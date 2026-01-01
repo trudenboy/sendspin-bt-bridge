@@ -1,0 +1,45 @@
+services:
+  sendspin-client:
+    build: .
+    container_name: sendspin-client
+    restart: unless-stopped
+    
+    # Required for Bluetooth access
+    network_mode: host
+    privileged: true
+    
+    volumes:
+      # Mount D-Bus socket for Bluetooth
+      - /var/run/dbus:/var/run/dbus
+      # Mount PipeWire/PulseAudio socket for audio
+      - /run/user/1000/pulse:/run/user/1000/pulse
+      - /run/user/1000/pipewire-0:/run/user/1000/pipewire-0
+      # Configuration directory
+      - /etc/docker/Sendspin:/config
+    
+    environment:
+      # Sendspin Configuration
+      - SENDSPIN_SERVER=auto  # Use 'auto' for mDNS discovery, or specify hostname/IP
+      
+      # Bluetooth Configuration (can also be configured via web UI)
+      - BLUETOOTH_MAC=04:57:91:D8:EC:9D
+      
+      # System Configuration
+      - TZ=Australia/Melbourne
+      - WEB_PORT=8080
+      - CONFIG_DIR=/config
+      # Audio configuration - use host's PipeWire/PulseAudio
+      - PULSE_SERVER=unix:/run/user/1000/pulse/native
+      - XDG_RUNTIME_DIR=/run/user/1000
+    
+    devices:
+      # Grant access to Bluetooth adapter
+      - /dev/bus/usb:/dev/bus/usb
+    
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+      - SYS_ADMIN
+    
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"

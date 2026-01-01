@@ -1,0 +1,7 @@
+sendspin
+flask>=3.0.0
+flask-cors>=4.0.0
+psutil>=5.9.0
+python-dotenv>=1.0.0
+waitress>=2.1.2
+netifaces>=0.11.0
