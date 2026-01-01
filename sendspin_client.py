@@ -91,9 +91,29 @@ class BluetoothManager:
     
     def is_device_connected(self) -> bool:
         """Check if device is currently connected"""
-        success, output = self._run_bluetoothctl(['info', self.mac_address])
-        self.connected = success and 'Connected: yes' in output
-        return self.connected
+        try:
+            # Use subprocess directly for more reliable real-time status
+            result = subprocess.run(
+                ['bluetoothctl', 'info', self.mac_address],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            is_connected = result.returncode == 0 and 'Connected: yes' in result.stdout
+            
+            # Log status changes
+            if is_connected != self.connected:
+                if is_connected:
+                    logger.info(f"✓ Bluetooth device {self.mac_address} connected")
+                else:
+                    logger.warning(f"✗ Bluetooth device {self.mac_address} disconnected")
+            
+            self.connected = is_connected
+            return self.connected
+        except Exception as e:
+            logger.debug(f"Error checking Bluetooth connection: {e}")
+            self.connected = False
+            return False
     
     def pair_device(self) -> bool:
         """Pair with the Bluetooth device"""
