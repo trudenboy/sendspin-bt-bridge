@@ -2,6 +2,8 @@
 
 A Docker-based Sendspin client with Bluetooth speaker support and web-based configuration interface. Perfect for running on headless systems like Raspberry Pi or Home Assistant installations.
 
+[Why did I build this?](why-did-I-build-this.md)
+
 ## Features
 
 - ✅ **Sendspin Protocol**: Full support for Music Assistant's Sendspin protocol
