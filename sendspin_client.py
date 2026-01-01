@@ -352,10 +352,12 @@ class SendspinClient:
     
     async def update_status(self):
         """Update client status"""
+        logger.debug("Status monitoring loop started")
         while self.running:
             try:
                 if self.bt_manager:
                     bt_connected = self.bt_manager.is_device_connected()
+                    logger.debug(f"Bluetooth status check: connected={bt_connected}")
                     if bt_connected != self.status['bluetooth_connected']:
                         self.status['bluetooth_connected'] = bt_connected
                         self.status['bluetooth_connected_at'] = datetime.now().isoformat()
