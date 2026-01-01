@@ -12,6 +12,13 @@ A Docker-based Sendspin client with Bluetooth speaker support and web-based conf
 - 📊 **Status Reporting**: Reports speaker state and container info to Music Assistant
 - 🕐 **Timezone Support**: Configurable timezone for accurate scheduling
 
+<img width="1233" height="657" alt="image" src="https://github.com/user-attachments/assets/d5f3f733-b073-4a08-b23a-feb3efc4daf7" />
+<br><br>
+
+<img width="1187" height="257" alt="image" src="https://github.com/user-attachments/assets/72080af9-819a-4f63-9f1f-81e87a469d03" />
+
+
+
 ## Quick Start
 
 ### Prerequisites
@@ -21,6 +28,22 @@ A Docker-based Sendspin client with Bluetooth speaker support and web-based conf
 - Music Assistant server running on your network
 
 **Important**: If using Bluetooth speakers, they must be paired with the host system before starting the container. The container will use the host's Bluetooth adapter via D-Bus.
+
+### Bluetooth Setup on Host
+
+Ensure Bluetooth is enabled on the host:
+
+```bash
+# Check if Bluetooth is available
+hciconfig
+
+# Enable Bluetooth if needed
+sudo systemctl enable bluetooth
+sudo systemctl start bluetooth
+
+# Ensure your user (or the container) can access Bluetooth
+sudo usermod -a -G bluetooth $USER
+```
 
 To pair a Bluetooth speaker on the host:
 ```bash
@@ -33,91 +56,25 @@ connect XX:XX:XX:XX:XX:XX
 exit
 ```
 
+
+### Permissions
+
+The container requires:
+- `privileged: true` for Bluetooth access
+- `network_mode: host` for mDNS discovery
+- Access to `/var/run/dbus` for Bluetooth communication
+- Access to `/dev/bus/usb` for USB Bluetooth adapters
+
+
+
 ### Installation
 
-1. Clone this repository:
-```bash
-git clone https://github.com/loryanstrant/Sendspin-client.git
-cd Sendspin-client
-```
-
-2. Create the configuration directory:
+1. Create the configuration directory:
 ```bash
 sudo mkdir -p /etc/docker/Sendspin
 ```
 
-3. Configure via the web interface at `http://your-host:8080` after starting the container.
-   
-   You can also edit `docker-compose.yml` to set the Bluetooth MAC address:
-```yaml
-environment:
-  - SENDSPIN_SERVER=auto  # 'auto' enables mDNS discovery
-  - BLUETOOTH_MAC=XX:XX:XX:XX:XX:XX  # Your Bluetooth speaker MAC
-  - SENDSPIN_PORT=9000
-  - BLUETOOTH_MAC=XX:XX:XX:XX:XX:XX
-  - TZ=Your/Timezone
-  - WEB_PORT=8080
-```
-
-4. Start the container:
-```bash
-docker-compose up -d
-```
-
-5. Access the web interface:
-```
-http://your-host-ip:8080
-```
-
-## Configuration
-
-The Sendspin client can be configured through the web interface at `http://your-host:8080`.
-
-### Configuration Options
-
-- **Player Name**: The name that appears in Music Assistant (configured via web UI)
-- **Server**: Use `auto` for automatic mDNS discovery, or specify a hostname/IP
-- **Bluetooth MAC**: MAC address of your Bluetooth speaker (optional)
-- **Timezone**: Your local timezone
-
-**Note**: Configuration changes require a container restart to take effect.
-### Environment Variables
-
-| Variable | Description | Default | Required |
-|----------|-------------|---------|----------|
-| `SENDSPIN_NAME` | Player name in Music Assistant | `Docker-{hostname}` | No |
-| `SENDSPIN_SERVER` | Music Assistant server hostname/IP | `ma.strant.casa` | Yes |
-| `SENDSPIN_PORT` | Sendspin server port | `9000` | Yes |
-| `BLUETOOTH_MAC` | Bluetooth speaker MAC address | - | No* |
-| `TZ` | Timezone (e.g., `Australia/Melbourne`) | `Australia/Melbourne` | No |
-| `WEB_PORT` | Web interface port | `8080` | No |
-
-*Leave empty to disable Bluetooth functionality
-
-### Finding Your Bluetooth Speaker MAC Address
-
-On your Docker host, run:
-```bash
-bluetoothctl
-scan on
-# Wait for your device to appear
-# Note the MAC address
-scan off
-exit
-```
-
-### Web Interface
-
-The web interface provides:
-
-- **Real-time Status**: View connection status, playback state, and system info
-- **Configuration**: Change settings without editing files
-- **Monitoring**: See when the speaker connects/disconnects
-- **System Info**: View IP address, hostname, and uptime
-
-## Docker Compose Configuration
-
-### Using Pre-built Image (Recommended)
+2. Customise Docker compose & deploy using pre-built image (Recommended)
 
 ```yaml
 version: '3.8'
@@ -151,45 +108,49 @@ services:
       - SYS_ADMIN
 ```
 
-### Building Locally
 
-```bash
-docker-compose up -d --build
+3. Access the web interface:
+```
+http://your-host-ip:8080
 ```
 
-## Host System Requirements
+## Configuration
 
-### Minimal Requirements
+The Sendspin client can also be configured through the web interface at `http://your-host:8080`.
 
-The container includes all necessary dependencies, but your host needs:
+### Configuration Options
 
-1. **Docker**: Version 20.10 or newer
-2. **Bluetooth Adapter**: Built-in or USB Bluetooth adapter
-3. **D-Bus**: Usually pre-installed on most Linux distributions
+- **Player Name**: The name that appears in Music Assistant (configured via web UI)
+- **Server**: Use `auto` for automatic mDNS discovery, or specify a hostname/IP
+- **Bluetooth MAC**: MAC address of your Bluetooth speaker (optional)
+- **Timezone**: Your local timezone
 
-### Bluetooth Setup on Host
+**Note**: Configuration changes require a container restart to take effect.
+### Environment Variables
 
-Ensure Bluetooth is enabled on the host:
+| Variable | Description | Default | Required |
+|----------|-------------|---------|----------|
+| `SENDSPIN_NAME` | Player name in Music Assistant | `Docker-{hostname}` | No |
+| `SENDSPIN_SERVER` | Music Assistant server hostname/IP | `ma.strant.casa` | Yes |
+| `SENDSPIN_PORT` | Sendspin server port | `9000` | Yes |
+| `BLUETOOTH_MAC` | Bluetooth speaker MAC address | - | No* |
+| `TZ` | Timezone (e.g., `Australia/Melbourne`) | `Australia/Melbourne` | No |
+| `WEB_PORT` | Web interface port | `8080` | No |
 
-```bash
-# Check if Bluetooth is available
-hciconfig
+*Leave empty to disable Bluetooth functionality
 
-# Enable Bluetooth if needed
-sudo systemctl enable bluetooth
-sudo systemctl start bluetooth
 
-# Ensure your user (or the container) can access Bluetooth
-sudo usermod -a -G bluetooth $USER
-```
+### Web Interface
 
-### Permissions
+The web interface provides:
 
-The container requires:
-- `privileged: true` for Bluetooth access
-- `network_mode: host` for mDNS discovery
-- Access to `/var/run/dbus` for Bluetooth communication
-- Access to `/dev/bus/usb` for USB Bluetooth adapters
+- **Real-time Status**: View connection status, playback state, and system info
+- **Configuration**: Change settings without editing files
+- **Monitoring**: See when the speaker connects/disconnects
+- **System Info**: View IP address, hostname, and uptime
+
+
+
 
 ## Troubleshooting
 
@@ -310,6 +271,10 @@ Contributions are welcome! Please:
 3. Make your changes
 4. Submit a pull request
 
+## Development Approach
+<img width="256" height="256" alt="image" src="https://github.com/user-attachments/assets/3e6903cf-2bfa-4f10-bc25-8bf3de5e2f3a" />
+
+
 ## License
 
 MIT License - see LICENSE file for details
@@ -323,7 +288,6 @@ MIT License - see LICENSE file for details
 ## Support
 
 - **Issues**: [GitHub Issues](https://github.com/loryanstrant/Sendspin-client/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/loryanstrant/Sendspin-client/discussions)
 - **Music Assistant**: [Discord](https://discord.gg/kaVm8hGpne)
 
 ## Changelog
