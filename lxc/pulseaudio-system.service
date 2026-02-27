@@ -10,15 +10,10 @@ ExecStart=/usr/bin/pulseaudio --system --realtime --disallow-exit --no-cpu-limit
 ExecReload=/bin/kill -HUP $MAINPID
 Restart=on-failure
 RestartSec=5
-User=pulse
-Group=pulse
+Environment=PULSE_RUNTIME_PATH=/var/run/pulse
 LockPersonality=yes
-MemoryDenyWriteExecute=yes
-NoNewPrivileges=yes
-ProtectHome=yes
-ProtectKernelModules=yes
-ProtectKernelTunables=yes
-RestrictNamespaces=yes
+NoNewPrivileges=no
+ProtectHome=no
 RestrictRealtime=no
 
 [Install]

@@ -104,11 +104,12 @@ echo ""
 # ─── Debian 12 template ───────────────────────────────────────────────────────
 msg "Checking for Debian 12 template..."
 
+# Ubuntu 24.04 is required — ships with Python 3.12 which sendspin needs
 TEMPLATE=$(pveam available --section system 2>/dev/null \
-  | grep "debian-12" | sort -V | tail -1 | awk '{print $2}')
+  | grep "ubuntu-24.04" | sort -V | tail -1 | awk '{print $2}')
 
 if [[ -z "$TEMPLATE" ]]; then
-  die "No Debian 12 template found in pveam. Run: pveam update"
+  die "No Ubuntu 24.04 template found in pveam. Run: pveam update"
 fi
 
 ok "Found template: ${TEMPLATE}"
@@ -150,7 +151,7 @@ pct create "$CTID" "$TEMPLATE_PATH" \
   --unprivileged 0                  \
   --features     nesting=1          \
   --onboot       1                  \
-  --ostype       debian             \
+  --ostype       ubuntu             \
   --password \
   2>&1
 
@@ -162,12 +163,16 @@ msg "Adding cgroup device rules to container config..."
 LXC_CONF="/etc/pve/lxc/${CTID}.conf"
 
 cat >> "$LXC_CONF" <<'EOF'
+# AppArmor: unconfined (required for bluetoothd management socket in LXC)
+lxc.apparmor.profile: unconfined
 # Bluetooth HCI devices
 lxc.cgroup2.devices.allow: c 166:* rwm
 # Input devices
 lxc.cgroup2.devices.allow: c 13:* rwm
-# USB device tree (bind mount)
-lxc.mount.entry: /dev/bus/usb dev/bus/usb none bind,optional,create=dir 0 0
+# rfkill device (required by bluetoothd)
+lxc.cgroup2.devices.allow: c 10:232 rwm
+# USB device tree (bind mount, recursive for all USB buses)
+lxc.mount.entry: /dev/bus/usb dev/bus/usb none rbind,optional,create=dir 0 0
 EOF
 
 if [[ "${USB_BT}" == "y" ]]; then

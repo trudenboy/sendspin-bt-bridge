@@ -41,10 +41,10 @@ msg "Installing system packages..."
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y -qq \
-  python3 python3-pip \
+  python3 python3-pip python3-venv python3-full \
   bluetooth bluez bluez-tools \
   pulseaudio pulseaudio-module-bluetooth \
-  alsa-utils dbus \
+  alsa-utils dbus libportaudio2 \
   avahi-daemon avahi-utils libnss-mdns \
   curl wget ca-certificates git jq tzdata procps
 ok "System packages installed"
@@ -138,6 +138,12 @@ cat > /etc/pulse/system.pa <<'EOF'
 .ifexists module-card-restore.so
     load-module module-card-restore
 .endif
+
+# Fallback null sink — used when no Bluetooth sink is available yet.
+# sendspin requires at least one sink to initialise.
+.ifexists module-null-sink.so
+    load-module module-null-sink sink_name=fallback rate=44100 channels=2
+.endif
 EOF
 
 cat > /etc/pulse/client.conf.d/00-no-autospawn.conf <<'EOF'
@@ -197,19 +203,14 @@ Before=bluetooth.service sendspin-client.service
 
 [Service]
 Type=notify
+Environment=PULSE_RUNTIME_PATH=/var/run/pulse
 ExecStart=/usr/bin/pulseaudio --system --realtime --disallow-exit --no-cpu-limit --log-target=journal
 ExecReload=/bin/kill -HUP $MAINPID
 Restart=on-failure
 RestartSec=5
-User=pulse
-Group=pulse
 LockPersonality=yes
-MemoryDenyWriteExecute=yes
-NoNewPrivileges=yes
-ProtectHome=yes
-ProtectKernelModules=yes
-ProtectKernelTunables=yes
-RestrictNamespaces=yes
+NoNewPrivileges=no
+ProtectHome=no
 RestrictRealtime=no
 
 [Install]
@@ -228,6 +229,9 @@ Requires=pulseaudio-system.service dbus.service
 Type=simple
 EnvironmentFile=/etc/environment
 Environment=PYTHONUNBUFFERED=1
+Environment=HOME=/root
+Environment=PULSE_SERVER=unix:/var/run/pulse/native
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 ExecStartPre=/bin/sleep 3
 ExecStart=/usr/bin/python3 /opt/sendspin-client/sendspin_client.py
 WorkingDirectory=/opt/sendspin-client

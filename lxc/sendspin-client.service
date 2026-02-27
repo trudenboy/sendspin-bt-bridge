@@ -9,6 +9,9 @@ Requires=pulseaudio-system.service dbus.service
 Type=simple
 EnvironmentFile=/etc/environment
 Environment=PYTHONUNBUFFERED=1
+Environment=HOME=/root
+Environment=PULSE_SERVER=unix:/var/run/pulse/native
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 ExecStartPre=/bin/sleep 3
 ExecStart=/usr/bin/python3 /opt/sendspin-client/sendspin_client.py
 WorkingDirectory=/opt/sendspin-client
