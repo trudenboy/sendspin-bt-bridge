@@ -21,6 +21,120 @@ A Docker-based Sendspin client with Bluetooth speaker support and web-based conf
 
 
 
+## Proxmox VE (LXC) Deployment
+
+Run Sendspin Client as a **native LXC container** on Proxmox VE — no Docker required. The LXC container runs its own `bluetoothd`, `pulseaudio`, and `avahi-daemon`, with USB Bluetooth hardware passed through via cgroup rules.
+
+### Docker vs LXC comparison
+
+| Feature | Docker | LXC (Proxmox) |
+|---------|--------|---------------|
+| Deployment target | Any Docker host | Proxmox VE 7/8 |
+| Bluetooth | Uses host's bluetoothd via D-Bus socket | Own bluetoothd inside container |
+| Audio | Uses host's PulseAudio/PipeWire socket | Own pulseaudio --system inside container |
+| mDNS discovery | Uses host's avahi-daemon | Own avahi-daemon inside container |
+| Config changes | Container restart | `systemctl restart sendspin-client` |
+| USB BT adapter | Host passthrough | cgroup passthrough to LXC |
+
+### One-line install (on Proxmox host as root)
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/loryanstrant/sendspin-client/main/lxc/proxmox-create.sh)
+```
+
+The script will interactively prompt for container ID, hostname, RAM, disk, network, and USB Bluetooth passthrough options.
+
+### Prerequisites
+
+- Proxmox VE 7 or 8
+- USB Bluetooth adapter (or onboard Bluetooth on the Proxmox host)
+- Debian 12 LXC template available in Proxmox (the script downloads it automatically)
+
+### Manual install steps (Proxmox UI)
+
+If you prefer to create the container via the Proxmox web UI:
+
+1. Create a new **privileged** LXC container (Debian 12, 512 MB RAM, 4 GB disk)
+2. Start the container and open a shell (`pct enter <CTID>`)
+3. Run the installer:
+   ```bash
+   bash <(curl -fsSL https://raw.githubusercontent.com/loryanstrant/sendspin-client/main/lxc/install.sh)
+   ```
+4. Append the following to `/etc/pve/lxc/<CTID>.conf` on the **Proxmox host**:
+   ```
+   lxc.cgroup2.devices.allow: c 166:* rwm
+   lxc.cgroup2.devices.allow: c 13:* rwm
+   lxc.mount.entry: /dev/bus/usb dev/bus/usb none bind,optional,create=dir 0 0
+   # If using a USB Bluetooth adapter:
+   lxc.cgroup2.devices.allow: c 189:* rwm
+   ```
+5. Restart the container: `pct restart <CTID>`
+
+### Bluetooth speaker pairing (inside the container)
+
+```bash
+# Enter the container
+pct enter <CTID>
+
+# Start interactive Bluetooth manager
+bluetoothctl
+
+# Inside bluetoothctl:
+power on
+scan on
+# Wait for your speaker to appear, then:
+pair XX:XX:XX:XX:XX:XX
+trust XX:XX:XX:XX:XX:XX
+connect XX:XX:XX:XX:XX:XX
+exit
+```
+
+Then set `BLUETOOTH_MAC` in `/config/config.json` and restart the service.
+
+### Key monitoring commands
+
+```bash
+# View application logs
+pct exec <CTID> -- journalctl -u sendspin-client -f
+
+# Check all service statuses
+pct exec <CTID> -- systemctl status sendspin-client pulseaudio-system bluetooth avahi-daemon --no-pager
+
+# List audio sinks (confirm Bluetooth sink is present)
+pct exec <CTID> -- pactl list sinks short
+
+# Check Bluetooth adapter
+pct exec <CTID> -- bluetoothctl show
+
+# Verify PulseAudio socket
+pct exec <CTID> -- ls -la /var/run/pulse/native
+```
+
+### Manual USB Bluetooth passthrough
+
+To pass through a specific USB Bluetooth adapter, find its device numbers on the Proxmox host:
+
+```bash
+lsusb | grep -i bluetooth
+# Example output: Bus 001 Device 003: ID 0a12:0001 Cambridge Silicon Radio, Ltd Bluetooth Dongle
+
+# Map Bus 001 Device 003 → /dev/bus/usb/001/003
+```
+
+Then add to `/etc/pve/lxc/<CTID>.conf`:
+```
+lxc.cgroup2.devices.allow: c 189:* rwm
+lxc.mount.entry: /dev/bus/usb dev/bus/usb none bind,optional,create=dir 0 0
+```
+
+> **Note:** Configuration changes in `/config/config.json` take effect after:
+> ```bash
+> pct exec <CTID> -- systemctl restart sendspin-client
+> ```
+> There is no need to restart the container.
+
+---
+
 ## Quick Start
 
 ### Prerequisites
