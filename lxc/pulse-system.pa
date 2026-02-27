@@ -1,0 +1,35 @@
+# /etc/pulse/system.pa
+# PulseAudio system-mode configuration for Sendspin LXC deployment
+# Written by install.sh - do not edit manually
+
+.ifexists module-udev-detect.so
+    load-module module-udev-detect
+.endif
+
+.ifexists module-bluetooth-policy.so
+    load-module module-bluetooth-policy
+.endif
+
+.ifexists module-bluetooth-discover.so
+    load-module module-bluetooth-discover
+.endif
+
+.ifexists module-native-protocol-unix.so
+    load-module module-native-protocol-unix auth-anonymous=1 socket=/var/run/pulse/native
+.endif
+
+.ifexists module-native-protocol-tcp.so
+    load-module module-native-protocol-tcp auth-ip-acl=127.0.0.1 auth-anonymous=1
+.endif
+
+.ifexists module-stream-restore.so
+    load-module module-stream-restore restore_device=false
+.endif
+
+.ifexists module-device-restore.so
+    load-module module-device-restore
+.endif
+
+.ifexists module-card-restore.so
+    load-module module-card-restore
+.endif

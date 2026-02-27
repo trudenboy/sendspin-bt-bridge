@@ -1,0 +1,22 @@
+[Unit]
+Description=Sendspin Client (Music Assistant Player with Bluetooth)
+Documentation=https://github.com/loryanstrant/sendspin-client
+After=network-online.target dbus.service bluetooth.service pulseaudio-system.service avahi-daemon.service
+Wants=network-online.target
+Requires=pulseaudio-system.service dbus.service
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/environment
+Environment=PYTHONUNBUFFERED=1
+ExecStartPre=/bin/sleep 3
+ExecStart=/usr/bin/python3 /opt/sendspin-client/sendspin_client.py
+WorkingDirectory=/opt/sendspin-client
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=sendspin-client
+
+[Install]
+WantedBy=multi-user.target
