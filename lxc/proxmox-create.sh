@@ -72,6 +72,34 @@ command -v pct   &>/dev/null || die "pct not found — is this a Proxmox VE host
 command -v pveam &>/dev/null || die "pveam not found — is this a Proxmox VE host?"
 ok "Proxmox VE host confirmed"
 
+# ─── Bluetooth on the Proxmox host ───────────────────────────────────────────
+# The LXC container cannot run its own bluetoothd (AF_BLUETOOTH kernel limitation
+# in LXC network namespaces). Instead, bluetoothd runs on the Proxmox HOST and
+# the container accesses it via a bind-mounted D-Bus socket at /bt-dbus.
+msg "Ensuring Bluetooth (bluez) is installed on the host..."
+if ! command -v bluetoothctl &>/dev/null; then
+  apt-get install -y -qq bluez
+  ok "bluez installed on host"
+else
+  ok "bluez already installed on host"
+fi
+
+if ! systemctl is-active --quiet bluetooth 2>/dev/null; then
+  systemctl enable --now bluetooth
+  ok "bluetooth.service enabled and started on host"
+else
+  ok "bluetooth.service already running on host"
+fi
+
+# Verify at least one HCI adapter is present
+if ! command -v hciconfig &>/dev/null || ! hciconfig 2>/dev/null | grep -q "hci"; then
+  warn "No Bluetooth HCI adapter detected on host. Bluetooth may not work."
+  warn "Ensure a USB Bluetooth adapter is connected to the Proxmox host."
+else
+  HCI_ADDR=$(hciconfig 2>/dev/null | grep "BD Address" | awk '{print $3}' | head -1)
+  ok "Bluetooth HCI adapter found: ${HCI_ADDR}"
+fi
+
 # ─── Interactive prompts ──────────────────────────────────────────────────────
 msg "Container configuration"
 echo ""
@@ -101,8 +129,8 @@ echo ""
 warn "You will be prompted to set the LXC root password."
 echo ""
 
-# ─── Debian 12 template ───────────────────────────────────────────────────────
-msg "Checking for Debian 12 template..."
+# ─── Ubuntu 24.04 template ───────────────────────────────────────────────────
+msg "Checking for Ubuntu 24.04 template..."
 
 # Ubuntu 24.04 is required — ships with Python 3.12 which sendspin needs
 TEMPLATE=$(pveam available --section system 2>/dev/null \
@@ -185,15 +213,17 @@ fi
 
 ok "cgroup device rules written to ${LXC_CONF}"
 
-# ─── Start container ──────────────────────────────────────────────────────────
-msg "Starting container ${CTID}..."
+# ─── First start — run install.sh ─────────────────────────────────────────────
+# install.sh creates /bt-dbus (the D-Bus bridge mount point) among other things.
+# The D-Bus bind-mount entry is added AFTER install.sh, then the container is
+# restarted so the mount applies.
+msg "Starting container ${CTID} (first start)..."
 pct start "$CTID"
 ok "Container started"
 
 msg "Waiting for container to be ready..."
 sleep 5
 
-# ─── Run install.sh inside container ─────────────────────────────────────────
 msg "Downloading install.sh from GitHub..."
 
 INSTALL_URL="https://raw.githubusercontent.com/${GITHUB_REPO}/${GITHUB_BRANCH}/lxc/install.sh"
@@ -205,6 +235,25 @@ ok "install.sh downloaded into container"
 msg "Running install.sh inside container ${CTID}..."
 echo ""
 pct exec "$CTID" -- bash /root/install.sh --repo "$GITHUB_REPO" --branch "$GITHUB_BRANCH"
+
+# ─── D-Bus bridge mount ───────────────────────────────────────────────────────
+# Bind-mount the host's D-Bus socket directory into the container at /bt-dbus.
+# This gives PulseAudio and bluetoothctl (via btctl) access to the host bluetoothd.
+# /bt-dbus was created by install.sh above; the mount requires a container restart.
+msg "Adding host D-Bus socket mount to ${LXC_CONF}..."
+cat >> "$LXC_CONF" <<'EOF'
+# Host D-Bus socket — gives PulseAudio and btctl access to the host's bluetoothd.
+# Bluetooth runs on the Proxmox host (AF_BLUETOOTH is not available in LXC namespaces).
+lxc.mount.entry: /run/dbus bt-dbus none bind,create=dir 0 0
+EOF
+ok "D-Bus bridge mount entry added"
+
+msg "Restarting container to apply D-Bus mount..."
+pct stop "$CTID"
+sleep 3
+pct start "$CTID"
+sleep 5
+ok "Container restarted with D-Bus bridge active"
 
 # ─── Summary ─────────────────────────────────────────────────────────────────
 echo ""
@@ -222,8 +271,9 @@ echo -e "  ${BOLD}IP address:${NC}     ${CONTAINER_IP}"
 echo -e "  ${BOLD}Web UI:${NC}         http://${CONTAINER_IP}:8080"
 echo ""
 echo -e "  ${BOLD}Next steps:${NC}"
-echo -e "    1. Open the web UI and set your Bluetooth MAC address"
-echo -e "    2. Restart the service: ${CYAN}pct exec ${CTID} -- systemctl restart sendspin-client${NC}"
+echo -e "    1. Pair your Bluetooth speaker (see commands below)"
+echo -e "    2. Set BLUETOOTH_MAC in web UI: http://${CONTAINER_IP}:8080"
+echo -e "    3. Restart the service: ${CYAN}pct exec ${CTID} -- systemctl restart sendspin-client${NC}"
 echo ""
 echo -e "  ${BOLD}Useful commands:${NC}"
 echo -e "    # Enter the container:"
@@ -232,12 +282,16 @@ echo ""
 echo -e "    # View logs:"
 echo -e "    ${CYAN}pct exec ${CTID} -- journalctl -u sendspin-client -f${NC}"
 echo ""
-echo -e "    # Pair a Bluetooth speaker:"
-echo -e "    ${CYAN}pct exec ${CTID} -- bluetoothctl${NC}"
+echo -e "    # Pair a Bluetooth speaker (from inside the container):"
+echo -e "    ${CYAN}pct exec ${CTID} -- btctl${NC}   # opens bluetoothctl via host D-Bus"
 echo -e "    ${BLUE}  > scan on${NC}"
 echo -e "    ${BLUE}  > pair <MAC>${NC}"
 echo -e "    ${BLUE}  > trust <MAC>${NC}"
 echo -e "    ${BLUE}  > connect <MAC>${NC}"
+echo -e "    ${BLUE}  > quit${NC}"
+echo ""
+echo -e "    # Or pair directly on the host:"
+echo -e "    ${CYAN}bluetoothctl scan on${NC}   # from the Proxmox host"
 echo ""
 echo -e "  ${YELLOW}Note:${NC} Config changes → ${CYAN}pct exec ${CTID} -- systemctl restart sendspin-client${NC}"
 echo ""

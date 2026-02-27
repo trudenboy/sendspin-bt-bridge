@@ -82,7 +82,14 @@ else
   ok "config.json already exists — skipping"
 fi
 
-# ─── 5. PulseAudio system user ────────────────────────────────────────────────
+# ─── 5. Bluetooth D-Bus bridge mount point ────────────────────────────────────
+# The container uses the Proxmox HOST's bluetoothd via a bind-mounted D-Bus socket.
+# /bt-dbus is the persistent mount point (must exist before the LXC mount applies).
+msg "Creating Bluetooth D-Bus mount point..."
+mkdir -p /bt-dbus
+ok "/bt-dbus created (host D-Bus socket will be bind-mounted here)"
+
+# ─── 6. PulseAudio system user ────────────────────────────────────────────────
 msg "Setting up pulse system user..."
 if ! id pulse &>/dev/null; then
   useradd --system --home-dir /var/run/pulse --shell /bin/false --comment "PulseAudio system user" pulse
@@ -199,11 +206,13 @@ cat > /etc/systemd/system/pulseaudio-system.service <<'EOF'
 Description=PulseAudio System-Mode Daemon (Sendspin)
 After=dbus.service
 Requires=dbus.service
-Before=bluetooth.service sendspin-client.service
+Before=sendspin-client.service
 
 [Service]
 Type=notify
 Environment=PULSE_RUNTIME_PATH=/var/run/pulse
+# Use the host's D-Bus socket (bind-mounted at /bt-dbus) for Bluetooth A2DP
+Environment=DBUS_SYSTEM_BUS_ADDRESS=unix:path=/bt-dbus/system_bus_socket
 ExecStart=/usr/bin/pulseaudio --system --realtime --disallow-exit --no-cpu-limit --log-target=journal
 ExecReload=/bin/kill -HUP $MAINPID
 Restart=on-failure
@@ -221,7 +230,7 @@ cat > /etc/systemd/system/sendspin-client.service <<'EOF'
 [Unit]
 Description=Sendspin Client (Music Assistant Player with Bluetooth)
 Documentation=https://github.com/loryanstrant/sendspin-client
-After=network-online.target dbus.service bluetooth.service pulseaudio-system.service avahi-daemon.service
+After=network-online.target dbus.service pulseaudio-system.service avahi-daemon.service
 Wants=network-online.target
 Requires=pulseaudio-system.service dbus.service
 
@@ -231,6 +240,8 @@ EnvironmentFile=/etc/environment
 Environment=PYTHONUNBUFFERED=1
 Environment=HOME=/root
 Environment=PULSE_SERVER=unix:/var/run/pulse/native
+# Use the host's D-Bus socket (bind-mounted at /bt-dbus) for Bluetooth control
+Environment=DBUS_SYSTEM_BUS_ADDRESS=unix:path=/bt-dbus/system_bus_socket
 Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 ExecStartPre=/bin/sleep 3
 ExecStart=/usr/bin/python3 /opt/sendspin-client/sendspin_client.py
@@ -247,16 +258,32 @@ EOF
 
 ok "Systemd units installed"
 
-# ─── 10. Enable and start services ───────────────────────────────────────────
+# ─── 10. btctl wrapper ────────────────────────────────────────────────────────
+# btctl wraps bluetoothctl to use the host's D-Bus socket at /bt-dbus.
+# Bluetooth runs on the Proxmox HOST; the container accesses it via bind-mount.
+msg "Installing btctl wrapper..."
+cat > /usr/local/bin/btctl <<'BTCTL'
+#!/usr/bin/env bash
+exec env DBUS_SYSTEM_BUS_ADDRESS=unix:path=/bt-dbus/system_bus_socket bluetoothctl "$@"
+BTCTL
+chmod +x /usr/local/bin/btctl
+ok "btctl installed at /usr/local/bin/btctl"
+
+# ─── 11. Enable and start services ───────────────────────────────────────────
 msg "Enabling and starting services..."
 systemctl daemon-reload
 
-for svc in dbus bluetooth avahi-daemon pulseaudio-system sendspin-client; do
+# bluetooth.service (local bluetoothd) is NOT needed — we use the host's bluetoothd.
+# Disable it to prevent noise in logs from failed start attempts.
+systemctl disable bluetooth 2>/dev/null || true
+systemctl stop    bluetooth 2>/dev/null || true
+
+for svc in dbus avahi-daemon pulseaudio-system sendspin-client; do
   systemctl enable "$svc" 2>/dev/null || warn "Could not enable $svc (may not exist yet)"
 done
 
 # Start in dependency order
-for svc in dbus bluetooth avahi-daemon pulseaudio-system sendspin-client; do
+for svc in dbus avahi-daemon pulseaudio-system sendspin-client; do
   if systemctl is-active --quiet "$svc" 2>/dev/null; then
     ok "$svc already running"
   else
@@ -281,7 +308,7 @@ echo -e "  ${BOLD}Key commands:${NC}"
 echo -e "    systemctl status sendspin-client"
 echo -e "    systemctl restart sendspin-client"
 echo -e "    pactl list sinks short"
-echo -e "    bluetoothctl scan on"
+echo -e "    btctl scan on        # scan for BT devices (uses host bluetoothd)"
 echo ""
 echo -e "  ${YELLOW}Note:${NC} Config changes require:"
 echo -e "    systemctl restart sendspin-client"

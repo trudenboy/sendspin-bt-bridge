@@ -2,15 +2,17 @@
 Description=PulseAudio System-Mode Daemon (Sendspin)
 After=dbus.service
 Requires=dbus.service
-Before=bluetooth.service sendspin-client.service
+Before=sendspin-client.service
 
 [Service]
 Type=notify
+Environment=PULSE_RUNTIME_PATH=/var/run/pulse
+# Use the host's D-Bus socket (bind-mounted at /bt-dbus) for Bluetooth A2DP
+Environment=DBUS_SYSTEM_BUS_ADDRESS=unix:path=/bt-dbus/system_bus_socket
 ExecStart=/usr/bin/pulseaudio --system --realtime --disallow-exit --no-cpu-limit --log-target=journal
 ExecReload=/bin/kill -HUP $MAINPID
 Restart=on-failure
 RestartSec=5
-Environment=PULSE_RUNTIME_PATH=/var/run/pulse
 LockPersonality=yes
 NoNewPrivileges=no
 ProtectHome=no
