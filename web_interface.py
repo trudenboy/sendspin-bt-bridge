@@ -34,26 +34,29 @@ DEFAULT_CONFIG = {
     'SENDSPIN_NAME': 'Sendspin-Player',
     'SENDSPIN_SERVER': 'auto',  # Use 'auto' for mDNS discovery
     'BLUETOOTH_MAC': '',
+    'BLUETOOTH_DEVICES': [],
     'TZ': 'Australia/Melbourne',
 }
 
-# Global client reference will be set by main
-_client_ref = None
+# Global clients list will be set by main
+_clients: list = []
 
 def set_client(client):
-    """Set the global client reference"""
-    global _client_ref
-    _client_ref = client
+    """Set a single client reference (backward compat)"""
+    global _clients
+    _clients = [client]
     logger.info(f"Client reference set in web interface: {client}")
 
-def get_client_status():
-    """Get status from the Sendspin client"""
+def set_clients(clients):
+    """Set multiple client references"""
+    global _clients
+    _clients = clients if clients else []
+    logger.info(f"Client references set in web interface: {len(_clients)} client(s)")
+
+def get_client_status_for(client):
+    """Get status dict for a specific client"""
     try:
-        global _client_ref
-        client = _client_ref
-        
         if client is None:
-            logger.warning("Client reference is None")
             return {
                 'connected': False,
                 'server_connected': False,
@@ -62,11 +65,10 @@ def get_client_status():
                 'playing': False,
                 'error': 'Client not running',
                 'version': VERSION,
-                'build_date': BUILD_DATE
+                'build_date': BUILD_DATE,
             }
-        
+
         if not hasattr(client, 'status'):
-            logger.warning("Client has no status attribute")
             return {
                 'connected': False,
                 'server_connected': False,
@@ -75,31 +77,33 @@ def get_client_status():
                 'playing': False,
                 'error': 'Client initializing',
                 'version': VERSION,
-                'build_date': BUILD_DATE
+                'build_date': BUILD_DATE,
             }
-        
-        # Get status from client
+
         status = client.status.copy()
-        
+
         # Calculate uptime
         if 'uptime_start' in status:
             uptime = datetime.now() - status['uptime_start']
             status['uptime'] = str(timedelta(seconds=int(uptime.total_seconds())))
             del status['uptime_start']
-        
+
         # Add version info
         status['version'] = VERSION
         status['build_date'] = BUILD_DATE
-        
+
         # Check if process is running
         if client.process:
             status['connected'] = client.process.poll() is None
         else:
             status['connected'] = False
-        
+
+        # Add player_name for multi-device identification
+        status['player_name'] = getattr(client, 'player_name', None)
+
         logger.debug(f"Status retrieved: {status}")
         return status
-        
+
     except Exception as e:
         logger.error(f"Error getting client status: {e}", exc_info=True)
         return {
@@ -110,8 +114,24 @@ def get_client_status():
             'playing': False,
             'error': str(e),
             'version': VERSION,
-            'build_date': BUILD_DATE
+            'build_date': BUILD_DATE,
         }
+
+def get_client_status():
+    """Get status from the first client (backward compat)"""
+    if not _clients:
+        logger.warning("No clients registered")
+        return {
+            'connected': False,
+            'server_connected': False,
+            'bluetooth_connected': False,
+            'bluetooth_available': False,
+            'playing': False,
+            'error': 'No clients',
+            'version': VERSION,
+            'build_date': BUILD_DATE,
+        }
+    return get_client_status_for(_clients[0])
 
 # HTML Template
 def get_version_info():
@@ -322,9 +342,14 @@ HTML_TEMPLATE = """
                     <input type="text" name="SENDSPIN_SERVER" required>
                 </div>
 
-                <div class="form-group">
+                <div id="bt-devices-group" class="form-group" style="display:none;">
+                    <label>Bluetooth Devices (JSON array)</label>
+                    <textarea name="BLUETOOTH_DEVICES" rows="6" style="width:100%;padding:10px;border:2px solid #e5e7eb;border-radius:5px;font-family:monospace;font-size:13px;" placeholder='[{"mac":"AA:BB:CC:DD:EE:FF","adapter":"hci0","player_name":"My Speaker"}]'></textarea>
+                    <div style="font-size:12px;color:#666;margin-top:4px;">Each entry: <code>{"mac":"...", "adapter":"hci0", "player_name":"..."}</code></div>
+                </div>
+                <div id="bt-mac-group" class="form-group">
                     <label>Bluetooth MAC Address</label>
-                    <input type="text" name="BLUETOOTH_MAC">
+                    <input type="text" name="BLUETOOTH_MAC" placeholder="AA:BB:CC:DD:EE:FF">
                 </div>
                 <button type="submit" class="btn">Save Configuration</button>
             </form>
@@ -420,8 +445,21 @@ HTML_TEMPLATE = """
             try {
                 const response = await fetch('/api/config');
                 const config = await response.json();
-                
+
+                // Handle BLUETOOTH_DEVICES vs BLUETOOTH_MAC
+                const devices = config.BLUETOOTH_DEVICES;
+                if (devices && Array.isArray(devices) && devices.length > 0) {
+                    document.getElementById('bt-devices-group').style.display = 'block';
+                    document.getElementById('bt-mac-group').style.display = 'none';
+                    const ta = document.querySelector('[name="BLUETOOTH_DEVICES"]');
+                    if (ta) ta.value = JSON.stringify(devices, null, 2);
+                } else {
+                    document.getElementById('bt-devices-group').style.display = 'none';
+                    document.getElementById('bt-mac-group').style.display = 'block';
+                }
+
                 Object.keys(config).forEach(key => {
+                    if (key === 'BLUETOOTH_DEVICES') return; // handled above
                     const input = document.querySelector(`[name="${key}"]`);
                     if (input) {
                         input.value = config[key];
@@ -466,6 +504,21 @@ HTML_TEMPLATE = """
             e.preventDefault();
             const formData = new FormData(e.target);
             const config = Object.fromEntries(formData);
+
+            // Parse BLUETOOTH_DEVICES textarea as JSON if present and non-empty
+            if (config.BLUETOOTH_DEVICES !== undefined) {
+                const raw = config.BLUETOOTH_DEVICES.trim();
+                if (raw) {
+                    try {
+                        config.BLUETOOTH_DEVICES = JSON.parse(raw);
+                    } catch (err) {
+                        alert('BLUETOOTH_DEVICES is not valid JSON: ' + err.message);
+                        return;
+                    }
+                } else {
+                    config.BLUETOOTH_DEVICES = [];
+                }
+            }
 
             try {
                 const response = await fetch('/api/config', {
@@ -515,7 +568,7 @@ def set_volume():
         volume = max(0, min(100, int(volume)))
         
         # Get client and send volume command via pactl to both sendspin and bluetooth
-        client = get_client()
+        client = _clients[0] if _clients else None
         if client and client.bluetooth_sink_name:
             # Set Bluetooth speaker volume
             result = subprocess.run(
@@ -537,7 +590,14 @@ def set_volume():
 @app.route('/api/status')
 def api_status():
     """API endpoint for status"""
-    return jsonify(get_client_status())
+    if not _clients:
+        return jsonify({'error': 'No clients'})
+    if len(_clients) == 1:
+        return jsonify(get_client_status_for(_clients[0]))
+    # Multi-client: return devices array + first client's fields at top level
+    first = get_client_status_for(_clients[0])
+    result = {**first, 'devices': [get_client_status_for(c) for c in _clients]}
+    return jsonify(result)
 
 @app.route('/api/config', methods=['GET', 'POST'])
 def api_config():

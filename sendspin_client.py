@@ -41,19 +41,57 @@ class ClientHolder:
 class BluetoothManager:
     """Manages Bluetooth speaker connections using bluetoothctl"""
     
-    def __init__(self, mac_address: str, client=None):
+    def __init__(self, mac_address: str, adapter: str = "", device_name: str = "", client=None):
         self.mac_address = mac_address
+        self.adapter = adapter        # "hci0", "hci1", etc. — empty = use default
+        self.device_name = device_name or mac_address
         self.client = client
         self.connected = False
         self.last_check = 0
         self.check_interval = 10  # Check every 10 seconds
-        
-    def _run_bluetoothctl(self, commands: list) -> tuple[bool, str]:
-        """Run bluetoothctl commands"""
+
+        # Resolve adapter name to MAC for reliable 'select' in bridged D-Bus setups.
+        # In LXC containers, 'select hci0' fails ("Controller hci0 not available");
+        # selecting by MAC address works because D-Bus objects use MACs, not hciN names.
+        self._adapter_select = self._resolve_adapter_select(adapter) if adapter else ''
+
+    def _resolve_adapter_select(self, adapter: str) -> str:
+        """Resolve hciN to adapter MAC address for bluetoothctl 'select'.
+        Falls back to the original name if resolution fails."""
+        if not adapter or not adapter.startswith('hci'):
+            return adapter  # Already a MAC or empty string
         try:
-            # Create a command string with all commands
-            cmd_string = '\n'.join(commands)
-            # Use bash -c with echo pipe for more reliable output
+            idx = int(adapter[3:])  # N from hciN
+        except ValueError:
+            return adapter
+        try:
+            result = subprocess.run(
+                ['bash', '-c', 'bluetoothctl list 2>/dev/null'],
+                capture_output=True, text=True, timeout=5
+            )
+            # Parse "Controller <MAC> description [default]" lines
+            macs = []
+            for line in result.stdout.splitlines():
+                if 'Controller' in line:
+                    for part in line.split():
+                        if len(part) == 17 and part.count(':') == 5:
+                            macs.append(part.upper())
+                            break
+            if idx < len(macs):
+                logger.info(f"Resolved adapter {adapter} → {macs[idx]}")
+                return macs[idx]
+        except Exception as e:
+            logger.debug(f"Adapter MAC resolution failed: {e}")
+        return adapter  # Fall back to hciN name
+
+    def _run_bluetoothctl(self, commands: list) -> tuple[bool, str]:
+        """Run bluetoothctl commands, prepending 'select <adapter_mac>' if configured."""
+        try:
+            all_commands = []
+            if self._adapter_select:
+                all_commands.append(f'select {self._adapter_select}')
+            all_commands.extend(commands)
+            cmd_string = '\n'.join(all_commands)
             bash_cmd = f"echo '{cmd_string}' | bluetoothctl"
             result = subprocess.run(
                 ['bash', '-c', bash_cmd],
@@ -69,13 +107,17 @@ class BluetoothManager:
     def check_bluetooth_available(self) -> bool:
         """Check if Bluetooth is available on the system"""
         try:
+            if self.adapter:
+                # Check specific adapter via _run_bluetoothctl (includes select)
+                success, output = self._run_bluetoothctl(['show'])
+                return success and 'Controller' in output
+            # Default: check for any controller
             result = subprocess.run(
                 ['bluetoothctl', 'show'],
                 capture_output=True,
                 text=True,
                 timeout=5
             )
-            # Check for controller more flexibly
             if result.returncode == 0:
                 output_lower = result.stdout.lower()
                 return 'controller' in output_lower and 'no default controller' not in output_lower
@@ -86,28 +128,26 @@ class BluetoothManager:
     
     def is_device_paired(self) -> bool:
         """Check if device is paired"""
-        success, output = self._run_bluetoothctl(['info', self.mac_address])
+        # 'info MAC' as a single command (not split into two list elements).
+        # select is prepended automatically via _adapter_select (resolved to adapter MAC).
+        success, output = self._run_bluetoothctl([f'info {self.mac_address}'])
         return success and 'Paired: yes' in output
-    
+
     def is_device_connected(self) -> bool:
         """Check if device is currently connected"""
         try:
-            # Use subprocess directly for more reliable real-time status
-            result = subprocess.run(
-                ['bluetoothctl', 'info', self.mac_address],
-                capture_output=True,
-                text=True,
-                timeout=5
-            )
-            is_connected = result.returncode == 0 and 'Connected: yes' in result.stdout
-            
+            # Use resolved adapter MAC for 'select' so that 'info MAC' queries
+            # the right adapter-specific device DB (BlueZ devices are adapter-scoped).
+            success, output = self._run_bluetoothctl([f'info {self.mac_address}'])
+            is_connected = success and 'Connected: yes' in output
+
             # Log status changes
             if is_connected != self.connected:
                 if is_connected:
-                    logger.info(f"✓ Bluetooth device {self.mac_address} connected")
+                    logger.info(f"✓ BT device {self.device_name} ({self.mac_address}) connected")
                 else:
-                    logger.warning(f"✗ Bluetooth device {self.mac_address} disconnected")
-            
+                    logger.warning(f"✗ BT device {self.device_name} ({self.mac_address}) disconnected")
+
             self.connected = is_connected
             return self.connected
         except Exception as e:
@@ -138,8 +178,9 @@ class BluetoothManager:
         """Configure host's PipeWire/PulseAudio to use the Bluetooth device as audio output"""
         try:
             import time
-            
-            # Wait for PipeWire/PulseAudio to see the device
+
+            # Wait for PipeWire/PulseAudio to register the device.
+            # A2DP profile takes a few seconds to appear after BT connects.
             time.sleep(3)
             
             # Format the MAC address for PipeWire/PulseAudio (replace : with _)
@@ -154,31 +195,37 @@ class BluetoothManager:
             )
             logger.info(f"Available audio sinks:\n{result.stdout}")
             
-            # Try to find and set the Bluetooth sink as default
-            # PipeWire typically names them: bluez_output.XX_XX_XX_XX_XX_XX.1
+            # Find the Bluetooth sink (do NOT change system default — PULSE_SINK handles per-process routing)
             sink_names = [
                 f"bluez_output.{pa_mac}.1",  # PipeWire format
                 f"bluez_output.{pa_mac}.a2dp-sink",
-                f"bluez_sink.{pa_mac}.a2dp_sink",  # Legacy format
+                f"bluez_sink.{pa_mac}.a2dp_sink",  # Legacy PulseAudio format
                 f"bluez_sink.{pa_mac}",
             ]
-            
+
             success = False
             configured_sink = None
-            for sink_name in sink_names:
-                result = subprocess.run(
-                    ['pactl', 'set-default-sink', sink_name],
-                    capture_output=True,
-                    text=True,
-                    timeout=5
-                )
-                if result.returncode == 0:
-                    logger.info(f"✓ Set default audio sink to: {sink_name}")
-                    configured_sink = sink_name
-                    success = True
+            # Retry up to 3 times — A2DP sink may take a few extra seconds to appear
+            for attempt in range(3):
+                for sink_name in sink_names:
+                    result = subprocess.run(
+                        ['pactl', 'get-sink-volume', sink_name],
+                        capture_output=True,
+                        text=True,
+                        timeout=5
+                    )
+                    if result.returncode == 0:
+                        logger.info(f"✓ Found audio sink: {sink_name}")
+                        configured_sink = sink_name
+                        success = True
+                        break
+                    else:
+                        logger.debug(f"Sink {sink_name} not found, trying next...")
+                if success:
                     break
-                else:
-                    logger.debug(f"Sink {sink_name} not found, trying next...")
+                if attempt < 2:
+                    logger.info(f"Sink not yet available, retrying in 3s... (attempt {attempt + 1}/3)")
+                    time.sleep(3)
             
             if success and configured_sink:
                 # Set volume to 100% for maximum output
@@ -282,16 +329,38 @@ class BluetoothManager:
     
     async def monitor_and_reconnect(self):
         """Continuously monitor connection and reconnect if needed"""
+        logger.info(f"[{self.device_name}] monitor_and_reconnect task started")
+        loop = asyncio.get_event_loop()
+        iteration = 0
         while True:
+            iteration += 1
             try:
                 current_time = time.time()
                 if current_time - self.last_check >= self.check_interval:
                     self.last_check = current_time
-                    
-                    if not self.is_device_connected():
-                        logger.warning("Bluetooth speaker disconnected, attempting reconnect...")
-                        self.connect_device()
-                    
+                    logger.info(f"[{self.device_name}] BT check #{iteration}")
+
+                    # Run blocking BT check in thread pool — never block the event loop
+                    connected = await loop.run_in_executor(None, self.is_device_connected)
+                    logger.info(f"[{self.device_name}] BT connected={connected}")
+                    if not connected:
+                        # Kill sendspin daemon immediately — if the BT sink is gone,
+                        # sendspin floods PortAudioErrors on every audio chunk, which
+                        # starves its own event loop and causes WebSocket PONG timeouts.
+                        if self.client and self.client.process and self.client.process.poll() is None:
+                            logger.info(f"BT disconnected for {self.device_name}, stopping sendspin daemon...")
+                            try:
+                                self.client.process.terminate()
+                            except Exception:
+                                pass
+
+                        logger.warning(f"Bluetooth device {self.device_name} disconnected, attempting reconnect...")
+                        success = await loop.run_in_executor(None, self.connect_device)
+                        if success and self.client:
+                            # BT reconnected — start fresh sendspin to register with MA
+                            logger.info(f"BT reconnected for {self.device_name}, starting sendspin...")
+                            await self.client.start_sendspin_process()
+
                 await asyncio.sleep(5)
             except Exception as e:
                 logger.error(f"Error in Bluetooth monitor: {e}")
@@ -301,12 +370,14 @@ class BluetoothManager:
 class SendspinClient:
     """Wrapper for sendspin CLI with status tracking"""
     
-    def __init__(self, player_name: str, server_host: str, server_port: int, 
-                 bt_manager: Optional[BluetoothManager] = None):
+    def __init__(self, player_name: str, server_host: str, server_port: int,
+                 bt_manager: Optional[BluetoothManager] = None,
+                 listen_port: int = 8928):
         self.player_name = player_name
         self.server_host = server_host
         self.server_port = server_port
         self.bt_manager = bt_manager
+        self.listen_port = listen_port  # port sendspin daemon listens on
         
         # Status tracking
         self.status = {
@@ -353,10 +424,12 @@ class SendspinClient:
     async def update_status(self):
         """Update client status"""
         logger.debug("Status monitoring loop started")
+        loop = asyncio.get_event_loop()
         while self.running:
             try:
                 if self.bt_manager:
-                    bt_connected = self.bt_manager.is_device_connected()
+                    # Run blocking BT check in thread pool — never block the event loop
+                    bt_connected = await loop.run_in_executor(None, self.bt_manager.is_device_connected)
                     logger.debug(f"Bluetooth status check: connected={bt_connected}")
                     if bt_connected != self.status['bluetooth_connected']:
                         self.status['bluetooth_connected'] = bt_connected
@@ -369,8 +442,13 @@ class SendspinClient:
                             self.status['server_connected_at'] = datetime.now().isoformat()
                         self.status['server_connected'] = False
                         self.status['connected'] = False
-                        logger.warning("Sendspin process died, restarting...")
-                        await self.start_sendspin_process()
+                        # Don't restart sendspin if BT is disconnected — monitor_and_reconnect
+                        # will start it again once BT reconnects (prevents PortAudio error flood).
+                        if not self.bt_manager or self.bt_manager.connected:
+                            logger.warning("Sendspin process died, restarting...")
+                            await self.start_sendspin_process()
+                        else:
+                            logger.info("Sendspin process stopped; waiting for BT to reconnect before restarting")
                     else:
                         # Process is running, mark as connected
                         if not self.status['server_connected']:
@@ -386,30 +464,44 @@ class SendspinClient:
     async def start_sendspin_process(self):
         """Start the sendspin CLI player"""
         try:
-            # Build command
+            # Build command — use 'daemon' subcommand with unique port + settings-dir per instance
+            safe_id = ''.join(c if c.isalnum() or c == '-' else '-' for c in self.player_name.lower()).strip('-')
+            client_id = f"sendspin-{safe_id}"
+            settings_dir = f"/tmp/sendspin-{safe_id}"
             cmd = [
-                'sendspin',
-                '--headless',
+                'sendspin', 'daemon',
                 '--name', self.player_name,
+                '--id', client_id,
+                '--port', str(self.listen_port),
+                '--settings-dir', settings_dir,
             ]
-            
+
             # Add server URL only if explicitly configured
             if self.server_host and self.server_host.lower() not in ['auto', 'discover', '']:
                 server_url = f"ws://{self.server_host}:{self.server_port}/sendspin"
-                logger.info(f"Starting Sendspin player connecting to {server_url}")
+                logger.info(f"Starting Sendspin player '{self.player_name}' connecting to {server_url} (port {self.listen_port})")
                 cmd.extend(['--url', server_url])
             else:
-                logger.info("Starting Sendspin player with auto-discovery (mDNS)")
+                logger.info(f"Starting Sendspin player '{self.player_name}' with auto-discovery (port {self.listen_port})")
             
+            # Set PULSE_SINK so this process routes audio to its specific BT sink
+            env = os.environ.copy()
+            if self.bt_manager:
+                pa_mac = self.bt_manager.mac_address.replace(':', '_')
+                pulse_sink = f"bluez_sink.{pa_mac}.a2dp_sink"
+                env['PULSE_SINK'] = pulse_sink
+                logger.info(f"Routing audio to sink: {pulse_sink}")
+
             # Start the sendspin process
             self.process = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
-                bufsize=1
+                bufsize=1,
+                env=env,
             )
-            
+
             logger.info(f"Sendspin player started (PID: {self.process.pid})")
             logger.info(f"Sendspin command: {' '.join(cmd)}")
             self.status['server_connected'] = True
@@ -427,72 +519,83 @@ class SendspinClient:
         """Monitor sendspin process output and sync volume changes"""
         if not self.process:
             return
-        
+
+        # Capture process reference so this task stays bound to THIS process instance
+        # even if self.process is reassigned when a new process is started.
+        process = self.process
+        loop = asyncio.get_event_loop()
+
+        def _read_until_eof():
+            """Run in a SINGLE thread pool slot.
+            Reading one line at a time with per-line run_in_executor calls saturates
+            the thread pool when sendspin emits errors at high rate (100+ lines/sec),
+            starving is_device_connected() calls and blocking BT disconnect detection.
+            Running the entire loop in ONE executor call avoids that problem.
+            Python's logging and dict writes are thread-safe via the GIL.
+            Sentinel is '' (empty str) because process is opened with text=True."""
+            for raw_line in iter(process.stdout.readline, ''):
+                if not self.running:
+                    break
+                line_str = raw_line.strip()
+                logger.info(f"Sendspin: {line_str}")
+
+                # Update playing state from output
+                if line_str.startswith("State:") or line_str.startswith("Playback state:"):
+                    state = line_str.split(":")[-1].strip().lower()
+                    self.status['playing'] = (state == 'playing')
+
+                # Track current track and artist
+                if line_str.startswith("Now playing:"):
+                    track_name = line_str.split("Now playing:")[-1].strip()
+                    self.status['_track_name'] = track_name
+
+                if line_str.startswith("Artist:"):
+                    artist_name = line_str.split("Artist:")[-1].strip()
+                    self.status['current_artist'] = artist_name
+                    if hasattr(self.status, '__getitem__') and self.status.get('_track_name'):
+                        self.status['current_track'] = f"{artist_name} - {self.status['_track_name']}"
+
+                # Track server connection
+                if "Connected to" in line_str and "ws://" in line_str:
+                    if not self.status['server_connected_at']:
+                        self.status['server_connected_at'] = datetime.now().isoformat()
+                    self.status['server_connected'] = True
+
+                # Sync volume changes to Bluetooth speaker
+                if line_str.startswith("Volume:") and self.bluetooth_sink_name:
+                    try:
+                        volume_part = line_str.split("Volume:")[-1].strip().rstrip('%')
+                        if volume_part and volume_part.isdigit():
+                            volume_percent = int(volume_part)
+                            self.status['volume'] = volume_percent
+
+                            if self.volume_restore_done:
+                                try:
+                                    config_path = '/config/config.json'
+                                    if os.path.exists(config_path):
+                                        with open(config_path, 'r') as f:
+                                            config = json.load(f)
+                                        config['LAST_VOLUME'] = volume_percent
+                                        with open(config_path, 'w') as f:
+                                            json.dump(config, f, indent=2)
+                                except Exception as e:
+                                    logger.debug(f"Could not save volume to config: {e}")
+
+                            result = subprocess.run(
+                                ['pactl', 'set-sink-volume', self.bluetooth_sink_name, f'{volume_percent}%'],
+                                capture_output=True,
+                                text=True,
+                                timeout=2
+                            )
+                            if result.returncode == 0:
+                                logger.info(f"✓ Synced Bluetooth speaker volume to {volume_percent}%")
+                    except Exception as e:
+                        logger.debug(f"Could not sync volume: {e}")
+
         try:
-            while self.running and self.process.poll() is None:
-                line = self.process.stdout.readline()
-                if line:
-                    line_str = line.strip()
-                    logger.info(f"Sendspin: {line_str}")
-                    
-                    # Update playing state from output
-                    if line_str.startswith("State:") or line_str.startswith("Playback state:"):
-                        state = line_str.split(":")[-1].strip().lower()
-                        self.status['playing'] = (state == 'playing')
-                    
-                    # Track current track and artist
-                    if line_str.startswith("Now playing:"):
-                        track_name = line_str.split("Now playing:")[-1].strip()
-                        # Store just the track name, artist will be combined later
-                        self.status['_track_name'] = track_name
-                    
-                    if line_str.startswith("Artist:"):
-                        artist_name = line_str.split("Artist:")[-1].strip()
-                        self.status['current_artist'] = artist_name
-                        # Combine artist and track if we have both
-                        if hasattr(self.status, '__getitem__') and self.status.get('_track_name'):
-                            self.status['current_track'] = f"{artist_name} - {self.status['_track_name']}"
-                    
-                    # Track server connection
-                    if "Connected to" in line_str and "ws://" in line_str:
-                        if not self.status['server_connected_at']:
-                            self.status['server_connected_at'] = datetime.now().isoformat()
-                        self.status['server_connected'] = True
-                    
-                    # Sync volume changes to Bluetooth speaker
-                    if line_str.startswith("Volume:") and self.bluetooth_sink_name:
-                        try:
-                            # Extract volume percentage (e.g., "Volume: 75%" -> "75")
-                            volume_part = line_str.split("Volume:")[-1].strip().rstrip('%')
-                            if volume_part and volume_part.isdigit():
-                                volume_percent = int(volume_part)
-                                self.status['volume'] = volume_percent
-                                
-                                # Save volume to config for persistence (only after initial restore)
-                                if self.volume_restore_done:
-                                    try:
-                                        config_path = '/config/config.json'
-                                        if os.path.exists(config_path):
-                                            with open(config_path, 'r') as f:
-                                                config = json.load(f)
-                                            config['LAST_VOLUME'] = volume_percent
-                                            with open(config_path, 'w') as f:
-                                                json.dump(config, f, indent=2)
-                                    except Exception as e:
-                                        logger.debug(f"Could not save volume to config: {e}")
-                                
-                                # Update Bluetooth speaker volume to match
-                                result = subprocess.run(
-                                    ['pactl', 'set-sink-volume', self.bluetooth_sink_name, f'{volume_percent}%'],
-                                    capture_output=True,
-                                    text=True,
-                                    timeout=2
-                                )
-                                if result.returncode == 0:
-                                    logger.info(f"✓ Synced Bluetooth speaker volume to {volume_percent}%")
-                        except Exception as e:
-                            logger.debug(f"Could not sync volume: {e}")
-                await asyncio.sleep(0.1)
+            await loop.run_in_executor(None, _read_until_eof)
+        except asyncio.CancelledError:
+            pass  # task was cancelled (e.g. process restarted) — exit cleanly
         except Exception as e:
             logger.error(f"Error monitoring output: {e}")
     
@@ -526,8 +629,13 @@ class SendspinClient:
                     logger.error(f"Error connecting Bluetooth: {e}")
             
             tasks.append(asyncio.create_task(connect_bluetooth_async()))
-            tasks.append(asyncio.create_task(self.bt_manager.monitor_and_reconnect()))
-        
+            mon_task = asyncio.create_task(self.bt_manager.monitor_and_reconnect())
+            mon_task.add_done_callback(
+                lambda t: logger.error(f"[{self.player_name}] monitor_and_reconnect task DIED: {t.exception()}")
+                if not t.cancelled() and t.exception() else None
+            )
+            tasks.append(mon_task)
+
         try:
             # Keep running
             while self.running:
@@ -567,69 +675,78 @@ def get_client_instance() -> Optional[SendspinClient]:
 async def main():
     """Main entry point"""
     global _client_instance
-    
-    # Load configuration from file (web UI editable)
+
     config = load_config()
-    player_name = config.get('SENDSPIN_NAME', f'Docker-{socket.gethostname()}')
     server_host = config.get('SENDSPIN_SERVER', 'auto')
-    bt_mac = config.get('BLUETOOTH_MAC', '')
-    
+    server_port = int(config.get('SENDSPIN_PORT', 9000))
+
     # Set timezone
-    tz = os.getenv('TZ', 'Australia/Melbourne')
+    tz = os.getenv('TZ', config.get('TZ', 'UTC'))
     os.environ['TZ'] = tz
     time.tzset()
-    
-    logger.info(f"Starting Sendspin Client: {player_name}")
+    logger.info(f"Timezone: {tz}")
+
+    # Normalise device list — fall back to legacy BLUETOOTH_MAC
+    bt_devices = config.get('BLUETOOTH_DEVICES', [])
+    if not bt_devices:
+        mac = config.get('BLUETOOTH_MAC', '')
+        name = config.get('SENDSPIN_NAME', f'Sendspin-{socket.gethostname()}')
+        bt_devices = [{'mac': mac, 'adapter': '', 'player_name': name}]
+
+    logger.info(f"Starting {len(bt_devices)} player instance(s)")
     if server_host and server_host.lower() not in ['auto', 'discover', '']:
         logger.info(f"Server: {server_host}:{server_port}")
     else:
         logger.info("Server: Auto-discovery enabled (mDNS)")
-    logger.info(f"Timezone: {tz}")
-    
-    # Log Bluetooth MAC if provided (manager created after client)
-    if bt_mac:
-        logger.info(f"Bluetooth MAC: {bt_mac}")
-    
-    # Create client first (without BT manager)
-    client = SendspinClient(player_name, server_host, 9000, None)
-    
-    # Now create Bluetooth manager with client reference and assign to client
-    if bt_mac:
-        bt_manager = BluetoothManager(bt_mac, client)
-        if not bt_manager.check_bluetooth_available():
-            logger.warning("Bluetooth not available on this system!")
-        # Assign the manager to the client using the correct attribute name
-        client.bt_manager = bt_manager
-        # Update status
-        client.status['bluetooth_available'] = bt_manager.check_bluetooth_available()
-    
-    # Set the client using our class holder
-    ClientHolder.set_client(client)
-    logger.info("Client instance registered")
-    
-    # Start web interface in background thread AFTER client is created
+
+    base_listen_port = 8928
+    clients = []
+    for i, device in enumerate(bt_devices):
+        mac = device.get('mac', '')
+        adapter = device.get('adapter', '')
+        player_name = (device.get('player_name') or
+                       config.get('SENDSPIN_NAME', f'Sendspin-{socket.gethostname()}'))
+        listen_port = device.get('port', base_listen_port + i)
+
+        client = SendspinClient(player_name, server_host, server_port, None, listen_port=listen_port)
+        if mac:
+            bt_mgr = BluetoothManager(mac, adapter=adapter, device_name=player_name, client=client)
+            if not bt_mgr.check_bluetooth_available():
+                logger.warning(f"BT adapter '{adapter or 'default'}' not available for {player_name}")
+            client.bt_manager = bt_mgr
+            client.status['bluetooth_available'] = bt_mgr.check_bluetooth_available()
+        clients.append(client)
+        logger.info(f"  Player: '{player_name}', BT: {mac or 'none'}, Adapter: {adapter or 'default'}")
+
+    # First client is the primary for web UI backward-compat
+    _client_instance = clients[0]
+    ClientHolder.set_client(clients[0])
+    logger.info("Client instance(s) registered")
+
+    # Start web interface in background thread
     import threading
     def run_web_server():
-        from web_interface import set_client, main as web_main
-        set_client(client)  # Pass the client reference to web interface
+        from web_interface import set_clients, main as web_main
+        set_clients(clients)
         web_main()
-    
+
     web_thread = threading.Thread(target=run_web_server, daemon=True, name="WebServer")
     web_thread.start()
     logger.info("Web interface starting in background...")
-    
+
     # Handle shutdown signals
     loop = asyncio.get_event_loop()
-    
+
     def signal_handler():
         logger.info("Received shutdown signal")
-        asyncio.create_task(client.stop())
-    
+        for c in clients:
+            asyncio.create_task(c.stop())
+
     for sig in (signal.SIGTERM, signal.SIGINT):
         loop.add_signal_handler(sig, signal_handler)
-    
-    # Run client
-    await client.run()
+
+    # Run all clients in parallel
+    await asyncio.gather(*[c.run() for c in clients])
 
 
 
@@ -644,17 +761,22 @@ def load_config():
     default_config = {
         'SENDSPIN_NAME': f'Sendspin-{socket.gethostname()}',
         'SENDSPIN_SERVER': 'auto',
+        'SENDSPIN_PORT': 9000,
         'BLUETOOTH_MAC': '',
+        'BLUETOOTH_DEVICES': [],
         'TZ': 'Australia/Melbourne',
     }
-    
+
+    allowed_keys = {'SENDSPIN_NAME', 'SENDSPIN_SERVER', 'SENDSPIN_PORT', 'BLUETOOTH_MAC',
+                    'BLUETOOTH_DEVICES', 'TZ', 'LAST_VOLUME'}
+
     if config_file.exists():
         try:
             with open(config_file) as f:
                 saved_config = json.load(f)
                 # Update with saved config
                 for key, value in saved_config.items():
-                    if key in default_config or key in ['SENDSPIN_NAME', 'SENDSPIN_SERVER', 'BLUETOOTH_MAC', 'TZ']:
+                    if key in allowed_keys:
                         default_config[key] = value
                 logger.info(f"Loaded config from {config_file}")
         except Exception as e:
