@@ -250,12 +250,12 @@ HTML_TEMPLATE = """
 
         /* BT device table */
         .bt-header {
-            display: grid; grid-template-columns: 1fr 1.3fr 0.9fr 5.5rem 30px;
+            display: grid; grid-template-columns: 1fr 1.3fr 0.9fr 9rem 4.5rem 5.5rem 30px;
             gap: 8px; margin-bottom: 4px; padding: 0 2px;
             font-size: 11px; font-weight: 600; color: #6b7280; text-transform: uppercase;
         }
         .bt-device-row {
-            display: grid; grid-template-columns: 1fr 1.3fr 0.9fr 5.5rem 30px;
+            display: grid; grid-template-columns: 1fr 1.3fr 0.9fr 9rem 4.5rem 5.5rem 30px;
             gap: 8px; align-items: center; margin-bottom: 8px;
         }
         .bt-device-row input, .bt-device-row select {
@@ -412,7 +412,7 @@ HTML_TEMPLATE = """
                 <label>Bluetooth Devices</label>
                 <div class="bt-header">
                     <span>Player Name</span><span>MAC Address</span>
-                    <span>Adapter</span><span>Delay ms</span><span></span>
+                    <span>Adapter</span><span>Listen Address</span><span>Port</span><span>Delay ms</span><span></span>
                 </div>
                 <div id="bt-devices-table"></div>
                 <div class="bt-toolbar">
@@ -804,17 +804,22 @@ function btAdapterOptions(selected) {
     return opts;
 }
 
-function addBtDeviceRow(name, mac, adapter, delay) {
+function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort) {
     var tbody = document.getElementById('bt-devices-table');
     var row = document.createElement('div');
     row.className = 'bt-device-row';
     var delayVal = (delay !== undefined && delay !== null && delay !== '') ? delay : -500;
+    var portVal  = (listenPort !== undefined && listenPort !== null && listenPort !== '') ? listenPort : '';
     row.innerHTML =
         '<input type="text" placeholder="Player Name" class="bt-name" value="' +
             escHtml(name || '') + '">' +
         '<input type="text" placeholder="AA:BB:CC:DD:EE:FF" class="bt-mac" value="' +
             escHtml(mac || '') + '">' +
         '<select class="bt-adapter">' + btAdapterOptions(adapter || '') + '</select>' +
+        '<input type="text" class="bt-listen-host" placeholder="auto" title="IP address this player advertises/listens on. Leave blank to auto-detect." value="' +
+            escHtml(listenHost || '') + '">' +
+        '<input type="number" class="bt-listen-port" placeholder="8928" title="Port this player listens on (default: 8928, 8929 for 2nd…)" value="' +
+            escHtml(String(portVal)) + '" min="1024" max="65535">' +
         '<input type="number" class="bt-delay" title="Static delay (ms). Negative = compensate for output latency. Typical BT A2DP: -500" value="' +
             escHtml(String(delayVal)) + '" step="50">' +
         '<button type="button" class="btn-remove-dev">\u00d7</button>';
@@ -833,13 +838,19 @@ function addBtDeviceRow(name, mac, adapter, delay) {
 function collectBtDevices() {
     var devices = [];
     document.querySelectorAll('#bt-devices-table .bt-device-row').forEach(function(row) {
-        var name    = row.querySelector('.bt-name').value.trim();
-        var mac     = row.querySelector('.bt-mac').value.trim().toUpperCase();
-        var adapter = row.querySelector('.bt-adapter').value;
-        var delayEl = row.querySelector('.bt-delay');
-        var delay   = delayEl ? parseFloat(delayEl.value) : -500;
+        var name       = row.querySelector('.bt-name').value.trim();
+        var mac        = row.querySelector('.bt-mac').value.trim().toUpperCase();
+        var adapter    = row.querySelector('.bt-adapter').value;
+        var listenHost = (row.querySelector('.bt-listen-host') || {}).value || '';
+        var portEl     = row.querySelector('.bt-listen-port');
+        var listenPort = portEl && portEl.value.trim() ? parseInt(portEl.value, 10) : null;
+        var delayEl    = row.querySelector('.bt-delay');
+        var delay      = delayEl ? parseFloat(delayEl.value) : -500;
         if (isNaN(delay)) delay = -500;
-        if (mac) devices.push({ mac: mac, adapter: adapter, player_name: name, static_delay_ms: delay });
+        var dev = { mac: mac, adapter: adapter, player_name: name, static_delay_ms: delay };
+        if (listenHost) dev.listen_host = listenHost;
+        if (listenPort) dev.listen_port = listenPort;
+        if (mac) devices.push(dev);
     });
     return devices;
 }
@@ -847,7 +858,8 @@ function collectBtDevices() {
 function populateBtDeviceRows(devices) {
     document.getElementById('bt-devices-table').innerHTML = '';
     devices.forEach(function(d) {
-        addBtDeviceRow(d.player_name || '', d.mac || '', d.adapter || '', d.static_delay_ms);
+        addBtDeviceRow(d.player_name || '', d.mac || '', d.adapter || '',
+                       d.static_delay_ms, d.listen_host, d.listen_port);
     });
 }
 
