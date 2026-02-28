@@ -2,7 +2,7 @@
 # HA Supervisor will build this Dockerfile using the ha-addon/ directory as the
 # build context.  The base image already contains all Python source and
 # dependencies; we only add the HA-specific entry point.
-ARG BUILD_FROM=ghcr.io/loryanstrant/sendspin-client:latest
+ARG BUILD_FROM=ghcr.io/trudenboy/sendspin-bt-bridge:latest
 FROM ${BUILD_FROM}
 
 # HA Supervisor expects the entry point to be at /run.sh by convention, but any
