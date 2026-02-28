@@ -64,6 +64,22 @@ def _bt_remove_device(mac: str, adapter_mac: str = '') -> None:
     threading.Thread(target=_run, daemon=True).start()
 
 
+def _persist_device_enabled(player_name: str, enabled: bool) -> None:
+    if not CONFIG_FILE.exists():
+        return
+    try:
+        with open(CONFIG_FILE, 'r') as f:
+            cfg = json.load(f)
+        for dev in cfg.get('BLUETOOTH_DEVICES', []):
+            if dev.get('player_name') == player_name:
+                dev['enabled'] = enabled
+                break
+        with open(CONFIG_FILE, 'w') as f:
+            json.dump(cfg, f, indent=2)
+    except Exception as e:
+        logger.warning(f"Could not persist enabled flag for '{player_name}': {e}")
+
+
 def set_clients(clients):
     """Set multiple client references"""
     global _clients
@@ -124,6 +140,7 @@ def get_client_status_for(client):
         status['bluetooth_mac'] = bt_mgr.mac_address if bt_mgr else None
         status['bluetooth_adapter'] = bt_mgr.adapter if bt_mgr else None
         status['has_sink'] = bool(getattr(client, 'bluetooth_sink_name', None))
+        status['bt_management_enabled'] = getattr(client, 'bt_management_enabled', True)
 
         logger.debug(f"Status retrieved: {status}")
         return status
@@ -218,6 +235,10 @@ HTML_TEMPLATE = """
         .btn-bt-reconnect:hover:not(:disabled) { background: #5a67d8; }
         .btn-bt-pair { background: #f59e0b; }
         .btn-bt-pair:hover:not(:disabled) { background: #d97706; }
+        .btn-bt-release { background: #ef4444; }
+        .btn-bt-release:hover:not(:disabled) { background: #dc2626; }
+        .btn-bt-reclaim { background: #10b981; }
+        .btn-bt-reclaim:hover:not(:disabled) { background: #059669; }
         .bt-action-status { font-size: 12px; color: #6b7280; }
         /* Group controls */
         .group-controls {
@@ -699,6 +720,8 @@ function buildDeviceCard(i) {
             ' onclick="btReconnect(' + i + ')">&#128260; Reconnect</button>' +
           '<button type="button" class="btn-bt-action btn-bt-pair" id="dbtn-pair-' + i + '"' +
             ' onclick="btPair(' + i + ')" title="Put the device into pairing mode first">&#128279; Re-pair</button>' +
+          '<button type="button" class="btn-bt-action btn-bt-release" id="dbtn-release-' + i + '"' +
+            ' onclick="btToggleManagement(' + i + ')">\uD83D\uDD13 Release</button>' +
           '<span class="bt-action-status" id="dbt-action-status-' + i + '"></span>' +
         '</div>';
     return card;
@@ -828,6 +851,24 @@ function populateDeviceCard(i, dev) {
                 }).catch(function(e) { console.error('Mute failed:', e); });
             });
         }
+    }
+
+    // Release/Reclaim button state
+    var relBtn = document.getElementById('dbtn-release-' + i);
+    if (relBtn) {
+        var mgmtEnabled = dev.bt_management_enabled !== false;
+        if (mgmtEnabled) {
+            relBtn.textContent = '\uD83D\uDD13 Release';
+            relBtn.className = 'btn-bt-action btn-bt-release';
+        } else {
+            relBtn.textContent = '\uD83D\uDD12 Reclaim';
+            relBtn.className = 'btn-bt-action btn-bt-reclaim';
+        }
+        // Disable Reconnect/Re-pair while released
+        var reconnBtn = document.getElementById('dbtn-reconnect-' + i);
+        var pairBtn = document.getElementById('dbtn-pair-' + i);
+        if (reconnBtn) reconnBtn.disabled = !mgmtEnabled;
+        if (pairBtn) pairBtn.disabled = !mgmtEnabled;
     }
 }
 
@@ -1062,6 +1103,31 @@ async function btPair(i) {
     }, 30000);
 }
 
+async function btToggleManagement(i) {
+    var dev = lastDevices && lastDevices[i];
+    if (!dev) return;
+    var playerName = dev.player_name || null;
+    var newEnabled = dev.bt_management_enabled === false;  // toggle
+    var btn = document.getElementById('dbtn-release-' + i);
+    var status = document.getElementById('dbt-action-status-' + i);
+    if (btn) btn.disabled = true;
+    if (status) status.textContent = newEnabled ? '\u21BB Reclaiming\u2026' : '\u21BB Releasing\u2026';
+    try {
+        var resp = await fetch('/api/bt/management', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({player_name: playerName, enabled: newEnabled})
+        });
+        var d = await resp.json();
+        if (d.success) lastDevices[i].bt_management_enabled = newEnabled;
+        if (status) status.textContent = d.success ? '\u2713 ' + d.message : '\u2717 ' + (d.error || 'Failed');
+    } catch (e) {
+        if (status) status.textContent = '\u2717 Error';
+    }
+    if (btn) btn.disabled = false;
+    setTimeout(function() { if (status) status.textContent = ''; }, 4000);
+}
+
 function toggleAutoRefresh() {
     autoRefreshLogs = !autoRefreshLogs;
     var btn = document.getElementById('auto-refresh-btn');
@@ -1226,6 +1292,13 @@ function collectBtDevices() {
         var dev = { mac: mac, adapter: adapter, player_name: name, static_delay_ms: delay };
         if (listenHost) dev.listen_host = listenHost;
         if (listenPort) dev.listen_port = listenPort;
+        // Preserve enabled flag (not a form field — comes from live status)
+        var livedev = lastDevices && lastDevices.find(function(d) {
+            return d.player_name === name || d.bluetooth_mac === mac;
+        });
+        if (livedev && livedev.bt_management_enabled === false) {
+            dev.enabled = false;
+        }
         if (mac) devices.push(dev);
     });
     return devices;
@@ -1764,6 +1837,31 @@ def api_bt_pair():
         return jsonify({'success': True, 'message': 'Pairing started (~25s)'})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/bt/management', methods=['POST'])
+def api_bt_management():
+    """Release or reclaim the BT adapter for a player."""
+    data = request.get_json() or {}
+    player_name = data.get('player_name')
+    enabled = data.get('enabled')
+    if enabled is None:
+        return jsonify({'success': False, 'error': 'Missing "enabled" field'}), 400
+    client = next((c for c in _clients if getattr(c, 'player_name', None) == player_name), None)
+    if not client and _clients:
+        client = _clients[0]
+    if not client:
+        return jsonify({'success': False, 'error': 'No client found'}), 503
+    enabled = bool(enabled)
+    # set_bt_management_enabled is synchronous — safe to call from Flask thread directly
+    threading.Thread(
+        target=client.set_bt_management_enabled,
+        args=(enabled,),
+        daemon=True
+    ).start()
+    _persist_device_enabled(player_name, enabled)
+    action = 'reclaimed' if enabled else 'released'
+    return jsonify({'success': True, 'message': f'BT adapter {action}', 'enabled': enabled})
 
 
 @app.route('/api/status')

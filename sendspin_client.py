@@ -66,6 +66,7 @@ class BluetoothManager:
         # In LXC containers, 'select hci0' fails ("Controller hci0 not available");
         # selecting by MAC address works because D-Bus objects use MACs, not hciN names.
         self._adapter_select = self._resolve_adapter_select(adapter) if adapter else ''
+        self.management_enabled: bool = True  # False = released; monitor loop skips reconnect
 
     def _resolve_adapter_select(self, adapter: str) -> str:
         """Resolve hciN to adapter MAC address for bluetoothctl 'select'.
@@ -374,6 +375,10 @@ class BluetoothManager:
         while True:
             iteration += 1
             try:
+                if not self.management_enabled:
+                    await asyncio.sleep(5)
+                    continue
+
                 current_time = time.time()
                 if current_time - self.last_check >= self.check_interval:
                     self.last_check = current_time
@@ -459,10 +464,12 @@ class SendspinClient:
             'uptime_start': datetime.now(),
             'reconnecting': False,
             'reconnect_attempt': 0,
+            'bt_management_enabled': True,
         }
-        
+
         self.process = None
         self.running = False
+        self.bt_management_enabled: bool = True
         self.bluetooth_sink_name = None  # Store Bluetooth sink name for volume sync
         self.volume_restore_done = False  # Flag to prevent saving initial volume
         self._monitor_task: Optional[asyncio.Task] = None
@@ -738,15 +745,18 @@ class SendspinClient:
     async def run(self):
         """Main run loop"""
         self.running = True
-        
+
         # Start Sendspin player first (don't block on Bluetooth)
-        await self.start_sendspin_process()
-        
+        if self.bt_management_enabled:
+            await self.start_sendspin_process()
+        else:
+            logger.info(f"[{self.player_name}] BT management disabled — skipping sendspin startup")
+
         # Start background tasks
         tasks = [
             asyncio.create_task(self.update_status())
         ]
-        
+
         # Handle Bluetooth connection in background if configured
         logger.info(f"Bluetooth manager present: {self.bt_manager is not None}")
         if self.bt_manager:
@@ -755,6 +765,8 @@ class SendspinClient:
                 """Connect Bluetooth in background without blocking"""
                 logger.info("Bluetooth async task started, waiting 2 seconds...")
                 await asyncio.sleep(2)  # Let sendspin start first
+                if not self.bt_management_enabled:
+                    return
                 logger.info("Connecting Bluetooth speaker...")
                 try:
                     # Run in thread pool to avoid blocking
@@ -797,6 +809,30 @@ class SendspinClient:
     async def stop(self):
         """Stop the client"""
         self.running = False
+
+    def set_bt_management_enabled(self, enabled: bool) -> None:
+        """Release (enabled=False) or reclaim (enabled=True) the BT adapter."""
+        self.bt_management_enabled = enabled
+        self.status['bt_management_enabled'] = enabled
+        if self.bt_manager:
+            self.bt_manager.management_enabled = enabled
+        if not enabled:
+            # Stop sendspin subprocess
+            if self.process and self.process.poll() is None:
+                logger.info(f"[{self.player_name}] BT released — stopping sendspin")
+                try:
+                    self.process.terminate()
+                except Exception:
+                    pass
+            # Disconnect BT device (synchronous subprocess call, safe from any thread)
+            if self.bt_manager:
+                try:
+                    self.bt_manager.disconnect_device()
+                except Exception as e:
+                    logger.warning(f"[{self.player_name}] Disconnect on release failed: {e}")
+            logger.info(f"[{self.player_name}] BT adapter released to host")
+        else:
+            logger.info(f"[{self.player_name}] BT adapter reclaimed — monitor will reconnect")
 
 
 async def main():
@@ -846,6 +882,12 @@ async def main():
                 logger.warning(f"BT adapter '{adapter or 'default'}' not available for {player_name}")
             client.bt_manager = bt_mgr
             client.status['bluetooth_available'] = bt_mgr.check_bluetooth_available()
+            bt_enabled = device.get('enabled', True)
+            if not bt_enabled:
+                client.bt_management_enabled = False
+                client.status['bt_management_enabled'] = False
+                bt_mgr.management_enabled = False
+                logger.info(f"  Player '{player_name}': BT management disabled at startup")
         clients.append(client)
         logger.info(f"  Player: '{player_name}', BT: {mac or 'none'}, Adapter: {adapter or 'default'}")
 
