@@ -582,6 +582,12 @@ class SendspinClient:
     async def start_sendspin_process(self):
         """Start the sendspin CLI player"""
         try:
+            # If BT is connected but sink hasn't been configured yet (e.g. process restart
+            # triggered by _read_until_eof before monitor_and_reconnect runs configure),
+            # configure the audio sink now so bluetooth_sink_name is available.
+            if self.bt_manager and self.bt_manager.connected and not self.bluetooth_sink_name:
+                self.bt_manager.configure_bluetooth_audio()
+
             # Kill any existing process first to free the port
             if self.process and self.process.poll() is None:
                 logger.info(f"Stopping existing sendspin process (PID {self.process.pid}) before restart")
