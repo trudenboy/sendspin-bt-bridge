@@ -1,86 +1,98 @@
-# Sendspin Docker Client
+# Sendspin Bluetooth Bridge
 
-A Docker-based Sendspin client with Bluetooth speaker support and web-based configuration interface. Perfect for running on headless systems like Raspberry Pi or Home Assistant installations.
+A Bluetooth bridge for [Music Assistant](https://www.music-assistant.io/) — connects your Bluetooth speakers to the MA Sendspin protocol. Runs as a Docker container, a Home Assistant addon, or a native LXC container on Proxmox VE. Designed for headless systems.
 
 [Why did I build this?](why-did-I-build-this.md)
 
 ## Features
 
-- ✅ **Sendspin Protocol**: Full support for Music Assistant's Sendspin protocol
-- 🔊 **Bluetooth Audio**: Automatic connection and reconnection to Bluetooth speakers
-- 🌐 **Web Interface**: Easy configuration and real-time status monitoring
-- 🐳 **Docker Ready**: Fully containerized with minimal host dependencies
-- 🔄 **Auto-reconnect**: Automatically handles Bluetooth speaker disconnections
-- 📊 **Status Reporting**: Reports speaker state and container info to Music Assistant
-- 🕐 **Timezone Support**: Configurable timezone for accurate scheduling
+- **Sendspin Protocol**: Full support for Music Assistant's native Sendspin streaming protocol
+- **Multi-device**: Bridge multiple Bluetooth speakers simultaneously, each appearing as its own MA player
+- **Auto-reconnect**: Monitors speaker connections every 10 s and reconnects automatically
+- **Web Interface**: Real-time status dashboard and configuration UI on port 8080
+- **Three deployment options**: Home Assistant addon, Docker Compose, or Proxmox LXC
+- **PipeWire & PulseAudio**: Auto-detects the host audio system
+- **Player metadata**: Reports real device manufacturer and model to Music Assistant
+- **Group controls**: Volume and mute controls across multiple players from the web UI
 
 <img width="1233" height="657" alt="image" src="https://github.com/user-attachments/assets/d5f3f733-b073-4a08-b23a-feb3efc4daf7" />
 <br><br>
 
 <img width="1187" height="257" alt="image" src="https://github.com/user-attachments/assets/72080af9-819a-4f63-9f1f-81e87a469d03" />
 
+---
 
+## Deployment Options
 
-## Quick Start
+| | Home Assistant Addon | Docker Compose | Proxmox LXC |
+|---|---|---|---|
+| Install method | HA Addon Store (one-click) | `docker compose up` | One-line script |
+| Bluetooth | Host bluetoothd via D-Bus | Host bluetoothd via D-Bus | Own bluetoothd inside LXC |
+| Audio | HA Supervisor bridge | Host PulseAudio/PipeWire | Own PulseAudio inside LXC |
+| Config UI | HA panel + web UI | Web UI at :8080 | Web UI at :8080 |
+| Config changes | Addon restart | Container restart | `systemctl restart` |
+
+---
+
+## Option A — Home Assistant Addon
+
+### Install
+
+1. In Home Assistant go to **Settings → Add-ons → Add-on store → ⋮ → Repositories**
+2. Add: `https://github.com/trudenboy/sendspin-bt-bridge`
+3. Find **Sendspin Bluetooth Bridge** in the store and click **Install**
+
+### Configure
+
+In the addon **Configuration** tab:
+
+```yaml
+sendspin_server: auto          # or your MA hostname/IP
+sendspin_port: 9000
+bluetooth_devices:
+  - mac: "AA:BB:CC:DD:EE:FF"
+    player_name: "Living Room Speaker"
+  - mac: "11:22:33:44:55:66"
+    player_name: "Kitchen Speaker"
+    adapter: hci1              # optional — only needed for multi-adapter setups
+```
+
+The addon exposes the web UI via **HA Ingress** (no port forwarding needed) and appears in the HA sidebar.
+
+### Requirements
+
+- Home Assistant OS or Supervised
+- Bluetooth adapter accessible to the host
+- Music Assistant server running on your network (any host)
+
+### Audio routing (HA OS)
+
+The addon requests `audio: true` in its manifest so HA Supervisor injects `PULSE_SERVER` automatically. No manual socket configuration is needed.
+
+---
+
+## Option B — Docker Compose
 
 ### Prerequisites
 
-- Docker and Docker Compose installed
-- Bluetooth adapter on the host system (if using Bluetooth speakers)
+- Docker and Docker Compose
+- Bluetooth speakers **paired** with the host before starting the container
 - Music Assistant server running on your network
 
-**Important**: If using Bluetooth speakers, they must be paired with the host system before starting the container. The container will use the host's Bluetooth adapter via D-Bus.
+### Pair speakers on the host first
 
-### Bluetooth Setup on Host
-
-Ensure Bluetooth is enabled on the host:
-
-```bash
-# Check if Bluetooth is available
-hciconfig
-
-# Enable Bluetooth if needed
-sudo systemctl enable bluetooth
-sudo systemctl start bluetooth
-
-# Ensure your user (or the container) can access Bluetooth
-sudo usermod -a -G bluetooth $USER
-```
-
-To pair a Bluetooth speaker on the host:
 ```bash
 bluetoothctl
 scan on
-# Wait for your device to appear
-pair XX:XX:XX:XX:XX:XX
+pair  XX:XX:XX:XX:XX:XX
 trust XX:XX:XX:XX:XX:XX
 connect XX:XX:XX:XX:XX:XX
 exit
 ```
 
-
-### Permissions
-
-The container requires:
-- `privileged: true` for Bluetooth access
-- `network_mode: host` for mDNS discovery
-- Access to `/var/run/dbus` for Bluetooth communication
-- Access to `/dev/bus/usb` for USB Bluetooth adapters
-
-
-
-### Installation
-
-1. Create the configuration directory:
-```bash
-sudo mkdir -p /etc/docker/Sendspin
-```
-
-2. Customise Docker compose & deploy using pre-built image (Recommended)
+### docker-compose.yml
 
 ```yaml
-version: '3.8'
-
 services:
   sendspin-client:
     image: ghcr.io/loryanstrant/sendspin-client:latest
@@ -88,217 +100,351 @@ services:
     restart: unless-stopped
     network_mode: host
     privileged: true
-    
+
     volumes:
       - /var/run/dbus:/var/run/dbus
+      - /run/user/1000/pulse:/run/user/1000/pulse   # PulseAudio
       - /etc/docker/Sendspin:/config
-    
+
     environment:
-      - SENDSPIN_NAME=Living Room
-      - SENDSPIN_SERVER=ma.local
-      - SENDSPIN_PORT=9000
-      - BLUETOOTH_MAC=04:57:91:D8:EC:9D
+      - SENDSPIN_SERVER=auto
       - TZ=Australia/Melbourne
       - WEB_PORT=8080
-    
+
     devices:
       - /dev/bus/usb:/dev/bus/usb
-    
+
     cap_add:
       - NET_ADMIN
       - NET_RAW
       - SYS_ADMIN
 ```
 
+Create config directory and start:
 
-3. Access the web interface:
+```bash
+sudo mkdir -p /etc/docker/Sendspin
+docker compose up -d
 ```
-http://your-host-ip:8080
+
+Access the web UI at `http://your-host-ip:8080` to add Bluetooth devices and set the MA server.
+
+---
+
+## Option C — Proxmox VE (LXC)
+
+Run as a **native LXC container** — no Docker required. The container runs its own `bluetoothd`, `pulseaudio`, and `avahi-daemon` with USB Bluetooth hardware passed through via cgroup rules.
+
+### One-line install (on the Proxmox host as root)
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/loryanstrant/sendspin-client/main/lxc/proxmox-create.sh)
 ```
+
+The script interactively prompts for container ID, hostname, RAM, disk, network, and USB Bluetooth passthrough.
+
+### Manual steps (Proxmox UI)
+
+1. Create a new **privileged** LXC container (Debian 12, 512 MB RAM, 4 GB disk)
+2. Start the container and open a shell (`pct enter <CTID>`)
+3. Run the installer:
+   ```bash
+   bash <(curl -fsSL https://raw.githubusercontent.com/loryanstrant/sendspin-client/main/lxc/install.sh)
+   ```
+4. Append to `/etc/pve/lxc/<CTID>.conf` on the **Proxmox host**:
+   ```
+   lxc.cgroup2.devices.allow: c 166:* rwm
+   lxc.cgroup2.devices.allow: c 13:* rwm
+   lxc.mount.entry: /dev/bus/usb dev/bus/usb none bind,optional,create=dir 0 0
+   lxc.cgroup2.devices.allow: c 189:* rwm
+   ```
+5. Restart the container: `pct restart <CTID>`
+
+### Bluetooth pairing inside the LXC
+
+```bash
+pct enter <CTID>
+bluetoothctl
+power on
+scan on
+pair  XX:XX:XX:XX:XX:XX
+trust XX:XX:XX:XX:XX:XX
+connect XX:XX:XX:XX:XX:XX
+exit
+```
+
+Then add the device in `/config/config.json` and restart the service:
+
+```bash
+pct exec <CTID> -- systemctl restart sendspin-client
+```
+
+### Key monitoring commands
+
+```bash
+pct exec <CTID> -- journalctl -u sendspin-client -f
+pct exec <CTID> -- systemctl status sendspin-client pulseaudio-system bluetooth avahi-daemon --no-pager
+pct exec <CTID> -- pactl list sinks short
+pct exec <CTID> -- bluetoothctl show
+```
+
+---
 
 ## Configuration
 
-The Sendspin client can also be configured through the web interface at `http://your-host:8080`.
+### Multi-device config (`/config/config.json`)
 
-### Configuration Options
+The recommended way to configure multiple speakers:
 
-- **Player Name**: The name that appears in Music Assistant (configured via web UI)
-- **Server**: Use `auto` for automatic mDNS discovery, or specify a hostname/IP
-- **Bluetooth MAC**: MAC address of your Bluetooth speaker (optional)
-- **Timezone**: Your local timezone
+```json
+{
+  "SENDSPIN_NAME": "Sendspin-Bridge",
+  "SENDSPIN_SERVER": "auto",
+  "SENDSPIN_PORT": "9000",
+  "BLUETOOTH_DEVICES": [
+    {
+      "mac": "80:99:E7:C2:0B:D3",
+      "player_name": "Living Room",
+      "adapter": "hci0"
+    },
+    {
+      "mac": "FC:58:FA:EB:08:6C",
+      "player_name": "Kitchen",
+      "adapter": "hci1"
+    }
+  ],
+  "TZ": "Australia/Melbourne"
+}
+```
 
-**Note**: Configuration changes require a container restart to take effect.
+Each device in `BLUETOOTH_DEVICES` spawns an independent Sendspin player and Bluetooth manager. Both appear as separate players in Music Assistant.
+
+The `adapter` field is optional — omit it if you only have one Bluetooth adapter. Set it to `hci0`, `hci1`, etc. when you have multiple adapters and want to pin a speaker to a specific one.
+
+### Legacy single-device config (still supported)
+
+```json
+{
+  "SENDSPIN_SERVER": "auto",
+  "BLUETOOTH_MAC": "AA:BB:CC:DD:EE:FF"
+}
+```
+
 ### Environment Variables
 
-| Variable | Description | Default | Required |
-|----------|-------------|---------|----------|
-| `SENDSPIN_NAME` | Player name in Music Assistant | `Docker-{hostname}` | No |
-| `SENDSPIN_SERVER` | Music Assistant server hostname/IP | `ma.strant.casa` | Yes |
-| `SENDSPIN_PORT` | Sendspin server port | `9000` | Yes |
-| `BLUETOOTH_MAC` | Bluetooth speaker MAC address | - | No* |
-| `TZ` | Timezone (e.g., `Australia/Melbourne`) | `Australia/Melbourne` | No |
-| `WEB_PORT` | Web interface port | `8080` | No |
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SENDSPIN_NAME` | `Docker-{hostname}` | Base player name shown in Music Assistant |
+| `SENDSPIN_SERVER` | `auto` | MA server hostname/IP; `auto` uses mDNS discovery |
+| `SENDSPIN_PORT` | `9000` | MA Sendspin WebSocket port |
+| `BLUETOOTH_MAC` | `` | Single speaker MAC (legacy; use `BLUETOOTH_DEVICES` in config.json instead) |
+| `TZ` | `Australia/Melbourne` | Container timezone |
+| `WEB_PORT` | `8080` | Web interface port |
 
-*Leave empty to disable Bluetooth functionality
-
+Environment variables are overridden by values in `/config/config.json` if the file exists.
 
 ### Web Interface
 
-The web interface provides:
+The web UI at `http://your-host:8080` (or via HA Ingress) provides:
 
-- **Real-time Status**: View connection status, playback state, and system info
-- **Configuration**: Change settings without editing files
-- **Monitoring**: See when the speaker connects/disconnects
-- **System Info**: View IP address, hostname, and uptime
+- **Per-device cards**: Connection status, playback state, volume slider, mute toggle
+- **Reconnect / Re-pair buttons**: Trigger manual reconnect or full re-pair without restarting
+- **Group controls**: Set volume or mute across all devices at once
+- **Configuration page**: Edit server address, add/remove Bluetooth devices
+- **System info**: IP address, hostname, uptime, audio sink status
 
-
-
-
-## Troubleshooting
-
-### Bluetooth Speaker Won't Connect
-
-1. **Check Bluetooth availability**:
-```bash
-docker exec -it sendspin-client bluetoothctl
-power on
-scan on
-```
-
-2. **Pair manually if needed**:
-```bash
-docker exec -it sendspin-client bluetoothctl
-pair XX:XX:XX:XX:XX:XX
-trust XX:XX:XX:XX:XX:XX
-connect XX:XX:XX:XX:XX:XX
-```
-
-3. **Check container logs**:
-```bash
-docker logs sendspin-client
-```
-
-### Can't Connect to Music Assistant
-
-1. Verify the server address and port in your configuration
-2. Ensure the container is on the same network (using `network_mode: host`)
-3. Check Music Assistant logs for connection attempts
-4. Verify firewall rules aren't blocking port 9000
-
-### Web Interface Not Accessible
-
-1. Check if the port is correct: `docker ps`
-2. Ensure no other service is using port 8080
-3. Try accessing via the host's IP: `http://192.168.1.x:8080`
-
-### Container Restarts Frequently
-
-1. Check logs: `docker logs sendspin-client`
-2. Verify Bluetooth adapter is working: `hciconfig`
-3. Check D-Bus is running: `ps aux | grep dbus`
+---
 
 ## Architecture
 
 ```
 ┌─────────────────────────────────────┐
 │     Music Assistant Server          │
-│         (Sendspin Server)           │
+│  (built-in Sendspin provider)       │
 └──────────────┬──────────────────────┘
-               │ WebSocket (port 9000)
+               │ WebSocket ws://<ma>:9000/sendspin
                │
 ┌──────────────▼──────────────────────┐
-│     Sendspin Docker Client          │
-│  ┌──────────────────────────────┐   │
-│  │   Python Sendspin Client     │   │
-│  │   - aiosendspin library      │   │
-│  │   - Audio streaming          │   │
-│  │   - Status reporting         │   │
-│  └──────────────────────────────┘   │
-│  ┌──────────────────────────────┐   │
-│  │   Bluetooth Manager          │   │
-│  │   - bluetoothctl interface   │   │
-│  │   - Auto-reconnect logic     │   │
-│  │   - Connection monitoring    │   │
-│  └──────────────────────────────┘   │
-│  ┌──────────────────────────────┐   │
-│  │   Web Interface (Flask)      │   │
-│  │   - Configuration UI         │   │
-│  │   - Status dashboard         │   │
-│  │   - Real-time monitoring     │   │
-│  └──────────────────────────────┘   │
-└──────────────┬──────────────────────┘
-               │ Bluetooth
-               │
-┌──────────────▼──────────────────────┐
-│      Bluetooth Speaker              │
-└─────────────────────────────────────┘
+│     Sendspin Bluetooth Bridge       │
+│                                     │
+│  ┌─────────────────────────────┐    │
+│  │  SendspinClient (per device)│    │
+│  │  · sendspin CLI subprocess  │    │
+│  │  · playback state tracking  │    │
+│  │  · volume sync via pactl    │    │
+│  └─────────────────────────────┘    │
+│  ┌─────────────────────────────┐    │
+│  │  BluetoothManager           │    │
+│  │  · bluetoothctl interface   │    │
+│  │  · auto-reconnect every 10s │    │
+│  │  · PipeWire/PulseAudio sink │    │
+│  └─────────────────────────────┘    │
+│  ┌─────────────────────────────┐    │
+│  │  Web Interface (Flask/8080) │    │
+│  │  · status dashboard         │    │
+│  │  · config editor            │    │
+│  │  · group controls           │    │
+│  └─────────────────────────────┘    │
+└──────────┬──────────────────────────┘
+           │ Bluetooth A2DP
+    ┌──────┴──────┐
+    │  Speaker 1  │  Speaker 2  │  ...
+    └─────────────┘
 ```
 
-## Development
+---
 
-### Building from Source
+## Troubleshooting
 
-```bash
-git clone https://github.com/loryanstrant/Sendspin-client.git
-cd Sendspin-client
-docker build -t sendspin-client .
-```
-
-### Running Tests
+### Bluetooth speaker won't connect
 
 ```bash
-# Test Bluetooth connectivity
+# Docker
 docker exec -it sendspin-client bluetoothctl info XX:XX:XX:XX:XX:XX
 
-# Test Sendspin connection
+# Pair manually
+docker exec -it sendspin-client bluetoothctl
+pair XX:XX:XX:XX:XX:XX
+trust XX:XX:XX:XX:XX:XX
+connect XX:XX:XX:XX:XX:XX
+
+# Check logs
 docker logs -f sendspin-client
 ```
 
-### Modifying the Code
+### Can't connect to Music Assistant
 
-The main components are:
+1. Verify `SENDSPIN_SERVER` is correct or use `auto`
+2. Ensure `network_mode: host` is set (required for mDNS)
+3. Check MA logs for incoming Sendspin connections
+4. Verify port 9000 is reachable from the host
 
-- `sendspin_client.py`: Core Sendspin client with Bluetooth management
-- `web_interface.py`: Flask web application for UI
-- `entrypoint.sh`: Container startup script
-- `Dockerfile`: Container build configuration
-- `docker-compose.yml`: Docker Compose orchestration
+### Audio routing issues (Docker)
+
+The container needs access to the host audio socket. Add to `docker-compose.yml`:
+
+```yaml
+volumes:
+  - /run/user/1000/pulse:/run/user/1000/pulse
+environment:
+  - PULSE_SERVER=unix:/run/user/1000/pulse/native
+```
+
+For PipeWire:
+```yaml
+volumes:
+  - /run/user/1000/pipewire-0:/run/user/1000/pipewire-0
+```
+
+### No audio sink after Bluetooth connects
+
+The app tries several naming patterns automatically:
+- `bluez_output.{MAC}.1` (PipeWire)
+- `bluez_output.{MAC}.a2dp-sink`
+- `bluez_sink.{MAC}.a2dp_sink` (PulseAudio)
+- `bluez_sink.{MAC}`
+
+List available sinks to confirm which is active:
+
+```bash
+docker exec -it sendspin-client pactl list short sinks
+```
+
+---
+
+## Development
+
+```bash
+# Clone
+git clone https://github.com/trudenboy/sendspin-bt-bridge.git
+cd sendspin-bt-bridge
+
+# Build and run locally
+docker compose up --build
+
+# View logs
+docker logs -f sendspin-client
+
+# Run without Docker (requires system BT/audio packages)
+pip install -r requirements.txt
+python sendspin_client.py
+```
+
+### Project structure
+
+| File | Purpose |
+|------|---------|
+| `sendspin_client.py` | Core app — `BluetoothManager`, `SendspinClient`, `main()` |
+| `web_interface.py` | Flask web UI served by Waitress |
+| `entrypoint.sh` | Container startup — D-Bus, audio socket detection, app launch |
+| `Dockerfile` | Container image |
+| `docker-compose.yml` | Docker Compose orchestration |
+| `ha-addon/config.yaml` | Home Assistant addon manifest |
+| `ha-addon/Dockerfile` | HA addon image (thin wrapper over main image) |
+| `ha-addon/run.sh` | HA entry point — translates options.json → config.json |
+| `ha-addon/translations/en.yaml` | HA UI labels |
+| `lxc/` | Proxmox LXC install scripts |
+
+---
 
 ## Contributing
 
-Contributions are welcome! Please:
-
 1. Fork the repository
-2. Create a feature branch
+2. Create a feature branch off `integration`
 3. Make your changes
-4. Submit a pull request
+4. Submit a pull request against `integration`
+
+---
 
 ## Development Approach
 <img width="256" height="256" alt="image" src="https://github.com/user-attachments/assets/3e6903cf-2bfa-4f10-bc25-8bf3de5e2f3a" />
 
-
-## License
-
-MIT License - see LICENSE file for details
+---
 
 ## Credits
 
 - Built for [Music Assistant](https://www.music-assistant.io/)
-- Uses [aiosendspin](https://github.com/Sendspin/aiosendspin) library
+- Uses the `sendspin` CLI from the MA project
 - Inspired by [sendspin-go](https://github.com/Sendspin/sendspin-go)
+- Upstream repository: [loryanstrant/Sendspin-client](https://github.com/loryanstrant/Sendspin-client)
+- Born from the MA community discussion: [Sendspin Bluetooth Bridge #4677](https://github.com/orgs/music-assistant/discussions/4677)
 
 ## Support
 
-- **Issues**: [GitHub Issues](https://github.com/loryanstrant/Sendspin-client/issues)
-- **Music Assistant**: [Discord](https://discord.gg/kaVm8hGpne)
+- **Issues**: [GitHub Issues](https://github.com/trudenboy/sendspin-bt-bridge/issues)
+- **Original discussion**: [music-assistant/discussions #4677](https://github.com/orgs/music-assistant/discussions/4677)
+- **Music Assistant community**: [Discord](https://discord.gg/kaVm8hGpne)
+
+## License
+
+MIT License — see [LICENSE](LICENSE) for details.
+
+---
 
 ## Changelog
 
-### v1.0.0 (2026-01-01)
+### v1.2.0
+
+- **Home Assistant addon** — install directly from HA Addon Store via custom repository
+- **Multi-adapter support** — pin each device to a specific Bluetooth adapter (`hci0`, `hci1`, …)
+- **Reconnect / Re-pair buttons** in the web UI per device card
+- **Group volume and mute controls** across all players
+- **Audio-only BT scan filter** — only audio-capable devices shown during scan
+- **Real device manufacturer** reported to Music Assistant player info
+- **HA audio socket detection** — `entrypoint.sh` checks `PULSE_SERVER`, `/run/audio/pulse.sock`, then standard paths
+- Code review fixes: reliability and dead code cleanup
+
+### v1.1.0
+
+- Multi-device support (`BLUETOOTH_DEVICES` array in config.json)
+- Each device appears as a separate player in Music Assistant
+- Web UI device cards with per-device status
+
+### v1.0.0
 
 - Initial release
 - Sendspin protocol support
-- Bluetooth speaker management
+- Single Bluetooth speaker management
 - Web-based configuration interface
 - Docker container with auto-reconnect
 - GHCR image publishing

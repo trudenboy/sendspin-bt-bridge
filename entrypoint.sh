@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
 echo "=== Starting Sendspin Client Container ==="
 
@@ -24,7 +24,14 @@ fi
 
 # Use host's PipeWire/PulseAudio
 echo "Using host audio system (PipeWire/PulseAudio)..."
-if [ -S /run/user/1000/pulse/native ]; then
+if [ -n "${PULSE_SERVER:-}" ]; then
+    # Already set — by HA Supervisor (audio: true) or the ha-addon run.sh
+    echo "Audio bridge pre-configured: $PULSE_SERVER"
+elif [ -S /run/audio/pulse.sock ]; then
+    # HA OS audio bridge socket (Supervisor injects this path in some versions)
+    export PULSE_SERVER=unix:/run/audio/pulse.sock
+    echo "HA audio bridge socket found: /run/audio/pulse.sock"
+elif [ -S /run/user/1000/pulse/native ]; then
     echo "Host PulseAudio socket found"
     export PULSE_SERVER=unix:/run/user/1000/pulse/native
 elif [ -S /run/user/1000/pipewire-0 ]; then
