@@ -1297,6 +1297,21 @@ def api_config():
                 config = json.load(f)
         else:
             config = DEFAULT_CONFIG.copy()
+
+        # Enrich BLUETOOTH_DEVICES with resolved listen_port / listen_host
+        # from running client instances (not saved to file — display only).
+        client_map = {getattr(c, 'player_name', None): c for c in _clients}
+        mac_map    = {getattr(getattr(c, 'bt_manager', None), 'mac_address', None): c
+                      for c in _clients}
+        for dev in config.get('BLUETOOTH_DEVICES', []):
+            client = client_map.get(dev.get('player_name')) or mac_map.get(dev.get('mac'))
+            if client:
+                if 'listen_port' not in dev or not dev['listen_port']:
+                    dev['listen_port'] = getattr(client, 'listen_port', None)
+                if 'listen_host' not in dev or not dev['listen_host']:
+                    dev['listen_host'] = (getattr(client, 'listen_host', None)
+                                          or client.status.get('ip_address'))
+
         return jsonify(config)
 
     elif request.method == 'POST':
