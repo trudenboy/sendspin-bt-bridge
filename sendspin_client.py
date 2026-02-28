@@ -24,6 +24,11 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Shared audio format cache — updated by whichever sendspin process logs
+# "Audio format: flac 48000Hz/24-bit/2ch"; read by all clients to fill in
+# format details when only "Stream started with codec X" was received.
+_last_full_audio_format: Optional[str] = None
+
 # Global client instance holder (class-based singleton)
 class ClientHolder:
     """Thread-safe holder for the client instance"""
@@ -595,6 +600,7 @@ class SendspinClient:
             Running the entire loop in ONE executor call avoids that problem.
             Python's logging and dict writes are thread-safe via the GIL.
             Sentinel is '' (empty str) because process is opened with text=True."""
+            global _last_full_audio_format
             for raw_line in iter(process.stdout.readline, ''):
                 if not self.running:
                     break
@@ -612,7 +618,11 @@ class SendspinClient:
                         try:
                             codec = line_str.split('Stream started with codec')[-1].strip()
                             if codec:
-                                self.status['audio_format'] = codec
+                                # Use cached full format if codec matches, else just codec
+                                if _last_full_audio_format and _last_full_audio_format.startswith(codec):
+                                    self.status['audio_format'] = _last_full_audio_format
+                                else:
+                                    self.status['audio_format'] = codec
                         except Exception:
                             pass
                 elif 'Stream STOPPED' in line_str or 'MPRIS interface stopped' in line_str:
@@ -622,6 +632,8 @@ class SendspinClient:
                 if 'Audio format:' in line_str:
                     try:
                         fmt = line_str.split('Audio format:')[-1].strip()
+                        if fmt:
+                            _last_full_audio_format = fmt
                         self.status['audio_format'] = fmt
                     except Exception:
                         pass
