@@ -604,6 +604,17 @@ HTML_TEMPLATE = """
 </div>
 
 <script>
+// ---- Ingress-aware API base path ----
+// When served via HA Ingress the page URL is something like
+//   https://haos/api/hassio_ingress/TOKEN/
+// fetch(API_BASE + '/api/...') would hit HA Core instead of this addon.
+// We compute the base path from the current URL so relative API
+// calls work both under Ingress and at direct http://host:8080/.
+var API_BASE = (function() {
+    var p = window.location.pathname;
+    return p.endsWith('/') ? p.slice(0, -1) : p.split('/').slice(0, -1).join('/');
+})();
+
 // ---- State ----
 var autoRefreshLogs = false;
 var autoRefreshInterval = null;
@@ -619,7 +630,7 @@ var volPending = {}; // deviceIndex -> true if user recently touched slider
 
 async function updateStatus() {
     try {
-        var resp = await fetch('/api/status');
+        var resp = await fetch(API_BASE + '/api/status');
         var status = await resp.json();
 
         var info = [];
@@ -836,7 +847,7 @@ function populateDeviceCard(i, dev) {
             muteBtn._handlerSet = true;
             muteBtn.addEventListener('click', function() {
                 var dev = lastDevices && lastDevices[i]; if (!dev) return;
-                fetch('/api/mute', {
+                fetch(API_BASE + '/api/mute', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ player_name: dev.player_name || null }),
@@ -889,7 +900,7 @@ function onVolumeInput(i, val) {
 async function sendVolume(deviceIndex, vol) {
     var dev = lastDevices[deviceIndex] || {};
     try {
-        await fetch('/api/volume', {
+        await fetch(API_BASE + '/api/volume', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ volume: vol, player_name: dev.player_name || null }),
@@ -951,7 +962,7 @@ function setLogLevel(level) {
 
 async function refreshLogs() {
     try {
-        var resp = await fetch('/api/logs?lines=150');
+        var resp = await fetch(API_BASE + '/api/logs?lines=150');
         var data = await resp.json();
         allLogs = data.logs || [];
         renderLogs();
@@ -1015,7 +1026,7 @@ function onGroupVolumeInput(val) {
     _groupVolTimer = setTimeout(function() {
         var names = _getSelectedNames();
         if (!names.length) return;
-        fetch('/api/volume', {
+        fetch(API_BASE + '/api/volume', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({volume: parseInt(val, 10), player_names: names})
@@ -1035,7 +1046,7 @@ function onGroupMute() {
         });
     }
     var muteVal = anyUnmuted;
-    fetch('/api/mute', {
+    fetch(API_BASE + '/api/mute', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({mute: muteVal, player_names: names})
@@ -1059,7 +1070,7 @@ async function btReconnect(i) {
     if (pairBtn) pairBtn.disabled = true;
     if (status) status.textContent = '&#8635; Reconnecting\u2026';
     try {
-        var resp = await fetch('/api/bt/reconnect', {
+        var resp = await fetch(API_BASE + '/api/bt/reconnect', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({player_name: playerName})
@@ -1086,7 +1097,7 @@ async function btPair(i) {
     if (reconnBtn) reconnBtn.disabled = true;
     if (status) status.textContent = '&#8635; Pairing\u2026 (~25s, put device in pairing mode)';
     try {
-        var resp = await fetch('/api/bt/pair', {
+        var resp = await fetch(API_BASE + '/api/bt/pair', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({player_name: playerName})
@@ -1113,7 +1124,7 @@ async function btToggleManagement(i) {
     if (btn) btn.disabled = true;
     if (status) status.textContent = newEnabled ? '\u21BB Reclaiming\u2026' : '\u21BB Releasing\u2026';
     try {
-        var resp = await fetch('/api/bt/management', {
+        var resp = await fetch(API_BASE + '/api/bt/management', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({player_name: playerName, enabled: newEnabled})
@@ -1147,7 +1158,7 @@ function toggleAutoRefresh() {
 
 async function loadBtAdapters() {
     try {
-        var resp = await fetch('/api/bt/adapters');
+        var resp = await fetch(API_BASE + '/api/bt/adapters');
         var data = await resp.json();
         btAdapters = data.adapters || [];
     } catch (_) { btAdapters = []; }
@@ -1325,7 +1336,7 @@ async function startBtScan() {
     box.style.display = 'none';
 
     try {
-        var resp = await fetch('/api/bt/scan', { method: 'POST' });
+        var resp = await fetch(API_BASE + '/api/bt/scan', { method: 'POST' });
         var data = await resp.json();
         var devices = data.devices || [];
 
@@ -1384,7 +1395,7 @@ async function saveConfig() {
     }
 
     try {
-        var resp = await fetch('/api/config', {
+        var resp = await fetch(API_BASE + '/api/config', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(config),
@@ -1412,7 +1423,7 @@ document.getElementById('config-form').addEventListener('submit', async function
 
 async function loadConfig() {
     try {
-        var resp = await fetch('/api/config');
+        var resp = await fetch(API_BASE + '/api/config');
         var config = await resp.json();
 
         // Populate simple fields
@@ -1455,7 +1466,7 @@ async function saveAndRestart() {
         }
         banner.textContent = '🔄 Restarting service\u2026';
         try {
-            await fetch('/api/restart', { method: 'POST' });
+            await fetch(API_BASE + '/api/restart', { method: 'POST' });
         } catch (_) { /* Service dropped connection — expected */ }
 
         await new Promise(function(r) { setTimeout(r, 2500); });
@@ -1464,7 +1475,7 @@ async function saveAndRestart() {
             banner.textContent = '🔄 Restarting\u2026 (' + attempt + 's)';
             await new Promise(function(r) { setTimeout(r, 1000); });
             try {
-                var resp = await fetch('/api/status');
+                var resp = await fetch(API_BASE + '/api/status');
                 if (resp.ok) {
                     banner.className = 'restart-banner online';
                     banner.textContent = '\u2713 Service restarted successfully';
@@ -1551,7 +1562,7 @@ setInterval(updateTzPreview, 1000);
 
 async function loadVersionInfo() {
     try {
-        var resp = await fetch('/api/version');
+        var resp = await fetch(API_BASE + '/api/version');
         var data = await resp.json();
         var el = document.getElementById('version-display');
         if (!el) return;
@@ -1578,7 +1589,7 @@ function onDiagToggle(el) {
 async function loadDiagnostics(contentEl) {
     contentEl.innerHTML = '<span style="color:#6b7280;font-size:13px;">Loading&#8230;</span>';
     try {
-        var resp = await fetch('/api/diagnostics');
+        var resp = await fetch(API_BASE + '/api/diagnostics');
         var data = await resp.json();
         contentEl.innerHTML = renderDiagnostics(data);
         contentEl.dataset.loaded = '1';
