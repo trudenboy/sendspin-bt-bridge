@@ -8,6 +8,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import signal
 import socket
 import subprocess
@@ -23,6 +24,13 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+CLIENT_VERSION = "1.2.0"
+
+# Shared audio format cache — updated by whichever sendspin process logs
+# "Audio format: flac 48000Hz/24-bit/2ch"; read by all clients to fill in
+# format details when only "Stream started with codec X" was received.
+_last_full_audio_format: Optional[str] = None
 
 # Global client instance holder (class-based singleton)
 class ClientHolder:
@@ -49,6 +57,7 @@ class BluetoothManager:
         self.connected = False
         self.last_check = 0
         self.check_interval = 10  # Check every 10 seconds
+        self.bt_manufacturer: Optional[str] = None  # resolved once on first connect
 
         # Resolve adapter name to MAC for reliable 'select' in bridged D-Bus setups.
         # In LXC containers, 'select hci0' fails ("Controller hci0 not available");
@@ -104,6 +113,59 @@ class BluetoothManager:
             logger.error(f"Bluetoothctl error: {e}")
             return False, str(e)
     
+    def _fetch_manufacturer(self) -> Optional[str]:
+        """Get manufacturer name from BT DeviceID profile via host's pairing data."""
+        # The host's /var/lib/bluetooth/ is mounted read-only at /var/lib/bluetooth-bt/
+        # in the LXC container (bind mount added to lxc.conf).
+        adapter_mac = self._adapter_select or self.adapter
+        if not adapter_mac:
+            return None
+        info_path = f"/var/lib/bluetooth-bt/{adapter_mac}/{self.mac_address}/info"
+        try:
+            vendor_id = None
+            source = None
+            with open(info_path) as f:
+                for line in f:
+                    line = line.strip()
+                    if line.startswith('Vendor='):
+                        vendor_id = int(line.split('=', 1)[1])
+                    elif line.startswith('Source='):
+                        source = int(line.split('=', 1)[1])
+            if vendor_id is None:
+                return None
+            # Source=2 → USB VID; Source=1 → Bluetooth SIG company ID
+            # Look up USB vendor IDs in /usr/share/misc/usb.ids (vendor lines: "XXXX  Name")
+            # Chip/SoC vendors that appear in DeviceID but are not useful device manufacturers
+            CHIP_VENDORS = {
+                'linux foundation', 'cambridge silicon radio', 'csr plc',
+                'qualcomm', 'qualcomm technologies', 'broadcom',
+                'texas instruments', 'nordic semiconductor', 'silicon labs',
+                'cypress semiconductor', 'microchip technology',
+            }
+            if source == 2:
+                hex_vid = f"{vendor_id:04x}"
+                usb_ids = '/usr/share/misc/usb.ids'
+                try:
+                    with open(usb_ids) as f:
+                        for line in f:
+                            if line.startswith(hex_vid + '  '):
+                                name = line[len(hex_vid):].strip()
+                                if name and name.lower() not in CHIP_VENDORS:
+                                    return name
+                                return None
+                except OSError:
+                    pass
+            # Bluetooth SIG company IDs (small hardcoded table for consumer device brands)
+            BT_COMPANIES = {
+                0x004C: 'Apple', 0x012D: 'Sony', 0x0075: 'Samsung',
+                0x01D8: 'Bose', 0x0131: 'LG Electronics',
+            }
+            if source == 1 and vendor_id in BT_COMPANIES:
+                return BT_COMPANIES[vendor_id]
+        except Exception as e:
+            logger.debug(f"Manufacturer fetch failed for {self.mac_address}: {e}")
+        return None
+
     def check_bluetooth_available(self) -> bool:
         """Check if Bluetooth is available on the system"""
         try:
@@ -156,17 +218,41 @@ class BluetoothManager:
             return False
     
     def pair_device(self) -> bool:
-        """Pair with the Bluetooth device"""
+        """Pair with the Bluetooth device.
+
+        Uses a single long-running bluetoothctl session with stdin kept open:
+        1. Scan for 12s so BlueZ caches the device (required for 'pair' to work)
+        2. Pair + trust while device is still in cache / pairing mode
+        The device MUST be in pairing/discoverable mode when this runs.
+        """
         logger.info(f"Pairing with {self.mac_address}...")
-        success, output = self._run_bluetoothctl([
-            'power on',
-            'agent on',
-            'default-agent',
-            f'pair {self.mac_address}'
-        ])
-        if success:
-            logger.info("Pairing successful")
-        return success
+        adapter_prefix = f'select {self._adapter_select}\n' if self._adapter_select else ''
+        mac = self.mac_address
+        # Keep stdin open: scan 12s to discover device → pair → trust → scan off
+        bash_cmd = (
+            f'( printf "{adapter_prefix}power on\\nagent on\\ndefault-agent\\nscan on\\n";'
+            f' sleep 12;'
+            f' printf "pair {mac}\\ntrust {mac}\\nscan off\\n";'
+            f' sleep 10'
+            f' ) | timeout 28 bluetoothctl 2>&1'
+        )
+        try:
+            result = subprocess.run(
+                ['bash', '-c', bash_cmd],
+                capture_output=True, text=True, timeout=32
+            )
+            out = result.stdout
+            logger.info(f"Pair output (last 600 chars): {out[-600:]}")
+            ok = ('Pairing successful' in out or 'Already paired' in out
+                  or 'Paired: yes' in out)
+            if ok:
+                logger.info("Pairing successful")
+            else:
+                logger.warning(f"Pairing may have failed. Output: {out[-200:]}")
+            return ok
+        except Exception as e:
+            logger.error(f"Pair error: {e}")
+            return False
     
     def trust_device(self) -> bool:
         """Trust the Bluetooth device"""
@@ -177,8 +263,6 @@ class BluetoothManager:
     def configure_bluetooth_audio(self) -> bool:
         """Configure host's PipeWire/PulseAudio to use the Bluetooth device as audio output"""
         try:
-            import time
-
             # Wait for PipeWire/PulseAudio to register the device.
             # A2DP profile takes a few seconds to appear after BT connects.
             time.sleep(3)
@@ -287,18 +371,21 @@ class BluetoothManager:
         if self.is_device_connected():
             logger.info("Device already connected")
             self.connected = True
+            if self.bt_manufacturer is None:
+                self.bt_manufacturer = self._fetch_manufacturer()
+                if self.bt_manufacturer:
+                    logger.info(f"BT manufacturer: {self.bt_manufacturer}")
             # Ensure audio is configured
             self.configure_bluetooth_audio()
             return True
         
         logger.info(f"Connecting to {self.mac_address}...")
         
-        # Ensure paired and trusted
+        # Ensure paired and trusted (pair_device also runs trust)
         if not self.is_device_paired():
             logger.info("Device not paired, attempting to pair...")
             if not self.pair_device():
                 return False
-            self.trust_device()
         
         # Power on bluetooth
         self._run_bluetoothctl(['power on'])
@@ -313,6 +400,10 @@ class BluetoothManager:
             if self.is_device_connected():
                 logger.info("Successfully connected to Bluetooth speaker")
                 self.connected = True
+                if self.bt_manufacturer is None:
+                    self.bt_manufacturer = self._fetch_manufacturer()
+                    if self.bt_manufacturer:
+                        logger.info(f"BT manufacturer: {self.bt_manufacturer}")
                 # Configure audio routing
                 self.configure_bluetooth_audio()
                 return True
@@ -332,6 +423,7 @@ class BluetoothManager:
         logger.info(f"[{self.device_name}] monitor_and_reconnect task started")
         loop = asyncio.get_event_loop()
         iteration = 0
+        reconnect_attempt = 0
         while True:
             iteration += 1
             try:
@@ -344,6 +436,11 @@ class BluetoothManager:
                     connected = await loop.run_in_executor(None, self.is_device_connected)
                     logger.info(f"[{self.device_name}] BT connected={connected}")
                     if not connected:
+                        reconnect_attempt += 1
+                        if self.client:
+                            self.client.status['reconnecting'] = True
+                            self.client.status['reconnect_attempt'] = reconnect_attempt
+
                         # Kill sendspin daemon immediately — if the BT sink is gone,
                         # sendspin floods PortAudioErrors on every audio chunk, which
                         # starves its own event loop and causes WebSocket PONG timeouts.
@@ -354,12 +451,21 @@ class BluetoothManager:
                             except Exception:
                                 pass
 
-                        logger.warning(f"Bluetooth device {self.device_name} disconnected, attempting reconnect...")
+                        logger.warning(f"Bluetooth device {self.device_name} disconnected, attempting reconnect... (attempt {reconnect_attempt})")
                         success = await loop.run_in_executor(None, self.connect_device)
                         if success and self.client:
+                            reconnect_attempt = 0
+                            self.client.status['reconnecting'] = False
+                            self.client.status['reconnect_attempt'] = 0
                             # BT reconnected — start fresh sendspin to register with MA
                             logger.info(f"BT reconnected for {self.device_name}, starting sendspin...")
                             await self.client.start_sendspin_process()
+                    else:
+                        # Device is connected — clear any reconnect state
+                        if self.client and self.client.status.get('reconnecting'):
+                            self.client.status['reconnecting'] = False
+                            self.client.status['reconnect_attempt'] = 0
+                        reconnect_attempt = 0
 
                 await asyncio.sleep(5)
             except Exception as e:
@@ -372,13 +478,17 @@ class SendspinClient:
     
     def __init__(self, player_name: str, server_host: str, server_port: int,
                  bt_manager: Optional[BluetoothManager] = None,
-                 listen_port: int = 8928):
+                 listen_port: int = 8928,
+                 static_delay_ms: Optional[float] = None,
+                 listen_host: Optional[str] = None):
         self.player_name = player_name
         self.server_host = server_host
         self.server_port = server_port
         self.bt_manager = bt_manager
         self.listen_port = listen_port  # port sendspin daemon listens on
-        
+        self.listen_host = listen_host  # explicit IP for WebSocket URL display (None = auto-detect)
+        self.static_delay_ms = static_delay_ms  # per-device delay override (None = use env var)
+
         # Status tracking
         self.status = {
             'connected': False,
@@ -391,10 +501,17 @@ class SendspinClient:
             'current_track': None,
             'current_artist': None,
             'volume': 100,
-            'ip_address': self.get_ip_address(),
+            'muted': False,
+            'audio_format': None,
+            'reanchor_count': 0,
+            'last_sync_error_ms': None,
+            'reanchoring': False,
+            'ip_address': listen_host or self.get_ip_address(),
             'hostname': socket.gethostname(),
             'last_error': None,
-            'uptime_start': datetime.now()
+            'uptime_start': datetime.now(),
+            'reconnecting': False,
+            'reconnect_attempt': 0,
         }
         
         self.process = None
@@ -414,10 +531,11 @@ class SendspinClient:
             # Fallback method
             try:
                 s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                s.connect(("8.8.8.8", 80))
-                ip = s.getsockname()[0]
-                s.close()
-                return ip
+                try:
+                    s.connect(("8.8.8.8", 80))
+                    return s.getsockname()[0]
+                finally:
+                    s.close()
             except Exception:
                 return "unknown"
     
@@ -464,16 +582,42 @@ class SendspinClient:
     async def start_sendspin_process(self):
         """Start the sendspin CLI player"""
         try:
+            # If BT is connected but sink hasn't been configured yet (e.g. process restart
+            # triggered by _read_until_eof before monitor_and_reconnect runs configure),
+            # configure the audio sink now so bluetooth_sink_name is available.
+            if self.bt_manager and self.bt_manager.connected and not self.bluetooth_sink_name:
+                self.bt_manager.configure_bluetooth_audio()
+
+            # Kill any existing process first to free the port
+            if self.process and self.process.poll() is None:
+                logger.info(f"Stopping existing sendspin process (PID {self.process.pid}) before restart")
+                try:
+                    self.process.terminate()
+                    self.process.wait(timeout=3)
+                except Exception:
+                    try:
+                        self.process.kill()
+                    except Exception:
+                        pass
+
             # Build command — use 'daemon' subcommand with unique port + settings-dir per instance
             safe_id = ''.join(c if c.isalnum() or c == '-' else '-' for c in self.player_name.lower()).strip('-')
             client_id = f"sendspin-{safe_id}"
             settings_dir = f"/tmp/sendspin-{safe_id}"
+            # static_delay_ms compensates for BT A2DP + PA buffer latency (~500ms total)
+            # Negative value = schedule audio earlier to account for output latency
+            # Per-device value takes priority over the env var global default
+            if self.static_delay_ms is not None:
+                static_delay_ms = self.static_delay_ms
+            else:
+                static_delay_ms = float(os.environ.get('SENDSPIN_STATIC_DELAY_MS', '-500'))
             cmd = [
                 'sendspin', 'daemon',
                 '--name', self.player_name,
                 '--id', client_id,
                 '--port', str(self.listen_port),
                 '--settings-dir', settings_dir,
+                '--static-delay-ms', str(static_delay_ms),
             ]
 
             # Add server URL only if explicitly configured
@@ -492,6 +636,16 @@ class SendspinClient:
                 env['PULSE_SINK'] = pulse_sink
                 logger.info(f"Routing audio to sink: {pulse_sink}")
 
+            # Override device info reported to Music Assistant
+            if self.bt_manager and self.bt_manager.bt_manufacturer is None:
+                self.bt_manager.bt_manufacturer = self.bt_manager._fetch_manufacturer()
+                if self.bt_manager.bt_manufacturer:
+                    logger.info(f"BT manufacturer: {self.bt_manager.bt_manufacturer}")
+            bt_mfr = (self.bt_manager.bt_manufacturer if self.bt_manager else None) or 'Sendspin'
+            env['SENDSPIN_BRIDGE_MANUFACTURER'] = bt_mfr
+            env['SENDSPIN_BRIDGE_PRODUCT_NAME'] = 'Bluetooth Bridge'
+            env['SENDSPIN_BRIDGE_VERSION'] = CLIENT_VERSION
+
             # Start the sendspin process
             self.process = subprocess.Popen(
                 cmd,
@@ -506,6 +660,7 @@ class SendspinClient:
             logger.info(f"Sendspin command: {' '.join(cmd)}")
             self.status['server_connected'] = True
             self.status['connected'] = True
+            self.status['playing'] = False  # reset; monitor_output() will set True on Stream STARTED
             
             # Monitor output in background
             asyncio.create_task(self.monitor_output())
@@ -533,38 +688,72 @@ class SendspinClient:
             Running the entire loop in ONE executor call avoids that problem.
             Python's logging and dict writes are thread-safe via the GIL.
             Sentinel is '' (empty str) because process is opened with text=True."""
+            global _last_full_audio_format
             for raw_line in iter(process.stdout.readline, ''):
                 if not self.running:
                     break
                 line_str = raw_line.strip()
                 logger.info(f"Sendspin: {line_str}")
 
-                # Update playing state from output
-                if line_str.startswith("State:") or line_str.startswith("Playback state:"):
-                    state = line_str.split(":")[-1].strip().lower()
-                    self.status['playing'] = (state == 'playing')
+                # Update playing state — sendspin uses Python logging format:
+                # "INFO:sendspin.audio:Stream STARTED: N chunks, ..."
+                # "INFO:sendspin.audio:Stream STOPPED" (if/when emitted)
+                # "INFO:aiosendspin.client.client:Stream started with codec flac"
+                if 'Stream STARTED' in line_str or 'Stream started with codec' in line_str:
+                    self.status['playing'] = True
+                    # Extract codec from "Stream started with codec flac"
+                    if 'Stream started with codec' in line_str:
+                        try:
+                            codec = line_str.split('Stream started with codec')[-1].strip()
+                            if codec:
+                                # Use cached full format if codec matches, else just codec
+                                if _last_full_audio_format and _last_full_audio_format.startswith(codec):
+                                    self.status['audio_format'] = _last_full_audio_format
+                                else:
+                                    self.status['audio_format'] = codec
+                        except Exception:
+                            pass
+                elif 'Stream STOPPED' in line_str or 'MPRIS interface stopped' in line_str:
+                    self.status['playing'] = False
 
-                # Track current track and artist
-                if line_str.startswith("Now playing:"):
-                    track_name = line_str.split("Now playing:")[-1].strip()
-                    self.status['_track_name'] = track_name
+                # Parse audio format: "Audio format: flac 48000Hz/24-bit/2ch"
+                if 'Audio format:' in line_str:
+                    try:
+                        fmt = line_str.split('Audio format:')[-1].strip()
+                        if fmt:
+                            _last_full_audio_format = fmt
+                        self.status['audio_format'] = fmt
+                    except Exception:
+                        pass
 
-                if line_str.startswith("Artist:"):
-                    artist_name = line_str.split("Artist:")[-1].strip()
-                    self.status['current_artist'] = artist_name
-                    if hasattr(self.status, '__getitem__') and self.status.get('_track_name'):
-                        self.status['current_track'] = f"{artist_name} - {self.status['_track_name']}"
+                # Parse sync events: "Sync error 503.6 ms too large; re-anchoring"
+                # or "Audio underflow detected; requesting re-anchor"
+                if 're-anchoring' in line_str or 're-anchor' in line_str:
+                    try:
+                        m = re.search(r'Sync error ([\d.]+)\s*ms', line_str)
+                        if m:
+                            self.status['last_sync_error_ms'] = float(m.group(1))
+                        self.status['reanchor_count'] += 1
+                        self.status['reanchoring'] = True
+                    except Exception:
+                        pass
+                elif 'Stream STARTED' in line_str:
+                    self.status['reanchoring'] = False
 
-                # Track server connection
-                if "Connected to" in line_str and "ws://" in line_str:
+                # Track server connection — actual sendspin output:
+                # "INFO:sendspin.daemon.daemon:Server connected"
+                # "INFO:aiosendspin.client.client:Handshake with server complete"
+                if 'Server connected' in line_str or 'Handshake with server complete' in line_str:
                     if not self.status['server_connected_at']:
                         self.status['server_connected_at'] = datetime.now().isoformat()
                     self.status['server_connected'] = True
 
                 # Sync volume changes to Bluetooth speaker
-                if line_str.startswith("Volume:") and self.bluetooth_sink_name:
+                # Handles "Volume: XX%" and "Server set player volume: XX%"
+                if ('Volume:' in line_str or 'player volume:' in line_str.lower()) and self.bluetooth_sink_name:
                     try:
-                        volume_part = line_str.split("Volume:")[-1].strip().rstrip('%')
+                        # Split on last colon to get the value regardless of prefix
+                        volume_part = line_str.rsplit(':', 1)[-1].strip().rstrip('%')
                         if volume_part and volume_part.isdigit():
                             volume_percent = int(volume_part)
                             self.status['volume'] = volume_percent
@@ -706,9 +895,16 @@ async def main():
         adapter = device.get('adapter', '')
         player_name = (device.get('player_name') or
                        config.get('SENDSPIN_NAME', f'Sendspin-{socket.gethostname()}'))
-        listen_port = device.get('port', base_listen_port + i)
+        # 'listen_port' is the preferred key; 'port' kept for backward compat
+        listen_port = int(device.get('listen_port') or device.get('port') or base_listen_port + i)
+        listen_host = device.get('listen_host')
+        static_delay_ms = device.get('static_delay_ms')
+        if static_delay_ms is not None:
+            static_delay_ms = float(static_delay_ms)
 
-        client = SendspinClient(player_name, server_host, server_port, None, listen_port=listen_port)
+        client = SendspinClient(player_name, server_host, server_port, None,
+                                listen_port=listen_port, static_delay_ms=static_delay_ms,
+                                listen_host=listen_host)
         if mac:
             bt_mgr = BluetoothManager(mac, adapter=adapter, device_name=player_name, client=client)
             if not bt_mgr.check_bluetooth_available():
