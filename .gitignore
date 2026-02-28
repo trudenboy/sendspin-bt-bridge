@@ -49,3 +49,6 @@ htmlcov/
 
 # Worktrees
 .worktrees/
+
+# Local notes
+community_engagement.md
