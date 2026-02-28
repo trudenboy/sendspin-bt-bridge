@@ -178,25 +178,33 @@ HTML_TEMPLATE = """
 
         /* Status grid */
         .status-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 20px;
-            margin-bottom: 20px;
+            display: flex; flex-direction: column;
+            gap: 12px; margin-bottom: 20px;
         }
-        .status-card, .device-card {
-            background: white; border-radius: 10px; padding: 20px;
+        .device-card {
+            background: white; border-radius: 10px; padding: 16px 20px;
             box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            display: flex; align-items: center; gap: 0;
+        }
+        .device-card-identity {
+            min-width: 180px; max-width: 220px; padding-right: 20px;
+            border-right: 1px solid #e5e7eb; margin-right: 0; flex-shrink: 0;
         }
         .device-card-title {
-            font-size: 16px; font-weight: 700; color: #667eea; margin-bottom: 2px;
+            font-size: 15px; font-weight: 700; color: #667eea; margin-bottom: 2px;
         }
         .device-mac {
             font-size: 11px; color: #9ca3af; font-family: 'Courier New', monospace;
-            margin-bottom: 14px;
         }
-        .device-rows { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-        .device-rows .status-label { font-size: 12px; color: #666; margin-bottom: 3px; }
-        .device-rows .status-value { font-size: 14px; font-weight: 600; color: #333; }
+        .device-rows {
+            display: flex; flex: 1; gap: 0;
+        }
+        .device-rows > div {
+            flex: 1; padding: 0 16px; border-right: 1px solid #e5e7eb;
+        }
+        .device-rows > div:last-child { border-right: none; }
+        .device-rows .status-label { font-size: 11px; color: #9ca3af; margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.04em; }
+        .device-rows .status-value { font-size: 13px; font-weight: 600; color: #333; }
 
         /* Status indicators */
         .status-indicator {
@@ -496,9 +504,11 @@ function buildDeviceCard(i) {
     card.className = 'device-card';
     card.id = 'device-card-' + i;
     card.innerHTML =
-        '<div class="device-card-title" id="dname-' + i + '">Device ' + (i+1) + '</div>' +
-        '<div class="device-mac" id="dmac-' + i + '"></div>' +
-        '<div class="device-url" id="durl-' + i + '" style="font-size:11px;color:#888;margin-bottom:8px;"></div>' +
+        '<div class="device-card-identity">' +
+          '<div class="device-card-title" id="dname-' + i + '">Device ' + (i+1) + '</div>' +
+          '<div class="device-mac" id="dmac-' + i + '"></div>' +
+          '<div id="durl-' + i + '" style="font-size:10px;color:#c4b5fd;margin-top:2px;word-break:break-all;"></div>' +
+        '</div>' +
         '<div class="device-rows">' +
           '<div>' +
             '<div class="status-label">Bluetooth</div>' +
@@ -519,8 +529,7 @@ function buildDeviceCard(i) {
           '<div>' +
             '<div class="status-label">Playback</div>' +
             '<div class="status-value" id="dplay-' + i + '">-</div>' +
-            '<div class="ts" id="dtrack-' + i + '"></div>' +
-            '<div class="ts" id="daudiofmt-' + i + '" style="color:#8b5cf6;margin-top:2px;"></div>' +
+            '<div class="ts" id="daudiofmt-' + i + '" style="color:#8b5cf6;"></div>' +
           '</div>' +
           '<div>' +
             '<div class="status-label">Volume</div>' +
@@ -530,8 +539,8 @@ function buildDeviceCard(i) {
                 'oninput="onVolumeInput(' + i + ', this.value)">' +
               '<span class="volume-pct" id="dvol-' + i + '">100%</span>' +
               '<button type="button" id="dmute-' + i + '" ' +
-                'style="margin-left:8px;padding:2px 8px;border:1px solid #d1d5db;border-radius:4px;' +
-                'background:white;cursor:pointer;font-size:13px;" ' +
+                'style="margin-left:6px;padding:2px 7px;border:1px solid #d1d5db;border-radius:4px;' +
+                'background:white;cursor:pointer;font-size:12px;" ' +
                 'title="Mute/Unmute">&#128264;</button>' +
             '</div>' +
           '</div>' +
