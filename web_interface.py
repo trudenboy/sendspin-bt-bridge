@@ -1184,7 +1184,7 @@ function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort) {
     var tbody = document.getElementById('bt-devices-table');
     var row = document.createElement('div');
     row.className = 'bt-device-row';
-    var delayVal = (delay !== undefined && delay !== null && delay !== '') ? delay : -500;
+    var delayVal = (delay !== undefined && delay !== null && delay !== '') ? delay : 0;
     var portVal  = (listenPort !== undefined && listenPort !== null && listenPort !== '') ? listenPort : '';
     row.innerHTML =
         '<input type="text" placeholder="Player Name" class="bt-name" value="' +
@@ -1221,8 +1221,8 @@ function collectBtDevices() {
         var portEl     = row.querySelector('.bt-listen-port');
         var listenPort = portEl && portEl.value.trim() ? parseInt(portEl.value, 10) : null;
         var delayEl    = row.querySelector('.bt-delay');
-        var delay      = delayEl ? parseFloat(delayEl.value) : -500;
-        if (isNaN(delay)) delay = -500;
+        var delay      = delayEl ? parseFloat(delayEl.value) : 0;
+        if (isNaN(delay)) delay = 0;
         var dev = { mac: mac, adapter: adapter, player_name: name, static_delay_ms: delay };
         if (listenHost) dev.listen_host = listenHost;
         if (listenPort) dev.listen_port = listenPort;
@@ -1298,6 +1298,9 @@ async function saveConfig() {
 
     // Collect BT devices from table rows (overrides anything from formData)
     config.BLUETOOTH_DEVICES = collectBtDevices();
+    // Pass current group slider value so backend can init volume for new devices
+    var groupSlider = document.getElementById('group-vol-slider');
+    config._new_device_default_volume = groupSlider ? parseInt(groupSlider.value, 10) : 100;
     // Persist manually-added adapters
     config.BLUETOOTH_ADAPTERS = btManualAdapters.filter(function(a) { return a.mac || a.id; });
     // Keep single BLUETOOTH_MAC for backward compat if exactly one device
@@ -1834,6 +1837,14 @@ def api_config():
             if deleted or adapter_changed:
                 adapter_mac = client_adapter.get(mac) or ''
                 _bt_remove_device(mac, adapter_mac)
+
+        # Init LAST_VOLUMES for brand-new devices to the group slider value
+        default_vol = config.pop('_new_device_default_volume', None)
+        if default_vol is not None:
+            last_volumes = config.setdefault('LAST_VOLUMES', existing.get('LAST_VOLUMES', {}))
+            for mac in new_devices:
+                if mac and mac not in last_volumes:
+                    last_volumes[mac] = default_vol
 
         with open(CONFIG_FILE, 'w') as f:
             json.dump(config, f, indent=2)
