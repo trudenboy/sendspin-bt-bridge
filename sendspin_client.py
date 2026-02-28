@@ -74,7 +74,6 @@ class BluetoothManager:
         self.connected = False
         self.last_check = 0
         self.check_interval = 10  # Check every 10 seconds
-        self.bt_manufacturer: Optional[str] = None  # resolved once on first connect
 
         # Resolve adapter name to MAC for reliable 'select' in bridged D-Bus setups.
         # In LXC containers, 'select hci0' fails ("Controller hci0 not available");
@@ -130,59 +129,6 @@ class BluetoothManager:
             logger.error(f"Bluetoothctl error: {e}")
             return False, str(e)
     
-    def _fetch_manufacturer(self) -> Optional[str]:
-        """Get manufacturer name from BT DeviceID profile via host's pairing data."""
-        # The host's /var/lib/bluetooth/ is mounted read-only at /var/lib/bluetooth-bt/
-        # in the LXC container (bind mount added to lxc.conf).
-        adapter_mac = self._adapter_select or self.adapter
-        if not adapter_mac:
-            return None
-        info_path = f"/var/lib/bluetooth-bt/{adapter_mac}/{self.mac_address}/info"
-        try:
-            vendor_id = None
-            source = None
-            with open(info_path) as f:
-                for line in f:
-                    line = line.strip()
-                    if line.startswith('Vendor='):
-                        vendor_id = int(line.split('=', 1)[1])
-                    elif line.startswith('Source='):
-                        source = int(line.split('=', 1)[1])
-            if vendor_id is None:
-                return None
-            # Source=2 → USB VID; Source=1 → Bluetooth SIG company ID
-            # Look up USB vendor IDs in /usr/share/misc/usb.ids (vendor lines: "XXXX  Name")
-            # Chip/SoC vendors that appear in DeviceID but are not useful device manufacturers
-            CHIP_VENDORS = {
-                'linux foundation', 'cambridge silicon radio', 'csr plc',
-                'qualcomm', 'qualcomm technologies', 'broadcom',
-                'texas instruments', 'nordic semiconductor', 'silicon labs',
-                'cypress semiconductor', 'microchip technology',
-            }
-            if source == 2:
-                hex_vid = f"{vendor_id:04x}"
-                usb_ids = '/usr/share/misc/usb.ids'
-                try:
-                    with open(usb_ids) as f:
-                        for line in f:
-                            if line.startswith(hex_vid + '  '):
-                                name = line[len(hex_vid):].strip()
-                                if name and name.lower() not in CHIP_VENDORS:
-                                    return name
-                                return None
-                except OSError:
-                    pass
-            # Bluetooth SIG company IDs (small hardcoded table for consumer device brands)
-            BT_COMPANIES = {
-                0x004C: 'Apple', 0x012D: 'Sony', 0x0075: 'Samsung',
-                0x01D8: 'Bose', 0x0131: 'LG Electronics',
-            }
-            if source == 1 and vendor_id in BT_COMPANIES:
-                return BT_COMPANIES[vendor_id]
-        except Exception as e:
-            logger.debug(f"Manufacturer fetch failed for {self.mac_address}: {e}")
-        return None
-
     def check_bluetooth_available(self) -> bool:
         """Check if Bluetooth is available on the system"""
         try:
@@ -392,10 +338,6 @@ class BluetoothManager:
         if self.is_device_connected():
             logger.info("Device already connected")
             self.connected = True
-            if self.bt_manufacturer is None:
-                self.bt_manufacturer = self._fetch_manufacturer()
-                if self.bt_manufacturer:
-                    logger.info(f"BT manufacturer: {self.bt_manufacturer}")
             # Ensure audio is configured
             self.configure_bluetooth_audio()
             return True
@@ -421,10 +363,6 @@ class BluetoothManager:
             if self.is_device_connected():
                 logger.info("Successfully connected to Bluetooth speaker")
                 self.connected = True
-                if self.bt_manufacturer is None:
-                    self.bt_manufacturer = self._fetch_manufacturer()
-                    if self.bt_manufacturer:
-                        logger.info(f"BT manufacturer: {self.bt_manufacturer}")
                 # Configure audio routing
                 self.configure_bluetooth_audio()
                 return True
@@ -658,12 +596,7 @@ class SendspinClient:
                 logger.info(f"Routing audio to sink: {pulse_sink}")
 
             # Override device info reported to Music Assistant
-            if self.bt_manager and self.bt_manager.bt_manufacturer is None:
-                self.bt_manager.bt_manufacturer = self.bt_manager._fetch_manufacturer()
-                if self.bt_manager.bt_manufacturer:
-                    logger.info(f"BT manufacturer: {self.bt_manager.bt_manufacturer}")
-            bt_mfr = (self.bt_manager.bt_manufacturer if self.bt_manager else None) or 'Sendspin'
-            env['SENDSPIN_BRIDGE_MANUFACTURER'] = bt_mfr
+            env['SENDSPIN_BRIDGE_MANUFACTURER'] = 'Sendspin'
             env['SENDSPIN_BRIDGE_PRODUCT_NAME'] = 'Bluetooth Bridge'
             env['SENDSPIN_BRIDGE_VERSION'] = CLIENT_VERSION
 
