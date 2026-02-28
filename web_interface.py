@@ -36,7 +36,7 @@ CONFIG_FILE = CONFIG_DIR / 'config.json'
 
 # Default configuration
 DEFAULT_CONFIG = {
-    'SENDSPIN_NAME': 'Sendspin',
+
     'SENDSPIN_SERVER': 'auto',
     'BLUETOOTH_MAC': '',
     'BLUETOOTH_DEVICES': [],
@@ -481,10 +481,6 @@ HTML_TEMPLATE = """
     <details class="config-section" open>
         <summary>&#9881;&#65039; Configuration</summary>
         <form id="config-form">
-            <div class="form-group">
-                <label>Player Name Prefix</label>
-                <input type="text" name="SENDSPIN_NAME" id="cfg-sendspin-name" placeholder="Sendspin">
-            </div>
             <div class="form-group">
                 <label>Server (use &#8216;auto&#8217; for mDNS discovery)</label>
                 <input type="text" name="SENDSPIN_SERVER" required>
@@ -1327,7 +1323,7 @@ async function loadConfig() {
         var config = await resp.json();
 
         // Populate simple fields
-        ['SENDSPIN_NAME', 'SENDSPIN_SERVER', 'TZ'].forEach(function(key) {
+        ['SENDSPIN_SERVER', 'TZ'].forEach(function(key) {
             var input = document.querySelector('[name="' + key + '"]');
             if (input && config[key] !== undefined) input.value = config[key];
         });
@@ -1343,7 +1339,7 @@ async function loadConfig() {
             populateBtDeviceRows(devices);
         } else if (config.BLUETOOTH_MAC) {
             // Migrate single BLUETOOTH_MAC to table
-            addBtDeviceRow(config.SENDSPIN_NAME || '', config.BLUETOOTH_MAC, '');
+            addBtDeviceRow('', config.BLUETOOTH_MAC, '');
         }
     } catch (err) {
         console.error('Error loading config:', err);

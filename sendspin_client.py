@@ -830,8 +830,7 @@ async def main():
     bt_devices = config.get('BLUETOOTH_DEVICES', [])
     if not bt_devices:
         mac = config.get('BLUETOOTH_MAC', '')
-        prefix = config.get('SENDSPIN_NAME', 'Sendspin')
-        bt_devices = [{'mac': mac, 'adapter': '', 'player_name': f'{prefix} Player'}]
+        bt_devices = [{'mac': mac, 'adapter': '', 'player_name': 'Sendspin Player'}]
 
     logger.info(f"Starting {len(bt_devices)} player instance(s)")
     if server_host and server_host.lower() not in ['auto', 'discover', '']:
@@ -844,8 +843,7 @@ async def main():
     for i, device in enumerate(bt_devices):
         mac = device.get('mac', '')
         adapter = device.get('adapter', '')
-        prefix = config.get('SENDSPIN_NAME', 'Sendspin')
-        player_name = device.get('player_name') or f'{prefix} Player'
+        player_name = device.get('player_name') or 'Sendspin Player'
         # 'listen_port' is the preferred key; 'port' kept for backward compat
         listen_port = int(device.get('listen_port') or device.get('port') or base_listen_port + i)
         listen_host = device.get('listen_host')
@@ -906,7 +904,6 @@ def load_config():
     config_file = config_dir / 'config.json'
     
     default_config = {
-        'SENDSPIN_NAME': f'Sendspin-{socket.gethostname()}',
         'SENDSPIN_SERVER': 'auto',
         'SENDSPIN_PORT': 9000,
         'BLUETOOTH_MAC': '',
@@ -914,7 +911,7 @@ def load_config():
         'TZ': 'Australia/Melbourne',
     }
 
-    allowed_keys = {'SENDSPIN_NAME', 'SENDSPIN_SERVER', 'SENDSPIN_PORT', 'BLUETOOTH_MAC',
+    allowed_keys = {'SENDSPIN_SERVER', 'SENDSPIN_PORT', 'BLUETOOTH_MAC',
                     'BLUETOOTH_DEVICES', 'TZ', 'LAST_VOLUME'}
 
     if config_file.exists():
