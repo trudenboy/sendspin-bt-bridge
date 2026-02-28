@@ -27,7 +27,7 @@ app = Flask(__name__)
 CORS(app)
 
 # Version information
-VERSION = "1.2.2"
+VERSION = "1.2.3"
 BUILD_DATE = "2026-02-28"
 
 # Configuration file path
