@@ -100,6 +100,9 @@ def get_client_status_for(client):
         status['build_date'] = BUILD_DATE
         status['connected'] = client.process.poll() is None if client.process else False
         status['player_name'] = getattr(client, 'player_name', None)
+        status['listen_port'] = getattr(client, 'listen_port', None)
+        status['server_host'] = getattr(client, 'server_host', None)
+        status['server_port'] = getattr(client, 'server_port', None)
 
         bt_mgr = getattr(client, 'bt_manager', None)
         status['bluetooth_mac'] = bt_mgr.mac_address if bt_mgr else None
@@ -497,6 +500,7 @@ function buildDeviceCard(i) {
     card.innerHTML =
         '<div class="device-card-title" id="dname-' + i + '">Device ' + (i+1) + '</div>' +
         '<div class="device-mac" id="dmac-' + i + '"></div>' +
+        '<div class="device-url" id="durl-' + i + '" style="font-size:11px;color:#888;margin-bottom:8px;"></div>' +
         '<div class="device-rows">' +
           '<div>' +
             '<div class="status-label">Bluetooth</div>' +
@@ -538,6 +542,15 @@ function populateDeviceCard(i, dev) {
 
     var mac = dev.bluetooth_mac || '';
     document.getElementById('dmac-' + i).textContent = mac ? 'MAC: ' + mac : '';
+
+    var urlEl = document.getElementById('durl-' + i);
+    if (urlEl) {
+        if (dev.ip_address && dev.listen_port) {
+            urlEl.textContent = 'ws://' + dev.ip_address + ':' + dev.listen_port + '/sendspin';
+        } else {
+            urlEl.textContent = '';
+        }
+    }
 
     // Bluetooth
     var btInd   = document.getElementById('dbt-ind-' + i);
