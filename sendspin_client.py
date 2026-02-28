@@ -415,12 +415,14 @@ class SendspinClient:
     
     def __init__(self, player_name: str, server_host: str, server_port: int,
                  bt_manager: Optional[BluetoothManager] = None,
-                 listen_port: int = 8928):
+                 listen_port: int = 8928,
+                 static_delay_ms: Optional[float] = None):
         self.player_name = player_name
         self.server_host = server_host
         self.server_port = server_port
         self.bt_manager = bt_manager
         self.listen_port = listen_port  # port sendspin daemon listens on
+        self.static_delay_ms = static_delay_ms  # per-device delay override (None = use env var)
         
         # Status tracking
         self.status = {
@@ -532,7 +534,11 @@ class SendspinClient:
             settings_dir = f"/tmp/sendspin-{safe_id}"
             # static_delay_ms compensates for BT A2DP + PA buffer latency (~500ms total)
             # Negative value = schedule audio earlier to account for output latency
-            static_delay_ms = float(os.environ.get('SENDSPIN_STATIC_DELAY_MS', '-500'))
+            # Per-device value takes priority over the env var global default
+            if self.static_delay_ms is not None:
+                static_delay_ms = self.static_delay_ms
+            else:
+                static_delay_ms = float(os.environ.get('SENDSPIN_STATIC_DELAY_MS', '-500'))
             cmd = [
                 'sendspin', 'daemon',
                 '--name', self.player_name,
@@ -809,8 +815,12 @@ async def main():
         player_name = (device.get('player_name') or
                        config.get('SENDSPIN_NAME', f'Sendspin-{socket.gethostname()}'))
         listen_port = device.get('port', base_listen_port + i)
+        static_delay_ms = device.get('static_delay_ms')
+        if static_delay_ms is not None:
+            static_delay_ms = float(static_delay_ms)
 
-        client = SendspinClient(player_name, server_host, server_port, None, listen_port=listen_port)
+        client = SendspinClient(player_name, server_host, server_port, None,
+                                listen_port=listen_port, static_delay_ms=static_delay_ms)
         if mac:
             bt_mgr = BluetoothManager(mac, adapter=adapter, device_name=player_name, client=client)
             if not bt_mgr.check_bluetooth_available():

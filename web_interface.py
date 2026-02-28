@@ -250,12 +250,12 @@ HTML_TEMPLATE = """
 
         /* BT device table */
         .bt-header {
-            display: grid; grid-template-columns: 1fr 1.3fr 0.9fr 30px;
+            display: grid; grid-template-columns: 1fr 1.3fr 0.9fr 5.5rem 30px;
             gap: 8px; margin-bottom: 4px; padding: 0 2px;
             font-size: 11px; font-weight: 600; color: #6b7280; text-transform: uppercase;
         }
         .bt-device-row {
-            display: grid; grid-template-columns: 1fr 1.3fr 0.9fr 30px;
+            display: grid; grid-template-columns: 1fr 1.3fr 0.9fr 5.5rem 30px;
             gap: 8px; align-items: center; margin-bottom: 8px;
         }
         .bt-device-row input, .bt-device-row select {
@@ -412,7 +412,7 @@ HTML_TEMPLATE = """
                 <label>Bluetooth Devices</label>
                 <div class="bt-header">
                     <span>Player Name</span><span>MAC Address</span>
-                    <span>Adapter</span><span></span>
+                    <span>Adapter</span><span>Delay ms</span><span></span>
                 </div>
                 <div id="bt-devices-table"></div>
                 <div class="bt-toolbar">
@@ -804,16 +804,19 @@ function btAdapterOptions(selected) {
     return opts;
 }
 
-function addBtDeviceRow(name, mac, adapter) {
+function addBtDeviceRow(name, mac, adapter, delay) {
     var tbody = document.getElementById('bt-devices-table');
     var row = document.createElement('div');
     row.className = 'bt-device-row';
+    var delayVal = (delay !== undefined && delay !== null && delay !== '') ? delay : -500;
     row.innerHTML =
         '<input type="text" placeholder="Player Name" class="bt-name" value="' +
             escHtml(name || '') + '">' +
         '<input type="text" placeholder="AA:BB:CC:DD:EE:FF" class="bt-mac" value="' +
             escHtml(mac || '') + '">' +
         '<select class="bt-adapter">' + btAdapterOptions(adapter || '') + '</select>' +
+        '<input type="number" class="bt-delay" title="Static delay (ms). Negative = compensate for output latency. Typical BT A2DP: -500" value="' +
+            escHtml(String(delayVal)) + '" step="50">' +
         '<button type="button" class="btn-remove-dev">\u00d7</button>';
 
     row.querySelector('.btn-remove-dev').addEventListener('click', function() {
@@ -833,7 +836,10 @@ function collectBtDevices() {
         var name    = row.querySelector('.bt-name').value.trim();
         var mac     = row.querySelector('.bt-mac').value.trim().toUpperCase();
         var adapter = row.querySelector('.bt-adapter').value;
-        if (mac) devices.push({ mac: mac, adapter: adapter, player_name: name });
+        var delayEl = row.querySelector('.bt-delay');
+        var delay   = delayEl ? parseFloat(delayEl.value) : -500;
+        if (isNaN(delay)) delay = -500;
+        if (mac) devices.push({ mac: mac, adapter: adapter, player_name: name, static_delay_ms: delay });
     });
     return devices;
 }
@@ -841,7 +847,7 @@ function collectBtDevices() {
 function populateBtDeviceRows(devices) {
     document.getElementById('bt-devices-table').innerHTML = '';
     devices.forEach(function(d) {
-        addBtDeviceRow(d.player_name || '', d.mac || '', d.adapter || '');
+        addBtDeviceRow(d.player_name || '', d.mac || '', d.adapter || '', d.static_delay_ms);
     });
 }
 
@@ -1424,13 +1430,23 @@ def api_diagnostics():
     try:
         diag: dict = {}
 
-        # Bluetooth daemon
+        # Bluetooth daemon — in LXC the daemon runs on the host with a bridged D-Bus,
+        # so systemctl is-active bluetooth will always return 'inactive'. Instead check
+        # whether bluetoothctl can list controllers via the available D-Bus socket.
         try:
             r = subprocess.run(
-                ['systemctl', 'is-active', 'bluetooth'],
-                capture_output=True, text=True, timeout=3
+                ['bluetoothctl', 'list'],
+                capture_output=True, text=True, timeout=5
             )
-            diag['bluetooth_daemon'] = r.stdout.strip() or 'unknown'
+            if r.returncode == 0 and 'Controller' in r.stdout:
+                diag['bluetooth_daemon'] = 'active'
+            else:
+                # Fall back to systemctl for non-LXC deployments
+                r2 = subprocess.run(
+                    ['systemctl', 'is-active', 'bluetooth'],
+                    capture_output=True, text=True, timeout=3
+                )
+                diag['bluetooth_daemon'] = r2.stdout.strip() or 'inactive'
         except Exception:
             diag['bluetooth_daemon'] = 'unknown'
 
