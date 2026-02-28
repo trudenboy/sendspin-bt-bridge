@@ -1234,19 +1234,41 @@ def api_bt_scan():
              ' | timeout 13 bluetoothctl 2>&1'],
             capture_output=True, text=True, timeout=16
         )
-        devices = []
         seen: set = set()
+        names: dict = {}
         ansi_re = re.compile(r'\x1b\[[0-9;]*m')
-        pattern = re.compile(r'\[NEW\]\s+Device\s+([0-9A-Fa-f:]{17})\s+(.*)')
+        # [NEW] Device — first time seen this scan session
+        new_pat = re.compile(r'\[NEW\]\s+Device\s+([0-9A-Fa-f:]{17})\s+(.*)')
+        # [CHG] Device MAC Name: ... — already-known device reports name update
+        chg_name_pat = re.compile(r'\[CHG\]\s+Device\s+([0-9A-Fa-f:]{17})\s+Name:\s+(.*)')
+        # [CHG] Device MAC RSSI: ... — already-known device seen with signal (active)
+        chg_rssi_pat = re.compile(r'\[CHG\]\s+Device\s+([0-9A-Fa-f:]{17})\s+RSSI:')
+        active_macs: set = set()
         for line in result.stdout.splitlines():
             clean = ansi_re.sub('', line)
-            m = pattern.search(clean)
+            m = new_pat.search(clean)
             if m:
                 mac = m.group(1).upper()
                 name = m.group(2).strip()
-                if mac and mac not in seen:
-                    seen.add(mac)
-                    devices.append({'mac': mac, 'name': name or mac})
+                seen.add(mac)
+                if name and not re.match(r'^[0-9A-Fa-f]{2}[-:]', name):
+                    names[mac] = name
+                continue
+            m = chg_name_pat.search(clean)
+            if m:
+                mac = m.group(1).upper()
+                names[mac] = m.group(2).strip()
+                continue
+            m = chg_rssi_pat.search(clean)
+            if m:
+                active_macs.add(m.group(1).upper())
+        # Include already-known devices that were actively seen (CHG RSSI) during scan
+        all_macs = seen | active_macs
+        devices = []
+        for mac in all_macs:
+            devices.append({'mac': mac, 'name': names.get(mac, mac)})
+        # Sort: named devices first, then by MAC
+        devices.sort(key=lambda d: (d['name'] == d['mac'], d['name']))
         return jsonify({'devices': devices})
     except Exception as e:
         logger.error(f"BT scan failed: {e}")
