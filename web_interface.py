@@ -721,7 +721,7 @@ function buildDeviceCard(i) {
           '<button type="button" class="btn-bt-action btn-bt-pair" id="dbtn-pair-' + i + '"' +
             ' onclick="btPair(' + i + ')" title="Put the device into pairing mode first">&#128279; Re-pair</button>' +
           '<button type="button" class="btn-bt-action btn-bt-release" id="dbtn-release-' + i + '"' +
-            ' onclick="btToggleManagement(' + i + ')">\uD83D\uDD13 Release</button>' +
+            ' onclick="btToggleManagement(' + i + ')">\U0001F513 Release</button>' +
           '<span class="bt-action-status" id="dbt-action-status-' + i + '"></span>' +
         '</div>';
     return card;
@@ -858,10 +858,10 @@ function populateDeviceCard(i, dev) {
     if (relBtn) {
         var mgmtEnabled = dev.bt_management_enabled !== false;
         if (mgmtEnabled) {
-            relBtn.textContent = '\uD83D\uDD13 Release';
+            relBtn.textContent = '\U0001F513 Release';
             relBtn.className = 'btn-bt-action btn-bt-release';
         } else {
-            relBtn.textContent = '\uD83D\uDD12 Reclaim';
+            relBtn.textContent = '\U0001F512 Reclaim';
             relBtn.className = 'btn-bt-action btn-bt-reclaim';
         }
         // Disable Reconnect/Re-pair while released
