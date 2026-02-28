@@ -1784,7 +1784,17 @@ def api_config():
 
     elif request.method == 'POST':
         config = request.get_json()
+        # Preserve runtime-managed keys not sent by the UI
         CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        if CONFIG_FILE.exists():
+            try:
+                with open(CONFIG_FILE) as f:
+                    existing = json.load(f)
+                for key in ('LAST_VOLUMES', 'LAST_VOLUME'):
+                    if key in existing and key not in config:
+                        config[key] = existing[key]
+            except Exception:
+                pass
         with open(CONFIG_FILE, 'w') as f:
             json.dump(config, f, indent=2)
         return jsonify({'success': True})
