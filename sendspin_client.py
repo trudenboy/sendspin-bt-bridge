@@ -24,6 +24,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+CLIENT_VERSION = "1.2.0"
+
 # Shared audio format cache — updated by whichever sendspin process logs
 # "Audio format: flac 48000Hz/24-bit/2ch"; read by all clients to fill in
 # format details when only "Stream started with codec X" was received.
@@ -565,6 +567,11 @@ class SendspinClient:
                 pulse_sink = f"bluez_sink.{pa_mac}.a2dp_sink"
                 env['PULSE_SINK'] = pulse_sink
                 logger.info(f"Routing audio to sink: {pulse_sink}")
+
+            # Override device info reported to Music Assistant
+            env['SENDSPIN_BRIDGE_MANUFACTURER'] = 'Sendspin'
+            env['SENDSPIN_BRIDGE_PRODUCT_NAME'] = 'Bluetooth Bridge'
+            env['SENDSPIN_BRIDGE_VERSION'] = CLIENT_VERSION
 
             # Start the sendspin process
             self.process = subprocess.Popen(
