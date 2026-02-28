@@ -429,6 +429,8 @@ class SendspinClient:
             'current_track': None,
             'current_artist': None,
             'volume': 100,
+            'muted': False,
+            'audio_format': None,
             'ip_address': self.get_ip_address(),
             'hostname': socket.gethostname(),
             'last_error': None,
@@ -600,6 +602,14 @@ class SendspinClient:
                     self.status['playing'] = True
                 elif 'Stream STOPPED' in line_str or 'MPRIS interface stopped' in line_str:
                     self.status['playing'] = False
+
+                # Parse audio format: "Audio format: flac 48000Hz/24-bit/2ch"
+                if 'Audio format:' in line_str:
+                    try:
+                        fmt = line_str.split('Audio format:')[-1].strip()
+                        self.status['audio_format'] = fmt
+                    except Exception:
+                        pass
 
                 # Track server connection — actual sendspin output:
                 # "INFO:sendspin.daemon.daemon:Server connected"

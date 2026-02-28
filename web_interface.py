@@ -522,6 +522,7 @@ function buildDeviceCard(i) {
             '<div class="status-label">Playback</div>' +
             '<div class="status-value" id="dplay-' + i + '">-</div>' +
             '<div class="ts" id="dtrack-' + i + '"></div>' +
+            '<div class="ts" id="daudiofmt-' + i + '" style="color:#8b5cf6;margin-top:2px;"></div>' +
           '</div>' +
           '<div>' +
             '<div class="status-label">Volume</div>' +
@@ -530,6 +531,10 @@ function buildDeviceCard(i) {
                 'class="volume-slider" id="vslider-' + i + '" ' +
                 'oninput="onVolumeInput(' + i + ', this.value)">' +
               '<span class="volume-pct" id="dvol-' + i + '">100%</span>' +
+              '<button type="button" id="dmute-' + i + '" ' +
+                'style="margin-left:8px;padding:2px 8px;border:1px solid #d1d5db;border-radius:4px;' +
+                'background:white;cursor:pointer;font-size:13px;" ' +
+                'title="Mute/Unmute">&#128264;</button>' +
             '</div>' +
           '</div>' +
         '</div>';
@@ -593,12 +598,43 @@ function populateDeviceCard(i, dev) {
     var trackEl = document.getElementById('dtrack-' + i);
     if (trackEl) trackEl.textContent = dev.current_track || '';
 
+    // Audio format
+    var fmtEl = document.getElementById('daudiofmt-' + i);
+    if (fmtEl) fmtEl.textContent = dev.audio_format || '';
+
     // Volume — only update if user isn't actively adjusting this slider
     if (dev.volume !== undefined && !volPending[i]) {
         var slider = document.getElementById('vslider-' + i);
         var volEl  = document.getElementById('dvol-' + i);
         if (slider) slider.value = dev.volume;
         if (volEl)  volEl.textContent = dev.volume + '%';
+    }
+
+    // Mute button — attach handler once, update icon on every poll
+    var muteBtn = document.getElementById('dmute-' + i);
+    if (muteBtn) {
+        muteBtn.textContent = dev.muted ? '\uD83D\uDD07' : '\uD83D\uDD08';
+        muteBtn.title = dev.muted ? 'Unmute' : 'Mute';
+        muteBtn.style.background = dev.muted ? '#fee2e2' : 'white';
+        if (!muteBtn._handlerSet) {
+            muteBtn._handlerSet = true;
+            muteBtn.addEventListener('click', function() {
+                var dev = lastDevices[i] || {};
+                fetch('/api/mute', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ player_name: dev.player_name || null }),
+                }).then(function(r) { return r.json(); }).then(function(d) {
+                    if (d.success && lastDevices[i]) lastDevices[i].muted = d.muted;
+                    var btn = document.getElementById('dmute-' + i);
+                    if (btn) {
+                        btn.textContent = d.muted ? '\uD83D\uDD07' : '\uD83D\uDD08';
+                        btn.title = d.muted ? 'Unmute' : 'Mute';
+                        btn.style.background = d.muted ? '#fee2e2' : 'white';
+                    }
+                }).catch(function(e) { console.error('Mute failed:', e); });
+            });
+        }
     }
 }
 
@@ -1127,6 +1163,50 @@ def set_volume():
                 return jsonify({'success': True, 'volume': volume})
             else:
                 return jsonify({'success': False, 'error': 'Failed to set volume'}), 500
+        else:
+            return jsonify({'success': False, 'error': 'Client not available'}), 503
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/mute', methods=['POST'])
+def set_mute():
+    """Toggle or set mute on a player's Bluetooth sink"""
+    try:
+        data = request.get_json() or {}
+        player_name = data.get('player_name')
+        # mute: True=mute, False=unmute, omit=toggle
+        mute_value = data.get('mute')
+
+        client = None
+        if player_name:
+            for c in _clients:
+                if getattr(c, 'player_name', None) == player_name:
+                    client = c
+                    break
+        if client is None and _clients:
+            client = _clients[0]
+
+        if client and client.bluetooth_sink_name:
+            if mute_value is None:
+                pactl_arg = 'toggle'
+            else:
+                pactl_arg = '1' if mute_value else '0'
+            result = subprocess.run(
+                ['pactl', 'set-sink-mute', client.bluetooth_sink_name, pactl_arg],
+                capture_output=True, text=True, timeout=2
+            )
+            if result.returncode == 0:
+                # Read back actual mute state
+                info = subprocess.run(
+                    ['pactl', 'get-sink-mute', client.bluetooth_sink_name],
+                    capture_output=True, text=True, timeout=2
+                )
+                muted = 'yes' in info.stdout.lower()
+                client.status['muted'] = muted
+                return jsonify({'success': True, 'muted': muted})
+            else:
+                return jsonify({'success': False, 'error': 'pactl failed'}), 500
         else:
             return jsonify({'success': False, 'error': 'Client not available'}), 503
     except Exception as e:
