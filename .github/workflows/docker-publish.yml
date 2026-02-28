@@ -18,13 +18,24 @@ jobs:
   build-and-push:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       packages: write
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-      
+
+      - name: Sync ha-addon version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          VERSION=$(grep -oP '(?<=VERSION = ")[^"]+' web_interface.py)
+          sed -i "s/^version: .*/version: \"${VERSION}\"/" ha-addon/config.yaml
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add ha-addon/config.yaml
+          git diff --staged --quiet || git commit -m "chore: sync ha-addon version to ${VERSION} [skip ci]"
+          git push origin HEAD:main
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
       

@@ -1,6 +1,7 @@
 services:
   sendspin-client:
-    build: .
+    image: ghcr.io/trudenboy/sendspin-bt-bridge:latest
+    # To build from source instead: docker compose up --build
     container_name: sendspin-client
     restart: unless-stopped
     

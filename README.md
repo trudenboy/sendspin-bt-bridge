@@ -94,7 +94,7 @@ exit
 ```yaml
 services:
   sendspin-client:
-    image: ghcr.io/loryanstrant/sendspin-client:latest
+    image: ghcr.io/trudenboy/sendspin-bt-bridge:latest
     container_name: sendspin-client
     restart: unless-stopped
     network_mode: host
@@ -125,6 +125,8 @@ Create config directory and start:
 sudo mkdir -p /etc/docker/Sendspin
 docker compose up -d
 ```
+
+> **Migrating from an earlier install?** The image was previously published as `ghcr.io/loryanstrant/sendspin-client`. Update your compose file or pull command to `ghcr.io/trudenboy/sendspin-bt-bridge:latest`.
 
 Access the web UI at `http://your-host-ip:8080` to add Bluetooth devices and set the MA server.
 
