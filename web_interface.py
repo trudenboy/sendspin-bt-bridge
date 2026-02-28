@@ -352,22 +352,20 @@ HTML_TEMPLATE = """
     <!-- Header -->
     <div class="header">
         <h1>&#127925; Sendspin Client</h1>
-        <div class="version-info" id="version-display">
-            <div>{{ VERSION }}</div>
-            <div>{{ BUILD_DATE }}</div>
+        <div style="text-align:right;">
+            <div class="version-info" id="version-display">
+                <div>{{ VERSION }}</div>
+                <div>{{ BUILD_DATE }}</div>
+            </div>
+            <div id="system-info" style="font-size:12px;color:#9ca3af;margin-top:4px;line-height:1.6;"></div>
         </div>
     </div>
 
     <!-- Restart banner -->
     <div id="restart-banner" class="restart-banner"></div>
 
-    <!-- Status grid: system info + device cards (populated by JS) -->
-    <div class="status-grid" id="status-grid">
-        <div class="status-card">
-            <div class="status-label" style="font-size:14px;color:#666;margin-bottom:8px;">System</div>
-            <div id="container-info" style="font-size:13px;color:#333;line-height:1.7;">Loading&#8230;</div>
-        </div>
-    </div>
+    <!-- Status grid: device cards (populated by JS) -->
+    <div class="status-grid" id="status-grid"></div>
 
     <!-- Configuration -->
     <div class="config-section">
@@ -464,11 +462,11 @@ async function updateStatus() {
         var status = await resp.json();
 
         var info = [];
-        if (status.hostname)   info.push('Host: ' + status.hostname);
-        if (status.ip_address) info.push('IP: ' + status.ip_address);
-        if (status.uptime)     info.push('Uptime: ' + status.uptime);
-        document.getElementById('container-info').innerHTML =
-            info.length ? info.join('<br>') : '&mdash;';
+        if (status.hostname)   info.push(escHtml(status.hostname));
+        if (status.ip_address) info.push(escHtml(status.ip_address));
+        if (status.uptime)     info.push('up ' + escHtml(status.uptime));
+        var sysEl = document.getElementById('system-info');
+        if (sysEl) sysEl.innerHTML = info.join(' &middot; ');
 
         var devices = status.devices || [status];
         lastDevices = devices;
