@@ -13,6 +13,7 @@ arch:
 startup: application
 boot: auto
 host_network: true
+host_dbus: true
 privileged:
   - SYS_ADMIN
   - NET_ADMIN

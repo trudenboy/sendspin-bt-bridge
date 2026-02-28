@@ -45,7 +45,7 @@ echo "Available audio sinks:"
 pactl list short sinks 2>/dev/null || echo "Could not list sinks"
 
 # If BLUETOOTH_MAC is set, configure it as default
-if [ -n "$BLUETOOTH_MAC" ]; then
+if [ -n "${BLUETOOTH_MAC:-}" ]; then
     echo "Will configure Bluetooth audio for $BLUETOOTH_MAC after connection..."
     
     # Try to restore last volume if saved
