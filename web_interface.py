@@ -147,7 +147,7 @@ HTML_TEMPLATE = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sendspin Client</title>
+    <title>Sendspin BT Bridge</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -373,7 +373,7 @@ HTML_TEMPLATE = """
 
     <!-- Header -->
     <div class="header">
-        <h1>&#127925; Sendspin Client</h1>
+        <h1>&#127925; Sendspin BT Bridge</h1>
         <div style="text-align:right;">
             <div class="version-info" id="version-display">
                 <div>{{ VERSION }}</div>
