@@ -47,6 +47,23 @@ DEFAULT_CONFIG = {
 _clients: list = []
 
 
+def _bt_remove_device(mac: str, adapter_mac: str = '') -> None:
+    """Remove device from BT stack (disconnect + unpair). Fire-and-forget."""
+    def _run():
+        cmds = []
+        if adapter_mac:
+            cmds.append(f'select {adapter_mac}')
+        cmds.append(f'remove {mac}')
+        cmd_str = '\n'.join(cmds) + '\n'
+        try:
+            subprocess.run(['bluetoothctl'], input=cmd_str,
+                           capture_output=True, text=True, timeout=10)
+            logger.info(f"BT stack: removed {mac} (adapter: {adapter_mac or 'default'})")
+        except Exception as e:
+            logger.warning(f"BT stack cleanup failed for {mac}: {e}")
+    threading.Thread(target=_run, daemon=True).start()
+
+
 def set_clients(clients):
     """Set multiple client references"""
     global _clients
@@ -1788,6 +1805,7 @@ def api_config():
         config = request.get_json()
         # Preserve runtime-managed keys not sent by the UI
         CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        existing = {}
         if CONFIG_FILE.exists():
             try:
                 with open(CONFIG_FILE) as f:
@@ -1797,6 +1815,26 @@ def api_config():
                         config[key] = existing[key]
             except Exception:
                 pass
+
+        # BT stack cleanup for deleted or adapter-changed devices
+        old_devices = {d['mac']: d for d in existing.get('BLUETOOTH_DEVICES', []) if d.get('mac')}
+        new_devices = {d['mac']: d for d in config.get('BLUETOOTH_DEVICES', []) if d.get('mac')}
+
+        # Build adapter MAC lookup from running clients (already resolved hciN → MAC)
+        client_adapter = {
+            getattr(getattr(c, 'bt_manager', None), 'mac_address', None):
+            getattr(getattr(c, 'bt_manager', None), '_adapter_select', '')
+            for c in _clients
+        }
+
+        for mac, old_dev in old_devices.items():
+            new_dev = new_devices.get(mac)
+            adapter_changed = new_dev and new_dev.get('adapter') != old_dev.get('adapter')
+            deleted = new_dev is None
+            if deleted or adapter_changed:
+                adapter_mac = client_adapter.get(mac) or ''
+                _bt_remove_device(mac, adapter_mac)
+
         with open(CONFIG_FILE, 'w') as f:
             json.dump(config, f, indent=2)
         return jsonify({'success': True})
