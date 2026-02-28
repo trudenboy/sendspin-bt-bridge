@@ -1171,16 +1171,16 @@ function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort) {
     var portVal  = (listenPort !== undefined && listenPort !== null && listenPort !== '') ? listenPort : '';
     row.innerHTML =
         '<input type="text" placeholder="Player Name" class="bt-name" value="' +
-            escHtml(name || '') + '">' +
+            escHtmlAttr(name || '') + '">' +
         '<input type="text" placeholder="AA:BB:CC:DD:EE:FF" class="bt-mac" value="' +
-            escHtml(mac || '') + '">' +
+            escHtmlAttr(mac || '') + '">' +
         '<select class="bt-adapter">' + btAdapterOptions(adapter || '') + '</select>' +
         '<input type="text" class="bt-listen-host" placeholder="auto" title="IP address this player advertises/listens on. Leave blank to auto-detect." value="' +
-            escHtml(listenHost || '') + '">' +
+            escHtmlAttr(listenHost || '') + '">' +
         '<input type="number" class="bt-listen-port" placeholder="8928" title="Port this player listens on (default: 8928, 8929 for 2nd…)" value="' +
-            escHtml(String(portVal)) + '" min="1024" max="65535">' +
+            escHtmlAttr(String(portVal)) + '" min="1024" max="65535">' +
         '<input type="number" class="bt-delay" title="Static delay (ms). Negative = compensate for output latency. Typical BT A2DP: -500" value="' +
-            escHtml(String(delayVal)) + '" step="50">' +
+            escHtmlAttr(String(delayVal)) + '" step="50">' +
         '<button type="button" class="btn-remove-dev">\u00d7</button>';
 
     row.querySelector('.btn-remove-dev').addEventListener('click', function() {
@@ -1629,9 +1629,15 @@ def set_volume():
                     client.status['volume'] = volume
                     # Persist per-device volume so it survives restarts
                     mac = getattr(getattr(client, 'bt_manager', None), 'mac_address', None)
-                    if mac:
-                        from sendspin_client import _save_device_volume
-                        _save_device_volume(mac, volume)
+                    if mac and CONFIG_FILE.exists():
+                        try:
+                            with open(CONFIG_FILE, 'r') as f:
+                                cfg = json.load(f)
+                            cfg.setdefault('LAST_VOLUMES', {})[mac] = volume
+                            with open(CONFIG_FILE, 'w') as f:
+                                json.dump(cfg, f, indent=2)
+                        except Exception as e:
+                            logger.debug(f"Could not save volume for {mac}: {e}")
                     results.append({'player': getattr(client, 'player_name', '?'), 'ok': True})
                 else:
                     results.append({'player': getattr(client, 'player_name', '?'), 'ok': False})
