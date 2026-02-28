@@ -523,6 +523,7 @@ class SendspinClient:
             logger.info(f"Sendspin command: {' '.join(cmd)}")
             self.status['server_connected'] = True
             self.status['connected'] = True
+            self.status['playing'] = False  # reset; monitor_output() will set True on Stream STARTED
             
             # Monitor output in background
             asyncio.create_task(self.monitor_output())
@@ -556,24 +557,19 @@ class SendspinClient:
                 line_str = raw_line.strip()
                 logger.info(f"Sendspin: {line_str}")
 
-                # Update playing state from output
-                if line_str.startswith("State:") or line_str.startswith("Playback state:"):
-                    state = line_str.split(":")[-1].strip().lower()
-                    self.status['playing'] = (state == 'playing')
+                # Update playing state — sendspin uses Python logging format:
+                # "INFO:sendspin.audio:Stream STARTED: N chunks, ..."
+                # "INFO:sendspin.audio:Stream STOPPED" (if/when emitted)
+                # "INFO:aiosendspin.client.client:Stream started with codec flac"
+                if 'Stream STARTED' in line_str or 'Stream started with codec' in line_str:
+                    self.status['playing'] = True
+                elif 'Stream STOPPED' in line_str or 'MPRIS interface stopped' in line_str:
+                    self.status['playing'] = False
 
-                # Track current track and artist
-                if line_str.startswith("Now playing:"):
-                    track_name = line_str.split("Now playing:")[-1].strip()
-                    self.status['_track_name'] = track_name
-
-                if line_str.startswith("Artist:"):
-                    artist_name = line_str.split("Artist:")[-1].strip()
-                    self.status['current_artist'] = artist_name
-                    if hasattr(self.status, '__getitem__') and self.status.get('_track_name'):
-                        self.status['current_track'] = f"{artist_name} - {self.status['_track_name']}"
-
-                # Track server connection
-                if "Connected to" in line_str and "ws://" in line_str:
+                # Track server connection — actual sendspin output:
+                # "INFO:sendspin.daemon.daemon:Server connected"
+                # "INFO:aiosendspin.client.client:Handshake with server complete"
+                if 'Server connected' in line_str or 'Handshake with server complete' in line_str:
                     if not self.status['server_connected_at']:
                         self.status['server_connected_at'] = datetime.now().isoformat()
                     self.status['server_connected'] = True
