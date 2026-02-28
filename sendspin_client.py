@@ -156,17 +156,41 @@ class BluetoothManager:
             return False
     
     def pair_device(self) -> bool:
-        """Pair with the Bluetooth device"""
+        """Pair with the Bluetooth device.
+
+        Uses a single long-running bluetoothctl session with stdin kept open:
+        1. Scan for 12s so BlueZ caches the device (required for 'pair' to work)
+        2. Pair + trust while device is still in cache / pairing mode
+        The device MUST be in pairing/discoverable mode when this runs.
+        """
         logger.info(f"Pairing with {self.mac_address}...")
-        success, output = self._run_bluetoothctl([
-            'power on',
-            'agent on',
-            'default-agent',
-            f'pair {self.mac_address}'
-        ])
-        if success:
-            logger.info("Pairing successful")
-        return success
+        adapter_prefix = f'select {self._adapter_select}\n' if self._adapter_select else ''
+        mac = self.mac_address
+        # Keep stdin open: scan 12s to discover device → pair → trust → scan off
+        bash_cmd = (
+            f'( printf "{adapter_prefix}power on\\nagent on\\ndefault-agent\\nscan on\\n";'
+            f' sleep 12;'
+            f' printf "pair {mac}\\ntrust {mac}\\nscan off\\n";'
+            f' sleep 10'
+            f' ) | timeout 28 bluetoothctl 2>&1'
+        )
+        try:
+            result = subprocess.run(
+                ['bash', '-c', bash_cmd],
+                capture_output=True, text=True, timeout=32
+            )
+            out = result.stdout
+            logger.info(f"Pair output (last 600 chars): {out[-600:]}")
+            ok = ('Pairing successful' in out or 'Already paired' in out
+                  or 'Paired: yes' in out)
+            if ok:
+                logger.info("Pairing successful")
+            else:
+                logger.warning(f"Pairing may have failed. Output: {out[-200:]}")
+            return ok
+        except Exception as e:
+            logger.error(f"Pair error: {e}")
+            return False
     
     def trust_device(self) -> bool:
         """Trust the Bluetooth device"""
@@ -293,12 +317,11 @@ class BluetoothManager:
         
         logger.info(f"Connecting to {self.mac_address}...")
         
-        # Ensure paired and trusted
+        # Ensure paired and trusted (pair_device also runs trust)
         if not self.is_device_paired():
             logger.info("Device not paired, attempting to pair...")
             if not self.pair_device():
                 return False
-            self.trust_device()
         
         # Power on bluetooth
         self._run_bluetoothctl(['power on'])
@@ -481,6 +504,18 @@ class SendspinClient:
     async def start_sendspin_process(self):
         """Start the sendspin CLI player"""
         try:
+            # Kill any existing process first to free the port
+            if self.process and self.process.poll() is None:
+                logger.info(f"Stopping existing sendspin process (PID {self.process.pid}) before restart")
+                try:
+                    self.process.terminate()
+                    self.process.wait(timeout=3)
+                except Exception:
+                    try:
+                        self.process.kill()
+                    except Exception:
+                        pass
+
             # Build command — use 'daemon' subcommand with unique port + settings-dir per instance
             safe_id = ''.join(c if c.isalnum() or c == '-' else '-' for c in self.player_name.lower()).strip('-')
             client_id = f"sendspin-{safe_id}"
