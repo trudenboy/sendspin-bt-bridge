@@ -1,6 +1,6 @@
 # Sendspin Bluetooth Bridge
 
-[🇷🇺 Читать на русском](README.ru.md)
+[Читать на русском](README.ru.md)
 
 A Bluetooth bridge for [Music Assistant](https://www.music-assistant.io/) — connects your Bluetooth speakers to the MA Sendspin protocol. Runs as a Docker container, a Home Assistant addon, or a native LXC container on Proxmox VE. Designed for headless systems.
 
