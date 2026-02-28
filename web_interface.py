@@ -482,8 +482,8 @@ HTML_TEMPLATE = """
         <summary>&#9881;&#65039; Configuration</summary>
         <form id="config-form">
             <div class="form-group">
-                <label>Server (use &#8216;auto&#8217; for mDNS discovery)</label>
-                <input type="text" name="SENDSPIN_SERVER" required>
+                <label>Music Assistant server &mdash; IP/hostname, or <code>auto</code> to discover via mDNS</label>
+                <input type="text" name="SENDSPIN_SERVER" placeholder="auto" required>
             </div>
 
             <div class="form-group">
