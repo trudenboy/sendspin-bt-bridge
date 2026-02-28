@@ -645,9 +645,11 @@ class SendspinClient:
                     self.status['server_connected'] = True
 
                 # Sync volume changes to Bluetooth speaker
-                if line_str.startswith("Volume:") and self.bluetooth_sink_name:
+                # Handles "Volume: XX%" and "Server set player volume: XX%"
+                if ('Volume:' in line_str or 'player volume:' in line_str.lower()) and self.bluetooth_sink_name:
                     try:
-                        volume_part = line_str.split("Volume:")[-1].strip().rstrip('%')
+                        # Split on last colon to get the value regardless of prefix
+                        volume_part = line_str.rsplit(':', 1)[-1].strip().rstrip('%')
                         if volume_part and volume_part.isdigit():
                             volume_percent = int(volume_part)
                             self.status['volume'] = volume_percent
