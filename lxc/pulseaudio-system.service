@@ -6,6 +6,8 @@ Before=sendspin-client.service
 
 [Service]
 Type=notify
+User=pulse
+Group=pulse
 Environment=PULSE_RUNTIME_PATH=/var/run/pulse
 # Use the host's D-Bus socket (bind-mounted at /bt-dbus) for Bluetooth A2DP
 Environment=DBUS_SYSTEM_BUS_ADDRESS=unix:path=/bt-dbus/system_bus_socket
@@ -14,8 +16,7 @@ ExecReload=/bin/kill -HUP $MAINPID
 Restart=on-failure
 RestartSec=5
 LockPersonality=yes
-NoNewPrivileges=no
-ProtectHome=no
+NoNewPrivileges=yes
 RestrictRealtime=no
 
 [Install]

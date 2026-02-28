@@ -33,3 +33,9 @@
 .ifexists module-card-restore.so
     load-module module-card-restore
 .endif
+
+# Fallback null sink — used when no Bluetooth sink is available yet.
+# sendspin requires at least one sink to initialise.
+.ifexists module-null-sink.so
+    load-module module-null-sink sink_name=fallback rate=44100 channels=2
+.endif
