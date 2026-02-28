@@ -1,0 +1,18 @@
+---
+configuration:
+  sendspin_server:
+    name: "Music Assistant server"
+    description: >-
+      Hostname or IP of the Music Assistant server. Use "auto" to discover
+      it automatically via mDNS (recommended for most setups).
+  sendspin_port:
+    name: "Sendspin port"
+    description: >-
+      WebSocket port exposed by the Music Assistant Sendspin provider.
+      The default (9000) matches the MA default; only change if you have
+      multiple instances or a custom port.
+  bluetooth_devices:
+    name: "Bluetooth devices"
+    description: >-
+      List of Bluetooth speakers to bridge. Each entry requires a MAC
+      address and a player name that will appear in Music Assistant.

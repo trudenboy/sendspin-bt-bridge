@@ -1,0 +1,35 @@
+---
+name: "Sendspin Bluetooth Bridge"
+version: "1.2.0"
+slug: "sendspin_bt_bridge"
+description: "Bridge Music Assistant Sendspin protocol to Bluetooth speakers"
+url: "https://github.com/loryanstrant/Sendspin-client"
+arch:
+  - aarch64
+  - amd64
+  - armv7
+startup: application
+boot: auto
+host_network: true
+privileged: true
+devices:
+  - /dev/bus/usb
+audio: true
+init: false
+ingress: true
+ingress_port: 8080
+panel_icon: mdi:bluetooth-audio
+
+options:
+  sendspin_server: "auto"
+  sendspin_port: 9000
+  bluetooth_devices: []
+
+schema:
+  sendspin_server: str
+  sendspin_port: int
+  bluetooth_devices:
+    - mac: str
+      player_name: str
+      adapter: str?
+      static_delay_ms: int?
