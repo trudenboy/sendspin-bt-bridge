@@ -1631,6 +1631,11 @@ def set_volume():
                 )
                 if r.returncode == 0:
                     client.status['volume'] = volume
+                    # Persist per-device volume so it survives restarts
+                    mac = getattr(getattr(client, 'bt_manager', None), 'mac_address', None)
+                    if mac:
+                        from sendspin_client import _save_device_volume
+                        _save_device_volume(mac, volume)
                     results.append({'player': getattr(client, 'player_name', '?'), 'ok': True})
                 else:
                     results.append({'player': getattr(client, 'player_name', '?'), 'ok': False})

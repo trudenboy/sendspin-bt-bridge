@@ -32,6 +32,23 @@ CLIENT_VERSION = "1.2.0"
 # format details when only "Stream started with codec X" was received.
 _last_full_audio_format: Optional[str] = None
 
+_CONFIG_PATH = '/config/config.json'
+
+
+def _save_device_volume(mac: Optional[str], volume: int) -> None:
+    """Persist per-device volume to config.json under LAST_VOLUMES[mac]."""
+    if not mac or not os.path.exists(_CONFIG_PATH):
+        return
+    try:
+        with open(_CONFIG_PATH, 'r') as f:
+            cfg = json.load(f)
+        cfg.setdefault('LAST_VOLUMES', {})[mac] = volume
+        with open(_CONFIG_PATH, 'w') as f:
+            json.dump(cfg, f, indent=2)
+    except Exception as e:
+        logger.debug(f"Could not save volume for {mac}: {e}")
+
+
 # Global client instance holder (class-based singleton)
 class ClientHolder:
     """Thread-safe holder for the client instance"""
@@ -329,15 +346,19 @@ class BluetoothManager:
                     self.client.bluetooth_sink_name = configured_sink
                     logger.info(f"Stored Bluetooth sink for volume sync: {configured_sink}")
                     
-                    # Restore last volume if saved
+                    # Restore last volume for this device (keyed by MAC)
                     restored = False
                     try:
                         config_path = '/config/config.json'
                         if os.path.exists(config_path):
                             with open(config_path, 'r') as f:
-                                config = json.load(f)
-                            last_volume = config.get('LAST_VOLUME')
-                            if last_volume and isinstance(last_volume, int) and 0 <= last_volume <= 100:
+                                cfg = json.load(f)
+                            # Per-device dict (preferred); fall back to legacy single value
+                            volumes = cfg.get('LAST_VOLUMES', {})
+                            last_volume = volumes.get(self.mac_address)
+                            if last_volume is None:
+                                last_volume = cfg.get('LAST_VOLUME')
+                            if last_volume is not None and isinstance(last_volume, int) and 0 <= last_volume <= 100:
                                 result = subprocess.run(
                                     ['pactl', 'set-sink-volume', configured_sink, f'{last_volume}%'],
                                     capture_output=True,
@@ -345,12 +366,12 @@ class BluetoothManager:
                                     timeout=2
                                 )
                                 if result.returncode == 0:
-                                    logger.info(f"✓ Restored volume to {last_volume}%")
+                                    logger.info(f"✓ Restored volume to {last_volume}% for {self.mac_address}")
                                     self.client.status['volume'] = last_volume
                                     restored = True
                     except Exception as e:
                         logger.debug(f"Could not restore volume: {e}")
-                    
+
                     # Always set flag to allow saving future changes
                     self.client.volume_restore_done = True
                     if not restored:
@@ -760,13 +781,10 @@ class SendspinClient:
 
                             if self.volume_restore_done:
                                 try:
-                                    config_path = '/config/config.json'
-                                    if os.path.exists(config_path):
-                                        with open(config_path, 'r') as f:
-                                            config = json.load(f)
-                                        config['LAST_VOLUME'] = volume_percent
-                                        with open(config_path, 'w') as f:
-                                            json.dump(config, f, indent=2)
+                                    _save_device_volume(
+                                        getattr(self.bt_manager, 'mac_address', None),
+                                        volume_percent
+                                    )
                                 except Exception as e:
                                     logger.debug(f"Could not save volume to config: {e}")
 
