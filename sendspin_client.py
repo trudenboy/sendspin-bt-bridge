@@ -332,6 +332,7 @@ class BluetoothManager:
         logger.info(f"[{self.device_name}] monitor_and_reconnect task started")
         loop = asyncio.get_event_loop()
         iteration = 0
+        reconnect_attempt = 0
         while True:
             iteration += 1
             try:
@@ -344,6 +345,11 @@ class BluetoothManager:
                     connected = await loop.run_in_executor(None, self.is_device_connected)
                     logger.info(f"[{self.device_name}] BT connected={connected}")
                     if not connected:
+                        reconnect_attempt += 1
+                        if self.client:
+                            self.client.status['reconnecting'] = True
+                            self.client.status['reconnect_attempt'] = reconnect_attempt
+
                         # Kill sendspin daemon immediately — if the BT sink is gone,
                         # sendspin floods PortAudioErrors on every audio chunk, which
                         # starves its own event loop and causes WebSocket PONG timeouts.
@@ -354,12 +360,21 @@ class BluetoothManager:
                             except Exception:
                                 pass
 
-                        logger.warning(f"Bluetooth device {self.device_name} disconnected, attempting reconnect...")
+                        logger.warning(f"Bluetooth device {self.device_name} disconnected, attempting reconnect... (attempt {reconnect_attempt})")
                         success = await loop.run_in_executor(None, self.connect_device)
                         if success and self.client:
+                            reconnect_attempt = 0
+                            self.client.status['reconnecting'] = False
+                            self.client.status['reconnect_attempt'] = 0
                             # BT reconnected — start fresh sendspin to register with MA
                             logger.info(f"BT reconnected for {self.device_name}, starting sendspin...")
                             await self.client.start_sendspin_process()
+                    else:
+                        # Device is connected — clear any reconnect state
+                        if self.client and self.client.status.get('reconnecting'):
+                            self.client.status['reconnecting'] = False
+                            self.client.status['reconnect_attempt'] = 0
+                        reconnect_attempt = 0
 
                 await asyncio.sleep(5)
             except Exception as e:
@@ -394,7 +409,9 @@ class SendspinClient:
             'ip_address': self.get_ip_address(),
             'hostname': socket.gethostname(),
             'last_error': None,
-            'uptime_start': datetime.now()
+            'uptime_start': datetime.now(),
+            'reconnecting': False,
+            'reconnect_attempt': 0,
         }
         
         self.process = None
