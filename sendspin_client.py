@@ -431,6 +431,9 @@ class SendspinClient:
             'volume': 100,
             'muted': False,
             'audio_format': None,
+            'reanchor_count': 0,
+            'last_sync_error_ms': None,
+            'reanchoring': False,
             'ip_address': self.get_ip_address(),
             'hostname': socket.gethostname(),
             'last_error': None,
@@ -610,6 +613,20 @@ class SendspinClient:
                         self.status['audio_format'] = fmt
                     except Exception:
                         pass
+
+                # Parse sync events: "Sync error 503.6 ms too large; re-anchoring"
+                if 're-anchoring' in line_str:
+                    try:
+                        import re as _re
+                        m = _re.search(r'Sync error ([\d.]+)\s*ms', line_str)
+                        if m:
+                            self.status['last_sync_error_ms'] = float(m.group(1))
+                        self.status['reanchor_count'] += 1
+                        self.status['reanchoring'] = True
+                    except Exception:
+                        pass
+                elif 'Stream STARTED' in line_str:
+                    self.status['reanchoring'] = False
 
                 # Track server connection — actual sendspin output:
                 # "INFO:sendspin.daemon.daemon:Server connected"

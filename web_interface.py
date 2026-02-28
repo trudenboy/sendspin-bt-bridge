@@ -544,6 +544,11 @@ function buildDeviceCard(i) {
                 'title="Mute/Unmute">&#128264;</button>' +
             '</div>' +
           '</div>' +
+          '<div>' +
+            '<div class="status-label">Sync</div>' +
+            '<div class="status-value" id="dsync-' + i + '">&#8212;</div>' +
+            '<div class="ts" id="dsync-detail-' + i + '"></div>' +
+          '</div>' +
         '</div>';
     return card;
 }
@@ -608,6 +613,25 @@ function populateDeviceCard(i, dev) {
     // Audio format
     var fmtEl = document.getElementById('daudiofmt-' + i);
     if (fmtEl) fmtEl.textContent = dev.audio_format || '';
+
+    // Sync
+    var syncEl = document.getElementById('dsync-' + i);
+    var syncDetail = document.getElementById('dsync-detail-' + i);
+    if (syncEl) {
+        if (!dev.playing) {
+            syncEl.textContent = '\u2014';
+            syncEl.style.color = '#9ca3af';
+            if (syncDetail) syncDetail.textContent = '';
+        } else if (dev.reanchoring) {
+            syncEl.innerHTML = '<span style="color:#f59e0b;">&#9888; Re-anchoring</span>';
+            if (syncDetail) syncDetail.textContent = dev.last_sync_error_ms
+                ? 'Error: ' + dev.last_sync_error_ms.toFixed(1) + ' ms' : '';
+        } else {
+            syncEl.innerHTML = '<span style="color:#10b981;">&#10003; In sync</span>';
+            if (syncDetail) syncDetail.textContent = dev.reanchor_count
+                ? 'Re-anchors: ' + dev.reanchor_count : '';
+        }
+    }
 
     // Volume — only update if user isn't actively adjusting this slider
     if (dev.volume !== undefined && !volPending[i]) {
