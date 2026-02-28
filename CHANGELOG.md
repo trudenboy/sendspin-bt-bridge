@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Signal handler used `asyncio.create_task` which could leave orphaned tasks on shutdown
 - Per-player audio format cache was a module-level global, causing wrong format shown for second device in multi-device setups
 - Removed dead code: `ClientHolder` class and `get_client_instance()` function
+- LXC: `module-bluetooth-policy auto_switch=never` added to `pulse-system.pa` — fixes A2DP connection failure for devices that advertise HFP/HSP profiles (e.g. ENEBY Portable); SCO sockets required by HFP are unavailable in LXC kernel namespaces, causing `br-connection-unknown` disconnect before PulseAudio could create the A2DP sink
 
 ## [1.2.0] - 2026-02-28
 
