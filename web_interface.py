@@ -232,7 +232,7 @@ HTML_TEMPLATE = """
         .config-section summary::-webkit-details-marker,
         .logs-section summary::-webkit-details-marker { display: none; }
         .config-section summary::before, .logs-section summary::before {
-            content: '\25B6';
+            content: '\\25B6';
             display: inline-block; font-size: 13px; margin-right: 8px;
             transition: transform 0.2s;
         }
@@ -345,7 +345,7 @@ HTML_TEMPLATE = """
         }
         .diag-section summary::-webkit-details-marker { display: none; }
         .diag-section summary::before {
-            content: '\25B6';
+            content: '\\25B6';
             display: inline-block; font-size: 13px; margin-right: 8px;
             transition: transform 0.2s;
         }
