@@ -3,6 +3,42 @@ set -euo pipefail
 
 echo "=== Starting Sendspin Client Container ==="
 
+# HA Addon mode: /data/options.json is written by HA Supervisor before start.
+# Translate it to /config/config.json so the rest of the startup is uniform.
+if [ -f /data/options.json ]; then
+    echo "HA Addon mode detected — reading /data/options.json"
+    mkdir -p /config
+    python3 - <<'PYEOF'
+import json
+
+with open('/data/options.json') as f:
+    opts = json.load(f)
+
+config = {
+    'SENDSPIN_SERVER': opts.get('sendspin_server', 'auto'),
+    'SENDSPIN_PORT':   str(opts.get('sendspin_port', 9000)),
+    'BLUETOOTH_DEVICES': opts.get('bluetooth_devices', []),
+    'TZ': opts.get('tz', 'UTC'),
+}
+
+# Preserve persisted volume levels
+try:
+    with open('/config/config.json') as f:
+        existing = json.load(f)
+    if 'LAST_VOLUMES' in existing:
+        config['LAST_VOLUMES'] = existing['LAST_VOLUMES']
+    elif 'LAST_VOLUME' in existing:
+        config['LAST_VOLUME'] = existing['LAST_VOLUME']
+except (FileNotFoundError, json.JSONDecodeError):
+    pass
+
+with open('/config/config.json', 'w') as f:
+    json.dump(config, f, indent=2)
+
+print(f"Generated /config/config.json with {len(config['BLUETOOTH_DEVICES'])} device(s)")
+PYEOF
+fi
+
 # Use host's D-Bus (mounted from host)
 echo "Using host D-Bus socket..."
 if [ -S /var/run/dbus/system_bus_socket ]; then
