@@ -417,28 +417,4 @@ MIT License — see [LICENSE](LICENSE) for details.
 
 ## Changelog
 
-### v1.2.0
-
-- **Home Assistant addon** — install directly from HA Addon Store via custom repository
-- **Multi-adapter support** — pin each device to a specific Bluetooth adapter (`hci0`, `hci1`, …)
-- **Reconnect / Re-pair buttons** in the web UI per device card
-- **Group volume and mute controls** across all players
-- **Audio-only BT scan filter** — only audio-capable devices shown during scan
-- **Real device manufacturer** reported to Music Assistant player info
-- **HA audio socket detection** — `entrypoint.sh` checks `PULSE_SERVER`, `/run/audio/pulse.sock`, then standard paths
-- Code review fixes: reliability and dead code cleanup
-
-### v1.1.0
-
-- Multi-device support (`BLUETOOTH_DEVICES` array in config.json)
-- Each device appears as a separate player in Music Assistant
-- Web UI device cards with per-device status
-
-### v1.0.0
-
-- Initial release
-- Sendspin protocol support
-- Single Bluetooth speaker management
-- Web-based configuration interface
-- Docker container with auto-reconnect
-- GHCR image publishing
+See [CHANGELOG.md](CHANGELOG.md) for the full version history.
