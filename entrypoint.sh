@@ -52,7 +52,7 @@ fi
 echo "Checking for Bluetooth on host..."
 if bluetoothctl show 2>&1 | grep -qE "Controller|Discovering|Powered"; then
     echo "Bluetooth controller detected!"
-    bluetoothctl show | head -10
+    bluetoothctl show | head -10 || true
 else
     echo "WARNING: No Bluetooth controller available"
     echo "Bluetooth functionality will not be available"
