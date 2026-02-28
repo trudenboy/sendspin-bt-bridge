@@ -15,10 +15,9 @@ A Bluetooth bridge for [Music Assistant](https://www.music-assistant.io/) — co
 - **Player metadata**: Reports real device manufacturer and model to Music Assistant
 - **Group controls**: Volume and mute controls across multiple players from the web UI
 
-<img width="1233" height="657" alt="image" src="https://github.com/user-attachments/assets/d5f3f733-b073-4a08-b23a-feb3efc4daf7" />
+<img width="1228" height="2694" alt="192 168 10 180_8080_ (1)" src="https://github.com/user-attachments/assets/ff3d99bc-7f8a-459b-ba9a-9ba3c10bedd6" />
 <br><br>
-
-<img width="1187" height="257" alt="image" src="https://github.com/user-attachments/assets/72080af9-819a-4f63-9f1f-81e87a469d03" />
+<img width="1019" height="245" alt="Screenshot 2026-02-28 at 17 03 49" src="https://github.com/user-attachments/assets/7654570b-bada-4cca-a195-4ced53c8d398" />
 
 ---
 
@@ -393,11 +392,6 @@ python sendspin_client.py
 2. Create a feature branch off `integration`
 3. Make your changes
 4. Submit a pull request against `integration`
-
----
-
-## Development Approach
-<img width="256" height="256" alt="image" src="https://github.com/user-attachments/assets/3e6903cf-2bfa-4f10-bc25-8bf3de5e2f3a" />
 
 ---
 
