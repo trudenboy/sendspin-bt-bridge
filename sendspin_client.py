@@ -27,10 +27,11 @@ logger = logging.getLogger(__name__)
 
 CLIENT_VERSION = "1.2.0"
 
-# Shared audio format cache — updated by whichever sendspin process logs
-# "Audio format: flac 48000Hz/24-bit/2ch"; read by all clients to fill in
-# format details when only "Stream started with codec X" was received.
-_last_full_audio_format: Optional[str] = None
+# Per-player audio format cache — keyed by player_name.
+# Updated when a full "Audio format: flac 48000Hz/24-bit/2ch" line is received;
+# read by the same player to fill in format details when only
+# "Stream started with codec X" was received.
+_last_full_audio_format: dict = {}  # player_name → format string
 
 _CONFIG_PATH = '/config/config.json'
 
@@ -47,20 +48,6 @@ def _save_device_volume(mac: Optional[str], volume: int) -> None:
             json.dump(cfg, f, indent=2)
     except Exception as e:
         logger.debug(f"Could not save volume for {mac}: {e}")
-
-
-# Global client instance holder (class-based singleton)
-class ClientHolder:
-    """Thread-safe holder for the client instance"""
-    _instance = None
-    
-    @classmethod
-    def set_client(cls, client):
-        cls._instance = client
-        
-    @classmethod
-    def get_client(cls):
-        return cls._instance
 
 
 class BluetoothManager:
@@ -110,16 +97,17 @@ class BluetoothManager:
         return adapter  # Fall back to hciN name
 
     def _run_bluetoothctl(self, commands: list) -> tuple[bool, str]:
-        """Run bluetoothctl commands, prepending 'select <adapter_mac>' if configured."""
+        """Run bluetoothctl commands, prepending 'select <adapter_mac>' if configured.
+        Uses stdin pipe directly — no shell, no injection risk."""
         try:
             all_commands = []
             if self._adapter_select:
                 all_commands.append(f'select {self._adapter_select}')
             all_commands.extend(commands)
-            cmd_string = '\n'.join(all_commands)
-            bash_cmd = f"echo '{cmd_string}' | bluetoothctl"
+            cmd_string = '\n'.join(all_commands) + '\n'
             result = subprocess.run(
-                ['bash', '-c', bash_cmd],
+                ['bluetoothctl'],
+                input=cmd_string,
                 capture_output=True,
                 text=True,
                 timeout=10
@@ -477,6 +465,7 @@ class SendspinClient:
         self.running = False
         self.bluetooth_sink_name = None  # Store Bluetooth sink name for volume sync
         self.volume_restore_done = False  # Flag to prevent saving initial volume
+        self._monitor_task: Optional[asyncio.Task] = None
     
     def get_ip_address(self) -> str:
         """Get the primary IP address of this machine"""
@@ -616,8 +605,15 @@ class SendspinClient:
             self.status['connected'] = True
             self.status['playing'] = False  # reset; monitor_output() will set True on Stream STARTED
             
-            # Monitor output in background
-            asyncio.create_task(self.monitor_output())
+            # Monitor output in background — cancel any previous task first
+            if self._monitor_task and not self._monitor_task.done():
+                self._monitor_task.cancel()
+            self._monitor_task = asyncio.create_task(self.monitor_output())
+            self._monitor_task.add_done_callback(
+                lambda t: logger.error(
+                    f"[{self.player_name}] monitor_output ended with error: {t.exception()}"
+                ) if not t.cancelled() and t.exception() else None
+            )
             
         except Exception as e:
             logger.error(f"Failed to start Sendspin player: {e}")
@@ -642,7 +638,6 @@ class SendspinClient:
             Running the entire loop in ONE executor call avoids that problem.
             Python's logging and dict writes are thread-safe via the GIL.
             Sentinel is '' (empty str) because process is opened with text=True."""
-            global _last_full_audio_format
             for raw_line in iter(process.stdout.readline, ''):
                 if not self.running:
                     break
@@ -661,8 +656,9 @@ class SendspinClient:
                             codec = line_str.split('Stream started with codec')[-1].strip()
                             if codec:
                                 # Use cached full format if codec matches, else just codec
-                                if _last_full_audio_format and _last_full_audio_format.startswith(codec):
-                                    self.status['audio_format'] = _last_full_audio_format
+                                cached = _last_full_audio_format.get(self.player_name, '')
+                                if cached and cached.startswith(codec):
+                                    self.status['audio_format'] = cached
                                 else:
                                     self.status['audio_format'] = codec
                         except Exception:
@@ -675,7 +671,7 @@ class SendspinClient:
                     try:
                         fmt = line_str.split('Audio format:')[-1].strip()
                         if fmt:
-                            _last_full_audio_format = fmt
+                            _last_full_audio_format[self.player_name] = fmt
                         self.status['audio_format'] = fmt
                     except Exception:
                         pass
@@ -803,18 +799,8 @@ class SendspinClient:
         self.running = False
 
 
-# Global client instance for web UI access
-_client_instance: Optional[SendspinClient] = None
-
-
-def get_client_instance() -> Optional[SendspinClient]:
-    """Get the global client instance"""
-    return _client_instance
-
-
 async def main():
     """Main entry point"""
-    global _client_instance
 
     config = load_config()
     server_host = config.get('SENDSPIN_SERVER', 'auto')
@@ -863,9 +849,6 @@ async def main():
         clients.append(client)
         logger.info(f"  Player: '{player_name}', BT: {mac or 'none'}, Adapter: {adapter or 'default'}")
 
-    # First client is the primary for web UI backward-compat
-    _client_instance = clients[0]
-    ClientHolder.set_client(clients[0])
     logger.info("Client instance(s) registered")
 
     # Start web interface in background thread
@@ -885,7 +868,12 @@ async def main():
     def signal_handler():
         logger.info("Received shutdown signal")
         for c in clients:
-            asyncio.create_task(c.stop())
+            c.running = False
+            if c.process:
+                try:
+                    c.process.terminate()
+                except Exception:
+                    pass
 
     for sig in (signal.SIGTERM, signal.SIGINT):
         loop.add_signal_handler(sig, signal_handler)
