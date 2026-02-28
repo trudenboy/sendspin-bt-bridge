@@ -613,7 +613,7 @@ function populateDeviceCard(i, dev) {
     // Mute button — attach handler once, update icon on every poll
     var muteBtn = document.getElementById('dmute-' + i);
     if (muteBtn) {
-        muteBtn.textContent = dev.muted ? '\uD83D\uDD07' : '\uD83D\uDD08';
+        muteBtn.textContent = dev.muted ? '\\uD83D\\uDD07' : '\\uD83D\\uDD08';
         muteBtn.title = dev.muted ? 'Unmute' : 'Mute';
         muteBtn.style.background = dev.muted ? '#fee2e2' : 'white';
         if (!muteBtn._handlerSet) {
@@ -628,7 +628,7 @@ function populateDeviceCard(i, dev) {
                     if (d.success && lastDevices[i]) lastDevices[i].muted = d.muted;
                     var btn = document.getElementById('dmute-' + i);
                     if (btn) {
-                        btn.textContent = d.muted ? '\uD83D\uDD07' : '\uD83D\uDD08';
+                        btn.textContent = d.muted ? '\\uD83D\\uDD07' : '\\uD83D\\uDD08';
                         btn.title = d.muted ? 'Unmute' : 'Mute';
                         btn.style.background = d.muted ? '#fee2e2' : 'white';
                     }
