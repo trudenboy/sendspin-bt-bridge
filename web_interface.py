@@ -185,8 +185,23 @@ HTML_TEMPLATE = """
         .device-card {
             background: white; border-radius: 10px; padding: 16px 20px;
             box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            display: flex; align-items: center; gap: 0;
+            display: flex; align-items: center; gap: 0; flex-wrap: wrap;
         }
+        .device-card-actions {
+            width: 100%; display: flex; align-items: center; gap: 8px;
+            padding-top: 10px; margin-top: 10px; border-top: 1px solid #f3f4f6;
+            flex-wrap: wrap;
+        }
+        .btn-bt-action {
+            padding: 4px 12px; font-size: 12px; font-weight: 600; border: none;
+            border-radius: 5px; cursor: pointer; color: white; transition: opacity 0.15s;
+        }
+        .btn-bt-action:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-bt-reconnect { background: #667eea; }
+        .btn-bt-reconnect:hover:not(:disabled) { background: #5a67d8; }
+        .btn-bt-pair { background: #f59e0b; }
+        .btn-bt-pair:hover:not(:disabled) { background: #d97706; }
+        .bt-action-status { font-size: 12px; color: #6b7280; }
         .device-card-identity {
             min-width: 180px; max-width: 220px; padding-right: 20px;
             border-right: 1px solid #e5e7eb; margin-right: 0; flex-shrink: 0;
@@ -561,6 +576,13 @@ function buildDeviceCard(i) {
             '<div class="status-value" id="dsync-' + i + '">&#8212;</div>' +
             '<div class="ts" id="dsync-detail-' + i + '"></div>' +
           '</div>' +
+        '</div>' +
+        '<div class="device-card-actions">' +
+          '<button type="button" class="btn-bt-action btn-bt-reconnect" id="dbtn-reconnect-' + i + '"' +
+            ' onclick="btReconnect(' + i + ')">&#128260; Reconnect</button>' +
+          '<button type="button" class="btn-bt-action btn-bt-pair" id="dbtn-pair-' + i + '"' +
+            ' onclick="btPair(' + i + ')" title="Put the device into pairing mode first">&#128279; Re-pair</button>' +
+          '<span class="bt-action-status" id="dbt-action-status-' + i + '"></span>' +
         '</div>';
     return card;
 }
@@ -768,6 +790,62 @@ async function refreshLogs() {
     } catch (err) {
         console.error('Error refreshing logs:', err);
     }
+}
+
+// ---- BT Actions (reconnect / pair) ----
+
+async function btReconnect(i) {
+    var dev = lastDevices && lastDevices[i];
+    var playerName = dev ? dev.player_name : null;
+    var btn = document.getElementById('dbtn-reconnect-' + i);
+    var pairBtn = document.getElementById('dbtn-pair-' + i);
+    var status = document.getElementById('dbt-action-status-' + i);
+    if (btn) btn.disabled = true;
+    if (pairBtn) pairBtn.disabled = true;
+    if (status) status.textContent = '&#8635; Reconnecting\u2026';
+    try {
+        var resp = await fetch('/api/bt/reconnect', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({player_name: playerName})
+        });
+        var d = await resp.json();
+        if (status) status.textContent = d.success ? '\u2713 ' + (d.message || 'Started') : '\u2717 ' + (d.error || 'Failed');
+    } catch (e) {
+        if (status) status.textContent = '\u2717 Error';
+    }
+    setTimeout(function() {
+        if (btn) btn.disabled = false;
+        if (pairBtn) pairBtn.disabled = false;
+        if (status) status.textContent = '';
+    }, 8000);
+}
+
+async function btPair(i) {
+    var dev = lastDevices && lastDevices[i];
+    var playerName = dev ? dev.player_name : null;
+    var btn = document.getElementById('dbtn-pair-' + i);
+    var reconnBtn = document.getElementById('dbtn-reconnect-' + i);
+    var status = document.getElementById('dbt-action-status-' + i);
+    if (btn) btn.disabled = true;
+    if (reconnBtn) reconnBtn.disabled = true;
+    if (status) status.textContent = '&#8635; Pairing\u2026 (~25s, put device in pairing mode)';
+    try {
+        var resp = await fetch('/api/bt/pair', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({player_name: playerName})
+        });
+        var d = await resp.json();
+        if (status) status.textContent = d.success ? '\u2713 ' + (d.message || 'Started') : '\u2717 ' + (d.error || 'Failed');
+    } catch (e) {
+        if (status) status.textContent = '\u2717 Error';
+    }
+    setTimeout(function() {
+        if (btn) btn.disabled = false;
+        if (reconnBtn) reconnBtn.disabled = false;
+        if (status) status.textContent = '';
+    }, 30000);
 }
 
 function toggleAutoRefresh() {
@@ -1313,6 +1391,61 @@ def set_mute():
                 return jsonify({'success': False, 'error': 'pactl failed'}), 500
         else:
             return jsonify({'success': False, 'error': 'Client not available'}), 503
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/bt/reconnect', methods=['POST'])
+def api_bt_reconnect():
+    """Force reconnect a BT device (connect without re-pairing)"""
+    try:
+        data = request.get_json() or {}
+        player_name = data.get('player_name')
+        client = next((c for c in _clients if getattr(c, 'player_name', None) == player_name), None)
+        if client is None and _clients:
+            client = _clients[0]
+        if not client or not client.bt_manager:
+            return jsonify({'success': False, 'error': 'No BT manager for this player'}), 503
+
+        bt = client.bt_manager
+
+        def _do_reconnect():
+            try:
+                bt.disconnect_device()
+                time.sleep(1)
+                bt.connect_device()
+            except Exception as e:
+                logger.error(f"Force reconnect failed: {e}")
+
+        threading.Thread(target=_do_reconnect, daemon=True).start()
+        return jsonify({'success': True, 'message': 'Reconnect started'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/bt/pair', methods=['POST'])
+def api_bt_pair():
+    """Force re-pair a BT device (pair + connect). Device must be in pairing mode."""
+    try:
+        data = request.get_json() or {}
+        player_name = data.get('player_name')
+        client = next((c for c in _clients if getattr(c, 'player_name', None) == player_name), None)
+        if client is None and _clients:
+            client = _clients[0]
+        if not client or not client.bt_manager:
+            return jsonify({'success': False, 'error': 'No BT manager for this player'}), 503
+
+        bt = client.bt_manager
+
+        def _do_pair():
+            try:
+                bt.pair_device()
+                bt.connect_device()
+            except Exception as e:
+                logger.error(f"Force pair failed: {e}")
+
+        threading.Thread(target=_do_pair, daemon=True).start()
+        return jsonify({'success': True, 'message': 'Pairing started (~25s)'})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
