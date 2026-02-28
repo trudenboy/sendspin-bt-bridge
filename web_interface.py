@@ -106,6 +106,7 @@ def get_client_status_for(client):
 
         bt_mgr = getattr(client, 'bt_manager', None)
         status['bluetooth_mac'] = bt_mgr.mac_address if bt_mgr else None
+        status['bluetooth_adapter'] = bt_mgr.adapter if bt_mgr else None
 
         logger.debug(f"Status retrieved: {status}")
         return status
@@ -224,7 +225,20 @@ HTML_TEMPLATE = """
             background: white; border-radius: 10px; padding: 20px;
             box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px;
         }
-        .config-section h2 { color: #667eea; margin-bottom: 15px; }
+        .config-section summary, .logs-section summary {
+            color: #667eea; font-size: 20px; font-weight: 700;
+            cursor: pointer; list-style: none; user-select: none; margin-bottom: 0;
+        }
+        .config-section summary::-webkit-details-marker,
+        .logs-section summary::-webkit-details-marker { display: none; }
+        .config-section summary::before, .logs-section summary::before {
+            content: '\25B6';
+            display: inline-block; font-size: 13px; margin-right: 8px;
+            transition: transform 0.2s;
+        }
+        .config-section[open] summary::before,
+        .logs-section[open] summary::before { transform: rotate(90deg); }
+        .config-section[open] summary, .logs-section[open] summary { margin-bottom: 15px; }
         .form-group { margin-bottom: 15px; }
         .form-group label { display: block; margin-bottom: 5px; color: #333; font-weight: 500; }
         .form-group input {
@@ -376,13 +390,9 @@ HTML_TEMPLATE = """
     <div class="status-grid" id="status-grid"></div>
 
     <!-- Configuration -->
-    <div class="config-section">
-        <h2>&#9881;&#65039; Configuration</h2>
+    <details class="config-section" open>
+        <summary>&#9881;&#65039; Configuration</summary>
         <form id="config-form">
-            <div class="form-group">
-                <label>Player Name</label>
-                <input type="text" name="SENDSPIN_NAME" required>
-            </div>
             <div class="form-group">
                 <label>Server (use &#8216;auto&#8217; for mDNS discovery)</label>
                 <input type="text" name="SENDSPIN_SERVER" required>
@@ -425,7 +435,7 @@ HTML_TEMPLATE = """
                 </button>
             </div>
         </form>
-    </div>
+    </details>
 
     <!-- Diagnostics (collapsible) -->
     <details class="diag-section" id="diag-details" ontoggle="onDiagToggle(this)">
@@ -434,8 +444,8 @@ HTML_TEMPLATE = """
     </details>
 
     <!-- Logs -->
-    <div class="logs-section">
-        <h2>&#128203; Logs</h2>
+    <details class="logs-section">
+        <summary>&#128203; Logs</summary>
         <div class="logs-toolbar">
             <button onclick="refreshLogs()" class="btn btn-refresh">Refresh Logs</button>
             <button onclick="toggleAutoRefresh()" class="btn" id="auto-refresh-btn">Auto-Refresh: Off</button>
@@ -447,7 +457,7 @@ HTML_TEMPLATE = """
             </div>
         </div>
         <div class="logs-container" id="logs"></div>
-    </div>
+    </details>
 
 </div>
 
@@ -507,6 +517,7 @@ function buildDeviceCard(i) {
         '<div class="device-card-identity">' +
           '<div class="device-card-title" id="dname-' + i + '">Device ' + (i+1) + '</div>' +
           '<div class="device-mac" id="dmac-' + i + '"></div>' +
+          '<div id="dadapter-' + i + '" style="font-size:10px;color:#94a3b8;margin-top:1px;"></div>' +
           '<div id="durl-' + i + '" style="font-size:10px;color:#c4b5fd;margin-top:2px;word-break:break-all;"></div>' +
         '</div>' +
         '<div class="device-rows">' +
@@ -559,6 +570,9 @@ function populateDeviceCard(i, dev) {
 
     var mac = dev.bluetooth_mac || '';
     document.getElementById('dmac-' + i).textContent = mac ? 'MAC: ' + mac : '';
+
+    var adapterEl = document.getElementById('dadapter-' + i);
+    if (adapterEl) adapterEl.textContent = dev.bluetooth_adapter ? dev.bluetooth_adapter : '';
 
     var urlEl = document.getElementById('durl-' + i);
     if (urlEl) {

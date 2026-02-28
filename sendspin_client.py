@@ -525,12 +525,16 @@ class SendspinClient:
             safe_id = ''.join(c if c.isalnum() or c == '-' else '-' for c in self.player_name.lower()).strip('-')
             client_id = f"sendspin-{safe_id}"
             settings_dir = f"/tmp/sendspin-{safe_id}"
+            # static_delay_ms compensates for BT A2DP + PA buffer latency (~500ms total)
+            # Negative value = schedule audio earlier to account for output latency
+            static_delay_ms = float(os.environ.get('SENDSPIN_STATIC_DELAY_MS', '-500'))
             cmd = [
                 'sendspin', 'daemon',
                 '--name', self.player_name,
                 '--id', client_id,
                 '--port', str(self.listen_port),
                 '--settings-dir', settings_dir,
+                '--static-delay-ms', str(static_delay_ms),
             ]
 
             # Add server URL only if explicitly configured
@@ -623,7 +627,8 @@ class SendspinClient:
                         pass
 
                 # Parse sync events: "Sync error 503.6 ms too large; re-anchoring"
-                if 're-anchoring' in line_str:
+                # or "Audio underflow detected; requesting re-anchor"
+                if 're-anchoring' in line_str or 're-anchor' in line_str:
                     try:
                         import re as _re
                         m = _re.search(r'Sync error ([\d.]+)\s*ms', line_str)
