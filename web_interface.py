@@ -397,7 +397,7 @@ HTML_TEMPLATE = """
                 </div>
                 <div id="bt-devices-table"></div>
                 <div class="bt-toolbar">
-                    <button type="button" onclick="addBtDeviceRow()" class="btn btn-sm">+ Add Device</button>
+                    <button type="button" id="add-dev-btn" onclick="addBtDeviceRow()" class="btn btn-sm">+ Add Device</button>
                     <button type="button" onclick="startBtScan()" class="btn btn-sm btn-scan" id="scan-btn">
                         &#128269; Scan
                     </button>
@@ -720,9 +720,11 @@ function addBtDeviceRow(name, mac, adapter) {
         '<input type="text" placeholder="AA:BB:CC:DD:EE:FF" class="bt-mac" value="' +
             escHtml(mac || '') + '">' +
         '<select class="bt-adapter">' + btAdapterOptions(adapter || '') + '</select>' +
-        '<button type="button" class="btn-remove-dev" ' +
-            'onclick="this.closest(\'.bt-device-row\').remove()">\u00d7</button>';
+        '<button type="button" class="btn-remove-dev">\u00d7</button>';
 
+    row.querySelector('.btn-remove-dev').addEventListener('click', function() {
+        this.closest('.bt-device-row').remove();
+    });
     row.querySelector('.bt-mac').addEventListener('input', function() {
         var v = this.value.trim();
         var valid = /^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$/.test(v);
@@ -770,19 +772,21 @@ async function startBtScan() {
             status.textContent = 'No devices found.';
         } else {
             status.textContent = 'Found ' + devices.length + ' device(s)';
-            listDiv.innerHTML = devices.map(function(d) {
-                var safeName = escHtml(d.name);
+            listDiv.innerHTML = devices.map(function(d, i) {
                 return '<div class="scan-result-item">' +
                     '<span class="scan-result-mac">' + escHtml(d.mac) + '</span>' +
-                    '<span>' + safeName + '</span>' +
-                    '<button type="button" style="margin-left:auto;padding:3px 10px;' +
+                    '<span>' + escHtml(d.name) + '</span>' +
+                    '<button type="button" data-scan-idx="' + i + '" style="margin-left:auto;padding:3px 10px;' +
                         'background:#667eea;color:white;border:none;border-radius:4px;' +
-                        'cursor:pointer;font-size:12px;" ' +
-                        'onclick="addFromScan(\'' + d.mac + '\',\'' +
-                        d.name.replace(/\\/g,'\\\\').replace(/'/g,"\\'") + '\')">' +
-                        'Add</button>' +
+                        'cursor:pointer;font-size:12px;">Add</button>' +
                     '</div>';
             }).join('');
+            listDiv.querySelectorAll('[data-scan-idx]').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    var d = devices[parseInt(this.dataset.scanIdx)];
+                    addFromScan(d.mac, d.name);
+                });
+            });
             box.style.display = 'block';
         }
     } catch (err) {
