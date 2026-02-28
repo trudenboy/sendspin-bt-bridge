@@ -758,7 +758,7 @@ async function startBtScan() {
     var listDiv = document.getElementById('scan-results-list');
 
     btn.disabled = true;
-    status.textContent = '\ud83d\udd04 Scanning\u2026 (~10s)';
+    status.textContent = '🔄 Scanning\u2026 (~10s)';
     box.style.display = 'none';
 
     try {
@@ -879,7 +879,7 @@ async function saveAndRestart() {
             banner.style.display = 'none';
             return;
         }
-        banner.textContent = '\ud83d\udd04 Restarting service\u2026';
+        banner.textContent = '🔄 Restarting service\u2026';
         try {
             await fetch('/api/restart', { method: 'POST' });
         } catch (_) { /* Service dropped connection — expected */ }
@@ -887,7 +887,7 @@ async function saveAndRestart() {
         await new Promise(function(r) { setTimeout(r, 2500); });
 
         for (var attempt = 1; attempt <= 30; attempt++) {
-            banner.textContent = '\ud83d\udd04 Restarting\u2026 (' + attempt + 's)';
+            banner.textContent = '🔄 Restarting\u2026 (' + attempt + 's)';
             await new Promise(function(r) { setTimeout(r, 1000); });
             try {
                 var resp = await fetch('/api/status');
