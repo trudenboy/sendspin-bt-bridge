@@ -1264,6 +1264,24 @@ def api_bt_scan():
                 active_macs.add(m.group(1).upper())
         # Include already-known devices that were actively seen (CHG RSSI) during scan
         all_macs = seen | active_macs
+
+        # For MACs without a name, look them up in BlueZ device database
+        unnamed = {mac for mac in all_macs if mac not in names}
+        if unnamed:
+            db_result = subprocess.run(
+                ['bash', '-c', 'echo "devices" | bluetoothctl 2>/dev/null'],
+                capture_output=True, text=True, timeout=5
+            )
+            dev_pat = re.compile(r'Device\s+([0-9A-Fa-f:]{17})\s+(.*)')
+            for line in db_result.stdout.splitlines():
+                clean = ansi_re.sub('', line)
+                m = dev_pat.search(clean)
+                if m:
+                    mac = m.group(1).upper()
+                    name = m.group(2).strip()
+                    if mac in unnamed and name and not re.match(r'^[0-9A-Fa-f]{2}[-:]', name):
+                        names[mac] = name
+
         devices = []
         for mac in all_macs:
             devices.append({'mac': mac, 'name': names.get(mac, mac)})
