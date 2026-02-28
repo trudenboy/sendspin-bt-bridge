@@ -202,6 +202,26 @@ HTML_TEMPLATE = """
         .btn-bt-pair { background: #f59e0b; }
         .btn-bt-pair:hover:not(:disabled) { background: #d97706; }
         .bt-action-status { font-size: 12px; color: #6b7280; }
+        /* Group controls */
+        .group-controls {
+            background: white; border-radius: 10px; padding: 12px 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.08); margin-bottom: 14px;
+            display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+        }
+        .group-controls-label {
+            font-size: 12px; font-weight: 700; color: #667eea;
+            text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap;
+        }
+        .group-select-info { font-size: 12px; color: #6b7280; white-space: nowrap; }
+        .group-vol-row { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 180px; }
+        .group-vol-slider { flex: 1; height: 4px; accent-color: #667eea; cursor: pointer; }
+        .group-vol-pct { min-width: 36px; font-size: 13px; color: #555; text-align: right; }
+        .btn-group-mute {
+            padding: 4px 12px; font-size: 12px; font-weight: 600; border: 1px solid #d1d5db;
+            border-radius: 5px; background: white; cursor: pointer;
+        }
+        .btn-group-mute.muted { background: #fee2e2; border-color: #fca5a5; }
+        .device-select-cb { width: 15px; height: 15px; accent-color: #667eea; cursor: pointer; }
         .device-card-identity {
             min-width: 180px; max-width: 220px; padding-right: 20px;
             border-right: 1px solid #e5e7eb; margin-right: 0; flex-shrink: 0;
@@ -401,6 +421,24 @@ HTML_TEMPLATE = """
     <!-- Restart banner -->
     <div id="restart-banner" class="restart-banner"></div>
 
+    <!-- Group Controls -->
+    <div class="group-controls" id="group-controls" style="display:none;">
+        <span class="group-controls-label">&#127922; Group</span>
+        <span class="group-select-info" id="group-select-info">All players</span>
+        <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:#6b7280;cursor:pointer;">
+            <input type="checkbox" id="group-select-all" checked onchange="onGroupSelectAll(this)">
+            All
+        </label>
+        <div class="group-vol-row">
+            <span style="font-size:11px;color:#9ca3af;font-weight:600;text-transform:uppercase;">Vol</span>
+            <input type="range" min="0" max="100" value="50" class="group-vol-slider" id="group-vol-slider"
+                oninput="onGroupVolumeInput(this.value)">
+            <span class="group-vol-pct" id="group-vol-pct">50%</span>
+        </div>
+        <button type="button" class="btn-group-mute" id="group-mute-btn"
+            onclick="onGroupMute()">&#128264; Mute All</button>
+    </div>
+
     <!-- Status grid: device cards (populated by JS) -->
     <div class="status-grid" id="status-grid"></div>
 
@@ -520,6 +558,8 @@ async function updateStatus() {
             .slice(devices.length)
             .forEach(function(c) { c.remove(); });
 
+        _updateGroupPanel();
+
     } catch (err) {
         console.error('Status update failed:', err);
     }
@@ -531,7 +571,11 @@ function buildDeviceCard(i) {
     card.id = 'device-card-' + i;
     card.innerHTML =
         '<div class="device-card-identity">' +
-          '<div class="device-card-title" id="dname-' + i + '">Device ' + (i+1) + '</div>' +
+          '<div style="display:flex;align-items:center;gap:6px;">' +
+            '<input type="checkbox" class="device-select-cb" id="dsel-' + i + '" checked' +
+              ' onchange="onDeviceSelect(' + i + ', this.checked)">' +
+            '<div class="device-card-title" id="dname-' + i + '">Device ' + (i+1) + '</div>' +
+          '</div>' +
           '<div class="device-mac" id="dmac-' + i + '"></div>' +
           '<div id="dadapter-' + i + '" style="font-size:10px;color:#94a3b8;margin-top:1px;"></div>' +
           '<div id="durl-' + i + '" style="font-size:10px;color:#c4b5fd;margin-top:2px;word-break:break-all;"></div>' +
@@ -790,6 +834,93 @@ async function refreshLogs() {
     } catch (err) {
         console.error('Error refreshing logs:', err);
     }
+}
+
+// ---- Group Controls ----
+
+var _groupSelected = {};   // index → true/false
+
+function _getSelectedNames() {
+    var names = [];
+    if (lastDevices) {
+        lastDevices.forEach(function(dev, i) {
+            if (_groupSelected[i] !== false) names.push(dev.player_name);
+        });
+    }
+    return names;
+}
+
+function _updateGroupPanel() {
+    var total = lastDevices ? lastDevices.length : 0;
+    if (total < 2) {
+        document.getElementById('group-controls').style.display = 'none';
+        return;
+    }
+    document.getElementById('group-controls').style.display = 'flex';
+    var sel = _getSelectedNames().length;
+    var info = document.getElementById('group-select-info');
+    if (info) info.textContent = sel === total ? 'All ' + total + ' players' : sel + ' of ' + total + ' selected';
+    var allCb = document.getElementById('group-select-all');
+    if (allCb) {
+        allCb.checked = sel === total;
+        allCb.indeterminate = sel > 0 && sel < total;
+    }
+}
+
+function onDeviceSelect(i, checked) {
+    _groupSelected[i] = checked;
+    _updateGroupPanel();
+}
+
+function onGroupSelectAll(cb) {
+    if (lastDevices) {
+        lastDevices.forEach(function(_, i) {
+            _groupSelected[i] = cb.checked;
+            var dcb = document.getElementById('dsel-' + i);
+            if (dcb) dcb.checked = cb.checked;
+        });
+    }
+    _updateGroupPanel();
+}
+
+var _groupVolTimer = null;
+function onGroupVolumeInput(val) {
+    var pct = document.getElementById('group-vol-pct');
+    if (pct) pct.textContent = val + '%';
+    clearTimeout(_groupVolTimer);
+    _groupVolTimer = setTimeout(function() {
+        var names = _getSelectedNames();
+        if (!names.length) return;
+        fetch('/api/volume', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({volume: parseInt(val, 10), player_names: names})
+        });
+    }, 250);
+}
+
+function onGroupMute() {
+    var names = _getSelectedNames();
+    if (!names.length) return;
+    var btn = document.getElementById('group-mute-btn');
+    // Determine: if any selected player is unmuted → mute all; else unmute all
+    var anyUnmuted = false;
+    if (lastDevices) {
+        lastDevices.forEach(function(dev, i) {
+            if (_groupSelected[i] !== false && !dev.muted) anyUnmuted = true;
+        });
+    }
+    var muteVal = anyUnmuted;
+    fetch('/api/mute', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({mute: muteVal, player_names: names})
+    }).then(function(r) { return r.json(); }).then(function(d) {
+        if (btn) {
+            btn.textContent = muteVal ? '\\uD83D\\uDD07 Unmute All' : '\\uD83D\\uDD08 Mute All';
+            btn.className = 'btn-group-mute' + (muteVal ? ' muted' : '');
+        }
+    });
 }
 
 // ---- BT Actions (reconnect / pair) ----
@@ -1320,77 +1451,78 @@ def api_restart():
 
 @app.route('/api/volume', methods=['POST'])
 def set_volume():
-    """Set player volume"""
+    """Set player volume. Accepts player_name (single) or player_names (list) or neither (all)."""
     try:
         data = request.get_json()
         volume = max(0, min(100, int(data.get('volume', 100))))
-        player_name = data.get('player_name')
+        player_names = data.get('player_names')  # list → multi-player
+        player_name  = data.get('player_name')   # str  → single (compat)
 
-        client = None
-        if player_name:
-            for c in _clients:
-                if getattr(c, 'player_name', None) == player_name:
-                    client = c
-                    break
-        if client is None and _clients:
-            client = _clients[0]
-
-        if client and client.bluetooth_sink_name:
-            result = subprocess.run(
-                ['pactl', 'set-sink-volume', client.bluetooth_sink_name, f'{volume}%'],
-                capture_output=True, text=True, timeout=2
-            )
-            if result.returncode == 0:
-                client.status['volume'] = volume
-                return jsonify({'success': True, 'volume': volume})
-            else:
-                return jsonify({'success': False, 'error': 'Failed to set volume'}), 500
+        if player_names is not None:
+            targets = [c for c in _clients if getattr(c, 'player_name', None) in player_names]
+        elif player_name:
+            targets = [c for c in _clients if getattr(c, 'player_name', None) == player_name]
         else:
-            return jsonify({'success': False, 'error': 'Client not available'}), 503
+            targets = _clients[:1]  # legacy: first client
+
+        results = []
+        for client in targets:
+            if client.bluetooth_sink_name:
+                r = subprocess.run(
+                    ['pactl', 'set-sink-volume', client.bluetooth_sink_name, f'{volume}%'],
+                    capture_output=True, text=True, timeout=2
+                )
+                if r.returncode == 0:
+                    client.status['volume'] = volume
+                    results.append({'player': getattr(client, 'player_name', '?'), 'ok': True})
+                else:
+                    results.append({'player': getattr(client, 'player_name', '?'), 'ok': False})
+        if not results:
+            return jsonify({'success': False, 'error': 'No clients available'}), 503
+        return jsonify({'success': True, 'volume': volume, 'results': results})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @app.route('/api/mute', methods=['POST'])
 def set_mute():
-    """Toggle or set mute on a player's Bluetooth sink"""
+    """Toggle or set mute. Accepts player_name (single), player_names (list), or neither (all)."""
     try:
         data = request.get_json() or {}
-        player_name = data.get('player_name')
-        # mute: True=mute, False=unmute, omit=toggle
-        mute_value = data.get('mute')
+        player_names = data.get('player_names')
+        player_name  = data.get('player_name')
+        mute_value   = data.get('mute')  # True=mute, False=unmute, omit=toggle
 
-        client = None
-        if player_name:
-            for c in _clients:
-                if getattr(c, 'player_name', None) == player_name:
-                    client = c
-                    break
-        if client is None and _clients:
-            client = _clients[0]
+        if player_names is not None:
+            targets = [c for c in _clients if getattr(c, 'player_name', None) in player_names]
+        elif player_name:
+            targets = [c for c in _clients if getattr(c, 'player_name', None) == player_name]
+        else:
+            targets = _clients[:1]
 
-        if client and client.bluetooth_sink_name:
-            if mute_value is None:
-                pactl_arg = 'toggle'
-            else:
-                pactl_arg = '1' if mute_value else '0'
-            result = subprocess.run(
-                ['pactl', 'set-sink-mute', client.bluetooth_sink_name, pactl_arg],
-                capture_output=True, text=True, timeout=2
-            )
-            if result.returncode == 0:
-                # Read back actual mute state
-                info = subprocess.run(
-                    ['pactl', 'get-sink-mute', client.bluetooth_sink_name],
+        pactl_arg = 'toggle' if mute_value is None else ('1' if mute_value else '0')
+        results = []
+        for client in targets:
+            if client.bluetooth_sink_name:
+                r = subprocess.run(
+                    ['pactl', 'set-sink-mute', client.bluetooth_sink_name, pactl_arg],
                     capture_output=True, text=True, timeout=2
                 )
-                muted = 'yes' in info.stdout.lower()
-                client.status['muted'] = muted
-                return jsonify({'success': True, 'muted': muted})
-            else:
-                return jsonify({'success': False, 'error': 'pactl failed'}), 500
-        else:
+                if r.returncode == 0:
+                    info = subprocess.run(
+                        ['pactl', 'get-sink-mute', client.bluetooth_sink_name],
+                        capture_output=True, text=True, timeout=2
+                    )
+                    muted = 'yes' in info.stdout.lower()
+                    client.status['muted'] = muted
+                    results.append({'player': getattr(client, 'player_name', '?'),
+                                    'ok': True, 'muted': muted})
+                else:
+                    results.append({'player': getattr(client, 'player_name', '?'), 'ok': False})
+        if not results:
             return jsonify({'success': False, 'error': 'Client not available'}), 503
+        muted = results[0].get('muted', False) if results else False
+        return jsonify({'success': True, 'muted': muted, 'results': results})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
