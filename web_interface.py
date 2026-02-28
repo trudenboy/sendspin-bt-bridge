@@ -401,8 +401,9 @@ HTML_TEMPLATE = """
             <div class="form-group">
                 <label>Timezone</label>
                 <div style="display:flex;gap:10px;align-items:center;">
-                    <input type="text" name="TZ" placeholder="Australia/Melbourne" style="flex:1;"
-                        oninput="updateTzPreview()">
+                    <input type="text" name="TZ" id="tz-input" placeholder="Australia/Melbourne" style="flex:1;"
+                        list="tz-list" autocomplete="off" oninput="updateTzPreview()">
+                    <datalist id="tz-list"></datalist>
                     <span id="tz-preview" class="tz-preview"></span>
                 </div>
             </div>
@@ -1048,6 +1049,46 @@ function updateTzPreview() {
 
 // Update TZ preview every second while panel is visible
 setInterval(updateTzPreview, 1000);
+
+// Populate TZ datalist from browser's IANA timezone database
+(function() {
+    var dl = document.getElementById('tz-list');
+    if (!dl) return;
+    var zones = [];
+    try {
+        zones = Intl.supportedValuesOf('timeZone');
+    } catch (_) {
+        // Fallback for older browsers — common zones
+        zones = [
+            'UTC','Africa/Cairo','Africa/Johannesburg','Africa/Lagos','Africa/Nairobi',
+            'America/Anchorage','America/Argentina/Buenos_Aires','America/Bogota',
+            'America/Chicago','America/Denver','America/Halifax','America/Los_Angeles',
+            'America/Mexico_City','America/New_York','America/Phoenix','America/Santiago',
+            'America/Sao_Paulo','America/Toronto','America/Vancouver',
+            'Asia/Bangkok','Asia/Colombo','Asia/Dubai','Asia/Hong_Kong','Asia/Jakarta',
+            'Asia/Jerusalem','Asia/Karachi','Asia/Kolkata','Asia/Kuala_Lumpur',
+            'Asia/Seoul','Asia/Shanghai','Asia/Singapore','Asia/Taipei','Asia/Tehran',
+            'Asia/Tokyo','Asia/Vladivostok','Asia/Yekaterinburg',
+            'Atlantic/Azores','Atlantic/Reykjavik',
+            'Australia/Adelaide','Australia/Brisbane','Australia/Darwin',
+            'Australia/Melbourne','Australia/Perth','Australia/Sydney',
+            'Europe/Amsterdam','Europe/Athens','Europe/Berlin','Europe/Brussels',
+            'Europe/Budapest','Europe/Copenhagen','Europe/Dublin','Europe/Helsinki',
+            'Europe/Istanbul','Europe/Kyiv','Europe/Lisbon','Europe/London',
+            'Europe/Madrid','Europe/Moscow','Europe/Oslo','Europe/Paris',
+            'Europe/Prague','Europe/Rome','Europe/Stockholm','Europe/Vienna',
+            'Europe/Warsaw','Europe/Zurich',
+            'Pacific/Auckland','Pacific/Fiji','Pacific/Honolulu','Pacific/Noumea',
+        ];
+    }
+    var frag = document.createDocumentFragment();
+    zones.forEach(function(tz) {
+        var opt = document.createElement('option');
+        opt.value = tz;
+        frag.appendChild(opt);
+    });
+    dl.appendChild(frag);
+}());
 
 // ---- Version ----
 
