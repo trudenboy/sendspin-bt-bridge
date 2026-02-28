@@ -7,7 +7,7 @@
 .endif
 
 .ifexists module-bluetooth-policy.so
-    load-module module-bluetooth-policy
+    load-module module-bluetooth-policy auto_switch=never
 .endif
 
 .ifexists module-bluetooth-discover.so
