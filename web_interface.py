@@ -1213,16 +1213,21 @@ def api_bt_adapters():
 def api_bt_scan():
     """Scan for nearby Bluetooth devices (~10 second scan)"""
     try:
+        # Keep stdin open with sleep so bluetoothctl doesn't exit immediately
+        # after processing commands — it exits on stdin EOF before discoveries arrive.
         result = subprocess.run(
             ['bash', '-c',
-             'echo -e "power on\\nagent on\\nscan on\\n" | timeout 12 bluetoothctl 2>&1'],
-            capture_output=True, text=True, timeout=15
+             '( printf "power on\\nagent on\\nscan on\\n"; sleep 10; printf "scan off\\n" )'
+             ' | timeout 13 bluetoothctl 2>&1'],
+            capture_output=True, text=True, timeout=16
         )
         devices = []
         seen: set = set()
+        ansi_re = re.compile(r'\x1b\[[0-9;]*m')
         pattern = re.compile(r'\[NEW\]\s+Device\s+([0-9A-Fa-f:]{17})\s+(.*)')
         for line in result.stdout.splitlines():
-            m = pattern.search(line)
+            clean = ansi_re.sub('', line)
+            m = pattern.search(clean)
             if m:
                 mac = m.group(1).upper()
                 name = m.group(2).strip()
