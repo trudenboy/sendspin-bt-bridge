@@ -42,7 +42,7 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y -qq \
   python3 python3-pip python3-venv python3-full \
-  bluetooth bluez bluez-tools \
+  bluez-tools \
   pulseaudio pulseaudio-module-bluetooth \
   alsa-utils dbus libportaudio2 \
   avahi-daemon avahi-utils libnss-mdns \
@@ -106,7 +106,7 @@ chown pulse:pulse /var/run/pulse
 chmod 755 /var/run/pulse
 ok "pulse user configured (bluetooth + audio groups)"
 
-# ─── 6. PulseAudio system configuration ──────────────────────────────────────
+# ─── 7. PulseAudio system configuration ──────────────────────────────────────
 msg "Writing PulseAudio system configuration..."
 mkdir -p /etc/pulse/client.conf.d
 
@@ -160,7 +160,7 @@ EOF
 
 ok "PulseAudio configuration written"
 
-# ─── 7. D-Bus policy for PulseAudio ↔ BlueZ ──────────────────────────────────
+# ─── 8. D-Bus policy for PulseAudio ↔ BlueZ ──────────────────────────────────
 msg "Writing D-Bus policy for PulseAudio Bluetooth access..."
 cat > /etc/dbus-1/system.d/pulseaudio-bluetooth.conf <<'EOF'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -181,7 +181,7 @@ cat > /etc/dbus-1/system.d/pulseaudio-bluetooth.conf <<'EOF'
 EOF
 ok "D-Bus policy written"
 
-# ─── 8. Environment variables ─────────────────────────────────────────────────
+# ─── 9. Environment variables ─────────────────────────────────────────────────
 msg "Setting environment variables in /etc/environment..."
 
 set_env_var() {
@@ -198,7 +198,7 @@ set_env_var "CONFIG_DIR"    "/config"
 set_env_var "WEB_PORT"      "8080"
 ok "Environment variables set"
 
-# ─── 9. Systemd units ─────────────────────────────────────────────────────────
+# ─── 10. Systemd units ────────────────────────────────────────────────────────
 msg "Installing systemd service units..."
 
 cat > /etc/systemd/system/pulseaudio-system.service <<'EOF'
@@ -210,6 +210,8 @@ Before=sendspin-client.service
 
 [Service]
 Type=notify
+User=pulse
+Group=pulse
 Environment=PULSE_RUNTIME_PATH=/var/run/pulse
 # Use the host's D-Bus socket (bind-mounted at /bt-dbus) for Bluetooth A2DP
 Environment=DBUS_SYSTEM_BUS_ADDRESS=unix:path=/bt-dbus/system_bus_socket
@@ -218,8 +220,7 @@ ExecReload=/bin/kill -HUP $MAINPID
 Restart=on-failure
 RestartSec=5
 LockPersonality=yes
-NoNewPrivileges=no
-ProtectHome=no
+NoNewPrivileges=yes
 RestrictRealtime=no
 
 [Install]
@@ -243,11 +244,13 @@ Environment=PULSE_SERVER=unix:/var/run/pulse/native
 # Use the host's D-Bus socket (bind-mounted at /bt-dbus) for Bluetooth control
 Environment=DBUS_SYSTEM_BUS_ADDRESS=unix:path=/bt-dbus/system_bus_socket
 Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-ExecStartPre=/bin/sleep 3
+ExecStartPre=/bin/bash -c 'i=0; while [ $i -lt 30 ]; do [ -S /var/run/pulse/native ] && [ -e /bt-dbus/system_bus_socket ] && exit 0; sleep 1; i=$((i+1)); done; echo "Timeout waiting for PulseAudio/D-Bus sockets" >&2; exit 1'
 ExecStart=/usr/bin/python3 /opt/sendspin-client/sendspin_client.py
 WorkingDirectory=/opt/sendspin-client
 Restart=on-failure
 RestartSec=10
+NoNewPrivileges=yes
+PrivateTmp=yes
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=sendspin-client
@@ -258,7 +261,7 @@ EOF
 
 ok "Systemd units installed"
 
-# ─── 10. btctl wrapper ────────────────────────────────────────────────────────
+# ─── 11. btctl wrapper ────────────────────────────────────────────────────────
 # btctl wraps bluetoothctl to use the host's D-Bus socket at /bt-dbus.
 # Bluetooth runs on the Proxmox HOST; the container accesses it via bind-mount.
 msg "Installing btctl wrapper..."
@@ -269,7 +272,7 @@ BTCTL
 chmod +x /usr/local/bin/btctl
 ok "btctl installed at /usr/local/bin/btctl"
 
-# ─── 11. Enable and start services ───────────────────────────────────────────
+# ─── 12. Enable and start services ───────────────────────────────────────────
 msg "Enabling and starting services..."
 systemctl daemon-reload
 

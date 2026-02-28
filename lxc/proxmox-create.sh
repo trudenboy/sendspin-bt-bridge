@@ -150,6 +150,7 @@ if ! pveam list local 2>/dev/null | grep -q "$TEMPLATE"; then
   pveam download local "$TEMPLATE" &
   spinner $! "Downloading ${TEMPLATE}..."
   wait
+  pveam list local 2>/dev/null | grep -q "$TEMPLATE" || die "Template download failed: ${TEMPLATE}"
   ok "Template downloaded"
 else
   ok "Template already present"
@@ -206,6 +207,10 @@ EOF
 if [[ "${USB_BT}" == "y" ]]; then
   cat >> "$LXC_CONF" <<'EOF'
 # USB devices (for USB Bluetooth adapter passthrough)
+# WARNING: c 189:* grants access to ALL USB devices in the LXC.
+# For tighter control, identify the specific device with lsusb and restrict
+# to a single bus/device — see the "Manual USB Bluetooth Passthrough" section
+# in lxc/README.md.
 lxc.cgroup2.devices.allow: c 189:* rwm
 EOF
   ok "USB Bluetooth cgroup rules added"
@@ -222,7 +227,7 @@ pct start "$CTID"
 ok "Container started"
 
 msg "Waiting for container to be ready..."
-sleep 5
+timeout 60 pct exec "$CTID" -- systemctl is-system-running --wait 2>/dev/null || true
 
 msg "Downloading install.sh from GitHub..."
 
@@ -250,9 +255,13 @@ ok "D-Bus bridge mount entry added"
 
 msg "Restarting container to apply D-Bus mount..."
 pct stop "$CTID"
-sleep 3
+# Wait for container to stop before restarting
+for _i in $(seq 1 60); do
+  pct status "$CTID" 2>/dev/null | grep -q "running" || break
+  sleep 0.5
+done
 pct start "$CTID"
-sleep 5
+timeout 60 pct exec "$CTID" -- systemctl is-system-running --wait 2>/dev/null || true
 ok "Container restarted with D-Bus bridge active"
 
 # ─── Summary ─────────────────────────────────────────────────────────────────

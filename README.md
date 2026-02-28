@@ -136,7 +136,9 @@ Access the web UI at `http://your-host-ip:8080` to add Bluetooth devices and set
 
 ## Option C — Proxmox VE (LXC)
 
-Run as a **native LXC container** — no Docker required. The container runs its own `bluetoothd`, `pulseaudio`, and `avahi-daemon` with USB Bluetooth hardware passed through via cgroup rules.
+Run as a **native LXC container** — no Docker required. The container uses the **host's `bluetoothd` via a D-Bus bridge** (AF_BLUETOOTH is not available in LXC namespaces), with `pulseaudio --system` and `avahi-daemon` running inside the container.
+
+For full documentation, prerequisites, manual install steps, pairing instructions, and monitoring commands, see **[lxc/README.md](lxc/README.md)**.
 
 ### One-line install (on the Proxmox host as root)
 
@@ -144,11 +146,19 @@ Run as a **native LXC container** — no Docker required. The container runs its
 bash <(curl -fsSL https://raw.githubusercontent.com/loryanstrant/sendspin-client/main/lxc/proxmox-create.sh)
 ```
 
+Or download and review first:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/loryanstrant/sendspin-client/main/lxc/proxmox-create.sh -o proxmox-create.sh
+less proxmox-create.sh
+bash proxmox-create.sh
+```
+
 The script interactively prompts for container ID, hostname, RAM, disk, network, and USB Bluetooth passthrough.
 
 ### Manual steps (Proxmox UI)
 
-1. Create a new **privileged** LXC container (Debian 12, 512 MB RAM, 4 GB disk)
+1. Create a new **privileged** LXC container (**Ubuntu 24.04**, 512 MB RAM, 4 GB disk)
 2. Start the container and open a shell (`pct enter <CTID>`)
 3. Run the installer:
    ```bash
@@ -156,9 +166,11 @@ The script interactively prompts for container ID, hostname, RAM, disk, network,
    ```
 4. Append to `/etc/pve/lxc/<CTID>.conf` on the **Proxmox host**:
    ```
+   lxc.apparmor.profile: unconfined
    lxc.cgroup2.devices.allow: c 166:* rwm
    lxc.cgroup2.devices.allow: c 13:* rwm
-   lxc.mount.entry: /dev/bus/usb dev/bus/usb none bind,optional,create=dir 0 0
+   lxc.cgroup2.devices.allow: c 10:232 rwm
+   lxc.mount.entry: /run/dbus bt-dbus none bind,create=dir 0 0
    lxc.cgroup2.devices.allow: c 189:* rwm
    ```
 5. Restart the container: `pct restart <CTID>`
@@ -167,7 +179,7 @@ The script interactively prompts for container ID, hostname, RAM, disk, network,
 
 ```bash
 pct enter <CTID>
-bluetoothctl
+btctl
 power on
 scan on
 pair  XX:XX:XX:XX:XX:XX
@@ -186,9 +198,9 @@ pct exec <CTID> -- systemctl restart sendspin-client
 
 ```bash
 pct exec <CTID> -- journalctl -u sendspin-client -f
-pct exec <CTID> -- systemctl status sendspin-client pulseaudio-system bluetooth avahi-daemon --no-pager
+pct exec <CTID> -- systemctl status sendspin-client pulseaudio-system avahi-daemon --no-pager
 pct exec <CTID> -- pactl list sinks short
-pct exec <CTID> -- bluetoothctl show
+pct exec <CTID> -- btctl show
 ```
 
 ---
