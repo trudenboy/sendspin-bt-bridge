@@ -97,6 +97,8 @@ def _detect_runtime() -> str:
             _runtime_cache = 'systemd'
         elif os.path.exists('/run/systemd/system/sendspin-client.service'):
             _runtime_cache = 'systemd'
+        elif os.path.exists('/data/options.json'):
+            _runtime_cache = 'ha_addon'
         else:
             _runtime_cache = 'docker'
     return _runtime_cache
@@ -1975,6 +1977,20 @@ def api_logs():
             log_lines = result.stdout.splitlines()
             if not log_lines and result.stderr:
                 log_lines = result.stderr.splitlines()
+        elif runtime == 'ha_addon':
+            import urllib.request as _ur
+            token = os.environ.get('SUPERVISOR_TOKEN', '')
+            if token:
+                req = _ur.Request(
+                    'http://supervisor/addons/self/logs',
+                    headers={'Authorization': f'Bearer {token}'}
+                )
+                with _ur.urlopen(req, timeout=10) as resp:
+                    text = resp.read().decode('utf-8', errors='replace')
+                all_lines = text.splitlines()
+                log_lines = all_lines[-lines:]
+            else:
+                log_lines = ['(SUPERVISOR_TOKEN not available — check addon permissions)']
         else:
             result = subprocess.run(
                 ['docker', 'logs', '--tail', str(lines), 'sendspin-client'],
