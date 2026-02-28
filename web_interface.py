@@ -323,6 +323,41 @@ HTML_TEMPLATE = """
         .scan-result-item:last-child { border-bottom: none; }
         .scan-result-mac { font-family: monospace; color: #9ca3af; font-size: 12px; }
 
+        /* Adapters panel */
+        .adapters-card {
+            border: 1px solid #e5e7eb; border-radius: 8px;
+            margin-bottom: 18px; overflow: hidden;
+        }
+        .adapters-card-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 10px 14px; background: #f9fafb;
+            border-bottom: 1px solid #e5e7eb; font-weight: 600; color: #374151;
+            font-size: 13px;
+        }
+        .adapters-card-header div { display: flex; gap: 8px; }
+        .adapter-row {
+            display: grid;
+            grid-template-columns: 5rem 1fr 1.4fr 2.5rem 2rem;
+            gap: 8px; align-items: center;
+            padding: 7px 14px; border-bottom: 1px solid #f3f4f6; font-size: 13px;
+        }
+        .adapter-row:last-child { border-bottom: none; }
+        .adapter-row.detected { color: #374151; }
+        .adapter-row input {
+            padding: 5px 8px; border: 1px solid #e5e7eb;
+            border-radius: 4px; font-size: 13px; width: 100%;
+        }
+        .adapter-row input:focus { outline: none; border-color: #667eea; }
+        .dot { font-size: 16px; text-align: center; }
+        .dot.green { color: #10b981; }
+        .dot.grey  { color: #9ca3af; }
+        .mono { font-family: 'Courier New', monospace; font-size: 12px; color: #6b7280; }
+        .btn-remove-adapter {
+            background: #fee2e2; color: #ef4444; border: none; border-radius: 4px;
+            width: 24px; height: 24px; cursor: pointer; font-size: 14px; line-height: 1;
+        }
+        .btn-remove-adapter:hover { background: #fecaca; }
+
         /* Buttons */
         .btn {
             background: #667eea; color: white; padding: 10px 20px;
@@ -465,6 +500,21 @@ HTML_TEMPLATE = """
                 </div>
             </div>
 
+            <!-- Bluetooth Adapters panel -->
+            <div class="form-group">
+                <label>Bluetooth Adapters</label>
+                <div class="adapters-card">
+                    <div class="adapters-card-header">
+                        <span>Detected &amp; manual adapters</span>
+                        <div>
+                            <button type="button" class="btn btn-sm btn-refresh" onclick="loadBtAdapters()">&#x21BA; Refresh</button>
+                            <button type="button" class="btn btn-sm" onclick="addManualAdapterRow('','','')">+ Add</button>
+                        </div>
+                    </div>
+                    <div id="adapters-table"></div>
+                </div>
+            </div>
+
             <!-- BT devices table (replaces raw JSON textarea + single MAC input) -->
             <div class="form-group">
                 <label>Bluetooth Devices</label>
@@ -526,6 +576,7 @@ var autoRefreshInterval = null;
 var allLogs = [];
 var currentLogLevel = 'all';
 var btAdapters = [];
+var btManualAdapters = [];
 var lastDevices = [];
 var volTimers = {};
 var volPending = {}; // deviceIndex -> true if user recently touched slider
@@ -1021,7 +1072,90 @@ async function loadBtAdapters() {
         var data = await resp.json();
         btAdapters = data.adapters || [];
     } catch (_) { btAdapters = []; }
+    // Merge manual entries not already in detected list
+    btManualAdapters.forEach(function(m) {
+        if (!btAdapters.find(function(a) { return a.id === m.id; }))
+            btAdapters.push(Object.assign({}, m, {manual: true}));
+    });
+    renderAdaptersTable();
+    rebuildAdapterDropdowns();
 }
+
+// ---- Adapter panel ----
+
+function escHtmlAttr(s) { return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+
+function renderAdaptersTable() {
+    var el = document.getElementById('adapters-table');
+    if (!el) return;
+    el.innerHTML = '';
+    btAdapters.forEach(function(a) {
+        if (a.manual) {
+            el.appendChild(buildManualRow(a.id, a.mac, a.name));
+        } else {
+            var row = document.createElement('div');
+            row.className = 'adapter-row detected';
+            row.innerHTML =
+                '<span>' + escHtml(a.id) + '</span>' +
+                '<span class="mono">' + escHtml(a.mac) + '</span>' +
+                '<span>' + escHtml(a.name || '') + '</span>' +
+                '<span class="dot ' + (a.powered ? 'green' : 'grey') + '">\u25cf</span>' +
+                '<span></span>';
+            el.appendChild(row);
+        }
+    });
+}
+
+function buildManualRow(id, mac, name) {
+    var row = document.createElement('div');
+    row.className = 'adapter-row manual';
+    row.innerHTML =
+        '<input type="text" class="adp-id" placeholder="hci2" value="' + escHtmlAttr(id) + '">' +
+        '<input type="text" class="adp-mac mono" placeholder="AA:BB:CC:DD:EE:FF" value="' + escHtmlAttr(mac) + '">' +
+        '<input type="text" class="adp-name" placeholder="Display name" value="' + escHtmlAttr(name) + '">' +
+        '<span class="dot grey">\u25cf</span>' +
+        '<button type="button" class="btn-remove-adapter">\u00d7</button>';
+    ['adp-id', 'adp-mac', 'adp-name'].forEach(function(cls) {
+        row.querySelector('.' + cls).addEventListener('blur', syncManualAdapters);
+    });
+    row.querySelector('.btn-remove-adapter').addEventListener('click', function() {
+        row.remove();
+        syncManualAdapters();
+    });
+    return row;
+}
+
+function addManualAdapterRow(id, mac, name) {
+    var el = document.getElementById('adapters-table');
+    if (!el) return;
+    el.appendChild(buildManualRow(id || '', mac || '', name || ''));
+}
+
+function syncManualAdapters() {
+    btManualAdapters = [];
+    document.querySelectorAll('#adapters-table .adapter-row.manual').forEach(function(row) {
+        var id  = row.querySelector('.adp-id').value.trim();
+        var mac = row.querySelector('.adp-mac').value.trim();
+        var name = row.querySelector('.adp-name').value.trim();
+        if (id || mac) btManualAdapters.push({id: id, mac: mac, name: name});
+    });
+    // Re-merge into btAdapters (keep detected, replace manual section)
+    btAdapters = btAdapters.filter(function(a) { return !a.manual; });
+    btManualAdapters.forEach(function(m) {
+        if (!btAdapters.find(function(a) { return a.id === m.id; }))
+            btAdapters.push(Object.assign({}, m, {manual: true}));
+    });
+    rebuildAdapterDropdowns();
+}
+
+function rebuildAdapterDropdowns() {
+    document.querySelectorAll('#bt-devices-table .bt-adapter').forEach(function(sel) {
+        var current = sel.value;
+        sel.innerHTML = btAdapterOptions(current);
+    });
+}
+
+// ---- BT Device Table (adapter dropdown) ----
 
 function btAdapterOptions(selected) {
     var opts = '<option value="">default</option>';
@@ -1151,6 +1285,8 @@ async function saveConfig() {
 
     // Collect BT devices from table rows (overrides anything from formData)
     config.BLUETOOTH_DEVICES = collectBtDevices();
+    // Persist manually-added adapters
+    config.BLUETOOTH_ADAPTERS = btManualAdapters.filter(function(a) { return a.mac || a.id; });
     // Keep single BLUETOOTH_MAC for backward compat if exactly one device
     if (config.BLUETOOTH_DEVICES.length === 1) {
         config.BLUETOOTH_MAC = config.BLUETOOTH_DEVICES[0].mac;
@@ -1196,6 +1332,10 @@ async function loadConfig() {
             if (input && config[key] !== undefined) input.value = config[key];
         });
         updateTzPreview();
+
+        // Restore manual adapters before re-running loadBtAdapters so merging picks them up
+        btManualAdapters = config.BLUETOOTH_ADAPTERS || [];
+        await loadBtAdapters();
 
         // Populate BT device table
         var devices = config.BLUETOOTH_DEVICES;
@@ -1418,9 +1558,7 @@ function reloadDiagnostics() {
 }
 
 // ---- Init ----
-loadBtAdapters().then(function() {
-    loadConfig();   // populate adapter dropdowns after adapters are loaded
-});
+loadConfig();   // calls loadBtAdapters() internally after restoring btManualAdapters
 updateStatus();
 setInterval(updateStatus, 2000);
 refreshLogs();
@@ -1686,8 +1824,8 @@ def api_bt_adapters():
             ['bash', '-c', 'bluetoothctl list 2>/dev/null'],
             capture_output=True, text=True, timeout=5
         )
-        adapters = []
-        for i, line in enumerate(result.stdout.splitlines()):
+        macs = []
+        for line in result.stdout.splitlines():
             if 'Controller' not in line:
                 continue
             parts = line.split()
@@ -1695,11 +1833,21 @@ def api_bt_adapters():
                 (p for p in parts if len(p) == 17 and p.count(':') == 5), None
             )
             if mac:
-                mac_idx = parts.index(mac)
-                name_parts = [p for p in parts[mac_idx + 1:]
-                              if p not in ('[default]', 'default')]
-                name = ' '.join(name_parts).strip() or f'hci{i}'
-                adapters.append({'id': f'hci{i}', 'mac': mac, 'name': name})
+                macs.append(mac)
+        adapters = []
+        for i, mac in enumerate(macs):
+            show_out = subprocess.run(
+                ['bash', '-c',
+                 f"printf 'select {mac}\\nshow\\n' | bluetoothctl 2>/dev/null"],
+                capture_output=True, text=True, timeout=5
+            ).stdout
+            powered = 'Powered: yes' in show_out
+            alias = next(
+                (ln.split('Alias:')[1].strip()
+                 for ln in show_out.splitlines() if 'Alias:' in ln),
+                f'hci{i}'
+            )
+            adapters.append({'id': f'hci{i}', 'mac': mac, 'name': alias, 'powered': powered})
         return jsonify({'adapters': adapters})
     except Exception as e:
         return jsonify({'adapters': [], 'error': str(e)})
