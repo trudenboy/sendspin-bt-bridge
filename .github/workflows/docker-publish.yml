@@ -7,6 +7,12 @@ on:
   pull_request:
     branches:
       - main
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to build (e.g. v1.3.0)'
+        required: false
+        default: ''
 
 env:
   REGISTRY: ghcr.io
