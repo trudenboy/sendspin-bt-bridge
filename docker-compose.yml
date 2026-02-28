@@ -21,6 +21,7 @@ services:
     environment:
       # Sendspin Configuration
       - SENDSPIN_SERVER=auto  # Use 'auto' for mDNS discovery, or specify hostname/IP
+      # - SENDSPIN_NAME=Living-Room  # Override default player name (default: Sendspin-<hostname>)
       
       # Bluetooth Configuration (can also be configured via web UI)
       - BLUETOOTH_MAC=04:57:91:D8:EC:9D

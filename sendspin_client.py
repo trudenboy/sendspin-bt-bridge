@@ -13,6 +13,7 @@ import signal
 import socket
 import subprocess
 import time
+import uuid as _uuid
 from datetime import datetime
 from typing import Optional
 
@@ -34,6 +35,11 @@ CLIENT_VERSION = "1.2.1"
 _last_full_audio_format: dict = {}  # player_name → format string
 
 _CONFIG_PATH = '/config/config.json'
+
+
+def _player_id_from_mac(mac: str) -> str:
+    """Stable, globally-unique player ID derived from BT MAC address."""
+    return str(_uuid.uuid5(_uuid.NAMESPACE_DNS, mac.lower()))
 
 
 def _save_device_volume(mac: Optional[str], volume: int) -> None:
@@ -557,7 +563,8 @@ class SendspinClient:
 
             # Build command — use 'daemon' subcommand with unique port + settings-dir per instance
             safe_id = ''.join(c if c.isalnum() or c == '-' else '-' for c in self.player_name.lower()).strip('-')
-            client_id = f"sendspin-{safe_id}"
+            _mac = self.bt_manager.mac_address if self.bt_manager else None
+            client_id = _player_id_from_mac(_mac) if _mac else f"sendspin-{safe_id}"
             settings_dir = f"/tmp/sendspin-{safe_id}"
             # static_delay_ms compensates for BT A2DP + PA buffer latency (~500ms total)
             # Negative value = schedule audio earlier to account for output latency
@@ -860,12 +867,17 @@ async def main():
     else:
         logger.info("Server: Auto-discovery enabled (mDNS)")
 
+    _default_player_name = (
+        os.getenv('SENDSPIN_NAME')
+        or f"Sendspin-{socket.gethostname()}"
+    )
+
     base_listen_port = 8928
     clients = []
     for i, device in enumerate(bt_devices):
         mac = device.get('mac', '')
         adapter = device.get('adapter', '')
-        player_name = device.get('player_name') or 'Sendspin Player'
+        player_name = device.get('player_name') or _default_player_name
         # 'listen_port' is the preferred key; 'port' kept for backward compat
         listen_port = int(device.get('listen_port') or device.get('port') or base_listen_port + i)
         listen_host = device.get('listen_host')
@@ -892,6 +904,21 @@ async def main():
         logger.info(f"  Player: '{player_name}', BT: {mac or 'none'}, Adapter: {adapter or 'default'}")
 
     logger.info("Client instance(s) registered")
+
+    # Warn about listen_port collisions (all containers share host network)
+    used_ports: set = set()
+    for _c in clients:
+        if _c.listen_port in used_ports:
+            logger.warning(
+                f"[{_c.player_name}] listen_port {_c.listen_port} already used by another "
+                f"client — sendspin daemon will fail to bind. Set unique 'listen_port' per device."
+            )
+        elif _c.listen_port == 8928 and len(clients) > 1:
+            logger.warning(
+                f"[{_c.player_name}] Using default listen_port 8928 with multiple devices — "
+                f"set explicit ports."
+            )
+        used_ports.add(_c.listen_port)
 
     # Start web interface in background thread
     import threading
