@@ -107,6 +107,7 @@ def get_client_status_for(client):
         bt_mgr = getattr(client, 'bt_manager', None)
         status['bluetooth_mac'] = bt_mgr.mac_address if bt_mgr else None
         status['bluetooth_adapter'] = bt_mgr.adapter if bt_mgr else None
+        status['has_sink'] = bool(getattr(client, 'bluetooth_sink_name', None))
 
         logger.debug(f"Status retrieved: {status}")
         return status
@@ -715,19 +716,27 @@ function populateDeviceCard(i, dev) {
     }
 
     // Volume — only update if user isn't actively adjusting this slider
+    var hasSink = dev.has_sink !== false;  // true when audio sink is configured
     if (dev.volume !== undefined && !volPending[i]) {
         var slider = document.getElementById('vslider-' + i);
         var volEl  = document.getElementById('dvol-' + i);
-        if (slider) slider.value = dev.volume;
-        if (volEl)  volEl.textContent = dev.volume + '%';
+        if (slider) {
+            slider.value = dev.volume;
+            slider.disabled = !hasSink;
+            slider.style.opacity = hasSink ? '' : '0.35';
+            slider.title = hasSink ? '' : 'Audio sink not configured';
+        }
+        if (volEl) volEl.textContent = dev.volume + '%';
     }
 
     // Mute button — attach handler once, update icon on every poll
     var muteBtn = document.getElementById('dmute-' + i);
     if (muteBtn) {
         muteBtn.textContent = dev.muted ? '\\uD83D\\uDD07' : '\\uD83D\\uDD08';
-        muteBtn.title = dev.muted ? 'Unmute' : 'Mute';
+        muteBtn.title = dev.muted ? 'Unmute' : (hasSink ? 'Mute' : 'Audio sink not configured');
         muteBtn.style.background = dev.muted ? '#fee2e2' : 'white';
+        muteBtn.disabled = !hasSink;
+        muteBtn.style.opacity = hasSink ? '' : '0.35';
         if (!muteBtn._handlerSet) {
             muteBtn._handlerSet = true;
             muteBtn.addEventListener('click', function() {
