@@ -8,6 +8,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import signal
 import socket
 import subprocess
@@ -262,8 +263,6 @@ class BluetoothManager:
     def configure_bluetooth_audio(self) -> bool:
         """Configure host's PipeWire/PulseAudio to use the Bluetooth device as audio output"""
         try:
-            import time
-
             # Wait for PipeWire/PulseAudio to register the device.
             # A2DP profile takes a few seconds to appear after BT connects.
             time.sleep(3)
@@ -532,10 +531,11 @@ class SendspinClient:
             # Fallback method
             try:
                 s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                s.connect(("8.8.8.8", 80))
-                ip = s.getsockname()[0]
-                s.close()
-                return ip
+                try:
+                    s.connect(("8.8.8.8", 80))
+                    return s.getsockname()[0]
+                finally:
+                    s.close()
             except Exception:
                 return "unknown"
     
@@ -730,8 +730,7 @@ class SendspinClient:
                 # or "Audio underflow detected; requesting re-anchor"
                 if 're-anchoring' in line_str or 're-anchor' in line_str:
                     try:
-                        import re as _re
-                        m = _re.search(r'Sync error ([\d.]+)\s*ms', line_str)
+                        m = re.search(r'Sync error ([\d.]+)\s*ms', line_str)
                         if m:
                             self.status['last_sync_error_ms'] = float(m.group(1))
                         self.status['reanchor_count'] += 1
@@ -898,7 +897,7 @@ async def main():
                        config.get('SENDSPIN_NAME', f'Sendspin-{socket.gethostname()}'))
         # 'listen_port' is the preferred key; 'port' kept for backward compat
         listen_port = int(device.get('listen_port') or device.get('port') or base_listen_port + i)
-        listen_host = device.get('listen_host') or None
+        listen_host = device.get('listen_host')
         static_delay_ms = device.get('static_delay_ms')
         if static_delay_ms is not None:
             static_delay_ms = float(static_delay_ms)

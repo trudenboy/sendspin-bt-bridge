@@ -47,13 +47,6 @@ DEFAULT_CONFIG = {
 _clients: list = []
 
 
-def set_client(client):
-    """Set a single client reference (backward compat)"""
-    global _clients
-    _clients = [client]
-    logger.info(f"Client reference set in web interface: {client}")
-
-
 def set_clients(clients):
     """Set multiple client references"""
     global _clients
@@ -61,13 +54,19 @@ def set_clients(clients):
     logger.info(f"Client references set in web interface: {len(_clients)} client(s)")
 
 
+_runtime_cache: str = ''
+
 def _detect_runtime() -> str:
-    """Detect whether running under systemd (LXC) or Docker"""
-    if os.path.exists('/etc/systemd/system/sendspin-client.service'):
-        return 'systemd'
-    if os.path.exists('/run/systemd/system/sendspin-client.service'):
-        return 'systemd'
-    return 'docker'
+    """Detect whether running under systemd (LXC) or Docker. Result is cached."""
+    global _runtime_cache
+    if not _runtime_cache:
+        if os.path.exists('/etc/systemd/system/sendspin-client.service'):
+            _runtime_cache = 'systemd'
+        elif os.path.exists('/run/systemd/system/sendspin-client.service'):
+            _runtime_cache = 'systemd'
+        else:
+            _runtime_cache = 'docker'
+    return _runtime_cache
 
 
 def get_client_status_for(client):
@@ -448,6 +447,10 @@ HTML_TEMPLATE = """
         <summary>&#9881;&#65039; Configuration</summary>
         <form id="config-form">
             <div class="form-group">
+                <label>Player Name (global default)</label>
+                <input type="text" name="SENDSPIN_NAME" id="cfg-sendspin-name" placeholder="Sendspin-Player">
+            </div>
+            <div class="form-group">
                 <label>Server (use &#8216;auto&#8217; for mDNS discovery)</label>
                 <input type="text" name="SENDSPIN_SERVER" required>
             </div>
@@ -542,6 +545,11 @@ async function updateStatus() {
         if (sysEl) sysEl.innerHTML = info.join(' &middot; ');
 
         var devices = status.devices || [status];
+        // Reset group selection if device list changes (avoids stale index mapping)
+        if (lastDevices.length !== devices.length ||
+            !lastDevices.every(function(d, idx) { return d.player_name === devices[idx].player_name; })) {
+            _groupSelected = {};
+        }
         lastDevices = devices;
         var grid = document.getElementById('status-grid');
 
@@ -732,7 +740,7 @@ function populateDeviceCard(i, dev) {
     // Mute button — attach handler once, update icon on every poll
     var muteBtn = document.getElementById('dmute-' + i);
     if (muteBtn) {
-        muteBtn.textContent = dev.muted ? '\\uD83D\\uDD07' : '\\uD83D\\uDD08';
+        muteBtn.textContent = dev.muted ? '🔇' : '🔈';
         muteBtn.title = dev.muted ? 'Unmute' : (hasSink ? 'Mute' : 'Audio sink not configured');
         muteBtn.style.background = dev.muted ? '#fee2e2' : 'white';
         muteBtn.disabled = !hasSink;
@@ -740,7 +748,7 @@ function populateDeviceCard(i, dev) {
         if (!muteBtn._handlerSet) {
             muteBtn._handlerSet = true;
             muteBtn.addEventListener('click', function() {
-                var dev = lastDevices[i] || {};
+                var dev = lastDevices && lastDevices[i]; if (!dev) return;
                 fetch('/api/mute', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -749,7 +757,7 @@ function populateDeviceCard(i, dev) {
                     if (d.success && lastDevices[i]) lastDevices[i].muted = d.muted;
                     var btn = document.getElementById('dmute-' + i);
                     if (btn) {
-                        btn.textContent = d.muted ? '\\uD83D\\uDD07' : '\\uD83D\\uDD08';
+                        btn.textContent = d.muted ? '🔇' : '🔈';
                         btn.title = d.muted ? 'Unmute' : 'Mute';
                         btn.style.background = d.muted ? '#fee2e2' : 'white';
                     }
@@ -769,7 +777,6 @@ function onVolumeInput(i, val) {
     volPending[i] = true;
     clearTimeout(volTimers[i]);
     volTimers[i] = setTimeout(function() {
-        delete volPending[i];
         sendVolume(i, parseInt(val, 10));
     }, 300);
 }
@@ -784,6 +791,8 @@ async function sendVolume(deviceIndex, vol) {
         });
     } catch (err) {
         console.error('Volume set failed:', err);
+    } finally {
+        delete volPending[deviceIndex];
     }
 }
 
@@ -794,6 +803,7 @@ function escHtml(s) {
 }
 
 function getLogClass(line) {
+    if (!line || typeof line !== 'string') return '';
     var u = line.toUpperCase();
     if (u.indexOf('ERROR') !== -1 || u.indexOf('CRITICAL') !== -1) return 'log-error';
     if (u.indexOf('WARNING') !== -1 || u.indexOf('WARN') !== -1)   return 'log-warning';
@@ -926,7 +936,7 @@ function onGroupMute() {
         body: JSON.stringify({mute: muteVal, player_names: names})
     }).then(function(r) { return r.json(); }).then(function(d) {
         if (btn) {
-            btn.textContent = muteVal ? '\\uD83D\\uDD07 Unmute All' : '\\uD83D\\uDD08 Mute All';
+            btn.textContent = muteVal ? '🔇 Unmute All' : '🔈 Mute All';
             btn.className = 'btn-group-mute' + (muteVal ? ' muted' : '');
         }
     });
@@ -1640,7 +1650,7 @@ def api_config():
 @app.route('/api/logs')
 def api_logs():
     """Return real service logs (journalctl or docker logs)"""
-    lines = request.args.get('lines', 150, type=int)
+    lines = min(request.args.get('lines', 150, type=int), 500)
     try:
         runtime = _detect_runtime()
         if runtime == 'systemd':
