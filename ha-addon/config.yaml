@@ -13,7 +13,10 @@ arch:
 startup: application
 boot: auto
 host_network: true
-privileged: true
+privileged:
+  - SYS_ADMIN
+  - NET_ADMIN
+  - NET_RAW
 devices:
   - /dev/bus/usb
 audio: true
