@@ -36,7 +36,7 @@ CONFIG_FILE = CONFIG_DIR / 'config.json'
 
 # Default configuration
 DEFAULT_CONFIG = {
-    'SENDSPIN_NAME': 'Sendspin-Player',
+    'SENDSPIN_NAME': 'Sendspin',
     'SENDSPIN_SERVER': 'auto',
     'BLUETOOTH_MAC': '',
     'BLUETOOTH_DEVICES': [],
@@ -482,8 +482,8 @@ HTML_TEMPLATE = """
         <summary>&#9881;&#65039; Configuration</summary>
         <form id="config-form">
             <div class="form-group">
-                <label>Player Name (global default)</label>
-                <input type="text" name="SENDSPIN_NAME" id="cfg-sendspin-name" placeholder="Sendspin-Player">
+                <label>Player Name Prefix</label>
+                <input type="text" name="SENDSPIN_NAME" id="cfg-sendspin-name" placeholder="Sendspin">
             </div>
             <div class="form-group">
                 <label>Server (use &#8216;auto&#8217; for mDNS discovery)</label>

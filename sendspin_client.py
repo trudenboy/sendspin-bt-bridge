@@ -830,8 +830,8 @@ async def main():
     bt_devices = config.get('BLUETOOTH_DEVICES', [])
     if not bt_devices:
         mac = config.get('BLUETOOTH_MAC', '')
-        name = config.get('SENDSPIN_NAME', f'Sendspin-{socket.gethostname()}')
-        bt_devices = [{'mac': mac, 'adapter': '', 'player_name': name}]
+        prefix = config.get('SENDSPIN_NAME', 'Sendspin')
+        bt_devices = [{'mac': mac, 'adapter': '', 'player_name': f'{prefix} Player'}]
 
     logger.info(f"Starting {len(bt_devices)} player instance(s)")
     if server_host and server_host.lower() not in ['auto', 'discover', '']:
@@ -844,8 +844,8 @@ async def main():
     for i, device in enumerate(bt_devices):
         mac = device.get('mac', '')
         adapter = device.get('adapter', '')
-        player_name = (device.get('player_name') or
-                       config.get('SENDSPIN_NAME', f'Sendspin-{socket.gethostname()}'))
+        prefix = config.get('SENDSPIN_NAME', 'Sendspin')
+        player_name = device.get('player_name') or f'{prefix} Player'
         # 'listen_port' is the preferred key; 'port' kept for backward compat
         listen_port = int(device.get('listen_port') or device.get('port') or base_listen_port + i)
         listen_host = device.get('listen_host')
