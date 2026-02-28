@@ -27,8 +27,8 @@ app = Flask(__name__)
 CORS(app)
 
 # Version information
-VERSION = "1.0.0"
-BUILD_DATE = "2026-01-01"
+VERSION = "1.2.0"
+BUILD_DATE = "2026-02-28"
 
 # Configuration file path
 CONFIG_DIR = Path(os.getenv('CONFIG_DIR', '/config'))
@@ -1481,9 +1481,37 @@ def api_bt_scan():
                     if mac in unnamed and name and not re.match(r'^[0-9A-Fa-f]{2}[-:]', name):
                         names[mac] = name
 
+        # Check each device's Class / UUIDs to filter audio-capable devices.
+        # Major device class 4 (0x0400) = Audio/Video.
+        # UUID 0000110b = A2DP Sink (speaker/headphones).
+        # Devices with no class info are kept (unknown → better show than hide).
+        def is_audio_device(mac: str) -> bool:
+            try:
+                r = subprocess.run(
+                    ['bluetoothctl', 'info', mac],
+                    capture_output=True, text=True, timeout=4
+                )
+                out = r.stdout
+                # Check Class field: "Class: 0x240404" — major class bits 12-8
+                class_m = re.search(r'Class:\s+(0x[0-9A-Fa-f]+)', out)
+                if class_m:
+                    cls = int(class_m.group(1), 16)
+                    major = (cls >> 8) & 0x1f
+                    return major == 4  # 4 = Audio/Video
+                # Class unavailable — check for A2DP Sink UUID
+                if '0000110b' in out.lower():
+                    return True
+                # No class info at all — include (device may not be cached yet)
+                if 'Class:' not in out and 'UUID:' not in out:
+                    return True
+                return False
+            except Exception:
+                return True  # on error, include
+
         devices = []
         for mac in all_macs:
-            devices.append({'mac': mac, 'name': names.get(mac, mac)})
+            if is_audio_device(mac):
+                devices.append({'mac': mac, 'name': names.get(mac, mac)})
         # Sort: named devices first, then by MAC
         devices.sort(key=lambda d: (d['name'] == d['mac'], d['name']))
         return jsonify({'devices': devices})
