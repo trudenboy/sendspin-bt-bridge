@@ -603,6 +603,14 @@ class SendspinClient:
                 # "INFO:aiosendspin.client.client:Stream started with codec flac"
                 if 'Stream STARTED' in line_str or 'Stream started with codec' in line_str:
                     self.status['playing'] = True
+                    # Extract codec from "Stream started with codec flac"
+                    if 'Stream started with codec' in line_str:
+                        try:
+                            codec = line_str.split('Stream started with codec')[-1].strip()
+                            if codec:
+                                self.status['audio_format'] = codec
+                        except Exception:
+                            pass
                 elif 'Stream STOPPED' in line_str or 'MPRIS interface stopped' in line_str:
                     self.status['playing'] = False
 

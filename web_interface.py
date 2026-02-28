@@ -612,7 +612,7 @@ function populateDeviceCard(i, dev) {
 
     // Audio format
     var fmtEl = document.getElementById('daudiofmt-' + i);
-    if (fmtEl) fmtEl.textContent = dev.audio_format || '';
+    if (fmtEl) fmtEl.textContent = dev.audio_format ? 'Transport: ' + dev.audio_format : '';
 
     // Sync
     var syncEl = document.getElementById('dsync-' + i);
