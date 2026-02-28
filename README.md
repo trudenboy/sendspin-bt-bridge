@@ -406,10 +406,13 @@ python sendspin_client.py
 - Built for [Music Assistant](https://www.music-assistant.io/)
 - Uses the `sendspin` CLI from the MA project
 - Inspired by [sendspin-go](https://github.com/Sendspin/sendspin-go)
+- Upstream repository: [loryanstrant/Sendspin-client](https://github.com/loryanstrant/Sendspin-client)
+- Born from the MA community discussion: [Sendspin Bluetooth Bridge #4677](https://github.com/orgs/music-assistant/discussions/4677)
 
 ## Support
 
 - **Issues**: [GitHub Issues](https://github.com/trudenboy/sendspin-bt-bridge/issues)
+- **Original discussion**: [music-assistant/discussions #4677](https://github.com/orgs/music-assistant/discussions/4677)
 - **Music Assistant community**: [Discord](https://discord.gg/kaVm8hGpne)
 
 ## License
