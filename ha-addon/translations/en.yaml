@@ -16,3 +16,24 @@ configuration:
     description: >-
       List of Bluetooth speakers to bridge. Each entry requires a MAC
       address and a player name that will appear in Music Assistant.
+    fields:
+      mac:
+        name: "MAC address"
+        description: >-
+          Bluetooth MAC address of the speaker (format: AA:BB:CC:DD:EE:FF).
+          Find it in bluetoothctl with "devices" after pairing.
+      player_name:
+        name: "Player name"
+        description: >-
+          Display name shown in Music Assistant for this speaker.
+          Each device must have a unique name.
+      adapter:
+        name: "Bluetooth adapter"
+        description: >-
+          MAC address of the Bluetooth adapter to use for this device.
+          Leave blank to use the system default adapter.
+      static_delay_ms:
+        name: "Static delay (ms)"
+        description: >-
+          Fixed latency offset in milliseconds. Use negative values to compensate
+          for Bluetooth A2DP buffering (typical: -500). Leave 0 for no adjustment.

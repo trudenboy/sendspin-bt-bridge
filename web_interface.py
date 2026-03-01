@@ -418,6 +418,11 @@ HTML_TEMPLATE = """
         }
         .scan-result-item:last-child { border-bottom: none; }
         .scan-result-mac { font-family: monospace; color: var(--secondary-text-color); font-size: 12px; }
+        .paired-box {
+            margin-top: 10px; border: 1px solid var(--divider-color); border-radius: 6px;
+            padding: 10px; background: var(--secondary-background-color);
+        }
+        .paired-box-title { font-size: 12px; color: var(--secondary-text-color); margin-bottom: 6px; }
 
         /* Adapters panel */
         .adapters-card {
@@ -626,6 +631,10 @@ HTML_TEMPLATE = """
                         &#128269; Scan
                     </button>
                     <span id="scan-status" class="scan-badge"></span>
+                </div>
+                <div id="paired-box" class="paired-box" style="display:none;">
+                    <div class="paired-box-title">Already paired &#8212; click to add:</div>
+                    <div id="paired-list"></div>
                 </div>
                 <div id="scan-results-box" class="scan-results-box">
                     <div class="scan-results-title">Discovered devices &#8212; click to add:</div>
@@ -1443,10 +1452,46 @@ async function startBtScan() {
     }
 }
 
+function autoAdapter() {
+    return (btAdapters.length === 1) ? btAdapters[0].id : '';
+}
+
 function addFromScan(mac, name) {
-    addBtDeviceRow(name, mac, '');
+    addBtDeviceRow(name, mac, autoAdapter());
     document.getElementById('scan-results-box').style.display = 'none';
     document.getElementById('scan-status').textContent = '';
+}
+
+function addFromPaired(mac, name) {
+    addBtDeviceRow(name, mac, autoAdapter());
+    document.getElementById('paired-box').style.display = 'none';
+}
+
+async function loadPairedDevices() {
+    try {
+        var resp = await fetch(API_BASE + '/api/bt/paired');
+        var data = await resp.json();
+        var devices = data.devices || [];
+        var box = document.getElementById('paired-box');
+        var listDiv = document.getElementById('paired-list');
+        if (devices.length === 0) { box.style.display = 'none'; return; }
+        listDiv.innerHTML = devices.map(function(d, i) {
+            return '<div class="scan-result-item">' +
+                '<span class="scan-result-mac">' + escHtml(d.mac) + '</span>' +
+                '<span>' + escHtml(d.name) + '</span>' +
+                '<button type="button" data-paired-idx="' + i + '" style="margin-left:auto;padding:3px 10px;' +
+                    'background:var(--primary-color);color:white;border:none;border-radius:4px;' +
+                    'cursor:pointer;font-size:12px;">Add</button>' +
+                '</div>';
+        }).join('');
+        listDiv.querySelectorAll('[data-paired-idx]').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                var d = devices[parseInt(this.dataset.pairedIdx)];
+                addFromPaired(d.mac, d.name);
+            });
+        });
+        box.style.display = 'block';
+    } catch (_) {}
 }
 
 // ---- Config ----
@@ -1511,6 +1556,7 @@ async function loadConfig() {
         // Restore manual adapters before re-running loadBtAdapters so merging picks them up
         btManualAdapters = config.BLUETOOTH_ADAPTERS || [];
         await loadBtAdapters();
+        loadPairedDevices();
 
         // Populate BT device table
         var devices = config.BLUETOOTH_DEVICES;
@@ -2173,6 +2219,35 @@ def api_bt_adapters():
         return jsonify({'adapters': adapters})
     except Exception as e:
         return jsonify({'adapters': [], 'error': str(e)})
+
+
+@app.route('/api/bt/paired')
+def api_bt_paired():
+    """Return already-paired Bluetooth devices instantly (no scan)"""
+    try:
+        result = subprocess.run(
+            ['bash', '-c', 'echo "devices" | bluetoothctl 2>/dev/null'],
+            capture_output=True, text=True, timeout=5
+        )
+        ansi_re = re.compile(r'\x1b\[[0-9;]*m')
+        dev_pat = re.compile(r'Device\s+([0-9A-Fa-f:]{17})\s+(.*)')
+        devices = []
+        seen = set()
+        for line in result.stdout.splitlines():
+            clean = ansi_re.sub('', line)
+            m = dev_pat.search(clean)
+            if m:
+                mac = m.group(1).upper()
+                name = m.group(2).strip()
+                if mac not in seen:
+                    seen.add(mac)
+                    # Skip entries where name looks like a raw MAC
+                    if re.match(r'^[0-9A-Fa-f]{2}[-:]', name):
+                        name = ''
+                    devices.append({'mac': mac, 'name': name or mac})
+        return jsonify({'devices': devices})
+    except Exception as e:
+        return jsonify({'devices': [], 'error': str(e)})
 
 
 @app.route('/api/bt/scan', methods=['POST'])

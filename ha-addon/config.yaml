@@ -33,9 +33,9 @@ options:
 
 schema:
   sendspin_server: str
-  sendspin_port: int
+  sendspin_port: port
   bluetooth_devices:
-    - mac: str
+    - mac: "match(([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2})"
       player_name: str
       adapter: str?
       static_delay_ms: int?
