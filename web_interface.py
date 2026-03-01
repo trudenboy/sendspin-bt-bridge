@@ -1756,7 +1756,7 @@ def index():
 
 @app.route('/api/restart', methods=['POST'])
 def api_restart():
-    """Restart the service (systemd or Docker)"""
+    """Restart the service (systemd, HA addon, or Docker)"""
     runtime = _detect_runtime()
     try:
         if runtime == 'systemd':
@@ -1767,6 +1767,29 @@ def api_restart():
                     capture_output=True, timeout=10
                 )
             threading.Thread(target=_do_systemd, daemon=True).start()
+        elif runtime == 'ha_addon':
+            def _do_ha_restart():
+                import urllib.request as _ur
+                time.sleep(0.5)
+                token = os.environ.get('SUPERVISOR_TOKEN', '')
+                if token:
+                    try:
+                        req = _ur.Request(
+                            'http://supervisor/addons/self/restart',
+                            data=b'{}',
+                            headers={'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'},
+                            method='POST'
+                        )
+                        _ur.urlopen(req, timeout=15)
+                    except Exception as e:
+                        logger.warning(f'Supervisor restart failed: {e}; falling back to SIGTERM')
+                        try:
+                            os.kill(1, signal.SIGTERM)
+                        except ProcessLookupError:
+                            os.kill(os.getpid(), signal.SIGTERM)
+                else:
+                    os.kill(os.getpid(), signal.SIGTERM)
+            threading.Thread(target=_do_ha_restart, daemon=True).start()
         else:
             def _do_docker():
                 time.sleep(0.5)
@@ -2032,6 +2055,41 @@ def api_config():
 
         with open(CONFIG_FILE, 'w') as f:
             json.dump(config, f, indent=2)
+
+        # In HA addon mode, also push to Supervisor options so the config
+        # survives container restarts (run.sh regenerates config.json from options.json).
+        if _detect_runtime() == 'ha_addon':
+            try:
+                import urllib.request as _ur
+                token = os.environ.get('SUPERVISOR_TOKEN', '')
+                if token:
+                    # Map config.json keys → Supervisor options schema
+                    sup_devices = []
+                    for d in config.get('BLUETOOTH_DEVICES', []):
+                        entry = {'mac': d.get('mac', ''), 'player_name': d.get('player_name', '')}
+                        if d.get('adapter'):
+                            entry['adapter'] = d['adapter']
+                        if d.get('static_delay_ms'):
+                            entry['static_delay_ms'] = int(d['static_delay_ms'])
+                        sup_devices.append(entry)
+                    sup_opts = {
+                        'options': {
+                            'sendspin_server': config.get('SENDSPIN_SERVER', 'auto'),
+                            'sendspin_port':   int(config.get('SENDSPIN_PORT', 9000)),
+                            'bluetooth_devices': sup_devices,
+                        }
+                    }
+                    body = json.dumps(sup_opts).encode()
+                    req = _ur.Request(
+                        'http://supervisor/addons/self/options',
+                        data=body,
+                        headers={'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'},
+                        method='POST'
+                    )
+                    _ur.urlopen(req, timeout=10)
+            except Exception as e:
+                logger.warning(f'Failed to sync Supervisor options: {e}')
+
         return jsonify({'success': True})
 
 
