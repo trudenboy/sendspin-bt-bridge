@@ -73,25 +73,8 @@ Open an issue at [GitHub Issues](https://github.com/trudenboy/sendspin-bt-bridge
 
 ## Attribution
 
-This project is a fork of [loryanstrant/Sendspin-client](https://github.com/loryanstrant/Sendspin-client) with significant extensions (multi-device support, HA addon, Proxmox LXC installer, security fixes, diagnostics UI).
+This project originated from [loryanstrant/Sendspin-client](https://github.com/loryanstrant/Sendspin-client)
+and has since grown into a fully independent project. Credit to loryanstrant for the original concept.
 
 When contributing:
 - Credit the [Music Assistant](https://www.music-assistant.io/) team for the Sendspin protocol and CLI
-- Credit `loryanstrant/Sendspin-client` as the upstream origin
-- Improvements that are applicable upstream should also be proposed as a PR to `loryanstrant/Sendspin-client`
-
----
-
-## Syncing with Upstream
-
-```bash
-# Add upstream remote (one-time)
-git remote add upstream https://github.com/loryanstrant/Sendspin-client.git
-
-# Pull upstream changes
-git fetch upstream
-git merge upstream/main
-
-# Resolve any conflicts, then push
-git push origin main
-```

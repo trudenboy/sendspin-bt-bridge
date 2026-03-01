@@ -16,7 +16,7 @@ err()  { echo -e "${RED}✗${NC}  $*" >&2; }
 die()  { err "$*"; exit 1; }
 
 # ─── Argument parsing ─────────────────────────────────────────────────────────
-GITHUB_REPO="loryanstrant/sendspin-client"
+GITHUB_REPO="trudenboy/sendspin-bt-bridge"
 GITHUB_BRANCH="main"
 
 while [[ $# -gt 0 ]]; do
@@ -230,7 +230,7 @@ EOF
 cat > /etc/systemd/system/sendspin-client.service <<'EOF'
 [Unit]
 Description=Sendspin Client (Music Assistant Player with Bluetooth)
-Documentation=https://github.com/loryanstrant/sendspin-client
+Documentation=https://github.com/trudenboy/sendspin-bt-bridge
 After=network-online.target dbus.service pulseaudio-system.service avahi-daemon.service
 Wants=network-online.target
 Requires=pulseaudio-system.service dbus.service

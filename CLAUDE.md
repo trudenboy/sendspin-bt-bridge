@@ -25,7 +25,7 @@ docker exec -it sendspin-client bluetoothctl
 
 There is no test suite. Manual testing is via `docker logs` and the web UI at `http://localhost:8080`.
 
-CI/CD builds multi-platform Docker images (`linux/amd64`, `linux/arm64`) to `ghcr.io/loryanstrant/sendspin-client` on push to `main`.
+CI/CD builds multi-platform Docker images (`linux/amd64`, `linux/arm64`) to `ghcr.io/trudenboy/sendspin-bt-bridge` on push to `main`.
 
 ## Architecture
 

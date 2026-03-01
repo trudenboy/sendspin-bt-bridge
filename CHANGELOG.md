@@ -103,13 +103,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Volume sync: parse `Server set player volume` log format from Music Assistant
 - `LAST_VOLUMES` preserved when saving configuration via web UI
 
-## [1.1.0] - 2026-01-27 (upstream: loryanstrant/Sendspin-client)
+## [1.1.0] - 2026-01-27 (origin: loryanstrant/Sendspin-client)
 
 ### Fixed
 - Bluetooth connection status monitoring reliability
 - Bluetooth disconnect detection with real-time status polling
 
-## [1.0.0] - 2026-01-01 (upstream: loryanstrant/Sendspin-client)
+## [1.0.0] - 2026-01-01 (origin: loryanstrant/Sendspin-client)
 
 ### Added
 - Initial release: Dockerized Sendspin client with Bluetooth speaker management
