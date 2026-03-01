@@ -11,11 +11,15 @@ A Bluetooth bridge for [Music Assistant](https://www.music-assistant.io/) — co
 - **Sendspin Protocol**: Full support for Music Assistant's native Sendspin streaming protocol
 - **Multi-device**: Bridge multiple Bluetooth speakers simultaneously, each appearing as its own MA player
 - **Auto-reconnect**: Monitors speaker connections every 10 s and reconnects automatically
-- **Web Interface**: Real-time status dashboard and configuration UI on port 8080
+- **HA-aligned Web UI**: Dashboard styled to match Home Assistant/Music Assistant — CSS design tokens, automatic dark/light theme, Roboto font; live theme injection when opened via HA Ingress
 - **Three deployment options**: Home Assistant addon, Docker Compose, or Proxmox LXC
 - **PipeWire & PulseAudio**: Auto-detects the host audio system
-- **Player metadata**: Reports real device manufacturer and model to Music Assistant
+- **Audio format display**: Codec, sample rate, and bit depth shown per device (e.g. `flac 48000Hz/24-bit/2ch`)
 - **Group controls**: Volume and mute controls across multiple players from the web UI
+- **BT adapter management**: Auto-detect adapters with manual override; pin each speaker to a specific adapter
+- **Per-device latency compensation**: `static_delay_ms` field to compensate A2DP buffer latency
+- **Diagnostics endpoint**: `/api/diagnostics` returns structured health info — adapters, sinks, D-Bus status, per-device state
+- **Player metadata**: Reports real device manufacturer and model to Music Assistant
 
 <img width="1228" height="2694" alt="192 168 10 180_8080_ (1)" src="https://github.com/user-attachments/assets/ff3d99bc-7f8a-459b-ba9a-9ba3c10bedd6" />
 <br><br>
@@ -56,9 +60,10 @@ bluetooth_devices:
   - mac: "11:22:33:44:55:66"
     player_name: "Kitchen Speaker"
     adapter: hci1              # optional — only needed for multi-adapter setups
+    static_delay_ms: -500      # optional — A2DP latency compensation in ms
 ```
 
-The addon exposes the web UI via **HA Ingress** (no port forwarding needed) and appears in the HA sidebar.
+The addon exposes the web UI via **HA Ingress** (no port forwarding needed) and appears in the HA sidebar. The UI automatically picks up your HA theme (light/dark) via the Ingress `setTheme` postMessage API.
 
 ### Requirements
 
@@ -143,13 +148,13 @@ For full documentation, prerequisites, manual install steps, pairing instruction
 ### One-line install (on the Proxmox host as root)
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/loryanstrant/sendspin-client/main/lxc/proxmox-create.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/lxc/proxmox-create.sh)
 ```
 
 Or download and review first:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/loryanstrant/sendspin-client/main/lxc/proxmox-create.sh -o proxmox-create.sh
+curl -fsSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/lxc/proxmox-create.sh -o proxmox-create.sh
 less proxmox-create.sh
 bash proxmox-create.sh
 ```
@@ -162,7 +167,7 @@ The script interactively prompts for container ID, hostname, RAM, disk, network,
 2. Start the container and open a shell (`pct enter <CTID>`)
 3. Run the installer:
    ```bash
-   bash <(curl -fsSL https://raw.githubusercontent.com/loryanstrant/sendspin-client/main/lxc/install.sh)
+   bash <(curl -fsSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/lxc/install.sh)
    ```
 4. Append to `/etc/pve/lxc/<CTID>.conf` on the **Proxmox host**:
    ```
@@ -262,11 +267,14 @@ Environment variables are overridden by values in `/config/config.json` if the f
 
 The web UI at `http://your-host:8080` (or via HA Ingress) provides:
 
-- **Per-device cards**: Connection status, playback state, volume slider, mute toggle
+- **HA-aligned design**: CSS custom properties matching HA design tokens; automatic dark/light theme via `prefers-color-scheme`; live theme sync when opened inside HA Ingress
+- **Per-device cards**: Connection status, playback state, audio format (codec/rate/depth), sync status, volume slider, mute toggle
 - **Reconnect / Re-pair buttons**: Trigger manual reconnect or full re-pair without restarting
 - **Group controls**: Set volume or mute across all devices at once
-- **Configuration page**: Edit server address, add/remove Bluetooth devices
-- **System info**: IP address, hostname, uptime, audio sink status
+- **BT scan**: Scan for nearby audio devices and add them to config directly from the UI
+- **BT adapter panel**: View detected adapters, set adapter per device
+- **Configuration page**: Edit server address, add/remove Bluetooth devices, IANA timezone autocomplete
+- **System info**: IP address, hostname, uptime, audio sink status, per-player WebSocket URL
 
 ---
 
@@ -349,6 +357,14 @@ For PipeWire:
 ```yaml
 volumes:
   - /run/user/1000/pipewire-0:/run/user/1000/pipewire-0
+```
+
+### Diagnostics
+
+`GET /api/diagnostics` returns a JSON snapshot of the system state — adapters detected, PulseAudio sinks, D-Bus availability, and per-device status. Useful for remote debugging without shell access.
+
+```bash
+curl http://your-host:8080/api/diagnostics | python3 -m json.tool
 ```
 
 ### No audio sink after Bluetooth connects
