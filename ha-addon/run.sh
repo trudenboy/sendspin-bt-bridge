@@ -26,23 +26,9 @@ import json, sys, os
 with open('/data/options.json') as f:
     opts = json.load(f)
 
-# Timezone: use options value, or auto-detect from Supervisor
-tz = (opts.get('tz') or '').strip()
-if not tz:
-    try:
-        import urllib.request
-        token = os.environ.get('SUPERVISOR_TOKEN', '')
-        req = urllib.request.Request(
-            'http://supervisor/host/info',
-            headers={'Authorization': f'Bearer {token}'}
-        )
-        with urllib.request.urlopen(req, timeout=3) as r:
-            host_info = json.load(r)
-            tz = host_info.get('data', {}).get('timezone', '') or ''
-    except Exception:
-        pass
-if not tz:
-    tz = 'UTC'
+# Timezone: use options value, fall back to TZ env var (set by HA Supervisor),
+# then UTC
+tz = (opts.get('tz') or '').strip() or os.environ.get('TZ', '') or 'UTC'
 
 # bluetooth_adapters: convert [{id, mac?}] → [{id, mac, name}]
 raw_adapters = opts.get('bluetooth_adapters', []) or []
