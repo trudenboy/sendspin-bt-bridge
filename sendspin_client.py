@@ -26,7 +26,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-CLIENT_VERSION = "1.3.17"
+CLIENT_VERSION = "1.3.18"
 
 
 def _read_mpris_metadata_for(player_name: str):

@@ -27,7 +27,7 @@ app = Flask(__name__)
 CORS(app)
 
 # Version information
-VERSION = "1.3.17"
+VERSION = "1.3.18"
 BUILD_DATE = "2026-03-01"
 
 # Configuration file path
@@ -142,6 +142,18 @@ def get_client_status_for(client):
         bt_mgr = getattr(client, 'bt_manager', None)
         status['bluetooth_mac'] = bt_mgr.mac_address if bt_mgr else None
         status['bluetooth_adapter'] = bt_mgr.adapter if bt_mgr else None
+        adapter_name = None
+        if bt_mgr and bt_mgr.adapter:
+            try:
+                with open(CONFIG_FILE) as _f:
+                    _cfg = json.load(_f)
+                for _a in _cfg.get('BLUETOOTH_ADAPTERS', []):
+                    if _a.get('mac') == bt_mgr.adapter or _a.get('id') == bt_mgr.adapter:
+                        adapter_name = _a.get('name')
+                        break
+            except Exception:
+                pass
+        status['bluetooth_adapter_name'] = adapter_name
         status['has_sink'] = bool(getattr(client, 'bluetooth_sink_name', None))
         status['bt_management_enabled'] = getattr(client, 'bt_management_enabled', True)
 
@@ -272,12 +284,15 @@ HTML_TEMPLATE = """
             background: var(--card-background-color);
             border-radius: var(--ha-card-border-radius); padding: 16px 20px;
             box-shadow: var(--ha-card-box-shadow);
-            display: flex; align-items: center; gap: 0; flex-wrap: wrap;
+            display: grid;
+            grid-template-columns: minmax(180px, 220px) repeat(5, 1fr);
+            align-items: start;
         }
         .device-card-actions {
-            width: 100%; display: flex; align-items: center; gap: 8px;
+            grid-column: 1 / -1; grid-row: 2;
+            display: grid; grid-template-columns: subgrid;
+            align-items: center;
             padding-top: 10px; margin-top: 10px; border-top: 1px solid var(--divider-color);
-            flex-wrap: wrap;
         }
         .btn-bt-action {
             padding: 4px 12px; font-size: 12px; font-weight: 600; border: none;
@@ -317,8 +332,8 @@ HTML_TEMPLATE = """
         .btn-group-mute.muted { background: rgba(219,68,55,.1); border-color: var(--error-color); color: var(--error-color); }
         .device-select-cb { width: 15px; height: 15px; accent-color: var(--primary-color); cursor: pointer; }
         .device-card-identity {
-            min-width: 180px; max-width: 220px; padding-right: 20px;
-            border-right: 1px solid var(--divider-color); margin-right: 0; flex-shrink: 0;
+            grid-column: 1; grid-row: 1;
+            padding-right: 20px; border-right: 1px solid var(--divider-color);
         }
         .device-card-title {
             font-size: 15px; font-weight: 700; color: var(--primary-color); margin-bottom: 2px;
@@ -327,10 +342,10 @@ HTML_TEMPLATE = """
             font-size: 11px; color: var(--secondary-text-color); font-family: 'Courier New', monospace;
         }
         .device-rows {
-            display: flex; flex: 1; gap: 0;
+            display: contents;
         }
         .device-rows > div {
-            flex: 1; padding: 0 16px; border-right: 1px solid var(--divider-color);
+            grid-row: 1; padding: 0 16px; border-right: 1px solid var(--divider-color);
         }
         .device-rows > div:last-child { border-right: none; }
         .device-rows .status-label { font-size: 11px; color: var(--secondary-text-color); margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.04em; }
@@ -772,9 +787,7 @@ function buildDeviceCard(i) {
             '<div class="device-card-title" id="dname-' + i + '">Device ' + (i+1) + '</div>' +
           '</div>' +
           '<div class="device-mac" id="dmac-' + i + '"></div>' +
-          '<div id="dadapter-' + i + '" style="font-size:10px;color:#94a3b8;margin-top:1px;"></div>' +
           '<div id="durl-' + i + '" style="font-size:10px;color:#c4b5fd;margin-top:2px;word-break:break-all;"></div>' +
-          '<div id="ddelay-' + i + '" style="display:none;font-size:10px;color:#f59e0b;margin-top:2px;"></div>' +
         '</div>' +
         '<div class="device-rows">' +
           '<div>' +
@@ -784,6 +797,7 @@ function buildDeviceCard(i) {
               '<span id="dbt-txt-' + i + '">-</span>' +
             '</div>' +
             '<div class="ts" id="dbt-since-' + i + '"></div>' +
+            '<div class="ts" id="dbt-adapter-' + i + '" style="color:#94a3b8;font-family:monospace;font-size:10px;margin-top:2px;"></div>' +
           '</div>' +
           '<div>' +
             '<div class="status-label">Server</div>' +
@@ -792,11 +806,11 @@ function buildDeviceCard(i) {
               '<span id="dsrv-txt-' + i + '">-</span>' +
             '</div>' +
             '<div class="ts" id="dsrv-since-' + i + '"></div>' +
+            '<div class="ts" id="dsrv-uri-' + i + '" style="color:#c4b5fd;font-size:10px;word-break:break-all;"></div>' +
           '</div>' +
           '<div>' +
             '<div class="status-label">Playback</div>' +
             '<div class="status-value" id="dplay-' + i + '">-</div>' +
-            '<div class="ts" id="dtrack-' + i + '" style="color:#94a3b8;font-style:italic;"></div>' +
             '<div class="ts" id="daudiofmt-' + i + '" style="color:#8b5cf6;"></div>' +
           '</div>' +
           '<div>' +
@@ -816,16 +830,20 @@ function buildDeviceCard(i) {
             '<div class="status-label">Sync</div>' +
             '<div class="status-value" id="dsync-' + i + '">&#8212;</div>' +
             '<div class="ts" id="dsync-detail-' + i + '"></div>' +
+            '<div class="ts" id="ddelay-' + i + '" style="display:none;color:#f59e0b;"></div>' +
           '</div>' +
         '</div>' +
         '<div class="device-card-actions">' +
-          '<button type="button" class="btn-bt-action btn-bt-reconnect" id="dbtn-reconnect-' + i + '"' +
-            ' onclick="btReconnect(' + i + ')">&#128260; Reconnect</button>' +
-          '<button type="button" class="btn-bt-action btn-bt-pair" id="dbtn-pair-' + i + '"' +
-            ' onclick="btPair(' + i + ')" title="Put the device into pairing mode first">&#128279; Re-pair</button>' +
-          '<button type="button" class="btn-bt-action btn-bt-release" id="dbtn-release-' + i + '"' +
-            ' onclick="btToggleManagement(' + i + ')">\U0001F513 Release</button>' +
-          '<span class="bt-action-status" id="dbt-action-status-' + i + '"></span>' +
+          '<div style="grid-column:1/4;display:flex;gap:6px;align-items:center;">' +
+            '<button type="button" class="btn-bt-action btn-bt-reconnect" id="dbtn-reconnect-' + i + '"' +
+              ' onclick="btReconnect(' + i + ')">&#128260; Reconnect</button>' +
+            '<button type="button" class="btn-bt-action btn-bt-pair" id="dbtn-pair-' + i + '"' +
+              ' onclick="btPair(' + i + ')" title="Put the device into pairing mode first">&#128279; Re-pair</button>' +
+            '<button type="button" class="btn-bt-action btn-bt-release" id="dbtn-release-' + i + '"' +
+              ' onclick="btToggleManagement(' + i + ')">\U0001F513 Release</button>' +
+            '<span class="bt-action-status" id="dbt-action-status-' + i + '"></span>' +
+          '</div>' +
+          '<div id="dtrack-' + i + '" style="grid-column:4/-1;padding:0 16px;color:#94a3b8;font-style:italic;font-size:13px;white-space:nowrap;"></div>' +
         '</div>';
     return card;
 }
@@ -837,8 +855,13 @@ function populateDeviceCard(i, dev) {
     var mac = dev.bluetooth_mac || '';
     document.getElementById('dmac-' + i).textContent = mac ? 'MAC: ' + mac : '';
 
-    var adapterEl = document.getElementById('dadapter-' + i);
-    if (adapterEl) adapterEl.textContent = dev.bluetooth_adapter ? dev.bluetooth_adapter : '';
+    var btAdapterEl = document.getElementById('dbt-adapter-' + i);
+    if (btAdapterEl) {
+        var adParts = [];
+        if (dev.bluetooth_adapter_name) adParts.push(dev.bluetooth_adapter_name);
+        if (dev.bluetooth_adapter) adParts.push(dev.bluetooth_adapter);
+        btAdapterEl.textContent = adParts.join(' / ');
+    }
 
     var urlEl = document.getElementById('durl-' + i);
     if (urlEl) {
@@ -876,15 +899,19 @@ function populateDeviceCard(i, dev) {
     var srvSince = document.getElementById('dsrv-since-' + i);
     if (dev.server_connected) {
         srvInd.className = 'status-indicator active';
-        srvTxt.textContent = (dev.server_host && dev.server_port)
-            ? 'Connected \u2014 ' + dev.server_host + ':' + dev.server_port
-            : 'Connected';
+        srvTxt.textContent = 'Connected';
     } else {
         srvInd.className = 'status-indicator inactive';
         srvTxt.textContent = dev.error || 'Disconnected';
     }
     if (srvSince) srvSince.textContent = dev.server_connected_at
         ? 'Since: ' + new Date(dev.server_connected_at).toLocaleString() : '';
+    var srvUri = document.getElementById('dsrv-uri-' + i);
+    if (srvUri) {
+        srvUri.textContent = (dev.server_connected && dev.server_host && dev.server_port)
+            ? 'ws://' + dev.server_host + ':' + dev.server_port + '/sendspin'
+            : '';
+    }
 
     // Playback
     document.getElementById('dplay-' + i).textContent =
@@ -899,7 +926,6 @@ function populateDeviceCard(i, dev) {
             trackEl.textContent = '';
         }
     }
-
     // Delay badge
     var delayEl = document.getElementById('ddelay-' + i);
     if (delayEl) {
