@@ -536,7 +536,8 @@ HTML_TEMPLATE = """
         }
         .filter-btn:hover { color: var(--primary-text-color); }
         .filter-btn.active { background: var(--primary-color); color: white; }
-        .ts { font-size: 11px; color: var(--secondary-text-color); margin-top: 3px; }
+        .ts     { font-size: 11px; color: var(--secondary-text-color); margin-top: 3px; }
+        .ts-sub { font-size: 11px; color: var(--secondary-text-color); margin-top: 3px; font-family: 'Courier New', monospace; word-break: break-all; }
 
         /* Diagnostics section */
         .diag-section {
@@ -814,7 +815,7 @@ function buildDeviceCard(i) {
             '<div class="device-card-title" id="dname-' + i + '">Device ' + (i+1) + '</div>' +
           '</div>' +
           '<div class="device-mac" id="dmac-' + i + '"></div>' +
-          '<div id="durl-' + i + '" style="font-size:10px;color:#c4b5fd;margin-top:2px;word-break:break-all;"></div>' +
+          '<div class="ts-sub" id="durl-' + i + '"></div>' +
         '</div>' +
         '<div class="device-rows">' +
           '<div>' +
@@ -824,7 +825,7 @@ function buildDeviceCard(i) {
               '<span id="dbt-txt-' + i + '">-</span>' +
             '</div>' +
             '<div class="ts" id="dbt-since-' + i + '"></div>' +
-            '<div class="ts" id="dbt-adapter-' + i + '" style="color:#94a3b8;font-family:monospace;font-size:10px;margin-top:2px;"></div>' +
+            '<div class="ts-sub" id="dbt-adapter-' + i + '"></div>' +
           '</div>' +
           '<div>' +
             '<div class="status-label">Server</div>' +
@@ -833,7 +834,7 @@ function buildDeviceCard(i) {
               '<span id="dsrv-txt-' + i + '">-</span>' +
             '</div>' +
             '<div class="ts" id="dsrv-since-' + i + '"></div>' +
-            '<div class="ts" id="dsrv-uri-' + i + '" style="color:#c4b5fd;font-size:10px;word-break:break-all;"></div>' +
+            '<div class="ts-sub" id="dsrv-uri-' + i + '"></div>' +
           '</div>' +
           '<div>' +
             '<div class="status-label">Playback</div>' +
@@ -845,8 +846,8 @@ function buildDeviceCard(i) {
                 'background:white;cursor:pointer;font-size:12px;" ' +
                 'onclick="onDevicePause(' + i + ')" title="Pause/Unpause">&#9646;&#9646;</button>' +
             '</div>' +
-            '<div class="ts" id="dplay-since-' + i + '" style="color:#94a3b8;"></div>' +
-            '<div class="ts" id="daudiofmt-' + i + '" style="color:#8b5cf6;"></div>' +
+            '<div class="ts" id="dplay-since-' + i + '"></div>' +
+            '<div class="ts-sub" id="daudiofmt-' + i + '"></div>' +
           '</div>' +
           '<div>' +
             '<div class="status-label">Volume</div>' +
