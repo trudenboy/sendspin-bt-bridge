@@ -27,7 +27,7 @@ app = Flask(__name__)
 CORS(app)
 
 # Version information
-VERSION = "1.3.22"
+VERSION = "1.3.23"
 BUILD_DATE = "2026-03-01"
 
 # Configuration file path
@@ -164,6 +164,7 @@ def get_client_status_for(client):
                 except Exception:
                     pass
         status['bluetooth_adapter_name'] = adapter_name
+        status['bluetooth_adapter_hci'] = getattr(bt_mgr, 'adapter_hci_name', '') if bt_mgr else ''
         status['has_sink'] = bool(getattr(client, 'bluetooth_sink_name', None))
         status['bt_management_enabled'] = getattr(client, 'bt_management_enabled', True)
 
@@ -339,7 +340,8 @@ HTML_TEMPLATE = """
             border-radius: 5px; background: var(--card-background-color);
             color: var(--primary-text-color); cursor: pointer;
         }
-        .btn-group-mute.muted { background: rgba(219,68,55,.1); border-color: var(--error-color); color: var(--error-color); }
+        .btn-group-mute.muted  { background: rgba(219,68,55,.1); border-color: var(--error-color); color: var(--error-color); }
+        .btn-group-mute.paused { background: rgba(3,169,244,.1); border-color: var(--primary-color); color: var(--primary-color); }
         .device-select-cb { width: 15px; height: 15px; accent-color: var(--primary-color); cursor: pointer; }
         .device-card-identity {
             grid-column: 1; grid-row: 1;
@@ -368,6 +370,7 @@ HTML_TEMPLATE = """
         }
         .status-indicator.active   { background: var(--success-color); box-shadow: 0 0 8px var(--success-color); }
         .status-indicator.inactive { background: var(--error-color); }
+        .status-indicator.warning  { background: #f59e0b; }
 
         /* Volume slider */
         .volume-row { display: flex; align-items: center; gap: 6px; }
@@ -834,9 +837,16 @@ function buildDeviceCard(i) {
           '</div>' +
           '<div>' +
             '<div class="status-label">Playback</div>' +
-            '<div class="status-value" id="dplay-' + i + '">-</div>' +
-            '<div class="ts" id="daudiofmt-' + i + '" style="color:#8b5cf6;"></div>' +
+            '<div class="status-value">' +
+              '<span class="status-indicator" id="dplay-ind-' + i + '"></span>' +
+              '<span id="dplay-' + i + '">-</span>' +
+              '<button type="button" id="dbtn-pause-' + i + '" ' +
+                'style="margin-left:6px;padding:2px 7px;border:1px solid #d1d5db;border-radius:4px;' +
+                'background:white;cursor:pointer;font-size:12px;" ' +
+                'onclick="onDevicePause(' + i + ')" title="Pause/Unpause">&#9646;&#9646;</button>' +
+            '</div>' +
             '<div class="ts" id="dplay-since-' + i + '" style="color:#94a3b8;"></div>' +
+            '<div class="ts" id="daudiofmt-' + i + '" style="color:#8b5cf6;"></div>' +
           '</div>' +
           '<div>' +
             '<div class="status-label">Volume</div>' +
@@ -882,10 +892,10 @@ function populateDeviceCard(i, dev) {
 
     var btAdapterEl = document.getElementById('dbt-adapter-' + i);
     if (btAdapterEl) {
-        var adParts = [];
-        if (dev.bluetooth_adapter_name) adParts.push(dev.bluetooth_adapter_name);
-        if (dev.bluetooth_adapter) adParts.push(dev.bluetooth_adapter);
-        btAdapterEl.textContent = adParts.join(' / ');
+        var parts = [];
+        if (dev.bluetooth_adapter_hci) parts.push(dev.bluetooth_adapter_hci);
+        if (dev.bluetooth_adapter) parts.push(dev.bluetooth_adapter);
+        btAdapterEl.textContent = parts.join(' ');
     }
 
     var urlEl = document.getElementById('durl-' + i);
@@ -937,8 +947,48 @@ function populateDeviceCard(i, dev) {
     }
 
     // Playback
-    document.getElementById('dplay-' + i).textContent =
-        dev.playing ? '\u25b6\ufe0f Playing' : '\u23f8\ufe0f Stopped';
+    var playInd   = document.getElementById('dplay-ind-' + i);
+    var playTxt   = document.getElementById('dplay-' + i);
+    var playSince = document.getElementById('dplay-since-' + i);
+    var fmtEl     = document.getElementById('daudiofmt-' + i);
+
+    // Color indicator: red=no sink (BT not ready), green=playing, yellow=stopped
+    if (!dev.has_sink && dev.bluetooth_mac) {
+        if (playInd) playInd.className = 'status-indicator inactive';
+        if (playTxt) playTxt.textContent = 'No Sink';
+    } else if (dev.playing) {
+        if (playInd) playInd.className = 'status-indicator active';
+        if (playTxt) playTxt.textContent = '\u25b6 Playing';
+    } else {
+        if (playInd) playInd.className = 'status-indicator warning';
+        if (playTxt) playTxt.textContent = '\u23f8 Stopped';
+    }
+
+    // Since: above audioformat
+    if (playSince) playSince.textContent = dev.state_changed_at
+        ? 'Since: ' + new Date(dev.state_changed_at).toLocaleString() : '';
+
+    // Audio format (strip codec prefix)
+    if (fmtEl) {
+        var fmt = dev.audio_format || '';
+        if (fmt) { var sp = fmt.indexOf(' '); fmt = sp !== -1 ? fmt.slice(sp + 1) : ''; }
+        fmtEl.textContent = fmt;
+    }
+
+    // Sync pause button state from poll (don't override if user just clicked)
+    var pauseBtn = document.getElementById('dbtn-pause-' + i);
+    if (pauseBtn && !pauseBtn.classList.contains('pending')) {
+        if (dev.playing) {
+            pauseBtn.innerHTML = '&#9646;&#9646;';
+            pauseBtn.classList.remove('paused');
+            pauseBtn.title = 'Pause';
+        } else {
+            pauseBtn.innerHTML = '&#9654;';
+            pauseBtn.classList.add('paused');
+            pauseBtn.title = 'Unpause';
+        }
+    }
+
     var trackEl = document.getElementById('dtrack-' + i);
     if (trackEl) {
         if (dev.playing && (dev.current_artist || dev.current_track)) {
@@ -959,25 +1009,6 @@ function populateDeviceCard(i, dev) {
         } else {
             delayEl.style.display = 'none';
         }
-    }
-
-    // Audio format — strip codec name prefix (e.g. "flac 48000Hz/24-bit/2ch" → "48000Hz/24-bit/2ch")
-    var fmtEl = document.getElementById('daudiofmt-' + i);
-    if (fmtEl) {
-        var fmt = dev.audio_format || '';
-        if (fmt) {
-            var sp = fmt.indexOf(' ');
-            fmt = sp !== -1 ? fmt.slice(sp + 1) : '';
-        }
-        fmtEl.textContent = fmt;
-    }
-
-    // Since: timestamp for current playback state
-    var playSince = document.getElementById('dplay-since-' + i);
-    if (playSince) {
-        playSince.textContent = dev.state_changed_at
-            ? 'Since: ' + new Date(dev.state_changed_at).toLocaleString()
-            : '';
     }
 
     // Sync
@@ -1216,29 +1247,63 @@ function onGroupMute() {
     var names = _getSelectedNames();
     if (!names.length) return;
     var btn = document.getElementById('group-mute-btn');
-    // Determine: if any selected player is unmuted → mute all; else unmute all
-    var anyUnmuted = false;
-    if (lastDevices) {
-        lastDevices.forEach(function(dev, i) {
-            if (_groupSelected[i] !== false && !dev.muted) anyUnmuted = true;
-        });
-    }
-    var muteVal = anyUnmuted;
+    var currentlyMuted = btn && btn.classList.contains('muted');
+    var muteVal = !currentlyMuted;   // Toggle: muted→unmute, not muted→mute
     fetch(API_BASE + '/api/mute', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({mute: muteVal, player_names: names})
-    }).then(function(r) { return r.json(); }).then(function(d) {
+    }).then(function(r) { return r.json(); }).then(function() {
         if (btn) {
-            btn.textContent = muteVal ? '🔇 Unmute All' : '🔈 Mute All';
+            btn.textContent = muteVal ? '\uD83D\uDD07 Unmute All' : '\uD83D\uDD08 Mute All';
             btn.className = 'btn-group-mute' + (muteVal ? ' muted' : '');
         }
     });
 }
 
 function onPauseAll() {
-    fetch(API_BASE + '/api/pause_all', { method: 'POST' })
-        .then(function(r) { return r.json(); });
+    var btn = document.getElementById('group-pause-btn');
+    var isPaused = btn && btn.classList.contains('paused');
+    var action = isPaused ? 'play' : 'pause';
+    fetch(API_BASE + '/api/pause_all', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({action: action})
+    }).then(function(r) { return r.json(); }).then(function() {
+        if (btn) {
+            if (action === 'pause') {
+                btn.textContent = '\u25b6 Unpause All';
+                btn.classList.add('paused');
+            } else {
+                btn.textContent = '\u23f8\u23f8 Pause All';
+                btn.classList.remove('paused');
+            }
+        }
+    });
+}
+
+function onDevicePause(i) {
+    var dev = lastDevices && lastDevices[i];
+    var btn = document.getElementById('dbtn-pause-' + i);
+    var isPaused = btn && btn.classList.contains('paused');
+    var action = isPaused ? 'play' : 'pause';
+    fetch(API_BASE + '/api/pause', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({action: action, player_name: dev ? dev.player_name : null})
+    }).then(function(r) { return r.json(); }).then(function() {
+        if (btn) {
+            if (action === 'pause') {
+                btn.innerHTML = '&#9654;';
+                btn.classList.add('paused');
+                btn.title = 'Unpause';
+            } else {
+                btn.innerHTML = '&#9646;&#9646;';
+                btn.classList.remove('paused');
+                btn.title = 'Pause';
+            }
+        }
+    });
 }
 
 // ---- BT Actions (reconnect / pair) ----
@@ -2044,8 +2109,10 @@ def set_mute():
 
 @app.route('/api/pause_all', methods=['POST'])
 def pause_all():
-    """Pause all playing Sendspin MPRIS instances via D-Bus."""
-    paused = 0
+    """Pause or play all Sendspin MPRIS instances via D-Bus."""
+    data = request.get_json() or {}
+    action = data.get('action', 'pause')   # 'pause' or 'play'
+    count = 0
     try:
         import dbus
         bus = dbus.SessionBus()
@@ -2059,14 +2126,62 @@ def pause_all():
                 obj = bus.get_object(sname, '/org/mpris/MediaPlayer2')
                 props = dbus.Interface(obj, 'org.freedesktop.DBus.Properties')
                 pb = str(props.Get('org.mpris.MediaPlayer2.Player', 'PlaybackStatus'))
-                if pb == 'Playing':
-                    dbus.Interface(obj, 'org.mpris.MediaPlayer2.Player').Pause()
-                    paused += 1
+                player = dbus.Interface(obj, 'org.mpris.MediaPlayer2.Player')
+                if action == 'play' and pb in ('Paused', 'Stopped'):
+                    player.Play()
+                    count += 1
+                elif action == 'pause' and pb == 'Playing':
+                    player.Pause()
+                    count += 1
             except Exception:
                 pass
     except Exception:
         pass
-    return jsonify({'success': True, 'paused': paused})
+    return jsonify({'success': True, 'action': action, 'count': count})
+
+
+@app.route('/api/pause', methods=['POST'])
+def pause_player():
+    """Pause or play a single Sendspin player via D-Bus (matched by process PID)."""
+    data = request.get_json() or {}
+    player_name = data.get('player_name', '')
+    action = data.get('action', 'pause')  # 'pause' or 'play'
+    target = next((c for c in _clients if getattr(c, 'player_name', None) == player_name), None)
+    if not target or not target.process:
+        return jsonify({'success': False, 'error': 'Player not found or not running'}), 404
+    target_pid = target.process.pid
+    count = 0
+    try:
+        import dbus
+        bus = dbus.SessionBus()
+        dbus_iface = dbus.Interface(
+            bus.get_object('org.freedesktop.DBus', '/org/freedesktop/DBus'),
+            'org.freedesktop.DBus'
+        )
+        for name in bus.list_names():
+            sname = str(name)
+            if not sname.startswith('org.mpris.MediaPlayer2.Sendspin'):
+                continue
+            if 'SendspinBridge' in sname:
+                continue
+            try:
+                if int(dbus_iface.GetConnectionUnixProcessID(name)) != target_pid:
+                    continue
+                obj = bus.get_object(sname, '/org/mpris/MediaPlayer2')
+                props = dbus.Interface(obj, 'org.freedesktop.DBus.Properties')
+                pb = str(props.Get('org.mpris.MediaPlayer2.Player', 'PlaybackStatus'))
+                player_iface = dbus.Interface(obj, 'org.mpris.MediaPlayer2.Player')
+                if action == 'play' and pb in ('Paused', 'Stopped'):
+                    player_iface.Play()
+                    count += 1
+                elif action == 'pause' and pb == 'Playing':
+                    player_iface.Pause()
+                    count += 1
+            except Exception:
+                pass
+    except Exception:
+        pass
+    return jsonify({'success': True, 'action': action, 'count': count})
 
 
 @app.route('/api/bt/reconnect', methods=['POST'])

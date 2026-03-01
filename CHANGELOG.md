@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.23] - 2026-03-01
+
+### Added
+- **BT adapter shown as hciN MAC** — adapter column now displays `hci0 C0:FB:F9:62:D6:9D` format
+  instead of user-defined name; hci index resolved by matching effective adapter MAC against
+  `bluetoothctl list` output
+- **Playback color indicator** — green dot (Playing), yellow dot (Stopped), red dot (No Sink);
+  mirrors the BT/Server indicator pattern
+- **Playback "Since:" moved above audio format** — more logical reading order
+- **Per-device Pause/Unpause button** — ⏸⏸ button in each device's Playback row toggles
+  pause/play for that specific player via MPRIS D-Bus; synced with status poll every 2 seconds
+- **Pause All ↔ Unpause All toggle** — Pause All button is now stateful; turns blue and shows
+  "▶ Unpause All" after pausing; click again to resume all players
+
+### Fixed
+- **Unmute All reliability** — `onGroupMute()` now uses the button's own `.muted` class to
+  determine current state instead of potentially stale `lastDevices` data, eliminating the race
+  condition where clicking quickly would mute again instead of unmuting
+
 ## [1.3.22] - 2026-03-01
 
 ### Added

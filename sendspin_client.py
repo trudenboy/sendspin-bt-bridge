@@ -26,7 +26,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-CLIENT_VERSION = "1.3.22"
+CLIENT_VERSION = "1.3.23"
 
 
 async def _pause_all_via_mpris() -> int:
@@ -185,6 +185,8 @@ class BluetoothManager:
         else:
             self.effective_adapter_mac = self._detect_default_adapter_mac()
 
+        self.adapter_hci_name = self._resolve_adapter_hci_name()
+
     def _detect_default_adapter_mac(self) -> str:
         """Return the MAC of the default Bluetooth controller, or empty string."""
         try:
@@ -195,6 +197,31 @@ class BluetoothManager:
             return m.group(1) if m else ''
         except Exception:
             return ''
+
+    def _resolve_adapter_hci_name(self) -> str:
+        """Return hciN name for the effective adapter MAC (e.g. 'hci0'), or empty string."""
+        if self.adapter.startswith('hci'):
+            return self.adapter  # Already have it from config
+        effective = (self.effective_adapter_mac or '').upper()
+        if not effective:
+            return ''
+        try:
+            result = subprocess.run(
+                ['bluetoothctl', 'list'], capture_output=True, text=True, timeout=5
+            )
+            idx = 0
+            for line in result.stdout.splitlines():
+                if 'Controller' not in line:
+                    continue
+                for part in line.split():
+                    if len(part) == 17 and part.count(':') == 5:
+                        if part.upper() == effective:
+                            return f'hci{idx}'
+                        idx += 1
+                        break
+        except Exception:
+            pass
+        return ''
 
     def _resolve_adapter_select(self, adapter: str) -> str:
         """Resolve hciN to adapter MAC address for bluetoothctl 'select'.

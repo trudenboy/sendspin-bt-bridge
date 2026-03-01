@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.23] - 2026-03-01
+
+### Added
+- **BT adapter shown as hciN MAC** — adapter column now displays `hci0 C0:FB:F9:62:D6:9D` format
+- **Playback color indicator** — green/yellow/red dot in Playback column
+- **Per-device Pause/Unpause button** — ⏸⏸ button in each device's Playback row
+- **Pause All ↔ Unpause All toggle** — Pause All button is now stateful
+
+### Fixed
+- **Unmute All reliability** — fixed race condition where clicking quickly would mute again
+
 ## [1.3.22] - 2026-03-01
 
 ### Added
