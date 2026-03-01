@@ -629,8 +629,8 @@ HTML_TEMPLATE = """
             </div>
 
             <div class="form-group">
-                <label>Bridge name — appended to every player name in MA as <em>Player @ Name</em> (<code>auto</code> = hostname, empty = off)</label>
-                <input type="text" name="BRIDGE_NAME" placeholder="e.g. Living Room or auto">
+                <label>Bridge name — appended to every player name in MA as <em>Player @ Name</em> (empty = off)</label>
+                <input type="text" name="BRIDGE_NAME" placeholder="e.g. Living Room">
             </div>
 
             <div class="form-group">
