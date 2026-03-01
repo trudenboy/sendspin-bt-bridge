@@ -1098,8 +1098,6 @@ async def main():
         effective_bridge = socket.gethostname()
     else:
         effective_bridge = raw_bridge  # '' = disabled
-    bridge_suffix = bool(config.get('BRIDGE_NAME_SUFFIX', False))
-
     # Set timezone
     tz = os.getenv('TZ', config.get('TZ', 'UTC'))
     os.environ['TZ'] = tz
@@ -1245,13 +1243,12 @@ def load_config():
         'SENDSPIN_SERVER': 'auto',
         'SENDSPIN_PORT': 9000,
         'BRIDGE_NAME': '',
-        'BRIDGE_NAME_SUFFIX': False,
         'BLUETOOTH_MAC': '',
         'BLUETOOTH_DEVICES': [],
         'TZ': 'Australia/Melbourne',
     }
 
-    allowed_keys = {'SENDSPIN_SERVER', 'SENDSPIN_PORT', 'BRIDGE_NAME', 'BRIDGE_NAME_SUFFIX',
+    allowed_keys = {'SENDSPIN_SERVER', 'SENDSPIN_PORT', 'BRIDGE_NAME',
                     'BLUETOOTH_MAC', 'BLUETOOTH_DEVICES', 'TZ', 'LAST_VOLUME'}
 
     if config_file.exists():
