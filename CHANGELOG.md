@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.18] - 2026-03-01
+
+### Changed
+- **Device card converted to CSS Grid** — identity + 5 status columns share a single grid, so the action row (buttons + track) uses subgrid for pixel-perfect column alignment
+- **Delay badge moved to Sync column** — shown in amber below sync detail instead of in the identity section
+- **Bluetooth column shows adapter name/MAC** — reads adapter `name` from config and displays `name / MAC` below the "Since:" timestamp
+- **Server column shows WebSocket URI** — `ws://host:port/sendspin` in purple below "Since:" timestamp; status text simplified to "Connected"
+- **Track/artist moved to action row** — same line as Reconnect/Re-pair/Release buttons, aligned under Playback column via CSS subgrid; single line, full text, 13 px italic
+
+## [1.3.17] - 2026-03-01
+
+### Fixed
+- **MPRIS service identity** — D-Bus service name is now always `'Sendspin'` (not the dynamic player name) so MPRIS clients find the correct interface after player restarts
+
+## [1.3.16] - 2026-03-01
+
+### Added
+- **MPRIS track/artist metadata via D-Bus** — `sendspin_client.py` exposes `org.mpris.MediaPlayer2.Player` on the session bus; current track title and artist are reflected in MPRIS `Metadata` so media-key applets and home automation can read them
+
+## [1.3.15] - 2026-03-01
+
+### Added
+- **Full bidirectional sync** — `listen_host`, `listen_port`, `enabled` fields added to `bluetooth_devices` schema and preserved across Supervisor options sync; adapter `name` preserved similarly
+- **Ingress form shows SENDSPIN_PORT** — port input added to the config form and populated from saved config
+- **Device card shows artist — track during playback** — `dtrack` element now rendered; delay badge shows when `static_delay_ms ≠ 0`; server status includes connected host:port
+
 ## [1.3.14] - 2026-03-01
 
 ### Fixed

@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.18] - 2026-03-01
+
+### Changed
+- **Device card uses CSS Grid** — action row with buttons and track info is pixel-aligned to the status columns via subgrid
+- **Delay badge in Sync column** — delay shown in amber next to sync status instead of in the device name area
+- **Bluetooth column shows adapter name/MAC** — adapter identity visible at a glance below the connection timestamp
+- **Server column shows WebSocket URI** — full `ws://host:port/sendspin` address displayed in purple
+- **Now-playing in action row** — track and artist shown on the same line as buttons, aligned under Playback column; single line, full text
+
+## [1.3.17] - 2026-03-01
+
+### Fixed
+- **MPRIS service name** — fixed D-Bus service identity so media-key clients reliably find the player interface
+
+## [1.3.16] - 2026-03-01
+
+### Added
+- **MPRIS metadata support** — track title and artist exposed via D-Bus `org.mpris.MediaPlayer2.Player` for integration with media-key applets and home automation
+
+## [1.3.15] - 2026-03-01
+
+### Added
+- **Bidirectional config sync** — `listen_host`, `listen_port`, `enabled`, and adapter `name` fields now survive container restarts via Supervisor options round-trip
+- **SENDSPIN_PORT in Ingress config form** — port field added and pre-populated from saved config
+
 ## [1.3.14] - 2026-03-01
 
 ### Fixed
