@@ -27,7 +27,7 @@ app = Flask(__name__)
 CORS(app)
 
 # Version information
-VERSION = "1.3.20"
+VERSION = "1.3.21"
 BUILD_DATE = "2026-03-01"
 
 # Configuration file path
@@ -615,7 +615,7 @@ HTML_TEMPLATE = """
             </div>
 
             <div class="form-group">
-                <label>Bridge name — shown in MA device info (<code>auto</code> = hostname, empty = off)</label>
+                <label>Bridge name — appended to every player name in MA (<code>auto</code> = hostname, empty = off)</label>
                 <input type="text" name="BRIDGE_NAME" placeholder="e.g. Living Room or auto">
             </div>
             <div class="form-group">

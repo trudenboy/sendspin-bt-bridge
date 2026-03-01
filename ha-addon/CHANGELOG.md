@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.21] - 2026-03-01
+
+### Fixed
+- **Bridge name now works** — setting `bridge_name` appends `@ {name}` to every player name
+  visible in MA without needing `bridge_name_suffix`; removed non-functional
+  `SENDSPIN_BRIDGE_*` env vars that the sendspin binary silently ignored
+- **Volume persists across addon updates** — config now stored in `/data` (HA Supervisor
+  persistent volume) instead of ephemeral container filesystem; `LAST_VOLUMES` and device
+  `enabled` flags survive container image recreations (addon updates)
+
 ## [1.3.20] - 2026-03-01
 
 ### Added

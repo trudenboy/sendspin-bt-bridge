@@ -26,7 +26,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-CLIENT_VERSION = "1.3.20"
+CLIENT_VERSION = "1.3.21"
 
 
 async def _pause_all_via_mpris() -> int:
@@ -139,7 +139,7 @@ except Exception:
 # "Stream started with codec X" was received.
 _last_full_audio_format: dict = {}  # player_name → format string
 
-_CONFIG_PATH = '/config/config.json'
+_CONFIG_PATH = os.path.join(os.getenv('CONFIG_DIR', '/config'), 'config.json')
 
 
 def _player_id_from_mac(mac: str) -> str:
@@ -395,7 +395,7 @@ class BluetoothManager:
                     # Restore last volume for this device (keyed by MAC)
                     restored = False
                     try:
-                        config_path = '/config/config.json'
+                        config_path = _CONFIG_PATH
                         if os.path.exists(config_path):
                             with open(config_path, 'r') as f:
                                 cfg = json.load(f)
@@ -716,14 +716,6 @@ class SendspinClient:
                 env['PULSE_SINK'] = pulse_sink
                 logger.info(f"Routing audio to sink: {pulse_sink}")
 
-            # Override device info reported to Music Assistant
-            env['SENDSPIN_BRIDGE_MANUFACTURER'] = 'Sendspin'
-            env['SENDSPIN_BRIDGE_PRODUCT_NAME'] = (
-                f'BT Bridge @ {self._effective_bridge}'
-                if self._effective_bridge else 'Bluetooth Bridge'
-            )
-            env['SENDSPIN_BRIDGE_VERSION'] = CLIENT_VERSION
-
             # Start the sendspin process
             self.process = subprocess.Popen(
                 cmd,
@@ -1007,7 +999,7 @@ async def main():
         mac = device.get('mac', '')
         adapter = device.get('adapter', '')
         player_name = device.get('player_name') or _default_player_name
-        if effective_bridge and bridge_suffix:
+        if effective_bridge:
             player_name = f"{player_name} @ {effective_bridge}"
         # 'listen_port' is the preferred key; 'port' kept for backward compat
         listen_port = int(device.get('listen_port') or device.get('port') or base_listen_port + i)

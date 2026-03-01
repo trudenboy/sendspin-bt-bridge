@@ -70,7 +70,7 @@ config = {
 
 # Preserve runtime state (volumes, release/reclaim flags) from previous config
 try:
-    with open('/config/config.json') as f:
+    with open('/data/config.json') as f:
         existing = json.load(f)
     if 'LAST_VOLUMES' in existing:
         config['LAST_VOLUMES'] = existing['LAST_VOLUMES']
@@ -85,10 +85,10 @@ try:
 except (FileNotFoundError, json.JSONDecodeError):
     pass
 
-with open('/config/config.json', 'w') as f:
+with open('/data/config.json', 'w') as f:
     json.dump(config, f, indent=2)
 
-print(f"Generated /config/config.json with {len(config['BLUETOOTH_DEVICES'])} device(s), TZ={config['TZ']}, {len(config['BLUETOOTH_ADAPTERS'])} adapter(s)")
+print(f"Generated /data/config.json with {len(config['BLUETOOTH_DEVICES'])} device(s), TZ={config['TZ']}, {len(config['BLUETOOTH_ADAPTERS'])} adapter(s)")
 PYEOF
 fi
 
@@ -163,6 +163,11 @@ if command -v dbus-daemon > /dev/null 2>&1; then
     else
         echo "WARNING: dbus-daemon failed to start session bus"
     fi
+fi
+
+# In HA addon mode, use /data (persistent volume) for runtime config
+if [ -f /data/options.json ]; then
+    export CONFIG_DIR=/data
 fi
 
 # Start the Sendspin client (includes web interface)
