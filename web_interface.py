@@ -537,7 +537,7 @@ HTML_TEMPLATE = """
         .filter-btn:hover { color: var(--primary-text-color); }
         .filter-btn.active { background: var(--primary-color); color: white; }
         .ts     { font-size: 11px; color: var(--secondary-text-color); margin-top: 3px; }
-        .ts-sub { font-size: 11px; color: var(--secondary-text-color); margin-top: 3px; font-family: 'Courier New', monospace; word-break: break-all; }
+        .ts-sub { font-size: 11px; color: var(--primary-color); margin-top: 3px; word-break: break-all; }
 
         /* Diagnostics section */
         .diag-section {
