@@ -26,7 +26,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-CLIENT_VERSION = "1.3.23"
+CLIENT_VERSION = "1.3.24"
 
 
 async def _pause_all_via_mpris() -> int:
