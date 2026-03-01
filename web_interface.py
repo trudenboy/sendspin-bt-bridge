@@ -2056,7 +2056,7 @@ def api_logs():
             if token:
                 req = _ur.Request(
                     'http://supervisor/addons/self/logs',
-                    headers={'Authorization': f'Bearer {token}'}
+                    headers={'Authorization': f'Bearer {token}', 'Accept': 'text/plain'}
                 )
                 with _ur.urlopen(req, timeout=10) as resp:
                     text = resp.read().decode('utf-8', errors='replace')
