@@ -688,22 +688,10 @@ class SendspinClient:
                         self.status['server_connected'] = True
                         self.status['connected'] = True
 
-                        # Fallback: detect actual server IP via ss if not yet captured from output
+                        # Fallback: detect actual server IP via /proc/{pid}/fd + /proc/net/tcp[6]
                         if self.status['server_connected'] and not self.connected_server_url and self.process:
                             try:
-                                r = subprocess.run(
-                                    ['ss', '-tnp'],
-                                    capture_output=True, text=True, timeout=2
-                                )
-                                pid_tag = f'pid={self.process.pid},'
-                                for _line in r.stdout.splitlines():
-                                    if pid_tag in _line and self.server_port and str(self.server_port) in _line:
-                                        _parts = _line.split()
-                                        for _p in _parts:
-                                            _m = re.match(r'(\d+\.\d+\.\d+\.\d+):(\d+)', _p)
-                                            if _m and _m.group(2) == str(self.server_port):
-                                                self.connected_server_url = f'ws://{_m.group(1)}:{self.server_port}/sendspin'
-                                                break
+                                self.connected_server_url = self._detect_server_url_from_proc()
                             except Exception:
                                 pass
 
@@ -723,6 +711,75 @@ class SendspinClient:
                 logger.error(f"Error updating status: {e}")
                 await asyncio.sleep(10)
     
+    def _detect_server_url_from_proc(self) -> str:
+        """Detect server URL from /proc/net/tcp by finding the inbound connection from MA.
+
+        MA connects TO sendspin's listen_port; the remote IP on that connection is MA's host.
+        We combine it with the configured server_port to build the ws:// URL.
+        """
+        import os as _os
+        pid = self.process.pid
+        # Collect socket inodes owned by this process
+        socket_inodes: set = set()
+        try:
+            fd_dir = f'/proc/{pid}/fd'
+            for fd in _os.listdir(fd_dir):
+                try:
+                    target = _os.readlink(f'{fd_dir}/{fd}')
+                    if target.startswith('socket:['):
+                        socket_inodes.add(target[8:-1])
+                except OSError:
+                    pass
+        except OSError:
+            return ''
+        if not socket_inodes:
+            return ''
+
+        listen_port_hex = format(self.listen_port, '04X') if self.listen_port else None
+
+        def _decode_ipv4(ip_hex: str) -> str:
+            b = bytes.fromhex(ip_hex)
+            return f'{b[3]}.{b[2]}.{b[1]}.{b[0]}'
+
+        for fname in ('/proc/net/tcp6', '/proc/net/tcp'):
+            try:
+                with open(fname) as _f:
+                    lines = _f.readlines()[1:]
+            except OSError:
+                continue
+            for line in lines:
+                cols = line.split()
+                if len(cols) < 10 or cols[3] != '01':  # state 01 = ESTABLISHED
+                    continue
+                if cols[9] not in socket_inodes:
+                    continue
+                local_parts = cols[1].split(':')
+                remote_parts = cols[2].split(':')
+                if len(local_parts) < 2 or len(remote_parts) < 2:
+                    continue
+                local_port_hex = local_parts[-1]
+                # We want the inbound connection to our listen_port (MA → sendspin)
+                if listen_port_hex and local_port_hex.upper() != listen_port_hex:
+                    continue
+                # Decode the remote (MA) IP address
+                ip_hex = remote_parts[0]
+                try:
+                    if len(ip_hex) == 32:  # tcp6 — check for IPv4-mapped ::ffff:x.x.x.x
+                        words = [ip_hex[i:i+8] for i in range(0, 32, 8)]
+                        if words[0] == '00000000' and words[1] == '00000000' and words[2] == 'FFFF0000':
+                            ip = _decode_ipv4(words[3])
+                        else:
+                            continue  # pure IPv6 — skip
+                    elif len(ip_hex) == 8:  # tcp — little-endian IPv4
+                        ip = _decode_ipv4(ip_hex)
+                    else:
+                        continue
+                    server_port = self.server_port or 9000
+                    return f'ws://{ip}:{server_port}/sendspin'
+                except Exception:
+                    continue
+        return ''
+
     async def start_sendspin_process(self):
         """Start the sendspin CLI player"""
         try:
