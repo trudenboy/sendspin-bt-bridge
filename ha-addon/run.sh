@@ -74,6 +74,9 @@ with open('/config/config.json', 'w') as f:
 print(f"Generated /config/config.json with {len(config['BLUETOOTH_DEVICES'])} device(s), TZ={config['TZ']}, {len(config['BLUETOOTH_ADAPTERS'])} adapter(s)")
 EOF
 
+# Signal to entrypoint.sh that config is already generated (skip its duplicate block)
+export HA_ADDON_CONFIG_DONE=1
+
 # HA Supervisor audio bridge setup
 # Supervisor injects PULSE_SERVER when `audio: true` is set in config.yaml.
 # If it's already set, trust it. Otherwise fall back to known HA OS paths.

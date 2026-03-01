@@ -5,7 +5,7 @@ echo "=== Starting Sendspin Client Container ==="
 
 # HA Addon mode: /data/options.json is written by HA Supervisor before start.
 # Translate it to /config/config.json so the rest of the startup is uniform.
-if [ -f /data/options.json ]; then
+if [ -f /data/options.json ] && [ -z "${HA_ADDON_CONFIG_DONE:-}" ]; then
     echo "HA Addon mode detected — reading /data/options.json"
     mkdir -p /config
     python3 - <<'PYEOF'
