@@ -11,6 +11,11 @@ configuration:
       WebSocket port exposed by the Music Assistant Sendspin provider.
       The default (9000) matches the MA default; only change if you have
       multiple instances or a custom port.
+  tz:
+    name: "Timezone"
+    description: >-
+      IANA timezone name (e.g. "Europe/Moscow", "America/New_York").
+      Leave empty to automatically use the Home Assistant system timezone.
   bluetooth_devices:
     name: "Bluetooth devices"
     description: >-
@@ -37,3 +42,19 @@ configuration:
         description: >-
           Fixed latency offset in milliseconds. Use negative values to compensate
           for Bluetooth A2DP buffering (typical: -500). Leave 0 for no adjustment.
+  bluetooth_adapters:
+    name: "Bluetooth adapters"
+    description: >-
+      Optional list of Bluetooth adapters available on this system.
+      Each entry needs an adapter ID (hci0, hci1 …) and optionally a MAC address.
+      Leave empty for automatic detection.
+    fields:
+      id:
+        name: "Adapter ID"
+        description: >-
+          Bluetooth adapter identifier (e.g. hci0, hci1). Used in the
+          per-device "adapter" field and in the Ingress web UI dropdowns.
+      mac:
+        name: "Adapter MAC"
+        description: >-
+          MAC address of this Bluetooth adapter (optional, for display only).

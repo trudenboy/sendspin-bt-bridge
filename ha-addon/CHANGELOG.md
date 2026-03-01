@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.9] - 2026-03-01
+
+### Added
+- **Timezone in native Config tab** — new `tz` option; leave empty to auto-detect from Home Assistant system timezone via Supervisor `/host/info` API
+- **Bluetooth adapters in native Config tab** — new `bluetooth_adapters` option (`[{id, mac?}]`); populates adapter dropdowns in the Ingress web UI without opening it first
+- **Timezone auto-detection** — if `tz` is empty at startup, timezone is fetched from the Supervisor host info; falls back to `UTC`
+- **Config sync** — saving via Ingress UI now persists `tz` and `bluetooth_adapters` to Supervisor options
+
 ## [1.3.8] - 2026-03-01
 
 ### Fixed

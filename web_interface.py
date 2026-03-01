@@ -27,7 +27,7 @@ app = Flask(__name__)
 CORS(app)
 
 # Version information
-VERSION = "1.3.8"
+VERSION = "1.3.9"
 BUILD_DATE = "2026-03-01"
 
 # Configuration file path
@@ -2118,11 +2118,18 @@ def api_config():
                         if d.get('static_delay_ms'):
                             entry['static_delay_ms'] = int(d['static_delay_ms'])
                         sup_devices.append(entry)
+                    sup_adapters = [
+                        {'id': a['id'], 'mac': a.get('mac', '')}
+                        for a in config.get('BLUETOOTH_ADAPTERS', [])
+                        if a.get('id')
+                    ]
                     sup_opts = {
                         'options': {
-                            'sendspin_server': config.get('SENDSPIN_SERVER', 'auto'),
-                            'sendspin_port':   int(config.get('SENDSPIN_PORT', 9000)),
-                            'bluetooth_devices': sup_devices,
+                            'sendspin_server':    config.get('SENDSPIN_SERVER', 'auto'),
+                            'sendspin_port':      int(config.get('SENDSPIN_PORT', 9000)),
+                            'tz':                 config.get('TZ', ''),
+                            'bluetooth_devices':  sup_devices,
+                            'bluetooth_adapters': sup_adapters,
                         }
                     }
                     body = json.dumps(sup_opts).encode()

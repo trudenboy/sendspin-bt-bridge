@@ -21,16 +21,40 @@ mkdir -p /config
 
 # Translate /data/options.json → /config/config.json
 python3 - <<'EOF'
-import json, sys
+import json, sys, os
 
 with open('/data/options.json') as f:
     opts = json.load(f)
 
+# Timezone: use options value, or auto-detect from Supervisor
+tz = (opts.get('tz') or '').strip()
+if not tz:
+    try:
+        import urllib.request
+        token = os.environ.get('SUPERVISOR_TOKEN', '')
+        req = urllib.request.Request(
+            'http://supervisor/host/info',
+            headers={'Authorization': f'Bearer {token}'}
+        )
+        with urllib.request.urlopen(req, timeout=3) as r:
+            host_info = json.load(r)
+            tz = host_info.get('data', {}).get('timezone', '') or ''
+    except Exception:
+        pass
+if not tz:
+    tz = 'UTC'
+
+# bluetooth_adapters: convert [{id, mac?}] → [{id, mac, name}]
+raw_adapters = opts.get('bluetooth_adapters', []) or []
+adapters = [{'id': a['id'], 'mac': a.get('mac', ''), 'name': a['id']}
+            for a in raw_adapters if a.get('id')]
+
 config = {
-    'SENDSPIN_SERVER': opts.get('sendspin_server', 'auto'),
-    'SENDSPIN_PORT':   str(opts.get('sendspin_port', 9000)),
-    'BLUETOOTH_DEVICES': opts.get('bluetooth_devices', []),
-    'TZ': opts.get('tz', 'UTC'),
+    'SENDSPIN_SERVER':    opts.get('sendspin_server', 'auto'),
+    'SENDSPIN_PORT':      str(opts.get('sendspin_port', 9000)),
+    'BLUETOOTH_DEVICES':  opts.get('bluetooth_devices', []),
+    'BLUETOOTH_ADAPTERS': adapters,
+    'TZ':                 tz,
 }
 
 # Preserve LAST_VOLUME if already saved by the app
@@ -47,7 +71,7 @@ if 'LAST_VOLUME' in existing:
 with open('/config/config.json', 'w') as f:
     json.dump(config, f, indent=2)
 
-print(f"Generated /config/config.json with {len(config['BLUETOOTH_DEVICES'])} device(s)")
+print(f"Generated /config/config.json with {len(config['BLUETOOTH_DEVICES'])} device(s), TZ={config['TZ']}, {len(config['BLUETOOTH_ADAPTERS'])} adapter(s)")
 EOF
 
 # HA Supervisor audio bridge setup
