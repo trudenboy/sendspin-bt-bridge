@@ -1255,7 +1255,7 @@ function onGroupMute() {
         body: JSON.stringify({mute: muteVal, player_names: names})
     }).then(function(r) { return r.json(); }).then(function() {
         if (btn) {
-            btn.textContent = muteVal ? '\uD83D\uDD07 Unmute All' : '\uD83D\uDD08 Mute All';
+            btn.textContent = muteVal ? '🔇 Unmute All' : '🔈 Mute All';
             btn.className = 'btn-group-mute' + (muteVal ? ' muted' : '');
         }
     });
