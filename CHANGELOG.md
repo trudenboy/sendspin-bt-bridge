@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.22] - 2026-03-01
+
+### Added
+- **Pause All button** — new button in the control bar pauses all active Sendspin players via
+  MPRIS D-Bus (companion to "Mute All")
+- **Actual Bluetooth adapter shown** — device cards now display the real controller MAC even
+  when the device uses the default adapter (auto-detected via `bluetoothctl show`)
+- **Real server URL** — Server column shows the actual resolved `ws://ip:port/sendspin` instead
+  of blank when server is set to `auto`; captured from sendspin output or via `ss` socket lookup
+- **Playback "Since:" timestamp** — a "Since: date/time" line appears below Stopped/Playing
+  state showing when the current state began
+
+### Changed
+- **Audio format display** — removed "Transport: " label prefix; format shows stream details
+  only (e.g. `48000Hz/24-bit/2ch` instead of `Transport: flac 48000Hz/24-bit/2ch`)
+
 ## [1.3.21] - 2026-03-01
 
 ### Fixed

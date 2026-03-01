@@ -27,7 +27,7 @@ app = Flask(__name__)
 CORS(app)
 
 # Version information
-VERSION = "1.3.21"
+VERSION = "1.3.22"
 BUILD_DATE = "2026-03-01"
 
 # Configuration file path
@@ -139,21 +139,30 @@ def get_client_status_for(client):
         status['server_host'] = getattr(client, 'server_host', None)
         status['server_port'] = getattr(client, 'server_port', None)
         status['static_delay_ms'] = getattr(client, 'static_delay_ms', None)
+        status['connected_server_url'] = getattr(client, 'connected_server_url', '') or (
+            f'ws://{client.server_host}:{client.server_port}/sendspin'
+            if getattr(client, 'server_host', None) and
+               client.server_host.lower() not in ('auto', 'discover', '')
+            else ''
+        )
 
         bt_mgr = getattr(client, 'bt_manager', None)
         status['bluetooth_mac'] = bt_mgr.mac_address if bt_mgr else None
-        status['bluetooth_adapter'] = bt_mgr.adapter if bt_mgr else None
+        status['bluetooth_adapter'] = (bt_mgr.effective_adapter_mac or bt_mgr.adapter) if bt_mgr else None
         adapter_name = None
-        if bt_mgr and bt_mgr.adapter:
-            try:
-                with open(CONFIG_FILE) as _f:
-                    _cfg = json.load(_f)
-                for _a in _cfg.get('BLUETOOTH_ADAPTERS', []):
-                    if _a.get('mac') == bt_mgr.adapter or _a.get('id') == bt_mgr.adapter:
-                        adapter_name = _a.get('name')
-                        break
-            except Exception:
-                pass
+        if bt_mgr:
+            lookup_mac = bt_mgr.effective_adapter_mac or bt_mgr.adapter
+            if lookup_mac:
+                try:
+                    with open(CONFIG_FILE) as _f:
+                        _cfg = json.load(_f)
+                    for _a in _cfg.get('BLUETOOTH_ADAPTERS', []):
+                        if (_a.get('mac', '').upper() == lookup_mac.upper() or
+                                _a.get('id') == lookup_mac):
+                            adapter_name = _a.get('name')
+                            break
+                except Exception:
+                    pass
         status['bluetooth_adapter_name'] = adapter_name
         status['has_sink'] = bool(getattr(client, 'bluetooth_sink_name', None))
         status['bt_management_enabled'] = getattr(client, 'bt_management_enabled', True)
@@ -595,6 +604,8 @@ HTML_TEMPLATE = """
         </div>
         <button type="button" class="btn-group-mute" id="group-mute-btn"
             onclick="onGroupMute()">&#128264; Mute All</button>
+        <button type="button" class="btn-group-mute" id="group-pause-btn"
+            onclick="onPauseAll()">&#9646;&#9646; Pause All</button>
     </div>
 
     <!-- Status grid: device cards (populated by JS) -->
@@ -825,6 +836,7 @@ function buildDeviceCard(i) {
             '<div class="status-label">Playback</div>' +
             '<div class="status-value" id="dplay-' + i + '">-</div>' +
             '<div class="ts" id="daudiofmt-' + i + '" style="color:#8b5cf6;"></div>' +
+            '<div class="ts" id="dplay-since-' + i + '" style="color:#94a3b8;"></div>' +
           '</div>' +
           '<div>' +
             '<div class="status-label">Volume</div>' +
@@ -921,9 +933,7 @@ function populateDeviceCard(i, dev) {
         ? 'Since: ' + new Date(dev.server_connected_at).toLocaleString() : '';
     var srvUri = document.getElementById('dsrv-uri-' + i);
     if (srvUri) {
-        srvUri.textContent = (dev.server_connected && dev.server_host && dev.server_port)
-            ? 'ws://' + dev.server_host + ':' + dev.server_port + '/sendspin'
-            : '';
+        srvUri.textContent = dev.server_connected ? (dev.connected_server_url || '') : '';
     }
 
     // Playback
@@ -951,9 +961,24 @@ function populateDeviceCard(i, dev) {
         }
     }
 
-    // Audio format
+    // Audio format — strip codec name prefix (e.g. "flac 48000Hz/24-bit/2ch" → "48000Hz/24-bit/2ch")
     var fmtEl = document.getElementById('daudiofmt-' + i);
-    if (fmtEl) fmtEl.textContent = dev.audio_format ? 'Transport: ' + dev.audio_format : '';
+    if (fmtEl) {
+        var fmt = dev.audio_format || '';
+        if (fmt) {
+            var sp = fmt.indexOf(' ');
+            fmt = sp !== -1 ? fmt.slice(sp + 1) : '';
+        }
+        fmtEl.textContent = fmt;
+    }
+
+    // Since: timestamp for current playback state
+    var playSince = document.getElementById('dplay-since-' + i);
+    if (playSince) {
+        playSince.textContent = dev.state_changed_at
+            ? 'Since: ' + new Date(dev.state_changed_at).toLocaleString()
+            : '';
+    }
 
     // Sync
     var syncEl = document.getElementById('dsync-' + i);
@@ -1209,6 +1234,11 @@ function onGroupMute() {
             btn.className = 'btn-group-mute' + (muteVal ? ' muted' : '');
         }
     });
+}
+
+function onPauseAll() {
+    fetch(API_BASE + '/api/pause_all', { method: 'POST' })
+        .then(function(r) { return r.json(); });
 }
 
 // ---- BT Actions (reconnect / pair) ----
@@ -2010,6 +2040,33 @@ def set_mute():
         return jsonify({'success': True, 'muted': muted, 'results': results})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/pause_all', methods=['POST'])
+def pause_all():
+    """Pause all playing Sendspin MPRIS instances via D-Bus."""
+    paused = 0
+    try:
+        import dbus
+        bus = dbus.SessionBus()
+        for name in bus.list_names():
+            sname = str(name)
+            if not sname.startswith('org.mpris.MediaPlayer2.Sendspin'):
+                continue
+            if 'SendspinBridge' in sname:
+                continue
+            try:
+                obj = bus.get_object(sname, '/org/mpris/MediaPlayer2')
+                props = dbus.Interface(obj, 'org.freedesktop.DBus.Properties')
+                pb = str(props.Get('org.mpris.MediaPlayer2.Player', 'PlaybackStatus'))
+                if pb == 'Playing':
+                    dbus.Interface(obj, 'org.mpris.MediaPlayer2.Player').Pause()
+                    paused += 1
+            except Exception:
+                pass
+    except Exception:
+        pass
+    return jsonify({'success': True, 'paused': paused})
 
 
 @app.route('/api/bt/reconnect', methods=['POST'])

@@ -26,7 +26,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-CLIENT_VERSION = "1.3.21"
+CLIENT_VERSION = "1.3.22"
 
 
 async def _pause_all_via_mpris() -> int:
@@ -178,6 +178,23 @@ class BluetoothManager:
         # selecting by MAC address works because D-Bus objects use MACs, not hciN names.
         self._adapter_select = self._resolve_adapter_select(adapter) if adapter else ''
         self.management_enabled: bool = True  # False = released; monitor loop skips reconnect
+
+        # Resolve effective adapter MAC for display (handles empty/default adapter case)
+        if self._adapter_select:
+            self.effective_adapter_mac = self._adapter_select
+        else:
+            self.effective_adapter_mac = self._detect_default_adapter_mac()
+
+    def _detect_default_adapter_mac(self) -> str:
+        """Return the MAC of the default Bluetooth controller, or empty string."""
+        try:
+            out = subprocess.check_output(
+                ['bluetoothctl', 'show'], stderr=subprocess.DEVNULL, timeout=5, text=True
+            )
+            m = re.search(r'Controller\s+([0-9A-Fa-f:]{17})', out)
+            return m.group(1) if m else ''
+        except Exception:
+            return ''
 
     def _resolve_adapter_select(self, adapter: str) -> str:
         """Resolve hciN to adapter MAC address for bluetoothctl 'select'.
@@ -571,6 +588,7 @@ class SendspinClient:
             'reanchor_count': 0,
             'last_sync_error_ms': None,
             'reanchoring': False,
+            'state_changed_at': None,
             'ip_address': listen_host or self.get_ip_address(),
             'hostname': socket.gethostname(),
             'last_error': None,
@@ -584,6 +602,7 @@ class SendspinClient:
         self.running = False
         self.bt_management_enabled: bool = True
         self.bluetooth_sink_name = None  # Store Bluetooth sink name for volume sync
+        self.connected_server_url: str = ''  # actual resolved ws:// URL (populated after connect)
         self.volume_restore_done = False  # Flag to prevent saving initial volume
         self._monitor_task: Optional[asyncio.Task] = None
     
@@ -641,6 +660,25 @@ class SendspinClient:
                             self.status['server_connected_at'] = datetime.now().isoformat()
                         self.status['server_connected'] = True
                         self.status['connected'] = True
+
+                        # Fallback: detect actual server IP via ss if not yet captured from output
+                        if self.status['server_connected'] and not self.connected_server_url and self.process:
+                            try:
+                                r = subprocess.run(
+                                    ['ss', '-tnp'],
+                                    capture_output=True, text=True, timeout=2
+                                )
+                                pid_tag = f'pid={self.process.pid},'
+                                for _line in r.stdout.splitlines():
+                                    if pid_tag in _line and self.server_port and str(self.server_port) in _line:
+                                        _parts = _line.split()
+                                        for _p in _parts:
+                                            _m = re.match(r'(\d+\.\d+\.\d+\.\d+):(\d+)', _p)
+                                            if _m and _m.group(2) == str(self.server_port):
+                                                self.connected_server_url = f'ws://{_m.group(1)}:{self.server_port}/sendspin'
+                                                break
+                            except Exception:
+                                pass
 
                         # Poll MPRIS for current track/artist metadata
                         if self.status.get('playing'):
@@ -777,6 +815,7 @@ class SendspinClient:
                 # "INFO:aiosendspin.client.client:Stream started with codec flac"
                 if 'Stream STARTED' in line_str or 'Stream started with codec' in line_str:
                     self.status['playing'] = True
+                    self.status['state_changed_at'] = datetime.now().isoformat()
                     # Extract codec from "Stream started with codec flac"
                     if 'Stream started with codec' in line_str:
                         try:
@@ -792,6 +831,7 @@ class SendspinClient:
                             pass
                 elif 'Stream STOPPED' in line_str or 'MPRIS interface stopped' in line_str:
                     self.status['playing'] = False
+                    self.status['state_changed_at'] = datetime.now().isoformat()
 
                 # Parse audio format: "Audio format: flac 48000Hz/24-bit/2ch"
                 if 'Audio format:' in line_str:
@@ -824,6 +864,12 @@ class SendspinClient:
                     if not self.status['server_connected_at']:
                         self.status['server_connected_at'] = datetime.now().isoformat()
                     self.status['server_connected'] = True
+
+                # Try to capture actual server URL from sendspin output
+                if not self.connected_server_url:
+                    m = re.search(r'ws://[^\s/]+:\d+/\S*', line_str)
+                    if m:
+                        self.connected_server_url = m.group(0)
 
                 # Sync volume changes to Bluetooth speaker
                 # Handles "Volume: XX%" and "Server set player volume: XX%"
