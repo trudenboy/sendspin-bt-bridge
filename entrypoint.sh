@@ -152,6 +152,17 @@ if [ -n "${BLUETOOTH_MAC:-}" ]; then
     fi
 fi
 
+# Start a D-Bus session bus so sendspin's MPRIS interface works (track/artist metadata)
+if command -v dbus-daemon > /dev/null 2>&1; then
+    DBUS_ADDR=$(dbus-daemon --session --fork --print-address 2>/dev/null || true)
+    if [ -n "$DBUS_ADDR" ]; then
+        export DBUS_SESSION_BUS_ADDRESS="$DBUS_ADDR"
+        echo "D-Bus session bus started: $DBUS_SESSION_BUS_ADDRESS"
+    else
+        echo "WARNING: dbus-daemon failed to start session bus"
+    fi
+fi
+
 # Start the Sendspin client (includes web interface)
 echo "Starting Sendspin client with web interface..."
 exec python3 /app/sendspin_client.py

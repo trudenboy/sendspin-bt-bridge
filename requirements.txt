@@ -5,3 +5,4 @@ psutil>=5.9.0,<7.0.0
 python-dotenv>=1.0.0,<2.0.0
 waitress>=2.1.2,<4.0.0
 netifaces>=0.11.0,<1.0.0
+dbus-python

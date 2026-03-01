@@ -26,7 +26,38 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-CLIENT_VERSION = "1.3.15"
+CLIENT_VERSION = "1.3.16"
+
+
+def _read_mpris_metadata_for(player_name: str):
+    """Read current track/artist from MPRIS on the D-Bus session bus.
+
+    Scans all registered MPRIS services, matches by Identity == player_name,
+    and returns (artist, track).  Returns (None, None) if D-Bus is unavailable,
+    no matching player is found, or there is no current metadata.
+    """
+    try:
+        import dbus  # optional dependency — may not be installed
+        bus = dbus.SessionBus()
+        for name in bus.list_names():
+            if not str(name).startswith('org.mpris.MediaPlayer2.'):
+                continue
+            try:
+                obj = bus.get_object(str(name), '/org/mpris/MediaPlayer2')
+                iface = dbus.Interface(obj, 'org.freedesktop.DBus.Properties')
+                identity = str(iface.Get('org.mpris.MediaPlayer2', 'Identity'))
+                if identity != player_name:
+                    continue
+                meta = iface.Get('org.mpris.MediaPlayer2.Player', 'Metadata')
+                title = str(meta.get('xesam:title', '') or '')
+                artists = meta.get('xesam:artist', [])
+                artist = str(artists[0]) if artists else ''
+                return artist or None, title or None
+            except Exception:
+                continue
+        return None, None
+    except Exception:
+        return None, None
 
 # Per-player audio format cache — keyed by player_name.
 # Updated when a full "Audio format: flac 48000Hz/24-bit/2ch" line is received;
@@ -534,7 +565,18 @@ class SendspinClient:
                             self.status['server_connected_at'] = datetime.now().isoformat()
                         self.status['server_connected'] = True
                         self.status['connected'] = True
-                        
+
+                        # Poll MPRIS for current track/artist metadata
+                        if self.status.get('playing'):
+                            artist, track = await loop.run_in_executor(
+                                None, _read_mpris_metadata_for, self.player_name
+                            )
+                            self.status['current_artist'] = artist
+                            self.status['current_track'] = track
+                        else:
+                            self.status['current_artist'] = None
+                            self.status['current_track'] = None
+
                 await asyncio.sleep(10)
             except Exception as e:
                 logger.error(f"Error updating status: {e}")
