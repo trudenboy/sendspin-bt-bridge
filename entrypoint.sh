@@ -61,6 +61,8 @@ adapters = detected
 config = {
     'SENDSPIN_SERVER':    opts.get('sendspin_server', 'auto'),
     'SENDSPIN_PORT':      str(opts.get('sendspin_port', 9000)),
+    'BRIDGE_NAME':        opts.get('bridge_name', ''),
+    'BRIDGE_NAME_SUFFIX': opts.get('bridge_name_suffix', False),
     'BLUETOOTH_DEVICES':  opts.get('bluetooth_devices', []),
     'BLUETOOTH_ADAPTERS': adapters,
     'TZ':                 tz,

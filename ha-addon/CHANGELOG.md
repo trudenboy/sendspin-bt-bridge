@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.19] - 2026-03-01
+
+### Added
+- **Bridge name identification** — new `bridge_name` option identifies this bridge instance in MA
+  device info (Model field shows `BT Bridge @ {name}`); set to `auto` for hostname
+- **Optional player name suffix** — `bridge_name_suffix` bool (default off) appends `@ {name}`
+  to every player's display name in the MA player list
+- **MPRIS Identity service** — registers `org.mpris.MediaPlayer2.SendspinBridge.*` on the
+  session bus with Identity = effective player name
+
 ## [1.3.18] - 2026-03-01
 
 ### Changed

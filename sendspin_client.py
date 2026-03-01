@@ -26,7 +26,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-CLIENT_VERSION = "1.3.18"
+CLIENT_VERSION = "1.3.19"
 
 
 def _read_mpris_metadata_for(player_name: str):
@@ -57,6 +57,48 @@ def _read_mpris_metadata_for(player_name: str):
         return None, None
     except Exception:
         return None, None
+
+_DBUS_MPRIS_AVAILABLE = False
+MprisIdentityService = None
+_GLib = None
+try:
+    import dbus.service, dbus.mainloop.glib
+    from gi.repository import GLib as _GLib
+
+    class MprisIdentityService(dbus.service.Object):
+        """Minimal MPRIS MediaPlayer2 service — exposes Identity = effective player name."""
+        def __init__(self, player_name: str, index: int = 0):
+            safe = ''.join(c if c.isalnum() else '' for c in player_name)[:32] or f'i{index}'
+            bus_name = dbus.service.BusName(
+                f'org.mpris.MediaPlayer2.SendspinBridge.{safe}',
+                dbus.SessionBus()
+            )
+            super().__init__(bus_name, '/org/mpris/MediaPlayer2')
+            self._identity = player_name
+
+        @dbus.service.method('org.freedesktop.DBus.Properties',
+                             in_signature='ss', out_signature='v')
+        def Get(self, iface, prop):
+            return self.GetAll(iface).get(prop, dbus.String(''))
+
+        @dbus.service.method('org.freedesktop.DBus.Properties',
+                             in_signature='s', out_signature='a{sv}')
+        def GetAll(self, iface):
+            if iface == 'org.mpris.MediaPlayer2':
+                return {
+                    'Identity':            dbus.String(self._identity),
+                    'CanQuit':             dbus.Boolean(False),
+                    'CanRaise':            dbus.Boolean(False),
+                    'HasTrackList':        dbus.Boolean(False),
+                    'DesktopEntry':        dbus.String('sendspin'),
+                    'SupportedUriSchemes': dbus.Array([], signature='s'),
+                    'SupportedMimeTypes':  dbus.Array([], signature='s'),
+                }
+            return {}
+
+    _DBUS_MPRIS_AVAILABLE = True
+except Exception:
+    pass
 
 # Per-player audio format cache — keyed by player_name.
 # Updated when a full "Audio format: flac 48000Hz/24-bit/2ch" line is received;
@@ -468,7 +510,8 @@ class SendspinClient:
                  bt_manager: Optional[BluetoothManager] = None,
                  listen_port: int = 8928,
                  static_delay_ms: Optional[float] = None,
-                 listen_host: Optional[str] = None):
+                 listen_host: Optional[str] = None,
+                 effective_bridge: str = ''):
         self.player_name = player_name
         self.server_host = server_host
         self.server_port = server_port
@@ -476,6 +519,7 @@ class SendspinClient:
         self.listen_port = listen_port  # port sendspin daemon listens on
         self.listen_host = listen_host  # explicit IP for WebSocket URL display (None = auto-detect)
         self.static_delay_ms = static_delay_ms  # per-device delay override (None = use env var)
+        self._effective_bridge = effective_bridge  # bridge instance label for MA device info
 
         # Status tracking
         self.status = {
@@ -641,7 +685,10 @@ class SendspinClient:
 
             # Override device info reported to Music Assistant
             env['SENDSPIN_BRIDGE_MANUFACTURER'] = 'Sendspin'
-            env['SENDSPIN_BRIDGE_PRODUCT_NAME'] = 'Bluetooth Bridge'
+            env['SENDSPIN_BRIDGE_PRODUCT_NAME'] = (
+                f'BT Bridge @ {self._effective_bridge}'
+                if self._effective_bridge else 'Bluetooth Bridge'
+            )
             env['SENDSPIN_BRIDGE_VERSION'] = CLIENT_VERSION
 
             # Start the sendspin process
@@ -890,6 +937,14 @@ async def main():
     server_host = config.get('SENDSPIN_SERVER', 'auto')
     server_port = int(config.get('SENDSPIN_PORT', 9000))
 
+    # Bridge name identification
+    raw_bridge = config.get('BRIDGE_NAME', '') or os.getenv('BRIDGE_NAME', '')
+    if raw_bridge.lower() in ('auto', 'hostname'):
+        effective_bridge = socket.gethostname()
+    else:
+        effective_bridge = raw_bridge  # '' = disabled
+    bridge_suffix = bool(config.get('BRIDGE_NAME_SUFFIX', False))
+
     # Set timezone
     tz = os.getenv('TZ', config.get('TZ', 'UTC'))
     os.environ['TZ'] = tz
@@ -919,6 +974,8 @@ async def main():
         mac = device.get('mac', '')
         adapter = device.get('adapter', '')
         player_name = device.get('player_name') or _default_player_name
+        if effective_bridge and bridge_suffix:
+            player_name = f"{player_name} @ {effective_bridge}"
         # 'listen_port' is the preferred key; 'port' kept for backward compat
         listen_port = int(device.get('listen_port') or device.get('port') or base_listen_port + i)
         listen_host = device.get('listen_host')
@@ -928,7 +985,7 @@ async def main():
 
         client = SendspinClient(player_name, server_host, server_port, None,
                                 listen_port=listen_port, static_delay_ms=static_delay_ms,
-                                listen_host=listen_host)
+                                listen_host=listen_host, effective_bridge=effective_bridge)
         if mac:
             bt_mgr = BluetoothManager(mac, adapter=adapter, device_name=player_name, client=client)
             if not bt_mgr.check_bluetooth_available():
@@ -954,6 +1011,18 @@ async def main():
         logger.info(f"  Player: '{player_name}', BT: {mac or 'none'}, Adapter: {adapter or 'default'}")
 
     logger.info("Client instance(s) registered")
+
+    # Register MPRIS Identity services on the session bus (one per player)
+    if _DBUS_MPRIS_AVAILABLE:
+        try:
+            dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
+            for _i, _c in enumerate(clients):
+                MprisIdentityService(_c.player_name, _i)
+            import threading as _th
+            _th.Thread(target=_GLib.MainLoop().run, daemon=True, name='mpris-glib').start()
+            logger.info("MPRIS Identity service(s) registered on session bus")
+        except Exception as _e:
+            logger.warning(f"MPRIS Identity service unavailable: {_e}")
 
     # Warn about listen_port collisions (all containers share host network)
     used_ports: set = set()
@@ -1013,13 +1082,15 @@ def load_config():
     default_config = {
         'SENDSPIN_SERVER': 'auto',
         'SENDSPIN_PORT': 9000,
+        'BRIDGE_NAME': '',
+        'BRIDGE_NAME_SUFFIX': False,
         'BLUETOOTH_MAC': '',
         'BLUETOOTH_DEVICES': [],
         'TZ': 'Australia/Melbourne',
     }
 
-    allowed_keys = {'SENDSPIN_SERVER', 'SENDSPIN_PORT', 'BLUETOOTH_MAC',
-                    'BLUETOOTH_DEVICES', 'TZ', 'LAST_VOLUME'}
+    allowed_keys = {'SENDSPIN_SERVER', 'SENDSPIN_PORT', 'BRIDGE_NAME', 'BRIDGE_NAME_SUFFIX',
+                    'BLUETOOTH_MAC', 'BLUETOOTH_DEVICES', 'TZ', 'LAST_VOLUME'}
 
     if config_file.exists():
         try:

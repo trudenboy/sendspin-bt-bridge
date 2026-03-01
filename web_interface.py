@@ -27,7 +27,7 @@ app = Flask(__name__)
 CORS(app)
 
 # Version information
-VERSION = "1.3.18"
+VERSION = "1.3.19"
 BUILD_DATE = "2026-03-01"
 
 # Configuration file path
@@ -36,8 +36,9 @@ CONFIG_FILE = CONFIG_DIR / 'config.json'
 
 # Default configuration
 DEFAULT_CONFIG = {
-
     'SENDSPIN_SERVER': 'auto',
+    'BRIDGE_NAME': '',
+    'BRIDGE_NAME_SUFFIX': False,
     'BLUETOOTH_MAC': '',
     'BLUETOOTH_DEVICES': [],
     'TZ': 'Australia/Melbourne',
@@ -611,6 +612,18 @@ HTML_TEMPLATE = """
             <div class="form-group">
                 <label>Music Assistant WebSocket port</label>
                 <input type="number" name="SENDSPIN_PORT" placeholder="9000" min="1024" max="65535">
+            </div>
+
+            <div class="form-group">
+                <label>Bridge name — shown in MA device info (<code>auto</code> = hostname, empty = off)</label>
+                <input type="text" name="BRIDGE_NAME" placeholder="e.g. Living Room or auto">
+            </div>
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" name="BRIDGE_NAME_SUFFIX">
+                    Append bridge name to player name in MA player list
+                    (e.g. <em>ENEBY Portable @ Living Room</em>)
+                </label>
             </div>
 
             <div class="form-group">
@@ -1556,6 +1569,8 @@ async function saveConfig() {
     var formData = new FormData(document.getElementById('config-form'));
     var config = Object.fromEntries(formData);
 
+    // Checkbox not included in FormData when unchecked — capture explicitly
+    config.BRIDGE_NAME_SUFFIX = !!document.querySelector('[name="BRIDGE_NAME_SUFFIX"]')?.checked;
     // Collect BT devices from table rows (overrides anything from formData)
     config.BLUETOOTH_DEVICES = collectBtDevices();
     // Pass current group slider value so backend can init volume for new devices
@@ -1603,10 +1618,12 @@ async function loadConfig() {
         var config = await resp.json();
 
         // Populate simple fields
-        ['SENDSPIN_SERVER', 'SENDSPIN_PORT', 'TZ'].forEach(function(key) {
+        ['SENDSPIN_SERVER', 'SENDSPIN_PORT', 'BRIDGE_NAME', 'TZ'].forEach(function(key) {
             var input = document.querySelector('[name="' + key + '"]');
             if (input && config[key] !== undefined) input.value = config[key];
         });
+        var sfxCb = document.querySelector('[name="BRIDGE_NAME_SUFFIX"]');
+        if (sfxCb) sfxCb.checked = !!config.BRIDGE_NAME_SUFFIX;
         updateTzPreview();
 
         // Restore manual adapters before re-running loadBtAdapters so merging picks them up
@@ -2190,6 +2207,8 @@ def api_config():
                         'options': {
                             'sendspin_server':    config.get('SENDSPIN_SERVER', 'auto'),
                             'sendspin_port':      int(config.get('SENDSPIN_PORT', 9000)),
+                            'bridge_name':        config.get('BRIDGE_NAME', ''),
+                            'bridge_name_suffix': bool(config.get('BRIDGE_NAME_SUFFIX', False)),
                             'tz':                 config.get('TZ', ''),
                             'bluetooth_devices':  sup_devices,
                             'bluetooth_adapters': sup_adapters,
