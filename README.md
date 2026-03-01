@@ -19,7 +19,7 @@ A Bluetooth bridge for [Music Assistant](https://www.music-assistant.io/) — co
 - **BT adapter management**: Auto-detect adapters with manual override; pin each speaker to a specific adapter
 - **Per-device latency compensation**: `static_delay_ms` field to compensate A2DP buffer latency
 - **Diagnostics endpoint**: `/api/diagnostics` returns structured health info — adapters, sinks, D-Bus status, per-device state
-- **Player metadata**: Reports real device manufacturer and model to Music Assistant
+- **Multiple bridge instances**: Run several bridge instances (containers/LXC/addons) against the same MA server — each registers its own set of players independently
 
 <img width="1228" height="2694" alt="192 168 10 180_8080_ (1)" src="https://github.com/user-attachments/assets/ff3d99bc-7f8a-459b-ba9a-9ba3c10bedd6" />
 <br><br>
