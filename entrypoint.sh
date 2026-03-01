@@ -5,20 +5,44 @@ echo "=== Starting Sendspin Client Container ==="
 
 # HA Addon mode: /data/options.json is written by HA Supervisor before start.
 # Translate it to /config/config.json so the rest of the startup is uniform.
-if [ -f /data/options.json ] && [ -z "${HA_ADDON_CONFIG_DONE:-}" ]; then
+if [ -f /data/options.json ]; then
     echo "HA Addon mode detected — reading /data/options.json"
     mkdir -p /config
     python3 - <<'PYEOF'
-import json
+import json, os
 
 with open('/data/options.json') as f:
     opts = json.load(f)
 
+# Timezone: use options value, or auto-detect from Supervisor
+tz = (opts.get('tz') or '').strip()
+if not tz:
+    try:
+        import urllib.request
+        token = os.environ.get('SUPERVISOR_TOKEN', '')
+        req = urllib.request.Request(
+            'http://supervisor/host/info',
+            headers={'Authorization': f'Bearer {token}'}
+        )
+        with urllib.request.urlopen(req, timeout=3) as r:
+            host_info = json.load(r)
+            tz = host_info.get('data', {}).get('timezone', '') or ''
+    except Exception:
+        pass
+if not tz:
+    tz = 'UTC'
+
+# bluetooth_adapters: convert [{id, mac?}] → [{id, mac, name}]
+raw_adapters = opts.get('bluetooth_adapters', []) or []
+adapters = [{'id': a['id'], 'mac': a.get('mac', ''), 'name': a['id']}
+            for a in raw_adapters if a.get('id')]
+
 config = {
-    'SENDSPIN_SERVER': opts.get('sendspin_server', 'auto'),
-    'SENDSPIN_PORT':   str(opts.get('sendspin_port', 9000)),
-    'BLUETOOTH_DEVICES': opts.get('bluetooth_devices', []),
-    'TZ': opts.get('tz', 'UTC'),
+    'SENDSPIN_SERVER':    opts.get('sendspin_server', 'auto'),
+    'SENDSPIN_PORT':      str(opts.get('sendspin_port', 9000)),
+    'BLUETOOTH_DEVICES':  opts.get('bluetooth_devices', []),
+    'BLUETOOTH_ADAPTERS': adapters,
+    'TZ':                 tz,
 }
 
 # Preserve persisted volume levels
@@ -35,7 +59,7 @@ except (FileNotFoundError, json.JSONDecodeError):
 with open('/config/config.json', 'w') as f:
     json.dump(config, f, indent=2)
 
-print(f"Generated /config/config.json with {len(config['BLUETOOTH_DEVICES'])} device(s)")
+print(f"Generated /config/config.json with {len(config['BLUETOOTH_DEVICES'])} device(s), TZ={config['TZ']}, {len(config['BLUETOOTH_ADAPTERS'])} adapter(s)")
 PYEOF
 fi
 
