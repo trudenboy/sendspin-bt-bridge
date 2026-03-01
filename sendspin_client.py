@@ -26,15 +26,16 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-CLIENT_VERSION = "1.3.16"
+CLIENT_VERSION = "1.3.17"
 
 
 def _read_mpris_metadata_for(player_name: str):
     """Read current track/artist from MPRIS on the D-Bus session bus.
 
-    Scans all registered MPRIS services, matches by Identity == player_name,
-    and returns (artist, track).  Returns (None, None) if D-Bus is unavailable,
-    no matching player is found, or there is no current metadata.
+    Scans all registered MPRIS services (sendspin registers as
+    org.mpris.MediaPlayer2.Sendspin.instanceN with Identity='Sendspin'),
+    returns (artist, track) from the first service that has track metadata.
+    Returns (None, None) if D-Bus is unavailable or no metadata found.
     """
     try:
         import dbus  # optional dependency — may not be installed
@@ -45,14 +46,12 @@ def _read_mpris_metadata_for(player_name: str):
             try:
                 obj = bus.get_object(str(name), '/org/mpris/MediaPlayer2')
                 iface = dbus.Interface(obj, 'org.freedesktop.DBus.Properties')
-                identity = str(iface.Get('org.mpris.MediaPlayer2', 'Identity'))
-                if identity != player_name:
-                    continue
                 meta = iface.Get('org.mpris.MediaPlayer2.Player', 'Metadata')
                 title = str(meta.get('xesam:title', '') or '')
                 artists = meta.get('xesam:artist', [])
                 artist = str(artists[0]) if artists else ''
-                return artist or None, title or None
+                if title or artist:
+                    return artist or None, title or None
             except Exception:
                 continue
         return None, None
