@@ -38,14 +38,23 @@ try:
 except Exception:
     pass
 
-# Merge: detected takes precedence; keep manual entries not found in detected
-existing_macs = {a['mac'] for a in detected if a.get('mac')}
-existing_ids  = {a['id']  for a in detected if a.get('id')}
+# Merge: detected takes precedence for hw fields; options name wins if set
+existing_macs = {a['mac']: a for a in detected if a.get('mac')}
+existing_ids  = {a['id']:  a for a in detected if a.get('id')}
 for a in raw_adapters:
-    if a.get('mac') and a['mac'] not in existing_macs:
-        detected.append({'id': a.get('id', ''), 'mac': a['mac'], 'name': a.get('id', '')})
+    # If user supplied a name in options, apply it to the matching detected entry
+    opt_name = a.get('name', '').strip()
+    if a.get('mac') and a['mac'] in existing_macs:
+        if opt_name:
+            existing_macs[a['mac']]['name'] = opt_name
+    elif a.get('id') and a['id'] in existing_ids:
+        if opt_name:
+            existing_ids[a['id']]['name'] = opt_name
+    # Keep manual entries not found in detected
+    elif a.get('mac') and a['mac'] not in existing_macs:
+        detected.append({'id': a.get('id', ''), 'mac': a['mac'], 'name': opt_name or a.get('id', '')})
     elif a.get('id') and a['id'] not in existing_ids:
-        detected.append({'id': a['id'], 'mac': a.get('mac', ''), 'name': a['id']})
+        detected.append({'id': a['id'], 'mac': a.get('mac', ''), 'name': opt_name or a['id']})
 
 adapters = detected
 

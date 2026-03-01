@@ -27,7 +27,7 @@ app = Flask(__name__)
 CORS(app)
 
 # Version information
-VERSION = "1.3.14"
+VERSION = "1.3.15"
 BUILD_DATE = "2026-03-01"
 
 # Configuration file path
@@ -137,6 +137,7 @@ def get_client_status_for(client):
         status['listen_port'] = getattr(client, 'listen_port', None)
         status['server_host'] = getattr(client, 'server_host', None)
         status['server_port'] = getattr(client, 'server_port', None)
+        status['static_delay_ms'] = getattr(client, 'static_delay_ms', None)
 
         bt_mgr = getattr(client, 'bt_manager', None)
         status['bluetooth_mac'] = bt_mgr.mac_address if bt_mgr else None
@@ -593,6 +594,11 @@ HTML_TEMPLATE = """
             </div>
 
             <div class="form-group">
+                <label>Music Assistant WebSocket port</label>
+                <input type="number" name="SENDSPIN_PORT" placeholder="9000" min="1024" max="65535">
+            </div>
+
+            <div class="form-group">
                 <label>Timezone</label>
                 <div style="display:flex;gap:10px;align-items:center;">
                     <input type="text" name="TZ" id="tz-input" placeholder="Australia/Melbourne" style="flex:1;"
@@ -768,6 +774,7 @@ function buildDeviceCard(i) {
           '<div class="device-mac" id="dmac-' + i + '"></div>' +
           '<div id="dadapter-' + i + '" style="font-size:10px;color:#94a3b8;margin-top:1px;"></div>' +
           '<div id="durl-' + i + '" style="font-size:10px;color:#c4b5fd;margin-top:2px;word-break:break-all;"></div>' +
+          '<div id="ddelay-' + i + '" style="display:none;font-size:10px;color:#f59e0b;margin-top:2px;"></div>' +
         '</div>' +
         '<div class="device-rows">' +
           '<div>' +
@@ -789,6 +796,7 @@ function buildDeviceCard(i) {
           '<div>' +
             '<div class="status-label">Playback</div>' +
             '<div class="status-value" id="dplay-' + i + '">-</div>' +
+            '<div class="ts" id="dtrack-' + i + '" style="color:#94a3b8;font-style:italic;"></div>' +
             '<div class="ts" id="daudiofmt-' + i + '" style="color:#8b5cf6;"></div>' +
           '</div>' +
           '<div>' +
@@ -868,7 +876,9 @@ function populateDeviceCard(i, dev) {
     var srvSince = document.getElementById('dsrv-since-' + i);
     if (dev.server_connected) {
         srvInd.className = 'status-indicator active';
-        srvTxt.textContent = 'Connected';
+        srvTxt.textContent = (dev.server_host && dev.server_port)
+            ? 'Connected \u2014 ' + dev.server_host + ':' + dev.server_port
+            : 'Connected';
     } else {
         srvInd.className = 'status-indicator inactive';
         srvTxt.textContent = dev.error || 'Disconnected';
@@ -880,7 +890,27 @@ function populateDeviceCard(i, dev) {
     document.getElementById('dplay-' + i).textContent =
         dev.playing ? '\u25b6\ufe0f Playing' : '\u23f8\ufe0f Stopped';
     var trackEl = document.getElementById('dtrack-' + i);
-    if (trackEl) trackEl.textContent = dev.current_track || '';
+    if (trackEl) {
+        if (dev.playing && (dev.current_artist || dev.current_track)) {
+            trackEl.textContent = dev.current_artist && dev.current_track
+                ? dev.current_artist + ' \u2014 ' + dev.current_track
+                : (dev.current_artist || dev.current_track || '');
+        } else {
+            trackEl.textContent = '';
+        }
+    }
+
+    // Delay badge
+    var delayEl = document.getElementById('ddelay-' + i);
+    if (delayEl) {
+        var delay = dev.static_delay_ms;
+        if (delay !== undefined && delay !== null && delay !== 0) {
+            delayEl.textContent = 'delay: ' + (delay > 0 ? '+' : '') + delay + 'ms';
+            delayEl.style.display = '';
+        } else {
+            delayEl.style.display = 'none';
+        }
+    }
 
     // Audio format
     var fmtEl = document.getElementById('daudiofmt-' + i);
@@ -1547,7 +1577,7 @@ async function loadConfig() {
         var config = await resp.json();
 
         // Populate simple fields
-        ['SENDSPIN_SERVER', 'TZ'].forEach(function(key) {
+        ['SENDSPIN_SERVER', 'SENDSPIN_PORT', 'TZ'].forEach(function(key) {
             var input = document.querySelector('[name="' + key + '"]');
             if (input && config[key] !== undefined) input.value = config[key];
         });
@@ -2117,9 +2147,16 @@ def api_config():
                             entry['adapter'] = d['adapter']
                         if d.get('static_delay_ms'):
                             entry['static_delay_ms'] = int(d['static_delay_ms'])
+                        if d.get('listen_host'):
+                            entry['listen_host'] = d['listen_host']
+                        if d.get('listen_port'):
+                            entry['listen_port'] = int(d['listen_port'])
+                        if 'enabled' in d:
+                            entry['enabled'] = bool(d['enabled'])
                         sup_devices.append(entry)
                     sup_adapters = [
-                        {'id': a['id'], 'mac': a.get('mac', '')}
+                        dict({'id': a['id'], 'mac': a.get('mac', '')},
+                             **({'name': a['name']} if a.get('name') else {}))
                         for a in config.get('BLUETOOTH_ADAPTERS', [])
                         if a.get('id')
                     ]
