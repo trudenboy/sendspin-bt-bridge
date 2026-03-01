@@ -26,7 +26,40 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-CLIENT_VERSION = "1.3.19"
+CLIENT_VERSION = "1.3.20"
+
+
+async def _pause_all_via_mpris() -> int:
+    """Send MPRIS Pause to all playing sendspin instances on the session bus.
+
+    Returns the number of players that were successfully paused.
+    Called during graceful shutdown before terminating processes.
+    """
+    paused = 0
+    try:
+        import dbus
+        bus = dbus.SessionBus()
+        for name in bus.list_names():
+            sname = str(name)
+            # Target only sendspin's own MPRIS registrations, not our bridge service
+            if not sname.startswith('org.mpris.MediaPlayer2.Sendspin'):
+                continue
+            if 'SendspinBridge' in sname:
+                continue
+            try:
+                obj = bus.get_object(sname, '/org/mpris/MediaPlayer2')
+                props = dbus.Interface(obj, 'org.freedesktop.DBus.Properties')
+                pb = str(props.Get('org.mpris.MediaPlayer2.Player', 'PlaybackStatus'))
+                if pb == 'Playing':
+                    player = dbus.Interface(obj, 'org.mpris.MediaPlayer2.Player')
+                    player.Pause()
+                    logger.info(f"Sent MPRIS Pause to {sname}")
+                    paused += 1
+            except Exception as _e:
+                logger.debug(f"MPRIS pause skipped for {sname}: {_e}")
+    except Exception as _e:
+        logger.debug(f"MPRIS pause unavailable: {_e}")
+    return paused
 
 
 def _read_mpris_metadata_for(player_name: str):
@@ -1053,8 +1086,12 @@ async def main():
     # Handle shutdown signals
     loop = asyncio.get_event_loop()
 
-    def signal_handler():
-        logger.info("Received shutdown signal")
+    async def _graceful_shutdown():
+        logger.info("Received shutdown signal — pausing players before exit...")
+        paused = await _pause_all_via_mpris()
+        if paused:
+            logger.info(f"Paused {paused} player(s) in MA — waiting 500 ms...")
+            await asyncio.sleep(0.5)
         for c in clients:
             c.running = False
             if c.process:
@@ -1062,6 +1099,9 @@ async def main():
                     c.process.terminate()
                 except Exception:
                     pass
+
+    def signal_handler():
+        loop.create_task(_graceful_shutdown())
 
     for sig in (signal.SIGTERM, signal.SIGINT):
         loop.add_signal_handler(sig, signal_handler)
