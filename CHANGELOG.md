@@ -5,6 +5,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.7] - 2026-03-01
+
+### Changed
+- **Web UI redesigned** to match Home Assistant / Music Assistant visual language
+  - CSS custom properties (`:root` design tokens) replace all hardcoded colors
+  - `@media (prefers-color-scheme: dark)` dark theme with HA dark palette
+  - Header styled as HA app-toolbar (`--app-header-background-color`)
+  - Primary color changed from purple (`#667eea`) to HA blue (`#03a9f4`)
+  - Status/action colors mapped to `--success-color`, `--error-color`, `--warning-color`
+  - Cards use `--ha-card-border-radius` (12px) and `--ha-card-box-shadow`
+  - Buttons: `border-radius: 4px`, uppercase, HA letter-spacing and font-weight
+  - Font changed to Roboto (Google Fonts) with `-apple-system` fallback
+  - HA Ingress `setTheme` postMessage listener — live theme injection when opened in HA sidebar
+
+## [1.3.6] - 2026-02-28
+
+### Fixed
+- HA addon runtime detection: `_detect_runtime()` now checks `/data/options.json` before falling through to `docker`, preventing `api_logs()` from trying to run `docker logs` inside the addon container
+- Logs endpoint in HA addon mode now fetches from Supervisor API (`GET /addons/self/logs`) using `SUPERVISOR_TOKEN`
+
+## [1.3.5] - 2026-02-28
+
+### Fixed
+- All `fetch()` calls in the web UI now use `API_BASE` prefix — fixes JSON parse errors when accessed via HA Ingress (where the page URL contains a token path segment and bare `/api/...` resolved against HA Core instead of the addon)
+
+## [1.3.4] - 2026-02-28
+
+### Fixed
+- `pipefail` crash in `entrypoint.sh`: `bluetoothctl show | head -10` caused `bluetoothctl` to receive SIGPIPE and exit non-zero under `set -euo pipefail`; suppressed with `|| true`
+
+## [1.3.3] - 2026-02-28
+
+### Fixed
+- `entrypoint.sh` now detects HA addon mode via `/data/options.json` and translates it to `/config/config.json` before startup, matching the Docker Compose flow
+
 ## [1.2.3] - 2026-02-28
 
 ### Changed
@@ -85,6 +120,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - mDNS auto-discovery for Music Assistant server (`SENDSPIN_SERVER=auto`)
 - Config persistence via `/config/config.json`
 
+[1.3.7]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.6...v1.3.7
+[1.3.6]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.5...v1.3.6
+[1.3.5]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.4...v1.3.5
+[1.3.4]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.3...v1.3.4
+[1.3.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.2.3...v1.3.3
 [1.2.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.2.2...v1.2.3
 [1.2.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.2.1...v1.2.2
 [1.2.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.2.0...v1.2.1
