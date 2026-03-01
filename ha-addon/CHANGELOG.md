@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.13] - 2026-03-01
+
+### Added
+- **Auto-detect Bluetooth adapters on startup** — discovers adapters via `bluetoothctl list` at container start; no need to manually configure adapter IDs
+- **Native Config tab shows adapters after first Save** — Ingress UI now writes auto-detected adapters back to Supervisor options on save
+
 ## [1.3.12] - 2026-03-01
 
 ### Fixed

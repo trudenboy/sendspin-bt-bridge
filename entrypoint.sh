@@ -9,7 +9,7 @@ if [ -f /data/options.json ]; then
     echo "HA Addon mode detected — reading /data/options.json"
     mkdir -p /config
     python3 - <<'PYEOF'
-import json, os
+import json, os, subprocess, re
 
 with open('/data/options.json') as f:
     opts = json.load(f)
@@ -18,10 +18,36 @@ with open('/data/options.json') as f:
 # then UTC
 tz = (opts.get('tz') or '').strip() or os.environ.get('TZ', '') or 'UTC'
 
-# bluetooth_adapters: convert [{id, mac?}] → [{id, mac, name}]
+# bluetooth_adapters: auto-detect via bluetoothctl, merge with options entries
 raw_adapters = opts.get('bluetooth_adapters', []) or []
-adapters = [{'id': a['id'], 'mac': a.get('mac', ''), 'name': a['id']}
-            for a in raw_adapters if a.get('id')]
+
+detected = []
+try:
+    out = subprocess.check_output(
+        ['bluetoothctl', 'list'], stderr=subprocess.DEVNULL, timeout=5
+    ).decode()
+    # Lines: "Controller AA:BB:CC:DD:EE:FF Name [default]"
+    for i, line in enumerate(out.strip().splitlines()):
+        m = re.search(r'Controller\s+([0-9A-Fa-f:]{17})\s+(.*?)(\s+\[default\])?$', line)
+        if m:
+            detected.append({
+                'id': f'hci{i}',
+                'mac': m.group(1),
+                'name': m.group(2).strip() or f'hci{i}'
+            })
+except Exception:
+    pass
+
+# Merge: detected takes precedence; keep manual entries not found in detected
+existing_macs = {a['mac'] for a in detected if a.get('mac')}
+existing_ids  = {a['id']  for a in detected if a.get('id')}
+for a in raw_adapters:
+    if a.get('mac') and a['mac'] not in existing_macs:
+        detected.append({'id': a.get('id', ''), 'mac': a['mac'], 'name': a.get('id', '')})
+    elif a.get('id') and a['id'] not in existing_ids:
+        detected.append({'id': a['id'], 'mac': a.get('mac', ''), 'name': a['id']})
+
+adapters = detected
 
 config = {
     'SENDSPIN_SERVER':    opts.get('sendspin_server', 'auto'),

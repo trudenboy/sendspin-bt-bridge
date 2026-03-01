@@ -27,7 +27,7 @@ app = Flask(__name__)
 CORS(app)
 
 # Version information
-VERSION = "1.3.12"
+VERSION = "1.3.13"
 BUILD_DATE = "2026-03-01"
 
 # Configuration file path
@@ -1505,8 +1505,8 @@ async function saveConfig() {
     // Pass current group slider value so backend can init volume for new devices
     var groupSlider = document.getElementById('group-vol-slider');
     config._new_device_default_volume = groupSlider ? parseInt(groupSlider.value, 10) : 100;
-    // Persist manually-added adapters
-    config.BLUETOOTH_ADAPTERS = btManualAdapters.filter(function(a) { return a.mac || a.id; });
+    // Save all adapters (auto-detected + manual) so native HA Config tab shows them
+    config.BLUETOOTH_ADAPTERS = btAdapters.filter(function(a) { return a.id; });
     // Keep single BLUETOOTH_MAC for backward compat if exactly one device
     if (config.BLUETOOTH_DEVICES.length === 1) {
         config.BLUETOOTH_MAC = config.BLUETOOTH_DEVICES[0].mac;
