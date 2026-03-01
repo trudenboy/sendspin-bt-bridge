@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.14] - 2026-03-01
+
+### Fixed
+- **HA addon: release/reclaim state lost on restart** — `entrypoint.sh` now preserves `enabled` flags from the previous `config.json` when regenerating it from `options.json`; device that was released stays released after restart
+- **Volume slider shows 100% after restart** — `sendspin_client.py` now pre-fills `status['volume']` from `LAST_VOLUMES` at startup so the UI displays the saved volume immediately, before Bluetooth reconnects
+
 ## [1.3.13] - 2026-03-01
 
 ### Added

@@ -26,7 +26,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-CLIENT_VERSION = "1.3.13"
+CLIENT_VERSION = "1.3.14"
 
 # Per-player audio format cache — keyed by player_name.
 # Updated when a full "Audio format: flac 48000Hz/24-bit/2ch" line is received;
@@ -900,6 +900,15 @@ async def main():
                 client.status['bt_management_enabled'] = False
                 bt_mgr.management_enabled = False
                 logger.info(f"  Player '{player_name}': BT management disabled at startup")
+            # Pre-fill volume from saved LAST_VOLUMES so UI shows correct value before BT connects
+            try:
+                with open(config_file) as _f:
+                    _saved = json.load(_f)
+                _saved_vol = _saved.get('LAST_VOLUMES', {}).get(mac)
+                if _saved_vol is not None and isinstance(_saved_vol, int) and 0 <= _saved_vol <= 100:
+                    client.status['volume'] = _saved_vol
+            except Exception:
+                pass
         clients.append(client)
         logger.info(f"  Player: '{player_name}', BT: {mac or 'none'}, Adapter: {adapter or 'default'}")
 
