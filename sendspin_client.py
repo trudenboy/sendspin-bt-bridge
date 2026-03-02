@@ -26,7 +26,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-CLIENT_VERSION = "1.3.29"
+CLIENT_VERSION = "1.3.30"
 
 
 async def _pause_all_via_mpris() -> int:
@@ -63,11 +63,10 @@ async def _pause_all_via_mpris() -> int:
 
 
 def _read_mpris_metadata_for(pid: int):
-    """Read current track/artist from MPRIS for the sendspin process with the given PID.
+    """Read track/artist/playback-state from MPRIS for the given sendspin PID.
 
-    Sendspin registers as org.mpris.MediaPlayer2.Sendspin.instance{PID}.
-    Targets that specific bus name to avoid mixing up metadata across players.
-    Returns (None, None) if D-Bus is unavailable or no metadata found.
+    Returns (artist, track, playback_status) where playback_status is
+    'Playing', 'Paused', or 'Stopped'. All fields are None on failure.
     """
     try:
         import dbus  # optional dependency — may not be installed
@@ -80,11 +79,12 @@ def _read_mpris_metadata_for(pid: int):
             title = str(meta.get('xesam:title', '') or '')
             artists = meta.get('xesam:artist', [])
             artist = str(artists[0]) if artists else ''
-            return artist or None, title or None
+            playback_status = str(iface.Get('org.mpris.MediaPlayer2.Player', 'PlaybackStatus'))
+            return artist or None, title or None, playback_status
         except Exception:
-            return None, None
+            return None, None, None
     except Exception:
-        return None, None
+        return None, None, None
 
 _DBUS_MPRIS_AVAILABLE = False
 MprisIdentityService = None
@@ -726,13 +726,21 @@ class SendspinClient:
                             except Exception:
                                 pass
 
-                        # Poll MPRIS for current track/artist metadata
-                        if self.status.get('playing') and self.process:
-                            artist, track = await loop.run_in_executor(
+                        # Poll MPRIS for track metadata and authoritative playback state
+                        if self.process:
+                            artist, track, playback_status = await loop.run_in_executor(
                                 None, _read_mpris_metadata_for, self.process.pid
                             )
-                            self.status['current_artist'] = artist
-                            self.status['current_track'] = track
+                            if playback_status is not None:
+                                # MPRIS is authoritative — overrides log-based detection
+                                is_playing = (playback_status == 'Playing')
+                                if is_playing != self.status.get('playing'):
+                                    self.status['playing'] = is_playing
+                                    self.status['state_changed_at'] = datetime.now().isoformat()
+                            if artist is not None or track is not None:
+                                self.status['current_artist'] = artist
+                                self.status['current_track'] = track
+                            # Don't clear track/artist on pause — keep last known values for display
                         else:
                             self.status['current_artist'] = None
                             self.status['current_track'] = None
