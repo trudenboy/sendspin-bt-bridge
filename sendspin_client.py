@@ -8,11 +8,8 @@ import asyncio
 import json
 import logging
 import os
-import re
 import signal
 import socket
-import subprocess
-import sys
 import threading
 import time
 from datetime import datetime
@@ -31,7 +28,6 @@ from mpris import (
     _GLib,
     MprisIdentityService,
     pause_all_via_mpris as _pause_all_via_mpris,
-    read_mpris_metadata_for as _read_mpris_metadata_for,
 )
 from bluetooth_manager import BluetoothManager
 
@@ -41,12 +37,6 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
-
-# Per-player — keyed by player_name.
-# Updated when a full "Audio format: flac 48000Hz/24-bit/2ch" line is received;
-# read by the same player to fill in format details when only
-# "Stream started with codec X" was received.
-_last_full_audio_format: dict = {}  # player_name → format string
 
 class SendspinClient:
     """Wrapper for sendspin CLI with status tracking"""
@@ -95,12 +85,13 @@ class SendspinClient:
             'group_id': None,
         }
 
-        self.process = None
+        self.process = None  # kept for API compatibility (routes/api.py uses it for process check)
         self.running = False
         self.bt_management_enabled: bool = True
         self.bluetooth_sink_name = None  # Store Bluetooth sink name for volume sync
         self.connected_server_url: str = ''  # actual resolved ws:// URL (populated after connect)
-        self.volume_restore_done = False  # Flag to prevent saving initial volume
+        self._daemon_task: Optional[asyncio.Task] = None
+        self._bridge_daemon = None  # BridgeDaemon instance (in-process sendspin)
         self._monitor_task: Optional[asyncio.Task] = None
         self._status_lock = threading.Lock()  # protects concurrent reads/writes of self.status
 
@@ -129,7 +120,6 @@ class SendspinClient:
     async def update_status(self):
         """Update client status"""
         logger.debug("Status monitoring loop started")
-        loop = asyncio.get_event_loop()
         while self.running:
             try:
                 if self.bt_manager:
@@ -140,55 +130,31 @@ class SendspinClient:
                     if bt_connected != self.status['bluetooth_connected']:
                         self.status['bluetooth_connected'] = bt_connected
                         self.status['bluetooth_connected_at'] = datetime.now().isoformat()
-                
-                # Check if process is still running
-                if self.process:
-                    if self.process.poll() is not None:
-                        if self.status['server_connected']:
-                            self.status['server_connected_at'] = datetime.now().isoformat()
+
+                # Check in-process daemon health
+                if self._daemon_task:
+                    if self._daemon_task.done():
                         self.status['server_connected'] = False
                         self.status['connected'] = False
                         self.status['group_name'] = None
                         self.status['group_id'] = None
-                        # Don't restart sendspin if BT is disconnected — monitor_and_reconnect
-                        # will start it again once BT reconnects (prevents PortAudio error flood).
+                        # Don't restart if BT is disconnected — monitor_and_reconnect
+                        # will call start_sendspin() once BT reconnects.
                         if not self.bt_manager or self.bt_manager.connected:
-                            logger.warning("Sendspin process died, restarting...")
-                            await self.start_sendspin_process()
+                            logger.warning("Daemon task died unexpectedly, restarting...")
+                            await self.start_sendspin()
                         else:
-                            logger.info("Sendspin process stopped; waiting for BT to reconnect before restarting")
+                            logger.info("Daemon task stopped; waiting for BT to reconnect")
                     else:
-                        # Process is running, mark as connected
-                        if not self.status['server_connected']:
-                            self.status['server_connected_at'] = datetime.now().isoformat()
-                        self.status['server_connected'] = True
-                        self.status['connected'] = True
-
-                        # Fallback: detect actual server IP via /proc/{pid}/fd + /proc/net/tcp[6]
-                        if self.status['server_connected'] and not self.connected_server_url and self.process:
-                            try:
-                                self.connected_server_url = self._detect_server_url_from_proc()
-                            except Exception:
-                                pass
-
-                        # Poll MPRIS for track metadata and authoritative playback state
-                        if self.process:
-                            artist, track, playback_status = await loop.run_in_executor(
-                                None, _read_mpris_metadata_for, self.process.pid
-                            )
-                            if playback_status is not None:
-                                # MPRIS is authoritative — overrides log-based detection
-                                is_playing = (playback_status == 'Playing')
-                                if is_playing != self.status.get('playing'):
-                                    self.status['playing'] = is_playing
-                                    self.status['state_changed_at'] = datetime.now().isoformat()
-                            if artist is not None or track is not None:
-                                self.status['current_artist'] = artist
-                                self.status['current_track'] = track
-                            # Don't clear track/artist on pause — keep last known values for display
-                        else:
-                            self.status['current_artist'] = None
-                            self.status['current_track'] = None
+                        # Daemon is running — update connected state from daemon client
+                        daemon = self._bridge_daemon
+                        if daemon and daemon._client is not None:
+                            is_connected = getattr(daemon._client, 'connected', False)
+                            if is_connected and not self.status.get('server_connected'):
+                                self.status['server_connected'] = True
+                                self.status['connected'] = True
+                                if not self.status.get('server_connected_at'):
+                                    self.status['server_connected_at'] = datetime.now().isoformat()
 
                 await asyncio.sleep(10)
             except Exception as e:
@@ -196,322 +162,128 @@ class SendspinClient:
                 await asyncio.sleep(10)
     
     def _detect_server_url_from_proc(self) -> str:
-        """Detect server URL from /proc/net/tcp by finding the inbound connection from MA.
-
-        MA connects TO sendspin's listen_port; the remote IP on that connection is MA's host.
-        We combine it with the configured server_port to build the ws:// URL.
-        """
-        import os as _os
-        pid = self.process.pid
-        # Collect socket inodes owned by this process
-        socket_inodes: set = set()
-        try:
-            fd_dir = f'/proc/{pid}/fd'
-            for fd in _os.listdir(fd_dir):
-                try:
-                    target = _os.readlink(f'{fd_dir}/{fd}')
-                    if target.startswith('socket:['):
-                        socket_inodes.add(target[8:-1])
-                except OSError:
-                    pass
-        except OSError:
-            return ''
-        if not socket_inodes:
-            return ''
-
-        listen_port_hex = format(self.listen_port, '04X') if self.listen_port else None
-
-        def _decode_ipv4(ip_hex: str) -> str:
-            b = bytes.fromhex(ip_hex)
-            return f'{b[3]}.{b[2]}.{b[1]}.{b[0]}'
-
-        for fname in ('/proc/net/tcp6', '/proc/net/tcp'):
-            try:
-                with open(fname) as _f:
-                    lines = _f.readlines()[1:]
-            except OSError:
-                continue
-            for line in lines:
-                cols = line.split()
-                if len(cols) < 10 or cols[3] != '01':  # state 01 = ESTABLISHED
-                    continue
-                if cols[9] not in socket_inodes:
-                    continue
-                local_parts = cols[1].split(':')
-                remote_parts = cols[2].split(':')
-                if len(local_parts) < 2 or len(remote_parts) < 2:
-                    continue
-                local_port_hex = local_parts[-1]
-                # We want the inbound connection to our listen_port (MA → sendspin)
-                if listen_port_hex and local_port_hex.upper() != listen_port_hex:
-                    continue
-                # Decode the remote (MA) IP address
-                ip_hex = remote_parts[0]
-                try:
-                    if len(ip_hex) == 32:  # tcp6 — check for IPv4-mapped ::ffff:x.x.x.x
-                        words = [ip_hex[i:i+8] for i in range(0, 32, 8)]
-                        if words[0] == '00000000' and words[1] == '00000000' and words[2] == 'FFFF0000':
-                            ip = _decode_ipv4(words[3])
-                        else:
-                            continue  # pure IPv6 — skip
-                    elif len(ip_hex) == 8:  # tcp — little-endian IPv4
-                        ip = _decode_ipv4(ip_hex)
-                    else:
-                        continue
-                    server_port = self.server_port or 9000
-                    return f'ws://{ip}:{server_port}/sendspin'
-                except Exception:
-                    continue
+        """Kept for backwards compatibility — in-process daemon doesn't use this."""
         return ''
 
-    async def start_sendspin_process(self):
-        """Start the sendspin CLI player"""
+    async def start_sendspin(self) -> None:
+        """Start the sendspin daemon in-process via BridgeDaemon."""
         try:
-            # If BT is connected but sink hasn't been configured yet (e.g. process restart
-            # triggered by _read_until_eof before monitor_and_reconnect runs configure),
-            # configure the audio sink now so bluetooth_sink_name is available.
+            from services.bridge_daemon import BridgeDaemon, resolve_audio_device_for_sink
+            from sendspin.daemon.daemon import DaemonArgs
+            from sendspin.settings import get_client_settings
+        except ImportError as e:
+            logger.error(f"sendspin package not available (running outside container?): {e}")
+            self.status['last_error'] = str(e)
+            return
+
+        try:
+            # Configure BT audio sink if not yet done
             if self.bt_manager and self.bt_manager.connected and not self.bluetooth_sink_name:
                 self.bt_manager.configure_bluetooth_audio()
 
-            # Kill any existing process first to free the port
-            if self.process and self.process.poll() is None:
-                logger.info(f"Stopping existing sendspin process (PID {self.process.pid}) before restart")
-                try:
-                    self.process.terminate()
-                    loop = asyncio.get_event_loop()
-                    await loop.run_in_executor(None, lambda: self.process.wait(timeout=3))
-                except Exception:
-                    try:
-                        self.process.kill()
-                    except Exception:
-                        pass
+            # Stop any existing daemon task first
+            await self.stop_sendspin()
 
-            # Build command — use group-aware wrapper to get MA group info via stdout.
-            # The wrapper monkey-patches SendspinDaemon to log group/update events.
-            # TODO: remove wrapper once upstream sendspin-cli adds native daemon group logging.
-            safe_id = ''.join(c if c.isalnum() or c == '-' else '-' for c in self.player_name.lower()).strip('-')
+            safe_id = ''.join(
+                c if c.isalnum() or c == '-' else '-' for c in self.player_name.lower()
+            ).strip('-')
             _mac = self.bt_manager.mac_address if self.bt_manager else None
             client_id = _player_id_from_mac(_mac) if _mac else f"sendspin-{safe_id}"
-            # static_delay_ms compensates for BT A2DP + PA buffer latency (~500ms total)
-            # Negative value = schedule audio earlier to account for output latency
-            # Per-device value takes priority over the env var global default
+
             if self.static_delay_ms is not None:
                 static_delay_ms = self.static_delay_ms
             else:
                 static_delay_ms = float(os.environ.get('SENDSPIN_STATIC_DELAY_MS', '-500'))
-            _wrapper = os.path.join(os.path.dirname(__file__), 'services', 'sendspin_group_daemon.py')
-            cmd = [
-                sys.executable, _wrapper, 'daemon',
-                '--name', self.player_name,
-                '--id', client_id,
-                '--port', str(self.listen_port),
-                '--static-delay-ms', str(static_delay_ms),
-                '--hardware-volume', 'false',
-            ]
 
-            # Add server URL only if explicitly configured
-            if self.server_host and self.server_host.lower() not in ['auto', 'discover', '']:
+            server_url: Optional[str] = None
+            if self.server_host and self.server_host.lower() not in ('auto', 'discover', ''):
                 server_url = f"ws://{self.server_host}:{self.server_port}/sendspin"
                 logger.info(f"Starting Sendspin player '{self.player_name}' connecting to {server_url} (port {self.listen_port})")
-                cmd.extend(['--url', server_url])
             else:
                 logger.info(f"Starting Sendspin player '{self.player_name}' with auto-discovery (port {self.listen_port})")
 
-            # Isolate per-instance config via HOME — avoids shared ~/.config/sendspin/
-            instance_home = f"/tmp/sendspin-{safe_id}"
-            os.makedirs(instance_home, exist_ok=True)
-            env = os.environ.copy()
-            env['HOME'] = instance_home
+            # Resolve audio device matching the BT sink
+            audio_device = resolve_audio_device_for_sink(self.bluetooth_sink_name)
+            if audio_device:
+                logger.info(f"Audio device: {audio_device.name} (index {audio_device.index})")
+            else:
+                logger.error("No audio output device found — cannot start daemon")
+                self.status['last_error'] = 'No audio output device found'
+                return
 
-            if self.bt_manager:
-                pa_mac = self.bt_manager.mac_address.replace(':', '_')
-                # Use the sink name probed by configure_bluetooth_audio if available;
-                # fall back to legacy PulseAudio format for PULSE_SINK env var only.
-                if self.bluetooth_sink_name:
-                    pulse_sink = self.bluetooth_sink_name
-                    env['PULSE_SINK'] = pulse_sink
-                    cmd.extend(['--audio-device', pulse_sink])
-                    logger.info(f"Routing audio to sink: {pulse_sink}")
-                else:
-                    # Sink not confirmed yet — set PULSE_SINK only, omit --audio-device
-                    pulse_sink = f"bluez_sink.{pa_mac}.a2dp_sink"
-                    env['PULSE_SINK'] = pulse_sink
-                    logger.info(f"Routing audio to sink (PULSE_SINK only): {pulse_sink}")
+            # Per-instance isolated settings to avoid ~/.config/sendspin/ conflicts
+            settings = await get_client_settings('daemon', config_dir=f'/tmp/sendspin-{safe_id}')
+            # Seed volume from saved value so playback starts at correct level
+            saved_vol = self.status.get('volume', 100)
+            if isinstance(saved_vol, int) and 0 <= saved_vol <= 100:
+                settings.player_volume = saved_vol
 
-            # Start the sendspin process with elevated scheduling priority
-            def _set_nice():
-                try:
-                    os.nice(-5)
-                except OSError:
-                    pass  # requires root or CAP_SYS_NICE
-
-            self.process = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1,
-                env=env,
-                preexec_fn=_set_nice,
+            args = DaemonArgs(
+                audio_device=audio_device,
+                client_id=client_id,
+                client_name=self.player_name,
+                settings=settings,
+                url=server_url,
+                static_delay_ms=static_delay_ms,
+                listen_port=self.listen_port,
+                use_mpris=True,
+                use_hardware_volume=False,  # we manage volume via pactl against the BT sink
             )
 
-            logger.info(f"Sendspin player started (PID: {self.process.pid})")
-            logger.info(f"Sendspin command: {' '.join(cmd)}")
-            self.status['playing'] = False  # reset; monitor_output() will set True on Stream STARTED
-            
-            # Monitor output in background — cancel any previous task first
-            if self._monitor_task and not self._monitor_task.done():
-                self._monitor_task.cancel()
-            self._monitor_task = asyncio.create_task(self.monitor_output())
-            def _on_monitor_output_done(t):
+            def _on_volume_save(vol: int) -> None:
+                try:
+                    _save_device_volume(getattr(self.bt_manager, 'mac_address', None), vol)
+                except Exception as exc:
+                    logger.debug(f"Could not save volume: {exc}")
+
+            self._bridge_daemon = BridgeDaemon(
+                args=args,
+                status=self.status,
+                bluetooth_sink_name=self.bluetooth_sink_name,
+                on_volume_save=_on_volume_save,
+            )
+            self.status['playing'] = False
+
+            self._daemon_task = asyncio.create_task(self._bridge_daemon.run())
+
+            def _on_daemon_done(t: asyncio.Task) -> None:
                 if not t.cancelled() and t.exception():
-                    logger.error(
-                        f"[{self.player_name}] monitor_output ended with error: {t.exception()}"
-                    )
-            self._monitor_task.add_done_callback(_on_monitor_output_done)
-            
+                    logger.error(f"[{self.player_name}] BridgeDaemon ended with error: {t.exception()}")
+
+            self._daemon_task.add_done_callback(_on_daemon_done)
+            logger.info(f"Sendspin daemon started in-process for '{self.player_name}'")
+
         except Exception as e:
-            logger.error(f"Failed to start Sendspin player: {e}")
+            logger.error(f"Failed to start Sendspin daemon: {e}")
             self.status['last_error'] = str(e)
             self.status['server_connected'] = False
-    
-    async def monitor_output(self):
-        """Monitor sendspin process output and sync volume changes"""
-        if not self.process:
-            return
 
-        # Capture process reference so this task stays bound to THIS process instance
-        # even if self.process is reassigned when a new process is started.
-        process = self.process
-        loop = asyncio.get_event_loop()
+    async def stop_sendspin(self) -> None:
+        """Stop the in-process sendspin daemon task."""
+        if self._daemon_task and not self._daemon_task.done():
+            self._daemon_task.cancel()
+            try:
+                await asyncio.wait_for(asyncio.shield(self._daemon_task), timeout=3.0)
+            except (asyncio.CancelledError, asyncio.TimeoutError):
+                pass
+        self._daemon_task = None
+        self._bridge_daemon = None
+        self.status['server_connected'] = False
+        self.status['connected'] = False
+        self.status['group_name'] = None
+        self.status['group_id'] = None
 
-        def _read_until_eof():
-            """Run in a SINGLE thread pool slot.
-            Reading one line at a time with per-line run_in_executor calls saturates
-            the thread pool when sendspin emits errors at high rate (100+ lines/sec),
-            starving is_device_connected() calls and blocking BT disconnect detection.
-            Running the entire loop in ONE executor call avoids that problem.
-            Python's logging and dict writes are thread-safe via the GIL.
-            Sentinel is '' (empty str) because process is opened with text=True."""
-            for raw_line in iter(process.stdout.readline, ''):
-                if not self.running:
-                    break
-                line_str = raw_line.strip()
-                logger.info(f"Sendspin: {line_str}")
+    def is_running(self) -> bool:
+        """Return True if the in-process daemon task is alive."""
+        return self._daemon_task is not None and not self._daemon_task.done()
 
-                # Update playing state — sendspin uses Python logging format:
-                # "INFO:sendspin.audio:Stream STARTED: N chunks, ..."
-                # "INFO:sendspin.audio:Stream STOPPED" (if/when emitted)
-                # "INFO:aiosendspin.client.client:Stream started with codec flac"
-                if 'Stream STARTED' in line_str or 'Stream started with codec' in line_str:
-                    self.status['playing'] = True
-                    self.status['state_changed_at'] = datetime.now().isoformat()
-                    # Extract codec from "Stream started with codec flac"
-                    if 'Stream started with codec' in line_str:
-                        try:
-                            codec = line_str.split('Stream started with codec')[-1].strip()
-                            if codec:
-                                # Use cached full format if codec matches, else just codec
-                                cached = _last_full_audio_format.get(self.player_name, '')
-                                if cached and cached.startswith(codec):
-                                    self.status['audio_format'] = cached
-                                else:
-                                    self.status['audio_format'] = codec
-                        except Exception:
-                            pass
-                elif 'Stream STOPPED' in line_str or 'MPRIS interface stopped' in line_str:
-                    self.status['playing'] = False
-                    self.status['state_changed_at'] = datetime.now().isoformat()
-
-                # Parse audio format: "Audio format: flac 48000Hz/24-bit/2ch"
-                if 'Audio format:' in line_str:
-                    try:
-                        fmt = line_str.split('Audio format:')[-1].strip()
-                        if fmt:
-                            _last_full_audio_format[self.player_name] = fmt
-                        self.status['audio_format'] = fmt
-                    except Exception:
-                        pass
-
-                # Parse sync events: "Sync error 503.6 ms too large; re-anchoring"
-                # or "Audio underflow detected; requesting re-anchor"
-                if 're-anchoring' in line_str or 're-anchor' in line_str:
-                    try:
-                        m = re.search(r'Sync error ([\d.]+)\s*ms', line_str)
-                        if m:
-                            self.status['last_sync_error_ms'] = float(m.group(1))
-                        self.status['reanchor_count'] += 1
-                        self.status['reanchoring'] = True
-                    except Exception:
-                        pass
-                elif 'Stream STARTED' in line_str:
-                    self.status['reanchoring'] = False
-
-                # Track server connection — actual sendspin output:
-                # "INFO:sendspin.daemon.daemon:Server connected"
-                # "INFO:aiosendspin.client.client:Handshake with server complete"
-                if 'Server connected' in line_str or 'Handshake with server complete' in line_str:
-                    if not self.status['server_connected_at']:
-                        self.status['server_connected_at'] = datetime.now().isoformat()
-                    self.status['server_connected'] = True
-
-                # Try to capture actual server URL from sendspin output
-                if not self.connected_server_url:
-                    m = re.search(r'ws://[^\s/]+:\d+/\S*', line_str)
-                    if m:
-                        self.connected_server_url = m.group(0)
-
-                # Sync volume changes to Bluetooth speaker
-                # Handles "Volume: XX%" and "Server set player volume: XX%"
-                if ('Volume:' in line_str or 'player volume:' in line_str.lower()) and self.bluetooth_sink_name:
-                    try:
-                        # Split on last colon to get the value regardless of prefix
-                        volume_part = line_str.rsplit(':', 1)[-1].strip().rstrip('%')
-                        if volume_part and volume_part.isdigit():
-                            volume_percent = int(volume_part)
-                            self.status['volume'] = volume_percent
-
-                            if self.volume_restore_done:
-                                try:
-                                    _save_device_volume(
-                                        getattr(self.bt_manager, 'mac_address', None),
-                                        volume_percent
-                                    )
-                                except Exception as e:
-                                    logger.debug(f"Could not save volume to config: {e}")
-
-                            result = subprocess.run(
-                                ['pactl', 'set-sink-volume', self.bluetooth_sink_name, f'{volume_percent}%'],
-                                capture_output=True,
-                                text=True,
-                                timeout=2
-                            )
-                            if result.returncode == 0:
-                                logger.info(f"✓ Synced Bluetooth speaker volume to {volume_percent}%")
-                    except Exception as e:
-                        logger.debug(f"Could not sync volume: {e}")
-
-                # Parse MA group info logged by sendspin_group_daemon.py wrapper
-                if 'Group name:' in line_str:
-                    gname = line_str.split('Group name:', 1)[-1].strip()
-                    self.status['group_name'] = gname if gname else None
-                if 'Group ID:' in line_str:
-                    self.status['group_id'] = line_str.split('Group ID:', 1)[-1].strip()
-
-        try:
-            await loop.run_in_executor(None, _read_until_eof)
-        except asyncio.CancelledError:
-            pass  # task was cancelled (e.g. process restarted) — exit cleanly
-        except Exception as e:
-            logger.error(f"Error monitoring output: {e}")
-    
     async def run(self):
         """Main run loop"""
         self.running = True
 
         # Start Sendspin player first (don't block on Bluetooth)
         if self.bt_management_enabled:
-            await self.start_sendspin_process()
+            await self.start_sendspin()
         else:
             logger.info(f"[{self.player_name}] BT management disabled — skipping sendspin startup")
 
@@ -560,18 +332,7 @@ class SendspinClient:
             # Cleanup
             for task in tasks:
                 task.cancel()
-            
-            if self.process:
-                try:
-                    self.process.terminate()
-                    loop = asyncio.get_event_loop()
-                    await loop.run_in_executor(None, lambda: self.process.wait(timeout=5))
-                except Exception as e:
-                    logger.error(f"Error terminating process: {e}")
-                    try:
-                        self.process.kill()
-                    except Exception:
-                        pass
+            await self.stop_sendspin()
     
     async def stop(self):
         """Stop the client"""
@@ -584,13 +345,11 @@ class SendspinClient:
         if self.bt_manager:
             self.bt_manager.management_enabled = enabled
         if not enabled:
-            # Stop sendspin subprocess
-            if self.process and self.process.poll() is None:
-                logger.info(f"[{self.player_name}] BT released — stopping sendspin")
-                try:
-                    self.process.terminate()
-                except Exception:
-                    pass
+            # Cancel the in-process daemon task (task.cancel() is thread-safe)
+            if self.is_running():
+                logger.info(f"[{self.player_name}] BT released — stopping sendspin daemon")
+                if self._daemon_task:
+                    self._daemon_task.cancel()
             # Disconnect BT device (synchronous subprocess call, safe from any thread)
             if self.bt_manager:
                 try:
@@ -745,11 +504,7 @@ async def main():
             await asyncio.sleep(0.5)
         for c in clients:
             c.running = False
-            if c.process:
-                try:
-                    c.process.terminate()
-                except Exception:
-                    pass
+            await c.stop_sendspin()
 
     def signal_handler():
         loop.create_task(_graceful_shutdown())

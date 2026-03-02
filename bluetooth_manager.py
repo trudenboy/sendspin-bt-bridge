@@ -489,12 +489,9 @@ class BluetoothManager:
                         # Kill sendspin daemon immediately — if the BT sink is gone,
                         # sendspin floods PortAudioErrors on every audio chunk, which
                         # starves its own event loop and causes WebSocket PONG timeouts.
-                        if self.client and self.client.process and self.client.process.poll() is None:
+                        if self.client and self.client.is_running():
                             logger.info(f"BT disconnected for {self.device_name}, stopping sendspin daemon...")
-                            try:
-                                self.client.process.terminate()
-                            except Exception:
-                                pass
+                            await self.client.stop_sendspin()
 
                         logger.warning(f"Bluetooth device {self.device_name} disconnected, attempting reconnect... (attempt {reconnect_attempt})")
                         success = await loop.run_in_executor(None, self.connect_device)
@@ -504,7 +501,7 @@ class BluetoothManager:
                             self.client.status['reconnect_attempt'] = 0
                             # BT reconnected — start fresh sendspin to register with MA
                             logger.info(f"BT reconnected for {self.device_name}, starting sendspin...")
-                            await self.client.start_sendspin_process()
+                            await self.client.start_sendspin()
                     else:
                         # Device is connected — clear any reconnect state
                         if self.client and self.client.status.get('reconnecting'):
