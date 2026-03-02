@@ -2563,6 +2563,15 @@ def api_bt_scan():
         # Major device class 4 (0x0400) = Audio/Video.
         # UUID 0000110b = A2DP Sink (speaker/headphones).
         # Devices with no class info are kept (unknown → better show than hide).
+        # Audio-related Bluetooth profile UUIDs (short form, lowercase)
+        _AUDIO_UUIDS = {
+            '0000110b',  # A2DP Sink
+            '0000110a',  # A2DP Source
+            '0000110e',  # AV Remote Control
+            '0000110c',  # AV Remote Control Target
+            '0000111e',  # Hands-Free
+        }
+
         def is_audio_device(mac: str) -> bool:
             try:
                 r = subprocess.run(
@@ -2570,19 +2579,21 @@ def api_bt_scan():
                     capture_output=True, text=True, timeout=4
                 )
                 out = r.stdout
-                # Check Class field: "Class: 0x240404" — major class bits 12-8
+                out_lower = out.lower()
+                # Check Class field: major class 4 = Audio/Video
                 class_m = re.search(r'Class:\s+(0x[0-9A-Fa-f]+)', out)
                 if class_m:
                     cls = int(class_m.group(1), 16)
                     major = (cls >> 8) & 0x1f
-                    return major == 4  # 4 = Audio/Video
-                # Class unavailable — check for A2DP Sink UUID
-                if '0000110b' in out.lower():
+                    return major == 4
+                # No Class — check for any audio profile UUID
+                if any(u in out_lower for u in _AUDIO_UUIDS):
                     return True
-                # No class info at all — include (device may not be cached yet)
-                if 'Class:' not in out and 'UUID:' not in out:
-                    return True
-                return False
+                # BlueZ has info (Name or UUID) but no audio class/UUID → not audio
+                if 'Name:' in out or 'UUID:' in out:
+                    return False
+                # Truly uncached (no Name, no Class, no UUID) → include cautiously
+                return True
             except Exception:
                 return True  # on error, include
 
