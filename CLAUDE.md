@@ -29,20 +29,37 @@ CI/CD builds multi-platform Docker images (`linux/amd64`, `linux/arm64`) to `ghc
 
 ## Architecture
 
-Two main Python files:
+**Python modules (v1.4.x modular structure):**
 
-**`sendspin_client.py`** - Core application:
-- `BluetoothManager` - Manages Bluetooth pairing/connection via `bluetoothctl` subprocess. Auto-reconnects every 10 seconds. Handles both PipeWire and PulseAudio sink routing.
-- `SendspinClient` - Wraps the `sendspin` CLI (run as subprocess with `--headless`). Parses CLI output to track playback state and syncs volume to the Bluetooth sink via `pactl`.
-- `main()` - Loads config, instantiates both classes, starts web server in a daemon thread, then runs the async event loop.
+**`sendspin_client.py`** (753 lines) - Core entry point:
+- `SendspinClient` - Wraps the `sendspin` CLI subprocess. Parses output to track playback state, syncs volume via `pactl`.
+- `main()` - Loads config, instantiates BluetoothManager + SendspinClient per device, starts web server daemon thread, runs async event loop.
 
-**`web_interface.py`** - Flask app served by Waitress on port 8080:
-- Embeds all HTML/CSS/JS inline (no template files or static assets)
-- Polls `/api/status` every 2 seconds to update the dashboard
-- `/api/config` GET/POST reads/writes `/config/config.json`
-- `/api/volume` invokes `pactl` to set speaker volume
+**`bluetooth_manager.py`** (492 lines) - BT connection management:
+- `BluetoothManager` - Manages pairing/connection via `bluetoothctl` stdin pipe. Auto-reconnects every 10 s. Handles PipeWire and PulseAudio sink routing.
+- `_force_sbc_codec()` - Forces SBC A2DP codec via pactl/bluetoothctl.
+
+**`config.py`** (80 lines) - Configuration layer:
+- `_CONFIG_PATH`, `_config_lock` (shared threading.Lock — imported by both sendspin_client.py and web_interface.py)
+- `load_config()`, `_player_id_from_mac()`, `_save_device_volume()`
+
+**`mpris.py`** (121 lines) - MPRIS D-Bus integration:
+- `MprisIdentityService` - Registers MediaPlayer2 D-Bus service so MA discovers the bridge by player name
+- `pause_all_via_mpris()`, `read_mpris_metadata_for()` - D-Bus helpers
+
+**`web_interface.py`** (1107 lines) - Flask app served by Waitress on port 8080:
+- All `/api/*` routes
+- Polls `/api/status` every 2 s via JS in browser
+- Imports `_config_lock` from `config.py` (unified shared lock)
+- HA Ingress support via `X-Ingress-Path` → Flask `SCRIPT_NAME`
+
+**`templates/index.html`** - Jinja2 HTML template (Flask `render_template`)
+**`static/style.css`** - Extracted CSS (360 lines)
+**`static/app.js`** - Extracted JavaScript (1242 lines)
 
 **Config persistence:** `/config/config.json` (mounted Docker volume at `/etc/docker/Sendspin`). Changes via the web UI require a container restart to take effect.
+
+**Docs site:** `docs-site/` — Astro Starlight, deployed to GitHub Pages at `https://trudenboy.github.io/sendspin-bt-bridge`
 
 ## Key Environment Variables
 
