@@ -2564,16 +2564,22 @@ def api_bt_scan():
         else:
             init = 'power on\\nagent on\\nscan on\\n'
 
-        # Keep stdin open with sleep so bluetoothctl doesn't exit immediately
-        # after processing commands — it exits on stdin EOF before discoveries arrive.
+        # After scan off, query each adapter's device list within the SAME session
+        # so BlueZ cache is still alive. 'show' outputs bare "Controller MAC ...",
+        # 'devices' outputs bare "Device MAC Name" — distinct from scan events
+        # which always carry [NEW]/[CHG]/[DEL] prefixes.
+        post_scan = ''.join(f'select {m}\\nshow\\ndevices\\n' for m in adapter_macs)
+        bt_timeout = 12 + len(adapter_macs) * 2
+
         result = subprocess.run(
             ['bash', '-c',
-             f'( printf "{init}"; sleep 10; printf "scan off\\n" )'
-             ' | timeout 13 bluetoothctl 2>&1'],
-            capture_output=True, text=True, timeout=16
+             f'( printf "{init}"; sleep 10; printf "scan off\\n{post_scan}"; sleep 1 )'
+             f' | timeout {bt_timeout} bluetoothctl 2>&1'],
+            capture_output=True, text=True, timeout=bt_timeout + 4
         )
         seen: set = set()
         names: dict = {}
+        device_adapter: dict = {}  # mac → adapter_mac, built from post-scan output
         ansi_re = re.compile(r'\x1b\[[0-9;]*m')
         # [NEW] Device — first time seen this scan session
         new_pat = re.compile(r'\[NEW\]\s+Device\s+([0-9A-Fa-f:]{17})\s+(.*)')
@@ -2581,9 +2587,28 @@ def api_bt_scan():
         chg_name_pat = re.compile(r'\[CHG\]\s+Device\s+([0-9A-Fa-f:]{17})\s+Name:\s+(.*)')
         # [CHG] Device MAC RSSI: ... — already-known device seen with signal (active)
         chg_rssi_pat = re.compile(r'\[CHG\]\s+Device\s+([0-9A-Fa-f:]{17})\s+RSSI:')
+        # Post-scan: bare "Controller MAC" from 'show', bare "Device MAC" from 'devices'
+        show_ctrl_pat = re.compile(r'^Controller\s+([0-9A-Fa-f:]{17})')
+        show_dev_pat = re.compile(r'^Device\s+([0-9A-Fa-f:]{17})')
         active_macs: set = set()
+        current_show_adapter: str = ''
         for line in result.stdout.splitlines():
-            clean = ansi_re.sub('', line)
+            clean = ansi_re.sub('', line).strip()
+            # Post-scan 'show' output: bare "Controller MAC ..." (no [CHG] prefix)
+            if not clean.startswith('['):
+                m = show_ctrl_pat.match(clean)
+                if m:
+                    current_show_adapter = m.group(1).upper()
+                    continue
+                # Post-scan 'devices' output: bare "Device MAC Name"
+                if current_show_adapter:
+                    m = show_dev_pat.match(clean)
+                    if m:
+                        dmac = m.group(1).upper()
+                        if dmac not in device_adapter:
+                            device_adapter[dmac] = current_show_adapter
+                        continue
+            # Scan events
             m = new_pat.search(clean)
             if m:
                 mac = m.group(1).upper()
@@ -2656,27 +2681,6 @@ def api_bt_scan():
                 continue
             devices.append({'mac': mac, 'name': names.get(mac, mac)})
 
-        # Map each found device to the adapter that has it in its device list.
-        # Run "select ADAPTER; devices" per adapter and check which MACs appear.
-        device_adapter: dict = {}
-        found_macs = {d['mac'] for d in devices}
-        for adapter_mac in adapter_macs:
-            try:
-                ar = subprocess.run(
-                    ['bash', '-c',
-                     f'printf "select {adapter_mac}\\ndevices\\n" | bluetoothctl 2>/dev/null'],
-                    capture_output=True, text=True, timeout=5
-                )
-                adp_ansi = re.compile(r'\x1b\[[0-9;]*m')
-                adp_dev = re.compile(r'Device\s+([0-9A-Fa-f:]{17})')
-                for line in ar.stdout.splitlines():
-                    m = adp_dev.search(adp_ansi.sub('', line))
-                    if m:
-                        dmac = m.group(1).upper()
-                        if dmac in found_macs and dmac not in device_adapter:
-                            device_adapter[dmac] = adapter_mac
-            except Exception:
-                pass
         for d in devices:
             d['adapter'] = device_adapter.get(d['mac'], '')
 
