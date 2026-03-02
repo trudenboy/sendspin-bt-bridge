@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.26] - 2026-03-02
+
+### Added
+- **PULSE_LATENCY_MSEC setting** — configurable PulseAudio buffer latency (default 200 ms);
+  increase to 400–600 ms to reduce audio dropouts on slow/overloaded hardware; exposed in
+  the web UI config form and HA addon native Config tab
+
+### Fixed
+- **MPRIS track per player** — `_read_mpris_metadata_for()` now queries
+  `org.mpris.MediaPlayer2.Sendspin.instance{PID}` directly instead of returning
+  metadata from the first MPRIS service found; each player now shows its own track
+
+### Changed
+- **Sendspin process priority** — launched with `nice -5` so audio threads are scheduled
+  ahead of lower-priority background tasks when the system is under load
+
 ## [1.3.25] - 2026-03-02
 
 ### Fixed

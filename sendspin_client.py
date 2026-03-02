@@ -26,7 +26,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-CLIENT_VERSION = "1.3.25"
+CLIENT_VERSION = "1.3.26"
 
 
 async def _pause_all_via_mpris() -> int:
@@ -62,32 +62,27 @@ async def _pause_all_via_mpris() -> int:
     return paused
 
 
-def _read_mpris_metadata_for(player_name: str):
-    """Read current track/artist from MPRIS on the D-Bus session bus.
+def _read_mpris_metadata_for(pid: int):
+    """Read current track/artist from MPRIS for the sendspin process with the given PID.
 
-    Scans all registered MPRIS services (sendspin registers as
-    org.mpris.MediaPlayer2.Sendspin.instanceN with Identity='Sendspin'),
-    returns (artist, track) from the first service that has track metadata.
+    Sendspin registers as org.mpris.MediaPlayer2.Sendspin.instance{PID}.
+    Targets that specific bus name to avoid mixing up metadata across players.
     Returns (None, None) if D-Bus is unavailable or no metadata found.
     """
     try:
         import dbus  # optional dependency — may not be installed
         bus = dbus.SessionBus()
-        for name in bus.list_names():
-            if not str(name).startswith('org.mpris.MediaPlayer2.'):
-                continue
-            try:
-                obj = bus.get_object(str(name), '/org/mpris/MediaPlayer2')
-                iface = dbus.Interface(obj, 'org.freedesktop.DBus.Properties')
-                meta = iface.Get('org.mpris.MediaPlayer2.Player', 'Metadata')
-                title = str(meta.get('xesam:title', '') or '')
-                artists = meta.get('xesam:artist', [])
-                artist = str(artists[0]) if artists else ''
-                if title or artist:
-                    return artist or None, title or None
-            except Exception:
-                continue
-        return None, None
+        service_name = f'org.mpris.MediaPlayer2.Sendspin.instance{pid}'
+        try:
+            obj = bus.get_object(service_name, '/org/mpris/MediaPlayer2')
+            iface = dbus.Interface(obj, 'org.freedesktop.DBus.Properties')
+            meta = iface.Get('org.mpris.MediaPlayer2.Player', 'Metadata')
+            title = str(meta.get('xesam:title', '') or '')
+            artists = meta.get('xesam:artist', [])
+            artist = str(artists[0]) if artists else ''
+            return artist or None, title or None
+        except Exception:
+            return None, None
     except Exception:
         return None, None
 
@@ -696,9 +691,9 @@ class SendspinClient:
                                 pass
 
                         # Poll MPRIS for current track/artist metadata
-                        if self.status.get('playing'):
+                        if self.status.get('playing') and self.process:
                             artist, track = await loop.run_in_executor(
-                                None, _read_mpris_metadata_for, self.player_name
+                                None, _read_mpris_metadata_for, self.process.pid
                             )
                             self.status['current_artist'] = artist
                             self.status['current_track'] = track
@@ -838,7 +833,13 @@ class SendspinClient:
                 env['PULSE_SINK'] = pulse_sink
                 logger.info(f"Routing audio to sink: {pulse_sink}")
 
-            # Start the sendspin process
+            # Start the sendspin process with elevated scheduling priority
+            def _set_nice():
+                try:
+                    os.nice(-5)
+                except OSError:
+                    pass  # requires root or CAP_SYS_NICE
+
             self.process = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
@@ -846,6 +847,7 @@ class SendspinClient:
                 text=True,
                 bufsize=1,
                 env=env,
+                preexec_fn=_set_nice,
             )
 
             logger.info(f"Sendspin player started (PID: {self.process.pid})")
@@ -1104,6 +1106,11 @@ async def main():
     time.tzset()
     logger.info(f"Timezone: {tz}")
 
+    # PulseAudio latency — larger buffer reduces underflows on slow hardware
+    pulse_latency_msec = int(config.get('PULSE_LATENCY_MSEC', 200))
+    os.environ['PULSE_LATENCY_MSEC'] = str(pulse_latency_msec)
+    logger.info(f"PULSE_LATENCY_MSEC: {pulse_latency_msec} ms")
+
     # Normalise device list — fall back to legacy BLUETOOTH_MAC
     bt_devices = config.get('BLUETOOTH_DEVICES', [])
     if not bt_devices:
@@ -1246,10 +1253,12 @@ def load_config():
         'BLUETOOTH_MAC': '',
         'BLUETOOTH_DEVICES': [],
         'TZ': 'Australia/Melbourne',
+        'PULSE_LATENCY_MSEC': 200,
     }
 
     allowed_keys = {'SENDSPIN_SERVER', 'SENDSPIN_PORT', 'BRIDGE_NAME',
-                    'BLUETOOTH_MAC', 'BLUETOOTH_DEVICES', 'TZ', 'LAST_VOLUME'}
+                    'BLUETOOTH_MAC', 'BLUETOOTH_DEVICES', 'TZ', 'LAST_VOLUME',
+                    'PULSE_LATENCY_MSEC'}
 
     if config_file.exists():
         try:

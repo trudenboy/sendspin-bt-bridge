@@ -27,7 +27,7 @@ app = Flask(__name__)
 CORS(app)
 
 # Version information
-VERSION = "1.3.25"
+VERSION = "1.3.26"
 BUILD_DATE = "2026-03-01"
 
 # Configuration file path
@@ -41,6 +41,7 @@ DEFAULT_CONFIG = {
     'BLUETOOTH_MAC': '',
     'BLUETOOTH_DEVICES': [],
     'TZ': 'Australia/Melbourne',
+    'PULSE_LATENCY_MSEC': 200,
 }
 
 # Global clients list will be set by main
@@ -631,6 +632,11 @@ HTML_TEMPLATE = """
             <div class="form-group">
                 <label>Bridge name — appended to every player name in MA as <em>Player @ Name</em> (empty = off)</label>
                 <input type="text" name="BRIDGE_NAME" placeholder="e.g. Living Room">
+            </div>
+
+            <div class="form-group">
+                <label>PulseAudio latency (ms) — larger value reduces audio dropouts on slow hardware (default 200)</label>
+                <input type="number" name="PULSE_LATENCY_MSEC" placeholder="200" min="50" max="2000">
             </div>
 
             <div class="form-group">
@@ -1712,7 +1718,7 @@ async function loadConfig() {
         var config = await resp.json();
 
         // Populate simple fields
-        ['SENDSPIN_SERVER', 'SENDSPIN_PORT', 'BRIDGE_NAME', 'TZ'].forEach(function(key) {
+        ['SENDSPIN_SERVER', 'SENDSPIN_PORT', 'BRIDGE_NAME', 'TZ', 'PULSE_LATENCY_MSEC'].forEach(function(key) {
             var input = document.querySelector('[name="' + key + '"]');
             if (input && config[key] !== undefined) input.value = config[key];
         });
@@ -2378,6 +2384,7 @@ def api_config():
                             'sendspin_port':      int(config.get('SENDSPIN_PORT', 9000)),
                             'bridge_name':        config.get('BRIDGE_NAME', ''),
                             'tz':                 config.get('TZ', ''),
+                            'pulse_latency_msec': int(config.get('PULSE_LATENCY_MSEC', 200)),
                             'bluetooth_devices':  sup_devices,
                             'bluetooth_adapters': sup_adapters,
                         }

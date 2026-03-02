@@ -16,6 +16,12 @@ configuration:
     description: >-
       IANA timezone name (e.g. "Europe/Moscow", "America/New_York").
       Leave empty to automatically use the Home Assistant system timezone.
+  pulse_latency_msec:
+    name: "PulseAudio latency (ms)"
+    description: >-
+      Requested PulseAudio buffer latency in milliseconds. Larger values reduce
+      audio dropouts on slow hardware at the cost of slightly higher latency.
+      Default is 200 ms; try 400–600 ms if dropouts persist.
   bluetooth_devices:
     name: "Bluetooth devices"
     description: >-

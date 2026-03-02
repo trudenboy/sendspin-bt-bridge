@@ -41,6 +41,7 @@ config = {
     'BLUETOOTH_DEVICES':  opts.get('bluetooth_devices', []),
     'BLUETOOTH_ADAPTERS': adapters,
     'TZ':                 tz,
+    'PULSE_LATENCY_MSEC': int(opts.get('pulse_latency_msec') or 200),
 }
 
 # Preserve LAST_VOLUME if already saved by the app
