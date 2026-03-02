@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.2] - 2026-03-02
+
+### Fixed
+- **Configuration page: device enabled state not preserved** — saving configuration
+  no longer resets disabled devices to enabled when the status poll hasn't run yet
+
 ## [1.6.1] - 2026-03-02
 
 ### Fixed
