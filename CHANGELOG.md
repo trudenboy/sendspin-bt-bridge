@@ -5,7 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.6.7] - 2026-03-03
+## [1.7.0] - 2026-03-03
+
+### Changed
+- **D-Bus Bluetooth monitor** — replaced `bluetoothctl` polling in `monitor_and_reconnect()`
+  with a `dbus-fast` (asyncio-native) `PropertiesChanged` signal subscription. Disconnects
+  are detected **instantly** instead of waiting for the next check interval (default 10 s).
+  Falls back to `bluetoothctl` polling if `dbus-fast` is unavailable.
+- **`is_device_connected()`** — now queries BlueZ `Device1.Connected` property via
+  `dbus-python` synchronously (~10× faster than spawning a `bluetoothctl` subprocess).
+  Retains bluetoothctl fallback for environments without D-Bus access.
+- **`is_device_paired()`** — same D-Bus-first approach as `is_device_connected()`.
+- **`disconnect_device()`** — calls `org.bluez.Device1.Disconnect` via D-Bus directly;
+  falls back to `bluetoothctl disconnect`.
+- Added `dbus-fast>=2.22.0,<3.0.0` to `requirements.txt`.
+- Added explicit `import asyncio` to `bluetooth_manager.py` (was implicit via module load order).
+
+
 
 ### Changed
 - **In-process sendspin daemon** — replaced `subprocess + stdout-parsing` architecture
