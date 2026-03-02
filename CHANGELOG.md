@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.25] - 2026-03-02
+
+### Fixed
+- **BT scan covers all adapters** — scan now sends `select + scan on` for every adapter
+  so devices visible only on a secondary adapter (e.g. hci0 while hci1 is busy) are found
+- **Adapter auto-selected on Add** — after scan, per-adapter device lists are queried
+  within the same bluetoothctl session (before cache is evicted) so the correct adapter
+  is pre-filled when clicking Add in scan results
+- **Device name from `bluetoothctl info`** — Classic BT devices in pairing mode often
+  resolve their name after scan ends; name is now extracted from the post-scan
+  `bluetoothctl info` call and used in scan results
+- **Audio filter relaxed for pairing-mode devices** — devices with Name but no UUID
+  (not yet paired, no profile cache) are now included; only excluded when UUID list
+  is present but contains no audio profiles
+- **Already Paired filter** — simplified to name-only filter (hides MAC-only entries
+  by default); removed HA device registry and audio-class checks
+
 ## [1.3.24] - 2026-03-01
 
 ### Changed

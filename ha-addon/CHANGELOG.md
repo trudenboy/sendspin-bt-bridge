@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.25] - 2026-03-02
+
+### Fixed
+- **BT scan covers all adapters** — scans hci0 and hci1 simultaneously; devices
+  only visible on a secondary adapter are no longer missed
+- **Adapter auto-selected on Add** — correct adapter pre-filled when adding a
+  device from scan results
+- **Device name in scan results** — Classic BT devices in pairing mode now show
+  their name (resolved via `bluetoothctl info` after scan)
+- **Audio filter** — devices with a name but no UUID (pairing mode, unpaired)
+  are included; only excluded when non-audio UUIDs are present
+- **Already Paired filter** — shows named devices only by default; "Show all"
+  checkbox reveals unnamed (MAC-only) entries
+
 ## [1.3.24] - 2026-03-01
 
 ### Changed
