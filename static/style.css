@@ -176,11 +176,7 @@
         .config-section summary::-webkit-details-marker,
         .logs-section summary::-webkit-details-marker { display: none; }
         .config-section summary::before, .logs-section summary::before {
-            content: '\\25B6';
-            display: inline-block; font-size: 13px; margin-right: 8px;
-            transition: transform 0.2s;
-        }
-        .config-section[open] summary::before,
+            content: '\25B6';
         .logs-section[open] summary::before { transform: rotate(90deg); }
         .config-section[open] summary, .logs-section[open] summary { margin-bottom: 15px; }
         .form-group { margin-bottom: 15px; }
@@ -337,11 +333,7 @@
         }
         .diag-section summary::-webkit-details-marker { display: none; }
         .diag-section summary::before {
-            content: '\\25B6';
-            display: inline-block; font-size: 13px; margin-right: 8px;
-            transition: transform 0.2s;
-        }
-        .diag-section[open] summary::before { transform: rotate(90deg); }
+            content: '\25B6';
         .diag-table { width: 100%; border-collapse: collapse; margin-top: 14px; }
         .diag-table th {
             font-size: 11px; font-weight: 600; color: var(--secondary-text-color);
