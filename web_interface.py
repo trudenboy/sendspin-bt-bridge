@@ -27,7 +27,7 @@ app = Flask(__name__)
 CORS(app)
 
 # Version information
-VERSION = "1.3.31"
+VERSION = "1.3.32"
 BUILD_DATE = "2026-03-01"
 
 # Configuration file path
@@ -960,7 +960,17 @@ function populateDeviceCard(i, dev) {
         ? 'Since: ' + new Date(dev.server_connected_at).toLocaleString() : '';
     var srvUri = document.getElementById('dsrv-uri-' + i);
     if (srvUri) {
-        srvUri.textContent = dev.server_connected ? (dev.connected_server_url || '') : '';
+        var srvLabel = '';
+        if (dev.server_connected) {
+            var h = dev.server_host || '';
+            if (h && !['auto','discover',''].includes(h.toLowerCase())) {
+                srvLabel = h + ':' + (dev.server_port || 9000);
+            } else if (dev.connected_server_url) {
+                var m = dev.connected_server_url.match(/^wss?:\/\/([^\/]+)/);
+                if (m) srvLabel = m[1];
+            }
+        }
+        srvUri.textContent = srvLabel;
     }
 
     // Playback

@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.32] - 2026-03-02
+
+### Fixed
+- **Server column shows `host:port`** — URI in device card Server column now taken from
+  config settings (`server_host:server_port`) instead of the full `ws://…/sendspin`
+  string detected from `/proc/net/tcp`; for `auto`-discovery mode the host is extracted
+  from the resolved URL
+
 ## [1.3.31] - 2026-03-02
 
 ### Fixed
@@ -353,6 +361,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - mDNS auto-discovery for Music Assistant server (`SENDSPIN_SERVER=auto`)
 - Config persistence via `/config/config.json`
 
+[1.3.32]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.31...v1.3.32
 [1.3.31]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.30...v1.3.31
 [1.3.30]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.29...v1.3.30
 [1.3.29]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.28...v1.3.29
