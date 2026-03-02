@@ -5,7 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.4.2] - 2026-03-02
+## [1.5.0] - 2026-03-02
+
+### Changed
+- Code quality sprint: VERSION/config consolidation, removed `netifaces`, halved bluetoothctl
+  subprocess calls, improved HEALTHCHECK, multi-stage Dockerfile, adapter name cache
+- Modular architecture: `state.py`, `services/bluetooth.py`, `routes/api.py`, `routes/views.py`;
+  `web_interface.py` reduced from ~1 045 to 57 lines
+
+
 
 ### Fixed
 - HA ingress CSS/JS: replaced `before_request` with WSGI middleware — static files now load correctly

@@ -5,7 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.4.2] - 2026-03-02
+## [1.5.0] - 2026-03-02
+
+### Changed
+- **Major code-quality sprint** — six targeted fixes + full modular refactor:
+
+#### Quick fixes
+- **VERSION consolidation** — single source of truth in `config.py`; removed duplicate
+  declarations from `sendspin_client.py` and `web_interface.py`
+- **DEFAULT_CONFIG consolidation** — moved to `config.py`; web UI now imports it
+- **Removed `netifaces`** — deprecated dependency dropped; `get_ip_address()` uses
+  `socket.connect()` exclusively (more reliable, works on all platforms)
+- **Halved `bluetoothctl` subprocess spawning** — `update_status()` now reads the cached
+  `bt_manager.connected` flag instead of calling `is_device_connected()` on every poll
+- **Improved Docker HEALTHCHECK** — parses `/api/status` JSON; reports unhealthy if no
+  device has `connected: true`; `start-period` extended to 60 s
+- **Multi-stage Dockerfile** — builder stage compiles native extensions (dbus-python);
+  runtime image contains only runtime libraries, reducing final image size
+- **Adapter name cache** — `/api/status` no longer opens `config.json` on every 2-second
+  poll; cache is invalidated on every `/api/config` POST save
+
+#### Modular architecture (Phase 3)
+- **`state.py`** (new) — shared `clients` list with in-place mutation + adapter name cache
+- **`services/bluetooth.py`** (new) — `bt_remove_device`, `persist_device_enabled`,
+  `is_audio_device`, `_AUDIO_UUIDS`
+- **`routes/api.py`** (new) — all `/api/*` route handlers as Flask Blueprint (~590 lines)
+- **`routes/views.py`** (new) — `index()` route as Flask Blueprint
+- **`web_interface.py`** slimmed from ~1 045 lines to **57 lines** — app init, WSGI
+  middleware, blueprint registration, `main()`
+
+
 
 ### Fixed
 - **Home Assistant ingress CSS/JS** — `before_request` SCRIPT_NAME approach replaced with
