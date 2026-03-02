@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sendspin Bluetooth Bridge</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<div class="container">
+
+    <!-- Header -->
+    <div class="header">
+        <h1>&#127925; Sendspin Bluetooth Bridge</h1>
+        <div style="text-align:right;">
+            <div class="version-info" id="version-display">
+                <div>{{ VERSION }}</div>
+                <div>{{ BUILD_DATE }}</div>
+            </div>
+            <div id="system-info" style="font-size:12px;color:#9ca3af;margin-top:4px;line-height:1.6;"></div>
+        </div>
+    </div>
+
+    <!-- Restart banner -->
+    <div id="restart-banner" class="restart-banner"></div>
+
+    <!-- Group Controls -->
+    <div class="group-controls" id="group-controls" style="display:none;">
+        <span class="group-controls-label">&#127922; Group</span>
+        <span class="group-select-info" id="group-select-info">All players</span>
+        <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:#6b7280;cursor:pointer;">
+            <input type="checkbox" id="group-select-all" checked onchange="onGroupSelectAll(this)">
+            All
+        </label>
+        <div class="group-vol-row">
+            <span style="font-size:11px;color:#9ca3af;font-weight:600;text-transform:uppercase;">Vol</span>
+            <input type="range" min="0" max="100" value="50" class="group-vol-slider" id="group-vol-slider"
+                oninput="onGroupVolumeInput(this.value)">
+            <span class="group-vol-pct" id="group-vol-pct">50%</span>
+        </div>
+        <button type="button" class="btn-group-mute" id="group-mute-btn"
+            onclick="onGroupMute()">&#128264; Mute All</button>
+        <button type="button" class="btn-group-mute" id="group-pause-btn"
+            onclick="onPauseAll()">&#9646;&#9646; Pause All</button>
+    </div>
+
+    <!-- Status grid: device cards (populated by JS) -->
+    <div class="status-grid" id="status-grid"></div>
+
+    <!-- Configuration -->
+    <details class="config-section" open>
+        <summary>&#9881;&#65039; Configuration</summary>
+        <form id="config-form">
+            <div class="form-group">
+                <label>Music Assistant server &mdash; IP/hostname, or <code>auto</code> to discover via mDNS</label>
+                <input type="text" name="SENDSPIN_SERVER" placeholder="auto" required>
+            </div>
+
+            <div class="form-group">
+                <label>Music Assistant WebSocket port</label>
+                <input type="number" name="SENDSPIN_PORT" placeholder="9000" min="1024" max="65535">
+            </div>
+
+            <div class="form-group">
+                <label>Bridge name — appended to every player name in MA as <em>Player @ Name</em> (empty = off)</label>
+                <input type="text" name="BRIDGE_NAME" placeholder="e.g. Living Room">
+            </div>
+
+            <div class="form-group">
+                <label>PulseAudio latency (ms) — larger value reduces audio dropouts on slow hardware (default 200)</label>
+                <input type="number" name="PULSE_LATENCY_MSEC" placeholder="200" min="50" max="2000">
+            </div>
+
+            <div class="form-group">
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                    <input type="checkbox" name="PREFER_SBC_CODEC" id="prefer-sbc-codec" style="width:auto;margin:0;">
+                    Prefer SBC codec — forces the simplest A2DP codec after each BT connect, reducing encoder CPU load on slow hardware (requires PulseAudio 15+)
+                </label>
+                <div style="margin-top:6px;padding:8px 10px;background:var(--warning-color,#ff9800);color:#fff;border-radius:4px;font-size:12px;line-height:1.5;">
+                    <strong>Tip: biggest CPU saving</strong> — change audio format in Music&nbsp;Assistant:
+                    Settings &rarr; Providers &rarr; Sendspin &rarr; Audio&nbsp;Quality &rarr; <strong>PCM 44.1&nbsp;kHz / 16-bit</strong>.
+                    This eliminates FLAC decoding entirely (&minus;~30% CPU per player).
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Timezone</label>
+                <div style="display:flex;gap:10px;align-items:center;">
+                    <input type="text" name="TZ" id="tz-input" placeholder="Australia/Melbourne" style="flex:1;"
+                        list="tz-list" autocomplete="off" oninput="updateTzPreview()">
+                    <datalist id="tz-list"></datalist>
+                    <span id="tz-preview" class="tz-preview"></span>
+                </div>
+            </div>
+
+            <!-- Bluetooth Adapters panel -->
+            <div class="form-group">
+                <label>Bluetooth Adapters</label>
+                <div class="adapters-card">
+                    <div class="adapters-card-header">
+                        <span>Detected &amp; manual adapters</span>
+                        <div>
+                            <button type="button" class="btn btn-sm btn-refresh" onclick="loadBtAdapters()">&#x21BA; Refresh</button>
+                            <button type="button" class="btn btn-sm" onclick="addManualAdapterRow('','','')">+ Add</button>
+                        </div>
+                    </div>
+                    <div id="adapters-table"></div>
+                </div>
+            </div>
+
+            <!-- BT devices table (replaces raw JSON textarea + single MAC input) -->
+            <div class="form-group">
+                <label>Bluetooth Devices</label>
+                <div class="bt-header">
+                    <span>Player Name</span><span>MAC Address</span>
+                    <span>Adapter</span><span>Listen Address</span><span>Port</span><span>Delay ms</span><span></span>
+                </div>
+                <div id="bt-devices-table"></div>
+                <div class="bt-toolbar">
+                    <button type="button" id="add-dev-btn" onclick="addBtDeviceRow()" class="btn btn-sm">+ Add Device</button>
+                    <button type="button" onclick="startBtScan()" class="btn btn-sm btn-scan" id="scan-btn">
+                        &#128269; Scan
+                    </button>
+                    <span id="scan-status" class="scan-badge"></span>
+                </div>
+                <div id="paired-box" class="paired-box" style="display:none;">
+                    <div class="paired-box-title" style="display:flex;align-items:center;gap:8px;">
+                        <span>Already paired &#8212; click to add:</span>
+                        <label style="font-size:12px;color:var(--secondary-text-color);cursor:pointer;margin-left:auto;white-space:nowrap;">
+                            <input type="checkbox" id="paired-show-all" onchange="loadPairedDevices()"> Show all
+                        </label>
+                    </div>
+                    <div id="paired-list"></div>
+                </div>
+                <div id="scan-results-box" class="scan-results-box">
+                    <div class="scan-results-title">Discovered devices &#8212; click to add:</div>
+                    <div id="scan-results-list"></div>
+                </div>
+            </div>
+
+            <div class="form-actions">
+                <button type="submit" class="btn">Save Configuration</button>
+                <button type="button" onclick="saveAndRestart()" class="btn btn-restart">
+                    Save &amp; Restart
+                </button>
+            </div>
+        </form>
+    </details>
+
+    <!-- Diagnostics (collapsible) -->
+    <details class="diag-section" id="diag-details" ontoggle="onDiagToggle(this)">
+        <summary>Diagnostics</summary>
+        <div id="diag-content"></div>
+    </details>
+
+    <!-- Logs -->
+    <details class="logs-section">
+        <summary>&#128203; Logs</summary>
+        <div class="logs-toolbar">
+            <button onclick="refreshLogs()" class="btn btn-refresh">Refresh Logs</button>
+            <button onclick="toggleAutoRefresh()" class="btn" id="auto-refresh-btn">Auto-Refresh: Off</button>
+            <div class="log-filter">
+                <button onclick="setLogLevel('all')"     id="filter-all"     class="filter-btn active">All</button>
+                <button onclick="setLogLevel('error')"   id="filter-error"   class="filter-btn">Error</button>
+                <button onclick="setLogLevel('warning')" id="filter-warning" class="filter-btn">Warning</button>
+                <button onclick="setLogLevel('info')"    id="filter-info"    class="filter-btn">Info</button>
+            </div>
+        </div>
+        <div class="logs-container" id="logs"></div>
+    </details>
+
+</div>
+
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

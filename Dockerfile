@@ -39,9 +39,9 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application files
-COPY sendspin_client.py .
-COPY web_interface.py .
-COPY entrypoint.sh .
+COPY sendspin_client.py web_interface.py config.py mpris.py bluetooth_manager.py entrypoint.sh ./
+COPY templates/ templates/
+COPY static/ static/
 
 # Make entrypoint executable
 RUN chmod +x entrypoint.sh
