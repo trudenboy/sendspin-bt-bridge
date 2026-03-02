@@ -51,6 +51,14 @@ DEFAULT_CONFIG = {
 _clients: list = []
 
 
+@app.before_request
+def _set_ingress_script_name():
+    """Support Home Assistant ingress: prefix url_for() with the ingress base path."""
+    ingress_path = request.headers.get('X-Ingress-Path', '').rstrip('/')
+    if ingress_path:
+        request.environ['SCRIPT_NAME'] = ingress_path
+
+
 def _bt_remove_device(mac: str, adapter_mac: str = '') -> None:
     """Remove device from BT stack (disconnect + unpair). Fire-and-forget."""
     def _run():
