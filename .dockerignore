@@ -1,0 +1,17 @@
+# Large dirs not needed in Docker build context
+docs-site/
+.git/
+lxc/
+ha-addon/
+.github/
+patches/
+.playwright-mcp/
+
+# Documentation
+*.md
+CHANGELOG*
+LICENSE
+
+# Dev/compose files
+docker-compose.yml
+.dockerignore

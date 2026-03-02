@@ -50,16 +50,16 @@ RUN mkdir -p /app /config /var/run/dbus
 # Set working directory
 WORKDIR /app
 
+# Copy entrypoint separately so its layer is independent of Python code changes
+COPY entrypoint.sh ./
+RUN chmod +x entrypoint.sh
+
 # Copy application files
-COPY sendspin_client.py web_interface.py config.py mpris.py bluetooth_manager.py entrypoint.sh ./
-COPY state.py ./
+COPY sendspin_client.py web_interface.py config.py mpris.py bluetooth_manager.py state.py ./
 COPY routes/ routes/
 COPY services/ services/
 COPY templates/ templates/
 COPY static/ static/
-
-# Make entrypoint executable
-RUN chmod +x entrypoint.sh
 
 # Expose web interface port
 EXPOSE 8080

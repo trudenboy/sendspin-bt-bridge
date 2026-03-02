@@ -36,7 +36,7 @@ env/
 Thumbs.db
 
 # Docker
-.dockerignore
+# .dockerignore  ← removed: this file should be committed
 
 # Config
 config.json
