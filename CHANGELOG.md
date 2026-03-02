@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.1] - 2026-03-02
+
+### Added
+- **BT_CHECK_INTERVAL** — configurable Bluetooth connection check interval in seconds
+  (default 10); exposed in Configuration UI
+- **BT_MAX_RECONNECT_FAILS** — auto-set device `Enabled=False` after N consecutive failed
+  reconnects (default 0 = never); exposed in Configuration UI
+
+### Fixed
+- **Configuration section** — now collapsed by default on page load
+- **Removed Sendspin provider tip** — dismissed the "change audio quality in MA" disclaimer
+  under the PREFER_SBC_CODEC checkbox
+
 ## [1.5.0] - 2026-03-02
 
 ### Changed
