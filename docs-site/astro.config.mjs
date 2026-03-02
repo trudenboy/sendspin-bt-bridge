@@ -20,7 +20,7 @@ export default defineConfig({
         github: 'https://github.com/trudenboy/sendspin-bt-bridge',
       },
       sidebar: [
-        { label: 'Главная', translations: { en: 'Home' }, slug: 'index' },
+        { label: 'Главная', translations: { en: 'Home' }, link: '/' },
         {
           label: 'Установка', translations: { en: 'Installation' },
           items: [
