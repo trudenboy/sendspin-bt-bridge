@@ -5,6 +5,52 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.33] - 2026-03-02
+
+### Fixed
+- **Shell injection in `pair_device()`** — replaced `bash -c` f-string construction with
+  a direct `bluetoothctl` `Popen` + stdin pipe; added MAC address regex validation before
+  use; eliminates command injection via the `/api/bt/pair` web endpoint
+- **Silent task crash** — `add_done_callback` lambdas in `monitor_and_reconnect` and
+  `monitor_output` were ternary expressions evaluated at registration time (always `None`),
+  so crashes were silently swallowed; replaced with proper named callback functions
+- **NameError in `main()`** — `config_file` (local to `load_config()`) was referenced in
+  `main()`, silently caught by `except Exception: pass`; replaced with `_CONFIG_PATH`;
+  per-device volume pre-fill now works correctly on startup
+- **Dropped config keys on reload** — `LAST_VOLUMES`, `BLUETOOTH_ADAPTERS`, and
+  `BRIDGE_NAME_SUFFIX` were missing from `load_config()` `allowed_keys` and stripped on
+  every config reload; all three keys are now preserved
+- **Premature `server_connected=True`** — flag was set immediately after `Popen()` before
+  the sendspin process connected to Music Assistant; removed; state is now set by log
+  parsing and the `update_status()` polling loop as before
+- **100% volume blast on BT connect** — `configure_bluetooth_audio()` no longer forces
+  the sink to 100% before restoring the saved volume, preventing an audible blast
+- **Blocking `process.wait()` in async context** — both termination paths in
+  `start_sendspin_process()` and the shutdown cleanup now wrap `process.wait()` in
+  `run_in_executor()` to avoid stalling the asyncio event loop
+- **`_pause_all_via_mpris` blocking event loop** — converted from `async def` to a
+  regular function; called via `run_in_executor()` during graceful shutdown
+
+### Security
+- **`pair_device()` shell injection** — see Fixed above
+- **Docker: removed `privileged: true`** — `cap_add` (NET_ADMIN, NET_RAW, SYS_ADMIN) is
+  sufficient; `privileged: true` granted unrestricted host access unnecessarily
+- **Docker: removed hardcoded developer MAC** — `BLUETOOTH_MAC` placeholder now uses
+  `${BLUETOOTH_MAC:-}` env var substitution
+
+### Changed
+- **Config file writes are now atomic** — all `config.json` read-modify-write operations
+  in both `sendspin_client.py` and `web_interface.py` are serialised with a
+  `threading.Lock` and written via a temporary file + `os.replace()` to prevent data
+  corruption from concurrent Flask/asyncio writes
+- **Thread-safe status dict** — `SendspinClient` now exposes `update_status(**kwargs)`
+  and `get_status()` methods backed by a `threading.Lock`
+- **Docker: configurable audio UID** — hardcoded `/run/user/1000/pulse` paths replaced
+  with `${AUDIO_UID:-1000}` to support systems where the primary user is not UID 1000
+- **Replaced all `bash -c` subprocess wrappers** in `web_interface.py` BT API endpoints
+  with direct `bluetoothctl` invocations using stdin pipe (no shell, no injection risk)
+- **`dbus-python` version pinned** to `>=1.3.2,<2.0.0` in `requirements.txt`
+
 ## [1.3.32] - 2026-03-02
 
 ### Fixed

@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.33] - 2026-03-02
+
+### Fixed
+- Shell injection in `pair_device()` — replaced `bash -c` f-string with stdin pipe + MAC validation
+- Silent task crashes — broken `add_done_callback` lambdas replaced with named callbacks
+- NameError in `main()` — per-device volume pre-fill now works correctly on startup
+- Dropped config keys (`LAST_VOLUMES`, `BLUETOOTH_ADAPTERS`, `BRIDGE_NAME_SUFFIX`) on reload
+- Premature `server_connected=True` set immediately after process start
+- 100% volume blast before saved-volume restore on BT connect
+- Blocking `process.wait()` calls in async context wrapped in `run_in_executor()`
+- `_pause_all_via_mpris` blocking event loop — converted to sync, called via executor
+
+### Security
+- Removed `privileged: true` from Docker compose — `cap_add` is sufficient
+- Removed hardcoded developer MAC address from `docker-compose.yml`
+
+### Changed
+- Config file writes are now atomic and serialised with `threading.Lock` + `os.replace()`
+- Thread-safe status dict via `update_status()` / `get_status()` with `threading.Lock`
+- Docker audio paths use `${AUDIO_UID:-1000}` instead of hardcoded UID 1000
+- All `bash -c` BT API wrappers replaced with direct stdin pipe calls
+- `dbus-python` pinned to `>=1.3.2,<2.0.0`
+
 ## [1.3.32] - 2026-03-02
 
 ### Fixed
