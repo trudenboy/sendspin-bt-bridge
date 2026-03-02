@@ -28,6 +28,22 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__, template_folder='templates', static_folder='static')
 CORS(app)
 
+
+class _IngressMiddleware:
+    """WSGI middleware: sets SCRIPT_NAME from X-Ingress-Path header before Flask
+    creates its URL adapter, so that url_for() correctly prefixes all URLs."""
+    def __init__(self, wsgi_app):
+        self._app = wsgi_app
+
+    def __call__(self, environ, start_response):
+        ingress_path = environ.get('HTTP_X_INGRESS_PATH', '').rstrip('/')
+        if ingress_path:
+            environ['SCRIPT_NAME'] = ingress_path
+        return self._app(environ, start_response)
+
+
+app.wsgi_app = _IngressMiddleware(app.wsgi_app)
+
 # Version information
 VERSION = "1.4.1"
 BUILD_DATE = "2026-03-02"
@@ -49,14 +65,6 @@ DEFAULT_CONFIG = {
 
 # Global clients list will be set by main
 _clients: list = []
-
-
-@app.before_request
-def _set_ingress_script_name():
-    """Support Home Assistant ingress: prefix url_for() with the ingress base path."""
-    ingress_path = request.headers.get('X-Ingress-Path', '').rstrip('/')
-    if ingress_path:
-        request.environ['SCRIPT_NAME'] = ingress_path
 
 
 def _bt_remove_device(mac: str, adapter_mac: str = '') -> None:

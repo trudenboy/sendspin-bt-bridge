@@ -177,7 +177,9 @@
         .logs-section summary::-webkit-details-marker { display: none; }
         .config-section summary::before, .logs-section summary::before {
             content: '\25B6';
-        .logs-section[open] summary::before { transform: rotate(90deg); }
+            display: inline-block; margin-right: 8px; transition: transform 0.2s;
+        }
+        .logs-section[open] summary::before, .config-section[open] summary::before { transform: rotate(90deg); }
         .config-section[open] summary, .logs-section[open] summary { margin-bottom: 15px; }
         .form-group { margin-bottom: 15px; }
         .form-group label { display: block; margin-bottom: 5px; color: var(--primary-text-color); font-weight: 500; }
@@ -334,6 +336,9 @@
         .diag-section summary::-webkit-details-marker { display: none; }
         .diag-section summary::before {
             content: '\25B6';
+            display: inline-block; margin-right: 8px; transition: transform 0.2s;
+        }
+        .diag-section[open] summary::before { transform: rotate(90deg); }
         .diag-table { width: 100%; border-collapse: collapse; margin-top: 14px; }
         .diag-table th {
             font-size: 11px; font-weight: 600; color: var(--secondary-text-color);
