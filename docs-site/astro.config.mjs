@@ -16,9 +16,9 @@ export default defineConfig({
       editLink: {
         baseUrl: 'https://github.com/trudenboy/sendspin-bt-bridge/edit/main/docs-site/src/content/docs/',
       },
-      social: [
-        { icon: 'github', label: 'GitHub', href: 'https://github.com/trudenboy/sendspin-bt-bridge' },
-      ],
+      social: {
+        github: 'https://github.com/trudenboy/sendspin-bt-bridge',
+      },
       sidebar: [
         { label: 'Главная', translations: { en: 'Home' }, slug: 'index' },
         {
