@@ -520,7 +520,10 @@ class SendspinClient:
                     # Run in thread pool to avoid blocking
                     loop = asyncio.get_event_loop()
                     await loop.run_in_executor(None, self.bt_manager.connect_device)
-                    self.status['bluetooth_connected'] = self.bt_manager.is_device_connected()
+                    bt_now = self.bt_manager.is_device_connected()
+                    if bt_now != self.status['bluetooth_connected']:
+                        self.status['bluetooth_connected'] = bt_now
+                        self.status['bluetooth_connected_at'] = datetime.now().isoformat()
                 except Exception as e:
                     logger.error(f"Error connecting Bluetooth: {e}")
             
