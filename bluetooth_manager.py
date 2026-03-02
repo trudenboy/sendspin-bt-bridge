@@ -57,7 +57,7 @@ class BluetoothManager:
     """Manages Bluetooth speaker connections using bluetoothctl"""
 
     def __init__(self, mac_address: str, adapter: str = "", device_name: str = "", client=None,
-                 prefer_sbc: bool = False):
+                 prefer_sbc: bool = False, check_interval: int = 10, max_reconnect_fails: int = 0):
         self.mac_address = mac_address
         self.adapter = adapter        # "hci0", "hci1", etc. — empty = use default
         self.device_name = device_name or mac_address
@@ -65,7 +65,8 @@ class BluetoothManager:
         self.prefer_sbc = prefer_sbc
         self.connected = False
         self.last_check = 0
-        self.check_interval = 10  # Check every 10 seconds
+        self.check_interval = check_interval
+        self.max_reconnect_fails = max_reconnect_fails
 
         # Resolve adapter name to MAC for reliable 'select' in bridged D-Bus setups.
         # In LXC containers, 'select hci0' fails ("Controller hci0 not available");
@@ -465,6 +466,25 @@ class BluetoothManager:
                         if self.client:
                             self.client.status['reconnecting'] = True
                             self.client.status['reconnect_attempt'] = reconnect_attempt
+
+                        # Auto-disable BT management after too many consecutive failures
+                        if self.max_reconnect_fails > 0 and reconnect_attempt >= self.max_reconnect_fails:
+                            logger.warning(
+                                f"[{self.device_name}] {reconnect_attempt} consecutive failed reconnects "
+                                f"(threshold={self.max_reconnect_fails}) — auto-disabling BT management"
+                            )
+                            self.management_enabled = False
+                            if self.client:
+                                self.client.bt_management_enabled = False
+                                self.client.status['bt_management_enabled'] = False
+                                self.client.status['reconnecting'] = False
+                            try:
+                                from services.bluetooth import persist_device_enabled
+                                persist_device_enabled(self.device_name, False)
+                            except Exception as _e:
+                                logger.debug(f"persist_device_enabled failed: {_e}")
+                            reconnect_attempt = 0
+                            continue
 
                         # Kill sendspin daemon immediately — if the BT sink is gone,
                         # sendspin floods PortAudioErrors on every audio chunk, which

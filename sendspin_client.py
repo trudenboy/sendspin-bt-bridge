@@ -612,6 +612,9 @@ async def main():
     if prefer_sbc:
         logger.info("PREFER_SBC_CODEC: enabled — will request SBC codec after BT connect")
 
+    bt_check_interval = int(config.get('BT_CHECK_INTERVAL', 10))
+    bt_max_reconnect_fails = int(config.get('BT_MAX_RECONNECT_FAILS', 0))
+
     # Normalise device list — fall back to legacy BLUETOOTH_MAC
     bt_devices = config.get('BLUETOOTH_DEVICES', [])
     if not bt_devices:
@@ -649,7 +652,9 @@ async def main():
                                 listen_host=listen_host, effective_bridge=effective_bridge)
         if mac:
             bt_mgr = BluetoothManager(mac, adapter=adapter, device_name=player_name, client=client,
-                                       prefer_sbc=prefer_sbc)
+                                       prefer_sbc=prefer_sbc,
+                                       check_interval=bt_check_interval,
+                                       max_reconnect_fails=bt_max_reconnect_fails)
             if not bt_mgr.check_bluetooth_available():
                 logger.warning(f"BT adapter '{adapter or 'default'}' not available for {player_name}")
             client.bt_manager = bt_mgr

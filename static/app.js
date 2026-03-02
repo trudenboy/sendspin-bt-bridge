@@ -955,6 +955,9 @@ async function saveConfig() {
     config.BLUETOOTH_DEVICES = collectBtDevices();
     // Checkbox → bool (FormData only includes it when checked, with value "on")
     config.PREFER_SBC_CODEC = !!(document.getElementById('prefer-sbc-codec') || {}).checked;
+    // Cast numeric BT settings to integers
+    config.BT_CHECK_INTERVAL = parseInt(config.BT_CHECK_INTERVAL, 10) || 10;
+    config.BT_MAX_RECONNECT_FAILS = parseInt(config.BT_MAX_RECONNECT_FAILS, 10) || 0;
     // Pass current group slider value so backend can init volume for new devices
     var groupSlider = document.getElementById('group-vol-slider');
     config._new_device_default_volume = groupSlider ? parseInt(groupSlider.value, 10) : 100;
@@ -1000,7 +1003,8 @@ async function loadConfig() {
         var config = await resp.json();
 
         // Populate simple fields
-        ['SENDSPIN_SERVER', 'SENDSPIN_PORT', 'BRIDGE_NAME', 'TZ', 'PULSE_LATENCY_MSEC'].forEach(function(key) {
+        ['SENDSPIN_SERVER', 'SENDSPIN_PORT', 'BRIDGE_NAME', 'TZ', 'PULSE_LATENCY_MSEC',
+         'BT_CHECK_INTERVAL', 'BT_MAX_RECONNECT_FAILS'].forEach(function(key) {
             var input = document.querySelector('[name="' + key + '"]');
             if (input && config[key] !== undefined) input.value = config[key];
         });
