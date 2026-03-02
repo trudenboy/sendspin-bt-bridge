@@ -5,6 +5,73 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.31] - 2026-03-02
+
+### Fixed
+- **`--audio-device` crash on PipeWire** — `start_sendspin_process()` now uses the sink
+  name confirmed by `configure_bluetooth_audio()` instead of always hardcoding
+  `bluez_sink.{MAC}.a2dp_sink`; on PipeWire systems the actual sink is `bluez_output.*`
+  so the hardcoded name caused an immediate "Specified audio device not found" crash and
+  immediate process restart loop; when no sink has been confirmed yet `--audio-device` is
+  omitted entirely and `PULSE_SINK` alone is used (pre-v1.3.29 fallback behaviour)
+
+## [1.3.30] - 2026-03-02
+
+### Fixed
+- **Stale playback state** — `update_status()` now polls MPRIS `PlaybackStatus`
+  unconditionally (not only when `playing=True`); `PlaybackStatus` overrides log-based
+  state detection when D-Bus responds, so pausing in MA is reflected in the bridge UI
+  within ≤10 s without relying on fragile log parsing
+- **Stale track metadata** — track/artist are kept on pause instead of cleared; last
+  known values remain visible while paused; `_read_mpris_metadata_for()` extended to
+  return `(artist, track, playback_status)` instead of `(artist, track)`
+
+## [1.3.29] - 2026-03-02
+
+### Fixed
+- **sendspin 5.x compatibility** — `requirements.txt` now pins `sendspin>=5.1.3,<6`;
+  `--audio-device bluez_sink.{MAC}.a2dp_sink` passed explicitly alongside `PULSE_SINK`
+  for reliable sink routing under sendspin 5.x; `--hardware-volume false` prevents
+  sendspin's native volume control from conflicting with bridge volume sync
+- **Per-instance config isolation** — deprecated `--settings-dir` replaced with
+  per-instance `HOME=/tmp/sendspin-{id}` to isolate `~/.config/sendspin/` across
+  daemon instances
+
+## [1.3.28] - 2026-03-02
+
+### Fixed
+- **PULSE_LATENCY_MSEC and PREFER_SBC_CODEC reset on restart** — `entrypoint.sh` was
+  regenerating `/data/config.json` from `options.json` without mapping
+  `pulse_latency_msec` and `prefer_sbc_codec`, causing both settings to always revert
+  to defaults (200 ms / false) on every container restart
+
+## [1.3.27] - 2026-03-02
+
+### Added
+- **Prefer SBC codec** — new `PREFER_SBC_CODEC` config option; when enabled, forces the
+  A2DP codec to SBC immediately after each Bluetooth connect via
+  `pactl send-message … bluez5/set_codec a2dp_sink SBC` (requires PulseAudio 15+);
+  SBC is the simplest mandatory A2DP codec and reduces PA encoder CPU load; exposed in
+  the web UI config form and HA addon native Config tab
+- **LXC CPU-optimal PulseAudio config** — `lxc/pulse-daemon.conf` installed to
+  `/etc/pulse/daemon.conf` by `install.sh`; sets `resample-method=trivial`,
+  `default-sample-rate=48000`, `default-sample-format=s16le`
+
+## [1.3.26] - 2026-03-02
+
+### Added
+- **PULSE_LATENCY_MSEC setting** — configurable PulseAudio buffer latency (default
+  200 ms); increase to 400–600 ms to reduce audio dropouts on slow or overloaded
+  hardware; exposed in the web UI config form and HA addon native Config tab
+- **Sendspin process nice priority** — sendspin daemons launched with `nice -5` so audio
+  threads are scheduled ahead of lower-priority background tasks under load
+
+### Fixed
+- **MPRIS track per player** — `_read_mpris_metadata_for()` now queries
+  `org.mpris.MediaPlayer2.Sendspin.instance{PID}` directly instead of returning
+  metadata from the first MPRIS service found; each player now shows its own current
+  track
+
 ## [1.3.25] - 2026-03-02
 
 ### Fixed
@@ -286,6 +353,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - mDNS auto-discovery for Music Assistant server (`SENDSPIN_SERVER=auto`)
 - Config persistence via `/config/config.json`
 
+[1.3.31]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.30...v1.3.31
+[1.3.30]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.29...v1.3.30
+[1.3.29]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.28...v1.3.29
+[1.3.28]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.27...v1.3.28
+[1.3.27]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.26...v1.3.27
+[1.3.26]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.25...v1.3.26
+[1.3.25]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.24...v1.3.25
+[1.3.24]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.23...v1.3.24
+[1.3.23]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.22...v1.3.23
+[1.3.22]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.21...v1.3.22
+[1.3.21]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.20...v1.3.21
+[1.3.20]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.19...v1.3.20
+[1.3.19]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.18...v1.3.19
+[1.3.18]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.17...v1.3.18
+[1.3.17]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.16...v1.3.17
+[1.3.16]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.15...v1.3.16
+[1.3.15]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.14...v1.3.15
+[1.3.14]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.13...v1.3.14
+[1.3.13]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.12...v1.3.13
+[1.3.12]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.11...v1.3.12
+[1.3.11]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.10...v1.3.11
+[1.3.10]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.9...v1.3.10
+[1.3.9]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.8...v1.3.9
+[1.3.8]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.7...v1.3.8
 [1.3.7]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.6...v1.3.7
 [1.3.6]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.5...v1.3.6
 [1.3.5]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.4...v1.3.5
