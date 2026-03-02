@@ -26,7 +26,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-CLIENT_VERSION = "1.3.30"
+CLIENT_VERSION = "1.3.31"
 
 
 async def _pause_all_via_mpris() -> int:
@@ -876,11 +876,18 @@ class SendspinClient:
 
             if self.bt_manager:
                 pa_mac = self.bt_manager.mac_address.replace(':', '_')
-                pulse_sink = f"bluez_sink.{pa_mac}.a2dp_sink"
-                # Keep PULSE_SINK for compatibility + explicit --audio-device for sendspin 5.x
-                env['PULSE_SINK'] = pulse_sink
-                cmd.extend(['--audio-device', pulse_sink])
-                logger.info(f"Routing audio to sink: {pulse_sink}")
+                # Use the sink name probed by configure_bluetooth_audio if available;
+                # fall back to legacy PulseAudio format for PULSE_SINK env var only.
+                if self.bluetooth_sink_name:
+                    pulse_sink = self.bluetooth_sink_name
+                    env['PULSE_SINK'] = pulse_sink
+                    cmd.extend(['--audio-device', pulse_sink])
+                    logger.info(f"Routing audio to sink: {pulse_sink}")
+                else:
+                    # Sink not confirmed yet — set PULSE_SINK only, omit --audio-device
+                    pulse_sink = f"bluez_sink.{pa_mac}.a2dp_sink"
+                    env['PULSE_SINK'] = pulse_sink
+                    logger.info(f"Routing audio to sink (PULSE_SINK only): {pulse_sink}")
 
             # Start the sendspin process with elevated scheduling priority
             def _set_nice():
