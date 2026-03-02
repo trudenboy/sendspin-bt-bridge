@@ -66,6 +66,8 @@ config = {
     'BLUETOOTH_DEVICES':  opts.get('bluetooth_devices', []),
     'BLUETOOTH_ADAPTERS': adapters,
     'TZ':                 tz,
+    'PULSE_LATENCY_MSEC': opts.get('pulse_latency_msec', 200),
+    'PREFER_SBC_CODEC':   opts.get('prefer_sbc_codec', False),
 }
 
 # Preserve runtime state (volumes, release/reclaim flags) from previous config
