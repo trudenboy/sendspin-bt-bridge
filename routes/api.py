@@ -1,0 +1,940 @@
+"""
+API Blueprint for sendspin-bt-bridge.
+
+All /api/* routes and the helper functions they depend on.
+"""
+import json
+import logging
+import os
+import re
+import signal
+import subprocess
+import threading
+import time
+from datetime import datetime, timedelta
+
+from flask import Blueprint, jsonify, request
+
+from config import (
+    VERSION, BUILD_DATE, DEFAULT_CONFIG,
+    CONFIG_FILE, CONFIG_DIR, _config_lock,
+)
+from state import clients as _clients, get_adapter_name, load_adapter_name_cache
+from services import (
+    bt_remove_device as _bt_remove_device,
+    persist_device_enabled as _persist_device_enabled,
+    is_audio_device,
+)
+from services.bluetooth import _AUDIO_UUIDS
+
+logger = logging.getLogger(__name__)
+
+api_bp = Blueprint('api', __name__)
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+_runtime_cache: str = ''
+
+
+def _detect_runtime() -> str:
+    """Detect whether running under systemd, HA addon, or Docker. Result is cached."""
+    global _runtime_cache
+    if not _runtime_cache:
+        if os.path.exists('/etc/systemd/system/sendspin-client.service'):
+            _runtime_cache = 'systemd'
+        elif os.path.exists('/run/systemd/system/sendspin-client.service'):
+            _runtime_cache = 'systemd'
+        elif os.path.exists('/data/options.json'):
+            _runtime_cache = 'ha_addon'
+        else:
+            _runtime_cache = 'docker'
+    return _runtime_cache
+
+
+def get_client_status_for(client):
+    """Get status dict for a specific client."""
+    try:
+        if client is None:
+            return {
+                'connected': False, 'server_connected': False,
+                'bluetooth_connected': False, 'bluetooth_available': False,
+                'playing': False, 'error': 'Client not running',
+                'version': VERSION, 'build_date': BUILD_DATE, 'bluetooth_mac': None,
+            }
+
+        if not hasattr(client, 'status'):
+            return {
+                'connected': False, 'server_connected': False,
+                'bluetooth_connected': False, 'bluetooth_available': False,
+                'playing': False, 'error': 'Client initializing',
+                'version': VERSION, 'build_date': BUILD_DATE, 'bluetooth_mac': None,
+            }
+
+        status = client.status.copy()
+
+        if 'uptime_start' in status:
+            uptime = datetime.now() - status['uptime_start']
+            status['uptime'] = str(timedelta(seconds=int(uptime.total_seconds())))
+            del status['uptime_start']
+
+        status['version'] = VERSION
+        status['build_date'] = BUILD_DATE
+        status['connected'] = client.process.poll() is None if client.process else False
+        status['player_name'] = getattr(client, 'player_name', None)
+        status['listen_port'] = getattr(client, 'listen_port', None)
+        status['server_host'] = getattr(client, 'server_host', None)
+        status['server_port'] = getattr(client, 'server_port', None)
+        status['static_delay_ms'] = getattr(client, 'static_delay_ms', None)
+        status['connected_server_url'] = getattr(client, 'connected_server_url', '') or (
+            f'ws://{client.server_host}:{client.server_port}/sendspin'
+            if getattr(client, 'server_host', None) and
+               client.server_host.lower() not in ('auto', 'discover', '')
+            else ''
+        )
+
+        bt_mgr = getattr(client, 'bt_manager', None)
+        status['bluetooth_mac'] = bt_mgr.mac_address if bt_mgr else None
+        status['bluetooth_adapter'] = (bt_mgr.effective_adapter_mac or bt_mgr.adapter) if bt_mgr else None
+        adapter_name = None
+        if bt_mgr:
+            lookup_mac = bt_mgr.effective_adapter_mac or bt_mgr.adapter
+            if lookup_mac:
+                adapter_name = get_adapter_name(lookup_mac.upper())
+        status['bluetooth_adapter_name'] = adapter_name
+        status['bluetooth_adapter_hci'] = getattr(bt_mgr, 'adapter_hci_name', '') if bt_mgr else ''
+        status['has_sink'] = bool(getattr(client, 'bluetooth_sink_name', None))
+        status['bt_management_enabled'] = getattr(client, 'bt_management_enabled', True)
+
+        logger.debug(f"Status retrieved: {status}")
+        return status
+
+    except Exception as e:
+        logger.error(f"Error getting client status: {e}", exc_info=True)
+        return {
+            'connected': False, 'server_connected': False,
+            'bluetooth_connected': False, 'bluetooth_available': False,
+            'playing': False, 'error': str(e),
+            'version': VERSION, 'build_date': BUILD_DATE, 'bluetooth_mac': None,
+        }
+
+
+def get_client_status():
+    """Get status from the first client (backward compatibility)."""
+    if not _clients:
+        return {
+            'connected': False, 'server_connected': False,
+            'bluetooth_connected': False, 'bluetooth_available': False,
+            'playing': False, 'error': 'No clients',
+            'version': VERSION, 'build_date': BUILD_DATE, 'bluetooth_mac': None,
+        }
+    return get_client_status_for(_clients[0])
+
+
+# ---------------------------------------------------------------------------
+# Routes
+# ---------------------------------------------------------------------------
+
+@api_bp.route('/api/restart', methods=['POST'])
+def api_restart():
+    """Restart the service (systemd, HA addon, or Docker)."""
+    runtime = _detect_runtime()
+    try:
+        if runtime == 'systemd':
+            def _do_systemd():
+                time.sleep(0.5)
+                subprocess.run(
+                    ['systemctl', 'restart', 'sendspin-client'],
+                    capture_output=True, timeout=10
+                )
+            threading.Thread(target=_do_systemd, daemon=True).start()
+        elif runtime == 'ha_addon':
+            def _do_ha_restart():
+                import urllib.request as _ur
+                time.sleep(0.5)
+                token = os.environ.get('SUPERVISOR_TOKEN', '')
+                if token:
+                    try:
+                        req = _ur.Request(
+                            'http://supervisor/addons/self/restart',
+                            data=b'{}',
+                            headers={
+                                'Authorization': f'Bearer {token}',
+                                'Content-Type': 'application/json',
+                            },
+                            method='POST',
+                        )
+                        _ur.urlopen(req, timeout=15)
+                    except Exception as e:
+                        logger.warning(f'Supervisor restart failed: {e}; falling back to SIGTERM')
+                        try:
+                            os.kill(1, signal.SIGTERM)
+                        except ProcessLookupError:
+                            os.kill(os.getpid(), signal.SIGTERM)
+                else:
+                    os.kill(os.getpid(), signal.SIGTERM)
+            threading.Thread(target=_do_ha_restart, daemon=True).start()
+        else:
+            def _do_docker():
+                time.sleep(0.5)
+                try:
+                    os.kill(1, signal.SIGTERM)
+                except ProcessLookupError:
+                    os.kill(os.getpid(), signal.SIGTERM)
+            threading.Thread(target=_do_docker, daemon=True).start()
+
+        return jsonify({'success': True, 'runtime': runtime})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@api_bp.route('/api/volume', methods=['POST'])
+def set_volume():
+    """Set player volume. Accepts player_name (single), player_names (list), or neither (all)."""
+    try:
+        data = request.get_json()
+        volume = max(0, min(100, int(data.get('volume', 100))))
+        player_names = data.get('player_names')
+        player_name  = data.get('player_name')
+
+        if player_names is not None:
+            targets = [c for c in _clients if getattr(c, 'player_name', None) in player_names]
+        elif player_name:
+            targets = [c for c in _clients if getattr(c, 'player_name', None) == player_name]
+        else:
+            targets = _clients[:1]
+
+        results = []
+        for client in targets:
+            if client.bluetooth_sink_name:
+                r = subprocess.run(
+                    ['pactl', 'set-sink-volume', client.bluetooth_sink_name, f'{volume}%'],
+                    capture_output=True, text=True, timeout=2
+                )
+                if r.returncode == 0:
+                    client.status['volume'] = volume
+                    mac = getattr(getattr(client, 'bt_manager', None), 'mac_address', None)
+                    if mac and CONFIG_FILE.exists():
+                        try:
+                            with _config_lock:
+                                with open(CONFIG_FILE, 'r') as f:
+                                    cfg = json.load(f)
+                                cfg.setdefault('LAST_VOLUMES', {})[mac] = volume
+                                tmp = str(CONFIG_FILE) + '.tmp'
+                                with open(tmp, 'w') as f:
+                                    json.dump(cfg, f, indent=2)
+                                os.replace(tmp, str(CONFIG_FILE))
+                        except Exception as e:
+                            logger.debug(f"Could not save volume for {mac}: {e}")
+                    results.append({'player': getattr(client, 'player_name', '?'), 'ok': True})
+                else:
+                    results.append({'player': getattr(client, 'player_name', '?'), 'ok': False})
+        if not results:
+            return jsonify({'success': False, 'error': 'No clients available'}), 503
+        return jsonify({'success': True, 'volume': volume, 'results': results})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@api_bp.route('/api/mute', methods=['POST'])
+def set_mute():
+    """Toggle or set mute."""
+    try:
+        data = request.get_json() or {}
+        player_names = data.get('player_names')
+        player_name  = data.get('player_name')
+        mute_value   = data.get('mute')
+
+        if player_names is not None:
+            targets = [c for c in _clients if getattr(c, 'player_name', None) in player_names]
+        elif player_name:
+            targets = [c for c in _clients if getattr(c, 'player_name', None) == player_name]
+        else:
+            targets = _clients[:1]
+
+        pactl_arg = 'toggle' if mute_value is None else ('1' if mute_value else '0')
+        results = []
+        for client in targets:
+            if client.bluetooth_sink_name:
+                r = subprocess.run(
+                    ['pactl', 'set-sink-mute', client.bluetooth_sink_name, pactl_arg],
+                    capture_output=True, text=True, timeout=2
+                )
+                if r.returncode == 0:
+                    info = subprocess.run(
+                        ['pactl', 'get-sink-mute', client.bluetooth_sink_name],
+                        capture_output=True, text=True, timeout=2
+                    )
+                    muted = 'yes' in info.stdout.lower()
+                    client.status['muted'] = muted
+                    results.append({'player': getattr(client, 'player_name', '?'),
+                                    'ok': True, 'muted': muted})
+                else:
+                    results.append({'player': getattr(client, 'player_name', '?'), 'ok': False})
+        if not results:
+            return jsonify({'success': False, 'error': 'Client not available'}), 503
+        muted = results[0].get('muted', False) if results else False
+        return jsonify({'success': True, 'muted': muted, 'results': results})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@api_bp.route('/api/pause_all', methods=['POST'])
+def pause_all():
+    """Pause or play all Sendspin MPRIS instances via D-Bus."""
+    data = request.get_json() or {}
+    action = data.get('action', 'pause')
+    count = 0
+    try:
+        import dbus
+        bus = dbus.SessionBus()
+        for name in bus.list_names():
+            sname = str(name)
+            if not sname.startswith('org.mpris.MediaPlayer2.Sendspin'):
+                continue
+            if 'SendspinBridge' in sname:
+                continue
+            try:
+                obj = bus.get_object(sname, '/org/mpris/MediaPlayer2')
+                props = dbus.Interface(obj, 'org.freedesktop.DBus.Properties')
+                pb = str(props.Get('org.mpris.MediaPlayer2.Player', 'PlaybackStatus'))
+                player = dbus.Interface(obj, 'org.mpris.MediaPlayer2.Player')
+                if action == 'play' and pb in ('Paused', 'Stopped'):
+                    player.Play()
+                    count += 1
+                elif action == 'pause' and pb == 'Playing':
+                    player.Pause()
+                    count += 1
+            except Exception:
+                pass
+    except Exception:
+        pass
+    return jsonify({'success': True, 'action': action, 'count': count})
+
+
+@api_bp.route('/api/pause', methods=['POST'])
+def pause_player():
+    """Pause or play a single Sendspin player via D-Bus (matched by process PID)."""
+    data = request.get_json() or {}
+    player_name = data.get('player_name', '')
+    action = data.get('action', 'pause')
+    target = next((c for c in _clients if getattr(c, 'player_name', None) == player_name), None)
+    if not target or not target.process:
+        return jsonify({'success': False, 'error': 'Player not found or not running'}), 404
+    target_pid = target.process.pid
+    count = 0
+    try:
+        import dbus
+        bus = dbus.SessionBus()
+        dbus_iface = dbus.Interface(
+            bus.get_object('org.freedesktop.DBus', '/org/freedesktop/DBus'),
+            'org.freedesktop.DBus'
+        )
+        for name in bus.list_names():
+            sname = str(name)
+            if not sname.startswith('org.mpris.MediaPlayer2.Sendspin'):
+                continue
+            if 'SendspinBridge' in sname:
+                continue
+            try:
+                if int(dbus_iface.GetConnectionUnixProcessID(name)) != target_pid:
+                    continue
+                obj = bus.get_object(sname, '/org/mpris/MediaPlayer2')
+                props = dbus.Interface(obj, 'org.freedesktop.DBus.Properties')
+                pb = str(props.Get('org.mpris.MediaPlayer2.Player', 'PlaybackStatus'))
+                player_iface = dbus.Interface(obj, 'org.mpris.MediaPlayer2.Player')
+                if action == 'play' and pb in ('Paused', 'Stopped'):
+                    player_iface.Play()
+                    count += 1
+                elif action == 'pause' and pb == 'Playing':
+                    player_iface.Pause()
+                    count += 1
+            except Exception:
+                pass
+    except Exception:
+        pass
+    return jsonify({'success': True, 'action': action, 'count': count})
+
+
+@api_bp.route('/api/bt/reconnect', methods=['POST'])
+def api_bt_reconnect():
+    """Force reconnect a BT device (connect without re-pairing)."""
+    try:
+        data = request.get_json() or {}
+        player_name = data.get('player_name')
+        client = next((c for c in _clients if getattr(c, 'player_name', None) == player_name), None)
+        if client is None and _clients:
+            client = _clients[0]
+        if not client or not client.bt_manager:
+            return jsonify({'success': False, 'error': 'No BT manager for this player'}), 503
+
+        bt = client.bt_manager
+
+        def _do_reconnect():
+            try:
+                bt.disconnect_device()
+                time.sleep(1)
+                bt.connect_device()
+            except Exception as e:
+                logger.error(f"Force reconnect failed: {e}")
+
+        threading.Thread(target=_do_reconnect, daemon=True).start()
+        return jsonify({'success': True, 'message': 'Reconnect started'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@api_bp.route('/api/bt/pair', methods=['POST'])
+def api_bt_pair():
+    """Force re-pair a BT device. Device must be in pairing mode."""
+    try:
+        data = request.get_json() or {}
+        player_name = data.get('player_name')
+        client = next((c for c in _clients if getattr(c, 'player_name', None) == player_name), None)
+        if client is None and _clients:
+            client = _clients[0]
+        if not client or not client.bt_manager:
+            return jsonify({'success': False, 'error': 'No BT manager for this player'}), 503
+
+        bt = client.bt_manager
+
+        def _do_pair():
+            try:
+                bt.pair_device()
+                bt.connect_device()
+            except Exception as e:
+                logger.error(f"Force pair failed: {e}")
+
+        threading.Thread(target=_do_pair, daemon=True).start()
+        return jsonify({'success': True, 'message': 'Pairing started (~25s)'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@api_bp.route('/api/bt/management', methods=['POST'])
+def api_bt_management():
+    """Release or reclaim the BT adapter for a player."""
+    data = request.get_json() or {}
+    player_name = data.get('player_name')
+    enabled = data.get('enabled')
+    if enabled is None:
+        return jsonify({'success': False, 'error': 'Missing "enabled" field'}), 400
+    client = next((c for c in _clients if getattr(c, 'player_name', None) == player_name), None)
+    if not client and _clients:
+        client = _clients[0]
+    if not client:
+        return jsonify({'success': False, 'error': 'No client found'}), 503
+    enabled = bool(enabled)
+    threading.Thread(
+        target=client.set_bt_management_enabled,
+        args=(enabled,),
+        daemon=True
+    ).start()
+    _persist_device_enabled(player_name, enabled)
+    action = 'reclaimed' if enabled else 'released'
+    return jsonify({'success': True, 'message': f'BT adapter {action}', 'enabled': enabled})
+
+
+@api_bp.route('/api/status')
+def api_status():
+    """Return status for all client instances."""
+    if not _clients:
+        return jsonify({'error': 'No clients'})
+    if len(_clients) == 1:
+        return jsonify(get_client_status_for(_clients[0]))
+    first = get_client_status_for(_clients[0])
+    result = {**first, 'devices': [get_client_status_for(c) for c in _clients]}
+    return jsonify(result)
+
+
+@api_bp.route('/api/config', methods=['GET', 'POST'])
+def api_config():
+    """Read or write the service configuration."""
+    if request.method == 'GET':
+        if CONFIG_FILE.exists():
+            with open(CONFIG_FILE) as f:
+                config = json.load(f)
+        else:
+            config = DEFAULT_CONFIG.copy()
+
+        # Enrich BLUETOOTH_DEVICES with resolved listen_port / listen_host from running clients
+        client_map = {getattr(c, 'player_name', None): c for c in _clients}
+        mac_map    = {getattr(getattr(c, 'bt_manager', None), 'mac_address', None): c
+                      for c in _clients}
+        for dev in config.get('BLUETOOTH_DEVICES', []):
+            client = client_map.get(dev.get('player_name')) or mac_map.get(dev.get('mac'))
+            if client:
+                if 'listen_port' not in dev or not dev['listen_port']:
+                    dev['listen_port'] = getattr(client, 'listen_port', None)
+                if 'listen_host' not in dev or not dev['listen_host']:
+                    dev['listen_host'] = (getattr(client, 'listen_host', None)
+                                          or client.status.get('ip_address'))
+
+        return jsonify(config)
+
+    # POST
+    config = request.get_json()
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    with _config_lock:
+        existing = {}
+        if CONFIG_FILE.exists():
+            try:
+                with open(CONFIG_FILE) as f:
+                    existing = json.load(f)
+                for key in ('LAST_VOLUMES', 'LAST_VOLUME'):
+                    if key in existing and key not in config:
+                        config[key] = existing[key]
+            except Exception:
+                pass
+
+        old_devices = {d['mac']: d for d in existing.get('BLUETOOTH_DEVICES', []) if d.get('mac')}
+        new_devices = {d['mac']: d for d in config.get('BLUETOOTH_DEVICES', []) if d.get('mac')}
+
+        client_adapter = {
+            getattr(getattr(c, 'bt_manager', None), 'mac_address', None):
+            getattr(getattr(c, 'bt_manager', None), '_adapter_select', '')
+            for c in _clients
+        }
+
+        for mac, old_dev in old_devices.items():
+            new_dev = new_devices.get(mac)
+            adapter_changed = new_dev and new_dev.get('adapter') != old_dev.get('adapter')
+            deleted = new_dev is None
+            if deleted or adapter_changed:
+                adapter_mac = client_adapter.get(mac) or ''
+                _bt_remove_device(mac, adapter_mac)
+
+        default_vol = config.pop('_new_device_default_volume', None)
+        if default_vol is not None:
+            last_volumes = config.setdefault('LAST_VOLUMES', existing.get('LAST_VOLUMES', {}))
+            for mac in new_devices:
+                if mac and mac not in last_volumes:
+                    last_volumes[mac] = default_vol
+
+        tmp = str(CONFIG_FILE) + '.tmp'
+        with open(tmp, 'w') as f:
+            json.dump(config, f, indent=2)
+        os.replace(tmp, str(CONFIG_FILE))
+
+    # Invalidate adapter name cache so next status poll picks up changes
+    load_adapter_name_cache()
+
+    if _detect_runtime() == 'ha_addon':
+        try:
+            import urllib.request as _ur
+            token = os.environ.get('SUPERVISOR_TOKEN', '')
+            if token:
+                sup_devices = []
+                for d in config.get('BLUETOOTH_DEVICES', []):
+                    entry = {'mac': d.get('mac', ''), 'player_name': d.get('player_name', '')}
+                    if d.get('adapter'):
+                        entry['adapter'] = d['adapter']
+                    if d.get('static_delay_ms'):
+                        entry['static_delay_ms'] = int(d['static_delay_ms'])
+                    if d.get('listen_host'):
+                        entry['listen_host'] = d['listen_host']
+                    if d.get('listen_port'):
+                        entry['listen_port'] = int(d['listen_port'])
+                    if 'enabled' in d:
+                        entry['enabled'] = bool(d['enabled'])
+                    sup_devices.append(entry)
+                sup_adapters = [
+                    dict({'id': a['id'], 'mac': a.get('mac', '')},
+                         **({'name': a['name']} if a.get('name') else {}))
+                    for a in config.get('BLUETOOTH_ADAPTERS', [])
+                    if a.get('id')
+                ]
+                sup_opts = {
+                    'options': {
+                        'sendspin_server':    config.get('SENDSPIN_SERVER', 'auto'),
+                        'sendspin_port':      int(config.get('SENDSPIN_PORT', 9000)),
+                        'bridge_name':        config.get('BRIDGE_NAME', ''),
+                        'tz':                 config.get('TZ', ''),
+                        'pulse_latency_msec': int(config.get('PULSE_LATENCY_MSEC', 200)),
+                        'prefer_sbc_codec':   bool(config.get('PREFER_SBC_CODEC', False)),
+                        'bluetooth_devices':  sup_devices,
+                        'bluetooth_adapters': sup_adapters,
+                    }
+                }
+                body = json.dumps(sup_opts).encode()
+                req = _ur.Request(
+                    'http://supervisor/addons/self/options',
+                    data=body,
+                    headers={
+                        'Authorization': f'Bearer {token}',
+                        'Content-Type': 'application/json',
+                    },
+                    method='POST',
+                )
+                _ur.urlopen(req, timeout=10)
+        except Exception as e:
+            logger.warning(f'Failed to sync Supervisor options: {e}')
+
+    return jsonify({'success': True})
+
+
+@api_bp.route('/api/logs')
+def api_logs():
+    """Return real service logs (journalctl, Supervisor, or docker logs)."""
+    lines = min(request.args.get('lines', 150, type=int), 500)
+    try:
+        runtime = _detect_runtime()
+        if runtime == 'systemd':
+            result = subprocess.run(
+                ['journalctl', '-u', 'sendspin-client',
+                 '-n', str(lines), '--no-pager', '--output=short-iso'],
+                capture_output=True, text=True, timeout=10
+            )
+            log_lines = result.stdout.splitlines()
+            if not log_lines and result.stderr:
+                log_lines = result.stderr.splitlines()
+        elif runtime == 'ha_addon':
+            import urllib.request as _ur
+            token = os.environ.get('SUPERVISOR_TOKEN', '')
+            if token:
+                req = _ur.Request(
+                    'http://supervisor/addons/self/logs',
+                    headers={'Authorization': f'Bearer {token}', 'Accept': 'text/plain'}
+                )
+                with _ur.urlopen(req, timeout=10) as resp:
+                    text = resp.read().decode('utf-8', errors='replace')
+                log_lines = text.splitlines()[-lines:]
+            else:
+                log_lines = ['(SUPERVISOR_TOKEN not available — check addon permissions)']
+        else:
+            result = subprocess.run(
+                ['docker', 'logs', '--tail', str(lines), 'sendspin-client'],
+                capture_output=True, text=True, timeout=10
+            )
+            log_lines = (result.stdout + result.stderr).splitlines()
+
+        if not log_lines:
+            log_lines = ['(No logs available)']
+
+        return jsonify({'logs': log_lines, 'runtime': runtime})
+    except Exception as e:
+        logger.error(f"Error reading logs: {e}")
+        return jsonify({'logs': [f'Error reading logs: {e}']})
+
+
+@api_bp.route('/api/bt/adapters')
+def api_bt_adapters():
+    """List available Bluetooth adapters."""
+    try:
+        result = subprocess.run(
+            ['bluetoothctl', 'list'],
+            capture_output=True, text=True, timeout=5
+        )
+        macs = []
+        for line in result.stdout.splitlines():
+            if 'Controller' not in line:
+                continue
+            parts = line.split()
+            mac = next(
+                (p for p in parts if len(p) == 17 and p.count(':') == 5), None
+            )
+            if mac:
+                macs.append(mac)
+        adapters = []
+        for i, mac in enumerate(macs):
+            show_out = subprocess.run(
+                ['bluetoothctl'],
+                input=f'select {mac}\nshow\n',
+                capture_output=True, text=True, timeout=5
+            ).stdout
+            powered = 'Powered: yes' in show_out
+            alias = next(
+                (ln.split('Alias:')[1].strip()
+                 for ln in show_out.splitlines() if 'Alias:' in ln),
+                f'hci{i}'
+            )
+            adapters.append({'id': f'hci{i}', 'mac': mac, 'name': alias, 'powered': powered})
+        return jsonify({'adapters': adapters})
+    except Exception as e:
+        return jsonify({'adapters': [], 'error': str(e)})
+
+
+@api_bp.route('/api/bt/paired')
+def api_bt_paired():
+    """Return already-paired Bluetooth devices."""
+    named_only = request.args.get('filter', '1') != '0'
+    try:
+        result = subprocess.run(
+            ['bluetoothctl'],
+            input='devices\n',
+            capture_output=True, text=True, timeout=5
+        )
+        ansi_re = re.compile(r'\x1b\[[0-9;]*m')
+        dev_pat = re.compile(r'Device\s+([0-9A-Fa-f:]{17})\s+(.*)')
+        devices = []
+        seen = set()
+        for line in result.stdout.splitlines():
+            clean = ansi_re.sub('', line)
+            m = dev_pat.search(clean)
+            if m:
+                mac = m.group(1).upper()
+                name = m.group(2).strip()
+                if mac not in seen:
+                    seen.add(mac)
+                    if re.match(r'^[0-9A-Fa-f]{2}[-:]', name):
+                        name = ''
+                    if named_only and not name:
+                        continue
+                    devices.append({'mac': mac, 'name': name or mac})
+        devices.sort(key=lambda d: d['name'].lower())
+        return jsonify({'devices': devices})
+    except Exception as e:
+        return jsonify({'devices': [], 'error': str(e)})
+
+
+@api_bp.route('/api/bt/scan', methods=['POST'])
+def api_bt_scan():
+    """Scan for nearby Bluetooth devices (~10 second scan)."""
+    try:
+        list_result = subprocess.run(
+            ['bluetoothctl', 'list'],
+            capture_output=True, text=True, timeout=5
+        )
+        adapter_macs = re.findall(r'Controller\s+([0-9A-Fa-f:]{17})', list_result.stdout)
+
+        post_scan_cmds = []
+        for m in adapter_macs:
+            post_scan_cmds.extend([f'select {m}', 'show', 'devices'])
+        bt_timeout = 12 + len(adapter_macs) * 2
+
+        proc = subprocess.Popen(
+            ['bluetoothctl'],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+        if adapter_macs:
+            init_cmds: list[str] = []
+            for m in adapter_macs:
+                init_cmds.extend([f'select {m}', 'power on', 'scan on'])
+        else:
+            init_cmds = ['power on', 'agent on', 'scan on']
+        proc.stdin.write('\n'.join(init_cmds) + '\n')
+        proc.stdin.flush()
+        time.sleep(10)
+        proc.stdin.write('scan off\n' + '\n'.join(post_scan_cmds) + '\n')
+        proc.stdin.flush()
+        time.sleep(1)
+        result_stdout, _ = proc.communicate(timeout=bt_timeout + 4)
+
+        class _R:
+            stdout = result_stdout
+
+        result = _R()
+        seen: set = set()
+        names: dict = {}
+        device_adapter: dict = {}
+        ansi_re = re.compile(r'\x1b\[[0-9;]*m')
+        new_pat = re.compile(r'\[NEW\]\s+Device\s+([0-9A-Fa-f:]{17})\s+(.*)')
+        chg_name_pat = re.compile(r'\[CHG\]\s+Device\s+([0-9A-Fa-f:]{17})\s+Name:\s+(.*)')
+        chg_rssi_pat = re.compile(r'\[CHG\]\s+Device\s+([0-9A-Fa-f:]{17})\s+RSSI:')
+        show_ctrl_pat = re.compile(r'^Controller\s+([0-9A-Fa-f:]{17})')
+        show_dev_pat = re.compile(r'^Device\s+([0-9A-Fa-f:]{17})')
+        active_macs: set = set()
+        current_show_adapter: str = ''
+        for line in result.stdout.splitlines():
+            clean = ansi_re.sub('', line).strip()
+            if not clean.startswith('['):
+                ctrl_m = show_ctrl_pat.match(clean)
+                if ctrl_m:
+                    current_show_adapter = ctrl_m.group(1).upper()
+                    continue
+                if current_show_adapter:
+                    dev_m = show_dev_pat.match(clean)
+                    if dev_m:
+                        dmac = dev_m.group(1).upper()
+                        if dmac not in device_adapter:
+                            device_adapter[dmac] = current_show_adapter
+                        continue
+            scan_m = new_pat.search(clean)
+            if scan_m:
+                mac = scan_m.group(1).upper()
+                name = scan_m.group(2).strip()
+                seen.add(mac)
+                if name and not re.match(r'^[0-9A-Fa-f]{2}[-:]', name):
+                    names[mac] = name
+                continue
+            chg_n = chg_name_pat.search(clean)
+            if chg_n:
+                mac = chg_n.group(1).upper()
+                names[mac] = chg_n.group(2).strip()
+                continue
+            chg_r = chg_rssi_pat.search(clean)
+            if chg_r:
+                active_macs.add(chg_r.group(1).upper())
+        all_macs = seen | active_macs
+
+        # Look up names for devices seen only by RSSI (already-paired/cached)
+        unnamed = {mac for mac in all_macs if mac not in names}
+        if unnamed:
+            db_result = subprocess.run(
+                ['bluetoothctl'],
+                input='devices\n',
+                capture_output=True, text=True, timeout=5
+            )
+            db_pat = re.compile(r'Device\s+([0-9A-Fa-f:]{17})\s+(.*)')
+            for line in db_result.stdout.splitlines():
+                clean = ansi_re.sub('', line)
+                db_m = db_pat.search(clean)
+                if db_m:
+                    mac = db_m.group(1).upper()
+                    name = db_m.group(2).strip()
+                    if mac in unnamed and name and not re.match(r'^[0-9A-Fa-f]{2}[-:]', name):
+                        names[mac] = name
+
+        # Filter to audio-capable devices and enrich with bluetoothctl info
+        devices = []
+        for mac in all_macs:
+            try:
+                r = subprocess.run(['bluetoothctl', 'info', mac],
+                                   capture_output=True, text=True, timeout=4)
+                out = r.stdout
+                out_lower = out.lower()
+            except Exception:
+                devices.append({'mac': mac, 'name': names.get(mac, mac)})
+                continue
+            if mac not in names:
+                nm = re.search(r'\bName:\s+(.*)', out)
+                if nm:
+                    n = nm.group(1).strip()
+                    if n and not re.match(r'^[0-9A-Fa-f]{2}[-:]', n):
+                        names[mac] = n
+            class_m = re.search(r'Class:\s+(0x[0-9A-Fa-f]+)', out)
+            if class_m:
+                cls = int(class_m.group(1), 16)
+                if (cls >> 8) & 0x1f != 4:
+                    continue
+            elif any(u in out_lower for u in _AUDIO_UUIDS):
+                pass
+            elif 'UUID:' in out:
+                continue
+            devices.append({'mac': mac, 'name': names.get(mac, mac)})
+
+        for d in devices:
+            d['adapter'] = device_adapter.get(d['mac'], '')
+
+        devices.sort(key=lambda d: (d['name'] == d['mac'], d['name']))
+        return jsonify({'devices': devices})
+    except Exception as e:
+        logger.error(f"BT scan failed: {e}")
+        return jsonify({'devices': [], 'error': str(e)})
+
+
+@api_bp.route('/api/diagnostics')
+def api_diagnostics():
+    """Return structured health diagnostics."""
+    try:
+        diag: dict = {}
+
+        try:
+            r = subprocess.run(
+                ['bluetoothctl', 'list'],
+                capture_output=True, text=True, timeout=5
+            )
+            if r.returncode == 0 and 'Controller' in r.stdout:
+                diag['bluetooth_daemon'] = 'active'
+            else:
+                r2 = subprocess.run(
+                    ['systemctl', 'is-active', 'bluetooth'],
+                    capture_output=True, text=True, timeout=3
+                )
+                diag['bluetooth_daemon'] = r2.stdout.strip() or 'inactive'
+        except Exception:
+            diag['bluetooth_daemon'] = 'unknown'
+
+        dbus_env = os.environ.get('DBUS_SYSTEM_BUS_ADDRESS', '')
+        dbus_path = dbus_env.replace('unix:path=', '') if dbus_env else '/run/dbus/system_bus_socket'
+        diag['dbus_available'] = os.path.exists(dbus_path)
+
+        try:
+            r = subprocess.run(
+                ['bluetoothctl', 'list'],
+                capture_output=True, text=True, timeout=5
+            )
+            adapters = []
+            for i, line in enumerate(r.stdout.splitlines()):
+                if 'Controller' not in line:
+                    continue
+                parts = line.split()
+                mac = next((p for p in parts if len(p) == 17 and p.count(':') == 5), '')
+                adapters.append({
+                    'id': f'hci{i}', 'mac': mac,
+                    'default': 'default' in line.lower(),
+                })
+            diag['adapters'] = adapters
+        except Exception as e:
+            diag['adapters'] = [{'error': str(e)}]
+
+        try:
+            r = subprocess.run(['pactl', 'info'], capture_output=True, text=True, timeout=3)
+            if r.returncode == 0:
+                diag['pulseaudio'] = next(
+                    (l.split(':', 1)[-1].strip() for l in r.stdout.splitlines()
+                     if 'Server Name' in l),
+                    'running'
+                )
+            else:
+                diag['pulseaudio'] = 'not available'
+        except Exception:
+            diag['pulseaudio'] = 'not available'
+
+        try:
+            r = subprocess.run(
+                ['pactl', 'list', 'short', 'sinks'],
+                capture_output=True, text=True, timeout=3
+            )
+            diag['sinks'] = [
+                l.split()[1] for l in r.stdout.splitlines()
+                if 'bluez' in l.lower() and len(l.split()) > 1
+            ]
+        except Exception:
+            diag['sinks'] = []
+
+        device_diag = []
+        for client in _clients:
+            bt_mgr = getattr(client, 'bt_manager', None)
+            device_diag.append({
+                'name': getattr(client, 'player_name', 'Unknown'),
+                'mac': bt_mgr.mac_address if bt_mgr else None,
+                'connected': client.status.get('bluetooth_connected', False),
+                'sink': getattr(client, 'bluetooth_sink_name', None),
+                'last_error': client.status.get('last_error'),
+            })
+        diag['devices'] = device_diag
+
+        return jsonify(diag)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@api_bp.route('/api/version')
+def api_version():
+    """Return git version information."""
+    cwd = os.path.dirname(os.path.abspath(__file__))
+    try:
+        git_sha = subprocess.run(
+            ['git', 'rev-parse', '--short', 'HEAD'],
+            capture_output=True, text=True, timeout=3, cwd=cwd
+        ).stdout.strip()
+        git_desc = subprocess.run(
+            ['git', 'describe', '--tags', '--always'],
+            capture_output=True, text=True, timeout=3, cwd=cwd
+        ).stdout.strip()
+        git_date = subprocess.run(
+            ['git', 'log', '-1', '--format=%ci'],
+            capture_output=True, text=True, timeout=3, cwd=cwd
+        ).stdout.strip()
+        return jsonify({
+            'version': git_desc or VERSION,
+            'git_sha': git_sha or 'unknown',
+            'built_at': (git_date.split(' ')[0] if git_date else BUILD_DATE),
+        })
+    except Exception:
+        return jsonify({'version': VERSION, 'git_sha': 'unknown', 'built_at': BUILD_DATE})
