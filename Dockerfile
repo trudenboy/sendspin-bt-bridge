@@ -52,6 +52,9 @@ WORKDIR /app
 
 # Copy application files
 COPY sendspin_client.py web_interface.py config.py mpris.py bluetooth_manager.py entrypoint.sh ./
+COPY state.py ./
+COPY routes/ routes/
+COPY services/ services/
 COPY templates/ templates/
 COPY static/ static/
 

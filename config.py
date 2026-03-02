@@ -30,6 +30,8 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 _CONFIG_PATH = os.path.join(os.getenv('CONFIG_DIR', '/config'), 'config.json')
+CONFIG_DIR = Path(os.getenv('CONFIG_DIR', '/config'))
+CONFIG_FILE = CONFIG_DIR / 'config.json'
 _config_lock = threading.Lock()  # serializes all config.json read-modify-write ops
 
 

@@ -702,7 +702,8 @@ async def main():
 
     # Start web interface in background thread
     def run_web_server():
-        from web_interface import set_clients, main as web_main
+        from state import set_clients
+        from web_interface import main as web_main
         set_clients(clients)
         web_main()
 
