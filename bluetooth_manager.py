@@ -88,7 +88,8 @@ def _dbus_call_device_method(device_path: str, method_name: str) -> bool:
         return False
 
 
-
+class BluetoothManager:
+    """Manages Bluetooth speaker connections using bluetoothctl and D-Bus"""
 
     def __init__(self, mac_address: str, adapter: str = "", device_name: str = "", client=None,
                  prefer_sbc: bool = False, check_interval: int = 10, max_reconnect_fails: int = 0):
