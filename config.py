@@ -5,6 +5,20 @@ Provides the config file path, a process-wide lock for atomic writes,
 and helpers for loading/persisting configuration.
 """
 
+VERSION = "1.4.2"
+BUILD_DATE = "2026-03-02"
+
+DEFAULT_CONFIG = {
+    'SENDSPIN_SERVER': 'auto',
+    'SENDSPIN_PORT': 9000,
+    'BRIDGE_NAME': '',
+    'BLUETOOTH_MAC': '',
+    'BLUETOOTH_DEVICES': [],
+    'TZ': 'Australia/Melbourne',
+    'PULSE_LATENCY_MSEC': 200,
+    'PREFER_SBC_CODEC': False,
+}
+
 import json
 import logging
 import os
@@ -46,16 +60,7 @@ def load_config() -> dict:
     config_dir = Path(os.getenv('CONFIG_DIR', '/config'))
     config_file = config_dir / 'config.json'
 
-    default_config = {
-        'SENDSPIN_SERVER': 'auto',
-        'SENDSPIN_PORT': 9000,
-        'BRIDGE_NAME': '',
-        'BLUETOOTH_MAC': '',
-        'BLUETOOTH_DEVICES': [],
-        'TZ': 'Australia/Melbourne',
-        'PULSE_LATENCY_MSEC': 200,
-        'PREFER_SBC_CODEC': False,
-    }
+    result = DEFAULT_CONFIG.copy()
 
     allowed_keys = {
         'SENDSPIN_SERVER', 'SENDSPIN_PORT', 'BRIDGE_NAME',
@@ -70,11 +75,11 @@ def load_config() -> dict:
                 saved_config = json.load(f)
             for key, value in saved_config.items():
                 if key in allowed_keys:
-                    default_config[key] = value
+                    result[key] = value
             logger.info(f"Loaded config from {config_file}")
         except Exception as e:
             logger.warning(f"Error loading config: {e}, using defaults")
     else:
         logger.info(f"Config file not found at {config_file}, using defaults")
 
-    return default_config
+    return result

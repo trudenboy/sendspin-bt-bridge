@@ -13,6 +13,7 @@ import re
 import subprocess
 import time
 import threading
+from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
 from config import _CONFIG_PATH, _config_lock, _save_device_volume
@@ -452,6 +453,13 @@ class BluetoothManager:
                     # Run blocking BT check in thread pool — never block the event loop
                     connected = await loop.run_in_executor(None, self.is_device_connected)
                     logger.info(f"[{self.device_name}] BT connected={connected}")
+
+                    # Keep client status in sync so update_status() can read the cached flag
+                    if self.client:
+                        if connected != self.client.status.get('bluetooth_connected'):
+                            self.client.status['bluetooth_connected'] = connected
+                            self.client.status['bluetooth_connected_at'] = datetime.now().isoformat()
+
                     if not connected:
                         reconnect_attempt += 1
                         if self.client:

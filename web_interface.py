@@ -19,7 +19,7 @@ from flask import Flask, jsonify, render_template, request
 from flask_cors import CORS
 from waitress import serve
 
-from config import _config_lock  # shared lock — same object as sendspin_client uses
+from config import _config_lock, VERSION, BUILD_DATE, DEFAULT_CONFIG  # shared lock — same object as sendspin_client uses
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -44,27 +44,32 @@ class _IngressMiddleware:
 
 app.wsgi_app = _IngressMiddleware(app.wsgi_app)
 
-# Version information
-VERSION = "1.4.2"
-BUILD_DATE = "2026-03-02"
-
 # Configuration file path
 CONFIG_DIR = Path(os.getenv('CONFIG_DIR', '/config'))
 CONFIG_FILE = CONFIG_DIR / 'config.json'
 
-# Default configuration
-DEFAULT_CONFIG = {
-    'SENDSPIN_SERVER': 'auto',
-    'BRIDGE_NAME': '',
-    'BLUETOOTH_MAC': '',
-    'BLUETOOTH_DEVICES': [],
-    'TZ': 'Australia/Melbourne',
-    'PULSE_LATENCY_MSEC': 200,
-    'PREFER_SBC_CODEC': False,
-}
-
 # Global clients list will be set by main
 _clients: list = []
+
+# Adapter name lookup cache: mac_upper → friendly name. Rebuilt from config on demand.
+_adapter_name_cache: dict[str, str] = {}
+_adapter_cache_loaded = False
+
+
+def _load_adapter_name_cache() -> None:
+    """Load adapter friendly names from config.json into the in-memory cache."""
+    global _adapter_name_cache, _adapter_cache_loaded
+    try:
+        with open(CONFIG_FILE) as _f:
+            _cfg = json.load(_f)
+        _adapter_name_cache = {
+            a.get('mac', a.get('id', '')).upper(): a.get('name', '')
+            for a in _cfg.get('BLUETOOTH_ADAPTERS', [])
+            if a.get('mac') or a.get('id')
+        }
+    except Exception:
+        _adapter_name_cache = {}
+    _adapter_cache_loaded = True
 
 
 def _bt_remove_device(mac: str, adapter_mac: str = '') -> None:
@@ -175,16 +180,9 @@ def get_client_status_for(client):
         if bt_mgr:
             lookup_mac = bt_mgr.effective_adapter_mac or bt_mgr.adapter
             if lookup_mac:
-                try:
-                    with open(CONFIG_FILE) as _f:
-                        _cfg = json.load(_f)
-                    for _a in _cfg.get('BLUETOOTH_ADAPTERS', []):
-                        if (_a.get('mac', '').upper() == lookup_mac.upper() or
-                                _a.get('id') == lookup_mac):
-                            adapter_name = _a.get('name')
-                            break
-                except Exception:
-                    pass
+                if not _adapter_cache_loaded:
+                    _load_adapter_name_cache()
+                adapter_name = _adapter_name_cache.get(lookup_mac.upper()) or None
         status['bluetooth_adapter_name'] = adapter_name
         status['bluetooth_adapter_hci'] = getattr(bt_mgr, 'adapter_hci_name', '') if bt_mgr else ''
         status['has_sink'] = bool(getattr(client, 'bluetooth_sink_name', None))
@@ -619,6 +617,9 @@ def api_config():
             with open(tmp, 'w') as f:
                 json.dump(config, f, indent=2)
             os.replace(tmp, str(CONFIG_FILE))
+
+        # Invalidate adapter name cache so next status poll picks up changes
+        _load_adapter_name_cache()
 
         # In HA addon mode, also push to Supervisor options so the config
         # survives container restarts (run.sh regenerates config.json from options.json).

@@ -17,9 +17,8 @@ import time
 from datetime import datetime
 from typing import Optional
 
-import netifaces
-
 from config import (
+    VERSION as CLIENT_VERSION,
     _CONFIG_PATH,
     _config_lock,
     _player_id_from_mac,
@@ -42,9 +41,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-CLIENT_VERSION = "1.4.2"
-
-# Per-player audio format cache — keyed by player_name.
+# Per-player — keyed by player_name.
 # Updated when a full "Audio format: flac 48000Hz/24-bit/2ch" line is received;
 # read by the same player to fill in format details when only
 # "Stream started with codec X" was received.
@@ -117,22 +114,14 @@ class SendspinClient:
     def get_ip_address(self) -> str:
         """Get the primary IP address of this machine"""
         try:
-            # Try to get IP from default gateway interface
-            gws = netifaces.gateways()
-            default_interface = gws['default'][netifaces.AF_INET][1]
-            addrs = netifaces.ifaddresses(default_interface)
-            return addrs[netifaces.AF_INET][0]['addr']
-        except Exception:
-            # Fallback method
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             try:
-                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                try:
-                    s.connect(("8.8.8.8", 80))
-                    return s.getsockname()[0]
-                finally:
-                    s.close()
-            except Exception:
-                return "unknown"
+                s.connect(("8.8.8.8", 80))
+                return s.getsockname()[0]
+            finally:
+                s.close()
+        except Exception:
+            return "unknown"
     
     async def update_status(self):
         """Update client status"""
@@ -141,9 +130,10 @@ class SendspinClient:
         while self.running:
             try:
                 if self.bt_manager:
-                    # Run blocking BT check in thread pool — never block the event loop
-                    bt_connected = await loop.run_in_executor(None, self.bt_manager.is_device_connected)
-                    logger.debug(f"Bluetooth status check: connected={bt_connected}")
+                    # Read cached connected flag — monitor_and_reconnect() polls
+                    # is_device_connected() on its own schedule and keeps this up-to-date,
+                    # so we avoid a redundant bluetoothctl subprocess here.
+                    bt_connected = self.bt_manager.connected
                     if bt_connected != self.status['bluetooth_connected']:
                         self.status['bluetooth_connected'] = bt_connected
                         self.status['bluetooth_connected_at'] = datetime.now().isoformat()
