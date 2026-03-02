@@ -27,8 +27,8 @@ app = Flask(__name__)
 CORS(app)
 
 # Version information
-VERSION = "1.3.32"
-BUILD_DATE = "2026-03-01"
+VERSION = "1.3.33"
+BUILD_DATE = "2026-03-02"
 
 # Configuration file path
 CONFIG_DIR = Path(os.getenv('CONFIG_DIR', '/config'))
