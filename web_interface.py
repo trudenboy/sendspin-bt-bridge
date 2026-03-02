@@ -1602,7 +1602,7 @@ async function startBtScan() {
             listDiv.querySelectorAll('[data-scan-idx]').forEach(function(btn) {
                 btn.addEventListener('click', function() {
                     var d = devices[parseInt(this.dataset.scanIdx)];
-                    addFromScan(d.mac, d.name);
+                    addFromScan(d.mac, d.name, d.adapter);
                 });
             });
             box.style.display = 'block';
@@ -1618,8 +1618,8 @@ function autoAdapter() {
     return (btAdapters.length === 1) ? btAdapters[0].id : '';
 }
 
-function addFromScan(mac, name) {
-    addBtDeviceRow(name, mac, autoAdapter());
+function addFromScan(mac, name, adapter) {
+    addBtDeviceRow(name, mac, adapter || autoAdapter());
     document.getElementById('scan-results-box').style.display = 'none';
     document.getElementById('scan-status').textContent = '';
 }
@@ -2655,6 +2655,31 @@ def api_bt_scan():
             elif 'UUID:' in out:
                 continue
             devices.append({'mac': mac, 'name': names.get(mac, mac)})
+
+        # Map each found device to the adapter that has it in its device list.
+        # Run "select ADAPTER; devices" per adapter and check which MACs appear.
+        device_adapter: dict = {}
+        found_macs = {d['mac'] for d in devices}
+        for adapter_mac in adapter_macs:
+            try:
+                ar = subprocess.run(
+                    ['bash', '-c',
+                     f'printf "select {adapter_mac}\\ndevices\\n" | bluetoothctl 2>/dev/null'],
+                    capture_output=True, text=True, timeout=5
+                )
+                adp_ansi = re.compile(r'\x1b\[[0-9;]*m')
+                adp_dev = re.compile(r'Device\s+([0-9A-Fa-f:]{17})')
+                for line in ar.stdout.splitlines():
+                    m = adp_dev.search(adp_ansi.sub('', line))
+                    if m:
+                        dmac = m.group(1).upper()
+                        if dmac in found_macs and dmac not in device_adapter:
+                            device_adapter[dmac] = adapter_mac
+            except Exception:
+                pass
+        for d in devices:
+            d['adapter'] = device_adapter.get(d['mac'], '')
+
         # Sort: named devices first, then by MAC
         devices.sort(key=lambda d: (d['name'] == d['mac'], d['name']))
         return jsonify({'devices': devices})
