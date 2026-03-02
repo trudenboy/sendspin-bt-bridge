@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.7.0] - 2026-03-03
+## [2.0.0] - 2026-03-02
 
 ### Changed
 - **D-Bus Bluetooth monitor** — replaced `bluetoothctl` polling in `monitor_and_reconnect()`
@@ -20,6 +20,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   falls back to `bluetoothctl disconnect`.
 - Added `dbus-fast>=2.22.0,<3.0.0` to `requirements.txt`.
 - Added explicit `import asyncio` to `bluetooth_manager.py` (was implicit via module load order).
+- **In-process sendspin daemon** — replaced `subprocess + stdout-parsing` architecture
+  with direct in-process `BridgeDaemon(SendspinDaemon)` subclass. Status updates
+  (play/stop, audio format, volume, group, metadata) are now delivered via typed
+  callbacks instead of fragile log-line parsing. Removed ~230 lines of parsing code.
+- **Track metadata** now delivered by `add_metadata_listener` callback instead of
+  periodic MPRIS polling; eliminates the 10-second metadata lag.
 
 
 
