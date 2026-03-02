@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.3] - 2026-03-02
+
+### Fixed
+- **HA Configuration page: device enabled state not synchronized** — toggling
+  Release/Reclaim on the dashboard now immediately syncs the `enabled` flag to
+  HA Supervisor options, so the Configuration page reflects the correct state
+- **Configuration page: device enabled state lost on save** — `enabled: false`
+  is now preserved in the device row dataset when loading config, preventing it
+  from being reset when live status hasn't polled yet
+
 ## [1.6.2] - 2026-03-02
 
 ### Fixed
