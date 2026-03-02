@@ -29,6 +29,11 @@ CORS(app)
 _startup_config = load_config()
 app.secret_key = ensure_secret_key(_startup_config)
 
+# Cache AUTH_ENABLED at startup so _check_auth() never reads config.json
+# on every request.  Like all other settings, a change takes effect after
+# the service is restarted (same behaviour as SENDSPIN_SERVER, etc.).
+_auth_enabled: bool = bool(_startup_config.get('AUTH_ENABLED', False))
+
 
 class _IngressMiddleware:
     """WSGI middleware: sets SCRIPT_NAME from X-Ingress-Path header before Flask
@@ -61,8 +66,7 @@ _PUBLIC_PATHS = {'/login', '/logout', '/api/status'}
 @app.before_request
 def _check_auth():
     """Enforce authentication when AUTH_ENABLED is True."""
-    config = load_config()
-    if not config.get('AUTH_ENABLED', False):
+    if not _auth_enabled:
         return  # auth disabled — allow all
 
     # HA Ingress: the proxy already authenticated the user
