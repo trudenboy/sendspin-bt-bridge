@@ -7,14 +7,15 @@ services:
     
     # Required for Bluetooth access
     network_mode: host
-    privileged: true
+    # Note: privileged: true removed — use only the capabilities actually needed below
     
     volumes:
       # Mount D-Bus socket for Bluetooth
       - /var/run/dbus:/var/run/dbus
       # Mount PipeWire/PulseAudio socket for audio
-      - /run/user/1000/pulse:/run/user/1000/pulse
-      - /run/user/1000/pipewire-0:/run/user/1000/pipewire-0
+      # Set AUDIO_UID to match your system user UID if it differs from 1000 (check with: id -u)
+      - /run/user/${AUDIO_UID:-1000}/pulse:/run/user/${AUDIO_UID:-1000}/pulse
+      - /run/user/${AUDIO_UID:-1000}/pipewire-0:/run/user/${AUDIO_UID:-1000}/pipewire-0
       # Configuration directory
       - /etc/docker/Sendspin:/config
     
@@ -24,24 +25,25 @@ services:
       # - SENDSPIN_NAME=Living-Room  # Override default player name (default: Sendspin-<hostname>)
       
       # Bluetooth Configuration (can also be configured via web UI)
-      - BLUETOOTH_MAC=04:57:91:D8:EC:9D
+      # Set your speaker's MAC address here, e.g.: AA:BB:CC:DD:EE:FF
+      - BLUETOOTH_MAC=${BLUETOOTH_MAC:-}
       
       # System Configuration
       - TZ=Australia/Melbourne
       - WEB_PORT=8080
       - CONFIG_DIR=/config
       # Audio configuration - use host's PipeWire/PulseAudio
-      - PULSE_SERVER=unix:/run/user/1000/pulse/native
-      - XDG_RUNTIME_DIR=/run/user/1000
+      - PULSE_SERVER=unix:/run/user/${AUDIO_UID:-1000}/pulse/native
+      - XDG_RUNTIME_DIR=/run/user/${AUDIO_UID:-1000}
     
     devices:
       # Grant access to Bluetooth adapter
       - /dev/bus/usb:/dev/bus/usb
     
     cap_add:
-      - NET_ADMIN
-      - NET_RAW
-      - SYS_ADMIN
+      - NET_ADMIN   # Bluetooth adapter control
+      - NET_RAW     # Raw BT/HCI socket access
+      - SYS_ADMIN   # BlueZ kernel operations (D-Bus, rfkill)
     
     labels:
       - "com.centurylinklabs.watchtower.enable=true"

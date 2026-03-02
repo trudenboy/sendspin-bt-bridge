@@ -12,6 +12,7 @@ import re
 import signal
 import socket
 import subprocess
+import threading
 import time
 import uuid as _uuid
 from datetime import datetime
@@ -29,11 +30,12 @@ logger = logging.getLogger(__name__)
 CLIENT_VERSION = "1.3.32"
 
 
-async def _pause_all_via_mpris() -> int:
+def _pause_all_via_mpris() -> int:
     """Send MPRIS Pause to all playing sendspin instances on the session bus.
 
     Returns the number of players that were successfully paused.
     Called during graceful shutdown before terminating processes.
+    All D-Bus calls are synchronous — call via run_in_executor from async contexts.
     """
     paused = 0
     try:
@@ -135,6 +137,7 @@ except Exception:
 _last_full_audio_format: dict = {}  # player_name → format string
 
 _CONFIG_PATH = os.path.join(os.getenv('CONFIG_DIR', '/config'), 'config.json')
+_config_lock = threading.Lock()
 
 
 def _player_id_from_mac(mac: str) -> str:
@@ -147,11 +150,14 @@ def _save_device_volume(mac: Optional[str], volume: int) -> None:
     if not mac or not os.path.exists(_CONFIG_PATH):
         return
     try:
-        with open(_CONFIG_PATH, 'r') as f:
-            cfg = json.load(f)
-        cfg.setdefault('LAST_VOLUMES', {})[mac] = volume
-        with open(_CONFIG_PATH, 'w') as f:
-            json.dump(cfg, f, indent=2)
+        with _config_lock:
+            with open(_CONFIG_PATH, 'r') as f:
+                cfg = json.load(f)
+            cfg.setdefault('LAST_VOLUMES', {})[mac] = volume
+            tmp = _CONFIG_PATH + '.tmp'
+            with open(tmp, 'w') as f:
+                json.dump(cfg, f, indent=2)
+            os.replace(tmp, _CONFIG_PATH)
     except Exception as e:
         logger.debug(f"Could not save volume for {mac}: {e}")
 
@@ -358,24 +364,44 @@ class BluetoothManager:
         1. Scan for 12s so BlueZ caches the device (required for 'pair' to work)
         2. Pair + trust while device is still in cache / pairing mode
         The device MUST be in pairing/discoverable mode when this runs.
+        Uses stdin pipe directly — no shell, no injection risk.
         """
-        logger.info(f"Pairing with {self.mac_address}...")
-        adapter_prefix = f'select {self._adapter_select}\n' if self._adapter_select else ''
+        import re
         mac = self.mac_address
-        # Keep stdin open: scan 12s to discover device → pair → trust → scan off
-        bash_cmd = (
-            f'( printf "{adapter_prefix}power on\\nagent on\\ndefault-agent\\nscan on\\n";'
-            f' sleep 12;'
-            f' printf "pair {mac}\\ntrust {mac}\\nscan off\\n";'
-            f' sleep 10'
-            f' ) | timeout 28 bluetoothctl 2>&1'
-        )
+        if not re.fullmatch(r'([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}', mac):
+            logger.error(f"Invalid MAC address format: {mac}")
+            return False
+
+        logger.info(f"Pairing with {mac}...")
+
+        initial_cmds = []
+        if self._adapter_select:
+            initial_cmds.append(f'select {self._adapter_select}')
+        initial_cmds.extend(['power on', 'agent on', 'default-agent', 'scan on'])
+
+        pair_cmds = [f'pair {mac}', f'trust {mac}', 'scan off']
+
+        proc = None
         try:
-            result = subprocess.run(
-                ['bash', '-c', bash_cmd],
-                capture_output=True, text=True, timeout=32
+            proc = subprocess.Popen(
+                ['bluetoothctl'],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
             )
-            out = result.stdout
+            # Send initial setup and start scanning
+            proc.stdin.write('\n'.join(initial_cmds) + '\n')
+            proc.stdin.flush()
+            # Wait for scan to discover device
+            time.sleep(12)
+            # Send pair/trust commands
+            proc.stdin.write('\n'.join(pair_cmds) + '\n')
+            proc.stdin.flush()
+            # Wait for pairing to complete
+            time.sleep(10)
+
+            out, _ = proc.communicate(timeout=5)
             logger.info(f"Pair output (last 600 chars): {out[-600:]}")
             ok = ('Pairing successful' in out or 'Already paired' in out
                   or 'Paired: yes' in out)
@@ -386,6 +412,11 @@ class BluetoothManager:
             return ok
         except Exception as e:
             logger.error(f"Pair error: {e}")
+            if proc is not None:
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
             return False
     
     def trust_device(self) -> bool:
@@ -450,18 +481,6 @@ class BluetoothManager:
                 if self.prefer_sbc:
                     _force_sbc_codec(pa_mac)
 
-                # Set volume to 100% for maximum output
-                result = subprocess.run(
-                    ['pactl', 'set-sink-volume', configured_sink, '100%'],
-                    capture_output=True,
-                    text=True,
-                    timeout=5
-                )
-                if result.returncode == 0:
-                    logger.info(f"✓ Set Bluetooth speaker volume to 100%")
-                else:
-                    logger.warning("Could not set Bluetooth speaker volume")
-                    
                 # Store the sink name in client for volume sync
                 if self.client:
                     self.client.bluetooth_sink_name = configured_sink
@@ -663,6 +682,17 @@ class SendspinClient:
         self.connected_server_url: str = ''  # actual resolved ws:// URL (populated after connect)
         self.volume_restore_done = False  # Flag to prevent saving initial volume
         self._monitor_task: Optional[asyncio.Task] = None
+        self._status_lock = threading.Lock()  # protects concurrent reads/writes of self.status
+
+    def update_status(self, **kwargs) -> None:
+        """Thread-safe update of one or more status fields."""
+        with self._status_lock:
+            self.status.update(kwargs)
+
+    def get_status(self) -> dict:
+        """Return a shallow copy of status dict for safe cross-thread reads."""
+        with self._status_lock:
+            return dict(self.status)
     
     def get_ip_address(self) -> str:
         """Get the primary IP address of this machine"""
@@ -833,7 +863,8 @@ class SendspinClient:
                 logger.info(f"Stopping existing sendspin process (PID {self.process.pid}) before restart")
                 try:
                     self.process.terminate()
-                    self.process.wait(timeout=3)
+                    loop = asyncio.get_event_loop()
+                    await loop.run_in_executor(None, lambda: self.process.wait(timeout=3))
                 except Exception:
                     try:
                         self.process.kill()
@@ -908,19 +939,18 @@ class SendspinClient:
 
             logger.info(f"Sendspin player started (PID: {self.process.pid})")
             logger.info(f"Sendspin command: {' '.join(cmd)}")
-            self.status['server_connected'] = True
-            self.status['connected'] = True
             self.status['playing'] = False  # reset; monitor_output() will set True on Stream STARTED
             
             # Monitor output in background — cancel any previous task first
             if self._monitor_task and not self._monitor_task.done():
                 self._monitor_task.cancel()
             self._monitor_task = asyncio.create_task(self.monitor_output())
-            self._monitor_task.add_done_callback(
-                lambda t: logger.error(
-                    f"[{self.player_name}] monitor_output ended with error: {t.exception()}"
-                ) if not t.cancelled() and t.exception() else None
-            )
+            def _on_monitor_output_done(t):
+                if not t.cancelled() and t.exception():
+                    logger.error(
+                        f"[{self.player_name}] monitor_output ended with error: {t.exception()}"
+                    )
+            self._monitor_task.add_done_callback(_on_monitor_output_done)
             
         except Exception as e:
             logger.error(f"Failed to start Sendspin player: {e}")
@@ -1086,10 +1116,10 @@ class SendspinClient:
             
             tasks.append(asyncio.create_task(connect_bluetooth_async()))
             mon_task = asyncio.create_task(self.bt_manager.monitor_and_reconnect())
-            mon_task.add_done_callback(
-                lambda t: logger.error(f"[{self.player_name}] monitor_and_reconnect task DIED: {t.exception()}")
-                if not t.cancelled() and t.exception() else None
-            )
+            def _on_monitor_done(t):
+                if not t.cancelled() and t.exception():
+                    logger.error(f"[{self.player_name}] monitor_and_reconnect task DIED: {t.exception()}")
+            mon_task.add_done_callback(_on_monitor_done)
             tasks.append(mon_task)
 
         try:
@@ -1106,7 +1136,8 @@ class SendspinClient:
             if self.process:
                 try:
                     self.process.terminate()
-                    self.process.wait(timeout=5)
+                    loop = asyncio.get_event_loop()
+                    await loop.run_in_executor(None, lambda: self.process.wait(timeout=5))
                 except Exception as e:
                     logger.error(f"Error terminating process: {e}")
                     try:
@@ -1221,7 +1252,7 @@ async def main():
                 logger.info(f"  Player '{player_name}': BT management disabled at startup")
             # Pre-fill volume from saved LAST_VOLUMES so UI shows correct value before BT connects
             try:
-                with open(config_file) as _f:
+                with open(_CONFIG_PATH) as _f:
                     _saved = json.load(_f)
                 _saved_vol = _saved.get('LAST_VOLUMES', {}).get(mac)
                 if _saved_vol is not None and isinstance(_saved_vol, int) and 0 <= _saved_vol <= 100:
@@ -1239,8 +1270,7 @@ async def main():
             dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
             for _i, _c in enumerate(clients):
                 MprisIdentityService(_c.player_name, _i)
-            import threading as _th
-            _th.Thread(target=_GLib.MainLoop().run, daemon=True, name='mpris-glib').start()
+            threading.Thread(target=_GLib.MainLoop().run, daemon=True, name='mpris-glib').start()
             logger.info("MPRIS Identity service(s) registered on session bus")
         except Exception as _e:
             logger.warning(f"MPRIS Identity service unavailable: {_e}")
@@ -1261,7 +1291,6 @@ async def main():
         used_ports.add(_c.listen_port)
 
     # Start web interface in background thread
-    import threading
     def run_web_server():
         from web_interface import set_clients, main as web_main
         set_clients(clients)
@@ -1276,7 +1305,7 @@ async def main():
 
     async def _graceful_shutdown():
         logger.info("Received shutdown signal — pausing players before exit...")
-        paused = await _pause_all_via_mpris()
+        paused = await loop.run_in_executor(None, _pause_all_via_mpris)
         if paused:
             logger.info(f"Paused {paused} player(s) in MA — waiting 500 ms...")
             await asyncio.sleep(0.5)
@@ -1320,6 +1349,7 @@ def load_config():
 
     allowed_keys = {'SENDSPIN_SERVER', 'SENDSPIN_PORT', 'BRIDGE_NAME',
                     'BLUETOOTH_MAC', 'BLUETOOTH_DEVICES', 'TZ', 'LAST_VOLUME',
+                    'LAST_VOLUMES', 'BLUETOOTH_ADAPTERS', 'BRIDGE_NAME_SUFFIX',
                     'PULSE_LATENCY_MSEC', 'PREFER_SBC_CODEC'}
 
     if config_file.exists():

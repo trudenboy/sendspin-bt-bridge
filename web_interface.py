@@ -33,6 +33,7 @@ BUILD_DATE = "2026-03-01"
 # Configuration file path
 CONFIG_DIR = Path(os.getenv('CONFIG_DIR', '/config'))
 CONFIG_FILE = CONFIG_DIR / 'config.json'
+_config_lock = threading.Lock()  # serializes all config.json read-modify-write ops
 
 # Default configuration
 DEFAULT_CONFIG = {
@@ -70,14 +71,17 @@ def _persist_device_enabled(player_name: str, enabled: bool) -> None:
     if not CONFIG_FILE.exists():
         return
     try:
-        with open(CONFIG_FILE, 'r') as f:
-            cfg = json.load(f)
-        for dev in cfg.get('BLUETOOTH_DEVICES', []):
-            if dev.get('player_name') == player_name:
-                dev['enabled'] = enabled
-                break
-        with open(CONFIG_FILE, 'w') as f:
-            json.dump(cfg, f, indent=2)
+        with _config_lock:
+            with open(CONFIG_FILE, 'r') as f:
+                cfg = json.load(f)
+            for dev in cfg.get('BLUETOOTH_DEVICES', []):
+                if dev.get('player_name') == player_name:
+                    dev['enabled'] = enabled
+                    break
+            tmp = str(CONFIG_FILE) + '.tmp'
+            with open(tmp, 'w') as f:
+                json.dump(cfg, f, indent=2)
+            os.replace(tmp, str(CONFIG_FILE))
     except Exception as e:
         logger.warning(f"Could not persist enabled flag for '{player_name}': {e}")
 
@@ -2078,11 +2082,14 @@ def set_volume():
                     mac = getattr(getattr(client, 'bt_manager', None), 'mac_address', None)
                     if mac and CONFIG_FILE.exists():
                         try:
-                            with open(CONFIG_FILE, 'r') as f:
-                                cfg = json.load(f)
-                            cfg.setdefault('LAST_VOLUMES', {})[mac] = volume
-                            with open(CONFIG_FILE, 'w') as f:
-                                json.dump(cfg, f, indent=2)
+                            with _config_lock:
+                                with open(CONFIG_FILE, 'r') as f:
+                                    cfg = json.load(f)
+                                cfg.setdefault('LAST_VOLUMES', {})[mac] = volume
+                                tmp = str(CONFIG_FILE) + '.tmp'
+                                with open(tmp, 'w') as f:
+                                    json.dump(cfg, f, indent=2)
+                                os.replace(tmp, str(CONFIG_FILE))
                         except Exception as e:
                             logger.debug(f"Could not save volume for {mac}: {e}")
                     results.append({'player': getattr(client, 'player_name', '?'), 'ok': True})
@@ -2337,46 +2344,49 @@ def api_config():
         config = request.get_json()
         # Preserve runtime-managed keys not sent by the UI
         CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-        existing = {}
-        if CONFIG_FILE.exists():
-            try:
-                with open(CONFIG_FILE) as f:
-                    existing = json.load(f)
-                for key in ('LAST_VOLUMES', 'LAST_VOLUME'):
-                    if key in existing and key not in config:
-                        config[key] = existing[key]
-            except Exception:
-                pass
+        with _config_lock:
+            existing = {}
+            if CONFIG_FILE.exists():
+                try:
+                    with open(CONFIG_FILE) as f:
+                        existing = json.load(f)
+                    for key in ('LAST_VOLUMES', 'LAST_VOLUME'):
+                        if key in existing and key not in config:
+                            config[key] = existing[key]
+                except Exception:
+                    pass
 
-        # BT stack cleanup for deleted or adapter-changed devices
-        old_devices = {d['mac']: d for d in existing.get('BLUETOOTH_DEVICES', []) if d.get('mac')}
-        new_devices = {d['mac']: d for d in config.get('BLUETOOTH_DEVICES', []) if d.get('mac')}
+            # BT stack cleanup for deleted or adapter-changed devices
+            old_devices = {d['mac']: d for d in existing.get('BLUETOOTH_DEVICES', []) if d.get('mac')}
+            new_devices = {d['mac']: d for d in config.get('BLUETOOTH_DEVICES', []) if d.get('mac')}
 
-        # Build adapter MAC lookup from running clients (already resolved hciN → MAC)
-        client_adapter = {
-            getattr(getattr(c, 'bt_manager', None), 'mac_address', None):
-            getattr(getattr(c, 'bt_manager', None), '_adapter_select', '')
-            for c in _clients
-        }
+            # Build adapter MAC lookup from running clients (already resolved hciN → MAC)
+            client_adapter = {
+                getattr(getattr(c, 'bt_manager', None), 'mac_address', None):
+                getattr(getattr(c, 'bt_manager', None), '_adapter_select', '')
+                for c in _clients
+            }
 
-        for mac, old_dev in old_devices.items():
-            new_dev = new_devices.get(mac)
-            adapter_changed = new_dev and new_dev.get('adapter') != old_dev.get('adapter')
-            deleted = new_dev is None
-            if deleted or adapter_changed:
-                adapter_mac = client_adapter.get(mac) or ''
-                _bt_remove_device(mac, adapter_mac)
+            for mac, old_dev in old_devices.items():
+                new_dev = new_devices.get(mac)
+                adapter_changed = new_dev and new_dev.get('adapter') != old_dev.get('adapter')
+                deleted = new_dev is None
+                if deleted or adapter_changed:
+                    adapter_mac = client_adapter.get(mac) or ''
+                    _bt_remove_device(mac, adapter_mac)
 
-        # Init LAST_VOLUMES for brand-new devices to the group slider value
-        default_vol = config.pop('_new_device_default_volume', None)
-        if default_vol is not None:
-            last_volumes = config.setdefault('LAST_VOLUMES', existing.get('LAST_VOLUMES', {}))
-            for mac in new_devices:
-                if mac and mac not in last_volumes:
-                    last_volumes[mac] = default_vol
+            # Init LAST_VOLUMES for brand-new devices to the group slider value
+            default_vol = config.pop('_new_device_default_volume', None)
+            if default_vol is not None:
+                last_volumes = config.setdefault('LAST_VOLUMES', existing.get('LAST_VOLUMES', {}))
+                for mac in new_devices:
+                    if mac and mac not in last_volumes:
+                        last_volumes[mac] = default_vol
 
-        with open(CONFIG_FILE, 'w') as f:
-            json.dump(config, f, indent=2)
+            tmp = str(CONFIG_FILE) + '.tmp'
+            with open(tmp, 'w') as f:
+                json.dump(config, f, indent=2)
+            os.replace(tmp, str(CONFIG_FILE))
 
         # In HA addon mode, also push to Supervisor options so the config
         # survives container restarts (run.sh regenerates config.json from options.json).
@@ -2482,7 +2492,7 @@ def api_bt_adapters():
     """List available Bluetooth adapters"""
     try:
         result = subprocess.run(
-            ['bash', '-c', 'bluetoothctl list 2>/dev/null'],
+            ['bluetoothctl', 'list'],
             capture_output=True, text=True, timeout=5
         )
         macs = []
@@ -2498,8 +2508,8 @@ def api_bt_adapters():
         adapters = []
         for i, mac in enumerate(macs):
             show_out = subprocess.run(
-                ['bash', '-c',
-                 f"printf 'select {mac}\\nshow\\n' | bluetoothctl 2>/dev/null"],
+                ['bluetoothctl'],
+                input=f'select {mac}\nshow\n',
                 capture_output=True, text=True, timeout=5
             ).stdout
             powered = 'Powered: yes' in show_out
@@ -2520,7 +2530,8 @@ def api_bt_paired():
     named_only = request.args.get('filter', '1') != '0'
     try:
         result = subprocess.run(
-            ['bash', '-c', 'echo "devices" | bluetoothctl 2>/dev/null'],
+            ['bluetoothctl'],
+            input='devices\n',
             capture_output=True, text=True, timeout=5
         )
         ansi_re = re.compile(r'\x1b\[[0-9;]*m')
@@ -2591,28 +2602,46 @@ def api_bt_scan():
         # The default adapter may be busy with an existing connection and miss devices
         # that are only visible on a secondary adapter.
         list_result = subprocess.run(
-            ['bash', '-c', 'printf "list\\n" | bluetoothctl 2>/dev/null'],
+            ['bluetoothctl', 'list'],
             capture_output=True, text=True, timeout=5
         )
         adapter_macs = re.findall(r'Controller\s+([0-9A-Fa-f:]{17})', list_result.stdout)
-        if adapter_macs:
-            init = ''.join(f'select {m}\\npower on\\nscan on\\n' for m in adapter_macs)
-        else:
-            init = 'power on\\nagent on\\nscan on\\n'
 
         # After scan off, query each adapter's device list within the SAME session
         # so BlueZ cache is still alive. 'show' outputs bare "Controller MAC ...",
         # 'devices' outputs bare "Device MAC Name" — distinct from scan events
         # which always carry [NEW]/[CHG]/[DEL] prefixes.
-        post_scan = ''.join(f'select {m}\\nshow\\ndevices\\n' for m in adapter_macs)
+        post_scan_cmds = []
+        for m in adapter_macs:
+            post_scan_cmds.extend([f'select {m}', 'show', 'devices'])
         bt_timeout = 12 + len(adapter_macs) * 2
 
-        result = subprocess.run(
-            ['bash', '-c',
-             f'( printf "{init}"; sleep 10; printf "scan off\\n{post_scan}"; sleep 1 )'
-             f' | timeout {bt_timeout} bluetoothctl 2>&1'],
-            capture_output=True, text=True, timeout=bt_timeout + 4
+        proc = subprocess.Popen(
+            ['bluetoothctl'],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
         )
+        # Send initial commands: select each adapter, power on, scan on
+        if adapter_macs:
+            init_cmds = []
+            for m in adapter_macs:
+                init_cmds.extend([f'select {m}', 'power on', 'scan on'])
+        else:
+            init_cmds = ['power on', 'agent on', 'scan on']
+        proc.stdin.write('\n'.join(init_cmds) + '\n')
+        proc.stdin.flush()
+        time.sleep(10)
+        # Send scan off + post-scan queries
+        proc.stdin.write('scan off\n' + '\n'.join(post_scan_cmds) + '\n')
+        proc.stdin.flush()
+        time.sleep(1)
+        result_stdout, _ = proc.communicate(timeout=bt_timeout + 4)
+        # Wrap in a namespace object for compatibility with the rest of the code
+        class _R:
+            stdout = result_stdout
+        result = _R()
         seen: set = set()
         names: dict = {}
         device_adapter: dict = {}  # mac → adapter_mac, built from post-scan output
@@ -2668,7 +2697,8 @@ def api_bt_scan():
         unnamed = {mac for mac in all_macs if mac not in names}
         if unnamed:
             db_result = subprocess.run(
-                ['bash', '-c', 'echo "devices" | bluetoothctl 2>/dev/null'],
+                ['bluetoothctl'],
+                input='devices\n',
                 capture_output=True, text=True, timeout=5
             )
             dev_pat = re.compile(r'Device\s+([0-9A-Fa-f:]{17})\s+(.*)')
@@ -2762,7 +2792,7 @@ def api_diagnostics():
         # Bluetooth adapters
         try:
             r = subprocess.run(
-                ['bash', '-c', 'bluetoothctl list 2>/dev/null'],
+                ['bluetoothctl', 'list'],
                 capture_output=True, text=True, timeout=5
             )
             adapters = []
