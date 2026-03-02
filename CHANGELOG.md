@@ -5,7 +5,42 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.6.6] - 2026-03-02
+## [2.0.0] - 2026-03-02
+
+### Changed
+- **D-Bus Bluetooth monitor** — replaced `bluetoothctl` polling in `monitor_and_reconnect()`
+  with a `dbus-fast` (asyncio-native) `PropertiesChanged` signal subscription. Disconnects
+  are detected **instantly** instead of waiting for the next check interval (default 10 s).
+  Falls back to `bluetoothctl` polling if `dbus-fast` is unavailable.
+- **`is_device_connected()`** — now queries BlueZ `Device1.Connected` property via
+  `dbus-python` synchronously (~10× faster than spawning a `bluetoothctl` subprocess).
+  Retains bluetoothctl fallback for environments without D-Bus access.
+- **`is_device_paired()`** — same D-Bus-first approach as `is_device_connected()`.
+- **`disconnect_device()`** — calls `org.bluez.Device1.Disconnect` via D-Bus directly;
+  falls back to `bluetoothctl disconnect`.
+- Added `dbus-fast>=2.22.0,<3.0.0` to `requirements.txt`.
+- Added explicit `import asyncio` to `bluetooth_manager.py` (was implicit via module load order).
+- **In-process sendspin daemon** — replaced `subprocess + stdout-parsing` architecture
+  with direct in-process `BridgeDaemon(SendspinDaemon)` subclass. Status updates
+  (play/stop, audio format, volume, group, metadata) are now delivered via typed
+  callbacks instead of fragile log-line parsing. Removed ~230 lines of parsing code.
+- **Track metadata** now delivered by `add_metadata_listener` callback instead of
+  periodic MPRIS polling; eliminates the 10-second metadata lag.
+
+
+
+### Changed
+- **In-process sendspin daemon** — replaced `subprocess + stdout-parsing` architecture
+  with direct in-process `BridgeDaemon(SendspinDaemon)` subclass. Status updates
+  (play/stop, audio format, volume, group, metadata) are now delivered via typed
+  callbacks instead of fragile log-line parsing. Removed ~230 lines of parsing code.
+- **Deleted** `services/sendspin_group_daemon.py` monkey-patch wrapper (no longer needed
+  since `SendspinDaemon` upstream already logs group events and our daemon receives them
+  via `add_group_update_listener`).
+- **Track metadata** now delivered by `add_metadata_listener` callback instead of
+  periodic MPRIS polling; eliminates the 10-second metadata lag.
+- **BT reconnect** now calls `client.stop_sendspin()` / `client.start_sendspin()` instead
+  of `process.terminate()` / `start_sendspin_process()`.
 
 ### Added
 - **MA player grouping** — sendspin daemon now emits group membership events;

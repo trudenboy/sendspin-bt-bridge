@@ -5,7 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.6.6] - 2026-03-02
+## [2.0.0] - 2026-03-02
+
+### Changed
+- **D-Bus Bluetooth monitor** — instant disconnect detection via `dbus-fast`
+  `PropertiesChanged` signals; no more periodic polling delays.
+- `is_device_connected()` / `is_device_paired()` / `disconnect_device()` now use
+  BlueZ D-Bus API directly; bluetoothctl retained as fallback.
+- **In-process sendspin daemon** — `BridgeDaemon(SendspinDaemon)` subclass replaces
+  subprocess + stdout-parsing. Typed callbacks for all events.
+
+### Added
+- `dbus-fast` dependency for async D-Bus signal support.
+
+
+
+### Changed
+- **In-process sendspin daemon** — replaced subprocess + stdout-parsing with
+  `BridgeDaemon(SendspinDaemon)` subclass. Typed callbacks replace log parsing.
+  Track metadata delivered instantly via `add_metadata_listener` (no MPRIS poll lag).
 
 ### Added
 - **MA player grouping** — device card shows a group badge when the player

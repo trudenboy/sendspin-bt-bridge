@@ -81,7 +81,7 @@ def get_client_status_for(client):
 
         status['version'] = VERSION
         status['build_date'] = BUILD_DATE
-        status['connected'] = client.process.poll() is None if client.process else False
+        status['connected'] = client.is_running()
         status['player_name'] = getattr(client, 'player_name', None)
         status['listen_port'] = getattr(client, 'listen_port', None)
         status['server_host'] = getattr(client, 'server_host', None)
@@ -315,14 +315,15 @@ def pause_all():
 
 @api_bp.route('/api/pause', methods=['POST'])
 def pause_player():
-    """Pause or play a single Sendspin player via D-Bus (matched by process PID)."""
+    """Pause or play a single Sendspin player via D-Bus."""
     data = request.get_json() or {}
     player_name = data.get('player_name', '')
     action = data.get('action', 'pause')
     target = next((c for c in _clients if getattr(c, 'player_name', None) == player_name), None)
-    if not target or not target.process:
+    if not target or not target.is_running():
         return jsonify({'success': False, 'error': 'Player not found or not running'}), 404
-    target_pid = target.process.pid
+    import os as _os
+    target_pid = _os.getpid()  # in-process daemon runs in our PID
     count = 0
     try:
         import dbus
