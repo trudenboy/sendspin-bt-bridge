@@ -29,7 +29,7 @@ app = Flask(__name__, template_folder='templates', static_folder='static')
 CORS(app)
 
 # Version information
-VERSION = "1.4.0"
+VERSION = "1.4.1"
 BUILD_DATE = "2026-03-02"
 
 # Configuration file path

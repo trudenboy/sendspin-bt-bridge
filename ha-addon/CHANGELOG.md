@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.1] - 2026-03-02
+
+### Fixed
+- Home Assistant ingress: static files (CSS/JS) now load correctly via HA addon panel (`X-Ingress-Path` → Flask `SCRIPT_NAME`)
+- Broken emoji on Release/Reclaim buttons (`\U0001F513` → literal 🔓/🔒 in `app.js`)
+- Broken triangle in collapsible sections (`'\\25B6'` → `'\25B6'` in `style.css`)
+
 ## [1.4.0] - 2026-03-02
 
 ### Changed

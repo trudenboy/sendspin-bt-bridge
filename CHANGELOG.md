@@ -5,7 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.4.0] - 2026-03-02
+## [1.4.1] - 2026-03-02
+
+### Fixed
+- **Home Assistant ingress** — static files (CSS/JS) failed to load when accessed
+  via HA addon panel; added `X-Ingress-Path` header handling to set Flask `SCRIPT_NAME`
+  so `url_for()` generates correctly-prefixed URLs
+- **Broken emoji on Release/Reclaim buttons** — Python unicode escapes (`\U0001F513`)
+  replaced with literal `🔓`/`🔒` characters in `app.js`
+- **Broken triangle in collapsible sections** — CSS `content: '\\25B6'` (double backslash,
+  rendered as literal text) corrected to `'\25B6'`
+
+
 
 ### Changed
 - **Major modular refactoring** — monolithic files split into focused modules:
