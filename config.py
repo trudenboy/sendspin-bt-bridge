@@ -17,6 +17,8 @@ DEFAULT_CONFIG = {
     'TZ': 'Australia/Melbourne',
     'PULSE_LATENCY_MSEC': 200,
     'PREFER_SBC_CODEC': False,
+    'BT_CHECK_INTERVAL': 10,
+    'BT_MAX_RECONNECT_FAILS': 0,
 }
 
 import json

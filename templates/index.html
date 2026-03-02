@@ -51,7 +51,7 @@
     <div class="status-grid" id="status-grid"></div>
 
     <!-- Configuration -->
-    <details class="config-section" open>
+    <details class="config-section">
         <summary>&#9881;&#65039; Configuration</summary>
         <form id="config-form">
             <div class="form-group">
@@ -75,15 +75,20 @@
             </div>
 
             <div class="form-group">
+                <label>BT check interval (s) — how often to probe each device connection (default 10)</label>
+                <input type="number" name="BT_CHECK_INTERVAL" placeholder="10" min="5" max="300">
+            </div>
+
+            <div class="form-group">
+                <label>Auto-disable after N failed reconnects — set Enabled=Off after this many consecutive failures (0 = never)</label>
+                <input type="number" name="BT_MAX_RECONNECT_FAILS" placeholder="0" min="0" max="100">
+            </div>
+
+            <div class="form-group">
                 <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
                     <input type="checkbox" name="PREFER_SBC_CODEC" id="prefer-sbc-codec" style="width:auto;margin:0;">
                     Prefer SBC codec — forces the simplest A2DP codec after each BT connect, reducing encoder CPU load on slow hardware (requires PulseAudio 15+)
                 </label>
-                <div style="margin-top:6px;padding:8px 10px;background:var(--warning-color,#ff9800);color:#fff;border-radius:4px;font-size:12px;line-height:1.5;">
-                    <strong>Tip: biggest CPU saving</strong> — change audio format in Music&nbsp;Assistant:
-                    Settings &rarr; Providers &rarr; Sendspin &rarr; Audio&nbsp;Quality &rarr; <strong>PCM 44.1&nbsp;kHz / 16-bit</strong>.
-                    This eliminates FLAC decoding entirely (&minus;~30% CPU per player).
-                </div>
             </div>
 
             <div class="form-group">
