@@ -26,7 +26,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-CLIENT_VERSION = "1.3.28"
+CLIENT_VERSION = "1.3.29"
 
 
 async def _pause_all_via_mpris() -> int:
@@ -832,11 +832,10 @@ class SendspinClient:
                     except Exception:
                         pass
 
-            # Build command — use 'daemon' subcommand with unique port + settings-dir per instance
+            # Build command — use 'daemon' subcommand with unique port per instance
             safe_id = ''.join(c if c.isalnum() or c == '-' else '-' for c in self.player_name.lower()).strip('-')
             _mac = self.bt_manager.mac_address if self.bt_manager else None
             client_id = _player_id_from_mac(_mac) if _mac else f"sendspin-{safe_id}"
-            settings_dir = f"/tmp/sendspin-{safe_id}"
             # static_delay_ms compensates for BT A2DP + PA buffer latency (~500ms total)
             # Negative value = schedule audio earlier to account for output latency
             # Per-device value takes priority over the env var global default
@@ -849,8 +848,8 @@ class SendspinClient:
                 '--name', self.player_name,
                 '--id', client_id,
                 '--port', str(self.listen_port),
-                '--settings-dir', settings_dir,
                 '--static-delay-ms', str(static_delay_ms),
+                '--hardware-volume', 'false',
             ]
 
             # Add server URL only if explicitly configured
@@ -860,13 +859,19 @@ class SendspinClient:
                 cmd.extend(['--url', server_url])
             else:
                 logger.info(f"Starting Sendspin player '{self.player_name}' with auto-discovery (port {self.listen_port})")
-            
-            # Set PULSE_SINK so this process routes audio to its specific BT sink
+
+            # Isolate per-instance config via HOME — avoids shared ~/.config/sendspin/
+            instance_home = f"/tmp/sendspin-{safe_id}"
+            os.makedirs(instance_home, exist_ok=True)
             env = os.environ.copy()
+            env['HOME'] = instance_home
+
             if self.bt_manager:
                 pa_mac = self.bt_manager.mac_address.replace(':', '_')
                 pulse_sink = f"bluez_sink.{pa_mac}.a2dp_sink"
+                # Keep PULSE_SINK for compatibility + explicit --audio-device for sendspin 5.x
                 env['PULSE_SINK'] = pulse_sink
+                cmd.extend(['--audio-device', pulse_sink])
                 logger.info(f"Routing audio to sink: {pulse_sink}")
 
             # Start the sendspin process with elevated scheduling priority
