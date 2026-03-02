@@ -674,7 +674,12 @@ HTML_TEMPLATE = """
                     <span id="scan-status" class="scan-badge"></span>
                 </div>
                 <div id="paired-box" class="paired-box" style="display:none;">
-                    <div class="paired-box-title">Already paired &#8212; click to add:</div>
+                    <div class="paired-box-title" style="display:flex;align-items:center;gap:8px;">
+                        <span>Already paired &#8212; click to add:</span>
+                        <label style="font-size:12px;color:var(--secondary-text-color);cursor:pointer;margin-left:auto;white-space:nowrap;">
+                            <input type="checkbox" id="paired-show-all" onchange="loadPairedDevices()"> Show all
+                        </label>
+                    </div>
                     <div id="paired-list"></div>
                 </div>
                 <div id="scan-results-box" class="scan-results-box">
@@ -1626,12 +1631,15 @@ function addFromPaired(mac, name) {
 
 async function loadPairedDevices() {
     try {
-        var resp = await fetch(API_BASE + '/api/bt/paired');
+        var showAll = document.getElementById('paired-show-all');
+        var qs = (showAll && showAll.checked) ? '?filter=0' : '';
+        var resp = await fetch(API_BASE + '/api/bt/paired' + qs);
         var data = await resp.json();
         var devices = data.devices || [];
         var box = document.getElementById('paired-box');
         var listDiv = document.getElementById('paired-list');
         if (devices.length === 0) { box.style.display = 'none'; return; }
+        box.style.display = 'block';
         listDiv.innerHTML = devices.map(function(d, i) {
             return '<div class="scan-result-item">' +
                 '<span class="scan-result-mac">' + escHtml(d.mac) + '</span>' +
@@ -2472,7 +2480,8 @@ def api_bt_adapters():
 
 @app.route('/api/bt/paired')
 def api_bt_paired():
-    """Return already-paired Bluetooth devices instantly (no scan)"""
+    """Return already-paired Bluetooth devices. By default hides unnamed (MAC-only) entries."""
+    named_only = request.args.get('filter', '1') != '0'
     try:
         result = subprocess.run(
             ['bash', '-c', 'echo "devices" | bluetoothctl 2>/dev/null'],
@@ -2490,24 +2499,76 @@ def api_bt_paired():
                 name = m.group(2).strip()
                 if mac not in seen:
                     seen.add(mac)
-                    # Skip entries where name looks like a raw MAC
                     if re.match(r'^[0-9A-Fa-f]{2}[-:]', name):
                         name = ''
+                    if named_only and not name:
+                        continue
                     devices.append({'mac': mac, 'name': name or mac})
+        devices.sort(key=lambda d: d['name'].lower())
         return jsonify({'devices': devices})
     except Exception as e:
         return jsonify({'devices': [], 'error': str(e)})
+
+
+# Audio-related Bluetooth profile UUIDs (short form, lowercase)
+_AUDIO_UUIDS = {
+    '0000110b',  # A2DP Sink
+    '0000110a',  # A2DP Source
+    '0000110e',  # AV Remote Control
+    '0000110c',  # AV Remote Control Target
+    '0000111e',  # Hands-Free
+}
+
+
+def is_audio_device(mac: str) -> bool:
+    try:
+        r = subprocess.run(
+            ['bluetoothctl', 'info', mac],
+            capture_output=True, text=True, timeout=4
+        )
+        out = r.stdout
+        out_lower = out.lower()
+        # Check Class field: major class 4 = Audio/Video
+        class_m = re.search(r'Class:\s+(0x[0-9A-Fa-f]+)', out)
+        if class_m:
+            cls = int(class_m.group(1), 16)
+            major = (cls >> 8) & 0x1f
+            return major == 4
+        # No Class — check for any audio profile UUID
+        if any(u in out_lower for u in _AUDIO_UUIDS):
+            return True
+        # BlueZ has UUID info but no audio profile → definitely not audio
+        if 'UUID:' in out:
+            return False
+        # Name only (no Class, no UUID) — device may be in pairing mode, include cautiously
+        return True
+    except Exception:
+        return True  # on error, include
+
 
 
 @app.route('/api/bt/scan', methods=['POST'])
 def api_bt_scan():
     """Scan for nearby Bluetooth devices (~10 second scan)"""
     try:
+        # Discover all BT adapters so we scan on every one, not just the default.
+        # The default adapter may be busy with an existing connection and miss devices
+        # that are only visible on a secondary adapter.
+        list_result = subprocess.run(
+            ['bash', '-c', 'printf "list\\n" | bluetoothctl 2>/dev/null'],
+            capture_output=True, text=True, timeout=5
+        )
+        adapter_macs = re.findall(r'Controller\s+([0-9A-Fa-f:]{17})', list_result.stdout)
+        if adapter_macs:
+            init = ''.join(f'select {m}\\npower on\\nscan on\\n' for m in adapter_macs)
+        else:
+            init = 'power on\\nagent on\\nscan on\\n'
+
         # Keep stdin open with sleep so bluetoothctl doesn't exit immediately
         # after processing commands — it exits on stdin EOF before discoveries arrive.
         result = subprocess.run(
             ['bash', '-c',
-             '( printf "power on\\nagent on\\nscan on\\n"; sleep 10; printf "scan off\\n" )'
+             f'( printf "{init}"; sleep 10; printf "scan off\\n" )'
              ' | timeout 13 bluetoothctl 2>&1'],
             capture_output=True, text=True, timeout=16
         )
@@ -2563,44 +2624,37 @@ def api_bt_scan():
         # Major device class 4 (0x0400) = Audio/Video.
         # UUID 0000110b = A2DP Sink (speaker/headphones).
         # Devices with no class info are kept (unknown → better show than hide).
-        # Audio-related Bluetooth profile UUIDs (short form, lowercase)
-        _AUDIO_UUIDS = {
-            '0000110b',  # A2DP Sink
-            '0000110a',  # A2DP Source
-            '0000110e',  # AV Remote Control
-            '0000110c',  # AV Remote Control Target
-            '0000111e',  # Hands-Free
-        }
-
-        def is_audio_device(mac: str) -> bool:
-            try:
-                r = subprocess.run(
-                    ['bluetoothctl', 'info', mac],
-                    capture_output=True, text=True, timeout=4
-                )
-                out = r.stdout
-                out_lower = out.lower()
-                # Check Class field: major class 4 = Audio/Video
-                class_m = re.search(r'Class:\s+(0x[0-9A-Fa-f]+)', out)
-                if class_m:
-                    cls = int(class_m.group(1), 16)
-                    major = (cls >> 8) & 0x1f
-                    return major == 4
-                # No Class — check for any audio profile UUID
-                if any(u in out_lower for u in _AUDIO_UUIDS):
-                    return True
-                # BlueZ has info (Name or UUID) but no audio class/UUID → not audio
-                if 'Name:' in out or 'UUID:' in out:
-                    return False
-                # Truly uncached (no Name, no Class, no UUID) → include cautiously
-                return True
-            except Exception:
-                return True  # on error, include
-
+        # Also extracts the device name from the same bluetoothctl info call —
+        # Classic BT devices in pairing mode send their name after scan ends,
+        # so it may not appear in [NEW]/[CHG] events but is cached in BlueZ.
         devices = []
         for mac in all_macs:
-            if is_audio_device(mac):
+            try:
+                r = subprocess.run(['bluetoothctl', 'info', mac],
+                                   capture_output=True, text=True, timeout=4)
+                out = r.stdout
+                out_lower = out.lower()
+            except Exception:
                 devices.append({'mac': mac, 'name': names.get(mac, mac)})
+                continue
+            # Extract name if not captured during scan
+            if mac not in names:
+                nm = re.search(r'\bName:\s+(.*)', out)
+                if nm:
+                    n = nm.group(1).strip()
+                    if n and not re.match(r'^[0-9A-Fa-f]{2}[-:]', n):
+                        names[mac] = n
+            # Audio filter
+            class_m = re.search(r'Class:\s+(0x[0-9A-Fa-f]+)', out)
+            if class_m:
+                cls = int(class_m.group(1), 16)
+                if (cls >> 8) & 0x1f != 4:
+                    continue
+            elif any(u in out_lower for u in _AUDIO_UUIDS):
+                pass
+            elif 'UUID:' in out:
+                continue
+            devices.append({'mac': mac, 'name': names.get(mac, mac)})
         # Sort: named devices first, then by MAC
         devices.sort(key=lambda d: (d['name'] == d['mac'], d['name']))
         return jsonify({'devices': devices})
