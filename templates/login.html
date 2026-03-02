@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign in — Sendspin Bluetooth Bridge</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        .login-wrap {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .login-card {
+            background: var(--card-background-color);
+            border-radius: var(--ha-card-border-radius);
+            box-shadow: var(--ha-card-box-shadow);
+            padding: 36px 32px;
+            width: 100%;
+            max-width: 380px;
+        }
+        .login-header {
+            text-align: center;
+            margin-bottom: 28px;
+        }
+        .login-header h1 {
+            color: var(--primary-color);
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 6px;
+        }
+        .login-header p {
+            color: var(--secondary-text-color);
+            font-size: 13px;
+        }
+        .login-error {
+            background: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #fca5a5;
+            border-radius: 6px;
+            padding: 10px 14px;
+            font-size: 13px;
+            margin-bottom: 16px;
+        }
+        .login-submit {
+            width: 100%;
+            padding: 11px;
+            font-size: 15px;
+            font-weight: 600;
+            margin-top: 8px;
+        }
+    </style>
+</head>
+<body>
+<div class="login-wrap">
+    <div class="login-card">
+        <div class="login-header">
+            <h1>&#127925; Sendspin Bluetooth Bridge</h1>
+            <p>Sign in to continue</p>
+        </div>
+
+        {% if error %}
+        <div class="login-error">{{ error }}</div>
+        {% endif %}
+
+        <form method="post" autocomplete="on">
+            {% if ha_mode %}
+            <div class="form-group">
+                <label>Home Assistant username</label>
+                <input type="text" name="username" autocomplete="username" required autofocus>
+            </div>
+            {% endif %}
+            <div class="form-group">
+                <label>Password</label>
+                <input type="password" name="password" autocomplete="current-password"
+                    required {% if not ha_mode %}autofocus{% endif %}>
+            </div>
+            <button type="submit" class="btn login-submit">Sign in</button>
+        </form>
+    </div>
+</div>
+</body>
+</html>

@@ -11,9 +11,11 @@ routes/api.py and routes/views.py; shared helpers live in config.py and state.py
 import logging
 import os
 
-from flask import Flask
+from flask import Flask, jsonify, redirect, request, session, url_for
 from flask_cors import CORS
 from waitress import serve
+
+from config import ensure_secret_key, load_config
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -21,6 +23,11 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__, template_folder='templates', static_folder='static')
 CORS(app)
+
+# Set secret key (generated once and persisted to config.json so sessions
+# survive container restarts).
+_startup_config = load_config()
+app.secret_key = ensure_secret_key(_startup_config)
 
 
 class _IngressMiddleware:
@@ -41,9 +48,41 @@ app.wsgi_app = _IngressMiddleware(app.wsgi_app)
 # Register blueprints (imported after app is created to avoid circular imports)
 from routes.views import views_bp  # noqa: E402
 from routes.api import api_bp      # noqa: E402
+from routes.auth import auth_bp    # noqa: E402
 
 app.register_blueprint(views_bp)
 app.register_blueprint(api_bp)
+app.register_blueprint(auth_bp)
+
+# Public paths that never require authentication
+_PUBLIC_PATHS = {'/login', '/logout', '/api/status'}
+
+
+@app.before_request
+def _check_auth():
+    """Enforce authentication when AUTH_ENABLED is True."""
+    config = load_config()
+    if not config.get('AUTH_ENABLED', False):
+        return  # auth disabled — allow all
+
+    # HA Ingress: the proxy already authenticated the user
+    if request.headers.get('X-Ingress-Path'):
+        return
+
+    # Static assets and public API endpoints are always reachable
+    if request.path.startswith('/static/'):
+        return
+    if request.path in _PUBLIC_PATHS:
+        return
+
+    # Active session
+    if session.get('authenticated'):
+        return
+
+    # Unauthenticated — return 401 for API calls, redirect to login for pages
+    if request.path.startswith('/api/'):
+        return jsonify({'error': 'Unauthorized'}), 401
+    return redirect(url_for('auth.login', next=request.path))
 
 
 def main():
@@ -55,3 +94,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+

@@ -458,6 +458,10 @@ def api_config():
         else:
             config = DEFAULT_CONFIG.copy()
 
+        # Never expose secrets to the browser
+        config.pop('AUTH_PASSWORD_HASH', None)
+        config.pop('SECRET_KEY', None)
+
         # Enrich BLUETOOTH_DEVICES with resolved listen_port / listen_host from running clients
         client_map = {getattr(c, 'player_name', None): c for c in _clients}
         mac_map    = {getattr(getattr(c, 'bt_manager', None), 'mac_address', None): c
@@ -482,7 +486,8 @@ def api_config():
             try:
                 with open(CONFIG_FILE) as f:
                     existing = json.load(f)
-                for key in ('LAST_VOLUMES', 'LAST_VOLUME'):
+                # Preserve keys that are never submitted via the form
+                for key in ('LAST_VOLUMES', 'LAST_VOLUME', 'AUTH_PASSWORD_HASH', 'SECRET_KEY'):
                     if key in existing and key not in config:
                         config[key] = existing[key]
             except Exception:
@@ -570,6 +575,44 @@ def api_config():
                 _ur.urlopen(req, timeout=10)
         except Exception as e:
             logger.warning(f'Failed to sync Supervisor options: {e}')
+
+    return jsonify({'success': True})
+
+
+@api_bp.route('/api/set-password', methods=['POST'])
+def api_set_password():
+    """Set (or change) the standalone web UI password.
+
+    Only available in non-HA-addon mode.  Requires the request body to contain
+    a JSON object with a 'password' key (string, ≥8 characters).
+    """
+    if os.environ.get('SUPERVISOR_TOKEN'):
+        return jsonify({'error': 'Use HA user management in HA addon mode'}), 400
+
+    data = request.get_json(force=True, silent=True) or {}
+    password = data.get('password', '')
+    if not password:
+        return jsonify({'error': 'password is required'}), 400
+    if len(password) < 8:
+        return jsonify({'error': 'Password must be at least 8 characters'}), 400
+
+    from config import hash_password as _hash_pw
+    pw_hash = _hash_pw(password)
+
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    with _config_lock:
+        existing: dict = {}
+        if CONFIG_FILE.exists():
+            try:
+                with open(CONFIG_FILE) as f:
+                    existing = json.load(f)
+            except Exception:
+                pass
+        existing['AUTH_PASSWORD_HASH'] = pw_hash
+        tmp = str(CONFIG_FILE) + '.tmp'
+        with open(tmp, 'w') as f:
+            json.dump(existing, f, indent=2)
+        os.replace(tmp, str(CONFIG_FILE))
 
     return jsonify({'success': True})
 
