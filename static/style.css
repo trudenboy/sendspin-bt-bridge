@@ -91,6 +91,8 @@
             align-items: center;
             padding-top: 10px; margin-top: 10px; border-top: 1px solid var(--divider-color);
         }
+        /* Track info takes the right portion of the actions row on desktop */
+        .device-track-info { grid-column: 4 / -1; padding: 0 16px; white-space: nowrap; }
         .btn-bt-action {
             padding: 4px 12px; font-size: 12px; font-weight: 600; border: none;
             border-radius: 5px; cursor: pointer; color: white; transition: opacity 0.15s;
@@ -355,3 +357,60 @@
 
         /* Timezone preview */
         .tz-preview { font-size: 12px; color: var(--secondary-text-color); white-space: nowrap; }
+
+        /* Card icon buttons (pause, mute) — replaces hardcoded inline styles */
+        .card-icon-btn {
+            margin-left: 6px; padding: 2px 8px;
+            border: 1px solid var(--divider-color); border-radius: 4px;
+            background: var(--card-background-color); cursor: pointer;
+            font-size: 12px; color: var(--primary-text-color);
+        }
+        .card-icon-btn:hover { background: var(--secondary-background-color); }
+
+        /* ── Mobile ── */
+        @media (max-width: 640px) {
+            body { padding: 10px; }
+
+            /* Header */
+            .header { flex-direction: column; align-items: flex-start; gap: 4px; padding: 14px 16px; }
+            .header h1 { font-size: 20px; }
+            .header-meta { text-align: left !important; }
+
+            /* Device card → 2-column layout */
+            .device-card { grid-template-columns: 1fr 1fr; padding: 12px 14px; }
+            .device-card-identity {
+                grid-column: 1 / -1;
+                border-right: none; padding-right: 0; padding-bottom: 10px;
+            }
+            .device-rows > div {
+                grid-row: auto;
+                padding: 8px 6px;
+                border-right: none;
+                border-top: 1px solid var(--divider-color);
+            }
+            /* Sync (5th cell) spans full width */
+            .device-rows > div:nth-child(5) { grid-column: 1 / -1; }
+            .device-card-actions {
+                grid-row: auto;
+                display: flex; flex-direction: column; gap: 8px;
+            }
+            /* Track info: allow wrapping on mobile */
+            .device-track-info { white-space: normal; word-break: break-word; padding: 0; }
+
+            /* BT device table → horizontal scroll */
+            .bt-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+            .bt-header, .bt-device-row { min-width: 560px; }
+
+            /* Adapters panel → horizontal scroll */
+            .adapters-card { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+            .adapters-card-header { min-width: 420px; }
+            .adapter-row { min-width: 420px; }
+
+            /* Touch targets */
+            .btn-bt-action  { padding: 8px 12px; }
+            .card-icon-btn  { padding: 5px 9px; font-size: 13px; }
+            .filter-btn     { padding: 7px 12px; }
+
+            /* Logs */
+            .logs-container { max-height: 280px; font-size: 11px; }
+        }

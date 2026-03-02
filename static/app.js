@@ -123,8 +123,7 @@ function buildDeviceCard(i) {
               '<span class="status-indicator" id="dplay-ind-' + i + '"></span>' +
               '<span id="dplay-' + i + '">-</span>' +
               '<button type="button" id="dbtn-pause-' + i + '" ' +
-                'style="margin-left:6px;padding:2px 7px;border:1px solid #d1d5db;border-radius:4px;' +
-                'background:white;cursor:pointer;font-size:12px;" ' +
+                'class="card-icon-btn" ' +
                 'onclick="onDevicePause(' + i + ')" title="Pause/Unpause">&#9646;&#9646;</button>' +
             '</div>' +
             '<div class="ts" id="dplay-since-' + i + '"></div>' +
@@ -138,8 +137,7 @@ function buildDeviceCard(i) {
                 'oninput="onVolumeInput(' + i + ', this.value)">' +
               '<span class="volume-pct" id="dvol-' + i + '">100%</span>' +
               '<button type="button" id="dmute-' + i + '" ' +
-                'style="margin-left:6px;padding:2px 7px;border:1px solid #d1d5db;border-radius:4px;' +
-                'background:white;cursor:pointer;font-size:12px;" ' +
+                'class="card-icon-btn" ' +
                 'title="Mute/Unmute">&#128264;</button>' +
             '</div>' +
           '</div>' +
@@ -160,7 +158,7 @@ function buildDeviceCard(i) {
               ' onclick="btToggleManagement(' + i + ')">🔓 Release</button>' +
             '<span class="bt-action-status" id="dbt-action-status-' + i + '"></span>' +
           '</div>' +
-          '<div id="dtrack-' + i + '" style="grid-column:4/-1;padding:0 16px;color:#94a3b8;font-style:italic;font-size:13px;white-space:nowrap;"></div>' +
+          '<div id="dtrack-' + i + '" class="device-track-info" style="color:#94a3b8;font-style:italic;font-size:13px;"></div>' +
         '</div>';
     return card;
 }

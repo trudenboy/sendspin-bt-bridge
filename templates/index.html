@@ -15,7 +15,7 @@
     <!-- Header -->
     <div class="header">
         <h1>&#127925; Sendspin Bluetooth Bridge</h1>
-        <div style="text-align:right;">
+        <div class="header-meta" style="text-align:right;">
             <div class="version-info" id="version-display">
                 <div>{{ VERSION }}</div>
                 <div>{{ BUILD_DATE }}</div>
@@ -128,11 +128,13 @@
             <!-- BT devices table (replaces raw JSON textarea + single MAC input) -->
             <div class="form-group">
                 <label>Bluetooth Devices</label>
-                <div class="bt-header">
-                    <span>Player Name</span><span>MAC Address</span>
-                    <span>Adapter</span><span>Listen Address</span><span>Port</span><span>Delay ms</span><span></span>
+                <div class="bt-table-wrap">
+                    <div class="bt-header">
+                        <span>Player Name</span><span>MAC Address</span>
+                        <span>Adapter</span><span>Listen Address</span><span>Port</span><span>Delay ms</span><span></span>
+                    </div>
+                    <div id="bt-devices-table"></div>
                 </div>
-                <div id="bt-devices-table"></div>
                 <div class="bt-toolbar">
                     <button type="button" id="add-dev-btn" onclick="addBtDeviceRow()" class="btn btn-sm">+ Add Device</button>
                     <button type="button" onclick="startBtScan()" class="btn btn-sm btn-scan" id="scan-btn">
