@@ -486,14 +486,16 @@ def _sync_ha_options(config: dict) -> None:
         ]
         sup_opts = {
             'options': {
-                'sendspin_server':    config.get('SENDSPIN_SERVER', 'auto'),
-                'sendspin_port':      int(config.get('SENDSPIN_PORT', 9000)),
-                'bridge_name':        config.get('BRIDGE_NAME', ''),
-                'tz':                 config.get('TZ', ''),
-                'pulse_latency_msec': int(config.get('PULSE_LATENCY_MSEC', 200)),
-                'prefer_sbc_codec':   bool(config.get('PREFER_SBC_CODEC', False)),
-                'bluetooth_devices':  sup_devices,
-                'bluetooth_adapters': sup_adapters,
+                'sendspin_server':        config.get('SENDSPIN_SERVER', 'auto'),
+                'sendspin_port':          int(config.get('SENDSPIN_PORT', 9000)),
+                'bridge_name':            config.get('BRIDGE_NAME', ''),
+                'tz':                     config.get('TZ', ''),
+                'pulse_latency_msec':     int(config.get('PULSE_LATENCY_MSEC', 200)),
+                'prefer_sbc_codec':       bool(config.get('PREFER_SBC_CODEC', False)),
+                'bt_check_interval':      int(config.get('BT_CHECK_INTERVAL', 10)),
+                'bt_max_reconnect_fails': int(config.get('BT_MAX_RECONNECT_FAILS', 0)),
+                'bluetooth_devices':      sup_devices,
+                'bluetooth_adapters':     sup_adapters,
             }
         }
         body = json.dumps(sup_opts).encode()

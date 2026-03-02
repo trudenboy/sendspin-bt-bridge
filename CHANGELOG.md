@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.4] - 2026-03-02
+
+### Fixed
+- **BT check interval and auto-disable settings not persisted after restart** —
+  `BT_CHECK_INTERVAL` and `BT_MAX_RECONNECT_FAILS` are now included in the HA
+  addon schema, read from Supervisor options in `entrypoint.sh`, and synced back
+  to Supervisor options on config save; values survived addon restarts
+
 ## [1.6.3] - 2026-03-02
 
 ### Fixed

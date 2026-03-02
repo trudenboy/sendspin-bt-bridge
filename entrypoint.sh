@@ -59,15 +59,17 @@ for a in raw_adapters:
 adapters = detected
 
 config = {
-    'SENDSPIN_SERVER':    opts.get('sendspin_server', 'auto'),
-    'SENDSPIN_PORT':      str(opts.get('sendspin_port', 9000)),
-    'BRIDGE_NAME':        opts.get('bridge_name', ''),
-    'BRIDGE_NAME_SUFFIX': opts.get('bridge_name_suffix', False),
-    'BLUETOOTH_DEVICES':  opts.get('bluetooth_devices', []),
-    'BLUETOOTH_ADAPTERS': adapters,
-    'TZ':                 tz,
-    'PULSE_LATENCY_MSEC': opts.get('pulse_latency_msec', 200),
-    'PREFER_SBC_CODEC':   opts.get('prefer_sbc_codec', False),
+    'SENDSPIN_SERVER':        opts.get('sendspin_server', 'auto'),
+    'SENDSPIN_PORT':          str(opts.get('sendspin_port', 9000)),
+    'BRIDGE_NAME':            opts.get('bridge_name', ''),
+    'BRIDGE_NAME_SUFFIX':     opts.get('bridge_name_suffix', False),
+    'BLUETOOTH_DEVICES':      opts.get('bluetooth_devices', []),
+    'BLUETOOTH_ADAPTERS':     adapters,
+    'TZ':                     tz,
+    'PULSE_LATENCY_MSEC':     opts.get('pulse_latency_msec', 200),
+    'PREFER_SBC_CODEC':       opts.get('prefer_sbc_codec', False),
+    'BT_CHECK_INTERVAL':      opts.get('bt_check_interval', 10),
+    'BT_MAX_RECONNECT_FAILS': opts.get('bt_max_reconnect_fails', 0),
 }
 
 # Preserve runtime state (volumes, release/reclaim flags) from previous config
