@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0] - 2026-03-02
+
+### Added
+- Optional web UI authentication (`AUTH_ENABLED`); disabled by default
+- Set-password form in Configuration panel (PBKDF2-SHA256, no plaintext)
+- HA Ingress bypass — auth skipped when accessed via HA Ingress
+- HA Supervisor auth integration — validates against HA user database when `AUTH_ENABLED=true`
+- Sign out button in page header when auth is active
+
+### Fixed
+- BT_CHECK_INTERVAL and BT_MAX_RECONNECT_FAILS not loaded from saved config
+- Password hash and secret key preserved across config saves
+
 ## [1.5.1] - 2026-03-02
 
 ### Added

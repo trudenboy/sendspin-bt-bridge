@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0] - 2026-03-02
+
+### Added
+- **Web UI authentication** — optional password protection for standalone deployments
+  (`AUTH_ENABLED` setting, default off); configure via the Configuration panel
+- **Set password** — new "Set / change password" form in the Configuration panel;
+  stores a PBKDF2-SHA256 hash in `config.json`, never plaintext
+- **HA Ingress bypass** — when accessed via Home Assistant Ingress (`X-Ingress-Path`
+  header), local auth is automatically skipped (HA already authenticated the user)
+- **HA Supervisor auth** — when running as HA addon with `AUTH_ENABLED=true`, login
+  validates against the Home Assistant user database via the Supervisor auth API
+- **Sign out button** — shown in the page header when authentication is enabled
+- **`SECRET_KEY` persistence** — Flask session key generated once and persisted to
+  `config.json`, so sessions survive container restarts
+
+### Fixed
+- **`BT_CHECK_INTERVAL` / `BT_MAX_RECONNECT_FAILS` not loaded** — both settings were
+  missing from `allowed_keys` in `load_config()` and were never read from `config.json`;
+  fixed so saved values are correctly restored on startup
+- **Password hash / secret key not preserved on config save** — `AUTH_PASSWORD_HASH`
+  and `SECRET_KEY` are now preserved across `/api/config` POST saves (like `LAST_VOLUMES`)
+- **Sensitive fields in config GET** — `AUTH_PASSWORD_HASH` and `SECRET_KEY` are now
+  filtered out of the `/api/config` GET response
+
 ## [1.5.1] - 2026-03-02
 
 ### Added

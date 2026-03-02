@@ -32,11 +32,19 @@ var lastDevices = [];
 var volTimers = {};
 var volPending = {}; // deviceIndex -> true if user recently touched slider
 
+// ---- Auth helper ----
+
+function _handleUnauthorized() {
+    var loginUrl = (API_BASE || '') + '/login?next=' + encodeURIComponent(window.location.pathname);
+    window.location.href = loginUrl;
+}
+
 // ---- Status ----
 
 async function updateStatus() {
     try {
         var resp = await fetch(API_BASE + '/api/status');
+        if (resp.status === 401) { _handleUnauthorized(); return; }
         var status = await resp.json();
 
         var info = [];
@@ -955,6 +963,7 @@ async function saveConfig() {
     config.BLUETOOTH_DEVICES = collectBtDevices();
     // Checkbox → bool (FormData only includes it when checked, with value "on")
     config.PREFER_SBC_CODEC = !!(document.getElementById('prefer-sbc-codec') || {}).checked;
+    config.AUTH_ENABLED = !!(document.getElementById('auth-enabled') || {}).checked;
     // Cast numeric BT settings to integers
     config.BT_CHECK_INTERVAL = parseInt(config.BT_CHECK_INTERVAL, 10) || 10;
     config.BT_MAX_RECONNECT_FAILS = parseInt(config.BT_MAX_RECONNECT_FAILS, 10) || 0;
@@ -983,6 +992,34 @@ async function saveConfig() {
     }
 }
 
+// ---- Change password (standalone mode) ----
+
+async function setPassword() {
+    var pw  = (document.getElementById('new-password') || {}).value || '';
+    var pw2 = (document.getElementById('new-password-confirm') || {}).value || '';
+    if (!pw) { alert('Please enter a password.'); return; }
+    if (pw.length < 8) { alert('Password must be at least 8 characters.'); return; }
+    if (pw !== pw2) { alert('Passwords do not match.'); return; }
+    try {
+        var resp = await fetch(API_BASE + '/api/set-password', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password: pw }),
+        });
+        if (resp.status === 401) { _handleUnauthorized(); return; }
+        var data = await resp.json().catch(function() { return {}; });
+        if (resp.ok) {
+            alert('Password set successfully.');
+            document.getElementById('new-password').value = '';
+            document.getElementById('new-password-confirm').value = '';
+        } else {
+            alert('Error: ' + (data.error || 'Unknown error'));
+        }
+    } catch (err) {
+        alert('Error setting password: ' + err.message);
+    }
+}
+
 document.getElementById('config-form').addEventListener('submit', async function(e) {
     e.preventDefault();
     try {
@@ -1000,6 +1037,7 @@ document.getElementById('config-form').addEventListener('submit', async function
 async function loadConfig() {
     try {
         var resp = await fetch(API_BASE + '/api/config');
+        if (resp.status === 401) { _handleUnauthorized(); return; }
         var config = await resp.json();
 
         // Populate simple fields
@@ -1011,6 +1049,8 @@ async function loadConfig() {
         // Populate checkboxes
         var sbcCheck = document.getElementById('prefer-sbc-codec');
         if (sbcCheck) sbcCheck.checked = !!config.PREFER_SBC_CODEC;
+        var authCheck = document.getElementById('auth-enabled');
+        if (authCheck) authCheck.checked = !!config.AUTH_ENABLED;
         updateTzPreview();
 
         // Restore manual adapters before re-running loadBtAdapters so merging picks them up

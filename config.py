@@ -5,7 +5,7 @@ Provides the config file path, a process-wide lock for atomic writes,
 and helpers for loading/persisting configuration.
 """
 
-VERSION = "1.5.1"
+VERSION = "1.6.0"
 BUILD_DATE = "2026-03-02"
 
 DEFAULT_CONFIG = {
@@ -19,11 +19,16 @@ DEFAULT_CONFIG = {
     'PREFER_SBC_CODEC': False,
     'BT_CHECK_INTERVAL': 10,
     'BT_MAX_RECONNECT_FAILS': 0,
+    'AUTH_ENABLED': False,
+    'AUTH_PASSWORD_HASH': '',
+    'SECRET_KEY': '',
 }
 
+import hashlib
 import json
 import logging
 import os
+import secrets as _secrets
 import threading
 import uuid as _uuid
 from pathlib import Path
@@ -71,6 +76,8 @@ def load_config() -> dict:
         'BLUETOOTH_MAC', 'BLUETOOTH_DEVICES', 'TZ', 'LAST_VOLUME',
         'LAST_VOLUMES', 'BLUETOOTH_ADAPTERS', 'BRIDGE_NAME_SUFFIX',
         'PULSE_LATENCY_MSEC', 'PREFER_SBC_CODEC',
+        'BT_CHECK_INTERVAL', 'BT_MAX_RECONNECT_FAILS',
+        'AUTH_ENABLED', 'AUTH_PASSWORD_HASH', 'SECRET_KEY',
     }
 
     if config_file.exists():
@@ -87,3 +94,51 @@ def load_config() -> dict:
         logger.info(f"Config file not found at {config_file}, using defaults")
 
     return result
+
+
+# ---------------------------------------------------------------------------
+# Auth helpers
+# ---------------------------------------------------------------------------
+
+_PBKDF2_ITERS = 260_000
+
+
+def hash_password(plain: str) -> str:
+    """Return PBKDF2-SHA256 hash with embedded random salt (salt_hex:hash_hex)."""
+    salt = _secrets.token_bytes(16)
+    h = hashlib.pbkdf2_hmac('sha256', plain.encode(), salt, _PBKDF2_ITERS)
+    return salt.hex() + ':' + h.hex()
+
+
+def check_password(plain: str, stored: str) -> bool:
+    """Verify plain password against a stored hash produced by hash_password()."""
+    try:
+        salt_hex, h_hex = stored.split(':', 1)
+        salt = bytes.fromhex(salt_hex)
+        h = hashlib.pbkdf2_hmac('sha256', plain.encode(), salt, _PBKDF2_ITERS)
+        return h.hex() == h_hex
+    except Exception:
+        return False
+
+
+def ensure_secret_key(config: dict) -> str:
+    """Return SECRET_KEY from config, generating and persisting one if absent."""
+    key = config.get('SECRET_KEY', '')
+    if key:
+        return key
+    key = _secrets.token_hex(32)
+    try:
+        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        with _config_lock:
+            existing: dict = {}
+            if CONFIG_FILE.exists():
+                with open(CONFIG_FILE) as f:
+                    existing = json.load(f)
+            existing['SECRET_KEY'] = key
+            tmp = str(CONFIG_FILE) + '.tmp'
+            with open(tmp, 'w') as f:
+                json.dump(existing, f, indent=2)
+            os.replace(tmp, str(CONFIG_FILE))
+    except Exception as e:
+        logger.warning(f'Could not persist SECRET_KEY: {e}')
+    return key

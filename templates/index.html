@@ -21,6 +21,15 @@
                 <div>{{ BUILD_DATE }}</div>
             </div>
             <div id="system-info" style="font-size:12px;color:#9ca3af;margin-top:4px;line-height:1.6;"></div>
+            {% if auth_enabled %}
+            <div style="margin-top:8px;">
+                <a href="{{ url_for('auth.logout') }}"
+                   style="color:rgba(255,255,255,0.8);font-size:12px;text-decoration:none;
+                          border:1px solid rgba(255,255,255,0.4);border-radius:4px;padding:3px 10px;">
+                    Sign out
+                </a>
+            </div>
+            {% endif %}
         </div>
     </div>
 
@@ -152,6 +161,27 @@
                     Save &amp; Restart
                 </button>
             </div>
+
+            {% if not ha_mode %}
+            <!-- Authentication (standalone mode only) -->
+            <hr style="border:none;border-top:1px solid var(--divider-color);margin:20px 0;">
+            <div class="form-group">
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                    <input type="checkbox" name="AUTH_ENABLED" id="auth-enabled" style="width:auto;margin:0;">
+                    Enable web UI authentication — protect the interface with a password
+                </label>
+            </div>
+            <div class="form-group">
+                <label>Set / change password <span style="font-size:11px;color:var(--secondary-text-color);">(minimum 8 characters — set before enabling auth)</span></label>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                    <input type="password" id="new-password" autocomplete="new-password"
+                           placeholder="New password" style="flex:1;min-width:180px;">
+                    <input type="password" id="new-password-confirm" autocomplete="new-password"
+                           placeholder="Confirm password" style="flex:1;min-width:180px;">
+                    <button type="button" onclick="setPassword()" class="btn btn-sm">Set Password</button>
+                </div>
+            </div>
+            {% endif %}
         </form>
     </details>
 
