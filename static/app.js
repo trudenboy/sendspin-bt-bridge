@@ -795,10 +795,11 @@ function btAdapterOptions(selected) {
     return opts;
 }
 
-function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort) {
+function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabled) {
     var tbody = document.getElementById('bt-devices-table');
     var row = document.createElement('div');
     row.className = 'bt-device-row';
+    if (enabled === false) row.dataset.enabled = 'false';
     var delayVal = (delay !== undefined && delay !== null && delay !== '') ? delay : 0;
     var portVal  = (listenPort !== undefined && listenPort !== null && listenPort !== '') ? listenPort : '';
     row.innerHTML =
@@ -841,11 +842,13 @@ function collectBtDevices() {
         var dev = { mac: mac, adapter: adapter, player_name: name, static_delay_ms: delay };
         if (listenHost) dev.listen_host = listenHost;
         if (listenPort) dev.listen_port = listenPort;
-        // Preserve enabled flag (not a form field — comes from live status)
+        // Preserve enabled flag: live status takes precedence, then config-loaded value from dataset
         var livedev = lastDevices && lastDevices.find(function(d) {
             return d.player_name === name || d.bluetooth_mac === mac;
         });
-        if (livedev && livedev.bt_management_enabled === false) {
+        if (livedev) {
+            if (livedev.bt_management_enabled === false) dev.enabled = false;
+        } else if (row.dataset.enabled === 'false') {
             dev.enabled = false;
         }
         if (mac) devices.push(dev);
@@ -857,7 +860,7 @@ function populateBtDeviceRows(devices) {
     document.getElementById('bt-devices-table').innerHTML = '';
     devices.forEach(function(d) {
         addBtDeviceRow(d.player_name || '', d.mac || '', d.adapter || '',
-                       d.static_delay_ms, d.listen_host, d.listen_port);
+                       d.static_delay_ms, d.listen_host, d.listen_port, d.enabled);
     });
 }
 
