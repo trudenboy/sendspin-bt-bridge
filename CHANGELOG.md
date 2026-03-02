@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.2] - 2026-03-02
+
+### Fixed
+- **Home Assistant ingress CSS/JS** — `before_request` SCRIPT_NAME approach replaced with
+  `_IngressMiddleware` WSGI wrapper that modifies environ before Flask creates the URL adapter;
+  now `url_for()` correctly prefixes static file paths with the ingress base path
+- **Missing ▶ on Diagnostics collapsible** — CSS `::before` rule was missing closing `}`,
+  preventing the triangle indicator from rendering
+- **No rotate animation on config/diag open** — added `transform: rotate(90deg)` to
+  `.config-section[open]` and `.diag-section[open]` `summary::before` rules
+- **CSS `::before` transition** — added `display: inline-block; transition: transform 0.2s`
+  to all three collapsible section `::before` rules
+
 ## [1.4.1] - 2026-03-02
 
 ### Fixed

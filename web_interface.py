@@ -45,7 +45,7 @@ class _IngressMiddleware:
 app.wsgi_app = _IngressMiddleware(app.wsgi_app)
 
 # Version information
-VERSION = "1.4.1"
+VERSION = "1.4.2"
 BUILD_DATE = "2026-03-02"
 
 # Configuration file path
