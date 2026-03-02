@@ -12,6 +12,7 @@ import re
 import signal
 import socket
 import subprocess
+import sys
 import threading
 import time
 from datetime import datetime
@@ -90,6 +91,8 @@ class SendspinClient:
             'reconnecting': False,
             'reconnect_attempt': 0,
             'bt_management_enabled': True,
+            'group_name': None,
+            'group_id': None,
         }
 
         self.process = None
@@ -145,6 +148,8 @@ class SendspinClient:
                             self.status['server_connected_at'] = datetime.now().isoformat()
                         self.status['server_connected'] = False
                         self.status['connected'] = False
+                        self.status['group_name'] = None
+                        self.status['group_id'] = None
                         # Don't restart sendspin if BT is disconnected — monitor_and_reconnect
                         # will start it again once BT reconnects (prevents PortAudio error flood).
                         if not self.bt_manager or self.bt_manager.connected:
@@ -281,7 +286,9 @@ class SendspinClient:
                     except Exception:
                         pass
 
-            # Build command — use 'daemon' subcommand with unique port per instance
+            # Build command — use group-aware wrapper to get MA group info via stdout.
+            # The wrapper monkey-patches SendspinDaemon to log group/update events.
+            # TODO: remove wrapper once upstream sendspin-cli adds native daemon group logging.
             safe_id = ''.join(c if c.isalnum() or c == '-' else '-' for c in self.player_name.lower()).strip('-')
             _mac = self.bt_manager.mac_address if self.bt_manager else None
             client_id = _player_id_from_mac(_mac) if _mac else f"sendspin-{safe_id}"
@@ -292,8 +299,9 @@ class SendspinClient:
                 static_delay_ms = self.static_delay_ms
             else:
                 static_delay_ms = float(os.environ.get('SENDSPIN_STATIC_DELAY_MS', '-500'))
+            _wrapper = os.path.join(os.path.dirname(__file__), 'services', 'sendspin_group_daemon.py')
             cmd = [
-                'sendspin', 'daemon',
+                sys.executable, _wrapper, 'daemon',
                 '--name', self.player_name,
                 '--id', client_id,
                 '--port', str(self.listen_port),
@@ -482,6 +490,13 @@ class SendspinClient:
                                 logger.info(f"✓ Synced Bluetooth speaker volume to {volume_percent}%")
                     except Exception as e:
                         logger.debug(f"Could not sync volume: {e}")
+
+                # Parse MA group info logged by sendspin_group_daemon.py wrapper
+                if 'Group name:' in line_str:
+                    gname = line_str.split('Group name:', 1)[-1].strip()
+                    self.status['group_name'] = gname if gname else None
+                if 'Group ID:' in line_str:
+                    self.status['group_id'] = line_str.split('Group ID:', 1)[-1].strip()
 
         try:
             await loop.run_in_executor(None, _read_until_eof)

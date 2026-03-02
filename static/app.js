@@ -96,6 +96,7 @@ function buildDeviceCard(i) {
             '<div class="device-card-title" id="dname-' + i + '">Device ' + (i+1) + '</div>' +
           '</div>' +
           '<div class="device-mac" id="dmac-' + i + '"></div>' +
+          '<div class="group-badge" id="dgroup-' + i + '" style="display:none"></div>' +
           '<div class="ts-sub" id="durl-' + i + '"></div>' +
         '</div>' +
         '<div class="device-rows">' +
@@ -169,6 +170,12 @@ function populateDeviceCard(i, dev) {
 
     var mac = dev.bluetooth_mac || '';
     document.getElementById('dmac-' + i).textContent = mac ? 'MAC: ' + mac : '';
+
+    var groupBadge = document.getElementById('dgroup-' + i);
+    if (groupBadge) {
+        groupBadge.textContent = dev.group_name ? '\uD83D\uDD17 ' + dev.group_name : '';
+        groupBadge.style.display = dev.group_name ? '' : 'none';
+    }
 
     var btAdapterEl = document.getElementById('dbt-adapter-' + i);
     if (btAdapterEl) {
