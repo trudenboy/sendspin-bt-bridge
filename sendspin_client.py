@@ -26,7 +26,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-CLIENT_VERSION = "1.3.26"
+CLIENT_VERSION = "1.3.27"
 
 
 async def _pause_all_via_mpris() -> int:
@@ -156,14 +156,46 @@ def _save_device_volume(mac: Optional[str], volume: int) -> None:
         logger.debug(f"Could not save volume for {mac}: {e}")
 
 
+def _force_sbc_codec(pa_mac: str) -> None:
+    """Attempt to force SBC codec on the BlueZ card for this device.
+
+    SBC is the simplest mandatory A2DP codec — least CPU for the PA encoder.
+    Silently ignores failures (older PA, device already on SBC, or PA 14 that
+    lacks the send-message routing).
+    """
+    card_prefix = f"bluez_card.{pa_mac}"
+    try:
+        cards = subprocess.check_output(
+            ['pactl', 'list', 'short', 'cards'], text=True, timeout=5
+        )
+        for line in cards.splitlines():
+            if card_prefix in line:
+                card_name = line.split()[1]
+                result = subprocess.run(
+                    ['pactl', 'send-message',
+                     f'/card/{card_name}/bluez5/set_codec',
+                     'a2dp_sink', 'SBC'],
+                    timeout=5, check=False, capture_output=True, text=True
+                )
+                if result.returncode == 0:
+                    logger.info(f"✓ Forced SBC codec on {card_name}")
+                else:
+                    logger.debug(f"SBC force failed for {card_name}: {result.stderr.strip()}")
+                return
+    except Exception as e:
+        logger.debug(f"SBC codec force skipped: {e}")
+
+
 class BluetoothManager:
     """Manages Bluetooth speaker connections using bluetoothctl"""
-    
-    def __init__(self, mac_address: str, adapter: str = "", device_name: str = "", client=None):
+
+    def __init__(self, mac_address: str, adapter: str = "", device_name: str = "", client=None,
+                 prefer_sbc: bool = False):
         self.mac_address = mac_address
         self.adapter = adapter        # "hci0", "hci1", etc. — empty = use default
         self.device_name = device_name or mac_address
         self.client = client
+        self.prefer_sbc = prefer_sbc
         self.connected = False
         self.last_check = 0
         self.check_interval = 10  # Check every 10 seconds
@@ -414,6 +446,10 @@ class BluetoothManager:
                     time.sleep(3)
             
             if success and configured_sink:
+                # Try to force SBC codec (lowest CPU A2DP codec) if requested
+                if self.prefer_sbc:
+                    _force_sbc_codec(pa_mac)
+
                 # Set volume to 100% for maximum output
                 result = subprocess.run(
                     ['pactl', 'set-sink-volume', configured_sink, '100%'],
@@ -1111,6 +1147,10 @@ async def main():
     os.environ['PULSE_LATENCY_MSEC'] = str(pulse_latency_msec)
     logger.info(f"PULSE_LATENCY_MSEC: {pulse_latency_msec} ms")
 
+    prefer_sbc = bool(config.get('PREFER_SBC_CODEC', False))
+    if prefer_sbc:
+        logger.info("PREFER_SBC_CODEC: enabled — will request SBC codec after BT connect")
+
     # Normalise device list — fall back to legacy BLUETOOTH_MAC
     bt_devices = config.get('BLUETOOTH_DEVICES', [])
     if not bt_devices:
@@ -1147,7 +1187,8 @@ async def main():
                                 listen_port=listen_port, static_delay_ms=static_delay_ms,
                                 listen_host=listen_host, effective_bridge=effective_bridge)
         if mac:
-            bt_mgr = BluetoothManager(mac, adapter=adapter, device_name=player_name, client=client)
+            bt_mgr = BluetoothManager(mac, adapter=adapter, device_name=player_name, client=client,
+                                       prefer_sbc=prefer_sbc)
             if not bt_mgr.check_bluetooth_available():
                 logger.warning(f"BT adapter '{adapter or 'default'}' not available for {player_name}")
             client.bt_manager = bt_mgr
@@ -1254,11 +1295,12 @@ def load_config():
         'BLUETOOTH_DEVICES': [],
         'TZ': 'Australia/Melbourne',
         'PULSE_LATENCY_MSEC': 200,
+        'PREFER_SBC_CODEC': False,
     }
 
     allowed_keys = {'SENDSPIN_SERVER', 'SENDSPIN_PORT', 'BRIDGE_NAME',
                     'BLUETOOTH_MAC', 'BLUETOOTH_DEVICES', 'TZ', 'LAST_VOLUME',
-                    'PULSE_LATENCY_MSEC'}
+                    'PULSE_LATENCY_MSEC', 'PREFER_SBC_CODEC'}
 
     if config_file.exists():
         try:

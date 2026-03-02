@@ -22,6 +22,17 @@ configuration:
       Requested PulseAudio buffer latency in milliseconds. Larger values reduce
       audio dropouts on slow hardware at the cost of slightly higher latency.
       Default is 200 ms; try 400–600 ms if dropouts persist.
+  prefer_sbc_codec:
+    name: "Prefer SBC codec"
+    description: >-
+      When enabled, the bridge attempts to switch the Bluetooth A2DP codec to
+      SBC immediately after each device connects. SBC is the simplest mandatory
+      A2DP codec and requires the least CPU for encoding. Useful on slow
+      hardware (e.g. Celeron G1610T) with multiple simultaneous speakers.
+      Has no effect if PulseAudio does not support send-message (PA < 15) or
+      the device is already using SBC. Enable this alongside changing the
+      Music Assistant audio format to PCM 44.1 kHz / 16-bit for maximum CPU
+      savings.
   bluetooth_devices:
     name: "Bluetooth devices"
     description: >-

@@ -42,6 +42,7 @@ config = {
     'BLUETOOTH_ADAPTERS': adapters,
     'TZ':                 tz,
     'PULSE_LATENCY_MSEC': int(opts.get('pulse_latency_msec') or 200),
+    'PREFER_SBC_CODEC':   bool(opts.get('prefer_sbc_codec', False)),
 }
 
 # Preserve LAST_VOLUME if already saved by the app

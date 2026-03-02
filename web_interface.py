@@ -27,7 +27,7 @@ app = Flask(__name__)
 CORS(app)
 
 # Version information
-VERSION = "1.3.26"
+VERSION = "1.3.27"
 BUILD_DATE = "2026-03-01"
 
 # Configuration file path
@@ -42,6 +42,7 @@ DEFAULT_CONFIG = {
     'BLUETOOTH_DEVICES': [],
     'TZ': 'Australia/Melbourne',
     'PULSE_LATENCY_MSEC': 200,
+    'PREFER_SBC_CODEC': False,
 }
 
 # Global clients list will be set by main
@@ -637,6 +638,18 @@ HTML_TEMPLATE = """
             <div class="form-group">
                 <label>PulseAudio latency (ms) — larger value reduces audio dropouts on slow hardware (default 200)</label>
                 <input type="number" name="PULSE_LATENCY_MSEC" placeholder="200" min="50" max="2000">
+            </div>
+
+            <div class="form-group">
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                    <input type="checkbox" name="PREFER_SBC_CODEC" id="prefer-sbc-codec" style="width:auto;margin:0;">
+                    Prefer SBC codec — forces the simplest A2DP codec after each BT connect, reducing encoder CPU load on slow hardware (requires PulseAudio 15+)
+                </label>
+                <div style="margin-top:6px;padding:8px 10px;background:var(--warning-color,#ff9800);color:#fff;border-radius:4px;font-size:12px;line-height:1.5;">
+                    <strong>Tip: biggest CPU saving</strong> — change audio format in Music&nbsp;Assistant:
+                    Settings &rarr; Providers &rarr; Sendspin &rarr; Audio&nbsp;Quality &rarr; <strong>PCM 44.1&nbsp;kHz / 16-bit</strong>.
+                    This eliminates FLAC decoding entirely (&minus;~30% CPU per player).
+                </div>
             </div>
 
             <div class="form-group">
@@ -1673,6 +1686,8 @@ async function saveConfig() {
 
     // Collect BT devices from table rows (overrides anything from formData)
     config.BLUETOOTH_DEVICES = collectBtDevices();
+    // Checkbox → bool (FormData only includes it when checked, with value "on")
+    config.PREFER_SBC_CODEC = !!(document.getElementById('prefer-sbc-codec') || {}).checked;
     // Pass current group slider value so backend can init volume for new devices
     var groupSlider = document.getElementById('group-vol-slider');
     config._new_device_default_volume = groupSlider ? parseInt(groupSlider.value, 10) : 100;
@@ -1722,6 +1737,9 @@ async function loadConfig() {
             var input = document.querySelector('[name="' + key + '"]');
             if (input && config[key] !== undefined) input.value = config[key];
         });
+        // Populate checkboxes
+        var sbcCheck = document.getElementById('prefer-sbc-codec');
+        if (sbcCheck) sbcCheck.checked = !!config.PREFER_SBC_CODEC;
         updateTzPreview();
 
         // Restore manual adapters before re-running loadBtAdapters so merging picks them up
@@ -2385,6 +2403,7 @@ def api_config():
                             'bridge_name':        config.get('BRIDGE_NAME', ''),
                             'tz':                 config.get('TZ', ''),
                             'pulse_latency_msec': int(config.get('PULSE_LATENCY_MSEC', 200)),
+                            'prefer_sbc_codec':   bool(config.get('PREFER_SBC_CODEC', False)),
                             'bluetooth_devices':  sup_devices,
                             'bluetooth_adapters': sup_adapters,
                         }

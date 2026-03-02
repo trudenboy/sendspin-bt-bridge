@@ -1,6 +1,6 @@
 ---
 name: "Sendspin Bluetooth Bridge"
-version: "1.3.26"
+version: "1.3.27"
 slug: "sendspin_bt_bridge"
 description: "Bridge Music Assistant Sendspin protocol to Bluetooth speakers"
 url: "https://github.com/trudenboy/sendspin-bt-bridge"
@@ -33,6 +33,7 @@ options:
   bridge_name_suffix: false
   tz: ""
   pulse_latency_msec: 200
+  prefer_sbc_codec: false
   bluetooth_devices: []
   bluetooth_adapters: []
 
@@ -43,6 +44,7 @@ schema:
   bridge_name_suffix: bool?
   tz: str?
   pulse_latency_msec: int?
+  prefer_sbc_codec: bool?
   bluetooth_devices:
     - mac: "match(([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2})"
       player_name: str

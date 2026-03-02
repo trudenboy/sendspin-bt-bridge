@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.27] - 2026-03-02
+
+### Added
+- **Prefer SBC codec** — new `PREFER_SBC_CODEC` config option; when enabled, forces
+  the A2DP codec to SBC immediately after each Bluetooth connect via
+  `pactl send-message … bluez5/set_codec a2dp_sink SBC` (requires PulseAudio 15+);
+  SBC is the simplest mandatory codec and reduces PA encoder CPU load; exposed in
+  the web UI config form and HA addon native Config tab
+- **LXC CPU-optimal PulseAudio config** — `lxc/pulse-daemon.conf` installed to
+  `/etc/pulse/daemon.conf` by `install.sh`; sets `resample-method=trivial`,
+  `default-sample-rate=48000` (matches MA output, zero resampling), `default-sample-format=s16le`
+
 ## [1.3.26] - 2026-03-02
 
 ### Added

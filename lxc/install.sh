@@ -110,6 +110,10 @@ ok "pulse user configured (bluetooth + audio groups)"
 msg "Writing PulseAudio system configuration..."
 mkdir -p /etc/pulse/client.conf.d
 
+# CPU-optimal daemon.conf — trivial resampler, s16le, 48kHz to match MA output
+wget -q "${BASE}/lxc/pulse-daemon.conf" -O /etc/pulse/daemon.conf
+ok "PulseAudio daemon.conf written (trivial resampler + 48kHz + s16le)"
+
 cat > /etc/pulse/system.pa <<'EOF'
 # /etc/pulse/system.pa
 # PulseAudio system-mode configuration for Sendspin LXC deployment
