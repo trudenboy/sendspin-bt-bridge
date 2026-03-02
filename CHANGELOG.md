@@ -5,7 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.3.33] - 2026-03-02
+## [1.4.0] - 2026-03-02
+
+### Changed
+- **Major modular refactoring** — monolithic files split into focused modules:
+  - `config.py` — configuration path, shared `_config_lock`, `load_config()`,
+    `_player_id_from_mac()`, `_save_device_volume()`
+  - `mpris.py` — `MprisIdentityService`, `pause_all_via_mpris()`,
+    `read_mpris_metadata_for()`, optional D-Bus import guard
+  - `bluetooth_manager.py` — `BluetoothManager` class and `_force_sbc_codec()`
+    (492 lines, with `TYPE_CHECKING` guard to avoid circular imports)
+  - `sendspin_client.py` reduced from 1373 to 753 lines (core client + main only)
+- **HTML/CSS/JS extracted from Python** — `web_interface.py` reduced from 2891 to
+  1107 lines; markup moved to `templates/index.html`, styles to `static/style.css`,
+  scripts to `static/app.js`; Flask now serves static files natively
+- **Unified config lock** — `web_interface.py` now imports `_config_lock` from
+  `config.py` instead of maintaining its own separate lock, eliminating cross-process
+  config race conditions
+
+
 
 ### Fixed
 - **Shell injection in `pair_device()`** — replaced `bash -c` f-string construction with

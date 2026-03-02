@@ -42,7 +42,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-CLIENT_VERSION = "1.3.33"
+CLIENT_VERSION = "1.4.0"
 
 # Per-player audio format cache — keyed by player_name.
 # Updated when a full "Audio format: flac 48000Hz/24-bit/2ch" line is received;
