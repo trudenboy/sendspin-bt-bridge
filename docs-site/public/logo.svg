@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <!-- Bluetooth symbol -->
+  <rect width="64" height="64" rx="12" fill="#2563EB"/>
+  <!-- Speaker body -->
+  <rect x="18" y="20" width="20" height="24" rx="4" fill="white" opacity="0.9"/>
+  <circle cx="28" cy="36" r="7" fill="#2563EB"/>
+  <circle cx="28" cy="36" r="3" fill="white"/>
+  <!-- BT symbol -->
+  <path d="M38 26 L42 30 L36 35 L42 40 L38 44 L38 26Z" stroke="white" stroke-width="2.5" fill="none" stroke-linejoin="round"/>
+  <line x1="34" y1="30" x2="42" y2="30" stroke="white" stroke-width="2.5"/>
+  <line x1="34" y1="40" x2="42" y2="40" stroke="white" stroke-width="2.5"/>
+</svg>

@@ -16,18 +16,14 @@ export default defineConfig({
       editLink: {
         baseUrl: 'https://github.com/trudenboy/sendspin-bt-bridge/edit/main/docs-site/src/content/docs/',
       },
-      social: {
-        github: 'https://github.com/trudenboy/sendspin-bt-bridge',
-      },
+      social: [
+        { icon: 'github', label: 'GitHub', href: 'https://github.com/trudenboy/sendspin-bt-bridge' },
+      ],
       sidebar: [
         { label: 'Главная', translations: { en: 'Home' }, link: '/' },
         {
           label: 'Установка', translations: { en: 'Installation' },
-          items: [
-            { label: 'Home Assistant Addon', slug: 'installation/ha-addon' },
-            { label: 'Docker Compose', slug: 'installation/docker' },
-            { label: 'Proxmox LXC', slug: 'installation/lxc' },
-          ],
+          autogenerate: { directory: 'installation' },
         },
         { label: 'Настройка', translations: { en: 'Configuration' }, slug: 'configuration' },
         { label: 'Веб-интерфейс', translations: { en: 'Web UI' }, slug: 'web-ui' },

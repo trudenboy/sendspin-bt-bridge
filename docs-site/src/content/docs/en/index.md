@@ -5,7 +5,7 @@ template: splash
 hero:
   tagline: Connect Bluetooth speakers to Music Assistant — no extra hardware, no cloud
   image:
-    file: ../../../../assets/logo.svg
+    file: ../../../assets/logo.svg
   actions:
     - text: Install
       link: /sendspin-bt-bridge/en/installation/ha-addon/

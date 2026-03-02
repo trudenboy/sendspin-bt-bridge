@@ -5,7 +5,7 @@ template: splash
 hero:
   tagline: Подключите Bluetooth-колонки к Music Assistant без лишнего железа и облаков
   image:
-    file: ../../../assets/logo.svg
+    file: ../../assets/logo.svg
   actions:
     - text: Установить
       link: /sendspin-bt-bridge/installation/ha-addon/
