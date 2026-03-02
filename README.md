@@ -19,9 +19,9 @@ A Bluetooth bridge for [Music Assistant](https://www.music-assistant.io/) — co
 - **Diagnostics endpoint**: `/api/diagnostics` returns structured health info — adapters, sinks, D-Bus status, per-device state
 - **Multiple bridge instances**: Run several bridge instances (containers/LXC/addons) against the same MA server — each registers its own set of players independently
 
-<img width="1228" height="2694" alt="192 168 10 180_8080_ (1)" src="https://github.com/user-attachments/assets/ff3d99bc-7f8a-459b-ba9a-9ba3c10bedd6" />
+<img width="1316" height="3562" alt="Web dashboard" src="https://github.com/user-attachments/assets/d3027cc1-b724-4666-a72f-2e956340416c" />
 <br><br>
-<img width="1019" height="245" alt="Screenshot 2026-02-28 at 17 03 49" src="https://github.com/user-attachments/assets/7654570b-bada-4cca-a195-4ced53c8d398" />
+<img width="1019" height="245" alt="Players in MA" src="https://github.com/user-attachments/assets/7654570b-bada-4cca-a195-4ced53c8d398" />
 
 ---
 
