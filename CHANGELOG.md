@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.1] - 2026-03-02
+
+### Fixed
+- **Performance: config reads on every request** — `AUTH_ENABLED` is now cached at
+  startup instead of re-reading `config.json` on every HTTP request (including the
+  2-second status poll)
+
+### Changed
+- **Mobile UI optimization** — responsive layout at ≤640px: device cards switch to
+  2-column grid, BT device table and adapters panel scroll horizontally, header stacks
+  vertically, touch targets enlarged; pause/mute buttons now respect dark mode theme
+
 ## [1.6.0] - 2026-03-02
 
 ### Added

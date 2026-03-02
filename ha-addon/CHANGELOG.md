@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.1] - 2026-03-02
+
+### Fixed
+- **Performance: config reads on every request** — `AUTH_ENABLED` cached at startup,
+  no longer re-read from disk on every HTTP request
+
+### Changed
+- **Mobile UI optimization** — responsive layout at ≤640px with 2-column device cards,
+  horizontal scrolling tables, and correctly themed icon buttons
+
 ## [1.6.0] - 2026-03-02
 
 ### Added
