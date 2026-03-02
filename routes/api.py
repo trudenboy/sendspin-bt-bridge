@@ -432,6 +432,13 @@ def api_bt_management():
         daemon=True
     ).start()
     _persist_device_enabled(player_name, enabled)
+    # Sync enabled state to HA Supervisor so the Configuration page reflects it
+    try:
+        with open(CONFIG_FILE) as _f:
+            _cfg = json.load(_f)
+        threading.Thread(target=_sync_ha_options, args=(_cfg,), daemon=True).start()
+    except Exception:
+        pass
     action = 'reclaimed' if enabled else 'released'
     return jsonify({'success': True, 'message': f'BT adapter {action}', 'enabled': enabled})
 
@@ -446,6 +453,62 @@ def api_status():
     first = get_client_status_for(_clients[0])
     result = {**first, 'devices': [get_client_status_for(c) for c in _clients]}
     return jsonify(result)
+
+
+def _sync_ha_options(config: dict) -> None:
+    """Push current config to HA Supervisor options (no-op outside HA addon)."""
+    if _detect_runtime() != 'ha_addon':
+        return
+    try:
+        import urllib.request as _ur
+        token = os.environ.get('SUPERVISOR_TOKEN', '')
+        if not token:
+            return
+        sup_devices = []
+        for d in config.get('BLUETOOTH_DEVICES', []):
+            entry = {'mac': d.get('mac', ''), 'player_name': d.get('player_name', '')}
+            if d.get('adapter'):
+                entry['adapter'] = d['adapter']
+            if d.get('static_delay_ms'):
+                entry['static_delay_ms'] = int(d['static_delay_ms'])
+            if d.get('listen_host'):
+                entry['listen_host'] = d['listen_host']
+            if d.get('listen_port'):
+                entry['listen_port'] = int(d['listen_port'])
+            if 'enabled' in d:
+                entry['enabled'] = bool(d['enabled'])
+            sup_devices.append(entry)
+        sup_adapters = [
+            dict({'id': a['id'], 'mac': a.get('mac', '')},
+                 **({'name': a['name']} if a.get('name') else {}))
+            for a in config.get('BLUETOOTH_ADAPTERS', [])
+            if a.get('id')
+        ]
+        sup_opts = {
+            'options': {
+                'sendspin_server':    config.get('SENDSPIN_SERVER', 'auto'),
+                'sendspin_port':      int(config.get('SENDSPIN_PORT', 9000)),
+                'bridge_name':        config.get('BRIDGE_NAME', ''),
+                'tz':                 config.get('TZ', ''),
+                'pulse_latency_msec': int(config.get('PULSE_LATENCY_MSEC', 200)),
+                'prefer_sbc_codec':   bool(config.get('PREFER_SBC_CODEC', False)),
+                'bluetooth_devices':  sup_devices,
+                'bluetooth_adapters': sup_adapters,
+            }
+        }
+        body = json.dumps(sup_opts).encode()
+        req = _ur.Request(
+            'http://supervisor/addons/self/options',
+            data=body,
+            headers={
+                'Authorization': f'Bearer {token}',
+                'Content-Type': 'application/json',
+            },
+            method='POST',
+        )
+        _ur.urlopen(req, timeout=10)
+    except Exception as e:
+        logger.warning(f'Failed to sync Supervisor options: {e}')
 
 
 @api_bp.route('/api/config', methods=['GET', 'POST'])
@@ -525,56 +588,7 @@ def api_config():
     # Invalidate adapter name cache so next status poll picks up changes
     load_adapter_name_cache()
 
-    if _detect_runtime() == 'ha_addon':
-        try:
-            import urllib.request as _ur
-            token = os.environ.get('SUPERVISOR_TOKEN', '')
-            if token:
-                sup_devices = []
-                for d in config.get('BLUETOOTH_DEVICES', []):
-                    entry = {'mac': d.get('mac', ''), 'player_name': d.get('player_name', '')}
-                    if d.get('adapter'):
-                        entry['adapter'] = d['adapter']
-                    if d.get('static_delay_ms'):
-                        entry['static_delay_ms'] = int(d['static_delay_ms'])
-                    if d.get('listen_host'):
-                        entry['listen_host'] = d['listen_host']
-                    if d.get('listen_port'):
-                        entry['listen_port'] = int(d['listen_port'])
-                    if 'enabled' in d:
-                        entry['enabled'] = bool(d['enabled'])
-                    sup_devices.append(entry)
-                sup_adapters = [
-                    dict({'id': a['id'], 'mac': a.get('mac', '')},
-                         **({'name': a['name']} if a.get('name') else {}))
-                    for a in config.get('BLUETOOTH_ADAPTERS', [])
-                    if a.get('id')
-                ]
-                sup_opts = {
-                    'options': {
-                        'sendspin_server':    config.get('SENDSPIN_SERVER', 'auto'),
-                        'sendspin_port':      int(config.get('SENDSPIN_PORT', 9000)),
-                        'bridge_name':        config.get('BRIDGE_NAME', ''),
-                        'tz':                 config.get('TZ', ''),
-                        'pulse_latency_msec': int(config.get('PULSE_LATENCY_MSEC', 200)),
-                        'prefer_sbc_codec':   bool(config.get('PREFER_SBC_CODEC', False)),
-                        'bluetooth_devices':  sup_devices,
-                        'bluetooth_adapters': sup_adapters,
-                    }
-                }
-                body = json.dumps(sup_opts).encode()
-                req = _ur.Request(
-                    'http://supervisor/addons/self/options',
-                    data=body,
-                    headers={
-                        'Authorization': f'Bearer {token}',
-                        'Content-Type': 'application/json',
-                    },
-                    method='POST',
-                )
-                _ur.urlopen(req, timeout=10)
-        except Exception as e:
-            logger.warning(f'Failed to sync Supervisor options: {e}')
+    _sync_ha_options(config)
 
     return jsonify({'success': True})
 
