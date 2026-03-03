@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.5] - 2026-03-03
+
+### Improved
+- **Sink routing latency**: parallel routing — all devices route concurrently
+  instead of sequentially. Audio now reaches the correct speaker almost
+  instantly on repeated play (zero sleep fast path for known sink-input IDs).
+
 ## [2.3.4] - 2026-03-03
 
 ### Fixed
