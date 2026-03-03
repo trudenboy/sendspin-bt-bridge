@@ -288,8 +288,10 @@ class SendspinClient:
                 self._daemon_task.add_done_callback(_on_daemon_done)
                 logger.info(f"Sendspin daemon started in-process for '{self.player_name}'")
 
-                # Hold PULSE_SINK for 3 s to ensure Pa_OpenStream reads it.
-                await asyncio.sleep(3.0)
+                # Hold PULSE_SINK for 6 s to ensure Pa_OpenStream reads it.
+                # MA server typically connects ~4 s after daemon start; stream
+                # must open while PULSE_SINK is still set to the correct sink.
+                await asyncio.sleep(6.0)
             finally:
                 # Restore PULSE_SINK regardless of outcome
                 if _old_pulse_sink is None:
