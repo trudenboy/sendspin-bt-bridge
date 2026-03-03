@@ -1,7 +1,6 @@
 ---
 title: Sendspin Bluetooth Bridge
 description: Bluetooth-мост для Music Assistant — подключает Bluetooth-колонки к протоколу Sendspin MA
-template: splash
 hero:
   tagline: Подключите Bluetooth-колонки к Music Assistant без лишнего железа и облаков
   image:
@@ -11,6 +10,9 @@ hero:
       link: /sendspin-bt-bridge/installation/ha-addon/
       icon: right-arrow
       variant: primary
+    - text: Настройка
+      link: /sendspin-bt-bridge/configuration/
+      icon: setting
     - text: GitHub
       link: https://github.com/trudenboy/sendspin-bt-bridge
       icon: github
