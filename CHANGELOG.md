@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.3] - 2026-03-03
+
+### Fixed
+- **Sink routing on repeated group play**: `_routed = True` was never reset between
+  playback sessions. When a group stopped and restarted, sounddevice recreated the
+  PortAudio stream with a new PulseAudio sink-input ID, but routing was skipped because
+  `_routed` was already `True` — all streams fell back to the default PA sink (whichever
+  BT device was default at the time, typically the last active one).
+  Fixed by resetting `_routed = False` on every format change and releasing the previously
+  claimed sink-input ID before re-claiming in `_route_stream_to_sink`.
+
 ## [2.3.2] - 2026-03-03
 
 ### Fixed
