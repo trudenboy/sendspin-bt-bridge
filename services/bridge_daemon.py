@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import socket
 from datetime import datetime
 from importlib.metadata import version as _pkg_version
@@ -29,8 +30,6 @@ from sendspin.daemon.daemon import DaemonArgs, SendspinDaemon
 from config import VERSION as _BRIDGE_VERSION
 from services.pulse import (
     aget_sink_description,
-    alist_sink_input_ids,
-    amove_sink_input,
     aset_sink_volume,
 )
 
@@ -48,26 +47,17 @@ class BridgeDaemon(SendspinDaemon):
                         to persist the value to config.
     """
 
-    # Class-level lock to serialize sink-input routing across daemon instances
-    _routing_lock = asyncio.Lock()
-    _claimed_sink_inputs: set[int] = set()  # IDs already routed by other daemons
-
     def __init__(
         self,
         args: DaemonArgs,
         status: dict,
         bluetooth_sink_name: str | None,
         on_volume_save: Callable[[int], None] | None = None,
-        pre_start_sink_input_ids: set[int] | None = None,
     ) -> None:
         super().__init__(args)
         self._bridge_status = status
         self._bluetooth_sink_name = bluetooth_sink_name
         self._on_volume_save = on_volume_save
-        self._pre_start_sink_input_ids = pre_start_sink_input_ids or set()
-        self._routed = False  # True after sink-input has been moved to target
-        self._routed_sink_input_id: int | None = None
-        self._routing_task: asyncio.Task | None = None  # current pending route task
 
     # ── Client creation ──────────────────────────────────────────────────────
 
@@ -159,121 +149,15 @@ class BridgeDaemon(SendspinDaemon):
     # ── Audio / stream events ────────────────────────────────────────────────
 
     def _handle_format_change(self, codec: str | None, sample_rate: int, bit_depth: int, channels: int) -> None:
-        super()._handle_format_change(codec, sample_rate, bit_depth, channels)
-        self._bridge_status["audio_format"] = f"{codec or 'PCM'} {sample_rate}Hz/{bit_depth}-bit/{channels}ch"
-        # PA stream (sink-input) was just created by set_format() → sounddevice.
-        # Reset routing state so every new stream gets routed to the correct BT sink
-        # (the stream/sink-input is recreated on each group play start).
+        # Set PULSE_SINK before super() opens the PortAudio/PA stream so the stream
+        # is connected to the target BT sink from the very first sample.
+        # asyncio is single-threaded and this method is fully synchronous, so
+        # no other daemon can interleave between the env set and the stream open.
         if self._bluetooth_sink_name:
-            self._routed = False
-            asyncio.ensure_future(self._route_stream_to_sink())
-
-    async def _route_stream_to_sink(self) -> None:
-        """Find the newly created sink-input and move it to the target BT sink.
-
-        Two-phase approach to minimise the time audio plays through the wrong sink:
-
-        Phase 1 — Claim (under lock, fast):
-          Identify and atomically claim a sink-input ID.  If the previous ID is
-          still live (same PortAudio stream, repeated play), claim it immediately
-          without sleeping.  For new streams, poll briefly until the sink-input
-          appears (max 0.3 s in 50 ms steps) rather than a fixed sleep.
-
-        Phase 2 — Route (outside lock, parallel):
-          Call ``pactl move-sink-input`` outside the lock so all daemons can
-          route concurrently instead of sequentially.
-        """
-        _MAX_RETRIES = 3
-        player = self._bridge_status.get("player_name", "?")
-        sink_name = self._bluetooth_sink_name or ""
-        target_id: int | None = None
-
-        try:
-            # ── Phase 1: claim a sink-input ID (serialised) ───────────────────
-            async with BridgeDaemon._routing_lock:
-                prev_id = self._routed_sink_input_id
-                if prev_id is not None:
-                    BridgeDaemon._claimed_sink_inputs.discard(prev_id)
-                    self._routed_sink_input_id = None
-
-                # Prune IDs that no longer exist
-                live_ids = await alist_sink_input_ids()
-                stale = BridgeDaemon._claimed_sink_inputs - live_ids
-                if stale:
-                    BridgeDaemon._claimed_sink_inputs -= stale
-
-                # Fast path: re-use our own previous sink-input when still live
-                # (same PortAudio stream across stop/play cycles — no sleep needed)
-                if prev_id is not None and prev_id in live_ids and prev_id not in BridgeDaemon._claimed_sink_inputs:
-                    target_id = prev_id
-                else:
-                    # Slow path: poll until a new PA sink-input appears (max 300 ms)
-                    current_ids: set[int] = set()
-                    unclaimed: set[int] = set()
-                    for _ in range(6):
-                        await asyncio.sleep(0.05)
-                        current_ids = await alist_sink_input_ids()
-                        new_ids = current_ids - self._pre_start_sink_input_ids
-                        unclaimed = new_ids - BridgeDaemon._claimed_sink_inputs
-                        if unclaimed:
-                            break
-                    if not unclaimed:
-                        # Fall back to any unclaimed sink-input
-                        current_ids = await alist_sink_input_ids()
-                        unclaimed = current_ids - BridgeDaemon._claimed_sink_inputs
-                    if not unclaimed:
-                        logger.warning(
-                            "[%s] No unclaimed sink-input found (pre=%s, cur=%s, claimed=%s)",
-                            player,
-                            self._pre_start_sink_input_ids,
-                            current_ids,
-                            BridgeDaemon._claimed_sink_inputs,
-                        )
-                        return
-                    target_id = max(unclaimed)
-
-                # Reserve the ID before releasing the lock so no other daemon steals it
-                BridgeDaemon._claimed_sink_inputs.add(target_id)
-
-            # ── Phase 2: route (outside lock — parallel across daemons) ───────
-            for attempt in range(1, _MAX_RETRIES + 1):
-                ok = await amove_sink_input(target_id, sink_name)
-                if ok:
-                    self._routed = True
-                    self._routed_sink_input_id = target_id
-                    logger.info(
-                        "[%s] ✓ Routed sink-input %d → %s",
-                        player,
-                        target_id,
-                        self._bluetooth_sink_name,
-                    )
-                    return
-                if attempt < _MAX_RETRIES:
-                    delay = 0.5 * attempt
-                    logger.warning(
-                        "[%s] Route attempt %d/%d failed for sink-input %d, retrying in %.1fs...",
-                        player,
-                        attempt,
-                        _MAX_RETRIES,
-                        target_id,
-                        delay,
-                    )
-                    await asyncio.sleep(delay)
-            # All retries failed — release the claimed ID
-            BridgeDaemon._claimed_sink_inputs.discard(target_id)
-            logger.warning(
-                "[%s] Failed to route sink-input %d → %s after %d attempts",
-                player,
-                target_id,
-                self._bluetooth_sink_name,
-                _MAX_RETRIES,
-            )
-
-        except asyncio.CancelledError:
-            # Task was superseded by a newer stream-start event — release any claimed ID
-            if target_id is not None:
-                BridgeDaemon._claimed_sink_inputs.discard(target_id)
-            raise
+            os.environ["PULSE_SINK"] = self._bluetooth_sink_name
+        super()._handle_format_change(codec, sample_rate, bit_depth, channels)
+        os.environ.pop("PULSE_SINK", None)
+        self._bridge_status["audio_format"] = f"{codec or 'PCM'} {sample_rate}Hz/{bit_depth}-bit/{channels}ch"
 
     def _on_stream_event(self, event: str) -> None:
         super()._on_stream_event(event)
@@ -281,14 +165,6 @@ class BridgeDaemon(SendspinDaemon):
         if self._bridge_status.get("playing") != is_playing:
             self._bridge_status["playing"] = is_playing
             self._bridge_status["state_changed_at"] = datetime.now().isoformat()
-        # Re-route on every stream start: PipeWire may have moved the sink-input
-        # back to the default sink when the stream became active again.
-        # Cancel any pending routing task so only the latest start event routes.
-        if event == "start" and self._bluetooth_sink_name:
-            self._routed = False
-            if self._routing_task and not self._routing_task.done():
-                self._routing_task.cancel()
-            self._routing_task = asyncio.ensure_future(self._route_stream_to_sink())
         logger.debug("[%s] stream event: %s", self._bridge_status.get("player_name", "?"), event)
 
     # ── Server commands (volume / mute) ──────────────────────────────────────
