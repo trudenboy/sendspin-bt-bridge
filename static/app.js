@@ -95,8 +95,8 @@ function buildDeviceCard(i) {
               ' onchange="onDeviceSelect(' + i + ', this.checked)">' +
             '<div class="device-card-title" id="dname-' + i + '">Device ' + (i+1) + '</div>' +
           '</div>' +
-          '<div class="device-mac" id="dmac-' + i + '"></div>' +
           '<div class="group-badge" id="dgroup-' + i + '" style="display:none"></div>' +
+          '<div class="device-mac" id="dmac-' + i + '"></div>' +
           '<div class="ts-sub" id="durl-' + i + '"></div>' +
         '</div>' +
         '<div class="device-rows">' +
