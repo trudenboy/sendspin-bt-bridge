@@ -617,24 +617,27 @@ class BluetoothManager:
                 if not self.connected:
                     disconnect_event.set()
 
-                def on_props_changed(iface_name, changed, _invalidated, _evt=disconnect_event):
-                    if iface_name != "org.bluez.Device1" or "Connected" not in changed:
-                        return
-                    new_connected = bool(changed["Connected"].value)
-                    if new_connected == self.connected:
-                        return
-                    self.connected = new_connected
-                    ts = datetime.now().isoformat()
-                    if self.client:
-                        self.client.status["bluetooth_connected"] = new_connected
-                        self.client.status["bluetooth_connected_at"] = ts
-                    if not new_connected:
-                        loop.call_soon_threadsafe(_evt.set)
-                        logger.warning(f"[{self.device_name}] PropertiesChanged: Disconnected!")
-                    else:
-                        logger.info(f"[{self.device_name}] PropertiesChanged: Connected!")
+                def _make_props_handler(evt):
+                    def on_props_changed(iface_name, changed, _invalidated):
+                        if iface_name != "org.bluez.Device1" or "Connected" not in changed:
+                            return
+                        new_connected = bool(changed["Connected"].value)
+                        if new_connected == self.connected:
+                            return
+                        self.connected = new_connected
+                        ts = datetime.now().isoformat()
+                        if self.client:
+                            self.client.status["bluetooth_connected"] = new_connected
+                            self.client.status["bluetooth_connected_at"] = ts
+                        if not new_connected:
+                            loop.call_soon_threadsafe(evt.set)
+                            logger.warning(f"[{self.device_name}] PropertiesChanged: Disconnected!")
+                        else:
+                            logger.info(f"[{self.device_name}] PropertiesChanged: Connected!")
 
-                props_iface.on_properties_changed(on_props_changed)
+                    return on_props_changed
+
+                props_iface.on_properties_changed(_make_props_handler(disconnect_event))
                 logger.info(f"[{self.device_name}] D-Bus monitoring active (connected={self.connected})")
 
                 # Inner monitor loop

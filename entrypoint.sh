@@ -138,7 +138,7 @@ pactl list short sinks 2>/dev/null || echo "Could not list sinks"
 # If BLUETOOTH_MAC is set, configure it as default
 if [ -n "${BLUETOOTH_MAC:-}" ]; then
     echo "Will configure Bluetooth audio for $BLUETOOTH_MAC after connection..."
-    
+
     # Try to restore last volume if saved
     if [ -f /config/config.json ]; then
         LAST_VOLUME=$(python3 -c "import json; print(json.load(open('/config/config.json')).get('LAST_VOLUME', ''))" 2>/dev/null || echo "")
