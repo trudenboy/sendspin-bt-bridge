@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.4] - 2026-03-03
+
+### Fixed
+- **Sink routing on repeated group play (root cause)**: routing was only triggered from
+  `_handle_format_change`, which fires only when codec/sample-rate changes. On subsequent
+  play cycles with the same format (e.g. FLAC 48kHz), it never fired — all streams piled
+  up on the default PipeWire sink. Fixed by triggering re-routing from
+  `_on_stream_event("start")`, which fires on every stream activation.
+- **Stream stealing between daemons**: when all daemons re-routed simultaneously, `max(unclaimed)`
+  could pick up another daemon's sink-input. Fixed by preferring to re-claim the daemon's own
+  previous sink-input ID if it is still live.
+
 ## [2.3.3] - 2026-03-03
 
 ### Fixed
