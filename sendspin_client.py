@@ -205,7 +205,7 @@ class SendspinClient:
             # Resolve audio device matching the BT sink
             audio_device = resolve_audio_device_for_sink(self.bluetooth_sink_name)
             if audio_device:
-                logger.info(f"Audio device: {audio_device.name} (index {audio_device.index})")
+                logger.info(f"[{self.player_name}] Audio device resolved: {audio_device.name!r} (index {audio_device.index}) for sink {self.bluetooth_sink_name!r}")
             else:
                 logger.error("No audio output device found — cannot start daemon")
                 self.status['last_error'] = 'No audio output device found'

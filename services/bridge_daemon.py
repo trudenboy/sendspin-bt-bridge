@@ -140,10 +140,47 @@ class BridgeDaemon(SendspinDaemon):
             self._bridge_status['current_artist'] = metadata.artist
 
 
+def _get_sink_description(sink_name: str) -> str | None:
+    """Return the PulseAudio sink description (friendly name) for a sink by its PA name.
+
+    sounddevice/PortAudio exposes PA sinks by their *description*, not by their PA name.
+    We need to map e.g. 'bluez_sink.FC_58_FA_EB_08_6C.a2dp_sink' → 'ENEBY20'.
+    """
+    try:
+        result = subprocess.run(
+            ['pactl', 'list', 'sinks'],
+            capture_output=True, text=True, timeout=5,
+        )
+        description: str | None = None
+        in_target = False
+        for line in result.stdout.splitlines():
+            stripped = line.strip()
+            if stripped.startswith('Name:') and sink_name in stripped:
+                in_target = True
+                description = None
+                continue
+            if in_target:
+                if stripped.startswith('Description:'):
+                    description = stripped.split(':', 1)[1].strip()
+                    break
+                # Hit the next sink block — stop
+                if stripped.startswith('Name:'):
+                    break
+        return description
+    except Exception as exc:
+        logger.debug("Could not get sink description for %s: %s", sink_name, exc)
+        return None
+
+
 def resolve_audio_device_for_sink(sink_name: str | None):
     """Find the sounddevice AudioDevice matching a PulseAudio/PipeWire sink name.
 
-    Tries exact match, then MAC-segment match, then falls back to default device.
+    PulseAudio/PipeWire exposes sinks to sounddevice/PortAudio by their *description*
+    (friendly name), not by their PA sink identifier.  We therefore:
+      1. Ask pactl for the description of the target sink.
+      2. Try to match that description against sounddevice device names.
+      3. Fall back to MAC-segment and prefix heuristics.
+      4. Last resort: return the default device.
     """
     from sendspin.audio import query_devices
 
@@ -151,22 +188,50 @@ def resolve_audio_device_for_sink(sink_name: str | None):
     if not sink_name:
         return next((d for d in devices if d.is_default), None)
 
-    # Exact match
+    # Log available devices once for diagnostics
+    logger.debug(
+        "resolve_audio_device_for_sink(%s): available devices: %s",
+        sink_name, [d.name for d in devices],
+    )
+
+    # 1. Exact match on sink name (rare but possible with PipeWire)
     for dev in devices:
         if dev.name == sink_name:
+            logger.info("Audio device matched by exact sink name: %s", dev.name)
             return dev
 
-    # Prefix match (sounddevice may truncate long names)
-    for dev in devices:
-        if dev.name.startswith(sink_name[:20]):
-            return dev
+    # 2. Match via PA description (most reliable with PulseAudio)
+    description = _get_sink_description(sink_name)
+    if description:
+        logger.debug("Sink description for %s: %s", sink_name, description)
+        desc_lower = description.lower()
+        for dev in devices:
+            if dev.name.lower() == desc_lower:
+                logger.info("Audio device matched by description: %s", dev.name)
+                return dev
+        # Partial description match (truncated names)
+        for dev in devices:
+            if desc_lower in dev.name.lower() or dev.name.lower() in desc_lower:
+                logger.info("Audio device partial-matched by description: %s (desc=%s)", dev.name, description)
+                return dev
 
-    # MAC-segment match: 'bluez_output.AA_BB_CC_DD_EE_FF.1' → 'AA_BB_CC_DD_EE_FF'
+    # 3. MAC-segment match: 'bluez_output.AA_BB_CC_DD_EE_FF.1' → 'AA_BB_CC_DD_EE_FF'
     parts = sink_name.split('.')
     mac_segment = parts[1] if len(parts) >= 2 else ''
     if mac_segment:
         for dev in devices:
             if mac_segment.lower() in dev.name.lower():
+                logger.info("Audio device matched by MAC segment: %s", dev.name)
                 return dev
 
+    # 4. Prefix match
+    for dev in devices:
+        if dev.name.startswith(sink_name[:20]):
+            logger.info("Audio device matched by prefix: %s", dev.name)
+            return dev
+
+    logger.warning(
+        "No audio device found for sink %s (description=%s) — falling back to default",
+        sink_name, description,
+    )
     return next((d for d in devices if d.is_default), None)

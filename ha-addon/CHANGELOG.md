@@ -5,7 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.0.5] - 2026-03-03
+## [2.0.6] - 2026-03-03
+
+### Fixed
+- Audio device resolution now uses PA sink description (friendly name) to correctly
+  match each BT speaker in sounddevice, fixing group playback routing.
+
+
 
 ### Fixed
 - Group badge now shows "In group" when MA sends group_id but no group_name.

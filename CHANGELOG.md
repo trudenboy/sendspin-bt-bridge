@@ -5,7 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.0.5] - 2026-03-03
+## [2.0.6] - 2026-03-03
+
+### Fixed
+- **Group audio still routes to single device** — `resolve_audio_device_for_sink` was
+  matching PA sink names (e.g. `bluez_sink.FC_58_FA_EB_08_6C.a2dp_sink`) against
+  sounddevice device names, but PortAudio/PulseAudio exposes sinks by their *description*
+  (human-readable name like "ENEBY20"), not by their PA identifier.
+  Added `_get_sink_description()` which queries `pactl list sinks` for the friendly name,
+  then matches it against sounddevice devices. Falls back to MAC segment and prefix
+  heuristics as before.
+
+
 
 ### Fixed
 - **Group badge never shown** — MA's `group/update` message sends `group_id` but
