@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.2] - 2026-03-03
+
+### Fixed
+- **Re-anchoring loop caused by move-sink-input**: `_ensure_sink_routing()` was called
+  on every `Stream STARTED` event, including re-anchor events triggered by PA stream
+  glitches. Moving a sink-input causes a brief PA interruption → sendspin detects sync
+  error → re-anchor → `Stream STARTED` → move again → infinite loop of re-anchors at
+  playback start.
+  Fixed with `_sink_routed` flag: routing correction runs **once per stream** (reset in
+  `_handle_format_change` on new codec/format, set after first move). Re-anchor events
+  no longer trigger redundant `move-sink-input` calls.
+
 ## [2.5.1] - 2026-03-03
 
 ### Fixed

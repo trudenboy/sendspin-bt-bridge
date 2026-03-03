@@ -66,6 +66,7 @@ class BridgeDaemon(SendspinDaemon):
         self._bluetooth_sink_name = bluetooth_sink_name
         self._on_volume_save = on_volume_save
         self._on_status_change = on_status_change
+        self._sink_routed = False  # True after first move-sink-input for current stream
 
     def _notify(self) -> None:
         """Notify subscriber that status has changed (no-op if no callback)."""
@@ -169,6 +170,7 @@ class BridgeDaemon(SendspinDaemon):
     def _handle_format_change(self, codec: str | None, sample_rate: int, bit_depth: int, channels: int) -> None:
         super()._handle_format_change(codec, sample_rate, bit_depth, channels)
         self._bridge_status["audio_format"] = f"{codec or 'PCM'} {sample_rate}Hz/{bit_depth}-bit/{channels}ch"
+        self._sink_routed = False  # new stream — allow one routing correction
         self._notify()
 
     def _on_stream_event(self, event: str) -> None:
@@ -178,9 +180,11 @@ class BridgeDaemon(SendspinDaemon):
             self._bridge_status["playing"] = is_playing
             self._bridge_status["state_changed_at"] = datetime.now().isoformat()
             self._notify()
-        if event == "start" and self._bluetooth_sink_name:
-            # Correct any stream that PulseAudio's module-rescue-streams may have
-            # moved to the default sink when a BT sink disappeared temporarily.
+        if event == "start" and self._bluetooth_sink_name and not self._sink_routed:
+            # Correct any stream PA module-rescue-streams moved to the default sink.
+            # Guard with _sink_routed so we only move once per stream — moving a
+            # sink-input causes a PA glitch that triggers re-anchoring, creating a loop.
+            self._sink_routed = True
             asyncio.ensure_future(self._ensure_sink_routing())
         logger.debug("[%s] stream event: %s", self._bridge_status.get("player_name", "?"), event)
 
