@@ -178,8 +178,9 @@ class BridgeDaemon(SendspinDaemon):
         _MAX_RETRIES = 3
         async with BridgeDaemon._routing_lock:
             # Release previously claimed sink-input so the slot is freed for re-routing
-            if self._routed_sink_input_id is not None:
-                BridgeDaemon._claimed_sink_inputs.discard(self._routed_sink_input_id)
+            prev_id = self._routed_sink_input_id
+            if prev_id is not None:
+                BridgeDaemon._claimed_sink_inputs.discard(prev_id)
                 self._routed_sink_input_id = None
             # Prune stale claimed IDs: remove any that no longer exist as live sink-inputs
             live_ids = await alist_sink_input_ids()
@@ -190,21 +191,27 @@ class BridgeDaemon(SendspinDaemon):
 
             await asyncio.sleep(0.3)
             current_ids = await alist_sink_input_ids()
-            new_ids = current_ids - self._pre_start_sink_input_ids
-            unclaimed = new_ids - BridgeDaemon._claimed_sink_inputs
             player = self._bridge_status.get("player_name", "?")
-            if not unclaimed:
-                unclaimed = current_ids - BridgeDaemon._claimed_sink_inputs
-            if not unclaimed:
-                logger.warning(
-                    "[%s] No unclaimed sink-input found (pre=%s, cur=%s, claimed=%s)",
-                    player,
-                    self._pre_start_sink_input_ids,
-                    current_ids,
-                    BridgeDaemon._claimed_sink_inputs,
-                )
-                return
-            target_id = max(unclaimed)
+
+            # Prefer re-claiming our own previous sink-input if it's still live
+            # (format didn't change → same PortAudio stream → same PA sink-input ID)
+            if prev_id is not None and prev_id in current_ids and prev_id not in BridgeDaemon._claimed_sink_inputs:
+                target_id = prev_id
+            else:
+                new_ids = current_ids - self._pre_start_sink_input_ids
+                unclaimed = new_ids - BridgeDaemon._claimed_sink_inputs
+                if not unclaimed:
+                    unclaimed = current_ids - BridgeDaemon._claimed_sink_inputs
+                if not unclaimed:
+                    logger.warning(
+                        "[%s] No unclaimed sink-input found (pre=%s, cur=%s, claimed=%s)",
+                        player,
+                        self._pre_start_sink_input_ids,
+                        current_ids,
+                        BridgeDaemon._claimed_sink_inputs,
+                    )
+                    return
+                target_id = max(unclaimed)
             sink_name = self._bluetooth_sink_name or ""
             for attempt in range(1, _MAX_RETRIES + 1):
                 ok = await amove_sink_input(target_id, sink_name)
@@ -244,6 +251,11 @@ class BridgeDaemon(SendspinDaemon):
         if self._bridge_status.get("playing") != is_playing:
             self._bridge_status["playing"] = is_playing
             self._bridge_status["state_changed_at"] = datetime.now().isoformat()
+        # Re-route on every stream start: PipeWire may have moved the sink-input
+        # back to the default sink when the stream became active again.
+        if event == "start" and self._bluetooth_sink_name:
+            self._routed = False
+            asyncio.ensure_future(self._route_stream_to_sink())
         logger.debug("[%s] stream event: %s", self._bridge_status.get("player_name", "?"), event)
 
     # ── Server commands (volume / mute) ──────────────────────────────────────
