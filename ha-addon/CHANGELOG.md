@@ -7,68 +7,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [2.1.0] - 2026-03-03
 
+### Added
+- `pulsectl-asyncio>=0.8.0,<1.0.0` dependency; new `services/pulse.py` module.
+
 ### Changed
-- PulseAudio operations now use `pulsectl_asyncio` library instead of `pactl` subprocess.
-  Fixes audio device resolution for group playback; no fork+exec overhead.
+- **PulseAudio: migrate from subprocess `pactl` to `pulsectl_asyncio` library.**
+  All PA operations (sink discovery, volume, mute, diagnostics) use native API.
+  Fixes audio device resolution for group playback. Graceful fallback to `pactl` if unavailable.
 
-
-
-### Fixed
-- Audio device resolution now uses PA sink description (friendly name) to correctly
-  match each BT speaker in sounddevice, fixing group playback routing.
-
-
+## [2.0.6] - 2026-03-03
 
 ### Fixed
-- Group badge now shows "In group" when MA sends group_id but no group_name.
+- Audio device resolution now uses PA sink description (friendly name) via `pactl list sinks`
+  to correctly match each BT speaker in sounddevice, fixing group playback routing.
 
-
-
-### Fixed
-- Group playback: each BT device now routes audio to its own speaker (daemon restarted
-  after BT initial connect with correct audio sink).
-
-
+## [2.0.5] - 2026-03-03
 
 ### Fixed
-- Track metadata (title/artist) never populated — fixed wrong field access in
-  metadata callback (`payload.metadata.title` instead of `payload.title`).
+- Group badge now shows "🔗 In group" when MA sends `group_id` but no `group_name`
+  (MA omits `group_name` in `group/update` messages).
 
-
-
-### Fixed
-- `AttributeError` in metadata callback when receiving `ServerStatePayload`.
-- `_monitor_dbus` infinite retry loop in restricted D-Bus environments;
-  now falls back to bluetoothctl polling after 3 consecutive failures.
-
-
+## [2.0.4] - 2026-03-03
 
 ### Fixed
-- Restore missing `class BluetoothManager:` declaration (ImportError on startup).
+- Group playback: each BT device now routes audio to its own speaker. Daemon was
+  starting before BT connected (no sink known) → all players used the default device.
+  Daemon now restarts after initial BT connect with the correct audio sink.
+- `update_status` name collision between sync helper and async monitoring loop; renamed
+  async loop to `_status_monitor_loop`.
 
+## [2.0.3] - 2026-03-03
 
+### Fixed
+- Track metadata (title/artist) never populated — `_on_metadata_update` receives
+  `ServerStatePayload` but was accessing `payload.title` directly instead of
+  `payload.metadata.title`. Fixed field access path.
+
+## [2.0.2] - 2026-03-02
+
+### Fixed
+- `AttributeError` in metadata callback when receiving `ServerStatePayload` (no `title` attr).
+- `_monitor_dbus` infinite retry loop in restricted D-Bus environments (HA container policy);
+  now falls back to bluetoothctl polling after 3 consecutive `add match request` failures.
+
+## [2.0.1] - 2026-03-02
+
+### Fixed
+- `ImportError: cannot import name 'BluetoothManager'` on container startup — missing
+  `class BluetoothManager:` declaration was dropped during D-Bus refactor edit.
+
+## [2.0.0] - 2026-03-02
 
 ### Changed
 - **D-Bus Bluetooth monitor** — instant disconnect detection via `dbus-fast`
-  `PropertiesChanged` signals; no more periodic polling delays.
+  `PropertiesChanged` signals instead of periodic polling. Falls back to bluetoothctl polling
+  if D-Bus unavailable (e.g. restricted container environment).
 - `is_device_connected()` / `is_device_paired()` / `disconnect_device()` now use
-  BlueZ D-Bus API directly; bluetoothctl retained as fallback.
+  BlueZ D-Bus API directly (~10× faster); bluetoothctl retained as fallback.
 - **In-process sendspin daemon** — `BridgeDaemon(SendspinDaemon)` subclass replaces
-  subprocess + stdout-parsing. Typed callbacks for all events.
+  subprocess + stdout-parsing. All events (play/stop, volume, format, group, metadata)
+  delivered via typed callbacks. Removed ~230 lines of parsing code.
+- Track metadata delivered instantly via `add_metadata_listener` (eliminates 10 s MPRIS poll lag).
+- BT reconnect calls `start_sendspin()` / `stop_sendspin()` instead of process management.
 
 ### Added
-- `dbus-fast` dependency for async D-Bus signal support.
-
-
-
-### Changed
-- **In-process sendspin daemon** — replaced subprocess + stdout-parsing with
-  `BridgeDaemon(SendspinDaemon)` subclass. Typed callbacks replace log parsing.
-  Track metadata delivered instantly via `add_metadata_listener` (no MPRIS poll lag).
-
-### Added
-- **MA player grouping** — device card shows a group badge when the player
-  is part of a Music Assistant group; group name and ID tracked in status.
+- `dbus-fast>=2.22.0,<3.0.0` dependency for async D-Bus signal support.
+- MA player grouping — device card shows "🔗 group" badge; `group_name` and `group_id`
+  tracked in player status.
 
 ## [1.6.5] - 2026-03-02
 

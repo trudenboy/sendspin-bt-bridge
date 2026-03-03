@@ -7,19 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [2.1.0] - 2026-03-03
 
+### Added
+- `pulsectl-asyncio>=0.8.0,<1.0.0` to `requirements.txt`.
+- New module `services/pulse.py` — sync + async wrappers for all PulseAudio operations
+  with graceful fallback to `pactl` subprocess if `pulsectl_asyncio`/`libpulse0` unavailable.
+
 ### Changed
-- **PulseAudio: migrate from subprocess `pactl` to `pulsectl_asyncio` library**
+- **PulseAudio: migrate from subprocess `pactl` to `pulsectl_asyncio` library.**
   All PA operations (sink discovery, volume, mute, diagnostics) now use the native
   `pulsectl_asyncio` API instead of spawning `pactl` subprocesses.
   Benefits: no fork+exec overhead, typed objects, direct `sink.description` access
   (fixes audio device resolution for group playback).
-  Graceful fallback to `pactl` subprocess if `pulsectl_asyncio`/`libpulse0` unavailable.
-  New module: `services/pulse.py` with sync + async wrappers.
 
-### Added
-- `pulsectl-asyncio>=0.8.0,<1.0.0` to `requirements.txt`
-
-
+## [2.0.6] - 2026-03-03
 
 ### Fixed
 - **Group audio still routes to single device** — `resolve_audio_device_for_sink` was
@@ -30,14 +30,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   then matches it against sounddevice devices. Falls back to MAC segment and prefix
   heuristics as before.
 
-
+## [2.0.5] - 2026-03-03
 
 ### Fixed
 - **Group badge never shown** — MA's `group/update` message sends `group_id` but
   leaves `group_name` null (`omit_none = True`). UI now shows "🔗 In group" when
   `group_id` is set but `group_name` is absent.
 
-
+## [2.0.4] - 2026-03-03
 
 ### Fixed
 - **Group playback: audio routes to only one device** — daemon was started before
@@ -47,7 +47,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`update_status` name collision** — async status-monitor loop had the same name as
   the sync thread-safe helper, silently shadowing it. Renamed to `_status_monitor_loop`.
 
-
+## [2.0.3] - 2026-03-03
 
 ### Fixed
 - **Track metadata never populated** — `_on_metadata_update` callback receives
@@ -55,7 +55,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `SessionUpdateMetadata` directly. Fixed to access `payload.metadata.title`/`.artist`
   instead of `payload.title`/`.artist`. Track and artist now display correctly during playback.
 
-
+## [2.0.2] - 2026-03-02
 
 ### Fixed
 - `_on_metadata_update` raised `AttributeError` when metadata listener received
@@ -64,12 +64,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   in restricted container environments; now raises `RuntimeError` after 3 consecutive
   failures so `monitor_and_reconnect` falls back to bluetoothctl polling.
 
-
+## [2.0.1] - 2026-03-02
 
 ### Fixed
-- Restore missing `class BluetoothManager:` declaration lost during D-Bus refactor edit.
+- Restore missing `class BluetoothManager:` declaration lost during D-Bus refactor edit
+  (`ImportError: cannot import name 'BluetoothManager'` on container startup).
 
-
+## [2.0.0] - 2026-03-02
 
 ### Changed
 - **D-Bus Bluetooth monitor** — replaced `bluetoothctl` polling in `monitor_and_reconnect()`
@@ -82,37 +83,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`is_device_paired()`** — same D-Bus-first approach as `is_device_connected()`.
 - **`disconnect_device()`** — calls `org.bluez.Device1.Disconnect` via D-Bus directly;
   falls back to `bluetoothctl disconnect`.
-- Added `dbus-fast>=2.22.0,<3.0.0` to `requirements.txt`.
-- Added explicit `import asyncio` to `bluetooth_manager.py` (was implicit via module load order).
 - **In-process sendspin daemon** — replaced `subprocess + stdout-parsing` architecture
   with direct in-process `BridgeDaemon(SendspinDaemon)` subclass. Status updates
   (play/stop, audio format, volume, group, metadata) are now delivered via typed
   callbacks instead of fragile log-line parsing. Removed ~230 lines of parsing code.
-- **Track metadata** now delivered by `add_metadata_listener` callback instead of
-  periodic MPRIS polling; eliminates the 10-second metadata lag.
-
-
-
-### Changed
-- **In-process sendspin daemon** — replaced `subprocess + stdout-parsing` architecture
-  with direct in-process `BridgeDaemon(SendspinDaemon)` subclass. Status updates
-  (play/stop, audio format, volume, group, metadata) are now delivered via typed
-  callbacks instead of fragile log-line parsing. Removed ~230 lines of parsing code.
-- **Deleted** `services/sendspin_group_daemon.py` monkey-patch wrapper (no longer needed
-  since `SendspinDaemon` upstream already logs group events and our daemon receives them
-  via `add_group_update_listener`).
 - **Track metadata** now delivered by `add_metadata_listener` callback instead of
   periodic MPRIS polling; eliminates the 10-second metadata lag.
 - **BT reconnect** now calls `client.stop_sendspin()` / `client.start_sendspin()` instead
   of `process.terminate()` / `start_sendspin_process()`.
 
 ### Added
-- **MA player grouping** — sendspin daemon now emits group membership events;
-  `group_name` and `group_id` tracked in player status and shown as a badge
-  in the device card when the player is part of a Music Assistant group.
-  A wrapper (`services/sendspin_group_daemon.py`) monkey-patches the upstream
-  daemon until [sendspin-cli#153](https://github.com/Sendspin/sendspin-cli/pull/153)
-  is merged.
+- `dbus-fast>=2.22.0,<3.0.0` to `requirements.txt`.
+- Explicit `import asyncio` to `bluetooth_manager.py`.
+- `_dbus_device_path` cached in `BluetoothManager.__init__`.
+- Module-level `_dbus_get_device_property()` and `_dbus_call_device_method()` helpers.
+- **MA player grouping** — `group_name` and `group_id` tracked in player status and shown
+  as a badge in the device card when the player is part of a Music Assistant group.
 
 ## [1.6.5] - 2026-03-02
 
