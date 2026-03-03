@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.4] - 2026-03-03
+
+### Added
+- **DeviceInfo in MA**: players now register with `product_name = "Sendspin BT Bridge v2.1.4"` and
+  `manufacturer = <hostname>` — visible in MA player details; updates automatically on reconnect
+- **Server column**: always shows server address (`host:port` or `auto:9000`) regardless of connection state;
+  populates real host from WebSocket URL after connect
+- **Group badge**: shows last UUID segment of `group_id` (e.g. `🔗 855be80925d3`) when `group_name` is null,
+  allowing different groups to be distinguished
+- Group badge moved above MAC address in device card
+
 ## [2.1.3] - 2026-03-03
 
 ### Fixed
