@@ -161,8 +161,10 @@ class BridgeDaemon(SendspinDaemon):
         super()._handle_format_change(codec, sample_rate, bit_depth, channels)
         self._bridge_status["audio_format"] = f"{codec or 'PCM'} {sample_rate}Hz/{bit_depth}-bit/{channels}ch"
         # PA stream (sink-input) was just created by set_format() → sounddevice.
-        # Schedule routing to the correct BT sink.
-        if self._bluetooth_sink_name and not self._routed:
+        # Reset routing state so every new stream gets routed to the correct BT sink
+        # (the stream/sink-input is recreated on each group play start).
+        if self._bluetooth_sink_name:
+            self._routed = False
             asyncio.ensure_future(self._route_stream_to_sink())
 
     async def _route_stream_to_sink(self) -> None:
@@ -175,6 +177,10 @@ class BridgeDaemon(SendspinDaemon):
         """
         _MAX_RETRIES = 3
         async with BridgeDaemon._routing_lock:
+            # Release previously claimed sink-input so the slot is freed for re-routing
+            if self._routed_sink_input_id is not None:
+                BridgeDaemon._claimed_sink_inputs.discard(self._routed_sink_input_id)
+                self._routed_sink_input_id = None
             # Prune stale claimed IDs: remove any that no longer exist as live sink-inputs
             live_ids = await alist_sink_input_ids()
             stale = BridgeDaemon._claimed_sink_inputs - live_ids
