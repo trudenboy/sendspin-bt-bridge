@@ -1,102 +1,62 @@
 ---
-title: Устранение неполадок
-description: Решение типичных проблем Sendspin Bluetooth Bridge
+title: Troubleshooting
+description: Solving common issues with Sendspin Bluetooth Bridge
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+## Music Assistant doesn't see the player
 
-## Music Assistant не видит плеер
+1. Sendspin provider is enabled in MA: Settings → Providers
+2. `SENDSPIN_SERVER` is correct (or `auto` mDNS works — requires `network_mode: host`)
+3. Check for errors: `docker logs sendspin-client | grep ERROR`
 
-**Проверьте:**
+## Bluetooth won't connect
 
-1. Провайдер Sendspin включён в MA: Settings → Providers
-2. `SENDSPIN_SERVER` указан верно (или `auto` работает — проверьте mDNS)
-3. Плеер запускается без ошибок: `docker logs sendspin-client | grep ERROR`
-4. Порт не занят другим процессом: `ss -tlnp | grep 892`
+1. Device is paired: `bluetoothctl devices` should show your MAC
+2. D-Bus is accessible: `/var/run/dbus` is mounted in the container
+3. Adapter is powered: `bluetoothctl show` → `Powered: yes`
 
-**При `auto`:** mDNS требует `network_mode: host`. Убедитесь, что он задан.
-
-## Bluetooth не подключается
-
-**Проверьте:**
-
-1. Устройство спарено: `bluetoothctl devices` должен показывать ваш MAC
-2. D-Bus доступен: `/var/run/dbus` смонтирован в контейнер
-3. Адаптер включён: `bluetoothctl show` → `Powered: yes`
-
-**Переспарьте устройство** через кнопку **🔗 Re-pair** в веб-интерфейсе.
+Re-pair via the **🔗 Re-pair** button in the web UI.
 
 ```bash
-# Диагностика внутри контейнера
 docker exec -it sendspin-client bluetoothctl show
 docker exec -it sendspin-client bluetoothctl devices
 ```
 
-## Нет звука (No Sink)
+## No audio (No Sink)
 
-Статус **No Sink** означает, что BT подключён, но PulseAudio/PipeWire синк не найден.
+**No Sink** means BT is connected but no PulseAudio/PipeWire sink was found.
 
-**Причины и решения:**
-
-| Причина | Решение |
+| Cause | Fix |
 |---|---|
-| PulseAudio не запущен | `docker exec sendspin-client pactl info` |
-| Синк ещё не инициализирован | Подождите 5–10 сек после подключения BT |
-| Неверный UID аудио-сокета | Установите `AUDIO_UID` равным UID пользователя хоста (`id -u`) |
-| A2DP профиль не загружен | `pactl list cards` — проверьте профиль `a2dp-sink` |
+| PulseAudio not running | `docker exec sendspin-client pactl info` |
+| Sink not yet initialized | Wait 5–10 s after BT connects |
+| Wrong audio socket UID | Set `AUDIO_UID` to your user's UID (`id -u`) |
+| A2DP profile not loaded | `pactl list cards` — check for `a2dp-sink` profile |
 
-## Звук прерывается (заикается)
+## Audio stutters
 
-**Решения:**
+1. Increase `PULSE_LATENCY_MSEC` (try 400–600)
+2. Enable `PREFER_SBC_CODEC: true`
+3. In MA set Audio Quality → PCM 44.1kHz/16-bit (eliminates FLAC decoding)
+4. Check CPU: `docker stats sendspin-client`
 
-1. Увеличьте `PULSE_LATENCY_MSEC` (попробуйте 400–600)
-2. Включите `PREFER_SBC_CODEC: true` — SBC требует меньше CPU
-3. В MA установите Audio Quality → PCM 44.1kHz/16-bit (устраняет FLAC декодирование)
-4. Проверьте нагрузку CPU: `docker stats sendspin-client`
+## Web UI doesn't open via HA
 
-## Веб-интерфейс не открывается через HA
+- Addon version must be ≥ 1.4.1 (HA Ingress fix)
+- Check browser console for CSS/JS 404 errors
 
-**Проверьте:**
-
-- Версия аддона ≥ 1.4.1 (исправлен HA Ingress)
-- Аддон запущен: вкладка **Info** → статус **Running**
-- Консоль браузера: нет ли ошибок загрузки CSS/JS
-
-## Конфигурация не сохраняется
-
-Docker: убедитесь, что volume `/etc/docker/Sendspin:/config` смонтирован и директория доступна на запись:
-
-```bash
-ls -la /etc/docker/Sendspin/
-```
-
-## Проблемы в LXC (Proxmox)
-
-**bluetoothctl не находит адаптеры:**
-- Убедитесь, что USB Bluetooth-адаптер проброшен в контейнер (`lxc.cgroup2.devices.allow`)
-- Перезапустите bluetoothd: `systemctl restart bluetooth`
-
-**PulseAudio не видит BT-синк:**
-- Проверьте, что `pulseaudio-module-bluetooth` установлен
-- Перезапустите PulseAudio: `pulseaudio -k && pulseaudio --start`
-
-**Адаптер не отвечает по имени `hciN`:**
-- Используйте MAC-адрес адаптера в поле `adapter` вместо `hci0` — в LXC имена интерфейсов нестабильны
-
-## Сбор логов для отчёта об ошибке
+## Collecting logs for a bug report
 
 ```bash
 # Docker
 docker logs sendspin-client > bridge.log 2>&1
 
-# HA Addon
-# Settings → Add-ons → Sendspin Bluetooth Bridge → Logs
-
 # LXC / systemd
 journalctl -u sendspin-client --no-pager > bridge.log
 ```
 
-Приложите лог к [отчёту об ошибке](https://github.com/trudenboy/sendspin-bt-bridge/issues) вместе с:
-- Методом деплоя (Docker/HA/LXC)
-- Аудиосистемой (PipeWire/PulseAudio)
-- Версией из `/api/version`
+Include in your [bug report](https://github.com/trudenboy/sendspin-bt-bridge/issues):
+- Deployment method (Docker/HA/LXC)
+- Log output
+- Host OS, audio system (PipeWire/PulseAudio), Bluetooth adapter model
+- Version from `/api/version`

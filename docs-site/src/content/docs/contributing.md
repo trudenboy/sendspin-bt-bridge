@@ -1,89 +1,79 @@
 ---
-title: Разработка и участие
-description: Руководство разработчика для Sendspin Bluetooth Bridge
+title: Development & Contributing
+description: Developer guide for Sendspin Bluetooth Bridge
 ---
 
-## Запуск локально
+## Running Locally
 
-Требуется Docker и Docker Compose. Bluetooth-колонка должна быть **спарена с хостом** до запуска.
+Requires Docker and Docker Compose. The speaker must be **paired with the host** before starting.
 
 ```bash
 git clone https://github.com/trudenboy/sendspin-bt-bridge.git
 cd sendspin-bt-bridge
 
-# Собрать и запустить
 docker compose up --build
-
-# Просмотр логов
 docker logs -f sendspin-client
-
-# Веб UI
 open http://localhost:8080
 ```
 
-Запуск без Docker (требуются системные пакеты Bluetooth и аудио):
+Without Docker (requires system Bluetooth and audio packages):
 
 ```bash
 pip install -r requirements.txt
 python sendspin_client.py
 ```
 
-## Структура проекта
+## Project Structure
 
 ```
-sendspin_client.py    # Точка входа: SendspinClient + main()
-bluetooth_manager.py  # BluetoothManager — BT подключения через bluetoothctl
-config.py             # Конфигурация, shared lock, load_config()
-mpris.py              # MPRIS D-Bus интеграция, MprisIdentityService
-web_interface.py      # Flask API + Waitress сервер
-templates/index.html  # HTML шаблон
-static/style.css      # Стили
+sendspin_client.py    # Entry point: SendspinClient + main()
+bluetooth_manager.py  # BluetoothManager — BT connections via bluetoothctl
+config.py             # Configuration, shared lock, load_config()
+mpris.py              # MPRIS D-Bus integration, MprisIdentityService
+web_interface.py      # Flask API + Waitress server
+templates/index.html  # HTML template
+static/style.css      # Styles
 static/app.js         # JavaScript
-entrypoint.sh         # Docker entrypoint: D-Bus, аудио инициализация
-ha-addon/             # Home Assistant addon конфигурация
-lxc/                  # Proxmox LXC установочный скрипт
+entrypoint.sh         # Docker entrypoint: D-Bus, audio init
+ha-addon/             # Home Assistant addon configuration
+lxc/                  # Proxmox LXC install script
 ```
 
-## Чеклист ручного тестирования
+## Manual Test Checklist
 
-Автоматических тестов нет. Используйте этот чеклист при внесении изменений:
+There is no automated test suite. Use this checklist when making changes:
 
-- [ ] Контейнер запускается без ошибок (`docker logs -f sendspin-client`)
-- [ ] Веб UI загружается на `http://localhost:8080`
-- [ ] Bluetooth-устройство подключается и отображается в веб UI
-- [ ] Music Assistant определяет плеер
-- [ ] Аудио воспроизводится через Bluetooth-колонку
-- [ ] Слайдер громкости в веб UI изменяет громкость колонки
-- [ ] Авто-переподключение срабатывает после отключения колонки (~10 с)
-- [ ] Изменения конфигурации через веб UI сохраняются после перезапуска контейнера
-- [ ] `/api/status` возвращает корректный JSON
-- [ ] `/api/config` GET возвращает текущую конфигурацию; POST с корректными данными сохраняет её
+- [ ] Container starts without errors (`docker logs -f sendspin-client`)
+- [ ] Web UI loads at `http://localhost:8080`
+- [ ] Bluetooth device connects and appears in the web UI
+- [ ] Music Assistant detects the player
+- [ ] Audio plays through the Bluetooth speaker
+- [ ] Volume slider changes speaker volume
+- [ ] Auto-reconnect triggers after disconnecting (~10 s)
+- [ ] Config changes persist after container restart
+- [ ] `/api/status` returns valid JSON
 
-При изменениях HA аддона — дополнительно протестируйте через локальный репозиторий аддонов HA.
+## Branching Strategy
 
-## Стратегия веток
+- `main` — stable, always releasable
+- Feature branches — branch off `main`, name `feat/<description>` or `fix/<description>`
+- Submit a PR against `main`
 
-- `main` — стабильная, всегда готова к релизу
-- Ветки фич — ответвляйтесь от `main`, называйте `feat/<описание>` или `fix/<описание>`
-- PR — направляйте в `main`
+## Reporting a Bug
 
-## Сообщение об ошибке
-
-Откройте [issue на GitHub](https://github.com/trudenboy/sendspin-bt-bridge/issues). Укажите:
-
-- Метод деплоя (Docker / HA Addon / Proxmox LXC)
-- Релевантный вывод лога
-- ОС хоста, аудиосистему (PipeWire или PulseAudio), модель Bluetooth-адаптера
-- Шаги воспроизведения
+Open an [issue on GitHub](https://github.com/trudenboy/sendspin-bt-bridge/issues). Include:
+- Deployment method (Docker / HA Addon / Proxmox LXC)
+- Log output
+- Host OS, audio system (PipeWire/PulseAudio), Bluetooth adapter model
+- Steps to reproduce
 
 ## CI/CD
 
-Пуш тега `v*` в `main` автоматически:
-
-1. Собирает multi-platform Docker образ (`linux/amd64`, `linux/arm64`)
-2. Публикует в `ghcr.io/trudenboy/sendspin-bt-bridge`
-3. Синхронизирует версию в `ha-addon/config.yaml`
+Pushing a `v*` tag to `main` automatically:
+1. Builds multi-platform Docker image (`linux/amd64`, `linux/arm64`)
+2. Publishes to `ghcr.io/trudenboy/sendspin-bt-bridge`
+3. Syncs the version to `ha-addon/config.yaml`
 
 ## Attribution
 
-Проект вырос из [loryanstrant/Sendspin-client](https://github.com/loryanstrant/Sendspin-client). Благодарность команде [Music Assistant](https://www.music-assistant.io/) за протокол Sendspin и CLI.
+This project grew out of [loryanstrant/Sendspin-client](https://github.com/loryanstrant/Sendspin-client). Thanks to the [Music Assistant](https://www.music-assistant.io/) team for the Sendspin protocol and CLI.

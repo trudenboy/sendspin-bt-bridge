@@ -1,22 +1,22 @@
 ---
-title: Установка — Docker Compose
-description: Запуск Sendspin Bluetooth Bridge в Docker Compose
+title: Installation — Docker Compose
+description: Running Sendspin Bluetooth Bridge with Docker Compose
 ---
 
-import { Steps, Aside, Tabs, TabItem } from '@astrojs/starlight/components';
+import { Steps, Aside } from '@astrojs/starlight/components';
 
-## Требования
+## Requirements
 
-- Docker Engine и Docker Compose
-- Bluetooth-адаптер на хосте
-- PulseAudio или PipeWire на хосте
-- Music Assistant Server на вашей сети
+- Docker Engine and Docker Compose
+- Bluetooth adapter on the host
+- PulseAudio or PipeWire on the host
+- Music Assistant Server on your network
 
-## Быстрый старт
+## Quick Start
 
 <Steps>
 
-1. **Клонируйте репозиторий или создайте `docker-compose.yml`**
+1. **Clone the repository or create `docker-compose.yml`**
 
    ```yaml
    services:
@@ -32,7 +32,7 @@ import { Steps, Aside, Tabs, TabItem } from '@astrojs/starlight/components';
          - SENDSPIN_SERVER=auto
          - SENDSPIN_PORT=9000
          - BLUETOOTH_MAC=${BLUETOOTH_MAC:-}
-         - TZ=Europe/Moscow
+         - TZ=America/New_York
        volumes:
          - /var/run/dbus:/var/run/dbus
          - /run/user/${AUDIO_UID:-1000}/pulse:/run/user/1000/pulse
@@ -41,24 +41,22 @@ import { Steps, Aside, Tabs, TabItem } from '@astrojs/starlight/components';
        restart: unless-stopped
    ```
 
-2. **Настройте переменные окружения**
+2. **Configure environment variables**
 
-   Создайте файл `.env` рядом с `docker-compose.yml`:
+   Create a `.env` file next to `docker-compose.yml`:
 
    ```env
    BLUETOOTH_MAC=AA:BB:CC:DD:EE:FF
    AUDIO_UID=1000
    ```
 
-   Или передайте через переменные окружения хоста.
-
-3. **Запустите контейнер**
+3. **Start the container**
 
    ```bash
    docker compose up -d
    ```
 
-4. **Откройте веб-интерфейс**
+4. **Open the web interface**
 
    ```
    http://localhost:8080
@@ -66,39 +64,35 @@ import { Steps, Aside, Tabs, TabItem } from '@astrojs/starlight/components';
 
 </Steps>
 
-## Требования к сети
+## Network requirements
 
-Контейнер использует `network_mode: host`, что необходимо для:
-- Обнаружения MA сервера через mDNS (`auto`)
-- Bluetooth D-Bus доступа
+The container uses `network_mode: host`, required for:
+- MA server discovery via mDNS (`auto`)
+- Bluetooth D-Bus access
 
 ## Capabilities
 
-| Capability | Зачем |
+| Capability | Purpose |
 |---|---|
-| `NET_ADMIN` | Управление сетевыми интерфейсами (BT) |
-| `NET_RAW` | Raw socket доступ для BT |
-| `SYS_ADMIN` | Монтирование D-Bus, управление PulseAudio |
+| `NET_ADMIN` | Network interface management (BT) |
+| `NET_RAW` | Raw socket access for BT |
+| `SYS_ADMIN` | D-Bus mount, PulseAudio management |
 
 <Aside type="caution">
-  `privileged: true` **не требуется** и не рекомендуется. Достаточно перечисленных `cap_add`.
+  `privileged: true` is **not required** and not recommended. The listed `cap_add` are sufficient.
 </Aside>
 
 ## Volumes
 
-| Volume | Описание |
+| Volume | Description |
 |---|---|
-| `/var/run/dbus` | D-Bus сокет для bluetoothctl |
-| `/run/user/UID/pulse` | PulseAudio сокет |
-| `/run/user/UID/pipewire-0` | PipeWire сокет |
-| `/etc/docker/Sendspin` | Директория конфигурации (config.json) |
+| `/var/run/dbus` | D-Bus socket for bluetoothctl |
+| `/run/user/UID/pulse` | PulseAudio socket |
+| `/run/user/UID/pipewire-0` | PipeWire socket |
+| `/etc/docker/Sendspin` | Config directory (config.json) |
 
-## Просмотр логов
+## View logs
 
 ```bash
 docker logs -f sendspin-client
 ```
-
-## Несколько устройств
-
-Для управления несколькими колонками настройте их через веб-интерфейс на `http://localhost:8080` → раздел **Bluetooth Devices**. Каждое устройство создаёт отдельный процесс pleeera в MA.

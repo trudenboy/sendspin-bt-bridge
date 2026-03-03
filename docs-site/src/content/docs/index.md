@@ -1,17 +1,17 @@
 ---
 title: Sendspin Bluetooth Bridge
-description: Bluetooth-мост для Music Assistant — подключает Bluetooth-колонки к протоколу Sendspin MA
+description: Bluetooth bridge for Music Assistant — connects Bluetooth speakers to the Sendspin protocol
 hero:
-  tagline: Подключите Bluetooth-колонки к Music Assistant без лишнего железа и облаков
+  tagline: Connect Bluetooth speakers to Music Assistant — no extra hardware, no cloud
   image:
     file: ../../assets/logo.svg
   actions:
-    - text: Установить
-      link: /sendspin-bt-bridge/installation/ha-addon/
+    - text: Install
+      link: /sendspin-bt-bridge/en/installation/ha-addon/
       icon: right-arrow
       variant: primary
-    - text: Настройка
-      link: /sendspin-bt-bridge/configuration/
+    - text: Configuration
+      link: /sendspin-bt-bridge/en/configuration/
       icon: setting
     - text: GitHub
       link: https://github.com/trudenboy/sendspin-bt-bridge
@@ -21,45 +21,45 @@ hero:
 
 import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
 
-## Что это такое
+## What is it?
 
-**Sendspin Bluetooth Bridge** — мост между [Music Assistant](https://www.music-assistant.io/) и Bluetooth-колонками. Запускает CLI-плеер `sendspin` как подпроцесс, управляет Bluetooth-подключениями через `bluetoothctl` и предоставляет веб-интерфейс для мониторинга и настройки. Работает на Raspberry Pi, в Home Assistant, в Docker и Proxmox LXC.
+**Sendspin Bluetooth Bridge** is a bridge between [Music Assistant](https://www.music-assistant.io/) and Bluetooth speakers. It runs the `sendspin` CLI player as a subprocess, manages Bluetooth connections via `bluetoothctl`, and provides a web interface for monitoring and configuration. Runs on Raspberry Pi, in Home Assistant, Docker, and Proxmox LXC.
 
-## Возможности
+## Features
 
 <CardGrid>
-  <Card title="Несколько устройств" icon="list-format">
-    Одновременное подключение нескольких Bluetooth-колонок. Каждая отображается как отдельный плеер в Music Assistant.
+  <Card title="Multi-device" icon="list-format">
+    Connect multiple Bluetooth speakers simultaneously. Each appears as its own player in Music Assistant.
   </Card>
-  <Card title="Авто-переподключение" icon="refresh">
-    Мониторинг соединений каждые 10 с. При обрыве — автоматическое переподключение.
+  <Card title="Auto-reconnect" icon="refresh">
+    Connection monitoring every 10 s. Automatic reconnection on disconnect.
   </Card>
-  <Card title="Веб-интерфейс" icon="laptop">
-    Панель мониторинга в стиле Home Assistant. Управление громкостью, паузой, BT-адаптерами. Автоматическая тёмная/светлая тема.
+  <Card title="Web UI" icon="laptop">
+    Dashboard styled after Home Assistant. Volume, pause, BT adapter controls. Automatic dark/light theme.
   </Card>
-  <Card title="PipeWire и PulseAudio" icon="setting">
-    Автоматическое определение аудиосистемы хоста. Поддержка обеих систем без ручной настройки.
+  <Card title="PipeWire & PulseAudio" icon="setting">
+    Auto-detects the host audio system. Both systems work without manual configuration.
   </Card>
-  <Card title="Группное управление" icon="bars">
-    Регулировка громкости и отключение звука на всех плеерах одновременно из веб-интерфейса.
+  <Card title="Group controls" icon="bars">
+    Volume and mute controls across all players simultaneously from the web UI.
   </Card>
-  <Card title="Компенсация задержки" icon="seti:clock">
-    Поле `static_delay_ms` компенсирует буферную задержку A2DP для синхронизации группового воспроизведения.
+  <Card title="Latency compensation" icon="seti:clock">
+    `static_delay_ms` field compensates A2DP buffer latency for synchronized group playback.
   </Card>
 </CardGrid>
 
-## Варианты развёртывания
+## Deployment Options
 
 | | Home Assistant Addon | Docker Compose | Proxmox LXC |
 |---|---|---|---|
-| Установка | Магазин аддонов HA | `docker compose up` | Однострочный скрипт |
-| Bluetooth | bluetoothd хоста через D-Bus | bluetoothd хоста через D-Bus | Собственный bluetoothd |
-| Аудио | HA Supervisor bridge | PulseAudio/PipeWire хоста | Собственный PulseAudio |
-| Настройка | Панель HA + веб UI | Веб UI на :8080 | Веб UI на :8080 |
+| Install | HA Addon Store | `docker compose up` | One-line script |
+| Bluetooth | Host bluetoothd via D-Bus | Host bluetoothd via D-Bus | Own bluetoothd |
+| Audio | HA Supervisor bridge | Host PulseAudio/PipeWire | Own PulseAudio |
+| Config | HA panel + web UI | Web UI at :8080 | Web UI at :8080 |
 
 <CardGrid>
-  <LinkCard title="Установка: Home Assistant Addon" href="/sendspin-bt-bridge/installation/ha-addon/" />
-  <LinkCard title="Установка: Docker Compose" href="/sendspin-bt-bridge/installation/docker/" />
-  <LinkCard title="Установка: Proxmox LXC" href="/sendspin-bt-bridge/installation/lxc/" />
-  <LinkCard title="Настройка" href="/sendspin-bt-bridge/configuration/" />
+  <LinkCard title="Install: Home Assistant Addon" href="/sendspin-bt-bridge/en/installation/ha-addon/" />
+  <LinkCard title="Install: Docker Compose" href="/sendspin-bt-bridge/en/installation/docker/" />
+  <LinkCard title="Install: Proxmox LXC" href="/sendspin-bt-bridge/en/installation/lxc/" />
+  <LinkCard title="Configuration" href="/sendspin-bt-bridge/en/configuration/" />
 </CardGrid>
