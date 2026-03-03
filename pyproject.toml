@@ -1,0 +1,59 @@
+[project]
+name = "sendspin-bt-bridge"
+requires-python = ">=3.12"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # pyflakes
+    "I",      # isort
+    "UP",     # pyupgrade
+    "B",      # flake8-bugbear
+    "SIM",    # flake8-simplify
+    "TCH",    # flake8-type-checking
+    "RUF",    # ruff-specific rules
+]
+ignore = [
+    "E501",   # line too long (handled by formatter)
+    "SIM102", # collapsible if (reduces readability in complex conditionals)
+    "SIM103", # return condition directly (reduces readability)
+    "SIM105", # contextlib.suppress (try/except/pass is clearer for this project)
+    "SIM108", # use ternary operator (reduces readability)
+    "RUF002", # ambiguous unicode character (intentional × in docstrings)
+    "RUF012", # mutable class attributes (too noisy for this project)
+    "RUF006", # dangling asyncio task (intentional fire-and-forget)
+    "RUF046", # unnecessary int cast (explicit int() on round() is intentional)
+    "UP007",  # use X | Y for unions (keep Optional for clarity)
+    "B904",   # raise from in except (too disruptive to retrofit)
+]
+
+[tool.ruff.lint.isort]
+known-first-party = [
+    "config",
+    "state",
+    "web_interface",
+    "sendspin_client",
+    "bluetooth_manager",
+    "mpris",
+    "routes",
+    "services",
+]
+
+[tool.mypy]
+python_version = "3.12"
+follow_imports = "silent"
+ignore_missing_imports = true
+check_untyped_defs = false
+disallow_untyped_defs = false
+warn_return_any = false
+warn_unused_configs = true
+warn_unused_ignores = false
+show_error_codes = true
+exclude = [
+    "sendspin-cli/",
+]

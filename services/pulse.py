@@ -23,10 +23,11 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 try:
-    import pulsectl_asyncio  # type: ignore[import]
+    import pulsectl_asyncio  # type: ignore[import-untyped]
+
     _PULSECTL_AVAILABLE = True
 except (ImportError, OSError) as _err:
-    pulsectl_asyncio = None  # type: ignore[assignment]
+    pulsectl_asyncio = None  # type: ignore[assignment,unused-ignore]
     _PULSECTL_AVAILABLE = False
     logger.warning("pulsectl_asyncio unavailable (%s) — falling back to pactl subprocess", _err)
 
@@ -37,6 +38,7 @@ _TIMEOUT = 5.0  # seconds for any PA operation
 # ---------------------------------------------------------------------------
 # Internal async helpers
 # ---------------------------------------------------------------------------
+
 
 async def _aget_sink(pulse, sink_name: str) -> Any | None:
     """Return the pulsectl SinkInfo for *sink_name*, or None if not found."""
@@ -52,6 +54,7 @@ async def _aget_sink(pulse, sink_name: str) -> Any | None:
 # Async public API
 # ---------------------------------------------------------------------------
 
+
 async def alist_sinks() -> list[dict]:
     """Return all PA sinks as dicts with name, description, volume (0-100), muted."""
     if not _PULSECTL_AVAILABLE:
@@ -62,10 +65,10 @@ async def alist_sinks() -> list[dict]:
                 sinks = await pulse.sink_list()
                 return [
                     {
-                        'name': s.name,
-                        'description': s.description,
-                        'volume': max(0, min(100, int(round(s.volume.value_flat * 100)))),
-                        'muted': bool(s.mute),
+                        "name": s.name,
+                        "description": s.description,
+                        "volume": max(0, min(100, int(round(s.volume.value_flat * 100)))),
+                        "muted": bool(s.mute),
                     }
                     for s in sinks
                 ]
@@ -102,7 +105,12 @@ async def aset_sink_volume(sink_name: str, volume_pct: int) -> bool:
                 await pulse.volume_set_all_chans(sink, volume_pct / 100.0)
                 return True
     except Exception as exc:
-        logger.debug("aset_sink_volume(%s, %d) error: %s — falling back", sink_name, volume_pct, exc)
+        logger.debug(
+            "aset_sink_volume(%s, %d) error: %s — falling back",
+            sink_name,
+            volume_pct,
+            exc,
+        )
         return _fallback_set_volume(sink_name, volume_pct)
 
 
@@ -189,8 +197,12 @@ async def amove_sink_input(sink_input_idx: int, sink_name: str) -> bool:
                 await pulse.sink_input_move(si, sink)
                 return True
     except Exception as exc:
-        logger.debug("amove_sink_input(%d, %s) error: %s — falling back",
-                     sink_input_idx, sink_name, exc)
+        logger.debug(
+            "amove_sink_input(%d, %s) error: %s — falling back",
+            sink_input_idx,
+            sink_name,
+            exc,
+        )
         return _fallback_move_sink_input(sink_input_idx, sink_name)
 
 
@@ -202,7 +214,7 @@ async def aget_server_name() -> str:
         async with asyncio.timeout(_TIMEOUT):
             async with pulsectl_asyncio.PulseAsync(_CLIENT_NAME) as pulse:
                 info = await pulse.server_info()
-                return info.server_name or 'running'
+                return info.server_name or "running"
     except Exception as exc:
         logger.debug("aget_server_name error: %s — falling back", exc)
         return _fallback_server_name()
@@ -211,6 +223,7 @@ async def aget_server_name() -> str:
 # ---------------------------------------------------------------------------
 # Sync public API (thread-safe wrappers using a fresh event loop)
 # ---------------------------------------------------------------------------
+
 
 def _run(coro):
     """Run *coro* synchronously in a fresh event loop (safe from any thread)."""
@@ -253,15 +266,27 @@ def get_server_name() -> str:
 # Subprocess fallbacks (mirror pactl behaviour when pulsectl unavailable)
 # ---------------------------------------------------------------------------
 
+
 def _fallback_list_sinks() -> list[dict]:
     try:
-        r = subprocess.run(['pactl', 'list', 'short', 'sinks'],
-                           capture_output=True, text=True, timeout=5)
+        r = subprocess.run(
+            ["pactl", "list", "short", "sinks"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
         result = []
         for line in r.stdout.splitlines():
-            parts = line.split('\t')
+            parts = line.split("\t")
             if len(parts) >= 2:
-                result.append({'name': parts[1], 'description': parts[1], 'volume': None, 'muted': None})
+                result.append(
+                    {
+                        "name": parts[1],
+                        "description": parts[1],
+                        "volume": None,
+                        "muted": None,
+                    }
+                )
         return result
     except Exception:
         return []
@@ -269,15 +294,15 @@ def _fallback_list_sinks() -> list[dict]:
 
 def _fallback_get_description(sink_name: str) -> str | None:
     try:
-        r = subprocess.run(['pactl', 'list', 'sinks'], capture_output=True, text=True, timeout=5)
+        r = subprocess.run(["pactl", "list", "sinks"], capture_output=True, text=True, timeout=5)
         in_target = False
         for line in r.stdout.splitlines():
             s = line.strip()
-            if s.startswith('Name:') and sink_name in s:
+            if s.startswith("Name:") and sink_name in s:
                 in_target = True
-            elif in_target and s.startswith('Description:'):
-                return s.split(':', 1)[1].strip()
-            elif in_target and s.startswith('Name:'):
+            elif in_target and s.startswith("Description:"):
+                return s.split(":", 1)[1].strip()
+            elif in_target and s.startswith("Name:"):
                 break
     except Exception:
         pass
@@ -286,8 +311,12 @@ def _fallback_get_description(sink_name: str) -> str | None:
 
 def _fallback_set_volume(sink_name: str, volume_pct: int) -> bool:
     try:
-        r = subprocess.run(['pactl', 'set-sink-volume', sink_name, f'{volume_pct}%'],
-                           capture_output=True, text=True, timeout=3)
+        r = subprocess.run(
+            ["pactl", "set-sink-volume", sink_name, f"{volume_pct}%"],
+            capture_output=True,
+            text=True,
+            timeout=3,
+        )
         return r.returncode == 0
     except Exception:
         return False
@@ -295,11 +324,16 @@ def _fallback_set_volume(sink_name: str, volume_pct: int) -> bool:
 
 def _fallback_get_volume(sink_name: str) -> int | None:
     try:
-        r = subprocess.run(['pactl', 'get-sink-volume', sink_name],
-                           capture_output=True, text=True, timeout=3)
+        r = subprocess.run(
+            ["pactl", "get-sink-volume", sink_name],
+            capture_output=True,
+            text=True,
+            timeout=3,
+        )
         if r.returncode == 0:
             import re
-            m = re.search(r'(\d+)%', r.stdout)
+
+            m = re.search(r"(\d+)%", r.stdout)
             return int(m.group(1)) if m else None
     except Exception:
         pass
@@ -307,10 +341,14 @@ def _fallback_get_volume(sink_name: str) -> int | None:
 
 
 def _fallback_set_mute(sink_name: str, muted: bool | None) -> bool:
-    arg = 'toggle' if muted is None else ('1' if muted else '0')
+    arg = "toggle" if muted is None else ("1" if muted else "0")
     try:
-        r = subprocess.run(['pactl', 'set-sink-mute', sink_name, arg],
-                           capture_output=True, text=True, timeout=3)
+        r = subprocess.run(
+            ["pactl", "set-sink-mute", sink_name, arg],
+            capture_output=True,
+            text=True,
+            timeout=3,
+        )
         return r.returncode == 0
     except Exception:
         return False
@@ -318,10 +356,14 @@ def _fallback_set_mute(sink_name: str, muted: bool | None) -> bool:
 
 def _fallback_get_mute(sink_name: str) -> bool | None:
     try:
-        r = subprocess.run(['pactl', 'get-sink-mute', sink_name],
-                           capture_output=True, text=True, timeout=3)
+        r = subprocess.run(
+            ["pactl", "get-sink-mute", sink_name],
+            capture_output=True,
+            text=True,
+            timeout=3,
+        )
         if r.returncode == 0:
-            return 'yes' in r.stdout.lower()
+            return "yes" in r.stdout.lower()
     except Exception:
         pass
     return None
@@ -329,23 +371,27 @@ def _fallback_get_mute(sink_name: str) -> bool | None:
 
 def _fallback_server_name() -> str:
     try:
-        r = subprocess.run(['pactl', 'info'], capture_output=True, text=True, timeout=3)
+        r = subprocess.run(["pactl", "info"], capture_output=True, text=True, timeout=3)
         if r.returncode == 0:
             for line in r.stdout.splitlines():
-                if 'Server Name' in line:
-                    return line.split(':', 1)[-1].strip()
+                if "Server Name" in line:
+                    return line.split(":", 1)[-1].strip()
     except Exception:
         pass
-    return 'not available'
+    return "not available"
 
 
 def _fallback_sink_input_ids() -> set[int]:
     try:
-        r = subprocess.run(['pactl', 'list', 'short', 'sink-inputs'],
-                           capture_output=True, text=True, timeout=5)
+        r = subprocess.run(
+            ["pactl", "list", "short", "sink-inputs"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
         ids: set[int] = set()
         for line in r.stdout.splitlines():
-            parts = line.split('\t')
+            parts = line.split("\t")
             if parts:
                 try:
                     ids.add(int(parts[0]))
@@ -359,14 +405,21 @@ def _fallback_sink_input_ids() -> set[int]:
 def _fallback_move_sink_input(sink_input_idx: int, sink_name: str) -> bool:
     try:
         r = subprocess.run(
-            ['pactl', 'move-sink-input', str(sink_input_idx), sink_name],
-            capture_output=True, text=True, timeout=3,
+            ["pactl", "move-sink-input", str(sink_input_idx), sink_name],
+            capture_output=True,
+            text=True,
+            timeout=3,
         )
         if r.returncode == 0:
             logger.info("Moved sink-input %d → %s", sink_input_idx, sink_name)
         else:
-            logger.warning("move_sink_input(%d → %s) failed (rc=%d): %s",
-                            sink_input_idx, sink_name, r.returncode, r.stderr.strip())
+            logger.warning(
+                "move_sink_input(%d → %s) failed (rc=%d): %s",
+                sink_input_idx,
+                sink_name,
+                r.returncode,
+                r.stderr.strip(),
+            )
         return r.returncode == 0
     except Exception:
         return False
@@ -377,11 +430,13 @@ def get_sink_input_ids() -> set[int]:
     ids: set[int] = set()
     try:
         r = subprocess.run(
-            ['pactl', 'list', 'short', 'sink-inputs'],
-            capture_output=True, text=True, timeout=5,
+            ["pactl", "list", "short", "sink-inputs"],
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         for line in r.stdout.splitlines():
-            parts = line.split('\t')
+            parts = line.split("\t")
             if parts:
                 try:
                     ids.add(int(parts[0]))

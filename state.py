@@ -4,6 +4,7 @@ Shared application state for sendspin-bt-bridge.
 Single source of truth for the active SendspinClient list, shared between
 web_interface.py (reads for API responses) and sendspin_client.py (writes via set_clients).
 """
+
 import json
 import logging
 import os
@@ -33,14 +34,14 @@ _adapter_cache_loaded = False
 def load_adapter_name_cache() -> None:
     """Load adapter friendly names from config.json into the in-memory cache."""
     global _adapter_name_cache, _adapter_cache_loaded
-    config_file = Path(os.getenv('CONFIG_DIR', '/config')) / 'config.json'
+    config_file = Path(os.getenv("CONFIG_DIR", "/config")) / "config.json"
     try:
         with open(config_file) as _f:
             _cfg = json.load(_f)
         _adapter_name_cache = {
-            a.get('mac', a.get('id', '')).upper(): a.get('name', '')
-            for a in _cfg.get('BLUETOOTH_ADAPTERS', [])
-            if a.get('mac') or a.get('id')
+            a.get("mac", a.get("id", "")).upper(): a.get("name", "")
+            for a in _cfg.get("BLUETOOTH_ADAPTERS", [])
+            if a.get("mac") or a.get("id")
         }
     except Exception as _exc:
         _adapter_name_cache = {}
@@ -48,7 +49,7 @@ def load_adapter_name_cache() -> None:
     _adapter_cache_loaded = True
 
 
-def get_adapter_name(mac_upper: str) -> 'str | None':
+def get_adapter_name(mac_upper: str) -> "str | None":
     """Return adapter friendly name for the given MAC (uppercase), loading cache if needed."""
     if not _adapter_cache_loaded:
         load_adapter_name_cache()
