@@ -173,8 +173,9 @@ function populateDeviceCard(i, dev) {
 
     var groupBadge = document.getElementById('dgroup-' + i);
     if (groupBadge) {
-        groupBadge.textContent = dev.group_name ? '\uD83D\uDD17 ' + dev.group_name : '';
-        groupBadge.style.display = dev.group_name ? '' : 'none';
+        var groupLabel = dev.group_name || (dev.group_id ? 'In group' : '');
+        groupBadge.textContent = groupLabel ? '\uD83D\uDD17 ' + groupLabel : '';
+        groupBadge.style.display = groupLabel ? '' : 'none';
     }
 
     var btAdapterEl = document.getElementById('dbt-adapter-' + i);

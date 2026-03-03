@@ -5,7 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.0.4] - 2026-03-03
+## [2.0.5] - 2026-03-03
+
+### Fixed
+- **Group badge never shown** — MA's `group/update` message sends `group_id` but
+  leaves `group_name` null (`omit_none = True`). UI now shows "🔗 In group" when
+  `group_id` is set but `group_name` is absent.
+
+
 
 ### Fixed
 - **Group playback: audio routes to only one device** — daemon was started before
