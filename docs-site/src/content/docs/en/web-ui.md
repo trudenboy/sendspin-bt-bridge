@@ -9,6 +9,8 @@ The web interface is available on port **8080** (Docker/LXC) or via **HA Ingress
 
 ## Dashboard
 
+![Sendspin Bluetooth Bridge dashboard showing 6 device cards](/sendspin-bt-bridge/screenshots/screenshot-dashboard-full.png)
+
 ### Group Controls
 
 At the top of the page:
@@ -20,6 +22,8 @@ At the top of the page:
 ### Device Card
 
 Each Bluetooth device has its own card:
+
+![Device card showing ENEBY20 with Bluetooth connected, server connected, volume and sync status](/sendspin-bt-bridge/screenshots/screenshot-device-card.png)
 
 | Section | Content |
 |---|---|
@@ -46,6 +50,10 @@ Each Bluetooth device has its own card:
 </Aside>
 
 ## Configuration Section
+
+The collapsible **⚙️ Configuration** section lets you change settings without editing files:
+
+![Configuration section showing all settings fields and device table](/sendspin-bt-bridge/screenshots/screenshot-config.png)
 
 The collapsible **⚙️ Configuration** section lets you change settings without editing files:
 
