@@ -116,11 +116,17 @@ class BridgeDaemon(SendspinDaemon):
             self._bridge_status['server_connected_at'] = datetime.now().isoformat()
         self._bridge_status['server_connected'] = True
         self._bridge_status['connected'] = True
-        # Capture the actual server URL from the websocket
+        # Clear group state on new connection so stale IDs don't persist
+        self._bridge_status['group_id'] = None
+        self._bridge_status['group_name'] = None
+        # Capture real MA server IP from the incoming request's peer address
         try:
-            url = str(ws.url) if hasattr(ws, 'url') else ''
-            if url:
-                self._bridge_status['connected_server_url'] = url
+            req = getattr(ws, '_req', None)
+            if req is not None:
+                peer = req.remote  # e.g. '192.168.10.10'
+                # Rebuild URL using server_port from status (or default 9000)
+                port = self._bridge_status.get('server_port', 9000)
+                self._bridge_status['connected_server_url'] = f"{peer}:{port}"
         except Exception:
             pass
         await super()._handle_server_connection(ws)
@@ -183,7 +189,7 @@ class BridgeDaemon(SendspinDaemon):
     def _on_group_update(self, payload: GroupUpdateServerPayload) -> None:
         self._bridge_status['group_name'] = payload.group_name or None
         self._bridge_status['group_id'] = payload.group_id
-        logger.debug("Group update: id=%s name=%s state=%s", payload.group_id, payload.group_name, payload.playback_state)
+        logger.info("Group update: id=%s name=%s state=%s", payload.group_id, payload.group_name, payload.playback_state)
 
     # ── Track metadata ───────────────────────────────────────────────────────
 
