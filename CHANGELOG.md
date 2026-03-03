@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.6] - 2026-03-03
+
+### Fixed
+- **Stale routing tasks on rapid stop/play**: each `Stream STARTED` event created
+  a new `_route_stream_to_sink()` task. With rapid stop/play clicks, tasks piled up
+  (~20 for 4 devices) and competed for sink-input IDs that had already been replaced
+  by PipeWire, causing `sink-input N not found` failures and retries.
+  Fixed by tracking the current routing task per daemon and cancelling it on new
+  stream start. The `CancelledError` handler releases any already-claimed ID.
+
 ## [2.3.5] - 2026-03-03
 
 ### Improved
