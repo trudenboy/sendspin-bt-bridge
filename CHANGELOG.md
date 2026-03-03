@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [2.1.0] - 2026-03-03
 
 ### Added
-- `pulsectl-asyncio>=0.8.0,<1.0.0` to `requirements.txt`.
+- `pulsectl-asyncio>=1.0.0,<2.0.0` to `requirements.txt`.
 - New module `services/pulse.py` — sync + async wrappers for all PulseAudio operations
   with graceful fallback to `pactl` subprocess if `pulsectl_asyncio`/`libpulse0` unavailable.
 
