@@ -41,18 +41,6 @@ logger = logging.getLogger(__name__)
 class SendspinClient:
     """Wrapper for sendspin CLI with status tracking"""
 
-    # Class-level lock: serialises daemon PA-stream creation so that the
-    # PULSE_SINK env-var is held exclusively while each daemon opens its
-    # PortAudio stream.  asyncio.Lock is created lazily (must be created
-    # inside a running event loop).
-    _startup_lock: asyncio.Lock | None = None
-
-    @classmethod
-    def _get_startup_lock(cls) -> asyncio.Lock:
-        if cls._startup_lock is None:
-            cls._startup_lock = asyncio.Lock()
-        return cls._startup_lock
-
     def __init__(self, player_name: str, server_host: str, server_port: int,
                  bt_manager: Optional[BluetoothManager] = None,
                  listen_port: int = 8928,
@@ -188,18 +176,16 @@ class SendspinClient:
             self.status['last_error'] = str(e)
             return
 
-        # Acquire class-level lock so only one daemon at a time sets PULSE_SINK
-        # and waits for PortAudio to open its PA stream.  This ensures each
-        # daemon routes audio to the correct BT sink.
-        async with SendspinClient._get_startup_lock():
-            await self._start_sendspin_locked(
-                BridgeDaemon, resolve_audio_device_for_sink, DaemonArgs, get_client_settings
-            )
+        # BridgeDaemon._route_stream_to_sink() handles PA routing on stream start —
+        # no lock or PULSE_SINK env manipulation needed.
+        await self._start_sendspin_inner(
+            BridgeDaemon, resolve_audio_device_for_sink, DaemonArgs, get_client_settings
+        )
 
-    async def _start_sendspin_locked(
+    async def _start_sendspin_inner(
         self, BridgeDaemon, resolve_audio_device_for_sink, DaemonArgs, get_client_settings
     ) -> None:
-        """Inner startup — called with _startup_lock held."""
+        """Start the in-process daemon."""
         try:
             # Configure BT audio sink if not yet done
             if self.bt_manager and self.bt_manager.connected and not self.bluetooth_sink_name:
@@ -269,84 +255,19 @@ class SendspinClient:
             )
             self.status['playing'] = False
 
-            # Snapshot existing sink-input IDs before starting — any new one
-            # that appears belongs to this daemon (lock guarantees exclusivity).
-            try:
-                from services.pulse import alist_sink_input_ids, amove_sink_input
-                existing_ids = await alist_sink_input_ids()
-            except Exception:
-                existing_ids = set()
+            self._daemon_task = asyncio.create_task(self._bridge_daemon.run())
 
-            # Set PULSE_SINK as a best-effort initial routing hint.
-            _old_pulse_sink = os.environ.get('PULSE_SINK')
-            if self.bluetooth_sink_name:
-                os.environ['PULSE_SINK'] = self.bluetooth_sink_name
-                logger.info(f"[{self.player_name}] PULSE_SINK={self.bluetooth_sink_name}")
+            def _on_daemon_done(t: asyncio.Task) -> None:
+                if not t.cancelled() and t.exception():
+                    logger.error(f"[{self.player_name}] BridgeDaemon ended with error: {t.exception()}")
 
-            try:
-                self._daemon_task = asyncio.create_task(self._bridge_daemon.run())
-
-                def _on_daemon_done(t: asyncio.Task) -> None:
-                    if not t.cancelled() and t.exception():
-                        logger.error(f"[{self.player_name}] BridgeDaemon ended with error: {t.exception()}")
-
-                self._daemon_task.add_done_callback(_on_daemon_done)
-                logger.info(f"Sendspin daemon started in-process for '{self.player_name}'")
-
-                # Wait for the new PA sink-input to appear, then explicitly
-                # move it to the correct BT sink.  This is event-driven:
-                # we release the lock as soon as the stream appears (typically
-                # ~4 s) rather than holding it for a fixed 6 s.
-                if self.bluetooth_sink_name and existing_ids is not None:
-                    await self._claim_sink_input(existing_ids, amove_sink_input)
-            finally:
-                # Restore PULSE_SINK regardless of outcome
-                if _old_pulse_sink is None:
-                    os.environ.pop('PULSE_SINK', None)
-                else:
-                    os.environ['PULSE_SINK'] = _old_pulse_sink
+            self._daemon_task.add_done_callback(_on_daemon_done)
+            logger.info(f"Sendspin daemon started in-process for '{self.player_name}'")
 
         except Exception as e:
             logger.error(f"Failed to start Sendspin daemon: {e}")
             self.status['last_error'] = str(e)
             self.status['server_connected'] = False
-
-    async def _claim_sink_input(self, existing_ids: set[int], amove_sink_input,
-                                 timeout: float = 12.0, poll_interval: float = 0.4) -> bool:
-        """Wait for a new PA sink-input to appear and move it to the correct BT sink.
-
-        Since _startup_lock is held by the caller, any new sink-input that
-        appears belongs exclusively to this daemon.  We poll until we see it
-        (event-driven) rather than sleeping a fixed duration.
-        """
-        deadline = asyncio.get_event_loop().time() + timeout
-        from services.pulse import alist_sink_input_ids  # avoid circular at module level
-        while asyncio.get_event_loop().time() < deadline:
-            await asyncio.sleep(poll_interval)
-            try:
-                current_ids = await alist_sink_input_ids()
-                new_ids = current_ids - existing_ids
-                if new_ids:
-                    new_id = next(iter(new_ids))
-                    ok = await amove_sink_input(new_id, self.bluetooth_sink_name)
-                    if ok:
-                        logger.info(
-                            "[%s] Claimed sink-input #%d → %s",
-                            self.player_name, new_id, self.bluetooth_sink_name,
-                        )
-                    else:
-                        logger.warning(
-                            "[%s] move-sink-input #%d → %s failed",
-                            self.player_name, new_id, self.bluetooth_sink_name,
-                        )
-                    return ok
-            except Exception as exc:
-                logger.debug("[%s] _claim_sink_input poll error: %s", self.player_name, exc)
-        logger.warning(
-            "[%s] _claim_sink_input: no new stream appeared within %.0f s",
-            self.player_name, timeout,
-        )
-        return False
 
     async def stop_sendspin(self) -> None:
         """Stop the in-process sendspin daemon task."""

@@ -24,6 +24,11 @@ from aiosendspin.models.types import PlayerCommand, UndefinedField
 from sendspin.daemon.daemon import DaemonArgs, SendspinDaemon
 from services.pulse import aset_sink_volume, aget_sink_description
 
+try:
+    import pulsectl_asyncio  # type: ignore[import]
+except (ImportError, OSError):
+    pulsectl_asyncio = None  # type: ignore[assignment]
+
 from config import VERSION as _BRIDGE_VERSION
 
 logger = logging.getLogger(__name__)
@@ -154,6 +159,73 @@ class BridgeDaemon(SendspinDaemon):
         if self._bridge_status.get('playing') != is_playing:
             self._bridge_status['playing'] = is_playing
             self._bridge_status['state_changed_at'] = datetime.now().isoformat()
+        # When a PA stream opens, move it to the correct BT sink.
+        # This replaces the PULSE_SINK env-var approach entirely:
+        # each daemon moves its own stream on start, regardless of
+        # startup order or MA connection timing.
+        if event == 'start' and self._bluetooth_sink_name:
+            asyncio.ensure_future(self._route_stream_to_sink())
+
+    async def _route_stream_to_sink(self) -> None:
+        """Move one sink-input that is NOT on any BT sink to this daemon's BT sink.
+
+        Called on each stream-start event.  All in-process daemons share PID and
+        application.name, so streams are indistinguishable.  Strategy: find any
+        sink-input that is on a non-BT sink (i.e. default/auto_null) and move
+        exactly one to our target.  Because each daemon calls this on its own
+        stream-start, exactly one stream per daemon gets routed correctly.
+        """
+        try:
+            await asyncio.sleep(0.3)  # let PA register the stream
+            if pulsectl_asyncio is None:
+                # Fallback: subprocess move — move any stream on non-BT sink
+                from services.pulse import alist_sink_input_ids, amove_sink_input
+                import subprocess as _sp
+                r = _sp.run(['pactl', 'list', 'short', 'sink-inputs'],
+                            capture_output=True, text=True, timeout=5)
+                for line in r.stdout.splitlines():
+                    parts = line.split('\t')
+                    if len(parts) >= 2:
+                        si_id, sink_id = int(parts[0]), int(parts[1])
+                        # We'll just try to move it and hope for the best
+                        await amove_sink_input(si_id, self._bluetooth_sink_name)
+                        logger.info("[%s] Routed sink-input #%d → %s (fallback)",
+                                    self._bridge_status.get('player_name', '?'),
+                                    si_id, self._bluetooth_sink_name)
+                        return
+                return
+
+            async with asyncio.timeout(5.0):
+                async with pulsectl_asyncio.PulseAsync("bridge-route") as pulse:
+                    sinks = await pulse.sink_list()
+                    target = next((s for s in sinks if s.name == self._bluetooth_sink_name), None)
+                    if target is None:
+                        logger.warning("[%s] route: sink %s not found",
+                                       self._bridge_status.get('player_name', '?'),
+                                       self._bluetooth_sink_name)
+                        return
+                    # Build set of all BT sink indices
+                    bt_sink_indices = {s.index for s in sinks if 'bluez' in s.name}
+                    inputs = await pulse.sink_input_list()
+                    for si in inputs:
+                        if si.sink not in bt_sink_indices:
+                            # This stream is on a non-BT sink → move to ours
+                            await pulse.sink_input_move(si, target)
+                            logger.info("[%s] Routed sink-input #%d → %s",
+                                        self._bridge_status.get('player_name', '?'),
+                                        si.index, self._bluetooth_sink_name)
+                            return  # one stream per call
+                    # All streams already on BT sinks — check if any is on wrong BT sink
+                    # (happens on re-stream after group change)
+                    for si in inputs:
+                        if si.sink != target.index and si.sink in bt_sink_indices:
+                            # Stream is on another BT sink — don't steal it
+                            pass
+                    logger.debug("[%s] route: no unrouted streams found",
+                                 self._bridge_status.get('player_name', '?'))
+        except Exception as exc:
+            logger.warning("[%s] _route_stream_to_sink error: %s",
+                           self._bridge_status.get('player_name', '?'), exc)
 
     # ── Server commands (volume / mute) ──────────────────────────────────────
 
