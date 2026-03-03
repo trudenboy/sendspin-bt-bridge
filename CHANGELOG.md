@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.2] - 2026-03-03
+
+### Fixed
+- **D-Bus monitor callback signature**: `dbus-fast` requires exactly 3 positional
+  parameters for `on_properties_changed` callback, but the handler had 4 (with default).
+  This caused `reply_notify must be a function with 3 positional parameters` error
+  every 10 seconds for all devices. Fixed via closure factory pattern.
+
+### Added
+- GitHub repository link (🛠 GitHub) in web UI header
+- Sidebar navigation on documentation homepage (removed splash template)
+- Configuration link in docs hero actions (RU/EN)
+
 ## [2.3.1] - 2026-03-03
 
 ### Security

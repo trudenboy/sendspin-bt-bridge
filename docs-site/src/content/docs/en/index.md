@@ -1,7 +1,6 @@
 ---
 title: Sendspin Bluetooth Bridge
 description: Bluetooth bridge for Music Assistant — connects Bluetooth speakers to the Sendspin protocol
-template: splash
 hero:
   tagline: Connect Bluetooth speakers to Music Assistant — no extra hardware, no cloud
   image:
@@ -11,6 +10,9 @@ hero:
       link: /sendspin-bt-bridge/en/installation/ha-addon/
       icon: right-arrow
       variant: primary
+    - text: Configuration
+      link: /sendspin-bt-bridge/en/configuration/
+      icon: setting
     - text: GitHub
       link: https://github.com/trudenboy/sendspin-bt-bridge
       icon: github

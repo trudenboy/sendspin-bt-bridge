@@ -17,7 +17,7 @@ import threading
 import uuid as _uuid
 from pathlib import Path
 
-VERSION = "2.3.1"
+VERSION = "2.3.2"
 BUILD_DATE = "2026-03-03"
 
 DEFAULT_CONFIG = {
