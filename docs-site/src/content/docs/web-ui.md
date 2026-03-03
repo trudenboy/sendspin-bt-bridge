@@ -9,6 +9,8 @@ import { Aside } from '@astrojs/starlight/components';
 
 ## Панель управления
 
+![Панель управления Sendspin Bluetooth Bridge с 6 карточками устройств](/sendspin-bt-bridge/screenshots/screenshot-dashboard-full.png)
+
 ### Групповые элементы управления
 
 В верхней части страницы расположена панель групповых операций:
@@ -20,6 +22,8 @@ import { Aside } from '@astrojs/starlight/components';
 ### Карточка устройства
 
 Каждое Bluetooth-устройство отображается в отдельной карточке:
+
+![Карточка устройства ENEBY20 со статусом Bluetooth, сервера, громкостью и синхронизацией](/sendspin-bt-bridge/screenshots/screenshot-device-card.png)
 
 | Секция | Содержание |
 |---|---|
@@ -46,6 +50,10 @@ import { Aside } from '@astrojs/starlight/components';
 </Aside>
 
 ## Конфигурация
+
+Раскрывающийся раздел **⚙️ Configuration** позволяет изменить настройки без редактирования файла:
+
+![Раздел конфигурации с полями настроек и таблицей устройств](/sendspin-bt-bridge/screenshots/screenshot-config.png)
 
 Раскрывающийся раздел **⚙️ Configuration** позволяет изменить настройки без редактирования файла:
 
