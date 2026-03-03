@@ -40,7 +40,19 @@ logger = logging.getLogger(__name__)
 
 class SendspinClient:
     """Wrapper for sendspin CLI with status tracking"""
-    
+
+    # Class-level lock: serialises daemon PA-stream creation so that the
+    # PULSE_SINK env-var is held exclusively while each daemon opens its
+    # PortAudio stream.  asyncio.Lock is created lazily (must be created
+    # inside a running event loop).
+    _startup_lock: asyncio.Lock | None = None
+
+    @classmethod
+    def _get_startup_lock(cls) -> asyncio.Lock:
+        if cls._startup_lock is None:
+            cls._startup_lock = asyncio.Lock()
+        return cls._startup_lock
+
     def __init__(self, player_name: str, server_host: str, server_port: int,
                  bt_manager: Optional[BluetoothManager] = None,
                  listen_port: int = 8928,
@@ -176,6 +188,18 @@ class SendspinClient:
             self.status['last_error'] = str(e)
             return
 
+        # Acquire class-level lock so only one daemon at a time sets PULSE_SINK
+        # and waits for PortAudio to open its PA stream.  This ensures each
+        # daemon routes audio to the correct BT sink.
+        async with SendspinClient._get_startup_lock():
+            await self._start_sendspin_locked(
+                BridgeDaemon, resolve_audio_device_for_sink, DaemonArgs, get_client_settings
+            )
+
+    async def _start_sendspin_locked(
+        self, BridgeDaemon, resolve_audio_device_for_sink, DaemonArgs, get_client_settings
+    ) -> None:
+        """Inner startup — called with _startup_lock held."""
         try:
             # Configure BT audio sink if not yet done
             if self.bt_manager and self.bt_manager.connected and not self.bluetooth_sink_name:
@@ -202,7 +226,8 @@ class SendspinClient:
             else:
                 logger.info(f"Starting Sendspin player '{self.player_name}' with auto-discovery (port {self.listen_port})")
 
-            # Resolve audio device matching the BT sink
+            # Resolve audio device (used for DaemonArgs; may be 'default' if BT sinks
+            # are not exposed as individual PortAudio devices in this container).
             audio_device = await resolve_audio_device_for_sink(self.bluetooth_sink_name)
             if audio_device:
                 logger.info(f"[{self.player_name}] Audio device resolved: {audio_device.name!r} (index {audio_device.index}) for sink {self.bluetooth_sink_name!r}")
@@ -244,14 +269,33 @@ class SendspinClient:
             )
             self.status['playing'] = False
 
-            self._daemon_task = asyncio.create_task(self._bridge_daemon.run())
+            # Set PULSE_SINK so PortAudio's PulseAudio backend routes this
+            # daemon's stream to the correct BT sink.  PortAudio reads the
+            # env-var in pa_stream_connect_playback(), which is called during
+            # Pa_OpenStream() ~1-2 s after daemon.run() begins.
+            _old_pulse_sink = os.environ.get('PULSE_SINK')
+            if self.bluetooth_sink_name:
+                os.environ['PULSE_SINK'] = self.bluetooth_sink_name
+                logger.info(f"[{self.player_name}] PULSE_SINK={self.bluetooth_sink_name}")
 
-            def _on_daemon_done(t: asyncio.Task) -> None:
-                if not t.cancelled() and t.exception():
-                    logger.error(f"[{self.player_name}] BridgeDaemon ended with error: {t.exception()}")
+            try:
+                self._daemon_task = asyncio.create_task(self._bridge_daemon.run())
 
-            self._daemon_task.add_done_callback(_on_daemon_done)
-            logger.info(f"Sendspin daemon started in-process for '{self.player_name}'")
+                def _on_daemon_done(t: asyncio.Task) -> None:
+                    if not t.cancelled() and t.exception():
+                        logger.error(f"[{self.player_name}] BridgeDaemon ended with error: {t.exception()}")
+
+                self._daemon_task.add_done_callback(_on_daemon_done)
+                logger.info(f"Sendspin daemon started in-process for '{self.player_name}'")
+
+                # Hold PULSE_SINK for 3 s to ensure Pa_OpenStream reads it.
+                await asyncio.sleep(3.0)
+            finally:
+                # Restore PULSE_SINK regardless of outcome
+                if _old_pulse_sink is None:
+                    os.environ.pop('PULSE_SINK', None)
+                else:
+                    os.environ['PULSE_SINK'] = _old_pulse_sink
 
         except Exception as e:
             logger.error(f"Failed to start Sendspin daemon: {e}")

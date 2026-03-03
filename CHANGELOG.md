@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.3] - 2026-03-03
+
+### Fixed
+- **Group audio routing**: each daemon now routes to its own BT speaker via `PULSE_SINK` env var.
+  sounddevice/PortAudio in the container only exposes a single `default` device regardless of
+  BT sink names. The real routing mechanism is PortAudio's PulseAudio backend reading
+  `PULSE_SINK` at `pa_stream_connect_playback()` time (~1–2 s after daemon start).
+  A class-level `asyncio.Lock` serialises daemon startup so only one daemon at a time
+  holds its `PULSE_SINK` value, preventing race conditions between concurrent instances.
+
 ## [2.1.2] - 2026-03-03
 
 ### Fixed
