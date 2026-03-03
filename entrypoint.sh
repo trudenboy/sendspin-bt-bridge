@@ -72,6 +72,10 @@ config = {
     'BT_MAX_RECONNECT_FAILS': opts.get('bt_max_reconnect_fails', 0),
 }
 
+# Normalize: devices without explicit 'enabled' field default to True
+for dev in config.get('BLUETOOTH_DEVICES', []):
+    dev.setdefault('enabled', True)
+
 # Preserve runtime state (volumes, release/reclaim flags) from previous config
 try:
     with open('/data/config.json') as f:
@@ -80,12 +84,6 @@ try:
         config['LAST_VOLUMES'] = existing['LAST_VOLUMES']
     elif 'LAST_VOLUME' in existing:
         config['LAST_VOLUME'] = existing['LAST_VOLUME']
-    # Preserve enabled flags (release/reclaim) per device, matched by MAC
-    ex_by_mac = {d.get('mac', ''): d for d in existing.get('BLUETOOTH_DEVICES', []) if d.get('mac')}
-    for dev in config.get('BLUETOOTH_DEVICES', []):
-        mac = dev.get('mac', '')
-        if mac in ex_by_mac and 'enabled' in ex_by_mac[mac]:
-            dev['enabled'] = ex_by_mac[mac]['enabled']
 except (FileNotFoundError, json.JSONDecodeError):
     pass
 

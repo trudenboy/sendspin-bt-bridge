@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.5] - 2026-03-03
+
+### Fixed
+- **Enabled toggle sync**: bridge UI `enabled` toggle and HA addon config page now stay in sync
+  - `persist_device_enabled()` now writes to both `config.json` and `/data/options.json`, so toggling
+    in the bridge UI is immediately reflected on the HA config page
+  - On startup, each device's actual `enabled` state is synced to `options.json` (fixes devices showing
+    as disabled in HA config page when they are enabled in the bridge)
+  - `entrypoint.sh` no longer overrides `enabled` from old `config.json` on restart — `options.json`
+    is now the authoritative source; devices without explicit `enabled` in `options.json` default to `true`
+
 ## [2.1.4] - 2026-03-03
 
 ### Added
