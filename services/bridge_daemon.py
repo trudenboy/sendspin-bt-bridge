@@ -87,11 +87,6 @@ class BridgeDaemon(SendspinDaemon):
         from sendspin.audio import detect_supported_audio_formats
 
         try:
-            from aiosendspin_mpris import MPRIS_AVAILABLE
-        except ImportError:
-            MPRIS_AVAILABLE = False
-
-        try:
             sw_ver = f"aiosendspin {_pkg_version('aiosendspin')}"
         except Exception:
             sw_ver = "aiosendspin"
@@ -103,9 +98,8 @@ class BridgeDaemon(SendspinDaemon):
         )
 
         assert self._audio_handler is not None
-        client_roles = [Roles.PLAYER]
-        if MPRIS_AVAILABLE and self._args.use_mpris:
-            client_roles.extend([Roles.METADATA, Roles.CONTROLLER])
+        client_roles = [Roles.PLAYER, Roles.METADATA, Roles.CONTROLLER]
+        # MPRIS is handled separately (requires D-Bus session bus, not available in subprocesses)
 
         supported_formats = detect_supported_audio_formats(self._args.audio_device.index)
         if self._args.preferred_format is not None:
