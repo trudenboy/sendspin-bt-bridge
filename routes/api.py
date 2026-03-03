@@ -591,11 +591,14 @@ def api_config():
         return jsonify({"error": "Invalid JSON body"}), 400
 
     # Validate BLUETOOTH_DEVICES entries
+    bt_devices = config.get("BLUETOOTH_DEVICES", [])
+    if not isinstance(bt_devices, list):
+        return jsonify({"error": "BLUETOOTH_DEVICES must be an array"}), 400
     _MAC_RE = re.compile(r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")
-    for dev in config.get("BLUETOOTH_DEVICES", []):
+    for dev in bt_devices:
         if not isinstance(dev, dict):
             return jsonify({"error": "Each device must be an object"}), 400
-        mac = dev.get("mac", "")
+        mac = str(dev.get("mac", ""))
         if mac and not _MAC_RE.match(mac):
             return jsonify({"error": f"Invalid MAC address: {mac}"}), 400
         lp = dev.get("listen_port")

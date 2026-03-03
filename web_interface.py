@@ -33,17 +33,27 @@ app.secret_key = ensure_secret_key(_startup_config)
 _auth_enabled: bool = bool(_startup_config.get("AUTH_ENABLED", False))
 
 
+_TRUSTED_PROXIES = {"127.0.0.1", "::1", "172.30.32.2"}
+
+
 class _IngressMiddleware:
     """WSGI middleware: sets SCRIPT_NAME from X-Ingress-Path header before Flask
-    creates its URL adapter, so that url_for() correctly prefixes all URLs."""
+    creates its URL adapter, so that url_for() correctly prefixes all URLs.
+
+    Only honors the header from trusted HA Supervisor proxy addresses and
+    validates the value is a safe absolute path (single leading ``/``).
+    """
 
     def __init__(self, wsgi_app):
         self._app = wsgi_app
 
     def __call__(self, environ, start_response):
-        ingress_path = environ.get("HTTP_X_INGRESS_PATH", "").rstrip("/")
-        if ingress_path:
-            environ["SCRIPT_NAME"] = ingress_path
+        peer = environ.get("REMOTE_ADDR", "")
+        if peer in _TRUSTED_PROXIES:
+            ingress_path = environ.get("HTTP_X_INGRESS_PATH", "").rstrip("/")
+            # Only accept a single-leading-slash absolute path (no //, no scheme)
+            if ingress_path and ingress_path.startswith("/") and not ingress_path.startswith("//"):
+                environ["SCRIPT_NAME"] = ingress_path
         return self._app(environ, start_response)
 
 
@@ -72,7 +82,7 @@ def _check_auth():
     # local Supervisor proxy (prevents spoofing from LAN clients).
     if request.headers.get("X-Ingress-Path"):
         peer = request.remote_addr or ""
-        if peer in ("127.0.0.1", "::1", "172.30.32.2"):
+        if peer in _TRUSTED_PROXIES:
             return
 
     # Static assets and public API endpoints are always reachable
