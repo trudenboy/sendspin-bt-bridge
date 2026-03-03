@@ -5,6 +5,45 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.0] - 2026-03-03
+
+### Security
+- Auth bypass: X-Ingress-Path trusted only from localhost (prevents LAN spoofing)
+- Wildcard CORS removed (same-origin only)
+- Timing-safe password comparison via `hmac.compare_digest()`
+- Config POST: MAC validation, port range check, key whitelist
+
+### Fixed
+- PID 1 signals: `init: true` for proper SIGTERM forwarding
+- Routing retry: 3 attempts with backoff on `move-sink-input` failure
+- Stale claimed sink-inputs pruned before routing
+- dbus.mainloop.glib NameError in MPRIS Identity registration
+- BT scan process leak on timeout
+- Config .tmp cleanup on write failure
+- Shell variable quoting in entrypoint.sh
+
+### Changed
+- Removed unused thread-safe status methods (dead code)
+- Silent exceptions now logged at DEBUG level
+- Healthcheck uses WEB_PORT env var
+
+## [2.2.3] - 2026-03-03
+
+### Fixed
+- Sink-input dedup: `_claimed_sink_inputs` set + asyncio.Lock prevents two daemons
+  from routing the same sink-input
+
+## [2.2.2] - 2026-03-03
+
+### Changed
+- Audio routing: replaced null-sink/loopback with `pactl move-sink-input`
+  (PipeWire-compatible). Removed ~80 lines of incompatible module-loading code.
+
+## [2.2.0] - 2026-03-03
+
+### Added
+- Multi-speaker null-sink routing attempt (failed on PipeWire — superseded by v2.2.2)
+
 ## [2.1.8] - 2026-03-03
 
 ### Fixed
