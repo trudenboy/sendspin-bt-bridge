@@ -947,6 +947,42 @@ def api_diagnostics():
             })
         diag['devices'] = device_diag
 
+        # PA sink-inputs with properties (for routing diagnostics)
+        try:
+            r = subprocess.run(
+                ['pactl', 'list', 'sink-inputs'],
+                capture_output=True, text=True, timeout=5
+            )
+            sink_inputs = []
+            current: dict = {}
+            for line in r.stdout.splitlines():
+                line = line.strip()
+                if line.startswith('Sink Input #'):
+                    if current:
+                        sink_inputs.append(current)
+                    current = {'id': line.split('#')[1]}
+                elif ':' in line:
+                    key, _, val = line.partition(':')
+                    key = key.strip().lower().replace(' ', '_')
+                    if key in ('sink', 'state') or 'application' in key or 'media' in key:
+                        current[key] = val.strip()
+            if current:
+                sink_inputs.append(current)
+            diag['sink_inputs'] = sink_inputs
+        except Exception as e:
+            diag['sink_inputs'] = [{'error': str(e)}]
+
+        # PortAudio devices available inside the container
+        try:
+            from sendspin.audio import query_devices
+            diag['portaudio_devices'] = [
+                {'index': d.index, 'name': d.name, 'is_default': d.is_default}
+                for d in query_devices()
+                if d.output_channels > 0
+            ]
+        except Exception as e:
+            diag['portaudio_devices'] = [{'error': str(e)}]
+
         return jsonify(diag)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
