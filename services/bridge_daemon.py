@@ -155,14 +155,13 @@ class BridgeDaemon(SendspinDaemon):
 
     def _on_stream_event(self, event: str) -> None:
         super()._on_stream_event(event)
+        logger.info("[%s] _on_stream_event(%s) bt_sink=%s",
+                    self._bridge_status.get('player_name', '?'), event, self._bluetooth_sink_name)
         is_playing = event == 'start'
         if self._bridge_status.get('playing') != is_playing:
             self._bridge_status['playing'] = is_playing
             self._bridge_status['state_changed_at'] = datetime.now().isoformat()
         # When a PA stream opens, move it to the correct BT sink.
-        # This replaces the PULSE_SINK env-var approach entirely:
-        # each daemon moves its own stream on start, regardless of
-        # startup order or MA connection timing.
         if event == 'start' and self._bluetooth_sink_name:
             asyncio.ensure_future(self._route_stream_to_sink())
 
@@ -175,6 +174,8 @@ class BridgeDaemon(SendspinDaemon):
         exactly one to our target.  Because each daemon calls this on its own
         stream-start, exactly one stream per daemon gets routed correctly.
         """
+        player = self._bridge_status.get('player_name', '?')
+        logger.info("[%s] _route_stream_to_sink starting, target=%s", player, self._bluetooth_sink_name)
         try:
             await asyncio.sleep(0.3)  # let PA register the stream
             if pulsectl_asyncio is None:
