@@ -42,8 +42,9 @@ def load_adapter_name_cache() -> None:
             for a in _cfg.get('BLUETOOTH_ADAPTERS', [])
             if a.get('mac') or a.get('id')
         }
-    except Exception:
+    except Exception as _exc:
         _adapter_name_cache = {}
+        logger.debug("Could not load adapter name cache: %s", _exc)
     _adapter_cache_loaded = True
 
 

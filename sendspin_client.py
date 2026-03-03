@@ -93,18 +93,7 @@ class SendspinClient:
         self._daemon_task: Optional[asyncio.Task] = None
         self._bridge_daemon = None  # BridgeDaemon instance (in-process sendspin)
         self._monitor_task: Optional[asyncio.Task] = None
-        self._status_lock = threading.Lock()  # protects concurrent reads/writes of self.status
 
-    def update_status(self, **kwargs) -> None:
-        """Thread-safe update of one or more status fields."""
-        with self._status_lock:
-            self.status.update(kwargs)
-
-    def get_status(self) -> dict:
-        """Return a shallow copy of status dict for safe cross-thread reads."""
-        with self._status_lock:
-            return dict(self.status)
-    
     def get_ip_address(self) -> str:
         """Get the primary IP address of this machine"""
         try:
@@ -495,7 +484,8 @@ async def main():
     # Register MPRIS Identity services on the session bus (one per player)
     if _DBUS_MPRIS_AVAILABLE:
         try:
-            dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
+            import dbus.mainloop.glib as _dbus_ml
+            _dbus_ml.DBusGMainLoop(set_as_default=True)
             for _i, _c in enumerate(clients):
                 MprisIdentityService(_c.player_name, _i)
             threading.Thread(target=_GLib.MainLoop().run, daemon=True, name='mpris-glib').start()

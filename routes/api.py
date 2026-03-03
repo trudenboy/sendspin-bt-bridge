@@ -296,10 +296,10 @@ def pause_all():
                 elif action == 'pause' and pb == 'Playing':
                     player.Pause()
                     count += 1
-            except Exception:
-                pass
-    except Exception:
-        pass
+            except Exception as _exc:
+                logger.debug("MPRIS play/pause skipped for %s: %s", sname, _exc)
+    except Exception as _exc:
+        logger.debug("MPRIS play/pause unavailable: %s", _exc)
     return jsonify({'success': True, 'action': action, 'count': count})
 
 
@@ -341,10 +341,10 @@ def pause_player():
                 elif action == 'pause' and pb == 'Playing':
                     player_iface.Pause()
                     count += 1
-            except Exception:
-                pass
-    except Exception:
-        pass
+            except Exception as _exc:
+                logger.debug("MPRIS pause skipped for %s: %s", sname, _exc)
+    except Exception as _exc:
+        logger.debug("MPRIS pause unavailable: %s", _exc)
     return jsonify({'success': True, 'action': action, 'count': count})
 
 
@@ -535,6 +535,46 @@ def api_config():
 
     # POST
     config = request.get_json()
+    if not isinstance(config, dict):
+        return jsonify({'error': 'Invalid JSON body'}), 400
+
+    # Validate BLUETOOTH_DEVICES entries
+    _MAC_RE = re.compile(r'^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$')
+    for dev in config.get('BLUETOOTH_DEVICES', []):
+        if not isinstance(dev, dict):
+            return jsonify({'error': 'Each device must be an object'}), 400
+        mac = dev.get('mac', '')
+        if mac and not _MAC_RE.match(mac):
+            return jsonify({'error': f'Invalid MAC address: {mac}'}), 400
+        lp = dev.get('listen_port')
+        if lp is not None:
+            try:
+                lp = int(lp)
+                if not (1024 <= lp <= 65535):
+                    raise ValueError
+            except (ValueError, TypeError):
+                return jsonify({'error': f'Invalid listen_port: {dev.get("listen_port")}'}), 400
+
+    # Validate top-level port
+    sp = config.get('SENDSPIN_PORT')
+    if sp is not None:
+        try:
+            sp = int(sp)
+            if not (1 <= sp <= 65535):
+                raise ValueError
+        except (ValueError, TypeError):
+            return jsonify({'error': f'Invalid SENDSPIN_PORT: {config.get("SENDSPIN_PORT")}'}), 400
+
+    # Strip unknown top-level keys (whitelist)
+    _ALLOWED_POST_KEYS = {
+        'SENDSPIN_SERVER', 'SENDSPIN_PORT', 'BRIDGE_NAME', 'BRIDGE_NAME_SUFFIX',
+        'BLUETOOTH_MAC', 'BLUETOOTH_DEVICES', 'BLUETOOTH_ADAPTERS', 'TZ',
+        'PULSE_LATENCY_MSEC', 'PREFER_SBC_CODEC', 'BT_CHECK_INTERVAL',
+        'BT_MAX_RECONNECT_FAILS', 'AUTH_ENABLED', 'LAST_VOLUMES', 'LAST_VOLUME',
+        '_new_device_default_volume',
+    }
+    config = {k: v for k, v in config.items() if k in _ALLOWED_POST_KEYS}
+
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     with _config_lock:
         existing = {}
@@ -546,8 +586,8 @@ def api_config():
                 for key in ('LAST_VOLUMES', 'LAST_VOLUME', 'AUTH_PASSWORD_HASH', 'SECRET_KEY'):
                     if key in existing and key not in config:
                         config[key] = existing[key]
-            except Exception:
-                pass
+            except Exception as _exc:
+                logger.debug("Could not read existing config for merge: %s", _exc)
 
         old_devices = {d['mac']: d for d in existing.get('BLUETOOTH_DEVICES', []) if d.get('mac')}
         new_devices = {d['mac']: d for d in config.get('BLUETOOTH_DEVICES', []) if d.get('mac')}
@@ -574,9 +614,17 @@ def api_config():
                     last_volumes[mac] = default_vol
 
         tmp = str(CONFIG_FILE) + '.tmp'
-        with open(tmp, 'w') as f:
-            json.dump(config, f, indent=2)
-        os.replace(tmp, str(CONFIG_FILE))
+        try:
+            with open(tmp, 'w') as f:
+                json.dump(config, f, indent=2)
+            os.replace(tmp, str(CONFIG_FILE))
+        except Exception:
+            # Remove partial temp file on failure
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+            raise
 
     # Invalidate adapter name cache so next status poll picks up changes
     load_adapter_name_cache()
@@ -760,19 +808,24 @@ def api_bt_scan():
             stderr=subprocess.STDOUT,
             text=True,
         )
-        if adapter_macs:
-            init_cmds: list[str] = []
-            for m in adapter_macs:
-                init_cmds.extend([f'select {m}', 'power on', 'scan on'])
-        else:
-            init_cmds = ['power on', 'agent on', 'scan on']
-        proc.stdin.write('\n'.join(init_cmds) + '\n')
-        proc.stdin.flush()
-        time.sleep(10)
-        proc.stdin.write('scan off\n' + '\n'.join(post_scan_cmds) + '\n')
-        proc.stdin.flush()
-        time.sleep(1)
-        result_stdout, _ = proc.communicate(timeout=bt_timeout + 4)
+        try:
+            if adapter_macs:
+                init_cmds: list[str] = []
+                for m in adapter_macs:
+                    init_cmds.extend([f'select {m}', 'power on', 'scan on'])
+            else:
+                init_cmds = ['power on', 'agent on', 'scan on']
+            proc.stdin.write('\n'.join(init_cmds) + '\n')
+            proc.stdin.flush()
+            time.sleep(10)
+            proc.stdin.write('scan off\n' + '\n'.join(post_scan_cmds) + '\n')
+            proc.stdin.flush()
+            time.sleep(1)
+            result_stdout, _ = proc.communicate(timeout=bt_timeout + 4)
+        except Exception:
+            proc.kill()
+            proc.wait()
+            raise
 
         class _R:
             stdout = result_stdout

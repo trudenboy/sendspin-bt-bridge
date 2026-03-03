@@ -12,7 +12,6 @@ import logging
 import os
 
 from flask import Flask, jsonify, redirect, request, session, url_for
-from flask_cors import CORS
 from waitress import serve
 
 from config import ensure_secret_key, load_config
@@ -22,7 +21,6 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__, template_folder='templates', static_folder='static')
-CORS(app)
 
 # Set secret key (generated once and persisted to config.json so sessions
 # survive container restarts).
@@ -69,9 +67,12 @@ def _check_auth():
     if not _auth_enabled:
         return  # auth disabled — allow all
 
-    # HA Ingress: the proxy already authenticated the user
+    # HA Ingress: trust the header only when the request originates from the
+    # local Supervisor proxy (prevents spoofing from LAN clients).
     if request.headers.get('X-Ingress-Path'):
-        return
+        peer = request.remote_addr or ''
+        if peer in ('127.0.0.1', '::1', '172.30.32.2'):
+            return
 
     # Static assets and public API endpoints are always reachable
     if request.path.startswith('/static/'):

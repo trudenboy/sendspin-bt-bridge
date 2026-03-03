@@ -5,8 +5,8 @@ Provides the config file path, a process-wide lock for atomic writes,
 and helpers for loading/persisting configuration.
 """
 
-VERSION = "2.2.3"
-BUILD_DATE = "2026-03-02"
+VERSION = "2.3.0"
+BUILD_DATE = "2026-03-03"
 
 DEFAULT_CONFIG = {
     'SENDSPIN_SERVER': 'auto',
@@ -25,6 +25,7 @@ DEFAULT_CONFIG = {
 }
 
 import hashlib
+import hmac as _hmac
 import json
 import logging
 import os
@@ -116,7 +117,7 @@ def check_password(plain: str, stored: str) -> bool:
         salt_hex, h_hex = stored.split(':', 1)
         salt = bytes.fromhex(salt_hex)
         h = hashlib.pbkdf2_hmac('sha256', plain.encode(), salt, _PBKDF2_ITERS)
-        return h.hex() == h_hex
+        return _hmac.compare_digest(h.hex(), h_hex)
     except Exception:
         return False
 

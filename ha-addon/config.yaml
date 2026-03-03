@@ -1,6 +1,6 @@
 ---
 name: "Sendspin Bluetooth Bridge"
-version: "2.2.3"
+version: "2.3.0"
 slug: "sendspin_bt_bridge"
 description: "Bridge Music Assistant Sendspin protocol to Bluetooth speakers"
 url: "https://github.com/trudenboy/sendspin-bt-bridge"
@@ -21,7 +21,7 @@ privileged:
 devices:
   - /dev/bus/usb
 audio: true
-init: false
+init: true
 ingress: true
 ingress_port: 8080
 panel_icon: mdi:bluetooth-audio
