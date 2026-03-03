@@ -7,11 +7,11 @@ hero:
     file: ../../assets/logo.svg
   actions:
     - text: Install
-      link: /sendspin-bt-bridge/en/installation/ha-addon/
+      link: /sendspin-bt-bridge/installation/ha-addon/
       icon: right-arrow
       variant: primary
     - text: Configuration
-      link: /sendspin-bt-bridge/en/configuration/
+      link: /sendspin-bt-bridge/configuration/
       icon: setting
     - text: GitHub
       link: https://github.com/trudenboy/sendspin-bt-bridge
@@ -58,8 +58,8 @@ import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
 | Config | HA panel + web UI | Web UI at :8080 | Web UI at :8080 |
 
 <CardGrid>
-  <LinkCard title="Install: Home Assistant Addon" href="/sendspin-bt-bridge/en/installation/ha-addon/" />
-  <LinkCard title="Install: Docker Compose" href="/sendspin-bt-bridge/en/installation/docker/" />
-  <LinkCard title="Install: Proxmox LXC" href="/sendspin-bt-bridge/en/installation/lxc/" />
-  <LinkCard title="Configuration" href="/sendspin-bt-bridge/en/configuration/" />
+  <LinkCard title="Install: Home Assistant Addon" href="/sendspin-bt-bridge/installation/ha-addon/" />
+  <LinkCard title="Install: Docker Compose" href="/sendspin-bt-bridge/installation/docker/" />
+  <LinkCard title="Install: Proxmox LXC" href="/sendspin-bt-bridge/installation/lxc/" />
+  <LinkCard title="Configuration" href="/sendspin-bt-bridge/configuration/" />
 </CardGrid>
