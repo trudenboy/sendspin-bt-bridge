@@ -30,14 +30,25 @@ sendspin_client.py    # Entry point: SendspinClient + main()
 bluetooth_manager.py  # BluetoothManager — BT connections via bluetoothctl
 config.py             # Configuration, shared lock, load_config()
 mpris.py              # MPRIS D-Bus integration, MprisIdentityService
-web_interface.py      # Flask API + Waitress server
-templates/index.html  # HTML template
-static/style.css      # Styles
-static/app.js         # JavaScript
+state.py              # Shared runtime state (list of SendspinClient instances)
+
+services/
+  bridge_daemon.py    # BridgeDaemon — runs inside each subprocess; stream events, sink routing
+  daemon_process.py   # Subprocess entry point: reads args, runs BridgeDaemon, emits JSON status
+  bluetooth.py        # Async BT helpers (D-Bus monitor)
+  pulse.py            # PulseAudio helpers (pulsectl + pactl): find sink, move sink-inputs
+
+routes/
+  api.py              # All /api/* Flask endpoints
+  views.py            # HTML page renders
+  auth.py             # Optional web UI password protection
+
 entrypoint.sh         # Docker entrypoint: D-Bus, audio init
 ha-addon/             # Home Assistant addon configuration
 lxc/                  # Proxmox LXC install script
 ```
+
+> **Architecture note**: each Bluetooth speaker runs as an isolated asyncio subprocess (`services/daemon_process.py`) with `PULSE_SINK=<bt_sink_name>` in its environment. This gives every speaker its own PulseAudio context so audio routes to the correct speaker from the first sample, without any `move-sink-input` calls at startup.
 
 ## Manual Test Checklist
 

@@ -290,9 +290,10 @@ The web UI at `http://your-host:8080` (or via HA Ingress) provides:
 │                                     │
 │  ┌─────────────────────────────┐    │
 │  │  SendspinClient (per device)│    │
-│  │  · sendspin CLI subprocess  │    │
+│  │  · daemon subprocess        │    │
+│  │    (PULSE_SINK=bt_sink)     │    │
 │  │  · playback state tracking  │    │
-│  │  · volume sync via pactl    │    │
+│  │  · volume sync via IPC      │    │
 │  └─────────────────────────────┘    │
 │  ┌─────────────────────────────┐    │
 │  │  BluetoothManager           │    │

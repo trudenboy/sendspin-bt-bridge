@@ -23,7 +23,7 @@ import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
 
 ## What is it?
 
-**Sendspin Bluetooth Bridge** is a bridge between [Music Assistant](https://www.music-assistant.io/) and Bluetooth speakers. It runs the `sendspin` CLI player as a subprocess, manages Bluetooth connections via `bluetoothctl`, and provides a web interface for monitoring and configuration. Runs on Raspberry Pi, in Home Assistant, Docker, and Proxmox LXC.
+**Sendspin Bluetooth Bridge** is a bridge between [Music Assistant](https://www.music-assistant.io/) and Bluetooth speakers. It uses the `aiosendspin` Python library for audio playback, manages Bluetooth connections via `bluetoothctl`, and provides a web interface for monitoring and configuration. Each Bluetooth speaker runs as an isolated subprocess with its own PulseAudio context for accurate multi-speaker routing. Runs on Raspberry Pi, in Home Assistant, Docker, and Proxmox LXC.
 
 ## Features
 

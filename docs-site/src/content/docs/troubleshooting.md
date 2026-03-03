@@ -3,6 +3,17 @@ title: Troubleshooting
 description: Solving common issues with Sendspin Bluetooth Bridge
 ---
 
+## Audio plays from one speaker only
+
+When a Bluetooth speaker disconnects and reconnects, PulseAudio's `module-rescue-streams` automatically moves all active audio streams to the default sink. On reconnect those streams don't return automatically.
+
+**Self-healing**: the bridge corrects this automatically. On the next playback start after a reconnect, it detects any misrouted streams and moves them back to the correct speaker. You may see a brief log message like `Corrected 1 sink-input(s) to bluez_sink.XX_XX...`.
+
+If it keeps happening consistently:
+1. Check logs: `docker logs sendspin-client | grep -i "sink\|routing\|corrected"`
+2. Verify the BT sink is properly detected: `docker exec sendspin-client pactl list sinks short`
+3. Try restarting the container after the speaker reconnects
+
 ## Music Assistant doesn't see the player
 
 1. Sendspin provider is enabled in MA: Settings → Providers

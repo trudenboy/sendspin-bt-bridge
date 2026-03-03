@@ -27,35 +27,49 @@ There is no test suite. Manual testing is via `docker logs` and the web UI at `h
 
 CI/CD builds multi-platform Docker images (`linux/amd64`, `linux/arm64`) to `ghcr.io/trudenboy/sendspin-bt-bridge` on push to `main`.
 
-## Architecture
+## Architecture (v2.5.x)
 
-**Python modules (v1.4.x modular structure):**
+**Subprocess isolation**: each Bluetooth speaker runs as a dedicated Python subprocess (`services/daemon_process.py`) with `PULSE_SINK=<bt_sink_name>` in env. This gives every speaker its own PulseAudio context → correct audio routing from the first sample, no `move-sink-input` needed.
 
-**`sendspin_client.py`** (753 lines) - Core entry point:
-- `SendspinClient` - Wraps the `sendspin` CLI subprocess. Parses output to track playback state, syncs volume via `pactl`.
-- `main()` - Loads config, instantiates BluetoothManager + SendspinClient per device, starts web server daemon thread, runs async event loop.
+```
+main process (Flask API, BT manager, web UI)
+    ├── asyncio subprocess (PULSE_SINK=bluez_sink.AA_BB...) → daemon_process.py
+    ├── asyncio subprocess (PULSE_SINK=bluez_sink.CC_DD...) → daemon_process.py
+    └── ...
+```
 
-**`bluetooth_manager.py`** (492 lines) - BT connection management:
-- `BluetoothManager` - Manages pairing/connection via `bluetoothctl` stdin pipe. Auto-reconnects every 10 s. Handles PipeWire and PulseAudio sink routing.
-- `_force_sbc_codec()` - Forces SBC A2DP codec via pactl/bluetoothctl.
+IPC: subprocess→parent via JSON lines on stdout; parent→subprocess via JSON lines on stdin (`set_volume`, `stop`).
 
-**`config.py`** (80 lines) - Configuration layer:
-- `_CONFIG_PATH`, `_config_lock` (shared threading.Lock — imported by both sendspin_client.py and web_interface.py)
+**`sendspin_client.py`** — core orchestration per device:
+- `SendspinClient` — manages the per-device subprocess lifecycle. Spawns `services/daemon_process.py` with correct `PULSE_SINK` env var. Reads JSON status from subprocess stdout, sends volume/stop commands via stdin.
+- `_start_sendspin_inner()` — subprocess spawn with `PULSE_SINK` and JSON args
+- `stop_sendspin()` — graceful stop: sends `{"cmd":"stop"}` to stdin, kills if timeout
+- `_read_subprocess_output()` — async task: forwards log lines, detects volume changes, calls `_save_device_volume()`
+- `main()` — loads config, instantiates `BluetoothManager` + `SendspinClient` per device, starts Waitress server in daemon thread, runs async event loop
+
+**`bluetooth_manager.py`** — BT connection management:
+- `BluetoothManager` — pairing/connection via `bluetoothctl`. Auto-reconnects every 10 s. Detects PipeWire (`bluez_output.MAC.1`) and PulseAudio (`bluez_sink.MAC.a2dp_sink`) sinks.
+- `configure_bluetooth_audio()` — finds the correct PulseAudio sink name for the connected device
+
+**`config.py`** — configuration layer:
+- `_CONFIG_PATH`, `_config_lock` (threading.Lock shared across modules)
 - `load_config()`, `_player_id_from_mac()`, `_save_device_volume()`
 
-**`mpris.py`** (121 lines) - MPRIS D-Bus integration:
-- `MprisIdentityService` - Registers MediaPlayer2 D-Bus service so MA discovers the bridge by player name
-- `pause_all_via_mpris()`, `read_mpris_metadata_for()` - D-Bus helpers
+**`mpris.py`** — MPRIS D-Bus integration:
+- `MprisIdentityService` — registers MediaPlayer2 D-Bus service so MA discovers the bridge by player name
 
-**`web_interface.py`** (1107 lines) - Flask app served by Waitress on port 8080:
-- All `/api/*` routes
-- Polls `/api/status` every 2 s via JS in browser
-- Imports `_config_lock` from `config.py` (unified shared lock)
-- HA Ingress support via `X-Ingress-Path` → Flask `SCRIPT_NAME`
+**`services/` module:**
+- `bridge_daemon.py` — `BridgeDaemon` subclass. Runs inside each subprocess. Handles `on_status_change` callbacks, stream events. `_sink_routed` flag prevents re-anchor feedback loop after PA rescue-streams correction.
+- `daemon_process.py` — subprocess entry point. Reads JSON args from argv, sets up `BridgeDaemon`, emits status as JSON to stdout, reads commands from stdin.
+- `bluetooth.py` — async BT helpers (D-Bus monitor, `dbus_monitor_reconnect`)
+- `pulse.py` — PulseAudio async helpers: `afind_sink_for_mac()`, `amove_pid_sink_inputs()` (corrects streams after PA module-rescue-streams moves them on BT reconnect), `_PULSECTL_AVAILABLE` flag
 
-**`templates/index.html`** - Jinja2 HTML template (Flask `render_template`)
-**`static/style.css`** - Extracted CSS (360 lines)
-**`static/app.js`** - Extracted JavaScript (1242 lines)
+**`routes/` module (Flask blueprints):**
+- `api.py` — all `/api/*` endpoints
+- `views.py` — HTML page renders
+- `auth.py` — optional web UI password protection
+
+**`state.py`** — shared runtime state (list of `SendspinClient` instances, global lock)
 
 **Config persistence:** `/config/config.json` (mounted Docker volume at `/etc/docker/Sendspin`). Changes via the web UI require a container restart to take effect.
 
@@ -65,12 +79,12 @@ CI/CD builds multi-platform Docker images (`linux/amd64`, `linux/arm64`) to `ghc
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `SENDSPIN_NAME` | `Docker-{hostname}` | Player display name in Music Assistant |
-| `SENDSPIN_SERVER` | `auto` | Server hostname/IP; `auto` uses mDNS discovery |
-| `SENDSPIN_PORT` | `9000` | WebSocket port (`ws://{server}:{port}/sendspin`) |
-| `BLUETOOTH_MAC` | `` | Target speaker MAC address (Bluetooth disabled if empty) |
+| `SENDSPIN_SERVER` | `auto` | MA server hostname/IP; `auto` uses mDNS discovery |
+| `SENDSPIN_PORT` | `9000` | WebSocket port |
+| `BLUETOOTH_MAC` | `` | Single-device MAC (legacy); use `BLUETOOTH_DEVICES` in config.json for multi-device |
 | `WEB_PORT` | `8080` | Web interface port |
 | `TZ` | `Australia/Melbourne` | Container timezone |
+| `CONFIG_DIR` | `/config` | Config directory path |
 
 ## Container Requirements
 
@@ -79,10 +93,14 @@ CI/CD builds multi-platform Docker images (`linux/amd64`, `linux/arm64`) to `ghc
 - Volume mounts: D-Bus socket, PulseAudio/PipeWire sockets, config directory
 - `entrypoint.sh` handles D-Bus setup, audio system detection, and volume restoration before starting the Python app
 
-## Audio Sink Detection
+## Audio Routing
 
-`BluetoothManager.configure_bluetooth_audio()` tries multiple `pactl` sink naming patterns for the connected device:
+`BluetoothManager.configure_bluetooth_audio()` tries multiple `pactl` sink naming patterns:
 - `bluez_output.{MAC}.1` (PipeWire)
 - `bluez_output.{MAC}.a2dp-sink`
-- `bluez_sink.{MAC}.a2dp_sink` (legacy PulseAudio)
+- `bluez_sink.{MAC}.a2dp_sink` (PulseAudio on HAOS)
 - `bluez_sink.{MAC}`
+
+Each `SendspinClient` spawns a subprocess with `PULSE_SINK=<found_sink_name>`. The subprocess creates its own PulseAudio context → audio routed to the correct BT speaker from the first sample.
+
+On BT reconnect: PulseAudio's `module-rescue-streams` may move streams to the default sink. `BridgeDaemon._ensure_sink_routing()` corrects this once on the next `Stream STARTED` event via `services/pulse.py:amove_pid_sink_inputs()`. The `_sink_routed` flag prevents repeated corrections that would cause a re-anchor feedback loop.

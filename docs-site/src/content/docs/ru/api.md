@@ -33,7 +33,7 @@ import { Aside } from '@astrojs/starlight/components';
     "volume": 48,
     "current_track": "Song Title",
     "current_artist": "Artist Name",
-    "audio_format": "48000Hz/24-bit/2ch",
+    "audio_format": "flac 48000Hz/24-bit/2ch",
     "adapter_mac": "C0:FB:F9:62:D6:9D",
     "adapter_id": "hci0",
     "sync_status": "In sync",
@@ -50,7 +50,7 @@ import { Aside } from '@astrojs/starlight/components';
 ### `GET /api/version`
 
 ```json
-{ "version": "1.4.1", "build_date": "2026-03-02" }
+{ "version": "2.5.2", "build_date": "2025-07-01" }
 ```
 
 ### `GET /api/logs`

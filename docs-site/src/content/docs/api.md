@@ -30,7 +30,7 @@ Status of all players.
     "volume": 48,
     "current_track": "Song Title",
     "current_artist": "Artist Name",
-    "audio_format": "48000Hz/24-bit/2ch",
+    "audio_format": "flac 48000Hz/24-bit/2ch",
     "management_enabled": true
   }
 ]
@@ -43,7 +43,7 @@ Structured diagnostics: adapters, sinks, D-Bus, per-device state.
 ### `GET /api/version`
 
 ```json
-{ "version": "1.4.1", "build_date": "2026-03-02" }
+{ "version": "2.5.2", "build_date": "2025-07-01" }
 ```
 
 ## Playback Control
@@ -85,6 +85,20 @@ Scan ~10 s. **Response:** `{ "devices": [{ "mac": "...", "name": "..." }] }`
 ### `GET /api/bt/adapters`
 
 List of available BT adapters.
+
+### `GET /api/bt/paired`
+
+List of currently paired devices (name + MAC).
+
+## System
+
+### `GET /api/logs`
+
+Recent log lines from the bridge. Useful for debugging without SSH access.
+
+### `POST /api/restart`
+
+Restart the bridge process (causes container/service restart).
 
 ## Configuration
 
