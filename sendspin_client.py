@@ -510,6 +510,14 @@ async def main():
 
     logger.info("Client instance(s) registered")
 
+    # Sync enabled state to options.json so HA addon config page reflects current state
+    try:
+        from services.bluetooth import persist_device_enabled as _persist_enabled
+        for _c in clients:
+            _persist_enabled(_c.player_name, _c.bt_management_enabled)
+    except Exception as _e:
+        logger.debug(f"Could not sync enabled state to options.json: {_e}")
+
     # Register MPRIS Identity services on the session bus (one per player)
     if _DBUS_MPRIS_AVAILABLE:
         try:

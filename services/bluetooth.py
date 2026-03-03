@@ -16,6 +16,7 @@ from config import _config_lock
 logger = logging.getLogger(__name__)
 
 _CONFIG_FILE = Path(os.getenv('CONFIG_DIR', '/config')) / 'config.json'
+_OPTIONS_FILE = Path('/data/options.json')
 
 _AUDIO_UUIDS = {
     '0000110b',  # A2DP Sink
@@ -44,7 +45,7 @@ def bt_remove_device(mac: str, adapter_mac: str = '') -> None:
 
 
 def persist_device_enabled(player_name: str, enabled: bool) -> None:
-    """Persist the enabled flag for a device in config.json."""
+    """Persist the enabled flag to config.json and (in HA mode) to options.json."""
     if not _CONFIG_FILE.exists():
         return
     try:
@@ -61,6 +62,23 @@ def persist_device_enabled(player_name: str, enabled: bool) -> None:
             os.replace(tmp, str(_CONFIG_FILE))
     except Exception as e:
         logger.warning(f"Could not persist enabled flag for '{player_name}': {e}")
+
+    # Sync to options.json so the HA addon config page reflects the change
+    if _OPTIONS_FILE.exists():
+        try:
+            with open(_OPTIONS_FILE, 'r') as f:
+                opts = json.load(f)
+            for dev in opts.get('bluetooth_devices', []):
+                if dev.get('player_name') == player_name:
+                    dev['enabled'] = enabled
+                    break
+            tmp = str(_OPTIONS_FILE) + '.tmp'
+            with open(tmp, 'w') as f:
+                json.dump(opts, f, indent=2)
+            os.replace(tmp, str(_OPTIONS_FILE))
+            logger.debug(f"Synced enabled={enabled} for '{player_name}' to options.json")
+        except Exception as e:
+            logger.debug(f"Could not sync enabled flag to options.json: {e}")
 
 
 def is_audio_device(mac: str) -> bool:

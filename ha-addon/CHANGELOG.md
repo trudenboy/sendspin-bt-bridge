@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.5] - 2026-03-03
+
+### Fixed
+- Enabled toggle in bridge UI now syncs to `options.json` so HA config page stays in sync
+- Startup sync: device enabled state written to `options.json` on boot (fixes "disabled" display for active devices)
+- `entrypoint.sh`: `options.json` is now authoritative for `enabled`; absent field defaults to `true`
+
 ## [2.1.4] - 2026-03-03
 
 ### Added

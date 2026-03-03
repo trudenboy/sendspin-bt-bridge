@@ -5,7 +5,7 @@ Provides the config file path, a process-wide lock for atomic writes,
 and helpers for loading/persisting configuration.
 """
 
-VERSION = "2.1.4"
+VERSION = "2.1.5"
 BUILD_DATE = "2026-03-02"
 
 DEFAULT_CONFIG = {
