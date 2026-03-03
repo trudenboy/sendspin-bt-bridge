@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import socket
 from datetime import datetime
 from importlib.metadata import version as _pkg_version
@@ -32,7 +33,7 @@ from sendspin.daemon.daemon import DaemonArgs, SendspinDaemon
 
 from config import VERSION as _BRIDGE_VERSION
 from services.pulse import (
-    aget_sink_description,
+    amove_pid_sink_inputs,
     aset_sink_volume,
 )
 
@@ -177,7 +178,26 @@ class BridgeDaemon(SendspinDaemon):
             self._bridge_status["playing"] = is_playing
             self._bridge_status["state_changed_at"] = datetime.now().isoformat()
             self._notify()
+        if event == "start" and self._bluetooth_sink_name:
+            # Correct any stream that PulseAudio's module-rescue-streams may have
+            # moved to the default sink when a BT sink disappeared temporarily.
+            asyncio.ensure_future(self._ensure_sink_routing())
         logger.debug("[%s] stream event: %s", self._bridge_status.get("player_name", "?"), event)
+
+    async def _ensure_sink_routing(self) -> None:
+        """Move any of our sink-inputs that ended up on the wrong sink."""
+        pid = os.getpid()
+        sink = self._bluetooth_sink_name
+        if not sink:
+            return
+        try:
+            moved = await amove_pid_sink_inputs(pid, sink)
+            if moved:
+                logger.info(
+                    "[%s] Corrected %d sink-input(s) → %s", self._bridge_status.get("player_name", "?"), moved, sink
+                )
+        except Exception as exc:
+            logger.debug("_ensure_sink_routing: %s", exc)
 
     # ── Server commands (volume / mute) ──────────────────────────────────────
 
@@ -239,69 +259,3 @@ class BridgeDaemon(SendspinDaemon):
             changed = True
         if changed:
             self._notify()
-
-
-async def resolve_audio_device_for_sink(sink_name: str | None):
-    """Find the sounddevice AudioDevice matching a PulseAudio/PipeWire sink name.
-
-    PulseAudio/PipeWire exposes sinks to sounddevice/PortAudio by their *description*
-    (friendly name), not by their PA sink identifier.  We use pulsectl_asyncio to get
-    the description, then match against sounddevice devices.
-    """
-    from sendspin.audio import query_devices
-
-    devices = query_devices()
-    if not sink_name:
-        return next((d for d in devices if d.is_default), None)
-
-    logger.debug(
-        "resolve_audio_device_for_sink(%s): available devices: %s",
-        sink_name,
-        [d.name for d in devices],
-    )
-
-    # 1. Exact match on sink name (PipeWire may expose by name)
-    for dev in devices:
-        if dev.name == sink_name:
-            logger.info("Audio device matched by exact sink name: %s", dev.name)
-            return dev
-
-    # 2. Match via PA description (most reliable — pulsectl_asyncio, awaited directly)
-    description = await aget_sink_description(sink_name)
-    if description:
-        logger.debug("Sink description for %s: %s", sink_name, description)
-        desc_lower = description.lower()
-        for dev in devices:
-            if dev.name.lower() == desc_lower:
-                logger.info("Audio device matched by description: %s", dev.name)
-                return dev
-        for dev in devices:
-            if desc_lower in dev.name.lower() or dev.name.lower() in desc_lower:
-                logger.info(
-                    "Audio device partial-matched by description: %s (desc=%s)",
-                    dev.name,
-                    description,
-                )
-                return dev
-
-    # 3. MAC-segment match: 'bluez_output.AA_BB_CC_DD_EE_FF.1' → 'AA_BB_CC_DD_EE_FF'
-    parts = sink_name.split(".")
-    mac_segment = parts[1] if len(parts) >= 2 else ""
-    if mac_segment:
-        for dev in devices:
-            if mac_segment.lower() in dev.name.lower():
-                logger.info("Audio device matched by MAC segment: %s", dev.name)
-                return dev
-
-    # 4. Prefix match
-    for dev in devices:
-        if dev.name.startswith(sink_name[:20]):
-            logger.info("Audio device matched by prefix: %s", dev.name)
-            return dev
-
-    logger.warning(
-        "No audio device found for sink %s (description=%s) — falling back to default",
-        sink_name,
-        description,
-    )
-    return next((d for d in devices if d.is_default), None)
