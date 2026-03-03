@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.1] - 2026-03-03
+
+### Fixed
+- **PulseAudio module-rescue-streams override**: when a BT sink disappears (speaker
+  disconnects), PulseAudio's `module-rescue-streams` moves any active stream on that
+  sink to the default sink. If another subprocess's stream is on the default sink at
+  that moment, all audio can end up on the same speaker. On reconnect, the stream isn't
+  automatically moved back to its correct sink.
+  Fix: on every `Stream STARTED` event in `BridgeDaemon`, `_ensure_sink_routing()` runs
+  `amove_pid_sink_inputs(os.getpid(), sink_name)` — moves all sink-inputs belonging to
+  this subprocess's PID back to the correct BT sink. With one subprocess per speaker
+  (v2.5.0), there is exactly one sink-input per process — no race conditions, no
+  claimed-ID tracking.
+- Added `amove_pid_sink_inputs(pid, sink_name)` to `services/pulse.py`: finds
+  sink-inputs by `application.process.id` property via pulsectl (pactl fallback).
+
 ## [2.5.0] - 2026-03-03
 
 ### Changed

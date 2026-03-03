@@ -206,6 +206,39 @@ async def amove_sink_input(sink_input_idx: int, sink_name: str) -> bool:
         return _fallback_move_sink_input(sink_input_idx, sink_name)
 
 
+async def amove_pid_sink_inputs(pid: int, sink_name: str) -> int:
+    """Move all sink-inputs belonging to *pid* to *sink_name*.
+
+    Returns the number of sink-inputs moved (0 means nothing to do or nothing found).
+    Used from within a daemon subprocess to correct PipeWire auto-routing after a BT
+    sink disappears and re-appears: PULSE_SINK handles initial routing but WirePlumber
+    may re-route streams to the default sink during reconnect events.
+    """
+    if not _PULSECTL_AVAILABLE:
+        return _fallback_move_pid_sink_inputs(pid, sink_name)
+    try:
+        async with asyncio.timeout(_TIMEOUT):
+            async with pulsectl_asyncio.PulseAsync(_CLIENT_NAME) as pulse:
+                inputs = await pulse.sink_input_list()
+                sinks = await pulse.sink_list()
+                target = next((s for s in sinks if s.name == sink_name), None)
+                if target is None:
+                    logger.debug("amove_pid_sink_inputs: sink %s not found", sink_name)
+                    return 0
+                moved = 0
+                for si in inputs:
+                    props = getattr(si, "proplist", {}) or {}
+                    if str(props.get("application.process.id", "")) == str(pid):
+                        if si.sink != target.index:
+                            await pulse.sink_input_move(si, target)
+                            logger.info("Moved sink-input %d (pid=%d) → %s", si.index, pid, sink_name)
+                            moved += 1
+                return moved
+    except Exception as exc:
+        logger.debug("amove_pid_sink_inputs(%d, %s) error: %s — falling back", pid, sink_name, exc)
+        return _fallback_move_pid_sink_inputs(pid, sink_name)
+
+
 async def aget_server_name() -> str:
     """Return PA server name string (for diagnostics)."""
     if not _PULSECTL_AVAILABLE:
@@ -423,6 +456,40 @@ def _fallback_move_sink_input(sink_input_idx: int, sink_name: str) -> bool:
         return r.returncode == 0
     except Exception:
         return False
+
+
+def _fallback_move_pid_sink_inputs(pid: int, sink_name: str) -> int:
+    """pactl fallback: find sink-inputs by pid and move them to sink_name."""
+    try:
+        # Get all sink-input details to find our PID
+        r = subprocess.run(["pactl", "list", "sink-inputs"], capture_output=True, text=True, timeout=5)
+        if r.returncode != 0:
+            return 0
+        moved = 0
+        current_id: int | None = None
+        current_pid: str | None = None
+        for line in r.stdout.splitlines():
+            line = line.strip()
+            if line.startswith("Sink Input #"):
+                current_id = int(line.split("#")[1])
+                current_pid = None
+            elif "application.process.id" in line:
+                current_pid = line.split("=", 1)[-1].strip().strip('"')
+            if current_id is not None and current_pid == str(pid):
+                r2 = subprocess.run(
+                    ["pactl", "move-sink-input", str(current_id), sink_name],
+                    capture_output=True,
+                    text=True,
+                    timeout=3,
+                )
+                if r2.returncode == 0:
+                    logger.info("Moved sink-input %d (pid=%d) → %s", current_id, pid, sink_name)
+                    moved += 1
+                current_id = None
+                current_pid = None
+        return moved
+    except Exception:
+        return 0
 
 
 def get_sink_input_ids() -> set[int]:
