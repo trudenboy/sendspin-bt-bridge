@@ -3,13 +3,16 @@
 Replaces the subprocess + stdout-parsing approach: BridgeDaemon subclasses
 SendspinDaemon and overrides key methods to update the bridge status dict
 directly via typed callbacks instead of fragile log-line parsing.
+
+When running inside a subprocess spawned by SendspinClient, PULSE_SINK is
+already set in the subprocess environment before any PA connection is made,
+so audio routes to the correct BT sink from the first sample.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
-import os
 import socket
 from datetime import datetime
 from importlib.metadata import version as _pkg_version
@@ -45,6 +48,8 @@ class BridgeDaemon(SendspinDaemon):
         bluetooth_sink_name: PulseAudio/PipeWire sink name for volume sync.
         on_volume_save: Optional callback(volume_int) called after volume changes
                         to persist the value to config.
+        on_status_change: Optional callback() called whenever status is mutated.
+                          Used by daemon_process.py to flush status to parent.
     """
 
     def __init__(
@@ -53,11 +58,21 @@ class BridgeDaemon(SendspinDaemon):
         status: dict,
         bluetooth_sink_name: str | None,
         on_volume_save: Callable[[int], None] | None = None,
+        on_status_change: Callable[[], None] | None = None,
     ) -> None:
         super().__init__(args)
         self._bridge_status = status
         self._bluetooth_sink_name = bluetooth_sink_name
         self._on_volume_save = on_volume_save
+        self._on_status_change = on_status_change
+
+    def _notify(self) -> None:
+        """Notify subscriber that status has changed (no-op if no callback)."""
+        if self._on_status_change:
+            try:
+                self._on_status_change()
+            except Exception:
+                pass
 
     # ── Client creation ──────────────────────────────────────────────────────
 
@@ -137,6 +152,7 @@ class BridgeDaemon(SendspinDaemon):
                 self._bridge_status["connected_server_url"] = f"{peer}:{port}"
         except Exception as _exc:
             logger.debug("Could not extract peer address: %s", _exc)
+        self._notify()
         await super()._handle_server_connection(ws)
 
     def _on_server_disconnect(self) -> None:
@@ -145,19 +161,14 @@ class BridgeDaemon(SendspinDaemon):
         self._bridge_status["connected"] = False
         self._bridge_status["group_name"] = None
         self._bridge_status["group_id"] = None
+        self._notify()
 
     # ── Audio / stream events ────────────────────────────────────────────────
 
     def _handle_format_change(self, codec: str | None, sample_rate: int, bit_depth: int, channels: int) -> None:
-        # Set PULSE_SINK before super() opens the PortAudio/PA stream so the stream
-        # is connected to the target BT sink from the very first sample.
-        # asyncio is single-threaded and this method is fully synchronous, so
-        # no other daemon can interleave between the env set and the stream open.
-        if self._bluetooth_sink_name:
-            os.environ["PULSE_SINK"] = self._bluetooth_sink_name
         super()._handle_format_change(codec, sample_rate, bit_depth, channels)
-        os.environ.pop("PULSE_SINK", None)
         self._bridge_status["audio_format"] = f"{codec or 'PCM'} {sample_rate}Hz/{bit_depth}-bit/{channels}ch"
+        self._notify()
 
     def _on_stream_event(self, event: str) -> None:
         super()._on_stream_event(event)
@@ -165,6 +176,7 @@ class BridgeDaemon(SendspinDaemon):
         if self._bridge_status.get("playing") != is_playing:
             self._bridge_status["playing"] = is_playing
             self._bridge_status["state_changed_at"] = datetime.now().isoformat()
+            self._notify()
         logger.debug("[%s] stream event: %s", self._bridge_status.get("player_name", "?"), event)
 
     # ── Server commands (volume / mute) ──────────────────────────────────────
@@ -209,6 +221,7 @@ class BridgeDaemon(SendspinDaemon):
             payload.group_name,
             payload.playback_state,
         )
+        self._notify()
 
     # ── Track metadata ───────────────────────────────────────────────────────
 
@@ -217,10 +230,15 @@ class BridgeDaemon(SendspinDaemon):
         metadata = getattr(payload, "metadata", None)
         if metadata is None:
             return
+        changed = False
         if not isinstance(metadata.title, UndefinedField):
             self._bridge_status["current_track"] = metadata.title
+            changed = True
         if not isinstance(metadata.artist, UndefinedField):
             self._bridge_status["current_artist"] = metadata.artist
+            changed = True
+        if changed:
+            self._notify()
 
 
 async def resolve_audio_device_for_sink(sink_name: str | None):

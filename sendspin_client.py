@@ -12,10 +12,10 @@ import logging
 import os
 import signal
 import socket
+import sys
 import threading
 import time
 from datetime import datetime
-from typing import TYPE_CHECKING
 
 from bluetooth_manager import BluetoothManager
 from config import (
@@ -32,9 +32,6 @@ from mpris import (
 from mpris import (
     pause_all_via_mpris as _pause_all_via_mpris,
 )
-
-if TYPE_CHECKING:
-    from services.bridge_daemon import BridgeDaemon
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -97,8 +94,9 @@ class SendspinClient:
         self.bt_management_enabled: bool = True
         self.bluetooth_sink_name = None  # Store Bluetooth sink name for volume sync
         self.connected_server_url: str = ""  # actual resolved ws:// URL (populated after connect)
-        self._daemon_task: asyncio.Task | None = None
-        self._bridge_daemon: BridgeDaemon | None = None
+        self._daemon_proc: asyncio.subprocess.Process | None = None
+        self._daemon_task: asyncio.Task | None = None  # stdout reader task
+        self._bridge_daemon = None  # kept for API compatibility, always None in subprocess mode
         self._monitor_task: asyncio.Task | None = None
 
     def get_ip_address(self) -> str:
@@ -127,30 +125,22 @@ class SendspinClient:
                         self.status["bluetooth_connected"] = bt_connected
                         self.status["bluetooth_connected_at"] = datetime.now().isoformat()
 
-                # Check in-process daemon health
-                if self._daemon_task:
-                    if self._daemon_task.done():
+                # Check daemon subprocess health
+                if self._daemon_proc is not None:
+                    if self._daemon_proc.returncode is not None:
+                        # Subprocess exited
                         self.status["server_connected"] = False
                         self.status["connected"] = False
                         self.status["group_name"] = None
                         self.status["group_id"] = None
+                        self._daemon_proc = None
                         # Don't restart if BT is disconnected — monitor_and_reconnect
                         # will call start_sendspin() once BT reconnects.
                         if not self.bt_manager or self.bt_manager.connected:
-                            logger.warning("Daemon task died unexpectedly, restarting...")
+                            logger.warning("Daemon subprocess died unexpectedly, restarting...")
                             await self.start_sendspin()
                         else:
-                            logger.info("Daemon task stopped; waiting for BT to reconnect")
-                    else:
-                        # Daemon is running — update connected state from daemon client
-                        daemon = self._bridge_daemon
-                        if daemon and daemon._client is not None:
-                            is_connected = getattr(daemon._client, "connected", False)
-                            if is_connected and not self.status.get("server_connected"):
-                                self.status["server_connected"] = True
-                                self.status["connected"] = True
-                                if not self.status.get("server_connected_at"):
-                                    self.status["server_connected_at"] = datetime.now().isoformat()
+                            logger.info("Daemon subprocess stopped; waiting for BT to reconnect")
 
                 await asyncio.sleep(10)
             except Exception as e:
@@ -158,36 +148,17 @@ class SendspinClient:
                 await asyncio.sleep(10)
 
     async def start_sendspin(self) -> None:
-        """Start the sendspin daemon in-process via BridgeDaemon."""
-        try:
-            from sendspin.daemon.daemon import DaemonArgs
-            from sendspin.settings import get_client_settings
+        """Start the sendspin daemon as an isolated subprocess with PULSE_SINK routing."""
+        await self._start_sendspin_inner()
 
-            from services.bridge_daemon import (
-                BridgeDaemon,
-                resolve_audio_device_for_sink,
-            )
-        except ImportError as e:
-            logger.error(f"sendspin package not available (running outside container?): {e}")
-            self.status["last_error"] = str(e)
-            return
-
-        await self._start_sendspin_inner(BridgeDaemon, resolve_audio_device_for_sink, DaemonArgs, get_client_settings)
-
-    async def _start_sendspin_inner(
-        self,
-        BridgeDaemon,
-        resolve_audio_device_for_sink,
-        DaemonArgs,
-        get_client_settings,
-    ) -> None:
-        """Start the in-process daemon."""
+    async def _start_sendspin_inner(self) -> None:
+        """Spawn daemon_process.py subprocess with PULSE_SINK in its environment."""
         try:
             # Configure BT audio sink if not yet done
             if self.bt_manager and self.bt_manager.connected and not self.bluetooth_sink_name:
                 self.bt_manager.configure_bluetooth_audio()
 
-            # Stop any existing daemon task first
+            # Stop any existing subprocess first
             await self.stop_sendspin()
 
             safe_id = "".join(c if c.isalnum() or c == "-" else "-" for c in self.player_name.lower()).strip("-")
@@ -200,11 +171,7 @@ class SendspinClient:
                 static_delay_ms = float(os.environ.get("SENDSPIN_STATIC_DELAY_MS", "-500"))
 
             server_url: str | None = None
-            if self.server_host and self.server_host.lower() not in (
-                "auto",
-                "discover",
-                "",
-            ):
+            if self.server_host and self.server_host.lower() not in ("auto", "discover", ""):
                 server_url = f"ws://{self.server_host}:{self.server_port}/sendspin"
                 logger.info(
                     f"Starting Sendspin player '{self.player_name}' connecting to {server_url} (port {self.listen_port})"
@@ -214,81 +181,125 @@ class SendspinClient:
                     f"Starting Sendspin player '{self.player_name}' with auto-discovery (port {self.listen_port})"
                 )
 
-            audio_device = await resolve_audio_device_for_sink(self.bluetooth_sink_name)
-            if audio_device:
-                logger.info(
-                    f"[{self.player_name}] Audio device resolved: {audio_device.name!r} (index {audio_device.index}) for sink {self.bluetooth_sink_name!r}"
-                )
-            else:
-                logger.error("No audio output device found — cannot start daemon")
-                self.status["last_error"] = "No audio output device found"
-                return
-
-            # Per-instance isolated settings to avoid ~/.config/sendspin/ conflicts
-            settings = await get_client_settings("daemon", config_dir=f"/tmp/sendspin-{safe_id}")
-            # Seed volume from saved value so playback starts at correct level
-            saved_vol = self.status.get("volume", 100)
-            if isinstance(saved_vol, int) and 0 <= saved_vol <= 100:
-                settings.player_volume = saved_vol
-
-            args = DaemonArgs(
-                audio_device=audio_device,
-                client_id=client_id,
-                client_name=self.player_name,
-                settings=settings,
-                url=server_url,
-                static_delay_ms=static_delay_ms,
-                listen_port=self.listen_port,
-                use_mpris=True,
-                use_hardware_volume=False,  # we manage volume via pactl against the BT sink
+            params = json.dumps(
+                {
+                    "player_name": self.player_name,
+                    "client_id": str(client_id),
+                    "listen_port": self.listen_port,
+                    "url": server_url,
+                    "static_delay_ms": static_delay_ms,
+                    "bluetooth_sink_name": self.bluetooth_sink_name,
+                    "volume": self.status.get("volume", 100),
+                    "settings_dir": f"/tmp/sendspin-{safe_id}",
+                }
             )
 
-            def _on_volume_save(vol: int) -> None:
-                try:
-                    _save_device_volume(getattr(self.bt_manager, "mac_address", None), vol)
-                except Exception as exc:
-                    logger.debug(f"Could not save volume: {exc}")
+            # Build subprocess environment: inherit everything + PULSE_SINK for routing
+            env = os.environ.copy()
+            if self.bluetooth_sink_name:
+                env["PULSE_SINK"] = self.bluetooth_sink_name
+                logger.info(f"[{self.player_name}] Subprocess PULSE_SINK={self.bluetooth_sink_name}")
 
-            self._bridge_daemon = BridgeDaemon(
-                args=args,
-                status=self.status,
-                bluetooth_sink_name=self.bluetooth_sink_name,
-                on_volume_save=_on_volume_save,
+            self._daemon_proc = await asyncio.create_subprocess_exec(
+                sys.executable,
+                "-m",
+                "services.daemon_process",
+                params,
+                stdout=asyncio.subprocess.PIPE,
+                stdin=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.DEVNULL,  # stderr goes to container logs via root logger
+                env=env,
             )
             self.status["playing"] = False
 
-            self._daemon_task = asyncio.create_task(self._bridge_daemon.run())
+            # Start async task to consume subprocess stdout (status + log lines)
+            self._daemon_task = asyncio.create_task(self._read_subprocess_output())
 
-            def _on_daemon_done(t: asyncio.Task) -> None:
+            def _on_reader_done(t: asyncio.Task) -> None:
                 if not t.cancelled() and t.exception():
-                    logger.error(f"[{self.player_name}] BridgeDaemon ended with error: {t.exception()}")
+                    logger.error(f"[{self.player_name}] stdout reader error: {t.exception()}")
 
-            self._daemon_task.add_done_callback(_on_daemon_done)
-            logger.info(f"Sendspin daemon started in-process for '{self.player_name}'")
+            self._daemon_task.add_done_callback(_on_reader_done)
+            logger.info(f"Sendspin daemon subprocess started (PID {self._daemon_proc.pid}) for '{self.player_name}'")
 
         except Exception as e:
-            logger.error(f"Failed to start Sendspin daemon: {e}")
+            logger.error(f"Failed to start Sendspin daemon subprocess: {e}")
             self.status["last_error"] = str(e)
             self.status["server_connected"] = False
 
+    async def _read_subprocess_output(self) -> None:
+        """Read JSON lines from daemon subprocess stdout and merge into self.status."""
+        if self._daemon_proc is None or self._daemon_proc.stdout is None:
+            return
+        _LOG_METHODS = {
+            "debug": logger.debug,
+            "info": logger.info,
+            "warning": logger.warning,
+            "error": logger.error,
+            "critical": logger.critical,
+        }
+        async for line in self._daemon_proc.stdout:
+            try:
+                msg = json.loads(line.decode().strip())
+            except (json.JSONDecodeError, ValueError):
+                continue
+            if msg.get("type") == "status":
+                # Track volume changes for persistence
+                prev_volume = self.status.get("volume")
+                # Merge subprocess status into our status dict (excluding 'type' key)
+                for k, v in msg.items():
+                    if k != "type":
+                        self.status[k] = v
+                new_volume = self.status.get("volume")
+                _mac = self.bt_manager.mac_address if self.bt_manager else None
+                if new_volume is not None and isinstance(new_volume, int) and new_volume != prev_volume and _mac:
+                    _save_device_volume(_mac, new_volume)
+            elif msg.get("type") == "log":
+                log_fn = _LOG_METHODS.get(msg.get("level", "info"), logger.info)
+                log_fn("[%s/proc] %s", self.player_name, msg.get("msg", ""))
+
+    async def _send_subprocess_command(self, cmd: dict) -> None:
+        """Write a JSON command to the daemon subprocess stdin."""
+        if self._daemon_proc and self._daemon_proc.stdin and self._daemon_proc.returncode is None:
+            try:
+                self._daemon_proc.stdin.write((json.dumps(cmd) + "\n").encode())
+                await self._daemon_proc.stdin.drain()
+            except Exception as exc:
+                logger.debug("Could not send subprocess command: %s", exc)
+
     async def stop_sendspin(self) -> None:
-        """Stop the in-process sendspin daemon task."""
+        """Stop the daemon subprocess gracefully."""
+        # Cancel stdout reader task
         if self._daemon_task and not self._daemon_task.done():
             self._daemon_task.cancel()
             try:
-                await asyncio.wait_for(self._daemon_task, timeout=3.0)
+                await asyncio.wait_for(self._daemon_task, timeout=2.0)
             except (TimeoutError, asyncio.CancelledError):
                 pass
         self._daemon_task = None
+
+        # Terminate subprocess
+        if self._daemon_proc and self._daemon_proc.returncode is None:
+            try:
+                await self._send_subprocess_command({"cmd": "stop"})
+                await asyncio.wait_for(self._daemon_proc.wait(), timeout=3.0)
+            except TimeoutError:
+                logger.warning(f"[{self.player_name}] Daemon subprocess did not exit, killing")
+                self._daemon_proc.kill()
+                await self._daemon_proc.wait()
+            except Exception as exc:
+                logger.debug("stop_sendspin: %s", exc)
+        self._daemon_proc = None
         self._bridge_daemon = None
+
         self.status["server_connected"] = False
         self.status["connected"] = False
         self.status["group_name"] = None
         self.status["group_id"] = None
 
     def is_running(self) -> bool:
-        """Return True if the in-process daemon task is alive."""
-        return self._daemon_task is not None and not self._daemon_task.done()
+        """Return True if the daemon subprocess is alive."""
+        return self._daemon_proc is not None and self._daemon_proc.returncode is None
 
     async def run(self):
         """Main run loop"""
@@ -369,11 +380,10 @@ class SendspinClient:
         if self.bt_manager:
             self.bt_manager.management_enabled = enabled
         if not enabled:
-            # Cancel the in-process daemon task (task.cancel() is thread-safe)
-            if self.is_running():
+            # Terminate the daemon subprocess (safe from any thread via kill)
+            if self.is_running() and self._daemon_proc:
                 logger.info(f"[{self.player_name}] BT released — stopping sendspin daemon")
-                if self._daemon_task:
-                    self._daemon_task.cancel()
+                self._daemon_proc.kill()
             # Disconnect BT device (synchronous subprocess call, safe from any thread)
             if self.bt_manager:
                 try:

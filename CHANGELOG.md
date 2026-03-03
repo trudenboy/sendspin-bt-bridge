@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.0] - 2026-03-03
+
+### Changed
+- **Subprocess isolation for sink routing**: each `SendspinClient` now spawns a
+  dedicated subprocess (`services/daemon_process.py`) with `PULSE_SINK` set to the
+  target Bluetooth sink in the subprocess environment.  Because PortAudio creates one
+  PA context per Python process, subprocess isolation is the only reliable way to
+  guarantee that every audio stream goes to the correct speaker from the first sample —
+  no `move-sink-input`, no polling, no delay.
+- Removed all reactive routing code that was introduced in v2.2.x–v2.3.x:
+  `_routing_lock`, `_claimed_sink_inputs`, `_route_stream_to_sink()`,
+  `_routing_task`, `_pre_start_sink_input_ids`, inline PULSE_SINK attempts (~200 lines total removed).
+- New `services/daemon_process.py`: subprocess entry point with JSON IPC over
+  stdin/stdout.  Parent sends `{"cmd":"set_volume","value":N}` / `{"cmd":"stop"}`;
+  subprocess emits `{"type":"status",...}` and `{"type":"log",...}` lines.
+- `SendspinClient` updated: `_daemon_proc` (asyncio.subprocess.Process), `_read_subprocess_output()`,
+  `_send_subprocess_command()` replace the former in-process daemon task.
+- Volume changes from Music Assistant server (inside subprocess) are now detected in
+  `_read_subprocess_output` and persisted via `_save_device_volume`.
+
 ## [2.4.0] - 2026-03-03
 
 ### Changed
