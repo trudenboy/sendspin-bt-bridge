@@ -279,6 +279,11 @@ class SendspinClient:
                 await asyncio.wait_for(asyncio.shield(self._daemon_task), timeout=3.0)
             except (asyncio.CancelledError, asyncio.TimeoutError):
                 pass
+        # Clear claimed sink-input so re-routing works on restart
+        if self._bridge_daemon is not None:
+            from services.bridge_daemon import BridgeDaemon
+            BridgeDaemon._claimed_sink_inputs.discard(
+                getattr(self._bridge_daemon, '_routed_sink_input_id', None))
         self._daemon_task = None
         self._bridge_daemon = None
         self.status['server_connected'] = False
