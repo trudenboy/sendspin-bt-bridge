@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.6] - 2026-03-03
+
+### Fixed
+- **Stale routing tasks on rapid stop/play**: tasks from previous play cycles
+  are now cancelled on new stream start, preventing sink-input ID conflicts
+  and routing failures under rapid stop/play clicks.
+
 ## [2.3.5] - 2026-03-03
 
 ### Improved
