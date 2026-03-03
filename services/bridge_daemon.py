@@ -66,6 +66,7 @@ class BridgeDaemon(SendspinDaemon):
         self._on_volume_save = on_volume_save
         self._pre_start_sink_input_ids = pre_start_sink_input_ids or set()
         self._routed = False  # True after sink-input has been moved to target
+        self._routed_sink_input_id: int | None = None
 
     # ── Client creation ──────────────────────────────────────────────────────
 

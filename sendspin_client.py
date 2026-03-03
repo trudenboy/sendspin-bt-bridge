@@ -93,7 +93,6 @@ class SendspinClient:
             "group_id": None,
         }
 
-        self.process = None  # kept for API compatibility (routes/api.py uses it for process check)
         self.running = False
         self.bt_management_enabled: bool = True
         self.bluetooth_sink_name = None  # Store Bluetooth sink name for volume sync
@@ -157,10 +156,6 @@ class SendspinClient:
             except Exception as e:
                 logger.error(f"Error updating status: {e}")
                 await asyncio.sleep(10)
-
-    def _detect_server_url_from_proc(self) -> str:
-        """Kept for backwards compatibility — in-process daemon doesn't use this."""
-        return ""
 
     async def start_sendspin(self) -> None:
         """Start the sendspin daemon in-process via BridgeDaemon."""
@@ -288,7 +283,7 @@ class SendspinClient:
         if self._daemon_task and not self._daemon_task.done():
             self._daemon_task.cancel()
             try:
-                await asyncio.wait_for(asyncio.shield(self._daemon_task), timeout=3.0)
+                await asyncio.wait_for(self._daemon_task, timeout=3.0)
             except (TimeoutError, asyncio.CancelledError):
                 pass
         # Clear claimed sink-input so re-routing works on restart

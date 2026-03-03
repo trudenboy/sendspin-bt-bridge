@@ -17,6 +17,7 @@ import logging
 import os
 import urllib.request as _ur
 from urllib.error import HTTPError
+from urllib.parse import urlparse
 
 from flask import Blueprint, redirect, render_template, request, session, url_for
 
@@ -30,6 +31,16 @@ auth_bp = Blueprint("auth", __name__)
 def _is_ha_addon() -> bool:
     """True when running as a Home Assistant addon (SUPERVISOR_TOKEN is set)."""
     return bool(os.environ.get("SUPERVISOR_TOKEN"))
+
+
+def _safe_next_url() -> str:
+    """Return a validated local redirect target from the ``next`` query param."""
+    target = request.args.get("next", "/")
+    parsed = urlparse(target)
+    # Only allow local paths (no scheme, no netloc, single leading /)
+    if parsed.scheme or parsed.netloc or not target.startswith("/") or target.startswith("//"):
+        return "/"
+    return target
 
 
 @auth_bp.route("/login", methods=["GET", "POST"])
@@ -56,7 +67,7 @@ def login():
                 )
                 _ur.urlopen(req, timeout=10)
                 session["authenticated"] = True
-                return redirect(request.args.get("next", "/"))
+                return redirect(_safe_next_url())
             except HTTPError:
                 error = "Invalid credentials"
             except Exception as exc:
@@ -69,7 +80,7 @@ def login():
                 error = "No password configured — set one via the Configuration panel"
             elif check_password(password, stored):
                 session["authenticated"] = True
-                return redirect(request.args.get("next", "/"))
+                return redirect(_safe_next_url())
             else:
                 error = "Invalid password"
 

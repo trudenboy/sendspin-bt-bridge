@@ -46,6 +46,19 @@ logger = logging.getLogger(__name__)
 api_bp = Blueprint("api", __name__)
 
 # ---------------------------------------------------------------------------
+# Pre-compiled regex patterns (avoid recompilation per request)
+# ---------------------------------------------------------------------------
+
+_MAC_RE = re.compile(r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+_DEV_PAT = re.compile(r"Device\s+([0-9A-Fa-f:]{17})\s+(.*)")
+_NEW_DEV_PAT = re.compile(r"\[NEW\]\s+Device\s+([0-9A-Fa-f:]{17})\s+(.*)")
+_CHG_NAME_PAT = re.compile(r"\[CHG\]\s+Device\s+([0-9A-Fa-f:]{17})\s+Name:\s+(.*)")
+_CHG_RSSI_PAT = re.compile(r"\[CHG\]\s+Device\s+([0-9A-Fa-f:]{17})\s+RSSI:")
+_SHOW_CTRL_PAT = re.compile(r"^Controller\s+([0-9A-Fa-f:]{17})")
+_SHOW_DEV_PAT = re.compile(r"^Device\s+([0-9A-Fa-f:]{17})")
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
@@ -489,7 +502,7 @@ def api_bt_management():
 def api_status():
     """Return status for all client instances."""
     if not _clients:
-        return jsonify({"error": "No clients"})
+        return jsonify({"error": "No clients"}), 503
     if len(_clients) == 1:
         return jsonify(get_client_status_for(_clients[0]))
     first = get_client_status_for(_clients[0])
@@ -594,7 +607,6 @@ def api_config():
     bt_devices = config.get("BLUETOOTH_DEVICES", [])
     if not isinstance(bt_devices, list):
         return jsonify({"error": "BLUETOOTH_DEVICES must be an array"}), 400
-    _MAC_RE = re.compile(r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")
     for dev in bt_devices:
         if not isinstance(dev, dict):
             return jsonify({"error": "Each device must be an object"}), 400
@@ -801,7 +813,7 @@ def api_logs():
         return jsonify({"logs": log_lines, "runtime": runtime})
     except Exception as e:
         logger.error(f"Error reading logs: {e}")
-        return jsonify({"logs": [f"Error reading logs: {e}"]})
+        return jsonify({"logs": [f"Error reading logs: {e}"]}), 500
 
 
 @api_bp.route("/api/bt/adapters")
@@ -849,13 +861,11 @@ def api_bt_paired():
             text=True,
             timeout=5,
         )
-        ansi_re = re.compile(r"\x1b\[[0-9;]*m")
-        dev_pat = re.compile(r"Device\s+([0-9A-Fa-f:]{17})\s+(.*)")
         devices = []
         seen = set()
         for line in result.stdout.splitlines():
-            clean = ansi_re.sub("", line)
-            m = dev_pat.search(clean)
+            clean = _ANSI_RE.sub("", line)
+            m = _DEV_PAT.search(clean)
             if m:
                 mac = m.group(1).upper()
                 name = m.group(2).strip()
@@ -917,29 +927,23 @@ def api_bt_scan():
         seen: set = set()
         names: dict = {}
         device_adapter: dict = {}
-        ansi_re = re.compile(r"\x1b\[[0-9;]*m")
-        new_pat = re.compile(r"\[NEW\]\s+Device\s+([0-9A-Fa-f:]{17})\s+(.*)")
-        chg_name_pat = re.compile(r"\[CHG\]\s+Device\s+([0-9A-Fa-f:]{17})\s+Name:\s+(.*)")
-        chg_rssi_pat = re.compile(r"\[CHG\]\s+Device\s+([0-9A-Fa-f:]{17})\s+RSSI:")
-        show_ctrl_pat = re.compile(r"^Controller\s+([0-9A-Fa-f:]{17})")
-        show_dev_pat = re.compile(r"^Device\s+([0-9A-Fa-f:]{17})")
         active_macs: set = set()
         current_show_adapter: str = ""
         for line in result.stdout.splitlines():
-            clean = ansi_re.sub("", line).strip()
+            clean = _ANSI_RE.sub("", line).strip()
             if not clean.startswith("["):
-                ctrl_m = show_ctrl_pat.match(clean)
+                ctrl_m = _SHOW_CTRL_PAT.match(clean)
                 if ctrl_m:
                     current_show_adapter = ctrl_m.group(1).upper()
                     continue
                 if current_show_adapter:
-                    dev_m = show_dev_pat.match(clean)
+                    dev_m = _SHOW_DEV_PAT.match(clean)
                     if dev_m:
                         dmac = dev_m.group(1).upper()
                         if dmac not in device_adapter:
                             device_adapter[dmac] = current_show_adapter
                         continue
-            scan_m = new_pat.search(clean)
+            scan_m = _NEW_DEV_PAT.search(clean)
             if scan_m:
                 mac = scan_m.group(1).upper()
                 name = scan_m.group(2).strip()
@@ -947,12 +951,12 @@ def api_bt_scan():
                 if name and not re.match(r"^[0-9A-Fa-f]{2}[-:]", name):
                     names[mac] = name
                 continue
-            chg_n = chg_name_pat.search(clean)
+            chg_n = _CHG_NAME_PAT.search(clean)
             if chg_n:
                 mac = chg_n.group(1).upper()
                 names[mac] = chg_n.group(2).strip()
                 continue
-            chg_r = chg_rssi_pat.search(clean)
+            chg_r = _CHG_RSSI_PAT.search(clean)
             if chg_r:
                 active_macs.add(chg_r.group(1).upper())
         all_macs = seen | active_macs
@@ -967,10 +971,9 @@ def api_bt_scan():
                 text=True,
                 timeout=5,
             )
-            db_pat = re.compile(r"Device\s+([0-9A-Fa-f:]{17})\s+(.*)")
             for line in db_result.stdout.splitlines():
-                clean = ansi_re.sub("", line)
-                db_m = db_pat.search(clean)
+                clean = _ANSI_RE.sub("", line)
+                db_m = _DEV_PAT.search(clean)
                 if db_m:
                     mac = db_m.group(1).upper()
                     name = db_m.group(2).strip()

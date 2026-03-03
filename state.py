@@ -53,4 +53,4 @@ def get_adapter_name(mac_upper: str) -> "str | None":
     """Return adapter friendly name for the given MAC (uppercase), loading cache if needed."""
     if not _adapter_cache_loaded:
         load_adapter_name_cache()
-    return _adapter_name_cache.get(mac_upper) or None
+    return _adapter_name_cache.get(mac_upper)

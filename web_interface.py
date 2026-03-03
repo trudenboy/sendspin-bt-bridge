@@ -101,6 +101,21 @@ def _check_auth():
     return redirect(url_for("auth.login", next=request.path))
 
 
+@app.errorhandler(404)
+def _handle_404(e):
+    if request.path.startswith("/api/"):
+        return jsonify({"error": "Not found"}), 404
+    return redirect("/")
+
+
+@app.errorhandler(500)
+def _handle_500(e):
+    logger.error(f"Internal server error: {e}")
+    if request.path.startswith("/api/"):
+        return jsonify({"error": "Internal server error"}), 500
+    return redirect("/")
+
+
 def main():
     """Start the web interface"""
     port = int(os.getenv("WEB_PORT", 8080))

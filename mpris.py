@@ -91,29 +91,3 @@ def pause_all_via_mpris() -> int:
     except Exception as _e:
         logger.debug(f"MPRIS pause unavailable: {_e}")
     return paused
-
-
-def read_mpris_metadata_for(pid: int):
-    """Read track/artist/playback-state from MPRIS for the given sendspin PID.
-
-    Returns (artist, track, playback_status) where playback_status is
-    'Playing', 'Paused', or 'Stopped'. All fields are None on failure.
-    """
-    try:
-        import dbus  # optional dependency — may not be installed
-
-        bus = dbus.SessionBus()
-        service_name = f"org.mpris.MediaPlayer2.Sendspin.instance{pid}"
-        try:
-            obj = bus.get_object(service_name, "/org/mpris/MediaPlayer2")
-            iface = dbus.Interface(obj, "org.freedesktop.DBus.Properties")
-            meta = iface.Get("org.mpris.MediaPlayer2.Player", "Metadata")
-            title = str(meta.get("xesam:title", "") or "")
-            artists = meta.get("xesam:artist", [])
-            artist = str(artists[0]) if artists else ""
-            playback_status = str(iface.Get("org.mpris.MediaPlayer2.Player", "PlaybackStatus"))
-            return artist or None, title or None, playback_status
-        except Exception:
-            return None, None, None
-    except Exception:
-        return None, None, None
