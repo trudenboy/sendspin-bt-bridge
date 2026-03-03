@@ -136,14 +136,13 @@ class BridgeDaemon(SendspinDaemon):
             self._bridge_status['current_artist'] = metadata.artist
 
 
-def resolve_audio_device_for_sink(sink_name: str | None):
+async def resolve_audio_device_for_sink(sink_name: str | None):
     """Find the sounddevice AudioDevice matching a PulseAudio/PipeWire sink name.
 
     PulseAudio/PipeWire exposes sinks to sounddevice/PortAudio by their *description*
     (friendly name), not by their PA sink identifier.  We use pulsectl_asyncio to get
     the description, then match against sounddevice devices.
     """
-    from services.pulse import get_sink_description
     from sendspin.audio import query_devices
 
     devices = query_devices()
@@ -161,8 +160,8 @@ def resolve_audio_device_for_sink(sink_name: str | None):
             logger.info("Audio device matched by exact sink name: %s", dev.name)
             return dev
 
-    # 2. Match via PA description (most reliable — pulsectl_asyncio)
-    description = get_sink_description(sink_name)
+    # 2. Match via PA description (most reliable — pulsectl_asyncio, awaited directly)
+    description = await aget_sink_description(sink_name)
     if description:
         logger.debug("Sink description for %s: %s", sink_name, description)
         desc_lower = description.lower()

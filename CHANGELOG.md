@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.2] - 2026-03-03
+
+### Fixed
+- `Cannot run the event loop while another loop is running` crash on daemon restart after BT connect:
+  `resolve_audio_device_for_sink` is now `async` and uses `await aget_sink_description()` directly
+  instead of calling the sync wrapper `get_sink_description()` (which creates a new event loop —
+  illegal inside an already-running asyncio loop)
+- `coroutine 'aget_sink_description' was never awaited` warning eliminated
+
 ## [2.1.1] - 2026-03-03
 
 ### Fixed

@@ -203,7 +203,7 @@ class SendspinClient:
                 logger.info(f"Starting Sendspin player '{self.player_name}' with auto-discovery (port {self.listen_port})")
 
             # Resolve audio device matching the BT sink
-            audio_device = resolve_audio_device_for_sink(self.bluetooth_sink_name)
+            audio_device = await resolve_audio_device_for_sink(self.bluetooth_sink_name)
             if audio_device:
                 logger.info(f"[{self.player_name}] Audio device resolved: {audio_device.name!r} (index {audio_device.index}) for sink {self.bluetooth_sink_name!r}")
             else:
