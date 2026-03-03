@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.1] - 2026-03-03
+
+### Security
+- Open redirect fixed: login `?next=` validated to local paths only
+
+### Fixed
+- `asyncio.shield()` misuse in `stop_sendspin()` — always timed out; removed
+- `_GLib` never imported — MPRIS identity now works when GLib available
+- `_routed_sink_input_id` initialized in `BridgeDaemon.__init__`
+- Missing HTTP status codes on error responses (503, 500)
+- ha-addon `config.yaml` version reverted — CI auto-syncs on tag push
+
+### Removed
+- Dead code: `_detect_server_url_from_proc()`, `self.process`, `read_mpris_metadata_for()`
+
+### Changed
+- Regex compiled once at module level (10 patterns in `routes/api.py`)
+- Flask 404/500 error handlers with JSON for API routes
+- Docs link added to web UI header
+
 ## [2.3.0] - 2026-03-03
 
 ### Security

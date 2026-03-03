@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.1] - 2026-03-03
+
+### Security
+- **Open redirect fixed**: login redirect target (`?next=`) now validated to be a local
+  path — rejects absolute URLs, `//host` and scheme-relative redirects
+
+### Fixed
+- **asyncio.shield() misuse**: `stop_sendspin()` used `shield()` inside `wait_for()`,
+  preventing cancellation from propagating — timeout always expired; shield removed
+- **`_GLib` never imported**: MPRIS identity registration silently failed because
+  `GLib` was never assigned from `gi.repository`; now properly imported in `mpris.py`
+- **`_routed_sink_input_id` uninitialized**: attribute was dynamically created on first
+  routing success; now initialized to `None` in `BridgeDaemon.__init__`
+- **Missing HTTP status codes**: error responses in `/api/status` (503) and
+  `/api/logs` (500) now return proper status codes instead of implicit 200
+- **Stale comment**: removed outdated "monkey-patch" comment in `bridge_daemon.py`
+- **ha-addon version**: reverted `config.yaml` version to let CI auto-sync on tag push
+
+### Removed
+- Dead code: `_detect_server_url_from_proc()`, `self.process`, `read_mpris_metadata_for()`
+- Redundant `or None` in `state.py` (`.get()` already returns `None`)
+
+### Changed
+- 10 regex `re.compile()` calls moved from per-request to module-level constants
+  in `routes/api.py` for better performance
+- Added Flask `@errorhandler(404)` and `@errorhandler(500)` with JSON responses
+  for `/api/` routes and redirect-to-home for page routes
+- Added documentation link (📖 Docs) to web UI header
+- Added `_GLib is not None` guard before starting GLib main loop thread
+
 ## [2.3.0] - 2026-03-03
 
 ### Security
