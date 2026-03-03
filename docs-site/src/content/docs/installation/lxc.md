@@ -1,60 +1,60 @@
 ---
-title: Установка — Proxmox LXC
-description: Установка Sendspin Bluetooth Bridge в Proxmox LXC контейнер
+title: Installation — Proxmox LXC
+description: Installing Sendspin Bluetooth Bridge in a Proxmox LXC container
 ---
 
 import { Steps, Aside } from '@astrojs/starlight/components';
 
-## Преимущества LXC перед Docker
+## Why LXC over Docker?
 
-В отличие от Docker, LXC-контейнер имеет **собственный bluetoothd и PulseAudio**, что даёт более стабильную работу с Bluetooth: паринг сохраняется между перезапусками, нет конфликтов с хостовым bluetoothd.
+Unlike Docker, an LXC container has its **own bluetoothd and PulseAudio**, providing more stable Bluetooth operation: pairing persists across reboots, no conflicts with the host's bluetoothd.
 
-## Требования
+## Requirements
 
-- Proxmox VE 7.x или 8.x
-- USB Bluetooth-адаптер (рекомендуется один адаптер — одна колонка)
+- Proxmox VE 7.x or 8.x
+- USB Bluetooth adapter (recommended: one adapter per speaker)
 
-## Установка
+## Installation
 
 <Steps>
 
-1. **Запустите скрипт установки**
+1. **Run the install script**
 
-   На хосте Proxmox выполните:
+   On the Proxmox host:
 
    ```bash
    bash -c "$(wget -qO - https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/lxc/install.sh)"
    ```
 
-   Скрипт создаст LXC контейнер, установит все зависимости, настроит PulseAudio и запустит сервис.
+   The script creates an LXC container, installs all dependencies, configures PulseAudio, and starts the service.
 
-2. **Войдите в консоль контейнера**
+2. **Enter the container console**
 
    ```bash
    pct enter <ID>
    ```
 
-3. **Откройте веб-интерфейс**
+3. **Open the web interface**
 
    ```
-   http://<IP-контейнера>:8080
+   http://<container-IP>:8080
    ```
 
-4. **Добавьте Bluetooth-устройство**
+4. **Add a Bluetooth device**
 
-   В веб-интерфейсе перейдите в **Конфигурация → Bluetooth Devices**, нажмите **Scan** для поиска устройств или **+ Add Device** для ручного ввода MAC-адреса.
+   In the web interface go to **Configuration → Bluetooth Devices**, click **Scan** to discover devices or **+ Add Device** to enter a MAC address manually.
 
 </Steps>
 
-## Паринг колонки
+## Pairing a speaker
 
-Если колонка ещё не спарена:
+If the speaker hasn't been paired yet:
 
-1. Переведите колонку в режим паринга
-2. В веб-интерфейсе нажмите **🔍 Scan** и подождите ~10 секунд
-3. Нажмите **Re-pair** рядом с найденным устройством
+1. Put the speaker in pairing mode
+2. Click **🔍 Scan** in the web UI and wait ~10 seconds
+3. Click **Re-pair** next to the found device
 
-Или через `bluetoothctl` внутри контейнера:
+Or via `bluetoothctl` inside the container:
 
 ```bash
 bluetoothctl
@@ -65,7 +65,7 @@ bluetoothctl
 # connect AA:BB:CC:DD:EE:FF
 ```
 
-## Управление сервисом
+## Service management
 
 ```bash
 systemctl status sendspin-client
@@ -73,7 +73,7 @@ systemctl restart sendspin-client
 journalctl -u sendspin-client -f
 ```
 
-## Обновление
+## Updating
 
 ```bash
 cd /opt/sendspin-bt-bridge
@@ -82,5 +82,5 @@ systemctl restart sendspin-client
 ```
 
 <Aside type="tip">
-  Для нескольких колонок рекомендуется создать отдельный LXC контейнер под каждый USB Bluetooth адаптер. Это изолирует bluetoothd и PulseAudio, устраняя конфликты кодеков.
+  For multiple speakers, consider creating a separate LXC container per USB Bluetooth adapter. This isolates bluetoothd and PulseAudio, eliminating codec conflicts.
 </Aside>

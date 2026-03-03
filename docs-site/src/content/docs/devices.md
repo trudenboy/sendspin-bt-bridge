@@ -1,97 +1,77 @@
 ---
-title: Устройства и адаптеры
-description: Управление Bluetooth-устройствами и адаптерами в Sendspin Bluetooth Bridge
+title: Devices & Adapters
+description: Managing Bluetooth devices and adapters in Sendspin Bluetooth Bridge
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
-## Добавление устройства
+## Adding a Device
 
-### Через веб-интерфейс (рекомендуется)
+### Via web interface (recommended)
 
-1. Откройте **⚙️ Configuration → Bluetooth Devices**
-2. Нажмите **🔍 Scan** — мост просканирует BT-эфир ~10 секунд
-3. В списке найденных устройств нажмите на нужное — оно добавится в таблицу
-4. Заполните имя плеера
-5. Нажмите **Save & Restart**
+1. Open **⚙️ Configuration → Bluetooth Devices**
+2. Click **🔍 Scan** — the bridge will scan for ~10 seconds
+3. Click a discovered device to add it to the table
+4. Fill in the player name
+5. Click **Save & Restart**
 
-### Вручную
+### Manually
 
-Нажмите **+ Add Device** и заполните поля:
-- **Player Name** — имя, которое появится в Music Assistant
-- **MAC Address** — в формате `AA:BB:CC:DD:EE:FF`
-- **Adapter** — опционально, для мультиадаптерных систем
-- **Listen Address / Port** — если нужны нестандартные значения
-- **Delay ms** — компенсация A2DP задержки
+Click **+ Add Device** and fill in:
+- **Player Name** — name that will appear in Music Assistant
+- **MAC Address** — in format `AA:BB:CC:DD:EE:FF`
+- **Adapter** — optional, for multi-adapter setups
+- **Listen Address / Port** — if non-default values are needed
+- **Delay ms** — A2DP latency compensation
 
-## Паринг
+## Pairing
 
-Если устройство ещё не спарено с хостом:
+If the device hasn't been paired with the host yet:
 
-1. Переведите колонку в режим паринга (удерживайте кнопку Bluetooth)
-2. В карточке устройства нажмите **🔗 Re-pair**
-3. Подождите ~25 секунд (паринг + доверие + подключение)
+1. Put the speaker in pairing mode
+2. Click **🔗 Re-pair** in the device card
+3. Wait ~25 seconds (pair + trust + connect)
 
-<Aside type="caution">
-  При паринге через веб-интерфейс устройство должно быть в режиме паринга **до нажатия кнопки**. Мост начнёт поиск немедленно.
-</Aside>
+## Bluetooth Adapters
 
-## Bluetooth-адаптеры
+The bridge auto-detects all adapters via `bluetoothctl list`. The **↺ Refresh** button updates the list.
 
-### Автоопределение
+### Binding a device to an adapter
 
-Мост автоматически определяет все адаптеры командой `bluetoothctl list`. Кнопка **↺ Refresh** обновляет список.
+In the **Adapter** field specify:
+- `hci0`, `hci1` — by interface name
+- `AA:BB:CC:DD:EE:FF` — by adapter MAC (recommended in LXC where `hciN` may be unavailable)
 
-### Привязка устройства к адаптеру
-
-В поле **Adapter** укажите:
-- `hci0`, `hci1` — по имени интерфейса
-- `AA:BB:CC:DD:EE:FF` — по MAC-адресу адаптера (рекомендуется в LXC, где `hciN` может быть недоступно)
-
-<Aside type="tip">
-  В LXC-контейнерах с проброшенным USB адаптером используйте **MAC-адрес** вместо `hciN` — имя интерфейса может меняться после перезагрузки.
-</Aside>
-
-### Мультиадаптерная конфигурация
-
-Для нескольких колонок с разными адаптерами:
+### Multi-adapter configuration
 
 ```json
 {
   "BLUETOOTH_DEVICES": [
-    { "mac": "AA:BB:CC:DD:EE:FF", "player_name": "Гостиная", "adapter": "hci0" },
-    { "mac": "11:22:33:44:55:66", "player_name": "Кухня", "adapter": "hci1" }
+    { "mac": "AA:BB:CC:DD:EE:FF", "player_name": "Living Room", "adapter": "hci0" },
+    { "mac": "11:22:33:44:55:66", "player_name": "Kitchen", "adapter": "hci1" }
   ]
 }
 ```
 
-## Статусы устройства
+## A2DP Latency Compensation
 
-| Статус | Описание |
-|---|---|
-| **Connected** | BT подключён, аудио-синк настроен |
-| **Disconnected** | BT не подключён, идёт переподключение |
-| **No Sink** | BT подключён, но аудио-синк не найден — требуется перезапуск PulseAudio |
+All Bluetooth devices have built-in buffer latency (typically 100–600 ms). For group playback this causes desynchronization.
 
-## Компенсация задержки A2DP
+The `static_delay_ms` field compensates for this:
+- Negative value — delay this player (it's "faster" than others)
+- Positive value — speed up data delivery (player is "slower")
 
-Все Bluetooth-устройства имеют встроенную буферную задержку (обычно 100–600 мс). При групповом воспроизведении это приводит к рассинхронизации.
+Example: if one speaker lags 300 ms behind another, set `static_delay_ms: 300` for the lagging one.
 
-Поле `static_delay_ms` позволяет скомпенсировать это:
-- Отрицательное значение — задержать данный плеер (он "быстрее" остальных)
-- Положительное значение — ускорить подачу данных (плеер "медленнее")
-
-Пример: если одна колонка отстаёт на 300 мс от другой, установите для неё `static_delay_ms: 300`.
-
-Текущая задержка отображается в секции **Sync** карточки устройства.
+The current delay is shown in the **Sync** section of the device card.
 
 ## Release / Reclaim
 
-Кнопка **🔓 Release** переводит устройство в "свободный" режим:
-- Мост перестаёт пытаться переподключиться
-- Bluetooth-адаптер освобождается для другого источника
-- Плеер остаётся в конфигурации
+**🔓 Release** puts the device in "free" mode:
+- Bridge stops trying to reconnect
+- Bluetooth adapter is freed for another source
+- Device remains in config
 
-Кнопка **🔒 Reclaim** возвращает управление мосту.
+**🔒 Reclaim** returns management to the bridge.
 
-Это полезно, если вы хотите временно подключить колонку к телефону, не останавливая сервис.
+Useful when you want to temporarily connect a speaker to a phone without stopping the service.

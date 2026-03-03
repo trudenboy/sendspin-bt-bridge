@@ -9,8 +9,8 @@ export default defineConfig({
     starlight({
       title: 'Sendspin BT Bridge',
       locales: {
-        root: { label: 'Русский', lang: 'ru' },
-        en: { label: 'English', lang: 'en' },
+        root: { label: 'English', lang: 'en' },
+        ru: { label: 'Русский', lang: 'ru' },
       },
       defaultLocale: 'root',
       editLink: {
@@ -20,17 +20,17 @@ export default defineConfig({
         { icon: 'github', label: 'GitHub', href: 'https://github.com/trudenboy/sendspin-bt-bridge' },
       ],
       sidebar: [
-        { label: 'Главная', translations: { en: 'Home' }, link: '/' },
+        { label: 'Home', translations: { ru: 'Главная' }, link: '/' },
         {
-          label: 'Установка', translations: { en: 'Installation' },
+          label: 'Installation', translations: { ru: 'Установка' },
           autogenerate: { directory: 'installation' },
         },
-        { label: 'Настройка', translations: { en: 'Configuration' }, slug: 'configuration' },
-        { label: 'Веб-интерфейс', translations: { en: 'Web UI' }, slug: 'web-ui' },
-        { label: 'Устройства', translations: { en: 'Devices' }, slug: 'devices' },
+        { label: 'Configuration', translations: { ru: 'Настройка' }, slug: 'configuration' },
+        { label: 'Web UI', translations: { ru: 'Веб-интерфейс' }, slug: 'web-ui' },
+        { label: 'Devices', translations: { ru: 'Устройства' }, slug: 'devices' },
         { label: 'API Reference', slug: 'api' },
-        { label: 'Устранение неполадок', translations: { en: 'Troubleshooting' }, slug: 'troubleshooting' },
-        { label: 'Разработка', translations: { en: 'Contributing' }, slug: 'contributing' },
+        { label: 'Troubleshooting', translations: { ru: 'Устранение неполадок' }, slug: 'troubleshooting' },
+        { label: 'Contributing', translations: { ru: 'Разработка' }, slug: 'contributing' },
       ],
     }),
   ],

@@ -1,33 +1,33 @@
 ---
-title: Настройка
-description: Полный справочник параметров конфигурации Sendspin Bluetooth Bridge
+title: Configuration
+description: Complete configuration reference for Sendspin Bluetooth Bridge
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
-Конфигурация хранится в файле `config.json` в директории `/config` (монтируется как Docker volume). Редактировать можно через веб-интерфейс или напрямую через файл (требует перезапуска).
+Configuration is stored in `config.json` in the `/config` directory (mounted as a Docker volume). Edit via the web interface or directly (requires restart).
 
-## Основные параметры
+## Core Parameters
 
-| Параметр | Тип | По умолчанию | Описание |
+| Parameter | Type | Default | Description |
 |---|---|---|---|
-| `SENDSPIN_SERVER` | string | `"auto"` | Адрес MA сервера. `auto` — обнаружение через mDNS |
-| `SENDSPIN_PORT` | integer | `9000` | WebSocket порт MA (`ws://server:port/sendspin`) |
-| `BRIDGE_NAME` | string | `""` | Суффикс к имени каждого плеера в MA (пустая строка — выключено) |
-| `TZ` | string | `"Australia/Melbourne"` | Временная зона контейнера |
-| `PULSE_LATENCY_MSEC` | integer | `200` | Задержка PulseAudio в мс. Увеличьте при звуковых заикание на медленном железе |
-| `PREFER_SBC_CODEC` | boolean | `false` | Принудительно использовать SBC кодек после каждого подключения. Снижает нагрузку CPU |
+| `SENDSPIN_SERVER` | string | `"auto"` | MA server address. `auto` = mDNS discovery |
+| `SENDSPIN_PORT` | integer | `9000` | MA WebSocket port (`ws://server:port/sendspin`) |
+| `BRIDGE_NAME` | string | `""` | Suffix appended to every player name in MA (empty = off) |
+| `TZ` | string | `"Australia/Melbourne"` | Container timezone |
+| `PULSE_LATENCY_MSEC` | integer | `200` | PulseAudio latency in ms. Increase if audio stutters on slow hardware |
+| `PREFER_SBC_CODEC` | boolean | `false` | Force SBC codec after each BT connect. Reduces CPU load |
 
-## Bluetooth-устройства
+## Bluetooth Devices
 
-Список устройств задаётся в поле `BLUETOOTH_DEVICES`. Каждое устройство — отдельный плеер в MA.
+The device list is set in `BLUETOOTH_DEVICES`. Each device becomes a separate player in MA.
 
 ```json
 {
   "BLUETOOTH_DEVICES": [
     {
       "mac": "AA:BB:CC:DD:EE:FF",
-      "player_name": "Колонка в гостиной",
+      "player_name": "Living Room Speaker",
       "adapter": "hci0",
       "static_delay_ms": -500,
       "listen_host": "0.0.0.0",
@@ -38,60 +38,38 @@ import { Aside } from '@astrojs/starlight/components';
 }
 ```
 
-### Поля устройства
+### Device Fields
 
-| Поле | Тип | Обязательное | Описание |
+| Field | Type | Required | Description |
 |---|---|---|---|
-| `mac` | string | ✓ | MAC-адрес Bluetooth-колонки (формат `AA:BB:CC:DD:EE:FF`) |
-| `player_name` | string | ✓ | Отображаемое имя плеера в MA |
-| `adapter` | string | — | ID адаптера (`hci0`, `hci1`) или MAC адаптера. Пустая строка — адаптер по умолчанию |
-| `static_delay_ms` | integer | — | Компенсация A2DP задержки в мс. Отрицательное значение = задержать плеер |
-| `listen_host` | string | — | IP для прослушивания sendspin WebSocket (по умолчанию `0.0.0.0`) |
-| `listen_port` | integer | — | Порт sendspin WebSocket (по умолчанию `9000 + индекс`) |
-| `enabled` | boolean | — | `false` — устройство отключено и пропускается при запуске |
+| `mac` | string | ✓ | Bluetooth speaker MAC address (`AA:BB:CC:DD:EE:FF`) |
+| `player_name` | string | ✓ | Display name in MA |
+| `adapter` | string | — | Adapter ID (`hci0`, `hci1`) or adapter MAC. Empty = default adapter |
+| `static_delay_ms` | integer | — | A2DP latency compensation in ms. Negative = delay this player |
+| `listen_host` | string | — | IP for sendspin WebSocket listener (default `0.0.0.0`) |
+| `listen_port` | integer | — | sendspin WebSocket port (default `9000 + index`) |
+| `enabled` | boolean | — | `false` = device is disabled and skipped on startup |
 
-## Bluetooth-адаптеры
+## Environment Variables
 
-Опциональный список адаптеров для явной привязки:
+Environment variables override `config.json` values:
 
-```json
-{
-  "BLUETOOTH_ADAPTERS": [
-    {
-      "id": "hci0",
-      "mac": "C0:FB:F9:62:D6:9D",
-      "name": "Гостиная"
-    }
-  ]
-}
-```
-
-## Переменные окружения
-
-Переменные окружения Docker/HA переопределяют значения из `config.json`:
-
-| Переменная | Описание |
+| Variable | Description |
 |---|---|
-| `SENDSPIN_SERVER` | Адрес MA сервера |
-| `SENDSPIN_PORT` | WebSocket порт |
-| `BLUETOOTH_MAC` | MAC устройства (для одноустройственной конфигурации) |
-| `WEB_PORT` | Порт веб-интерфейса (по умолчанию `8080`) |
-| `TZ` | Временная зона |
-| `CONFIG_DIR` | Путь к директории конфигурации (по умолчанию `/config`) |
+| `SENDSPIN_SERVER` | MA server address |
+| `SENDSPIN_PORT` | WebSocket port |
+| `BLUETOOTH_MAC` | Device MAC (single-device config) |
+| `WEB_PORT` | Web UI port (default `8080`) |
+| `TZ` | Timezone |
+| `CONFIG_DIR` | Config directory path (default `/config`) |
 
-## Оптимизация производительности
+## Performance Optimization
 
 <Aside type="tip">
-**Снижение нагрузки CPU на слабом железе (Raspberry Pi):**
+**Reduce CPU load on slow hardware (Raspberry Pi):**
 
-1. Включите `PREFER_SBC_CODEC: true` — SBC требует минимального декодирования
-2. В MA: Settings → Providers → Sendspin → Audio Quality → выберите **PCM 44.1 kHz / 16-bit**
+1. Enable `PREFER_SBC_CODEC: true` — SBC requires minimal decoding
+2. In MA: Settings → Providers → Sendspin → Audio Quality → **PCM 44.1 kHz / 16-bit**
 
-Эти две настройки вместе устраняют FLAC-декодирование и снижают нагрузку ~30% на плеер.
-</Aside>
-
-<Aside type="note">
-**Синхронизация группового воспроизведения:**
-
-При использовании нескольких колонок одновременно задержки A2DP могут различаться. Используйте `static_delay_ms` для выравнивания: измерьте задержку каждой колонки и установите отрицательное значение для более быстрых устройств.
+Together these eliminate FLAC decoding and reduce load ~30% per player.
 </Aside>

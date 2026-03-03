@@ -1,68 +1,68 @@
 ---
-title: Установка — Home Assistant Addon
-description: Пошаговая установка Sendspin Bluetooth Bridge как аддона Home Assistant
+title: Installation — Home Assistant Addon
+description: Step-by-step installation of Sendspin Bluetooth Bridge as a Home Assistant addon
 ---
 
 import { Steps, Aside } from '@astrojs/starlight/components';
 
-## Требования
+## Requirements
 
-- Home Assistant OS или Supervised
-- Bluetooth-адаптер, доступный хосту HA
-- Music Assistant Server на вашей сети
+- Home Assistant OS or Supervised
+- Bluetooth adapter accessible to the HA host
+- Music Assistant Server running on your network
 
-## Установка
+## Installation
 
 <Steps>
 
-1. **Добавьте репозиторий аддонов**
+1. **Add the addon repository**
 
-   В Home Assistant перейдите в **Настройки → Аддоны → Магазин аддонов → ⋮ (меню) → Репозитории** и добавьте:
+   In Home Assistant go to **Settings → Add-ons → Add-on store → ⋮ → Repositories** and add:
 
    ```
    https://github.com/trudenboy/sendspin-bt-bridge
    ```
 
-2. **Установите аддон**
+2. **Install the addon**
 
-   Найдите **Sendspin Bluetooth Bridge** в магазине аддонов и нажмите **Установить**.
+   Find **Sendspin Bluetooth Bridge** in the addon store and click **Install**.
 
-3. **Настройте аддон**
+3. **Configure the addon**
 
-   Перейдите на вкладку **Конфигурация** и добавьте ваши устройства:
+   Go to the **Configuration** tab and add your devices:
 
    ```yaml
-   sendspin_server: auto          # или IP/hostname вашего MA сервера
+   sendspin_server: auto          # or your MA server hostname/IP
    sendspin_port: 9000
    bluetooth_devices:
      - mac: "AA:BB:CC:DD:EE:FF"
-       player_name: "Колонка в гостиной"
+       player_name: "Living Room Speaker"
      - mac: "11:22:33:44:55:66"
-       player_name: "Колонка на кухне"
-       adapter: hci1              # только для конфигураций с несколькими адаптерами
-       static_delay_ms: -500      # компенсация задержки A2DP в мс
+       player_name: "Kitchen Speaker"
+       adapter: hci1              # only needed for multi-adapter setups
+       static_delay_ms: -500      # A2DP latency compensation in ms
    ```
 
-4. **Запустите аддон**
+4. **Start the addon**
 
-   Нажмите **Запустить**. Аддон появится в боковой панели HA.
+   Click **Start**. The addon will appear in the HA sidebar.
 
 </Steps>
 
-## Открытие веб-интерфейса
+## Opening the web interface
 
-Аддон предоставляет веб-интерфейс через **HA Ingress** — нажмите **Открыть веб-интерфейс** в странице аддона или перейдите по ссылке в боковой панели. Порт 8080 не нужно пробрасывать.
+The addon provides a web UI via **HA Ingress** — click **Open Web UI** on the addon page or use the sidebar link. No port forwarding required.
 
-Интерфейс автоматически применяет тему HA (тёмная/светлая) через Ingress `postMessage` API.
+The interface automatically applies the HA theme (dark/light) via the Ingress `postMessage` API.
 
-## Аудио-маршрутизация (HA OS)
+## Audio routing (HA OS)
 
-Аддон запрашивает `audio: true` в манифесте, поэтому HA Supervisor автоматически инжектирует переменную `PULSE_SERVER`. Ручная настройка сокетов не требуется.
+The addon requests `audio: true` in its manifest, so the HA Supervisor automatically injects `PULSE_SERVER`. No manual socket configuration needed.
 
-## Применение изменений конфигурации
+## Applying configuration changes
 
-Изменения в конфигурации аддона вступают в силу после перезапуска. Используйте кнопку **Перезапустить** в странице аддона или нажмите **Сохранить и перезапустить** в веб-интерфейсе.
+Configuration changes take effect after a restart. Use the **Restart** button on the addon page or click **Save & Restart** in the web interface.
 
 <Aside type="tip">
-  Если Music Assistant не видит плеер после запуска — проверьте, что в настройках MA включён провайдер **Sendspin**. Перейдите в Settings → Providers и убедитесь, что Sendspin активен.
+  If Music Assistant doesn't see the player after starting — check that the **Sendspin** provider is enabled in MA. Go to Settings → Providers and make sure Sendspin is active.
 </Aside>
