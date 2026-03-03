@@ -94,8 +94,6 @@ class SendspinClient:
         self._bridge_daemon = None  # BridgeDaemon instance (in-process sendspin)
         self._monitor_task: Optional[asyncio.Task] = None
         self._status_lock = threading.Lock()  # protects concurrent reads/writes of self.status
-        self._null_sink_name: Optional[str] = None  # virtual PA sink name (set by main())
-        self._loopback_module_id: Optional[int] = None  # PA loopback module index
 
     def update_status(self, **kwargs) -> None:
         """Thread-safe update of one or more status fields."""
@@ -212,29 +210,14 @@ class SendspinClient:
             else:
                 logger.info(f"Starting Sendspin player '{self.player_name}' with auto-discovery (port {self.listen_port})")
 
-            # --- Null-sink + loopback routing ---
-            # If we have a null-sink, create a loopback to forward audio to BT sink
-            # and resolve the audio device to the null-sink (not the BT sink).
-            resolve_target = self.bluetooth_sink_name  # fallback: try BT sink directly
-            if self._null_sink_name and self.bluetooth_sink_name:
-                from services.pulse import load_loopback
-                self._loopback_module_id = load_loopback(
-                    f"{self._null_sink_name}.monitor",
-                    self.bluetooth_sink_name,
-                )
-                if self._loopback_module_id is not None:
-                    logger.info(
-                        f"[{self.player_name}] Loopback: {self._null_sink_name} → {self.bluetooth_sink_name}"
-                    )
-                    resolve_target = self._null_sink_name
-                else:
-                    logger.warning(
-                        f"[{self.player_name}] Loopback creation failed — falling back to default device"
-                    )
+            # Snapshot current sink-inputs so BridgeDaemon can identify
+            # the new one it creates (for move-sink-input routing).
+            from services.pulse import get_sink_input_ids
+            pre_sink_inputs = get_sink_input_ids()
 
-            audio_device = await resolve_audio_device_for_sink(resolve_target)
+            audio_device = await resolve_audio_device_for_sink(self.bluetooth_sink_name)
             if audio_device:
-                logger.info(f"[{self.player_name}] Audio device resolved: {audio_device.name!r} (index {audio_device.index}) for sink {resolve_target!r}")
+                logger.info(f"[{self.player_name}] Audio device resolved: {audio_device.name!r} (index {audio_device.index}) for sink {self.bluetooth_sink_name!r}")
             else:
                 logger.error("No audio output device found — cannot start daemon")
                 self.status['last_error'] = 'No audio output device found'
@@ -270,6 +253,7 @@ class SendspinClient:
                 status=self.status,
                 bluetooth_sink_name=self.bluetooth_sink_name,
                 on_volume_save=_on_volume_save,
+                pre_start_sink_input_ids=pre_sink_inputs,
             )
             self.status['playing'] = False
 
@@ -288,7 +272,7 @@ class SendspinClient:
             self.status['server_connected'] = False
 
     async def stop_sendspin(self) -> None:
-        """Stop the in-process sendspin daemon task and clean up loopback."""
+        """Stop the in-process sendspin daemon task."""
         if self._daemon_task and not self._daemon_task.done():
             self._daemon_task.cancel()
             try:
@@ -297,11 +281,6 @@ class SendspinClient:
                 pass
         self._daemon_task = None
         self._bridge_daemon = None
-        # Unload loopback module (null-sink persists for reuse)
-        if self._loopback_module_id is not None and self._loopback_module_id >= 0:
-            from services.pulse import unload_module
-            unload_module(self._loopback_module_id)
-            self._loopback_module_id = None
         self.status['server_connected'] = False
         self.status['connected'] = False
         self.status['group_name'] = None
@@ -453,17 +432,6 @@ async def main():
         or f"Sendspin-{socket.gethostname()}"
     )
 
-    # Pre-create virtual null-sinks for each BT device so PortAudio sees them
-    # on first Pa_Initialize() (triggered by query_devices() in daemon startup).
-    from services.pulse import load_null_sink
-    for device in bt_devices:
-        mac = device.get('mac', '')
-        if mac:
-            mac_under = mac.replace(':', '_')
-            ns_name = f"bridge_{mac_under}"
-            _pname = device.get('player_name') or _default_player_name
-            load_null_sink(ns_name, f"Bridge: {_pname}")
-
     base_listen_port = 8928
     clients = []
     for i, device in enumerate(bt_devices):
@@ -483,7 +451,6 @@ async def main():
                                 listen_port=listen_port, static_delay_ms=static_delay_ms,
                                 listen_host=listen_host, effective_bridge=effective_bridge)
         if mac:
-            client._null_sink_name = f"bridge_{mac.replace(':', '_')}"
             bt_mgr = BluetoothManager(mac, adapter=adapter, device_name=player_name, client=client,
                                        prefer_sbc=prefer_sbc,
                                        check_interval=bt_check_interval,

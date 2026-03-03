@@ -22,7 +22,7 @@ from aiosendspin.models.core import (
 )
 from aiosendspin.models.types import PlayerCommand, UndefinedField
 from sendspin.daemon.daemon import DaemonArgs, SendspinDaemon
-from services.pulse import aset_sink_volume, aget_sink_description
+from services.pulse import aset_sink_volume, aget_sink_description, alist_sink_input_ids, amove_sink_input
 
 from config import VERSION as _BRIDGE_VERSION
 
@@ -40,17 +40,23 @@ class BridgeDaemon(SendspinDaemon):
                         to persist the value to config.
     """
 
+    # Class-level lock to serialize sink-input routing across daemon instances
+    _routing_lock = asyncio.Lock()
+
     def __init__(
         self,
         args: DaemonArgs,
         status: dict,
         bluetooth_sink_name: str | None,
         on_volume_save: Callable[[int], None] | None = None,
+        pre_start_sink_input_ids: set[int] | None = None,
     ) -> None:
         super().__init__(args)
         self._bridge_status = status
         self._bluetooth_sink_name = bluetooth_sink_name
         self._on_volume_save = on_volume_save
+        self._pre_start_sink_input_ids = pre_start_sink_input_ids or set()
+        self._routed = False  # True after sink-input has been moved to target
 
     # ── Client creation ──────────────────────────────────────────────────────
 
@@ -147,6 +153,39 @@ class BridgeDaemon(SendspinDaemon):
         self._bridge_status['audio_format'] = (
             f"{codec or 'PCM'} {sample_rate}Hz/{bit_depth}-bit/{channels}ch"
         )
+        # PA stream (sink-input) was just created by set_format() → sounddevice.
+        # Schedule routing to the correct BT sink.
+        if self._bluetooth_sink_name and not self._routed:
+            asyncio.ensure_future(self._route_stream_to_sink())
+
+    async def _route_stream_to_sink(self) -> None:
+        """Find the newly created sink-input and move it to the target BT sink.
+
+        Uses *pre_start_sink_input_ids* to identify the new sink-input (any ID
+        that didn't exist before this daemon started).  An asyncio lock serializes
+        routing across daemon instances to prevent two daemons from claiming the
+        same sink-input.
+        """
+        async with BridgeDaemon._routing_lock:
+            # Small delay for PA/PipeWire to register the new sink-input
+            await asyncio.sleep(0.3)
+            current_ids = await alist_sink_input_ids()
+            new_ids = current_ids - self._pre_start_sink_input_ids
+            player = self._bridge_status.get('player_name', '?')
+            if not new_ids:
+                logger.warning("[%s] No new sink-input found for routing "
+                               "(pre=%s, cur=%s)", player,
+                               self._pre_start_sink_input_ids, current_ids)
+                return
+            target_id = max(new_ids)  # highest (newest) ID
+            ok = await amove_sink_input(target_id, self._bluetooth_sink_name)
+            if ok:
+                self._routed = True
+                logger.info("[%s] ✓ Routed sink-input %d → %s",
+                            player, target_id, self._bluetooth_sink_name)
+            else:
+                logger.warning("[%s] Failed to route sink-input %d → %s",
+                               player, target_id, self._bluetooth_sink_name)
 
     def _on_stream_event(self, event: str) -> None:
         super()._on_stream_event(event)
