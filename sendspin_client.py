@@ -117,8 +117,8 @@ class SendspinClient:
         except Exception:
             return "unknown"
     
-    async def update_status(self):
-        """Update client status"""
+    async def _status_monitor_loop(self):
+        """Periodic status monitoring loop (BT state + daemon health)."""
         logger.debug("Status monitoring loop started")
         while self.running:
             try:
@@ -289,7 +289,7 @@ class SendspinClient:
 
         # Start background tasks
         tasks = [
-            asyncio.create_task(self.update_status())
+            asyncio.create_task(self._status_monitor_loop())
         ]
 
         # Handle Bluetooth connection in background if configured
@@ -311,6 +311,16 @@ class SendspinClient:
                     if bt_now != self.status['bluetooth_connected']:
                         self.status['bluetooth_connected'] = bt_now
                         self.status['bluetooth_connected_at'] = datetime.now().isoformat()
+                    # Restart daemon with correct BT audio device now that sink is known.
+                    # At start_sendspin() time bluetooth_sink_name was None (BT not yet
+                    # connected), so the daemon was bound to the default audio device.
+                    # Re-starting here ensures each player routes audio to its own BT sink.
+                    if bt_now and self.bluetooth_sink_name:
+                        logger.info(
+                            f"[{self.player_name}] BT connected with sink {self.bluetooth_sink_name} "
+                            "— restarting daemon on correct audio device"
+                        )
+                        await self.start_sendspin()
                 except Exception as e:
                     logger.error(f"Error connecting Bluetooth: {e}")
             

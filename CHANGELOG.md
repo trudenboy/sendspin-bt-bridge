@@ -5,7 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.0.3] - 2026-03-03
+## [2.0.4] - 2026-03-03
+
+### Fixed
+- **Group playback: audio routes to only one device** — daemon was started before
+  Bluetooth connected, so it bound to the default audio device (no BT sink known yet).
+  After initial BT connect, daemon now restarts with the correct per-device BT sink,
+  ensuring each player in a group outputs to its own Bluetooth speaker.
+- **`update_status` name collision** — async status-monitor loop had the same name as
+  the sync thread-safe helper, silently shadowing it. Renamed to `_status_monitor_loop`.
+
+
 
 ### Fixed
 - **Track metadata never populated** — `_on_metadata_update` callback receives
