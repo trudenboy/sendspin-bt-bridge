@@ -173,7 +173,7 @@ function populateDeviceCard(i, dev) {
 
     var groupBadge = document.getElementById('dgroup-' + i);
     if (groupBadge) {
-        var groupLabel = dev.group_name || (dev.group_id ? 'In group' : '');
+        var groupLabel = dev.group_name || (dev.group_id ? dev.group_id.split('-').pop() : '');
         groupBadge.textContent = groupLabel ? '\uD83D\uDD17 ' + groupLabel : '';
         groupBadge.style.display = groupLabel ? '' : 'none';
     }
