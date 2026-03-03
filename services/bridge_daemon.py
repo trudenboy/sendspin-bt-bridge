@@ -42,6 +42,7 @@ class BridgeDaemon(SendspinDaemon):
 
     # Class-level lock to serialize sink-input routing across daemon instances
     _routing_lock = asyncio.Lock()
+    _claimed_sink_inputs: set[int] = set()  # IDs already routed by other daemons
 
     def __init__(
         self,
@@ -161,26 +162,29 @@ class BridgeDaemon(SendspinDaemon):
     async def _route_stream_to_sink(self) -> None:
         """Find the newly created sink-input and move it to the target BT sink.
 
-        Uses *pre_start_sink_input_ids* to identify the new sink-input (any ID
-        that didn't exist before this daemon started).  An asyncio lock serializes
-        routing across daemon instances to prevent two daemons from claiming the
-        same sink-input.
+        Uses *pre_start_sink_input_ids* and *_claimed_sink_inputs* to identify
+        the new unclaimed sink-input.  An asyncio lock serializes routing across
+        daemon instances to prevent two daemons from claiming the same one.
         """
         async with BridgeDaemon._routing_lock:
-            # Small delay for PA/PipeWire to register the new sink-input
             await asyncio.sleep(0.3)
             current_ids = await alist_sink_input_ids()
             new_ids = current_ids - self._pre_start_sink_input_ids
+            unclaimed = new_ids - BridgeDaemon._claimed_sink_inputs
             player = self._bridge_status.get('player_name', '?')
-            if not new_ids:
-                logger.warning("[%s] No new sink-input found for routing "
-                               "(pre=%s, cur=%s)", player,
-                               self._pre_start_sink_input_ids, current_ids)
+            if not unclaimed:
+                unclaimed = current_ids - BridgeDaemon._claimed_sink_inputs
+            if not unclaimed:
+                logger.warning("[%s] No unclaimed sink-input found (pre=%s, cur=%s, claimed=%s)",
+                               player, self._pre_start_sink_input_ids, current_ids,
+                               BridgeDaemon._claimed_sink_inputs)
                 return
-            target_id = max(new_ids)  # highest (newest) ID
+            target_id = max(unclaimed)
             ok = await amove_sink_input(target_id, self._bluetooth_sink_name)
             if ok:
+                BridgeDaemon._claimed_sink_inputs.add(target_id)
                 self._routed = True
+                self._routed_sink_input_id = target_id
                 logger.info("[%s] ✓ Routed sink-input %d → %s",
                             player, target_id, self._bluetooth_sink_name)
             else:
