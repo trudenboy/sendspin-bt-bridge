@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.7] - 2026-03-03
+
+### Fixed
+- **Group audio routing**: increased PULSE_SINK hold from 3 s to 6 s — Music Assistant connects
+  ~4 s after daemon start, so the PA stream now opens while the correct BT sink is still set
+
+### Changed
+- **Diagnostics**: `/api/diagnostics` now includes `sink_inputs` (PA stream properties incl.
+  `application.name`) and `portaudio_devices` list for audio routing debugging
+
 ## [2.1.5] - 2026-03-03
 
 ### Fixed
