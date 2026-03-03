@@ -278,7 +278,8 @@ pct exec <CTID> -- bluetoothctl show
 │                                     │
 │  ┌─────────────────────────────┐    │
 │  │  SendspinClient (на устр.)  │    │
-│  │  · subprocess sendspin CLI  │    │
+│  │  · daemon-subprocess        │    │
+│  │    (PULSE_SINK=bt_sink)     │    │
 │  │  · отслеживание воспр.      │    │
 │  │  · синхронизация громкости  │    │
 │  └─────────────────────────────┘    │
