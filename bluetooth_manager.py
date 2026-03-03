@@ -19,6 +19,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
 from config import _CONFIG_PATH, _config_lock, _save_device_volume
+from services.pulse import get_sink_volume, set_sink_volume, list_sinks
 
 if TYPE_CHECKING:
     from sendspin_client import SendspinClient
@@ -336,18 +337,12 @@ class BluetoothManager:
             # A2DP profile takes a few seconds to appear after BT connects.
             time.sleep(3)
             
-            # Format the MAC address for PipeWire/PulseAudio (replace : with _)
             pa_mac = self.mac_address.replace(':', '_')
-            
-            # List available sinks first
-            result = subprocess.run(
-                ['pactl', 'list', 'short', 'sinks'],
-                capture_output=True,
-                text=True,
-                timeout=5
-            )
-            logger.info(f"Available audio sinks:\n{result.stdout}")
-            
+
+            # Log available sinks for diagnostics
+            sinks = list_sinks()
+            logger.info(f"Available audio sinks: {[s['name'] for s in sinks]}")
+
             # Find the Bluetooth sink (do NOT change system default — PULSE_SINK handles per-process routing)
             sink_names = [
                 f"bluez_output.{pa_mac}.1",  # PipeWire format
@@ -355,19 +350,14 @@ class BluetoothManager:
                 f"bluez_sink.{pa_mac}.a2dp_sink",  # Legacy PulseAudio format
                 f"bluez_sink.{pa_mac}",
             ]
+            known_names = {s['name'] for s in sinks}
 
             success = False
             configured_sink = None
             # Retry up to 3 times — A2DP sink may take a few extra seconds to appear
             for attempt in range(3):
                 for sink_name in sink_names:
-                    result = subprocess.run(
-                        ['pactl', 'get-sink-volume', sink_name],
-                        capture_output=True,
-                        text=True,
-                        timeout=5
-                    )
-                    if result.returncode == 0:
+                    if sink_name in known_names or get_sink_volume(sink_name) is not None:
                         logger.info(f"✓ Found audio sink: {sink_name}")
                         configured_sink = sink_name
                         success = True
@@ -379,6 +369,8 @@ class BluetoothManager:
                 if attempt < 2:
                     logger.info(f"Sink not yet available, retrying in 3s... (attempt {attempt + 1}/3)")
                     time.sleep(3)
+                    sinks = list_sinks()
+                    known_names = {s['name'] for s in sinks}
             
             if success and configured_sink:
                 # Try to force SBC codec (lowest CPU A2DP codec) if requested
@@ -397,26 +389,18 @@ class BluetoothManager:
                         if os.path.exists(config_path):
                             with open(config_path, 'r') as f:
                                 cfg = json.load(f)
-                            # Per-device dict (preferred); fall back to legacy single value
                             volumes = cfg.get('LAST_VOLUMES', {})
                             last_volume = volumes.get(self.mac_address)
                             if last_volume is None:
                                 last_volume = cfg.get('LAST_VOLUME')
                             if last_volume is not None and isinstance(last_volume, int) and 0 <= last_volume <= 100:
-                                result = subprocess.run(
-                                    ['pactl', 'set-sink-volume', configured_sink, f'{last_volume}%'],
-                                    capture_output=True,
-                                    text=True,
-                                    timeout=2
-                                )
-                                if result.returncode == 0:
+                                if set_sink_volume(configured_sink, last_volume):
                                     logger.info(f"✓ Restored volume to {last_volume}% for {self.mac_address}")
                                     self.client.status['volume'] = last_volume
                                     restored = True
                     except Exception as e:
                         logger.debug(f"Could not restore volume: {e}")
 
-                    # Always allow saving future volume changes
                     if hasattr(self.client, 'volume_restore_done'):
                         self.client.volume_restore_done = True
                     if not restored:

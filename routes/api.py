@@ -26,6 +26,7 @@ from services import (
     is_audio_device,
 )
 from services.bluetooth import _AUDIO_UUIDS
+from services.pulse import set_sink_volume, set_sink_mute, get_sink_mute, get_server_name, list_sinks
 
 logger = logging.getLogger(__name__)
 
@@ -208,11 +209,8 @@ def set_volume():
         results = []
         for client in targets:
             if client.bluetooth_sink_name:
-                r = subprocess.run(
-                    ['pactl', 'set-sink-volume', client.bluetooth_sink_name, f'{volume}%'],
-                    capture_output=True, text=True, timeout=2
-                )
-                if r.returncode == 0:
+                ok = set_sink_volume(client.bluetooth_sink_name, volume)
+                if ok:
                     client.status['volume'] = volume
                     mac = getattr(getattr(client, 'bt_manager', None), 'mac_address', None)
                     if mac and CONFIG_FILE.exists():
@@ -227,9 +225,7 @@ def set_volume():
                                 os.replace(tmp, str(CONFIG_FILE))
                         except Exception as e:
                             logger.debug(f"Could not save volume for {mac}: {e}")
-                    results.append({'player': getattr(client, 'player_name', '?'), 'ok': True})
-                else:
-                    results.append({'player': getattr(client, 'player_name', '?'), 'ok': False})
+                results.append({'player': getattr(client, 'player_name', '?'), 'ok': ok})
         if not results:
             return jsonify({'success': False, 'error': 'No clients available'}), 503
         return jsonify({'success': True, 'volume': volume, 'results': results})
@@ -253,20 +249,14 @@ def set_mute():
         else:
             targets = _clients[:1]
 
-        pactl_arg = 'toggle' if mute_value is None else ('1' if mute_value else '0')
         results = []
         for client in targets:
             if client.bluetooth_sink_name:
-                r = subprocess.run(
-                    ['pactl', 'set-sink-mute', client.bluetooth_sink_name, pactl_arg],
-                    capture_output=True, text=True, timeout=2
-                )
-                if r.returncode == 0:
-                    info = subprocess.run(
-                        ['pactl', 'get-sink-mute', client.bluetooth_sink_name],
-                        capture_output=True, text=True, timeout=2
-                    )
-                    muted = 'yes' in info.stdout.lower()
+                ok = set_sink_mute(client.bluetooth_sink_name, mute_value)
+                if ok:
+                    muted = get_sink_mute(client.bluetooth_sink_name)
+                    if muted is None:
+                        muted = bool(mute_value) if mute_value is not None else not client.status.get('muted', False)
                     client.status['muted'] = muted
                     results.append({'player': getattr(client, 'player_name', '?'),
                                     'ok': True, 'muted': muted})
@@ -933,26 +923,14 @@ def api_diagnostics():
             diag['adapters'] = [{'error': str(e)}]
 
         try:
-            r = subprocess.run(['pactl', 'info'], capture_output=True, text=True, timeout=3)
-            if r.returncode == 0:
-                diag['pulseaudio'] = next(
-                    (l.split(':', 1)[-1].strip() for l in r.stdout.splitlines()
-                     if 'Server Name' in l),
-                    'running'
-                )
-            else:
-                diag['pulseaudio'] = 'not available'
+            diag['pulseaudio'] = get_server_name()
         except Exception:
             diag['pulseaudio'] = 'not available'
 
         try:
-            r = subprocess.run(
-                ['pactl', 'list', 'short', 'sinks'],
-                capture_output=True, text=True, timeout=3
-            )
             diag['sinks'] = [
-                l.split()[1] for l in r.stdout.splitlines()
-                if 'bluez' in l.lower() and len(l.split()) > 1
+                s['name'] for s in list_sinks()
+                if 'bluez' in s['name'].lower()
             ]
         except Exception:
             diag['sinks'] = []

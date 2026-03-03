@@ -5,7 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.0.6] - 2026-03-03
+## [2.1.0] - 2026-03-03
+
+### Changed
+- **PulseAudio: migrate from subprocess `pactl` to `pulsectl_asyncio` library**
+  All PA operations (sink discovery, volume, mute, diagnostics) now use the native
+  `pulsectl_asyncio` API instead of spawning `pactl` subprocesses.
+  Benefits: no fork+exec overhead, typed objects, direct `sink.description` access
+  (fixes audio device resolution for group playback).
+  Graceful fallback to `pactl` subprocess if `pulsectl_asyncio`/`libpulse0` unavailable.
+  New module: `services/pulse.py` with sync + async wrappers.
+
+### Added
+- `pulsectl-asyncio>=0.8.0,<1.0.0` to `requirements.txt`
+
+
 
 ### Fixed
 - **Group audio still routes to single device** — `resolve_audio_device_for_sink` was
