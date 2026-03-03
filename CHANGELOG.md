@@ -5,7 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.0.2] - 2026-03-02
+## [2.0.3] - 2026-03-03
+
+### Fixed
+- **Track metadata never populated** — `_on_metadata_update` callback receives
+  `ServerStatePayload` (with nested `metadata: SessionUpdateMetadata`), not
+  `SessionUpdateMetadata` directly. Fixed to access `payload.metadata.title`/`.artist`
+  instead of `payload.title`/`.artist`. Track and artist now display correctly during playback.
+
+
 
 ### Fixed
 - `_on_metadata_update` raised `AttributeError` when metadata listener received

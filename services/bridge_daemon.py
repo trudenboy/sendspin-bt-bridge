@@ -12,12 +12,12 @@ import subprocess
 from datetime import datetime
 from typing import TYPE_CHECKING, Callable
 
-from aiosendspin.models.core import GroupUpdateServerPayload, ServerCommandPayload
+from aiosendspin.models.core import GroupUpdateServerPayload, ServerCommandPayload, ServerStatePayload
 from aiosendspin.models.types import PlayerCommand, UndefinedField
 from sendspin.daemon.daemon import DaemonArgs, SendspinDaemon
 
 if TYPE_CHECKING:
-    from aiosendspin.models.metadata import SessionUpdateMetadata
+    pass
 
 logger = logging.getLogger(__name__)
 
@@ -125,12 +125,14 @@ class BridgeDaemon(SendspinDaemon):
     def _on_group_update(self, payload: GroupUpdateServerPayload) -> None:
         self._bridge_status['group_name'] = payload.group_name or None
         self._bridge_status['group_id'] = payload.group_id
+        logger.debug("Group update: id=%s name=%s state=%s", payload.group_id, payload.group_name, payload.playback_state)
 
     # ── Track metadata ───────────────────────────────────────────────────────
 
-    def _on_metadata_update(self, metadata) -> None:
-        # Guard: metadata listener may receive ServerStatePayload (no title attr)
-        if not hasattr(metadata, 'title'):
+    def _on_metadata_update(self, payload: ServerStatePayload) -> None:
+        """Callback receives ServerStatePayload; track info is in payload.metadata."""
+        metadata = getattr(payload, 'metadata', None)
+        if metadata is None:
             return
         if not isinstance(metadata.title, UndefinedField):
             self._bridge_status['current_track'] = metadata.title
