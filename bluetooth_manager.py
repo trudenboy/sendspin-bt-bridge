@@ -483,15 +483,16 @@ class BluetoothManager:
         """Continuously monitor BT connection and reconnect if needed.
 
         Tries D-Bus PropertiesChanged signals (dbus-fast) for instant disconnect
-        detection; falls back to bluetoothctl polling if dbus-fast is unavailable.
+        detection; falls back to bluetoothctl polling if dbus-fast is unavailable
+        or if the D-Bus environment doesn't support signal subscriptions.
         """
         logger.info(f"[{self.device_name}] monitor_and_reconnect task started")
         try:
             from dbus_fast.aio import MessageBus
             from dbus_fast import BusType
             await self._monitor_dbus(MessageBus, BusType)
-        except ImportError:
-            logger.info(f"[{self.device_name}] dbus-fast not available — using bluetoothctl polling")
+        except (ImportError, RuntimeError) as e:
+            logger.info(f"[{self.device_name}] D-Bus monitor unavailable ({e}) — using bluetoothctl polling")
             await self._monitor_polling()
 
     async def _monitor_polling(self):
@@ -567,9 +568,15 @@ class BluetoothManager:
                 await asyncio.sleep(10)
 
     async def _monitor_dbus(self, MessageBus, BusType):
-        """D-Bus PropertiesChanged signal-based monitor (preferred path)."""
+        """D-Bus PropertiesChanged signal-based monitor (preferred path).
+
+        Raises RuntimeError after 3 consecutive connection failures so
+        monitor_and_reconnect() can fall back to bluetoothctl polling.
+        """
         loop = asyncio.get_event_loop()
         reconnect_attempt = 0
+        connect_failures = 0
+        _MAX_CONNECT_FAILURES = 3
         logger.info(f"[{self.device_name}] D-Bus monitor started (path={self._dbus_device_path})")
 
         while True:
@@ -584,11 +591,17 @@ class BluetoothManager:
                     device_iface = proxy.get_interface('org.bluez.Device1')
                     props_iface = proxy.get_interface('org.freedesktop.DBus.Properties')
                 except Exception as e:
-                    logger.debug(f"[{self.device_name}] D-Bus device not registered yet: {e}")
+                    connect_failures += 1
+                    logger.debug(f"[{self.device_name}] D-Bus device not available ({e}), attempt {connect_failures}/{_MAX_CONNECT_FAILURES}")
                     if bus:
                         bus.disconnect()
+                    if connect_failures >= _MAX_CONNECT_FAILURES:
+                        raise RuntimeError(f"D-Bus device introspection failed {connect_failures} times: {e}")
                     await asyncio.sleep(5)
                     continue
+
+                # Successfully connected — reset failure counter
+                connect_failures = 0
 
                 # Read initial connected state
                 try:
@@ -713,8 +726,13 @@ class BluetoothManager:
                             except Exception:
                                 pass
 
+            except RuntimeError:
+                raise  # propagate to monitor_and_reconnect for polling fallback
             except Exception as e:
-                logger.error(f"[{self.device_name}] D-Bus monitor error: {e}, restarting in 10s...")
+                connect_failures += 1
+                logger.error(f"[{self.device_name}] D-Bus monitor error ({connect_failures}/{_MAX_CONNECT_FAILURES}): {e}")
+                if connect_failures >= _MAX_CONNECT_FAILURES:
+                    raise RuntimeError(f"D-Bus monitor failed {connect_failures} consecutive times: {e}")
             finally:
                 if bus:
                     try:

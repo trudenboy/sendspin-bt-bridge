@@ -5,7 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.0.1] - 2026-03-02
+## [2.0.2] - 2026-03-02
+
+### Fixed
+- `_on_metadata_update` raised `AttributeError` when metadata listener received
+  a `ServerStatePayload` (no `title` attribute); guard with `hasattr` check.
+- `_monitor_dbus` looped forever on D-Bus policy errors (`add match request failed`)
+  in restricted container environments; now raises `RuntimeError` after 3 consecutive
+  failures so `monitor_and_reconnect` falls back to bluetoothctl polling.
+
+
 
 ### Fixed
 - Restore missing `class BluetoothManager:` declaration lost during D-Bus refactor edit.

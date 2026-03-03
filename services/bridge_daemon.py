@@ -128,7 +128,10 @@ class BridgeDaemon(SendspinDaemon):
 
     # ── Track metadata ───────────────────────────────────────────────────────
 
-    def _on_metadata_update(self, metadata: SessionUpdateMetadata) -> None:
+    def _on_metadata_update(self, metadata) -> None:
+        # Guard: metadata listener may receive ServerStatePayload (no title attr)
+        if not hasattr(metadata, 'title'):
+            return
         if not isinstance(metadata.title, UndefinedField):
             self._bridge_status['current_track'] = metadata.title
         if not isinstance(metadata.artist, UndefinedField):
