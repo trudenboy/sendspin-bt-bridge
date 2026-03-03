@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.5] - 2026-03-03
+
+### Improved
+- **Sink routing latency**: split routing into two phases — claim (under lock)
+  and route (outside lock, parallel). Previously the asyncio lock was held during
+  `pactl move-sink-input`, causing 4 devices to route sequentially (~1 s each = ~4 s
+  total). All daemons now route concurrently.
+- **Fast path for repeated play**: if the previous sink-input ID is still live
+  (same PortAudio stream across stop/play cycles), it is re-claimed immediately
+  with zero sleep. Audio reaches the correct speaker almost instantly on repeat play.
+- **Adaptive polling for new streams**: replaced fixed `sleep(0.3)` with a
+  50 ms poll loop (max 300 ms) that breaks as soon as the sink-input appears.
+
 ## [2.3.4] - 2026-03-03
 
 ### Fixed

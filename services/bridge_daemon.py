@@ -170,37 +170,53 @@ class BridgeDaemon(SendspinDaemon):
     async def _route_stream_to_sink(self) -> None:
         """Find the newly created sink-input and move it to the target BT sink.
 
-        Uses *pre_start_sink_input_ids* and *_claimed_sink_inputs* to identify
-        the new unclaimed sink-input.  An asyncio lock serializes routing across
-        daemon instances to prevent two daemons from claiming the same one.
-        Retries up to 3 times on failure with increasing delay.
+        Two-phase approach to minimise the time audio plays through the wrong sink:
+
+        Phase 1 — Claim (under lock, fast):
+          Identify and atomically claim a sink-input ID.  If the previous ID is
+          still live (same PortAudio stream, repeated play), claim it immediately
+          without sleeping.  For new streams, poll briefly until the sink-input
+          appears (max 0.3 s in 50 ms steps) rather than a fixed sleep.
+
+        Phase 2 — Route (outside lock, parallel):
+          Call ``pactl move-sink-input`` outside the lock so all daemons can
+          route concurrently instead of sequentially.
         """
         _MAX_RETRIES = 3
+        player = self._bridge_status.get("player_name", "?")
+        sink_name = self._bluetooth_sink_name or ""
+
+        # ── Phase 1: claim a sink-input ID (serialised) ──────────────────────
         async with BridgeDaemon._routing_lock:
-            # Release previously claimed sink-input so the slot is freed for re-routing
             prev_id = self._routed_sink_input_id
             if prev_id is not None:
                 BridgeDaemon._claimed_sink_inputs.discard(prev_id)
                 self._routed_sink_input_id = None
-            # Prune stale claimed IDs: remove any that no longer exist as live sink-inputs
+
+            # Prune IDs that no longer exist
             live_ids = await alist_sink_input_ids()
             stale = BridgeDaemon._claimed_sink_inputs - live_ids
             if stale:
-                logger.debug("Pruning stale claimed sink-inputs: %s", stale)
                 BridgeDaemon._claimed_sink_inputs -= stale
 
-            await asyncio.sleep(0.3)
-            current_ids = await alist_sink_input_ids()
-            player = self._bridge_status.get("player_name", "?")
-
-            # Prefer re-claiming our own previous sink-input if it's still live
-            # (format didn't change → same PortAudio stream → same PA sink-input ID)
-            if prev_id is not None and prev_id in current_ids and prev_id not in BridgeDaemon._claimed_sink_inputs:
+            # Fast path: re-use our own previous sink-input when still live
+            # (same PortAudio stream across stop/play cycles — no sleep needed)
+            if prev_id is not None and prev_id in live_ids and prev_id not in BridgeDaemon._claimed_sink_inputs:
                 target_id = prev_id
             else:
-                new_ids = current_ids - self._pre_start_sink_input_ids
-                unclaimed = new_ids - BridgeDaemon._claimed_sink_inputs
+                # Slow path: poll until a new PA sink-input appears (max 300 ms)
+                current_ids: set[int] = set()
+                unclaimed: set[int] = set()
+                for _ in range(6):
+                    await asyncio.sleep(0.05)
+                    current_ids = await alist_sink_input_ids()
+                    new_ids = current_ids - self._pre_start_sink_input_ids
+                    unclaimed = new_ids - BridgeDaemon._claimed_sink_inputs
+                    if unclaimed:
+                        break
                 if not unclaimed:
+                    # Fall back to any unclaimed sink-input
+                    current_ids = await alist_sink_input_ids()
                     unclaimed = current_ids - BridgeDaemon._claimed_sink_inputs
                 if not unclaimed:
                     logger.warning(
@@ -212,38 +228,43 @@ class BridgeDaemon(SendspinDaemon):
                     )
                     return
                 target_id = max(unclaimed)
-            sink_name = self._bluetooth_sink_name or ""
-            for attempt in range(1, _MAX_RETRIES + 1):
-                ok = await amove_sink_input(target_id, sink_name)
-                if ok:
-                    BridgeDaemon._claimed_sink_inputs.add(target_id)
-                    self._routed = True
-                    self._routed_sink_input_id = target_id
-                    logger.info(
-                        "[%s] ✓ Routed sink-input %d → %s",
-                        player,
-                        target_id,
-                        self._bluetooth_sink_name,
-                    )
-                    return
-                if attempt < _MAX_RETRIES:
-                    delay = 0.5 * attempt
-                    logger.warning(
-                        "[%s] Route attempt %d/%d failed for sink-input %d, retrying in %.1fs...",
-                        player,
-                        attempt,
-                        _MAX_RETRIES,
-                        target_id,
-                        delay,
-                    )
-                    await asyncio.sleep(delay)
-            logger.warning(
-                "[%s] Failed to route sink-input %d → %s after %d attempts",
-                player,
-                target_id,
-                self._bluetooth_sink_name,
-                _MAX_RETRIES,
-            )
+
+            # Reserve the ID before releasing the lock so no other daemon steals it
+            BridgeDaemon._claimed_sink_inputs.add(target_id)
+
+        # ── Phase 2: route (outside lock — parallel across daemons) ──────────
+        for attempt in range(1, _MAX_RETRIES + 1):
+            ok = await amove_sink_input(target_id, sink_name)
+            if ok:
+                self._routed = True
+                self._routed_sink_input_id = target_id
+                logger.info(
+                    "[%s] ✓ Routed sink-input %d → %s",
+                    player,
+                    target_id,
+                    self._bluetooth_sink_name,
+                )
+                return
+            if attempt < _MAX_RETRIES:
+                delay = 0.5 * attempt
+                logger.warning(
+                    "[%s] Route attempt %d/%d failed for sink-input %d, retrying in %.1fs...",
+                    player,
+                    attempt,
+                    _MAX_RETRIES,
+                    target_id,
+                    delay,
+                )
+                await asyncio.sleep(delay)
+        # All retries failed — release the claimed ID
+        BridgeDaemon._claimed_sink_inputs.discard(target_id)
+        logger.warning(
+            "[%s] Failed to route sink-input %d → %s after %d attempts",
+            player,
+            target_id,
+            self._bluetooth_sink_name,
+            _MAX_RETRIES,
+        )
 
     def _on_stream_event(self, event: str) -> None:
         super()._on_stream_event(event)
