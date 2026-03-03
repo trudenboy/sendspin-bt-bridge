@@ -11,71 +11,83 @@ Two authentication backends are supported:
 When AUTH_ENABLED is False (default) all requests bypass this entirely;
 the before_request hook in web_interface.py is the gatekeeper.
 """
+
 import json
 import logging
 import os
 import urllib.request as _ur
 from urllib.error import HTTPError
+from urllib.parse import urlparse
 
-from flask import Blueprint, render_template, request, session, redirect, url_for
+from flask import Blueprint, redirect, render_template, request, session, url_for
 
-from config import load_config, check_password
+from config import check_password, load_config
 
 logger = logging.getLogger(__name__)
 
-auth_bp = Blueprint('auth', __name__)
+auth_bp = Blueprint("auth", __name__)
 
 
 def _is_ha_addon() -> bool:
     """True when running as a Home Assistant addon (SUPERVISOR_TOKEN is set)."""
-    return bool(os.environ.get('SUPERVISOR_TOKEN'))
+    return bool(os.environ.get("SUPERVISOR_TOKEN"))
 
 
-@auth_bp.route('/login', methods=['GET', 'POST'])
+def _safe_next_url() -> str:
+    """Return a validated local redirect target from the ``next`` query param."""
+    target = request.args.get("next", "/")
+    parsed = urlparse(target)
+    # Only allow local paths (no scheme, no netloc, single leading /)
+    if parsed.scheme or parsed.netloc or not target.startswith("/") or target.startswith("//"):
+        return "/"
+    return target
+
+
+@auth_bp.route("/login", methods=["GET", "POST"])
 def login():
     error = None
     ha_mode = _is_ha_addon()
 
-    if request.method == 'POST':
+    if request.method == "POST":
         config = load_config()
         if ha_mode:
-            username = request.form.get('username', '').strip()
-            password = request.form.get('password', '')
-            token = os.environ.get('SUPERVISOR_TOKEN', '')
+            username = request.form.get("username", "").strip()
+            password = request.form.get("password", "")
+            token = os.environ.get("SUPERVISOR_TOKEN", "")
             try:
-                body = json.dumps({'username': username, 'password': password}).encode()
+                body = json.dumps({"username": username, "password": password}).encode()
                 req = _ur.Request(
-                    'http://supervisor/auth',
+                    "http://supervisor/auth",
                     data=body,
                     headers={
-                        'Authorization': f'Bearer {token}',
-                        'Content-Type': 'application/json',
+                        "Authorization": f"Bearer {token}",
+                        "Content-Type": "application/json",
                     },
-                    method='POST',
+                    method="POST",
                 )
                 _ur.urlopen(req, timeout=10)
-                session['authenticated'] = True
-                return redirect(request.args.get('next', '/'))
+                session["authenticated"] = True
+                return redirect(_safe_next_url())
             except HTTPError:
-                error = 'Invalid credentials'
+                error = "Invalid credentials"
             except Exception as exc:
-                logger.warning('HA supervisor auth error: %s', exc)
-                error = 'Authentication service unavailable'
+                logger.warning("HA supervisor auth error: %s", exc)
+                error = "Authentication service unavailable"
         else:
-            password = request.form.get('password', '')
-            stored = config.get('AUTH_PASSWORD_HASH', '')
+            password = request.form.get("password", "")
+            stored = config.get("AUTH_PASSWORD_HASH", "")
             if not stored:
-                error = 'No password configured — set one via the Configuration panel'
+                error = "No password configured — set one via the Configuration panel"
             elif check_password(password, stored):
-                session['authenticated'] = True
-                return redirect(request.args.get('next', '/'))
+                session["authenticated"] = True
+                return redirect(_safe_next_url())
             else:
-                error = 'Invalid password'
+                error = "Invalid password"
 
-    return render_template('login.html', error=error, ha_mode=ha_mode)
+    return render_template("login.html", error=error, ha_mode=ha_mode)
 
 
-@auth_bp.route('/logout')
+@auth_bp.route("/logout")
 def logout():
-    session.pop('authenticated', None)
-    return redirect(url_for('auth.login'))
+    session.pop("authenticated", None)
+    return redirect(url_for("auth.login"))

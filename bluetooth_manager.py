@@ -5,6 +5,7 @@ Handles pairing, connecting, disconnecting, audio sink configuration, and
 automatic reconnection. Uses D-Bus (dbus-fast) for instant disconnect detection
 via PropertiesChanged signals; falls back to bluetoothctl polling if unavailable.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -14,17 +15,13 @@ import os
 import re
 import subprocess
 import time
-import threading
 from datetime import datetime
-from typing import TYPE_CHECKING, Optional
 
-from config import _CONFIG_PATH, _config_lock, _save_device_volume
-from services.pulse import get_sink_volume, set_sink_volume, list_sinks
-
-if TYPE_CHECKING:
-    from sendspin_client import SendspinClient
+from config import _CONFIG_PATH
+from services.pulse import get_sink_volume, list_sinks, set_sink_volume
 
 logger = logging.getLogger(__name__)
+
 
 def _force_sbc_codec(pa_mac: str) -> None:
     """Attempt to force SBC codec on the BlueZ card for this device.
@@ -35,17 +32,22 @@ def _force_sbc_codec(pa_mac: str) -> None:
     """
     card_prefix = f"bluez_card.{pa_mac}"
     try:
-        cards = subprocess.check_output(
-            ['pactl', 'list', 'short', 'cards'], text=True, timeout=5
-        )
+        cards = subprocess.check_output(["pactl", "list", "short", "cards"], text=True, timeout=5)
         for line in cards.splitlines():
             if card_prefix in line:
                 card_name = line.split()[1]
                 result = subprocess.run(
-                    ['pactl', 'send-message',
-                     f'/card/{card_name}/bluez5/set_codec',
-                     'a2dp_sink', 'SBC'],
-                    timeout=5, check=False, capture_output=True, text=True
+                    [
+                        "pactl",
+                        "send-message",
+                        f"/card/{card_name}/bluez5/set_codec",
+                        "a2dp_sink",
+                        "SBC",
+                    ],
+                    timeout=5,
+                    check=False,
+                    capture_output=True,
+                    text=True,
                 )
                 if result.returncode == 0:
                     logger.info(f"✓ Forced SBC codec on {card_name}")
@@ -56,7 +58,7 @@ def _force_sbc_codec(pa_mac: str) -> None:
         logger.debug(f"SBC codec force skipped: {e}")
 
 
-def _dbus_get_device_property(device_path: str, property_name: str, adapter_hci: str = 'hci0'):
+def _dbus_get_device_property(device_path: str, property_name: str, adapter_hci: str = "hci0"):
     """Read a single BlueZ Device1 property synchronously via dbus-python.
 
     Falls back to None on any error (D-Bus unavailable, device not registered, etc.).
@@ -64,10 +66,11 @@ def _dbus_get_device_property(device_path: str, property_name: str, adapter_hci:
     """
     try:
         import dbus as _dbus
+
         bus = _dbus.SystemBus()
-        device = bus.get_object('org.bluez', device_path)
-        props = _dbus.Interface(device, 'org.freedesktop.DBus.Properties')
-        return props.Get('org.bluez.Device1', property_name)
+        device = bus.get_object("org.bluez", device_path)
+        props = _dbus.Interface(device, "org.freedesktop.DBus.Properties")
+        return props.Get("org.bluez.Device1", property_name)
     except Exception:
         return None
 
@@ -79,9 +82,10 @@ def _dbus_call_device_method(device_path: str, method_name: str) -> bool:
     """
     try:
         import dbus as _dbus
+
         bus = _dbus.SystemBus()
-        device = bus.get_object('org.bluez', device_path)
-        iface = _dbus.Interface(device, 'org.bluez.Device1')
+        device = bus.get_object("org.bluez", device_path)
+        iface = _dbus.Interface(device, "org.bluez.Device1")
         getattr(iface, method_name)()
         return True
     except Exception as e:
@@ -92,10 +96,18 @@ def _dbus_call_device_method(device_path: str, method_name: str) -> bool:
 class BluetoothManager:
     """Manages Bluetooth speaker connections using bluetoothctl and D-Bus"""
 
-    def __init__(self, mac_address: str, adapter: str = "", device_name: str = "", client=None,
-                 prefer_sbc: bool = False, check_interval: int = 10, max_reconnect_fails: int = 0):
+    def __init__(
+        self,
+        mac_address: str,
+        adapter: str = "",
+        device_name: str = "",
+        client=None,
+        prefer_sbc: bool = False,
+        check_interval: int = 10,
+        max_reconnect_fails: int = 0,
+    ):
         self.mac_address = mac_address
-        self.adapter = adapter        # "hci0", "hci1", etc. — empty = use default
+        self.adapter = adapter  # "hci0", "hci1", etc. — empty = use default
         self.device_name = device_name or mac_address
         self.client = client
         self.prefer_sbc = prefer_sbc
@@ -107,7 +119,7 @@ class BluetoothManager:
         # Resolve adapter name to MAC for reliable 'select' in bridged D-Bus setups.
         # In LXC containers, 'select hci0' fails ("Controller hci0 not available");
         # selecting by MAC address works because D-Bus objects use MACs, not hciN names.
-        self._adapter_select = self._resolve_adapter_select(adapter) if adapter else ''
+        self._adapter_select = self._resolve_adapter_select(adapter) if adapter else ""
         self.management_enabled: bool = True  # False = released; monitor loop skips reconnect
 
         # Resolve effective adapter MAC for display (handles empty/default adapter case)
@@ -118,50 +130,51 @@ class BluetoothManager:
 
         self.adapter_hci_name = self._resolve_adapter_hci_name()
         # D-Bus device path: /org/bluez/<adapter>/dev_XX_XX_XX_XX_XX_XX
-        _mac_dbus = self.mac_address.upper().replace(':', '_')
-        _hci = self.adapter_hci_name or 'hci0'
-        self._dbus_device_path: str = f'/org/bluez/{_hci}/dev_{_mac_dbus}'
+        _mac_dbus = self.mac_address.upper().replace(":", "_")
+        _hci = self.adapter_hci_name or "hci0"
+        self._dbus_device_path: str = f"/org/bluez/{_hci}/dev_{_mac_dbus}"
 
     def _detect_default_adapter_mac(self) -> str:
         """Return the MAC of the default Bluetooth controller, or empty string."""
         try:
             out = subprocess.check_output(
-                ['bluetoothctl', 'show'], stderr=subprocess.DEVNULL, timeout=5, text=True
+                ["bluetoothctl", "show"],
+                stderr=subprocess.DEVNULL,
+                timeout=5,
+                text=True,
             )
-            m = re.search(r'Controller\s+([0-9A-Fa-f:]{17})', out)
-            return m.group(1) if m else ''
+            m = re.search(r"Controller\s+([0-9A-Fa-f:]{17})", out)
+            return m.group(1) if m else ""
         except Exception:
-            return ''
+            return ""
 
     def _resolve_adapter_hci_name(self) -> str:
         """Return hciN name for the effective adapter MAC (e.g. 'hci0'), or empty string."""
-        if self.adapter.startswith('hci'):
+        if self.adapter.startswith("hci"):
             return self.adapter  # Already have it from config
-        effective = (self.effective_adapter_mac or '').upper()
+        effective = (self.effective_adapter_mac or "").upper()
         if not effective:
-            return ''
+            return ""
         try:
-            result = subprocess.run(
-                ['bluetoothctl', 'list'], capture_output=True, text=True, timeout=5
-            )
+            result = subprocess.run(["bluetoothctl", "list"], capture_output=True, text=True, timeout=5)
             idx = 0
             for line in result.stdout.splitlines():
-                if 'Controller' not in line:
+                if "Controller" not in line:
                     continue
                 for part in line.split():
-                    if len(part) == 17 and part.count(':') == 5:
+                    if len(part) == 17 and part.count(":") == 5:
                         if part.upper() == effective:
-                            return f'hci{idx}'
+                            return f"hci{idx}"
                         idx += 1
                         break
         except Exception:
             pass
-        return ''
+        return ""
 
     def _resolve_adapter_select(self, adapter: str) -> str:
         """Resolve hciN to adapter MAC address for bluetoothctl 'select'.
         Falls back to the original name if resolution fails."""
-        if not adapter or not adapter.startswith('hci'):
+        if not adapter or not adapter.startswith("hci"):
             return adapter  # Already a MAC or empty string
         try:
             idx = int(adapter[3:])  # N from hciN
@@ -169,15 +182,17 @@ class BluetoothManager:
             return adapter
         try:
             result = subprocess.run(
-                ['bash', '-c', 'bluetoothctl list 2>/dev/null'],
-                capture_output=True, text=True, timeout=5
+                ["bash", "-c", "bluetoothctl list 2>/dev/null"],
+                capture_output=True,
+                text=True,
+                timeout=5,
             )
             # Parse "Controller <MAC> description [default]" lines
             macs = []
             for line in result.stdout.splitlines():
-                if 'Controller' in line:
+                if "Controller" in line:
                     for part in line.split():
-                        if len(part) == 17 and part.count(':') == 5:
+                        if len(part) == 17 and part.count(":") == 5:
                             macs.append(part.upper())
                             break
             if idx < len(macs):
@@ -193,61 +208,56 @@ class BluetoothManager:
         try:
             all_commands = []
             if self._adapter_select:
-                all_commands.append(f'select {self._adapter_select}')
+                all_commands.append(f"select {self._adapter_select}")
             all_commands.extend(commands)
-            cmd_string = '\n'.join(all_commands) + '\n'
+            cmd_string = "\n".join(all_commands) + "\n"
             result = subprocess.run(
-                ['bluetoothctl'],
+                ["bluetoothctl"],
                 input=cmd_string,
                 capture_output=True,
                 text=True,
-                timeout=10
+                timeout=10,
             )
             return result.returncode == 0, result.stdout
         except Exception as e:
             logger.error(f"Bluetoothctl error: {e}")
             return False, str(e)
-    
+
     def check_bluetooth_available(self) -> bool:
         """Check if Bluetooth is available on the system"""
         try:
             if self.adapter:
                 # Check specific adapter via _run_bluetoothctl (includes select)
-                success, output = self._run_bluetoothctl(['show'])
-                return success and 'Controller' in output
+                success, output = self._run_bluetoothctl(["show"])
+                return success and "Controller" in output
             # Default: check for any controller
-            result = subprocess.run(
-                ['bluetoothctl', 'show'],
-                capture_output=True,
-                text=True,
-                timeout=5
-            )
+            result = subprocess.run(["bluetoothctl", "show"], capture_output=True, text=True, timeout=5)
             if result.returncode == 0:
                 output_lower = result.stdout.lower()
-                return 'controller' in output_lower and 'no default controller' not in output_lower
+                return "controller" in output_lower and "no default controller" not in output_lower
             return False
         except Exception as e:
             logger.error(f"Bluetooth not available: {e}")
             return False
-    
+
     def is_device_paired(self) -> bool:
         """Check if device is paired via D-Bus; falls back to bluetoothctl."""
-        val = _dbus_get_device_property(self._dbus_device_path, 'Paired')
+        val = _dbus_get_device_property(self._dbus_device_path, "Paired")
         if val is not None:
             return bool(val)
-        success, output = self._run_bluetoothctl([f'info {self.mac_address}'])
-        return success and 'Paired: yes' in output
+        success, output = self._run_bluetoothctl([f"info {self.mac_address}"])
+        return success and "Paired: yes" in output
 
     def is_device_connected(self) -> bool:
         """Check if device is currently connected via D-Bus; falls back to bluetoothctl."""
         try:
-            val = _dbus_get_device_property(self._dbus_device_path, 'Connected')
+            val = _dbus_get_device_property(self._dbus_device_path, "Connected")
             if val is not None:
                 is_connected = bool(val)
             else:
                 # D-Bus unavailable — fall back to bluetoothctl
-                success, output = self._run_bluetoothctl([f'info {self.mac_address}'])
-                is_connected = success and 'Connected: yes' in output
+                success, output = self._run_bluetoothctl([f"info {self.mac_address}"])
+                is_connected = success and "Connected: yes" in output
 
             if is_connected != self.connected:
                 if is_connected:
@@ -261,7 +271,7 @@ class BluetoothManager:
             logger.debug(f"Error checking Bluetooth connection: {e}")
             self.connected = False
             return False
-    
+
     def pair_device(self) -> bool:
         """Pair with the Bluetooth device.
 
@@ -272,8 +282,9 @@ class BluetoothManager:
         Uses stdin pipe directly — no shell, no injection risk.
         """
         import re
+
         mac = self.mac_address
-        if not re.fullmatch(r'([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}', mac):
+        if not re.fullmatch(r"([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}", mac):
             logger.error(f"Invalid MAC address format: {mac}")
             return False
 
@@ -281,35 +292,35 @@ class BluetoothManager:
 
         initial_cmds = []
         if self._adapter_select:
-            initial_cmds.append(f'select {self._adapter_select}')
-        initial_cmds.extend(['power on', 'agent on', 'default-agent', 'scan on'])
+            initial_cmds.append(f"select {self._adapter_select}")
+        initial_cmds.extend(["power on", "agent on", "default-agent", "scan on"])
 
-        pair_cmds = [f'pair {mac}', f'trust {mac}', 'scan off']
+        pair_cmds = [f"pair {mac}", f"trust {mac}", "scan off"]
 
         proc = None
         try:
             proc = subprocess.Popen(
-                ['bluetoothctl'],
+                ["bluetoothctl"],
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
             )
             # Send initial setup and start scanning
-            proc.stdin.write('\n'.join(initial_cmds) + '\n')
+            assert proc.stdin is not None
+            proc.stdin.write("\n".join(initial_cmds) + "\n")
             proc.stdin.flush()
             # Wait for scan to discover device
             time.sleep(12)
             # Send pair/trust commands
-            proc.stdin.write('\n'.join(pair_cmds) + '\n')
+            proc.stdin.write("\n".join(pair_cmds) + "\n")
             proc.stdin.flush()
             # Wait for pairing to complete
             time.sleep(10)
 
             out, _ = proc.communicate(timeout=5)
             logger.info(f"Pair output (last 600 chars): {out[-600:]}")
-            ok = ('Pairing successful' in out or 'Already paired' in out
-                  or 'Paired: yes' in out)
+            ok = "Pairing successful" in out or "Already paired" in out or "Paired: yes" in out
             if ok:
                 logger.info("Pairing successful")
             else:
@@ -323,12 +334,11 @@ class BluetoothManager:
                 except Exception:
                     pass
             return False
-    
+
     def trust_device(self) -> bool:
         """Trust the Bluetooth device"""
-        success, _ = self._run_bluetoothctl([f'trust {self.mac_address}'])
+        success, _ = self._run_bluetoothctl([f"trust {self.mac_address}"])
         return success
-    
 
     def configure_bluetooth_audio(self) -> bool:
         """Configure host's PipeWire/PulseAudio to use the Bluetooth device as audio output"""
@@ -336,8 +346,8 @@ class BluetoothManager:
             # Wait for PipeWire/PulseAudio to register the device.
             # A2DP profile takes a few seconds to appear after BT connects.
             time.sleep(3)
-            
-            pa_mac = self.mac_address.replace(':', '_')
+
+            pa_mac = self.mac_address.replace(":", "_")
 
             # Log available sinks for diagnostics
             sinks = list_sinks()
@@ -350,7 +360,7 @@ class BluetoothManager:
                 f"bluez_sink.{pa_mac}.a2dp_sink",  # Legacy PulseAudio format
                 f"bluez_sink.{pa_mac}",
             ]
-            known_names = {s['name'] for s in sinks}
+            known_names = {s["name"] for s in sinks}
 
             success = False
             configured_sink = None
@@ -370,8 +380,8 @@ class BluetoothManager:
                     logger.info(f"Sink not yet available, retrying in 3s... (attempt {attempt + 1}/3)")
                     time.sleep(3)
                     sinks = list_sinks()
-                    known_names = {s['name'] for s in sinks}
-            
+                    known_names = {s["name"] for s in sinks}
+
             if success and configured_sink:
                 # Try to force SBC codec (lowest CPU A2DP codec) if requested
                 if self.prefer_sbc:
@@ -381,36 +391,36 @@ class BluetoothManager:
                 if self.client:
                     self.client.bluetooth_sink_name = configured_sink
                     logger.info(f"Stored Bluetooth sink for volume sync: {configured_sink}")
-                    
+
                     # Restore last volume for this device (keyed by MAC)
                     restored = False
                     try:
                         config_path = _CONFIG_PATH
                         if os.path.exists(config_path):
-                            with open(config_path, 'r') as f:
+                            with open(config_path) as f:
                                 cfg = json.load(f)
-                            volumes = cfg.get('LAST_VOLUMES', {})
+                            volumes = cfg.get("LAST_VOLUMES", {})
                             last_volume = volumes.get(self.mac_address)
                             if last_volume is None:
-                                last_volume = cfg.get('LAST_VOLUME')
+                                last_volume = cfg.get("LAST_VOLUME")
                             if last_volume is not None and isinstance(last_volume, int) and 0 <= last_volume <= 100:
                                 if set_sink_volume(configured_sink, last_volume):
                                     logger.info(f"✓ Restored volume to {last_volume}% for {self.mac_address}")
-                                    self.client.status['volume'] = last_volume
+                                    self.client.status["volume"] = last_volume
                                     restored = True
                     except Exception as e:
                         logger.debug(f"Could not restore volume: {e}")
 
-                    if hasattr(self.client, 'volume_restore_done'):
+                    if hasattr(self.client, "volume_restore_done"):
                         self.client.volume_restore_done = True
                     if not restored:
                         logger.info("No saved volume to restore, will use current volume")
             elif not success:
                 logger.warning(f"Could not find Bluetooth sink for {self.mac_address}")
                 logger.warning("Audio may play from default device instead of Bluetooth")
-            
+
             return success
-            
+
         except Exception as e:
             logger.error(f"Error configuring Bluetooth audio: {e}")
             return False
@@ -424,24 +434,24 @@ class BluetoothManager:
             # Ensure audio is configured
             self.configure_bluetooth_audio()
             return True
-        
+
         logger.info(f"Connecting to {self.mac_address}...")
-        
+
         # Ensure paired and trusted (pair_device also runs trust)
         if not self.is_device_paired():
             logger.info("Device not paired, attempting to pair...")
             if not self.pair_device():
                 return False
-        
+
         # Power on bluetooth
-        self._run_bluetoothctl(['power on'])
+        self._run_bluetoothctl(["power on"])
         time.sleep(1)
-        
+
         # Try to connect
-        success, output = self._run_bluetoothctl([f'connect {self.mac_address}'])
-        
+        _success, _output = self._run_bluetoothctl([f"connect {self.mac_address}"])
+
         # Wait for connection to establish
-        for i in range(5):
+        for _i in range(5):
             time.sleep(1)
             if self.is_device_connected():
                 logger.info("Successfully connected to Bluetooth speaker")
@@ -449,20 +459,20 @@ class BluetoothManager:
                 # Configure audio routing
                 self.configure_bluetooth_audio()
                 return True
-        
-        logger.warning(f"Failed to connect after 5 attempts")
+
+        logger.warning("Failed to connect after 5 attempts")
         return False
-    
+
     def disconnect_device(self) -> bool:
         """Disconnect from the Bluetooth device via D-Bus; falls back to bluetoothctl."""
-        if _dbus_call_device_method(self._dbus_device_path, 'Disconnect'):
+        if _dbus_call_device_method(self._dbus_device_path, "Disconnect"):
             self.connected = False
             return True
-        success, _ = self._run_bluetoothctl([f'disconnect {self.mac_address}'])
+        success, _ = self._run_bluetoothctl([f"disconnect {self.mac_address}"])
         if success:
             self.connected = False
         return success
-    
+
     async def monitor_and_reconnect(self):
         """Continuously monitor BT connection and reconnect if needed.
 
@@ -472,8 +482,9 @@ class BluetoothManager:
         """
         logger.info(f"[{self.device_name}] monitor_and_reconnect task started")
         try:
-            from dbus_fast.aio import MessageBus
             from dbus_fast import BusType
+            from dbus_fast.aio import MessageBus
+
             await self._monitor_dbus(MessageBus, BusType)
         except (ImportError, RuntimeError) as e:
             logger.info(f"[{self.device_name}] D-Bus monitor unavailable ({e}) — using bluetoothctl polling")
@@ -500,15 +511,15 @@ class BluetoothManager:
                     logger.info(f"[{self.device_name}] BT connected={connected}")
 
                     if self.client:
-                        if connected != self.client.status.get('bluetooth_connected'):
-                            self.client.status['bluetooth_connected'] = connected
-                            self.client.status['bluetooth_connected_at'] = datetime.now().isoformat()
+                        if connected != self.client.status.get("bluetooth_connected"):
+                            self.client.status["bluetooth_connected"] = connected
+                            self.client.status["bluetooth_connected_at"] = datetime.now().isoformat()
 
                     if not connected:
                         reconnect_attempt += 1
                         if self.client:
-                            self.client.status['reconnecting'] = True
-                            self.client.status['reconnect_attempt'] = reconnect_attempt
+                            self.client.status["reconnecting"] = True
+                            self.client.status["reconnect_attempt"] = reconnect_attempt
 
                         if self.max_reconnect_fails > 0 and reconnect_attempt >= self.max_reconnect_fails:
                             logger.warning(
@@ -518,10 +529,11 @@ class BluetoothManager:
                             self.management_enabled = False
                             if self.client:
                                 self.client.bt_management_enabled = False
-                                self.client.status['bt_management_enabled'] = False
-                                self.client.status['reconnecting'] = False
+                                self.client.status["bt_management_enabled"] = False
+                                self.client.status["reconnecting"] = False
                             try:
                                 from services.bluetooth import persist_device_enabled
+
                                 persist_device_enabled(self.device_name, False)
                             except Exception as _e:
                                 logger.debug(f"persist_device_enabled failed: {_e}")
@@ -532,18 +544,20 @@ class BluetoothManager:
                             logger.info(f"BT disconnected for {self.device_name}, stopping sendspin daemon...")
                             await self.client.stop_sendspin()
 
-                        logger.warning(f"Bluetooth device {self.device_name} disconnected, reconnecting... (attempt {reconnect_attempt})")
+                        logger.warning(
+                            f"Bluetooth device {self.device_name} disconnected, reconnecting... (attempt {reconnect_attempt})"
+                        )
                         success = await loop.run_in_executor(None, self.connect_device)
                         if success and self.client:
                             reconnect_attempt = 0
-                            self.client.status['reconnecting'] = False
-                            self.client.status['reconnect_attempt'] = 0
+                            self.client.status["reconnecting"] = False
+                            self.client.status["reconnect_attempt"] = 0
                             logger.info(f"BT reconnected for {self.device_name}, starting sendspin...")
                             await self.client.start_sendspin()
                     else:
-                        if self.client and self.client.status.get('reconnecting'):
-                            self.client.status['reconnecting'] = False
-                            self.client.status['reconnect_attempt'] = 0
+                        if self.client and self.client.status.get("reconnecting"):
+                            self.client.status["reconnecting"] = False
+                            self.client.status["reconnect_attempt"] = 0
                         reconnect_attempt = 0
 
                 await asyncio.sleep(5)
@@ -570,13 +584,15 @@ class BluetoothManager:
 
                 # Introspect the device object (may fail if device not yet registered with BlueZ)
                 try:
-                    introspection = await bus.introspect('org.bluez', self._dbus_device_path)
-                    proxy = bus.get_proxy_object('org.bluez', self._dbus_device_path, introspection)
-                    device_iface = proxy.get_interface('org.bluez.Device1')
-                    props_iface = proxy.get_interface('org.freedesktop.DBus.Properties')
+                    introspection = await bus.introspect("org.bluez", self._dbus_device_path)
+                    proxy = bus.get_proxy_object("org.bluez", self._dbus_device_path, introspection)
+                    device_iface = proxy.get_interface("org.bluez.Device1")
+                    props_iface = proxy.get_interface("org.freedesktop.DBus.Properties")
                 except Exception as e:
                     connect_failures += 1
-                    logger.debug(f"[{self.device_name}] D-Bus device not available ({e}), attempt {connect_failures}/{_MAX_CONNECT_FAILURES}")
+                    logger.debug(
+                        f"[{self.device_name}] D-Bus device not available ({e}), attempt {connect_failures}/{_MAX_CONNECT_FAILURES}"
+                    )
                     if bus:
                         bus.disconnect()
                     if connect_failures >= _MAX_CONNECT_FAILURES:
@@ -593,27 +609,27 @@ class BluetoothManager:
                 except Exception:
                     self.connected = False
                 if self.client:
-                    self.client.status['bluetooth_connected'] = self.connected
-                    self.client.status['bluetooth_connected_at'] = datetime.now().isoformat()
+                    self.client.status["bluetooth_connected"] = self.connected
+                    self.client.status["bluetooth_connected_at"] = datetime.now().isoformat()
 
                 # asyncio.Event set from D-Bus signal callback (called in D-Bus reader task thread)
                 disconnect_event = asyncio.Event()
                 if not self.connected:
                     disconnect_event.set()
 
-                def on_props_changed(iface_name, changed, _invalidated):
-                    if iface_name != 'org.bluez.Device1' or 'Connected' not in changed:
+                def on_props_changed(iface_name, changed, _invalidated, _evt=disconnect_event):
+                    if iface_name != "org.bluez.Device1" or "Connected" not in changed:
                         return
-                    new_connected = bool(changed['Connected'].value)
+                    new_connected = bool(changed["Connected"].value)
                     if new_connected == self.connected:
                         return
                     self.connected = new_connected
                     ts = datetime.now().isoformat()
                     if self.client:
-                        self.client.status['bluetooth_connected'] = new_connected
-                        self.client.status['bluetooth_connected_at'] = ts
+                        self.client.status["bluetooth_connected"] = new_connected
+                        self.client.status["bluetooth_connected_at"] = ts
                     if not new_connected:
-                        loop.call_soon_threadsafe(disconnect_event.set)
+                        loop.call_soon_threadsafe(_evt.set)
                         logger.warning(f"[{self.device_name}] PropertiesChanged: Disconnected!")
                     else:
                         logger.info(f"[{self.device_name}] PropertiesChanged: Connected!")
@@ -630,15 +646,15 @@ class BluetoothManager:
 
                     if self.connected:
                         # Clear reconnect state
-                        if self.client and self.client.status.get('reconnecting'):
-                            self.client.status['reconnecting'] = False
-                            self.client.status['reconnect_attempt'] = 0
+                        if self.client and self.client.status.get("reconnecting"):
+                            self.client.status["reconnecting"] = False
+                            self.client.status["reconnect_attempt"] = 0
                         reconnect_attempt = 0
 
                         # Wait for disconnect signal or heartbeat timeout
                         try:
                             await asyncio.wait_for(disconnect_event.wait(), timeout=self.check_interval * 3)
-                        except asyncio.TimeoutError:
+                        except TimeoutError:
                             # Heartbeat — verify state directly
                             try:
                                 current_val = bool(await device_iface.get_connected())
@@ -646,8 +662,8 @@ class BluetoothManager:
                                     logger.warning(f"[{self.device_name}] Heartbeat: missed disconnect signal")
                                     self.connected = False
                                     if self.client:
-                                        self.client.status['bluetooth_connected'] = False
-                                        self.client.status['bluetooth_connected_at'] = datetime.now().isoformat()
+                                        self.client.status["bluetooth_connected"] = False
+                                        self.client.status["bluetooth_connected_at"] = datetime.now().isoformat()
                                     disconnect_event.set()
                             except Exception:
                                 pass
@@ -656,8 +672,8 @@ class BluetoothManager:
                         disconnect_event.clear()
                         reconnect_attempt += 1
                         if self.client:
-                            self.client.status['reconnecting'] = True
-                            self.client.status['reconnect_attempt'] = reconnect_attempt
+                            self.client.status["reconnecting"] = True
+                            self.client.status["reconnect_attempt"] = reconnect_attempt
 
                         # Auto-disable after too many failures
                         if self.max_reconnect_fails > 0 and reconnect_attempt >= self.max_reconnect_fails:
@@ -668,10 +684,11 @@ class BluetoothManager:
                             self.management_enabled = False
                             if self.client:
                                 self.client.bt_management_enabled = False
-                                self.client.status['bt_management_enabled'] = False
-                                self.client.status['reconnecting'] = False
+                                self.client.status["bt_management_enabled"] = False
+                                self.client.status["reconnecting"] = False
                             try:
                                 from services.bluetooth import persist_device_enabled
+
                                 persist_device_enabled(self.device_name, False)
                             except Exception as _e:
                                 logger.debug(f"persist_device_enabled failed: {_e}")
@@ -684,17 +701,19 @@ class BluetoothManager:
                             logger.info(f"BT disconnected for {self.device_name}, stopping sendspin daemon...")
                             await self.client.stop_sendspin()
 
-                        logger.warning(f"[{self.device_name}] Disconnected, reconnecting... (attempt {reconnect_attempt})")
+                        logger.warning(
+                            f"[{self.device_name}] Disconnected, reconnecting... (attempt {reconnect_attempt})"
+                        )
                         success = await loop.run_in_executor(None, self.connect_device)
 
                         if success:
                             reconnect_attempt = 0
                             self.connected = True
                             if self.client:
-                                self.client.status['reconnecting'] = False
-                                self.client.status['reconnect_attempt'] = 0
-                                self.client.status['bluetooth_connected'] = True
-                                self.client.status['bluetooth_connected_at'] = datetime.now().isoformat()
+                                self.client.status["reconnecting"] = False
+                                self.client.status["reconnect_attempt"] = 0
+                                self.client.status["bluetooth_connected"] = True
+                                self.client.status["bluetooth_connected_at"] = datetime.now().isoformat()
                             # Re-subscribe signals — device object may have changed
                             logger.info(f"[{self.device_name}] Reconnected, restarting D-Bus subscription...")
                             if self.client:
@@ -714,7 +733,9 @@ class BluetoothManager:
                 raise  # propagate to monitor_and_reconnect for polling fallback
             except Exception as e:
                 connect_failures += 1
-                logger.error(f"[{self.device_name}] D-Bus monitor error ({connect_failures}/{_MAX_CONNECT_FAILURES}): {e}")
+                logger.error(
+                    f"[{self.device_name}] D-Bus monitor error ({connect_failures}/{_MAX_CONNECT_FAILURES}): {e}"
+                )
                 if connect_failures >= _MAX_CONNECT_FAILURES:
                     raise RuntimeError(f"D-Bus monitor failed {connect_failures} consecutive times: {e}")
             finally:
@@ -724,5 +745,3 @@ class BluetoothManager:
                     except Exception:
                         pass
             await asyncio.sleep(10)
-
-

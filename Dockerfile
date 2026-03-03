@@ -67,8 +67,9 @@ EXPOSE 8080
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD python3 -c "\
-import urllib.request, json, sys; \
-r = urllib.request.urlopen('http://localhost:8080/api/status'); \
+import urllib.request, json, sys, os; \
+port = os.environ.get('WEB_PORT', '8080'); \
+r = urllib.request.urlopen(f'http://localhost:{port}/api/status'); \
 d = json.loads(r.read()); \
 devs = d.get('devices', []); \
 sys.exit(0 if devs and any(dev.get('connected') for dev in devs) else 1)" || exit 1

@@ -12,7 +12,10 @@ import logging
 import socket
 from datetime import datetime
 from importlib.metadata import version as _pkg_version
-from typing import Callable
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 from aiosendspin.models.core import (
     DeviceInfo,
@@ -22,9 +25,14 @@ from aiosendspin.models.core import (
 )
 from aiosendspin.models.types import PlayerCommand, UndefinedField
 from sendspin.daemon.daemon import DaemonArgs, SendspinDaemon
-from services.pulse import aset_sink_volume, aget_sink_description, alist_sink_input_ids, amove_sink_input
 
 from config import VERSION as _BRIDGE_VERSION
+from services.pulse import (
+    aget_sink_description,
+    alist_sink_input_ids,
+    amove_sink_input,
+    aset_sink_volume,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -58,17 +66,18 @@ class BridgeDaemon(SendspinDaemon):
         self._on_volume_save = on_volume_save
         self._pre_start_sink_input_ids = pre_start_sink_input_ids or set()
         self._routed = False  # True after sink-input has been moved to target
+        self._routed_sink_input_id: int | None = None
 
     # ── Client creation ──────────────────────────────────────────────────────
 
     def _create_client(self, static_delay_ms: float = 0.0):
         """Create client with bridge-specific DeviceInfo and register all listeners."""
-        # Temporarily override device_info so super()._create_client() uses ours.
-        # We monkey-patch get_device_info on the daemon module for this call only.
-        import sendspin.daemon.daemon as _daemon_mod
+        # Build a bridge-specific DeviceInfo and pass it directly into the client
+        # so the server sees this process as a dedicated BT bridge endpoint.
         from aiosendspin.models.player import ClientHelloPlayerSupport
-        from sendspin.audio import detect_supported_audio_formats
         from aiosendspin.models.types import Roles
+        from sendspin.audio import detect_supported_audio_formats
+
         try:
             from aiosendspin_mpris import MPRIS_AVAILABLE
         except ImportError:
@@ -96,6 +105,7 @@ class BridgeDaemon(SendspinDaemon):
             supported_formats.insert(0, self._args.preferred_format)
 
         from aiosendspin.client import SendspinClient as _AioSendspinClient
+
         client = _AioSendspinClient(
             client_id=self._args.client_id,
             client_name=self._args.client_name,
@@ -119,41 +129,37 @@ class BridgeDaemon(SendspinDaemon):
 
     async def _handle_server_connection(self, ws) -> None:
         """Mark server connected before passing to parent handler (mDNS mode)."""
-        if not self._bridge_status.get('server_connected'):
-            self._bridge_status['server_connected_at'] = datetime.now().isoformat()
-        self._bridge_status['server_connected'] = True
-        self._bridge_status['connected'] = True
+        if not self._bridge_status.get("server_connected"):
+            self._bridge_status["server_connected_at"] = datetime.now().isoformat()
+        self._bridge_status["server_connected"] = True
+        self._bridge_status["connected"] = True
         # Clear group state on new connection so stale IDs don't persist
-        self._bridge_status['group_id'] = None
-        self._bridge_status['group_name'] = None
+        self._bridge_status["group_id"] = None
+        self._bridge_status["group_name"] = None
         # Capture real MA server IP from the incoming request's peer address
         try:
-            req = getattr(ws, '_req', None)
+            req = getattr(ws, "_req", None)
             if req is not None:
                 peer = req.remote  # e.g. '192.168.10.10'
                 # Rebuild URL using server_port from status (or default 9000)
-                port = self._bridge_status.get('server_port', 9000)
-                self._bridge_status['connected_server_url'] = f"{peer}:{port}"
-        except Exception:
-            pass
+                port = self._bridge_status.get("server_port", 9000)
+                self._bridge_status["connected_server_url"] = f"{peer}:{port}"
+        except Exception as _exc:
+            logger.debug("Could not extract peer address: %s", _exc)
         await super()._handle_server_connection(ws)
 
     def _on_server_disconnect(self) -> None:
         """Clear connection + group state on disconnect."""
-        self._bridge_status['server_connected'] = False
-        self._bridge_status['connected'] = False
-        self._bridge_status['group_name'] = None
-        self._bridge_status['group_id'] = None
+        self._bridge_status["server_connected"] = False
+        self._bridge_status["connected"] = False
+        self._bridge_status["group_name"] = None
+        self._bridge_status["group_id"] = None
 
     # ── Audio / stream events ────────────────────────────────────────────────
 
-    def _handle_format_change(
-        self, codec: str | None, sample_rate: int, bit_depth: int, channels: int
-    ) -> None:
+    def _handle_format_change(self, codec: str | None, sample_rate: int, bit_depth: int, channels: int) -> None:
         super()._handle_format_change(codec, sample_rate, bit_depth, channels)
-        self._bridge_status['audio_format'] = (
-            f"{codec or 'PCM'} {sample_rate}Hz/{bit_depth}-bit/{channels}ch"
-        )
+        self._bridge_status["audio_format"] = f"{codec or 'PCM'} {sample_rate}Hz/{bit_depth}-bit/{channels}ch"
         # PA stream (sink-input) was just created by set_format() → sounddevice.
         # Schedule routing to the correct BT sink.
         if self._bluetooth_sink_name and not self._routed:
@@ -165,39 +171,74 @@ class BridgeDaemon(SendspinDaemon):
         Uses *pre_start_sink_input_ids* and *_claimed_sink_inputs* to identify
         the new unclaimed sink-input.  An asyncio lock serializes routing across
         daemon instances to prevent two daemons from claiming the same one.
+        Retries up to 3 times on failure with increasing delay.
         """
+        _MAX_RETRIES = 3
         async with BridgeDaemon._routing_lock:
+            # Prune stale claimed IDs: remove any that no longer exist as live sink-inputs
+            live_ids = await alist_sink_input_ids()
+            stale = BridgeDaemon._claimed_sink_inputs - live_ids
+            if stale:
+                logger.debug("Pruning stale claimed sink-inputs: %s", stale)
+                BridgeDaemon._claimed_sink_inputs -= stale
+
             await asyncio.sleep(0.3)
             current_ids = await alist_sink_input_ids()
             new_ids = current_ids - self._pre_start_sink_input_ids
             unclaimed = new_ids - BridgeDaemon._claimed_sink_inputs
-            player = self._bridge_status.get('player_name', '?')
+            player = self._bridge_status.get("player_name", "?")
             if not unclaimed:
                 unclaimed = current_ids - BridgeDaemon._claimed_sink_inputs
             if not unclaimed:
-                logger.warning("[%s] No unclaimed sink-input found (pre=%s, cur=%s, claimed=%s)",
-                               player, self._pre_start_sink_input_ids, current_ids,
-                               BridgeDaemon._claimed_sink_inputs)
+                logger.warning(
+                    "[%s] No unclaimed sink-input found (pre=%s, cur=%s, claimed=%s)",
+                    player,
+                    self._pre_start_sink_input_ids,
+                    current_ids,
+                    BridgeDaemon._claimed_sink_inputs,
+                )
                 return
             target_id = max(unclaimed)
-            ok = await amove_sink_input(target_id, self._bluetooth_sink_name)
-            if ok:
-                BridgeDaemon._claimed_sink_inputs.add(target_id)
-                self._routed = True
-                self._routed_sink_input_id = target_id
-                logger.info("[%s] ✓ Routed sink-input %d → %s",
-                            player, target_id, self._bluetooth_sink_name)
-            else:
-                logger.warning("[%s] Failed to route sink-input %d → %s",
-                               player, target_id, self._bluetooth_sink_name)
+            sink_name = self._bluetooth_sink_name or ""
+            for attempt in range(1, _MAX_RETRIES + 1):
+                ok = await amove_sink_input(target_id, sink_name)
+                if ok:
+                    BridgeDaemon._claimed_sink_inputs.add(target_id)
+                    self._routed = True
+                    self._routed_sink_input_id = target_id
+                    logger.info(
+                        "[%s] ✓ Routed sink-input %d → %s",
+                        player,
+                        target_id,
+                        self._bluetooth_sink_name,
+                    )
+                    return
+                if attempt < _MAX_RETRIES:
+                    delay = 0.5 * attempt
+                    logger.warning(
+                        "[%s] Route attempt %d/%d failed for sink-input %d, retrying in %.1fs...",
+                        player,
+                        attempt,
+                        _MAX_RETRIES,
+                        target_id,
+                        delay,
+                    )
+                    await asyncio.sleep(delay)
+            logger.warning(
+                "[%s] Failed to route sink-input %d → %s after %d attempts",
+                player,
+                target_id,
+                self._bluetooth_sink_name,
+                _MAX_RETRIES,
+            )
 
     def _on_stream_event(self, event: str) -> None:
         super()._on_stream_event(event)
-        is_playing = event == 'start'
-        if self._bridge_status.get('playing') != is_playing:
-            self._bridge_status['playing'] = is_playing
-            self._bridge_status['state_changed_at'] = datetime.now().isoformat()
-        logger.debug("[%s] stream event: %s", self._bridge_status.get('player_name', '?'), event)
+        is_playing = event == "start"
+        if self._bridge_status.get("playing") != is_playing:
+            self._bridge_status["playing"] = is_playing
+            self._bridge_status["state_changed_at"] = datetime.now().isoformat()
+        logger.debug("[%s] stream event: %s", self._bridge_status.get("player_name", "?"), event)
 
     # ── Server commands (volume / mute) ──────────────────────────────────────
 
@@ -207,10 +248,10 @@ class BridgeDaemon(SendspinDaemon):
             return
         cmd = payload.player
         if cmd.command == PlayerCommand.VOLUME and cmd.volume is not None:
-            self._bridge_status['volume'] = cmd.volume
+            self._bridge_status["volume"] = cmd.volume
             self._sync_bt_sink_volume(cmd.volume)
         elif cmd.command == PlayerCommand.MUTE and cmd.mute is not None:
-            self._bridge_status['muted'] = cmd.mute
+            self._bridge_status["muted"] = cmd.mute
 
     def _sync_bt_sink_volume(self, volume: int) -> None:
         """Apply volume to the specific Bluetooth sink via pulsectl_asyncio."""
@@ -218,11 +259,13 @@ class BridgeDaemon(SendspinDaemon):
             return
         try:
             task = asyncio.ensure_future(aset_sink_volume(self._bluetooth_sink_name, volume))
-            task.add_done_callback(lambda t: (
-                logger.info("✓ Synced Bluetooth speaker volume to %d%%", volume)
-                if not t.exception() and t.result()
-                else logger.debug("Could not sync volume: %s", t.exception())
-            ))
+            task.add_done_callback(
+                lambda t: (
+                    logger.info("✓ Synced Bluetooth speaker volume to %d%%", volume)
+                    if not t.exception() and t.result()
+                    else logger.debug("Could not sync volume: %s", t.exception())
+                )
+            )
             if self._on_volume_save:
                 self._on_volume_save(volume)
         except Exception as exc:
@@ -231,21 +274,26 @@ class BridgeDaemon(SendspinDaemon):
     # ── MA group updates ─────────────────────────────────────────────────────
 
     def _on_group_update(self, payload: GroupUpdateServerPayload) -> None:
-        self._bridge_status['group_name'] = payload.group_name or None
-        self._bridge_status['group_id'] = payload.group_id
-        logger.info("Group update: id=%s name=%s state=%s", payload.group_id, payload.group_name, payload.playback_state)
+        self._bridge_status["group_name"] = payload.group_name or None
+        self._bridge_status["group_id"] = payload.group_id
+        logger.info(
+            "Group update: id=%s name=%s state=%s",
+            payload.group_id,
+            payload.group_name,
+            payload.playback_state,
+        )
 
     # ── Track metadata ───────────────────────────────────────────────────────
 
     def _on_metadata_update(self, payload: ServerStatePayload) -> None:
         """Callback receives ServerStatePayload; track info is in payload.metadata."""
-        metadata = getattr(payload, 'metadata', None)
+        metadata = getattr(payload, "metadata", None)
         if metadata is None:
             return
         if not isinstance(metadata.title, UndefinedField):
-            self._bridge_status['current_track'] = metadata.title
+            self._bridge_status["current_track"] = metadata.title
         if not isinstance(metadata.artist, UndefinedField):
-            self._bridge_status['current_artist'] = metadata.artist
+            self._bridge_status["current_artist"] = metadata.artist
 
 
 async def resolve_audio_device_for_sink(sink_name: str | None):
@@ -263,7 +311,8 @@ async def resolve_audio_device_for_sink(sink_name: str | None):
 
     logger.debug(
         "resolve_audio_device_for_sink(%s): available devices: %s",
-        sink_name, [d.name for d in devices],
+        sink_name,
+        [d.name for d in devices],
     )
 
     # 1. Exact match on sink name (PipeWire may expose by name)
@@ -283,12 +332,16 @@ async def resolve_audio_device_for_sink(sink_name: str | None):
                 return dev
         for dev in devices:
             if desc_lower in dev.name.lower() or dev.name.lower() in desc_lower:
-                logger.info("Audio device partial-matched by description: %s (desc=%s)", dev.name, description)
+                logger.info(
+                    "Audio device partial-matched by description: %s (desc=%s)",
+                    dev.name,
+                    description,
+                )
                 return dev
 
     # 3. MAC-segment match: 'bluez_output.AA_BB_CC_DD_EE_FF.1' → 'AA_BB_CC_DD_EE_FF'
-    parts = sink_name.split('.')
-    mac_segment = parts[1] if len(parts) >= 2 else ''
+    parts = sink_name.split(".")
+    mac_segment = parts[1] if len(parts) >= 2 else ""
     if mac_segment:
         for dev in devices:
             if mac_segment.lower() in dev.name.lower():
@@ -303,6 +356,7 @@ async def resolve_audio_device_for_sink(sink_name: str | None):
 
     logger.warning(
         "No audio device found for sink %s (description=%s) — falling back to default",
-        sink_name, description,
+        sink_name,
+        description,
     )
     return next((d for d in devices if d.is_default), None)

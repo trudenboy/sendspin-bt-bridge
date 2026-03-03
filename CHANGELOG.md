@@ -5,6 +5,103 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.1] - 2026-03-03
+
+### Security
+- **Open redirect fixed**: login redirect target (`?next=`) now validated to be a local
+  path — rejects absolute URLs, `//host` and scheme-relative redirects
+
+### Fixed
+- **asyncio.shield() misuse**: `stop_sendspin()` used `shield()` inside `wait_for()`,
+  preventing cancellation from propagating — timeout always expired; shield removed
+- **`_GLib` never imported**: MPRIS identity registration silently failed because
+  `GLib` was never assigned from `gi.repository`; now properly imported in `mpris.py`
+- **`_routed_sink_input_id` uninitialized**: attribute was dynamically created on first
+  routing success; now initialized to `None` in `BridgeDaemon.__init__`
+- **Missing HTTP status codes**: error responses in `/api/status` (503) and
+  `/api/logs` (500) now return proper status codes instead of implicit 200
+- **Stale comment**: removed outdated "monkey-patch" comment in `bridge_daemon.py`
+- **ha-addon version**: reverted `config.yaml` version to let CI auto-sync on tag push
+
+### Removed
+- Dead code: `_detect_server_url_from_proc()`, `self.process`, `read_mpris_metadata_for()`
+- Redundant `or None` in `state.py` (`.get()` already returns `None`)
+
+### Changed
+- 10 regex `re.compile()` calls moved from per-request to module-level constants
+  in `routes/api.py` for better performance
+- Added Flask `@errorhandler(404)` and `@errorhandler(500)` with JSON responses
+  for `/api/` routes and redirect-to-home for page routes
+- Added documentation link (📖 Docs) to web UI header
+- Added `_GLib is not None` guard before starting GLib main loop thread
+
+## [2.3.0] - 2026-03-03
+
+### Security
+- **Auth bypass fixed**: `X-Ingress-Path` header now trusted only from localhost IPs
+  (`127.0.0.1`, `::1`, `172.30.32.2`) — prevents LAN clients from spoofing the header
+  to bypass authentication on port 8080
+- **Wildcard CORS removed**: `CORS(app)` with `Access-Control-Allow-Origin: *` removed
+  entirely — UI and API are same-origin, cross-origin access is no longer permitted
+- **Timing-safe password comparison**: `check_password()` now uses `hmac.compare_digest()`
+  instead of `==` to prevent timing side-channel attacks
+- **Config POST validation**: MAC addresses validated with regex, port numbers checked for
+  valid range (1024–65535), top-level keys whitelisted — prevents arbitrary JSON injection
+
+### Fixed
+- **PID 1 signal handling**: HA addon now sets `init: true` so container signals (SIGTERM)
+  are properly forwarded to the Python process instead of falling through to SIGKILL after 10s
+- **Sink-input routing retry**: `_route_stream_to_sink()` now retries up to 3 times with
+  0.5s/1.0s/1.5s backoff on `amove_sink_input` failure
+- **Stale claimed IDs**: `_claimed_sink_inputs` is pruned against live sink-inputs before
+  each routing attempt — prevents stale entries from blocking re-routing after daemon crash
+- **dbus.mainloop.glib NameError**: MPRIS Identity service registration now correctly imports
+  `dbus.mainloop.glib` instead of referencing undefined `dbus` variable
+- **BT scan process leak**: `bluetoothctl` Popen in `/api/bt/scan` now wrapped in
+  try/except with `proc.kill()` on timeout — prevents orphaned processes
+- **Config write .tmp cleanup**: if `json.dump()` fails mid-write, the temporary file is
+  removed instead of being left on disk
+- **Shell variable quoting**: `$BLUETOOTH_MAC` in `entrypoint.sh` properly quoted to prevent
+  word splitting
+- **D-Bus warning improved**: entrypoint now logs "MPRIS will not be available" when
+  `dbus-daemon` fails to start
+
+### Changed
+- **Dead code removed**: unused `update_status()`/`get_status()` methods with `threading.Lock`
+  removed from `SendspinClient` — all status mutations use direct dict access (safe under GIL)
+- **Silent exceptions logged**: bare `except: pass` blocks in MPRIS D-Bus calls, adapter cache
+  loading, and config merge now log at `DEBUG` level for diagnostics
+- **Healthcheck port**: Dockerfile `HEALTHCHECK` now uses `WEB_PORT` env var instead of
+  hardcoded 8080
+
+## [2.2.3] - 2026-03-03
+
+### Fixed
+- **Sink-input dedup**: added `_claimed_sink_inputs` class-level set to `BridgeDaemon` so
+  each daemon claims a unique sink-input ID. Previously both daemons could route the same
+  sink-input (worked by luck, not design). An `asyncio.Lock` serializes routing to prevent
+  two daemons from claiming the same ID simultaneously.
+
+## [2.2.2] - 2026-03-03
+
+### Changed
+- **Audio routing overhaul**: replaced null-sink + loopback approach with `pactl move-sink-input`.
+  After `sounddevice.RawOutputStream` creates a PA sink-input (triggered by `_handle_format_change`),
+  the daemon diffs current vs pre-start sink-input IDs and moves the new one to the correct BT sink.
+  This works on PipeWire's PA-compat layer where `pactl load-module` always fails.
+
+### Removed
+- Removed `load_null_sink()`, `load_loopback()`, `unload_module()` and their async wrappers
+  from `services/pulse.py` (~80 lines) — all incompatible with PipeWire on HAOS
+
+## [2.2.0] - 2026-03-03
+
+### Added
+- **Multi-speaker null-sink routing** (attempt): each daemon creates a `module-null-sink` +
+  `module-loopback` pair to route audio through a per-device bridge sink to the BT sink.
+  This approach failed on HAOS because PipeWire's PA-compat layer does not support
+  `pactl load-module`. Superseded by v2.2.2's `move-sink-input` approach.
+
 ## [2.1.8] - 2026-03-03
 
 ### Fixed

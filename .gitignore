@@ -53,3 +53,8 @@ htmlcov/
 # Local notes
 community_engagement.md
 .worktrees/
+
+# IDE / tool artifacts
+.playwright-mcp/
+sendspin-cli/
+*.png
