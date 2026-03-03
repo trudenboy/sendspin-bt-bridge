@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.3] - 2026-03-03
+
+### Fixed
+- **Track title and artist not displayed in device cards**: The bridge was only
+  registering the `PLAYER` role with the MA server (not `METADATA` or `CONTROLLER`).
+  The server only sends metadata (title/artist) to clients with the `METADATA` role.
+  Fixed by always including `METADATA` and `CONTROLLER` roles regardless of MPRIS
+  availability — MPRIS is a D-Bus feature irrelevant to metadata role assignment.
+
 ## [2.5.2] - 2026-03-03
 
 ### Fixed
