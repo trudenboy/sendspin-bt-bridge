@@ -393,22 +393,20 @@ def load_null_sink(sink_name: str, description: str) -> int | None:
     Idempotent: if a sink with *sink_name* already exists, returns -1 (skip).
     """
     if check_sink_exists(sink_name):
-        logger.debug("Null-sink %s already exists — skipping", sink_name)
+        logger.info("Null-sink %s already exists — skipping", sink_name)
         return -1
     try:
-        args = (
-            f'sink_name={sink_name} '
-            f'sink_properties=device.description="{description}"'
-        )
-        r = subprocess.run(
-            ['pactl', 'load-module', 'module-null-sink', args],
-            capture_output=True, text=True, timeout=5,
-        )
-        if r.returncode == 0:
+        # Use shell=True so bash handles quoting of description with spaces
+        import shlex
+        desc_arg = shlex.quote(f'sink_properties=device.description={description}')
+        cmd = f'pactl load-module module-null-sink sink_name={sink_name} {desc_arg}'
+        logger.info("Creating null-sink: %s", cmd)
+        r = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=5)
+        if r.returncode == 0 and r.stdout.strip():
             module_id = int(r.stdout.strip())
             logger.info("Loaded module-null-sink %s (module %d)", sink_name, module_id)
             return module_id
-        logger.warning("load_null_sink(%s) failed: %s", sink_name, r.stderr.strip())
+        logger.warning("load_null_sink(%s) failed (rc=%d): %s", sink_name, r.returncode, r.stderr.strip())
     except Exception as exc:
         logger.warning("load_null_sink(%s) error: %s", sink_name, exc)
     return None
@@ -417,16 +415,17 @@ def load_null_sink(sink_name: str, description: str) -> int | None:
 def load_loopback(source: str, sink: str, latency_msec: int = 50) -> int | None:
     """Load a ``module-loopback`` from *source* to *sink*. Returns module index or None."""
     try:
-        args = f'source={source} sink={sink} latency_msec={latency_msec}'
         r = subprocess.run(
-            ['pactl', 'load-module', 'module-loopback', args],
+            ['pactl', 'load-module', 'module-loopback',
+             f'source={source}', f'sink={sink}', f'latency_msec={latency_msec}'],
             capture_output=True, text=True, timeout=5,
         )
-        if r.returncode == 0:
+        if r.returncode == 0 and r.stdout.strip():
             module_id = int(r.stdout.strip())
             logger.info("Loaded module-loopback %s → %s (module %d)", source, sink, module_id)
             return module_id
-        logger.warning("load_loopback(%s → %s) failed: %s", source, sink, r.stderr.strip())
+        logger.warning("load_loopback(%s → %s) failed (rc=%d): %s",
+                        source, sink, r.returncode, r.stderr.strip())
     except Exception as exc:
         logger.warning("load_loopback(%s → %s) error: %s", source, sink, exc)
     return None
