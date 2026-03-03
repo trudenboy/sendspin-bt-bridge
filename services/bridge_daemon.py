@@ -24,11 +24,6 @@ from aiosendspin.models.types import PlayerCommand, UndefinedField
 from sendspin.daemon.daemon import DaemonArgs, SendspinDaemon
 from services.pulse import aset_sink_volume, aget_sink_description
 
-try:
-    import pulsectl_asyncio  # type: ignore[import]
-except (ImportError, OSError):
-    pulsectl_asyncio = None  # type: ignore[assignment]
-
 from config import VERSION as _BRIDGE_VERSION
 
 logger = logging.getLogger(__name__)
@@ -155,66 +150,11 @@ class BridgeDaemon(SendspinDaemon):
 
     def _on_stream_event(self, event: str) -> None:
         super()._on_stream_event(event)
-        logger.info("[%s] _on_stream_event(%s) bt_sink=%s",
-                    self._bridge_status.get('player_name', '?'), event, self._bluetooth_sink_name)
         is_playing = event == 'start'
         if self._bridge_status.get('playing') != is_playing:
             self._bridge_status['playing'] = is_playing
             self._bridge_status['state_changed_at'] = datetime.now().isoformat()
-        # When a PA stream opens, move it to the correct BT sink.
-        if event == 'start' and self._bluetooth_sink_name:
-            asyncio.ensure_future(self._route_stream_to_sink())
-
-    async def _route_stream_to_sink(self) -> None:
-        """Move one sink-input that is NOT on any BT sink to this daemon's BT sink."""
-        player = self._bridge_status.get('player_name', '?')
-        logger.info("[%s] _route_stream_to_sink starting, target=%s", player, self._bluetooth_sink_name)
-        try:
-            await asyncio.sleep(0.5)  # let PA register the stream
-            # Use subprocess for reliability — pulsectl_asyncio may conflict
-            # with other PA connections in the same process.
-            import subprocess as _sp
-            # Get all sink-inputs
-            r = _sp.run(['pactl', 'list', 'short', 'sink-inputs'],
-                        capture_output=True, text=True, timeout=5)
-            logger.info("[%s] pactl sink-inputs: %s", player, r.stdout.strip())
-            # Get target sink index
-            r2 = _sp.run(['pactl', 'list', 'short', 'sinks'],
-                         capture_output=True, text=True, timeout=5)
-            logger.info("[%s] pactl sinks: %s", player, r2.stdout.strip())
-            target_idx = None
-            bt_indices: set[str] = set()
-            for line in r2.stdout.splitlines():
-                parts = line.split('\t')
-                if len(parts) >= 2:
-                    if parts[1] == self._bluetooth_sink_name:
-                        target_idx = parts[0]
-                    if 'bluez' in parts[1]:
-                        bt_indices.add(parts[0])
-            if target_idx is None:
-                logger.warning("[%s] route: target sink %s not found in pactl",
-                               player, self._bluetooth_sink_name)
-                return
-            # Find sink-inputs NOT on any BT sink and move one to target
-            for line in r.stdout.splitlines():
-                parts = line.split('\t')
-                if len(parts) >= 2:
-                    si_id, si_sink = parts[0], parts[1]
-                    if si_sink not in bt_indices:
-                        result = _sp.run(
-                            ['pactl', 'move-sink-input', si_id, self._bluetooth_sink_name],
-                            capture_output=True, text=True, timeout=3,
-                        )
-                        if result.returncode == 0:
-                            logger.info("[%s] Routed sink-input #%s → %s",
-                                        player, si_id, self._bluetooth_sink_name)
-                        else:
-                            logger.warning("[%s] move-sink-input #%s failed: %s",
-                                           player, si_id, result.stderr.strip())
-                        return  # one stream per call
-            logger.info("[%s] route: no unrouted streams found", player)
-        except Exception as exc:
-            logger.warning("[%s] _route_stream_to_sink error: %s", player, exc)
+        logger.debug("[%s] stream event: %s", self._bridge_status.get('player_name', '?'), event)
 
     # ── Server commands (volume / mute) ──────────────────────────────────────
 

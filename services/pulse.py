@@ -365,3 +365,103 @@ def _fallback_move_sink_input(sink_input_idx: int, sink_name: str) -> bool:
         return r.returncode == 0
     except Exception:
         return False
+
+
+# ---------------------------------------------------------------------------
+# PA module management (null-sink / loopback)
+# ---------------------------------------------------------------------------
+
+def check_sink_exists(sink_name: str) -> bool:
+    """Return True if a PA sink with *sink_name* already exists."""
+    try:
+        r = subprocess.run(
+            ['pactl', 'list', 'short', 'sinks'],
+            capture_output=True, text=True, timeout=5,
+        )
+        for line in r.stdout.splitlines():
+            parts = line.split('\t')
+            if len(parts) >= 2 and parts[1] == sink_name:
+                return True
+    except Exception as exc:
+        logger.debug("check_sink_exists(%s) error: %s", sink_name, exc)
+    return False
+
+
+def load_null_sink(sink_name: str, description: str) -> int | None:
+    """Load a ``module-null-sink`` and return the module index, or None on error.
+
+    Idempotent: if a sink with *sink_name* already exists, returns -1 (skip).
+    """
+    if check_sink_exists(sink_name):
+        logger.debug("Null-sink %s already exists — skipping", sink_name)
+        return -1
+    try:
+        args = (
+            f'sink_name={sink_name} '
+            f'sink_properties=device.description="{description}"'
+        )
+        r = subprocess.run(
+            ['pactl', 'load-module', 'module-null-sink', args],
+            capture_output=True, text=True, timeout=5,
+        )
+        if r.returncode == 0:
+            module_id = int(r.stdout.strip())
+            logger.info("Loaded module-null-sink %s (module %d)", sink_name, module_id)
+            return module_id
+        logger.warning("load_null_sink(%s) failed: %s", sink_name, r.stderr.strip())
+    except Exception as exc:
+        logger.warning("load_null_sink(%s) error: %s", sink_name, exc)
+    return None
+
+
+def load_loopback(source: str, sink: str, latency_msec: int = 50) -> int | None:
+    """Load a ``module-loopback`` from *source* to *sink*. Returns module index or None."""
+    try:
+        args = f'source={source} sink={sink} latency_msec={latency_msec}'
+        r = subprocess.run(
+            ['pactl', 'load-module', 'module-loopback', args],
+            capture_output=True, text=True, timeout=5,
+        )
+        if r.returncode == 0:
+            module_id = int(r.stdout.strip())
+            logger.info("Loaded module-loopback %s → %s (module %d)", source, sink, module_id)
+            return module_id
+        logger.warning("load_loopback(%s → %s) failed: %s", source, sink, r.stderr.strip())
+    except Exception as exc:
+        logger.warning("load_loopback(%s → %s) error: %s", source, sink, exc)
+    return None
+
+
+def unload_module(module_id: int) -> bool:
+    """Unload a PA module by index. Returns True on success."""
+    if module_id is None or module_id < 0:
+        return False
+    try:
+        r = subprocess.run(
+            ['pactl', 'unload-module', str(module_id)],
+            capture_output=True, text=True, timeout=5,
+        )
+        if r.returncode == 0:
+            logger.debug("Unloaded PA module %d", module_id)
+            return True
+        logger.debug("unload_module(%d) failed: %s", module_id, r.stderr.strip())
+    except Exception as exc:
+        logger.debug("unload_module(%d) error: %s", module_id, exc)
+    return False
+
+
+# Async wrappers (run subprocess in executor to avoid blocking event loop)
+
+async def aload_null_sink(sink_name: str, description: str) -> int | None:
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, load_null_sink, sink_name, description)
+
+
+async def aload_loopback(source: str, sink: str, latency_msec: int = 50) -> int | None:
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, load_loopback, source, sink, latency_msec)
+
+
+async def aunload_module(module_id: int) -> bool:
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, unload_module, module_id)
