@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.8] - 2026-03-03
+
+### Fixed
+- Group audio routing: event-driven stream claim replaces fixed 6 s sleep.
+  Each daemon's PA stream is explicitly moved to the correct BT sink as soon
+  as it appears. Correct for any number of devices; lock released faster.
+
 ## [2.1.7] - 2026-03-03
 
 ### Fixed

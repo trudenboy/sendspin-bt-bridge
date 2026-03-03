@@ -155,6 +155,45 @@ async def aget_sink_mute(sink_name: str) -> bool | None:
         return _fallback_get_mute(sink_name)
 
 
+async def alist_sink_input_ids() -> set[int]:
+    """Return set of current PA sink-input indices."""
+    if not _PULSECTL_AVAILABLE:
+        return _fallback_sink_input_ids()
+    try:
+        async with asyncio.timeout(_TIMEOUT):
+            async with pulsectl_asyncio.PulseAsync(_CLIENT_NAME) as pulse:
+                inputs = await pulse.sink_input_list()
+                return {i.index for i in inputs}
+    except Exception as exc:
+        logger.debug("alist_sink_input_ids error: %s — falling back", exc)
+        return _fallback_sink_input_ids()
+
+
+async def amove_sink_input(sink_input_idx: int, sink_name: str) -> bool:
+    """Move sink-input *sink_input_idx* to sink *sink_name*. Returns True on success."""
+    if not _PULSECTL_AVAILABLE:
+        return _fallback_move_sink_input(sink_input_idx, sink_name)
+    try:
+        async with asyncio.timeout(_TIMEOUT):
+            async with pulsectl_asyncio.PulseAsync(_CLIENT_NAME) as pulse:
+                inputs = await pulse.sink_input_list()
+                si = next((i for i in inputs if i.index == sink_input_idx), None)
+                if si is None:
+                    logger.warning("amove_sink_input: sink-input %d not found", sink_input_idx)
+                    return False
+                sinks = await pulse.sink_list()
+                sink = next((s for s in sinks if s.name == sink_name), None)
+                if sink is None:
+                    logger.warning("amove_sink_input: sink %s not found", sink_name)
+                    return False
+                await pulse.sink_input_move(si, sink)
+                return True
+    except Exception as exc:
+        logger.debug("amove_sink_input(%d, %s) error: %s — falling back",
+                     sink_input_idx, sink_name, exc)
+        return _fallback_move_sink_input(sink_input_idx, sink_name)
+
+
 async def aget_server_name() -> str:
     """Return PA server name string (for diagnostics)."""
     if not _PULSECTL_AVAILABLE:
@@ -298,3 +337,31 @@ def _fallback_server_name() -> str:
     except Exception:
         pass
     return 'not available'
+
+
+def _fallback_sink_input_ids() -> set[int]:
+    try:
+        r = subprocess.run(['pactl', 'list', 'short', 'sink-inputs'],
+                           capture_output=True, text=True, timeout=5)
+        ids: set[int] = set()
+        for line in r.stdout.splitlines():
+            parts = line.split('\t')
+            if parts:
+                try:
+                    ids.add(int(parts[0]))
+                except ValueError:
+                    pass
+        return ids
+    except Exception:
+        return set()
+
+
+def _fallback_move_sink_input(sink_input_idx: int, sink_name: str) -> bool:
+    try:
+        r = subprocess.run(
+            ['pactl', 'move-sink-input', str(sink_input_idx), sink_name],
+            capture_output=True, text=True, timeout=3,
+        )
+        return r.returncode == 0
+    except Exception:
+        return False

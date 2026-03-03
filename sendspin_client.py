@@ -269,10 +269,15 @@ class SendspinClient:
             )
             self.status['playing'] = False
 
-            # Set PULSE_SINK so PortAudio's PulseAudio backend routes this
-            # daemon's stream to the correct BT sink.  PortAudio reads the
-            # env-var in pa_stream_connect_playback(), which is called during
-            # Pa_OpenStream() ~1-2 s after daemon.run() begins.
+            # Snapshot existing sink-input IDs before starting — any new one
+            # that appears belongs to this daemon (lock guarantees exclusivity).
+            try:
+                from services.pulse import alist_sink_input_ids, amove_sink_input
+                existing_ids = await alist_sink_input_ids()
+            except Exception:
+                existing_ids = set()
+
+            # Set PULSE_SINK as a best-effort initial routing hint.
             _old_pulse_sink = os.environ.get('PULSE_SINK')
             if self.bluetooth_sink_name:
                 os.environ['PULSE_SINK'] = self.bluetooth_sink_name
@@ -288,10 +293,12 @@ class SendspinClient:
                 self._daemon_task.add_done_callback(_on_daemon_done)
                 logger.info(f"Sendspin daemon started in-process for '{self.player_name}'")
 
-                # Hold PULSE_SINK for 6 s to ensure Pa_OpenStream reads it.
-                # MA server typically connects ~4 s after daemon start; stream
-                # must open while PULSE_SINK is still set to the correct sink.
-                await asyncio.sleep(6.0)
+                # Wait for the new PA sink-input to appear, then explicitly
+                # move it to the correct BT sink.  This is event-driven:
+                # we release the lock as soon as the stream appears (typically
+                # ~4 s) rather than holding it for a fixed 6 s.
+                if self.bluetooth_sink_name and existing_ids is not None:
+                    await self._claim_sink_input(existing_ids, amove_sink_input)
             finally:
                 # Restore PULSE_SINK regardless of outcome
                 if _old_pulse_sink is None:
@@ -303,6 +310,43 @@ class SendspinClient:
             logger.error(f"Failed to start Sendspin daemon: {e}")
             self.status['last_error'] = str(e)
             self.status['server_connected'] = False
+
+    async def _claim_sink_input(self, existing_ids: set[int], amove_sink_input,
+                                 timeout: float = 12.0, poll_interval: float = 0.4) -> bool:
+        """Wait for a new PA sink-input to appear and move it to the correct BT sink.
+
+        Since _startup_lock is held by the caller, any new sink-input that
+        appears belongs exclusively to this daemon.  We poll until we see it
+        (event-driven) rather than sleeping a fixed duration.
+        """
+        deadline = asyncio.get_event_loop().time() + timeout
+        from services.pulse import alist_sink_input_ids  # avoid circular at module level
+        while asyncio.get_event_loop().time() < deadline:
+            await asyncio.sleep(poll_interval)
+            try:
+                current_ids = await alist_sink_input_ids()
+                new_ids = current_ids - existing_ids
+                if new_ids:
+                    new_id = next(iter(new_ids))
+                    ok = await amove_sink_input(new_id, self.bluetooth_sink_name)
+                    if ok:
+                        logger.info(
+                            "[%s] Claimed sink-input #%d → %s",
+                            self.player_name, new_id, self.bluetooth_sink_name,
+                        )
+                    else:
+                        logger.warning(
+                            "[%s] move-sink-input #%d → %s failed",
+                            self.player_name, new_id, self.bluetooth_sink_name,
+                        )
+                    return ok
+            except Exception as exc:
+                logger.debug("[%s] _claim_sink_input poll error: %s", self.player_name, exc)
+        logger.warning(
+            "[%s] _claim_sink_input: no new stream appeared within %.0f s",
+            self.player_name, timeout,
+        )
+        return False
 
     async def stop_sendspin(self) -> None:
         """Stop the in-process sendspin daemon task."""

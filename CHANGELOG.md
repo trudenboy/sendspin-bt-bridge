@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.8] - 2026-03-03
+
+### Fixed
+- **Group audio routing (v2)**: replaced fixed 6 s PULSE_SINK hold with event-driven
+  `_claim_sink_input()` — polls for new PA sink-input to appear, then explicitly moves
+  it to the correct BT sink via `pactl move-sink-input`. Lock is released as soon as
+  the stream appears (~4 s average) instead of after a fixed sleep.
+  Scales to any number of devices; routing is guaranteed correct regardless of PULSE_SINK
+  timing. Added `alist_sink_input_ids()` and `amove_sink_input()` to `services/pulse.py`
+  with pulsectl_asyncio native API and `pactl` subprocess fallback.
+
 ## [2.1.7] - 2026-03-03
 
 ### Fixed
