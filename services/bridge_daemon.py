@@ -9,13 +9,22 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import socket
 from datetime import datetime
+from importlib.metadata import version as _pkg_version
 from typing import Callable
 
-from aiosendspin.models.core import GroupUpdateServerPayload, ServerCommandPayload, ServerStatePayload
+from aiosendspin.models.core import (
+    DeviceInfo,
+    GroupUpdateServerPayload,
+    ServerCommandPayload,
+    ServerStatePayload,
+)
 from aiosendspin.models.types import PlayerCommand, UndefinedField
 from sendspin.daemon.daemon import DaemonArgs, SendspinDaemon
 from services.pulse import aset_sink_volume, aget_sink_description
+
+from config import VERSION as _BRIDGE_VERSION
 
 logger = logging.getLogger(__name__)
 
@@ -46,8 +55,54 @@ class BridgeDaemon(SendspinDaemon):
     # ── Client creation ──────────────────────────────────────────────────────
 
     def _create_client(self, static_delay_ms: float = 0.0):
-        """Create client and register all bridge listeners."""
-        client = super()._create_client(static_delay_ms)
+        """Create client with bridge-specific DeviceInfo and register all listeners."""
+        # Temporarily override device_info so super()._create_client() uses ours.
+        # We monkey-patch get_device_info on the daemon module for this call only.
+        import sendspin.daemon.daemon as _daemon_mod
+        from aiosendspin.models.player import ClientHelloPlayerSupport
+        from sendspin.audio import detect_supported_audio_formats
+        from aiosendspin.models.types import Roles
+        try:
+            from aiosendspin_mpris import MPRIS_AVAILABLE
+        except ImportError:
+            MPRIS_AVAILABLE = False
+
+        try:
+            sw_ver = f"aiosendspin {_pkg_version('aiosendspin')}"
+        except Exception:
+            sw_ver = "aiosendspin"
+
+        device_info = DeviceInfo(
+            product_name=f"Sendspin BT Bridge v{_BRIDGE_VERSION}",
+            manufacturer=socket.gethostname(),
+            software_version=sw_ver,
+        )
+
+        assert self._audio_handler is not None
+        client_roles = [Roles.PLAYER]
+        if MPRIS_AVAILABLE and self._args.use_mpris:
+            client_roles.extend([Roles.METADATA, Roles.CONTROLLER])
+
+        supported_formats = detect_supported_audio_formats(self._args.audio_device.index)
+        if self._args.preferred_format is not None:
+            supported_formats = [f for f in supported_formats if f != self._args.preferred_format]
+            supported_formats.insert(0, self._args.preferred_format)
+
+        from aiosendspin.client import SendspinClient as _AioSendspinClient
+        client = _AioSendspinClient(
+            client_id=self._args.client_id,
+            client_name=self._args.client_name,
+            roles=client_roles,
+            device_info=device_info,
+            player_support=ClientHelloPlayerSupport(
+                supported_formats=supported_formats,
+                buffer_capacity=32_000_000,
+                supported_commands=[PlayerCommand.VOLUME, PlayerCommand.MUTE],
+            ),
+            static_delay_ms=static_delay_ms,
+            initial_volume=self._audio_handler.volume,
+            initial_muted=self._audio_handler.muted,
+        )
         client.add_group_update_listener(self._on_group_update)
         client.add_metadata_listener(self._on_metadata_update)
         client.add_disconnect_listener(self._on_server_disconnect)
