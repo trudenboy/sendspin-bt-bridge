@@ -72,8 +72,8 @@ class BridgeDaemon(SendspinDaemon):
 
     def _create_client(self, static_delay_ms: float = 0.0):
         """Create client with bridge-specific DeviceInfo and register all listeners."""
-        # Temporarily override device_info so super()._create_client() uses ours.
-        # We monkey-patch get_device_info on the daemon module for this call only.
+        # Build a bridge-specific DeviceInfo and pass it directly into the client
+        # so the server sees this process as a dedicated BT bridge endpoint.
         from aiosendspin.models.player import ClientHelloPlayerSupport
         from aiosendspin.models.types import Roles
         from sendspin.audio import detect_supported_audio_formats

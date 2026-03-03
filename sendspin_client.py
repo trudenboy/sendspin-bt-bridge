@@ -513,7 +513,7 @@ async def main():
         logger.debug(f"Could not sync enabled state to options.json: {_e}")
 
     # Register MPRIS Identity services on the session bus (one per player)
-    if _DBUS_MPRIS_AVAILABLE:
+    if _DBUS_MPRIS_AVAILABLE and _GLib is not None:
         try:
             import dbus.mainloop.glib as _dbus_ml
 

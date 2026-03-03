@@ -5,7 +5,6 @@ Provides:
 - MprisIdentityService: registers a minimal MediaPlayer2 D-Bus service so
   Music Assistant can discover this bridge by player name.
 - _pause_all_via_mpris(): send Pause to all playing sendspin instances.
-- _read_mpris_metadata_for(): read track/artist/playback state for a PID.
 """
 
 import logging
@@ -22,6 +21,7 @@ _GLib = None
 try:
     import dbus.mainloop.glib
     import dbus.service
+    from gi.repository import GLib as _GLib  # type: ignore[assignment,no-redef]  # noqa: F401
 
     class MprisIdentityService(dbus.service.Object):  # type: ignore[no-redef]
         """Minimal MPRIS MediaPlayer2 service — exposes Identity = effective player name."""
