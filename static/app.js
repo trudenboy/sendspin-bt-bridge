@@ -232,13 +232,17 @@ function populateDeviceCard(i, dev) {
     var srvUri = document.getElementById('dsrv-uri-' + i);
     if (srvUri) {
         var srvLabel = '';
-        if (dev.server_connected) {
-            var h = dev.server_host || '';
+        var h = dev.server_host || '';
+        var p = dev.server_port || 9000;
+        if (dev.connected_server_url) {
+            var m = dev.connected_server_url.match(/^wss?:\/\/([^\/]+)/);
+            if (m) srvLabel = m[1];
+        }
+        if (!srvLabel) {
             if (h && !['auto','discover',''].includes(h.toLowerCase())) {
-                srvLabel = h + ':' + (dev.server_port || 9000);
-            } else if (dev.connected_server_url) {
-                var m = dev.connected_server_url.match(/^wss?:\/\/([^\/]+)/);
-                if (m) srvLabel = m[1];
+                srvLabel = h + ':' + p;
+            } else {
+                srvLabel = 'auto:' + p;
             }
         }
         srvUri.textContent = srvLabel;

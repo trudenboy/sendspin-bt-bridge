@@ -61,6 +61,13 @@ class BridgeDaemon(SendspinDaemon):
             self._bridge_status['server_connected_at'] = datetime.now().isoformat()
         self._bridge_status['server_connected'] = True
         self._bridge_status['connected'] = True
+        # Capture the actual server URL from the websocket
+        try:
+            url = str(ws.url) if hasattr(ws, 'url') else ''
+            if url:
+                self._bridge_status['connected_server_url'] = url
+        except Exception:
+            pass
         await super()._handle_server_connection(ws)
 
     def _on_server_disconnect(self) -> None:
