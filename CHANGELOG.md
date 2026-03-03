@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.0] - 2026-03-03
+
+### Changed
+- **Proactive sink routing via `PULSE_SINK`**: replaced reactive `pactl move-sink-input`
+  with a proactive approach that sets `PULSE_SINK` immediately before `_handle_format_change`
+  opens the PortAudio/PA stream. The stream now connects directly to the target BT sink
+  from the very first sample — no polling, no claiming, no delay.
+- Removed all reactive routing code: `_routing_lock`, `_claimed_sink_inputs`,
+  `_route_stream_to_sink()`, `_routing_task`, `_pre_start_sink_input_ids` (~150 lines removed).
+- asyncio's single-threaded execution guarantees that no other daemon can interleave
+  between the env-var set and the stream open, making this race-condition-free.
+
 ## [2.3.6] - 2026-03-03
 
 ### Fixed

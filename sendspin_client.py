@@ -214,12 +214,6 @@ class SendspinClient:
                     f"Starting Sendspin player '{self.player_name}' with auto-discovery (port {self.listen_port})"
                 )
 
-            # Snapshot current sink-inputs so BridgeDaemon can identify
-            # the new one it creates (for move-sink-input routing).
-            from services.pulse import get_sink_input_ids
-
-            pre_sink_inputs = get_sink_input_ids()
-
             audio_device = await resolve_audio_device_for_sink(self.bluetooth_sink_name)
             if audio_device:
                 logger.info(
@@ -260,7 +254,6 @@ class SendspinClient:
                 status=self.status,
                 bluetooth_sink_name=self.bluetooth_sink_name,
                 on_volume_save=_on_volume_save,
-                pre_start_sink_input_ids=pre_sink_inputs,
             )
             self.status["playing"] = False
 
@@ -286,13 +279,6 @@ class SendspinClient:
                 await asyncio.wait_for(self._daemon_task, timeout=3.0)
             except (TimeoutError, asyncio.CancelledError):
                 pass
-        # Clear claimed sink-input so re-routing works on restart
-        if self._bridge_daemon is not None:
-            from services.bridge_daemon import BridgeDaemon
-
-            routed_id = getattr(self._bridge_daemon, "_routed_sink_input_id", None)
-            if routed_id is not None:
-                BridgeDaemon._claimed_sink_inputs.discard(routed_id)
         self._daemon_task = None
         self._bridge_daemon = None
         self.status["server_connected"] = False
