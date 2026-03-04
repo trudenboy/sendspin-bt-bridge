@@ -36,6 +36,7 @@ options:
   prefer_sbc_codec: false
   bt_check_interval: 10
   bt_max_reconnect_fails: 0
+  auth_enabled: false
   bluetooth_devices: []
   bluetooth_adapters: []
 
@@ -49,6 +50,7 @@ schema:
   prefer_sbc_codec: bool?
   bt_check_interval: int?
   bt_max_reconnect_fails: int?
+  auth_enabled: bool?
   bluetooth_devices:
     - mac: "match(([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2})"
       player_name: str
