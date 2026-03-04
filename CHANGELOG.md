@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.3] - 2026-03-04
+
+### Fixed
+- **Sync column stuck in Re-anchoring**: backend periodic watcher auto-clears `reanchoring` 5 s after the last re-anchor log line; `last_reanchor_at` timestamp used as co-trigger alongside `reanchor_count` delta — warning fires reliably even when `reanchor_count` resets to 0 on stream restart and the UI misses the intermediate zero value
+- **Re-anchor state leaks across device list changes**: per-index maps `lastReanchorCount`, `reanchorShownAt`, and `lastReanchorAt` are now cleared in the same block as `_groupSelected` whenever device list length or order changes, preventing stale state being applied to the wrong device after a config edit
+
+### Improved
+- **Web UI — Connection column**: Bluetooth + Server merged into a single column; frees a column for a wider Playback cell
+- **Web UI — Track display**: current track moved into the Playback column; persists on pause/stop (cleared only when server sends empty artist + track)
+- **Web UI — Card visual states**: inactive devices (not connected and not playing) dimmed to 60 % opacity with a weaker shadow; actively playing device cards show a 3 px green left-border accent; smooth CSS transitions on state changes
+- **Web UI — Relative timestamps**: all "Since:" fields now show `HH:MM` (today) / `yesterday HH:MM` / `Nd ago HH:MM` instead of the full locale datetime string
+- **Web UI — Toast notifications**: `showToast()` replaces browser `alert()` for save-config and reconnect results; toasts slide in from the bottom-right and auto-dismiss after 3 s
+- **Web UI — Button hierarchy**: Re-pair → warning-color outline (less visually dominant); Release → ghost border (turns red on hover); Reconnect retains filled primary style
+- **Web UI — Sink name**: hidden by default below the volume slider; revealed on hover/focus of the Volume column — reduces visual noise
+- **Web UI — Global health indicator**: header now shows `● N/M playing · ● N disconnected` summary dots updated on every status push
+- **Web UI — Advanced settings toggle**: Latency, BT check interval, Auto-disable on N fails, and SBC codec preference collapsed behind a `▶ Advanced settings` toggle; basic form shows Server, Port, Bridge Name, and Timezone only
+- **Web UI — Delay badge**: only rendered when the device is actively playing (was shown in grey for disconnected/idle devices — misleading)
+- **Web UI — Keyboard shortcuts**: `R` refresh status · `P` pause all · `S` save config; shortcut hint shown in page footer
+
 ## [2.6.2] - 2026-03-04
 
 ### Fixed
@@ -1073,6 +1092,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - mDNS auto-discovery for Music Assistant server (`SENDSPIN_SERVER=auto`)
 - Config persistence via `/config/config.json`
 
+[2.6.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.6.2...v2.6.3
 [1.3.32]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.31...v1.3.32
 [1.3.31]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.30...v1.3.31
 [1.3.30]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.29...v1.3.30
