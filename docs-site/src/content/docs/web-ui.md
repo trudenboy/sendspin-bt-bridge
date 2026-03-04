@@ -1,88 +1,268 @@
 ---
 title: Web UI
-description: Web interface guide for Sendspin Bluetooth Bridge
+description: Complete guide to the Sendspin Bluetooth Bridge web interface — dashboard, device cards, configuration, diagnostics and logs
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
-The web interface is available on port **8080** (Docker/LXC) or via **HA Ingress** (addon).
+The web interface is available on port **8080** (Docker/LXC) or via **HA Ingress** (Home Assistant addon). It updates in real time over Server-Sent Events — no page refresh needed.
 
-## Dashboard
+## Overview
 
-![Sendspin Bluetooth Bridge dashboard showing 6 device cards](/sendspin-bt-bridge/screenshots/screenshot-dashboard-full.png)
+![Full dashboard showing 6 device cards with group controls and header](/sendspin-bt-bridge/screenshots/screenshot-dashboard-full.png)
 
-### Group Controls
+The dashboard shows all configured Bluetooth devices as cards. Cards are sorted automatically: playing devices first, then connected-but-idle, then inactive — so the most relevant speakers are always at the top. Within each tier, devices in the same MA sync group stay together.
 
-At the top of the page:
-- **All checkbox** — enable/disable all devices
-- **Vol slider** — adjust volume on all active devices simultaneously
-- **🔈 Mute All** — mute all devices
-- **▮▮ Pause All** — pause all playing players
+---
 
-### Device Card
+## Header
 
-Each Bluetooth device has its own card:
+![Header bar showing version, hostname, IP, uptime and health summary](/sendspin-bt-bridge/screenshots/screenshot-header.png)
 
-![Device card showing ENEBY20 with Bluetooth connected, server connected, volume and sync status](/sendspin-bt-bridge/screenshots/screenshot-device-card.png)
+The blue header bar shows:
 
-| Section | Content |
+- **Title** — "Sendspin Bluetooth Bridge" with links to Docs and GitHub
+- **Version + build date** — top right (e.g. `2.6.8 · 2026-03-04`), fetched live from `/api/version`
+- **Hostname · IP · uptime** — the container/host identity and how long the service has been running
+- **Health summary** — `4/6 playing · 1 disconnected` with color dots for quick status
+
+---
+
+## Group Controls
+
+![Group controls bar: GROUP dropdown, All 6 players, All checkbox, VOL slider 50%, Mute All, Pause All](/sendspin-bt-bridge/screenshots/screenshot-group-controls.png)
+
+The controls bar appears above the device cards. All operations apply only to currently selected (checked) devices.
+
+| Control | Description |
 |---|---|
-| **Header** | Name, MAC address, WebSocket URL |
-| **Bluetooth** | Connection status, since time, adapter and its MAC |
-| **Server** | MA server connection status, IP:port |
-| **Playback** | ▶ Playing / ▮▮ Paused / No Sink, pause/play button, audio format |
-| **Volume** | Volume slider, mute button |
-| **Sync** | Sync status, re-anchor count, current delay |
-| **Controls** | Reconnect, Re-pair, Release/Reclaim buttons |
-| **Track** | Artist — Track title |
+| **GROUP dropdown** | Filter the card view by MA sync group, or show "All groups" |
+| **Player count** | Shows how many devices are visible with the current filter |
+| **All checkbox** | Check or uncheck all visible cards at once |
+| **VOL slider** | Sets volume on all selected devices simultaneously |
+| **🔈 Mute All** | Toggles mute on all selected devices |
+| **▮▮ Pause All** | Sends pause once per MA sync group (avoids group desync); sends play to resume |
 
-### Device Control Buttons
+<Aside type="tip">
+  **Pause All** is group-aware: it sends the pause command once per MA sync group, not once per device. This keeps multi-speaker groups in sync.
+</Aside>
+
+---
+
+## Device Cards
+
+Each Bluetooth speaker has its own card. The card is divided into five columns.
+
+### Card Identity (left column)
+
+![Single device card (ENEBY20) while playing with EQ bars](/sendspin-bt-bridge/screenshots/screenshot-device-card-playing.png)
+
+- **Player name** — shown in the primary text color, always visible
+- **EQ bars** — four animated bars appear to the right of the name while the device is actively playing; they disappear when stopped
+- **Select checkbox** — include/exclude this device from group operations
+- **Group badge** — `🔗 GroupName` visible below the name when the device is part of a Music Assistant sync group
+
+**On hover**, additional details appear:
+
+![Device card on hover showing MAC, WebSocket URL, full BT MAC, MA address, sink name, and action buttons](/sendspin-bt-bridge/screenshots/screenshot-device-card-hover.png)
+
+- **MAC address** — the Bluetooth MAC of the speaker
+- **WebSocket URL** — the `ws://` address MA uses to connect (e.g. `ws://192.168.10.10:8928/sendspin`)
+- **Full BT adapter MAC** — next to the adapter name in the Connection column
+- **MA server address** — `host:port` or `auto:9000`
+- **Sink name** — the PulseAudio/PipeWire sink in the Volume column
+
+### Connection Column
+
+Two rows showing Bluetooth and Music Assistant connectivity:
+
+**Bluetooth row:**
+| Indicator | Meaning |
+|---|---|
+| 🟢 Connected | Bluetooth A2DP connection established |
+| 🟡 Reconnecting (N) | Attempting to reconnect; N = attempt count |
+| 🔴 Disconnected | No Bluetooth connection |
+
+The adapter name (`hci0`, `hci1`) is shown next to the dot. Hover to see the full adapter MAC and device MAC.
+
+**Music Assistant row:**
+| Indicator | Meaning |
+|---|---|
+| 🟢 Connected | MA WebSocket session active |
+| 🔴 Disconnected / Error | No MA connection |
+
+The MA server `host:port` is shown (or `auto:9000` for mDNS discovery). Hover to see the full resolved WebSocket URL.
+
+### Playback Column
+
+- **Status** — `▶ Playing` (green dot), `⏸ Stopped` (amber dot), `● No Sink` (red, device not connected)
+- **Per-device Pause/Play button** — `▮▮` while playing, `▶` while stopped; only visible when a sink is active
+- **Track / artist** — shown below the status; persists on pause (cleared only when MA sends empty values)
+  - **Compilation albums**: if multiple slash-separated artists are present (e.g. `Frank Sinatra/Louis Armstrong/Elvis Presley`), the display shows `Frank Sinatra +2` — hover the element for the full text
+- **Progress** — current position / total duration (e.g. `7:05 / 72:00`)
+
+### Volume Column
+
+- **Volume slider** (0–100) — dimmed and disabled when no sink is active
+- **Volume percentage** — shown next to the slider
+- **Mute button** — 🔈 (unmuted) / 🔇 (muted, red background)
+- **Audio format** — small text showing the negotiated codec and stream parameters (e.g. `44100Hz/16-bit/2ch`)
+- **Sink name** — revealed on hover (e.g. `bluez_sink.FC_58_FA_EB_08_6C.a2dp_sink`); a ⚠ yellow warning is shown if no sink is configured
+
+### Sync Column
+
+- **`✓ In sync`** (green) — Music Assistant has confirmed synchronisation
+- **`⚠ Re-anchoring`** (amber) — MA is actively adjusting timing; `Error: N ms` shows the deviation at the last correction
+- **`—`** — device is stopped or not connected
+
+**Re-anchors count** — number of sync corrections since the stream started. Turns **orange** at 10+, **red** at 100+. A high count with a fixed `delay:` badge usually means the `static_delay_ms` value needs tuning.
+
+**Delay badge** — `delay: -600ms` shown in the Sync column while the device is playing when `static_delay_ms ≠ 0`. This compensates for A2DP buffer latency to keep the speaker in sync with the group.
+
+### Action Buttons (revealed on hover)
 
 | Button | Action |
 |---|---|
-| **🔄 Reconnect** | Force Bluetooth reconnect |
-| **🔗 Re-pair** | Re-pair (~25 sec, put device in pairing mode first) |
-| **🔓 Release** | Release device — bridge stops managing the connection |
-| **🔒 Reclaim** | Return device management to the bridge |
+| **🔄 Reconnect** | Force Bluetooth disconnect + reconnect without re-pairing |
+| **🔗 Re-pair** | Full pairing sequence (~25 s); put the device in pairing mode first |
+| **🔓 Release** | Disable BT management for this device; bridge stops reconnecting |
+| **🔒 Reclaim** | Re-enable BT management (shown instead of Release when device is released) |
 
 <Aside type="tip">
-  **Release** is useful when you want to temporarily connect the speaker to another source (phone, PC) without stopping the bridge.
+  **Release** is useful when you temporarily want to connect the speaker to a phone or PC. The bridge leaves the device alone until you press **Reclaim**.
 </Aside>
 
-## Sync Column
+---
 
-The **Sync** row in each device card shows the Music Assistant sync status for that speaker.
+## Device Sorting
 
-| State | Description |
+Cards are automatically ordered as follows:
+
+1. **Playing** devices — at the top
+2. **Connected but idle** — stopped devices that are still connected
+3. **Inactive** — disconnected or released devices
+
+Within each tier, devices are grouped by their MA sync group (sorted by group name). Ungrouped devices appear at the end of their tier.
+
+---
+
+## Configuration
+
+The **⚙️ Configuration** section is a collapsible panel at the bottom of the page. Click the header to expand it.
+
+![Configuration section showing adapters table and devices table with Add Device and Scan buttons](/sendspin-bt-bridge/screenshots/screenshot-config-adapters.png)
+
+### Basic Settings
+
+- **Bridge name** — optional suffix added to every player name in MA (displayed as `Player @ Name`). Leave empty to disable.
+- **Timezone** — IANA timezone name (e.g. `Europe/Moscow`). A live clock preview updates next to the dropdown.
+
+### Bluetooth Adapters
+
+A table of detected and manually added Bluetooth adapters:
+
+| Column | Description |
 |---|---|
-| `✓ In sync` | MA confirmed synchronisation. Shows `Re-anchors: N` if corrections were made. |
-| `⚠ Re-anchoring` | MA is actively adjusting the delay. `Error: N ms` shows the deviation at the last correction. |
-| `—` | Device is not connected or not playing. |
+| **HCI name** | Kernel interface name (`hci0`, `hci1`) |
+| **MAC** | Adapter Bluetooth MAC address |
+| **Name** | Editable friendly name |
+| **Status dot** | Green = adapter present and active |
 
-The **delay badge** (`delay: Xms`) appears in orange when `static_delay_ms ≠ 0` and the device is active. It turns grey when the device is inactive.
+Use **↺ Refresh** to re-detect adapters. Use **+ Add** to manually add an adapter by MAC (useful if the adapter is not detected automatically).
 
-## Configuration Section
+### Bluetooth Devices
 
-The collapsible **⚙️ Configuration** section lets you change settings without editing files:
+![Devices table with Add Device, Scan and Already Paired sections](/sendspin-bt-bridge/screenshots/screenshot-config-devices.png)
 
-![Configuration section showing all settings fields and device table](/sendspin-bt-bridge/screenshots/screenshot-config.png)
+A row per configured speaker:
 
-The collapsible **⚙️ Configuration** section lets you change settings without editing files:
+| Column | Description |
+|---|---|
+| **Player Name** | Name shown in Music Assistant |
+| **MAC Address** | Bluetooth MAC of the speaker |
+| **Adapter** | Which BT adapter manages this device (`default`, `hci0`, `hci1`) |
+| **Listen Address** | IP the MA player advertises; leave blank to auto-detect |
+| **Port** | WebSocket port for this player (default starts at 8928, increments per device) |
+| **Delay ms** | `static_delay_ms` — negative value compensates A2DP buffer latency (typical: `-500` to `-700`) |
+| **Format** | Preferred audio format (`flac:44100:16:2` matches SBC A2DP with no resampling) |
+| **×** | Remove this device |
 
-- **MA Server / Port** — Music Assistant address and port
-- **Bridge Name** — player name suffix
-- **PulseAudio latency** — latency in ms
-- **Prefer SBC codec**
-- **Timezone**
-- **Bluetooth Adapters** — adapter list with Refresh and Add buttons
-- **Bluetooth Devices** — device table with Add Device and Scan buttons
+**+ Add Device** appends a blank row. **🔍 Scan** runs a ~10 s background Bluetooth scan across all adapters and shows discovered devices. Click a result to populate a new row.
 
-Save buttons:
-- **Save Configuration** — save without restarting
-- **Save & Restart** — save and restart the service
+The **Already paired** box lists previously paired devices from bluetoothctl. Click **Add** to add one to the table without scanning.
 
-## Theme
+### Advanced Settings
 
-The interface automatically applies the theme:
-- Via HA Ingress — reads the Home Assistant theme via `postMessage` API
-- Direct access — follows the browser's system theme (`prefers-color-scheme`)
+Click **▶ Advanced settings** to expand:
+
+- **SENDSPIN_SERVER** — MA server hostname/IP; `auto` uses mDNS
+- **SENDSPIN_PORT** — WebSocket port (default 9000)
+- **PULSE_LATENCY_MSEC** — PulseAudio latency hint
+- **BT_CHECK_INTERVAL** — reconnect check interval in seconds
+- **BT_MAX_RECONNECT_FAILS** — max consecutive reconnect failures before giving up
+- **Prefer SBC codec** — force SBC negotiation instead of AAC or aptX
+
+### Save Actions
+
+- **Save Configuration** — writes `config.json`; takes effect after restart
+- **Save & Restart** — saves and immediately restarts the bridge service
+
+<Aside type="caution">
+  Configuration changes require a restart. In Home Assistant addon mode, the addon restarts automatically when you press **Save & Restart**. In Docker/LXC mode, the Python process is restarted.
+</Aside>
+
+---
+
+## Diagnostics
+
+![Diagnostics section showing system health table with green/red status indicators](/sendspin-bt-bridge/screenshots/screenshot-diagnostics.png)
+
+The collapsible **Diagnostics** section shows a system health table:
+
+| Component | What it checks |
+|---|---|
+| Bluetooth daemon | `bluetoothctl` / `bluetoothd` running |
+| D-Bus socket | D-Bus socket reachable |
+| Audio server | `pulseaudio` or `pipewire` running |
+| Adapter hci0 / hci1 | Adapter present, MAC shown |
+| BT audio sinks | List of active `bluez_sink.*` or `bluez_output.*` PulseAudio/PipeWire sinks |
+| Per-device rows | Connection status + assigned sink name; red dot if disconnected |
+
+Click **↻ Refresh** to re-run the checks.
+
+---
+
+## Logs
+
+![Logs section showing monospace log output with color-coded lines and filter buttons](/sendspin-bt-bridge/screenshots/screenshot-logs.png)
+
+The collapsible **📋 Logs** section shows the last 150 lines of the application log.
+
+| Control | Description |
+|---|---|
+| **Refresh Logs** | Fetch latest log output |
+| **Auto-Refresh: Off/On** | Toggle 2-second automatic refresh |
+| **All / Error / Warning / Info** | Filter displayed lines by severity |
+
+Log lines are color-coded:
+- **Red** — ERROR
+- **Amber** — WARNING
+- **White** — INFO
+- **Gray** — DEBUG
+
+---
+
+## Keyboard Shortcuts
+
+| Key | Action |
+|---|---|
+| `R` | Refresh logs |
+| `P` | Pause all |
+| `S` | Save configuration |
+
+---
+
+## Theming
+
+- **Via HA Ingress** — inherits the active Home Assistant theme (light or dark) automatically via `postMessage` API
+- **Direct access** — follows the browser's `prefers-color-scheme` setting

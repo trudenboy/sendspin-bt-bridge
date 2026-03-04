@@ -169,7 +169,7 @@
             padding-right: 20px; border-right: 1px solid var(--divider-color);
         }
         .device-card-title {
-            font-size: 15px; font-weight: 700; color: var(--primary-color); margin-bottom: 2px;
+            font-size: 15px; font-weight: 700; color: var(--primary-text-color); margin-bottom: 2px;
         }
         .device-mac {
             font-size: 11px; color: var(--secondary-text-color); font-family: 'Courier New', monospace;

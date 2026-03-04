@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.10] - 2026-03-04
+
+### Improved
+- **Web UI — Player name color**: device names now use `--primary-text-color` (black/white depending on theme) instead of `--primary-color` (blue), improving readability in both light and dark themes
+- **Docs**: comprehensive web-ui.md rewrite documenting all v2.6.x features with new screenshots; usage examples and HA automation scenarios added to the home page
+
 ## [2.6.9] - 2026-03-04
 
 ### Fixed
