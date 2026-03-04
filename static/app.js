@@ -148,20 +148,22 @@ function buildDeviceCard(i) {
         '</div>' +
         '<div class="device-rows">' +
           // Connection column (BT + MA server merged)
-          '<div>' +
+          '<div class="conn-col">' +
             '<div class="status-label">Connection</div>' +
-            '<div class="status-value">' +
+            '<div class="conn-row">' +
+              '<span class="conn-tag">BT</span>' +
               '<span class="status-indicator" id="dbt-ind-' + i + '"></span>' +
               '<span id="dbt-txt-' + i + '">-</span>' +
+              '<span class="conn-detail" id="dbt-adapter-' + i + '"></span>' +
+              '<span class="conn-since" id="dbt-since-' + i + '"></span>' +
             '</div>' +
-            '<div class="ts" id="dbt-since-' + i + '"></div>' +
-            '<div class="ts-sub" id="dbt-adapter-' + i + '"></div>' +
-            '<div class="status-value" style="margin-top:6px;">' +
+            '<div class="conn-row">' +
+              '<span class="conn-tag">MA</span>' +
               '<span class="status-indicator" id="dsrv-ind-' + i + '"></span>' +
               '<span id="dsrv-txt-' + i + '">-</span>' +
+              '<span class="conn-detail" id="dsrv-uri-' + i + '"></span>' +
+              '<span class="conn-since" id="dsrv-since-' + i + '"></span>' +
             '</div>' +
-            '<div class="ts-sub" id="dsrv-uri-' + i + '"></div>' +
-            '<div class="ts" id="dsrv-since-' + i + '"></div>' +
           '</div>' +
           // Playback column (with inline track)
           '<div>' +
