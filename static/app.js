@@ -34,6 +34,46 @@ var volPending = {}; // deviceIndex -> true if user recently touched slider
 var reanchorShownAt = {};   // deviceIndex -> timestamp(ms) when last re-anchor event was detected
 var lastReanchorCount = {}; // deviceIndex -> reanchor_count at last render (to detect new events)
 
+// ---- Utility ----
+
+function formatSince(isoString) {
+    if (!isoString) return '';
+    try {
+        var d = new Date(isoString);
+        var now = new Date();
+        var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        var dDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+        var diffDays = Math.round((today - dDay) / 86400000);
+        var timeStr = d.toLocaleTimeString('default', {hour: '2-digit', minute: '2-digit', hour12: false});
+        if (diffDays === 0) return 'Since: ' + timeStr;
+        if (diffDays === 1) return 'Since: yesterday ' + timeStr;
+        return 'Since: ' + diffDays + 'd ago ' + timeStr;
+    } catch (_) {
+        return 'Since: ' + new Date(isoString).toLocaleString();
+    }
+}
+
+function showToast(msg, type) {
+    var container = document.getElementById('toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'toast-container';
+        container.className = 'toast-container';
+        document.body.appendChild(container);
+    }
+    var toast = document.createElement('div');
+    toast.className = 'toast toast-' + (type || 'info');
+    toast.textContent = msg;
+    container.appendChild(toast);
+    requestAnimationFrame(function() {
+        requestAnimationFrame(function() { toast.classList.add('show'); });
+    });
+    setTimeout(function() {
+        toast.classList.remove('show');
+        setTimeout(function() { toast.remove(); }, 300);
+    }, 3000);
+}
+
 // ---- Auth helper ----
 
 function _handleUnauthorized() {
@@ -80,6 +120,7 @@ async function updateStatus() {
             .forEach(function(c) { c.remove(); });
 
         _updateGroupPanel();
+        updateHealthIndicator(devices);
 
     } catch (err) {
         console.error('Status update failed:', err);
@@ -102,24 +143,23 @@ function buildDeviceCard(i) {
           '<div class="ts-sub" id="durl-' + i + '"></div>' +
         '</div>' +
         '<div class="device-rows">' +
+          // Connection column (BT + MA server merged)
           '<div>' +
-            '<div class="status-label">Bluetooth</div>' +
+            '<div class="status-label">Connection</div>' +
             '<div class="status-value">' +
               '<span class="status-indicator" id="dbt-ind-' + i + '"></span>' +
               '<span id="dbt-txt-' + i + '">-</span>' +
             '</div>' +
             '<div class="ts" id="dbt-since-' + i + '"></div>' +
             '<div class="ts-sub" id="dbt-adapter-' + i + '"></div>' +
-          '</div>' +
-          '<div>' +
-            '<div class="status-label">Server</div>' +
-            '<div class="status-value">' +
+            '<div class="status-value" style="margin-top:6px;">' +
               '<span class="status-indicator" id="dsrv-ind-' + i + '"></span>' +
               '<span id="dsrv-txt-' + i + '">-</span>' +
             '</div>' +
-            '<div class="ts" id="dsrv-since-' + i + '"></div>' +
             '<div class="ts-sub" id="dsrv-uri-' + i + '"></div>' +
+            '<div class="ts" id="dsrv-since-' + i + '"></div>' +
           '</div>' +
+          // Playback column (with inline track)
           '<div>' +
             '<div class="status-label">Playback</div>' +
             '<div class="status-value">' +
@@ -129,10 +169,12 @@ function buildDeviceCard(i) {
                 'class="card-icon-btn" ' +
                 'onclick="onDevicePause(' + i + ')" title="Pause/Unpause">&#9646;&#9646;</button>' +
             '</div>' +
+            '<div id="dtrack-' + i + '" class="device-track-inline"></div>' +
             '<div class="ts" id="dplay-since-' + i + '"></div>' +
             '<div class="ts-sub" id="daudiofmt-' + i + '"></div>' +
           '</div>' +
-          '<div>' +
+          // Volume column
+          '<div class="volume-col">' +
             '<div class="status-label">Volume</div>' +
             '<div class="volume-row">' +
               '<input type="range" min="0" max="100" value="100" ' +
@@ -143,12 +185,13 @@ function buildDeviceCard(i) {
                 'class="card-icon-btn" ' +
                 'title="Mute/Unmute">&#128264;</button>' +
             '</div>' +
-            '<div class="ts-sub" id="dsink-' + i + '" style="margin-top:3px;"></div>' +
+            '<div class="dsink-value ts-sub" id="dsink-' + i + '" style="margin-top:3px;"></div>' +
             '<div class="eq-bars" id="deq-' + i + '">' +
               '<div class="eq-bar"></div><div class="eq-bar"></div>' +
               '<div class="eq-bar"></div><div class="eq-bar"></div>' +
             '</div>' +
           '</div>' +
+          // Sync column
           '<div>' +
             '<div class="status-label">Sync</div>' +
             '<div class="status-value" id="dsync-' + i + '">&#8212;</div>' +
@@ -157,16 +200,13 @@ function buildDeviceCard(i) {
           '</div>' +
         '</div>' +
         '<div class="device-card-actions">' +
-          '<div style="grid-column:1/4;display:flex;gap:6px;align-items:center;">' +
-            '<button type="button" class="btn-bt-action btn-bt-reconnect" id="dbtn-reconnect-' + i + '"' +
-              ' onclick="btReconnect(' + i + ')">&#128260; Reconnect</button>' +
-            '<button type="button" class="btn-bt-action btn-bt-pair" id="dbtn-pair-' + i + '"' +
-              ' onclick="btPair(' + i + ')" title="Put the device into pairing mode first">&#128279; Re-pair</button>' +
-            '<button type="button" class="btn-bt-action btn-bt-release" id="dbtn-release-' + i + '"' +
-              ' onclick="btToggleManagement(' + i + ')">🔓 Release</button>' +
-            '<span class="bt-action-status" id="dbt-action-status-' + i + '"></span>' +
-          '</div>' +
-          '<div id="dtrack-' + i + '" class="device-track-info" style="color:#94a3b8;font-style:italic;font-size:13px;"></div>' +
+          '<button type="button" class="btn-bt-action btn-bt-reconnect" id="dbtn-reconnect-' + i + '"' +
+            ' onclick="btReconnect(' + i + ')">&#128260; Reconnect</button>' +
+          '<button type="button" class="btn-bt-action btn-bt-pair" id="dbtn-pair-' + i + '"' +
+            ' onclick="btPair(' + i + ')" title="Put the device into pairing mode first">&#128279; Re-pair</button>' +
+          '<button type="button" class="btn-bt-action btn-bt-release" id="dbtn-release-' + i + '"' +
+            ' onclick="btToggleManagement(' + i + ')">&#128274; Release</button>' +
+          '<span class="bt-action-status" id="dbt-action-status-' + i + '"></span>' +
         '</div>';
     return card;
 }
@@ -178,9 +218,21 @@ function populateDeviceCard(i, dev) {
     var mac = dev.bluetooth_mac || '';
     document.getElementById('dmac-' + i).textContent = mac ? 'MAC: ' + mac : '';
 
+    // Card activity classes
+    var card = document.getElementById('device-card-' + i);
+    if (card) {
+        var isActive = dev.bluetooth_connected || dev.playing;
+        card.classList.toggle('inactive', !isActive);
+        card.classList.toggle('playing', !!dev.playing);
+    }
+
     var groupBadge = document.getElementById('dgroup-' + i);
     if (groupBadge) {
-        var groupLabel = dev.group_name || (dev.group_id ? dev.group_id.split('-').pop() : '');
+        var groupLabel = dev.group_name || '';
+        if (!groupLabel && dev.group_id) {
+            // Fallback to last 6 chars of UUID, but without emoji if no name
+            groupLabel = dev.group_id.split('-').pop();
+        }
         groupBadge.textContent = groupLabel ? '\uD83D\uDD17 ' + groupLabel : '';
         groupBadge.style.display = groupLabel ? '' : 'none';
     }
@@ -220,8 +272,7 @@ function populateDeviceCard(i, dev) {
         btInd.className = 'status-indicator inactive';
         btTxt.textContent = 'Not Available';
     }
-    if (btSince) btSince.textContent = dev.bluetooth_connected_at
-        ? 'Since: ' + new Date(dev.bluetooth_connected_at).toLocaleString() : '';
+    if (btSince) btSince.textContent = formatSince(dev.bluetooth_connected_at);
 
     // Server
     var srvInd   = document.getElementById('dsrv-ind-' + i);
@@ -234,8 +285,7 @@ function populateDeviceCard(i, dev) {
         srvInd.className = 'status-indicator inactive';
         srvTxt.textContent = dev.error || 'Disconnected';
     }
-    if (srvSince) srvSince.textContent = dev.server_connected_at
-        ? 'Since: ' + new Date(dev.server_connected_at).toLocaleString() : '';
+    if (srvSince) srvSince.textContent = formatSince(dev.server_connected_at);
     var srvUri = document.getElementById('dsrv-uri-' + i);
     if (srvUri) {
         var srvLabel = '';
@@ -274,8 +324,7 @@ function populateDeviceCard(i, dev) {
     }
 
     // Since: above audioformat
-    if (playSince) playSince.textContent = dev.state_changed_at
-        ? 'Since: ' + new Date(dev.state_changed_at).toLocaleString() : '';
+    if (playSince) playSince.textContent = formatSince(dev.state_changed_at);
 
     // Audio format (strip codec prefix)
     if (fmtEl) {
@@ -300,23 +349,25 @@ function populateDeviceCard(i, dev) {
 
     var trackEl = document.getElementById('dtrack-' + i);
     if (trackEl) {
-        if (dev.playing && (dev.current_artist || dev.current_track)) {
+        // Persist track on pause — clear only when both fields are empty
+        if (dev.current_artist || dev.current_track) {
             trackEl.textContent = dev.current_artist && dev.current_track
                 ? dev.current_artist + ' \u2014 ' + dev.current_track
                 : (dev.current_artist || dev.current_track || '');
+            trackEl.style.color = dev.playing
+                ? 'var(--primary-text-color)' : 'var(--secondary-text-color)';
         } else {
             trackEl.textContent = '';
         }
     }
-    // Delay badge
+    // Delay badge — only show when playing (3.1)
     var delayEl = document.getElementById('ddelay-' + i);
     if (delayEl) {
         var delay = dev.static_delay_ms;
-        if (delay !== undefined && delay !== null && delay !== 0) {
+        if (dev.playing && delay !== undefined && delay !== null && delay !== 0) {
             delayEl.textContent = 'delay: ' + (delay > 0 ? '+' : '') + delay + 'ms';
             delayEl.style.display = '';
-            // Orange only when active; gray for offline/idle devices
-            delayEl.style.color = dev.playing ? '#f59e0b' : '#9ca3af';
+            delayEl.style.color = '#f59e0b';
         } else {
             delayEl.style.display = 'none';
         }
@@ -737,9 +788,12 @@ async function btReconnect(i) {
             body: JSON.stringify({player_name: playerName})
         });
         var d = await resp.json();
-        if (status) status.textContent = d.success ? '\u2713 ' + (d.message || 'Started') : '\u2717 ' + (d.error || 'Failed');
+        var msg = d.success ? '\u2713 ' + (d.message || 'Reconnect started') : '\u2717 ' + (d.error || 'Failed');
+        if (status) status.textContent = msg;
+        showToast(msg, d.success ? 'success' : 'error');
     } catch (e) {
         if (status) status.textContent = '\u2717 Error';
+        showToast('\u2717 Reconnect error', 'error');
     }
     setTimeout(function() {
         if (btn) btn.disabled = false;
@@ -1070,19 +1124,34 @@ function addFromPaired(mac, name) {
 async function loadPairedDevices() {
     try {
         var showAll = document.getElementById('paired-show-all');
-        var qs = (showAll && showAll.checked) ? '?filter=0' : '';
+        var showAllChecked = showAll && showAll.checked;
+        var qs = showAllChecked ? '?filter=0' : '';
         var resp = await fetch(API_BASE + '/api/bt/paired' + qs);
         var data = await resp.json();
         var devices = data.devices || [];
+        var allCount = data.total_count || devices.length;
         var box = document.getElementById('paired-box');
         var listDiv = document.getElementById('paired-list');
-        if (devices.length === 0) { box.style.display = 'none'; return; }
+        if (devices.length === 0 && !showAllChecked) { box.style.display = 'none'; return; }
         box.style.display = 'block';
-        listDiv.innerHTML = devices.map(function(d, i) {
+
+        // Update title with count hint
+        var titleEl = box.querySelector('.paired-box-title span');
+        if (titleEl) {
+            var countHint = '';
+            if (!showAllChecked && allCount > devices.length) {
+                countHint = ' (' + devices.length + ' audio · ' + allCount + ' total)';
+            } else {
+                countHint = ' (' + devices.length + ')';
+            }
+            titleEl.textContent = 'Already paired \u2014 click to add:' + countHint;
+        }
+
+        listDiv.innerHTML = devices.map(function(d, idx) {
             return '<div class="scan-result-item">' +
                 '<span class="scan-result-mac">' + escHtml(d.mac) + '</span>' +
                 '<span>' + escHtml(d.name) + '</span>' +
-                '<button type="button" data-paired-idx="' + i + '" style="margin-left:auto;padding:3px 10px;' +
+                '<button type="button" data-paired-idx="' + idx + '" style="margin-left:auto;padding:3px 10px;' +
                     'background:var(--primary-color);color:white;border:none;border-radius:4px;' +
                     'cursor:pointer;font-size:12px;">Add</button>' +
                 '</div>';
@@ -1093,7 +1162,6 @@ async function loadPairedDevices() {
                 addFromPaired(d.mac, d.name);
             });
         });
-        box.style.display = 'block';
     } catch (_) {}
 }
 
@@ -1169,12 +1237,12 @@ document.getElementById('config-form').addEventListener('submit', async function
     try {
         var ok = await saveConfig();
         if (ok) {
-            alert('Configuration saved! Use \u201cSave & Restart\u201d or restart the service for changes to take effect.');
+            showToast('\u2713 Configuration saved \u2014 restart to apply', 'success');
         } else {
-            alert('Failed to save configuration.');
+            showToast('\u2717 Failed to save configuration', 'error');
         }
     } catch (err) {
-        alert('Error saving configuration: ' + err.message);
+        showToast('\u2717 Error: ' + err.message, 'error');
     }
 });
 
@@ -1422,6 +1490,46 @@ function reloadDiagnostics() {
     loadDiagnostics(content);
 }
 
+// ---- Config advanced toggle ----
+function toggleAdvanced() {
+    var btn = document.getElementById('adv-toggle');
+    var body = document.getElementById('adv-body');
+    if (!btn || !body) return;
+    var open = body.classList.toggle('open');
+    btn.classList.toggle('open', open);
+}
+
+// ---- Global Health Indicator ----
+function updateHealthIndicator(devices) {
+    var el = document.getElementById('health-indicator');
+    if (!el || !devices || !devices.length) return;
+    var playing = devices.filter(function(d) { return d.playing; }).length;
+    var disconnected = devices.filter(function(d) { return !d.bluetooth_connected; }).length;
+    var total = devices.length;
+    var parts = [];
+    if (playing > 0) {
+        parts.push('<span class="health-dot ok"></span>' + playing + '/' + total + ' playing');
+    } else {
+        parts.push('<span class="health-dot warn"></span>0/' + total + ' playing');
+    }
+    if (disconnected > 0) {
+        parts.push('<span class="health-dot error"></span>' + disconnected + ' disconnected');
+    }
+    el.innerHTML = parts.join('<span style="opacity:0.4;padding:0 2px;">·</span>');
+}
+
+// ---- Keyboard shortcuts ----
+document.addEventListener('keydown', function(e) {
+    // Skip if user is typing in an input/textarea
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.key === 'r' || e.key === 'R') { updateStatus(); showToast('Refreshed status', 'info'); }
+    if (e.key === 'p' || e.key === 'P') { onPauseAll(); }
+    if (e.key === 's' || e.key === 'S') {
+        document.getElementById('config-form').dispatchEvent(new Event('submit', {cancelable: true}));
+    }
+});
+
 // ---- Init ----
 loadConfig();   // calls loadBtAdapters() internally after restoring btManualAdapters
 updateStatus();
@@ -1461,6 +1569,7 @@ var _statusInterval = null;
             Array.from(grid.querySelectorAll('.device-card'))
                 .slice(devices.length).forEach(function(c) { c.remove(); });
             _updateGroupPanel();
+            updateHealthIndicator(devices);
         } catch (err) { console.error('SSE parse error:', err); }
     };
     es.onerror = function() {
