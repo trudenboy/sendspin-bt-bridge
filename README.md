@@ -27,6 +27,14 @@ A Bluetooth bridge for [Music Assistant](https://www.music-assistant.io/) — co
 
 ---
 
+## Multi-bridge deployment
+
+Run multiple bridge instances pointing at the same Music Assistant server to cover every room — each bridge handles the speakers within its Bluetooth range.
+
+![Deployment diagram](https://trudenboy.github.io/sendspin-bt-bridge/diagrams/deployment-multiroom.svg)
+
+---
+
 ## Deployment Options
 
 | | Home Assistant Addon | Docker Compose | Proxmox LXC |

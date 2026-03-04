@@ -100,6 +100,12 @@ If your Home Assistant runs on a Raspberry Pi with a built-in Bluetooth adapter,
   If you want to connect speakers in multiple rooms and your Raspberry Pi only reaches some of them, you can run the bridge on a second Raspberry Pi (or a Proxmox LXC container) elsewhere in the house and point it at the same Music Assistant server.
 </Aside>
 
+## Multi-bridge deployment
+
+Run multiple bridge instances against the same Music Assistant server to cover every room — each bridge handles the speakers within its Bluetooth range.
+
+![Deployment diagram: two bridges with two BT adapters each, four speakers across four rooms, all connecting to one Music Assistant server](/sendspin-bt-bridge/diagrams/deployment-multiroom.svg)
+
 ## Deployment options
 
 | | Home Assistant Addon | Docker Compose | Proxmox LXC |

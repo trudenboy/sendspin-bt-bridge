@@ -1,0 +1,182 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 610" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif">
+  <defs>
+    <marker id="arrowNet" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#2563eb"/>
+    </marker>
+    <marker id="arrowBt" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#ea580c"/>
+    </marker>
+    <filter id="shadow">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.18"/>
+    </filter>
+    <filter id="shadowLight">
+      <feDropShadow dx="0" dy="1" stdDeviation="2" flood-opacity="0.12"/>
+    </filter>
+  </defs>
+
+  <!-- ── BACKGROUND ── -->
+  <rect width="960" height="610" fill="#f1f5f9"/>
+
+  <!-- ── TITLE ── -->
+  <text x="480" y="27" text-anchor="middle" font-size="15" font-weight="700" fill="#0f172a">Multi-Bridge Deployment · Two Bridges, One Music Assistant Server</text>
+
+  <!-- ══════════════ HOUSE ══════════════ -->
+
+  <!-- Roof -->
+  <polygon points="480,48 910,118 50,118" fill="#475569"/>
+  <!-- Roof shading -->
+  <polygon points="480,48 910,118 690,118" fill="#334155" opacity="0.25"/>
+  <!-- Chimney -->
+  <rect x="590" y="38" width="22" height="44" rx="2" fill="#374151"/>
+  <rect x="587" y="36" width="28" height="7" rx="1" fill="#1f2937"/>
+
+  <!-- House body -->
+  <rect x="50" y="116" width="860" height="438" fill="#ffffff" stroke="#94a3b8" stroke-width="1.5"/>
+
+  <!-- Room fills -->
+  <rect x="51"  y="117" width="428" height="218" fill="#eff6ff"/>
+  <rect x="480" y="117" width="429" height="218" fill="#f0fdf4"/>
+  <rect x="51"  y="336" width="428" height="217" fill="#fdf4ff"/>
+  <rect x="480" y="336" width="429" height="217" fill="#fff7ed"/>
+
+  <!-- Room dividers -->
+  <line x1="479" y1="116" x2="479" y2="554" stroke="#94a3b8" stroke-width="2"/>
+  <line x1="50"  y1="335" x2="910" y2="335" stroke="#94a3b8" stroke-width="2"/>
+
+  <!-- House border (on top) -->
+  <rect x="50" y="116" width="860" height="438" fill="none" stroke="#64748b" stroke-width="2"/>
+
+  <!-- ── ROOM LABELS ── -->
+  <text x="68"  y="138" font-size="11" font-weight="700" fill="#64748b" letter-spacing="1">LIVING ROOM</text>
+  <text x="497" y="138" font-size="11" font-weight="700" fill="#64748b" letter-spacing="1">KITCHEN</text>
+  <text x="68"  y="356" font-size="11" font-weight="700" fill="#64748b" letter-spacing="1">BEDROOM</text>
+  <text x="497" y="356" font-size="11" font-weight="700" fill="#64748b" letter-spacing="1">OFFICE / STUDY</text>
+
+  <!-- ══════════════ MUSIC ASSISTANT SERVER ══════════════ -->
+  <rect x="72" y="147" width="152" height="72" rx="7" fill="#1e40af" filter="url(#shadow)"/>
+  <!-- server rack lines -->
+  <rect x="83" y="158" width="130" height="11" rx="3" fill="#3b82f6"/>
+  <rect x="83" y="173" width="130" height="11" rx="3" fill="#3b82f6"/>
+  <rect x="83" y="188" width="130" height="11" rx="3" fill="#3b82f6"/>
+  <!-- status LEDs -->
+  <circle cx="204" cy="163.5" r="3.5" fill="#4ade80"/>
+  <circle cx="204" cy="178.5" r="3.5" fill="#4ade80"/>
+  <circle cx="204" cy="193.5" r="3.5" fill="#facc15"/>
+  <!-- label -->
+  <text x="148" y="235" text-anchor="middle" font-size="12" font-weight="700" fill="#1e40af">Music Assistant</text>
+  <text x="148" y="249" text-anchor="middle" font-size="10" fill="#64748b">Home Automation Server</text>
+
+  <!-- ══════════════ BRIDGE 1 (Living Room / HA) ══════════════ -->
+  <rect x="72" y="268" width="152" height="52" rx="7" fill="#14532d" filter="url(#shadow)"/>
+  <!-- circuit detail -->
+  <rect x="83" y="277" width="110" height="9" rx="2.5" fill="#22c55e"/>
+  <rect x="83" y="290" width="80"  height="9" rx="2.5" fill="#22c55e"/>
+  <!-- BT adapter badges -->
+  <rect x="196" y="274" width="22" height="10" rx="3" fill="#0284c7"/>
+  <text x="207" y="282.5" text-anchor="middle" font-size="7" font-weight="700" fill="white">hci0</text>
+  <rect x="196" y="287" width="22" height="10" rx="3" fill="#0284c7"/>
+  <text x="207" y="295.5" text-anchor="middle" font-size="7" font-weight="700" fill="white">hci1</text>
+  <!-- label -->
+  <text x="148" y="336" text-anchor="middle" font-size="12" font-weight="700" fill="#14532d">Bridge 1</text>
+  <text x="148" y="350" text-anchor="middle" font-size="10" fill="#64748b">Home Assistant · hci0 + hci1</text>
+
+  <!-- ══════════════ SPEAKER 1 — Living Room ══════════════ -->
+  <rect x="342" y="220" width="100" height="68" rx="7" fill="#334155" filter="url(#shadowLight)"/>
+  <!-- speaker cone -->
+  <polygon points="358,237 358,261 371,268 371,230" fill="#64748b"/>
+  <path d="M375,234 Q387,248 375,262" stroke="#94a3b8" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+  <path d="M381,229 Q396,248 381,267" stroke="#94a3b8" stroke-width="2"   fill="none" stroke-linecap="round" opacity="0.55"/>
+  <path d="M387,225 Q405,248 387,271" stroke="#94a3b8" stroke-width="1.5" fill="none" stroke-linecap="round" opacity="0.3"/>
+  <!-- label -->
+  <text x="392" y="304" text-anchor="middle" font-size="11" font-weight="600" fill="#334155">Living Room</text>
+  <text x="392" y="317" text-anchor="middle" font-size="10" fill="#64748b">Speaker</text>
+
+  <!-- ══════════════ SPEAKER 2 — Kitchen ══════════════ -->
+  <rect x="680" y="210" width="100" height="68" rx="7" fill="#334155" filter="url(#shadowLight)"/>
+  <polygon points="696,227 696,251 709,258 709,220" fill="#64748b"/>
+  <path d="M713,224 Q725,238 713,252" stroke="#94a3b8" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+  <path d="M719,219 Q734,238 719,257" stroke="#94a3b8" stroke-width="2"   fill="none" stroke-linecap="round" opacity="0.55"/>
+  <path d="M725,215 Q743,238 725,261" stroke="#94a3b8" stroke-width="1.5" fill="none" stroke-linecap="round" opacity="0.3"/>
+  <text x="730" y="294" text-anchor="middle" font-size="11" font-weight="600" fill="#334155">Kitchen</text>
+  <text x="730" y="307" text-anchor="middle" font-size="10" fill="#64748b">Speaker</text>
+
+  <!-- ══════════════ BRIDGE 2 (Bedroom / Raspberry Pi) ══════════════ -->
+  <rect x="72" y="400" width="152" height="52" rx="7" fill="#14532d" filter="url(#shadow)"/>
+  <rect x="83" y="409" width="110" height="9" rx="2.5" fill="#22c55e"/>
+  <rect x="83" y="422" width="80"  height="9" rx="2.5" fill="#22c55e"/>
+  <rect x="196" y="406" width="22" height="10" rx="3" fill="#0284c7"/>
+  <text x="207" y="414.5" text-anchor="middle" font-size="7" font-weight="700" fill="white">hci0</text>
+  <rect x="196" y="419" width="22" height="10" rx="3" fill="#0284c7"/>
+  <text x="207" y="427.5" text-anchor="middle" font-size="7" font-weight="700" fill="white">hci1</text>
+  <text x="148" y="468" text-anchor="middle" font-size="12" font-weight="700" fill="#14532d">Bridge 2</text>
+  <text x="148" y="482" text-anchor="middle" font-size="10" fill="#64748b">Raspberry Pi · hci0 + hci1</text>
+
+  <!-- ══════════════ SPEAKER 3 — Bedroom ══════════════ -->
+  <rect x="342" y="398" width="100" height="68" rx="7" fill="#334155" filter="url(#shadowLight)"/>
+  <polygon points="358,415 358,439 371,446 371,408" fill="#64748b"/>
+  <path d="M375,412 Q387,426 375,440" stroke="#94a3b8" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+  <path d="M381,407 Q396,426 381,445" stroke="#94a3b8" stroke-width="2"   fill="none" stroke-linecap="round" opacity="0.55"/>
+  <path d="M387,403 Q405,426 387,449" stroke="#94a3b8" stroke-width="1.5" fill="none" stroke-linecap="round" opacity="0.3"/>
+  <text x="392" y="482" text-anchor="middle" font-size="11" font-weight="600" fill="#334155">Bedroom</text>
+  <text x="392" y="495" text-anchor="middle" font-size="10" fill="#64748b">Speaker</text>
+
+  <!-- ══════════════ SPEAKER 4 — Office ══════════════ -->
+  <rect x="680" y="398" width="100" height="68" rx="7" fill="#334155" filter="url(#shadowLight)"/>
+  <polygon points="696,415 696,439 709,446 709,408" fill="#64748b"/>
+  <path d="M713,412 Q725,426 713,440" stroke="#94a3b8" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+  <path d="M719,407 Q734,426 719,445" stroke="#94a3b8" stroke-width="2"   fill="none" stroke-linecap="round" opacity="0.55"/>
+  <path d="M725,403 Q743,426 725,449" stroke="#94a3b8" stroke-width="1.5" fill="none" stroke-linecap="round" opacity="0.3"/>
+  <text x="730" y="482" text-anchor="middle" font-size="11" font-weight="600" fill="#334155">Office</text>
+  <text x="730" y="495" text-anchor="middle" font-size="10" fill="#64748b">Speaker</text>
+
+  <!-- ══════════════ LAN CONNECTIONS ══════════════ -->
+
+  <!-- Bridge 1 → MA Server (short vertical, left channel) -->
+  <line x1="155" y1="268" x2="155" y2="219" stroke="#2563eb" stroke-width="2.5" marker-end="url(#arrowNet)"/>
+
+  <!-- Bridge 2 → MA Server (vertical through floor/ceiling, right channel) -->
+  <line x1="168" y1="400" x2="168" y2="219" stroke="#2563eb" stroke-width="2.5" stroke-dasharray="6,3" marker-end="url(#arrowNet)"/>
+  <!-- "passes through wall" indicator -->
+  <rect x="158" y="328" width="20" height="14" rx="2" fill="#dbeafe"/>
+  <text x="168" y="338.5" text-anchor="middle" font-size="8" fill="#2563eb" font-weight="600">LAN</text>
+
+  <!-- ══════════════ BLUETOOTH CONNECTIONS ══════════════ -->
+
+  <!-- Bridge 1 hci0 → Living Room Speaker -->
+  <line x1="224" y1="281" x2="342" y2="258"
+        stroke="#ea580c" stroke-width="2" stroke-dasharray="7,4"
+        marker-end="url(#arrowBt)"/>
+  <text x="283" y="261" text-anchor="middle" font-size="9" fill="#ea580c" font-weight="600">hci0</text>
+
+  <!-- Bridge 1 hci1 → Kitchen Speaker (curved, crosses wall) -->
+  <path d="M 224,296 Q 400,200 680,244"
+        stroke="#ea580c" stroke-width="2" stroke-dasharray="7,4" fill="none"
+        marker-end="url(#arrowBt)"/>
+  <text x="440" y="210" text-anchor="middle" font-size="9" fill="#ea580c" font-weight="600">hci1</text>
+
+  <!-- Bridge 2 hci0 → Bedroom Speaker -->
+  <line x1="224" y1="413" x2="342" y2="432"
+        stroke="#ea580c" stroke-width="2" stroke-dasharray="7,4"
+        marker-end="url(#arrowBt)"/>
+  <text x="283" y="414" text-anchor="middle" font-size="9" fill="#ea580c" font-weight="600">hci0</text>
+
+  <!-- Bridge 2 hci1 → Office Speaker (curved, crosses wall) -->
+  <path d="M 224,428 Q 400,490 680,432"
+        stroke="#ea580c" stroke-width="2" stroke-dasharray="7,4" fill="none"
+        marker-end="url(#arrowBt)"/>
+  <text x="440" y="499" text-anchor="middle" font-size="9" fill="#ea580c" font-weight="600">hci1</text>
+
+  <!-- ══════════════ LEGEND ══════════════ -->
+  <rect x="220" y="572" width="520" height="30" rx="6" fill="white" stroke="#e2e8f0" stroke-width="1"/>
+
+  <!-- BT legend -->
+  <line x1="238" y1="587" x2="278" y2="587" stroke="#ea580c" stroke-width="2" stroke-dasharray="7,4"/>
+  <polygon points="272,583.5 282,587 272,590.5" fill="#ea580c"/>
+  <text x="290" y="591" font-size="11" fill="#64748b">Bluetooth A2DP (per adapter)</text>
+
+  <!-- LAN legend -->
+  <line x1="468" y1="587" x2="508" y2="587" stroke="#2563eb" stroke-width="2.5"/>
+  <polygon points="502,583.5 512,587 502,590.5" fill="#2563eb"/>
+  <text x="520" y="591" font-size="11" fill="#64748b">Local Network (LAN / Wi-Fi)</text>
+
+</svg>
