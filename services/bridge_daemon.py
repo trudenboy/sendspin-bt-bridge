@@ -164,6 +164,8 @@ class BridgeDaemon(SendspinDaemon):
     def _handle_format_change(self, codec: str | None, sample_rate: int, bit_depth: int, channels: int) -> None:
         super()._handle_format_change(codec, sample_rate, bit_depth, channels)
         self._bridge_status["audio_format"] = f"{codec or 'PCM'} {sample_rate}Hz/{bit_depth}-bit/{channels}ch"
+        self._bridge_status["reanchor_count"] = 0  # reset per-stream re-anchor counter
+        self._bridge_status["reanchoring"] = False
         self._sink_routed = False  # new stream — allow one routing correction
         self._notify()
 
@@ -173,6 +175,10 @@ class BridgeDaemon(SendspinDaemon):
         if self._bridge_status.get("playing") != is_playing:
             self._bridge_status["playing"] = is_playing
             self._bridge_status["state_changed_at"] = datetime.now().isoformat()
+            self._notify()
+        # Clear reanchoring flag once the stream has restarted successfully
+        if event == "start" and self._bridge_status.get("reanchoring"):
+            self._bridge_status["reanchoring"] = False
             self._notify()
         if event == "start" and self._bluetooth_sink_name and not self._sink_routed:
             # Correct any stream PA module-rescue-streams moved to the default sink.
