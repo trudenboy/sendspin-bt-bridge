@@ -766,6 +766,24 @@ class BluetoothManager:
                                 self.connected = bool(await device_iface.get_connected())
                             except Exception:
                                 pass
+                            if self.connected:
+                                # Device reconnected on its own while we were sleeping —
+                                # configure audio and start sendspin, then restart D-Bus subscription
+                                logger.info(f"[{self.device_name}] External reconnect detected, configuring audio...")
+                                await loop.run_in_executor(None, self.configure_bluetooth_audio)
+                                reconnect_attempt = 0
+                                if self.client:
+                                    self.client._update_status(
+                                        {
+                                            "reconnecting": False,
+                                            "reconnect_attempt": 0,
+                                            "bluetooth_connected": True,
+                                            "bluetooth_connected_at": datetime.now().isoformat(),
+                                        }
+                                    )
+                                    logger.info(f"BT reconnected for {self.device_name}, starting sendspin...")
+                                    await self.client.start_sendspin()
+                                restart_outer = True
 
             except RuntimeError:
                 raise  # propagate to monitor_and_reconnect for polling fallback
