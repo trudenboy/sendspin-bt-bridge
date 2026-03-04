@@ -187,10 +187,10 @@
 <footer>sendspin-bt-bridge · github.com/trudenboy/sendspin-bt-bridge · rendered with D3-Graphviz</footer>
 
 <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@hpcc-js/wasm@2/dist/graphviz.umd.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/d3-graphviz@5/build/d3-graphviz.js"></script>
 
-<script>
+<script type="module">
+import Viz from 'https://cdn.jsdelivr.net/npm/@viz-js/viz/lib/viz-standalone.js';
+
 const DOT = `
 digraph multiroom {
   graph [
@@ -328,43 +328,50 @@ digraph multiroom {
 }
 `;
 
-let gviz;
+let _zoom, _svgEl;
 
-function resetZoom() {
-  if (gviz) gviz.resetZoom(d3.transition().duration(400));
-}
-function fitGraph() {
-  const svg = d3.select('#graph svg');
-  if (!svg.node()) return;
-  const card = document.getElementById('graph');
-  const w = card.clientWidth - 48;
-  const h = Math.round(w * 0.65);
-  svg.attr('width', w).attr('height', h);
-  resetZoom();
-}
+window.resetZoom = function() {
+  if (_zoom && _svgEl) d3.select(_svgEl).transition().duration(400).call(_zoom.transform, d3.zoomIdentity);
+};
+window.fitGraph = window.resetZoom;
 
-window.addEventListener('DOMContentLoaded', () => {
-  gviz = d3.select('#graph')
-    .graphviz({ useWorker: false, zoom: true })
-    .transition(() =>
-      d3.transition().duration(600).ease(d3.easeCubicOut)
-    )
-    .on('initEnd', () => {
-      document.getElementById('loading').style.display = 'none';
-    })
-    .renderDot(DOT)
-    .on('end', () => {
-      // style the rendered SVG to match the dark theme
-      const svg = d3.select('#graph svg');
-      svg.attr('style', 'max-width:100%;height:auto;border-radius:8px;');
+async function init() {
+  try {
+    const viz = await Viz.instance();
+    const svgEl = viz.renderSVGElement(DOT, { engine: 'dot' });
 
-      // make polygon fill=none (arrowheads) transparent, leave fill=<color>
-      svg.selectAll('polygon').each(function() {
-        const el = d3.select(this);
-        if (el.attr('fill') === 'black') el.attr('fill', '#334155').attr('stroke', '#334155');
-      });
+    // Fix default black arrowheads/text for dark bg
+    svgEl.querySelectorAll('[fill="black"]').forEach(el => el.setAttribute('fill', '#94a3b8'));
+    svgEl.querySelectorAll('[stroke="black"]').forEach(el => el.setAttribute('stroke', '#334155'));
+    svgEl.querySelectorAll('text').forEach(el => {
+      if (!el.getAttribute('fill') || el.getAttribute('fill') === 'black') {
+        el.setAttribute('fill', '#dde4f0');
+      }
     });
-});
+
+    svgEl.style.maxWidth = '100%';
+    svgEl.style.height = 'auto';
+    svgEl.style.borderRadius = '8px';
+
+    document.getElementById('loading').remove();
+    document.getElementById('graph').appendChild(svgEl);
+
+    // D3 zoom/pan
+    _svgEl = svgEl;
+    const inner = svgEl.querySelector('g');
+    _zoom = d3.zoom()
+      .scaleExtent([0.1, 4])
+      .on('zoom', (event) => { inner.setAttribute('transform', event.transform); });
+    d3.select(svgEl).call(_zoom);
+
+  } catch (err) {
+    document.getElementById('loading').innerHTML =
+      `<div style="color:#f87171">Render error: ${err.message}</div>`;
+    console.error(err);
+  }
+}
+
+init();
 </script>
 </body>
 </html>
