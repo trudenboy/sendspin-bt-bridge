@@ -106,6 +106,8 @@ automation:
 
 ![Диаграмма развёртывания: два бриджа с двумя BT-адаптерами каждый, четыре колонки в четырёх комнатах, все подключены к одному серверу Music Assistant](/sendspin-bt-bridge/diagrams/deployment-multiroom.svg)
 
+[Открыть диаграмму multiroom (Mermaid)](/sendspin-bt-bridge/diagrams/multiroom-diagram/)
+
 ## Варианты развёртывания
 
 | | Home Assistant Addon | Docker Compose | Proxmox LXC |

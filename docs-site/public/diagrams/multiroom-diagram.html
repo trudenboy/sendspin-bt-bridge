@@ -24,6 +24,7 @@
       --bridge:     #22d3ee;
       --adapter:    #10b981;
       --speaker:    #f59e0b;
+      --user:       #94a3b8;
     }
 
     html, body {
@@ -165,6 +166,7 @@
     <div class="legend-item"><div class="dot" style="background:#22d3ee"></div>BT Bridge (per zone)</div>
     <div class="legend-item"><div class="dot" style="background:#10b981"></div>BT Adapter (hciX)</div>
     <div class="legend-item"><div class="dot" style="background:#f59e0b"></div>Bluetooth Speaker</div>
+    <div class="legend-item"><div class="dot" style="background:#94a3b8"></div>User (remote / outside)</div>
   </div>
 
   <div class="card">
@@ -199,13 +201,16 @@ graph TB
     HA <-->|"Media Players API"| MA
   end
 
+  U["🧑‍💻  User\nTerrace (outside building)"]
+  U -.->|"Web UI / VPN"| HA
+
   subgraph Z1["  📍  Living Room  "]
     direction TB
     BR1["🔗  sendspin-bt-bridge\nRaspberry Pi 5"]
     subgraph Z1AD["BT Adapters"]
       direction LR
-      A1H0["📡 hci0"]
-      A1H1["📡 hci1"]
+      A1H0["ᛒ hci0"]
+      A1H1["ᛒ hci1"]
     end
     SP1["🔊 JBL Charge 5"]
     SP2["🔊 Bose SoundLink Max"]
@@ -218,8 +223,8 @@ graph TB
     BR2["🔗  sendspin-bt-bridge\nRaspberry Pi 4"]
     subgraph Z2AD["BT Adapters"]
       direction LR
-      A2H0["📡 hci0"]
-      A2H1["📡 hci1"]
+      A2H0["ᛒ hci0"]
+      A2H1["ᛒ hci1"]
     end
     SP5["🔊 JBL Flip 6"]
     SP6["🔊 UE Hyperboom"]
@@ -231,8 +236,8 @@ graph TB
     BR3["🔗  sendspin-bt-bridge\nMini PC / NUC"]
     subgraph Z3AD["BT Adapters"]
       direction LR
-      A3H0["📡 hci0"]
-      A3H1["📡 hci1"]
+      A3H0["ᛒ hci0"]
+      A3H1["ᛒ hci1"]
     end
     SP8["🔊 JBL PartyBox 110"]
     SP9["🔊 Sonos Move 2"]
@@ -245,7 +250,7 @@ graph TB
     BR4["🔗  sendspin-bt-bridge\nRaspberry Pi Zero 2W"]
     subgraph Z4AD["BT Adapters"]
       direction LR
-      A4H0["📡 hci0"]
+      A4H0["ᛒ hci0"]
     end
     SP12["🔊 Ultimate Ears Epicboom"]
     SP13["🔊 JBL Xtreme 3"]
@@ -290,12 +295,14 @@ graph TB
   classDef brStyle   fill:#0a2030,stroke:#22d3ee,stroke-width:1.5px,color:#67e8f9,rx:8
   classDef adStyle   fill:#071c14,stroke:#10b981,stroke-width:1px,color:#6ee7b7,rx:6
   classDef spStyle   fill:#1a1200,stroke:#f59e0b,stroke-width:1px,color:#fcd34d,rx:6
+  classDef userStyle fill:#0b0f14,stroke:#94a3b8,stroke-width:1.5px,color:#e2e8f0,rx:10
 
   class HA haStyle
   class MA maStyle
   class BR1,BR2,BR3,BR4 brStyle
   class A1H0,A1H1,A2H0,A2H1,A3H0,A3H1,A4H0,A4H1 adStyle
   class SP1,SP2,SP3,SP4,SP5,SP6,SP7,SP8,SP9,SP10,SP11,SP12,SP13 spStyle
+  class U userStyle
 
     </div>
   </div>

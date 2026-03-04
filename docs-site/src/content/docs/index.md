@@ -104,7 +104,7 @@ If your Home Assistant runs on a Raspberry Pi with a built-in Bluetooth adapter,
 
 Run multiple bridge instances against the same Music Assistant server to cover every room — each bridge handles the speakers within its Bluetooth range.
 
-[![Deployment diagram: multiroom floorplan with zones and adapters](/sendspin-bt-bridge/diagrams/multiroom-diagram.png)](/sendspin-bt-bridge/diagrams/multiroom-diagram.html)
+[![Deployment diagram: multiroom floorplan with zones and adapters](/sendspin-bt-bridge/diagrams/multiroom-diagram.png)](/sendspin-bt-bridge/diagrams/multiroom-diagram/)
 
 [![Multiroom Audio — Floor Plan](/sendspin-bt-bridge/diagrams/multiroom-floorplan.png)](/sendspin-bt-bridge/diagrams/multiroom-floorplan.html)
 

@@ -1,665 +1,527 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Multiroom Audio — Floor Plan</title>
-<link rel="preconnect" href="https://fonts.googleapis.com"/>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet"/>
-<style>
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-
-:root{
-  --bg:#07090e;
-  --surface:#0d1119;
-  --border:#1a2235;
-  --ha:#18b0ff;
-  --ma:#7c6dfa;
-  --bridge:#00e5cc;
-  --adapter:#0fd47a;
-  --speaker:#f5a623;
-  --text:#dde4f0;
-  --muted:#4a5a78;
-  --z1:#1a3a6b;
-  --z2:#1a3b2a;
-  --z3:#3a2a1a;
-  --z4:#1a3a3a;
-  --z1b:#18b0ff;
-  --z2b:#0fd47a;
-  --z3b:#f5a623;
-  --z4b:#00e5cc;
-}
-
-html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Space Grotesk',sans-serif}
-
-body{
-  display:flex;flex-direction:column;align-items:center;
-  min-height:100vh;padding:40px 24px 60px;
-  background-image:
-    radial-gradient(ellipse 70% 40% at 50% 0%,rgba(24,176,255,.08) 0%,transparent 60%),
-    radial-gradient(ellipse 40% 30% at 80% 80%,rgba(124,109,250,.06) 0%,transparent 50%);
-}
-
-header{
-  width:100%;max-width:1200px;
-  display:flex;align-items:baseline;gap:16px;
-  margin-bottom:32px;
-}
-header h1{
-  font-size:clamp(1.4rem,2.8vw,2.1rem);
-  font-weight:700;letter-spacing:-.04em;
-  background:linear-gradient(120deg,#fff 40%,var(--ha));
-  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
-}
-.badge{
-  font-family:'JetBrains Mono',monospace;
-  font-size:.7rem;color:var(--muted);
-  padding:3px 10px;border:1px solid var(--border);border-radius:4px;
-}
-
-/* legend */
-.legend{
-  width:100%;max-width:1200px;
-  display:flex;flex-wrap:wrap;gap:8px 20px;margin-bottom:28px;
-}
-.li{display:flex;align-items:center;gap:7px;font-family:'JetBrains Mono',monospace;font-size:.7rem;color:var(--muted)}
-.dot{width:9px;height:9px;border-radius:50%}
-
-/* main layout */
-.layout{width:100%;max-width:1200px;display:grid;grid-template-columns:1fr 340px;gap:16px;align-items:start}
-
-/* floorplan card */
-.fp-card{
-  background:var(--surface);border:1px solid var(--border);border-radius:14px;
-  padding:24px;
-  box-shadow:0 20px 60px rgba(0,0,0,.5),0 0 0 1px rgba(24,176,255,.05);
-  position:relative;overflow:hidden;
-}
-.fp-card::before{
-  content:'';position:absolute;inset:0;
-  background:radial-gradient(ellipse 50% 30% at 50% 0%,rgba(24,176,255,.04) 0%,transparent 60%);
-  pointer-events:none;
-}
-
-svg#floorplan{width:100%;height:auto;display:block}
-
-/* rooms */
-.room{
-  cursor:pointer;transition:filter .2s;
-}
-.room:hover{filter:brightness(1.3)}
-.room.active .room-fill{opacity:.35}
-
-.room-fill{transition:opacity .2s}
-
-/* speaker nodes */
-.speaker-node{cursor:pointer;transition:transform .15s}
-.speaker-node:hover{transform:scale(1.25)}
-.speaker-node circle.outer{animation:pulse 2.5s ease-in-out infinite}
-@keyframes pulse{
-  0%,100%{opacity:.15;r:14}
-  50%{opacity:.4;r:18}
-}
-
-/* signal rings */
-.signal-ring{
-  animation:ring 2s ease-out infinite;
-  transform-origin:center;
-  pointer-events:none;
-}
-.signal-ring:nth-child(2){animation-delay:.5s}
-.signal-ring:nth-child(3){animation-delay:1s}
-@keyframes ring{
-  0%{opacity:.5;transform:scale(1)}
-  100%{opacity:0;transform:scale(2.2)}
-}
-
-/* bridge node */
-.bridge-icon{
-  font-size:11px;
-  font-family:'JetBrains Mono',monospace;
-}
-
-/* info panel */
-.info-panel{
-  background:var(--surface);border:1px solid var(--border);border-radius:14px;
-  padding:24px;
-  box-shadow:0 20px 60px rgba(0,0,0,.5);
-  position:sticky;top:24px;
-}
-
-.panel-title{
-  font-size:.65rem;font-family:'JetBrains Mono',monospace;
-  color:var(--muted);text-transform:uppercase;letter-spacing:.1em;
-  margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--border);
-}
-
-.zone-info{display:none}
-.zone-info.active{display:block;animation:fadein .25s ease}
-@keyframes fadein{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
-
-.zone-name{
-  font-size:1.2rem;font-weight:600;margin-bottom:4px;
-}
-.zone-hw{
-  font-family:'JetBrains Mono',monospace;font-size:.72rem;color:var(--muted);
-  margin-bottom:18px;
-}
-
-.section-label{
-  font-size:.6rem;font-family:'JetBrains Mono',monospace;
-  color:var(--muted);text-transform:uppercase;letter-spacing:.1em;
-  margin-bottom:8px;margin-top:14px;
-}
-
-.adapter-row{
-  display:flex;align-items:center;gap:8px;
-  padding:8px 10px;border-radius:7px;background:#0a1520;
-  border:1px solid #1a2d1a;margin-bottom:6px;
-}
-.adapter-dot{width:7px;height:7px;border-radius:50%;background:var(--adapter);flex-shrink:0}
-.adapter-name{font-family:'JetBrains Mono',monospace;font-size:.72rem;color:var(--adapter)}
-
-.speaker-list{display:flex;flex-direction:column;gap:5px;margin-top:2px}
-.speaker-item{
-  display:flex;align-items:center;gap:8px;
-  padding:7px 10px;border-radius:7px;
-  background:#1a1100;border:1px solid #2a1e00;
-}
-.sp-icon{font-size:.9rem}
-.sp-name{font-size:.78rem;font-weight:500}
-.sp-adapter{font-family:'JetBrains Mono',monospace;font-size:.62rem;color:var(--muted);margin-left:auto}
-
-/* default panel state */
-.panel-default{
-  text-align:center;padding:32px 0;color:var(--muted);
-  font-size:.82rem;
-}
-.panel-default .arrow{font-size:2rem;margin-bottom:12px;opacity:.3}
-
-/* floor label */
-.floor-label{
-  font-family:'JetBrains Mono',monospace;font-size:.6rem;
-  fill:#2a3a55;text-transform:uppercase;letter-spacing:.12em;
-}
-
-/* room label text */
-text.room-label{
-  font-family:'Space Grotesk',sans-serif;
-  font-size:12px;font-weight:600;fill:rgba(220,232,255,.6);
-  pointer-events:none;
-  text-anchor:middle;dominant-baseline:middle;
-}
-text.room-sublabel{
-  font-family:'JetBrains Mono',monospace;
-  font-size:9px;fill:rgba(220,232,255,.3);
-  pointer-events:none;
-  text-anchor:middle;dominant-baseline:middle;
-}
-
-/* active room highlight */
-.room-outline{
-  stroke-width:2;fill:none;opacity:0;
-  transition:opacity .2s;
-}
-.room.active .room-outline{opacity:1}
-
-@media(max-width:780px){
-  .layout{grid-template-columns:1fr}
-  .info-panel{position:static}
-}
-</style>
+  <meta charset="UTF-8" />
+  <title>Multiroom Audio — Floor Plan</title>
+  <style>body{margin:0;background:#0d1117;}</style>
 </head>
 <body>
-
-<header>
-  <h1>Multiroom Audio — Floor Plan</h1>
-  <span class="badge">sendspin-bt-bridge</span>
-</header>
-
-<div class="legend">
-  <div class="li"><div class="dot" style="background:#18b0ff"></div>Home Assistant</div>
-  <div class="li"><div class="dot" style="background:#7c6dfa"></div>Music Assistant</div>
-  <div class="li"><div class="dot" style="background:#00e5cc"></div>BT Bridge</div>
-  <div class="li"><div class="dot" style="background:#0fd47a"></div>BT Adapter hciX</div>
-  <div class="li"><div class="dot" style="background:#f5a623"></div>Bluetooth Speaker</div>
-</div>
-
-<div class="layout">
-
-  <!-- FLOOR PLAN -->
-  <div class="fp-card">
-    <svg id="floorplan" viewBox="0 0 760 540" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <!-- grid pattern -->
-        <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
-          <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#1a2235" stroke-width=".4"/>
-        </pattern>
-
-        <!-- zone fills -->
-        <linearGradient id="z1g" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stop-color="#0d2040" stop-opacity=".9"/>
-          <stop offset="100%" stop-color="#112645" stop-opacity=".7"/>
-        </linearGradient>
-        <linearGradient id="z2g" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stop-color="#071a10" stop-opacity=".9"/>
-          <stop offset="100%" stop-color="#0c2416" stop-opacity=".7"/>
-        </linearGradient>
-        <linearGradient id="z3g" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stop-color="#1a1206" stop-opacity=".9"/>
-          <stop offset="100%" stop-color="#221806" stop-opacity=".7"/>
-        </linearGradient>
-        <linearGradient id="z4g" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stop-color="#051a1a" stop-opacity=".9"/>
-          <stop offset="100%" stop-color="#092222" stop-opacity=".7"/>
-        </linearGradient>
-
-        <!-- speaker glow filter -->
-        <filter id="sp-glow" x="-50%" y="-50%" width="200%" height="200%">
-          <feGaussianBlur stdDeviation="3" result="blur"/>
-          <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-        </filter>
-        <filter id="br-glow" x="-100%" y="-100%" width="300%" height="300%">
-          <feGaussianBlur stdDeviation="4" result="blur"/>
-          <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-        </filter>
-        <filter id="wall-shadow">
-          <feDropShadow dx="2" dy="2" stdDeviation="3" flood-color="#000" flood-opacity=".4"/>
-        </filter>
-      </defs>
-
-      <!-- background grid -->
-      <rect width="760" height="540" fill="url(#grid)"/>
-
-      <!-- outer house shape -->
-      <rect x="30" y="30" width="700" height="480" rx="4" fill="#0a0e18" stroke="#1e2d45" stroke-width="1.5"/>
-
-      <!-- ─── ZONE 1: Living Room (top-left large) ─── -->
-      <g class="room" id="zone1" onclick="selectZone(1)">
-        <rect class="room-fill" x="30" y="30" width="400" height="260" rx="4" fill="url(#z1g)" opacity=".25"/>
-        <rect class="room-outline" x="31" y="31" width="398" height="258" rx="3" stroke="#18b0ff"/>
-        <!-- wall lines -->
-        <line x1="430" y1="30" x2="430" y2="290" stroke="#1e2d45" stroke-width="6"/>
-        <line x1="30" y1="290" x2="430" y2="290" stroke="#1e2d45" stroke-width="6"/>
-
-        <!-- door cutout (bottom wall) -->
-        <line x1="155" y1="290" x2="205" y2="290" stroke="#0a0e18" stroke-width="7"/>
-        <path d="M 155 290 Q 155 265 205 265" fill="none" stroke="#1e2d45" stroke-width="1" stroke-dasharray="3,3"/>
-
-        <!-- room label -->
-        <text class="room-label" x="220" y="155">Living Room</text>
-        <text class="room-sublabel" x="220" y="170">Zone 1</text>
-      </g>
-
-      <!-- ─── ZONE 2: Kitchen (top-right) ─── -->
-      <g class="room" id="zone2" onclick="selectZone(2)">
-        <rect class="room-fill" x="430" y="30" width="300" height="260" rx="4" fill="url(#z2g)" opacity=".25"/>
-        <rect class="room-outline" x="431" y="31" width="298" height="258" rx="3" stroke="#0fd47a"/>
-        <line x1="430" y1="290" x2="730" y2="290" stroke="#1e2d45" stroke-width="6"/>
-        <!-- door cutout -->
-        <line x1="520" y1="290" x2="570" y2="290" stroke="#0a0e18" stroke-width="7"/>
-        <path d="M 520 290 Q 520 265 570 265" fill="none" stroke="#1e2d45" stroke-width="1" stroke-dasharray="3,3"/>
-
-        <text class="room-label" x="580" y="155">Kitchen</text>
-        <text class="room-sublabel" x="580" y="170">Zone 2</text>
-      </g>
-
-      <!-- ─── ZONE 3: Conference Room (bottom-left) ─── -->
-      <g class="room" id="zone3" onclick="selectZone(3)">
-        <rect class="room-fill" x="30" y="290" width="270" height="220" rx="4" fill="url(#z3g)" opacity=".25"/>
-        <rect class="room-outline" x="31" y="291" width="268" height="218" rx="3" stroke="#f5a623"/>
-        <line x1="300" y1="290" x2="300" y2="510" stroke="#1e2d45" stroke-width="6"/>
-        <!-- door cutout -->
-        <line x1="300" y1="380" x2="300" y2="430" stroke="#0a0e18" stroke-width="7"/>
-        <path d="M 300 380 Q 275 380 275 430" fill="none" stroke="#1e2d45" stroke-width="1" stroke-dasharray="3,3"/>
-
-        <text class="room-label" x="165" y="390">Conference Room</text>
-        <text class="room-sublabel" x="165" y="406">Zone 3</text>
-      </g>
-
-      <!-- ─── ZONE 4: Terrace (bottom-right) ─── -->
-      <g class="room" id="zone4" onclick="selectZone(4)">
-        <rect class="room-fill" x="300" y="290" width="430" height="220" rx="4" fill="url(#z4g)" opacity=".25"/>
-        <rect class="room-outline" x="301" y="291" width="428" height="218" rx="3" stroke="#00e5cc"/>
-        <!-- dashed border to indicate outdoor -->
-        <rect x="305" y="295" width="420" height="210" rx="2" fill="none" stroke="#00e5cc" stroke-width=".8" stroke-dasharray="8,6" opacity=".3"/>
-
-        <text class="room-label" x="515" y="390">Terrace</text>
-        <text class="room-sublabel" x="515" y="406">Zone 4 · Outdoor</text>
-      </g>
-
-      <!-- ═══════════════════════════════════════ -->
-      <!-- BT BRIDGES (raspberry pi icons)         -->
-      <!-- ═══════════════════════════════════════ -->
-
-      <!-- Bridge Z1 - Living Room -->
-      <g filter="url(#br-glow)">
-        <rect x="46" y="46" width="58" height="36" rx="5" fill="#071825" stroke="#00e5cc" stroke-width="1.2"/>
-        <text x="75" y="59" font-family="JetBrains Mono,monospace" font-size="7" fill="#00e5cc" text-anchor="middle">bt-bridge</text>
-        <text x="75" y="70" font-family="JetBrains Mono,monospace" font-size="7" fill="#3a8a7a" text-anchor="middle">RPi 5</text>
-        <circle cx="46" cy="50" r="3" fill="#00e5cc" opacity=".8"/>
-      </g>
-
-      <!-- Bridge Z2 - Kitchen -->
-      <g filter="url(#br-glow)">
-        <rect x="446" y="46" width="58" height="36" rx="5" fill="#071825" stroke="#00e5cc" stroke-width="1.2"/>
-        <text x="475" y="59" font-family="JetBrains Mono,monospace" font-size="7" fill="#00e5cc" text-anchor="middle">bt-bridge</text>
-        <text x="475" y="70" font-family="JetBrains Mono,monospace" font-size="7" fill="#3a8a7a" text-anchor="middle">RPi 4</text>
-        <circle cx="446" cy="50" r="3" fill="#00e5cc" opacity=".8"/>
-      </g>
-
-      <!-- Bridge Z3 - Conference -->
-      <g filter="url(#br-glow)">
-        <rect x="46" y="304" width="58" height="36" rx="5" fill="#071825" stroke="#00e5cc" stroke-width="1.2"/>
-        <text x="75" y="317" font-family="JetBrains Mono,monospace" font-size="7" fill="#00e5cc" text-anchor="middle">bt-bridge</text>
-        <text x="75" y="328" font-family="JetBrains Mono,monospace" font-size="7" fill="#3a8a7a" text-anchor="middle">NUC</text>
-        <circle cx="46" cy="308" r="3" fill="#00e5cc" opacity=".8"/>
-      </g>
-
-      <!-- Bridge Z4 - Terrace -->
-      <g filter="url(#br-glow)">
-        <rect x="316" y="304" width="58" height="36" rx="5" fill="#071825" stroke="#00e5cc" stroke-width="1.2"/>
-        <text x="345" y="317" font-family="JetBrains Mono,monospace" font-size="7" fill="#00e5cc" text-anchor="middle">bt-bridge</text>
-        <text x="345" y="328" font-family="JetBrains Mono,monospace" font-size="7" fill="#3a8a7a" text-anchor="middle">RPi Zero 2W</text>
-        <circle cx="316" cy="308" r="3" fill="#00e5cc" opacity=".8"/>
-      </g>
-
-      <!-- ═══════════════════════════════════════ -->
-      <!-- SPEAKERS                                -->
-      <!-- ═══════════════════════════════════════ -->
-
-      <!-- Z1 Speakers: hci0 → SP1(JBL Charge 5), SP2(Bose SoundLink) | hci1 → SP3(Sony), SP4(Harman) -->
-
-      <!-- SP1 JBL Charge 5 -->
-      <g class="speaker-node" data-zone="1" data-name="JBL Charge 5" data-adapter="hci0">
-        <circle class="signal-ring" cx="130" cy="110" r="12" fill="none" stroke="#f5a623" stroke-width="1" opacity=".5"/>
-        <circle class="signal-ring" cx="130" cy="110" r="12" fill="none" stroke="#f5a623" stroke-width="1" opacity=".5"/>
-        <circle cx="130" cy="110" r="9" fill="#1a1100" stroke="#f5a623" stroke-width="1.5" filter="url(#sp-glow)"/>
-        <text x="130" y="114" font-size="10" text-anchor="middle" fill="#f5a623">🔊</text>
-        <text x="130" y="128" font-family="JetBrains Mono,monospace" font-size="7" fill="#a07010" text-anchor="middle">JBL</text>
-      </g>
-
-      <!-- SP2 Bose SoundLink Max -->
-      <g class="speaker-node" data-zone="1" data-name="Bose SoundLink Max" data-adapter="hci0">
-        <circle class="signal-ring" cx="200" cy="90" r="12" fill="none" stroke="#f5a623" stroke-width="1" opacity=".5"/>
-        <circle class="signal-ring" cx="200" cy="90" r="12" fill="none" stroke="#f5a623" stroke-width="1" opacity=".5"/>
-        <circle cx="200" cy="90" r="9" fill="#1a1100" stroke="#f5a623" stroke-width="1.5" filter="url(#sp-glow)"/>
-        <text x="200" y="94" font-size="10" text-anchor="middle" fill="#f5a623">🔊</text>
-        <text x="200" y="108" font-family="JetBrains Mono,monospace" font-size="7" fill="#a07010" text-anchor="middle">Bose</text>
-      </g>
-
-      <!-- SP3 Sony SRS-XB43 -->
-      <g class="speaker-node" data-zone="1" data-name="Sony SRS-XB43" data-adapter="hci1">
-        <circle class="signal-ring" cx="310" cy="110" r="12" fill="none" stroke="#f5a623" stroke-width="1" opacity=".5"/>
-        <circle class="signal-ring" cx="310" cy="110" r="12" fill="none" stroke="#f5a623" stroke-width="1" opacity=".5"/>
-        <circle cx="310" cy="110" r="9" fill="#1a1100" stroke="#f5a623" stroke-width="1.5" filter="url(#sp-glow)"/>
-        <text x="310" y="114" font-size="10" text-anchor="middle" fill="#f5a623">🔊</text>
-        <text x="310" y="128" font-family="JetBrains Mono,monospace" font-size="7" fill="#a07010" text-anchor="middle">Sony</text>
-      </g>
-
-      <!-- SP4 Harman Kardon Aura -->
-      <g class="speaker-node" data-zone="1" data-name="Harman Kardon Aura" data-adapter="hci1">
-        <circle class="signal-ring" cx="380" cy="240" r="12" fill="none" stroke="#f5a623" stroke-width="1" opacity=".5"/>
-        <circle class="signal-ring" cx="380" cy="240" r="12" fill="none" stroke="#f5a623" stroke-width="1" opacity=".5"/>
-        <circle cx="380" cy="240" r="9" fill="#1a1100" stroke="#f5a623" stroke-width="1.5" filter="url(#sp-glow)"/>
-        <text x="380" y="244" font-size="10" text-anchor="middle" fill="#f5a623">🔊</text>
-        <text x="380" y="258" font-family="JetBrains Mono,monospace" font-size="7" fill="#a07010" text-anchor="middle">Harman</text>
-      </g>
-
-      <!-- Z2 Speakers -->
-      <!-- SP5 JBL Flip 6 -->
-      <g class="speaker-node" data-zone="2" data-name="JBL Flip 6" data-adapter="hci0">
-        <circle class="signal-ring" cx="510" cy="100" r="12" fill="none" stroke="#f5a623" stroke-width="1" opacity=".5"/>
-        <circle class="signal-ring" cx="510" cy="100" r="12" fill="none" stroke="#f5a623" stroke-width="1" opacity=".5"/>
-        <circle cx="510" cy="100" r="9" fill="#1a1100" stroke="#f5a623" stroke-width="1.5" filter="url(#sp-glow)"/>
-        <text x="510" y="104" font-size="10" text-anchor="middle" fill="#f5a623">🔊</text>
-        <text x="510" y="118" font-family="JetBrains Mono,monospace" font-size="7" fill="#a07010" text-anchor="middle">JBL Flip</text>
-      </g>
-
-      <!-- SP6 UE Hyperboom -->
-      <g class="speaker-node" data-zone="2" data-name="UE Hyperboom" data-adapter="hci0">
-        <circle class="signal-ring" cx="640" cy="200" r="12" fill="none" stroke="#f5a623" stroke-width="1" opacity=".5"/>
-        <circle class="signal-ring" cx="640" cy="200" r="12" fill="none" stroke="#f5a623" stroke-width="1" opacity=".5"/>
-        <circle cx="640" cy="200" r="9" fill="#1a1100" stroke="#f5a623" stroke-width="1.5" filter="url(#sp-glow)"/>
-        <text x="640" y="204" font-size="10" text-anchor="middle" fill="#f5a623">🔊</text>
-        <text x="640" y="218" font-family="JetBrains Mono,monospace" font-size="7" fill="#a07010" text-anchor="middle">UE</text>
-      </g>
-
-      <!-- SP7 Anker Soundcore -->
-      <g class="speaker-node" data-zone="2" data-name="Anker Soundcore Motion" data-adapter="hci1">
-        <circle class="signal-ring" cx="680" cy="100" r="12" fill="none" stroke="#f5a623" stroke-width="1" opacity=".5"/>
-        <circle class="signal-ring" cx="680" cy="100" r="12" fill="none" stroke="#f5a623" stroke-width="1" opacity=".5"/>
-        <circle cx="680" cy="100" r="9" fill="#1a1100" stroke="#f5a623" stroke-width="1.5" filter="url(#sp-glow)"/>
-        <text x="680" y="104" font-size="10" text-anchor="middle" fill="#f5a623">🔊</text>
-        <text x="680" y="118" font-family="JetBrains Mono,monospace" font-size="7" fill="#a07010" text-anchor="middle">Anker</text>
-      </g>
-
-      <!-- Z3 Speakers -->
-      <!-- SP8 JBL PartyBox -->
-      <g class="speaker-node" data-zone="3" data-name="JBL PartyBox 110" data-adapter="hci0">
-        <circle class="signal-ring" cx="90" cy="455" r="12" fill="none" stroke="#f5a623" stroke-width="1" opacity=".5"/>
-        <circle class="signal-ring" cx="90" cy="455" r="12" fill="none" stroke="#f5a623" stroke-width="1" opacity=".5"/>
-        <circle cx="90" cy="455" r="9" fill="#1a1100" stroke="#f5a623" stroke-width="1.5" filter="url(#sp-glow)"/>
-        <text x="90" y="459" font-size="10" text-anchor="middle" fill="#f5a623">🔊</text>
-        <text x="90" y="473" font-family="JetBrains Mono,monospace" font-size="7" fill="#a07010" text-anchor="middle">JBL PB</text>
-      </g>
-
-      <!-- SP9 Sonos Move 2 -->
-      <g class="speaker-node" data-zone="3" data-name="Sonos Move 2" data-adapter="hci0">
-        <circle class="signal-ring" cx="160" cy="480" r="12" fill="none" stroke="#f5a623" stroke-width="1" opacity=".5"/>
-        <circle class="signal-ring" cx="160" cy="480" r="12" fill="none" stroke="#f5a623" stroke-width="1" opacity=".5"/>
-        <circle cx="160" cy="480" r="9" fill="#1a1100" stroke="#f5a623" stroke-width="1.5" filter="url(#sp-glow)"/>
-        <text x="160" y="484" font-size="10" text-anchor="middle" fill="#f5a623">🔊</text>
-        <text x="160" y="498" font-family="JetBrains Mono,monospace" font-size="7" fill="#a07010" text-anchor="middle">Sonos</text>
-      </g>
-
-      <!-- SP10 B&O A1 -->
-      <g class="speaker-node" data-zone="3" data-name="Bang & Olufsen A1" data-adapter="hci1">
-        <circle class="signal-ring" cx="230" cy="455" r="12" fill="none" stroke="#f5a623" stroke-width="1" opacity=".5"/>
-        <circle class="signal-ring" cx="230" cy="455" r="12" fill="none" stroke="#f5a623" stroke-width="1" opacity=".5"/>
-        <circle cx="230" cy="455" r="9" fill="#1a1100" stroke="#f5a623" stroke-width="1.5" filter="url(#sp-glow)"/>
-        <text x="230" y="459" font-size="10" text-anchor="middle" fill="#f5a623">🔊</text>
-        <text x="230" y="473" font-family="JetBrains Mono,monospace" font-size="7" fill="#a07010" text-anchor="middle">B&amp;O</text>
-      </g>
-
-      <!-- SP11 Marshall Emberton -->
-      <g class="speaker-node" data-zone="3" data-name="Marshall Emberton III" data-adapter="hci1">
-        <circle class="signal-ring" cx="270" cy="340" r="12" fill="none" stroke="#f5a623" stroke-width="1" opacity=".5"/>
-        <circle class="signal-ring" cx="270" cy="340" r="12" fill="none" stroke="#f5a623" stroke-width="1" opacity=".5"/>
-        <circle cx="270" cy="340" r="9" fill="#1a1100" stroke="#f5a623" stroke-width="1.5" filter="url(#sp-glow)"/>
-        <text x="270" y="344" font-size="10" text-anchor="middle" fill="#f5a623">🔊</text>
-        <text x="270" y="358" font-family="JetBrains Mono,monospace" font-size="7" fill="#a07010" text-anchor="middle">Marshall</text>
-      </g>
-
-      <!-- Z4 Speakers -->
-      <!-- SP12 UE Epicboom -->
-      <g class="speaker-node" data-zone="4" data-name="UE Epicboom" data-adapter="hci0">
-        <circle class="signal-ring" cx="500" cy="450" r="12" fill="none" stroke="#f5a623" stroke-width="1" opacity=".5"/>
-        <circle class="signal-ring" cx="500" cy="450" r="12" fill="none" stroke="#f5a623" stroke-width="1" opacity=".5"/>
-        <circle cx="500" cy="450" r="9" fill="#1a1100" stroke="#f5a623" stroke-width="1.5" filter="url(#sp-glow)"/>
-        <text x="500" y="454" font-size="10" text-anchor="middle" fill="#f5a623">🔊</text>
-        <text x="500" y="468" font-family="JetBrains Mono,monospace" font-size="7" fill="#a07010" text-anchor="middle">UE Epic</text>
-      </g>
-
-      <!-- SP13 JBL Xtreme 3 -->
-      <g class="speaker-node" data-zone="4" data-name="JBL Xtreme 3" data-adapter="hci0">
-        <circle class="signal-ring" cx="660" cy="430" r="12" fill="none" stroke="#f5a623" stroke-width="1" opacity=".5"/>
-        <circle class="signal-ring" cx="660" cy="430" r="12" fill="none" stroke="#f5a623" stroke-width="1" opacity=".5"/>
-        <circle cx="660" cy="430" r="9" fill="#1a1100" stroke="#f5a623" stroke-width="1.5" filter="url(#sp-glow)"/>
-        <text x="660" y="434" font-size="10" text-anchor="middle" fill="#f5a623">🔊</text>
-        <text x="660" y="448" font-family="JetBrains Mono,monospace" font-size="7" fill="#a07010" text-anchor="middle">JBL Xt</text>
-      </g>
-
-      <!-- ═══════ BT lines (bridge→adapter→speaker) ═══════ -->
-      <!-- Z1 lines -->
-      <line x1="104" y1="64" x2="130" y2="101" stroke="#0fd47a" stroke-width=".6" stroke-dasharray="4,4" opacity=".4"/>
-      <line x1="104" y1="64" x2="200" y2="81" stroke="#0fd47a" stroke-width=".6" stroke-dasharray="4,4" opacity=".4"/>
-      <line x1="104" y1="64" x2="310" y2="101" stroke="#0fd47a" stroke-width=".6" stroke-dasharray="4,4" opacity=".3"/>
-      <line x1="104" y1="64" x2="380" y2="231" stroke="#0fd47a" stroke-width=".6" stroke-dasharray="4,4" opacity=".3"/>
-
-      <!-- Z2 lines -->
-      <line x1="504" y1="64" x2="510" y2="91" stroke="#0fd47a" stroke-width=".6" stroke-dasharray="4,4" opacity=".4"/>
-      <line x1="504" y1="64" x2="640" y2="191" stroke="#0fd47a" stroke-width=".6" stroke-dasharray="4,4" opacity=".3"/>
-      <line x1="504" y1="64" x2="680" y2="91" stroke="#0fd47a" stroke-width=".6" stroke-dasharray="4,4" opacity=".3"/>
-
-      <!-- Z3 lines -->
-      <line x1="75" y1="340" x2="90" y2="446" stroke="#0fd47a" stroke-width=".6" stroke-dasharray="4,4" opacity=".4"/>
-      <line x1="75" y1="340" x2="160" y2="471" stroke="#0fd47a" stroke-width=".6" stroke-dasharray="4,4" opacity=".3"/>
-      <line x1="75" y1="340" x2="230" y2="446" stroke="#0fd47a" stroke-width=".6" stroke-dasharray="4,4" opacity=".3"/>
-      <line x1="75" y1="340" x2="270" y2="331" stroke="#0fd47a" stroke-width=".6" stroke-dasharray="4,4" opacity=".3"/>
-
-      <!-- Z4 lines -->
-      <line x1="345" y1="340" x2="500" y2="441" stroke="#0fd47a" stroke-width=".6" stroke-dasharray="4,4" opacity=".4"/>
-      <line x1="345" y1="340" x2="660" y2="421" stroke="#0fd47a" stroke-width=".6" stroke-dasharray="4,4" opacity=".3"/>
-
-      <!-- compass / scale -->
-      <text x="700" y="520" font-family="JetBrains Mono,monospace" font-size="8" fill="#2a3a55">N ↑</text>
-      <line x1="635" y1="518" x2="695" y2="518" stroke="#1a2a3a" stroke-width="1"/>
-      <text x="665" y="514" font-family="JetBrains Mono,monospace" font-size="7" fill="#2a3a55" text-anchor="middle">10 m</text>
-    </svg>
-  </div>
-
-  <!-- INFO PANEL -->
-  <div class="info-panel">
-    <div class="panel-title">Zone Details</div>
-
-    <div id="panel-default" class="panel-default">
-      <div class="arrow">←</div>
-      <div>Click a room on the<br>floor plan to see details</div>
-    </div>
-
-    <!-- Zone 1 -->
-    <div class="zone-info" id="zi1">
-      <div class="zone-name" style="color:#18b0ff">📍 Living Room</div>
-      <div class="zone-hw" style="font-family:'JetBrains Mono',monospace;font-size:.72rem;color:#4a5a78">Raspberry Pi 5 · sendspin-bt-bridge</div>
-
-      <div class="section-label">BT Adapters</div>
-      <div class="adapter-row"><div class="adapter-dot"></div><span class="adapter-name">hci0</span><span style="font-size:.65rem;color:#2a5a4a;margin-left:auto;font-family:'JetBrains Mono',monospace">2 speakers</span></div>
-      <div class="adapter-row"><div class="adapter-dot"></div><span class="adapter-name">hci1</span><span style="font-size:.65rem;color:#2a5a4a;margin-left:auto;font-family:'JetBrains Mono',monospace">2 speakers</span></div>
-
-      <div class="section-label">Speakers</div>
-      <div class="speaker-list">
-        <div class="speaker-item"><span class="sp-icon">🔊</span><span class="sp-name">JBL Charge 5</span><span class="sp-adapter">hci0</span></div>
-        <div class="speaker-item"><span class="sp-icon">🔊</span><span class="sp-name">Bose SoundLink Max</span><span class="sp-adapter">hci0</span></div>
-        <div class="speaker-item"><span class="sp-icon">🔊</span><span class="sp-name">Sony SRS-XB43</span><span class="sp-adapter">hci1</span></div>
-        <div class="speaker-item"><span class="sp-icon">🔊</span><span class="sp-name">Harman Kardon Aura</span><span class="sp-adapter">hci1</span></div>
-      </div>
-    </div>
-
-    <!-- Zone 2 -->
-    <div class="zone-info" id="zi2">
-      <div class="zone-name" style="color:#0fd47a">📍 Kitchen</div>
-      <div class="zone-hw" style="font-family:'JetBrains Mono',monospace;font-size:.72rem;color:#4a5a78">Raspberry Pi 4 · sendspin-bt-bridge</div>
-
-      <div class="section-label">BT Adapters</div>
-      <div class="adapter-row"><div class="adapter-dot"></div><span class="adapter-name">hci0</span><span style="font-size:.65rem;color:#2a5a4a;margin-left:auto;font-family:'JetBrains Mono',monospace">2 speakers</span></div>
-      <div class="adapter-row"><div class="adapter-dot"></div><span class="adapter-name">hci1</span><span style="font-size:.65rem;color:#2a5a4a;margin-left:auto;font-family:'JetBrains Mono',monospace">1 speaker</span></div>
-
-      <div class="section-label">Speakers</div>
-      <div class="speaker-list">
-        <div class="speaker-item"><span class="sp-icon">🔊</span><span class="sp-name">JBL Flip 6</span><span class="sp-adapter">hci0</span></div>
-        <div class="speaker-item"><span class="sp-icon">🔊</span><span class="sp-name">UE Hyperboom</span><span class="sp-adapter">hci0</span></div>
-        <div class="speaker-item"><span class="sp-icon">🔊</span><span class="sp-name">Anker Soundcore Motion</span><span class="sp-adapter">hci1</span></div>
-      </div>
-    </div>
-
-    <!-- Zone 3 -->
-    <div class="zone-info" id="zi3">
-      <div class="zone-name" style="color:#f5a623">📍 Conference Room</div>
-      <div class="zone-hw" style="font-family:'JetBrains Mono',monospace;font-size:.72rem;color:#4a5a78">Mini PC / NUC · sendspin-bt-bridge</div>
-
-      <div class="section-label">BT Adapters</div>
-      <div class="adapter-row"><div class="adapter-dot"></div><span class="adapter-name">hci0</span><span style="font-size:.65rem;color:#2a5a4a;margin-left:auto;font-family:'JetBrains Mono',monospace">2 speakers</span></div>
-      <div class="adapter-row"><div class="adapter-dot"></div><span class="adapter-name">hci1</span><span style="font-size:.65rem;color:#2a5a4a;margin-left:auto;font-family:'JetBrains Mono',monospace">2 speakers</span></div>
-
-      <div class="section-label">Speakers</div>
-      <div class="speaker-list">
-        <div class="speaker-item"><span class="sp-icon">🔊</span><span class="sp-name">JBL PartyBox 110</span><span class="sp-adapter">hci0</span></div>
-        <div class="speaker-item"><span class="sp-icon">🔊</span><span class="sp-name">Sonos Move 2</span><span class="sp-adapter">hci0</span></div>
-        <div class="speaker-item"><span class="sp-icon">🔊</span><span class="sp-name">Bang & Olufsen A1</span><span class="sp-adapter">hci1</span></div>
-        <div class="speaker-item"><span class="sp-icon">🔊</span><span class="sp-name">Marshall Emberton III</span><span class="sp-adapter">hci1</span></div>
-      </div>
-    </div>
-
-    <!-- Zone 4 -->
-    <div class="zone-info" id="zi4">
-      <div class="zone-name" style="color:#00e5cc">📍 Terrace</div>
-      <div class="zone-hw" style="font-family:'JetBrains Mono',monospace;font-size:.72rem;color:#4a5a78">Raspberry Pi Zero 2W · sendspin-bt-bridge</div>
-
-      <div class="section-label">BT Adapters</div>
-      <div class="adapter-row"><div class="adapter-dot"></div><span class="adapter-name">hci0</span><span style="font-size:.65rem;color:#2a5a4a;margin-left:auto;font-family:'JetBrains Mono',monospace">2 speakers</span></div>
-
-      <div class="section-label">Speakers</div>
-      <div class="speaker-list">
-        <div class="speaker-item"><span class="sp-icon">🔊</span><span class="sp-name">Ultimate Ears Epicboom</span><span class="sp-adapter">hci0</span></div>
-        <div class="speaker-item"><span class="sp-icon">🔊</span><span class="sp-name">JBL Xtreme 3</span><span class="sp-adapter">hci0</span></div>
-      </div>
-    </div>
-
-    <!-- MA/HA status at bottom -->
-    <div style="margin-top:24px;padding-top:16px;border-top:1px solid #1a2235">
-      <div class="section-label">Control Layer</div>
-      <div style="display:flex;flex-direction:column;gap:5px;margin-top:8px">
-        <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:6px;background:#050d1f;border:1px solid #1a2a4a">
-          <div style="width:6px;height:6px;border-radius:50%;background:#18b0ff"></div>
-          <span style="font-size:.75rem;font-weight:500;color:#93c5fd">Home Assistant</span>
-          <span style="font-family:'JetBrains Mono',monospace;font-size:.6rem;color:#2a4a6a;margin-left:auto">Automations</span>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:6px;background:#080510;border:1px solid #2a1a5a">
-          <div style="width:6px;height:6px;border-radius:50%;background:#7c6dfa"></div>
-          <span style="font-size:.75rem;font-weight:500;color:#a5b4fc">Music Assistant</span>
-          <span style="font-family:'JetBrains Mono',monospace;font-size:.6rem;color:#3a2a7a;margin-left:auto">Streaming</span>
-        </div>
-      </div>
-    </div>
-
-  </div>
-</div>
-
-<footer style="margin-top:28px;font-family:'JetBrains Mono',monospace;font-size:.68rem;color:#2a3a55;opacity:.7">
-  sendspin-bt-bridge · github.com/trudenboy/sendspin-bt-bridge
-</footer>
-
-<script>
-let activeZone = null;
-
-const zoneColors = {1:'#18b0ff', 2:'#0fd47a', 3:'#f5a623', 4:'#00e5cc'};
-
-function selectZone(n) {
-  // clear previous
-  if (activeZone) {
-    document.getElementById('zone'+activeZone).classList.remove('active');
-    document.getElementById('zi'+activeZone).classList.remove('active');
-  }
-  document.getElementById('panel-default').style.display='none';
-
-  if (activeZone === n) {
-    // deselect
-    activeZone = null;
-    document.getElementById('panel-default').style.display='block';
-    return;
-  }
-
-  activeZone = n;
-  document.getElementById('zone'+n).classList.add('active');
-  document.getElementById('zi'+n).classList.add('active');
-
-  // animate speaker rings in that zone
-  pulseSpeakers(n);
-}
-
-function pulseSpeakers(zone) {
-  document.querySelectorAll('.speaker-node[data-zone="'+zone+'"] .signal-ring').forEach(r => {
-    r.style.animationPlayState = 'running';
-  });
-}
-
-// stagger signal ring animations per speaker
-document.querySelectorAll('.speaker-node').forEach((node, i) => {
-  node.querySelectorAll('.signal-ring').forEach((ring, j) => {
-    ring.style.animationDelay = (i * 0.3 + j * 0.6) + 's';
-  });
-});
-</script>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1720 1020" width="1720" height="1020"
+     font-family="'Inter','Segoe UI',system-ui,sans-serif">
+<defs>
+  <pattern id="outdoor" patternUnits="userSpaceOnUse" width="14" height="14" patternTransform="rotate(45)">
+    <rect width="14" height="14" fill="#07130a"/>
+    <line x1="0" y1="0" x2="0" y2="14" stroke="#173d1a" stroke-width="2"/>
+  </pattern>
+  <filter id="sh"><feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000" flood-opacity="0.6"/></filter>
+  <marker id="ac" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="5" markerHeight="5" orient="auto">
+    <path d="M0,1 L7,4 L0,7z" fill="#22d3ee"/></marker>
+  <marker id="ag" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="5" markerHeight="5" orient="auto">
+    <path d="M0,1 L7,4 L0,7z" fill="#10b981"/></marker>
+  <marker id="aa" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="5" markerHeight="5" orient="auto">
+    <path d="M0,1 L7,4 L0,7z" fill="#f59e0b"/></marker>
+  <marker id="ai" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="5" markerHeight="5" orient="auto">
+    <path d="M0,1 L7,4 L0,7z" fill="#6366f1"/></marker>
+  <marker id="ar" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="5" markerHeight="5" orient="auto">
+    <path d="M0,1 L7,4 L0,7z" fill="#94a3b8"/></marker>
+</defs>
+
+<!-- Background -->
+<rect width="1720" height="1020" fill="#0d1117"/>
+
+<!-- ── TITLE ─────────────────────────────────────────────── -->
+<text x="660" y="28" text-anchor="middle" fill="#2d3a50" font-size="10" letter-spacing="5">SENDSPIN-BT-BRIDGE</text>
+<text x="660" y="56" text-anchor="middle" fill="#cbd5e1" font-size="22" font-weight="700" letter-spacing="2">MULTIROOM AUDIO · FLOOR PLAN</text>
+
+<!-- ═════════════════════════════════════════════════════════
+     BUILDING  x=30..1050  y=72..960
+     ═════════════════════════════════════════════════════════ -->
+
+<!-- Outer wall mass -->
+<rect x="30" y="72" width="1020" height="888" fill="#080c12"/>
+<!-- Outer border -->
+<rect x="30" y="72" width="1020" height="888" rx="4" fill="none" stroke="#1e3550" stroke-width="5"/>
+
+<!-- ── Internal vertical wall  x=590  (Living ↔ Kitchen / Conf ↔ Server) -->
+<rect x="588" y="72" width="5" height="888" fill="#1e3550"/>
+
+<!-- ── Internal horizontal wall  y=520  (top ↔ bottom) -->
+<rect x="30" y="518" width="1020" height="5" fill="#1e3550"/>
+
+<!-- door arcs -->
+<!-- Living ↔ Kitchen door at top wall y=518, x=440 -->
+<rect x="414" y="513" width="52" height="10" fill="#080c12"/>
+<path d="M414,518 A52,52 0 0,0 466,466" fill="none" stroke="#2d4a6e" stroke-width="1.2" stroke-dasharray="5,3"/>
+<!-- Conference ↔ Server door at bottom wall y=518, x=760 -->
+<rect x="734" y="513" width="52" height="10" fill="#080c12"/>
+<path d="M786,518 A52,52 0 0,1 786,570" fill="none" stroke="#2d4a6e" stroke-width="1.2" stroke-dasharray="5,3"/>
+<!-- Partition door at x=588, living/conf junction y=680 -->
+<rect x="583" y="660" width="10" height="52" fill="#080c12"/>
+<path d="M593,660 A52,52 0 0,1 641,660" fill="none" stroke="#2d4a6e" stroke-width="1.2" stroke-dasharray="5,3"/>
+
+<!-- ═════════════════════════════════════════════════════════
+     LIVING ROOM  (34,76) → (585,515)
+     ═════════════════════════════════════════════════════════ -->
+<rect x="34" y="76" width="551" height="439" fill="#0b1726"/>
+
+<!-- windows north wall -->
+<line x1="90"  y1="76" x2="160" y2="76" stroke="#22d3ee" stroke-width="4" opacity="0.35"/>
+<line x1="280" y1="76" x2="390" y2="76" stroke="#22d3ee" stroke-width="4" opacity="0.35"/>
+<line x1="460" y1="76" x2="530" y2="76" stroke="#22d3ee" stroke-width="4" opacity="0.35"/>
+<!-- window sill marks -->
+<line x1="90"  y1="78" x2="160" y2="78" stroke="#22d3ee" stroke-width="1" opacity="0.2"/>
+<line x1="280" y1="78" x2="390" y2="78" stroke="#22d3ee" stroke-width="1" opacity="0.2"/>
+
+<!-- Room label -->
+<text x="310" y="97" text-anchor="middle" fill="#1a3d70" font-size="10" letter-spacing="5" font-weight="600">📍 LIVING ROOM</text>
+
+<!-- FURNITURE -->
+<!-- sofa -->
+<rect x="50"  y="408" width="210" height="52" rx="6" fill="#0a1521" stroke="#112030" stroke-width="1.2"/>
+<rect x="50"  y="386" width="52"  height="74" rx="6" fill="#0a1521" stroke="#112030" stroke-width="1.2"/>
+<rect x="208" y="386" width="52"  height="22" rx="4" fill="#0a1521" stroke="#112030" stroke-width="1.2"/>
+<!-- cushions -->
+<rect x="62"  y="420" width="56" height="28" rx="4" fill="#0d1c2e" stroke="#14273d" stroke-width="1"/>
+<rect x="128" y="420" width="56" height="28" rx="4" fill="#0d1c2e" stroke="#14273d" stroke-width="1"/>
+<rect x="194" y="420" width="56" height="28" rx="4" fill="#0d1c2e" stroke="#14273d" stroke-width="1"/>
+<!-- coffee table -->
+<rect x="110" y="474" width="100" height="58" rx="4" fill="none" stroke="#10203a" stroke-width="1.2"/>
+<!-- TV unit -->
+<rect x="380" y="408" width="180" height="18" rx="2" fill="#09111e" stroke="#1a3050" stroke-width="1"/>
+<rect x="450" y="426" width="40" height="12" fill="#09111e" stroke="#1a3050" stroke-width="1"/>
+<!-- rug -->
+<rect x="90" y="388" width="260" height="130" rx="8" fill="none" stroke="#0f2038" stroke-width="1" stroke-dasharray="3,4"/>
+<!-- bookshelf west wall -->
+<rect x="34" y="280" width="20" height="140" rx="2" fill="#0a1522" stroke="#0e2030" stroke-width="1"/>
+<line x1="34" y1="300" x2="54" y2="300" stroke="#0e2030" stroke-width="0.8"/>
+<line x1="34" y1="330" x2="54" y2="330" stroke="#0e2030" stroke-width="0.8"/>
+<line x1="34" y1="360" x2="54" y2="360" stroke="#0e2030" stroke-width="0.8"/>
+<line x1="34" y1="390" x2="54" y2="390" stroke="#0e2030" stroke-width="0.8"/>
+<!-- plant corner -->
+<circle cx="554" cy="492" r="18" fill="none" stroke="#102818" stroke-width="1.2"/>
+<circle cx="554" cy="492" r="10" fill="none" stroke="#173520" stroke-width="1"/>
+
+<!-- ── LIVING ROOM TECH ─────────────────────────────── -->
+<!-- BR1 -->
+<rect x="58" y="114" width="200" height="42" rx="7" fill="#091d2e" stroke="#22d3ee" stroke-width="1.8" filter="url(#sh)"/>
+<text x="158" y="131" text-anchor="middle" fill="#67e8f9" font-size="10.5" font-weight="700">🔗 sendspin-bt-bridge</text>
+<text x="158" y="147" text-anchor="middle" fill="#2e6e88" font-size="8.5">Raspberry Pi 5  ·  📶 Player: Living Room</text>
+<!-- A1H0 -->
+<rect x="58" y="170" width="94" height="28" rx="5" fill="#061812" stroke="#10b981" stroke-width="1.3"/>
+<text x="105" y="188" text-anchor="middle" fill="#6ee7b7" font-size="9.5">ᛒ hci0</text>
+<!-- A1H1 -->
+<rect x="164" y="170" width="94" height="28" rx="5" fill="#061812" stroke="#10b981" stroke-width="1.3"/>
+<text x="211" y="188" text-anchor="middle" fill="#6ee7b7" font-size="9.5">ᛒ hci1</text>
+<!-- BR1→adapters -->
+<line x1="105" y1="156" x2="105" y2="170" stroke="#22d3ee" stroke-width="1.3" marker-end="url(#ag)"/>
+<line x1="158" y1="156" x2="211" y2="170" stroke="#22d3ee" stroke-width="1.3" marker-end="url(#ag)"/>
+<!-- Speakers hci0 -->
+<rect x="58" y="214" width="170" height="28" rx="5" fill="#180f00" stroke="#f59e0b" stroke-width="1.1"/>
+<text x="143" y="232" text-anchor="middle" fill="#fcd34d" font-size="9">🔊 JBL Charge 5</text>
+<rect x="58" y="250" width="170" height="28" rx="5" fill="#180f00" stroke="#f59e0b" stroke-width="1.1"/>
+<text x="143" y="268" text-anchor="middle" fill="#fcd34d" font-size="9">🔊 Bose SoundLink Max</text>
+<!-- Speakers hci1 -->
+<rect x="300" y="214" width="170" height="28" rx="5" fill="#180f00" stroke="#f59e0b" stroke-width="1.1"/>
+<text x="385" y="232" text-anchor="middle" fill="#fcd34d" font-size="9">🔊 Sony SRS-XB43</text>
+<rect x="300" y="250" width="170" height="28" rx="5" fill="#180f00" stroke="#f59e0b" stroke-width="1.1"/>
+<text x="385" y="268" text-anchor="middle" fill="#fcd34d" font-size="9">🔊 Harman Kardon Aura</text>
+<!-- hci0 → speakers -->
+<line x1="105" y1="198" x2="105" y2="214" stroke="#10b981" stroke-width="1" marker-end="url(#aa)"/>
+<polyline points="105,198 105,244 143,244 143,250" fill="none" stroke="#10b981" stroke-width="1" marker-end="url(#aa)"/>
+<!-- hci1 → speakers -->
+<line x1="211" y1="198" x2="385" y2="214" stroke="#10b981" stroke-width="1" marker-end="url(#aa)"/>
+<polyline points="211,198 211,244 385,244 385,250" fill="none" stroke="#10b981" stroke-width="1" marker-end="url(#aa)"/>
+
+<!-- ═════════════════════════════════════════════════════════
+     KITCHEN  (593,76) → (1047,515)
+     ═════════════════════════════════════════════════════════ -->
+<rect x="593" y="76" width="454" height="439" fill="#0b1e16"/>
+
+<!-- windows north + east -->
+<line x1="660"  y1="76"  x2="760"  y2="76"  stroke="#22d3ee" stroke-width="4" opacity="0.35"/>
+<line x1="860"  y1="76"  x2="980"  y2="76"  stroke="#22d3ee" stroke-width="4" opacity="0.35"/>
+<line x1="1047" y1="160" x2="1047" y2="260" stroke="#22d3ee" stroke-width="4" opacity="0.35"/>
+
+<!-- Room label -->
+<text x="820" y="97" text-anchor="middle" fill="#1a4030" font-size="10" letter-spacing="5" font-weight="600">📍 KITCHEN</text>
+
+<!-- FURNITURE -->
+<!-- counter south wall -->
+<rect x="597" y="458" width="448" height="40" rx="3" fill="#091812" stroke="#0f2518" stroke-width="1.2"/>
+<!-- counter east wall -->
+<rect x="1005" y="100" width="40" height="350" rx="3" fill="#091812" stroke="#0f2518" stroke-width="1.2"/>
+<!-- sink in east counter -->
+<rect x="1008" y="200" width="34" height="50" rx="2" fill="#07120f" stroke="#162a1e" stroke-width="1.5"/>
+<circle cx="1025" cy="225" r="10" fill="none" stroke="#1a3525" stroke-width="1.5"/>
+<!-- kitchen island -->
+<rect x="690" y="370" width="220" height="72" rx="5" fill="none" stroke="#0f2518" stroke-width="1.4"/>
+<line x1="690" y1="406" x2="910" y2="406" stroke="#0f2518" stroke-width="0.8"/>
+<!-- stove burners on south counter -->
+<rect x="597" y="418" width="80" height="40" rx="2" fill="#091812" stroke="#0f2518" stroke-width="1"/>
+<circle cx="617" cy="430" r="7" fill="none" stroke="#162a1e" stroke-width="1.2"/>
+<circle cx="637" cy="430" r="7" fill="none" stroke="#162a1e" stroke-width="1.2"/>
+<circle cx="617" cy="450" r="7" fill="none" stroke="#162a1e" stroke-width="1.2"/>
+<circle cx="637" cy="450" r="7" fill="none" stroke="#162a1e" stroke-width="1.2"/>
+<!-- fridge -->
+<rect x="960" y="430" width="44" height="68" rx="3" fill="#091812" stroke="#0f2518" stroke-width="1.2"/>
+<line x1="982" y1="432" x2="982" y2="496" stroke="#0f2518" stroke-width="0.8"/>
+<!-- bar stools at island -->
+<ellipse cx="720" cy="360" rx="14" ry="8" fill="none" stroke="#0f2518" stroke-width="1"/>
+<ellipse cx="760" cy="360" rx="14" ry="8" fill="none" stroke="#0f2518" stroke-width="1"/>
+<ellipse cx="800" cy="360" rx="14" ry="8" fill="none" stroke="#0f2518" stroke-width="1"/>
+<ellipse cx="840" cy="360" rx="14" ry="8" fill="none" stroke="#0f2518" stroke-width="1"/>
+<ellipse cx="880" cy="360" rx="14" ry="8" fill="none" stroke="#0f2518" stroke-width="1"/>
+
+<!-- ── KITCHEN TECH ─────────────────────────────────── -->
+<!-- BR2 -->
+<rect x="608" y="114" width="200" height="42" rx="7" fill="#091d2e" stroke="#22d3ee" stroke-width="1.8" filter="url(#sh)"/>
+<text x="708" y="131" text-anchor="middle" fill="#67e8f9" font-size="10.5" font-weight="700">🔗 sendspin-bt-bridge</text>
+<text x="708" y="147" text-anchor="middle" fill="#2e6e88" font-size="8.5">Raspberry Pi 4  ·  📶 Player: Kitchen</text>
+<!-- A2H0 -->
+<rect x="608" y="170" width="94" height="28" rx="5" fill="#061812" stroke="#10b981" stroke-width="1.3"/>
+<text x="655" y="188" text-anchor="middle" fill="#6ee7b7" font-size="9.5">ᛒ hci0</text>
+<!-- A2H1 -->
+<rect x="714" y="170" width="94" height="28" rx="5" fill="#061812" stroke="#10b981" stroke-width="1.3"/>
+<text x="761" y="188" text-anchor="middle" fill="#6ee7b7" font-size="9.5">ᛒ hci1</text>
+<!-- BR2→adapters -->
+<line x1="655" y1="156" x2="655" y2="170" stroke="#22d3ee" stroke-width="1.3" marker-end="url(#ag)"/>
+<line x1="708" y1="156" x2="761" y2="170" stroke="#22d3ee" stroke-width="1.3" marker-end="url(#ag)"/>
+<!-- Speakers hci0 -->
+<rect x="608" y="214" width="152" height="28" rx="5" fill="#180f00" stroke="#f59e0b" stroke-width="1.1"/>
+<text x="684" y="232" text-anchor="middle" fill="#fcd34d" font-size="9">🔊 JBL Flip 6</text>
+<rect x="608" y="250" width="152" height="28" rx="5" fill="#180f00" stroke="#f59e0b" stroke-width="1.1"/>
+<text x="684" y="268" text-anchor="middle" fill="#fcd34d" font-size="9">🔊 UE Hyperboom</text>
+<!-- Speakers hci1 -->
+<rect x="820" y="214" width="200" height="28" rx="5" fill="#180f00" stroke="#f59e0b" stroke-width="1.1"/>
+<text x="920" y="232" text-anchor="middle" fill="#fcd34d" font-size="9">🔊 Anker Soundcore Motion</text>
+<!-- hci0 → speakers -->
+<line x1="655" y1="198" x2="684" y2="214" stroke="#10b981" stroke-width="1" marker-end="url(#aa)"/>
+<polyline points="655,198 655,244 684,244 684,250" fill="none" stroke="#10b981" stroke-width="1" marker-end="url(#aa)"/>
+<!-- hci1 → speakers -->
+<line x1="761" y1="198" x2="920" y2="214" stroke="#10b981" stroke-width="1" marker-end="url(#aa)"/>
+
+<!-- ═════════════════════════════════════════════════════════
+     CONFERENCE ROOM  (34,523) → (585,957)
+     ═════════════════════════════════════════════════════════ -->
+<rect x="34" y="523" width="551" height="434" fill="#12092a"/>
+
+<!-- windows south -->
+<line x1="90"  y1="957" x2="180" y2="957" stroke="#22d3ee" stroke-width="4" opacity="0.35"/>
+<line x1="280" y1="957" x2="420" y2="957" stroke="#22d3ee" stroke-width="4" opacity="0.35"/>
+<line x1="34"  y1="630" x2="34"  y2="720" stroke="#22d3ee" stroke-width="4" opacity="0.35"/>
+
+<!-- Room label -->
+<text x="310" y="544" text-anchor="middle" fill="#280e60" font-size="10" letter-spacing="4" font-weight="600">📍 CONFERENCE ROOM</text>
+
+<!-- FURNITURE – large table -->
+<rect x="90" y="720" width="400" height="190" rx="7" fill="none" stroke="#1a0e36" stroke-width="1.6"/>
+<!-- chairs top -->
+<rect x="108" y="702" width="36" height="16" rx="3" fill="none" stroke="#1a0e36" stroke-width="1.1"/>
+<rect x="158" y="702" width="36" height="16" rx="3" fill="none" stroke="#1a0e36" stroke-width="1.1"/>
+<rect x="208" y="702" width="36" height="16" rx="3" fill="none" stroke="#1a0e36" stroke-width="1.1"/>
+<rect x="258" y="702" width="36" height="16" rx="3" fill="none" stroke="#1a0e36" stroke-width="1.1"/>
+<rect x="308" y="702" width="36" height="16" rx="3" fill="none" stroke="#1a0e36" stroke-width="1.1"/>
+<rect x="358" y="702" width="36" height="16" rx="3" fill="none" stroke="#1a0e36" stroke-width="1.1"/>
+<rect x="408" y="702" width="36" height="16" rx="3" fill="none" stroke="#1a0e36" stroke-width="1.1"/>
+<!-- chairs bottom -->
+<rect x="108" y="912" width="36" height="16" rx="3" fill="none" stroke="#1a0e36" stroke-width="1.1"/>
+<rect x="158" y="912" width="36" height="16" rx="3" fill="none" stroke="#1a0e36" stroke-width="1.1"/>
+<rect x="208" y="912" width="36" height="16" rx="3" fill="none" stroke="#1a0e36" stroke-width="1.1"/>
+<rect x="258" y="912" width="36" height="16" rx="3" fill="none" stroke="#1a0e36" stroke-width="1.1"/>
+<rect x="308" y="912" width="36" height="16" rx="3" fill="none" stroke="#1a0e36" stroke-width="1.1"/>
+<rect x="358" y="912" width="36" height="16" rx="3" fill="none" stroke="#1a0e36" stroke-width="1.1"/>
+<rect x="408" y="912" width="36" height="16" rx="3" fill="none" stroke="#1a0e36" stroke-width="1.1"/>
+<!-- chairs left -->
+<rect x="62" y="736" width="16" height="32" rx="3" fill="none" stroke="#1a0e36" stroke-width="1.1"/>
+<rect x="62" y="780" width="16" height="32" rx="3" fill="none" stroke="#1a0e36" stroke-width="1.1"/>
+<rect x="62" y="824" width="16" height="32" rx="3" fill="none" stroke="#1a0e36" stroke-width="1.1"/>
+<rect x="62" y="868" width="16" height="32" rx="3" fill="none" stroke="#1a0e36" stroke-width="1.1"/>
+<!-- chairs right -->
+<rect x="502" y="736" width="16" height="32" rx="3" fill="none" stroke="#1a0e36" stroke-width="1.1"/>
+<rect x="502" y="780" width="16" height="32" rx="3" fill="none" stroke="#1a0e36" stroke-width="1.1"/>
+<rect x="502" y="824" width="16" height="32" rx="3" fill="none" stroke="#1a0e36" stroke-width="1.1"/>
+<rect x="502" y="868" width="16" height="32" rx="3" fill="none" stroke="#1a0e36" stroke-width="1.1"/>
+<!-- projector screen -->
+<rect x="90" y="938" width="400" height="14" rx="2" fill="#0c0818" stroke="#1a0e36" stroke-width="1"/>
+<!-- whiteboard west wall -->
+<rect x="34" y="544" width="16" height="140" rx="2" fill="#0d0820" stroke="#1a0e36" stroke-width="1"/>
+
+<!-- ── CONFERENCE ROOM TECH ────────────────────────── -->
+<!-- BR3 -->
+<rect x="58" y="558" width="200" height="42" rx="7" fill="#091d2e" stroke="#22d3ee" stroke-width="1.8" filter="url(#sh)"/>
+<text x="158" y="575" text-anchor="middle" fill="#67e8f9" font-size="10.5" font-weight="700">🔗 sendspin-bt-bridge</text>
+<text x="158" y="591" text-anchor="middle" fill="#2e6e88" font-size="8.5">Mini PC / NUC  ·  📶 Player: Conference</text>
+<!-- A3H0 -->
+<rect x="58" y="614" width="94" height="28" rx="5" fill="#061812" stroke="#10b981" stroke-width="1.3"/>
+<text x="105" y="632" text-anchor="middle" fill="#6ee7b7" font-size="9.5">ᛒ hci0</text>
+<!-- A3H1 -->
+<rect x="164" y="614" width="94" height="28" rx="5" fill="#061812" stroke="#10b981" stroke-width="1.3"/>
+<text x="211" y="632" text-anchor="middle" fill="#6ee7b7" font-size="9.5">ᛒ hci1</text>
+<!-- BR3→adapters -->
+<line x1="105" y1="600" x2="105" y2="614" stroke="#22d3ee" stroke-width="1.3" marker-end="url(#ag)"/>
+<line x1="158" y1="600" x2="211" y2="614" stroke="#22d3ee" stroke-width="1.3" marker-end="url(#ag)"/>
+<!-- Speakers hci0 -->
+<rect x="58" y="658" width="168" height="28" rx="5" fill="#180f00" stroke="#f59e0b" stroke-width="1.1"/>
+<text x="142" y="676" text-anchor="middle" fill="#fcd34d" font-size="9">🔊 JBL PartyBox 110</text>
+<rect x="58" y="694" width="168" height="28" rx="5" fill="#180f00" stroke="#f59e0b" stroke-width="1.1"/>
+<text x="142" y="712" text-anchor="middle" fill="#fcd34d" font-size="9">🔊 Sonos Move 2</text>
+<!-- Speakers hci1 -->
+<rect x="330" y="658" width="130" height="28" rx="5" fill="#180f00" stroke="#f59e0b" stroke-width="1.1"/>
+<text x="395" y="676" text-anchor="middle" fill="#fcd34d" font-size="9">🔊 B&amp;O A1</text>
+<rect x="330" y="694" width="130" height="28" rx="5" fill="#180f00" stroke="#f59e0b" stroke-width="1.1"/>
+<text x="395" y="712" text-anchor="middle" fill="#fcd34d" font-size="9">🔊 Marshall III</text>
+<!-- hci0 → speakers -->
+<line x1="105" y1="642" x2="105" y2="658" stroke="#10b981" stroke-width="1" marker-end="url(#aa)"/>
+<polyline points="105,642 105,688 142,688 142,694" fill="none" stroke="#10b981" stroke-width="1" marker-end="url(#aa)"/>
+<!-- hci1 → speakers -->
+<line x1="211" y1="642" x2="395" y2="658" stroke="#10b981" stroke-width="1" marker-end="url(#aa)"/>
+<polyline points="211,642 211,688 395,688 395,694" fill="none" stroke="#10b981" stroke-width="1" marker-end="url(#aa)"/>
+
+<!-- ═════════════════════════════════════════════════════════
+     SERVER ROOM + HALLWAY  (593,523) → (1047,957)
+     ═════════════════════════════════════════════════════════ -->
+<rect x="593" y="523" width="454" height="434" fill="#0a0c12"/>
+
+<!-- Sub-room: Server Room top portion -->
+<rect x="593" y="523" width="200" height="200" fill="#08090f" stroke="#1c2d44" stroke-width="1" stroke-dasharray="6,3"/>
+<text x="693" y="543" text-anchor="middle" fill="#1c2a40" font-size="8.5" letter-spacing="3">SERVER ROOM</text>
+
+<!-- Server rack -->
+<rect x="618" y="556" width="88" height="150" rx="4" fill="#06080e" stroke="#1c2d44" stroke-width="1.5"/>
+<text x="662" y="573" text-anchor="middle" fill="#1c2d44" font-size="8" font-weight="600">SERVER</text>
+<rect x="623" y="578" width="78" height="8"  rx="1" fill="#090e18" stroke="#1c2d44" stroke-width="0.5"/>
+<rect x="623" y="591" width="78" height="8"  rx="1" fill="#090e18" stroke="#1c2d44" stroke-width="0.5"/>
+<rect x="623" y="604" width="78" height="8"  rx="1" fill="#090e18" stroke="#1c2d44" stroke-width="0.5"/>
+<rect x="623" y="617" width="78" height="8"  rx="1" fill="#090e18" stroke="#1c2d44" stroke-width="0.5"/>
+<rect x="623" y="630" width="78" height="8"  rx="1" fill="#090e18" stroke="#1c2d44" stroke-width="0.5"/>
+<rect x="623" y="643" width="78" height="8"  rx="1" fill="#090e18" stroke="#1c2d44" stroke-width="0.5"/>
+<rect x="623" y="656" width="78" height="8"  rx="1" fill="#090e18" stroke="#1c2d44" stroke-width="0.5"/>
+<rect x="623" y="669" width="78" height="8"  rx="1" fill="#090e18" stroke="#1c2d44" stroke-width="0.5"/>
+<!-- status LEDs -->
+<circle cx="694" cy="582" r="3" fill="#22d3ee" opacity="0.9"/>
+<circle cx="694" cy="595" r="3" fill="#10b981" opacity="0.9"/>
+<circle cx="694" cy="608" r="3" fill="#22d3ee" opacity="0.7"/>
+<circle cx="694" cy="621" r="3" fill="#f59e0b" opacity="0.8"/>
+<circle cx="694" cy="634" r="3" fill="#22d3ee" opacity="0.9"/>
+<circle cx="694" cy="647" r="3" fill="#10b981" opacity="0.7"/>
+<circle cx="694" cy="660" r="3" fill="#22d3ee" opacity="0.9"/>
+<circle cx="694" cy="673" r="3" fill="#22d3ee" opacity="0.6"/>
+
+<!-- Network switch -->
+<rect x="720" y="600" width="100" height="28" rx="3" fill="#06080e" stroke="#1c2d44" stroke-width="1.2"/>
+<text x="770" y="613" text-anchor="middle" fill="#1c3450" font-size="7.5">🔌 LAN Switch</text>
+<line x1="730" y1="616" x2="730" y2="622" stroke="#22d3ee" stroke-width="1" opacity="0.5"/>
+<line x1="742" y1="616" x2="742" y2="622" stroke="#22d3ee" stroke-width="1" opacity="0.5"/>
+<line x1="754" y1="616" x2="754" y2="622" stroke="#10b981" stroke-width="1" opacity="0.5"/>
+<line x1="766" y1="616" x2="766" y2="622" stroke="#10b981" stroke-width="1" opacity="0.5"/>
+<line x1="778" y1="616" x2="778" y2="622" stroke="#f59e0b" stroke-width="1" opacity="0.5"/>
+<line x1="790" y1="616" x2="790" y2="622" stroke="#22d3ee" stroke-width="1" opacity="0.5"/>
+<line x1="802" y1="616" x2="802" y2="622" stroke="#22d3ee" stroke-width="1" opacity="0.5"/>
+
+<!-- HA box -->
+<rect x="618" y="740" width="200" height="44" rx="7" fill="#0c1f38" stroke="#18b0ff" stroke-width="1.8" filter="url(#sh)"/>
+<text x="718" y="758" text-anchor="middle" fill="#93c5fd" font-size="11" font-weight="700">🏠 Home Assistant</text>
+<text x="718" y="776" text-anchor="middle" fill="#3060a0" font-size="9">Automation · Dashboards · Scenes</text>
+
+<!-- MA box -->
+<rect x="618" y="798" width="200" height="44" rx="7" fill="#13103a" stroke="#6366f1" stroke-width="1.8" filter="url(#sh)"/>
+<text x="718" y="816" text-anchor="middle" fill="#a5b4fc" font-size="11" font-weight="700">🎵 Music Assistant</text>
+<text x="718" y="834" text-anchor="middle" fill="#4a47a0" font-size="9">Streaming · Playlists · EQ</text>
+
+<!-- HA ↔ MA -->
+<line x1="718" y1="784" x2="718" y2="798" stroke="#6366f1" stroke-width="1.6" marker-end="url(#ai)"/>
+<text x="826" y="793" fill="#252d45" font-size="8" font-style="italic">Media Players API</text>
+
+<!-- MA → 4 bridges via LAN (short labeled arrows from MA box to zone labels) -->
+<!-- Vertical indicator line from MA box -->
+<line x1="718" y1="842" x2="718" y2="870" stroke="#6366f1" stroke-width="1.2" stroke-dasharray="5,3"/>
+<rect x="633" y="870" width="170" height="50" rx="5" fill="#0c0e1a" stroke="#2e3060" stroke-width="1"/>
+<text x="718" y="885" text-anchor="middle" fill="#4a50a0" font-size="8.5" font-weight="600">WiFi / LAN → Players</text>
+<text x="718" y="900" text-anchor="middle" fill="#353866" font-size="8">Living Room · Kitchen</text>
+<text x="718" y="914" text-anchor="middle" fill="#353866" font-size="8">Conference · Terrace</text>
+
+<!-- Hall furniture: couch + plant -->
+<rect x="820" y="730" width="160" height="80" rx="5" fill="none" stroke="#141824" stroke-width="1.2"/>
+<rect x="840" y="748" width="50" height="44" rx="4" fill="#0c0f1a" stroke="#141824" stroke-width="1"/>
+<rect x="900" y="748" width="50" height="44" rx="4" fill="#0c0f1a" stroke="#141824" stroke-width="1"/>
+<circle cx="980" cy="890" r="22" fill="none" stroke="#0f1a0c" stroke-width="1.2"/>
+<circle cx="980" cy="890" r="12" fill="none" stroke="#142012" stroke-width="1"/>
+
+<!-- ═════════════════════════════════════════════════════════
+     TERRACE  (1070,72) → (1390,957)
+     ═════════════════════════════════════════════════════════ -->
+<rect x="1070" y="72" width="320" height="885" fill="url(#outdoor)"/>
+<rect x="1070" y="72" width="320" height="885" rx="4" fill="none" stroke="#1f4d24" stroke-width="2.5" stroke-dasharray="12,5"/>
+
+<!-- Pergola posts -->
+<rect x="1070" y="72"  width="12" height="12" rx="2" fill="#1a4020"/>
+<rect x="1376" y="72"  width="12" height="12" rx="2" fill="#1a4020"/>
+<rect x="1070" y="944" width="12" height="12" rx="2" fill="#1a4020"/>
+<rect x="1376" y="944" width="12" height="12" rx="2" fill="#1a4020"/>
+<!-- Pergola beams -->
+<line x1="1082" y1="78" x2="1376" y2="78" stroke="#1a4020" stroke-width="1.5" stroke-dasharray="18,8"/>
+<line x1="1082" y1="950" x2="1376" y2="950" stroke="#1a4020" stroke-width="1.5" stroke-dasharray="18,8"/>
+
+<!-- Room label -->
+<text x="1230" y="100" text-anchor="middle" fill="#1a4a20" font-size="10" letter-spacing="5" font-weight="600">📍 TERRACE</text>
+<text x="1230" y="116" text-anchor="middle" fill="#143518" font-size="9" letter-spacing="3">— OUTDOOR —</text>
+
+<!-- Outdoor furniture -->
+<!-- Round table -->
+<circle cx="1230" cy="540" r="75" fill="none" stroke="#152a18" stroke-width="1.5"/>
+<circle cx="1230" cy="540" r="10" fill="none" stroke="#152a18" stroke-width="1"/>
+<!-- chairs around table -->
+<rect x="1196" y="452" width="30" height="14" rx="3" fill="none" stroke="#152a18" stroke-width="1.1"/>
+<rect x="1244" y="452" width="30" height="14" rx="3" fill="none" stroke="#152a18" stroke-width="1.1"/>
+<rect x="1292" y="490" width="14" height="30" rx="3" fill="none" stroke="#152a18" stroke-width="1.1"/>
+<rect x="1292" y="540" width="14" height="30" rx="3" fill="none" stroke="#152a18" stroke-width="1.1"/>
+<rect x="1292" y="590" width="14" height="30" rx="3" fill="none" stroke="#152a18" stroke-width="1.1"/>
+<rect x="1244" y="624" width="30" height="14" rx="3" fill="none" stroke="#152a18" stroke-width="1.1"/>
+<rect x="1196" y="624" width="30" height="14" rx="3" fill="none" stroke="#152a18" stroke-width="1.1"/>
+<rect x="1154" y="590" width="14" height="30" rx="3" fill="none" stroke="#152a18" stroke-width="1.1"/>
+<rect x="1154" y="540" width="14" height="30" rx="3" fill="none" stroke="#152a18" stroke-width="1.1"/>
+<rect x="1154" y="490" width="14" height="30" rx="3" fill="none" stroke="#152a18" stroke-width="1.1"/>
+<!-- planters -->
+<circle cx="1105" cy="850" r="30" fill="none" stroke="#152a18" stroke-width="1.4"/>
+<circle cx="1105" cy="850" r="18" fill="none" stroke="#1a3520" stroke-width="1"/>
+<circle cx="1355" cy="850" r="30" fill="none" stroke="#152a18" stroke-width="1.4"/>
+<circle cx="1355" cy="850" r="18" fill="none" stroke="#1a3520" stroke-width="1"/>
+<circle cx="1105" cy="160" r="24" fill="none" stroke="#152a18" stroke-width="1.4"/>
+<circle cx="1355" cy="160" r="24" fill="none" stroke="#152a18" stroke-width="1.4"/>
+<!-- sun loungers -->
+<rect x="1090" y="370" width="60" height="160" rx="8" fill="none" stroke="#152a18" stroke-width="1.1"/>
+<rect x="1096" y="372" width="48" height="52" rx="6" fill="none" stroke="#152a18" stroke-width="1"/>
+<rect x="1320" y="370" width="60" height="160" rx="8" fill="none" stroke="#152a18" stroke-width="1.1"/>
+<rect x="1326" y="372" width="48" height="52" rx="6" fill="none" stroke="#152a18" stroke-width="1"/>
+
+<!-- ── TERRACE TECH ────────────────────────────────── -->
+<!-- BR4 -->
+<rect x="1086" y="132" width="200" height="42" rx="7" fill="#091d2e" stroke="#22d3ee" stroke-width="1.8" filter="url(#sh)"/>
+<text x="1186" y="149" text-anchor="middle" fill="#67e8f9" font-size="10.5" font-weight="700">🔗 sendspin-bt-bridge</text>
+<text x="1186" y="165" text-anchor="middle" fill="#2e6e88" font-size="8.5">RPi Zero 2W  ·  📶 Player: Terrace</text>
+<!-- A4H0 -->
+<rect x="1086" y="188" width="94" height="28" rx="5" fill="#061812" stroke="#10b981" stroke-width="1.3"/>
+<text x="1133" y="206" text-anchor="middle" fill="#6ee7b7" font-size="9.5">ᛒ hci0</text>
+<!-- BR4 → adapter -->
+<line x1="1133" y1="174" x2="1133" y2="188" stroke="#22d3ee" stroke-width="1.3" marker-end="url(#ag)"/>
+<!-- Speakers -->
+<rect x="1086" y="232" width="200" height="28" rx="5" fill="#180f00" stroke="#f59e0b" stroke-width="1.1"/>
+<text x="1186" y="250" text-anchor="middle" fill="#fcd34d" font-size="9">🔊 Ultimate Ears Epicboom</text>
+<rect x="1086" y="268" width="200" height="28" rx="5" fill="#180f00" stroke="#f59e0b" stroke-width="1.1"/>
+<text x="1186" y="286" text-anchor="middle" fill="#fcd34d" font-size="9">🔊 JBL Xtreme 3</text>
+<!-- hci0 → speakers -->
+<line x1="1133" y1="216" x2="1160" y2="232" stroke="#10b981" stroke-width="1" marker-end="url(#aa)"/>
+<polyline points="1133,216 1133,260 1160,260 1160,268" fill="none" stroke="#10b981" stroke-width="1" marker-end="url(#aa)"/>
+
+<!-- Remote user (outside building) on terrace -->
+<rect x="1140" y="736" width="190" height="44" rx="7" fill="#0c0e1a" stroke="#94a3b8" stroke-width="1.4" filter="url(#sh)"/>
+<text x="1235" y="754" text-anchor="middle" fill="#e2e8f0" font-size="10.5" font-weight="700">🧑‍💻 Remote User</text>
+<text x="1235" y="772" text-anchor="middle" fill="#64748b" font-size="8.5">Phone / Laptop · Terrace</text>
+
+<!-- Remote user → HA (routed to avoid cards) -->
+<polyline points="1140,758 1060,758 1060,720 818,720 818,740" fill="none" stroke="#94a3b8" stroke-width="1.2" stroke-dasharray="5,4" marker-end="url(#ar)"/>
+<text x="1088" y="712" fill="#475569" font-size="8" font-style="italic">WiFi / VPN</text>
+
+<!-- ═════════════════════════════════════════════════════════
+     LEGEND PANEL  (1410,72) → (1710,957)
+     ═════════════════════════════════════════════════════════ -->
+<rect x="1410" y="72" width="295" height="885" rx="6" fill="#08090f" stroke="#1a2234" stroke-width="1.5"/>
+<text x="1558" y="106" text-anchor="middle" fill="#2a3550" font-size="10" letter-spacing="4" font-weight="600">L E G E N D</text>
+<line x1="1430" y1="116" x2="1686" y2="116" stroke="#1a2234" stroke-width="1"/>
+
+<!-- Node type examples -->
+<rect x="1430" y="130" width="100" height="32" rx="6" fill="#091d2e" stroke="#22d3ee" stroke-width="1.6"/>
+<text x="1480" y="150" text-anchor="middle" fill="#67e8f9" font-size="9" font-weight="600">Bridge</text>
+<text x="1545" y="140" fill="#3a4a64" font-size="8.5">sendspin-bt-bridge</text>
+<text x="1545" y="154" fill="#2d3a52" font-size="8">instance per zone</text>
+
+<rect x="1430" y="178" width="100" height="32" rx="6" fill="#061812" stroke="#10b981" stroke-width="1.4"/>
+<text x="1480" y="199" text-anchor="middle" fill="#6ee7b7" font-size="9" font-weight="600">Adapter</text>
+<text x="1545" y="190" fill="#3a4a64" font-size="8.5">Bluetooth HCI</text>
+<text x="1545" y="204" fill="#2d3a52" font-size="8">hci0 / hci1</text>
+
+<rect x="1430" y="226" width="100" height="32" rx="6" fill="#180f00" stroke="#f59e0b" stroke-width="1.2"/>
+<text x="1480" y="247" text-anchor="middle" fill="#fcd34d" font-size="9" font-weight="600">Speaker</text>
+<text x="1545" y="238" fill="#3a4a64" font-size="8.5">Bluetooth A2DP</text>
+<text x="1545" y="252" fill="#2d3a52" font-size="8">speaker device</text>
+
+<rect x="1430" y="274" width="100" height="32" rx="6" fill="#0c1f38" stroke="#18b0ff" stroke-width="1.6"/>
+<text x="1480" y="295" text-anchor="middle" fill="#93c5fd" font-size="9" font-weight="600">HA</text>
+<text x="1545" y="286" fill="#3a4a64" font-size="8.5">Home Assistant</text>
+<text x="1545" y="300" fill="#2d3a52" font-size="8">automation &amp; control</text>
+
+<rect x="1430" y="322" width="100" height="32" rx="6" fill="#13103a" stroke="#6366f1" stroke-width="1.6"/>
+<text x="1480" y="343" text-anchor="middle" fill="#a5b4fc" font-size="9" font-weight="600">MA</text>
+<text x="1545" y="334" fill="#3a4a64" font-size="8.5">Music Assistant</text>
+<text x="1545" y="348" fill="#2d3a52" font-size="8">streaming &amp; playlists</text>
+
+<line x1="1430" y1="370" x2="1686" y2="370" stroke="#1a2234" stroke-width="1"/>
+<text x="1430" y="386" fill="#2a3550" font-size="8" letter-spacing="2">CONNECTIONS</text>
+
+<!-- Line legend -->
+<line x1="1430" y1="406" x2="1510" y2="406" stroke="#22d3ee" stroke-width="1.6" marker-end="url(#ag)"/>
+<text x="1522" y="410" fill="#3a4a64" font-size="8.5">Bridge → Adapter</text>
+
+<line x1="1430" y1="432" x2="1510" y2="432" stroke="#10b981" stroke-width="1.3" marker-end="url(#aa)"/>
+<text x="1522" y="436" fill="#3a4a64" font-size="8.5">Adapter → Speaker (BT A2DP)</text>
+
+<line x1="1430" y1="458" x2="1510" y2="458" stroke="#6366f1" stroke-width="1.1" stroke-dasharray="6,3" marker-end="url(#ai)"/>
+<text x="1522" y="462" fill="#3a4a64" font-size="8.5">HA ↔ MA (Media Players API)</text>
+
+<line x1="1430" y1="484" x2="1510" y2="484" stroke="#6366f1" stroke-width="1.1" stroke-dasharray="4,4" opacity="0.7"/>
+<text x="1522" y="488" fill="#3a4a64" font-size="8.5">MA → Bridges (LAN / WiFi)</text>
+
+<line x1="1430" y1="510" x2="1686" y2="510" stroke="#1a2234" stroke-width="1"/>
+<text x="1430" y="526" fill="#2a3550" font-size="8" letter-spacing="2">ZONES</text>
+
+<!-- Zone color swatches -->
+<rect x="1430" y="542" width="80" height="22" rx="3" fill="#0b1726"/>
+<rect x="1430" y="542" width="80" height="22" rx="3" fill="none" stroke="#1e3550" stroke-width="1"/>
+<text x="1520" y="557" fill="#3a4a64" font-size="8.5">Living Room (indoor)</text>
+
+<rect x="1430" y="574" width="80" height="22" rx="3" fill="#0b1e16"/>
+<rect x="1430" y="574" width="80" height="22" rx="3" fill="none" stroke="#1e3550" stroke-width="1"/>
+<text x="1520" y="589" fill="#3a4a64" font-size="8.5">Kitchen (indoor)</text>
+
+<rect x="1430" y="606" width="80" height="22" rx="3" fill="#12092a"/>
+<rect x="1430" y="606" width="80" height="22" rx="3" fill="none" stroke="#1e3550" stroke-width="1"/>
+<text x="1520" y="621" fill="#3a4a64" font-size="8.5">Conference (indoor)</text>
+
+<rect x="1430" y="638" width="80" height="22" rx="3" fill="url(#outdoor)"/>
+<rect x="1430" y="638" width="80" height="22" rx="3" fill="none" stroke="#1f4d24" stroke-width="1" stroke-dasharray="4,2"/>
+<text x="1520" y="653" fill="#3a4a64" font-size="8.5">Terrace (outdoor)</text>
+
+<line x1="1430" y1="676" x2="1686" y2="676" stroke="#1a2234" stroke-width="1"/>
+<text x="1430" y="692" fill="#2a3550" font-size="8" letter-spacing="2">AUDIO PROTOCOL</text>
+<text x="1430" y="712" fill="#283040" font-size="8.5">Bluetooth A2DP profile</text>
+<text x="1430" y="728" fill="#283040" font-size="8.5">PulseAudio/PipeWire sink routing</text>
+<text x="1430" y="744" fill="#283040" font-size="8.5">per-process PULSE_SINK isolation</text>
+
+<line x1="1430" y1="760" x2="1686" y2="760" stroke="#1a2234" stroke-width="1"/>
+<text x="1430" y="776" fill="#2a3550" font-size="8" letter-spacing="2">HARDWARE</text>
+<text x="1430" y="796" fill="#283040" font-size="8.5">Living: Raspberry Pi 5</text>
+<text x="1430" y="812" fill="#283040" font-size="8.5">Kitchen: Raspberry Pi 4</text>
+<text x="1430" y="828" fill="#283040" font-size="8.5">Conference: Mini PC / NUC</text>
+<text x="1430" y="844" fill="#283040" font-size="8.5">Terrace: Raspberry Pi Zero 2W</text>
+
+<!-- Compass -->
+<g transform="translate(1558,900)">
+  <circle r="26" fill="none" stroke="#1e2d44" stroke-width="1.5"/>
+  <polygon points="0,-20 6,-6 0,-10 -6,-6" fill="#22d3ee" opacity="0.8"/>
+  <polygon points="0,20 6,6 0,10 -6,6" fill="#2d3a55"/>
+  <line x1="-20" y1="0" x2="-12" y2="0" stroke="#2d3a55" stroke-width="1.5"/>
+  <line x1="12" y1="0" x2="20" y2="0" stroke="#2d3a55" stroke-width="1.5"/>
+  <text y="-28" text-anchor="middle" fill="#22d3ee" font-size="10" font-weight="700">N</text>
+  <text y="38"  text-anchor="middle" fill="#2d3a55" font-size="9">S</text>
+  <text x="-32" y="4" text-anchor="middle" fill="#2d3a55" font-size="9">W</text>
+  <text x="32"  y="4" text-anchor="middle" fill="#2d3a55" font-size="9">E</text>
+</g>
+
+<!-- ── CAPTION ─────────────────────────────────────────────── -->
+<text x="860" y="1010" text-anchor="middle" fill="#1a2234" font-size="9" letter-spacing="1">
+  github.com/trudenboy/sendspin-bt-bridge · multiroom audio floor plan
+</text>
+
+</svg>
 </body>
 </html>
