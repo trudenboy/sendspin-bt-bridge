@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.6] - 2026-03-04
+
+### Added
+- **Group filter for volume/pause controls**: New dropdown in the Group Controls panel
+  to filter operations by MA sync group. Selecting a group auto-checks only devices
+  in that group; volume, mute, and pause/unpause apply only to the selection.
+  Pause with a filtered selection uses per-player `/api/pause` calls for reliability
+  in subprocess mode.
+- **Timed re-anchor warning in Sync column**: Re-anchoring alert (with error ms) now
+  stays visible for `abs(static_delay_ms)` ms after the event, then reverts to
+  "✓ In sync — Re-anchors: N". Fallback is 3 s when no delay is configured.
+
+### Fixed
+- **Format column missing from device config table**: `preferred_format` input was added
+  in v2.5.5 but the `bt-header` grid had 7 columns instead of 8; added "Format" header
+  and updated `grid-template-columns` in both `.bt-header` and `.bt-device-row`.
+
 ## [2.5.5] - 2026-03-04
 
 ### Added
