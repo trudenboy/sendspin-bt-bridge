@@ -33,6 +33,7 @@ var volTimers = {};
 var volPending = {}; // deviceIndex -> true if user recently touched slider
 var reanchorShownAt = {};   // deviceIndex -> timestamp(ms) when last re-anchor event was detected
 var lastReanchorCount = {}; // deviceIndex -> reanchor_count at last render (to detect new events)
+var lastReanchorAt = {};    // deviceIndex -> last_reanchor_at string seen (catches count resets on stream restart)
 
 // ---- Utility ----
 
@@ -97,10 +98,13 @@ async function updateStatus() {
         if (sysEl) sysEl.textContent = info.join(' \u00b7 ');
 
         var devices = status.devices || [status];
-        // Reset group selection if device list changes (avoids stale index mapping)
+        // Reset index-keyed state if device list changes (avoids stale mappings)
         if (lastDevices.length !== devices.length ||
             !lastDevices.every(function(d, idx) { return d.player_name === devices[idx].player_name; })) {
             _groupSelected = {};
+            lastReanchorCount = {};
+            reanchorShownAt = {};
+            lastReanchorAt = {};
         }
         lastDevices = devices;
         var grid = document.getElementById('status-grid');
@@ -382,18 +386,24 @@ function populateDeviceCard(i, dev) {
     var syncDetail = document.getElementById('dsync-detail-' + i);
     if (syncEl) {
         var currCount = dev.reanchor_count || 0;
+        var currAt = dev.last_reanchor_at || '';
         if (!dev.playing) {
             syncEl.textContent = '\u2014';
             syncEl.style.color = '#9ca3af';
             if (syncDetail) syncDetail.textContent = '';
             delete reanchorShownAt[i];
             lastReanchorCount[i] = currCount;
+            lastReanchorAt[i] = currAt;
         } else {
-            // Detect a new re-anchor event: count increased since last render
-            if (lastReanchorCount[i] !== undefined && currCount > lastReanchorCount[i]) {
+            // Detect a new re-anchor event: count increased OR last_reanchor_at changed
+            // (count alone can reset to 0 on stream restart, causing missed detections)
+            var countIncreased = lastReanchorCount[i] !== undefined && currCount > lastReanchorCount[i];
+            var tsChanged = lastReanchorAt[i] !== undefined && currAt && currAt !== lastReanchorAt[i];
+            if (countIncreased || tsChanged) {
                 reanchorShownAt[i] = Date.now();
             }
             lastReanchorCount[i] = currCount;
+            lastReanchorAt[i] = currAt;
 
             var warningDuration = Math.max(Math.abs(dev.static_delay_ms || 0), 5000);
             var shownAt = reanchorShownAt[i];
@@ -1558,6 +1568,9 @@ var _statusInterval = null;
             if (lastDevices.length !== devices.length ||
                 !lastDevices.every(function(d, idx) { return d.player_name === devices[idx].player_name; })) {
                 _groupSelected = {};
+                lastReanchorCount = {};
+                reanchorShownAt = {};
+                lastReanchorAt = {};
             }
             lastDevices = devices;
             var grid = document.getElementById('status-grid');
