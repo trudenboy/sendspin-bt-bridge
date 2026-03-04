@@ -28,6 +28,8 @@ Once installed, each Bluetooth speaker appears as a regular player in Music Assi
 
 It runs entirely on your local network: no cloud accounts, no subscriptions, no internet connection required for playback.
 
+![Web dashboard showing 6 Bluetooth speakers with real-time playback status, volume controls and sync state](/sendspin-bt-bridge/screenshots/screenshot-dashboard-full.png)
+
 ## What you need
 
 - A Raspberry Pi, a PC running Home Assistant, or any Linux machine on your home network
