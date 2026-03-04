@@ -37,6 +37,13 @@ var lastReanchorAt = {};    // deviceIndex -> last_reanchor_at string seen (catc
 
 // ---- Utility ----
 
+function fmtMs(ms) {
+    var s = Math.floor(ms / 1000);
+    var m = Math.floor(s / 60);
+    s = s % 60;
+    return m + ':' + (s < 10 ? '0' : '') + s;
+}
+
 function formatSince(isoString) {
     if (!isoString) return '';
     try {
@@ -159,13 +166,13 @@ function buildDeviceCard(i) {
               '<span class="status-indicator" id="dbt-ind-' + i + '"></span>' +
               '<span id="dbt-txt-' + i + '">-</span>' +
               '<span class="conn-detail" id="dbt-adapter-' + i + '"></span>' +
-              '<span class="conn-since" id="dbt-since-' + i + '"></span>' +
+              '<span class="conn-hover-detail" id="dbt-mac-' + i + '"></span>' +
             '</div>' +
             '<div class="conn-row">' +
               '<span class="conn-tag">MA</span>' +
               '<span class="status-indicator" id="dsrv-ind-' + i + '"></span>' +
               '<span id="dsrv-txt-' + i + '">-</span>' +
-              '<span class="conn-detail" id="dsrv-uri-' + i + '"></span>' +
+              '<span class="conn-detail conn-hover-detail" id="dsrv-uri-' + i + '"></span>' +
             '</div>' +
           '</div>' +
           // Playback column (with inline track)
@@ -179,7 +186,10 @@ function buildDeviceCard(i) {
                 'onclick="onDevicePause(' + i + ')" title="Pause/Unpause">&#9646;&#9646;</button>' +
             '</div>' +
             '<div id="dtrack-' + i + '" class="device-track-inline"></div>' +
-            '<div class="ts" id="dplay-since-' + i + '"></div>' +
+            '<div class="track-progress-wrap" id="dprog-wrap-' + i + '" style="display:none;">' +
+              '<div class="track-progress-bar"><div class="track-progress-fill" id="dprog-fill-' + i + '"></div></div>' +
+              '<div class="track-progress-time" id="dprog-time-' + i + '"></div>' +
+            '</div>' +
           '</div>' +
           // Volume column
           '<div class="volume-col">' +
@@ -273,7 +283,7 @@ function populateDeviceCard(i, dev) {
     // Bluetooth
     var btInd   = document.getElementById('dbt-ind-' + i);
     var btTxt   = document.getElementById('dbt-txt-' + i);
-    var btSince = document.getElementById('dbt-since-' + i);
+    var btMacEl = document.getElementById('dbt-mac-' + i);
     if (dev.bluetooth_connected) {
         btInd.className = 'status-indicator active';
         btTxt.textContent = 'Connected';
@@ -288,7 +298,7 @@ function populateDeviceCard(i, dev) {
         btInd.className = 'status-indicator inactive';
         btTxt.textContent = 'Not Available';
     }
-    if (btSince) btSince.textContent = formatSince(dev.bluetooth_connected_at);
+    if (btMacEl) btMacEl.textContent = dev.bluetooth_mac || '';
 
     // Server
     var srvInd = document.getElementById('dsrv-ind-' + i);
@@ -322,8 +332,7 @@ function populateDeviceCard(i, dev) {
     // Playback
     var playInd   = document.getElementById('dplay-ind-' + i);
     var playTxt   = document.getElementById('dplay-' + i);
-    var playSince = document.getElementById('dplay-since-' + i);
-    var fmtEl     = document.getElementById('daudiofmt-' + i);
+    var fmtEl = document.getElementById('daudiofmt-' + i);
 
     // Color indicator: red=no sink (BT not ready), green=playing, yellow=stopped
     if (!dev.has_sink && dev.bluetooth_mac) {
@@ -337,8 +346,17 @@ function populateDeviceCard(i, dev) {
         if (playTxt) playTxt.textContent = '\u23f8 Stopped';
     }
 
-    // Since: above audioformat
-    if (playSince) playSince.textContent = formatSince(dev.state_changed_at);
+    // Track progress bar
+    var progWrap = document.getElementById('dprog-wrap-' + i);
+    var progFill = document.getElementById('dprog-fill-' + i);
+    var progTime = document.getElementById('dprog-time-' + i);
+    var hasProg = dev.playing && dev.track_duration_ms > 0 && dev.track_progress_ms != null;
+    if (progWrap) progWrap.style.display = hasProg ? '' : 'none';
+    if (hasProg && progFill && progTime) {
+        var pct = Math.min(100, (dev.track_progress_ms / dev.track_duration_ms) * 100);
+        progFill.style.width = pct + '%';
+        progTime.textContent = fmtMs(dev.track_progress_ms) + ' / ' + fmtMs(dev.track_duration_ms);
+    }
 
     // Audio format (strip codec prefix)
     if (fmtEl) {
@@ -425,8 +443,11 @@ function populateDeviceCard(i, dev) {
             } else {
                 delete reanchorShownAt[i];
                 syncEl.innerHTML = '<span style="color:#10b981;">&#10003; In sync</span>';
-                if (syncDetail) syncDetail.textContent = dev.reanchor_count
-                    ? 'Re-anchors: ' + dev.reanchor_count : '';
+                if (syncDetail) {
+                    var rc = dev.reanchor_count || 0;
+                    syncDetail.textContent = rc ? 'Re-anchors: ' + rc : '';
+                    syncDetail.style.color = rc > 100 ? 'var(--error-color)' : rc > 10 ? '#f59e0b' : '';
+                }
             }
         }
     }

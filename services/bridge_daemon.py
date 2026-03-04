@@ -266,5 +266,15 @@ class BridgeDaemon(SendspinDaemon):
         if not isinstance(metadata.artist, UndefinedField):
             self._bridge_status["current_artist"] = metadata.artist
             changed = True
+        progress = getattr(metadata, "progress", None)
+        if progress is not None:
+            tp = getattr(progress, "track_progress", None)
+            td = getattr(progress, "track_duration", None)
+            if tp is not None:
+                self._bridge_status["track_progress_ms"] = int(tp)
+                changed = True
+            if td is not None:
+                self._bridge_status["track_duration_ms"] = int(td)
+                changed = True
         if changed:
             self._notify()

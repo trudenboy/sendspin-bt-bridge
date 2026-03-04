@@ -82,6 +82,8 @@ class DeviceStatus:
     group_name: str | None = None
     group_id: str | None = None
     connected_server_url: str | None = None
+    track_progress_ms: int | None = None
+    track_duration_ms: int | None = None
 
     # ── Dict-compatible interface ──────────────────────────────────────────
 
@@ -342,6 +344,8 @@ class SendspinClient:
                 "state_changed_at",
                 "last_error",
                 "last_error_at",
+                "track_progress_ms",
+                "track_duration_ms",
             }
         )
         async for line in self._daemon_proc.stdout:

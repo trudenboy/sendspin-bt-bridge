@@ -465,6 +465,27 @@
             flex-shrink: 0; margin-left: auto; padding-left: 4px;
             white-space: nowrap;
         }
+        .conn-hover-detail {
+            display: none;
+            font-size: 11px;
+            color: var(--secondary-text-color);
+            margin-left: 4px;
+        }
+        .device-card:hover .conn-hover-detail,
+        .device-card:focus-within .conn-hover-detail { display: inline; }
+
+        /* Track progress bar */
+        .track-progress-wrap { margin-top: 4px; }
+        .track-progress-bar {
+            height: 3px;
+            background: var(--divider-color, rgba(0,0,0,0.12));
+            border-radius: 2px; overflow: hidden;
+        }
+        .track-progress-fill {
+            height: 100%; background: var(--primary-color);
+            border-radius: 2px; transition: width 0.5s linear;
+        }
+        .track-progress-time { font-size: 10px; color: var(--secondary-text-color); margin-top: 2px; }
         .conn-row .status-indicator { margin-right: 3px; }
         .conn-row > span:nth-child(3) { font-size: 13px; font-weight: 600; flex-shrink: 0; }
 
