@@ -51,6 +51,7 @@ class SendspinClient:
         static_delay_ms: float | None = None,
         listen_host: str | None = None,
         effective_bridge: str = "",
+        preferred_format: str | None = "flac:44100:16:2",
     ):
         self.player_name = player_name
         self.server_host = server_host
@@ -59,6 +60,7 @@ class SendspinClient:
         self.listen_port = listen_port  # port sendspin daemon listens on
         self.listen_host = listen_host  # explicit IP for WebSocket URL display (None = auto-detect)
         self.static_delay_ms = static_delay_ms  # per-device delay override (None = use env var)
+        self.preferred_format = preferred_format  # preferred audio format string (e.g. "flac:44100:16:2")
         self._effective_bridge = effective_bridge  # bridge instance label for MA device info
 
         # Status tracking
@@ -78,6 +80,7 @@ class SendspinClient:
             "reanchor_count": 0,
             "last_sync_error_ms": None,
             "reanchoring": False,
+            "audio_streaming": False,
             "state_changed_at": None,
             "ip_address": listen_host or self.get_ip_address(),
             "hostname": socket.gethostname(),
@@ -191,6 +194,7 @@ class SendspinClient:
                     "bluetooth_sink_name": self.bluetooth_sink_name,
                     "volume": self.status.get("volume", 100),
                     "settings_dir": f"/tmp/sendspin-{safe_id}",
+                    "preferred_format": self.preferred_format,
                 }
             )
 
@@ -454,6 +458,7 @@ async def main():
         static_delay_ms = device.get("static_delay_ms")
         if static_delay_ms is not None:
             static_delay_ms = float(static_delay_ms)
+        preferred_format = device.get("preferred_format", "flac:44100:16:2")
 
         client = SendspinClient(
             player_name,
@@ -464,6 +469,7 @@ async def main():
             static_delay_ms=static_delay_ms,
             listen_host=listen_host,
             effective_bridge=effective_bridge,
+            preferred_format=preferred_format or None,
         )
         if mac:
             bt_mgr = BluetoothManager(
