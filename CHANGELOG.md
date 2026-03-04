@@ -5,7 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.5.7] - 2026-03-04
+## [2.6.0] - 2026-03-05
+
+### Performance
+- **Real-time status via SSE**: Added `GET /api/status/stream` Server-Sent Events endpoint.
+  Browser now receives status pushes instantly on change instead of polling every 2 s (~300 req/min → ~0).
+  Falls back to 2 s polling automatically if SSE is not supported.
+- **Daemon crash recovery time**: Reduced `_status_monitor_loop` sleep from 10 s → 2 s.
+  Crash detection and restart now takes ≤4 s (was up to 20 s).
+- **Exponential backoff on daemon restart**: Crash-loop delay grows 1→2→4→8→30 s (max).
+  Resets to 1 s after a successful run. Prevents CPU spin on persistent errors.
+- **Status emission deduplication**: `daemon_process.py` now skips stdout writes when
+  status hasn't changed, reducing IPC noise by ~10× during steady-state playback.
+- **Volume config write debounce**: `/api/volume` now applies `pactl` change instantly and
+  schedules the `config.json` write 1 s after the last call. Prevents disk I/O storm when
+  dragging the volume slider.
+
+### Improved
+- **Sink name in UI**: Audio sink name (e.g. `bluez_output.FC_...`) now shown under the
+  volume slider. Shows ⚠ warning when BT is connected but no sink is detected.
+- **Volume slider pending state**: Slider fades to 55% opacity while a volume request is in
+  flight, giving clear visual feedback that the action was received.
+- **BT reconnecting animation**: Status indicator pulses orange during reconnection attempts
+  instead of showing a static red/inactive dot.
+- **Status keys whitelist**: `_read_subprocess_output()` now only merges known status keys
+  from the daemon subprocess, preventing unbounded dict growth from future subprocess bugs.
+
+
 
 ### Security
 - **Session cookie hardening**: Set `SESSION_COOKIE_SAMESITE=Lax` and `SESSION_COOKIE_HTTPONLY=True`

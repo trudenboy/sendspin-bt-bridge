@@ -14,8 +14,9 @@ import threading
 import time
 from datetime import datetime, timedelta
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, Response, jsonify, request
 
+import state
 from config import (
     BUILD_DATE,
     CONFIG_DIR,
@@ -57,6 +58,45 @@ _CHG_NAME_PAT = re.compile(r"\[CHG\]\s+Device\s+([0-9A-Fa-f:]{17})\s+Name:\s+(.*
 _CHG_RSSI_PAT = re.compile(r"\[CHG\]\s+Device\s+([0-9A-Fa-f:]{17})\s+RSSI:")
 _SHOW_CTRL_PAT = re.compile(r"^Controller\s+([0-9A-Fa-f:]{17})")
 _SHOW_DEV_PAT = re.compile(r"^Device\s+([0-9A-Fa-f:]{17})")
+
+# ---------------------------------------------------------------------------
+# Volume persistence debounce — decouple immediate pactl call from slow disk write
+# ---------------------------------------------------------------------------
+
+_volume_timers: dict[str, threading.Timer] = {}
+_volume_timers_lock = threading.Lock()
+
+
+def _persist_volume(mac: str, volume: int) -> None:
+    """Write volume to config.json (called via debounce timer, not inline)."""
+    with _volume_timers_lock:
+        _volume_timers.pop(mac, None)
+    if not CONFIG_FILE.exists():
+        return
+    try:
+        with _config_lock:
+            with open(CONFIG_FILE) as f:
+                cfg = json.load(f)
+            cfg.setdefault("LAST_VOLUMES", {})[mac] = volume
+            tmp = str(CONFIG_FILE) + ".tmp"
+            with open(tmp, "w") as f:
+                json.dump(cfg, f, indent=2)
+            os.replace(tmp, str(CONFIG_FILE))
+    except Exception as e:
+        logger.debug(f"Could not save volume for {mac}: {e}")
+
+
+def _schedule_volume_persist(mac: str, volume: int) -> None:
+    """Schedule a debounced config.json write 1 s after the last volume change."""
+    with _volume_timers_lock:
+        old = _volume_timers.pop(mac, None)
+        if old:
+            old.cancel()
+        t = threading.Timer(1.0, _persist_volume, args=(mac, volume))
+        t.daemon = True
+        _volume_timers[mac] = t
+        t.start()
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -141,6 +181,7 @@ def get_client_status_for(client):
         status["bluetooth_adapter_name"] = adapter_name
         status["bluetooth_adapter_hci"] = getattr(bt_mgr, "adapter_hci_name", "") if bt_mgr else ""
         status["has_sink"] = bool(getattr(client, "bluetooth_sink_name", None))
+        status["sink_name"] = getattr(client, "bluetooth_sink_name", None)
         status["bt_management_enabled"] = getattr(client, "bt_management_enabled", True)
 
         logger.debug(f"Status retrieved: {status}")
@@ -270,18 +311,8 @@ def set_volume():
                 if ok:
                     client.status["volume"] = volume
                     mac = getattr(getattr(client, "bt_manager", None), "mac_address", None)
-                    if mac and CONFIG_FILE.exists():
-                        try:
-                            with _config_lock:
-                                with open(CONFIG_FILE) as f:
-                                    cfg = json.load(f)
-                                cfg.setdefault("LAST_VOLUMES", {})[mac] = volume
-                                tmp = str(CONFIG_FILE) + ".tmp"
-                                with open(tmp, "w") as f:
-                                    json.dump(cfg, f, indent=2)
-                                os.replace(tmp, str(CONFIG_FILE))
-                        except Exception as e:
-                            logger.debug(f"Could not save volume for {mac}: {e}")
+                    if mac:
+                        _schedule_volume_persist(mac, volume)
                 results.append({"player": getattr(client, "player_name", "?"), "ok": ok})
         if not results:
             return jsonify({"success": False, "error": "No clients available"}), 503
@@ -513,6 +544,42 @@ def api_status():
     first = get_client_status_for(snapshot[0])
     result = {**first, "devices": [get_client_status_for(c) for c in snapshot]}
     return jsonify(result)
+
+
+@api_bp.route("/api/status/stream")
+def api_status_stream():
+    """Server-Sent Events endpoint — pushes status when it changes.
+
+    Clients connect once and receive real-time updates instead of polling
+    /api/status every 2 seconds.  A heartbeat comment is sent every 30 s to
+    keep the connection alive through proxies.
+    """
+
+    def _generate():
+        last_version = -1
+        while True:
+            cur = state._status_version
+            if cur != last_version:
+                last_version = cur
+                with _clients_lock:
+                    snapshot = list(_clients)
+                if snapshot:
+                    if len(snapshot) == 1:
+                        data = get_client_status_for(snapshot[0])
+                    else:
+                        first = get_client_status_for(snapshot[0])
+                        data = {**first, "devices": [get_client_status_for(c) for c in snapshot]}
+                    yield f"data: {json.dumps(data)}\n\n"
+            else:
+                # Wait up to 30 s for a status change (or send heartbeat)
+                state._status_event.wait(timeout=30)
+                yield ": heartbeat\n\n"
+
+    return Response(
+        _generate(),
+        mimetype="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 def _sync_ha_options(config: dict) -> None:

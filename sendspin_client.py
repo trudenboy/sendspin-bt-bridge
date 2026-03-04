@@ -17,6 +17,7 @@ import threading
 import time
 from datetime import datetime
 
+import state as _state
 from bluetooth_manager import BluetoothManager
 from config import (
     _CONFIG_PATH,
@@ -101,6 +102,7 @@ class SendspinClient:
         self._daemon_task: asyncio.Task | None = None  # stdout reader task
         self._bridge_daemon = None  # kept for API compatibility, always None in subprocess mode
         self._monitor_task: asyncio.Task | None = None
+        self._restart_delay: float = 1.0  # exponential backoff for unexpected daemon restarts
 
     def get_ip_address(self) -> str:
         """Get the primary IP address of this machine"""
@@ -140,15 +142,24 @@ class SendspinClient:
                         # Don't restart if BT is disconnected — monitor_and_reconnect
                         # will call start_sendspin() once BT reconnects.
                         if not self.bt_manager or self.bt_manager.connected:
-                            logger.warning("Daemon subprocess died unexpectedly, restarting...")
+                            logger.warning(
+                                "Daemon subprocess died unexpectedly, restarting in %.0fs...",
+                                self._restart_delay,
+                            )
+                            await asyncio.sleep(self._restart_delay)
+                            self._restart_delay = min(self._restart_delay * 2, 30.0)
                             await self.start_sendspin()
                         else:
+                            self._restart_delay = 1.0  # reset when BT drives the restart
                             logger.info("Daemon subprocess stopped; waiting for BT to reconnect")
+                    else:
+                        # Daemon alive — reset backoff
+                        self._restart_delay = 1.0
 
-                await asyncio.sleep(10)
+                await asyncio.sleep(2)
             except Exception as e:
                 logger.error(f"Error updating status: {e}")
-                await asyncio.sleep(10)
+                await asyncio.sleep(2)
 
     async def start_sendspin(self) -> None:
         """Start the sendspin daemon as an isolated subprocess with PULSE_SINK routing."""
@@ -242,6 +253,28 @@ class SendspinClient:
             "error": logger.error,
             "critical": logger.critical,
         }
+        # Whitelist of keys accepted from subprocess — prevents unbounded status dict growth
+        _ALLOWED_KEYS = frozenset(
+            {
+                "playing",
+                "connected",
+                "server_connected",
+                "server_connected_at",
+                "connected_server_url",
+                "group_id",
+                "group_name",
+                "audio_format",
+                "audio_streaming",
+                "volume",
+                "muted",
+                "reanchoring",
+                "reanchor_count",
+                "last_sync_error_ms",
+                "current_track",
+                "current_artist",
+                "state_changed_at",
+            }
+        )
         async for line in self._daemon_proc.stdout:
             try:
                 msg = json.loads(line.decode().strip())
@@ -250,14 +283,15 @@ class SendspinClient:
             if msg.get("type") == "status":
                 # Track volume changes for persistence
                 prev_volume = self.status.get("volume")
-                # Merge subprocess status into our status dict (excluding 'type' key)
+                # Merge only whitelisted keys from subprocess status
                 for k, v in msg.items():
-                    if k != "type":
+                    if k in _ALLOWED_KEYS:
                         self.status[k] = v
                 new_volume = self.status.get("volume")
                 _mac = self.bt_manager.mac_address if self.bt_manager else None
                 if new_volume is not None and isinstance(new_volume, int) and new_volume != prev_volume and _mac:
                     _save_device_volume(_mac, new_volume)
+                _state.notify_status_changed()
             elif msg.get("type") == "log":
                 log_fn = _LOG_METHODS.get(msg.get("level", "info"), logger.info)
                 log_fn("[%s/proc] %s", self.player_name, msg.get("msg", ""))

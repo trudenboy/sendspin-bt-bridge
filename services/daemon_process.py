@@ -99,7 +99,12 @@ def _setup_logging() -> None:
 
 
 def _emit_status(status: dict) -> None:
-    """Serialize status dict and write to stdout as a single JSON line."""
+    """Serialize status dict and write to stdout as a single JSON line.
+
+    De-duplicates: if the serialized payload is identical to the last emission,
+    the write is skipped to avoid flooding the parent with no-op updates.
+    """
+    global _last_status_json
     # Emit only JSON-serialisable values
     serialisable = {}
     for k, v in status.items():
@@ -108,7 +113,14 @@ def _emit_status(status: dict) -> None:
             serialisable[k] = v
         except TypeError:
             serialisable[k] = str(v)
-    print(json.dumps({"type": "status", **serialisable}), flush=True)
+    payload = json.dumps({"type": "status", **serialisable}, sort_keys=True)
+    if payload == _last_status_json:
+        return
+    _last_status_json = payload
+    print(payload, flush=True)
+
+
+_last_status_json: str = ""
 
 
 # ---------------------------------------------------------------------------
