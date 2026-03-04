@@ -27,6 +27,12 @@ app = Flask(__name__, template_folder="templates", static_folder="static")
 _startup_config = load_config()
 app.secret_key = ensure_secret_key(_startup_config)
 
+# Harden session cookies: SameSite=Lax prevents cross-site request forgery
+# (all POST endpoints also use request.get_json() which rejects form-encoded
+# bodies, providing defence-in-depth).  HttpOnly prevents JS cookie access.
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+
 # Cache AUTH_ENABLED at startup so _check_auth() never reads config.json
 # on every request.  Like all other settings, a change takes effect after
 # the service is restarted (same behaviour as SENDSPIN_SERVER, etc.).

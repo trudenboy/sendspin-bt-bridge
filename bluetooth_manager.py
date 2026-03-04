@@ -182,7 +182,7 @@ class BluetoothManager:
             return adapter
         try:
             result = subprocess.run(
-                ["bash", "-c", "bluetoothctl list 2>/dev/null"],
+                ["bluetoothctl", "list"],
                 capture_output=True,
                 text=True,
                 timeout=5,

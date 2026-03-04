@@ -260,11 +260,13 @@ async def aget_server_name() -> str:
 
 def _run(coro):
     """Run *coro* synchronously in a fresh event loop (safe from any thread)."""
-    loop = asyncio.new_event_loop()
+    loop = None
     try:
+        loop = asyncio.new_event_loop()
         return loop.run_until_complete(coro)
     finally:
-        loop.close()
+        if loop is not None:
+            loop.close()
 
 
 def list_sinks() -> list[dict]:
