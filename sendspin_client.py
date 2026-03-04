@@ -156,6 +156,7 @@ class SendspinClient:
         self._bridge_daemon = None  # kept for API compatibility, always None in subprocess mode
         self._monitor_task: asyncio.Task | None = None
         self._restart_delay: float = 1.0  # exponential backoff for unexpected daemon restarts
+        self._start_sendspin_lock: asyncio.Lock | None = None  # set in run(), guards concurrent starts
 
     def _update_status(self, updates: dict) -> None:
         """Thread-safe update of self.status; notifies SSE listeners."""
@@ -230,7 +231,15 @@ class SendspinClient:
 
     async def start_sendspin(self) -> None:
         """Start the sendspin daemon as an isolated subprocess with PULSE_SINK routing."""
-        await self._start_sendspin_inner()
+        lock = self._start_sendspin_lock
+        if lock is None:
+            await self._start_sendspin_inner()
+            return
+        if lock.locked():
+            logger.debug(f"[{self.player_name}] start_sendspin already in progress, skipping duplicate")
+            return
+        async with lock:
+            await self._start_sendspin_inner()
 
     async def _start_sendspin_inner(self) -> None:
         """Spawn daemon_process.py subprocess with PULSE_SINK in its environment."""
@@ -427,6 +436,7 @@ class SendspinClient:
     async def run(self):
         """Main run loop"""
         self.running = True
+        self._start_sendspin_lock = asyncio.Lock()
 
         # Start Sendspin player first (don't block on Bluetooth)
         if self.bt_management_enabled:

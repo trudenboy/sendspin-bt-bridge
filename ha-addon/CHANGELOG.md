@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.9] - 2026-03-04
+
+### Fixed
+- Concurrent reconnect race: duplicate `configure_bluetooth_audio()` and double daemon spawns on BT reconnect eliminated via threading/asyncio locks
+- Duplicate `start_sendspin()` calls dropped when daemon is already starting
+
+### Improved
+- Web UI: EQ bars moved beside player name, triggered by playing state
+- Web UI: devices sorted by MA sync group within activity level; ungrouped last
+- Web UI: slash-separated compilation names truncated to "Artist +N" with full tooltip; long names no longer overflow cards
+
 ## [2.6.8] - 2026-03-04
 
 ### Fixed

@@ -29,6 +29,16 @@ var currentLogLevel = 'all';
 var btAdapters = [];
 var btManualAdapters = [];
 var lastDevices = [];
+
+// Return first slash-separated segment with "+N" suffix if list has more items.
+// E.g. "A/B/C" → "A +2". Single values pass through unchanged.
+function _firstOfSlash(str) {
+    if (!str) return str;
+    var i = str.indexOf('/');
+    if (i === -1) return str;
+    var count = str.split('/').length - 1;
+    return str.substring(0, i).trim() + ' +' + count;
+}
 var volTimers = {};
 var volPending = {}; // deviceIndex -> true if user recently touched slider
 var reanchorShownAt = {};   // deviceIndex -> timestamp(ms) when last re-anchor event was detected
@@ -108,7 +118,11 @@ async function updateStatus() {
         var devices = status.devices || [status];
         var sorted = devices.slice().sort(function(a, b) {
             var score = function(d) { return d.playing ? 2 : (d.bluetooth_connected ? 1 : 0); };
-            return score(b) - score(a);
+            var sd = score(b) - score(a);
+            if (sd !== 0) return sd;
+            var ga = a.group_id || '\uffff';
+            var gb = b.group_id || '\uffff';
+            return ga < gb ? -1 : ga > gb ? 1 : 0;
         });
         // Reset index-keyed state if device list changes (avoids stale mappings)
         if (lastDevices.length !== sorted.length ||
@@ -167,6 +181,10 @@ function buildDeviceCard(i) {
             '<input type="checkbox" class="device-select-cb" id="dsel-' + i + '" checked' +
               ' onchange="onDeviceSelect(' + i + ', this.checked)">' +
             '<div class="device-card-title" id="dname-' + i + '">Device ' + (i+1) + '</div>' +
+            '<div class="eq-bars" id="deq-' + i + '">' +
+              '<div class="eq-bar"></div><div class="eq-bar"></div>' +
+              '<div class="eq-bar"></div><div class="eq-bar"></div>' +
+            '</div>' +
           '</div>' +
           '<div class="group-badge" id="dgroup-' + i + '" style="display:none"></div>' +
           '<div class="device-mac identity-detail" id="dmac-' + i + '"></div>' +
@@ -210,10 +228,6 @@ function buildDeviceCard(i) {
           '<div class="volume-col">' +
             '<div class="status-label">Volume</div>' +
             '<div class="volume-row">' +
-              '<div class="eq-bars" id="deq-' + i + '">' +
-                '<div class="eq-bar"></div><div class="eq-bar"></div>' +
-                '<div class="eq-bar"></div><div class="eq-bar"></div>' +
-              '</div>' +
               '<input type="range" min="0" max="100" value="100" ' +
                 'class="volume-slider" id="vslider-' + i + '" ' +
                 'oninput="onVolumeInput(' + i + ', this.value)">' +
@@ -405,13 +419,18 @@ function populateDeviceCard(i, dev) {
     if (trackEl) {
         // Persist track on pause — clear only when both fields are empty
         if (dev.current_artist || dev.current_track) {
-            trackEl.textContent = dev.current_artist && dev.current_track
+            var fullText = dev.current_artist && dev.current_track
                 ? dev.current_artist + ' \u2014 ' + dev.current_track
                 : (dev.current_artist || dev.current_track || '');
+            trackEl.textContent = _firstOfSlash(dev.current_artist) && _firstOfSlash(dev.current_track)
+                ? _firstOfSlash(dev.current_artist) + ' \u2014 ' + _firstOfSlash(dev.current_track)
+                : _firstOfSlash(dev.current_artist || dev.current_track || '');
+            trackEl.title = fullText;
             trackEl.style.color = dev.playing
                 ? 'var(--primary-text-color)' : 'var(--secondary-text-color)';
         } else {
             trackEl.textContent = '';
+            trackEl.title = '';
         }
     }
     // Delay badge — only show when playing (3.1)
@@ -503,7 +522,7 @@ function populateDeviceCard(i, dev) {
 
     // Equalizer — show only when audio data is actually streaming
     var eqEl = document.getElementById('deq-' + i);
-    if (eqEl) eqEl.classList.toggle('active', !!dev.audio_streaming);
+    if (eqEl) eqEl.classList.toggle('active', !!dev.playing);
 
     // Mute button — attach handler once, update icon on every poll
     var muteBtn = document.getElementById('dmute-' + i);

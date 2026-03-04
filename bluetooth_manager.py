@@ -13,6 +13,7 @@ import json
 import logging
 import re
 import subprocess
+import threading
 import time
 from datetime import datetime
 
@@ -120,6 +121,7 @@ class BluetoothManager:
         # selecting by MAC address works because D-Bus objects use MACs, not hciN names.
         self._adapter_select = self._resolve_adapter_select(adapter) if adapter else ""
         self.management_enabled: bool = True  # False = released; monitor loop skips reconnect
+        self._connect_lock = threading.Lock()  # prevents concurrent connect_device() calls
 
         # Resolve effective adapter MAC for display (handles empty/default adapter case)
         if self._adapter_select:
@@ -426,6 +428,18 @@ class BluetoothManager:
 
     def connect_device(self) -> bool:
         """Connect to the Bluetooth device"""
+        if not self._connect_lock.acquire(blocking=False):
+            logger.debug(f"[{self.device_name}] connect_device already in progress, waiting...")
+            with self._connect_lock:  # wait for ongoing call to finish
+                pass
+            return self.is_device_connected()
+        try:
+            return self._connect_device_inner()
+        finally:
+            self._connect_lock.release()
+
+    def _connect_device_inner(self) -> bool:
+        """Connect to the Bluetooth device (called with _connect_lock held)"""
         # First check if already connected
         if self.is_device_connected():
             logger.info("Device already connected")

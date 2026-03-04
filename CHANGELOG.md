@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.9] - 2026-03-04
+
+### Fixed
+- **Concurrent reconnect race**: `BluetoothManager.connect_device()` now uses a `threading.Lock` — a second concurrent call waits for the first and returns its result, eliminating duplicate `configure_bluetooth_audio()` runs and double subprocess spawns on reconnect
+- **Duplicate `start_sendspin()` guard**: `asyncio.Lock` on `SendspinClient.start_sendspin()` drops concurrent calls that arrive while a daemon is already starting
+
+### Improved
+- **Web UI — EQ bars**: animated EQ bars moved from the Volume column to beside the player name (like Music Assistant); triggered by `playing` state instead of `audio_streaming`
+- **Web UI — Device sort**: within the same activity level (playing / connected / inactive), devices are grouped by MA sync group; ungrouped devices appear last
+- **Web UI — Long track/artist names**: slash-separated compilation names (e.g. `"A/B/C"`) truncated to `"A +2"` with full text in tooltip; column ellipsis fixed via `min-width: 0` on flex children
+
 ## [2.6.8] - 2026-03-04
 
 ### Fixed

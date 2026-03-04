@@ -191,6 +191,7 @@
         }
         .device-rows > div {
             grid-row: 1; padding: 0 16px; border-right: 1px solid var(--divider-color);
+            min-width: 0; overflow: hidden;
         }
         .device-rows > div:last-child { border-right: none; }
         .device-rows .status-label { font-size: 11px; color: var(--secondary-text-color); margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.04em; }
@@ -226,8 +227,6 @@
             height: 14px;
         }
         .eq-bars.active { display: flex; }
-        .volume-row .eq-bars { display: none; flex-shrink: 0; margin-right: 4px; }
-        .volume-row .eq-bars.active { display: flex; }
         .eq-bar {
             width: 3px;
             border-radius: 1px;
