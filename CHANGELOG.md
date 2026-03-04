@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.1] - 2026-03-04
+
+### Fixed
+- **Per-device pause button**: Used `os.getpid()` (Flask process) instead of daemon subprocess PID for D-Bus lookup — button now correctly matches the sendspin subprocess and sends pause/play (m2)
+- **asyncio deprecation**: Replaced 5 uses of `asyncio.get_event_loop()` with `asyncio.get_running_loop()` — eliminates DeprecationWarning in Python 3.12, prevents RuntimeError in Python 3.14 (C2)
+- **Daemon stderr silenced**: Changed `stderr=DEVNULL` to `stderr=PIPE` with `_read_subprocess_stderr()` task — crashes and library errors written to stderr are now logged as warnings (M4)
+- **assert in production**: Replaced `assert` statements in `bluetooth_manager.py` and `services/bridge_daemon.py` with explicit `RuntimeError` raises — survives Python `-O` optimization flag (M3)
+
+### Security / Stability
+- **Thread-safe device status**: Added `threading.Lock` (`_status_lock`) to `SendspinClient` and `_update_status()` helper — eliminates data races between asyncio loop, D-Bus callback thread, and Flask WSGI threads (C1)
+- **Adapter cache TOCTOU**: Added `_adapter_cache_lock` with double-checked locking in `state.py` — prevents concurrent WSGI threads from double-loading the adapter name cache (M5)
+
+### Performance
+- **Async BT scan**: `POST /api/bt/scan` now returns `{"job_id": "..."}` immediately; poll `GET /api/bt/scan/result/<id>` for result. Scan runs in a background thread — no longer blocks WSGI workers for 11–17 s (M1)
+- **Parallel bluetoothctl info**: Device enrichment during scan uses `ThreadPoolExecutor(max_workers=8)` — 50 devices enriched in parallel instead of sequentially (M1)
+- **BT poll logs to DEBUG**: Reduced log verbosity from INFO to DEBUG for polling loop entries — eliminates ~720 log lines/hour/device at steady state (M6)
+
+### Code Quality
+- **Duplicate volume persistence**: Removed duplicated `open/json.load/dump/os.replace` in `routes/api.py`; now delegates to `config.save_device_volume()` (m7)
+- **Config path consolidation**: Removed `_CONFIG_PATH` string variable; all code uses `CONFIG_FILE: Path` from `config.py` (TD2)
+- **Reconnect retry deduplication**: Extracted `_handle_reconnect_failure()` method in `BluetoothManager` — eliminates duplicated auto-disable logic between `_monitor_polling` and `_monitor_dbus` (TD1)
+- **HA config translation script**: Moved 85-line Python heredoc from `entrypoint.sh` to `scripts/translate_ha_config.py` — now lintable, typed, and `sendspin_port` saved as `int` instead of `str` (TD3)
+- **DeviceStatus dataclass**: `SendspinClient.status` is now a typed `@dataclass` instead of a plain dict — prevents unbounded key growth, enables static type checking (TD4)
+- **Late import removed**: `routes/views.py` no longer imports from `web_interface`; reads `current_app.config["AUTH_ENABLED"]` instead (m1)
+- **Healthcheck fix**: Dockerfile healthcheck now checks web UI reachability only — no longer marks container unhealthy when BT speaker is disconnected (normal state on startup) (minor)
+- **XSS prevention**: System info display uses `textContent` instead of `innerHTML` in app.js (m5)
+
 ## [2.6.0] - 2026-03-05
 
 ### Performance

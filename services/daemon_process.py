@@ -130,7 +130,7 @@ _last_status_json: str = ""
 
 async def _read_commands(daemon_ref: list, stop_event: asyncio.Event) -> None:
     """Read JSON commands from stdin and dispatch them."""
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     reader = asyncio.StreamReader()
     protocol = asyncio.StreamReaderProtocol(reader)
     await loop.connect_read_pipe(lambda: protocol, sys.stdin)

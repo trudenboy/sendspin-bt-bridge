@@ -4,6 +4,7 @@ API Blueprint for sendspin-bt-bridge.
 All /api/* routes and the helper functions they depend on.
 """
 
+import concurrent.futures
 import json
 import logging
 import os
@@ -12,6 +13,7 @@ import signal
 import subprocess
 import threading
 import time
+import uuid
 from datetime import datetime, timedelta
 
 from flask import Blueprint, Response, jsonify, request
@@ -24,6 +26,9 @@ from config import (
     DEFAULT_CONFIG,
     VERSION,
     _config_lock,
+)
+from config import (
+    save_device_volume as _save_device_volume,
 )
 from services import (
     bt_remove_device as _bt_remove_device,
@@ -39,7 +44,14 @@ from services.pulse import (
     set_sink_mute,
     set_sink_volume,
 )
-from state import _clients_lock, get_adapter_name, load_adapter_name_cache
+from state import (
+    _clients_lock,
+    create_scan_job,
+    finish_scan_job,
+    get_adapter_name,
+    get_scan_job,
+    load_adapter_name_cache,
+)
 from state import clients as _clients
 
 logger = logging.getLogger(__name__)
@@ -71,19 +83,7 @@ def _persist_volume(mac: str, volume: int) -> None:
     """Write volume to config.json (called via debounce timer, not inline)."""
     with _volume_timers_lock:
         _volume_timers.pop(mac, None)
-    if not CONFIG_FILE.exists():
-        return
-    try:
-        with _config_lock:
-            with open(CONFIG_FILE) as f:
-                cfg = json.load(f)
-            cfg.setdefault("LAST_VOLUMES", {})[mac] = volume
-            tmp = str(CONFIG_FILE) + ".tmp"
-            with open(tmp, "w") as f:
-                json.dump(cfg, f, indent=2)
-            os.replace(tmp, str(CONFIG_FILE))
-    except Exception as e:
-        logger.debug(f"Could not save volume for {mac}: {e}")
+    _save_device_volume(mac, volume)
 
 
 def _schedule_volume_persist(mac: str, volume: int) -> None:
@@ -149,7 +149,8 @@ def get_client_status_for(client):
                 "bluetooth_mac": None,
             }
 
-        status = client.status.copy()
+        with client._status_lock:
+            status = client.status.copy()
 
         if "uptime_start" in status:
             uptime = datetime.now() - status["uptime_start"]
@@ -309,13 +310,11 @@ def set_volume():
             if client.bluetooth_sink_name:
                 ok = set_sink_volume(client.bluetooth_sink_name, volume)
                 if ok:
-                    client.status["volume"] = volume
+                    client._update_status({"volume": volume})
                     mac = getattr(getattr(client, "bt_manager", None), "mac_address", None)
                     if mac:
                         _schedule_volume_persist(mac, volume)
                 results.append({"player": getattr(client, "player_name", "?"), "ok": ok})
-        if results:
-            state.notify_status_changed()
         if not results:
             return jsonify({"success": False, "error": "No clients available"}), 503
         return jsonify({"success": True, "volume": volume, "results": results})
@@ -347,7 +346,7 @@ def set_mute():
                     muted = get_sink_mute(client.bluetooth_sink_name)
                     if muted is None:
                         muted = bool(mute_value) if mute_value is not None else not client.status.get("muted", False)
-                    client.status["muted"] = muted
+                    client._update_status({"muted": muted})
                     results.append(
                         {
                             "player": getattr(client, "player_name", "?"),
@@ -408,9 +407,9 @@ def pause_player():
     target = next((c for c in _clients if getattr(c, "player_name", None) == player_name), None)
     if not target or not target.is_running():
         return jsonify({"success": False, "error": "Player not found or not running"}), 404
-    import os as _os
-
-    target_pid = _os.getpid()  # in-process daemon runs in our PID
+    target_pid = target._daemon_proc.pid if target._daemon_proc else None
+    if target_pid is None:
+        return jsonify({"success": False, "error": "Daemon not running"}), 404
     count = 0
     try:
         import dbus
@@ -982,9 +981,8 @@ def api_bt_paired():
         return jsonify({"devices": [], "error": str(e)})
 
 
-@api_bp.route("/api/bt/scan", methods=["POST"])
-def api_bt_scan():
-    """Scan for nearby Bluetooth devices (~10 second scan)."""
+def _run_bt_scan(job_id: str) -> None:
+    """Perform BT scan in a background thread and store result in state."""
     try:
         list_result = subprocess.run(["bluetoothctl", "list"], capture_output=True, text=True, timeout=5)
         adapter_macs = re.findall(r"Controller\s+([0-9A-Fa-f:]{17})", list_result.stdout)
@@ -1008,6 +1006,8 @@ def api_bt_scan():
                     init_cmds.extend([f"select {m}", "power on", "scan on"])
             else:
                 init_cmds = ["power on", "agent on", "scan on"]
+            if proc.stdin is None:
+                raise RuntimeError("bluetoothctl subprocess stdin unavailable")
             proc.stdin.write("\n".join(init_cmds) + "\n")
             proc.stdin.flush()
             time.sleep(10)
@@ -1020,16 +1020,12 @@ def api_bt_scan():
             proc.wait()
             raise
 
-        class _R:
-            stdout = result_stdout
-
-        result = _R()
         seen: set = set()
         names: dict = {}
         device_adapter: dict = {}
         active_macs: set = set()
         current_show_adapter: str = ""
-        for line in result.stdout.splitlines():
+        for line in result_stdout.splitlines():
             clean = _ANSI_RE.sub("", line).strip()
             if not clean.startswith("["):
                 ctrl_m = _SHOW_CTRL_PAT.match(clean)
@@ -1086,9 +1082,8 @@ def api_bt_scan():
                     if mac in unnamed and name and not re.match(r"^[0-9A-Fa-f]{2}[-:]", name):
                         names[mac] = name
 
-        # Filter to audio-capable devices and enrich with bluetoothctl info
-        devices = []
-        for mac in all_macs:
+        # Filter to audio-capable devices and enrich with bluetoothctl info (parallel)
+        def _enrich_device(mac: str) -> "dict | None":
             try:
                 r = subprocess.run(
                     ["bluetoothctl", "info", mac],
@@ -1099,8 +1094,7 @@ def api_bt_scan():
                 out = r.stdout
                 out_lower = out.lower()
             except Exception:
-                devices.append({"mac": mac, "name": names.get(mac, mac)})
-                continue
+                return {"mac": mac, "name": names.get(mac, mac)}
             if mac not in names:
                 nm = re.search(r"\bName:\s+(.*)", out)
                 if nm:
@@ -1111,21 +1105,50 @@ def api_bt_scan():
             if class_m:
                 cls = int(class_m.group(1), 16)
                 if (cls >> 8) & 0x1F != 4:
-                    continue
+                    return None
             elif any(u in out_lower for u in _AUDIO_UUIDS):
                 pass
             elif "UUID:" in out:
-                continue
-            devices.append({"mac": mac, "name": names.get(mac, mac)})
+                return None
+            return {"mac": mac, "name": names.get(mac, mac)}
+
+        devices = []
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+            futures = {pool.submit(_enrich_device, mac): mac for mac in all_macs}
+            for fut in concurrent.futures.as_completed(futures):
+                result = fut.result()
+                if result is not None:
+                    devices.append(result)
 
         for d in devices:
             d["adapter"] = device_adapter.get(d["mac"], "")
 
         devices.sort(key=lambda d: (d["name"] == d["mac"], d["name"]))
-        return jsonify({"devices": devices})
+        finish_scan_job(job_id, {"devices": devices})
     except Exception as e:
         logger.error(f"BT scan failed: {e}")
-        return jsonify({"devices": [], "error": str(e)})
+        finish_scan_job(job_id, {"devices": [], "error": str(e)})
+
+
+@api_bp.route("/api/bt/scan", methods=["POST"])
+def api_bt_scan():
+    """Start an async BT device scan; returns a job_id immediately."""
+    job_id = str(uuid.uuid4())
+    create_scan_job(job_id)
+    t = threading.Thread(target=_run_bt_scan, args=(job_id,), daemon=True, name=f"bt-scan-{job_id[:8]}")
+    t.start()
+    return jsonify({"job_id": job_id})
+
+
+@api_bp.route("/api/bt/scan/result/<job_id>", methods=["GET"])
+def api_bt_scan_result(job_id: str):
+    """Poll for BT scan result by job_id."""
+    job = get_scan_job(job_id)
+    if job is None:
+        return jsonify({"error": "Job not found"}), 404
+    if job["status"] == "running":
+        return jsonify({"status": "running"})
+    return jsonify({"status": "done", "devices": job.get("devices", []), "error": job.get("error")})
 
 
 @api_bp.route("/api/diagnostics")

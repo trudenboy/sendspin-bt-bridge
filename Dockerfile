@@ -58,21 +58,16 @@ RUN chmod +x entrypoint.sh
 COPY sendspin_client.py web_interface.py config.py mpris.py bluetooth_manager.py state.py ./
 COPY routes/ routes/
 COPY services/ services/
+COPY scripts/ scripts/
 COPY templates/ templates/
 COPY static/ static/
 
 # Expose web interface port
 EXPOSE 8080
 
-# Health check
+# Health check — verify only that the web UI is reachable (BT disconnected is normal)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD python3 -c "\
-import urllib.request, json, sys, os; \
-port = os.environ.get('WEB_PORT', '8080'); \
-r = urllib.request.urlopen(f'http://localhost:{port}/api/status'); \
-d = json.loads(r.read()); \
-devs = d.get('devices', []); \
-sys.exit(0 if devs and any(dev.get('connected') for dev in devs) else 1)" || exit 1
+    CMD python3 -c "import urllib.request, os; urllib.request.urlopen(f'http://localhost:{os.environ.get(\"WEB_PORT\",\"8080\")}/api/status')" || exit 1
 
 # Run entrypoint script
 ENTRYPOINT ["/app/entrypoint.sh"]

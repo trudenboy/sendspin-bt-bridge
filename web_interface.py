@@ -37,6 +37,7 @@ app.config["SESSION_COOKIE_HTTPONLY"] = True
 # on every request.  Like all other settings, a change takes effect after
 # the service is restarted (same behaviour as SENDSPIN_SERVER, etc.).
 _auth_enabled: bool = bool(_startup_config.get("AUTH_ENABLED", False))
+app.config["AUTH_ENABLED"] = _auth_enabled
 
 
 _TRUSTED_PROXIES = {"127.0.0.1", "::1", "172.30.32.2"}
