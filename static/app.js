@@ -507,6 +507,7 @@ async function refreshLogs() {
 // ---- Group Controls ----
 
 var _groupSelected = {};   // index → true/false
+var _groupFilter = '';     // current group filter value ('' = all groups)
 
 function _getSelectedNames() {
     var names = [];
@@ -518,6 +519,48 @@ function _getSelectedNames() {
     return names;
 }
 
+function _updateGroupFilter() {
+    var sel = document.getElementById('group-filter-sel');
+    if (!sel || !lastDevices) return;
+    // Collect unique group names from current devices
+    var groups = [];
+    lastDevices.forEach(function(dev) {
+        var g = dev.group_name || (dev.group_id ? dev.group_id.split('-').pop() : '');
+        if (g && groups.indexOf(g) === -1) groups.push(g);
+    });
+    // Rebuild options, preserving current selection
+    var cur = sel.value;
+    sel.innerHTML = '<option value="">All groups</option>';
+    groups.sort().forEach(function(g) {
+        var opt = document.createElement('option');
+        opt.value = g;
+        opt.textContent = '\uD83D\uDD17 ' + g;
+        sel.appendChild(opt);
+    });
+    // Hide/show based on whether any groups exist
+    sel.style.display = groups.length ? '' : 'none';
+    // Restore selection if group still exists
+    if (cur && groups.indexOf(cur) !== -1) {
+        sel.value = cur;
+    } else if (cur && groups.indexOf(cur) === -1) {
+        sel.value = '';
+        _groupFilter = '';
+    }
+}
+
+function onGroupFilterChange(val) {
+    _groupFilter = val;
+    if (!lastDevices) return;
+    lastDevices.forEach(function(dev, i) {
+        var g = dev.group_name || (dev.group_id ? dev.group_id.split('-').pop() : '');
+        var inGroup = !val || g === val;
+        _groupSelected[i] = inGroup;
+        var cb = document.getElementById('dsel-' + i);
+        if (cb) cb.checked = inGroup;
+    });
+    _updateGroupPanel();
+}
+
 function _updateGroupPanel() {
     var total = lastDevices ? lastDevices.length : 0;
     if (total < 2) {
@@ -525,6 +568,7 @@ function _updateGroupPanel() {
         return;
     }
     document.getElementById('group-controls').style.display = 'flex';
+    _updateGroupFilter();
     var sel = _getSelectedNames().length;
     var info = document.getElementById('group-select-info');
     if (info) info.textContent = sel === total ? 'All ' + total + ' players' : sel + ' of ' + total + ' selected';
@@ -589,11 +633,10 @@ function onPauseAll() {
     var btn = document.getElementById('group-pause-btn');
     var isPaused = btn && btn.classList.contains('paused');
     var action = isPaused ? 'play' : 'pause';
-    fetch(API_BASE + '/api/pause_all', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({action: action})
-    }).then(function(r) { return r.json(); }).then(function() {
+    var names = _getSelectedNames();
+    var total = lastDevices ? lastDevices.length : 0;
+
+    var afterPause = function() {
         if (btn) {
             if (action === 'pause') {
                 btn.textContent = '\u25b6 Unpause All';
@@ -603,7 +646,26 @@ function onPauseAll() {
                 btn.classList.remove('paused');
             }
         }
-    });
+    };
+
+    if (names.length === total) {
+        // All players — use bulk MPRIS pause
+        fetch(API_BASE + '/api/pause_all', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({action: action})
+        }).then(function(r) { return r.json(); }).then(afterPause);
+    } else {
+        // Filtered selection — call individual pause per player
+        var calls = names.map(function(name) {
+            return fetch(API_BASE + '/api/pause', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({action: action, player_name: name})
+            });
+        });
+        Promise.all(calls).then(afterPause);
+    }
 }
 
 function onDevicePause(i) {
