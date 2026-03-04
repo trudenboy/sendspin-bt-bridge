@@ -3,7 +3,6 @@ title: Устройства и адаптеры
 description: Управление Bluetooth-устройствами и адаптерами в Sendspin Bluetooth Bridge
 ---
 
-import { Aside } from '@astrojs/starlight/components';
 
 ## Добавление устройства
 

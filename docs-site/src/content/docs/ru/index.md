@@ -19,7 +19,6 @@ hero:
       variant: minimal
 ---
 
-import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 
 ## Что это такое
 

@@ -3,7 +3,6 @@ title: API Reference
 description: REST API for Sendspin Bluetooth Bridge
 ---
 
-import { Aside } from '@astrojs/starlight/components';
 
 The web interface provides a REST API on port `8080`. All endpoints return JSON.
 

@@ -3,7 +3,6 @@ title: Веб-интерфейс
 description: Полное руководство по веб-интерфейсу Sendspin Bluetooth Bridge — панель управления, карточки устройств, конфигурация, диагностика и журналы
 ---
 
-import { Aside } from '@astrojs/starlight/components';
 
 Веб-интерфейс доступен на порту **8080** (Docker/LXC) или через **HA Ingress** (аддон Home Assistant). Данные обновляются в реальном времени через Server-Sent Events — перезагрузка страницы не требуется.
 

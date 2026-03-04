@@ -3,7 +3,6 @@ title: Devices & Adapters
 description: Managing Bluetooth devices and adapters in Sendspin Bluetooth Bridge
 ---
 
-import { Aside } from '@astrojs/starlight/components';
 
 ## Adding a Device
 

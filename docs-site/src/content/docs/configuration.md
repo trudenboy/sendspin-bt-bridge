@@ -3,7 +3,6 @@ title: Configuration
 description: Complete configuration reference for Sendspin Bluetooth Bridge
 ---
 
-import { Aside } from '@astrojs/starlight/components';
 
 Configuration is stored in `config.json` in the `/config` directory (mounted as a Docker volume). Edit via the web interface or directly (requires restart).
 

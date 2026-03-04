@@ -3,7 +3,6 @@ title: Installation — Proxmox LXC
 description: Installing Sendspin Bluetooth Bridge in a Proxmox LXC container
 ---
 
-import { Steps, Aside } from '@astrojs/starlight/components';
 
 ## Why LXC over Docker?
 

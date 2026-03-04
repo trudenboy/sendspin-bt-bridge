@@ -3,7 +3,6 @@ title: Web UI
 description: Complete guide to the Sendspin Bluetooth Bridge web interface — dashboard, device cards, configuration, diagnostics and logs
 ---
 
-import { Aside } from '@astrojs/starlight/components';
 
 The web interface is available on port **8080** (Docker/LXC) or via **HA Ingress** (Home Assistant addon). It updates in real time over Server-Sent Events — no page refresh needed.
 

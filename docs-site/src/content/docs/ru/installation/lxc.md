@@ -3,7 +3,6 @@ title: Установка — Proxmox LXC
 description: Установка Sendspin Bluetooth Bridge в Proxmox LXC контейнер
 ---
 
-import { Steps, Aside } from '@astrojs/starlight/components';
 
 ## Преимущества LXC перед Docker
 

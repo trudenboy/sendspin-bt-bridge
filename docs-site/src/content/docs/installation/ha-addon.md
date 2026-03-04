@@ -3,7 +3,6 @@ title: Installation — Home Assistant Addon
 description: Step-by-step installation of Sendspin Bluetooth Bridge as a Home Assistant addon
 ---
 
-import { Steps, Aside } from '@astrojs/starlight/components';
 
 ## Requirements
 

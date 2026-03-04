@@ -3,7 +3,6 @@ title: Устранение неполадок
 description: Решение типичных проблем Sendspin Bluetooth Bridge
 ---
 
-import { Aside } from '@astrojs/starlight/components';
 
 ## Аудио играет только через одну колонку
 

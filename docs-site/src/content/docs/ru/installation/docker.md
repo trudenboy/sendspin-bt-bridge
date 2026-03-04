@@ -3,7 +3,6 @@ title: Установка — Docker Compose
 description: Запуск Sendspin Bluetooth Bridge в Docker Compose
 ---
 
-import { Steps, Aside, Tabs, TabItem } from '@astrojs/starlight/components';
 
 ## Требования
 
