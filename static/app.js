@@ -807,13 +807,14 @@ function btAdapterOptions(selected) {
     return opts;
 }
 
-function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabled) {
+function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabled, preferredFormat) {
     var tbody = document.getElementById('bt-devices-table');
     var row = document.createElement('div');
     row.className = 'bt-device-row';
     if (enabled === false) row.dataset.enabled = 'false';
     var delayVal = (delay !== undefined && delay !== null && delay !== '') ? delay : 0;
     var portVal  = (listenPort !== undefined && listenPort !== null && listenPort !== '') ? listenPort : '';
+    var fmtVal   = (preferredFormat !== undefined && preferredFormat !== null) ? preferredFormat : 'flac:44100:16:2';
     row.innerHTML =
         '<input type="text" placeholder="Player Name" class="bt-name" value="' +
             escHtmlAttr(name || '') + '">' +
@@ -826,6 +827,8 @@ function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabl
             escHtmlAttr(String(portVal)) + '" min="1024" max="65535">' +
         '<input type="number" class="bt-delay" title="Static delay (ms). Negative = compensate for output latency. Typical BT A2DP: -500" value="' +
             escHtmlAttr(String(delayVal)) + '" step="50">' +
+        '<input type="text" class="bt-preferred-format" placeholder="flac:44100:16:2" title="Preferred audio format: codec:samplerate:bitdepth:channels. Default flac:44100:16:2 matches SBC A2DP (no resampling)." value="' +
+            escHtmlAttr(fmtVal) + '">' +
         '<button type="button" class="btn-remove-dev">\u00d7</button>';
 
     row.querySelector('.btn-remove-dev').addEventListener('click', function() {
@@ -851,7 +854,9 @@ function collectBtDevices() {
         var delayEl    = row.querySelector('.bt-delay');
         var delay      = delayEl ? parseFloat(delayEl.value) : 0;
         if (isNaN(delay)) delay = 0;
-        var dev = { mac: mac, adapter: adapter, player_name: name, static_delay_ms: delay };
+        var fmtEl      = row.querySelector('.bt-preferred-format');
+        var preferredFormat = fmtEl ? fmtEl.value.trim() : 'flac:44100:16:2';
+        var dev = { mac: mac, adapter: adapter, player_name: name, static_delay_ms: delay, preferred_format: preferredFormat || 'flac:44100:16:2' };
         if (listenHost) dev.listen_host = listenHost;
         if (listenPort) dev.listen_port = listenPort;
         // Preserve enabled flag: live status takes precedence, then config-loaded value from dataset
@@ -872,7 +877,7 @@ function populateBtDeviceRows(devices) {
     document.getElementById('bt-devices-table').innerHTML = '';
     devices.forEach(function(d) {
         addBtDeviceRow(d.player_name || '', d.mac || '', d.adapter || '',
-                       d.static_delay_ms, d.listen_host, d.listen_port, d.enabled);
+                       d.static_delay_ms, d.listen_host, d.listen_port, d.enabled, d.preferred_format);
     });
 }
 

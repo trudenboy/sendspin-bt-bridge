@@ -151,7 +151,7 @@ async def _read_commands(daemon_ref: list, stop_event: asyncio.Event) -> None:
 
 
 async def _run(params: dict) -> None:
-    from sendspin.audio import query_devices
+    from sendspin.audio import parse_audio_format, query_devices
     from sendspin.daemon.daemon import DaemonArgs
     from sendspin.settings import get_client_settings
 
@@ -165,6 +165,7 @@ async def _run(params: dict) -> None:
     bluetooth_sink_name: str | None = params.get("bluetooth_sink_name")
     initial_volume: int = params.get("volume", 100)
     settings_dir: str = params.get("settings_dir", f"/tmp/sendspin-{client_id}")
+    preferred_format_str: str | None = params.get("preferred_format")
 
     logger = logging.getLogger(__name__)
 
@@ -188,6 +189,13 @@ async def _run(params: dict) -> None:
     settings = await get_client_settings("daemon", config_dir=settings_dir)
     settings.player_volume = initial_volume
 
+    preferred_fmt = None
+    if preferred_format_str:
+        try:
+            preferred_fmt = parse_audio_format(preferred_format_str)
+        except Exception as e:
+            logger.warning("[%s] Invalid preferred_format %r: %s", player_name, preferred_format_str, e)
+
     args = DaemonArgs(
         audio_device=audio_device,
         client_id=client_id,
@@ -198,6 +206,7 @@ async def _run(params: dict) -> None:
         listen_port=listen_port,
         use_mpris=False,  # MPRIS requires D-Bus session which subprocesses don't have
         use_hardware_volume=False,
+        preferred_format=preferred_fmt,
     )
 
     status: dict = {

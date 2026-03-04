@@ -1,6 +1,6 @@
 ---
 name: "Sendspin Bluetooth Bridge"
-version: "2.5.4"
+version: "2.5.5"
 slug: "sendspin_bt_bridge"
 description: "Bridge Music Assistant Sendspin protocol to Bluetooth speakers"
 url: "https://github.com/trudenboy/sendspin-bt-bridge"
@@ -57,6 +57,7 @@ schema:
       listen_host: str?
       listen_port: port?
       enabled: bool?
+      preferred_format: str?
   bluetooth_adapters:
     - id: str
       mac: str?
