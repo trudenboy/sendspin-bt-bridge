@@ -1009,6 +1009,7 @@ async function startBtScan() {
             var pollResp = await fetch(API_BASE + '/api/bt/scan/result/' + jobId);
             var pollData = await pollResp.json();
             if (pollData.status === 'done') {
+                if (pollData.error) { throw new Error(pollData.error); }
                 devices = pollData.devices || [];
                 break;
             }
