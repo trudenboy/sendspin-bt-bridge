@@ -143,6 +143,7 @@ async def _read_commands(daemon_ref: list, stop_event: asyncio.Event) -> None:
                 vol = int(cmd["value"])
                 daemon._bridge_status["volume"] = vol
                 daemon._sync_bt_sink_volume(vol)
+                daemon._notify()
 
 
 # ---------------------------------------------------------------------------
