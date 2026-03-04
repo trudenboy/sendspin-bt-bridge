@@ -233,11 +233,13 @@ function populateDeviceCard(i, dev) {
         var isActive = dev.bluetooth_connected || dev.playing;
         card.classList.toggle('inactive', !isActive);
         card.classList.toggle('playing', !!dev.playing);
-        if (!isActive) {
-            var selCb = document.getElementById('dsel-' + i);
-            if (selCb && selCb.checked) {
+        var selCb = document.getElementById('dsel-' + i);
+        if (selCb) {
+            if (!isActive && selCb.checked) {
                 selCb.checked = false;
                 _groupSelected[i] = false;
+            } else if (isActive && !selCb.checked && _groupSelected[i] !== false) {
+                selCb.checked = true;
             }
         }
     }
@@ -1574,24 +1576,28 @@ var _statusInterval = null;
             var sysEl = document.getElementById('system-info');
             if (sysEl) sysEl.textContent = info.join(' \u00b7 ');
             var devices = status.devices || [status];
-            if (lastDevices.length !== devices.length ||
-                !lastDevices.every(function(d, idx) { return d.player_name === devices[idx].player_name; })) {
+            var sorted = devices.slice().sort(function(a, b) {
+                var score = function(d) { return d.playing ? 2 : (d.bluetooth_connected ? 1 : 0); };
+                return score(b) - score(a);
+            });
+            if (lastDevices.length !== sorted.length ||
+                !lastDevices.every(function(d, idx) { return d.player_name === sorted[idx].player_name; })) {
                 _groupSelected = {};
                 lastReanchorCount = {};
                 reanchorShownAt = {};
                 lastReanchorAt = {};
             }
-            lastDevices = devices;
+            lastDevices = sorted;
             var grid = document.getElementById('status-grid');
-            devices.forEach(function(dev, i) {
+            sorted.forEach(function(dev, i) {
                 var card = document.getElementById('device-card-' + i);
                 if (!card) { card = buildDeviceCard(i); grid.appendChild(card); }
                 populateDeviceCard(i, dev);
             });
             Array.from(grid.querySelectorAll('.device-card'))
-                .slice(devices.length).forEach(function(c) { c.remove(); });
+                .slice(sorted.length).forEach(function(c) { c.remove(); });
             _updateGroupPanel();
-            updateHealthIndicator(devices);
+            updateHealthIndicator(sorted);
         } catch (err) { console.error('SSE parse error:', err); }
     };
     es.onerror = function() {
