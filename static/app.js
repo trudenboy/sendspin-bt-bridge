@@ -31,6 +31,7 @@ var btManualAdapters = [];
 var lastDevices = [];
 var volTimers = {};
 var volPending = {}; // deviceIndex -> true if user recently touched slider
+var reanchorShownAt = {}; // deviceIndex -> timestamp(ms) when reanchoring warning was first displayed
 
 // ---- Auth helper ----
 
@@ -325,14 +326,27 @@ function populateDeviceCard(i, dev) {
             syncEl.textContent = '\u2014';
             syncEl.style.color = '#9ca3af';
             if (syncDetail) syncDetail.textContent = '';
+            delete reanchorShownAt[i];
         } else if (dev.reanchoring) {
+            // Record when we first saw this re-anchor event
+            if (!reanchorShownAt[i]) reanchorShownAt[i] = Date.now();
             syncEl.innerHTML = '<span style="color:#f59e0b;">&#9888; Re-anchoring</span>';
             if (syncDetail) syncDetail.textContent = dev.last_sync_error_ms
                 ? 'Error: ' + dev.last_sync_error_ms.toFixed(1) + ' ms' : '';
         } else {
-            syncEl.innerHTML = '<span style="color:#10b981;">&#10003; In sync</span>';
-            if (syncDetail) syncDetail.textContent = dev.reanchor_count
-                ? 'Re-anchors: ' + dev.reanchor_count : '';
+            // After reanchoring=False: keep showing the warning for abs(static_delay_ms) ms
+            var warningDuration = Math.abs(dev.static_delay_ms || 0) || 3000;
+            var shownAt = reanchorShownAt[i];
+            if (shownAt && (Date.now() - shownAt) < warningDuration) {
+                syncEl.innerHTML = '<span style="color:#f59e0b;">&#9888; Re-anchoring</span>';
+                if (syncDetail) syncDetail.textContent = dev.last_sync_error_ms
+                    ? 'Error: ' + dev.last_sync_error_ms.toFixed(1) + ' ms' : '';
+            } else {
+                delete reanchorShownAt[i];
+                syncEl.innerHTML = '<span style="color:#10b981;">&#10003; In sync</span>';
+                if (syncDetail) syncDetail.textContent = dev.reanchor_count
+                    ? 'Re-anchors: ' + dev.reanchor_count : '';
+            }
         }
     }
 
