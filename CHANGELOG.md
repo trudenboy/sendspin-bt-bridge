@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.7] - 2026-03-04
+
+### Fixed
+- **Pause button**: Replaced broken MPRIS D-Bus approach (daemon runs with `use_mpris=False`, so no interface existed) with stdin IPC — sends `MediaCommand.PAUSE/PLAY` to MA via the aiosendspin websocket client; works for both solo and group playback
+- **Track progress bar**: Progress now interpolates client-side every second between server updates (MA sends `Progress` only on state changes, not continuously)
+
+### Improved
+- **Web UI — Volume column**: Sink name moved to bottom of column, now revealed on card hover instead of column hover — consistent with other hover-revealed details
+
 ## [2.6.6] - 2026-03-04
 
 ### Improved
