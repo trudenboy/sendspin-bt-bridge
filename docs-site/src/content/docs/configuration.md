@@ -6,6 +6,56 @@ description: Complete configuration reference for Sendspin Bluetooth Bridge
 
 Configuration is stored in `config.json` in the `/config` directory (mounted as a Docker volume). Edit via the web interface or directly (requires restart).
 
+## Home Assistant Addon
+
+When running as a Home Assistant addon, all settings are available through the built-in **Configuration** tab in the HA UI — no file editing required.
+
+Go to **Settings → Add-ons → Sendspin Bluetooth Bridge → Configuration**.
+
+![HA addon configuration panel — Options section with Music Assistant server, port, timezone and other fields](/sendspin-bt-bridge/screenshots/screenshot-ha-addon-config.png)
+
+### Options
+
+| Field | Description |
+|---|---|
+| **Music Assistant server** | Hostname or IP of the MA server. Use `auto` for automatic mDNS discovery (recommended). |
+| **Sendspin port** | WebSocket port of the MA Sendspin provider. Default `9000` matches the MA default. |
+| **bridge_name** | Optional label appended to every player name in MA (displayed as `Player @ Name`). Leave empty to disable. |
+| **bridge_name_suffix** | Toggle — when enabled, appends `@ {bridge_name}` to each individual player name. |
+| **Timezone** | IANA timezone (e.g. `Europe/Moscow`). Leave empty to inherit the HA system timezone. |
+| **PulseAudio latency (ms)** | Audio buffer latency hint. Increase to `400–600` if you hear dropouts on slow hardware. Default `200`. |
+| **Prefer SBC codec** | Toggle — forces SBC codec after each BT connect. Reduces CPU load; useful with multiple speakers on slow hardware. |
+| **bt_check_interval** | Reconnect polling interval in seconds (used when D-Bus events are unavailable). Default `10`. |
+| **bt_max_reconnect_fails** | Stop retrying reconnects after N consecutive failures. `0` = retry forever. |
+| **auth_enabled** | Toggle — enables password protection for the web UI. |
+
+### Bluetooth Devices and Adapters
+
+![HA addon config — Bluetooth devices list and adapters list with edit and delete buttons](/sendspin-bt-bridge/screenshots/screenshot-ha-addon-config-bottom.png)
+
+The **Bluetooth devices** section lists all configured speakers. Click **Edit** (✏) to open the device settings dialog, or **Add** to add a new device.
+
+![Device edit dialog showing mac, player_name, adapter, static_delay_ms, listen_host, listen_port, enabled and preferred_format fields](/sendspin-bt-bridge/screenshots/screenshot-ha-addon-device-edit.png)
+
+| Field | Description |
+|---|---|
+| **mac** | Bluetooth MAC address of the speaker (`AA:BB:CC:DD:EE:FF`) |
+| **player_name** | Display name shown in Music Assistant |
+| **adapter** | Bluetooth adapter to use (`hci0`, `hci1`, or adapter MAC). Leave empty for the default adapter. |
+| **static_delay_ms** | A2DP latency compensation in ms. Negative value delays this player to stay in sync with the group (typical: `-500` to `-700`). |
+| **listen_host** | IP address this player's WebSocket server advertises to MA. Leave empty for auto-detection. |
+| **listen_port** | WebSocket port for this player (default starts at `8928`, increments per device). |
+| **enabled** | Toggle — disable to skip this device on startup without removing it. |
+| **preferred_format** | Preferred audio format, e.g. `flac:44100:16:2`. Prevents PulseAudio resampling when MA sends FLAC. |
+
+The **Bluetooth adapters** section allows labelling each adapter (`hci0`, `hci1`) with a friendly name shown in the web UI.
+
+<Aside type="caution">
+After editing options, click **Save** at the bottom of the Options section. The addon restarts automatically to apply the changes.
+</Aside>
+
+---
+
 ## Core Parameters
 
 | Parameter | Type | Default | Description |
