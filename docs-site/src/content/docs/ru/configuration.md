@@ -14,9 +14,13 @@ import { Aside } from '@astrojs/starlight/components';
 | `SENDSPIN_SERVER` | string | `"auto"` | Адрес MA сервера. `auto` — обнаружение через mDNS |
 | `SENDSPIN_PORT` | integer | `9000` | WebSocket порт MA (`ws://server:port/sendspin`) |
 | `BRIDGE_NAME` | string | `""` | Суффикс к имени каждого плеера в MA (пустая строка — выключено) |
-| `TZ` | string | `"Australia/Melbourne"` | Временная зона контейнера |
-| `PULSE_LATENCY_MSEC` | integer | `200` | Задержка PulseAudio в мс. Увеличьте при звуковых заикание на медленном железе |
+| `BRIDGE_NAME_SUFFIX` | boolean | `false` | Добавлять `@ {BRIDGE_NAME}` к каждому индивидуальному имени плеера в MA |
+| `TZ` | string | `""` | Временная зона (пустая строка — берётся из переменной окружения `TZ`, иначе UTC) |
+| `PULSE_LATENCY_MSEC` | integer | `200` | Задержка PulseAudio в мс. Увеличьте при заикании звука на медленном железе |
 | `PREFER_SBC_CODEC` | boolean | `false` | Принудительно использовать SBC кодек после каждого подключения. Снижает нагрузку CPU |
+| `BT_CHECK_INTERVAL` | integer | `10` | Интервал polling-проверки BT в секундах когда D-Bus недоступен |
+| `BT_MAX_RECONNECT_FAILS` | integer | `0` | Авто-отключить BT управление после N неудач подряд. `0` = повторять бесконечно |
+| `AUTH_ENABLED` | boolean | `false` | Включить парольную защиту веб-интерфейса |
 
 ## Bluetooth-устройства
 
@@ -46,13 +50,14 @@ import { Aside } from '@astrojs/starlight/components';
 | `player_name` | string | ✓ | Отображаемое имя плеера в MA |
 | `adapter` | string | — | ID адаптера (`hci0`, `hci1`) или MAC адаптера. Пустая строка — адаптер по умолчанию |
 | `static_delay_ms` | integer | — | Компенсация A2DP задержки в мс. Отрицательное значение = задержать плеер |
+| `preferred_format` | string | — | Предпочитаемый аудиоформат, например `flac:44100:16:2`. Устраняет ресэмплинг PulseAudio |
 | `listen_host` | string | — | IP для прослушивания sendspin WebSocket (по умолчанию `0.0.0.0`) |
 | `listen_port` | integer | — | Порт sendspin WebSocket (по умолчанию `9000 + индекс`) |
 | `enabled` | boolean | — | `false` — устройство отключено и пропускается при запуске |
 
 ## Bluetooth-адаптеры
 
-Опциональный список адаптеров для явной привязки:
+Опциональный список адаптеров для явной привязки. Поле `name` отображается в колонке BT веб-интерфейса.
 
 ```json
 {
@@ -65,6 +70,12 @@ import { Aside } from '@astrojs/starlight/components';
   ]
 }
 ```
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `id` | string | Имя интерфейса ядра (`hciN`) |
+| `mac` | string | MAC-адрес адаптера |
+| `name` | string | Читаемое название, отображаемое в веб-интерфейсе |
 
 ## Переменные окружения
 

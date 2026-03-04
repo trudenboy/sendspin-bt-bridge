@@ -33,13 +33,13 @@ The LXC container **cannot** run its own `bluetoothd` due to `AF_BLUETOOTH` kern
 ### Option 1: One-line (on Proxmox host as root)
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/loryanstrant/sendspin-client/main/lxc/proxmox-create.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/lxc/proxmox-create.sh)
 ```
 
 ### Option 2: Download and review first (recommended)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/loryanstrant/sendspin-client/main/lxc/proxmox-create.sh -o proxmox-create.sh
+curl -fsSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/lxc/proxmox-create.sh -o proxmox-create.sh
 # Review the script before running:
 less proxmox-create.sh
 bash proxmox-create.sh
@@ -57,12 +57,12 @@ If you prefer to create the container via the Proxmox web UI:
 
    **Option A — one-liner:**
    ```bash
-   bash <(curl -fsSL https://raw.githubusercontent.com/loryanstrant/sendspin-client/main/lxc/install.sh)
+   bash <(curl -fsSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/lxc/install.sh)
    ```
 
    **Option B — download and review:**
    ```bash
-   curl -fsSL https://raw.githubusercontent.com/loryanstrant/sendspin-client/main/lxc/install.sh -o install.sh
+   curl -fsSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/lxc/install.sh -o install.sh
    less install.sh
    bash install.sh
    ```

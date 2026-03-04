@@ -120,7 +120,7 @@ if [[ "$IP" != "dhcp" ]]; then
   ask GATEWAY    "Gateway"                           ""
 fi
 
-ask GITHUB_REPO  "GitHub repo (owner/repo)"          "loryanstrant/sendspin-client"
+ask GITHUB_REPO  "GitHub repo (owner/repo)"          "trudenboy/sendspin-bt-bridge"
 ask GITHUB_BRANCH "Branch"                           "main"
 
 ask_yesno USB_BT "Pass through USB Bluetooth adapter?" "y"

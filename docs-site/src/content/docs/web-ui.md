@@ -49,6 +49,18 @@ Each Bluetooth device has its own card:
   **Release** is useful when you want to temporarily connect the speaker to another source (phone, PC) without stopping the bridge.
 </Aside>
 
+## Sync Column
+
+The **Sync** row in each device card shows the Music Assistant sync status for that speaker.
+
+| State | Description |
+|---|---|
+| `✓ In sync` | MA confirmed synchronisation. Shows `Re-anchors: N` if corrections were made. |
+| `⚠ Re-anchoring` | MA is actively adjusting the delay. `Error: N ms` shows the deviation at the last correction. |
+| `—` | Device is not connected or not playing. |
+
+The **delay badge** (`delay: Xms`) appears in orange when `static_delay_ms ≠ 0` and the device is active. It turns grey when the device is inactive.
+
 ## Configuration Section
 
 The collapsible **⚙️ Configuration** section lets you change settings without editing files:

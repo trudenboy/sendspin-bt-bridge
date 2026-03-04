@@ -25,9 +25,9 @@ docker exec -it sendspin-client bluetoothctl
 
 There is no test suite. Manual testing is via `docker logs` and the web UI at `http://localhost:8080`.
 
-CI/CD builds multi-platform Docker images (`linux/amd64`, `linux/arm64`) to `ghcr.io/trudenboy/sendspin-bt-bridge` on push to `main`.
+CI/CD builds multi-platform Docker images (`linux/amd64`, `linux/arm64`) to `ghcr.io/trudenboy/sendspin-bt-bridge` on `v*` tag push. Automatically syncs `ha-addon/config.yaml` version from `VERSION` in `config.py` before the build.
 
-## Architecture (v2.5.x)
+## Architecture (v2.6.2)
 
 **Subprocess isolation**: each Bluetooth speaker runs as a dedicated Python subprocess (`services/daemon_process.py`) with `PULSE_SINK=<bt_sink_name>` in env. This gives every speaker its own PulseAudio context → correct audio routing from the first sample, no `move-sink-input` needed.
 
@@ -41,10 +41,13 @@ main process (Flask API, BT manager, web UI)
 IPC: subprocess→parent via JSON lines on stdout; parent→subprocess via JSON lines on stdin (`set_volume`, `stop`).
 
 **`sendspin_client.py`** — core orchestration per device:
+- `DeviceStatus` — `@dataclass` typed per-device status; dict-compatible (`["key"]`, `.get()`, `.update()`, `.copy()`)
 - `SendspinClient` — manages the per-device subprocess lifecycle. Spawns `services/daemon_process.py` with correct `PULSE_SINK` env var. Reads JSON status from subprocess stdout, sends volume/stop commands via stdin.
+- `_status_lock = threading.Lock()` + `_update_status(updates)` — thread-safe status mutation from asyncio loop, D-Bus callback thread, and Flask WSGI threads; calls `notify_status_changed()` after each mutation
 - `_start_sendspin_inner()` — subprocess spawn with `PULSE_SINK` and JSON args
 - `stop_sendspin()` — graceful stop: sends `{"cmd":"stop"}` to stdin, kills if timeout
-- `_read_subprocess_output()` — async task: forwards log lines, detects volume changes, calls `_save_device_volume()`
+- `_read_subprocess_output()` — async task: forwards log lines, detects volume changes, calls `save_device_volume()`
+- `_read_subprocess_stderr()` — async task: forwards subprocess stderr to `logger.warning`
 - `main()` — loads config, instantiates `BluetoothManager` + `SendspinClient` per device, starts Waitress server in daemon thread, runs async event loop
 
 **`bluetooth_manager.py`** — BT connection management:
@@ -52,8 +55,10 @@ IPC: subprocess→parent via JSON lines on stdout; parent→subprocess via JSON 
 - `configure_bluetooth_audio()` — finds the correct PulseAudio sink name for the connected device
 
 **`config.py`** — configuration layer:
-- `_CONFIG_PATH`, `_config_lock` (threading.Lock shared across modules)
-- `load_config()`, `_player_id_from_mac()`, `_save_device_volume()`
+- `CONFIG_FILE: Path` — single source of truth for config path (replaces old `_CONFIG_PATH` string)
+- `_config_lock` (threading.Lock shared across modules)
+- `load_config()`, `_player_id_from_mac()`, `save_device_volume()` (public; `_save_device_volume` alias retained for compatibility)
+- `VERSION = "2.6.2"`
 
 **`mpris.py`** — MPRIS D-Bus integration:
 - `MprisIdentityService` — registers MediaPlayer2 D-Bus service so MA discovers the bridge by player name
@@ -61,15 +66,25 @@ IPC: subprocess→parent via JSON lines on stdout; parent→subprocess via JSON 
 **`services/` module:**
 - `bridge_daemon.py` — `BridgeDaemon` subclass. Runs inside each subprocess. Handles `on_status_change` callbacks, stream events. `_sink_routed` flag prevents re-anchor feedback loop after PA rescue-streams correction.
 - `daemon_process.py` — subprocess entry point. Reads JSON args from argv, sets up `BridgeDaemon`, emits status as JSON to stdout, reads commands from stdin.
-- `bluetooth.py` — async BT helpers (D-Bus monitor, `dbus_monitor_reconnect`)
+- `bluetooth.py` — BT helpers: `bt_remove_device()`, `persist_device_enabled()` (sync to config.json + options.json), `is_audio_device()`
 - `pulse.py` — PulseAudio async helpers: `afind_sink_for_mac()`, `amove_pid_sink_inputs()` (corrects streams after PA module-rescue-streams moves them on BT reconnect), `_PULSECTL_AVAILABLE` flag
 
 **`routes/` module (Flask blueprints):**
-- `api.py` — all `/api/*` endpoints
+- `api.py` — all `/api/*` endpoints; includes `GET /api/status/stream` (SSE), `POST /api/bt/scan` → `{job_id}`, `GET /api/bt/scan/result/<id>` (async scan), `_schedule_volume_persist()` (1 s debounce before writing config.json)
 - `views.py` — HTML page renders
 - `auth.py` — optional web UI password protection
 
-**`state.py`** — shared runtime state (list of `SendspinClient` instances, global lock)
+**`state.py`** — shared runtime state:
+- List of `SendspinClient` instances + global lock
+- `notify_status_changed()` — SSE signaling (increments version, wakes threading.Condition)
+- `_adapter_cache_lock` — double-checked locking in `get_adapter_name()`
+- `create_scan_job()` / `get_scan_job()` / `finish_scan_job()` — storage for async BT-scan jobs (TTL 2 min)
+
+**`scripts/translate_ha_config.py`** — called from `entrypoint.sh` in HA addon mode:
+- Converts `/data/options.json` → `/data/config.json` with full field typing
+- `_detect_adapters()` — enumerates BT controllers via `bluetoothctl list`
+- `_merge_adapters()` — merges user-supplied names with detected hardware
+- Preserves runtime state from previous config (LAST_VOLUMES, AUTH_PASSWORD_HASH, SECRET_KEY)
 
 **Config persistence:** `/config/config.json` (mounted Docker volume at `/etc/docker/Sendspin`). Changes via the web UI require a container restart to take effect.
 
