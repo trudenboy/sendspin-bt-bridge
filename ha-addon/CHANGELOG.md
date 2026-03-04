@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.1] - 2026-03-04
+
+### Performance
+- **Async BT scan**: `POST /api/bt/scan` returns `{job_id}` instantly; poll `GET /api/bt/scan/result/<id>` — no longer blocks web UI for 11–17 s.
+- `bluetoothctl info` calls run in parallel (8 workers) during scan.
+- BT reconnect poll log messages demoted to DEBUG — reduces log noise by ~720 lines/h per device.
+
+### Security / Stability
+- **Thread-safe device status**: Added lock around all status mutations shared between asyncio loop, D-Bus callback thread, and Flask WSGI threads.
+- **Adapter cache TOCTOU**: Double-checked locking prevents concurrent WSGI threads from racing on adapter name cache load.
+
+### Fixed
+- **Per-device pause button**: Was using Flask process PID instead of daemon subprocess PID — button now correctly pauses/resumes individual devices.
+- **asyncio deprecation**: `get_event_loop()` → `get_running_loop()` — no DeprecationWarning in Python 3.12, no RuntimeError in Python 3.14.
+- **Daemon stderr captured**: Crashes and library errors written to stderr are now logged as warnings instead of silently discarded.
+- **Healthcheck**: Container no longer reported unhealthy when BT speaker is disconnected (normal idle state).
+
+### Improved
+- HA config translation extracted from `entrypoint.sh` into `scripts/translate_ha_config.py` (type-checked, linted).
+- `SENDSPIN_PORT` now saved as integer (not string) in generated config.
+- Volume persistence logic deduplicated; config path unified to single source of truth.
+- `DeviceStatus` typed as dataclass — key typos caught at dev time.
+- `assert` statements replaced with explicit `RuntimeError` — survives Python `-O` flag.
+- Late import in views blueprint replaced with `app.config["AUTH_ENABLED"]`.
+
 ## [2.6.0] - 2026-03-05
 
 ### Performance
