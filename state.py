@@ -11,6 +11,27 @@ import os
 import threading
 from pathlib import Path
 
+# ---------------------------------------------------------------------------
+# SSE status-change signalling — used by /api/status/stream
+# ---------------------------------------------------------------------------
+_status_version: int = 0
+# Condition used instead of a plain Event to avoid a race between the version
+# check and the wait() call in the SSE generator (a plain set()+clear() can
+# lose the wakeup if notify fires between them).
+_status_condition: threading.Condition = threading.Condition()
+
+
+def notify_status_changed() -> None:
+    """Signal that at least one client status has changed (wakes SSE listeners).
+
+    Thread-safe: may be called from any thread.
+    """
+    global _status_version
+    with _status_condition:
+        _status_version += 1
+        _status_condition.notify_all()
+
+
 logger = logging.getLogger(__name__)
 
 # Active SendspinClient instances. Mutated in-place so all existing

@@ -5,7 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.5.7] - 2026-03-04
+## [2.6.0] - 2026-03-05
+
+### Performance
+- Real-time status via Server-Sent Events (eliminates polling).
+- Daemon crash detection: 20 s → ≤4 s.
+- Exponential backoff (1→30 s) on daemon crash-loop.
+- Status emission deduplication in daemon subprocess.
+- Volume config write debounced (instant pactl, delayed disk write).
+
+### Improved
+- Sink name shown under volume slider; ⚠ warning when BT connected but no sink.
+- Volume slider fades during in-flight requests.
+- BT reconnecting state shows pulsing orange indicator.
+- Subprocess status keys whitelisted to prevent unbounded memory growth.
+
+
 
 ### Security
 - Session cookie hardening (SameSite=Lax, HttpOnly).

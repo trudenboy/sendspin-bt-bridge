@@ -142,6 +142,7 @@ function buildDeviceCard(i) {
                 'class="card-icon-btn" ' +
                 'title="Mute/Unmute">&#128264;</button>' +
             '</div>' +
+            '<div class="ts-sub" id="dsink-' + i + '" style="margin-top:3px;"></div>' +
             '<div class="eq-bars" id="deq-' + i + '">' +
               '<div class="eq-bar"></div><div class="eq-bar"></div>' +
               '<div class="eq-bar"></div><div class="eq-bar"></div>' +
@@ -208,7 +209,7 @@ function populateDeviceCard(i, dev) {
         btInd.className = 'status-indicator active';
         btTxt.textContent = 'Connected';
     } else if (dev.reconnecting) {
-        btInd.className = 'status-indicator inactive';
+        btInd.className = 'status-indicator reconnecting';
         btTxt.textContent = 'Reconnecting\u2026' +
             (dev.reconnect_attempt ? ' (' + dev.reconnect_attempt + ')' : '');
     } else if (dev.bluetooth_available) {
@@ -364,6 +365,20 @@ function populateDeviceCard(i, dev) {
         if (volEl) volEl.textContent = dev.volume + '%';
     }
 
+    // Sink name — small hint under volume slider
+    var sinkEl = document.getElementById('dsink-' + i);
+    if (sinkEl) {
+        if (dev.sink_name) {
+            sinkEl.textContent = dev.sink_name;
+            sinkEl.style.color = '';
+        } else if (dev.bluetooth_mac && !hasSink) {
+            sinkEl.textContent = '\u26a0 No audio sink';
+            sinkEl.style.color = '#f59e0b';
+        } else {
+            sinkEl.textContent = '';
+        }
+    }
+
     // Equalizer — show only when audio data is actually streaming
     var eqEl = document.getElementById('deq-' + i);
     if (eqEl) eqEl.classList.toggle('active', !!dev.audio_streaming);
@@ -424,6 +439,8 @@ function onVolumeInput(i, val) {
 
     // Mark pending so status poll doesn't overwrite while user drags
     volPending[i] = true;
+    var slider = document.getElementById('vslider-' + i);
+    if (slider && !slider.disabled) { slider.style.opacity = '0.55'; }
     clearTimeout(volTimers[i]);
     volTimers[i] = setTimeout(function() {
         sendVolume(i, parseInt(val, 10));
@@ -442,6 +459,8 @@ async function sendVolume(deviceIndex, vol) {
         console.error('Volume set failed:', err);
     } finally {
         delete volPending[deviceIndex];
+        var slider = document.getElementById('vslider-' + deviceIndex);
+        if (slider && !slider.disabled) { slider.style.opacity = ''; }
     }
 }
 
@@ -1383,9 +1402,56 @@ function reloadDiagnostics() {
 // ---- Init ----
 loadConfig();   // calls loadBtAdapters() internally after restoring btManualAdapters
 updateStatus();
-var _statusInterval = setInterval(updateStatus, 2000);
+
+// Use SSE for real-time status push; fall back to polling if not supported
+var _statusInterval = null;
+(function _initStatusStream() {
+    if (typeof EventSource === 'undefined') {
+        // No SSE support — poll every 2 s
+        _statusInterval = setInterval(updateStatus, 2000);
+        return;
+    }
+    var es = new EventSource(API_BASE + '/api/status/stream');
+    var _sseAlive = true;
+    es.onmessage = function(e) {
+        try {
+            var status = JSON.parse(e.data);
+            // Reuse the same rendering logic as updateStatus()
+            var info = [];
+            if (status.hostname)   info.push(escHtml(status.hostname));
+            if (status.ip_address) info.push(escHtml(status.ip_address));
+            if (status.uptime)     info.push('up ' + escHtml(status.uptime));
+            var sysEl = document.getElementById('system-info');
+            if (sysEl) sysEl.innerHTML = info.join(' &middot; ');
+            var devices = status.devices || [status];
+            if (lastDevices.length !== devices.length ||
+                !lastDevices.every(function(d, idx) { return d.player_name === devices[idx].player_name; })) {
+                _groupSelected = {};
+            }
+            lastDevices = devices;
+            var grid = document.getElementById('status-grid');
+            devices.forEach(function(dev, i) {
+                var card = document.getElementById('device-card-' + i);
+                if (!card) { card = buildDeviceCard(i); grid.appendChild(card); }
+                populateDeviceCard(i, dev);
+            });
+            Array.from(grid.querySelectorAll('.device-card'))
+                .slice(devices.length).forEach(function(c) { c.remove(); });
+            _updateGroupPanel();
+        } catch (err) { console.error('SSE parse error:', err); }
+    };
+    es.onerror = function() {
+        if (!_sseAlive) return;
+        console.warn('SSE disconnected, falling back to polling');
+        _sseAlive = false;
+        es.close();
+        _statusInterval = setInterval(updateStatus, 2000);
+    };
+    window.addEventListener('beforeunload', function() { es.close(); });
+})();
+
 window.addEventListener('beforeunload', function() {
-    clearInterval(_statusInterval);
+    if (_statusInterval) clearInterval(_statusInterval);
     clearInterval(_tzPreviewInterval);
 });
 refreshLogs();
