@@ -49,11 +49,11 @@ async function updateStatus() {
         var status = await resp.json();
 
         var info = [];
-        if (status.hostname)   info.push(escHtml(status.hostname));
-        if (status.ip_address) info.push(escHtml(status.ip_address));
-        if (status.uptime)     info.push('up ' + escHtml(status.uptime));
+        if (status.hostname)   info.push(status.hostname);
+        if (status.ip_address) info.push(status.ip_address);
+        if (status.uptime)     info.push('up ' + status.uptime);
         var sysEl = document.getElementById('system-info');
-        if (sysEl) sysEl.innerHTML = info.join(' &middot; ');
+        if (sysEl) sysEl.textContent = info.join(' \u00b7 ');
 
         var devices = status.devices || [status];
         // Reset group selection if device list changes (avoids stale index mapping)
@@ -993,13 +993,27 @@ async function startBtScan() {
     var listDiv = document.getElementById('scan-results-list');
 
     btn.disabled = true;
-    status.textContent = '🔄 Scanning\u2026 (~10s)';
+    status.textContent = '\uD83D\uDD04 Scanning\u2026 (~10s)';
     box.style.display = 'none';
 
     try {
         var resp = await fetch(API_BASE + '/api/bt/scan', { method: 'POST' });
         var data = await resp.json();
-        var devices = data.devices || [];
+        var jobId = data.job_id;
+        if (!jobId) { throw new Error(data.error || 'No job_id returned'); }
+
+        // Poll for result every 2 s
+        var devices = null;
+        for (var attempt = 0; attempt < 30; attempt++) {
+            await new Promise(function(resolve) { setTimeout(resolve, 2000); });
+            var pollResp = await fetch(API_BASE + '/api/bt/scan/result/' + jobId);
+            var pollData = await pollResp.json();
+            if (pollData.status === 'done') {
+                devices = pollData.devices || [];
+                break;
+            }
+        }
+        if (devices === null) { throw new Error('Scan timed out'); }
 
         if (devices.length === 0) {
             status.textContent = 'No devices found.';
@@ -1418,11 +1432,11 @@ var _statusInterval = null;
             var status = JSON.parse(e.data);
             // Reuse the same rendering logic as updateStatus()
             var info = [];
-            if (status.hostname)   info.push(escHtml(status.hostname));
-            if (status.ip_address) info.push(escHtml(status.ip_address));
-            if (status.uptime)     info.push('up ' + escHtml(status.uptime));
+            if (status.hostname)   info.push(status.hostname);
+            if (status.ip_address) info.push(status.ip_address);
+            if (status.uptime)     info.push('up ' + status.uptime);
             var sysEl = document.getElementById('system-info');
-            if (sysEl) sysEl.innerHTML = info.join(' &middot; ');
+            if (sysEl) sysEl.textContent = info.join(' \u00b7 ');
             var devices = status.devices || [status];
             if (lastDevices.length !== devices.length ||
                 !lastDevices.every(function(d, idx) { return d.player_name === devices[idx].player_name; })) {

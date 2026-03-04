@@ -12,11 +12,10 @@ import subprocess
 import threading
 from pathlib import Path
 
+from config import CONFIG_FILE as _CONFIG_FILE
 from config import _config_lock
 
 logger = logging.getLogger(__name__)
-
-_CONFIG_FILE = Path(os.getenv("CONFIG_DIR", "/config")) / "config.json"
 _OPTIONS_FILE = Path("/data/options.json")
 
 _AUDIO_UUIDS = {

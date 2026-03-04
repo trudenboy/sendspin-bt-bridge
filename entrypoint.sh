@@ -4,99 +4,10 @@ set -euo pipefail
 echo "=== Starting Sendspin Client Container ==="
 
 # HA Addon mode: /data/options.json is written by HA Supervisor before start.
-# Translate it to /config/config.json so the rest of the startup is uniform.
+# Translate it to /data/config.json so the rest of the startup is uniform.
 if [ -f /data/options.json ]; then
     echo "HA Addon mode detected — reading /data/options.json"
-    mkdir -p /config
-    python3 - <<'PYEOF'
-import json, os, subprocess, re
-
-with open('/data/options.json') as f:
-    opts = json.load(f)
-
-# Timezone: use options value, fall back to TZ env var (set by HA Supervisor),
-# then UTC
-tz = (opts.get('tz') or '').strip() or os.environ.get('TZ', '') or 'UTC'
-
-# bluetooth_adapters: auto-detect via bluetoothctl, merge with options entries
-raw_adapters = opts.get('bluetooth_adapters', []) or []
-
-detected = []
-try:
-    out = subprocess.check_output(
-        ['bluetoothctl', 'list'], stderr=subprocess.DEVNULL, timeout=5
-    ).decode()
-    # Lines: "Controller AA:BB:CC:DD:EE:FF Name [default]"
-    for i, line in enumerate(out.strip().splitlines()):
-        m = re.search(r'Controller\s+([0-9A-Fa-f:]{17})\s+(.*?)(\s+\[default\])?$', line)
-        if m:
-            detected.append({
-                'id': f'hci{i}',
-                'mac': m.group(1),
-                'name': m.group(2).strip() or f'hci{i}'
-            })
-except Exception:
-    pass
-
-# Merge: detected takes precedence for hw fields; options name wins if set
-existing_macs = {a['mac']: a for a in detected if a.get('mac')}
-existing_ids  = {a['id']:  a for a in detected if a.get('id')}
-for a in raw_adapters:
-    # If user supplied a name in options, apply it to the matching detected entry
-    opt_name = a.get('name', '').strip()
-    if a.get('mac') and a['mac'] in existing_macs:
-        if opt_name:
-            existing_macs[a['mac']]['name'] = opt_name
-    elif a.get('id') and a['id'] in existing_ids:
-        if opt_name:
-            existing_ids[a['id']]['name'] = opt_name
-    # Keep manual entries not found in detected
-    elif a.get('mac') and a['mac'] not in existing_macs:
-        detected.append({'id': a.get('id', ''), 'mac': a['mac'], 'name': opt_name or a.get('id', '')})
-    elif a.get('id') and a['id'] not in existing_ids:
-        detected.append({'id': a['id'], 'mac': a.get('mac', ''), 'name': opt_name or a['id']})
-
-adapters = detected
-
-config = {
-    'SENDSPIN_SERVER':        opts.get('sendspin_server', 'auto'),
-    'SENDSPIN_PORT':          str(opts.get('sendspin_port', 9000)),
-    'BRIDGE_NAME':            opts.get('bridge_name', ''),
-    'BRIDGE_NAME_SUFFIX':     opts.get('bridge_name_suffix', False),
-    'BLUETOOTH_DEVICES':      opts.get('bluetooth_devices', []),
-    'BLUETOOTH_ADAPTERS':     adapters,
-    'TZ':                     tz,
-    'PULSE_LATENCY_MSEC':     opts.get('pulse_latency_msec', 200),
-    'PREFER_SBC_CODEC':       opts.get('prefer_sbc_codec', False),
-    'BT_CHECK_INTERVAL':      opts.get('bt_check_interval', 10),
-    'BT_MAX_RECONNECT_FAILS': opts.get('bt_max_reconnect_fails', 0),
-    'AUTH_ENABLED':           opts.get('auth_enabled', False),
-}
-
-# Normalize: devices without explicit 'enabled' field default to True
-for dev in config.get('BLUETOOTH_DEVICES', []):
-    dev.setdefault('enabled', True)
-
-# Preserve runtime state (volumes, release/reclaim flags) from previous config
-try:
-    with open('/data/config.json') as f:
-        existing = json.load(f)
-    if 'LAST_VOLUMES' in existing:
-        config['LAST_VOLUMES'] = existing['LAST_VOLUMES']
-    elif 'LAST_VOLUME' in existing:
-        config['LAST_VOLUME'] = existing['LAST_VOLUME']
-    # Preserve secrets — never exposed via HA Supervisor options
-    for key in ('AUTH_PASSWORD_HASH', 'SECRET_KEY'):
-        if key in existing:
-            config[key] = existing[key]
-except (FileNotFoundError, json.JSONDecodeError):
-    pass
-
-with open('/data/config.json', 'w') as f:
-    json.dump(config, f, indent=2)
-
-print(f"Generated /data/config.json with {len(config['BLUETOOTH_DEVICES'])} device(s), TZ={config['TZ']}, {len(config['BLUETOOTH_ADAPTERS'])} adapter(s)")
-PYEOF
+    python3 /app/scripts/translate_ha_config.py
 fi
 
 # Use host's D-Bus (mounted from host)

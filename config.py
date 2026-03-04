@@ -17,7 +17,7 @@ import threading
 import uuid as _uuid
 from pathlib import Path
 
-VERSION = "2.6.0"
+VERSION = "2.6.1"
 BUILD_DATE = "2026-03-04"
 
 DEFAULT_CONFIG = {
@@ -38,7 +38,6 @@ DEFAULT_CONFIG = {
 
 logger = logging.getLogger(__name__)
 
-_CONFIG_PATH = os.path.join(os.getenv("CONFIG_DIR", "/config"), "config.json")
 CONFIG_DIR = Path(os.getenv("CONFIG_DIR", "/config"))
 CONFIG_FILE = CONFIG_DIR / "config.json"
 _config_lock = threading.Lock()  # serializes all config.json read-modify-write ops
@@ -49,28 +48,29 @@ def _player_id_from_mac(mac: str) -> str:
     return str(_uuid.uuid5(_uuid.NAMESPACE_DNS, mac.lower()))
 
 
-def _save_device_volume(mac: str | None, volume: int) -> None:
+def save_device_volume(mac: str | None, volume: int) -> None:
     """Persist per-device volume to config.json under LAST_VOLUMES[mac]."""
-    if not mac or not os.path.exists(_CONFIG_PATH):
+    if not mac or not CONFIG_FILE.exists():
         return
     try:
         with _config_lock:
-            with open(_CONFIG_PATH) as f:
+            with open(CONFIG_FILE) as f:
                 cfg = json.load(f)
             cfg.setdefault("LAST_VOLUMES", {})[mac] = volume
-            tmp = _CONFIG_PATH + ".tmp"
+            tmp = str(CONFIG_FILE) + ".tmp"
             with open(tmp, "w") as f:
                 json.dump(cfg, f, indent=2)
-            os.replace(tmp, _CONFIG_PATH)
+            os.replace(tmp, str(CONFIG_FILE))
     except Exception as e:
         logger.debug(f"Could not save volume for {mac}: {e}")
 
 
+# Keep private alias for backward compatibility with internal callers
+_save_device_volume = save_device_volume
+
+
 def load_config() -> dict:
     """Load configuration from file, falling back to defaults."""
-    config_dir = Path(os.getenv("CONFIG_DIR", "/config"))
-    config_file = config_dir / "config.json"
-
     result = DEFAULT_CONFIG.copy()
 
     allowed_keys = {
@@ -93,18 +93,18 @@ def load_config() -> dict:
         "SECRET_KEY",
     }
 
-    if config_file.exists():
+    if CONFIG_FILE.exists():
         try:
-            with open(config_file) as f:
+            with open(CONFIG_FILE) as f:
                 saved_config = json.load(f)
             for key, value in saved_config.items():
                 if key in allowed_keys:
                     result[key] = value
-            logger.info(f"Loaded config from {config_file}")
+            logger.info(f"Loaded config from {CONFIG_FILE}")
         except Exception as e:
             logger.warning(f"Error loading config: {e}, using defaults")
     else:
-        logger.info(f"Config file not found at {config_file}, using defaults")
+        logger.info(f"Config file not found at {CONFIG_FILE}, using defaults")
 
     return result
 

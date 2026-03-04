@@ -11,13 +11,12 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import os
 import re
 import subprocess
 import time
 from datetime import datetime
 
-from config import _CONFIG_PATH
+from config import CONFIG_FILE as _CONFIG_FILE
 from services.pulse import get_sink_volume, list_sinks, set_sink_volume
 
 logger = logging.getLogger(__name__)
@@ -307,7 +306,8 @@ class BluetoothManager:
                 text=True,
             )
             # Send initial setup and start scanning
-            assert proc.stdin is not None
+            if proc.stdin is None:
+                raise RuntimeError("bluetoothctl subprocess stdin unavailable")
             proc.stdin.write("\n".join(initial_cmds) + "\n")
             proc.stdin.flush()
             # Wait for scan to discover device
@@ -395,9 +395,8 @@ class BluetoothManager:
                     # Restore last volume for this device (keyed by MAC)
                     restored = False
                     try:
-                        config_path = _CONFIG_PATH
-                        if os.path.exists(config_path):
-                            with open(config_path) as f:
+                        if _CONFIG_FILE.exists():
+                            with open(_CONFIG_FILE) as f:
                                 cfg = json.load(f)
                             volumes = cfg.get("LAST_VOLUMES", {})
                             last_volume = volumes.get(self.mac_address)
@@ -406,7 +405,7 @@ class BluetoothManager:
                             if last_volume is not None and isinstance(last_volume, int) and 0 <= last_volume <= 100:
                                 if set_sink_volume(configured_sink, last_volume):
                                     logger.info(f"✓ Restored volume to {last_volume}% for {self.mac_address}")
-                                    self.client.status["volume"] = last_volume
+                                    self.client._update_status({"volume": last_volume})
                                     restored = True
                     except Exception as e:
                         logger.debug(f"Could not restore volume: {e}")
@@ -473,6 +472,33 @@ class BluetoothManager:
             self.connected = False
         return success
 
+    def _handle_reconnect_failure(self, attempt: int) -> bool:
+        """Disable BT management after too many consecutive failed reconnects.
+
+        Returns True if management was disabled (caller should stop reconnecting).
+        Side-effects: sets self.management_enabled=False, updates client status,
+        calls persist_device_enabled().
+        """
+        if self.max_reconnect_fails <= 0 or attempt < self.max_reconnect_fails:
+            return False
+        logger.warning(
+            "[%s] %d consecutive failed reconnects (threshold=%d) — auto-disabling BT management",
+            self.device_name,
+            attempt,
+            self.max_reconnect_fails,
+        )
+        self.management_enabled = False
+        if self.client:
+            self.client.bt_management_enabled = False
+            self.client._update_status({"bt_management_enabled": False, "reconnecting": False})
+        try:
+            from services.bluetooth import persist_device_enabled
+
+            persist_device_enabled(self.device_name, False)
+        except Exception as _e:
+            logger.debug("persist_device_enabled failed: %s", _e)
+        return True
+
     async def monitor_and_reconnect(self):
         """Continuously monitor BT connection and reconnect if needed.
 
@@ -492,7 +518,7 @@ class BluetoothManager:
 
     async def _monitor_polling(self):
         """Legacy bluetoothctl polling-based monitor (fallback)."""
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         iteration = 0
         reconnect_attempt = 0
         while True:
@@ -505,38 +531,31 @@ class BluetoothManager:
                 current_time = time.time()
                 if current_time - self.last_check >= self.check_interval:
                     self.last_check = current_time
-                    logger.info(f"[{self.device_name}] BT poll #{iteration}")
+                    logger.debug(f"[{self.device_name}] BT poll #{iteration}")
 
                     connected = await loop.run_in_executor(None, self.is_device_connected)
-                    logger.info(f"[{self.device_name}] BT connected={connected}")
+                    logger.debug(f"[{self.device_name}] BT connected={connected}")
 
                     if self.client:
                         if connected != self.client.status.get("bluetooth_connected"):
-                            self.client.status["bluetooth_connected"] = connected
-                            self.client.status["bluetooth_connected_at"] = datetime.now().isoformat()
+                            self.client._update_status(
+                                {
+                                    "bluetooth_connected": connected,
+                                    "bluetooth_connected_at": datetime.now().isoformat(),
+                                }
+                            )
 
                     if not connected:
                         reconnect_attempt += 1
                         if self.client:
-                            self.client.status["reconnecting"] = True
-                            self.client.status["reconnect_attempt"] = reconnect_attempt
-
-                        if self.max_reconnect_fails > 0 and reconnect_attempt >= self.max_reconnect_fails:
-                            logger.warning(
-                                f"[{self.device_name}] {reconnect_attempt} consecutive failed reconnects "
-                                f"(threshold={self.max_reconnect_fails}) — auto-disabling BT management"
+                            self.client._update_status(
+                                {
+                                    "reconnecting": True,
+                                    "reconnect_attempt": reconnect_attempt,
+                                }
                             )
-                            self.management_enabled = False
-                            if self.client:
-                                self.client.bt_management_enabled = False
-                                self.client.status["bt_management_enabled"] = False
-                                self.client.status["reconnecting"] = False
-                            try:
-                                from services.bluetooth import persist_device_enabled
 
-                                persist_device_enabled(self.device_name, False)
-                            except Exception as _e:
-                                logger.debug(f"persist_device_enabled failed: {_e}")
+                        if self._handle_reconnect_failure(reconnect_attempt):
                             reconnect_attempt = 0
                             continue
 
@@ -550,14 +569,12 @@ class BluetoothManager:
                         success = await loop.run_in_executor(None, self.connect_device)
                         if success and self.client:
                             reconnect_attempt = 0
-                            self.client.status["reconnecting"] = False
-                            self.client.status["reconnect_attempt"] = 0
+                            self.client._update_status({"reconnecting": False, "reconnect_attempt": 0})
                             logger.info(f"BT reconnected for {self.device_name}, starting sendspin...")
                             await self.client.start_sendspin()
                     else:
                         if self.client and self.client.status.get("reconnecting"):
-                            self.client.status["reconnecting"] = False
-                            self.client.status["reconnect_attempt"] = 0
+                            self.client._update_status({"reconnecting": False, "reconnect_attempt": 0})
                         reconnect_attempt = 0
 
                 await asyncio.sleep(5)
@@ -571,7 +588,7 @@ class BluetoothManager:
         Raises RuntimeError after 3 consecutive connection failures so
         monitor_and_reconnect() can fall back to bluetoothctl polling.
         """
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         reconnect_attempt = 0
         connect_failures = 0
         _MAX_CONNECT_FAILURES = 3
@@ -609,8 +626,12 @@ class BluetoothManager:
                 except Exception:
                     self.connected = False
                 if self.client:
-                    self.client.status["bluetooth_connected"] = self.connected
-                    self.client.status["bluetooth_connected_at"] = datetime.now().isoformat()
+                    self.client._update_status(
+                        {
+                            "bluetooth_connected": self.connected,
+                            "bluetooth_connected_at": datetime.now().isoformat(),
+                        }
+                    )
 
                 # asyncio.Event set from D-Bus signal callback (called in D-Bus reader task thread)
                 disconnect_event = asyncio.Event()
@@ -627,8 +648,12 @@ class BluetoothManager:
                         self.connected = new_connected
                         ts = datetime.now().isoformat()
                         if self.client:
-                            self.client.status["bluetooth_connected"] = new_connected
-                            self.client.status["bluetooth_connected_at"] = ts
+                            self.client._update_status(
+                                {
+                                    "bluetooth_connected": new_connected,
+                                    "bluetooth_connected_at": ts,
+                                }
+                            )
                         if not new_connected:
                             loop.call_soon_threadsafe(evt.set)
                             logger.warning(f"[{self.device_name}] PropertiesChanged: Disconnected!")
@@ -650,8 +675,7 @@ class BluetoothManager:
                     if self.connected:
                         # Clear reconnect state
                         if self.client and self.client.status.get("reconnecting"):
-                            self.client.status["reconnecting"] = False
-                            self.client.status["reconnect_attempt"] = 0
+                            self.client._update_status({"reconnecting": False, "reconnect_attempt": 0})
                         reconnect_attempt = 0
 
                         # Wait for disconnect signal or heartbeat timeout
@@ -665,8 +689,12 @@ class BluetoothManager:
                                     logger.warning(f"[{self.device_name}] Heartbeat: missed disconnect signal")
                                     self.connected = False
                                     if self.client:
-                                        self.client.status["bluetooth_connected"] = False
-                                        self.client.status["bluetooth_connected_at"] = datetime.now().isoformat()
+                                        self.client._update_status(
+                                            {
+                                                "bluetooth_connected": False,
+                                                "bluetooth_connected_at": datetime.now().isoformat(),
+                                            }
+                                        )
                                     disconnect_event.set()
                             except Exception:
                                 pass
@@ -675,26 +703,15 @@ class BluetoothManager:
                         disconnect_event.clear()
                         reconnect_attempt += 1
                         if self.client:
-                            self.client.status["reconnecting"] = True
-                            self.client.status["reconnect_attempt"] = reconnect_attempt
+                            self.client._update_status(
+                                {
+                                    "reconnecting": True,
+                                    "reconnect_attempt": reconnect_attempt,
+                                }
+                            )
 
                         # Auto-disable after too many failures
-                        if self.max_reconnect_fails > 0 and reconnect_attempt >= self.max_reconnect_fails:
-                            logger.warning(
-                                f"[{self.device_name}] {reconnect_attempt} consecutive failed reconnects "
-                                f"(threshold={self.max_reconnect_fails}) — auto-disabling BT management"
-                            )
-                            self.management_enabled = False
-                            if self.client:
-                                self.client.bt_management_enabled = False
-                                self.client.status["bt_management_enabled"] = False
-                                self.client.status["reconnecting"] = False
-                            try:
-                                from services.bluetooth import persist_device_enabled
-
-                                persist_device_enabled(self.device_name, False)
-                            except Exception as _e:
-                                logger.debug(f"persist_device_enabled failed: {_e}")
+                        if self._handle_reconnect_failure(reconnect_attempt):
                             reconnect_attempt = 0
                             restart_outer = True
                             break
@@ -713,10 +730,14 @@ class BluetoothManager:
                             reconnect_attempt = 0
                             self.connected = True
                             if self.client:
-                                self.client.status["reconnecting"] = False
-                                self.client.status["reconnect_attempt"] = 0
-                                self.client.status["bluetooth_connected"] = True
-                                self.client.status["bluetooth_connected_at"] = datetime.now().isoformat()
+                                self.client._update_status(
+                                    {
+                                        "reconnecting": False,
+                                        "reconnect_attempt": 0,
+                                        "bluetooth_connected": True,
+                                        "bluetooth_connected_at": datetime.now().isoformat(),
+                                    }
+                                )
                             # Re-subscribe signals — device object may have changed
                             logger.info(f"[{self.device_name}] Reconnected, restarting D-Bus subscription...")
                             if self.client:

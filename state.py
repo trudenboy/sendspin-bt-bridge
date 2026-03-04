@@ -7,9 +7,9 @@ web_interface.py (reads for API responses) and sendspin_client.py (writes via se
 
 import json
 import logging
-import os
 import threading
-from pathlib import Path
+
+from config import CONFIG_FILE as _config_file
 
 # ---------------------------------------------------------------------------
 # SSE status-change signalling — used by /api/status/stream
@@ -53,14 +53,14 @@ def set_clients(new_clients: list) -> None:
 # ---------------------------------------------------------------------------
 _adapter_name_cache: dict[str, str] = {}
 _adapter_cache_loaded = False
+_adapter_cache_lock = threading.Lock()
 
 
 def load_adapter_name_cache() -> None:
     """Load adapter friendly names from config.json into the in-memory cache."""
     global _adapter_name_cache, _adapter_cache_loaded
-    config_file = Path(os.getenv("CONFIG_DIR", "/config")) / "config.json"
     try:
-        with open(config_file) as _f:
+        with open(_config_file) as _f:
             _cfg = json.load(_f)
         _adapter_name_cache = {
             a.get("mac", a.get("id", "")).upper(): a.get("name", "")
@@ -76,5 +76,42 @@ def load_adapter_name_cache() -> None:
 def get_adapter_name(mac_upper: str) -> "str | None":
     """Return adapter friendly name for the given MAC (uppercase), loading cache if needed."""
     if not _adapter_cache_loaded:
-        load_adapter_name_cache()
+        with _adapter_cache_lock:
+            if not _adapter_cache_loaded:  # double-checked locking
+                load_adapter_name_cache()
     return _adapter_name_cache.get(mac_upper)
+
+
+# ---------------------------------------------------------------------------
+# BT scan job store — keyed by UUID, TTL ~2 min
+# ---------------------------------------------------------------------------
+import time as _time  # noqa: E402 — intentionally late to keep top-level imports minimal
+
+_scan_jobs: dict[str, dict] = {}
+_scan_jobs_lock = threading.Lock()
+_SCAN_JOB_TTL = 120  # seconds
+
+
+def create_scan_job(job_id: str) -> None:
+    """Register a new in-progress scan job."""
+    with _scan_jobs_lock:
+        # Evict expired jobs before adding new one
+        now = _time.time()
+        expired = [jid for jid, j in _scan_jobs.items() if now - j.get("created", 0) > _SCAN_JOB_TTL]
+        for jid in expired:
+            del _scan_jobs[jid]
+        _scan_jobs[job_id] = {"status": "running", "created": now}
+
+
+def finish_scan_job(job_id: str, result: dict) -> None:
+    """Mark a scan job as done with its result."""
+    with _scan_jobs_lock:
+        if job_id in _scan_jobs:
+            _scan_jobs[job_id]["status"] = "done"
+            _scan_jobs[job_id].update(result)
+
+
+def get_scan_job(job_id: str) -> "dict | None":
+    """Return the job dict or None if not found."""
+    with _scan_jobs_lock:
+        return _scan_jobs.get(job_id)

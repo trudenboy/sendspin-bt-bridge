@@ -7,6 +7,7 @@ Runs the sendspin CLI player with Bluetooth speaker management
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import json
 import logging
 import os
@@ -15,12 +16,15 @@ import socket
 import sys
 import threading
 import time
+from dataclasses import dataclass, field
 from datetime import datetime
 
 import state as _state
 from bluetooth_manager import BluetoothManager
 from config import (
-    _CONFIG_PATH,
+    CONFIG_FILE as _CONFIG_PATH,
+)
+from config import (
     _player_id_from_mac,
     _save_device_volume,
     load_config,
@@ -37,6 +41,73 @@ from mpris import (
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class DeviceStatus:
+    """Typed status container for a single Sendspin device.
+
+    Supports dict-style access (``status["key"]``, ``status.get("key")``,
+    ``status.update({...})``, ``status.copy()``) so existing callers require
+    no changes.  Only declared fields can be set — this prevents unbounded
+    dict growth from unexpected subprocess keys.
+    """
+
+    connected: bool = False
+    playing: bool = False
+    bluetooth_available: bool = False
+    bluetooth_connected: bool = False
+    bluetooth_connected_at: str | None = None
+    server_connected: bool = False
+    server_connected_at: str | None = None
+    current_track: str | None = None
+    current_artist: str | None = None
+    volume: int = 100
+    muted: bool = False
+    audio_format: str | None = None
+    reanchor_count: int = 0
+    last_sync_error_ms: float | None = None
+    reanchoring: bool = False
+    audio_streaming: bool = False
+    state_changed_at: str | None = None
+    ip_address: str = ""
+    hostname: str = ""
+    last_error: str | None = None
+    last_error_at: str | None = None
+    uptime_start: datetime = field(default_factory=datetime.now)
+    reconnecting: bool = False
+    reconnect_attempt: int = 0
+    bt_management_enabled: bool = True
+    group_name: str | None = None
+    group_id: str | None = None
+    connected_server_url: str | None = None
+
+    # ── Dict-compatible interface ──────────────────────────────────────────
+
+    def __getitem__(self, key: str):
+        try:
+            return getattr(self, key)
+        except AttributeError:
+            raise KeyError(key)
+
+    def __setitem__(self, key: str, value) -> None:
+        if hasattr(self, key):
+            setattr(self, key, value)
+        # Silently ignore unknown keys (mirrors old dict behaviour for safety)
+
+    def __contains__(self, key: object) -> bool:
+        return hasattr(self, key) if isinstance(key, str) else False
+
+    def get(self, key: str, default=None):
+        return getattr(self, key, default)
+
+    def update(self, d: dict) -> None:
+        for k, v in d.items():
+            if hasattr(self, k):
+                setattr(self, k, v)
+
+    def copy(self) -> dict:
+        return dataclasses.asdict(self)
 
 
 class SendspinClient:
@@ -65,44 +136,29 @@ class SendspinClient:
         self._effective_bridge = effective_bridge  # bridge instance label for MA device info
 
         # Status tracking
-        self.status = {
-            "connected": False,
-            "playing": False,
-            "bluetooth_available": bt_manager.check_bluetooth_available() if bt_manager else False,
-            "bluetooth_connected": False,
-            "bluetooth_connected_at": None,
-            "server_connected": False,
-            "server_connected_at": None,
-            "current_track": None,
-            "current_artist": None,
-            "volume": 100,
-            "muted": False,
-            "audio_format": None,
-            "reanchor_count": 0,
-            "last_sync_error_ms": None,
-            "reanchoring": False,
-            "audio_streaming": False,
-            "state_changed_at": None,
-            "ip_address": listen_host or self.get_ip_address(),
-            "hostname": socket.gethostname(),
-            "last_error": None,
-            "uptime_start": datetime.now(),
-            "reconnecting": False,
-            "reconnect_attempt": 0,
-            "bt_management_enabled": True,
-            "group_name": None,
-            "group_id": None,
-        }
+        self.status = DeviceStatus(
+            bluetooth_available=bt_manager.check_bluetooth_available() if bt_manager else False,
+            ip_address=listen_host or self.get_ip_address(),
+            hostname=socket.gethostname(),
+        )
 
+        self._status_lock = threading.Lock()
         self.running = False
         self.bt_management_enabled: bool = True
         self.bluetooth_sink_name = None  # Store Bluetooth sink name for volume sync
         self.connected_server_url: str = ""  # actual resolved ws:// URL (populated after connect)
         self._daemon_proc: asyncio.subprocess.Process | None = None
         self._daemon_task: asyncio.Task | None = None  # stdout reader task
+        self._stderr_task: asyncio.Task | None = None  # stderr reader task
         self._bridge_daemon = None  # kept for API compatibility, always None in subprocess mode
         self._monitor_task: asyncio.Task | None = None
         self._restart_delay: float = 1.0  # exponential backoff for unexpected daemon restarts
+
+    def _update_status(self, updates: dict) -> None:
+        """Thread-safe update of self.status; notifies SSE listeners."""
+        with self._status_lock:
+            self.status.update(updates)
+        _state.notify_status_changed()
 
     def get_ip_address(self) -> str:
         """Get the primary IP address of this machine"""
@@ -127,20 +183,26 @@ class SendspinClient:
                     # so we avoid a redundant bluetoothctl subprocess here.
                     bt_connected = self.bt_manager.connected
                     if bt_connected != self.status["bluetooth_connected"]:
-                        self.status["bluetooth_connected"] = bt_connected
-                        self.status["bluetooth_connected_at"] = datetime.now().isoformat()
-                        _state.notify_status_changed()
+                        self._update_status(
+                            {
+                                "bluetooth_connected": bt_connected,
+                                "bluetooth_connected_at": datetime.now().isoformat(),
+                            }
+                        )
 
                 # Check daemon subprocess health
                 if self._daemon_proc is not None:
                     if self._daemon_proc.returncode is not None:
                         # Subprocess exited
-                        self.status["server_connected"] = False
-                        self.status["connected"] = False
-                        self.status["group_name"] = None
-                        self.status["group_id"] = None
+                        self._update_status(
+                            {
+                                "server_connected": False,
+                                "connected": False,
+                                "group_name": None,
+                                "group_id": None,
+                            }
+                        )
                         self._daemon_proc = None
-                        _state.notify_status_changed()
                         # Don't restart if BT is disconnected — monitor_and_reconnect
                         # will call start_sendspin() once BT reconnects.
                         if not self.bt_manager or self.bt_manager.connected:
@@ -224,13 +286,15 @@ class SendspinClient:
                 params,
                 stdout=asyncio.subprocess.PIPE,
                 stdin=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.DEVNULL,  # stderr goes to container logs via root logger
+                stderr=asyncio.subprocess.PIPE,
                 env=env,
             )
-            self.status["playing"] = False
+            with self._status_lock:
+                self.status["playing"] = False
 
-            # Start async task to consume subprocess stdout (status + log lines)
+            # Start async tasks to consume subprocess stdout and stderr
             self._daemon_task = asyncio.create_task(self._read_subprocess_output())
+            self._stderr_task = asyncio.create_task(self._read_subprocess_stderr())
 
             def _on_reader_done(t: asyncio.Task) -> None:
                 if not t.cancelled() and t.exception():
@@ -241,8 +305,7 @@ class SendspinClient:
 
         except Exception as e:
             logger.error(f"Failed to start Sendspin daemon subprocess: {e}")
-            self.status["last_error"] = str(e)
-            self.status["server_connected"] = False
+            self._update_status({"last_error": str(e), "server_connected": False})
 
     async def _read_subprocess_output(self) -> None:
         """Read JSON lines from daemon subprocess stdout and merge into self.status."""
@@ -286,19 +349,28 @@ class SendspinClient:
                 continue
             if msg.get("type") == "status":
                 # Track volume changes for persistence
-                prev_volume = self.status.get("volume")
-                # Merge only whitelisted keys from subprocess status
-                for k, v in msg.items():
-                    if k in _ALLOWED_KEYS:
-                        self.status[k] = v
+                with self._status_lock:
+                    prev_volume = self.status.get("volume")
+                updates = {k: v for k, v in msg.items() if k in _ALLOWED_KEYS}
+                if updates:
+                    self._update_status(updates)
                 new_volume = self.status.get("volume")
                 _mac = self.bt_manager.mac_address if self.bt_manager else None
                 if new_volume is not None and isinstance(new_volume, int) and new_volume != prev_volume and _mac:
                     _save_device_volume(_mac, new_volume)
-                _state.notify_status_changed()
             elif msg.get("type") == "log":
                 log_fn = _LOG_METHODS.get(msg.get("level", "info"), logger.info)
                 log_fn("[%s/proc] %s", self.player_name, msg.get("msg", ""))
+
+    async def _read_subprocess_stderr(self) -> None:
+        """Forward daemon subprocess stderr lines to logger as warnings."""
+        if self._daemon_proc is None or self._daemon_proc.stderr is None:
+            return
+        while self._daemon_proc and self._daemon_proc.stderr:
+            line = await self._daemon_proc.stderr.readline()
+            if not line:
+                break
+            logger.warning("[%s] daemon stderr: %s", self.player_name, line.decode().rstrip())
 
     async def _send_subprocess_command(self, cmd: dict) -> None:
         """Write a JSON command to the daemon subprocess stdin."""
@@ -311,14 +383,16 @@ class SendspinClient:
 
     async def stop_sendspin(self) -> None:
         """Stop the daemon subprocess gracefully."""
-        # Cancel stdout reader task
-        if self._daemon_task and not self._daemon_task.done():
-            self._daemon_task.cancel()
-            try:
-                await asyncio.wait_for(self._daemon_task, timeout=2.0)
-            except (TimeoutError, asyncio.CancelledError):
-                pass
-        self._daemon_task = None
+        # Cancel stdout/stderr reader tasks
+        for _task_attr in ("_daemon_task", "_stderr_task"):
+            _t = getattr(self, _task_attr, None)
+            if _t and not _t.done():
+                _t.cancel()
+                try:
+                    await asyncio.wait_for(_t, timeout=2.0)
+                except (TimeoutError, asyncio.CancelledError):
+                    pass
+            setattr(self, _task_attr, None)
 
         # Terminate subprocess
         if self._daemon_proc and self._daemon_proc.returncode is None:
@@ -334,10 +408,11 @@ class SendspinClient:
         self._daemon_proc = None
         self._bridge_daemon = None
 
-        self.status["server_connected"] = False
-        self.status["connected"] = False
-        self.status["group_name"] = None
-        self.status["group_id"] = None
+        with self._status_lock:
+            self.status["server_connected"] = False
+            self.status["connected"] = False
+            self.status["group_name"] = None
+            self.status["group_id"] = None
 
     def is_running(self) -> bool:
         """Return True if the daemon subprocess is alive."""
@@ -370,12 +445,16 @@ class SendspinClient:
                 logger.info("Connecting Bluetooth speaker...")
                 try:
                     # Run in thread pool to avoid blocking
-                    loop = asyncio.get_event_loop()
+                    loop = asyncio.get_running_loop()
                     await loop.run_in_executor(None, self.bt_manager.connect_device)
                     bt_now = self.bt_manager.is_device_connected()
                     if bt_now != self.status["bluetooth_connected"]:
-                        self.status["bluetooth_connected"] = bt_now
-                        self.status["bluetooth_connected_at"] = datetime.now().isoformat()
+                        self._update_status(
+                            {
+                                "bluetooth_connected": bt_now,
+                                "bluetooth_connected_at": datetime.now().isoformat(),
+                            }
+                        )
                     # Restart daemon with correct BT audio device now that sink is known.
                     # At start_sendspin() time bluetooth_sink_name was None (BT not yet
                     # connected), so the daemon was bound to the default audio device.
@@ -418,7 +497,7 @@ class SendspinClient:
     def set_bt_management_enabled(self, enabled: bool) -> None:
         """Release (enabled=False) or reclaim (enabled=True) the BT adapter."""
         self.bt_management_enabled = enabled
-        self.status["bt_management_enabled"] = enabled
+        self._update_status({"bt_management_enabled": enabled})
         if self.bt_manager:
             self.bt_manager.management_enabled = enabled
         if not enabled:
@@ -525,11 +604,11 @@ async def main():
             if not bt_mgr.check_bluetooth_available():
                 logger.warning(f"BT adapter '{adapter or 'default'}' not available for {player_name}")
             client.bt_manager = bt_mgr
-            client.status["bluetooth_available"] = bt_mgr.check_bluetooth_available()
+            client._update_status({"bluetooth_available": bt_mgr.check_bluetooth_available()})
             bt_enabled = device.get("enabled", True)
             if not bt_enabled:
                 client.bt_management_enabled = False
-                client.status["bt_management_enabled"] = False
+                client._update_status({"bt_management_enabled": False})
                 bt_mgr.management_enabled = False
                 logger.info(f"  Player '{player_name}': BT management disabled at startup")
             # Pre-fill volume from saved LAST_VOLUMES so UI shows correct value before BT connects
@@ -538,7 +617,7 @@ async def main():
                     _saved = json.load(_f)
                 _saved_vol = _saved.get("LAST_VOLUMES", {}).get(mac)
                 if _saved_vol is not None and isinstance(_saved_vol, int) and 0 <= _saved_vol <= 100:
-                    client.status["volume"] = _saved_vol
+                    client._update_status({"volume": _saved_vol})
             except Exception:
                 pass
         clients.append(client)
@@ -595,7 +674,7 @@ async def main():
     logger.info("Web interface starting in background...")
 
     # Handle shutdown signals
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
 
     async def _graceful_shutdown():
         logger.info("Received shutdown signal — pausing players before exit...")
