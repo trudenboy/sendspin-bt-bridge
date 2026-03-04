@@ -224,12 +224,12 @@
 
         /* BT device table */
         .bt-header {
-            display: grid; grid-template-columns: 1fr 1.3fr 0.9fr 9rem 4.5rem 5.5rem 30px;
+            display: grid; grid-template-columns: 1fr 1.3fr 0.9fr 9rem 4.5rem 5.5rem 8rem 30px;
             gap: 8px; margin-bottom: 4px; padding: 0 2px;
             font-size: 11px; font-weight: 600; color: var(--secondary-text-color); text-transform: uppercase;
         }
         .bt-device-row {
-            display: grid; grid-template-columns: 1fr 1.3fr 0.9fr 9rem 4.5rem 5.5rem 30px;
+            display: grid; grid-template-columns: 1fr 1.3fr 0.9fr 9rem 4.5rem 5.5rem 8rem 30px;
             gap: 8px; align-items: center; margin-bottom: 8px;
         }
         .bt-device-row input, .bt-device-row select {
@@ -428,7 +428,7 @@
 
             /* BT device table → horizontal scroll */
             .bt-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-            .bt-header, .bt-device-row { min-width: 560px; }
+            .bt-header, .bt-device-row { min-width: 700px; }
 
             /* Adapters panel → horizontal scroll */
             .adapters-card { overflow-x: auto; -webkit-overflow-scrolling: touch; }
