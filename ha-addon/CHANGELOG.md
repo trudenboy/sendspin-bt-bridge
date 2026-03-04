@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [2.6.8] - 2026-03-04
 
+### Fixed
+- Pause All: sends one command per MA group, not per client — fixes duplicate signals to grouped players
+
 ### Improved
 - Web UI: hover-only details (BT MAC, server URI, sink name, WS URL) always visible on touch; icon buttons enlarged to ≥36px; toast full-width on narrow screens
 

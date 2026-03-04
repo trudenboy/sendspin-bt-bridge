@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [2.6.8] - 2026-03-04
 
+### Fixed
+- **Pause All — group playback**: `pause_all` now sends one command per MA group instead of one per client, preventing duplicate pause/play signals to grouped players
+
 ### Improved
 - **Web UI — Mobile**: Hover-only details (BT MAC, server URI, sink name, WS URL) are always visible on touch devices; icon buttons enlarged to ≥36px touch targets; toast notifications span full screen width on narrow viewports
 
