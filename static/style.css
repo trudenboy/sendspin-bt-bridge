@@ -429,6 +429,29 @@
         }
         .card-icon-btn:hover { background: var(--secondary-background-color); }
 
+        /* Connection column compact rows */
+        .conn-row {
+            display: flex; align-items: center; gap: 4px;
+            font-size: 12px; margin-top: 5px;
+            overflow: hidden;
+        }
+        .conn-tag {
+            font-size: 10px; font-weight: 700; text-transform: uppercase;
+            color: var(--secondary-text-color); width: 18px; flex-shrink: 0;
+        }
+        .conn-detail {
+            font-size: 11px; color: var(--secondary-text-color);
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+            flex: 1; min-width: 0;
+        }
+        .conn-since {
+            font-size: 11px; color: var(--secondary-text-color);
+            flex-shrink: 0; margin-left: auto; padding-left: 4px;
+            white-space: nowrap;
+        }
+        .conn-row .status-indicator { margin-right: 3px; }
+        .conn-row > span:nth-child(3) { font-size: 13px; font-weight: 600; flex-shrink: 0; }
+
         /* Volume column — sink name hidden, revealed on hover */
         .volume-col .dsink-value { display: none; font-size: 11px; }
         .volume-col:hover .dsink-value,
