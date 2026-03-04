@@ -98,18 +98,22 @@ async function updateStatus() {
         if (sysEl) sysEl.textContent = info.join(' \u00b7 ');
 
         var devices = status.devices || [status];
+        var sorted = devices.slice().sort(function(a, b) {
+            var score = function(d) { return d.playing ? 2 : (d.bluetooth_connected ? 1 : 0); };
+            return score(b) - score(a);
+        });
         // Reset index-keyed state if device list changes (avoids stale mappings)
-        if (lastDevices.length !== devices.length ||
-            !lastDevices.every(function(d, idx) { return d.player_name === devices[idx].player_name; })) {
+        if (lastDevices.length !== sorted.length ||
+            !lastDevices.every(function(d, idx) { return d.player_name === sorted[idx].player_name; })) {
             _groupSelected = {};
             lastReanchorCount = {};
             reanchorShownAt = {};
             lastReanchorAt = {};
         }
-        lastDevices = devices;
+        lastDevices = sorted;
         var grid = document.getElementById('status-grid');
 
-        devices.forEach(function(dev, i) {
+        sorted.forEach(function(dev, i) {
             var card = document.getElementById('device-card-' + i);
             if (!card) {
                 card = buildDeviceCard(i);
@@ -120,11 +124,11 @@ async function updateStatus() {
 
         // Remove stale cards
         Array.from(grid.querySelectorAll('.device-card'))
-            .slice(devices.length)
+            .slice(sorted.length)
             .forEach(function(c) { c.remove(); });
 
         _updateGroupPanel();
-        updateHealthIndicator(devices);
+        updateHealthIndicator(sorted);
 
     } catch (err) {
         console.error('Status update failed:', err);
@@ -143,8 +147,8 @@ function buildDeviceCard(i) {
             '<div class="device-card-title" id="dname-' + i + '">Device ' + (i+1) + '</div>' +
           '</div>' +
           '<div class="group-badge" id="dgroup-' + i + '" style="display:none"></div>' +
-          '<div class="device-mac" id="dmac-' + i + '"></div>' +
-          '<div class="ts-sub" id="durl-' + i + '"></div>' +
+          '<div class="device-mac identity-detail" id="dmac-' + i + '"></div>' +
+          '<div class="ts-sub identity-detail" id="durl-' + i + '"></div>' +
         '</div>' +
         '<div class="device-rows">' +
           // Connection column (BT + MA server merged)
@@ -162,7 +166,6 @@ function buildDeviceCard(i) {
               '<span class="status-indicator" id="dsrv-ind-' + i + '"></span>' +
               '<span id="dsrv-txt-' + i + '">-</span>' +
               '<span class="conn-detail" id="dsrv-uri-' + i + '"></span>' +
-              '<span class="conn-since" id="dsrv-since-' + i + '"></span>' +
             '</div>' +
           '</div>' +
           // Playback column (with inline track)
@@ -177,12 +180,15 @@ function buildDeviceCard(i) {
             '</div>' +
             '<div id="dtrack-' + i + '" class="device-track-inline"></div>' +
             '<div class="ts" id="dplay-since-' + i + '"></div>' +
-            '<div class="ts-sub" id="daudiofmt-' + i + '"></div>' +
           '</div>' +
           // Volume column
           '<div class="volume-col">' +
             '<div class="status-label">Volume</div>' +
             '<div class="volume-row">' +
+              '<div class="eq-bars" id="deq-' + i + '">' +
+                '<div class="eq-bar"></div><div class="eq-bar"></div>' +
+                '<div class="eq-bar"></div><div class="eq-bar"></div>' +
+              '</div>' +
               '<input type="range" min="0" max="100" value="100" ' +
                 'class="volume-slider" id="vslider-' + i + '" ' +
                 'oninput="onVolumeInput(' + i + ', this.value)">' +
@@ -192,17 +198,14 @@ function buildDeviceCard(i) {
                 'title="Mute/Unmute">&#128264;</button>' +
             '</div>' +
             '<div class="dsink-value ts-sub" id="dsink-' + i + '" style="margin-top:3px;"></div>' +
-            '<div class="eq-bars" id="deq-' + i + '">' +
-              '<div class="eq-bar"></div><div class="eq-bar"></div>' +
-              '<div class="eq-bar"></div><div class="eq-bar"></div>' +
-            '</div>' +
+            '<div class="ts" id="daudiofmt-' + i + '"></div>' +
           '</div>' +
           // Sync column
           '<div>' +
             '<div class="status-label">Sync</div>' +
             '<div class="status-value" id="dsync-' + i + '">&#8212;</div>' +
             '<div class="ts" id="dsync-detail-' + i + '"></div>' +
-            '<div class="ts" id="ddelay-' + i + '" style="display:none;color:#f59e0b;"></div>' +
+            '<div class="ts" id="ddelay-' + i + '" style="display:none;"></div>' +
           '</div>' +
         '</div>' +
         '<div class="device-card-actions">' +
@@ -230,6 +233,13 @@ function populateDeviceCard(i, dev) {
         var isActive = dev.bluetooth_connected || dev.playing;
         card.classList.toggle('inactive', !isActive);
         card.classList.toggle('playing', !!dev.playing);
+        if (!isActive) {
+            var selCb = document.getElementById('dsel-' + i);
+            if (selCb && selCb.checked) {
+                selCb.checked = false;
+                _groupSelected[i] = false;
+            }
+        }
     }
 
     var groupBadge = document.getElementById('dgroup-' + i);
@@ -245,10 +255,8 @@ function populateDeviceCard(i, dev) {
 
     var btAdapterEl = document.getElementById('dbt-adapter-' + i);
     if (btAdapterEl) {
-        var parts = [];
-        if (dev.bluetooth_adapter_hci) parts.push(dev.bluetooth_adapter_hci);
-        if (dev.bluetooth_adapter) parts.push(dev.bluetooth_adapter);
-        btAdapterEl.textContent = parts.join(' ');
+        btAdapterEl.textContent = dev.bluetooth_adapter_hci || '';
+        if (dev.bluetooth_adapter) btAdapterEl.title = (dev.bluetooth_adapter_hci ? dev.bluetooth_adapter_hci + ' ' : '') + dev.bluetooth_adapter;
     }
 
     var urlEl = document.getElementById('durl-' + i);
@@ -281,9 +289,8 @@ function populateDeviceCard(i, dev) {
     if (btSince) btSince.textContent = formatSince(dev.bluetooth_connected_at);
 
     // Server
-    var srvInd   = document.getElementById('dsrv-ind-' + i);
-    var srvTxt   = document.getElementById('dsrv-txt-' + i);
-    var srvSince = document.getElementById('dsrv-since-' + i);
+    var srvInd = document.getElementById('dsrv-ind-' + i);
+    var srvTxt = document.getElementById('dsrv-txt-' + i);
     if (dev.server_connected) {
         srvInd.className = 'status-indicator active';
         srvTxt.textContent = 'Connected';
@@ -291,7 +298,6 @@ function populateDeviceCard(i, dev) {
         srvInd.className = 'status-indicator inactive';
         srvTxt.textContent = dev.error || 'Disconnected';
     }
-    if (srvSince) srvSince.textContent = formatSince(dev.server_connected_at);
     var srvUri = document.getElementById('dsrv-uri-' + i);
     if (srvUri) {
         var srvLabel = '';
@@ -351,6 +357,7 @@ function populateDeviceCard(i, dev) {
             pauseBtn.classList.add('paused');
             pauseBtn.title = 'Unpause';
         }
+        pauseBtn.style.display = (!dev.has_sink && dev.bluetooth_mac) ? 'none' : '';
     }
 
     var trackEl = document.getElementById('dtrack-' + i);
@@ -373,7 +380,7 @@ function populateDeviceCard(i, dev) {
         if (dev.playing && delay !== undefined && delay !== null && delay !== 0) {
             delayEl.textContent = 'delay: ' + (delay > 0 ? '+' : '') + delay + 'ms';
             delayEl.style.display = '';
-            delayEl.style.color = '#f59e0b';
+            delayEl.style.color = Math.abs(delay) > 1000 ? '#f59e0b' : 'var(--secondary-text-color)';
         } else {
             delayEl.style.display = 'none';
         }
