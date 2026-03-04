@@ -141,4 +141,6 @@ Environment variables override `config.json` values:
 **Reduce CPU load on slow hardware (Raspberry Pi):**
 
 Enable `PREFER_SBC_CODEC: true` — SBC requires minimal decoding and reduces load ~30% per player.
+
+Alternatively, set `preferred_format` to `pcm:44100:16:2` for a device. PCM is raw uncompressed audio — no FLAC decoding at all, at the cost of slightly higher network bandwidth. Only two codecs are supported in `preferred_format`: `flac` and `pcm`.
 </Aside>
