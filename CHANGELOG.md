@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.6] - 2026-03-04
+
+### Improved
+- **Web UI — Track progress bar**: Playback column now shows a thin progress bar with `m:ss / m:ss` time display during playback; hidden when stopped
+- **Web UI — MAC on hover**: BT MAC address hidden by default in the Connection column, revealed on card hover
+- **Web UI — Server URI on hover**: MA server address hidden by default, revealed on card hover — reduces visual noise
+- **Web UI — Re-anchor count coloring**: Sync column re-anchor count turns amber when >10 and red when >100
+- **Backend**: `track_progress_ms` / `track_duration_ms` extracted from `metadata.progress` in `BridgeDaemon` and propagated through the subprocess status pipeline
+
 ## [2.6.5] - 2026-03-04
 
 ### Improved

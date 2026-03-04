@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.6] - 2026-03-04
+
+### Improved
+- Web UI: track progress bar with `m:ss / m:ss` display in Playback column
+- Web UI: BT MAC address and MA server URI hidden by default, revealed on card hover
+- Web UI: re-anchor count in Sync column colored amber (>10) or red (>100)
+
+## [2.6.5] - 2026-03-04
+
+### Improved
+- Web UI: action buttons (Reconnect / Re-pair / Release) hidden by default, revealed on hover
+- Web UI: device cards sorted by activity — Playing first, then BT connected, then disconnected
+- Web UI: EQ bars moved inline into the volume row
+- Web UI: audio format shown in Volume column; adapter shown as `hciN` only
+
 ## [2.6.3] - 2026-03-04
 
 ### Fixed
