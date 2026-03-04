@@ -374,15 +374,24 @@ def pause_all():
     loop = state.get_main_loop()
     if loop is None:
         return jsonify({"success": False, "error": "Event loop not available"}), 503
+    # Send command once per group — sending PLAY from every client in the same
+    # MA group causes MA to break the group and create separate sessions per client.
+    seen_groups: set = set()
     count = 0
     for client in _clients:
-        if client.is_running():
-            try:
-                fut = asyncio.run_coroutine_threadsafe(client._send_subprocess_command({"cmd": action}), loop)
-                fut.result(timeout=2.0)
-                count += 1
-            except Exception as _exc:
-                logger.debug("Could not send %s to %s: %s", action, client.player_name, _exc)
+        if not client.is_running():
+            continue
+        gid = client.status.get("group_id")
+        if gid:
+            if gid in seen_groups:
+                continue  # already sent for this group
+            seen_groups.add(gid)
+        try:
+            fut = asyncio.run_coroutine_threadsafe(client._send_subprocess_command({"cmd": action}), loop)
+            fut.result(timeout=2.0)
+            count += 1
+        except Exception as _exc:
+            logger.debug("Could not send %s to %s: %s", action, client.player_name, _exc)
     return jsonify({"success": True, "action": action, "count": count})
 
 
