@@ -222,8 +222,8 @@ function buildDeviceCard(i) {
                 'class="card-icon-btn" ' +
                 'title="Mute/Unmute">&#128264;</button>' +
             '</div>' +
-            '<div class="dsink-value ts-sub" id="dsink-' + i + '" style="margin-top:3px;"></div>' +
             '<div class="ts" id="daudiofmt-' + i + '"></div>' +
+            '<div class="dsink-value ts-sub" id="dsink-' + i + '"></div>' +
           '</div>' +
           // Sync column
           '<div>' +

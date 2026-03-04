@@ -491,8 +491,8 @@
 
         /* Volume column — sink name hidden, revealed on hover */
         .volume-col .dsink-value { display: none; font-size: 11px; }
-        .volume-col:hover .dsink-value,
-        .volume-col:focus-within .dsink-value { display: block; }
+        .device-card:hover .dsink-value,
+        .device-card:focus-within .dsink-value { display: block; }
 
         /* Toast notifications */
         .toast-container {
