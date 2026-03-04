@@ -189,7 +189,7 @@
 <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
 
 <script type="module">
-import Viz from 'https://cdn.jsdelivr.net/npm/@viz-js/viz/lib/viz-standalone.js';
+import { instance } from 'https://cdn.jsdelivr.net/npm/@viz-js/viz/lib/viz-standalone.js';
 
 const DOT = `
 digraph multiroom {
@@ -337,7 +337,7 @@ window.fitGraph = window.resetZoom;
 
 async function init() {
   try {
-    const viz = await Viz.instance();
+    const viz = await instance();
     const svgEl = viz.renderSVGElement(DOT, { engine: 'dot' });
 
     // Fix default black arrowheads/text for dark bg
