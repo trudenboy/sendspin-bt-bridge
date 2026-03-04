@@ -50,6 +50,9 @@
     <!-- Group Controls -->
     <div class="group-controls" id="group-controls" style="display:none;">
         <span class="group-controls-label">&#127922; Group</span>
+        <select id="group-filter-sel" class="group-filter-sel" onchange="onGroupFilterChange(this.value)" title="Filter by MA sync group">
+            <option value="">All groups</option>
+        </select>
         <span class="group-select-info" id="group-select-info">All players</span>
         <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:#6b7280;cursor:pointer;">
             <input type="checkbox" id="group-select-all" checked onchange="onGroupSelectAll(this)">
@@ -142,7 +145,7 @@
                 <div class="bt-table-wrap">
                     <div class="bt-header">
                         <span>Player Name</span><span>MAC Address</span>
-                        <span>Adapter</span><span>Listen Address</span><span>Port</span><span>Delay ms</span><span></span>
+                        <span>Adapter</span><span>Listen Address</span><span>Port</span><span>Delay ms</span><span>Format</span><span></span>
                     </div>
                     <div id="bt-devices-table"></div>
                 </div>

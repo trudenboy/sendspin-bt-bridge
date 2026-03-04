@@ -119,6 +119,12 @@
             text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap;
         }
         .group-select-info { font-size: 12px; color: var(--secondary-text-color); white-space: nowrap; }
+        .group-filter-sel {
+            padding: 3px 8px; font-size: 12px; border: 1px solid var(--divider-color);
+            border-radius: 5px; background: var(--card-background-color);
+            color: var(--primary-text-color); cursor: pointer; max-width: 160px;
+        }
+        .group-filter-sel:focus { outline: none; border-color: var(--primary-color); }
         .group-vol-row { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 180px; }
         .group-vol-slider { flex: 1; height: 4px; accent-color: var(--primary-color); cursor: pointer; }
         .group-vol-pct { min-width: 36px; font-size: 13px; color: var(--secondary-text-color); text-align: right; }
@@ -224,12 +230,12 @@
 
         /* BT device table */
         .bt-header {
-            display: grid; grid-template-columns: 1fr 1.3fr 0.9fr 9rem 4.5rem 5.5rem 30px;
+            display: grid; grid-template-columns: 1fr 1.3fr 0.9fr 9rem 4.5rem 5.5rem 8rem 30px;
             gap: 8px; margin-bottom: 4px; padding: 0 2px;
             font-size: 11px; font-weight: 600; color: var(--secondary-text-color); text-transform: uppercase;
         }
         .bt-device-row {
-            display: grid; grid-template-columns: 1fr 1.3fr 0.9fr 9rem 4.5rem 5.5rem 30px;
+            display: grid; grid-template-columns: 1fr 1.3fr 0.9fr 9rem 4.5rem 5.5rem 8rem 30px;
             gap: 8px; align-items: center; margin-bottom: 8px;
         }
         .bt-device-row input, .bt-device-row select {
@@ -428,7 +434,7 @@
 
             /* BT device table → horizontal scroll */
             .bt-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-            .bt-header, .bt-device-row { min-width: 560px; }
+            .bt-header, .bt-device-row { min-width: 700px; }
 
             /* Adapters panel → horizontal scroll */
             .adapters-card { overflow-x: auto; -webkit-overflow-scrolling: touch; }
