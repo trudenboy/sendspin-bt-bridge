@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.5] - 2026-03-04
+
+### Improved
+- **Web UI — Action buttons on hover**: Reconnect / Re-pair / Release buttons are hidden by default and revealed on card hover (always visible on mobile), reducing visual clutter
+- **Web UI — MAC and URL on hover**: device MAC address and WebSocket URL in the identity column are hidden by default and revealed on hover
+- **Web UI — Sort disconnected to bottom**: device cards sorted by activity — Playing first, then BT connected, then disconnected
+- **Web UI — EQ bars inline**: animated EQ bars moved inside the volume row (before the slider), visible only during active audio streaming
+- **Web UI — Audio format in Volume column**: stream format moved from Playback column to Volume column, shown in secondary text color
+- **Web UI — Adapter tooltip**: BT adapter shown as `hciN` only; full controller MAC visible in tooltip on hover
+- **Web UI — Delay color**: `delay: Xms` badge uses secondary text color; amber only when `|delay| > 1000 ms`
+- **Web UI — Secondary text colors**: audio format, ws:// URL, and delay badge use `--secondary-text-color` instead of the accent blue
+- **Web UI — Pause button hidden on No Sink**: pause/play button hidden when BT is connected but audio sink is not yet configured
+- **Web UI — Inactive devices deselected**: group-control checkbox auto-unchecked for disconnected/inactive devices
+- **Configuration form order**: Bridge Name and Timezone promoted to top; MA server/port moved into Advanced settings (alongside latency, BT intervals, codec)
+
 ## [2.6.3] - 2026-03-04
 
 ### Fixed

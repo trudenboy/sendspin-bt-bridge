@@ -97,7 +97,15 @@
         .device-card-actions {
             grid-column: 1 / -1; grid-row: 2;
             display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
-            padding-top: 10px; margin-top: 10px; border-top: 1px solid var(--divider-color);
+            max-height: 0; overflow: hidden; opacity: 0;
+            padding-top: 0; margin-top: 0; border-top: none;
+            transition: max-height 0.2s, opacity 0.15s, padding-top 0.2s, margin-top 0.2s;
+        }
+        .device-card:hover .device-card-actions,
+        .device-card:focus-within .device-card-actions {
+            max-height: 60px; opacity: 1;
+            padding-top: 10px; margin-top: 10px;
+            border-top: 1px solid var(--divider-color);
         }
         .device-track-inline {
             font-size: 12px; color: var(--secondary-text-color);
@@ -166,6 +174,13 @@
         .device-mac {
             font-size: 11px; color: var(--secondary-text-color); font-family: 'Courier New', monospace;
         }
+        .device-card-identity .identity-detail {
+            max-height: 0; overflow: hidden; opacity: 0;
+            transition: max-height 0.15s, opacity 0.15s;
+        }
+        .device-card:hover .identity-detail, .device-card:focus-within .identity-detail {
+            max-height: 30px; opacity: 1;
+        }
         .group-badge {
             font-size: 11px; color: var(--secondary-text-color); margin-top: 3px;
             padding: 2px 6px; background: var(--divider-color, rgba(0,0,0,0.08));
@@ -209,9 +224,10 @@
             align-items: flex-end;
             gap: 2px;
             height: 14px;
-            margin-top: 5px;
         }
         .eq-bars.active { display: flex; }
+        .volume-row .eq-bars { display: none; flex-shrink: 0; margin-right: 4px; }
+        .volume-row .eq-bars.active { display: flex; }
         .eq-bar {
             width: 3px;
             border-radius: 1px;
@@ -385,7 +401,7 @@
         .filter-btn:hover { color: var(--primary-text-color); }
         .filter-btn.active { background: var(--primary-color); color: white; }
         .ts     { font-size: 11px; color: var(--secondary-text-color); margin-top: 3px; }
-        .ts-sub { font-size: 11px; color: var(--primary-color); margin-top: 3px; word-break: break-all; }
+        .ts-sub { font-size: 11px; color: var(--secondary-text-color); margin-top: 3px; word-break: break-all; }
 
         /* Diagnostics section */
         .diag-section {
@@ -538,6 +554,9 @@
             /* Sync (5th cell) spans full width */
             .device-rows > div:nth-child(5) { grid-column: 1 / -1; }
             .device-card-actions {
+                max-height: 100px; opacity: 1;
+                padding-top: 10px; margin-top: 10px;
+                border-top: 1px solid var(--divider-color);
                 flex-direction: column; align-items: flex-start;
             }
             .device-track-inline { white-space: normal; word-break: break-word; }
