@@ -34,6 +34,7 @@
                 <div>{{ BUILD_DATE }}</div>
             </div>
             <div id="system-info" style="font-size:12px;color:#9ca3af;margin-top:4px;line-height:1.6;"></div>
+            <div id="health-indicator" class="health-indicator"></div>
             {% if auth_enabled %}
             <div style="margin-top:8px;">
                 <a href="{{ url_for('auth.logout') }}"
@@ -94,6 +95,10 @@
                 <input type="text" name="BRIDGE_NAME" placeholder="e.g. Living Room">
             </div>
 
+            <button type="button" class="config-advanced-toggle" id="adv-toggle"
+                    onclick="toggleAdvanced()">Advanced settings</button>
+            <div class="config-advanced-body" id="adv-body">
+
             <div class="form-group">
                 <label>PulseAudio latency (ms) — larger value reduces audio dropouts on slow hardware (default 200)</label>
                 <input type="number" name="PULSE_LATENCY_MSEC" placeholder="200" min="50" max="2000">
@@ -115,6 +120,8 @@
                     Prefer SBC codec — forces the simplest A2DP codec after each BT connect, reducing encoder CPU load on slow hardware (requires PulseAudio 15+)
                 </label>
             </div>
+
+            </div><!-- /adv-body -->
 
             <div class="form-group">
                 <label>Timezone</label>
@@ -208,6 +215,13 @@
         <summary>Diagnostics</summary>
         <div id="diag-content"></div>
     </details>
+
+    <!-- Keyboard hint footer -->
+    <div class="kbd-hint">
+        <span class="kbd">R</span> refresh &nbsp;
+        <span class="kbd">P</span> pause all &nbsp;
+        <span class="kbd">S</span> save config
+    </div>
 
     <!-- Logs -->
     <details class="logs-section">

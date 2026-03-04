@@ -67,6 +67,7 @@ class DeviceStatus:
     audio_format: str | None = None
     reanchor_count: int = 0
     last_sync_error_ms: float | None = None
+    last_reanchor_at: float | None = None
     reanchoring: bool = False
     audio_streaming: bool = False
     state_changed_at: str | None = None
@@ -335,6 +336,7 @@ class SendspinClient:
                 "reanchoring",
                 "reanchor_count",
                 "last_sync_error_ms",
+                "last_reanchor_at",
                 "current_track",
                 "current_artist",
                 "state_changed_at",
