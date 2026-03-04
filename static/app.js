@@ -314,6 +314,8 @@ function populateDeviceCard(i, dev) {
         if (delay !== undefined && delay !== null && delay !== 0) {
             delayEl.textContent = 'delay: ' + (delay > 0 ? '+' : '') + delay + 'ms';
             delayEl.style.display = '';
+            // Orange only when active; gray for offline/idle devices
+            delayEl.style.color = dev.playing ? '#f59e0b' : '#9ca3af';
         } else {
             delayEl.style.display = 'none';
         }
@@ -336,7 +338,7 @@ function populateDeviceCard(i, dev) {
                 ? 'Error: ' + dev.last_sync_error_ms.toFixed(1) + ' ms' : '';
         } else {
             // After reanchoring=False: keep showing the warning for abs(static_delay_ms) ms
-            var warningDuration = Math.abs(dev.static_delay_ms || 0) || 3000;
+            var warningDuration = Math.max(Math.abs(dev.static_delay_ms || 0), 3000);
             var shownAt = reanchorShownAt[i];
             if (shownAt && (Date.now() - shownAt) < warningDuration) {
                 syncEl.innerHTML = '<span style="color:#f59e0b;">&#9888; Re-anchoring</span>';
