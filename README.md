@@ -31,7 +31,9 @@ A Bluetooth bridge for [Music Assistant](https://www.music-assistant.io/) — co
 
 Run multiple bridge instances pointing at the same Music Assistant server to cover every room — each bridge handles the speakers within its Bluetooth range.
 
-![Deployment diagram](https://trudenboy.github.io/sendspin-bt-bridge/diagrams/deployment-multiroom.svg)
+![Deployment diagram: multiroom floorplan with zones and adapters](https://trudenboy.github.io/sendspin-bt-bridge/diagrams/multiroom-diagram.png)
+<br>
+[View interactive version](https://trudenboy.github.io/sendspin-bt-bridge/diagrams/multiroom-diagram.html)
 
 ---
 

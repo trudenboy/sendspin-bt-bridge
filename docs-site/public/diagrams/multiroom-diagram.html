@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Multiroom Audio System — sendspin-bt-bridge</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@600;800&family=Inter:wght@300;400;500&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:         #05080f;
+      --surface:    #0d1117;
+      --border:     #1c2333;
+      --accent:     #3b82f6;
+      --accent2:    #6366f1;
+      --accent3:    #22d3ee;
+      --text:       #e2e8f0;
+      --text-muted: #64748b;
+      --ha:         #18b0ff;
+      --ma:         #6366f1;
+      --bridge:     #22d3ee;
+      --adapter:    #10b981;
+      --speaker:    #f59e0b;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      padding: 48px 24px 64px;
+      background-image:
+        radial-gradient(ellipse 80% 50% at 50% -10%, rgba(59,130,246,.12) 0%, transparent 60%),
+        linear-gradient(180deg, rgba(99,102,241,.05) 0%, transparent 40%);
+    }
+
+    /* ── Header ─────────────────────────────── */
+    header {
+      width: 100%;
+      max-width: 1300px;
+      display: flex;
+      align-items: baseline;
+      gap: 16px;
+      margin-bottom: 48px;
+    }
+
+    header h1 {
+      font-family: 'Syne', sans-serif;
+      font-size: clamp(1.6rem, 3vw, 2.4rem);
+      font-weight: 800;
+      letter-spacing: -.03em;
+      background: linear-gradient(135deg, #fff 30%, var(--accent));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    header .sub {
+      font-family: 'DM Mono', monospace;
+      font-size: .75rem;
+      color: var(--text-muted);
+      padding: 3px 10px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      white-space: nowrap;
+    }
+
+    /* ── Legend ─────────────────────────────── */
+    .legend {
+      width: 100%;
+      max-width: 1300px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 24px;
+      margin-bottom: 36px;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: .75rem;
+      color: var(--text-muted);
+      font-family: 'DM Mono', monospace;
+    }
+
+    .dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    /* ── Diagram card ───────────────────────── */
+    .card {
+      width: 100%;
+      max-width: 1300px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 40px 32px 48px;
+      box-shadow:
+        0 0 0 1px rgba(59,130,246,.06),
+        0 24px 80px rgba(0,0,0,.6),
+        0 4px 16px rgba(0,0,0,.4);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .card::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse 60% 40% at 50% 0%, rgba(59,130,246,.07) 0%, transparent 60%);
+      pointer-events: none;
+    }
+
+    .mermaid {
+      display: flex;
+      justify-content: center;
+    }
+
+    /* ── Mermaid SVG overrides ──────────────── */
+    .mermaid svg {
+      max-width: 100%;
+      height: auto;
+      font-family: 'Inter', sans-serif !important;
+    }
+
+    /* ── Footer ─────────────────────────────── */
+    footer {
+      margin-top: 32px;
+      font-size: .7rem;
+      color: var(--text-muted);
+      font-family: 'DM Mono', monospace;
+      opacity: .6;
+    }
+
+    /* ── Responsive ─────────────────────────── */
+    @media (max-width: 600px) {
+      body { padding: 24px 12px 40px; }
+      .card { padding: 20px 12px 28px; }
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>Multiroom Audio System</h1>
+    <span class="sub">sendspin-bt-bridge</span>
+  </header>
+
+  <div class="legend">
+    <div class="legend-item"><div class="dot" style="background:#18b0ff"></div>Home Assistant</div>
+    <div class="legend-item"><div class="dot" style="background:#6366f1"></div>Music Assistant</div>
+    <div class="legend-item"><div class="dot" style="background:#22d3ee"></div>BT Bridge (per zone)</div>
+    <div class="legend-item"><div class="dot" style="background:#10b981"></div>BT Adapter (hciX)</div>
+    <div class="legend-item"><div class="dot" style="background:#f59e0b"></div>Bluetooth Speaker</div>
+  </div>
+
+  <div class="card">
+    <div class="mermaid">
+%%{init: {
+  "theme": "base",
+  "themeVariables": {
+    "background":           "#0d1117",
+    "mainBkg":              "#111827",
+    "nodeBorder":           "#1e3a5f",
+    "clusterBkg":           "#0a0f1a",
+    "clusterBorder":        "#1c2a3e",
+    "titleColor":           "#e2e8f0",
+    "edgeLabelBackground":  "#0d1117",
+    "lineColor":            "#334155",
+    "primaryColor":         "#111827",
+    "primaryTextColor":     "#e2e8f0",
+    "primaryBorderColor":   "#1e3a5f",
+    "secondaryColor":       "#0f172a",
+    "tertiaryColor":        "#0a0f1a",
+    "fontFamily":           "Inter, sans-serif",
+    "fontSize":             "14px"
+  }
+}}%%
+
+graph TB
+
+  subgraph CTRL["  HA + MA — Control Layer  "]
+    direction LR
+    HA["🏠  Home Assistant\nAutomation · Dashboards · Scenes"]
+    MA["🎵  Music Assistant\nStreaming · Playlists · EQ"]
+    HA <-->|"Media Players API"| MA
+  end
+
+  subgraph Z1["  📍  Living Room  "]
+    direction TB
+    BR1["🔗  sendspin-bt-bridge\nRaspberry Pi 5"]
+    subgraph Z1AD["BT Adapters"]
+      direction LR
+      A1H0["📡 hci0"]
+      A1H1["📡 hci1"]
+    end
+    SP1["🔊 JBL Charge 5"]
+    SP2["🔊 Bose SoundLink Max"]
+    SP3["🔊 Sony SRS-XB43"]
+    SP4["🔊 Harman Kardon Aura"]
+  end
+
+  subgraph Z2["  📍  Kitchen  "]
+    direction TB
+    BR2["🔗  sendspin-bt-bridge\nRaspberry Pi 4"]
+    subgraph Z2AD["BT Adapters"]
+      direction LR
+      A2H0["📡 hci0"]
+      A2H1["📡 hci1"]
+    end
+    SP5["🔊 JBL Flip 6"]
+    SP6["🔊 UE Hyperboom"]
+    SP7["🔊 Anker Soundcore Motion"]
+  end
+
+  subgraph Z3["  📍  Conference Room  "]
+    direction TB
+    BR3["🔗  sendspin-bt-bridge\nMini PC / NUC"]
+    subgraph Z3AD["BT Adapters"]
+      direction LR
+      A3H0["📡 hci0"]
+      A3H1["📡 hci1"]
+    end
+    SP8["🔊 JBL PartyBox 110"]
+    SP9["🔊 Sonos Move 2"]
+    SP10["🔊 Bang & Olufsen A1"]
+    SP11["🔊 Marshall Emberton III"]
+  end
+
+  subgraph Z4["  📍  Terrace  "]
+    direction TB
+    BR4["🔗  sendspin-bt-bridge\nRaspberry Pi Zero 2W"]
+    subgraph Z4AD["BT Adapters"]
+      direction LR
+      A4H0["📡 hci0"]
+    end
+    SP12["🔊 Ultimate Ears Epicboom"]
+    SP13["🔊 JBL Xtreme 3"]
+  end
+
+  %% MA → Bridges (each bridge = independent MA player)
+  MA -->|"Player: Living Room"| BR1
+  MA -->|"Player: Kitchen"| BR2
+  MA -->|"Player: Conference"| BR3
+  MA -->|"Player: Terrace"| BR4
+
+  %% Bridge → Adapters
+  BR1 --> A1H0
+  BR1 --> A1H1
+  BR2 --> A2H0
+  BR2 --> A2H1
+  BR3 --> A3H0
+  BR3 --> A3H1
+  BR4 --> A4H0
+
+  %% Adapters → Speakers
+  A1H0 --> SP1
+  A1H0 --> SP2
+  A1H1 --> SP3
+  A1H1 --> SP4
+
+  A2H0 --> SP5
+  A2H0 --> SP6
+  A2H1 --> SP7
+
+  A3H0 --> SP8
+  A3H0 --> SP9
+  A3H1 --> SP10
+  A3H1 --> SP11
+
+  A4H0 --> SP12
+  A4H0 --> SP13
+
+  %% Node styles
+  classDef haStyle   fill:#0c1f38,stroke:#18b0ff,stroke-width:2px,color:#93c5fd,rx:10
+  classDef maStyle   fill:#13103a,stroke:#6366f1,stroke-width:2px,color:#a5b4fc,rx:10
+  classDef brStyle   fill:#0a2030,stroke:#22d3ee,stroke-width:1.5px,color:#67e8f9,rx:8
+  classDef adStyle   fill:#071c14,stroke:#10b981,stroke-width:1px,color:#6ee7b7,rx:6
+  classDef spStyle   fill:#1a1200,stroke:#f59e0b,stroke-width:1px,color:#fcd34d,rx:6
+
+  class HA haStyle
+  class MA maStyle
+  class BR1,BR2,BR3,BR4 brStyle
+  class A1H0,A1H1,A2H0,A2H1,A3H0,A3H1,A4H0,A4H1 adStyle
+  class SP1,SP2,SP3,SP4,SP5,SP6,SP7,SP8,SP9,SP10,SP11,SP12,SP13 spStyle
+
+    </div>
+  </div>
+
+  <footer>sendspin-bt-bridge · github.com/trudenboy/sendspin-bt-bridge</footer>
+
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: 'base',
+      securityLevel: 'loose',
+      flowchart: {
+        curve: 'basis',
+        nodeSpacing: 40,
+        rankSpacing: 60,
+        padding: 20,
+        useMaxWidth: true
+      },
+      themeVariables: {
+        background:           '#0d1117',
+        mainBkg:              '#111827',
+        nodeBorder:           '#1e3a5f',
+        clusterBkg:           '#0a0f1a',
+        clusterBorder:        '#1c2a3e',
+        titleColor:           '#e2e8f0',
+        edgeLabelBackground:  '#0d1117',
+        lineColor:            '#334155',
+        primaryColor:         '#111827',
+        primaryTextColor:     '#e2e8f0',
+        primaryBorderColor:   '#1e3a5f',
+        secondaryColor:       '#0f172a',
+        tertiaryColor:        '#0a0f1a',
+        fontFamily:           'Inter, sans-serif',
+        fontSize:             '14px'
+      }
+    });
+  </script>
+</body>
+</html>
