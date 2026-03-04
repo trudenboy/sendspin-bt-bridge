@@ -31,7 +31,8 @@ var btManualAdapters = [];
 var lastDevices = [];
 var volTimers = {};
 var volPending = {}; // deviceIndex -> true if user recently touched slider
-var reanchorShownAt = {}; // deviceIndex -> timestamp(ms) when reanchoring warning was first displayed
+var reanchorShownAt = {};   // deviceIndex -> timestamp(ms) when last re-anchor event was detected
+var lastReanchorCount = {}; // deviceIndex -> reanchor_count at last render (to detect new events)
 
 // ---- Auth helper ----
 
@@ -322,27 +323,32 @@ function populateDeviceCard(i, dev) {
     }
 
     // Sync
+    // NOTE: dev.reanchoring is NOT used for display — the backend flag can get stuck True
+    // because sendspin logs "re-anchoring" AFTER the stream-restart callback fires, so the
+    // bridge_daemon's on_stream_event("start") guard runs before the flag is ever set.
+    // Instead we track reanchor_count changes: when count increases a timed warning fires.
     var syncEl = document.getElementById('dsync-' + i);
     var syncDetail = document.getElementById('dsync-detail-' + i);
     if (syncEl) {
+        var currCount = dev.reanchor_count || 0;
         if (!dev.playing) {
             syncEl.textContent = '\u2014';
             syncEl.style.color = '#9ca3af';
             if (syncDetail) syncDetail.textContent = '';
             delete reanchorShownAt[i];
-        } else if (dev.reanchoring) {
-            // Record when we first saw this re-anchor event
-            if (!reanchorShownAt[i]) reanchorShownAt[i] = Date.now();
-            syncEl.innerHTML = '<span style="color:#f59e0b;">&#9888; Re-anchoring</span>';
-            if (syncDetail) syncDetail.textContent = dev.last_sync_error_ms
-                ? 'Error: ' + dev.last_sync_error_ms.toFixed(1) + ' ms' : '';
+            lastReanchorCount[i] = currCount;
         } else {
-            // After reanchoring=False: keep showing the warning for abs(static_delay_ms) ms
-            var warningDuration = Math.max(Math.abs(dev.static_delay_ms || 0), 3000);
+            // Detect a new re-anchor event: count increased since last render
+            if (lastReanchorCount[i] !== undefined && currCount > lastReanchorCount[i]) {
+                reanchorShownAt[i] = Date.now();
+            }
+            lastReanchorCount[i] = currCount;
+
+            var warningDuration = Math.max(Math.abs(dev.static_delay_ms || 0), 5000);
             var shownAt = reanchorShownAt[i];
             if (shownAt && (Date.now() - shownAt) < warningDuration) {
                 syncEl.innerHTML = '<span style="color:#f59e0b;">&#9888; Re-anchoring</span>';
-                if (syncDetail) syncDetail.textContent = dev.last_sync_error_ms
+                if (syncDetail) syncDetail.textContent = dev.last_sync_error_ms != null
                     ? 'Error: ' + dev.last_sync_error_ms.toFixed(1) + ' ms' : '';
             } else {
                 delete reanchorShownAt[i];

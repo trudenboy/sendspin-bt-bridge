@@ -26,6 +26,7 @@ import json
 import logging
 import os
 import sys
+import time
 
 # ---------------------------------------------------------------------------
 # Minimal JSON-line log handler (forwarded to parent via stdout)
@@ -36,6 +37,10 @@ _LOG_LEVELS = {"DEBUG": 10, "INFO": 20, "WARNING": 30, "ERROR": 40, "CRITICAL": 
 # Pattern that audio.py logs when re-anchoring is triggered
 _REANCHOR_MSG = "re-anchoring"
 _SYNC_ERROR_PREFIX = "Sync error "
+# Seconds after the last re-anchor log before we auto-clear the reanchoring flag.
+# sendspin logs "re-anchoring" AFTER it has already restarted the stream, so the
+# bridge_daemon on_stream_event("start") guard fires too early to clear the flag.
+_REANCHOR_AUTO_CLEAR_S = 5.0
 
 
 class _JsonLineHandler(logging.Handler):
@@ -58,6 +63,7 @@ class _JsonLineHandler(logging.Handler):
             if self._status is not None and _REANCHOR_MSG in msg:
                 self._status["reanchor_count"] = self._status.get("reanchor_count", 0) + 1
                 self._status["reanchoring"] = True
+                self._status["last_reanchor_at"] = time.monotonic()
                 # Extract sync error value if present: "Sync error 123.4 ms too large; re-anchoring"
                 if _SYNC_ERROR_PREFIX in msg:
                     try:
@@ -126,6 +132,27 @@ _last_status_json: str = ""
 # ---------------------------------------------------------------------------
 # stdin command reader
 # ---------------------------------------------------------------------------
+
+
+async def _reanchor_watcher(status: dict, on_status_change, stop_event: asyncio.Event) -> None:
+    """Periodically clear the reanchoring flag once it has been set for long enough.
+
+    sendspin logs "re-anchoring" AFTER restarting the stream, so the
+    bridge_daemon on_stream_event("start") guard fires too early to clear it.
+    This watcher checks every second; if no new re-anchor has occurred for
+    _REANCHOR_AUTO_CLEAR_S seconds it clears the flag and notifies.
+    """
+    while not stop_event.is_set():
+        await asyncio.sleep(1.0)
+        if status.get("reanchoring") and status.get("last_reanchor_at") is not None:
+            age = time.monotonic() - status["last_reanchor_at"]
+            if age >= _REANCHOR_AUTO_CLEAR_S:
+                status["reanchoring"] = False
+                if callable(on_status_change):
+                    try:
+                        on_status_change()
+                    except Exception:
+                        pass
 
 
 async def _read_commands(daemon_ref: list, stop_event: asyncio.Event) -> None:
@@ -239,6 +266,7 @@ async def _run(params: dict) -> None:
         "last_error": None,
         "reanchor_count": 0,
         "reanchoring": False,
+        "last_reanchor_at": None,
         "last_sync_error_ms": None,
         "audio_streaming": False,
     }
@@ -265,15 +293,17 @@ async def _run(params: dict) -> None:
 
     cmd_task = asyncio.create_task(_read_commands(daemon_ref, stop_event))
     daemon_task = asyncio.create_task(daemon.run())
+    watcher_task = asyncio.create_task(_reanchor_watcher(status, _on_status_change, stop_event))
 
     # Wait until stop command or daemon exits
     _done, pending = await asyncio.wait(
-        [cmd_task, daemon_task, asyncio.create_task(stop_event.wait())],
+        [cmd_task, daemon_task, watcher_task, asyncio.create_task(stop_event.wait())],
         return_when=asyncio.FIRST_COMPLETED,
     )
 
     daemon_task.cancel()
     cmd_task.cancel()
+    watcher_task.cancel()
     for t in pending:
         t.cancel()
 

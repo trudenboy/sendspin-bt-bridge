@@ -168,6 +168,7 @@ class BridgeDaemon(SendspinDaemon):
         self._bridge_status["audio_streaming"] = True  # actual audio data arrived
         self._bridge_status["reanchor_count"] = 0  # reset per-stream re-anchor counter
         self._bridge_status["reanchoring"] = False
+        self._bridge_status["last_reanchor_at"] = None
         self._sink_routed = False  # new stream — allow one routing correction
         self._notify()
 
@@ -181,10 +182,9 @@ class BridgeDaemon(SendspinDaemon):
         if event == "stop":
             self._bridge_status["audio_streaming"] = False
             self._notify()
-        # Clear reanchoring flag once the stream has restarted successfully
-        if event == "start" and self._bridge_status.get("reanchoring"):
-            self._bridge_status["reanchoring"] = False
-            self._notify()
+        # NOTE: reanchoring flag is NOT cleared here because sendspin logs "re-anchoring"
+        # AFTER restarting the stream — so this callback fires before the log handler sets
+        # the flag. Auto-clear is handled by _reanchor_watcher in daemon_process.py.
         if event == "start" and self._bluetooth_sink_name and not self._sink_routed:
             # Correct any stream PA module-rescue-streams moved to the default sink.
             # Guard with _sink_routed so we only move once per stream — moving a
