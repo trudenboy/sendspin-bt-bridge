@@ -533,6 +533,8 @@ def _sync_ha_options(config: dict) -> None:
                 entry["listen_port"] = int(d["listen_port"])
             if "enabled" in d:
                 entry["enabled"] = bool(d["enabled"])
+            if d.get("preferred_format"):
+                entry["preferred_format"] = d["preferred_format"]
             sup_devices.append(entry)
         sup_adapters = [
             dict(
@@ -547,11 +549,13 @@ def _sync_ha_options(config: dict) -> None:
                 "sendspin_server": config.get("SENDSPIN_SERVER", "auto"),
                 "sendspin_port": int(config.get("SENDSPIN_PORT", 9000)),
                 "bridge_name": config.get("BRIDGE_NAME", ""),
+                "bridge_name_suffix": bool(config.get("BRIDGE_NAME_SUFFIX", False)),
                 "tz": config.get("TZ", ""),
                 "pulse_latency_msec": int(config.get("PULSE_LATENCY_MSEC", 200)),
                 "prefer_sbc_codec": bool(config.get("PREFER_SBC_CODEC", False)),
                 "bt_check_interval": int(config.get("BT_CHECK_INTERVAL", 10)),
                 "bt_max_reconnect_fails": int(config.get("BT_MAX_RECONNECT_FAILS", 0)),
+                "auth_enabled": bool(config.get("AUTH_ENABLED", False)),
                 "bluetooth_devices": sup_devices,
                 "bluetooth_adapters": sup_adapters,
             }

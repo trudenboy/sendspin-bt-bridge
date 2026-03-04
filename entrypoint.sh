@@ -70,6 +70,7 @@ config = {
     'PREFER_SBC_CODEC':       opts.get('prefer_sbc_codec', False),
     'BT_CHECK_INTERVAL':      opts.get('bt_check_interval', 10),
     'BT_MAX_RECONNECT_FAILS': opts.get('bt_max_reconnect_fails', 0),
+    'AUTH_ENABLED':           opts.get('auth_enabled', False),
 }
 
 # Normalize: devices without explicit 'enabled' field default to True
@@ -84,6 +85,10 @@ try:
         config['LAST_VOLUMES'] = existing['LAST_VOLUMES']
     elif 'LAST_VOLUME' in existing:
         config['LAST_VOLUME'] = existing['LAST_VOLUME']
+    # Preserve secrets — never exposed via HA Supervisor options
+    for key in ('AUTH_PASSWORD_HASH', 'SECRET_KEY'):
+        if key in existing:
+            config[key] = existing[key]
 except (FileNotFoundError, json.JSONDecodeError):
     pass
 
