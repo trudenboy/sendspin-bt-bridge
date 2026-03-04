@@ -366,83 +366,46 @@ def set_mute():
 
 @api_bp.route("/api/pause_all", methods=["POST"])
 def pause_all():
-    """Pause or play all Sendspin MPRIS instances via D-Bus."""
+    """Pause or play all running daemon subprocesses via stdin IPC."""
+    import asyncio
+
     data = request.get_json() or {}
     action = data.get("action", "pause")
+    loop = state.get_main_loop()
+    if loop is None:
+        return jsonify({"success": False, "error": "Event loop not available"}), 503
     count = 0
-    try:
-        import dbus
-
-        bus = dbus.SessionBus()
-        for name in bus.list_names():
-            sname = str(name)
-            if not sname.startswith("org.mpris.MediaPlayer2.Sendspin"):
-                continue
-            if "SendspinBridge" in sname:
-                continue
+    for client in _clients:
+        if client.is_running():
             try:
-                obj = bus.get_object(sname, "/org/mpris/MediaPlayer2")
-                props = dbus.Interface(obj, "org.freedesktop.DBus.Properties")
-                pb = str(props.Get("org.mpris.MediaPlayer2.Player", "PlaybackStatus"))
-                player = dbus.Interface(obj, "org.mpris.MediaPlayer2.Player")
-                if action == "play" and pb in ("Paused", "Stopped"):
-                    player.Play()
-                    count += 1
-                elif action == "pause" and pb == "Playing":
-                    player.Pause()
-                    count += 1
+                fut = asyncio.run_coroutine_threadsafe(client._send_subprocess_command({"cmd": action}), loop)
+                fut.result(timeout=2.0)
+                count += 1
             except Exception as _exc:
-                logger.debug("MPRIS play/pause skipped for %s: %s", sname, _exc)
-    except Exception as _exc:
-        logger.debug("MPRIS play/pause unavailable: %s", _exc)
+                logger.debug("Could not send %s to %s: %s", action, client.player_name, _exc)
     return jsonify({"success": True, "action": action, "count": count})
 
 
 @api_bp.route("/api/pause", methods=["POST"])
 def pause_player():
-    """Pause or play a single Sendspin player via D-Bus."""
+    """Pause or play a single daemon subprocess via stdin IPC."""
+    import asyncio
+
     data = request.get_json() or {}
     player_name = data.get("player_name", "")
     action = data.get("action", "pause")
     target = next((c for c in _clients if getattr(c, "player_name", None) == player_name), None)
     if not target or not target.is_running():
         return jsonify({"success": False, "error": "Player not found or not running"}), 404
-    target_pid = target._daemon_proc.pid if target._daemon_proc else None
-    if target_pid is None:
-        return jsonify({"success": False, "error": "Daemon not running"}), 404
-    count = 0
+    loop = state.get_main_loop()
+    if loop is None:
+        return jsonify({"success": False, "error": "Event loop not available"}), 503
     try:
-        import dbus
-
-        bus = dbus.SessionBus()
-        dbus_iface = dbus.Interface(
-            bus.get_object("org.freedesktop.DBus", "/org/freedesktop/DBus"),
-            "org.freedesktop.DBus",
-        )
-        for name in bus.list_names():
-            sname = str(name)
-            if not sname.startswith("org.mpris.MediaPlayer2.Sendspin"):
-                continue
-            if "SendspinBridge" in sname:
-                continue
-            try:
-                if int(dbus_iface.GetConnectionUnixProcessID(name)) != target_pid:
-                    continue
-                obj = bus.get_object(sname, "/org/mpris/MediaPlayer2")
-                props = dbus.Interface(obj, "org.freedesktop.DBus.Properties")
-                pb = str(props.Get("org.mpris.MediaPlayer2.Player", "PlaybackStatus"))
-                player_iface = dbus.Interface(obj, "org.mpris.MediaPlayer2.Player")
-                if action == "play" and pb in ("Paused", "Stopped"):
-                    player_iface.Play()
-                    count += 1
-                elif action == "pause" and pb == "Playing":
-                    player_iface.Pause()
-                    count += 1
-            except Exception as _exc:
-                logger.debug("MPRIS pause skipped for %s: %s", sname, _exc)
-    except Exception as _exc:
-        logger.debug("MPRIS pause unavailable: %s", _exc)
-    return jsonify({"success": True, "action": action, "count": count})
+        fut = asyncio.run_coroutine_threadsafe(target._send_subprocess_command({"cmd": action}), loop)
+        fut.result(timeout=2.0)
+        return jsonify({"success": True, "action": action, "count": 1})
+    except Exception as exc:
+        return jsonify({"success": False, "error": str(exc)}), 500
 
 
 @api_bp.route("/api/bt/reconnect", methods=["POST"])

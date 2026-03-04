@@ -5,6 +5,7 @@ Single source of truth for the active SendspinClient list, shared between
 web_interface.py (reads for API responses) and sendspin_client.py (writes via set_clients).
 """
 
+import asyncio
 import json
 import logging
 import threading
@@ -19,6 +20,20 @@ _status_version: int = 0
 # check and the wait() call in the SSE generator (a plain set()+clear() can
 # lose the wakeup if notify fires between them).
 _status_condition: threading.Condition = threading.Condition()
+
+
+_main_loop: asyncio.AbstractEventLoop | None = None
+
+
+def set_main_loop(loop: asyncio.AbstractEventLoop) -> None:
+    """Store the main asyncio event loop for use by Flask/WSGI threads."""
+    global _main_loop
+    _main_loop = loop
+
+
+def get_main_loop() -> asyncio.AbstractEventLoop | None:
+    """Return the main asyncio event loop, or None if not yet set."""
+    return _main_loop
 
 
 def notify_status_changed() -> None:

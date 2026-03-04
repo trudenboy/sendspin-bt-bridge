@@ -34,6 +34,7 @@ var volPending = {}; // deviceIndex -> true if user recently touched slider
 var reanchorShownAt = {};   // deviceIndex -> timestamp(ms) when last re-anchor event was detected
 var lastReanchorCount = {}; // deviceIndex -> reanchor_count at last render (to detect new events)
 var lastReanchorAt = {};    // deviceIndex -> last_reanchor_at string seen (catches count resets on stream restart)
+var _progSnapshots = {};    // deviceIndex -> {pos, dur, t} for client-side progress interpolation
 
 // ---- Utility ----
 
@@ -141,6 +142,20 @@ async function updateStatus() {
         console.error('Status update failed:', err);
     }
 }
+
+// Interpolate progress bars every second between SSE updates
+setInterval(function() {
+    var now = Date.now();
+    Object.keys(_progSnapshots).forEach(function(idx) {
+        var snap = _progSnapshots[idx];
+        if (!snap) return;
+        var pos = Math.min(snap.pos + (now - snap.t), snap.dur);
+        var fill = document.getElementById('dprog-fill-' + idx);
+        var time = document.getElementById('dprog-time-' + idx);
+        if (fill) fill.style.width = Math.min(100, (pos / snap.dur) * 100) + '%';
+        if (time) time.textContent = fmtMs(pos) + ' / ' + fmtMs(snap.dur);
+    });
+}, 1000);
 
 function buildDeviceCard(i) {
     var card = document.createElement('div');
@@ -352,10 +367,16 @@ function populateDeviceCard(i, dev) {
     var progTime = document.getElementById('dprog-time-' + i);
     var hasProg = dev.playing && dev.track_duration_ms > 0 && dev.track_progress_ms != null;
     if (progWrap) progWrap.style.display = hasProg ? '' : 'none';
-    if (hasProg && progFill && progTime) {
-        var pct = Math.min(100, (dev.track_progress_ms / dev.track_duration_ms) * 100);
-        progFill.style.width = pct + '%';
-        progTime.textContent = fmtMs(dev.track_progress_ms) + ' / ' + fmtMs(dev.track_duration_ms);
+    if (hasProg) {
+        // Store snapshot with client-side timestamp for interpolation
+        _progSnapshots[i] = {pos: dev.track_progress_ms, dur: dev.track_duration_ms, t: Date.now()};
+        if (progFill && progTime) {
+            var pct = Math.min(100, (dev.track_progress_ms / dev.track_duration_ms) * 100);
+            progFill.style.width = pct + '%';
+            progTime.textContent = fmtMs(dev.track_progress_ms) + ' / ' + fmtMs(dev.track_duration_ms);
+        }
+    } else {
+        delete _progSnapshots[i];
     }
 
     // Audio format (strip codec prefix)

@@ -698,6 +698,9 @@ async def main():
     for sig in (signal.SIGTERM, signal.SIGINT):
         loop.add_signal_handler(sig, signal_handler)
 
+    # Expose the running loop so Flask/WSGI threads can schedule coroutines
+    _state.set_main_loop(asyncio.get_running_loop())
+
     # Run all clients in parallel
     await asyncio.gather(*[c.run() for c in clients])
 

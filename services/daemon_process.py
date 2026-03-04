@@ -176,6 +176,13 @@ async def _read_commands(daemon_ref: list, stop_event: asyncio.Event) -> None:
 
         if cmd.get("cmd") == "stop":
             stop_event.set()
+        elif cmd.get("cmd") in ("pause", "play"):
+            daemon = daemon_ref[0] if daemon_ref else None
+            if daemon and daemon._client and daemon._client.connected:
+                from aiosendspin.models.types import MediaCommand
+
+                mc = MediaCommand.PAUSE if cmd["cmd"] == "pause" else MediaCommand.PLAY
+                asyncio.ensure_future(daemon._client.send_group_command(mc))
         elif cmd.get("cmd") == "set_volume":
             daemon = daemon_ref[0] if daemon_ref else None
             if daemon and cmd.get("value") is not None:
