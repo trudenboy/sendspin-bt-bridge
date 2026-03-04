@@ -144,10 +144,7 @@ description: Полный справочник параметров конфиг
 <Aside type="tip">
 **Снижение нагрузки CPU на слабом железе (Raspberry Pi):**
 
-1. Включите `PREFER_SBC_CODEC: true` — SBC требует минимального декодирования
-2. В MA: Settings → Providers → Sendspin → Audio Quality → выберите **PCM 44.1 kHz / 16-bit**
-
-Эти две настройки вместе устраняют FLAC-декодирование и снижают нагрузку ~30% на плеер.
+Включите `PREFER_SBC_CODEC: true` — SBC требует минимального декодирования и снижает нагрузку ~30% на плеер.
 </Aside>
 
 <Aside type="note">

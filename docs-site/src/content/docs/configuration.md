@@ -140,8 +140,5 @@ Environment variables override `config.json` values:
 <Aside type="tip">
 **Reduce CPU load on slow hardware (Raspberry Pi):**
 
-1. Enable `PREFER_SBC_CODEC: true` — SBC requires minimal decoding
-2. In MA: Settings → Providers → Sendspin → Audio Quality → **PCM 44.1 kHz / 16-bit**
-
-Together these eliminate FLAC decoding and reduce load ~30% per player.
+Enable `PREFER_SBC_CODEC: true` — SBC requires minimal decoding and reduces load ~30% per player.
 </Aside>
