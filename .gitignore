@@ -58,3 +58,5 @@ community_engagement.md
 .playwright-mcp/
 sendspin-cli/
 *.png
+!ha-addon/icon.png
+!static/favicon.png
