@@ -593,9 +593,18 @@
 
             /* Touch targets */
             .btn-bt-action  { padding: 8px 12px; }
-            .card-icon-btn  { padding: 5px 9px; font-size: 13px; }
+            .card-icon-btn  { padding: 8px 12px; min-height: 36px; }
             .filter-btn     { padding: 7px 12px; }
 
             /* Logs */
             .logs-container { max-height: 280px; font-size: 11px; }
+
+            /* Always show hover-only details on touch */
+            .conn-hover-detail { display: inline; }
+            .device-card .identity-detail { max-height: 60px; opacity: 1; }
+            .device-card .dsink-value { display: block; }
+
+            /* Toast — full-width on mobile */
+            .toast-container { left: 12px; right: 12px; bottom: 16px; }
+            .toast { max-width: none; }
         }
