@@ -56,6 +56,23 @@ docker exec -it sendspin-client bluetoothctl devices
 - Addon version must be ≥ 1.4.1 (HA Ingress fix)
 - Check browser console for CSS/JS 404 errors
 
+## BT scan returns no result
+
+If the scan UI shows a job ID and keeps polling without results, or shows an error, check:
+
+1. The scan runs for ~10 s in the background — wait for it to complete before retrying
+2. If the error text is shown in the scan dialog, it contains the reason (e.g. `bluetoothctl timed out`)
+3. Verify bluetoothctl is accessible: `docker exec -it sendspin-client bluetoothctl list`
+4. Try restarting the container — a stale D-Bus session can block scanning
+
+## Pause button for a device does not work
+
+The per-device pause button matches the player by `player_name` via D-Bus. If it has no effect:
+
+1. Confirm the `player_name` in `config.json` exactly matches the name shown in the web UI (case-sensitive)
+2. Check that the sendspin process is running: `docker exec sendspin-client ps aux | grep sendspin`
+3. Check logs for D-Bus errors: `docker logs sendspin-client | grep -i "dbus\|pause"`
+
 ## Collecting logs for a bug report
 
 ```bash

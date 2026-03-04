@@ -14,9 +14,13 @@ Configuration is stored in `config.json` in the `/config` directory (mounted as 
 | `SENDSPIN_SERVER` | string | `"auto"` | MA server address. `auto` = mDNS discovery |
 | `SENDSPIN_PORT` | integer | `9000` | MA WebSocket port (`ws://server:port/sendspin`) |
 | `BRIDGE_NAME` | string | `""` | Suffix appended to every player name in MA (empty = off) |
-| `TZ` | string | `"Australia/Melbourne"` | Container timezone |
+| `BRIDGE_NAME_SUFFIX` | boolean | `false` | Append `@ {BRIDGE_NAME}` to each individual player name in MA |
+| `TZ` | string | `""` | Container timezone (empty = inherits `TZ` env var, fallback UTC) |
 | `PULSE_LATENCY_MSEC` | integer | `200` | PulseAudio latency in ms. Increase if audio stutters on slow hardware |
 | `PREFER_SBC_CODEC` | boolean | `false` | Force SBC codec after each BT connect. Reduces CPU load |
+| `BT_CHECK_INTERVAL` | integer | `10` | BT polling interval in seconds when D-Bus is unavailable |
+| `BT_MAX_RECONNECT_FAILS` | integer | `0` | Auto-disable BT management after N consecutive failures. `0` = retry forever |
+| `AUTH_ENABLED` | boolean | `false` | Enable password protection for the web UI |
 
 ## Bluetooth Devices
 
@@ -46,9 +50,28 @@ The device list is set in `BLUETOOTH_DEVICES`. Each device becomes a separate pl
 | `player_name` | string | ✓ | Display name in MA |
 | `adapter` | string | — | Adapter ID (`hci0`, `hci1`) or adapter MAC. Empty = default adapter |
 | `static_delay_ms` | integer | — | A2DP latency compensation in ms. Negative = delay this player |
+| `preferred_format` | string | — | Preferred audio format, e.g. `flac:44100:16:2`. Prevents PulseAudio resampling |
 | `listen_host` | string | — | IP for sendspin WebSocket listener (default `0.0.0.0`) |
 | `listen_port` | integer | — | sendspin WebSocket port (default `9000 + index`) |
 | `enabled` | boolean | — | `false` = device is disabled and skipped on startup |
+
+## Bluetooth Adapters
+
+Optional list of adapters for explicit labelling. The `name` field is shown in the BT column of the web UI.
+
+```json
+{
+  "BLUETOOTH_ADAPTERS": [
+    { "id": "hci0", "mac": "C0:FB:F9:62:D6:9D", "name": "Living room dongle" }
+  ]
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | Kernel interface name (`hciN`) |
+| `mac` | string | Adapter MAC address |
+| `name` | string | Human-readable label shown in the web UI |
 
 ## Environment Variables
 
