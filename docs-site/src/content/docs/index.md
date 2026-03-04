@@ -108,6 +108,8 @@ Run multiple bridge instances against the same Music Assistant server to cover e
 <br>
 [View interactive version](/sendspin-bt-bridge/diagrams/multiroom-diagram.html)
 
+[![Multiroom Audio — Floor Plan](/sendspin-bt-bridge/diagrams/multiroom-floorplan.png)](/sendspin-bt-bridge/diagrams/multiroom-floorplan.html)
+
 ## Deployment options
 
 | | Home Assistant Addon | Docker Compose | Proxmox LXC |

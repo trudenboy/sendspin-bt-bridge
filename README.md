@@ -35,6 +35,8 @@ Run multiple bridge instances pointing at the same Music Assistant server to cov
 <br>
 [View interactive version](https://trudenboy.github.io/sendspin-bt-bridge/diagrams/multiroom-diagram.html)
 
+[![Multiroom Audio — Floor Plan](https://trudenboy.github.io/sendspin-bt-bridge/diagrams/multiroom-floorplan.png)](https://trudenboy.github.io/sendspin-bt-bridge/diagrams/multiroom-floorplan.html)
+
 ---
 
 ## Deployment Options
