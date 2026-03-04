@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.3] - 2026-03-04
+
+### Fixed
+- Sync column no longer gets stuck showing "Re-anchoring" — backend watcher auto-clears state 5 s after last re-anchor log; detection robust to stream restarts that reset the count
+- Re-anchor display state resets correctly when device list order changes after a config edit
+
+### Improved
+- Web UI: Bluetooth + Server columns merged into Connection; track persists on pause
+- Web UI: Inactive cards dimmed; playing cards show green accent border
+- Web UI: Relative timestamps (HH:MM instead of full date)
+- Web UI: Toast notifications replace browser alert()
+- Web UI: Advanced settings collapsed by default (Latency, BT interval, Auto-disable, SBC codec)
+- Web UI: Global health indicator in header (N/M playing, disconnected count)
+- Web UI: Keyboard shortcuts — R refresh · P pause all · S save config
+
 ## [2.6.2] - 2026-03-04
 
 ### Fixed
