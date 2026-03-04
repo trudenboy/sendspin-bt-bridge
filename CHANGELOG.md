@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.2] - 2026-03-04
+
+### Fixed
+- **Sync delay badge color**: `delay: Xms` badge is now gray for non-playing/offline devices and orange only when actively playing — previously showed misleading orange on disconnected devices
+- **Re-anchor warning duration**: `Math.max(abs(delay), 3000)` instead of `abs(delay) || 3000` — for `-600ms` delay the 600ms window was shorter than a typical SSE update interval, so the post-re-anchor "Re-anchoring" banner was invisible in practice; now minimum 3 s
+
 ## [2.6.1] - 2026-03-04
 
 ### Fixed
