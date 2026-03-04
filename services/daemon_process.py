@@ -227,6 +227,7 @@ async def _run(params: dict) -> None:
         "reanchor_count": 0,
         "reanchoring": False,
         "last_sync_error_ms": None,
+        "audio_streaming": False,
     }
 
     # Emit initial status so parent knows subprocess is alive

@@ -141,6 +141,10 @@ function buildDeviceCard(i) {
                 'class="card-icon-btn" ' +
                 'title="Mute/Unmute">&#128264;</button>' +
             '</div>' +
+            '<div class="eq-bars" id="deq-' + i + '">' +
+              '<div class="eq-bar"></div><div class="eq-bar"></div>' +
+              '<div class="eq-bar"></div><div class="eq-bar"></div>' +
+            '</div>' +
           '</div>' +
           '<div>' +
             '<div class="status-label">Sync</div>' +
@@ -345,6 +349,10 @@ function populateDeviceCard(i, dev) {
         }
         if (volEl) volEl.textContent = dev.volume + '%';
     }
+
+    // Equalizer — show only when audio data is actually streaming
+    var eqEl = document.getElementById('deq-' + i);
+    if (eqEl) eqEl.classList.toggle('active', !!dev.audio_streaming);
 
     // Mute button — attach handler once, update icon on every poll
     var muteBtn = document.getElementById('dmute-' + i);

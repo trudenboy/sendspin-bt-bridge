@@ -80,6 +80,7 @@ class SendspinClient:
             "reanchor_count": 0,
             "last_sync_error_ms": None,
             "reanchoring": False,
+            "audio_streaming": False,
             "state_changed_at": None,
             "ip_address": listen_host or self.get_ip_address(),
             "hostname": socket.gethostname(),
