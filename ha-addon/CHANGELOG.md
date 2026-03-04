@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.7] - 2026-03-04
+
+### Security
+- Session cookie hardening (SameSite=Lax, HttpOnly).
+- Brute-force protection on /login: IP lockout after 5 failures / 60s window.
+- Adapter MAC validation added to `/api/config` POST.
+
+### Fixed
+- Thread-safety: client list access under concurrent Waitress threads.
+- Volume endpoint input validation: returns 400 on invalid value.
+- BT scan capped at 50 results to prevent DoS in dense environments.
+- Event loop resource leak in `services/pulse.py`.
+- `bash -c` removed from `_resolve_adapter_select` (direct subprocess).
+- `BRIDGE_NAME_SUFFIX` now applied in player name construction.
+
 ## [2.5.6] - 2026-03-04
 
 ### Added

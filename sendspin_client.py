@@ -410,6 +410,9 @@ async def main():
     raw_bridge = config.get("BRIDGE_NAME", "") or os.getenv("BRIDGE_NAME", "")
     if raw_bridge.lower() in ("auto", "hostname"):
         effective_bridge = socket.gethostname()
+    elif bool(config.get("BRIDGE_NAME_SUFFIX", False)) and not raw_bridge:
+        # No explicit bridge name but suffix enabled → use hostname
+        effective_bridge = socket.gethostname()
     else:
         effective_bridge = raw_bridge  # '' = disabled
     # Set timezone

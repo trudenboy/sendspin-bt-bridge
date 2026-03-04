@@ -1239,7 +1239,7 @@ function updateTzPreview() {
 }
 
 // Update TZ preview every second while panel is visible
-setInterval(updateTzPreview, 1000);
+var _tzPreviewInterval = setInterval(updateTzPreview, 1000);
 
 // Populate TZ datalist from browser's IANA timezone database
 (function() {
@@ -1383,6 +1383,10 @@ function reloadDiagnostics() {
 // ---- Init ----
 loadConfig();   // calls loadBtAdapters() internally after restoring btManualAdapters
 updateStatus();
-setInterval(updateStatus, 2000);
+var _statusInterval = setInterval(updateStatus, 2000);
+window.addEventListener('beforeunload', function() {
+    clearInterval(_statusInterval);
+    clearInterval(_tzPreviewInterval);
+});
 refreshLogs();
 loadVersionInfo();

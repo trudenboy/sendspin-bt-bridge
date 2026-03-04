@@ -38,8 +38,8 @@ from services.pulse import (
     set_sink_mute,
     set_sink_volume,
 )
+from state import _clients_lock, get_adapter_name, load_adapter_name_cache
 from state import clients as _clients
-from state import get_adapter_name, load_adapter_name_cache
 
 logger = logging.getLogger(__name__)
 
@@ -249,7 +249,10 @@ def set_volume():
     """Set player volume. Accepts player_name (single), player_names (list), or neither (all)."""
     try:
         data = request.get_json()
-        volume = max(0, min(100, int(data.get("volume", 100))))
+        try:
+            volume = max(0, min(100, int(data.get("volume", 100))))
+        except (ValueError, TypeError):
+            return jsonify({"success": False, "error": "Invalid volume value"}), 400
         player_names = data.get("player_names")
         player_name = data.get("player_name")
 
@@ -501,12 +504,14 @@ def api_bt_management():
 @api_bp.route("/api/status")
 def api_status():
     """Return status for all client instances."""
-    if not _clients:
+    with _clients_lock:
+        snapshot = list(_clients)
+    if not snapshot:
         return jsonify({"error": "No clients"}), 503
-    if len(_clients) == 1:
-        return jsonify(get_client_status_for(_clients[0]))
-    first = get_client_status_for(_clients[0])
-    result = {**first, "devices": [get_client_status_for(c) for c in _clients]}
+    if len(snapshot) == 1:
+        return jsonify(get_client_status_for(snapshot[0]))
+    first = get_client_status_for(snapshot[0])
+    result = {**first, "devices": [get_client_status_for(c) for c in snapshot]}
     return jsonify(result)
 
 
@@ -625,6 +630,17 @@ def api_config():
                     raise ValueError
             except (ValueError, TypeError):
                 return jsonify({"error": f"Invalid listen_port: {dev.get('listen_port')}"}), 400
+
+    # Validate BLUETOOTH_ADAPTERS entries
+    bt_adapters = config.get("BLUETOOTH_ADAPTERS", [])
+    if not isinstance(bt_adapters, list):
+        return jsonify({"error": "BLUETOOTH_ADAPTERS must be an array"}), 400
+    for adp in bt_adapters:
+        if not isinstance(adp, dict):
+            return jsonify({"error": "Each adapter must be an object"}), 400
+        amac = str(adp.get("mac", ""))
+        if amac and not _MAC_RE.match(amac):
+            return jsonify({"error": f"Invalid adapter MAC address: {amac}"}), 400
 
     # Validate top-level port
     sp = config.get("SENDSPIN_PORT")
@@ -964,6 +980,12 @@ def api_bt_scan():
             if chg_r:
                 active_macs.add(chg_r.group(1).upper())
         all_macs = seen | active_macs
+
+        # Cap results to avoid DoS in dense BT environments
+        _MAX_SCAN_RESULTS = 50
+        if len(all_macs) > _MAX_SCAN_RESULTS:
+            logger.warning("BT scan found %d devices, capping to %d", len(all_macs), _MAX_SCAN_RESULTS)
+            all_macs = set(list(all_macs)[:_MAX_SCAN_RESULTS])
 
         # Look up names for devices seen only by RSSI (already-paired/cached)
         unnamed = {mac for mac in all_macs if mac not in names}

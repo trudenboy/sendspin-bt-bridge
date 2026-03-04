@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.7] - 2026-03-04
+
+### Security
+- **Session cookie hardening**: Set `SESSION_COOKIE_SAMESITE=Lax` and `SESSION_COOKIE_HTTPONLY=True`
+  as CSRF defence-in-depth (all POST endpoints already reject form-encoded bodies via `get_json()`).
+- **Brute-force protection on /login**: In-memory IP-based lockout after 5 failed attempts within
+  60 seconds; locked out for 5 minutes. No external dependencies.
+- **Adapter MAC validation**: `/api/config` POST now validates MAC addresses in `BLUETOOTH_ADAPTERS`
+  entries (previously only `BLUETOOTH_DEVICES` were validated), preventing injection into
+  `bluetoothctl select` command.
+
+### Fixed
+- **Thread-safety in client list**: `state.py::set_clients()` now holds a lock during
+  `clear()+extend()` and `/api/status` snapshots the list before iteration, eliminating
+  potential `IndexError` under concurrent Waitress threads.
+- **Volume endpoint input validation**: `int()` conversion on `/api/volume` now wrapped in
+  `try/except`, returns HTTP 400 on invalid input instead of unhandled 500.
+- **Bluetooth scan DoS**: `/api/bt/scan` now caps discovered devices at 50 before running
+  individual `bluetoothctl info` subprocesses (prevents multi-minute hangs in dense BT environments).
+- **Event loop resource leak**: `services/pulse.py::_run()` now initialises the event loop
+  inside the `try` block, preventing fd/memory leak if loop creation raises.
+- **Remove `bash -c` in adapter resolution**: `bluetooth_manager.py::_resolve_adapter_select()`
+  now calls `["bluetoothctl", "list"]` directly (no shell invocation).
+- **BRIDGE_NAME_SUFFIX implemented**: Config field was stored/synced but never applied.
+  Now: when `BRIDGE_NAME_SUFFIX=True` and no explicit `BRIDGE_NAME` is set, the hostname
+  is appended to player names as `@ <hostname>`.
+
+### Maintenance
+- Store `setInterval` references in `app.js` and clear them on `beforeunload`.
+
 ## [2.5.6] - 2026-03-04
 
 ### Added
