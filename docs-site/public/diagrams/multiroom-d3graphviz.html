@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Multiroom Audio System · sendspin-bt-bridge</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #07090e;
+      --surface: #0d1117;
+      --border: #1a2235;
+      --text: #dde4f0;
+      --muted: #4a5a78;
+      --ha: #18b0ff;
+      --ma: #7c6dfa;
+      --bridge: #00e5cc;
+      --adapter: #0fd47a;
+      --speaker: #f5a623;
+      --user: #94a3b8;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    html, body {
+      margin: 0; height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Inter, system-ui, -apple-system, Segoe UI, sans-serif;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 40px 24px 56px;
+      background-image:
+        radial-gradient(ellipse 70% 40% at 50% 0%, rgba(24,176,255,.08) 0%, transparent 60%),
+        radial-gradient(ellipse 40% 30% at 80% 80%, rgba(124,109,250,.06) 0%, transparent 50%);
+      min-height: 100vh;
+    }
+
+    header {
+      width: 100%; max-width: 1300px;
+      display: flex; align-items: baseline; gap: 16px;
+      margin-bottom: 24px;
+    }
+    header h1 {
+      margin: 0;
+      font-size: clamp(1.3rem, 2.6vw, 2rem);
+      font-weight: 700;
+      letter-spacing: -.04em;
+      background: linear-gradient(120deg, #fff 40%, var(--ha));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .badge {
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: .7rem; color: var(--muted);
+      padding: 3px 10px; border: 1px solid var(--border); border-radius: 4px;
+      white-space: nowrap;
+    }
+
+    .legend {
+      width: 100%; max-width: 1300px;
+      display: flex; flex-wrap: wrap; gap: 8px 20px;
+      margin-bottom: 20px;
+    }
+    .li { display: flex; align-items: center; gap: 7px; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: .7rem; color: var(--muted); }
+    .dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+    .line { width: 20px; height: 2px; border-radius: 1px; }
+    .dashed { background: repeating-linear-gradient(90deg, var(--user) 0, var(--user) 5px, transparent 5px, transparent 9px); height: 2px; width: 22px; }
+
+    .toolbar {
+      width: 100%; max-width: 1300px;
+      display: flex; gap: 8px;
+      margin-bottom: 12px;
+    }
+    .btn {
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: .7rem; color: var(--muted);
+      padding: 4px 12px; border: 1px solid var(--border); border-radius: 6px;
+      background: var(--surface); cursor: pointer;
+      transition: color .15s, border-color .15s;
+    }
+    .btn:hover { color: var(--text); border-color: #334155; }
+
+    .card {
+      width: 100%; max-width: 1300px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 24px;
+      box-shadow: 0 20px 60px rgba(0,0,0,.5), 0 0 0 1px rgba(24,176,255,.05);
+      position: relative; overflow: hidden;
+    }
+    .card::before {
+      content: '';
+      position: absolute; inset: 0;
+      background: radial-gradient(ellipse 50% 30% at 50% 0%, rgba(24,176,255,.04) 0%, transparent 60%);
+      pointer-events: none;
+    }
+
+    #graph {
+      position: relative; z-index: 1;
+      min-height: 500px;
+      display: flex; justify-content: center; align-items: flex-start;
+    }
+
+    /* override graphviz SVG to fill the card nicely */
+    #graph svg {
+      max-width: 100%;
+      height: auto;
+      border-radius: 8px;
+    }
+
+    #loading {
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; gap: 14px;
+      padding: 80px 0;
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: .8rem;
+    }
+    .spinner {
+      width: 32px; height: 32px;
+      border: 2px solid var(--border);
+      border-top-color: var(--ha);
+      border-radius: 50%;
+      animation: spin .8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    footer {
+      margin-top: 18px;
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: .7rem; color: var(--muted); opacity: .75;
+    }
+
+    @media (max-width: 640px) {
+      body { padding: 24px 12px 40px; }
+      .card { padding: 16px 10px; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Multiroom Audio System</h1>
+  <span class="badge">sendspin-bt-bridge · D3-Graphviz</span>
+</header>
+
+<div class="legend">
+  <div class="li"><span class="dot" style="background:var(--ha)"></span>Home Assistant</div>
+  <div class="li"><span class="dot" style="background:var(--ma)"></span>Music Assistant</div>
+  <div class="li"><span class="dot" style="background:var(--bridge)"></span>BT Bridge (per zone)</div>
+  <div class="li"><span class="dot" style="background:var(--adapter)"></span>BT Adapter (hciX)</div>
+  <div class="li"><span class="dot" style="background:var(--speaker)"></span>Bluetooth Speaker</div>
+  <div class="li"><span class="dot" style="background:var(--user)"></span>User (Terrace)</div>
+  <div class="li"><span class="line" style="background:#5b4faa"></span>&nbsp;Sendspin WebSocket</div>
+  <div class="li"><span class="line" style="background:#00b4a0"></span>&nbsp;USB / Internal</div>
+  <div class="li"><span class="dashed"></span>&nbsp;Bluetooth A2DP</div>
+</div>
+
+<div class="toolbar">
+  <button class="btn" onclick="resetZoom()">⟲ Reset zoom</button>
+  <button class="btn" onclick="fitGraph()">⤢ Fit</button>
+  <span style="font-family:'JetBrains Mono',monospace;font-size:.65rem;color:var(--muted);padding:4px 0;align-self:center">
+    Scroll to zoom · Drag to pan
+  </span>
+</div>
+
+<div class="card">
+  <div id="graph">
+    <div id="loading">
+      <div class="spinner"></div>
+      Rendering graph…
+    </div>
+  </div>
+</div>
+
+<footer>sendspin-bt-bridge · github.com/trudenboy/sendspin-bt-bridge · rendered with D3-Graphviz</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@hpcc-js/wasm@2/dist/graphviz.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/d3-graphviz@5/build/d3-graphviz.js"></script>
+
+<script>
+const DOT = `
+digraph multiroom {
+  graph [
+    bgcolor="#07090e"
+    fontname="Inter"
+    fontcolor="#dde4f0"
+    fontsize=12
+    pad=1.0
+    nodesep=0.55
+    ranksep=0.75
+    splines=polyline
+    compound=true
+  ]
+  node [
+    fontname="Inter"
+    fontsize=11
+    style="filled,rounded"
+    shape=box
+    margin="0.20,0.14"
+  ]
+  edge [
+    fontname="Inter"
+    fontsize=9
+    arrowsize=0.65
+    penwidth=1.2
+  ]
+
+  // ── Remote User ──
+  USER [
+    label="User\n(Terrace · outside)"
+    fillcolor="#111827"
+    color="#94a3b8"
+    fontcolor="#cbd5e1"
+  ]
+
+  // ── Control Layer ──
+  subgraph cluster_ctrl {
+    graph [
+      label="HA + MA — Control Layer"
+      style=filled
+      fillcolor="#080d1a"
+      color="#1e3a5f"
+      fontcolor="#93c5fd"
+      fontsize=12
+      margin=18
+    ]
+    HA [
+      label="Home Assistant\nAutomation · Dashboards · Scenes"
+      fillcolor="#0c1f3a"
+      color="#18b0ff"
+      fontcolor="#93c5fd"
+    ]
+    MA [
+      label="Music Assistant\nStreaming · Playlists · EQ"
+      fillcolor="#0d0b25"
+      color="#7c6dfa"
+      fontcolor="#a5b4fc"
+    ]
+    HA -> MA [label="Media Players API" dir=both color="#4a6fa5" fontcolor="#4a6fa5"]
+  }
+
+  // ── Zone 1: Living Room ──
+  subgraph cluster_z1 {
+    graph [label="Living Room  ·  Zone 1" style=filled fillcolor="#040c1a" color="#18b0ff" fontcolor="#93c5fd" fontsize=11 margin=14]
+    BR1  [label="bt-bridge\nRPi 5"        fillcolor="#071825" color="#00e5cc" fontcolor="#5eead4"]
+    A1H0 [label="hci0"                    fillcolor="#041a0e" color="#0fd47a" fontcolor="#4ade80"]
+    A1H1 [label="hci1"                    fillcolor="#041a0e" color="#0fd47a" fontcolor="#4ade80"]
+    SP1  [label="JBL Charge 5"            fillcolor="#1a0f00" color="#f5a623" fontcolor="#fbbf24"]
+    SP2  [label="Bose SoundLink Max"      fillcolor="#1a0f00" color="#f5a623" fontcolor="#fbbf24"]
+    SP3  [label="Sony SRS-XB43"           fillcolor="#1a0f00" color="#f5a623" fontcolor="#fbbf24"]
+    SP4  [label="Harman Kardon Aura"      fillcolor="#1a0f00" color="#f5a623" fontcolor="#fbbf24"]
+    BR1  -> A1H0 [color="#00b4a0"]
+    BR1  -> A1H1 [color="#00b4a0"]
+    A1H0 -> SP1  [color="#b07820" style=dashed]
+    A1H0 -> SP2  [color="#b07820" style=dashed]
+    A1H1 -> SP3  [color="#b07820" style=dashed]
+    A1H1 -> SP4  [color="#b07820" style=dashed]
+  }
+
+  // ── Zone 2: Kitchen ──
+  subgraph cluster_z2 {
+    graph [label="Kitchen  ·  Zone 2" style=filled fillcolor="#041408" color="#0fd47a" fontcolor="#6ee7b7" fontsize=11 margin=14]
+    BR2  [label="bt-bridge\nRPi 4"    fillcolor="#071825" color="#00e5cc" fontcolor="#5eead4"]
+    A2H0 [label="hci0"                fillcolor="#041a0e" color="#0fd47a" fontcolor="#4ade80"]
+    A2H1 [label="hci1"                fillcolor="#041a0e" color="#0fd47a" fontcolor="#4ade80"]
+    SP5  [label="JBL Flip 6"          fillcolor="#1a0f00" color="#f5a623" fontcolor="#fbbf24"]
+    SP6  [label="UE Hyperboom"        fillcolor="#1a0f00" color="#f5a623" fontcolor="#fbbf24"]
+    SP7  [label="Anker Soundcore"     fillcolor="#1a0f00" color="#f5a623" fontcolor="#fbbf24"]
+    BR2  -> A2H0 [color="#00b4a0"]
+    BR2  -> A2H1 [color="#00b4a0"]
+    A2H0 -> SP5  [color="#b07820" style=dashed]
+    A2H0 -> SP6  [color="#b07820" style=dashed]
+    A2H1 -> SP7  [color="#b07820" style=dashed]
+  }
+
+  // ── Zone 3: Conference Room ──
+  subgraph cluster_z3 {
+    graph [label="Conference Room  ·  Zone 3" style=filled fillcolor="#150d04" color="#f5a623" fontcolor="#fbbf24" fontsize=11 margin=14]
+    BR3  [label="bt-bridge\nNUC"         fillcolor="#071825" color="#00e5cc" fontcolor="#5eead4"]
+    A3H0 [label="hci0"                   fillcolor="#041a0e" color="#0fd47a" fontcolor="#4ade80"]
+    A3H1 [label="hci1"                   fillcolor="#041a0e" color="#0fd47a" fontcolor="#4ade80"]
+    SP8  [label="JBL PartyBox 110"       fillcolor="#1a0f00" color="#f5a623" fontcolor="#fbbf24"]
+    SP9  [label="Sonos Move 2"           fillcolor="#1a0f00" color="#f5a623" fontcolor="#fbbf24"]
+    SP10 [label="Bang and Olufsen A1"    fillcolor="#1a0f00" color="#f5a623" fontcolor="#fbbf24"]
+    SP11 [label="Marshall Emberton III"  fillcolor="#1a0f00" color="#f5a623" fontcolor="#fbbf24"]
+    BR3  -> A3H0 [color="#00b4a0"]
+    BR3  -> A3H1 [color="#00b4a0"]
+    A3H0 -> SP8  [color="#b07820" style=dashed]
+    A3H0 -> SP9  [color="#b07820" style=dashed]
+    A3H1 -> SP10 [color="#b07820" style=dashed]
+    A3H1 -> SP11 [color="#b07820" style=dashed]
+  }
+
+  // ── Zone 4: Terrace ──
+  subgraph cluster_z4 {
+    graph [label="Terrace  ·  Zone 4  ·  Outdoor" style=filled fillcolor="#041414" color="#00e5cc" fontcolor="#5eead4" fontsize=11 margin=14]
+    BR4  [label="bt-bridge\nRPi Zero 2W"  fillcolor="#071825" color="#00e5cc" fontcolor="#5eead4"]
+    A4H0 [label="hci0"                    fillcolor="#041a0e" color="#0fd47a" fontcolor="#4ade80"]
+    SP12 [label="UE Epicboom"             fillcolor="#1a0f00" color="#f5a623" fontcolor="#fbbf24"]
+    SP13 [label="JBL Xtreme 3"           fillcolor="#1a0f00" color="#f5a623" fontcolor="#fbbf24"]
+    BR4  -> A4H0 [color="#00b4a0"]
+    A4H0 -> SP12 [color="#b07820" style=dashed]
+    A4H0 -> SP13 [color="#b07820" style=dashed]
+  }
+
+  // ── Cross-cluster edges ──
+  USER -> HA  [label="Web UI / VPN" style=dashed color="#64748b" fontcolor="#64748b"]
+  MA   -> BR1 [label="Sendspin WS" color="#5b4faa" fontcolor="#818cf8"]
+  MA   -> BR2 [label="Sendspin WS" color="#5b4faa" fontcolor="#818cf8"]
+  MA   -> BR3 [label="Sendspin WS" color="#5b4faa" fontcolor="#818cf8"]
+  MA   -> BR4 [label="Sendspin WS" color="#5b4faa" fontcolor="#818cf8"]
+
+  // force zones side by side
+  { rank=same; BR1; BR2; BR3; BR4 }
+}
+`;
+
+let gviz;
+
+function resetZoom() {
+  if (gviz) gviz.resetZoom(d3.transition().duration(400));
+}
+function fitGraph() {
+  const svg = d3.select('#graph svg');
+  if (!svg.node()) return;
+  const card = document.getElementById('graph');
+  const w = card.clientWidth - 48;
+  const h = Math.round(w * 0.65);
+  svg.attr('width', w).attr('height', h);
+  resetZoom();
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  gviz = d3.select('#graph')
+    .graphviz({ useWorker: false, zoom: true })
+    .transition(() =>
+      d3.transition().duration(600).ease(d3.easeCubicOut)
+    )
+    .on('initEnd', () => {
+      document.getElementById('loading').style.display = 'none';
+    })
+    .renderDot(DOT)
+    .on('end', () => {
+      // style the rendered SVG to match the dark theme
+      const svg = d3.select('#graph svg');
+      svg.attr('style', 'max-width:100%;height:auto;border-radius:8px;');
+
+      // make polygon fill=none (arrowheads) transparent, leave fill=<color>
+      svg.selectAll('polygon').each(function() {
+        const el = d3.select(this);
+        if (el.attr('fill') === 'black') el.attr('fill', '#334155').attr('stroke', '#334155');
+      });
+    });
+});
+</script>
+</body>
+</html>
