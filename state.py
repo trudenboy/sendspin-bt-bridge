@@ -15,15 +15,21 @@ from pathlib import Path
 # SSE status-change signalling — used by /api/status/stream
 # ---------------------------------------------------------------------------
 _status_version: int = 0
-_status_event: threading.Event = threading.Event()
+# Condition used instead of a plain Event to avoid a race between the version
+# check and the wait() call in the SSE generator (a plain set()+clear() can
+# lose the wakeup if notify fires between them).
+_status_condition: threading.Condition = threading.Condition()
 
 
 def notify_status_changed() -> None:
-    """Signal that at least one client status has changed (wakes SSE listeners)."""
+    """Signal that at least one client status has changed (wakes SSE listeners).
+
+    Thread-safe: may be called from any thread.
+    """
     global _status_version
-    _status_version += 1
-    _status_event.set()
-    _status_event.clear()
+    with _status_condition:
+        _status_version += 1
+        _status_condition.notify_all()
 
 
 logger = logging.getLogger(__name__)

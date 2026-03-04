@@ -314,6 +314,8 @@ def set_volume():
                     if mac:
                         _schedule_volume_persist(mac, volume)
                 results.append({"player": getattr(client, "player_name", "?"), "ok": ok})
+        if results:
+            state.notify_status_changed()
         if not results:
             return jsonify({"success": False, "error": "No clients available"}), 503
         return jsonify({"success": True, "volume": volume, "results": results})
@@ -553,14 +555,26 @@ def api_status_stream():
     Clients connect once and receive real-time updates instead of polling
     /api/status every 2 seconds.  A heartbeat comment is sent every 30 s to
     keep the connection alive through proxies.
+
+    Uses ``threading.Condition.wait_for()`` to avoid the race between reading
+    ``_status_version`` and blocking: the Condition lock ensures that any
+    ``notify_status_changed()`` call either happens before we start waiting
+    (so ``wait_for`` returns immediately) or wakes us up cleanly.
     """
 
     def _generate():
         last_version = -1
         while True:
-            cur = state._status_version
-            if cur != last_version:
-                last_version = cur
+            with state._status_condition:
+                # Wait until version changes or 30 s elapse (heartbeat).
+                # Capture last_version as default arg to avoid B023 late-binding.
+                changed = state._status_condition.wait_for(
+                    lambda v=last_version: state._status_version != v,
+                    timeout=30,
+                )
+
+            if changed:
+                last_version = state._status_version
                 with _clients_lock:
                     snapshot = list(_clients)
                 if snapshot:
@@ -571,8 +585,7 @@ def api_status_stream():
                         data = {**first, "devices": [get_client_status_for(c) for c in snapshot]}
                     yield f"data: {json.dumps(data)}\n\n"
             else:
-                # Wait up to 30 s for a status change (or send heartbeat)
-                state._status_event.wait(timeout=30)
+                # 30 s timeout — send a keepalive comment so proxies don't close the connection
                 yield ": heartbeat\n\n"
 
     return Response(

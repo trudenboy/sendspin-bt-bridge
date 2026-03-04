@@ -129,6 +129,7 @@ class SendspinClient:
                     if bt_connected != self.status["bluetooth_connected"]:
                         self.status["bluetooth_connected"] = bt_connected
                         self.status["bluetooth_connected_at"] = datetime.now().isoformat()
+                        _state.notify_status_changed()
 
                 # Check daemon subprocess health
                 if self._daemon_proc is not None:
@@ -139,6 +140,7 @@ class SendspinClient:
                         self.status["group_name"] = None
                         self.status["group_id"] = None
                         self._daemon_proc = None
+                        _state.notify_status_changed()
                         # Don't restart if BT is disconnected — monitor_and_reconnect
                         # will call start_sendspin() once BT reconnects.
                         if not self.bt_manager or self.bt_manager.connected:
@@ -273,6 +275,8 @@ class SendspinClient:
                 "current_track",
                 "current_artist",
                 "state_changed_at",
+                "last_error",
+                "last_error_at",
             }
         )
         async for line in self._daemon_proc.stdout:
