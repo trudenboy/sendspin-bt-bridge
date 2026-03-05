@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.2] - 2026-03-05
+
+### Fixed
+- **Per-device pause incorrectly fell back to `/api/pause` for grouped players**: `onDevicePause()` checked local `groupSize > 1` to decide between `/api/group/pause` and `/api/pause`. After MA restructures groups (e.g. post-pause), `groupSize` could drop to 1 causing the wrong endpoint. Now checks `group_id != null` directly — if a player has a `group_id` it is always in an MA group and `/api/group/pause` is always used.
+
 ## [2.8.1] - 2026-03-05
 
 ### Fixed
