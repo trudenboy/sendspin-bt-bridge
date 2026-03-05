@@ -81,7 +81,7 @@
             <input type="hidden" name="mfa_module_id" value="{{ mfa_module_id }}">
             <div class="form-group">
                 <label>Authentication code</label>
-                <input type="text" name="code" inputmode="numeric" pattern="[0-9 ]*"
+                <input type="text" name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6"
                     autocomplete="one-time-code" required autofocus
                     placeholder="6-digit code" style="letter-spacing: 0.15em;">
             </div>

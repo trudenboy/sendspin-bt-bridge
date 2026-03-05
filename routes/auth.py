@@ -182,25 +182,34 @@ def login():
             if step == "mfa":
                 # ── Step 2: submit TOTP / MFA code ──────────────────────────
                 flow_id = request.form.get("flow_id", "").strip()
-                code = request.form.get("code", "").strip()
                 mfa_module_id = request.form.get("mfa_module_id", "totp")
-                if not flow_id or not code:
-                    error = "Invalid request"
+                # Normalize: remove spaces/dashes (common in copy-pasted TOTP codes)
+                code = request.form.get("code", "").replace(" ", "").replace("-", "")
+                # Missing flow_id means the session/flow expired — restart login
+                if not flow_id:
+                    error = "Session expired — please sign in again"
                     return render_template("login.html", error=error, ha_mode=ha_mode)
-                result = _ha_flow_step(flow_id, {"code": code})
+                # Missing code — keep user on the MFA step so they can retry
+                if not code:
+                    error = "Authentication code is required"
+                    return render_template(
+                        "login.html",
+                        error=error,
+                        ha_mode=ha_mode,
+                        mfa_step=True,
+                        flow_id=flow_id,
+                        mfa_module_id=mfa_module_id,
+                    )
+                result = _ha_flow_step(flow_id, {"code": code, "mfa_module_id": mfa_module_id})
                 if result and result.get("type") == "create_entry":
                     _clear_failures(client_ip)
                     session["authenticated"] = True
                     return redirect(_safe_next_url())
                 _record_failure(client_ip)
-                errors = result.get("errors", {}) if result else {}
-                if errors.get("base") == "invalid_code":
-                    error = "Invalid authentication code"
-                elif result and result.get("type") == "abort":
+                if result and result.get("type") == "abort":
                     error = "Session expired — please sign in again"
                     return render_template("login.html", error=error, ha_mode=ha_mode)
-                else:
-                    error = "Invalid authentication code"
+                error = "Invalid authentication code"
                 return render_template(
                     "login.html",
                     error=error,
@@ -227,34 +236,44 @@ def login():
                     _record_failure(client_ip)
                     error = "Invalid credentials"
                 else:
-                    flow_id = flow.get("flow_id", "")
-                    result = _ha_flow_step(flow_id, {"username": username, "password": password})
-
-                    if result is None:
-                        error = "Authentication service unavailable"
-                    elif result.get("type") == "create_entry":
-                        # Credentials valid, no 2FA configured
-                        _clear_failures(client_ip)
-                        session["authenticated"] = True
-                        return redirect(_safe_next_url())
-                    elif result.get("type") == "form" and result.get("step_id") == "mfa":
-                        # 2FA required — extract module info from description_placeholders
-                        placeholders = result.get("description_placeholders") or {}
-                        mfa_module_id = placeholders.get("mfa_module_id", "totp")
-                        return render_template(
-                            "login.html",
-                            ha_mode=ha_mode,
-                            mfa_step=True,
-                            flow_id=flow_id,
-                            mfa_module_id=mfa_module_id,
-                            mfa_module_name=placeholders.get("mfa_module_name", "Authenticator app"),
-                        )
-                    else:
+                    flow_id = flow.get("flow_id") or ""
+                    if not flow_id:
+                        logger.error("HA login_flow returned no flow_id; falling back to Supervisor auth")
+                        if _supervisor_auth(username, password):
+                            _clear_failures(client_ip)
+                            session["authenticated"] = True
+                            return redirect(_safe_next_url())
                         _record_failure(client_ip)
-                        errors = result.get("errors", {})
-                        error = (
-                            "Invalid credentials" if errors.get("base") == "invalid_auth" else "Authentication failed"
-                        )
+                        error = "Invalid credentials"
+                    else:
+                        result = _ha_flow_step(flow_id, {"username": username, "password": password})
+                        if result is None:
+                            error = "Authentication service unavailable"
+                        elif result.get("type") == "create_entry":
+                            # Credentials valid, no 2FA configured
+                            _clear_failures(client_ip)
+                            session["authenticated"] = True
+                            return redirect(_safe_next_url())
+                        elif result.get("type") == "form" and result.get("step_id") == "mfa":
+                            # 2FA required — extract module info from description_placeholders
+                            placeholders = result.get("description_placeholders") or {}
+                            mfa_module_id = placeholders.get("mfa_module_id", "totp")
+                            return render_template(
+                                "login.html",
+                                ha_mode=ha_mode,
+                                mfa_step=True,
+                                flow_id=flow_id,
+                                mfa_module_id=mfa_module_id,
+                                mfa_module_name=placeholders.get("mfa_module_name", "Authenticator app"),
+                            )
+                        else:
+                            _record_failure(client_ip)
+                            errors = result.get("errors", {})
+                            error = (
+                                "Invalid credentials"
+                                if errors.get("base") == "invalid_auth"
+                                else "Authentication failed"
+                            )
         else:
             password = request.form.get("password", "")
             stored = config.get("AUTH_PASSWORD_HASH", "")
