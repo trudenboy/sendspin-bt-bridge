@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.0] - 2026-03-05
+
+### Added
+- **`GET /api/groups`** — new endpoint returning a consolidated list of MA player groups. Players sharing the same `group_id` are merged into one entry with `members`, `avg_volume`, and `playing` state. Solo players appear as single-member entries with `group_id: null`.
+- **`POST /api/group/pause`** — pause or resume a specific MA sync group by `group_id`. Sends the command to one member only; MA propagates it to the whole group (sending to each member individually would break sync).
+- **`group_id` filter for `POST /api/volume`** — set volume for all members of a specific MA sync group in one call (alongside existing `player_name`/`player_names` filters).
+- **`groups` field in SSE stream** — every status push now includes an aggregated group summary alongside per-device status, so clients can render group structure without computing it from individual devices.
+
+### Fixed
+- **Group filter dropdown broken**: `onGroupFilterChange()` referenced `inGroup` before it was declared — selecting a group in the filter had no effect.
+- **Per-device pause button sent to wrong group**: `onDevicePause()` called `/api/pause_all` for grouped devices (affected all groups), now correctly calls `/api/group/pause` with the specific `group_id`.
+
+### Removed
+- Unused `play_via_mpris` import in `routes/api.py` and its `__all__` export in `mpris.py` — play/resume now goes through `send_group_command` (same path as pause).
+
 ## [2.7.17] - 2026-03-05
 
 ### Fixed
