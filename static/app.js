@@ -332,7 +332,11 @@ function populateDeviceCard(i, dev) {
         var groupDisplay = groupLabel ? groupLabel.split('-').pop() : '';
         groupBadge.textContent = groupDisplay ? '\uD83D\uDD17 ' + groupDisplay : '';
         groupBadge.title = groupLabel;
-        var isSolo = !!dev.ma_now_playing && !dev.group_id;
+        // Solo = no other bridge device shares this group_id
+        var groupPeers = dev.group_id
+            ? (lastDevices || []).filter(function(d) { return d !== dev && d.group_id === dev.group_id; }).length
+            : 0;
+        var isSolo = !groupPeers;
         groupBadge.classList.toggle('hover-only', isSolo);
         groupBadge.style.display = groupDisplay ? '' : 'none';
     }

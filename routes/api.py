@@ -365,6 +365,7 @@ def set_mute():
             targets = _clients[:1]
 
         results = []
+        loop = state.get_main_loop()
         for client in targets:
             if client.bluetooth_sink_name:
                 ok = set_sink_mute(client.bluetooth_sink_name, mute_value)
@@ -373,6 +374,11 @@ def set_mute():
                     if muted is None:
                         muted = bool(mute_value) if mute_value is not None else not client.status.get("muted", False)
                     client._update_status({"muted": muted})
+                    # Sync muted state into daemon subprocess so it doesn't override on next emit
+                    if loop:
+                        asyncio.run_coroutine_threadsafe(
+                            client._send_subprocess_command({"cmd": "set_mute", "muted": muted}), loop
+                        )
                     results.append(
                         {
                             "player": getattr(client, "player_name", "?"),
