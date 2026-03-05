@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.9.0] - 2026-03-05
+
+### Added
+- New optional options `ma_api_url` and `ma_api_token`: connect to the Music Assistant WebSocket API to enable correct group resume and group name display.
+- `GET /api/ma/groups` endpoint: returns all MA syncgroup players with member details.
+- Group resume now uses the persistent MA syncgroup player via MA API (when configured), restoring all members in sync — identical to pressing resume in the MA UI.
+
 ## [2.8.2] - 2026-03-05
 
 ### Fixed

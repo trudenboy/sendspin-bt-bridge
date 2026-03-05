@@ -791,6 +791,39 @@ async def main():
     # Expose the running loop so Flask/WSGI threads can schedule coroutines
     _state.set_main_loop(asyncio.get_running_loop())
 
+    # Discover MA syncgroups via MA API.
+    # In HA addon mode (SUPERVISOR_TOKEN present): auto-detect URL and try supervisor token.
+    # Otherwise: use explicit MA_API_URL + MA_API_TOKEN from config.
+    ma_api_url = config.get("MA_API_URL", "").strip()
+    ma_api_token = config.get("MA_API_TOKEN", "").strip()
+
+    supervisor_token = os.environ.get("SUPERVISOR_TOKEN", "")
+    if supervisor_token:
+        # HA addon mode: auto-detect MA URL if not explicitly configured
+        if not ma_api_url:
+            _resolved = (
+                server_host
+                if (server_host and server_host.lower() not in ("auto", "discover", ""))
+                else "homeassistant.local"
+            )
+            ma_api_url = f"http://{_resolved}:8095"
+            logger.debug("MA API URL auto-detected (addon mode): %s", ma_api_url)
+        # Use supervisor token as MA auth token if no explicit token configured
+        if not ma_api_token:
+            ma_api_token = supervisor_token
+            logger.debug("MA API token: using SUPERVISOR_TOKEN (addon mode)")
+
+    if ma_api_url and ma_api_token:
+        _state.set_ma_api_credentials(ma_api_url, ma_api_token)
+        try:
+            from services.ma_client import discover_ma_groups
+
+            player_names = [c.player_name for c in clients]
+            name_map, all_groups = await discover_ma_groups(ma_api_url, ma_api_token, player_names)
+            _state.set_ma_groups(name_map, all_groups)
+        except Exception as _ma_exc:
+            logger.warning("MA API group discovery error: %s", _ma_exc)
+
     # Run all clients in parallel
     await asyncio.gather(*[c.run() for c in clients])
 

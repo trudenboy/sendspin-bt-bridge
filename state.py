@@ -19,12 +19,17 @@ __all__ = [
     "create_scan_job",
     "finish_scan_job",
     "get_adapter_name",
+    "get_ma_api_credentials",
+    "get_ma_group_for_player",
+    "get_ma_groups",
     "get_main_loop",
     "get_scan_job",
     "is_scan_running",
     "load_adapter_name_cache",
     "notify_status_changed",
     "set_clients",
+    "set_ma_api_credentials",
+    "set_ma_groups",
     "set_main_loop",
 ]
 
@@ -174,3 +179,50 @@ def get_scan_job(job_id: str) -> "dict | None":
     """Return the job dict or None if not found."""
     with _scan_jobs_lock:
         return _scan_jobs.get(job_id)
+
+
+# ---------------------------------------------------------------------------
+# MA syncgroup cache — player_name_lower → {"id": syncgroup_id, "name": group_name}
+# Populated at startup if MA_API_URL + MA_API_TOKEN are configured.
+# ---------------------------------------------------------------------------
+
+_ma_groups: dict[str, dict] = {}
+_ma_groups_lock = threading.Lock()
+_ma_all_groups: list[dict] = []  # full list: [{id, name, members: [{id, name, state, volume, available}]}]
+_ma_api_url: str = ""
+_ma_api_token: str = ""
+
+
+def set_ma_groups(mapping: "dict[str, dict]", all_groups: "list[dict] | None" = None) -> None:
+    """Store the MA player_name → syncgroup mapping and full group list discovered from MA API."""
+    with _ma_groups_lock:
+        _ma_groups.clear()
+        _ma_groups.update(mapping)
+        if all_groups is not None:
+            _ma_all_groups.clear()
+            _ma_all_groups.extend(all_groups)
+    logger.info("MA syncgroup cache updated: %d mapped, %d total group(s)", len(mapping), len(_ma_all_groups))
+
+
+def set_ma_api_credentials(url: str, token: str) -> None:
+    """Store resolved MA API URL and token for use across modules."""
+    global _ma_api_url, _ma_api_token
+    _ma_api_url = url
+    _ma_api_token = token
+
+
+def get_ma_api_credentials() -> "tuple[str, str]":
+    """Return (ma_api_url, ma_api_token)."""
+    return _ma_api_url, _ma_api_token
+
+
+def get_ma_group_for_player(player_name: str) -> "dict | None":
+    """Return MA syncgroup info {id, name} for the given bridge player name, or None."""
+    with _ma_groups_lock:
+        return _ma_groups.get(player_name.lower())
+
+
+def get_ma_groups() -> "list[dict]":
+    """Return all MA syncgroup players with their members."""
+    with _ma_groups_lock:
+        return list(_ma_all_groups)
