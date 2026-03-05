@@ -278,26 +278,9 @@
         }
         .bt-device-wrap { margin-bottom: 10px; }
         .bt-device-row {
-            display: grid; grid-template-columns: 1fr 1.3fr 0.9fr 9rem 4.5rem 5.5rem 8rem 30px;
+            display: grid; grid-template-columns: 1fr 1.3fr 0.9fr 9rem 4.5rem 5.5rem 8rem 5rem 30px;
             gap: 8px; align-items: center; margin-bottom: 0;
         }
-        .bt-device-sub-row {
-            display: flex; align-items: center; gap: 10px;
-            padding: 4px 0 2px 2px;
-            font-size: 12px; color: var(--secondary-text-color);
-        }
-        .bt-device-sub-row label {
-            display: flex; align-items: center; gap: 4px; cursor: pointer;
-            color: var(--secondary-text-color); font-weight: 400; margin-bottom: 0;
-        }
-        .bt-device-sub-row input[type=number] {
-            width: 56px; padding: 3px 6px; border: 1px solid var(--divider-color);
-            border-radius: 4px; font-size: 12px;
-            background: var(--card-background-color); color: var(--primary-text-color);
-        }
-        .bt-device-sub-row input[type=number]:focus { outline: none; border-color: var(--primary-color); }
-        .bt-keepalive-interval-wrap { display: none; align-items: center; gap: 4px; }
-        .bt-keepalive-interval-wrap.visible { display: flex; }
         .bt-device-row input, .bt-device-row select {
             padding: 7px 10px; border: 1px solid var(--divider-color);
             border-radius: 5px; font-size: 13px;

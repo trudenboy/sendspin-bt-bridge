@@ -62,7 +62,11 @@
     <div class="login-card">
         <div class="login-header">
             <h1>&#127925; Sendspin Bluetooth Bridge</h1>
+            {% if mfa_step %}
+            <p>Enter the code from your authenticator app</p>
+            {% else %}
             <p>Sign in to continue</p>
+            {% endif %}
         </div>
 
         {% if error %}
@@ -70,6 +74,21 @@
         {% endif %}
 
         <form method="post" autocomplete="on">
+            {% if mfa_step %}
+            {# ── Step 2: MFA code ── #}
+            <input type="hidden" name="step" value="mfa">
+            <input type="hidden" name="flow_id" value="{{ flow_id }}">
+            <input type="hidden" name="mfa_module_id" value="{{ mfa_module_id }}">
+            <div class="form-group">
+                <label>Authentication code</label>
+                <input type="text" name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6"
+                    autocomplete="one-time-code" required autofocus
+                    placeholder="6-digit code" style="letter-spacing: 0.15em;">
+            </div>
+            <button type="submit" class="btn login-submit">Verify</button>
+            {% else %}
+            {# ── Step 1: credentials ── #}
+            <input type="hidden" name="step" value="credentials">
             {% if ha_mode %}
             <div class="form-group">
                 <label>Home Assistant username</label>
@@ -82,6 +101,7 @@
                     required {% if not ha_mode %}autofocus{% endif %}>
             </div>
             <button type="submit" class="btn login-submit">Sign in</button>
+            {% endif %}
         </form>
     </div>
 </div>

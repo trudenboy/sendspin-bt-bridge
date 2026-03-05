@@ -685,11 +685,11 @@ def api_config():
         if ki is not None:
             try:
                 ki = int(ki)
-                if not (10 <= ki <= 300):
+                if ki != 0 and not (30 <= ki <= 3600):
                     raise ValueError
             except (ValueError, TypeError):
                 return jsonify(
-                    {"error": f"Invalid keepalive_interval: {dev.get('keepalive_interval')} (must be 10-300)"}
+                    {"error": f"Invalid keepalive_interval: {dev.get('keepalive_interval')} (must be 0 or 30-3600)"}
                 ), 400
 
     # Validate BLUETOOTH_ADAPTERS entries
