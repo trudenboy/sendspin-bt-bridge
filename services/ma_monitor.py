@@ -103,7 +103,7 @@ def _find_solo_player_queues(queues: list[dict]) -> list[tuple[str, dict]]:
         pid_ma = "up" + pid.replace("-", "")
         for q in queues:
             qid = q.get("queue_id", "")
-            if qid == pid or qid == pid_ma:
+            if qid in (pid, pid_ma):
                 result.append((pid, q))
                 break
     return result
