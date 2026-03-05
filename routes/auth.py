@@ -31,7 +31,7 @@ auth_bp = Blueprint("auth", __name__)
 
 # HA Core URL used for the full auth login-flow (supports 2FA).
 # In HA addon environment 'homeassistant' resolves to HA Core.
-_HA_CORE_URL = os.environ.get("HA_CORE_URL", "http://homeassistant:8123")
+_HA_CORE_URL = os.environ.get("HA_CORE_URL", "http://homeassistant:8123").rstrip("/")
 # client_id must be an HTTP URL; HA accepts any valid URL as client_id.
 _FLOW_CLIENT_ID = f"{_HA_CORE_URL}/"
 
@@ -87,7 +87,15 @@ def _is_ha_addon() -> bool:
 
 
 def _ha_flow_start() -> dict | None:
-    """Start an HA Core auth login_flow. Returns flow dict or None on error."""
+    """Start an HA Core auth login_flow.
+
+    Returns:
+        dict  — success (contains ``flow_id``)
+        {"_ha_error": True} — HA Core is reachable but returned an HTTP error;
+            caller MUST NOT fall back to Supervisor /auth (would bypass MFA).
+        None  — network-level failure (connection refused, DNS, timeout);
+            HA Core is unreachable, falling back to Supervisor /auth is safe.
+    """
     try:
         body = json.dumps(
             {
@@ -104,8 +112,15 @@ def _ha_flow_start() -> dict | None:
         )
         with _ur.urlopen(req, timeout=10) as resp:
             return json.loads(resp.read())
+    except HTTPError as exc:
+        # HA Core is reachable but returned an error (e.g. 404/500).
+        # Do NOT fall back to Supervisor /auth — that would bypass MFA.
+        logger.warning("HA login_flow HTTP %s — service error, MFA bypass prevented", exc.code)
+        return {"_ha_error": True}
     except Exception as exc:
-        logger.warning("HA login flow start error: %s", exc)
+        # Network-level failure (DNS, connection refused, timeout).
+        # HA Core is genuinely unreachable — Supervisor fallback is safe.
+        logger.warning("HA login flow unreachable: %s", exc)
         return None
 
 
@@ -227,7 +242,7 @@ def login():
                 # Try full HA login_flow (supports 2FA)
                 flow = _ha_flow_start()
                 if flow is None:
-                    # HA Core unreachable — fall back to Supervisor /auth (no 2FA)
+                    # Network-level failure — HA Core unreachable, Supervisor fallback is safe
                     logger.warning("HA login flow unavailable, falling back to Supervisor auth")
                     if _supervisor_auth(username, password):
                         _clear_failures(client_ip)
@@ -235,45 +250,39 @@ def login():
                         return redirect(_safe_next_url())
                     _record_failure(client_ip)
                     error = "Invalid credentials"
+                elif flow.get("_ha_error") or not flow.get("flow_id"):
+                    # HA Core is up but returned an error, or gave no flow_id.
+                    # Do NOT fall back to Supervisor — that would bypass MFA.
+                    logger.error("HA login_flow service error (flow=%r)", flow)
+                    error = "Authentication service unavailable"
                 else:
-                    flow_id = flow.get("flow_id") or ""
-                    if not flow_id:
-                        logger.error("HA login_flow returned no flow_id; falling back to Supervisor auth")
-                        if _supervisor_auth(username, password):
-                            _clear_failures(client_ip)
-                            session["authenticated"] = True
-                            return redirect(_safe_next_url())
-                        _record_failure(client_ip)
-                        error = "Invalid credentials"
+                    flow_id = flow["flow_id"]
+                    result = _ha_flow_step(flow_id, {"username": username, "password": password})
+                    if result is None:
+                        error = "Authentication service unavailable"
+                    elif result.get("type") == "create_entry":
+                        # Credentials valid, no 2FA configured
+                        _clear_failures(client_ip)
+                        session["authenticated"] = True
+                        return redirect(_safe_next_url())
+                    elif result.get("type") == "form" and result.get("step_id") == "mfa":
+                        # 2FA required — extract module info from description_placeholders
+                        placeholders = result.get("description_placeholders") or {}
+                        mfa_module_id = placeholders.get("mfa_module_id", "totp")
+                        return render_template(
+                            "login.html",
+                            ha_mode=ha_mode,
+                            mfa_step=True,
+                            flow_id=flow_id,
+                            mfa_module_id=mfa_module_id,
+                            mfa_module_name=placeholders.get("mfa_module_name", "Authenticator app"),
+                        )
                     else:
-                        result = _ha_flow_step(flow_id, {"username": username, "password": password})
-                        if result is None:
-                            error = "Authentication service unavailable"
-                        elif result.get("type") == "create_entry":
-                            # Credentials valid, no 2FA configured
-                            _clear_failures(client_ip)
-                            session["authenticated"] = True
-                            return redirect(_safe_next_url())
-                        elif result.get("type") == "form" and result.get("step_id") == "mfa":
-                            # 2FA required — extract module info from description_placeholders
-                            placeholders = result.get("description_placeholders") or {}
-                            mfa_module_id = placeholders.get("mfa_module_id", "totp")
-                            return render_template(
-                                "login.html",
-                                ha_mode=ha_mode,
-                                mfa_step=True,
-                                flow_id=flow_id,
-                                mfa_module_id=mfa_module_id,
-                                mfa_module_name=placeholders.get("mfa_module_name", "Authenticator app"),
-                            )
-                        else:
-                            _record_failure(client_ip)
-                            errors = result.get("errors", {})
-                            error = (
-                                "Invalid credentials"
-                                if errors.get("base") == "invalid_auth"
-                                else "Authentication failed"
-                            )
+                        _record_failure(client_ip)
+                        errors = result.get("errors", {})
+                        error = (
+                            "Invalid credentials" if errors.get("base") == "invalid_auth" else "Authentication failed"
+                        )
         else:
             password = request.form.get("password", "")
             stored = config.get("AUTH_PASSWORD_HASH", "")
