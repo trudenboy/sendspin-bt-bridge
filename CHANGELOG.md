@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.15] - 2026-03-05
+
+### Fixed
+- **Intermittent volume lag**: `/api/volume` now sets sink volume for all target devices concurrently via `ThreadPoolExecutor` instead of serially — with 3 devices the worst case dropped from ~15 s to ~5 s
+
+### Improved
+- Default `WEB_THREADS` bumped from 4 → 8 to reduce Waitress thread starvation when multiple browser tabs hold SSE connections
+
 ## [2.7.14] - 2026-03-05
 
 ### Fixed
