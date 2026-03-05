@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.9.9] - 2026-03-05
+
+### Changed
+- **Multi-syncgroup MA now-playing**: MA track/progress/controls are now scoped per syncgroup — each device only shows data from its own MA group; devices not in any group show no MA data.
+- **Shuffle/repeat in transport row**: ⇄ and ↻ buttons moved into the main controls row alongside ◀◀ ▮▮ ▶▶, hover-only, same visual style.
+- **Volume column wider**: volume column widened (1.25fr) at the expense of sync column (0.5fr) so long sink names don't wrap.
+
+### Fixed
+- **Per-device MA scoping**: disconnected/Released devices no longer show progress bar or track info from another device's MA group.
+
 ## [2.9.8] - 2026-03-05
 
 ### Changed
