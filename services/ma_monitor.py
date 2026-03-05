@@ -73,9 +73,17 @@ def _build_now_playing(queue: dict) -> dict:
 
 
 async def _find_syncgroup_queues(queues: list[dict]) -> list[dict]:
-    """Return all queue entries for known MA syncgroups."""
+    """Return all queue entries for known MA syncgroups.
+
+    Includes groups discovered via API *and* group_ids reported live by Sendspin devices.
+    """
     groups = _state.get_ma_groups()
     group_ids = {g["id"] for g in groups}
+    # Also include any group_id reported by Sendspin-connected bridge devices
+    for client in _state.clients:
+        gid = client.status.get("group_id") if hasattr(client, "status") else None
+        if gid:
+            group_ids.add(gid)
     result = [q for q in queues if q.get("queue_id") in group_ids and q.get("active")]
     if not result:
         result = [q for q in queues if q.get("queue_id") in group_ids]

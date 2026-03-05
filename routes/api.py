@@ -198,12 +198,18 @@ def get_client_status_for(client):
             ma_group = get_ma_group_for_player(player_name)
             if ma_group and ma_group.get("name"):
                 status["group_name"] = ma_group["name"]
-            # Per-device MA now-playing: syncgroup members keyed by group id, solo by player_id
+            # Per-device MA now-playing: prefer name-matched syncgroup, then Sendspin-reported
+            # group_id (which IS the MA syncgroup id), then solo player_id queue
             if ma_group:
                 status["ma_now_playing"] = get_ma_now_playing_for_group(ma_group["id"])
             else:
+                dev_group_id = status.get("group_id")
                 pid = getattr(client, "player_id", "")
-                status["ma_now_playing"] = get_ma_now_playing_for_group(pid) if pid else {}
+                status["ma_now_playing"] = (
+                    get_ma_now_playing_for_group(dev_group_id)
+                    or (get_ma_now_playing_for_group(pid) if pid else {})
+                    or {}
+                )
 
         logger.debug("Status retrieved: %s", status)
         return status
