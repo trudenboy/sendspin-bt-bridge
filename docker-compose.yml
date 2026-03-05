@@ -4,11 +4,11 @@ services:
     # To build from source instead: docker compose up --build
     container_name: sendspin-client
     restart: unless-stopped
-    
+
     # Required for Bluetooth access
     network_mode: host
     # Note: privileged: true removed — use only the capabilities actually needed below
-    
+
     volumes:
       # Mount D-Bus socket for Bluetooth
       - /var/run/dbus:/var/run/dbus
@@ -18,16 +18,16 @@ services:
       - /run/user/${AUDIO_UID:-1000}/pipewire-0:/run/user/${AUDIO_UID:-1000}/pipewire-0
       # Configuration directory
       - /etc/docker/Sendspin:/config
-    
+
     environment:
       # Sendspin Configuration
       - SENDSPIN_SERVER=auto  # Use 'auto' for mDNS discovery, or specify hostname/IP
       # - SENDSPIN_NAME=Living-Room  # Override default player name (default: Sendspin-<hostname>)
-      
+
       # Bluetooth Configuration (can also be configured via web UI)
       # Set your speaker's MAC address here, e.g.: AA:BB:CC:DD:EE:FF
       - BLUETOOTH_MAC=${BLUETOOTH_MAC:-}
-      
+
       # System Configuration
       - TZ=Australia/Melbourne
       - WEB_PORT=8080
@@ -35,15 +35,15 @@ services:
       # Audio configuration - use host's PipeWire/PulseAudio
       - PULSE_SERVER=unix:/run/user/${AUDIO_UID:-1000}/pulse/native
       - XDG_RUNTIME_DIR=/run/user/${AUDIO_UID:-1000}
-    
+
     devices:
       # Grant access to Bluetooth adapter
       - /dev/bus/usb:/dev/bus/usb
-    
+
     cap_add:
       - NET_ADMIN   # Bluetooth adapter control
       - NET_RAW     # Raw BT/HCI socket access
       - SYS_ADMIN   # BlueZ kernel operations (D-Bus, rfkill)
-    
+
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
