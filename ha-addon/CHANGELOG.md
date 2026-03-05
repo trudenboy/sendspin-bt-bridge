@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.0] - 2026-03-05
+
+### Added
+- **Group API**: new `GET /api/groups` endpoint showing all MA player groups with members, average volume and playback state
+- **Group pause/resume**: new `POST /api/group/pause` to pause or resume a specific MA sync group without affecting other groups
+- **Group volume control**: `POST /api/volume` now accepts a `group_id` to set volume for all members of a group at once
+- **Groups in SSE stream**: every status push now includes an aggregated `groups` summary
+
+### Fixed
+- Group filter dropdown in the web UI had no effect (JS variable bug)
+- Per-device pause button was sending pause to all groups instead of only the selected device's group
+
 ## [2.7.17] - 2026-03-05
 
 ### Fixed
