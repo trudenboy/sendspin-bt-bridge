@@ -866,14 +866,12 @@ function onDevicePause(i) {
     var isPaused = btn && btn.classList.contains('paused');
     var action = isPaused ? 'play' : 'pause';
 
-    // If device is in a multi-member group, pause/play the whole group via
-    // /api/group/pause (by group_id) — MA propagates to all group members.
-    // Using /api/pause (single-client) for PLAY breaks group sync in MA.
-    var groupSize = dev && dev.group_id
-        ? (lastDevices || []).filter(function(d) { return d.group_id === dev.group_id; }).length
-        : 0;
-    var url = groupSize > 1 ? '/api/group/pause' : '/api/pause';
-    var body = groupSize > 1
+    // If device has a group_id, pause/play via /api/group/pause (by group_id)
+    // so MA propagates the command to all group members correctly.
+    // Only use /api/pause for solo players (group_id is null).
+    var inGroup = dev && dev.group_id;
+    var url = inGroup ? '/api/group/pause' : '/api/pause';
+    var body = inGroup
         ? {action: action, group_id: dev.group_id}
         : {action: action, player_name: dev ? dev.player_name : null};
 
