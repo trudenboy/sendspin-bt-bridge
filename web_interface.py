@@ -132,7 +132,7 @@ def _handle_500(e):
 def main():
     """Start the web interface"""
     port = int(os.getenv("WEB_PORT", 8080))
-    threads = int(os.getenv("WEB_THREADS", 4))
+    threads = int(os.getenv("WEB_THREADS", 8))
     logger.info("Starting web interface on port %s", port)
     serve(app, host="0.0.0.0", port=port, threads=threads)
 

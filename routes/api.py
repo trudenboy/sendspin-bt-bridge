@@ -310,16 +310,19 @@ def set_volume():
         else:
             targets = list(_clients)
 
-        results = []
-        for client in targets:
-            if client.bluetooth_sink_name:
-                ok = set_sink_volume(client.bluetooth_sink_name, volume)
-                if ok:
-                    client._update_status({"volume": volume})
-                    mac = getattr(getattr(client, "bt_manager", None), "mac_address", None)
-                    if mac:
-                        _schedule_volume_persist(mac, volume)
-                results.append({"player": getattr(client, "player_name", "?"), "ok": ok})
+        def _set_one(client):
+            if not client.bluetooth_sink_name:
+                return None
+            ok = set_sink_volume(client.bluetooth_sink_name, volume)
+            if ok:
+                client._update_status({"volume": volume})
+                mac = getattr(getattr(client, "bt_manager", None), "mac_address", None)
+                if mac:
+                    _schedule_volume_persist(mac, volume)
+            return {"player": getattr(client, "player_name", "?"), "ok": ok}
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=len(targets) or 1) as pool:
+            results = [r for r in pool.map(_set_one, targets) if r is not None]
         if not results:
             return jsonify({"success": False, "error": "No clients available"}), 503
         return jsonify({"success": True, "volume": volume, "results": results})
