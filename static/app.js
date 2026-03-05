@@ -702,6 +702,7 @@ function _updateGroupFilter() {
     lastDevices.forEach(function(dev) {
         var g = dev.group_name || dev.group_id || '';
         if (g && groups.indexOf(g) === -1) groups.push(g);
+    });
     // Rebuild options, preserving current selection
     var cur = sel.value;
     sel.innerHTML = '<option value="">All groups</option>';
