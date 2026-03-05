@@ -5,7 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.9.5] - 2026-03-06
+## [2.9.6] - 2026-03-06
+
+### Fixed
+- **Web UI broken**: JavaScript syntax error in `renderDiagnostics()` prevented the entire UI from loading.
+- **MA monitor disabled**: `websockets` package added to `requirements.txt` — MA real-time monitor now starts correctly.
+
+
 
 ### Added
 - Persistent MA WebSocket monitor with real-time `player_queue_updated` / `player_updated` event subscriptions.

@@ -5,7 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.9.5] - 2026-03-06
+## [2.9.6] - 2026-03-06
+
+### Fixed
+- **Web UI broken** (`app.js`): duplicate closing brace in `renderDiagnostics()` caused a JavaScript syntax error that prevented the entire UI from loading.
+- **MA monitor disabled**: `websockets` package was missing from `requirements.txt`, causing the MA WebSocket monitor to be permanently disabled on startup (`websockets not installed — MA monitor disabled`).
+
+
 
 ### Added
 - **MA Monitor** (`services/ma_monitor.py`): persistent WebSocket connection to Music Assistant that subscribes to `player_queue_updated` / `player_updated` events in real time. Falls back to polling every 15 s if event subscription is unavailable. Auto-reconnects with exponential backoff.
