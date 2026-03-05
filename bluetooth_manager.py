@@ -575,7 +575,9 @@ class BluetoothManager:
 
                         if self.client and self.client.is_running():
                             logger.info(f"BT disconnected for {self.device_name}, stopping sendspin daemon...")
-                            if not self.client.status.get("group_id"):
+                            with self.client._status_lock:
+                                is_grouped = bool(self.client.status.get("group_id"))
+                            if not is_grouped:
                                 await self.client._send_subprocess_command({"cmd": "pause"})
                                 await asyncio.sleep(0.2)
                             await self.client.stop_sendspin()
@@ -744,7 +746,9 @@ class BluetoothManager:
                         # Stop sendspin (BT sink is gone — would flood PortAudioErrors)
                         if self.client and self.client.is_running():
                             logger.info(f"BT disconnected for {self.device_name}, stopping sendspin daemon...")
-                            if not self.client.status.get("group_id"):
+                            with self.client._status_lock:
+                                is_grouped = bool(self.client.status.get("group_id"))
+                            if not is_grouped:
                                 await self.client._send_subprocess_command({"cmd": "pause"})
                                 await asyncio.sleep(0.2)
                             await self.client.stop_sendspin()
