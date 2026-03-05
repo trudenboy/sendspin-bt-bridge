@@ -124,6 +124,77 @@ class MaMonitor:
                 return resp
         return {}
 
+    async def _refresh_stale_player_metadata(self, ws) -> None:
+        """Compare bridge player device_info in MA with current version/hostname.
+
+        If MA has stale metadata (e.g. after a version upgrade) and the player
+        is not actively playing, trigger a sendspin reconnect so the subprocess
+        sends a fresh client_hello with the updated product_name and manufacturer.
+        """
+        import socket as _socket
+
+        from config import VERSION
+
+        expected_product = f"Sendspin BT Bridge v{VERSION}"
+        expected_host = _socket.gethostname()
+
+        # Fetch all players from MA
+        mid = self._next_id()
+        await _send(ws, mid, "players/all", {})
+        players: list[dict] = []
+        for _ in range(30):
+            try:
+                resp = await _recv(ws, timeout=10.0)
+            except Exception:
+                break
+            if str(resp.get("message_id")) == str(mid):
+                players = resp.get("result") or []
+                break
+
+        if not players:
+            return
+
+        # Build bridge player lookup by name (lowercase)
+        bridge_clients = {getattr(c, "player_name", "").lower(): c for c in _state.clients}
+
+        for p in players:
+            pname = (p.get("display_name") or p.get("name") or "").lower()
+            matched_client = None
+            for bname, c in bridge_clients.items():
+                if bname and (bname in pname or pname in bname):
+                    matched_client = c
+                    break
+            if matched_client is None:
+                continue
+
+            device_info = p.get("device_info") or {}
+            product_name = device_info.get("product_name", "")
+            manufacturer = device_info.get("manufacturer", "")
+
+            if product_name == expected_product and manufacturer == expected_host:
+                continue  # already up to date
+
+            # Stale — only reconnect if player is not actively playing
+            if matched_client.status.get("playing"):
+                logger.info(
+                    "MA: player '%s' has stale device_info (product='%s', host='%s') — skipping reconnect (playing)",
+                    p.get("display_name"),
+                    product_name,
+                    manufacturer,
+                )
+                continue
+
+            logger.info(
+                "MA: player '%s' has stale device_info (product='%s' expected='%s', "
+                "host='%s' expected='%s') — triggering reconnect",
+                p.get("display_name"),
+                product_name,
+                expected_product,
+                manufacturer,
+                expected_host,
+            )
+            asyncio.create_task(matched_client.send_reconnect())
+
     async def _connect_and_run(self) -> None:
         """Single connection session: auth, subscribe events, poll loop."""
         try:
@@ -147,6 +218,9 @@ class MaMonitor:
 
             logger.info("MA monitor: connected and authenticated")
             _state.set_ma_connected(True)
+
+            # Check and refresh stale player metadata (once per connect session)
+            await self._refresh_stale_player_metadata(ws)
 
             # Initial poll
             await self._poll_queues(ws)

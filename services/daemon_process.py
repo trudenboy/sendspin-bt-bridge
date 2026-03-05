@@ -188,6 +188,10 @@ async def _read_commands(daemon_ref: list, stop_event: asyncio.Event) -> None:
                 daemon._bridge_status["volume"] = vol
                 daemon._sync_bt_sink_volume(vol)
                 daemon._notify()
+        elif cmd.get("cmd") == "reconnect":
+            daemon = daemon_ref[0] if daemon_ref else None
+            if daemon and getattr(daemon, "_client", None):
+                asyncio.ensure_future(daemon._client.disconnect())
         elif cmd.get("cmd") == "set_log_level":
             level_name = str(cmd.get("level", "INFO")).upper()
             level = getattr(logging, level_name, logging.INFO)
