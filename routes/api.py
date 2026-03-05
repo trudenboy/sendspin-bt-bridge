@@ -1536,7 +1536,7 @@ def api_debug_ma():
 
             async def _fetch():
                 ws_url = ma_url.replace("http://", "ws://").replace("https://", "wss://") + "/ws"
-                async with websockets.connect(ws_url, extra_headers={"Authorization": f"Bearer {ma_token}"}) as ws:
+                async with websockets.connect(ws_url, additional_headers={"Authorization": f"Bearer {ma_token}"}) as ws:
                     import json as _json
 
                     await ws.send(_json.dumps({"command": "player_queues/all", "args": {}, "message_id": 99}))

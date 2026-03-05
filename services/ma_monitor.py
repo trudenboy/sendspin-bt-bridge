@@ -99,8 +99,11 @@ def _find_solo_player_queues(queues: list[dict]) -> list[tuple[str, dict]]:
         pid = getattr(client, "player_id", "")
         if not pid or pid in group_ids:
             continue  # already handled as syncgroup member
+        # MA uses "up" + uuid_no_hyphens as queue_id for individual players
+        pid_ma = "up" + pid.replace("-", "")
         for q in queues:
-            if q.get("queue_id") == pid:
+            qid = q.get("queue_id", "")
+            if qid == pid or qid == pid_ma:
                 result.append((pid, q))
                 break
     return result
