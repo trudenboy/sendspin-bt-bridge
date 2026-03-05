@@ -377,35 +377,86 @@ def set_mute():
 
 @api_bp.route("/api/pause_all", methods=["POST"])
 def pause_all():
-    """Pause or play all running daemon subprocesses via WS controller command.
+    """Pause or play all running daemon subprocesses.
 
-    Sends IPC cmd once per unique MA sync group — the daemon calls
-    send_group_command() over the existing WS connection so MA is the
-    playback initiator and group sync is preserved.
-    Sending to every member of the same group would cause MA to break the
-    group into separate sessions.
+    Pause:  sends Sendspin session-group command once per unique group_id, or
+            directly to solo (ungrouped) players. MA propagates pause to all
+            group members via the existing WS connection.
+
+    Play:   for players mapped to an MA persistent syncgroup, calls ma_group_play()
+            (one call per unique MA syncgroup) so MA resumes all members in sync.
+            Falls back to Sendspin session-group command when MA is not configured
+            or the player has no mapped syncgroup. Solo players always use the
+            direct subprocess command.
     """
     data = request.get_json() or {}
     action = data.get("action", "pause")
     loop = state.get_main_loop()
     if loop is None:
         return jsonify({"success": False, "error": "Event loop not available"}), 503
-    seen_groups: set = set()
+
     count = 0
-    for client in _clients:
-        if not client.is_running():
-            continue
-        gid = client.status.get("group_id")
-        if gid:
-            if gid in seen_groups:
-                continue  # already sent for this group
-            seen_groups.add(gid)
-        try:
-            fut = asyncio.run_coroutine_threadsafe(client._send_subprocess_command({"cmd": action}), loop)
-            fut.result(timeout=2.0)
-            count += 1
-        except Exception as _exc:
-            logger.debug("Could not send %s to %s: %s", action, client.player_name, _exc)
+
+    if action == "pause":
+        # One pause command per unique Sendspin session group (MA propagates to all members)
+        seen_groups: set = set()
+        for client in _clients:
+            if not client.is_running():
+                continue
+            gid = client.status.get("group_id")
+            if gid:
+                if gid in seen_groups:
+                    continue
+                seen_groups.add(gid)
+            try:
+                fut = asyncio.run_coroutine_threadsafe(client._send_subprocess_command({"cmd": "pause"}), loop)
+                fut.result(timeout=2.0)
+                count += 1
+            except Exception as exc:
+                logger.debug("Could not send pause to %s: %s", client.player_name, exc)
+
+    else:  # play / unpause
+        ma_url, ma_token = state.get_ma_api_credentials()
+        seen_ma_syncgroups: set = set()
+        seen_session_groups: set = set()
+
+        for client in _clients:
+            if not client.is_running():
+                continue
+
+            # Try MA syncgroup play first (preserves group sync)
+            if ma_url and ma_token:
+                ma_group = state.get_ma_group_for_player(client.player_name)
+                if ma_group:
+                    sid = ma_group["id"]
+                    if sid not in seen_ma_syncgroups:
+                        seen_ma_syncgroups.add(sid)
+                        try:
+                            from services.ma_client import ma_group_play
+
+                            fut = asyncio.run_coroutine_threadsafe(ma_group_play(ma_url, ma_token, sid), loop)
+                            if fut.result(timeout=10.0):
+                                logger.info("pause_all play → MA syncgroup %s", sid)
+                                count += 1
+                                continue
+                        except Exception as exc:
+                            logger.warning("MA group play failed for %s, falling back: %s", sid, exc)
+                    else:
+                        continue  # already sent for this MA syncgroup
+
+            # Fallback: Sendspin session-group command (one per session group or solo)
+            gid = client.status.get("group_id")
+            if gid:
+                if gid in seen_session_groups:
+                    continue
+                seen_session_groups.add(gid)
+            try:
+                fut = asyncio.run_coroutine_threadsafe(client._send_subprocess_command({"cmd": "play"}), loop)
+                fut.result(timeout=2.0)
+                count += 1
+            except Exception as exc:
+                logger.debug("Could not send play to %s: %s", client.player_name, exc)
+
     return jsonify({"success": True, "action": action, "count": count})
 
 
@@ -519,7 +570,54 @@ def api_ma_rediscover():
         return jsonify({"success": False, "error": str(exc)}), 500
 
 
-@api_bp.route("/api/pause", methods=["POST"])
+@api_bp.route("/api/ma/nowplaying", methods=["GET"])
+def api_ma_nowplaying():
+    """Return current MA now-playing metadata.
+
+    Returns {"connected": false} when MA integration is not active.
+    Fields when connected: state, track, artist, album, image_url,
+    elapsed, elapsed_updated_at, duration, shuffle, repeat,
+    queue_index, queue_total, syncgroup_id.
+    """
+    if not state.is_ma_connected():
+        return jsonify({"connected": False})
+    return jsonify(state.get_ma_now_playing())
+
+
+@api_bp.route("/api/ma/queue/cmd", methods=["POST"])
+def api_ma_queue_cmd():
+    """Send a playback control command to the active MA syncgroup queue.
+
+    Body: {"action": "next"|"previous"|"shuffle"|"repeat"|"seek", "value": ...}
+    - shuffle: value=true|false
+    - repeat: value="off"|"all"|"one"
+    - seek: value=<seconds int>
+    """
+    if not state.is_ma_connected():
+        return jsonify({"success": False, "error": "MA not connected"}), 503
+
+    data = request.get_json(silent=True) or {}
+    action = data.get("action", "")
+    value = data.get("value")
+
+    if action not in ("next", "previous", "shuffle", "repeat", "seek"):
+        return jsonify({"success": False, "error": f"Unknown action: {action}"}), 400
+
+    loop = state.get_main_loop()
+    if not loop:
+        return jsonify({"success": False, "error": "Event loop not available"}), 503
+
+    try:
+        from services.ma_monitor import send_queue_cmd
+
+        fut = asyncio.run_coroutine_threadsafe(send_queue_cmd(action, value), loop)
+        ok = fut.result(timeout=10.0)
+        return jsonify({"success": ok})
+    except Exception as exc:
+        logger.warning("MA queue cmd %s failed: %s", action, exc)
+        return jsonify({"success": False, "error": str(exc)}), 500
+
+
 def pause_player():
     """Pause or play a single daemon subprocess via WS controller command.
 
@@ -740,6 +838,8 @@ def api_status_stream():
                         first = get_client_status_for(snapshot[0])
                         data = {**first, "devices": [get_client_status_for(c) for c in snapshot]}
                     data["groups"] = _build_groups_summary(snapshot)
+                    if state.is_ma_connected():
+                        data["nowplaying"] = state.get_ma_now_playing()
                     yield f"data: {json.dumps(data)}\n\n"
             else:
                 # 30 s timeout — send a keepalive comment so proxies don't close the connection
@@ -1451,6 +1551,18 @@ def api_diagnostics():
                 }
             )
         diag["devices"] = device_diag
+
+        # MA API integration status
+        ma_url, ma_token = state.get_ma_api_credentials()
+        ma_groups = state.get_ma_groups()
+        diag["ma_integration"] = {
+            "configured": bool(ma_url and ma_token),
+            "connected": state.is_ma_connected(),
+            "url": ma_url or "",
+            "syncgroups": [
+                {"id": g["id"], "name": g.get("name", ""), "members": len(g.get("members", []))} for g in ma_groups
+            ],
+        }
 
         # PA sink-inputs with properties (for routing diagnostics)
         try:

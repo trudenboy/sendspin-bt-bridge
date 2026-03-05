@@ -5,10 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.9.4] - 2026-03-05
+## [2.9.5] - 2026-03-06
+
+### Added
+- **MA Monitor** (`services/ma_monitor.py`): persistent WebSocket connection to Music Assistant that subscribes to `player_queue_updated` / `player_updated` events in real time. Falls back to polling every 15 s if event subscription is unavailable. Auto-reconnects with exponential backoff.
+- **MA now-playing API**: `GET /api/ma/nowplaying` — returns current track, artist, album, image URL, elapsed time, shuffle/repeat state and queue position.
+- **MA queue commands API**: `POST /api/ma/queue/cmd` — accepts `next`, `previous`, `shuffle`, `repeat`, `seek` actions forwarded to the active MA syncgroup.
+- **SSE now-playing**: each SSE status event now includes a `nowplaying` field with the full MA metadata (only when MA is connected).
+- **UI playback controls**: when MA is connected, the Playback column shows ⏮ ⏭ 🔀 🔁 control buttons, MA track/artist metadata (overriding Sendspin MPRIS data), and a live progress bar.
+- **Automatic player metadata refresh**: on each MA monitor connect, fetches all MA players, compares `device_info.product_name` / `manufacturer` against current version and hostname; if stale and not playing, triggers a reconnect so MA receives updated device info.
+- **Diagnostics — MA status**: `GET /api/diagnostics` now includes an `ma_integration` field (`configured`, `connected`, `url`, syncgroups list). The Diagnostics page shows an MA API row with green/red indicator and each syncgroup as a sub-row.
+- `state.py`: `is_ma_connected()`, `set_ma_connected()`, `get_ma_now_playing()`, `set_ma_now_playing()`.
+- `sendspin_client.py`: `send_reconnect()` public method to trigger subprocess reconnect.
+- `services/daemon_process.py`: new `reconnect` stdin command handler.
 
 ### Fixed
 - **Critical**: `MA_API_URL` and `MA_API_TOKEN` were not in the `allowed_keys` whitelist in `load_config()`, so they were silently filtered out and never passed to the MA API discovery code. MA group discovery was always skipped even when credentials were correctly saved in `config.json`.
+- **`POST /api/pause_all` (play/unpause)**: grouped players now resume via `ma_group_play()` (MA REST API) instead of individual Sendspin session-group commands. Using session-group `play` commands caused MA to break group sync. Solo players continue to use direct subprocess commands.
 
 ## [2.9.3] - 2026-03-05
 

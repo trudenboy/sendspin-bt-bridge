@@ -5,10 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.9.4] - 2026-03-05
+## [2.9.5] - 2026-03-06
+
+### Added
+- Persistent MA WebSocket monitor with real-time `player_queue_updated` / `player_updated` event subscriptions.
+- `GET /api/ma/nowplaying` and `POST /api/ma/queue/cmd` endpoints.
+- SSE events now include `nowplaying` MA metadata.
+- UI: ⏮ ⏭ 🔀 🔁 playback controls, MA track/artist display, and live progress bar in the Playback column (visible only when MA is connected).
+- Automatic player metadata refresh: on each MA monitor connect, stale `device_info` (version/hostname) is refreshed in MA by triggering a reconnect of idle devices.
+- Diagnostics: MA API connection status (green/red) and syncgroup list visible in the Diagnostics panel.
 
 ### Fixed
 - **Critical**: `MA_API_URL` and `MA_API_TOKEN` were silently ignored by `load_config()` (missing from `allowed_keys`). MA group discovery never ran even with correct credentials.
+- `POST /api/pause_all` (play/unpause): grouped players now resume via the MA group play API instead of individual Sendspin session-group commands, preventing MA from breaking group sync.
 
 ## [2.9.3] - 2026-03-05
 

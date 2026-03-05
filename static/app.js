@@ -45,6 +45,8 @@ var reanchorShownAt = {};   // deviceIndex -> timestamp(ms) when last re-anchor 
 var lastReanchorCount = {}; // deviceIndex -> reanchor_count at last render (to detect new events)
 var lastReanchorAt = {};    // deviceIndex -> last_reanchor_at string seen (catches count resets on stream restart)
 var _progSnapshots = {};    // deviceIndex -> {pos, dur, t} for client-side progress interpolation
+var _maNowPlaying = null;   // MA now-playing data from SSE (null = no MA or not connected)
+var _maProgSnapshot = null; // {elapsed, duration, t} for MA progress interpolation
 
 // ---- Utility ----
 
@@ -52,6 +54,13 @@ function fmtMs(ms) {
     var s = Math.floor(ms / 1000);
     var m = Math.floor(s / 60);
     s = s % 60;
+    return m + ':' + (s < 10 ? '0' : '') + s;
+}
+
+function fmtSec(sec) {
+    sec = Math.max(0, Math.floor(sec));
+    var m = Math.floor(sec / 60);
+    var s = sec % 60;
     return m + ':' + (s < 10 ? '0' : '') + s;
 }
 
@@ -160,6 +169,7 @@ async function updateStatus() {
 // Interpolate progress bars every second between SSE updates
 setInterval(function() {
     var now = Date.now();
+    // Sendspin-native per-device progress (ms)
     Object.keys(_progSnapshots).forEach(function(idx) {
         var snap = _progSnapshots[idx];
         if (!snap) return;
@@ -169,6 +179,17 @@ setInterval(function() {
         if (fill) fill.style.width = Math.min(100, (pos / snap.dur) * 100) + '%';
         if (time) time.textContent = fmtMs(pos) + ' / ' + fmtMs(snap.dur);
     });
+    // MA now-playing progress (seconds)
+    if (_maProgSnapshot && _maProgSnapshot.duration > 0) {
+        var elapsedSec = _maProgSnapshot.elapsed + (now - _maProgSnapshot.t) / 1000;
+        var pct = Math.min(100, (elapsedSec / _maProgSnapshot.duration) * 100);
+        document.querySelectorAll('.ma-prog-fill').forEach(function(el) {
+            el.style.width = pct + '%';
+        });
+        document.querySelectorAll('.ma-prog-time').forEach(function(el) {
+            el.textContent = fmtSec(elapsedSec) + ' / ' + fmtSec(_maProgSnapshot.duration);
+        });
+    }
 }, 1000);
 
 function buildDeviceCard(i) {
@@ -223,6 +244,16 @@ function buildDeviceCard(i) {
             '<div class="track-progress-wrap" id="dprog-wrap-' + i + '" style="display:none;">' +
               '<div class="track-progress-bar"><div class="track-progress-fill" id="dprog-fill-' + i + '"></div></div>' +
               '<div class="track-progress-time" id="dprog-time-' + i + '"></div>' +
+            '</div>' +
+            '<div class="ma-controls-row" id="dma-controls-' + i + '" style="display:none;">' +
+              '<button type="button" class="card-icon-btn" onclick="maQueueCmd(\'previous\')" title="Previous">&#9664;&#9664;</button>' +
+              '<button type="button" class="card-icon-btn" onclick="maQueueCmd(\'next\')" title="Next">&#9654;&#9654;</button>' +
+              '<button type="button" class="card-icon-btn" id="dma-shuffle-' + i + '" onclick="maQueueCmd(\'shuffle\', !(_maNowPlaying&&_maNowPlaying.shuffle))" title="Shuffle">&#128256;</button>' +
+              '<button type="button" class="card-icon-btn" id="dma-repeat-' + i + '" onclick="maCycleRepeat()" title="Repeat">&#128257;</button>' +
+            '</div>' +
+            '<div class="track-progress-wrap" id="dma-prog-wrap-' + i + '" style="display:none;">' +
+              '<div class="track-progress-bar"><div class="track-progress-fill ma-prog-fill" id="dma-prog-fill-' + i + '"></div></div>' +
+              '<div class="track-progress-time ma-prog-time" id="dma-prog-time-' + i + '"></div>' +
             '</div>' +
           '</div>' +
           // Volume column
@@ -431,20 +462,63 @@ function populateDeviceCard(i, dev) {
 
     var trackEl = document.getElementById('dtrack-' + i);
     if (trackEl) {
+        // When MA connected, prefer MA now-playing metadata
+        var maArtist = _maNowPlaying && _maNowPlaying.connected ? (_maNowPlaying.artist || '') : '';
+        var maTrack  = _maNowPlaying && _maNowPlaying.connected ? (_maNowPlaying.track  || '') : '';
+        var showArtist = maArtist || dev.current_artist;
+        var showTrack  = maTrack  || dev.current_track;
         // Persist track on pause — clear only when both fields are empty
-        if (dev.current_artist || dev.current_track) {
-            var fullText = dev.current_artist && dev.current_track
-                ? dev.current_artist + ' \u2014 ' + dev.current_track
-                : (dev.current_artist || dev.current_track || '');
-            trackEl.textContent = _firstOfSlash(dev.current_artist) && _firstOfSlash(dev.current_track)
-                ? _firstOfSlash(dev.current_artist) + ' \u2014 ' + _firstOfSlash(dev.current_track)
-                : _firstOfSlash(dev.current_artist || dev.current_track || '');
-            trackEl.title = fullText;
+        if (showArtist || showTrack) {
+            var fullText = showArtist && showTrack
+                ? showArtist + ' \u2014 ' + showTrack
+                : (showArtist || showTrack || '');
+            trackEl.textContent = _firstOfSlash(showArtist) && _firstOfSlash(showTrack)
+                ? _firstOfSlash(showArtist) + ' \u2014 ' + _firstOfSlash(showTrack)
+                : _firstOfSlash(showArtist || showTrack || '');
+            var tipAlbum = _maNowPlaying && _maNowPlaying.album ? ' \u00b7 ' + _maNowPlaying.album : '';
+            trackEl.title = fullText + tipAlbum;
             trackEl.style.color = dev.playing
                 ? 'var(--primary-text-color)' : 'var(--secondary-text-color)';
         } else {
             trackEl.textContent = '';
             trackEl.title = '';
+        }
+    }
+
+    // MA playback controls row
+    var maControlsEl = document.getElementById('dma-controls-' + i);
+    var maProgWrap   = document.getElementById('dma-prog-wrap-' + i);
+    var maShuffleBtn = document.getElementById('dma-shuffle-' + i);
+    var maRepeatBtn  = document.getElementById('dma-repeat-' + i);
+    if (maControlsEl) {
+        var maActive = !!((_maNowPlaying && _maNowPlaying.connected));
+        maControlsEl.style.display = maActive ? '' : 'none';
+        if (maActive) {
+            // Shuffle: highlighted when active
+            if (maShuffleBtn) maShuffleBtn.classList.toggle('active', !!_maNowPlaying.shuffle);
+            // Repeat: show current mode
+            if (maRepeatBtn) {
+                var rm = _maNowPlaying.repeat || 'off';
+                maRepeatBtn.textContent = rm === 'one' ? '\uD83D\uDD01' : rm === 'all' ? '\uD83D\uDD01' : '\uD83D\uDD01';
+                maRepeatBtn.title = 'Repeat: ' + rm + ' (click to cycle)';
+                maRepeatBtn.classList.toggle('active', rm !== 'off');
+            }
+        }
+    }
+    if (maProgWrap) {
+        var maHasProg = !!((_maNowPlaying && _maNowPlaying.connected &&
+                            _maNowPlaying.duration > 0 && _maNowPlaying.elapsed != null));
+        maProgWrap.style.display = maHasProg ? '' : 'none';
+        if (maHasProg) {
+            _maProgSnapshot = {
+                elapsed: _maNowPlaying.elapsed,
+                duration: _maNowPlaying.duration,
+                t: _maNowPlaying.elapsed_updated_at
+                    ? (Date.now() - (Date.now() / 1000 - _maNowPlaying.elapsed_updated_at) * 1000)
+                    : Date.now(),
+            };
+        } else if (!(_maNowPlaying && _maNowPlaying.connected)) {
+            _maProgSnapshot = null;
         }
     }
     // Delay badge — only show when playing (3.1)
@@ -895,6 +969,24 @@ function onDevicePause(i) {
 }
 
 // ---- BT Actions (reconnect / pair) ----
+
+async function maQueueCmd(action, value) {
+    var body = {action: action};
+    if (value !== undefined) body.value = value;
+    try {
+        await fetch(API_BASE + '/api/ma/queue/cmd', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(body)
+        });
+    } catch (err) { console.warn('MA queue cmd failed:', err); }
+}
+
+function maCycleRepeat() {
+    var rm = _maNowPlaying && _maNowPlaying.repeat || 'off';
+    var next = rm === 'off' ? 'all' : rm === 'all' ? 'one' : 'off';
+    maQueueCmd('repeat', next);
+}
 
 async function btReconnect(i) {
     var dev = lastDevices && lastDevices[i];
@@ -1704,6 +1796,23 @@ function renderDiagnostics(d) {
             '</td></tr>';
     });
 
+    // MA integration status
+    var ma = d.ma_integration || {};
+    if (ma.configured !== undefined) {
+        rows += '<tr><td>MA API</td><td>' +
+            dot(ma.connected) +
+            (ma.connected ? 'Connected' : (ma.configured ? 'Configured, not connected' : 'Not configured')) +
+            (ma.url ? ' <span style="color:#6b7280;font-size:11px;">(' + escHtml(ma.url) + ')</span>' : '') +
+            '</td></tr>';
+        (ma.syncgroups || []).forEach(function(g) {
+            rows += '<tr><td style="padding-left:20px;">↳ ' + escHtml(g.name || g.id) + '</td><td>' +
+                '<span style="color:#6b7280;font-size:11px;">' + g.members + ' member' + (g.members !== 1 ? 's' : '') + '</span>' +
+                '</td></tr>';
+        });
+    }
+    }
+
+
     return '<table class="diag-table">' +
         '<tr><th>Component</th><th>Status</th></tr>' +
         rows + '</table>' +
@@ -1794,6 +1903,10 @@ var _statusInterval = null;
     es.onmessage = function(e) {
         try {
             var status = JSON.parse(e.data);
+            // Update MA now-playing global before rendering cards
+            if (status.nowplaying !== undefined) {
+                _maNowPlaying = (status.nowplaying && status.nowplaying.connected) ? status.nowplaying : null;
+            }
             // Reuse the same rendering logic as updateStatus()
             var info = [];
             if (status.hostname)   info.push(status.hostname);
