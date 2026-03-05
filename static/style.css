@@ -474,11 +474,15 @@
             border-color: var(--primary-color);
             color: var(--primary-color);
         }
+        .transport-btn {
+            display: inline-flex; align-items: center; justify-content: center;
+            min-width: 32px; height: 26px; padding: 0 6px; font-size: 13px;
+        }
 
         /* Shuffle/repeat — in the transport row, visible only on card hover when MA active */
-        .ma-hover-btn { display: none; }
+        .ma-hover-btn { display: none !important; }
         .device-card:hover .ma-hover-btn.ma-ready,
-        .device-card:focus-within .ma-hover-btn.ma-ready { display: inline-flex; }
+        .device-card:focus-within .ma-hover-btn.ma-ready { display: inline-flex !important; }
 
         /* Album art + track row */
         .track-art-row { position: relative; display: flex; align-items: center; margin-top: 2px; }
