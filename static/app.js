@@ -169,25 +169,26 @@ async function updateStatus() {
 // Interpolate progress bars every second between SSE updates
 setInterval(function() {
     var now = Date.now();
-    // Sendspin-native per-device progress (ms)
-    Object.keys(_progSnapshots).forEach(function(idx) {
-        var snap = _progSnapshots[idx];
-        if (!snap) return;
-        var pos = Math.min(snap.pos + (now - snap.t), snap.dur);
-        var fill = document.getElementById('dprog-fill-' + idx);
-        var time = document.getElementById('dprog-time-' + idx);
-        if (fill) fill.style.width = Math.min(100, (pos / snap.dur) * 100) + '%';
-        if (time) time.textContent = fmtMs(pos) + ' / ' + fmtMs(snap.dur);
-    });
-    // MA now-playing progress (seconds)
+    // MA progress has priority: update all device progress bars with same MA data
     if (_maProgSnapshot && _maProgSnapshot.duration > 0) {
         var elapsedSec = _maProgSnapshot.elapsed + (now - _maProgSnapshot.t) / 1000;
         var pct = Math.min(100, (elapsedSec / _maProgSnapshot.duration) * 100);
-        document.querySelectorAll('.ma-prog-fill').forEach(function(el) {
+        document.querySelectorAll('[id^="dprog-fill-"]').forEach(function(el) {
             el.style.width = pct + '%';
         });
-        document.querySelectorAll('.ma-prog-time').forEach(function(el) {
+        document.querySelectorAll('[id^="dprog-time-"]').forEach(function(el) {
             el.textContent = fmtSec(elapsedSec) + ' / ' + fmtSec(_maProgSnapshot.duration);
+        });
+    } else {
+        // Sendspin-native per-device progress (ms)
+        Object.keys(_progSnapshots).forEach(function(idx) {
+            var snap = _progSnapshots[idx];
+            if (!snap) return;
+            var pos = Math.min(snap.pos + (now - snap.t), snap.dur);
+            var fill = document.getElementById('dprog-fill-' + idx);
+            var time = document.getElementById('dprog-time-' + idx);
+            if (fill) fill.style.width = Math.min(100, (pos / snap.dur) * 100) + '%';
+            if (time) time.textContent = fmtMs(pos) + ' / ' + fmtMs(snap.dur);
         });
     }
 }, 1000);
@@ -236,24 +237,23 @@ function buildDeviceCard(i) {
             '<div class="status-value">' +
               '<span class="status-indicator" id="dplay-ind-' + i + '"></span>' +
               '<span id="dplay-' + i + '">-</span>' +
-              '<button type="button" id="dbtn-pause-' + i + '" ' +
-                'class="card-icon-btn" ' +
+              '<button type="button" class="card-icon-btn transport-btn" id="dma-prev-' + i + '" ' +
+                'onclick="maQueueCmd(\'previous\')" title="Previous" style="display:none;">&#9664;&#9664;</button>' +
+              '<button type="button" class="card-icon-btn transport-btn" id="dbtn-pause-' + i + '" ' +
                 'onclick="onDevicePause(' + i + ')" title="Pause/Unpause">&#9646;&#9646;</button>' +
+              '<button type="button" class="card-icon-btn transport-btn" id="dma-next-' + i + '" ' +
+                'onclick="maQueueCmd(\'next\')" title="Next" style="display:none;">&#9654;&#9654;</button>' +
             '</div>' +
             '<div id="dtrack-' + i + '" class="device-track-inline"></div>' +
             '<div class="track-progress-wrap" id="dprog-wrap-' + i + '" style="display:none;">' +
               '<div class="track-progress-bar"><div class="track-progress-fill" id="dprog-fill-' + i + '"></div></div>' +
               '<div class="track-progress-time" id="dprog-time-' + i + '"></div>' +
             '</div>' +
-            '<div class="ma-controls-row" id="dma-controls-' + i + '" style="display:none;">' +
-              '<button type="button" class="card-icon-btn" onclick="maQueueCmd(\'previous\')" title="Previous">&#9664;&#9664;</button>' +
-              '<button type="button" class="card-icon-btn" onclick="maQueueCmd(\'next\')" title="Next">&#9654;&#9654;</button>' +
-              '<button type="button" class="card-icon-btn" id="dma-shuffle-' + i + '" onclick="maQueueCmd(\'shuffle\', !(_maNowPlaying&&_maNowPlaying.shuffle))" title="Shuffle">&#128256;</button>' +
-              '<button type="button" class="card-icon-btn" id="dma-repeat-' + i + '" onclick="maCycleRepeat()" title="Repeat">&#128257;</button>' +
-            '</div>' +
-            '<div class="track-progress-wrap" id="dma-prog-wrap-' + i + '" style="display:none;">' +
-              '<div class="track-progress-bar"><div class="track-progress-fill ma-prog-fill" id="dma-prog-fill-' + i + '"></div></div>' +
-              '<div class="track-progress-time ma-prog-time" id="dma-prog-time-' + i + '"></div>' +
+            '<div class="ma-secondary-controls" id="dma-secondary-' + i + '">' +
+              '<button type="button" class="card-icon-btn" id="dma-shuffle-' + i + '" ' +
+                'onclick="maQueueCmd(\'shuffle\', !(_maNowPlaying&&_maNowPlaying.shuffle))" title="Shuffle">&#128256;</button>' +
+              '<button type="button" class="card-icon-btn" id="dma-repeat-' + i + '" ' +
+                'onclick="maCycleRepeat()" title="Repeat">&#128257;</button>' +
             '</div>' +
           '</div>' +
           // Volume column
@@ -417,22 +417,32 @@ function populateDeviceCard(i, dev) {
         if (playTxt) playTxt.textContent = '\u23f8 Stopped';
     }
 
-    // Track progress bar
+    // Track progress bar (unified: MA takes priority over Sendspin)
     var progWrap = document.getElementById('dprog-wrap-' + i);
     var progFill = document.getElementById('dprog-fill-' + i);
     var progTime = document.getElementById('dprog-time-' + i);
-    var hasProg = dev.playing && dev.track_duration_ms > 0 && dev.track_progress_ms != null;
-    if (progWrap) progWrap.style.display = hasProg ? '' : 'none';
-    if (hasProg) {
-        // Store snapshot with client-side timestamp for interpolation
-        _progSnapshots[i] = {pos: dev.track_progress_ms, dur: dev.track_duration_ms, t: Date.now()};
-        if (progFill && progTime) {
-            var pct = Math.min(100, (dev.track_progress_ms / dev.track_duration_ms) * 100);
-            progFill.style.width = pct + '%';
-            progTime.textContent = fmtMs(dev.track_progress_ms) + ' / ' + fmtMs(dev.track_duration_ms);
-        }
-    } else {
+    var maActive = !!((_maNowPlaying && _maNowPlaying.connected));
+    if (maActive && _maNowPlaying.duration > 0 && _maNowPlaying.elapsed != null) {
+        _maProgSnapshot = {
+            elapsed: _maNowPlaying.elapsed,
+            duration: _maNowPlaying.duration,
+            t: _maNowPlaying.elapsed_updated_at
+                ? (Date.now() - (Date.now() / 1000 - _maNowPlaying.elapsed_updated_at) * 1000)
+                : Date.now(),
+        };
+        if (progWrap) progWrap.style.display = '';
         delete _progSnapshots[i];
+    } else {
+        if (!maActive) _maProgSnapshot = null;
+        var hasProg = dev.playing && dev.track_duration_ms > 0 && dev.track_progress_ms != null;
+        if (progWrap) progWrap.style.display = hasProg ? '' : 'none';
+        if (hasProg) {
+            _progSnapshots[i] = {pos: dev.track_progress_ms, dur: dev.track_duration_ms, t: Date.now()};
+            if (progFill) progFill.style.width = Math.min(100, (dev.track_progress_ms / dev.track_duration_ms) * 100) + '%';
+            if (progTime) progTime.textContent = fmtMs(dev.track_progress_ms) + ' / ' + fmtMs(dev.track_duration_ms);
+        } else {
+            delete _progSnapshots[i];
+        }
     }
 
     // Audio format (strip codec prefix)
@@ -485,40 +495,21 @@ function populateDeviceCard(i, dev) {
         }
     }
 
-    // MA playback controls row
-    var maControlsEl = document.getElementById('dma-controls-' + i);
-    var maProgWrap   = document.getElementById('dma-prog-wrap-' + i);
+    // MA transport buttons (prev/next flanking pause) + hover secondary controls
+    var prevBtn     = document.getElementById('dma-prev-' + i);
+    var nextBtn     = document.getElementById('dma-next-' + i);
+    var secCtrl     = document.getElementById('dma-secondary-' + i);
     var maShuffleBtn = document.getElementById('dma-shuffle-' + i);
     var maRepeatBtn  = document.getElementById('dma-repeat-' + i);
-    if (maControlsEl) {
-        var maActive = !!((_maNowPlaying && _maNowPlaying.connected));
-        maControlsEl.style.display = maActive ? '' : 'none';
-        if (maActive) {
-            // Shuffle: highlighted when active
-            if (maShuffleBtn) maShuffleBtn.classList.toggle('active', !!_maNowPlaying.shuffle);
-            // Repeat: show current mode
-            if (maRepeatBtn) {
-                var rm = _maNowPlaying.repeat || 'off';
-                maRepeatBtn.textContent = rm === 'one' ? '\uD83D\uDD01' : rm === 'all' ? '\uD83D\uDD01' : '\uD83D\uDD01';
-                maRepeatBtn.title = 'Repeat: ' + rm + ' (click to cycle)';
-                maRepeatBtn.classList.toggle('active', rm !== 'off');
-            }
-        }
-    }
-    if (maProgWrap) {
-        var maHasProg = !!((_maNowPlaying && _maNowPlaying.connected &&
-                            _maNowPlaying.duration > 0 && _maNowPlaying.elapsed != null));
-        maProgWrap.style.display = maHasProg ? '' : 'none';
-        if (maHasProg) {
-            _maProgSnapshot = {
-                elapsed: _maNowPlaying.elapsed,
-                duration: _maNowPlaying.duration,
-                t: _maNowPlaying.elapsed_updated_at
-                    ? (Date.now() - (Date.now() / 1000 - _maNowPlaying.elapsed_updated_at) * 1000)
-                    : Date.now(),
-            };
-        } else if (!(_maNowPlaying && _maNowPlaying.connected)) {
-            _maProgSnapshot = null;
+    if (prevBtn) prevBtn.style.display = maActive ? '' : 'none';
+    if (nextBtn) nextBtn.style.display = maActive ? '' : 'none';
+    if (secCtrl) secCtrl.classList.toggle('ma-ready', maActive);
+    if (maActive) {
+        if (maShuffleBtn) maShuffleBtn.classList.toggle('active', !!_maNowPlaying.shuffle);
+        if (maRepeatBtn) {
+            var rm = _maNowPlaying.repeat || 'off';
+            maRepeatBtn.title = 'Repeat: ' + rm + ' (click to cycle)';
+            maRepeatBtn.classList.toggle('active', rm !== 'off');
         }
     }
     // Delay badge — only show when playing (3.1)

@@ -469,8 +469,9 @@
         }
 
         /* MA playback controls row */
-        .ma-controls-row { display: flex; align-items: center; gap: 2px; margin-top: 4px; flex-wrap: wrap; }
-        .ma-controls-row .card-icon-btn { margin-left: 0; }
+        .ma-secondary-controls { display: none; align-items: center; gap: 2px; margin-top: 4px; }
+        .device-card:hover .ma-secondary-controls.ma-ready { display: flex; }
+        .ma-secondary-controls .card-icon-btn { margin-left: 0; }
 
         /* Released badge on device card */
         .released-badge {
