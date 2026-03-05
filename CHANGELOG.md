@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.6] - 2026-03-05
+
+### Added
+- **HA addon — 2FA authentication**: login now uses the HA Core `/auth/login_flow` API instead of the Supervisor shortcut, enabling full two-factor authentication (TOTP). A second form step appears when 2FA is configured. Falls back to Supervisor auth only when HA Core is unreachable (network failure), never on HTTP errors, preventing MFA bypass.
+
+### Improved
+- **Configuration — Keepalive**: replaced the checkbox + hidden interval sub-row with an inline number field in the main device row. Set to `0` to disable (default); minimum non-zero value is 30 s; maximum 3600 s.
+
+## [2.7.5] - 2026-03-05
+
+### Fixed
+- **Web UI**: fixed JS syntax error (`missing ) after argument list`) in `_updateGroupFilter()` that prevented device cards from rendering
+
 ## [2.7.4] - 2026-03-05
 
 ### Added
