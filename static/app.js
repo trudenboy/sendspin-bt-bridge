@@ -218,25 +218,31 @@ function buildDeviceCard(i) {
           '<div class="conn-col">' +
             '<div class="status-label">Connection</div>' +
             '<div class="conn-row">' +
-              '<span class="conn-tag">BT</span>' +
-              '<span class="status-indicator" id="dbt-ind-' + i + '"></span>' +
-              '<span id="dbt-txt-' + i + '">-</span>' +
-              '<span class="conn-detail" id="dbt-adapter-' + i + '"></span>' +
-              '<span class="conn-hover-detail" id="dbt-mac-' + i + '"></span>' +
+              '<div class="conn-row-main">' +
+                '<span class="conn-tag">BT</span>' +
+                '<span class="status-indicator" id="dbt-ind-' + i + '"></span>' +
+                '<span id="dbt-txt-' + i + '">-</span>' +
+                '<span class="conn-detail" id="dbt-adapter-' + i + '"></span>' +
+              '</div>' +
+              '<div class="conn-hover-sub" id="dbt-mac-' + i + '"></div>' +
             '</div>' +
             '<div class="conn-row">' +
-              '<span class="conn-tag">MA</span>' +
-              '<span class="status-indicator" id="dsrv-ind-' + i + '"></span>' +
-              '<span id="dsrv-txt-' + i + '">-</span>' +
-              '<span class="conn-detail conn-hover-detail" id="dsrv-uri-' + i + '"></span>' +
+              '<div class="conn-row-main">' +
+                '<span class="conn-tag">MA</span>' +
+                '<span class="status-indicator" id="dsrv-ind-' + i + '"></span>' +
+                '<span id="dsrv-txt-' + i + '">-</span>' +
+              '</div>' +
+              '<div class="conn-hover-sub" id="dsrv-uri-' + i + '"></div>' +
             '</div>' +
           '</div>' +
           // Playback column (with inline track)
-          '<div>' +
+          '<div class="playback-col">' +
             '<div class="status-label">Playback</div>' +
             '<div class="status-value">' +
               '<span class="status-indicator" id="dplay-ind-' + i + '"></span>' +
               '<span id="dplay-' + i + '">-</span>' +
+            '</div>' +
+            '<div class="playback-transport">' +
               '<button type="button" class="card-icon-btn transport-btn" id="dma-prev-' + i + '" ' +
                 'onclick="maQueueCmd(\'previous\')" title="Previous" style="display:none;">&#9664;&#9664;</button>' +
               '<button type="button" class="card-icon-btn transport-btn" id="dbtn-pause-' + i + '" ' +
@@ -245,7 +251,7 @@ function buildDeviceCard(i) {
                 'onclick="maQueueCmd(\'next\')" title="Next" style="display:none;">&#9654;&#9654;</button>' +
             '</div>' +
             '<div class="track-art-row">' +
-              '<img id="dart-' + i + '" class="album-art" src="" alt="" style="display:none;">' +
+              '<img id="dart-' + i + '" class="album-art" src="" alt="">' +
               '<div id="dtrack-' + i + '" class="device-track-inline"></div>' +
             '</div>' +
             '<div class="track-progress-wrap" id="dprog-wrap-' + i + '" style="display:none;">' +
@@ -510,9 +516,10 @@ function populateDeviceCard(i, dev) {
     var secCtrl     = document.getElementById('dma-secondary-' + i);
     var maShuffleBtn = document.getElementById('dma-shuffle-' + i);
     var maRepeatBtn  = document.getElementById('dma-repeat-' + i);
-    if (prevBtn) prevBtn.style.display = maActive ? '' : 'none';
-    if (nextBtn) nextBtn.style.display = maActive ? '' : 'none';
-    if (secCtrl) secCtrl.classList.toggle('ma-ready', maActive);
+    var deviceMaActive = maActive && !!dev.has_sink;
+    if (prevBtn) prevBtn.style.display = deviceMaActive ? '' : 'none';
+    if (nextBtn) nextBtn.style.display = deviceMaActive ? '' : 'none';
+    if (secCtrl) secCtrl.classList.toggle('ma-ready', deviceMaActive);
     if (maActive) {
         if (maShuffleBtn) maShuffleBtn.classList.toggle('active', !!_maNowPlaying.shuffle);
         if (maRepeatBtn) {
