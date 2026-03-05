@@ -105,6 +105,13 @@ def _setup_logging() -> None:
 # Status emission
 # ---------------------------------------------------------------------------
 
+_last_status_json: str = ""
+
+
+def _str_default(obj) -> str:
+    """JSON default: convert non-serialisable values to their string repr."""
+    return str(obj)
+
 
 def _emit_status(status: dict) -> None:
     """Serialize status dict and write to stdout as a single JSON line.
@@ -113,22 +120,11 @@ def _emit_status(status: dict) -> None:
     the write is skipped to avoid flooding the parent with no-op updates.
     """
     global _last_status_json
-    # Emit only JSON-serialisable values
-    serialisable = {}
-    for k, v in status.items():
-        try:
-            json.dumps(v)
-            serialisable[k] = v
-        except TypeError:
-            serialisable[k] = str(v)
-    payload = json.dumps({"type": "status", **serialisable}, sort_keys=True)
+    payload = json.dumps({"type": "status", **status}, default=_str_default, sort_keys=True)
     if payload == _last_status_json:
         return
     _last_status_json = payload
     print(payload, flush=True)
-
-
-_last_status_json: str = ""
 
 
 # ---------------------------------------------------------------------------
