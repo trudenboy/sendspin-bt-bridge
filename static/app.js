@@ -313,7 +313,10 @@ function populateDeviceCard(i, dev) {
     var btInd   = document.getElementById('dbt-ind-' + i);
     var btTxt   = document.getElementById('dbt-txt-' + i);
     var btMacEl = document.getElementById('dbt-mac-' + i);
-    if (dev.bluetooth_connected) {
+    if (dev.bt_management_enabled === false) {
+        btInd.className = 'status-indicator inactive';
+        btTxt.textContent = 'Released';
+    } else if (dev.bluetooth_connected) {
         btInd.className = 'status-indicator active';
         btTxt.textContent = 'Connected';
     } else if (dev.reconnecting) {
