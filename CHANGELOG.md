@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.2] - 2026-03-05
+
+### Improved
+- **Web UI — Header**: Docs and GitHub links moved out of `<h1>` into a proper nav row below the title; keyboard shortcuts hint relocated to the header right column (always visible)
+- **Web UI — Device cards**: "Released" badge displayed in device card header when BT management is disabled, so state is immediately obvious without reading the BT status row
+- **Web UI — Group badge**: raw hex UUID hashes (e.g. `332984a9c660`) no longer shown as group name — badge hidden when MA hasn't assigned a human-readable name
+- **Web UI — Group volume**: slider initialises from the average volume of active/connected devices instead of a fixed 50%
+- **Web UI — Sync column**: "Re-anchors" count now has a tooltip explaining the term; colour coding for high counts (>10 yellow, >100 red)
+- **Web UI — Diagnostics**: BT audio sink names rendered as individual `<code>` blocks with word-break, replacing the unreadable comma-joined string
+- **Web UI — Mute button**: state tracked via CSS class `.card-icon-btn.muted` instead of inline `style.background`, fixing the broken appearance in dark theme
+- **Web UI — Auto-refresh button**: active state uses CSS class `.auto-on` instead of hardcoded `#10b981` colour
+- **Web UI — Config dirty state**: unsaved changes show a dot indicator on the Configuration summary and trigger a browser `beforeunload` warning
+- **Web UI — Advanced settings**: button label shows count of non-default fields (e.g. "Advanced settings (2)") after config loads and on any change
+- **Web UI — BT scan**: animated CSS spinner shown while scan is in progress instead of static "Scanning…" text
+- **Web UI — Paired devices**: RSSI-only device names (e.g. `RSSI: 0xff…`) replaced with "Unknown device" in the add-device list
+- **Web UI — Re-pair confirm**: confirmation dialog before executing Re-pair to prevent accidental 25-second interruption
+- **Web UI — Tooltips**: descriptive `title` attributes on Release and Reclaim buttons explaining what each action does
+- **Web UI — Error toasts**: display for 6 s instead of 3 s to give time to read error messages
+- **Web UI — Progress time**: font-size increased from 10 px to 12 px for readability
+- **Web UI — BT config table**: horizontal scroll shadow on `.bt-table-wrap` indicates overflow content on narrow viewports
+- **Web UI — Keepalive layout**: keepalive controls extracted from the 8-column grid into a sub-row, fixing the "orphaned 30 ×" row artifact visible in previous releases
+- **Web UI — Mobile actions**: action buttons on device cards now wrap in a `flex-row` layout instead of stacking vertically, fitting more actions per row on small screens
+
 ## [2.7.1] - 2026-03-05
 
 ### Fixed

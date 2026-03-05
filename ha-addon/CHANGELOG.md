@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.2] - 2026-03-05
+
+### Improved
+- **Web UI — UX overhaul**: 20 usability improvements based on a full UX audit
+  - "Released" badge on device card header; group badge hides raw UUID hashes
+  - Config dirty-state indicator dot + browser warning on unsaved changes
+  - Advanced settings button shows count of non-default fields
+  - Group volume slider initialises from average of active devices
+  - BT scan shows animated spinner; Re-pair shows a confirmation dialog
+  - Error toasts stay visible for 6 s; sync "Re-anchors" has explanatory tooltip
+  - Mute button uses CSS class (dark theme fix); auto-refresh button uses CSS class
+  - Keyboard shortcuts hint moved to header; Docs/GitHub links out of `<h1>`
+  - Progress time font-size 10 px → 12 px; BT table horizontal scroll shadow
+  - Keepalive controls fixed (no more orphaned row in config); mobile action buttons wrap in a row
+
 ## [2.7.1] - 2026-03-05
 
 ### Fixed
