@@ -1810,8 +1810,6 @@ function renderDiagnostics(d) {
                 '</td></tr>';
         });
     }
-    }
-
 
     return '<table class="diag-table">' +
         '<tr><th>Component</th><th>Status</th></tr>' +
