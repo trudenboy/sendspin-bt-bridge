@@ -11,11 +11,13 @@ import dataclasses
 import json
 import logging
 import os
+import random
 import signal
 import socket
 import sys
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -33,9 +35,6 @@ from mpris import (
     _DBUS_MPRIS_AVAILABLE,
     MprisIdentityService,
     _GLib,
-)
-from mpris import (
-    pause_all_via_mpris as _pause_all_via_mpris,
 )
 
 # Configure logging
@@ -127,6 +126,8 @@ class SendspinClient:
         listen_host: str | None = None,
         effective_bridge: str = "",
         preferred_format: str | None = "flac:44100:16:2",
+        keepalive_enabled: bool = False,
+        keepalive_interval: int = 30,
     ):
         self.player_name = player_name
         self.server_host = server_host
@@ -137,6 +138,8 @@ class SendspinClient:
         self.static_delay_ms = static_delay_ms  # per-device delay override (None = use env var)
         self.preferred_format = preferred_format  # preferred audio format string (e.g. "flac:44100:16:2")
         self._effective_bridge = effective_bridge  # bridge instance label for MA device info
+        self.keepalive_enabled = keepalive_enabled  # send periodic silence to keep BT speaker alive
+        self.keepalive_interval = max(10, keepalive_interval)  # seconds between keepalive bursts
 
         # Status tracking
         self.status = DeviceStatus(
@@ -224,10 +227,10 @@ class SendspinClient:
                         # Daemon alive — reset backoff
                         self._restart_delay = 1.0
 
-                await asyncio.sleep(2)
+                await asyncio.sleep(5)
             except Exception as e:
                 logger.error(f"Error updating status: {e}")
-                await asyncio.sleep(2)
+                await asyncio.sleep(5)
 
     async def start_sendspin(self) -> None:
         """Start the sendspin daemon as an isolated subprocess with PULSE_SINK routing."""
@@ -396,6 +399,45 @@ class SendspinClient:
             except Exception as exc:
                 logger.debug("Could not send subprocess command: %s", exc)
 
+    async def _keepalive_loop(self) -> None:
+        """Periodically send a short silence burst to the BT sink to prevent speaker auto-disconnect."""
+        # Stagger startup across devices to avoid simultaneous paplay bursts
+        await asyncio.sleep(random.uniform(0, self.keepalive_interval))
+        while self.running:
+            await asyncio.sleep(self.keepalive_interval)
+            if (
+                self.bt_manager
+                and self.bt_manager.connected
+                and self.bluetooth_sink_name
+                and not self.status.get("audio_streaming")
+            ):
+                await self._send_keepalive_burst()
+
+    async def _send_keepalive_burst(self) -> None:
+        """Write 500 ms of PCM silence to the BT PulseAudio sink via paplay."""
+        # 500 ms x 44100 Hz x 2 ch x 2 bytes/sample = 88200 bytes
+        silence = b"\x00" * (44100 * 2 * 2 // 2)
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "paplay",
+                f"--device={self.bluetooth_sink_name}",
+                "--raw",
+                "--format=s16le",
+                "--rate=44100",
+                "--channels=2",
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            if proc.stdin:
+                proc.stdin.write(silence)
+                await proc.stdin.drain()
+                proc.stdin.close()
+            await asyncio.wait_for(proc.wait(), timeout=5.0)
+            logger.debug("[%s] Keepalive burst sent to %s", self.player_name, self.bluetooth_sink_name)
+        except Exception as exc:
+            logger.debug("[%s] Keepalive burst failed: %s", self.player_name, exc)
+
     async def stop_sendspin(self) -> None:
         """Stop the daemon subprocess gracefully."""
         # Cancel stdout/stderr reader tasks
@@ -446,6 +488,8 @@ class SendspinClient:
 
         # Start background tasks
         tasks = [asyncio.create_task(self._status_monitor_loop())]
+        if self.keepalive_enabled:
+            tasks.append(asyncio.create_task(self._keepalive_loop()))
 
         # Handle Bluetooth connection in background if configured
         logger.info(f"Bluetooth manager present: {self.bt_manager is not None}")
@@ -595,6 +639,8 @@ async def main():
         if static_delay_ms is not None:
             static_delay_ms = float(static_delay_ms)
         preferred_format = device.get("preferred_format", "flac:44100:16:2")
+        keepalive_enabled = bool(device.get("keepalive_silence", False))
+        keepalive_interval = max(10, int(device.get("keepalive_interval") or 30))
 
         client = SendspinClient(
             player_name,
@@ -606,6 +652,8 @@ async def main():
             listen_host=listen_host,
             effective_bridge=effective_bridge,
             preferred_format=preferred_format or None,
+            keepalive_enabled=keepalive_enabled,
+            keepalive_interval=keepalive_interval,
         )
         if mac:
             bt_mgr = BluetoothManager(
@@ -677,6 +725,12 @@ async def main():
             )
         used_ports.add(_c.listen_port)
 
+    # Size the thread pool to support concurrent BT reconnects across all devices.
+    # Default asyncio executor has too few threads when many devices reconnect simultaneously.
+    _pool_size = min(64, max(8, len(clients) * 2 + 4))
+    asyncio.get_running_loop().set_default_executor(ThreadPoolExecutor(max_workers=_pool_size))
+    logger.debug(f"ThreadPoolExecutor: max_workers={_pool_size}")
+
     # Start web interface in background thread
     def run_web_server():
         from state import set_clients
@@ -694,9 +748,10 @@ async def main():
 
     async def _graceful_shutdown():
         logger.info("Received shutdown signal — pausing players before exit...")
-        paused = await loop.run_in_executor(None, _pause_all_via_mpris)
-        if paused:
-            logger.info(f"Paused {paused} player(s) in MA — waiting 500 ms...")
+        active = [c for c in clients if c.is_running()]
+        if active:
+            await asyncio.gather(*[c._send_subprocess_command({"cmd": "pause"}) for c in active])
+            logger.info(f"Sent pause to {len(active)} player(s) — waiting 500 ms...")
             await asyncio.sleep(0.5)
         for c in clients:
             c.running = False

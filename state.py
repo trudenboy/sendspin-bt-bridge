@@ -36,11 +36,27 @@ def get_main_loop() -> asyncio.AbstractEventLoop | None:
     return _main_loop
 
 
+_notify_lock: threading.Lock = threading.Lock()
+_notify_timer: threading.Timer | None = None
+
+
 def notify_status_changed() -> None:
     """Signal that at least one client status has changed (wakes SSE listeners).
 
     Thread-safe: may be called from any thread.
+    Notifications are batched within a 100 ms window to prevent SSE storms
+    when many devices update simultaneously (e.g., mass reconnect).
     """
+    global _notify_timer
+    with _notify_lock:
+        if _notify_timer is None or not _notify_timer.is_alive():
+            _notify_timer = threading.Timer(0.1, _flush_notify)
+            _notify_timer.daemon = True
+            _notify_timer.start()
+
+
+def _flush_notify() -> None:
+    """Deliver the batched notification to SSE listeners."""
     global _status_version
     with _status_condition:
         _status_version += 1

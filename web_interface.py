@@ -126,8 +126,9 @@ def _handle_500(e):
 def main():
     """Start the web interface"""
     port = int(os.getenv("WEB_PORT", 8080))
+    threads = int(os.getenv("WEB_THREADS", 4))
     logger.info(f"Starting web interface on port {port}")
-    serve(app, host="0.0.0.0", port=port, threads=4)
+    serve(app, host="0.0.0.0", port=port, threads=threads)
 
 
 if __name__ == "__main__":

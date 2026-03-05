@@ -681,6 +681,16 @@ def api_config():
                     raise ValueError
             except (ValueError, TypeError):
                 return jsonify({"error": f"Invalid listen_port: {dev.get('listen_port')}"}), 400
+        ki = dev.get("keepalive_interval")
+        if ki is not None:
+            try:
+                ki = int(ki)
+                if not (10 <= ki <= 300):
+                    raise ValueError
+            except (ValueError, TypeError):
+                return jsonify(
+                    {"error": f"Invalid keepalive_interval: {dev.get('keepalive_interval')} (must be 10-300)"}
+                ), 400
 
     # Validate BLUETOOTH_ADAPTERS entries
     bt_adapters = config.get("BLUETOOTH_ADAPTERS", [])

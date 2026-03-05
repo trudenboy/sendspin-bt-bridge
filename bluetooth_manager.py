@@ -575,6 +575,9 @@ class BluetoothManager:
 
                         if self.client and self.client.is_running():
                             logger.info(f"BT disconnected for {self.device_name}, stopping sendspin daemon...")
+                            if not self.client.status.get("group_id"):
+                                await self.client._send_subprocess_command({"cmd": "pause"})
+                                await asyncio.sleep(0.2)
                             await self.client.stop_sendspin()
 
                         logger.warning(
@@ -608,10 +611,20 @@ class BluetoothManager:
         _MAX_CONNECT_FAILURES = 3
         logger.info(f"[{self.device_name}] D-Bus monitor started (path={self._dbus_device_path})")
 
+        # Single bus connection reused across BT reconnect iterations.
+        # Recreated only when it becomes unresponsive or on first start.
+        bus = None
+
         while True:
-            bus = None
+            bus_needs_reconnect = bus is None or not bus.connected
             try:
-                bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
+                if bus_needs_reconnect:
+                    if bus is not None:
+                        try:
+                            bus.disconnect()
+                        except Exception:
+                            pass
+                    bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
 
                 # Introspect the device object (may fail if device not yet registered with BlueZ)
                 try:
@@ -624,8 +637,6 @@ class BluetoothManager:
                     logger.debug(
                         f"[{self.device_name}] D-Bus device not available ({e}), attempt {connect_failures}/{_MAX_CONNECT_FAILURES}"
                     )
-                    if bus:
-                        bus.disconnect()
                     if connect_failures >= _MAX_CONNECT_FAILURES:
                         raise RuntimeError(f"D-Bus device introspection failed {connect_failures} times: {e}")
                     await asyncio.sleep(5)
@@ -733,6 +744,9 @@ class BluetoothManager:
                         # Stop sendspin (BT sink is gone — would flood PortAudioErrors)
                         if self.client and self.client.is_running():
                             logger.info(f"BT disconnected for {self.device_name}, stopping sendspin daemon...")
+                            if not self.client.status.get("group_id"):
+                                await self.client._send_subprocess_command({"cmd": "pause"})
+                                await asyncio.sleep(0.2)
                             await self.client.stop_sendspin()
 
                         logger.warning(
@@ -793,11 +807,12 @@ class BluetoothManager:
                     f"[{self.device_name}] D-Bus monitor error ({connect_failures}/{_MAX_CONNECT_FAILURES}): {e}"
                 )
                 if connect_failures >= _MAX_CONNECT_FAILURES:
+                    # Bus is likely broken; force reconnect on next iteration
+                    if bus:
+                        try:
+                            bus.disconnect()
+                        except Exception:
+                            pass
+                        bus = None
                     raise RuntimeError(f"D-Bus monitor failed {connect_failures} consecutive times: {e}")
-            finally:
-                if bus:
-                    try:
-                        bus.disconnect()
-                    except Exception:
-                        pass
             await asyncio.sleep(10)

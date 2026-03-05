@@ -1054,14 +1054,16 @@ function btAdapterOptions(selected) {
     return opts;
 }
 
-function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabled, preferredFormat) {
+function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabled, preferredFormat, keepaliveSilence, keepaliveInterval) {
     var tbody = document.getElementById('bt-devices-table');
     var row = document.createElement('div');
     row.className = 'bt-device-row';
     if (enabled === false) row.dataset.enabled = 'false';
-    var delayVal = (delay !== undefined && delay !== null && delay !== '') ? delay : 0;
-    var portVal  = (listenPort !== undefined && listenPort !== null && listenPort !== '') ? listenPort : '';
-    var fmtVal   = (preferredFormat !== undefined && preferredFormat !== null) ? preferredFormat : 'flac:44100:16:2';
+    var delayVal    = (delay !== undefined && delay !== null && delay !== '') ? delay : 0;
+    var portVal     = (listenPort !== undefined && listenPort !== null && listenPort !== '') ? listenPort : '';
+    var fmtVal      = (preferredFormat !== undefined && preferredFormat !== null) ? preferredFormat : 'flac:44100:16:2';
+    var kaChecked   = keepaliveSilence ? ' checked' : '';
+    var kaInterval  = (keepaliveInterval !== undefined && keepaliveInterval !== null && keepaliveInterval !== '') ? keepaliveInterval : 30;
     row.innerHTML =
         '<input type="text" placeholder="Player Name" class="bt-name" value="' +
             escHtmlAttr(name || '') + '">' +
@@ -1076,6 +1078,10 @@ function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabl
             escHtmlAttr(String(delayVal)) + '" step="50">' +
         '<input type="text" class="bt-preferred-format" placeholder="flac:44100:16:2" title="Preferred audio format: codec:samplerate:bitdepth:channels. Default flac:44100:16:2 matches SBC A2DP (no resampling)." value="' +
             escHtmlAttr(fmtVal) + '">' +
+        '<label title="Send periodic silence bursts to prevent speaker auto-disconnect on inactivity" style="white-space:nowrap;font-size:12px;">' +
+            '<input type="checkbox" class="bt-keepalive-silence"' + kaChecked + '> Keep-alive</label>' +
+        '<input type="number" class="bt-keepalive-interval" placeholder="30" min="10" max="300" title="Seconds between keepalive silence bursts (10–300, default 30)" value="' +
+            escHtmlAttr(String(kaInterval)) + '" style="width:56px;">' +
         '<button type="button" class="btn-remove-dev">\u00d7</button>';
 
     row.querySelector('.btn-remove-dev').addEventListener('click', function() {
@@ -1103,9 +1109,17 @@ function collectBtDevices() {
         if (isNaN(delay)) delay = 0;
         var fmtEl      = row.querySelector('.bt-preferred-format');
         var preferredFormat = fmtEl ? fmtEl.value.trim() : 'flac:44100:16:2';
+        var kaEl       = row.querySelector('.bt-keepalive-silence');
+        var kaIntEl    = row.querySelector('.bt-keepalive-interval');
+        var keepalive  = kaEl ? kaEl.checked : false;
+        var keepaliveInterval = kaIntEl ? (parseInt(kaIntEl.value, 10) || 30) : 30;
         var dev = { mac: mac, adapter: adapter, player_name: name, static_delay_ms: delay, preferred_format: preferredFormat || 'flac:44100:16:2' };
         if (listenHost) dev.listen_host = listenHost;
         if (listenPort) dev.listen_port = listenPort;
+        if (keepalive) {
+            dev.keepalive_silence = true;
+            dev.keepalive_interval = keepaliveInterval;
+        }
         // Preserve enabled flag: live status takes precedence, then config-loaded value from dataset
         var livedev = lastDevices && lastDevices.find(function(d) {
             return d.player_name === name || d.bluetooth_mac === mac;
@@ -1124,7 +1138,8 @@ function populateBtDeviceRows(devices) {
     document.getElementById('bt-devices-table').innerHTML = '';
     devices.forEach(function(d) {
         addBtDeviceRow(d.player_name || '', d.mac || '', d.adapter || '',
-                       d.static_delay_ms, d.listen_host, d.listen_port, d.enabled, d.preferred_format);
+                       d.static_delay_ms, d.listen_host, d.listen_port, d.enabled,
+                       d.preferred_format, d.keepalive_silence, d.keepalive_interval);
     });
 }
 
