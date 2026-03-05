@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.9.4] - 2026-03-05
+
+### Fixed
+- **Critical**: `MA_API_URL` and `MA_API_TOKEN` were silently ignored by `load_config()` (missing from `allowed_keys`). MA group discovery never ran even with correct credentials.
+
 ## [2.9.3] - 2026-03-05
 
 ### Fixed

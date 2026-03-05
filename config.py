@@ -17,7 +17,7 @@ import threading
 import uuid as _uuid
 from pathlib import Path
 
-VERSION = "2.9.3"
+VERSION = "2.9.4"
 BUILD_DATE = "2026-03-05"
 
 __all__ = [
@@ -110,6 +110,8 @@ def load_config() -> dict:
         "AUTH_PASSWORD_HASH",
         "SECRET_KEY",
         "LOG_LEVEL",
+        "MA_API_URL",
+        "MA_API_TOKEN",
     }
 
     if CONFIG_FILE.exists():
