@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.1] - 2026-03-05
+
+### Fixed
+- **`/api/pause` endpoint returning 404**: `pause_player()` function was defined but missing the `@api_bp.route` decorator, causing per-device pause to fail for solo players and filtered Pause All.
+
 ## [2.8.0] - 2026-03-05
 
 ### Added
