@@ -279,7 +279,7 @@ function buildDeviceCard(i) {
             '<div class="status-label">Sync</div>' +
             '<div class="status-value" id="dsync-' + i + '">&#8212;</div>' +
             '<div class="ts" id="dsync-detail-' + i + '"></div>' +
-            '<div class="ts" id="ddelay-' + i + '" style="display:none;"></div>' +
+            '<div class="ts sync-hover" id="ddelay-' + i + '"></div>' +
           '</div>' +
         '</div>' +
         '<div class="device-card-actions">' +
@@ -524,16 +524,17 @@ function populateDeviceCard(i, dev) {
             maRepeatBtn.classList.toggle('active', rm !== 'off');
         }
     }
-    // Delay badge — only show when playing (3.1)
+    // Delay badge — hover-only in sync column
     var delayEl = document.getElementById('ddelay-' + i);
     if (delayEl) {
         var delay = dev.static_delay_ms;
         if (dev.playing && delay !== undefined && delay !== null && delay !== 0) {
             delayEl.textContent = 'delay: ' + (delay > 0 ? '+' : '') + delay + 'ms';
-            delayEl.style.display = '';
             delayEl.style.color = Math.abs(delay) > 1000 ? '#f59e0b' : 'var(--secondary-text-color)';
+            delayEl.classList.add('has-delay');
         } else {
-            delayEl.style.display = 'none';
+            delayEl.textContent = '';
+            delayEl.classList.remove('has-delay');
         }
     }
 

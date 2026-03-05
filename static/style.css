@@ -419,6 +419,9 @@
         .filter-btn.active { background: var(--primary-color); color: white; }
         .ts     { font-size: 11px; color: var(--secondary-text-color); margin-top: 3px; }
         .ts-sub { font-size: 11px; color: var(--secondary-text-color); margin-top: 3px; word-break: break-all; }
+        .sync-hover { display: none; }
+        .device-card:hover .sync-hover.has-delay,
+        .device-card:focus-within .sync-hover.has-delay { display: block; }
 
         /* Diagnostics section */
         .diag-section {
