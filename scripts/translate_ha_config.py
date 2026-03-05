@@ -21,19 +21,39 @@ OPTIONS_FILE = "/data/options.json"
 CONFIG_FILE = "/data/config.json"
 
 
+def _mac_to_hci(mac: str) -> str:
+    """Return hciN interface name for a BT adapter MAC using sysfs, or empty string."""
+    mac_norm = mac.upper().replace(":", "").lower()  # e.g. "aabbccddeeff"
+    import pathlib
+
+    bt_sysfs = pathlib.Path("/sys/class/bluetooth")
+    try:
+        for hci in sorted(bt_sysfs.iterdir()):
+            addr_file = hci / "address"
+            if addr_file.exists():
+                addr = addr_file.read_text().strip().replace(":", "").lower()
+                if addr == mac_norm:
+                    return hci.name  # e.g. "hci0"
+    except Exception:
+        pass
+    return ""
+
+
 def _detect_adapters() -> list[dict]:
     """Return list of {id, mac, name} dicts for detected BT controllers."""
     detected: list[dict] = []
     try:
         out = subprocess.check_output(["bluetoothctl", "list"], stderr=subprocess.DEVNULL, timeout=5).decode()
-        for i, line in enumerate(out.strip().splitlines()):
+        for line in out.strip().splitlines():
             m = re.search(r"Controller\s+([0-9A-Fa-f:]{17})\s+(.*?)(\s+\[default\])?$", line)
             if m:
+                mac = m.group(1)
+                hci_name = _mac_to_hci(mac) or f"hci{len(detected)}"
                 detected.append(
                     {
-                        "id": f"hci{i}",
-                        "mac": m.group(1),
-                        "name": m.group(2).strip() or f"hci{i}",
+                        "id": hci_name,
+                        "mac": mac,
+                        "name": m.group(2).strip() or hci_name,
                     }
                 )
     except Exception:

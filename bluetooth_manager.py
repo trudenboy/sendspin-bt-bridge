@@ -159,6 +159,22 @@ class BluetoothManager:
         effective = (self.effective_adapter_mac or "").upper()
         if not effective:
             return ""
+        # Prefer sysfs lookup — it maps MACs to hciN names without relying on
+        # the ordering of 'bluetoothctl list' output which may not match hciN indices.
+        import pathlib
+
+        mac_norm = effective.replace(":", "").lower()
+        bt_sysfs = pathlib.Path("/sys/class/bluetooth")
+        try:
+            for hci in sorted(bt_sysfs.iterdir()):
+                addr_file = hci / "address"
+                if addr_file.exists():
+                    addr = addr_file.read_text().strip().replace(":", "").lower()
+                    if addr == mac_norm:
+                        return hci.name
+        except Exception:
+            pass
+        # Fallback: count adapter positions in bluetoothctl output (fragile, but last resort)
         try:
             result = subprocess.run(["bluetoothctl", "list"], capture_output=True, text=True, timeout=5)
             idx = 0
