@@ -673,6 +673,15 @@ async def main():
             keepalive_interval=keepalive_interval,
         )
         if mac:
+
+            def _on_sink_found(sink_name: str, restored_volume=None, _c=client) -> None:
+                _c.bluetooth_sink_name = sink_name
+                logger.info("Stored Bluetooth sink for volume sync: %s", sink_name)
+                if restored_volume is not None:
+                    _c._update_status({"volume": restored_volume})
+                if hasattr(_c, "volume_restore_done"):
+                    _c.volume_restore_done = True
+
             bt_mgr = BluetoothManager(
                 mac,
                 adapter=adapter,
@@ -681,6 +690,7 @@ async def main():
                 prefer_sbc=prefer_sbc,
                 check_interval=bt_check_interval,
                 max_reconnect_fails=bt_max_reconnect_fails,
+                on_sink_found=_on_sink_found,
             )
             bt_available = bt_mgr.check_bluetooth_available()
             if not bt_available:

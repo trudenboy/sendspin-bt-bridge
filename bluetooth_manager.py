@@ -106,11 +106,13 @@ class BluetoothManager:
         prefer_sbc: bool = False,
         check_interval: int = 10,
         max_reconnect_fails: int = 0,
+        on_sink_found=None,
     ):
         self.mac_address = mac_address
         self.adapter = adapter  # "hci0", "hci1", etc. — empty = use default
         self.device_name = device_name or mac_address
         self.client = client
+        self.on_sink_found = on_sink_found  # Callable[[str, int | None], None] | None
         self.prefer_sbc = prefer_sbc
         self.connected = False
         self.last_check = 0
@@ -390,33 +392,34 @@ class BluetoothManager:
                 if self.prefer_sbc:
                     _force_sbc_codec(pa_mac)
 
-                # Store the sink name in client for volume sync
-                if self.client:
+                # Resolve last saved volume for this device
+                restored_volume = None
+                try:
+                    if _CONFIG_FILE.exists():
+                        with config_lock, open(_CONFIG_FILE) as f:
+                            cfg = json.load(f)
+                        volumes = cfg.get("LAST_VOLUMES", {})
+                        last_volume = volumes.get(self.mac_address) or cfg.get("LAST_VOLUME")
+                        if last_volume is not None and isinstance(last_volume, int) and 0 <= last_volume <= 100:
+                            if set_sink_volume(configured_sink, last_volume):
+                                logger.info("✓ Restored volume to %s%% for %s", last_volume, self.mac_address)
+                                restored_volume = last_volume
+                except Exception as e:
+                    logger.debug("Could not restore volume: %s", e)
+
+                if not restored_volume:
+                    logger.info("No saved volume to restore, will use current volume")
+
+                # Notify caller via callback (decoupled) or fall back to direct client mutation
+                if self.on_sink_found:
+                    self.on_sink_found(configured_sink, restored_volume)
+                elif self.client:
                     self.client.bluetooth_sink_name = configured_sink
                     logger.info("Stored Bluetooth sink for volume sync: %s", configured_sink)
-
-                    # Restore last volume for this device (keyed by MAC)
-                    restored = False
-                    try:
-                        if _CONFIG_FILE.exists():
-                            with config_lock, open(_CONFIG_FILE) as f:
-                                cfg = json.load(f)
-                            volumes = cfg.get("LAST_VOLUMES", {})
-                            last_volume = volumes.get(self.mac_address)
-                            if last_volume is None:
-                                last_volume = cfg.get("LAST_VOLUME")
-                            if last_volume is not None and isinstance(last_volume, int) and 0 <= last_volume <= 100:
-                                if set_sink_volume(configured_sink, last_volume):
-                                    logger.info("✓ Restored volume to %s%% for %s", last_volume, self.mac_address)
-                                    self.client._update_status({"volume": last_volume})
-                                    restored = True
-                    except Exception as e:
-                        logger.debug("Could not restore volume: %s", e)
-
+                    if restored_volume is not None:
+                        self.client._update_status({"volume": restored_volume})
                     if hasattr(self.client, "volume_restore_done"):
                         self.client.volume_restore_done = True
-                    if not restored:
-                        logger.info("No saved volume to restore, will use current volume")
             elif not success:
                 logger.warning("Could not find Bluetooth sink for %s", self.mac_address)
                 logger.warning("Audio may play from default device instead of Bluetooth")
