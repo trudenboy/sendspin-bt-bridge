@@ -5,7 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.6.10] - 2026-03-04
+## [2.7.0] - 2026-03-05
+
+### Added
+- **Keepalive silence stream**: per-device opt-in feature that periodically sends a short PCM silence burst to the Bluetooth sink to prevent speakers from auto-disconnecting during silence. Configurable interval (10–300 s, default 30 s). Available in web UI config and HA addon.
+- **`WEB_THREADS` env var**: configurable Waitress HTTP thread count (default 4, recommend 16 for deployments with 20+ devices)
+
+### Improved
+- **Graceful shutdown**: players are now paused via subprocess stdin IPC (`{"cmd":"pause"}`) in parallel before stopping, replacing the fragile MPRIS D-Bus approach. Works reliably even when `dbus-python` is not available
+- **Group-aware BT disconnect pause**: when a BT disconnect is detected, solo players receive a pause signal before the daemon stops; grouped players skip it so other group members continue uninterrupted
+- **Scalability — SSE batching**: `notify_status_changed()` now batches notifications within a 100 ms window, preventing SSE storms when many devices update status simultaneously (reduces events ~10× under mass-reconnect)
+- **Scalability — ThreadPoolExecutor**: explicit pool sized to `min(64, N_devices×2+4)` workers, preventing BT reconnect queue starvation at 100+ devices
+- **Scalability — D-Bus bus reuse**: `MessageBus` connection is reused across BT reconnect iterations per device (was re-created each loop); reconnects only when the bus is unresponsive
+- **Scalability — keepalive jitter**: random startup delay (0..interval) staggers initial silence bursts across devices
+- **Scalability — status monitor**: `_status_monitor_loop` sleep increased from 2 s to 5 s, reducing asyncio wakeups from 50/s to 20/s at 100 devices
+
+### Fixed
+- **Race condition — group_id read**: `group_id` status field is now read under `_status_lock` before the BT-disconnect pause decision, preventing stale reads from concurrent daemon reader threads
+
+
 
 ### Improved
 - **Web UI — Player name color**: device names now use `--primary-text-color` (black/white depending on theme) instead of `--primary-color` (blue), improving readability in both light and dark themes
