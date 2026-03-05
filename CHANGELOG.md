@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.9] - 2026-03-05
+
+### Fixed
+- **HA auth**: removed `mfa_module_id` from MFA step payload — HA schema only accepts `code`, causing HTTP 400 "User input malformed"
+
 ## [2.7.8] - 2026-03-05
 
 ### Fixed
