@@ -448,6 +448,7 @@ def api_group_pause():
         return jsonify({"success": False, "error": str(exc)}), 500
 
 
+@api_bp.route("/api/pause", methods=["POST"])
 def pause_player():
     """Pause or play a single daemon subprocess via WS controller command.
 
