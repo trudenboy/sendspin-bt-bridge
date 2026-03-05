@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.10] - 2026-03-05
+
+### Fixed
+- **Socket leak**: fixed file descriptor leak in `get_ip_address()` — socket now uses context manager
+- **Thread safety**: `options.json` writes in `persist_device_enabled()` now held under `config_lock`; added missing locks to `load_config()` and `load_adapter_name_cache()`; protected all unprotected config reads with `_config_lock`
+- **Config validation**: `api_config` POST now rejects non-string values for `SENDSPIN_SERVER`, `BRIDGE_NAME`, `TZ`, and `LOG_LEVEL`
+- **Keepalive buffer**: clarified silence buffer calculation for readability (result unchanged: 88200 bytes = 500 ms)
+- **Adapter resolution**: use sysfs for `hciN`↔MAC resolution, fall back to `bluetoothctl` ordering
+- **Volume control**: `set_volume` default now targets all clients, not just the first
+- **Daemon logging**: removed debug comment and raw payload repr from group update log
+- **Status serialization**: moved `_last_status_json` before `_emit_status`; replaced O(N) serialize loop
+
+### Improved
+- **Runtime detection**: replaced mutable global cache with `functools.lru_cache` for thread-safe caching
+- **Pulse helpers**: deduplicated `get_sink_input_ids()` by delegating to the existing async implementation
+- **Code cleanup**: removed redundant `import re` inside `pair_device()` (already imported at module level)
+
+### Refactored
+- **Architecture**: decoupled `BluetoothManager` from `SendspinClient` via `on_sink_found` callback
+- **Adapter cache**: replaced `_adapter_cache_loaded` bool with `threading.Event`
+- **Logging**: replaced f-string log calls with lazy `%s` format throughout
+- **Naming**: renamed `_config_lock`/`_clients_lock` to public names
+- **Modules**: added `__all__` to public modules for explicit API surface
+- **Imports**: moved `import time` and `import asyncio` from function bodies to module top
+- **BT availability**: cached `check_bluetooth_available()`; log unknown `DeviceStatus` keys
+
 ## [2.7.9] - 2026-03-05
 
 ### Fixed

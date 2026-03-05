@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.10] - 2026-03-05
+
+### Fixed
+- Fixed socket file descriptor leak in IP address detection
+- Thread-safe config access: locks on `options.json` writes, `load_config()`, adapter cache, and all config reads
+- Config API rejects non-string values for server, bridge name, timezone, and log level fields
+- Use sysfs for `hciN`↔MAC adapter resolution with `bluetoothctl` fallback
+- `set_volume` now targets all clients by default, not just the first
+- Fixed status serialization order and removed O(N) serialize loop
+- Removed debug comment and raw payload repr from group update log
+
+### Improved
+- Deduplicated PulseAudio sink-input helper
+- Thread-safe runtime detection caching (`lru_cache`)
+- Code cleanup: removed redundant import, moved imports to module top
+
+### Refactored
+- Decoupled `BluetoothManager` from `SendspinClient` via callback
+- Replaced adapter cache bool with `threading.Event`
+- Lazy `%s` log formatting throughout
+- Added `__all__` to public modules
+- Cached `check_bluetooth_available()`
+
 ## [2.7.9] - 2026-03-05
 
 ### Fixed
