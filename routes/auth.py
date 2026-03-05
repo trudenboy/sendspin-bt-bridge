@@ -129,7 +129,8 @@ def _ha_flow_start() -> dict | None:
 def _ha_flow_step(flow_id: str, data: dict) -> dict | None:
     """Submit a step to an HA Core auth login_flow."""
     try:
-        body = json.dumps(data).encode()
+        payload = {"client_id": _FLOW_CLIENT_ID, **data}
+        body = json.dumps(payload).encode()
         req = _ur.Request(
             f"{_HA_CORE_URL}/auth/login_flow/{flow_id}",
             data=body,
