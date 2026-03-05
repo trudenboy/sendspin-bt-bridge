@@ -95,7 +95,8 @@ class DeviceStatus:
     def __setitem__(self, key: str, value) -> None:
         if hasattr(self, key):
             setattr(self, key, value)
-        # Silently ignore unknown keys (mirrors old dict behaviour for safety)
+        else:
+            logger.debug("DeviceStatus: unknown key ignored: %s", key)
 
     def __contains__(self, key: object) -> bool:
         return hasattr(self, key) if isinstance(key, str) else False
@@ -107,6 +108,8 @@ class DeviceStatus:
         for k, v in d.items():
             if hasattr(self, k):
                 setattr(self, k, v)
+            else:
+                logger.debug("DeviceStatus: unknown key ignored: %s", k)
 
     def copy(self) -> dict:
         return dataclasses.asdict(self)
@@ -675,10 +678,11 @@ async def main():
                 check_interval=bt_check_interval,
                 max_reconnect_fails=bt_max_reconnect_fails,
             )
-            if not bt_mgr.check_bluetooth_available():
+            bt_available = bt_mgr.check_bluetooth_available()
+            if not bt_available:
                 logger.warning(f"BT adapter '{adapter or 'default'}' not available for {player_name}")
             client.bt_manager = bt_mgr
-            client._update_status({"bluetooth_available": bt_mgr.check_bluetooth_available()})
+            client._update_status({"bluetooth_available": bt_available})
             bt_enabled = device.get("enabled", True)
             if not bt_enabled:
                 client.bt_management_enabled = False
