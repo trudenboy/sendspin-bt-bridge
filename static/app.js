@@ -1809,14 +1809,7 @@ function renderDiagnostics(d) {
                 '<span style="color:#6b7280;font-size:11px;">' + g.members + ' member' + (g.members !== 1 ? 's' : '') + '</span>' +
                 '</td></tr>';
         });
-        if (ma.connected && ma.nowplaying && ma.nowplaying.track) {
-            var np = ma.nowplaying;
-            var npText = (np.artist ? escHtml(np.artist) + ' \u2014 ' : '') + escHtml(np.track);
-            rows += '<tr><td style="padding-left:20px;">↳ Now playing</td><td>' +
-                '<span style="font-size:12px;">' + npText + '</span>' +
-                (np.state ? ' <span style="color:#6b7280;font-size:11px;">(' + escHtml(np.state) + ')</span>' : '') +
-                '</td></tr>';
-        }
+    }
     }
 
 

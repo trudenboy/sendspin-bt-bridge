@@ -1511,7 +1511,6 @@ def api_diagnostics():
             "syncgroups": [
                 {"id": g["id"], "name": g.get("name", ""), "members": len(g.get("members", []))} for g in ma_groups
             ],
-            "nowplaying": state.get_ma_now_playing() if state.is_ma_connected() else {},
         }
 
         # PA sink-inputs with properties (for routing diagnostics)
