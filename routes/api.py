@@ -885,6 +885,8 @@ def api_config():
         "LAST_VOLUMES",
         "LAST_VOLUME",
         "LOG_LEVEL",
+        "MA_API_URL",
+        "MA_API_TOKEN",
         "_new_device_default_volume",
     }
     config = {k: v for k, v in config.items() if k in _ALLOWED_POST_KEYS}
@@ -905,6 +907,9 @@ def api_config():
                 ):
                     if key in existing and key not in config:
                         config[key] = existing[key]
+                # Preserve MA_API_TOKEN if form submitted empty (user didn't change it)
+                if not config.get("MA_API_TOKEN") and existing.get("MA_API_TOKEN"):
+                    config["MA_API_TOKEN"] = existing["MA_API_TOKEN"]
             except Exception as _exc:
                 logger.debug("Could not read existing config for merge: %s", _exc)
 

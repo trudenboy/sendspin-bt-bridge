@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.9.1] - 2026-03-05
+
+### Fixed
+- MA API URL auto-detection in HA addon mode now uses `localhost:8095` instead of `homeassistant.local:8095` (both addons share host networking, mDNS may not resolve inside the container).
+- `SUPERVISOR_TOKEN` (HA auth token) is no longer incorrectly used as MA API token — a clear warning is now logged instructing the user to create a long-lived token in MA → Settings → API Tokens.
+- `MA_API_TOKEN` form field: empty submit no longer overwrites an existing saved token.
+
+### Added
+- `MA_API_URL` and `MA_API_TOKEN` fields are now visible in the web UI Configuration → Advanced settings section, so users can configure MA API integration without editing `config.json` manually.
+
 ## [2.9.0] - 2026-03-05
 
 ### Added

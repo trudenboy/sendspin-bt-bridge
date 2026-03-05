@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.9.1] - 2026-03-05
+
+### Fixed
+- MA API URL auto-detection now uses `localhost:8095` (reliable in addon network).
+- `ma_api_token` (HA Supervisor token) is not used for MA auth — log now clearly instructs to create token in MA → Settings → API Tokens.
+- Saving config with empty `MA_API_TOKEN` no longer clears an existing token.
+
+### Added
+- `MA_API_URL` and `MA_API_TOKEN` now visible in bridge web UI Advanced settings.
+
 ## [2.9.0] - 2026-03-05
 
 ### Added

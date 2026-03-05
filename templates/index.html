@@ -228,6 +228,16 @@
                 </div>
             </div>
 
+            <hr style="border:none;border-top:1px solid var(--divider-color);margin:20px 0;">
+            <div class="form-group">
+                <label>Music Assistant API URL <span style="font-size:11px;color:var(--secondary-text-color);">(for correct group resume — e.g. <code>http://192.168.1.x:8095</code>; leave blank to disable)</span></label>
+                <input type="text" name="MA_API_URL" placeholder="http://homeassistant.local:8095">
+            </div>
+            <div class="form-group">
+                <label>Music Assistant API token <span style="font-size:11px;color:var(--secondary-text-color);">(create in MA → Settings → API Tokens)</span></label>
+                <input type="password" name="MA_API_TOKEN" autocomplete="new-password" placeholder="eyJ...">
+            </div>
+
             </div><!-- /adv-body -->
         </form>
     </details>

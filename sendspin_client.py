@@ -799,19 +799,21 @@ async def main():
 
     supervisor_token = os.environ.get("SUPERVISOR_TOKEN", "")
     if supervisor_token:
-        # HA addon mode: auto-detect MA URL if not explicitly configured
+        # HA addon mode: auto-detect MA URL if not explicitly configured.
+        # Both addons share host networking → localhost:8095 is always reachable.
         if not ma_api_url:
-            _resolved = (
-                server_host
-                if (server_host and server_host.lower() not in ("auto", "discover", ""))
-                else "homeassistant.local"
-            )
-            ma_api_url = f"http://{_resolved}:8095"
-            logger.debug("MA API URL auto-detected (addon mode): %s", ma_api_url)
-        # Use supervisor token as MA auth token if no explicit token configured
+            if server_host and server_host.lower() not in ("auto", "discover", ""):
+                ma_api_url = f"http://{server_host}:8095"
+            else:
+                ma_api_url = "http://localhost:8095"
+            logger.info("MA API URL auto-detected (addon mode): %s", ma_api_url)
+        # SUPERVISOR_TOKEN is a HA token, NOT an MA token. MA uses its own JWT auth.
+        # Do NOT use SUPERVISOR_TOKEN for MA auth. Warn user if no explicit MA token.
         if not ma_api_token:
-            ma_api_token = supervisor_token
-            logger.debug("MA API token: using SUPERVISOR_TOKEN (addon mode)")
+            logger.warning(
+                "MA API: running in HA addon mode but no 'ma_api_token' configured. "
+                "Create a long-lived token in MA → Settings → API Tokens and set ma_api_token in bridge config."
+            )
 
     if ma_api_url and ma_api_token:
         _state.set_ma_api_credentials(ma_api_url, ma_api_token)

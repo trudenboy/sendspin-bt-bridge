@@ -1475,7 +1475,7 @@ async function loadConfig() {
 
         // Populate simple fields
         ['SENDSPIN_SERVER', 'SENDSPIN_PORT', 'BRIDGE_NAME', 'TZ', 'PULSE_LATENCY_MSEC',
-         'BT_CHECK_INTERVAL', 'BT_MAX_RECONNECT_FAILS'].forEach(function(key) {
+         'BT_CHECK_INTERVAL', 'BT_MAX_RECONNECT_FAILS', 'MA_API_URL', 'MA_API_TOKEN'].forEach(function(key) {
             var input = document.querySelector('[name="' + key + '"]');
             if (input && config[key] !== undefined) input.value = config[key];
         });
