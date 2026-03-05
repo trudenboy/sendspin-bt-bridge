@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.16] - 2026-03-05
+
+### Fixed
+- **Individual pause button in sync groups**: clicking ▮▮/▶ on a grouped device now pauses/unpauses the whole group via `/api/pause_all` — previously PLAY from a single group member caused MA to break the group into separate sessions
+
 ## [2.7.15] - 2026-03-05
 
 ### Fixed
