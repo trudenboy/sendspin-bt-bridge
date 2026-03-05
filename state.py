@@ -14,6 +14,7 @@ import time as _time
 from config import CONFIG_FILE as _config_file
 
 __all__ = [
+    "clear_ma_now_playing",
     "clients",
     "clients_lock",
     "create_scan_job",
@@ -23,6 +24,7 @@ __all__ = [
     "get_ma_group_for_player",
     "get_ma_groups",
     "get_ma_now_playing",
+    "get_ma_now_playing_for_group",
     "get_main_loop",
     "get_scan_job",
     "is_ma_connected",
@@ -34,6 +36,7 @@ __all__ = [
     "set_ma_connected",
     "set_ma_groups",
     "set_ma_now_playing",
+    "set_ma_now_playing_for_group",
     "set_main_loop",
 ]
 
@@ -238,7 +241,7 @@ def get_ma_groups() -> "list[dict]":
 
 _ma_connected: bool = False
 _ma_connected_lock = threading.Lock()
-_ma_now_playing: dict = {}
+_ma_now_playing: dict[str, dict] = {}  # keyed by syncgroup_id
 _ma_now_playing_lock = threading.Lock()
 
 
@@ -255,15 +258,37 @@ def set_ma_connected(value: bool) -> None:
         _ma_connected = value
 
 
-def get_ma_now_playing() -> dict:
-    """Return current MA now-playing metadata dict (empty if not playing/not connected)."""
+def get_ma_now_playing_for_group(syncgroup_id: str) -> dict:
+    """Return now-playing dict for a specific MA syncgroup_id."""
     with _ma_now_playing_lock:
-        return dict(_ma_now_playing)
+        return dict(_ma_now_playing.get(syncgroup_id, {}))
+
+
+def set_ma_now_playing_for_group(syncgroup_id: str, data: dict) -> None:
+    """Update now-playing for a specific syncgroup. Triggers SSE notification."""
+    with _ma_now_playing_lock:
+        _ma_now_playing[syncgroup_id] = data
+    notify_status_changed()
+
+
+def clear_ma_now_playing() -> None:
+    """Clear all now-playing state (e.g. on MA disconnect)."""
+    with _ma_now_playing_lock:
+        _ma_now_playing.clear()
+    notify_status_changed()
+
+
+def get_ma_now_playing() -> dict:
+    """Legacy: return first group's now-playing or empty dict."""
+    with _ma_now_playing_lock:
+        if _ma_now_playing:
+            return dict(next(iter(_ma_now_playing.values())))
+        return {}
 
 
 def set_ma_now_playing(data: dict) -> None:
-    """Update MA now-playing cache. Triggers SSE notification."""
+    """Legacy: update now-playing for the first/only group. Triggers SSE notification."""
+    syncgroup_id = data.get("syncgroup_id", "__default__")
     with _ma_now_playing_lock:
-        _ma_now_playing.clear()
-        _ma_now_playing.update(data)
+        _ma_now_playing[syncgroup_id] = data
     notify_status_changed()

@@ -72,18 +72,14 @@ def _build_now_playing(queue: dict) -> dict:
     return result
 
 
-async def _find_active_syncgroup_queue(queues: list[dict]) -> dict | None:
-    """Return the queue entry for the active MA syncgroup, or None."""
+async def _find_syncgroup_queues(queues: list[dict]) -> list[dict]:
+    """Return all queue entries for known MA syncgroups."""
     groups = _state.get_ma_groups()
     group_ids = {g["id"] for g in groups}
-    for q in queues:
-        if q.get("queue_id") in group_ids and q.get("active"):
-            return q
-    # Fallback: any syncgroup queue
-    for q in queues:
-        if q.get("queue_id") in group_ids:
-            return q
-    return None
+    result = [q for q in queues if q.get("queue_id") in group_ids and q.get("active")]
+    if not result:
+        result = [q for q in queues if q.get("queue_id") in group_ids]
+    return result
 
 
 async def _send(ws, msg_id: int, command: str, args: dict) -> None:
@@ -243,7 +239,7 @@ class MaMonitor:
                 await self._polling_loop(ws)
 
     async def _poll_queues(self, ws) -> None:
-        """Fetch player_queues/all and update now-playing cache."""
+        """Fetch player_queues/all and update now-playing cache per syncgroup."""
         try:
             mid = self._next_id()
             await _send(ws, mid, "player_queues/all", {})
@@ -251,11 +247,10 @@ class MaMonitor:
                 resp = await _recv(ws, timeout=10.0)
                 if str(resp.get("message_id")) == str(mid):
                     queues = resp.get("result") or []
-                    q = await _find_active_syncgroup_queue(queues)
-                    if q:
-                        _state.set_ma_now_playing(_build_now_playing(q))
-                    else:
-                        _state.set_ma_now_playing({"connected": True, "state": "idle"})
+                    syncgroup_queues = await _find_syncgroup_queues(queues)
+                    for q in syncgroup_queues:
+                        np = _build_now_playing(q)
+                        _state.set_ma_now_playing_for_group(np["syncgroup_id"], np)
                     return
         except Exception as exc:
             logger.debug("MA monitor poll error: %s", exc)
@@ -350,7 +345,7 @@ class MaMonitor:
             except Exception as exc:
                 logger.warning("MA monitor disconnected: %s — reconnecting in %ds", exc, delay)
             _state.set_ma_connected(False)
-            _state.set_ma_now_playing({"connected": False})
+            _state.clear_ma_now_playing()
             if not self._running:
                 break
             await asyncio.sleep(delay)
@@ -377,10 +372,11 @@ def start_monitor(ma_url: str, ma_token: str) -> MaMonitor:
     return _monitor_instance
 
 
-async def send_queue_cmd(action: str, value=None) -> bool:
+async def send_queue_cmd(action: str, value=None, syncgroup_id: str | None = None) -> bool:
     """Send a queue command to MA. Uses a fresh connection (monitor shared conn not easily accessible).
 
     Supported actions: next, previous, shuffle, repeat, seek.
+    syncgroup_id: target specific group; falls back to first known group.
     Returns True on success.
     """
     from services.ma_client import _normalize_ma_url
@@ -392,7 +388,11 @@ async def send_queue_cmd(action: str, value=None) -> bool:
     groups = _state.get_ma_groups()
     if not groups:
         return False
-    queue_id = groups[0]["id"]  # active syncgroup
+
+    if syncgroup_id:
+        queue_id = syncgroup_id
+    else:
+        queue_id = groups[0]["id"]  # fallback: first syncgroup
 
     try:
         import websockets

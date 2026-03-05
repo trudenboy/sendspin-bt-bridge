@@ -44,9 +44,8 @@ var volPending = {}; // deviceIndex -> true if user recently touched slider
 var reanchorShownAt = {};   // deviceIndex -> timestamp(ms) when last re-anchor event was detected
 var lastReanchorCount = {}; // deviceIndex -> reanchor_count at last render (to detect new events)
 var lastReanchorAt = {};    // deviceIndex -> last_reanchor_at string seen (catches count resets on stream restart)
-var _progSnapshots = {};    // deviceIndex -> {pos, dur, t} for client-side progress interpolation
-var _maNowPlaying = null;   // MA now-playing data from SSE (null = no MA or not connected)
-var _maProgSnapshot = null; // {elapsed, duration, t} for MA progress interpolation
+var _progSnapshots = {};    // deviceIndex -> {pos, dur, t} for Sendspin native progress interpolation
+var _maProgSnapshots = {};  // deviceIndex -> {elapsed, duration, t} for MA progress interpolation
 
 // ---- Utility ----
 
@@ -169,28 +168,27 @@ async function updateStatus() {
 // Interpolate progress bars every second between SSE updates
 setInterval(function() {
     var now = Date.now();
-    // MA progress has priority: update all device progress bars with same MA data
-    if (_maProgSnapshot && _maProgSnapshot.duration > 0) {
-        var elapsedSec = _maProgSnapshot.elapsed + (now - _maProgSnapshot.t) / 1000;
-        var pct = Math.min(100, (elapsedSec / _maProgSnapshot.duration) * 100);
-        document.querySelectorAll('[id^="dprog-fill-"]').forEach(function(el) {
-            el.style.width = pct + '%';
-        });
-        document.querySelectorAll('[id^="dprog-time-"]').forEach(function(el) {
-            el.textContent = fmtSec(elapsedSec) + ' / ' + fmtSec(_maProgSnapshot.duration);
-        });
-    } else {
-        // Sendspin-native per-device progress (ms)
-        Object.keys(_progSnapshots).forEach(function(idx) {
-            var snap = _progSnapshots[idx];
-            if (!snap) return;
-            var pos = Math.min(snap.pos + (now - snap.t), snap.dur);
-            var fill = document.getElementById('dprog-fill-' + idx);
-            var time = document.getElementById('dprog-time-' + idx);
-            if (fill) fill.style.width = Math.min(100, (pos / snap.dur) * 100) + '%';
-            if (time) time.textContent = fmtMs(pos) + ' / ' + fmtMs(snap.dur);
-        });
-    }
+    // MA progress per device
+    Object.keys(_maProgSnapshots).forEach(function(idx) {
+        var snap = _maProgSnapshots[idx];
+        if (!snap) return;
+        var elapsedSec = snap.elapsed + (now - snap.t) / 1000;
+        var pct = Math.min(100, (elapsedSec / snap.duration) * 100);
+        var fill = document.getElementById('dprog-fill-' + idx);
+        var timeEl = document.getElementById('dprog-time-' + idx);
+        if (fill) fill.style.width = pct + '%';
+        if (timeEl) timeEl.textContent = fmtSec(elapsedSec) + ' / ' + fmtSec(snap.duration);
+    });
+    // Sendspin-native per-device progress (ms)
+    Object.keys(_progSnapshots).forEach(function(idx) {
+        var snap = _progSnapshots[idx];
+        if (!snap) return;
+        var pos = Math.min(snap.pos + (now - snap.t), snap.dur);
+        var fill = document.getElementById('dprog-fill-' + idx);
+        var time = document.getElementById('dprog-time-' + idx);
+        if (fill) fill.style.width = Math.min(100, (pos / snap.dur) * 100) + '%';
+        if (time) time.textContent = fmtMs(pos) + ' / ' + fmtMs(snap.dur);
+    });
 }, 1000);
 
 function buildDeviceCard(i) {
@@ -242,11 +240,11 @@ function buildDeviceCard(i) {
               '<span class="status-indicator" id="dplay-ind-' + i + '"></span>' +
               '<span id="dplay-' + i + '">-</span>' +
               '<button type="button" class="card-icon-btn transport-btn" id="dma-prev-' + i + '" ' +
-                'onclick="maQueueCmd(\'previous\')" title="Previous" style="display:none;">&#9664;&#9664;</button>' +
+                'onclick="maQueueCmd(\'previous\', undefined, ' + i + ')" title="Previous" style="display:none;">&#9664;&#9664;</button>' +
               '<button type="button" class="card-icon-btn transport-btn" id="dbtn-pause-' + i + '" ' +
                 'onclick="onDevicePause(' + i + ')" title="Pause/Unpause">&#9646;&#9646;</button>' +
               '<button type="button" class="card-icon-btn transport-btn" id="dma-next-' + i + '" ' +
-                'onclick="maQueueCmd(\'next\')" title="Next" style="display:none;">&#9654;&#9654;</button>' +
+                'onclick="maQueueCmd(\'next\', undefined, ' + i + ')" title="Next" style="display:none;">&#9654;&#9654;</button>' +
             '</div>' +
             '<div class="track-art-row">' +
               '<img id="dart-' + i + '" class="album-art" src="" alt="">' +
@@ -258,9 +256,9 @@ function buildDeviceCard(i) {
             '</div>' +
             '<div class="ma-secondary-controls" id="dma-secondary-' + i + '">' +
               '<button type="button" class="card-icon-btn" id="dma-shuffle-' + i + '" ' +
-                'onclick="maQueueCmd(\'shuffle\', !(_maNowPlaying&&_maNowPlaying.shuffle))" title="Shuffle">&#128256;</button>' +
+                'onclick="maQueueCmd(\'shuffle\', undefined, ' + i + ')" title="Shuffle">&#128256;</button>' +
               '<button type="button" class="card-icon-btn" id="dma-repeat-' + i + '" ' +
-                'onclick="maCycleRepeat()" title="Repeat">&#128257;</button>' +
+                'onclick="maCycleRepeat(' + i + ')" title="Repeat">&#128257;</button>' +
             '</div>' +
           '</div>' +
           // Volume column
@@ -424,27 +422,26 @@ function populateDeviceCard(i, dev) {
         if (playTxt) playTxt.textContent = '\u23f8 Stopped';
     }
 
-    // Track progress bar (unified: MA takes priority over Sendspin)
+    // Track progress bar (per-device MA data takes priority over Sendspin)
     var progWrap = document.getElementById('dprog-wrap-' + i);
     var progFill = document.getElementById('dprog-fill-' + i);
     var progTime = document.getElementById('dprog-time-' + i);
-    var maActive = !!((_maNowPlaying && _maNowPlaying.connected));
-    var maHasProg = maActive && _maNowPlaying.duration > 0 && _maNowPlaying.elapsed != null;
+    var ma = dev.ma_now_playing || {};
+    var maActive = !!(ma.connected);
+    var deviceMaActive = maActive && !!dev.has_sink && !!dev.group_id;
+    var maHasProg = deviceMaActive && ma.duration > 0 && ma.elapsed != null;
     if (maHasProg) {
-        _maProgSnapshot = {
-            elapsed: _maNowPlaying.elapsed,
-            duration: _maNowPlaying.duration,
-            t: _maNowPlaying.elapsed_updated_at
-                ? (Date.now() - (Date.now() / 1000 - _maNowPlaying.elapsed_updated_at) * 1000)
+        _maProgSnapshots[i] = {
+            elapsed: ma.elapsed,
+            duration: ma.duration,
+            t: ma.elapsed_updated_at
+                ? (Date.now() - (Date.now() / 1000 - ma.elapsed_updated_at) * 1000)
                 : Date.now(),
         };
-    }
-    var deviceMaActive = maActive && !!dev.has_sink && !!dev.group_id;
-    if (deviceMaActive && maHasProg) {
         if (progWrap) progWrap.style.display = '';
         delete _progSnapshots[i];
     } else {
-        if (!maActive) _maProgSnapshot = null;
+        delete _maProgSnapshots[i];
         var hasProg = dev.playing && dev.track_duration_ms > 0 && dev.track_progress_ms != null;
         if (progWrap) progWrap.style.display = hasProg ? '' : 'none';
         if (hasProg) {
@@ -484,9 +481,8 @@ function populateDeviceCard(i, dev) {
     var trackEl = document.getElementById('dtrack-' + i);
     var artEl   = document.getElementById('dart-' + i);
     if (trackEl) {
-        // When MA connected AND device is in the MA group, prefer MA now-playing metadata
-        var maArtist = _maNowPlaying && _maNowPlaying.connected && dev.group_id ? (_maNowPlaying.artist || '') : '';
-        var maTrack  = _maNowPlaying && _maNowPlaying.connected && dev.group_id ? (_maNowPlaying.track  || '') : '';
+        var maArtist = deviceMaActive ? (ma.artist || '') : '';
+        var maTrack  = deviceMaActive ? (ma.track  || '') : '';
         var showArtist = maArtist || dev.current_artist;
         var showTrack  = maTrack  || dev.current_track;
         // Persist track on pause — clear only when both fields are empty
@@ -497,7 +493,7 @@ function populateDeviceCard(i, dev) {
             trackEl.textContent = _firstOfSlash(showArtist) && _firstOfSlash(showTrack)
                 ? _firstOfSlash(showArtist) + ' \u2014 ' + _firstOfSlash(showTrack)
                 : _firstOfSlash(showArtist || showTrack || '');
-            var tipAlbum = _maNowPlaying && _maNowPlaying.album && dev.group_id ? ' \u00b7 ' + _maNowPlaying.album : '';
+            var tipAlbum = deviceMaActive && ma.album ? ' \u00b7 ' + ma.album : '';
             trackEl.title = fullText + tipAlbum;
             trackEl.style.color = dev.playing
                 ? 'var(--primary-text-color)' : 'var(--secondary-text-color)';
@@ -508,7 +504,7 @@ function populateDeviceCard(i, dev) {
     }
     // Album art
     if (artEl) {
-        var imgUrl = _maNowPlaying && _maNowPlaying.connected && dev.group_id ? (_maNowPlaying.image_url || '') : '';
+        var imgUrl = deviceMaActive ? (ma.image_url || '') : '';
         if (artEl.src !== imgUrl) artEl.src = imgUrl;
     }
 
@@ -518,14 +514,13 @@ function populateDeviceCard(i, dev) {
     var secCtrl     = document.getElementById('dma-secondary-' + i);
     var maShuffleBtn = document.getElementById('dma-shuffle-' + i);
     var maRepeatBtn  = document.getElementById('dma-repeat-' + i);
-    var deviceMaActive = maActive && !!dev.has_sink && !!dev.group_id;
     if (prevBtn) prevBtn.style.display = deviceMaActive ? '' : 'none';
     if (nextBtn) nextBtn.style.display = deviceMaActive ? '' : 'none';
     if (secCtrl) secCtrl.classList.toggle('ma-ready', deviceMaActive);
-    if (maActive) {
-        if (maShuffleBtn) maShuffleBtn.classList.toggle('active', !!_maNowPlaying.shuffle);
+    if (deviceMaActive) {
+        if (maShuffleBtn) maShuffleBtn.classList.toggle('active', !!ma.shuffle);
         if (maRepeatBtn) {
-            var rm = _maNowPlaying.repeat || 'off';
+            var rm = ma.repeat || 'off';
             maRepeatBtn.title = 'Repeat: ' + rm + ' (click to cycle)';
             maRepeatBtn.classList.toggle('active', rm !== 'off');
         }
@@ -979,9 +974,14 @@ function onDevicePause(i) {
 
 // ---- BT Actions (reconnect / pair) ----
 
-async function maQueueCmd(action, value) {
+async function maQueueCmd(action, value, devIdx) {
     var body = {action: action};
     if (value !== undefined) body.value = value;
+    if (devIdx != null && lastDevices && lastDevices[devIdx]) {
+        var ma = lastDevices[devIdx].ma_now_playing || {};
+        if (ma.syncgroup_id) body.syncgroup_id = ma.syncgroup_id;
+        if (action === 'shuffle' && value === undefined) body.value = !ma.shuffle;
+    }
     try {
         await fetch(API_BASE + '/api/ma/queue/cmd', {
             method: 'POST',
@@ -991,10 +991,11 @@ async function maQueueCmd(action, value) {
     } catch (err) { console.warn('MA queue cmd failed:', err); }
 }
 
-function maCycleRepeat() {
-    var rm = _maNowPlaying && _maNowPlaying.repeat || 'off';
+function maCycleRepeat(devIdx) {
+    var ma = (devIdx != null && lastDevices && lastDevices[devIdx] && lastDevices[devIdx].ma_now_playing) || {};
+    var rm = ma.repeat || 'off';
     var next = rm === 'off' ? 'all' : rm === 'all' ? 'one' : 'off';
-    maQueueCmd('repeat', next);
+    maQueueCmd('repeat', next, devIdx);
 }
 
 async function btReconnect(i) {
@@ -1910,10 +1911,6 @@ var _statusInterval = null;
     es.onmessage = function(e) {
         try {
             var status = JSON.parse(e.data);
-            // Update MA now-playing global before rendering cards
-            if (status.nowplaying !== undefined) {
-                _maNowPlaying = (status.nowplaying && status.nowplaying.connected) ? status.nowplaying : null;
-            }
             // Reuse the same rendering logic as updateStatus()
             var info = [];
             if (status.hostname)   info.push(status.hostname);

@@ -55,6 +55,7 @@ from state import (
     finish_scan_job,
     get_adapter_name,
     get_ma_group_for_player,
+    get_ma_now_playing_for_group,
     get_scan_job,
     is_scan_running,
     load_adapter_name_cache,
@@ -197,6 +198,8 @@ def get_client_status_for(client):
             ma_group = get_ma_group_for_player(player_name)
             if ma_group and ma_group.get("name"):
                 status["group_name"] = ma_group["name"]
+            # Per-device MA now-playing (keyed by syncgroup_id)
+            status["ma_now_playing"] = get_ma_now_playing_for_group(ma_group["id"]) if ma_group else {}
 
         logger.debug("Status retrieved: %s", status)
         return status
@@ -607,6 +610,7 @@ def api_ma_queue_cmd():
     data = request.get_json(silent=True) or {}
     action = data.get("action", "")
     value = data.get("value")
+    syncgroup_id = data.get("syncgroup_id")
 
     if action not in ("next", "previous", "shuffle", "repeat", "seek"):
         return jsonify({"success": False, "error": f"Unknown action: {action}"}), 400
@@ -618,7 +622,7 @@ def api_ma_queue_cmd():
     try:
         from services.ma_monitor import send_queue_cmd
 
-        fut = asyncio.run_coroutine_threadsafe(send_queue_cmd(action, value), loop)
+        fut = asyncio.run_coroutine_threadsafe(send_queue_cmd(action, value, syncgroup_id), loop)
         ok = fut.result(timeout=10.0)
         return jsonify({"success": ok})
     except Exception as exc:
@@ -846,8 +850,6 @@ def api_status_stream():
                         first = get_client_status_for(snapshot[0])
                         data = {**first, "devices": [get_client_status_for(c) for c in snapshot]}
                     data["groups"] = _build_groups_summary(snapshot)
-                    if state.is_ma_connected():
-                        data["nowplaying"] = state.get_ma_now_playing()
                     yield f"data: {json.dumps(data)}\n\n"
             else:
                 # 30 s timeout — send a keepalive comment so proxies don't close the connection
