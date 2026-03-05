@@ -85,13 +85,13 @@ def set_clients(new_clients: list) -> None:
 # Adapter name cache — populated from config.json on first use, invalidated on save
 # ---------------------------------------------------------------------------
 _adapter_name_cache: dict[str, str] = {}
-_adapter_cache_loaded = False
+_adapter_cache_ready = threading.Event()
 _adapter_cache_lock = threading.Lock()
 
 
 def load_adapter_name_cache() -> None:
     """Load adapter friendly names from config.json into the in-memory cache."""
-    global _adapter_name_cache, _adapter_cache_loaded
+    global _adapter_name_cache
     try:
         with open(_config_file) as _f:
             _cfg = json.load(_f)
@@ -103,14 +103,14 @@ def load_adapter_name_cache() -> None:
     except Exception as _exc:
         _adapter_name_cache = {}
         logger.debug("Could not load adapter name cache: %s", _exc)
-    _adapter_cache_loaded = True
+    _adapter_cache_ready.set()
 
 
 def get_adapter_name(mac_upper: str) -> "str | None":
     """Return adapter friendly name for the given MAC (uppercase), loading cache if needed."""
-    if not _adapter_cache_loaded:
+    if not _adapter_cache_ready.is_set():
         with _adapter_cache_lock:
-            if not _adapter_cache_loaded:  # double-checked locking
+            if not _adapter_cache_ready.is_set():  # double-checked locking
                 load_adapter_name_cache()
     return _adapter_name_cache.get(mac_upper)
 
