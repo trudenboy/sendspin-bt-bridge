@@ -41,7 +41,8 @@ logger = logging.getLogger(__name__)
 
 CONFIG_DIR = Path(os.getenv("CONFIG_DIR", "/config"))
 CONFIG_FILE = CONFIG_DIR / "config.json"
-_config_lock = threading.Lock()  # serializes all config.json read-modify-write ops
+config_lock = threading.Lock()  # serializes all config.json read-modify-write ops
+_config_lock = config_lock  # backward-compat alias
 
 
 def _player_id_from_mac(mac: str) -> str:
@@ -54,7 +55,7 @@ def save_device_volume(mac: str | None, volume: int) -> None:
     if not mac or not CONFIG_FILE.exists():
         return
     try:
-        with _config_lock:
+        with config_lock:
             with open(CONFIG_FILE) as f:
                 cfg = json.load(f)
             cfg.setdefault("LAST_VOLUMES", {})[mac] = volume
@@ -144,7 +145,7 @@ def ensure_secret_key(config: dict) -> str:
     key = _secrets.token_hex(32)
     try:
         CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-        with _config_lock:
+        with config_lock:
             existing: dict = {}
             if CONFIG_FILE.exists():
                 with open(CONFIG_FILE) as f:

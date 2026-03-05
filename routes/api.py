@@ -26,7 +26,9 @@ from config import (
     CONFIG_FILE,
     DEFAULT_CONFIG,
     VERSION,
-    _config_lock,
+)
+from config import (
+    _config_lock as config_lock,
 )
 from config import (
     save_device_volume as _save_device_volume,
@@ -45,15 +47,17 @@ from services.pulse import (
     set_sink_mute,
     set_sink_volume,
 )
+from state import clients as _clients
 from state import (
-    _clients_lock,
+    clients_lock as _clients_lock,
+)
+from state import (
     create_scan_job,
     finish_scan_job,
     get_adapter_name,
     get_scan_job,
     load_adapter_name_cache,
 )
-from state import clients as _clients
 
 logger = logging.getLogger(__name__)
 
@@ -493,7 +497,7 @@ def api_bt_management():
     _persist_device_enabled(player_name, enabled)
     # Sync enabled state to HA Supervisor so the Configuration page reflects it
     try:
-        with _config_lock, open(CONFIG_FILE) as _f:
+        with config_lock, open(CONFIG_FILE) as _f:
             _cfg = json.load(_f)
         threading.Thread(target=_sync_ha_options, args=(_cfg,), daemon=True).start()
     except Exception:
@@ -733,7 +737,7 @@ def api_config():
     config = {k: v for k, v in config.items() if k in _ALLOWED_POST_KEYS}
 
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    with _config_lock:
+    with config_lock:
         existing = {}
         if CONFIG_FILE.exists():
             try:
@@ -819,7 +823,7 @@ def api_set_password():
     pw_hash = _hash_pw(password)
 
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    with _config_lock:
+    with config_lock:
         existing: dict = {}
         if CONFIG_FILE.exists():
             try:
@@ -850,7 +854,7 @@ def api_set_log_level():
 
     # Persist to config.json
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    with _config_lock:
+    with config_lock:
         existing: dict = {}
         if CONFIG_FILE.exists():
             try:

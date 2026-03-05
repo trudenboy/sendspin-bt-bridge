@@ -69,12 +69,13 @@ logger = logging.getLogger(__name__)
 # Active SendspinClient instances. Mutated in-place so all existing
 # references (imported via `from state import clients`) stay valid.
 clients: list = []
-_clients_lock = threading.Lock()
+clients_lock = threading.Lock()
+_clients_lock = clients_lock  # backward-compat alias
 
 
 def set_clients(new_clients: list) -> None:
     """Replace active client list in-place (keeps existing references valid)."""
-    with _clients_lock:
+    with clients_lock:
         clients.clear()
         clients.extend(new_clients if new_clients else [])
     logger.info(f"Client references updated: {len(clients)} client(s)")
