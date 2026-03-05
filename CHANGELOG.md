@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.11] - 2026-03-05
+
+### Improved
+- **PulseAudio performance**: reuse thread-local event loop in sync PA wrappers instead of creating/destroying per call
+- **BT thread isolation**: dedicated `ThreadPoolExecutor(2)` for long-running Bluetooth operations (pair, connect, configure) — prevents default pool starvation on low-core systems
+- **Shallow copy**: `DeviceStatus.copy()` uses dict comprehension over `fields()` instead of deep `asdict()` (all fields are immutable)
+- **Scan guard**: concurrent BT scans rejected with HTTP 409 — prevents overlapping `bluetoothctl scan on` interference
+
+### Refactored
+- **D-Bus monitor**: extracted inner monitoring loop into `_inner_dbus_monitor()` method, replaced `restart_outer` flag with clean `return` flow
+
 ## [2.7.10] - 2026-03-05
 
 ### Fixed

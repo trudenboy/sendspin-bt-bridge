@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.11] - 2026-03-05
+
+### Improved
+- Reuse thread-local event loop in PulseAudio sync wrappers (performance)
+- Dedicated thread pool for long-running BT operations (prevents pool starvation)
+- Shallow `DeviceStatus.copy()` (all fields immutable, deep copy unnecessary)
+- Concurrent BT scans rejected with HTTP 409
+
+### Refactored
+- Extracted inner D-Bus monitor loop into separate method, cleaner control flow
+
 ## [2.7.10] - 2026-03-05
 
 ### Fixed
