@@ -329,10 +329,11 @@ function populateDeviceCard(i, dev) {
     var groupBadge = document.getElementById('dgroup-' + i);
     if (groupBadge) {
         var groupLabel = dev.group_name || dev.group_id || '';
-        // Show only last segment (last UUID octet or last word of group name)
         var groupDisplay = groupLabel ? groupLabel.split('-').pop() : '';
         groupBadge.textContent = groupDisplay ? '\uD83D\uDD17 ' + groupDisplay : '';
         groupBadge.title = groupLabel;
+        var isSolo = !!dev.ma_now_playing && !dev.group_id;
+        groupBadge.classList.toggle('hover-only', isSolo);
         groupBadge.style.display = groupDisplay ? '' : 'none';
     }
 
@@ -426,7 +427,7 @@ function populateDeviceCard(i, dev) {
     var progTime = document.getElementById('dprog-time-' + i);
     var ma = dev.ma_now_playing || {};
     var maActive = !!(ma.connected);
-    var deviceMaActive = maActive && !!dev.has_sink && !!dev.group_id;
+    var deviceMaActive = maActive && !!dev.has_sink;
     var maHasProg = deviceMaActive && ma.duration > 0 && ma.elapsed != null;
     if (maHasProg) {
         _maProgSnapshots[i] = {

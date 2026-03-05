@@ -152,6 +152,7 @@ class SendspinClient:
 
         self._status_lock = threading.Lock()
         self.running = False
+        self.player_id: str = ""  # set in _start_sendspin_inner; used for solo MA queue lookup
         self.bt_management_enabled: bool = True
         self.bluetooth_sink_name = None  # Store Bluetooth sink name for volume sync
         self.connected_server_url: str = ""  # actual resolved ws:// URL (populated after connect)
@@ -256,6 +257,7 @@ class SendspinClient:
             safe_id = "".join(c if c.isalnum() or c == "-" else "-" for c in self.player_name.lower()).strip("-")
             _mac = self.bt_manager.mac_address if self.bt_manager else None
             client_id = _player_id_from_mac(_mac) if _mac else f"sendspin-{safe_id}"
+            self.player_id = str(client_id)  # persist for MA solo-queue lookup
 
             if self.static_delay_ms is not None:
                 static_delay_ms = self.static_delay_ms

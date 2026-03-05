@@ -186,6 +186,9 @@
             padding: 2px 6px; background: var(--divider-color, rgba(0,0,0,0.08));
             border-radius: 3px; display: inline-block;
         }
+        .group-badge.hover-only { display: none !important; }
+        .device-card:hover .group-badge.hover-only,
+        .device-card:focus-within .group-badge.hover-only { display: inline-block !important; }
         .device-rows {
             display: contents;
         }

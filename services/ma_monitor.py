@@ -82,6 +82,22 @@ async def _find_syncgroup_queues(queues: list[dict]) -> list[dict]:
     return result
 
 
+def _find_solo_player_queues(queues: list[dict]) -> list[tuple[str, dict]]:
+    """Return (player_id, queue) pairs for ungrouped bridge clients with their own MA queue."""
+    groups = _state.get_ma_groups()
+    group_ids = {g["id"] for g in groups}
+    result = []
+    for client in _state.clients:
+        pid = getattr(client, "player_id", "")
+        if not pid or pid in group_ids:
+            continue  # already handled as syncgroup member
+        for q in queues:
+            if q.get("queue_id") == pid:
+                result.append((pid, q))
+                break
+    return result
+
+
 async def _send(ws, msg_id: int, command: str, args: dict) -> None:
     await ws.send(json.dumps({"command": command, "args": args, "message_id": msg_id}))
 
@@ -239,7 +255,7 @@ class MaMonitor:
                 await self._polling_loop(ws)
 
     async def _poll_queues(self, ws) -> None:
-        """Fetch player_queues/all and update now-playing cache per syncgroup."""
+        """Fetch player_queues/all and update now-playing cache per syncgroup and solo player."""
         try:
             mid = self._next_id()
             await _send(ws, mid, "player_queues/all", {})
@@ -247,10 +263,16 @@ class MaMonitor:
                 resp = await _recv(ws, timeout=10.0)
                 if str(resp.get("message_id")) == str(mid):
                     queues = resp.get("result") or []
+                    # Syncgroup players
                     syncgroup_queues = await _find_syncgroup_queues(queues)
                     for q in syncgroup_queues:
                         np = _build_now_playing(q)
                         _state.set_ma_now_playing_for_group(np["syncgroup_id"], np)
+                    # Solo (ungrouped) players — keyed by their own player_id
+                    for player_id, q in _find_solo_player_queues(queues):
+                        np = _build_now_playing(q)
+                        np["syncgroup_id"] = player_id
+                        _state.set_ma_now_playing_for_group(player_id, np)
                     return
         except Exception as exc:
             logger.debug("MA monitor poll error: %s", exc)
