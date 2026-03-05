@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.9.8] - 2026-03-05
+
+### Changed
+- **Connection column layout**: BT MAC and MA host:port now appear below their respective rows on hover instead of inline to the right; connection column narrowed (0.75fr), playback column widened (1.5fr).
+- **Transport controls**: ◀◀ ▮▮ ▶▶ stay in the status row — now fit comfortably in the wider playback column.
+
+### Fixed
+- **Album art tooltip**: removed inline `style="display:none"` blocking CSS hover rule; `overflow:visible` on playback column prevents clipping of the absolute-positioned popup.
+- **Released devices**: prev/next/shuffle/repeat MA controls no longer shown on Released (no-sink) devices — visibility now gated on `has_sink` per device.
+
 ## [2.9.7] - 2026-03-06
 
 ### Added
