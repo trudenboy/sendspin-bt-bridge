@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.1] - 2026-03-05
+
+### Fixed
+- **Release/Reclaim button**: button text and class now update immediately on API success without waiting for SSE — previously showed stale label until the next server-sent event
+- **Released device BT status**: devices with `bt_management_enabled=false` now correctly display "Released" in the web UI instead of "BT Reconnecting…"
+- **Exponential backoff for BT reconnect**: consecutive failed reconnect attempts now use increasing delays (10 s × 2^(attempt-3), capped at 300 s), reducing radio interference with other A2DP devices on the same adapter during prolonged disconnection
+
 ## [2.7.0] - 2026-03-05
 
 ### Added

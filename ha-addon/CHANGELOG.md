@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.1] - 2026-03-05
+
+### Fixed
+- **Release/Reclaim button**: button text and state now update immediately in the UI on success — no more waiting for the next SSE tick
+- **Released device status**: devices in "Released" state now show "Released" in the BT status indicator instead of "BT Reconnecting…"
+- **BT reconnect backoff**: exponential delay between failed reconnect attempts (capped at 5 min) reduces audio interference with other A2DP speakers on the same adapter
+
 ## [2.7.0] - 2026-03-05
 
 ### Added
