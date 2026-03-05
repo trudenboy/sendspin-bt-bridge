@@ -90,7 +90,7 @@ function showToast(msg, type) {
     setTimeout(function() {
         toast.classList.remove('show');
         setTimeout(function() { toast.remove(); }, 300);
-    }, 3000);
+    }, type === 'error' ? 6000 : 3000);
 }
 
 // ---- Auth helper ----
@@ -181,6 +181,7 @@ function buildDeviceCard(i) {
             '<input type="checkbox" class="device-select-cb" id="dsel-' + i + '" checked' +
               ' onchange="onDeviceSelect(' + i + ', this.checked)">' +
             '<div class="device-card-title" id="dname-' + i + '">Device ' + (i+1) + '</div>' +
+            '<span class="released-badge" id="dreleased-badge-' + i + '" style="display:none;" title="BT management disabled — click Reclaim to resume">Released</span>' +
             '<div class="eq-bars" id="deq-' + i + '">' +
               '<div class="eq-bar"></div><div class="eq-bar"></div>' +
               '<div class="eq-bar"></div><div class="eq-bar"></div>' +
@@ -261,7 +262,15 @@ function buildDeviceCard(i) {
 
 function populateDeviceCard(i, dev) {
     var name = dev.player_name || ('Device ' + (i + 1));
-    document.getElementById('dname-' + i).textContent = name;
+    var nameEl = document.getElementById('dname-' + i);
+    if (nameEl) nameEl.textContent = name;
+
+    // Released badge next to name
+    var releasedBadge = document.getElementById('dreleased-badge-' + i);
+    if (releasedBadge) {
+        var isReleased = dev.bt_management_enabled === false;
+        releasedBadge.style.display = isReleased ? '' : 'none';
+    }
 
     var mac = dev.bluetooth_mac || '';
     document.getElementById('dmac-' + i).textContent = mac ? 'MAC: ' + mac : '';
@@ -285,11 +294,10 @@ function populateDeviceCard(i, dev) {
 
     var groupBadge = document.getElementById('dgroup-' + i);
     if (groupBadge) {
+        // Only show if group_name is a human-readable string, not a raw hex UUID hash
         var groupLabel = dev.group_name || '';
-        if (!groupLabel && dev.group_id) {
-            // Fallback to last 6 chars of UUID, but without emoji if no name
-            groupLabel = dev.group_id.split('-').pop();
-        }
+        var isUuidHash = /^[0-9a-f]{6,32}$/i.test(groupLabel);
+        groupLabel = isUuidHash ? '' : groupLabel;
         groupBadge.textContent = groupLabel ? '\uD83D\uDD17 ' + groupLabel : '';
         groupBadge.style.display = groupLabel ? '' : 'none';
     }
@@ -488,7 +496,9 @@ function populateDeviceCard(i, dev) {
                 syncEl.innerHTML = '<span style="color:#10b981;">&#10003; In sync</span>';
                 if (syncDetail) {
                     var rc = dev.reanchor_count || 0;
-                    syncDetail.textContent = rc ? 'Re-anchors: ' + rc : '';
+                    syncDetail.innerHTML = rc
+                        ? '<span title="Number of re-synchronisations in this stream session">Re-anchors: ' + rc + '</span>'
+                        : '';
                     syncDetail.style.color = rc > 100 ? 'var(--error-color)' : rc > 10 ? '#f59e0b' : '';
                 }
             }
@@ -530,9 +540,9 @@ function populateDeviceCard(i, dev) {
     // Mute button — attach handler once, update icon on every poll
     var muteBtn = document.getElementById('dmute-' + i);
     if (muteBtn) {
-        muteBtn.textContent = dev.muted ? '🔇' : '🔈';
+        muteBtn.textContent = dev.muted ? '\uD83D\uDD07' : '\uD83D\uDD08';
         muteBtn.title = dev.muted ? 'Unmute' : (hasSink ? 'Mute' : 'Audio sink not configured');
-        muteBtn.style.background = dev.muted ? '#fee2e2' : 'white';
+        muteBtn.classList.toggle('muted', !!dev.muted);
         muteBtn.disabled = !hasSink;
         muteBtn.style.opacity = hasSink ? '' : '0.35';
         if (!muteBtn._handlerSet) {
@@ -547,9 +557,9 @@ function populateDeviceCard(i, dev) {
                     if (d.success && lastDevices[i]) lastDevices[i].muted = d.muted;
                     var btn = document.getElementById('dmute-' + i);
                     if (btn) {
-                        btn.textContent = d.muted ? '🔇' : '🔈';
+                        btn.textContent = d.muted ? '\uD83D\uDD07' : '\uD83D\uDD08';
                         btn.title = d.muted ? 'Unmute' : 'Mute';
-                        btn.style.background = d.muted ? '#fee2e2' : 'white';
+                        btn.classList.toggle('muted', !!d.muted);
                     }
                 }).catch(function(e) { console.error('Mute failed:', e); });
             });
@@ -563,9 +573,11 @@ function populateDeviceCard(i, dev) {
         if (mgmtEnabled) {
             relBtn.textContent = '🔓 Release';
             relBtn.className = 'btn-bt-action btn-bt-release';
+            relBtn.title = 'Stop BT management for this device (it will stop auto-reconnecting)';
         } else {
             relBtn.textContent = '🔒 Reclaim';
             relBtn.className = 'btn-bt-action btn-bt-reclaim';
+            relBtn.title = 'Resume BT management and auto-reconnect';
         }
         // Disable Reconnect/Re-pair while released
         var reconnBtn = document.getElementById('dbtn-reconnect-' + i);
@@ -688,7 +700,8 @@ function _updateGroupFilter() {
     // Collect unique group names from current devices
     var groups = [];
     lastDevices.forEach(function(dev) {
-        var g = dev.group_name || (dev.group_id ? dev.group_id.split('-').pop() : '');
+        var g = dev.group_name || '';
+        if (/^[0-9a-f]{6,32}$/i.test(g)) g = '';  // skip UUID hashes
         if (g && groups.indexOf(g) === -1) groups.push(g);
     });
     // Rebuild options, preserving current selection
@@ -715,7 +728,8 @@ function onGroupFilterChange(val) {
     _groupFilter = val;
     if (!lastDevices) return;
     lastDevices.forEach(function(dev, i) {
-        var g = dev.group_name || (dev.group_id ? dev.group_id.split('-').pop() : '');
+        var g = dev.group_name || '';
+        if (/^[0-9a-f]{6,32}$/i.test(g)) g = '';  // skip UUID hashes
         var inGroup = !val || g === val;
         _groupSelected[i] = inGroup;
         var cb = document.getElementById('dsel-' + i);
@@ -740,6 +754,17 @@ function _updateGroupPanel() {
         allCb.checked = sel === total;
         allCb.indeterminate = sel > 0 && sel < total;
     }
+
+    // Sync group volume slider to average of active devices (once — don't override while user drags)
+    var groupSlider = document.getElementById('group-vol-slider');
+    var groupPct = document.getElementById('group-vol-pct');
+    if (groupSlider && !groupSlider._userTouched && lastDevices.length > 0) {
+        var active = lastDevices.filter(function(d) { return d.bluetooth_connected || d.playing; });
+        var src = active.length ? active : lastDevices;
+        var avg = Math.round(src.reduce(function(s, d) { return s + (d.volume || 50); }, 0) / src.length);
+        groupSlider.value = avg;
+        if (groupPct) groupPct.textContent = avg + '%';
+    }
 }
 
 function onDeviceSelect(i, checked) {
@@ -762,6 +787,9 @@ var _groupVolTimer = null;
 function onGroupVolumeInput(val) {
     var pct = document.getElementById('group-vol-pct');
     if (pct) pct.textContent = val + '%';
+    // Mark slider as user-controlled so auto-sync doesn't override it
+    var slider = document.getElementById('group-vol-slider');
+    if (slider) slider._userTouched = true;
     clearTimeout(_groupVolTimer);
     _groupVolTimer = setTimeout(function() {
         var names = _getSelectedNames();
@@ -888,6 +916,7 @@ async function btReconnect(i) {
 }
 
 async function btPair(i) {
+    if (!confirm('Put the device into pairing mode first, then click OK.\nThis will interrupt playback for ~25 seconds.')) return;
     var dev = lastDevices && lastDevices[i];
     var playerName = dev ? dev.player_name : null;
     var btn = document.getElementById('dbtn-pair-' + i);
@@ -956,12 +985,12 @@ function toggleAutoRefresh() {
     var btn = document.getElementById('auto-refresh-btn');
     if (autoRefreshLogs) {
         btn.textContent = 'Auto-Refresh: On';
-        btn.style.background = '#10b981';
+        btn.classList.add('auto-on');
         autoRefreshInterval = setInterval(refreshLogs, 2000);
         refreshLogs();
     } else {
         btn.textContent = 'Auto-Refresh: Off';
-        btn.style.background = 'var(--primary-color)';
+        btn.classList.remove('auto-on');
         clearInterval(autoRefreshInterval);
     }
 }
@@ -1071,9 +1100,13 @@ function btAdapterOptions(selected) {
 
 function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabled, preferredFormat, keepaliveSilence, keepaliveInterval) {
     var tbody = document.getElementById('bt-devices-table');
+    // Wrapper holds both the grid row and the keepalive sub-row
+    var wrap = document.createElement('div');
+    wrap.className = 'bt-device-wrap';
+    if (enabled === false) wrap.dataset.enabled = 'false';
+
     var row = document.createElement('div');
     row.className = 'bt-device-row';
-    if (enabled === false) row.dataset.enabled = 'false';
     var delayVal    = (delay !== undefined && delay !== null && delay !== '') ? delay : 0;
     var portVal     = (listenPort !== undefined && listenPort !== null && listenPort !== '') ? listenPort : '';
     var fmtVal      = (preferredFormat !== undefined && preferredFormat !== null) ? preferredFormat : 'flac:44100:16:2';
@@ -1087,32 +1120,49 @@ function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabl
         '<select class="bt-adapter">' + btAdapterOptions(adapter || '') + '</select>' +
         '<input type="text" class="bt-listen-host" placeholder="auto" title="IP address this player advertises/listens on. Leave blank to auto-detect." value="' +
             escHtmlAttr(listenHost || '') + '">' +
-        '<input type="number" class="bt-listen-port" placeholder="8928" title="Port this player listens on (default: 8928, 8929 for 2nd…)" value="' +
+        '<input type="number" class="bt-listen-port" placeholder="8928" title="Port this player listens on (default: 8928, 8929 for 2nd\u2026)" value="' +
             escHtmlAttr(String(portVal)) + '" min="1024" max="65535">' +
         '<input type="number" class="bt-delay" title="Static delay (ms). Negative = compensate for output latency. Typical BT A2DP: -500" value="' +
             escHtmlAttr(String(delayVal)) + '" step="50">' +
         '<input type="text" class="bt-preferred-format" placeholder="flac:44100:16:2" title="Preferred audio format: codec:samplerate:bitdepth:channels. Default flac:44100:16:2 matches SBC A2DP (no resampling)." value="' +
             escHtmlAttr(fmtVal) + '">' +
-        '<label title="Send periodic silence bursts to prevent speaker auto-disconnect on inactivity" style="white-space:nowrap;font-size:12px;">' +
-            '<input type="checkbox" class="bt-keepalive-silence"' + kaChecked + '> Keep-alive</label>' +
-        '<input type="number" class="bt-keepalive-interval" placeholder="30" min="10" max="300" title="Seconds between keepalive silence bursts (10–300, default 30)" value="' +
-            escHtmlAttr(String(kaInterval)) + '" style="width:56px;">' +
         '<button type="button" class="btn-remove-dev">\u00d7</button>';
 
+    // Keepalive options in a clearly-labelled sub-row below the main grid row
+    var subRow = document.createElement('div');
+    subRow.className = 'bt-device-sub-row';
+    subRow.innerHTML =
+        '<label title="Send periodic silence bursts to prevent speaker auto-disconnect on inactivity">' +
+            '<input type="checkbox" class="bt-keepalive-silence"' + kaChecked + '> Keep-alive silence</label>' +
+        '<span class="bt-keepalive-interval-wrap' + (keepaliveSilence ? ' visible' : '') + '">' +
+            'every <input type="number" class="bt-keepalive-interval" min="10" max="300" ' +
+                'title="Seconds between keepalive silence bursts (10\u2013300, default 30)" value="' +
+                escHtmlAttr(String(kaInterval)) + '"> s' +
+        '</span>';
+
     row.querySelector('.btn-remove-dev').addEventListener('click', function() {
-        this.closest('.bt-device-row').remove();
+        wrap.remove();
     });
     row.querySelector('.bt-mac').addEventListener('input', function() {
         var v = this.value.trim();
         var valid = /^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$/.test(v);
         this.classList.toggle('invalid', v !== '' && !valid);
     });
-    tbody.appendChild(row);
+    subRow.querySelector('.bt-keepalive-silence').addEventListener('change', function() {
+        var intervalWrap = subRow.querySelector('.bt-keepalive-interval-wrap');
+        if (intervalWrap) intervalWrap.classList.toggle('visible', this.checked);
+    });
+
+    wrap.appendChild(row);
+    wrap.appendChild(subRow);
+    tbody.appendChild(wrap);
 }
 
 function collectBtDevices() {
     var devices = [];
-    document.querySelectorAll('#bt-devices-table .bt-device-row').forEach(function(row) {
+    document.querySelectorAll('#bt-devices-table .bt-device-wrap').forEach(function(wrap) {
+        var row    = wrap.querySelector('.bt-device-row');
+        var subRow = wrap.querySelector('.bt-device-sub-row');
         var name       = row.querySelector('.bt-name').value.trim();
         var mac        = row.querySelector('.bt-mac').value.trim().toUpperCase();
         var adapter    = row.querySelector('.bt-adapter').value;
@@ -1124,8 +1174,8 @@ function collectBtDevices() {
         if (isNaN(delay)) delay = 0;
         var fmtEl      = row.querySelector('.bt-preferred-format');
         var preferredFormat = fmtEl ? fmtEl.value.trim() : 'flac:44100:16:2';
-        var kaEl       = row.querySelector('.bt-keepalive-silence');
-        var kaIntEl    = row.querySelector('.bt-keepalive-interval');
+        var kaEl       = subRow ? subRow.querySelector('.bt-keepalive-silence') : null;
+        var kaIntEl    = subRow ? subRow.querySelector('.bt-keepalive-interval') : null;
         var keepalive  = kaEl ? kaEl.checked : false;
         var keepaliveInterval = kaIntEl ? (parseInt(kaIntEl.value, 10) || 30) : 30;
         var dev = { mac: mac, adapter: adapter, player_name: name, static_delay_ms: delay, preferred_format: preferredFormat || 'flac:44100:16:2' };
@@ -1141,7 +1191,7 @@ function collectBtDevices() {
         });
         if (livedev) {
             if (livedev.bt_management_enabled === false) dev.enabled = false;
-        } else if (row.dataset.enabled === 'false') {
+        } else if (wrap.dataset.enabled === 'false') {
             dev.enabled = false;
         }
         if (mac) devices.push(dev);
@@ -1167,7 +1217,7 @@ async function startBtScan() {
     var listDiv = document.getElementById('scan-results-list');
 
     btn.disabled = true;
-    status.textContent = '\uD83D\uDD04 Scanning\u2026 (~10s)';
+    status.innerHTML = '<span class="scan-spinner"></span> Scanning\u2026 (~10s)';
     box.style.display = 'none';
 
     try {
@@ -1260,9 +1310,11 @@ async function loadPairedDevices() {
         }
 
         listDiv.innerHTML = devices.map(function(d, idx) {
+            // Replace raw RSSI-only strings with a friendlier label
+            var displayName = /^RSSI:/i.test(d.name) ? 'Unknown device' : d.name;
             return '<div class="scan-result-item">' +
                 '<span class="scan-result-mac">' + escHtml(d.mac) + '</span>' +
-                '<span>' + escHtml(d.name) + '</span>' +
+                '<span>' + escHtml(displayName) + '</span>' +
                 '<button type="button" data-paired-idx="' + idx + '" style="margin-left:auto;padding:3px 10px;' +
                     'background:var(--primary-color);color:white;border:none;border-radius:4px;' +
                     'cursor:pointer;font-size:12px;">Add</button>' +
@@ -1349,12 +1401,41 @@ document.getElementById('config-form').addEventListener('submit', async function
     try {
         var ok = await saveConfig();
         if (ok) {
+            _setConfigDirty(false);
             showToast('\u2713 Configuration saved \u2014 restart to apply', 'success');
         } else {
             showToast('\u2717 Failed to save configuration', 'error');
         }
     } catch (err) {
         showToast('\u2717 Error: ' + err.message, 'error');
+    }
+});
+
+// ---- Config dirty-state tracking ----
+var _configDirty = false;
+function _setConfigDirty(dirty) {
+    _configDirty = dirty;
+    var summary = document.querySelector('.config-section summary');
+    if (!summary) return;
+    var dot = summary.querySelector('.config-dirty-dot');
+    if (dirty) {
+        if (!dot) {
+            dot = document.createElement('span');
+            dot.className = 'config-dirty-dot';
+            dot.title = 'Unsaved changes';
+            summary.appendChild(dot);
+        }
+    } else {
+        if (dot) dot.remove();
+    }
+}
+// Watch config form for any change
+document.getElementById('config-form').addEventListener('input', function() { _setConfigDirty(true); _updateAdvancedCounter(); });
+document.getElementById('config-form').addEventListener('change', function() { _setConfigDirty(true); _updateAdvancedCounter(); });
+window.addEventListener('beforeunload', function(e) {
+    if (_configDirty) {
+        e.preventDefault();
+        e.returnValue = '';
     }
 });
 
@@ -1390,6 +1471,9 @@ async function loadConfig() {
             // Migrate single BLUETOOTH_MAC to table
             addBtDeviceRow('', config.BLUETOOTH_MAC, '');
         }
+
+        // Show count of non-default advanced fields
+        _updateAdvancedCounter();
     } catch (err) {
         console.error('Error loading config:', err);
     }
@@ -1409,6 +1493,7 @@ async function saveAndRestart() {
             banner.style.display = 'none';
             return;
         }
+        _setConfigDirty(false);
         banner.textContent = '🔄 Restarting service\u2026';
         try {
             await fetch(API_BASE + '/api/restart', { method: 'POST' });
@@ -1573,7 +1658,9 @@ function renderDiagnostics(d) {
     var sinks = d.sinks || [];
     rows += '<tr><td>BT audio sinks</td><td>' +
         dot(sinks.length > 0) +
-        (sinks.length > 0 ? escHtml(sinks.join(', ')) : 'None') +
+        (sinks.length > 0
+            ? sinks.map(function(s) { return '<code style="display:block;font-size:11px;word-break:break-all;">' + escHtml(s) + '</code>'; }).join('')
+            : 'None') +
         '</td></tr>';
 
     (d.devices || []).forEach(function(dev) {
@@ -1609,6 +1696,24 @@ function toggleAdvanced() {
     if (!btn || !body) return;
     var open = body.classList.toggle('open');
     btn.classList.toggle('open', open);
+}
+
+function _updateAdvancedCounter() {
+    var btn = document.getElementById('adv-toggle');
+    if (!btn) return;
+    var defaults = { SENDSPIN_SERVER: 'auto', SENDSPIN_PORT: '9000',
+        PULSE_LATENCY_MSEC: '200', BT_CHECK_INTERVAL: '10',
+        BT_MAX_RECONNECT_FAILS: '0', PREFER_SBC_CODEC: false };
+    var count = 0;
+    Object.keys(defaults).forEach(function(name) {
+        var el = document.querySelector('#adv-body [name="' + name + '"]');
+        if (!el) return;
+        var val = el.type === 'checkbox' ? el.checked : (el.value || '').trim();
+        var def = defaults[name];
+        if (el.type === 'checkbox') { if (val !== def) count++; }
+        else if (val && val !== String(def)) count++;
+    });
+    btn.textContent = count > 0 ? 'Advanced settings (' + count + ')' : 'Advanced settings';
 }
 
 // ---- Global Health Indicator ----

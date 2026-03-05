@@ -16,18 +16,21 @@
 
     <!-- Header -->
     <div class="header">
-        <h1>&#127925; Sendspin Bluetooth Bridge
-            <a href="https://trudenboy.github.io/sendspin-bt-bridge/" target="_blank" rel="noopener"
-               title="Documentation"
-               style="font-size:14px;color:rgba(255,255,255,0.7);text-decoration:none;margin-left:12px;
-                      border:1px solid rgba(255,255,255,0.3);border-radius:4px;padding:2px 8px;
-                      vertical-align:middle;">&#128214; Docs</a>
-            <a href="https://github.com/trudenboy/sendspin-bt-bridge" target="_blank" rel="noopener"
-               title="GitHub"
-               style="font-size:14px;color:rgba(255,255,255,0.7);text-decoration:none;margin-left:6px;
-                      border:1px solid rgba(255,255,255,0.3);border-radius:4px;padding:2px 8px;
-                      vertical-align:middle;">&#128736; GitHub</a>
-        </h1>
+        <div>
+            <h1>&#127925; Sendspin Bluetooth Bridge</h1>
+            <div style="margin-top:6px;display:flex;gap:8px;">
+                <a href="https://trudenboy.github.io/sendspin-bt-bridge/" target="_blank" rel="noopener"
+                   title="Documentation"
+                   style="font-size:13px;color:rgba(255,255,255,0.8);text-decoration:none;
+                          border:1px solid rgba(255,255,255,0.35);border-radius:4px;padding:2px 10px;">
+                    &#128214; Docs</a>
+                <a href="https://github.com/trudenboy/sendspin-bt-bridge" target="_blank" rel="noopener"
+                   title="GitHub"
+                   style="font-size:13px;color:rgba(255,255,255,0.8);text-decoration:none;
+                          border:1px solid rgba(255,255,255,0.35);border-radius:4px;padding:2px 10px;">
+                    &#128736; GitHub</a>
+            </div>
+        </div>
         <div class="header-meta" style="text-align:right;">
             <div class="version-info" id="version-display">
                 <div>{{ VERSION }}</div>
@@ -44,6 +47,13 @@
                 </a>
             </div>
             {% endif %}
+            <div style="margin-top:8px;">
+                <span style="font-size:11px;color:rgba(255,255,255,0.55);">
+                    ⌨ <span class="kbd" style="background:rgba(255,255,255,0.15);color:rgba(255,255,255,0.8);">R</span> refresh&nbsp;
+                    <span class="kbd" style="background:rgba(255,255,255,0.15);color:rgba(255,255,255,0.8);">P</span> pause all&nbsp;
+                    <span class="kbd" style="background:rgba(255,255,255,0.15);color:rgba(255,255,255,0.8);">S</span> save
+                </span>
+            </div>
         </div>
     </div>
 
@@ -215,13 +225,6 @@
         <summary>Diagnostics</summary>
         <div id="diag-content"></div>
     </details>
-
-    <!-- Keyboard hint footer -->
-    <div class="kbd-hint">
-        <span class="kbd">R</span> refresh &nbsp;
-        <span class="kbd">P</span> pause all &nbsp;
-        <span class="kbd">S</span> save config
-    </div>
 
     <!-- Logs -->
     <details class="logs-section">

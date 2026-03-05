@@ -59,7 +59,7 @@
             margin-bottom: 20px; box-shadow: var(--ha-card-box-shadow);
             display: flex; justify-content: space-between; align-items: center;
         }
-        .header h1 { color: var(--app-header-text-color); font-size: 28px; }
+        .header h1 { color: var(--app-header-text-color); font-size: 24px; margin-bottom: 0; }
         .version-info { text-align: right; font-size: 12px; color: var(--app-header-text-color); opacity: 0.85; }
         #system-info { color: rgba(255,255,255,0.7) !important; }
 
@@ -276,10 +276,28 @@
             gap: 8px; margin-bottom: 4px; padding: 0 2px;
             font-size: 11px; font-weight: 600; color: var(--secondary-text-color); text-transform: uppercase;
         }
+        .bt-device-wrap { margin-bottom: 10px; }
         .bt-device-row {
             display: grid; grid-template-columns: 1fr 1.3fr 0.9fr 9rem 4.5rem 5.5rem 8rem 30px;
-            gap: 8px; align-items: center; margin-bottom: 8px;
+            gap: 8px; align-items: center; margin-bottom: 0;
         }
+        .bt-device-sub-row {
+            display: flex; align-items: center; gap: 10px;
+            padding: 4px 0 2px 2px;
+            font-size: 12px; color: var(--secondary-text-color);
+        }
+        .bt-device-sub-row label {
+            display: flex; align-items: center; gap: 4px; cursor: pointer;
+            color: var(--secondary-text-color); font-weight: 400; margin-bottom: 0;
+        }
+        .bt-device-sub-row input[type=number] {
+            width: 56px; padding: 3px 6px; border: 1px solid var(--divider-color);
+            border-radius: 4px; font-size: 12px;
+            background: var(--card-background-color); color: var(--primary-text-color);
+        }
+        .bt-device-sub-row input[type=number]:focus { outline: none; border-color: var(--primary-color); }
+        .bt-keepalive-interval-wrap { display: none; align-items: center; gap: 4px; }
+        .bt-keepalive-interval-wrap.visible { display: flex; }
         .bt-device-row input, .bt-device-row select {
             padding: 7px 10px; border: 1px solid var(--divider-color);
             border-radius: 5px; font-size: 13px;
@@ -295,6 +313,19 @@
         }
         .btn-remove-dev:hover { background: rgba(219,68,55,.15); }
         .bt-toolbar { display: flex; align-items: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+        /* Horizontal scroll shadow hint for BT table */
+        .bt-table-wrap {
+            position: relative;
+            background-image: linear-gradient(to right, var(--card-background-color), var(--card-background-color)),
+                              linear-gradient(to right, var(--card-background-color), var(--card-background-color)),
+                              linear-gradient(to right, rgba(0,0,0,.08), transparent),
+                              linear-gradient(to left,  rgba(0,0,0,.08), transparent);
+            background-position: left center, right center, left center, right center;
+            background-repeat: no-repeat;
+            background-color: var(--card-background-color);
+            background-size: 20px 100%, 20px 100%, 8px 100%, 8px 100%;
+            background-attachment: local, local, scroll, scroll;
+        }
         .scan-badge {
             font-size: 13px; color: var(--secondary-text-color);
             display: flex; align-items: center; gap: 4px;
@@ -443,6 +474,42 @@
             font-size: 12px; color: var(--primary-text-color);
         }
         .card-icon-btn:hover { background: var(--secondary-background-color); }
+        .card-icon-btn.muted {
+            background: rgba(219, 68, 55, 0.12);
+            border-color: var(--error-color);
+            color: var(--error-color);
+        }
+
+        /* Released badge on device card */
+        .released-badge {
+            display: inline-block; font-size: 10px; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 0.04em;
+            padding: 1px 5px; border-radius: 3px;
+            background: rgba(107, 114, 128, 0.15);
+            color: var(--secondary-text-color);
+            border: 1px solid var(--divider-color);
+            vertical-align: middle; margin-left: 4px;
+        }
+
+        /* Config dirty indicator */
+        .config-dirty-dot {
+            display: inline-block; width: 7px; height: 7px;
+            background: var(--warning-color); border-radius: 50%;
+            margin-left: 6px; vertical-align: middle;
+        }
+
+        /* Scan spinner */
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .scan-spinner {
+            display: inline-block; width: 12px; height: 12px;
+            border: 2px solid rgba(139, 92, 246, 0.3);
+            border-top-color: #8b5cf6;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        /* Auto-refresh active state */
+        #auto-refresh-btn.auto-on { background: var(--success-color); }
 
         /* Connection column compact rows */
         .conn-row {
@@ -484,7 +551,7 @@
             height: 100%; background: var(--primary-color);
             border-radius: 2px; transition: width 0.5s linear;
         }
-        .track-progress-time { font-size: 10px; color: var(--secondary-text-color); margin-top: 2px; }
+        .track-progress-time { font-size: 12px; color: var(--secondary-text-color); margin-top: 2px; }
         .conn-row .status-indicator { margin-right: 3px; }
         .conn-row > span:nth-child(3) { font-size: 13px; font-weight: 600; flex-shrink: 0; }
 
@@ -556,7 +623,7 @@
 
             /* Header */
             .header { flex-direction: column; align-items: flex-start; gap: 4px; padding: 14px 16px; }
-            .header h1 { font-size: 20px; }
+            .header h1 { font-size: 18px; }
             .header-meta { text-align: left !important; }
 
             /* Device card → 2-column layout */
@@ -574,10 +641,11 @@
             /* Sync (5th cell) spans full width */
             .device-rows > div:nth-child(5) { grid-column: 1 / -1; }
             .device-card-actions {
-                max-height: 100px; opacity: 1;
+                grid-column: 1 / -1; grid-row: auto;
+                max-height: none; opacity: 1;
                 padding-top: 10px; margin-top: 10px;
                 border-top: 1px solid var(--divider-color);
-                flex-direction: column; align-items: flex-start;
+                flex-direction: row; align-items: flex-start; flex-wrap: wrap;
             }
             .device-track-inline { white-space: normal; word-break: break-word; }
 
