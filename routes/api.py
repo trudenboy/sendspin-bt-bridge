@@ -27,6 +27,7 @@ from config import (
     CONFIG_FILE,
     DEFAULT_CONFIG,
     VERSION,
+    load_config,
 )
 from config import (
     _config_lock as config_lock,
@@ -1007,7 +1008,10 @@ def api_bt_paired():
                     if named_only and not name:
                         continue
                     devices.append({"mac": mac, "name": name or mac})
-        devices.sort(key=lambda d: d["name"].lower())
+        # Bridge devices first, then others; alphabetically within each group
+        cfg = load_config()
+        bridge_macs = {d.get("mac", "").upper() for d in cfg.get("BLUETOOTH_DEVICES", []) if d.get("mac")}
+        devices.sort(key=lambda d: (0 if d["mac"] in bridge_macs else 1, d["name"].lower()))
         return jsonify({"devices": devices})
     except Exception as e:
         return jsonify({"devices": [], "error": str(e)})
