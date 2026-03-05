@@ -244,13 +244,11 @@ class BridgeDaemon(SendspinDaemon):
     def _on_group_update(self, payload: GroupUpdateServerPayload) -> None:
         self._bridge_status["group_name"] = payload.group_name or None
         self._bridge_status["group_id"] = payload.group_id
-        # DEBUG: log raw payload to verify what MA actually sends for group_name
         logger.info(
-            "Group update: id=%r name=%r state=%s (raw payload: %r)",
+            "Group update: id=%r name=%r state=%s",
             payload.group_id,
             payload.group_name,
             payload.playback_state,
-            payload,
         )
         self._notify()
 
