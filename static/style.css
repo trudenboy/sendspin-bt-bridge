@@ -539,6 +539,13 @@
             font-size: 10px; font-weight: 700; text-transform: uppercase;
             color: var(--secondary-text-color); width: 18px; flex-shrink: 0;
         }
+        .ma-api-badge {
+            font-size: 9px; font-weight: 700; text-transform: uppercase;
+            color: var(--primary-color); background: rgba(139,92,246,0.12);
+            border: 1px solid var(--primary-color); border-radius: 3px;
+            padding: 0 3px; margin-left: 4px; line-height: 14px;
+            vertical-align: middle; flex-shrink: 0;
+        }
         .conn-detail {
             font-size: 11px; color: var(--secondary-text-color);
             overflow: hidden; text-overflow: ellipsis; white-space: nowrap;

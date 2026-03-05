@@ -229,6 +229,7 @@ function buildDeviceCard(i) {
                 '<span class="conn-tag">MA</span>' +
                 '<span class="status-indicator" id="dsrv-ind-' + i + '"></span>' +
                 '<span id="dsrv-txt-' + i + '">-</span>' +
+                '<span class="ma-api-badge" id="dma-api-' + i + '" style="display:none" title="MA API integration active">api</span>' +
               '</div>' +
               '<div class="conn-hover-sub" id="dsrv-uri-' + i + '"></div>' +
             '</div>' +
@@ -382,6 +383,7 @@ function populateDeviceCard(i, dev) {
     // Server
     var srvInd = document.getElementById('dsrv-ind-' + i);
     var srvTxt = document.getElementById('dsrv-txt-' + i);
+    var maApiBadge = document.getElementById('dma-api-' + i);
     if (dev.server_connected) {
         srvInd.className = 'status-indicator active';
         srvTxt.textContent = 'Connected';
@@ -389,6 +391,7 @@ function populateDeviceCard(i, dev) {
         srvInd.className = 'status-indicator inactive';
         srvTxt.textContent = dev.error || 'Disconnected';
     }
+    if (maApiBadge) maApiBadge.style.display = (dev.ma_now_playing && dev.ma_now_playing.connected) ? '' : 'none';
     var srvUri = document.getElementById('dsrv-uri-' + i);
     if (srvUri) {
         var srvLabel = '';
