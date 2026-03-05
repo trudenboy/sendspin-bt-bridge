@@ -15,6 +15,7 @@ __all__ = [
     "_DBUS_MPRIS_AVAILABLE",
     "MprisIdentityService",
     "pause_all_via_mpris",
+    "play_via_mpris",
 ]
 
 # ---------------------------------------------------------------------------
@@ -97,3 +98,45 @@ def pause_all_via_mpris() -> int:
     except Exception as _e:
         logger.debug("MPRIS pause unavailable: %s", _e)
     return paused
+
+
+def play_via_mpris(target_player_names: list | None = None) -> int:
+    """Send MPRIS Play to sendspin instances so MA is the playback initiator.
+
+    If *target_player_names* is given, only the instance whose MPRIS Identity
+    matches one of those names will receive Play.  At most one Play command is
+    sent per unique Identity to avoid MA breaking the group.
+
+    Returns the number of players that received Play.
+    """
+    played = 0
+    try:
+        import dbus
+
+        bus = dbus.SessionBus()
+        sent_identities: set = set()
+        for name in bus.list_names():
+            sname = str(name)
+            if not sname.startswith("org.mpris.MediaPlayer2.Sendspin"):
+                continue
+            if "SendspinBridge" in sname:
+                continue
+            try:
+                obj = bus.get_object(sname, "/org/mpris/MediaPlayer2")
+                props = dbus.Interface(obj, "org.freedesktop.DBus.Properties")
+                if target_player_names is not None:
+                    identity = str(props.Get("org.mpris.MediaPlayer2", "Identity"))
+                    if identity not in target_player_names:
+                        continue
+                    if identity in sent_identities:
+                        continue
+                    sent_identities.add(identity)
+                player_iface = dbus.Interface(obj, "org.mpris.MediaPlayer2.Player")
+                player_iface.Play()
+                logger.info("Sent MPRIS Play to %s", sname)
+                played += 1
+            except Exception as _e:
+                logger.debug("MPRIS play skipped for %s: %s", sname, _e)
+    except Exception as _e:
+        logger.debug("MPRIS play unavailable: %s", _e)
+    return played
