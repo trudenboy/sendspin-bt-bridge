@@ -128,6 +128,10 @@ def main() -> None:
         for key in ("AUTH_PASSWORD_HASH", "SECRET_KEY"):
             if key in existing:
                 config[key] = existing[key]
+        # Preserve MA API credentials if not overridden via HA addon options
+        for key in ("MA_API_URL", "MA_API_TOKEN"):
+            if not config.get(key) and existing.get(key):
+                config[key] = existing[key]
         # Preserve per-device web UI settings (e.g. keepalive) not present in options.json
         existing_devs = {
             d["mac"]: d for d in existing.get("BLUETOOTH_DEVICES", []) if isinstance(d, dict) and d.get("mac")
