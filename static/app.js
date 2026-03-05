@@ -294,10 +294,7 @@ function populateDeviceCard(i, dev) {
 
     var groupBadge = document.getElementById('dgroup-' + i);
     if (groupBadge) {
-        // Only show if group_name is a human-readable string, not a raw hex UUID hash
         var groupLabel = dev.group_name || '';
-        var isUuidHash = /^[0-9a-f]{6,32}$/i.test(groupLabel);
-        groupLabel = isUuidHash ? '' : groupLabel;
         groupBadge.textContent = groupLabel ? '\uD83D\uDD17 ' + groupLabel : '';
         groupBadge.style.display = groupLabel ? '' : 'none';
     }
@@ -701,7 +698,6 @@ function _updateGroupFilter() {
     var groups = [];
     lastDevices.forEach(function(dev) {
         var g = dev.group_name || '';
-        if (/^[0-9a-f]{6,32}$/i.test(g)) g = '';  // skip UUID hashes
         if (g && groups.indexOf(g) === -1) groups.push(g);
     });
     // Rebuild options, preserving current selection
@@ -729,7 +725,6 @@ function onGroupFilterChange(val) {
     if (!lastDevices) return;
     lastDevices.forEach(function(dev, i) {
         var g = dev.group_name || '';
-        if (/^[0-9a-f]{6,32}$/i.test(g)) g = '';  // skip UUID hashes
         var inGroup = !val || g === val;
         _groupSelected[i] = inGroup;
         var cb = document.getElementById('dsel-' + i);
