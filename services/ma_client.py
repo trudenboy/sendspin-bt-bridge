@@ -3,8 +3,14 @@
 from __future__ import annotations
 
 import logging
+import re
 
 logger = logging.getLogger(__name__)
+
+
+def _norm(s: str) -> str:
+    """Strip non-alphanumeric chars for fuzzy name matching."""
+    return re.sub(r"[^a-z0-9]", "", s.lower())
 
 
 async def _normalize_ma_url(url: str) -> str:
@@ -73,10 +79,14 @@ async def discover_ma_groups(ma_url: str, ma_token: str, bridge_player_names: li
 
         all_groups.append({"id": syncgroup_id, "name": syncgroup_name, "members": members})
 
-        # Match bridge players → this syncgroup by name (case-insensitive substring)
+        # Match bridge players → this syncgroup by name (case-insensitive, ignoring punctuation)
         for bridge_name in bridge_player_names:
             b = bridge_name.lower()
-            if any(b in mn or mn in b for mn in member_names_lower if mn):
+            b_norm = _norm(bridge_name)
+            if any(
+                b in mn or mn in b or _norm(mn) in b_norm or b_norm in _norm(mn)
+                for mn in member_names_lower if mn
+            ):
                 name_map[b] = {"id": syncgroup_id, "name": syncgroup_name}
                 logger.debug(
                     "Mapped bridge player '%s' → MA syncgroup '%s' (%s)",
