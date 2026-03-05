@@ -246,9 +246,9 @@ function buildDeviceCard(i) {
               '<button type="button" class="card-icon-btn transport-btn" id="dma-next-' + i + '" ' +
                 'onclick="maQueueCmd(\'next\', undefined, ' + i + ')" title="Next" style="display:none;">&#9654;&#9654;</button>' +
               '<button type="button" class="card-icon-btn transport-btn ma-hover-btn" id="dma-shuffle-' + i + '" ' +
-                'onclick="maQueueCmd(\'shuffle\', undefined, ' + i + ')" title="Shuffle">&#128256;</button>' +
+                'onclick="maQueueCmd(\'shuffle\', undefined, ' + i + ')" title="Shuffle">&#8644;</button>' +
               '<button type="button" class="card-icon-btn transport-btn ma-hover-btn" id="dma-repeat-' + i + '" ' +
-                'onclick="maCycleRepeat(' + i + ')" title="Repeat">&#128257;</button>' +
+                'onclick="maCycleRepeat(' + i + ')" title="Repeat">&#8635;</button>' +
             '</div>' +
             '<div class="track-art-row">' +
               '<img id="dart-' + i + '" class="album-art" src="" alt="">' +
