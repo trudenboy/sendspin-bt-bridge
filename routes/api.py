@@ -1510,6 +1510,23 @@ def api_bt_scan_result(job_id: str):
     return jsonify({"status": "done", "devices": job.get("devices", []), "error": job.get("error")})
 
 
+@api_bp.route("/api/debug/ma")
+def api_debug_ma():
+    """Debug: dump MA now-playing cache, groups, and per-client player_ids."""
+    with state._ma_now_playing_lock:
+        cache = dict(state._ma_now_playing)
+    groups = state.get_ma_groups()
+    clients_info = [
+        {
+            "player_name": getattr(c, "player_name", None),
+            "player_id": getattr(c, "player_id", None),
+            "group_id": c.status.get("group_id") if hasattr(c, "status") else None,
+        }
+        for c in _clients
+    ]
+    return jsonify({"cache_keys": list(cache.keys()), "cache": cache, "groups": groups, "clients": clients_info})
+
+
 @api_bp.route("/api/diagnostics")
 def api_diagnostics():
     """Return structured health diagnostics."""
