@@ -1097,18 +1097,25 @@ function btAdapterOptions(selected) {
 
 function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabled, preferredFormat, keepaliveSilence, keepaliveInterval) {
     var tbody = document.getElementById('bt-devices-table');
-    // Wrapper holds both the grid row and the keepalive sub-row
     var wrap = document.createElement('div');
     wrap.className = 'bt-device-wrap';
     if (enabled === false) wrap.dataset.enabled = 'false';
 
     var row = document.createElement('div');
     row.className = 'bt-device-row';
-    var delayVal    = (delay !== undefined && delay !== null && delay !== '') ? delay : 0;
-    var portVal     = (listenPort !== undefined && listenPort !== null && listenPort !== '') ? listenPort : '';
-    var fmtVal      = (preferredFormat !== undefined && preferredFormat !== null) ? preferredFormat : 'flac:44100:16:2';
-    var kaChecked   = keepaliveSilence ? ' checked' : '';
-    var kaInterval  = (keepaliveInterval !== undefined && keepaliveInterval !== null && keepaliveInterval !== '') ? keepaliveInterval : 30;
+    var delayVal = (delay !== undefined && delay !== null && delay !== '') ? delay : 0;
+    var portVal  = (listenPort !== undefined && listenPort !== null && listenPort !== '') ? listenPort : '';
+    var fmtVal   = (preferredFormat !== undefined && preferredFormat !== null) ? preferredFormat : 'flac:44100:16:2';
+    // keepalive: 0 = disabled; ≥30 = enabled. Migrate old checkbox+interval format.
+    var kaVal;
+    if (keepaliveSilence) {
+        kaVal = (keepaliveInterval !== undefined && keepaliveInterval !== null && keepaliveInterval !== '') ? parseInt(keepaliveInterval, 10) || 30 : 30;
+        if (kaVal < 30) kaVal = 30;
+    } else {
+        kaVal = (keepaliveInterval !== undefined && keepaliveInterval !== null && keepaliveInterval !== '') ? parseInt(keepaliveInterval, 10) : 0;
+        // If migrated from a config that only has keepalive_interval without keepalive_silence, treat >0 as enabled
+        if (kaVal > 0 && kaVal < 30) kaVal = 30;
+    }
     row.innerHTML =
         '<input type="text" placeholder="Player Name" class="bt-name" value="' +
             escHtmlAttr(name || '') + '">' +
@@ -1123,19 +1130,10 @@ function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabl
             escHtmlAttr(String(delayVal)) + '" step="50">' +
         '<input type="text" class="bt-preferred-format" placeholder="flac:44100:16:2" title="Preferred audio format: codec:samplerate:bitdepth:channels. Default flac:44100:16:2 matches SBC A2DP (no resampling)." value="' +
             escHtmlAttr(fmtVal) + '">' +
+        '<input type="number" class="bt-keepalive-interval" min="0" placeholder="0" ' +
+            'title="Keep-alive silence interval in seconds. 0 = disabled. Minimum 30 when enabled." value="' +
+            escHtmlAttr(String(kaVal)) + '">' +
         '<button type="button" class="btn-remove-dev">\u00d7</button>';
-
-    // Keepalive options in a clearly-labelled sub-row below the main grid row
-    var subRow = document.createElement('div');
-    subRow.className = 'bt-device-sub-row';
-    subRow.innerHTML =
-        '<label title="Send periodic silence bursts to prevent speaker auto-disconnect on inactivity">' +
-            '<input type="checkbox" class="bt-keepalive-silence"' + kaChecked + '> Keep-alive silence</label>' +
-        '<span class="bt-keepalive-interval-wrap' + (keepaliveSilence ? ' visible' : '') + '">' +
-            'every <input type="number" class="bt-keepalive-interval" min="10" max="300" ' +
-                'title="Seconds between keepalive silence bursts (10\u2013300, default 30)" value="' +
-                escHtmlAttr(String(kaInterval)) + '"> s' +
-        '</span>';
 
     row.querySelector('.btn-remove-dev').addEventListener('click', function() {
         wrap.remove();
@@ -1145,13 +1143,8 @@ function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabl
         var valid = /^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$/.test(v);
         this.classList.toggle('invalid', v !== '' && !valid);
     });
-    subRow.querySelector('.bt-keepalive-silence').addEventListener('change', function() {
-        var intervalWrap = subRow.querySelector('.bt-keepalive-interval-wrap');
-        if (intervalWrap) intervalWrap.classList.toggle('visible', this.checked);
-    });
 
     wrap.appendChild(row);
-    wrap.appendChild(subRow);
     tbody.appendChild(wrap);
 }
 
@@ -1159,7 +1152,6 @@ function collectBtDevices() {
     var devices = [];
     document.querySelectorAll('#bt-devices-table .bt-device-wrap').forEach(function(wrap) {
         var row    = wrap.querySelector('.bt-device-row');
-        var subRow = wrap.querySelector('.bt-device-sub-row');
         var name       = row.querySelector('.bt-name').value.trim();
         var mac        = row.querySelector('.bt-mac').value.trim().toUpperCase();
         var adapter    = row.querySelector('.bt-adapter').value;
@@ -1171,16 +1163,16 @@ function collectBtDevices() {
         if (isNaN(delay)) delay = 0;
         var fmtEl      = row.querySelector('.bt-preferred-format');
         var preferredFormat = fmtEl ? fmtEl.value.trim() : 'flac:44100:16:2';
-        var kaEl       = subRow ? subRow.querySelector('.bt-keepalive-silence') : null;
-        var kaIntEl    = subRow ? subRow.querySelector('.bt-keepalive-interval') : null;
-        var keepalive  = kaEl ? kaEl.checked : false;
-        var keepaliveInterval = kaIntEl ? (parseInt(kaIntEl.value, 10) || 30) : 30;
+        var kaIntEl    = row.querySelector('.bt-keepalive-interval');
+        var kaVal      = kaIntEl ? parseInt(kaIntEl.value, 10) : 0;
+        if (isNaN(kaVal) || kaVal < 0) kaVal = 0;
+        if (kaVal > 0 && kaVal < 30) kaVal = 30;  // enforce minimum
         var dev = { mac: mac, adapter: adapter, player_name: name, static_delay_ms: delay, preferred_format: preferredFormat || 'flac:44100:16:2' };
         if (listenHost) dev.listen_host = listenHost;
         if (listenPort) dev.listen_port = listenPort;
-        if (keepalive) {
+        dev.keepalive_interval = kaVal;
+        if (kaVal > 0) {
             dev.keepalive_silence = true;
-            dev.keepalive_interval = keepaliveInterval;
         }
         // Preserve enabled flag: live status takes precedence, then config-loaded value from dataset
         var livedev = lastDevices && lastDevices.find(function(d) {

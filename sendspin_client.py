@@ -139,7 +139,7 @@ class SendspinClient:
         self.preferred_format = preferred_format  # preferred audio format string (e.g. "flac:44100:16:2")
         self._effective_bridge = effective_bridge  # bridge instance label for MA device info
         self.keepalive_enabled = keepalive_enabled  # send periodic silence to keep BT speaker alive
-        self.keepalive_interval = max(10, keepalive_interval)  # seconds between keepalive bursts
+        self.keepalive_interval = max(30, keepalive_interval)  # seconds between keepalive bursts
 
         # Status tracking
         self.status = DeviceStatus(
@@ -647,8 +647,10 @@ async def main():
         if static_delay_ms is not None:
             static_delay_ms = float(static_delay_ms)
         preferred_format = device.get("preferred_format", "flac:44100:16:2")
-        keepalive_enabled = bool(device.get("keepalive_silence", False))
-        keepalive_interval = max(10, int(device.get("keepalive_interval") or 30))
+        keepalive_interval = int(device.get("keepalive_interval") or 0)
+        # keepalive_silence (bool) is the legacy key; interval > 0 is the new canonical form
+        keepalive_enabled = keepalive_interval > 0 or bool(device.get("keepalive_silence", False))
+        keepalive_interval = max(30, keepalive_interval) if keepalive_enabled else 30
 
         client = SendspinClient(
             player_name,
