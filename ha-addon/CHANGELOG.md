@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.6] - 2026-03-05
+
+### Added
+- **2FA authentication**: login now uses the HA Core `/auth/login_flow` API, enabling full two-factor authentication (TOTP). A second form step appears when 2FA is configured on your HA account.
+
+### Improved
+- **Configuration — Keepalive**: replaced checkbox with an inline number field. Set to `0` to disable (default); minimum non-zero value is 30 s; maximum 3600 s.
+
+## [2.7.5] - 2026-03-05
+
+### Fixed
+- **Web UI**: fixed JS syntax error that prevented device cards from rendering
+
+## [2.7.4] - 2026-03-05
+
+### Added
+- **Log level control**: debug logging can now be enabled via the `log_level` addon option (`info`/`debug`) or toggled at runtime from the **Advanced settings** panel without a container restart.
+
 ## [2.7.3] - 2026-03-05
 
 ### Fixed
