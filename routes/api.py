@@ -496,7 +496,7 @@ def api_bt_management():
     _persist_device_enabled(player_name, enabled)
     # Sync enabled state to HA Supervisor so the Configuration page reflects it
     try:
-        with open(CONFIG_FILE) as _f:
+        with _config_lock, open(CONFIG_FILE) as _f:
             _cfg = json.load(_f)
         threading.Thread(target=_sync_ha_options, args=(_cfg,), daemon=True).start()
     except Exception:

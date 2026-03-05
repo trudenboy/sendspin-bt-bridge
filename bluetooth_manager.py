@@ -18,6 +18,7 @@ import time
 from datetime import datetime
 
 from config import CONFIG_FILE as _CONFIG_FILE
+from config import _config_lock as _config_lock
 from services.pulse import get_sink_volume, list_sinks, set_sink_volume
 
 logger = logging.getLogger(__name__)
@@ -398,7 +399,7 @@ class BluetoothManager:
                     restored = False
                     try:
                         if _CONFIG_FILE.exists():
-                            with open(_CONFIG_FILE) as f:
+                            with _config_lock, open(_CONFIG_FILE) as f:
                                 cfg = json.load(f)
                             volumes = cfg.get("LAST_VOLUMES", {})
                             last_volume = volumes.get(self.mac_address)
