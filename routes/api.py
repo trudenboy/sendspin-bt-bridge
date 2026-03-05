@@ -54,6 +54,7 @@ from state import (
     create_scan_job,
     finish_scan_job,
     get_adapter_name,
+    get_ma_group_for_player,
     get_scan_job,
     is_scan_running,
     load_adapter_name_cache,
@@ -189,6 +190,13 @@ def get_client_status_for(client):
         status["has_sink"] = bool(getattr(client, "bluetooth_sink_name", None))
         status["sink_name"] = getattr(client, "bluetooth_sink_name", None)
         status["bt_management_enabled"] = getattr(client, "bt_management_enabled", True)
+
+        # Enrich group_name with MA syncgroup name (Sendspin sends name=None)
+        player_name = getattr(client, "player_name", None)
+        if player_name:
+            ma_group = get_ma_group_for_player(player_name)
+            if ma_group and ma_group.get("name"):
+                status["group_name"] = ma_group["name"]
 
         logger.debug("Status retrieved: %s", status)
         return status
