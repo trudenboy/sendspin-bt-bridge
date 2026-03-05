@@ -481,6 +481,44 @@ def api_ma_groups():
     return jsonify(state.get_ma_groups())
 
 
+@api_bp.route("/api/ma/rediscover", methods=["POST"])
+def api_ma_rediscover():
+    """Re-run MA syncgroup discovery without restarting the addon.
+
+    Reads current MA_API_URL / MA_API_TOKEN from config.json and updates the state cache.
+    Useful after changing MA API credentials via the web UI.
+    """
+    cfg = load_config()
+    ma_url = cfg.get("MA_API_URL", "").strip()
+    ma_token = cfg.get("MA_API_TOKEN", "").strip()
+    if not ma_url or not ma_token:
+        return jsonify({"success": False, "error": "MA_API_URL or MA_API_TOKEN not configured"}), 400
+
+    loop = state.get_main_loop()
+    if not loop:
+        return jsonify({"success": False, "error": "Event loop not available"}), 503
+
+    try:
+        from services.ma_client import discover_ma_groups
+
+        player_names = [c.player_name for c in _clients]
+        fut = asyncio.run_coroutine_threadsafe(discover_ma_groups(ma_url, ma_token, player_names), loop)
+        name_map, all_groups = fut.result(timeout=15.0)
+        state.set_ma_api_credentials(ma_url, ma_token)
+        state.set_ma_groups(name_map, all_groups)
+        return jsonify(
+            {
+                "success": True,
+                "syncgroups": len(all_groups),
+                "mapped_players": len(name_map),
+                "groups": [{"id": g["id"], "name": g["name"]} for g in all_groups],
+            }
+        )
+    except Exception as exc:
+        logger.warning("MA rediscover failed: %s", exc)
+        return jsonify({"success": False, "error": str(exc)}), 500
+
+
 @api_bp.route("/api/pause", methods=["POST"])
 def pause_player():
     """Pause or play a single daemon subprocess via WS controller command.
@@ -912,6 +950,11 @@ def api_config():
                     config["MA_API_TOKEN"] = existing["MA_API_TOKEN"]
             except Exception as _exc:
                 logger.debug("Could not read existing config for merge: %s", _exc)
+
+        # Normalize MA_API_URL: add http:// scheme if missing
+        ma_url = config.get("MA_API_URL", "").strip()
+        if ma_url and "://" not in ma_url:
+            config["MA_API_URL"] = f"http://{ma_url}"
 
         old_devices = {d["mac"]: d for d in existing.get("BLUETOOTH_DEVICES", []) if d.get("mac")}
         new_devices = {d["mac"]: d for d in config.get("BLUETOOTH_DEVICES", []) if d.get("mac")}

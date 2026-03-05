@@ -7,11 +7,19 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+async def _normalize_ma_url(url: str) -> str:
+    """Ensure MA URL has http:// scheme."""
+    url = url.strip()
+    if url and "://" not in url:
+        url = f"http://{url}"
+    return url
+
+
 async def _fetch_all_players(ma_url: str, ma_token: str) -> list[dict]:
     """Connect to MA API and return the full players/all list."""
     from music_assistant_client import MusicAssistantClient
 
-    async with MusicAssistantClient(ma_url, None, token=ma_token) as client:
+    async with MusicAssistantClient(await _normalize_ma_url(ma_url), None, token=ma_token) as client:
         await client.connect()
         return await client.send_command("players/all")
 
@@ -94,7 +102,7 @@ async def ma_group_play(ma_url: str, ma_token: str, syncgroup_id: str) -> bool:
         return False
 
     try:
-        async with MusicAssistantClient(ma_url, None, token=ma_token) as client:
+        async with MusicAssistantClient(await _normalize_ma_url(ma_url), None, token=ma_token) as client:
             await client.connect()
             await client.players.play(syncgroup_id)
         logger.info("MA group play → %s", syncgroup_id)
