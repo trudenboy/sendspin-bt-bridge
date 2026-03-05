@@ -48,17 +48,18 @@ from services.pulse import (
     set_sink_mute,
     set_sink_volume,
 )
-from state import clients as _clients
 from state import (
-    clients_lock as _clients_lock,
-)
-from state import (
+    _adapter_cache_lock,
     create_scan_job,
     finish_scan_job,
     get_adapter_name,
     get_scan_job,
     is_scan_running,
     load_adapter_name_cache,
+)
+from state import clients as _clients
+from state import (
+    clients_lock as _clients_lock,
 )
 
 logger = logging.getLogger(__name__)
@@ -798,7 +799,8 @@ def api_config():
             raise
 
     # Invalidate adapter name cache so next status poll picks up changes
-    load_adapter_name_cache()
+    with _adapter_cache_lock:
+        load_adapter_name_cache()
 
     _sync_ha_options(config)
 

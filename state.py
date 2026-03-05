@@ -105,21 +105,26 @@ _adapter_cache_lock = threading.Lock()
 
 
 def load_adapter_name_cache() -> None:
-    """Load adapter friendly names from config.json into the in-memory cache."""
+    """Load adapter friendly names from config.json into the in-memory cache.
+
+    Called either standalone (already under ``_adapter_cache_lock``) or
+    from ``get_adapter_name`` which acquires the lock first.
+    ``_adapter_cache_lock`` is **not** reentrant, so this function must
+    NOT acquire it itself.
+    """
     global _adapter_name_cache
-    with _adapter_cache_lock:
-        try:
-            with open(_config_file) as _f:
-                _cfg = json.load(_f)
-            _adapter_name_cache = {
-                a.get("mac", a.get("id", "")).upper(): a.get("name", "")
-                for a in _cfg.get("BLUETOOTH_ADAPTERS", [])
-                if a.get("mac") or a.get("id")
-            }
-        except Exception as _exc:
-            _adapter_name_cache = {}
-            logger.debug("Could not load adapter name cache: %s", _exc)
-        _adapter_cache_ready.set()
+    try:
+        with open(_config_file) as _f:
+            _cfg = json.load(_f)
+        _adapter_name_cache = {
+            a.get("mac", a.get("id", "")).upper(): a.get("name", "")
+            for a in _cfg.get("BLUETOOTH_ADAPTERS", [])
+            if a.get("mac") or a.get("id")
+        }
+    except Exception as _exc:
+        _adapter_name_cache = {}
+        logger.debug("Could not load adapter name cache: %s", _exc)
+    _adapter_cache_ready.set()
 
 
 def get_adapter_name(mac_upper: str) -> "str | None":
