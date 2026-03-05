@@ -469,10 +469,10 @@
             color: var(--primary-color);
         }
 
-        /* MA playback controls row */
-        .ma-secondary-controls { display: none; align-items: center; gap: 2px; margin-top: 4px; }
-        .device-card:hover .ma-secondary-controls.ma-ready { display: flex; }
-        .ma-secondary-controls .card-icon-btn { margin-left: 0; }
+        /* Shuffle/repeat — in the transport row, visible only on card hover when MA active */
+        .ma-hover-btn { display: none; }
+        .device-card:hover .ma-hover-btn.ma-ready,
+        .device-card:focus-within .ma-hover-btn.ma-ready { display: inline-flex; }
 
         /* Album art + track row */
         .track-art-row { position: relative; display: flex; align-items: center; margin-top: 2px; }

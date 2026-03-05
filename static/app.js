@@ -236,7 +236,7 @@ function buildDeviceCard(i) {
           // Playback column (with inline track)
           '<div class="playback-col">' +
             '<div class="status-label">Playback</div>' +
-            '<div class="status-value">' +
+            '<div class="status-value" id="dma-secondary-' + i + '">' +
               '<span class="status-indicator" id="dplay-ind-' + i + '"></span>' +
               '<span id="dplay-' + i + '">-</span>' +
               '<button type="button" class="card-icon-btn transport-btn" id="dma-prev-' + i + '" ' +
@@ -245,6 +245,10 @@ function buildDeviceCard(i) {
                 'onclick="onDevicePause(' + i + ')" title="Pause/Unpause">&#9646;&#9646;</button>' +
               '<button type="button" class="card-icon-btn transport-btn" id="dma-next-' + i + '" ' +
                 'onclick="maQueueCmd(\'next\', undefined, ' + i + ')" title="Next" style="display:none;">&#9654;&#9654;</button>' +
+              '<button type="button" class="card-icon-btn transport-btn ma-hover-btn" id="dma-shuffle-' + i + '" ' +
+                'onclick="maQueueCmd(\'shuffle\', undefined, ' + i + ')" title="Shuffle">&#128256;</button>' +
+              '<button type="button" class="card-icon-btn transport-btn ma-hover-btn" id="dma-repeat-' + i + '" ' +
+                'onclick="maCycleRepeat(' + i + ')" title="Repeat">&#128257;</button>' +
             '</div>' +
             '<div class="track-art-row">' +
               '<img id="dart-' + i + '" class="album-art" src="" alt="">' +
@@ -253,12 +257,6 @@ function buildDeviceCard(i) {
             '<div class="track-progress-wrap" id="dprog-wrap-' + i + '" style="display:none;">' +
               '<div class="track-progress-bar"><div class="track-progress-fill" id="dprog-fill-' + i + '"></div></div>' +
               '<div class="track-progress-time" id="dprog-time-' + i + '"></div>' +
-            '</div>' +
-            '<div class="ma-secondary-controls" id="dma-secondary-' + i + '">' +
-              '<button type="button" class="card-icon-btn" id="dma-shuffle-' + i + '" ' +
-                'onclick="maQueueCmd(\'shuffle\', undefined, ' + i + ')" title="Shuffle">&#128256;</button>' +
-              '<button type="button" class="card-icon-btn" id="dma-repeat-' + i + '" ' +
-                'onclick="maCycleRepeat(' + i + ')" title="Repeat">&#128257;</button>' +
             '</div>' +
           '</div>' +
           // Volume column
@@ -509,14 +507,14 @@ function populateDeviceCard(i, dev) {
     }
 
     // MA transport buttons (prev/next flanking pause) + hover secondary controls
-    var prevBtn     = document.getElementById('dma-prev-' + i);
-    var nextBtn     = document.getElementById('dma-next-' + i);
-    var secCtrl     = document.getElementById('dma-secondary-' + i);
+    var prevBtn      = document.getElementById('dma-prev-' + i);
+    var nextBtn      = document.getElementById('dma-next-' + i);
     var maShuffleBtn = document.getElementById('dma-shuffle-' + i);
     var maRepeatBtn  = document.getElementById('dma-repeat-' + i);
     if (prevBtn) prevBtn.style.display = deviceMaActive ? '' : 'none';
     if (nextBtn) nextBtn.style.display = deviceMaActive ? '' : 'none';
-    if (secCtrl) secCtrl.classList.toggle('ma-ready', deviceMaActive);
+    if (maShuffleBtn) maShuffleBtn.classList.toggle('ma-ready', deviceMaActive);
+    if (maRepeatBtn) maRepeatBtn.classList.toggle('ma-ready', deviceMaActive);
     if (deviceMaActive) {
         if (maShuffleBtn) maShuffleBtn.classList.toggle('active', !!ma.shuffle);
         if (maRepeatBtn) {
