@@ -927,7 +927,19 @@ async function btToggleManagement(i) {
             body: JSON.stringify({player_name: playerName, enabled: newEnabled})
         });
         var d = await resp.json();
-        if (d.success) lastDevices[i].bt_management_enabled = newEnabled;
+        if (d.success) {
+            lastDevices[i].bt_management_enabled = newEnabled;
+            // Update button immediately — don't wait for SSE
+            if (btn) {
+                btn.textContent = newEnabled ? '\uD83D\uDD13 Release' : '\uD83D\uDD12 Reclaim';
+                btn.className = 'btn-bt-action ' + (newEnabled ? 'btn-bt-release' : 'btn-bt-reclaim');
+            }
+            // Disable Reconnect/Re-pair while released
+            var reconnBtn = document.getElementById('dbtn-reconnect-' + i);
+            var pairBtn = document.getElementById('dbtn-pair-' + i);
+            if (reconnBtn) reconnBtn.disabled = newEnabled ? false : true;
+            if (pairBtn) pairBtn.disabled = newEnabled ? false : true;
+        }
         if (status) status.textContent = d.success ? '\u2713 ' + d.message : '\u2717 ' + (d.error || 'Failed');
     } catch (e) {
         if (status) status.textContent = '\u2717 Error';
