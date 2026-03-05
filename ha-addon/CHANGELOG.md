@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.10.4] - 2026-03-05
+
+### Fixed
+- **MA integration for solo players (e.g. WH-1000XM4)**: correctly matches MA's internal queue ID format `"up<uuid_no_hyphens>"`. Solo players now receive now-playing data and transport controls from MA API.
+- Fixed websockets connection in debug endpoint.
+
 ## [2.10.3] - 2026-03-05
 
 ### Added
