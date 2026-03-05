@@ -11,6 +11,12 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+__all__ = [
+    "_DBUS_MPRIS_AVAILABLE",
+    "MprisIdentityService",
+    "pause_all_via_mpris",
+]
+
 # ---------------------------------------------------------------------------
 # Optional dbus import — gracefully degraded if not available
 # ---------------------------------------------------------------------------

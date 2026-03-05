@@ -20,6 +20,20 @@ from pathlib import Path
 VERSION = "2.7.9"
 BUILD_DATE = "2026-03-05"
 
+__all__ = [
+    "BUILD_DATE",
+    "CONFIG_DIR",
+    "CONFIG_FILE",
+    "DEFAULT_CONFIG",
+    "VERSION",
+    "check_password",
+    "config_lock",
+    "ensure_secret_key",
+    "hash_password",
+    "load_config",
+    "save_device_volume",
+]
+
 DEFAULT_CONFIG = {
     "SENDSPIN_SERVER": "auto",
     "SENDSPIN_PORT": 9000,

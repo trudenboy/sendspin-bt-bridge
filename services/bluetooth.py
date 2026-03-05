@@ -18,6 +18,12 @@ from config import config_lock as _config_lock
 logger = logging.getLogger(__name__)
 _OPTIONS_FILE = Path("/data/options.json")
 
+__all__ = [
+    "bt_remove_device",
+    "is_audio_device",
+    "persist_device_enabled",
+]
+
 _AUDIO_UUIDS = {
     "0000110b",  # A2DP Sink
     "0000110a",  # A2DP Source

@@ -18,6 +18,19 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+__all__ = [
+    "_PULSECTL_AVAILABLE",
+    "amove_pid_sink_inputs",
+    "get_server_name",
+    "get_sink_description",
+    "get_sink_input_ids",
+    "get_sink_mute",
+    "get_sink_volume",
+    "list_sinks",
+    "set_sink_mute",
+    "set_sink_volume",
+]
+
 # ---------------------------------------------------------------------------
 # Availability check
 # ---------------------------------------------------------------------------

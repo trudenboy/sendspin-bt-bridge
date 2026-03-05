@@ -13,6 +13,20 @@ import time as _time
 
 from config import CONFIG_FILE as _config_file
 
+__all__ = [
+    "clients",
+    "clients_lock",
+    "create_scan_job",
+    "finish_scan_job",
+    "get_adapter_name",
+    "get_main_loop",
+    "get_scan_job",
+    "load_adapter_name_cache",
+    "notify_status_changed",
+    "set_clients",
+    "set_main_loop",
+]
+
 # ---------------------------------------------------------------------------
 # SSE status-change signalling — used by /api/status/stream
 # ---------------------------------------------------------------------------
