@@ -82,7 +82,7 @@
             border-radius: var(--ha-card-border-radius); padding: 16px 20px;
             box-shadow: var(--ha-card-box-shadow);
             display: grid;
-            grid-template-columns: minmax(180px, 220px) 0.75fr 1.5fr 1fr 0.75fr;
+            grid-template-columns: minmax(180px, 220px) 0.75fr 1.5fr 1.25fr 0.5fr;
             align-items: start;
             border-left: 3px solid transparent;
             transition: opacity 0.2s, box-shadow 0.2s, border-color 0.2s;
