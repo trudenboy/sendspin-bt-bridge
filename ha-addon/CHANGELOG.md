@@ -5,7 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.9.6] - 2026-03-06
+## [2.9.7] - 2026-03-06
+
+### Added
+- Album art tooltip on track name hover (120×120, from MA now-playing).
+- MA syncgroup name shown in device cards and group filter instead of raw UUID.
+
+### Changed
+- Unified progress bar: MA data takes priority; separate MA bar removed.
+- Transport controls: ◀◀ ▮▮/▶ ▶▶ in one consistent row; shuffle/repeat on card hover.
+
+
 
 ### Fixed
 - **Web UI broken**: JavaScript syntax error in `renderDiagnostics()` prevented the entire UI from loading.

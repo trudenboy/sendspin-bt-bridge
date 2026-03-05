@@ -5,7 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.9.6] - 2026-03-06
+## [2.9.7] - 2026-03-06
+
+### Added
+- **Album art tooltip**: hovering over the track name row shows a 120×120 album cover popup (from MA now-playing `image_url`).
+- **MA group name in UI**: device cards and group filter dropdown now show the human-readable MA syncgroup name (e.g. "Sendspin BT") instead of the raw Sendspin session UUID tail.
+
+### Changed
+- **Unified progress bar**: single bar per card — MA data takes priority when connected, Sendspin native data used as fallback. Separate MA progress bar removed.
+- **Transport controls redesign**: ◀◀ ▮▮/▶ ▶▶ now appear in a single row with consistent style; prev/next hidden when MA not connected. Shuffle/repeat moved to hover-only secondary row (appear on card hover).
+
+### Fixed
+- `HISTORY.md` added — non-technical project evolution overview.
+
+
 
 ### Fixed
 - **Web UI broken** (`app.js`): duplicate closing brace in `renderDiagnostics()` caused a JavaScript syntax error that prevented the entire UI from loading.
