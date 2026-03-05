@@ -9,6 +9,7 @@ import asyncio
 import json
 import logging
 import threading
+import time as _time
 
 from config import CONFIG_FILE as _config_file
 
@@ -116,7 +117,6 @@ def get_adapter_name(mac_upper: str) -> "str | None":
 # ---------------------------------------------------------------------------
 # BT scan job store — keyed by UUID, TTL ~2 min
 # ---------------------------------------------------------------------------
-import time as _time  # noqa: E402 — intentionally late to keep top-level imports minimal
 
 _scan_jobs: dict[str, dict] = {}
 _scan_jobs_lock = threading.Lock()
