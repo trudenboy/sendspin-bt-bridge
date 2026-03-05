@@ -486,6 +486,15 @@ class BluetoothManager:
             self.connected = False
         return success
 
+    def _reconnect_delay(self, attempt: int) -> float:
+        """Exponential backoff delay after a failed reconnect attempt.
+
+        Attempts 1-3 use check_interval; doubles every attempt thereafter,
+        capped at 5 minutes. Reduces BT radio activity (and audio disruption
+        on other devices sharing the same adapter) as failure count grows.
+        """
+        return min(self.check_interval * (2 ** max(0, attempt - 3)), 300.0)
+
     def _handle_reconnect_failure(self, attempt: int) -> bool:
         """Disable BT management after too many consecutive failed reconnects.
 
@@ -591,6 +600,11 @@ class BluetoothManager:
                             self.client._update_status({"reconnecting": False, "reconnect_attempt": 0})
                             logger.info(f"BT reconnected for {self.device_name}, starting sendspin...")
                             await self.client.start_sendspin()
+                        else:
+                            # Back off: delay next check proportional to failure count
+                            delay = self._reconnect_delay(reconnect_attempt)
+                            self.last_check = time.time() + delay - self.check_interval
+                            logger.debug(f"[{self.device_name}] Backoff: next attempt in {delay:.0f}s")
                     else:
                         if self.client and self.client.status.get("reconnecting"):
                             self.client._update_status({"reconnecting": False, "reconnect_attempt": 0})
@@ -777,8 +791,10 @@ class BluetoothManager:
                                 await self.client.start_sendspin()
                             restart_outer = True
                         else:
-                            # Failed — wait then retry (stay in inner loop)
-                            await asyncio.sleep(self.check_interval)
+                            # Failed — back off proportional to failure count
+                            delay = self._reconnect_delay(reconnect_attempt)
+                            logger.debug(f"[{self.device_name}] Backoff: next attempt in {delay:.0f}s")
+                            await asyncio.sleep(delay)
                             # Re-read state in case external reconnect happened
                             try:
                                 self.connected = bool(await device_iface.get_connected())
