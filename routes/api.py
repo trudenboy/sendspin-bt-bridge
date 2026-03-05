@@ -303,7 +303,7 @@ def set_volume():
         elif player_name:
             targets = [c for c in _clients if getattr(c, "player_name", None) == player_name]
         else:
-            targets = _clients[:1]
+            targets = list(_clients)
 
         results = []
         for client in targets:
