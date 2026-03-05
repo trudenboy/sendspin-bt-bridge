@@ -27,7 +27,7 @@ There is no test suite. Manual testing is via `docker logs` and the web UI at `h
 
 CI/CD builds multi-platform Docker images (`linux/amd64`, `linux/arm64`) to `ghcr.io/trudenboy/sendspin-bt-bridge` on `v*` tag push. Automatically syncs `ha-addon/config.yaml` version from `VERSION` in `config.py` before the build.
 
-## Architecture (v2.6.2)
+## Architecture (v2.7.4)
 
 **Subprocess isolation**: each Bluetooth speaker runs as a dedicated Python subprocess (`services/daemon_process.py`) with `PULSE_SINK=<bt_sink_name>` in env. This gives every speaker its own PulseAudio context → correct audio routing from the first sample, no `move-sink-input` needed.
 
@@ -100,6 +100,7 @@ IPC: subprocess→parent via JSON lines on stdout; parent→subprocess via JSON 
 | `WEB_PORT` | `8080` | Web interface port |
 | `TZ` | `Australia/Melbourne` | Container timezone |
 | `CONFIG_DIR` | `/config` | Config directory path |
+| `LOG_LEVEL` | `INFO` | Root logger level (`INFO` or `DEBUG`); set via HA addon option or web UI |
 
 ## Container Requirements
 
@@ -119,3 +120,104 @@ IPC: subprocess→parent via JSON lines on stdout; parent→subprocess via JSON 
 Each `SendspinClient` spawns a subprocess with `PULSE_SINK=<found_sink_name>`. The subprocess creates its own PulseAudio context → audio routed to the correct BT speaker from the first sample.
 
 On BT reconnect: PulseAudio's `module-rescue-streams` may move streams to the default sink. `BridgeDaemon._ensure_sink_routing()` corrects this once on the next `Stream STARTED` event via `services/pulse.py:amove_pid_sink_inputs()`. The `_sink_routed` flag prevents repeated corrections that would cause a re-anchor feedback loop.
+
+**Confirmed production (HAOS):** PulseAudio 17.0 is used, not PipeWire. The active sink pattern is always `bluez_sink.{MAC_underscores}.a2dp_sink` (e.g. `bluez_sink.FC_58_FA_EB_08_6C.a2dp_sink`). The PipeWire patterns (`bluez_output.*`) are tried first but will not match on HAOS.
+
+## Deployment Environment
+
+### Network topology
+
+| Host | IP | SSH alias | Key |
+|------|-----|-----------|-----|
+| Turris router | 192.168.10.1 | `turris` | `~/.ssh/id_turris` |
+| Proxmox | 192.168.10.12 | `proxmox` | `~/.ssh/id_proxmox` |
+| HAOS VM 104 | 192.168.10.10 | `haos` | `~/.ssh/id_turris` ⚠️ same key as Turris, different host |
+
+> The `haos` SSH alias connects directly to the HAOS SSH addon (port 22) using the `id_turris` key, which was reused from the Turris router key pair.
+
+### Proxmox host
+
+- PVE 8.4.16, kernel 6.8.12-18-pve
+- USB device mappings (passed through to HAOS VM 104):
+  - `Audio` → CSR8510 A10 BT adapter → hci0 inside HAOS
+  - `BLE` → CSR8510 A10 BT adapter → hci1 inside HAOS
+  - SONOFF Zigbee dongle (`1a86:55d4`) → passed directly as `usb0`
+
+### HAOS VM 104
+
+- HAOS 17.1, `qemux86-64` (OVA/QEMU), 2 vCPU, 6 GB RAM, 64 GB disk
+- HA Core 2026.02.3 (stable channel)
+- **Audio system: PulseAudio 17.0** (not PipeWire)
+- BT adapters inside HAOS:
+  - `hci0` MAC `C0:FB:F9:62:D6:9D` (CSR8510 A10, Proxmox `Audio` mapping)
+  - `hci1` MAC `C0:FB:F9:62:D7:D6` (CSR8510 A10, Proxmox `BLE` mapping)
+- Addon slug: `85b1ecde_sendspin_bt_bridge`
+
+### Configured Bluetooth devices (production)
+
+| Player name | MAC | Adapter | Port | Delay | Enabled |
+|-------------|-----|---------|------|-------|---------|
+| ENEBY20 | FC:58:FA:EB:08:6C | hci0 | 8928 | −600 ms | ✅ |
+| Yandex mini 2 007 a | 2C:D2:6B:B8:EC:5B | hci1 | 8929 | −400 ms | ✅ |
+| WH-1000XM4 | 80:99:E7:C2:0B:D3 | hci0 | 8931 | −600 ms | ❌ |
+| Lenco LS-500 | 30:21:0E:0A:AE:5A | hci1 | 8932 | −600 ms | ✅ |
+| OpenMove AfterShokz | 20:74:CF:61:FB:D8 | hci0 | 8933 | −600 ms | ❌ |
+| ENEBY Portable | 6C:5C:3D:35:17:99 | hci1 | 8933 | −600 ms | ❌ |
+
+### Production addon settings
+
+```
+TZ: Europe/Moscow
+pulse_latency_msec: 800   # high — compensates for QEMU VM audio overhead
+prefer_sbc_codec: true
+bt_check_interval: 15
+bt_max_reconnect_fails: 10
+```
+
+### Proxmox LXC 101 (standalone deployment)
+
+A second deployment of the bridge runs in a Proxmox LXC container (not HAOS):
+- OS: Ubuntu, 2 cores, 1 GB RAM, 4 GB disk, DHCP
+- AppArmor: unconfined (required for bluetoothd socket access)
+- USB passthrough: `/dev/bus/usb` (host BT adapters)
+- Mounts host's `/run/dbus` and `/var/lib/bluetooth` (read-only) so it shares the host BT stack
+
+## Agent Operations
+
+Commands for agents working with the production deployment.
+
+### Check addon status / available update
+
+```bash
+ssh haos "ha addons info 85b1ecde_sendspin_bt_bridge | grep -E 'version|state|update'"
+```
+
+### Update addon to latest version
+
+```bash
+ssh haos "ha addons update 85b1ecde_sendspin_bt_bridge"
+```
+
+### View addon logs (last 50 lines)
+
+```bash
+ssh haos "ha addons logs 85b1ecde_sendspin_bt_bridge | tail -50"
+```
+
+### Restart addon
+
+```bash
+ssh haos "ha addons restart 85b1ecde_sendspin_bt_bridge"
+```
+
+### Check active Bluetooth audio sinks
+
+```bash
+ssh haos "pactl list sinks short"
+```
+
+### Check Proxmox VM 104 status
+
+```bash
+ssh proxmox "qm status 104"
+```
