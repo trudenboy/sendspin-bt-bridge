@@ -217,6 +217,7 @@ async def _run(params: dict) -> None:
     static_delay_ms: float = params.get("static_delay_ms", -500.0)
     bluetooth_sink_name: str | None = params.get("bluetooth_sink_name")
     initial_volume: int = params.get("volume", 100)
+    initial_muted: bool = bool(params.get("muted", False))
     settings_dir: str = params.get("settings_dir", f"/tmp/sendspin-{client_id}")
     preferred_format_str: str | None = params.get("preferred_format")
 
@@ -271,7 +272,7 @@ async def _run(params: dict) -> None:
         "current_track": None,
         "current_artist": None,
         "volume": initial_volume,
-        "muted": False,
+        "muted": initial_muted,
         "audio_format": None,
         "group_name": None,
         "group_id": None,

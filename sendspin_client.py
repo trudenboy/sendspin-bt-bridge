@@ -285,6 +285,7 @@ class SendspinClient:
                     "static_delay_ms": static_delay_ms,
                     "bluetooth_sink_name": self.bluetooth_sink_name,
                     "volume": self.status.get("volume", 100),
+                    "muted": bool(self.status.get("muted", False)),
                     "settings_dir": f"/tmp/sendspin-{safe_id}",
                     "preferred_format": self.preferred_format,
                 }
