@@ -5,7 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.10.0] - 2026-03-05
+## [2.10.1] - 2026-03-05
+
+### Added
+- MA API badge next to the MA connection indicator when API integration is active.
+
+### Fixed
+- Mute state no longer resets after muteall/unmute-one sequence.
+- MA data now works for devices whose name didn't match in `discover_ma_groups` (uses Sendspin-reported `group_id` as fallback).
+- Group badge hover-only logic fixed for solo players (WH-1000XM4 etc.).
+- Transport buttons (◀◀ ▮▮ ▶▶ ⇄ ↻) now render at uniform size.
+
 
 ### Added
 - Solo (ungrouped) players now show MA track info, progress and transport controls from their own MA queue.

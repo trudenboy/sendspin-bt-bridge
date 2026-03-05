@@ -5,7 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.10.0] - 2026-03-05
+## [2.10.1] - 2026-03-05
+
+### Added
+- **MA API badge**: small "api" badge appears next to the MA connection indicator when MA API integration is active and delivering track data for a device.
+
+### Fixed
+- **Mute state reset on muteall/unmute**: daemon subprocess now receives `set_mute` command after each mute/unmute operation so its internal state stays in sync; prevents subsequent status emits from reverting muted state to `false`.
+- **MA data for WH-1000XM4 and similar devices**: MA now-playing lookup now uses the Sendspin-reported `group_id` (which is the MA syncgroup ID) as a fallback when name-matching in `discover_ma_groups` didn't produce a match. The MA monitor also now picks up syncgroup queues reported live by bridge devices, not only those discovered at startup.
+- **Group badge hover-only for solo players**: fixed condition — now based on whether any other device shares the same `group_id`, rather than the absence of `group_id` (every Sendspin player has a `group_id`).
+- **Transport button sizes**: all 5 buttons (◀◀ ▮▮ ▶▶ ⇄ ↻) now render at uniform size via `inline-flex` with fixed `min-width`/`height`.
+
 
 ### Added
 - **MA data for solo (ungrouped) players**: devices not in any Sendspin syncgroup now receive track info, progress bar, and transport controls (prev/next/shuffle/repeat) from their own MA queue. Previously only grouped devices had access to MA metadata.
