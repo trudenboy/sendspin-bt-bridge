@@ -34,7 +34,7 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add ha-addon/config.yaml
           git diff --staged --quiet || git commit -m "chore: sync ha-addon version to ${VERSION} [skip ci]"
-          git push origin HEAD:main
+          git push origin HEAD:main || echo "Push skipped (main already ahead — version already synced)"
 
       - name: Compute dispatch version
         if: github.event_name == 'workflow_dispatch' && inputs.tag != ''
