@@ -519,7 +519,54 @@ def api_ma_rediscover():
         return jsonify({"success": False, "error": str(exc)}), 500
 
 
-@api_bp.route("/api/pause", methods=["POST"])
+@api_bp.route("/api/ma/nowplaying", methods=["GET"])
+def api_ma_nowplaying():
+    """Return current MA now-playing metadata.
+
+    Returns {"connected": false} when MA integration is not active.
+    Fields when connected: state, track, artist, album, image_url,
+    elapsed, elapsed_updated_at, duration, shuffle, repeat,
+    queue_index, queue_total, syncgroup_id.
+    """
+    if not state.is_ma_connected():
+        return jsonify({"connected": False})
+    return jsonify(state.get_ma_now_playing())
+
+
+@api_bp.route("/api/ma/queue/cmd", methods=["POST"])
+def api_ma_queue_cmd():
+    """Send a playback control command to the active MA syncgroup queue.
+
+    Body: {"action": "next"|"previous"|"shuffle"|"repeat"|"seek", "value": ...}
+    - shuffle: value=true|false
+    - repeat: value="off"|"all"|"one"
+    - seek: value=<seconds int>
+    """
+    if not state.is_ma_connected():
+        return jsonify({"success": False, "error": "MA not connected"}), 503
+
+    data = request.get_json(silent=True) or {}
+    action = data.get("action", "")
+    value = data.get("value")
+
+    if action not in ("next", "previous", "shuffle", "repeat", "seek"):
+        return jsonify({"success": False, "error": f"Unknown action: {action}"}), 400
+
+    loop = state.get_main_loop()
+    if not loop:
+        return jsonify({"success": False, "error": "Event loop not available"}), 503
+
+    try:
+        from services.ma_monitor import send_queue_cmd
+
+        fut = asyncio.run_coroutine_threadsafe(send_queue_cmd(action, value), loop)
+        ok = fut.result(timeout=10.0)
+        return jsonify({"success": ok})
+    except Exception as exc:
+        logger.warning("MA queue cmd %s failed: %s", action, exc)
+        return jsonify({"success": False, "error": str(exc)}), 500
+
+
 def pause_player():
     """Pause or play a single daemon subprocess via WS controller command.
 
@@ -740,6 +787,8 @@ def api_status_stream():
                         first = get_client_status_for(snapshot[0])
                         data = {**first, "devices": [get_client_status_for(c) for c in snapshot]}
                     data["groups"] = _build_groups_summary(snapshot)
+                    if state.is_ma_connected():
+                        data["nowplaying"] = state.get_ma_now_playing()
                     yield f"data: {json.dumps(data)}\n\n"
             else:
                 # 30 s timeout — send a keepalive comment so proxies don't close the connection

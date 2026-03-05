@@ -22,14 +22,18 @@ __all__ = [
     "get_ma_api_credentials",
     "get_ma_group_for_player",
     "get_ma_groups",
+    "get_ma_now_playing",
     "get_main_loop",
     "get_scan_job",
+    "is_ma_connected",
     "is_scan_running",
     "load_adapter_name_cache",
     "notify_status_changed",
     "set_clients",
     "set_ma_api_credentials",
+    "set_ma_connected",
     "set_ma_groups",
+    "set_ma_now_playing",
     "set_main_loop",
 ]
 
@@ -226,3 +230,40 @@ def get_ma_groups() -> "list[dict]":
     """Return all MA syncgroup players with their members."""
     with _ma_groups_lock:
         return list(_ma_all_groups)
+
+
+# ---------------------------------------------------------------------------
+# MA connection state and now-playing cache
+# ---------------------------------------------------------------------------
+
+_ma_connected: bool = False
+_ma_connected_lock = threading.Lock()
+_ma_now_playing: dict = {}
+_ma_now_playing_lock = threading.Lock()
+
+
+def is_ma_connected() -> bool:
+    """Return True if MA API integration is active and discovery succeeded."""
+    with _ma_connected_lock:
+        return _ma_connected
+
+
+def set_ma_connected(value: bool) -> None:
+    """Set MA connection state. Called by MaMonitor on connect/disconnect."""
+    global _ma_connected
+    with _ma_connected_lock:
+        _ma_connected = value
+
+
+def get_ma_now_playing() -> dict:
+    """Return current MA now-playing metadata dict (empty if not playing/not connected)."""
+    with _ma_now_playing_lock:
+        return dict(_ma_now_playing)
+
+
+def set_ma_now_playing(data: dict) -> None:
+    """Update MA now-playing cache. Triggers SSE notification."""
+    with _ma_now_playing_lock:
+        _ma_now_playing.clear()
+        _ma_now_playing.update(data)
+    notify_status_changed()

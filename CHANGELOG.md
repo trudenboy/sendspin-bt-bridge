@@ -5,7 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.9.4] - 2026-03-05
+## [2.9.5] - 2026-03-06
+
+### Added
+- **MA Monitor** (`services/ma_monitor.py`): persistent WebSocket connection to Music Assistant that subscribes to `player_queue_updated` / `player_updated` events in real time. Falls back to polling every 15 s if event subscription is unavailable. Auto-reconnects with exponential backoff.
+- **MA now-playing API**: `GET /api/ma/nowplaying` — returns current track, artist, album, image URL, elapsed time, shuffle/repeat state and queue position.
+- **MA queue commands API**: `POST /api/ma/queue/cmd` — accepts `next`, `previous`, `shuffle`, `repeat`, `seek` actions forwarded to the active MA syncgroup.
+- **SSE now-playing**: each SSE status event now includes a `nowplaying` field with the full MA metadata (only when MA is connected).
+- **UI playback controls**: when MA is connected, the Playback column shows ⏮ ⏭ 🔀 🔁 control buttons, MA track/artist metadata (overriding Sendspin MPRIS data), and a live progress bar.
+- `state.py`: `is_ma_connected()`, `set_ma_connected()`, `get_ma_now_playing()`, `set_ma_now_playing()`.
+
+
 
 ### Fixed
 - **Critical**: `MA_API_URL` and `MA_API_TOKEN` were not in the `allowed_keys` whitelist in `load_config()`, so they were silently filtered out and never passed to the MA API discovery code. MA group discovery was always skipped even when credentials were correctly saved in `config.json`.

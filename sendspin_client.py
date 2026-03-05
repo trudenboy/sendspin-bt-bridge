@@ -823,11 +823,23 @@ async def main():
             player_names = [c.player_name for c in clients]
             name_map, all_groups = await discover_ma_groups(ma_api_url, ma_api_token, player_names)
             _state.set_ma_groups(name_map, all_groups)
+            if name_map:
+                _state.set_ma_connected(True)
         except Exception as _ma_exc:
             logger.warning("MA API group discovery error: %s", _ma_exc)
 
+    # Start MA monitor if credentials configured
+    ma_monitor_task = None
+    if ma_api_url and ma_api_token:
+        from services.ma_monitor import start_monitor
+
+        monitor = start_monitor(ma_api_url, ma_api_token)
+        ma_monitor_task = asyncio.create_task(monitor.run())
+
     # Run all clients in parallel
-    await asyncio.gather(*[c.run() for c in clients])
+    client_tasks = [asyncio.create_task(c.run()) for c in clients]
+    tasks = client_tasks + ([ma_monitor_task] if ma_monitor_task else [])
+    await asyncio.gather(*tasks)
 
 
 if __name__ == "__main__":
