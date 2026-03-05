@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.10.0] - 2026-03-05
+
+### Added
+- Solo (ungrouped) players now show MA track info, progress and transport controls from their own MA queue.
+
+### Changed
+- Shuffle/Repeat moved into transport row (hover-only, same style as ◀◀ ▮▮ ▶▶).
+- Group badge hidden by default for solo players (appears on hover).
+- Delay indicator in Sync column is now hover-only.
+
+### Fixed
+- Mute state no longer resets to unmuted after Bluetooth reconnect or re-anchor.
+
 ## [2.9.9] - 2026-03-05
 
 ### Changed

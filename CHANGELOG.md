@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.10.0] - 2026-03-05
+
+### Added
+- **MA data for solo (ungrouped) players**: devices not in any Sendspin syncgroup now receive track info, progress bar, and transport controls (prev/next/shuffle/repeat) from their own MA queue. Previously only grouped devices had access to MA metadata.
+
+### Changed
+- **Shuffle ⇄ / Repeat ↻ in transport row**: buttons moved from secondary hover row into the main control row alongside ◀◀ ▮▮ ▶▶, hover-only, matching the same button style. Replaced emoji with Unicode text symbols.
+- **Group badge hover-only for solo players**: devices without a syncgroup show the group/player label only on card hover.
+- **Delay badge hover-only**: static delay indicator in the Sync column is now hidden by default and appears only on card hover.
+
+### Fixed
+- **Mute state reset on BT reconnect**: daemon subprocess now receives the current muted state on start instead of always emitting `muted: false`, preventing the mute icon from resetting after a Bluetooth reconnect or re-anchor.
+
 ## [2.9.9] - 2026-03-05
 
 ### Changed
