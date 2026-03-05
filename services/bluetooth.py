@@ -44,9 +44,9 @@ def bt_remove_device(mac: str, adapter_mac: str = "") -> None:
                 text=True,
                 timeout=10,
             )
-            logger.info(f"BT stack: removed {mac} (adapter: {adapter_mac or 'default'})")
+            logger.info("BT stack: removed %s (adapter: %s)", mac, adapter_mac or "default")
         except Exception as e:
-            logger.warning(f"BT stack cleanup failed for {mac}: {e}")
+            logger.warning("BT stack cleanup failed for %s: %s", mac, e)
 
     threading.Thread(target=_run, daemon=True).start()
 
@@ -68,7 +68,7 @@ def persist_device_enabled(player_name: str, enabled: bool) -> None:
                 json.dump(cfg, f, indent=2)
             os.replace(tmp, str(_CONFIG_FILE))
     except Exception as e:
-        logger.warning(f"Could not persist enabled flag for '{player_name}': {e}")
+        logger.warning("Could not persist enabled flag for '%s': %s", player_name, e)
 
     # Sync to options.json so the HA addon config page reflects the change
     if _OPTIONS_FILE.exists():
@@ -83,9 +83,9 @@ def persist_device_enabled(player_name: str, enabled: bool) -> None:
             with open(tmp, "w") as f:
                 json.dump(opts, f, indent=2)
             os.replace(tmp, str(_OPTIONS_FILE))
-            logger.debug(f"Synced enabled={enabled} for '{player_name}' to options.json")
+            logger.debug("Synced enabled=%s for '%s' to options.json", enabled, player_name)
         except Exception as e:
-            logger.debug(f"Could not sync enabled flag to options.json: {e}")
+            logger.debug("Could not sync enabled flag to options.json: %s", e)
 
 
 def is_audio_device(mac: str) -> bool:

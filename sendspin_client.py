@@ -232,7 +232,7 @@ class SendspinClient:
 
                 await asyncio.sleep(5)
             except Exception as e:
-                logger.error(f"Error updating status: {e}")
+                logger.error("Error updating status: %s", e)
                 await asyncio.sleep(5)
 
     async def start_sendspin(self) -> None:
@@ -242,7 +242,7 @@ class SendspinClient:
             await self._start_sendspin_inner()
             return
         if lock.locked():
-            logger.debug(f"[{self.player_name}] start_sendspin already in progress, skipping duplicate")
+            logger.debug("[%s] start_sendspin already in progress, skipping duplicate", self.player_name)
             return
         async with lock:
             await self._start_sendspin_inner()
@@ -270,11 +270,14 @@ class SendspinClient:
             if self.server_host and self.server_host.lower() not in ("auto", "discover", ""):
                 server_url = f"ws://{self.server_host}:{self.server_port}/sendspin"
                 logger.info(
-                    f"Starting Sendspin player '{self.player_name}' connecting to {server_url} (port {self.listen_port})"
+                    "Starting Sendspin player '%s' connecting to %s (port %s)",
+                    self.player_name,
+                    server_url,
+                    self.listen_port,
                 )
             else:
                 logger.info(
-                    f"Starting Sendspin player '{self.player_name}' with auto-discovery (port {self.listen_port})"
+                    "Starting Sendspin player '%s' with auto-discovery (port %s)", self.player_name, self.listen_port
                 )
 
             params = json.dumps(
@@ -295,7 +298,7 @@ class SendspinClient:
             env = os.environ.copy()
             if self.bluetooth_sink_name:
                 env["PULSE_SINK"] = self.bluetooth_sink_name
-                logger.info(f"[{self.player_name}] Subprocess PULSE_SINK={self.bluetooth_sink_name}")
+                logger.info("[%s] Subprocess PULSE_SINK=%s", self.player_name, self.bluetooth_sink_name)
 
             self._daemon_proc = await asyncio.create_subprocess_exec(
                 sys.executable,
@@ -316,13 +319,13 @@ class SendspinClient:
 
             def _on_reader_done(t: asyncio.Task) -> None:
                 if not t.cancelled() and t.exception():
-                    logger.error(f"[{self.player_name}] stdout reader error: {t.exception()}")
+                    logger.error("[%s] stdout reader error: %s", self.player_name, t.exception())
 
             self._daemon_task.add_done_callback(_on_reader_done)
-            logger.info(f"Sendspin daemon subprocess started (PID {self._daemon_proc.pid}) for '{self.player_name}'")
+            logger.info("Sendspin daemon subprocess started (PID %s) for '%s'", self._daemon_proc.pid, self.player_name)
 
         except Exception as e:
-            logger.error(f"Failed to start Sendspin daemon subprocess: {e}")
+            logger.error("Failed to start Sendspin daemon subprocess: %s", e)
             self._update_status({"last_error": str(e), "server_connected": False})
 
     async def _read_subprocess_output(self) -> None:
@@ -460,7 +463,7 @@ class SendspinClient:
                 await self._send_subprocess_command({"cmd": "stop"})
                 await asyncio.wait_for(self._daemon_proc.wait(), timeout=3.0)
             except TimeoutError:
-                logger.warning(f"[{self.player_name}] Daemon subprocess did not exit, killing")
+                logger.warning("[%s] Daemon subprocess did not exit, killing", self.player_name)
                 self._daemon_proc.kill()
                 await self._daemon_proc.wait()
             except Exception as exc:
@@ -487,7 +490,7 @@ class SendspinClient:
         if self.bt_management_enabled:
             await self.start_sendspin()
         else:
-            logger.info(f"[{self.player_name}] BT management disabled — skipping sendspin startup")
+            logger.info("[%s] BT management disabled — skipping sendspin startup", self.player_name)
 
         # Start background tasks
         tasks = [asyncio.create_task(self._status_monitor_loop())]
@@ -495,7 +498,7 @@ class SendspinClient:
             tasks.append(asyncio.create_task(self._keepalive_loop()))
 
         # Handle Bluetooth connection in background if configured
-        logger.info(f"Bluetooth manager present: {self.bt_manager is not None}")
+        logger.info("Bluetooth manager present: %s", self.bt_manager is not None)
         if self.bt_manager:
             logger.info("Starting Bluetooth connection task...")
 
@@ -524,19 +527,20 @@ class SendspinClient:
                     # Re-starting here ensures each player routes audio to its own BT sink.
                     if bt_now and self.bluetooth_sink_name:
                         logger.info(
-                            f"[{self.player_name}] BT connected with sink {self.bluetooth_sink_name} "
-                            "— restarting daemon on correct audio device"
+                            "[%s] BT connected with sink %s — restarting daemon on correct audio device",
+                            self.player_name,
+                            self.bluetooth_sink_name,
                         )
                         await self.start_sendspin()
                 except Exception as e:
-                    logger.error(f"Error connecting Bluetooth: {e}")
+                    logger.error("Error connecting Bluetooth: %s", e)
 
             tasks.append(asyncio.create_task(connect_bluetooth_async()))
             mon_task = asyncio.create_task(self.bt_manager.monitor_and_reconnect())
 
             def _on_monitor_done(t):
                 if not t.cancelled() and t.exception():
-                    logger.error(f"[{self.player_name}] monitor_and_reconnect task DIED: {t.exception()}")
+                    logger.error("[%s] monitor_and_reconnect task DIED: %s", self.player_name, t.exception())
 
             mon_task.add_done_callback(_on_monitor_done)
             tasks.append(mon_task)
@@ -566,17 +570,17 @@ class SendspinClient:
         if not enabled:
             # Terminate the daemon subprocess (safe from any thread via kill)
             if self.is_running() and self._daemon_proc:
-                logger.info(f"[{self.player_name}] BT released — stopping sendspin daemon")
+                logger.info("[%s] BT released — stopping sendspin daemon", self.player_name)
                 self._daemon_proc.kill()
             # Disconnect BT device (synchronous subprocess call, safe from any thread)
             if self.bt_manager:
                 try:
                     self.bt_manager.disconnect_device()
                 except Exception as e:
-                    logger.warning(f"[{self.player_name}] Disconnect on release failed: {e}")
-            logger.info(f"[{self.player_name}] BT adapter released to host")
+                    logger.warning("[%s] Disconnect on release failed: %s", self.player_name, e)
+            logger.info("[%s] BT adapter released to host", self.player_name)
         else:
-            logger.info(f"[{self.player_name}] BT adapter reclaimed — monitor will reconnect")
+            logger.info("[%s] BT adapter reclaimed — monitor will reconnect", self.player_name)
 
 
 async def main():
@@ -599,12 +603,12 @@ async def main():
     tz = os.getenv("TZ", config.get("TZ", "UTC"))
     os.environ["TZ"] = tz
     time.tzset()
-    logger.info(f"Timezone: {tz}")
+    logger.info("Timezone: %s", tz)
 
     # PulseAudio latency — larger buffer reduces underflows on slow hardware
     pulse_latency_msec = int(config.get("PULSE_LATENCY_MSEC", 200))
     os.environ["PULSE_LATENCY_MSEC"] = str(pulse_latency_msec)
-    logger.info(f"PULSE_LATENCY_MSEC: {pulse_latency_msec} ms")
+    logger.info("PULSE_LATENCY_MSEC: %s ms", pulse_latency_msec)
 
     # Log level — apply to root logger and inherit in subprocesses via env var
     log_level = config.get("LOG_LEVEL", "INFO").upper()
@@ -612,7 +616,7 @@ async def main():
         log_level = "INFO"
     logging.getLogger().setLevel(getattr(logging, log_level))
     os.environ["LOG_LEVEL"] = log_level
-    logger.info(f"Log level: {log_level}")
+    logger.info("Log level: %s", log_level)
 
     prefer_sbc = bool(config.get("PREFER_SBC_CODEC", False))
     if prefer_sbc:
@@ -627,9 +631,9 @@ async def main():
         mac = config.get("BLUETOOTH_MAC", "")
         bt_devices = [{"mac": mac, "adapter": "", "player_name": "Sendspin Player"}]
 
-    logger.info(f"Starting {len(bt_devices)} player instance(s)")
+    logger.info("Starting %s player instance(s)", len(bt_devices))
     if server_host and server_host.lower() not in ["auto", "discover", ""]:
-        logger.info(f"Server: {server_host}:{server_port}")
+        logger.info("Server: %s:%s", server_host, server_port)
     else:
         logger.info("Server: Auto-discovery enabled (mDNS)")
 
@@ -680,7 +684,7 @@ async def main():
             )
             bt_available = bt_mgr.check_bluetooth_available()
             if not bt_available:
-                logger.warning(f"BT adapter '{adapter or 'default'}' not available for {player_name}")
+                logger.warning("BT adapter '%s' not available for %s", adapter or "default", player_name)
             client.bt_manager = bt_mgr
             client._update_status({"bluetooth_available": bt_available})
             bt_enabled = device.get("enabled", True)
@@ -688,7 +692,7 @@ async def main():
                 client.bt_management_enabled = False
                 client._update_status({"bt_management_enabled": False})
                 bt_mgr.management_enabled = False
-                logger.info(f"  Player '{player_name}': BT management disabled at startup")
+                logger.info("  Player '%s': BT management disabled at startup", player_name)
             # Pre-fill volume from saved LAST_VOLUMES so UI shows correct value before BT connects
             try:
                 with open(_CONFIG_PATH) as _f:
@@ -699,7 +703,7 @@ async def main():
             except Exception:
                 pass
         clients.append(client)
-        logger.info(f"  Player: '{player_name}', BT: {mac or 'none'}, Adapter: {adapter or 'default'}")
+        logger.info("  Player: '%s', BT: %s, Adapter: %s", player_name, mac or "none", adapter or "default")
 
     logger.info("Client instance(s) registered")
 
@@ -710,7 +714,7 @@ async def main():
         for _c in clients:
             _persist_enabled(_c.player_name, _c.bt_management_enabled)
     except Exception as _e:
-        logger.debug(f"Could not sync enabled state to options.json: {_e}")
+        logger.debug("Could not sync enabled state to options.json: %s", _e)
 
     # Register MPRIS Identity services on the session bus (one per player)
     if _DBUS_MPRIS_AVAILABLE and _GLib is not None:
@@ -723,19 +727,20 @@ async def main():
             threading.Thread(target=_GLib.MainLoop().run, daemon=True, name="mpris-glib").start()
             logger.info("MPRIS Identity service(s) registered on session bus")
         except Exception as _e:
-            logger.warning(f"MPRIS Identity service unavailable: {_e}")
+            logger.warning("MPRIS Identity service unavailable: %s", _e)
 
     # Warn about listen_port collisions (all containers share host network)
     used_ports: set = set()
     for _c in clients:
         if _c.listen_port in used_ports:
             logger.warning(
-                f"[{_c.player_name}] listen_port {_c.listen_port} already used by another "
-                f"client — sendspin daemon will fail to bind. Set unique 'listen_port' per device."
+                "[%s] listen_port %s already used by another client — sendspin daemon will fail to bind. Set unique 'listen_port' per device.",
+                _c.player_name,
+                _c.listen_port,
             )
         elif _c.listen_port == 8928 and len(clients) > 1:
             logger.warning(
-                f"[{_c.player_name}] Using default listen_port 8928 with multiple devices — set explicit ports."
+                "[%s] Using default listen_port 8928 with multiple devices — set explicit ports.", _c.player_name
             )
         used_ports.add(_c.listen_port)
 
@@ -743,7 +748,7 @@ async def main():
     # Default asyncio executor has too few threads when many devices reconnect simultaneously.
     _pool_size = min(64, max(8, len(clients) * 2 + 4))
     asyncio.get_running_loop().set_default_executor(ThreadPoolExecutor(max_workers=_pool_size))
-    logger.debug(f"ThreadPoolExecutor: max_workers={_pool_size}")
+    logger.debug("ThreadPoolExecutor: max_workers=%s", _pool_size)
 
     # Start web interface in background thread
     def run_web_server():
@@ -765,7 +770,7 @@ async def main():
         active = [c for c in clients if c.is_running()]
         if active:
             await asyncio.gather(*[c._send_subprocess_command({"cmd": "pause"}) for c in active])
-            logger.info(f"Sent pause to {len(active)} player(s) — waiting 500 ms...")
+            logger.info("Sent pause to %s player(s) — waiting 500 ms...", len(active))
             await asyncio.sleep(0.5)
         for c in clients:
             c.running = False

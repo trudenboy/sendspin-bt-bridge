@@ -64,7 +64,7 @@ def save_device_volume(mac: str | None, volume: int) -> None:
                 json.dump(cfg, f, indent=2)
             os.replace(tmp, str(CONFIG_FILE))
     except Exception as e:
-        logger.debug(f"Could not save volume for {mac}: {e}")
+        logger.debug("Could not save volume for %s: %s", mac, e)
 
 
 # Keep private alias for backward compatibility with internal callers
@@ -103,11 +103,11 @@ def load_config() -> dict:
             for key, value in saved_config.items():
                 if key in allowed_keys:
                     result[key] = value
-            logger.info(f"Loaded config from {CONFIG_FILE}")
+            logger.info("Loaded config from %s", CONFIG_FILE)
         except Exception as e:
-            logger.warning(f"Error loading config: {e}, using defaults")
+            logger.warning("Error loading config: %s, using defaults", e)
     else:
-        logger.info(f"Config file not found at {CONFIG_FILE}, using defaults")
+        logger.info("Config file not found at %s, using defaults", CONFIG_FILE)
 
     return result
 
@@ -156,5 +156,5 @@ def ensure_secret_key(config: dict) -> str:
                 json.dump(existing, f, indent=2)
             os.replace(tmp, str(CONFIG_FILE))
     except Exception as e:
-        logger.warning(f"Could not persist SECRET_KEY: {e}")
+        logger.warning("Could not persist SECRET_KEY: %s", e)
     return key

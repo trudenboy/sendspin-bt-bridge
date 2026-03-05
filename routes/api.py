@@ -190,11 +190,11 @@ def get_client_status_for(client):
         status["sink_name"] = getattr(client, "bluetooth_sink_name", None)
         status["bt_management_enabled"] = getattr(client, "bt_management_enabled", True)
 
-        logger.debug(f"Status retrieved: {status}")
+        logger.debug("Status retrieved: %s", status)
         return status
 
     except Exception as e:
-        logger.error(f"Error getting client status: {e}", exc_info=True)
+        logger.exception("Error getting client status: %s", e)
         return {
             "connected": False,
             "server_connected": False,
@@ -266,7 +266,7 @@ def api_restart():
                         )
                         _ur.urlopen(req, timeout=15)
                     except Exception as e:
-                        logger.warning(f"Supervisor restart failed: {e}; falling back to SIGTERM")
+                        logger.warning("Supervisor restart failed: %s; falling back to SIGTERM", e)
                         try:
                             os.kill(1, signal.SIGTERM)
                         except ProcessLookupError:
@@ -441,7 +441,7 @@ def api_bt_reconnect():
                 time.sleep(1)
                 bt.connect_device()
             except Exception as e:
-                logger.error(f"Force reconnect failed: {e}")
+                logger.error("Force reconnect failed: %s", e)
 
         threading.Thread(target=_do_reconnect, daemon=True).start()
         return jsonify({"success": True, "message": "Reconnect started"})
@@ -471,7 +471,7 @@ def api_bt_pair():
                 bt.pair_device()
                 bt.connect_device()
             except Exception as e:
-                logger.error(f"Force pair failed: {e}")
+                logger.error("Force pair failed: %s", e)
 
         threading.Thread(target=_do_pair, daemon=True).start()
         return jsonify({"success": True, "message": "Pairing started (~25s)"})
@@ -629,7 +629,7 @@ def _sync_ha_options(config: dict) -> None:
         )
         _ur.urlopen(req, timeout=10)
     except Exception as e:
-        logger.warning(f"Failed to sync Supervisor options: {e}")
+        logger.warning("Failed to sync Supervisor options: %s", e)
 
 
 @api_bp.route("/api/config", methods=["GET", "POST"])
@@ -937,7 +937,7 @@ def api_logs():
 
         return jsonify({"logs": log_lines, "runtime": runtime})
     except Exception as e:
-        logger.error(f"Error reading logs: {e}")
+        logger.error("Error reading logs: %s", e)
         return jsonify({"logs": [f"Error reading logs: {e}"]}), 500
 
 
@@ -1152,7 +1152,7 @@ def _run_bt_scan(job_id: str) -> None:
         devices.sort(key=lambda d: (d["name"] == d["mac"], d["name"]))
         finish_scan_job(job_id, {"devices": devices})
     except Exception as e:
-        logger.error(f"BT scan failed: {e}")
+        logger.error("BT scan failed: %s", e)
         finish_scan_job(job_id, {"devices": [], "error": str(e)})
 
 

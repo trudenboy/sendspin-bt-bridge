@@ -51,12 +51,12 @@ def _force_sbc_codec(pa_mac: str) -> None:
                     text=True,
                 )
                 if result.returncode == 0:
-                    logger.info(f"✓ Forced SBC codec on {card_name}")
+                    logger.info("✓ Forced SBC codec on %s", card_name)
                 else:
-                    logger.debug(f"SBC force failed for {card_name}: {result.stderr.strip()}")
+                    logger.debug("SBC force failed for %s: %s", card_name, result.stderr.strip())
                 return
     except Exception as e:
-        logger.debug(f"SBC codec force skipped: {e}")
+        logger.debug("SBC codec force skipped: %s", e)
 
 
 def _dbus_get_device_property(device_path: str, property_name: str, adapter_hci: str = "hci0"):
@@ -90,7 +90,7 @@ def _dbus_call_device_method(device_path: str, method_name: str) -> bool:
         getattr(iface, method_name)()
         return True
     except Exception as e:
-        logger.debug(f"D-Bus {method_name} failed: {e}")
+        logger.debug("D-Bus %s failed: %s", method_name, e)
         return False
 
 
@@ -198,10 +198,10 @@ class BluetoothManager:
                             macs.append(part.upper())
                             break
             if idx < len(macs):
-                logger.info(f"Resolved adapter {adapter} → {macs[idx]}")
+                logger.info("Resolved adapter %s → %s", adapter, macs[idx])
                 return macs[idx]
         except Exception as e:
-            logger.debug(f"Adapter MAC resolution failed: {e}")
+            logger.debug("Adapter MAC resolution failed: %s", e)
         return adapter  # Fall back to hciN name
 
     def _run_bluetoothctl(self, commands: list) -> tuple[bool, str]:
@@ -222,7 +222,7 @@ class BluetoothManager:
             )
             return result.returncode == 0, result.stdout
         except Exception as e:
-            logger.error(f"Bluetoothctl error: {e}")
+            logger.error("Bluetoothctl error: %s", e)
             return False, str(e)
 
     def check_bluetooth_available(self) -> bool:
@@ -239,7 +239,7 @@ class BluetoothManager:
                 return "controller" in output_lower and "no default controller" not in output_lower
             return False
         except Exception as e:
-            logger.error(f"Bluetooth not available: {e}")
+            logger.error("Bluetooth not available: %s", e)
             return False
 
     def is_device_paired(self) -> bool:
@@ -263,14 +263,14 @@ class BluetoothManager:
 
             if is_connected != self.connected:
                 if is_connected:
-                    logger.info(f"✓ BT device {self.device_name} ({self.mac_address}) connected")
+                    logger.info("✓ BT device %s (%s) connected", self.device_name, self.mac_address)
                 else:
-                    logger.warning(f"✗ BT device {self.device_name} ({self.mac_address}) disconnected")
+                    logger.warning("✗ BT device %s (%s) disconnected", self.device_name, self.mac_address)
 
             self.connected = is_connected
             return self.connected
         except Exception as e:
-            logger.debug(f"Error checking Bluetooth connection: {e}")
+            logger.debug("Error checking Bluetooth connection: %s", e)
             self.connected = False
             return False
 
@@ -287,10 +287,10 @@ class BluetoothManager:
 
         mac = self.mac_address
         if not re.fullmatch(r"([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}", mac):
-            logger.error(f"Invalid MAC address format: {mac}")
+            logger.error("Invalid MAC address format: %s", mac)
             return False
 
-        logger.info(f"Pairing with {mac}...")
+        logger.info("Pairing with %s...", mac)
 
         initial_cmds = []
         if self._adapter_select:
@@ -322,15 +322,15 @@ class BluetoothManager:
             time.sleep(10)
 
             out, _ = proc.communicate(timeout=5)
-            logger.info(f"Pair output (last 600 chars): {out[-600:]}")
+            logger.info("Pair output (last 600 chars): %s", out[-600:])
             ok = "Pairing successful" in out or "Already paired" in out or "Paired: yes" in out
             if ok:
                 logger.info("Pairing successful")
             else:
-                logger.warning(f"Pairing may have failed. Output: {out[-200:]}")
+                logger.warning("Pairing may have failed. Output: %s", out[-200:])
             return ok
         except Exception as e:
-            logger.error(f"Pair error: {e}")
+            logger.error("Pair error: %s", e)
             if proc is not None:
                 try:
                     proc.kill()
@@ -354,7 +354,7 @@ class BluetoothManager:
 
             # Log available sinks for diagnostics
             sinks = list_sinks()
-            logger.info(f"Available audio sinks: {[s['name'] for s in sinks]}")
+            logger.info("Available audio sinks: %s", [s["name"] for s in sinks])
 
             # Find the Bluetooth sink (do NOT change system default — PULSE_SINK handles per-process routing)
             sink_names = [
@@ -371,16 +371,16 @@ class BluetoothManager:
             for attempt in range(3):
                 for sink_name in sink_names:
                     if sink_name in known_names or get_sink_volume(sink_name) is not None:
-                        logger.info(f"✓ Found audio sink: {sink_name}")
+                        logger.info("✓ Found audio sink: %s", sink_name)
                         configured_sink = sink_name
                         success = True
                         break
                     else:
-                        logger.debug(f"Sink {sink_name} not found, trying next...")
+                        logger.debug("Sink %s not found, trying next...", sink_name)
                 if success:
                     break
                 if attempt < 2:
-                    logger.info(f"Sink not yet available, retrying in 3s... (attempt {attempt + 1}/3)")
+                    logger.info("Sink not yet available, retrying in 3s... (attempt %s/3)", attempt + 1)
                     time.sleep(3)
                     sinks = list_sinks()
                     known_names = {s["name"] for s in sinks}
@@ -393,7 +393,7 @@ class BluetoothManager:
                 # Store the sink name in client for volume sync
                 if self.client:
                     self.client.bluetooth_sink_name = configured_sink
-                    logger.info(f"Stored Bluetooth sink for volume sync: {configured_sink}")
+                    logger.info("Stored Bluetooth sink for volume sync: %s", configured_sink)
 
                     # Restore last volume for this device (keyed by MAC)
                     restored = False
@@ -407,30 +407,30 @@ class BluetoothManager:
                                 last_volume = cfg.get("LAST_VOLUME")
                             if last_volume is not None and isinstance(last_volume, int) and 0 <= last_volume <= 100:
                                 if set_sink_volume(configured_sink, last_volume):
-                                    logger.info(f"✓ Restored volume to {last_volume}% for {self.mac_address}")
+                                    logger.info("✓ Restored volume to %s%% for %s", last_volume, self.mac_address)
                                     self.client._update_status({"volume": last_volume})
                                     restored = True
                     except Exception as e:
-                        logger.debug(f"Could not restore volume: {e}")
+                        logger.debug("Could not restore volume: %s", e)
 
                     if hasattr(self.client, "volume_restore_done"):
                         self.client.volume_restore_done = True
                     if not restored:
                         logger.info("No saved volume to restore, will use current volume")
             elif not success:
-                logger.warning(f"Could not find Bluetooth sink for {self.mac_address}")
+                logger.warning("Could not find Bluetooth sink for %s", self.mac_address)
                 logger.warning("Audio may play from default device instead of Bluetooth")
 
             return success
 
         except Exception as e:
-            logger.error(f"Error configuring Bluetooth audio: {e}")
+            logger.error("Error configuring Bluetooth audio: %s", e)
             return False
 
     def connect_device(self) -> bool:
         """Connect to the Bluetooth device"""
         if not self._connect_lock.acquire(blocking=False):
-            logger.debug(f"[{self.device_name}] connect_device already in progress, waiting...")
+            logger.debug("[%s] connect_device already in progress, waiting...", self.device_name)
             with self._connect_lock:  # wait for ongoing call to finish
                 pass
             return self.is_device_connected()
@@ -449,7 +449,7 @@ class BluetoothManager:
             self.configure_bluetooth_audio()
             return True
 
-        logger.info(f"Connecting to {self.mac_address}...")
+        logger.info("Connecting to %s...", self.mac_address)
 
         # Ensure paired and trusted (pair_device also runs trust)
         if not self.is_device_paired():
@@ -530,14 +530,14 @@ class BluetoothManager:
         detection; falls back to bluetoothctl polling if dbus-fast is unavailable
         or if the D-Bus environment doesn't support signal subscriptions.
         """
-        logger.info(f"[{self.device_name}] monitor_and_reconnect task started")
+        logger.info("[%s] monitor_and_reconnect task started", self.device_name)
         try:
             from dbus_fast import BusType
             from dbus_fast.aio import MessageBus
 
             await self._monitor_dbus(MessageBus, BusType)
         except (ImportError, RuntimeError) as e:
-            logger.info(f"[{self.device_name}] D-Bus monitor unavailable ({e}) — using bluetoothctl polling")
+            logger.info("[%s] D-Bus monitor unavailable (%s) — using bluetoothctl polling", self.device_name, e)
             await self._monitor_polling()
 
     async def _monitor_polling(self):
@@ -555,10 +555,10 @@ class BluetoothManager:
                 current_time = time.time()
                 if current_time - self.last_check >= self.check_interval:
                     self.last_check = current_time
-                    logger.debug(f"[{self.device_name}] BT poll #{iteration}")
+                    logger.debug("[%s] BT poll #%s", self.device_name, iteration)
 
                     connected = await loop.run_in_executor(None, self.is_device_connected)
-                    logger.debug(f"[{self.device_name}] BT connected={connected}")
+                    logger.debug("[%s] BT connected=%s", self.device_name, connected)
 
                     if self.client:
                         if connected != self.client.status.get("bluetooth_connected"):
@@ -584,7 +584,7 @@ class BluetoothManager:
                             continue
 
                         if self.client and self.client.is_running():
-                            logger.info(f"BT disconnected for {self.device_name}, stopping sendspin daemon...")
+                            logger.info("BT disconnected for %s, stopping sendspin daemon...", self.device_name)
                             with self.client._status_lock:
                                 is_grouped = bool(self.client.status.get("group_id"))
                             if not is_grouped:
@@ -593,19 +593,21 @@ class BluetoothManager:
                             await self.client.stop_sendspin()
 
                         logger.warning(
-                            f"Bluetooth device {self.device_name} disconnected, reconnecting... (attempt {reconnect_attempt})"
+                            "Bluetooth device %s disconnected, reconnecting... (attempt %s)",
+                            self.device_name,
+                            reconnect_attempt,
                         )
                         success = await loop.run_in_executor(None, self.connect_device)
                         if success and self.client:
                             reconnect_attempt = 0
                             self.client._update_status({"reconnecting": False, "reconnect_attempt": 0})
-                            logger.info(f"BT reconnected for {self.device_name}, starting sendspin...")
+                            logger.info("BT reconnected for %s, starting sendspin...", self.device_name)
                             await self.client.start_sendspin()
                         else:
                             # Back off: delay next check proportional to failure count
                             delay = self._reconnect_delay(reconnect_attempt)
                             self.last_check = time.time() + delay - self.check_interval
-                            logger.debug(f"[{self.device_name}] Backoff: next attempt in {delay:.0f}s")
+                            logger.debug("[%s] Backoff: next attempt in %.0fs", self.device_name, delay)
                     else:
                         if self.client and self.client.status.get("reconnecting"):
                             self.client._update_status({"reconnecting": False, "reconnect_attempt": 0})
@@ -613,7 +615,7 @@ class BluetoothManager:
 
                 await asyncio.sleep(5)
             except Exception as e:
-                logger.error(f"Error in Bluetooth poll monitor: {e}")
+                logger.error("Error in Bluetooth poll monitor: %s", e)
                 await asyncio.sleep(10)
 
     async def _monitor_dbus(self, MessageBus, BusType):
@@ -626,7 +628,7 @@ class BluetoothManager:
         reconnect_attempt = 0
         connect_failures = 0
         _MAX_CONNECT_FAILURES = 3
-        logger.info(f"[{self.device_name}] D-Bus monitor started (path={self._dbus_device_path})")
+        logger.info("[%s] D-Bus monitor started (path=%s)", self.device_name, self._dbus_device_path)
 
         # Single bus connection reused across BT reconnect iterations.
         # Recreated only when it becomes unresponsive or on first start.
@@ -652,7 +654,11 @@ class BluetoothManager:
                 except Exception as e:
                     connect_failures += 1
                     logger.debug(
-                        f"[{self.device_name}] D-Bus device not available ({e}), attempt {connect_failures}/{_MAX_CONNECT_FAILURES}"
+                        "[%s] D-Bus device not available (%s), attempt %s/%s",
+                        self.device_name,
+                        e,
+                        connect_failures,
+                        _MAX_CONNECT_FAILURES,
                     )
                     if connect_failures >= _MAX_CONNECT_FAILURES:
                         raise RuntimeError(f"D-Bus device introspection failed {connect_failures} times: {e}")
@@ -698,14 +704,14 @@ class BluetoothManager:
                             )
                         if not new_connected:
                             loop.call_soon_threadsafe(evt.set)
-                            logger.warning(f"[{self.device_name}] PropertiesChanged: Disconnected!")
+                            logger.warning("[%s] PropertiesChanged: Disconnected!", self.device_name)
                         else:
-                            logger.info(f"[{self.device_name}] PropertiesChanged: Connected!")
+                            logger.info("[%s] PropertiesChanged: Connected!", self.device_name)
 
                     return on_props_changed
 
                 props_iface.on_properties_changed(_make_props_handler(disconnect_event))
-                logger.info(f"[{self.device_name}] D-Bus monitoring active (connected={self.connected})")
+                logger.info("[%s] D-Bus monitoring active (connected=%s)", self.device_name, self.connected)
 
                 # Inner monitor loop
                 restart_outer = False
@@ -728,7 +734,7 @@ class BluetoothManager:
                             try:
                                 current_val = bool(await device_iface.get_connected())
                                 if not current_val and self.connected:
-                                    logger.warning(f"[{self.device_name}] Heartbeat: missed disconnect signal")
+                                    logger.warning("[%s] Heartbeat: missed disconnect signal", self.device_name)
                                     self.connected = False
                                     if self.client:
                                         self.client._update_status(
@@ -760,7 +766,7 @@ class BluetoothManager:
 
                         # Stop sendspin (BT sink is gone — would flood PortAudioErrors)
                         if self.client and self.client.is_running():
-                            logger.info(f"BT disconnected for {self.device_name}, stopping sendspin daemon...")
+                            logger.info("BT disconnected for %s, stopping sendspin daemon...", self.device_name)
                             with self.client._status_lock:
                                 is_grouped = bool(self.client.status.get("group_id"))
                             if not is_grouped:
@@ -769,7 +775,7 @@ class BluetoothManager:
                             await self.client.stop_sendspin()
 
                         logger.warning(
-                            f"[{self.device_name}] Disconnected, reconnecting... (attempt {reconnect_attempt})"
+                            "[%s] Disconnected, reconnecting... (attempt %s)", self.device_name, reconnect_attempt
                         )
                         success = await loop.run_in_executor(None, self.connect_device)
 
@@ -786,15 +792,15 @@ class BluetoothManager:
                                     }
                                 )
                             # Re-subscribe signals — device object may have changed
-                            logger.info(f"[{self.device_name}] Reconnected, restarting D-Bus subscription...")
+                            logger.info("[%s] Reconnected, restarting D-Bus subscription...", self.device_name)
                             if self.client:
-                                logger.info(f"BT reconnected for {self.device_name}, starting sendspin...")
+                                logger.info("BT reconnected for %s, starting sendspin...", self.device_name)
                                 await self.client.start_sendspin()
                             restart_outer = True
                         else:
                             # Failed — back off proportional to failure count
                             delay = self._reconnect_delay(reconnect_attempt)
-                            logger.debug(f"[{self.device_name}] Backoff: next attempt in {delay:.0f}s")
+                            logger.debug("[%s] Backoff: next attempt in %.0fs", self.device_name, delay)
                             await asyncio.sleep(delay)
                             # Re-read state in case external reconnect happened
                             try:
@@ -804,7 +810,7 @@ class BluetoothManager:
                             if self.connected:
                                 # Device reconnected on its own while we were sleeping —
                                 # configure audio and start sendspin, then restart D-Bus subscription
-                                logger.info(f"[{self.device_name}] External reconnect detected, configuring audio...")
+                                logger.info("[%s] External reconnect detected, configuring audio...", self.device_name)
                                 await loop.run_in_executor(None, self.configure_bluetooth_audio)
                                 reconnect_attempt = 0
                                 if self.client:
@@ -816,7 +822,7 @@ class BluetoothManager:
                                             "bluetooth_connected_at": datetime.now().isoformat(),
                                         }
                                     )
-                                    logger.info(f"BT reconnected for {self.device_name}, starting sendspin...")
+                                    logger.info("BT reconnected for %s, starting sendspin...", self.device_name)
                                     await self.client.start_sendspin()
                                 restart_outer = True
 
@@ -825,7 +831,7 @@ class BluetoothManager:
             except Exception as e:
                 connect_failures += 1
                 logger.error(
-                    f"[{self.device_name}] D-Bus monitor error ({connect_failures}/{_MAX_CONNECT_FAILURES}): {e}"
+                    "[%s] D-Bus monitor error (%s/%s): %s", self.device_name, connect_failures, _MAX_CONNECT_FAILURES, e
                 )
                 if connect_failures >= _MAX_CONNECT_FAILURES:
                     # Bus is likely broken; force reconnect on next iteration

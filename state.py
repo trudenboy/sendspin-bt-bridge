@@ -78,7 +78,7 @@ def set_clients(new_clients: list) -> None:
     with clients_lock:
         clients.clear()
         clients.extend(new_clients if new_clients else [])
-    logger.info(f"Client references updated: {len(clients)} client(s)")
+    logger.info("Client references updated: %s client(s)", len(clients))
 
 
 # ---------------------------------------------------------------------------

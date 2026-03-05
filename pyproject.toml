@@ -11,6 +11,7 @@ select = [
     "E",      # pycodestyle errors
     "W",      # pycodestyle warnings
     "F",      # pyflakes
+    "G",      # flake8-logging-format (lazy % logging)
     "I",      # isort
     "UP",     # pyupgrade
     "B",      # flake8-bugbear

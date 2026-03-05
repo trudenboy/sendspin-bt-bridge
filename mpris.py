@@ -84,10 +84,10 @@ def pause_all_via_mpris() -> int:
                 if pb == "Playing":
                     player = dbus.Interface(obj, "org.mpris.MediaPlayer2.Player")
                     player.Pause()
-                    logger.info(f"Sent MPRIS Pause to {sname}")
+                    logger.info("Sent MPRIS Pause to %s", sname)
                     paused += 1
             except Exception as _e:
-                logger.debug(f"MPRIS pause skipped for {sname}: {_e}")
+                logger.debug("MPRIS pause skipped for %s: %s", sname, _e)
     except Exception as _e:
-        logger.debug(f"MPRIS pause unavailable: {_e}")
+        logger.debug("MPRIS pause unavailable: %s", _e)
     return paused
