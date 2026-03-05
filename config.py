@@ -112,7 +112,7 @@ def load_config() -> dict:
 
     if CONFIG_FILE.exists():
         try:
-            with open(CONFIG_FILE) as f:
+            with config_lock, open(CONFIG_FILE) as f:
                 saved_config = json.load(f)
             for key, value in saved_config.items():
                 if key in allowed_keys:
