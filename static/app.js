@@ -429,7 +429,8 @@ function populateDeviceCard(i, dev) {
     var progFill = document.getElementById('dprog-fill-' + i);
     var progTime = document.getElementById('dprog-time-' + i);
     var maActive = !!((_maNowPlaying && _maNowPlaying.connected));
-    if (maActive && _maNowPlaying.duration > 0 && _maNowPlaying.elapsed != null) {
+    var maHasProg = maActive && _maNowPlaying.duration > 0 && _maNowPlaying.elapsed != null;
+    if (maHasProg) {
         _maProgSnapshot = {
             elapsed: _maNowPlaying.elapsed,
             duration: _maNowPlaying.duration,
@@ -437,6 +438,9 @@ function populateDeviceCard(i, dev) {
                 ? (Date.now() - (Date.now() / 1000 - _maNowPlaying.elapsed_updated_at) * 1000)
                 : Date.now(),
         };
+    }
+    var deviceMaActive = maActive && !!dev.has_sink;
+    if (deviceMaActive && maHasProg) {
         if (progWrap) progWrap.style.display = '';
         delete _progSnapshots[i];
     } else {
