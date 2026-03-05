@@ -1512,7 +1512,9 @@ def api_bt_scan_result(job_id: str):
 
 @api_bp.route("/api/debug/ma")
 def api_debug_ma():
-    """Debug: dump MA now-playing cache, groups, and per-client player_ids."""
+    """Debug: dump MA now-playing cache, groups, per-client player_ids, and live queues."""
+    import asyncio as _asyncio
+
     with state._ma_now_playing_lock:
         cache = dict(state._ma_now_playing)
     groups = state.get_ma_groups()
@@ -1524,7 +1526,41 @@ def api_debug_ma():
         }
         for c in _clients
     ]
-    return jsonify({"cache_keys": list(cache.keys()), "cache": cache, "groups": groups, "clients": clients_info})
+
+    # Fetch live queue ids from MA WebSocket
+    ma_url, ma_token = state.get_ma_api_credentials()
+    live_queue_ids: list[str] = []
+    if ma_url and ma_token:
+        try:
+            import websockets
+
+            async def _fetch():
+                ws_url = ma_url.replace("http://", "ws://").replace("https://", "wss://") + "/ws"
+                async with websockets.connect(ws_url, extra_headers={"Authorization": f"Bearer {ma_token}"}) as ws:
+                    import json as _json
+
+                    await ws.send(_json.dumps({"command": "player_queues/all", "args": {}, "message_id": 99}))
+                    for _ in range(10):
+                        msg = _json.loads(await asyncio.wait_for(ws.recv(), timeout=5))
+                        if str(msg.get("message_id")) == "99":
+                            return [q.get("queue_id", "") for q in (msg.get("result") or [])]
+                return []
+
+            loop = state.get_main_loop()
+            if loop:
+                fut = _asyncio.run_coroutine_threadsafe(_fetch(), loop)
+                live_queue_ids = fut.result(timeout=10)
+        except Exception as e:
+            live_queue_ids = [f"error: {e}"]
+
+    return jsonify(
+        {
+            "cache_keys": list(cache.keys()),
+            "groups": groups,
+            "clients": clients_info,
+            "live_queue_ids": live_queue_ids,
+        }
+    )
 
 
 @api_bp.route("/api/diagnostics")
