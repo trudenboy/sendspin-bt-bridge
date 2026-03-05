@@ -224,7 +224,7 @@ def login():
                         flow_id=flow_id,
                         mfa_module_id=mfa_module_id,
                     )
-                result = _ha_flow_step(flow_id, {"code": code, "mfa_module_id": mfa_module_id})
+                result = _ha_flow_step(flow_id, {"code": code})
                 if result and result.get("type") == "create_entry":
                     _clear_failures(client_ip)
                     session["authenticated"] = True
