@@ -173,12 +173,9 @@ class SendspinClient:
     def get_ip_address(self) -> str:
         """Get the primary IP address of this machine"""
         try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            try:
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
                 s.connect(("8.8.8.8", 80))
                 return s.getsockname()[0]
-            finally:
-                s.close()
         except Exception:
             return "unknown"
 
@@ -421,8 +418,8 @@ class SendspinClient:
 
     async def _send_keepalive_burst(self) -> None:
         """Write 500 ms of PCM silence to the BT PulseAudio sink via paplay."""
-        # 500 ms x 44100 Hz x 2 ch x 2 bytes/sample = 88200 bytes
-        silence = b"\x00" * (44100 * 2 * 2 // 2)
+        # 500 ms x 44100 Hz x 2 channels x 2 bytes/sample = 88200 bytes
+        silence = b"\x00" * (int(44100 * 0.5) * 2 * 2)
         try:
             proc = await asyncio.create_subprocess_exec(
                 "paplay",

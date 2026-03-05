@@ -79,16 +79,17 @@ def persist_device_enabled(player_name: str, enabled: bool) -> None:
     # Sync to options.json so the HA addon config page reflects the change
     if _OPTIONS_FILE.exists():
         try:
-            with open(_OPTIONS_FILE) as f:
-                opts = json.load(f)
-            for dev in opts.get("bluetooth_devices", []):
-                if dev.get("player_name") == player_name:
-                    dev["enabled"] = enabled
-                    break
-            tmp = str(_OPTIONS_FILE) + ".tmp"
-            with open(tmp, "w") as f:
-                json.dump(opts, f, indent=2)
-            os.replace(tmp, str(_OPTIONS_FILE))
+            with _config_lock:
+                with open(_OPTIONS_FILE) as f:
+                    opts = json.load(f)
+                for dev in opts.get("bluetooth_devices", []):
+                    if dev.get("player_name") == player_name:
+                        dev["enabled"] = enabled
+                        break
+                tmp = str(_OPTIONS_FILE) + ".tmp"
+                with open(tmp, "w") as f:
+                    json.dump(opts, f, indent=2)
+                os.replace(tmp, str(_OPTIONS_FILE))
             logger.debug("Synced enabled=%s for '%s' to options.json", enabled, player_name)
         except Exception as e:
             logger.debug("Could not sync enabled flag to options.json: %s", e)

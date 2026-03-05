@@ -508,22 +508,5 @@ def _fallback_move_pid_sink_inputs(pid: int, sink_name: str) -> int:
 
 
 def get_sink_input_ids() -> set[int]:
-    """Return the set of currently active sink-input IDs (sync, subprocess)."""
-    ids: set[int] = set()
-    try:
-        r = subprocess.run(
-            ["pactl", "list", "short", "sink-inputs"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        for line in r.stdout.splitlines():
-            parts = line.split("\t")
-            if parts:
-                try:
-                    ids.add(int(parts[0]))
-                except ValueError:
-                    pass
-    except Exception as exc:
-        logger.debug("get_sink_input_ids error: %s", exc)
-    return ids
+    """Return the set of currently active sink-input IDs (sync)."""
+    return _run(alist_sink_input_ids())

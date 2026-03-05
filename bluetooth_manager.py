@@ -301,8 +301,6 @@ class BluetoothManager:
         The device MUST be in pairing/discoverable mode when this runs.
         Uses stdin pipe directly — no shell, no injection risk.
         """
-        import re
-
         mac = self.mac_address
         if not re.fullmatch(r"([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}", mac):
             logger.error("Invalid MAC address format: %s", mac)

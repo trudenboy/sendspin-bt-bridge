@@ -6,6 +6,7 @@ All /api/* routes and the helper functions they depend on.
 
 import asyncio
 import concurrent.futures
+import functools
 import json
 import logging
 import os
@@ -107,22 +108,18 @@ def _schedule_volume_persist(mac: str, volume: int) -> None:
 # Helpers
 # ---------------------------------------------------------------------------
 
-_runtime_cache: str = ""
 
-
+@functools.lru_cache(maxsize=1)
 def _detect_runtime() -> str:
     """Detect whether running under systemd, HA addon, or Docker. Result is cached."""
-    global _runtime_cache
-    if not _runtime_cache:
-        if os.path.exists("/etc/systemd/system/sendspin-client.service") or os.path.exists(
-            "/run/systemd/system/sendspin-client.service"
-        ):
-            _runtime_cache = "systemd"
-        elif os.path.exists("/data/options.json"):
-            _runtime_cache = "ha_addon"
-        else:
-            _runtime_cache = "docker"
-    return _runtime_cache
+    if os.path.exists("/etc/systemd/system/sendspin-client.service") or os.path.exists(
+        "/run/systemd/system/sendspin-client.service"
+    ):
+        return "systemd"
+    elif os.path.exists("/data/options.json"):
+        return "ha_addon"
+    else:
+        return "docker"
 
 
 def get_client_status_for(client):
@@ -663,6 +660,12 @@ def api_config():
     config = request.get_json()
     if not isinstance(config, dict):
         return jsonify({"error": "Invalid JSON body"}), 400
+
+    # Validate top-level string fields
+    for str_key in ("SENDSPIN_SERVER", "BRIDGE_NAME", "TZ", "LOG_LEVEL"):
+        val = config.get(str_key)
+        if val is not None and not isinstance(val, str):
+            return jsonify({"error": f"{str_key} must be a string"}), 400
 
     # Validate BLUETOOTH_DEVICES entries
     bt_devices = config.get("BLUETOOTH_DEVICES", [])
