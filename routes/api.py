@@ -35,6 +35,7 @@ from config import (
 from config import (
     save_device_volume as _save_device_volume,
 )
+from mpris import play_via_mpris as _play_via_mpris
 from services import (
     bt_remove_device as _bt_remove_device,
 )
@@ -374,24 +375,49 @@ def set_mute():
 
 @api_bp.route("/api/pause_all", methods=["POST"])
 def pause_all():
-    """Pause or play all running daemon subprocesses via stdin IPC."""
+    """Pause or play all running daemon subprocesses.
+
+    For pause: sends IPC command to each daemon (deduped per MA sync group).
+    For play: sends MPRIS Play via D-Bus so MA is the playback initiator and
+    can re-establish group sync.  One Play is sent per representative player
+    per group — sending from every member breaks the group.
+    """
     data = request.get_json() or {}
     action = data.get("action", "pause")
     loop = state.get_main_loop()
     if loop is None:
         return jsonify({"success": False, "error": "Event loop not available"}), 503
-    # Send command once per group — sending PLAY from every client in the same
-    # MA group causes MA to break the group and create separate sessions per client.
-    seen_groups: set = set()
+
+    if action == "play":
+        # Resume via MPRIS — MA is the initiator, group sync is preserved.
+        # Pick one representative per group_id (or every ungrouped player).
+        seen_groups: set = set()
+        representative_names: list = []
+        for client in _clients:
+            if not client.is_running():
+                continue
+            gid = client.status.get("group_id")
+            if gid:
+                if gid in seen_groups:
+                    continue  # already have a rep for this group
+                seen_groups.add(gid)
+            pname = getattr(client, "player_name", None)
+            if pname:
+                representative_names.append(pname)
+        count = _play_via_mpris(representative_names)
+        return jsonify({"success": True, "action": action, "count": count})
+
+    # Pause: send IPC command once per group.
+    seen_groups_p: set = set()
     count = 0
     for client in _clients:
         if not client.is_running():
             continue
         gid = client.status.get("group_id")
         if gid:
-            if gid in seen_groups:
+            if gid in seen_groups_p:
                 continue  # already sent for this group
-            seen_groups.add(gid)
+            seen_groups_p.add(gid)
         try:
             fut = asyncio.run_coroutine_threadsafe(client._send_subprocess_command({"cmd": action}), loop)
             fut.result(timeout=2.0)
@@ -403,12 +429,12 @@ def pause_all():
 
 @api_bp.route("/api/pause", methods=["POST"])
 def pause_player():
-    """Pause or play a single daemon subprocess via stdin IPC.
+    """Pause or play a single daemon subprocess.
 
-    If the target player is part of a MA sync group, the command is sent
-    only once (from the target itself) so MA keeps the group intact.
-    Sending PLAY from every member would cause MA to break the group into
-    separate sessions.
+    Pause: sends IPC cmd directly to the daemon.
+    Play: if the player is (or was) in a MA sync group, resumes via MPRIS so
+    MA is the initiator and can re-establish group sync.  For ungrouped players
+    the IPC play cmd is used as before.
     """
     data = request.get_json() or {}
     player_name = data.get("player_name", "")
@@ -419,11 +445,13 @@ def pause_player():
     loop = state.get_main_loop()
     if loop is None:
         return jsonify({"success": False, "error": "Event loop not available"}), 503
+
+    if action == "play":
+        # Resume via MPRIS — MA is the initiator, preserves group sync.
+        count = _play_via_mpris([player_name])
+        return jsonify({"success": True, "action": action, "count": count})
+
     try:
-        # If this player is in a MA sync group, send command only once from
-        # the target — MA will propagate to all group members automatically.
-        # Do NOT send to every member: sending PLAY from multiple clients
-        # causes MA to break the group and assign separate sessions.
         fut = asyncio.run_coroutine_threadsafe(target._send_subprocess_command({"cmd": action}), loop)
         fut.result(timeout=2.0)
         return jsonify({"success": True, "action": action, "count": 1})
