@@ -470,7 +470,6 @@
         }
 
         /* MA playback controls row */
-        .playback-transport { display: flex; align-items: center; gap: 2px; margin-top: 2px; }
         .ma-secondary-controls { display: none; align-items: center; gap: 2px; margin-top: 4px; }
         .device-card:hover .ma-secondary-controls.ma-ready { display: flex; }
         .ma-secondary-controls .card-icon-btn { margin-left: 0; }

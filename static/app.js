@@ -241,8 +241,6 @@ function buildDeviceCard(i) {
             '<div class="status-value">' +
               '<span class="status-indicator" id="dplay-ind-' + i + '"></span>' +
               '<span id="dplay-' + i + '">-</span>' +
-            '</div>' +
-            '<div class="playback-transport">' +
               '<button type="button" class="card-icon-btn transport-btn" id="dma-prev-' + i + '" ' +
                 'onclick="maQueueCmd(\'previous\')" title="Previous" style="display:none;">&#9664;&#9664;</button>' +
               '<button type="button" class="card-icon-btn transport-btn" id="dbtn-pause-' + i + '" ' +
