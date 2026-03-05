@@ -105,6 +105,16 @@ def main() -> None:
         for key in ("AUTH_PASSWORD_HASH", "SECRET_KEY"):
             if key in existing:
                 config[key] = existing[key]
+        # Preserve per-device web UI settings (e.g. keepalive) not present in options.json
+        existing_devs = {
+            d["mac"]: d for d in existing.get("BLUETOOTH_DEVICES", []) if isinstance(d, dict) and d.get("mac")
+        }
+        for dev in config["BLUETOOTH_DEVICES"]:
+            mac = dev.get("mac") if isinstance(dev, dict) else None
+            if mac and mac in existing_devs:
+                for field in ("keepalive_silence", "keepalive_interval"):
+                    if field not in dev and field in existing_devs[mac]:
+                        dev[field] = existing_devs[mac][field]
     except (FileNotFoundError, json.JSONDecodeError):
         pass
 
