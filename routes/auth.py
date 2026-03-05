@@ -111,7 +111,9 @@ def _ha_flow_start() -> dict | None:
             method="POST",
         )
         with _ur.urlopen(req, timeout=10) as resp:
-            return json.loads(resp.read())
+            result = json.loads(resp.read())
+            logger.debug("HA login_flow started: flow_id=%s", result.get("flow_id"))
+            return result
     except HTTPError as exc:
         # HA Core is reachable but returned an error (e.g. 404/500).
         # Do NOT fall back to Supervisor /auth — that would bypass MFA.
@@ -135,11 +137,17 @@ def _ha_flow_step(flow_id: str, data: dict) -> dict | None:
             method="POST",
         )
         with _ur.urlopen(req, timeout=10) as resp:
-            return json.loads(resp.read())
+            result = json.loads(resp.read())
+            logger.debug("HA flow step result: %s", result)
+            return result
     except HTTPError as exc:
         try:
-            return json.loads(exc.read())
+            body = exc.read()
+            result = json.loads(body)
+            logger.warning("HA flow step HTTP %s: %s", exc.code, result)
+            return result
         except Exception:
+            logger.warning("HA flow step HTTP %s (unparseable body)", exc.code)
             return None
     except Exception as exc:
         logger.warning("HA login flow step error: %s", exc)
