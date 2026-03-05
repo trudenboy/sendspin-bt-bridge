@@ -15,7 +15,6 @@ __all__ = [
     "_DBUS_MPRIS_AVAILABLE",
     "MprisIdentityService",
     "pause_all_via_mpris",
-    "play_via_mpris",
 ]
 
 # ---------------------------------------------------------------------------

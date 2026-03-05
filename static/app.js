@@ -731,6 +731,7 @@ function onGroupFilterChange(val) {
     if (!lastDevices) return;
     lastDevices.forEach(function(dev, i) {
         var g = dev.group_name || dev.group_id || '';
+        var inGroup = !val || g === val;
         _groupSelected[i] = inGroup;
         var cb = document.getElementById('dsel-' + i);
         if (cb) cb.checked = inGroup;
@@ -866,14 +867,14 @@ function onDevicePause(i) {
     var action = isPaused ? 'play' : 'pause';
 
     // If device is in a multi-member group, pause/play the whole group via
-    // /api/pause_all — which deduplicates per group_id and sends one command.
-    // Using /api/pause (single-client) for PLAY breaks the group in MA.
+    // /api/group/pause (by group_id) — MA propagates to all group members.
+    // Using /api/pause (single-client) for PLAY breaks group sync in MA.
     var groupSize = dev && dev.group_id
         ? (lastDevices || []).filter(function(d) { return d.group_id === dev.group_id; }).length
         : 0;
-    var url = groupSize > 1 ? '/api/pause_all' : '/api/pause';
+    var url = groupSize > 1 ? '/api/group/pause' : '/api/pause';
     var body = groupSize > 1
-        ? {action: action}
+        ? {action: action, group_id: dev.group_id}
         : {action: action, player_name: dev ? dev.player_name : null};
 
     fetch(API_BASE + url, {

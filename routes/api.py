@@ -35,7 +35,6 @@ from config import (
 from config import (
     save_device_volume as _save_device_volume,
 )
-from mpris import play_via_mpris as _play_via_mpris
 from services import (
     bt_remove_device as _bt_remove_device,
 )
@@ -303,8 +302,11 @@ def set_volume():
             return jsonify({"success": False, "error": "Invalid volume value"}), 400
         player_names = data.get("player_names")
         player_name = data.get("player_name")
+        group_id = data.get("group_id")
 
-        if player_names is not None:
+        if group_id is not None:
+            targets = [c for c in _clients if c.status.get("group_id") == group_id]
+        elif player_names is not None:
             targets = [c for c in _clients if getattr(c, "player_name", None) in player_names]
         elif player_name:
             targets = [c for c in _clients if getattr(c, "player_name", None) == player_name]
@@ -375,49 +377,29 @@ def set_mute():
 
 @api_bp.route("/api/pause_all", methods=["POST"])
 def pause_all():
-    """Pause or play all running daemon subprocesses.
+    """Pause or play all running daemon subprocesses via WS controller command.
 
-    For pause: sends IPC command to each daemon (deduped per MA sync group).
-    For play: sends MPRIS Play via D-Bus so MA is the playback initiator and
-    can re-establish group sync.  One Play is sent per representative player
-    per group — sending from every member breaks the group.
+    Sends IPC cmd once per unique MA sync group — the daemon calls
+    send_group_command() over the existing WS connection so MA is the
+    playback initiator and group sync is preserved.
+    Sending to every member of the same group would cause MA to break the
+    group into separate sessions.
     """
     data = request.get_json() or {}
     action = data.get("action", "pause")
     loop = state.get_main_loop()
     if loop is None:
         return jsonify({"success": False, "error": "Event loop not available"}), 503
-
-    if action == "play":
-        # Resume via MPRIS — MA is the initiator, group sync is preserved.
-        # Pick one representative per group_id (or every ungrouped player).
-        seen_groups: set = set()
-        representative_names: list = []
-        for client in _clients:
-            if not client.is_running():
-                continue
-            gid = client.status.get("group_id")
-            if gid:
-                if gid in seen_groups:
-                    continue  # already have a rep for this group
-                seen_groups.add(gid)
-            pname = getattr(client, "player_name", None)
-            if pname:
-                representative_names.append(pname)
-        count = _play_via_mpris(representative_names)
-        return jsonify({"success": True, "action": action, "count": count})
-
-    # Pause: send IPC command once per group.
-    seen_groups_p: set = set()
+    seen_groups: set = set()
     count = 0
     for client in _clients:
         if not client.is_running():
             continue
         gid = client.status.get("group_id")
         if gid:
-            if gid in seen_groups_p:
+            if gid in seen_groups:
                 continue  # already sent for this group
-            seen_groups_p.add(gid)
+            seen_groups.add(gid)
         try:
             fut = asyncio.run_coroutine_threadsafe(client._send_subprocess_command({"cmd": action}), loop)
             fut.result(timeout=2.0)
@@ -427,14 +409,51 @@ def pause_all():
     return jsonify({"success": True, "action": action, "count": count})
 
 
-@api_bp.route("/api/pause", methods=["POST"])
-def pause_player():
-    """Pause or play a single daemon subprocess.
+@api_bp.route("/api/group/pause", methods=["POST"])
+def api_group_pause():
+    """Pause or resume a specific MA sync group by group_id.
 
-    Pause: sends IPC cmd directly to the daemon.
-    Play: if the player is (or was) in a MA sync group, resumes via MPRIS so
-    MA is the initiator and can re-establish group sync.  For ungrouped players
-    the IPC play cmd is used as before.
+    Sends MediaCommand.PAUSE or MediaCommand.PLAY to ONE member of the group.
+    MA propagates the action to all group members — sending to each member
+    individually would break group sync.
+
+    Use action="play" to resume a paused group. Note: this is a resume command
+    only. Starting fresh playback with an empty queue must be done from MA UI
+    or HA actions.
+    """
+    data = request.get_json() or {}
+    group_id = data.get("group_id")
+    action = data.get("action", "pause")
+    if not group_id:
+        return jsonify({"success": False, "error": "group_id is required"}), 400
+
+    loop = state.get_main_loop()
+    if loop is None:
+        return jsonify({"success": False, "error": "Event loop not available"}), 503
+
+    # Find one running member of the specified group
+    target = next(
+        (c for c in _clients if c.is_running() and c.status.get("group_id") == group_id),
+        None,
+    )
+    if not target:
+        return jsonify({"success": False, "error": "Group not found or no running members"}), 404
+
+    try:
+        fut = asyncio.run_coroutine_threadsafe(target._send_subprocess_command({"cmd": action}), loop)
+        fut.result(timeout=2.0)
+        group_name = target.status.get("group_name")
+        return jsonify({"success": True, "action": action, "group_id": group_id, "group_name": group_name})
+    except Exception as exc:
+        return jsonify({"success": False, "error": str(exc)}), 500
+
+
+def pause_player():
+    """Pause or play a single daemon subprocess via WS controller command.
+
+    Sends IPC cmd to the target daemon which calls send_group_command() over
+    the existing WS connection — MA is the playback initiator and can
+    re-establish group sync.
     """
     data = request.get_json() or {}
     player_name = data.get("player_name", "")
@@ -445,12 +464,6 @@ def pause_player():
     loop = state.get_main_loop()
     if loop is None:
         return jsonify({"success": False, "error": "Event loop not available"}), 503
-
-    if action == "play":
-        # Resume via MPRIS — MA is the initiator, preserves group sync.
-        count = _play_via_mpris([player_name])
-        return jsonify({"success": True, "action": action, "count": count})
-
     try:
         fut = asyncio.run_coroutine_threadsafe(target._send_subprocess_command({"cmd": action}), loop)
         fut.result(timeout=2.0)
@@ -561,6 +574,64 @@ def api_status():
     return jsonify(result)
 
 
+def _build_groups_summary(clients: list) -> list[dict]:
+    """Build a list of group objects from the current client list.
+
+    Players sharing the same non-None group_id are merged into one group entry.
+    Solo players (group_id=None) each appear as their own single-member group.
+    """
+    groups: dict[str | None, dict] = {}
+    solo_counter = 0
+
+    for client in clients:
+        status = client.status
+        gid = status.get("group_id")
+        # Give each solo player a unique key so they don't merge
+        key = gid if gid is not None else f"__solo_{solo_counter}"
+        if gid is None:
+            solo_counter += 1
+
+        member = {
+            "player_name": getattr(client, "player_name", None),
+            "volume": status.get("volume", 100),
+            "playing": bool(status.get("playing")),
+            "connected": bool(status.get("connected")),
+            "bluetooth_connected": bool(status.get("bluetooth_connected")),
+        }
+
+        if key not in groups:
+            groups[key] = {
+                "group_id": gid,
+                "group_name": status.get("group_name"),
+                "members": [],
+            }
+
+        groups[key]["members"].append(member)
+
+    result = []
+    for entry in groups.values():
+        members = entry["members"]
+        volumes = [m["volume"] for m in members]
+        entry["avg_volume"] = round(sum(volumes) / len(volumes)) if volumes else 100
+        entry["playing"] = any(m["playing"] for m in members)
+        result.append(entry)
+
+    return result
+
+
+@api_bp.route("/api/groups")
+def api_groups():
+    """Return a list of MA player groups with their members.
+
+    Players sharing the same group_id (assigned by MA when placed in a Sync Group)
+    are returned as one entry. Solo players (not in any MA group) each appear as
+    their own single-member entry with group_id=null.
+    """
+    with _clients_lock:
+        snapshot = list(_clients)
+    return jsonify(_build_groups_summary(snapshot))
+
+
 @api_bp.route("/api/status/stream")
 def api_status_stream():
     """Server-Sent Events endpoint — pushes status when it changes.
@@ -596,6 +667,7 @@ def api_status_stream():
                     else:
                         first = get_client_status_for(snapshot[0])
                         data = {**first, "devices": [get_client_status_for(c) for c in snapshot]}
+                    data["groups"] = _build_groups_summary(snapshot)
                     yield f"data: {json.dumps(data)}\n\n"
             else:
                 # 30 s timeout — send a keepalive comment so proxies don't close the connection
