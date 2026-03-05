@@ -403,7 +403,13 @@ def pause_all():
 
 @api_bp.route("/api/pause", methods=["POST"])
 def pause_player():
-    """Pause or play a single daemon subprocess via stdin IPC."""
+    """Pause or play a single daemon subprocess via stdin IPC.
+
+    If the target player is part of a MA sync group, the command is sent
+    only once (from the target itself) so MA keeps the group intact.
+    Sending PLAY from every member would cause MA to break the group into
+    separate sessions.
+    """
     data = request.get_json() or {}
     player_name = data.get("player_name", "")
     action = data.get("action", "pause")
@@ -414,6 +420,10 @@ def pause_player():
     if loop is None:
         return jsonify({"success": False, "error": "Event loop not available"}), 503
     try:
+        # If this player is in a MA sync group, send command only once from
+        # the target — MA will propagate to all group members automatically.
+        # Do NOT send to every member: sending PLAY from multiple clients
+        # causes MA to break the group and assign separate sessions.
         fut = asyncio.run_coroutine_threadsafe(target._send_subprocess_command({"cmd": action}), loop)
         fut.result(timeout=2.0)
         return jsonify({"success": True, "action": action, "count": 1})

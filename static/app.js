@@ -423,7 +423,7 @@ function populateDeviceCard(i, dev) {
             pauseBtn.classList.add('paused');
             pauseBtn.title = 'Unpause';
         }
-        pauseBtn.style.display = (!dev.has_sink && dev.bluetooth_mac) ? 'none' : '';
+        pauseBtn.style.display = (!dev.has_sink && dev.bluetooth_mac) || dev.group_id ? 'none' : '';
     }
 
     var trackEl = document.getElementById('dtrack-' + i);
