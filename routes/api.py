@@ -4,6 +4,7 @@ API Blueprint for sendspin-bt-bridge.
 All /api/* routes and the helper functions they depend on.
 """
 
+import asyncio
 import concurrent.futures
 import json
 import logging
@@ -367,8 +368,6 @@ def set_mute():
 @api_bp.route("/api/pause_all", methods=["POST"])
 def pause_all():
     """Pause or play all running daemon subprocesses via stdin IPC."""
-    import asyncio
-
     data = request.get_json() or {}
     action = data.get("action", "pause")
     loop = state.get_main_loop()
@@ -398,8 +397,6 @@ def pause_all():
 @api_bp.route("/api/pause", methods=["POST"])
 def pause_player():
     """Pause or play a single daemon subprocess via stdin IPC."""
-    import asyncio
-
     data = request.get_json() or {}
     player_name = data.get("player_name", "")
     action = data.get("action", "pause")
@@ -842,8 +839,6 @@ def api_set_password():
 @api_bp.route("/api/settings/log_level", methods=["POST"])
 def api_set_log_level():
     """Apply log level immediately (INFO or DEBUG) and persist to config.json."""
-    import asyncio
-
     data = request.get_json(force=True, silent=True) or {}
     level = str(data.get("level", "")).upper()
     if level not in ("INFO", "DEBUG"):
