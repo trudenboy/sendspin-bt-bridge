@@ -5,7 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.6.10] - 2026-03-04
+## [2.7.0] - 2026-03-05
+
+### Added
+- **Keepalive silence stream**: per-device option to periodically send a short silence burst to the BT sink, preventing speakers from auto-disconnecting during silence. Configurable interval (10–300 s, default 30 s) — available in the addon UI
+
+### Improved
+- **Graceful shutdown**: all players are now paused via reliable IPC before the addon stops — no more abrupt cutoffs
+- **Group-aware pause on BT disconnect**: solo players receive a pause before the daemon stops; grouped players are unaffected so other group members continue playing
+- **SSE efficiency**: status notifications batched in 100 ms windows — reduces UI update overhead when many devices change state simultaneously
+- **BT reconnect scalability**: thread pool sized to device count; D-Bus connection reused across reconnect cycles
+
+### Fixed
+- **Race condition**: `group_id` status read is now thread-safe under `_status_lock`
+
+
 
 ### Improved
 - Web UI: player names now use primary text color (black/white) instead of accent blue
