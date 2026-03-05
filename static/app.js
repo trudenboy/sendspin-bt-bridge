@@ -426,7 +426,7 @@ function populateDeviceCard(i, dev) {
         var groupSize = dev.group_id
             ? (lastDevices || []).filter(function(d) { return d.group_id === dev.group_id; }).length
             : 0;
-        pauseBtn.style.display = (!dev.has_sink && dev.bluetooth_mac) || groupSize > 1 ? 'none' : '';
+        pauseBtn.style.display = (!dev.has_sink && dev.bluetooth_mac) ? 'none' : '';
     }
 
     var trackEl = document.getElementById('dtrack-' + i);
@@ -864,10 +864,22 @@ function onDevicePause(i) {
     var btn = document.getElementById('dbtn-pause-' + i);
     var isPaused = btn && btn.classList.contains('paused');
     var action = isPaused ? 'play' : 'pause';
-    fetch(API_BASE + '/api/pause', {
+
+    // If device is in a multi-member group, pause/play the whole group via
+    // /api/pause_all — which deduplicates per group_id and sends one command.
+    // Using /api/pause (single-client) for PLAY breaks the group in MA.
+    var groupSize = dev && dev.group_id
+        ? (lastDevices || []).filter(function(d) { return d.group_id === dev.group_id; }).length
+        : 0;
+    var url = groupSize > 1 ? '/api/pause_all' : '/api/pause';
+    var body = groupSize > 1
+        ? {action: action}
+        : {action: action, player_name: dev ? dev.player_name : null};
+
+    fetch(API_BASE + url, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({action: action, player_name: dev ? dev.player_name : null})
+        body: JSON.stringify(body)
     }).then(function(r) { return r.json(); }).then(function() {
         if (btn) {
             if (action === 'pause') {
