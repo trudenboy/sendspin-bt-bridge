@@ -1796,6 +1796,30 @@ function renderDiagnostics(d) {
             '</td></tr>';
     });
 
+    // MA integration status
+    var ma = d.ma_integration || {};
+    if (ma.configured !== undefined) {
+        rows += '<tr><td>MA API</td><td>' +
+            dot(ma.connected) +
+            (ma.connected ? 'Connected' : (ma.configured ? 'Configured, not connected' : 'Not configured')) +
+            (ma.url ? ' <span style="color:#6b7280;font-size:11px;">(' + escHtml(ma.url) + ')</span>' : '') +
+            '</td></tr>';
+        (ma.syncgroups || []).forEach(function(g) {
+            rows += '<tr><td style="padding-left:20px;">↳ ' + escHtml(g.name || g.id) + '</td><td>' +
+                '<span style="color:#6b7280;font-size:11px;">' + g.members + ' member' + (g.members !== 1 ? 's' : '') + '</span>' +
+                '</td></tr>';
+        });
+        if (ma.connected && ma.nowplaying && ma.nowplaying.track) {
+            var np = ma.nowplaying;
+            var npText = (np.artist ? escHtml(np.artist) + ' \u2014 ' : '') + escHtml(np.track);
+            rows += '<tr><td style="padding-left:20px;">↳ Now playing</td><td>' +
+                '<span style="font-size:12px;">' + npText + '</span>' +
+                (np.state ? ' <span style="color:#6b7280;font-size:11px;">(' + escHtml(np.state) + ')</span>' : '') +
+                '</td></tr>';
+        }
+    }
+
+
     return '<table class="diag-table">' +
         '<tr><th>Component</th><th>Status</th></tr>' +
         rows + '</table>' +

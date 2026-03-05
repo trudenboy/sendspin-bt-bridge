@@ -1501,6 +1501,19 @@ def api_diagnostics():
             )
         diag["devices"] = device_diag
 
+        # MA API integration status
+        ma_url, ma_token = state.get_ma_api_credentials()
+        ma_groups = state.get_ma_groups()
+        diag["ma_integration"] = {
+            "configured": bool(ma_url and ma_token),
+            "connected": state.is_ma_connected(),
+            "url": ma_url or "",
+            "syncgroups": [
+                {"id": g["id"], "name": g.get("name", ""), "members": len(g.get("members", []))} for g in ma_groups
+            ],
+            "nowplaying": state.get_ma_now_playing() if state.is_ma_connected() else {},
+        }
+
         # PA sink-inputs with properties (for routing diagnostics)
         try:
             r = subprocess.run(
