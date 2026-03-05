@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.3] - 2026-03-05
+
+### Fixed
+- **Web UI — Group badge**: group filter and badge now show the last segment of the UUID when `group_name` is not provided by MA (e.g. `332984a9c660`); full UUID available in tooltip on hover
+
+### Improved
+- **Diagnostics — Group name**: added detailed logging of raw `GroupUpdateServerPayload` to diagnose whether MA sends a human-readable group name — will drive future implementation of MA REST API group name resolution
+
 ## [2.7.2] - 2026-03-05
 
 ### Improved
