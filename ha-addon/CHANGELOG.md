@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.14] - 2026-03-05
+
+### Fixed
+- **KA s column header** aligned with keepalive input (was shifted to delete column)
+- **"Show all" label** no longer overflows paired devices box
+- **Paired devices sorting**: bridge devices listed first, then others
+
+### Improved
+- Restored thread-local event loop reuse in PulseAudio wrappers (performance)
+
 ## [2.7.13] - 2026-03-05
 
 ### Fixed

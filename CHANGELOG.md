@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.14] - 2026-03-05
+
+### Fixed
+- **KA s column header misaligned** — header grid had 8 columns vs 9 in device rows; "KA s" appeared over the delete button column
+- **"Show all" label overflow** in paired devices section — title span now shrinks with ellipsis, label stays visible
+- **Paired devices sort order** — bridge-configured devices (active and inactive) listed first, then others alphabetically
+
+### Improved
+- **PulseAudio performance**: restored thread-local event loop reuse in sync PA wrappers (reverted in 2.7.12 was misdiagnosis; actual root cause was the deadlock fixed in 2.7.13)
+
 ## [2.7.13] - 2026-03-05
 
 ### Fixed
