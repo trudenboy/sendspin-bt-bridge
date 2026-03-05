@@ -295,8 +295,11 @@ function populateDeviceCard(i, dev) {
     var groupBadge = document.getElementById('dgroup-' + i);
     if (groupBadge) {
         var groupLabel = dev.group_name || '';
-        groupBadge.textContent = groupLabel ? '\uD83D\uDD17 ' + groupLabel : '';
-        groupBadge.style.display = groupLabel ? '' : 'none';
+        // Show only last UUID segment (e.g. "a1b2c3d4-e5f6-7890-abcd-ef1234" → "ef1234")
+        var groupDisplay = groupLabel ? groupLabel.split('-').pop() : '';
+        groupBadge.textContent = groupDisplay ? '\uD83D\uDD17 ' + groupDisplay : '';
+        groupBadge.title = groupLabel;
+        groupBadge.style.display = groupDisplay ? '' : 'none';
     }
 
     var btAdapterEl = document.getElementById('dbt-adapter-' + i);
