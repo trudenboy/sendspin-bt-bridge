@@ -7,7 +7,6 @@ Runs the sendspin CLI player with Bluetooth speaker management
 from __future__ import annotations
 
 import asyncio
-import dataclasses
 import json
 import logging
 import os
@@ -18,7 +17,7 @@ import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from datetime import datetime
 
 import state as _state
@@ -112,7 +111,7 @@ class DeviceStatus:
                 logger.debug("DeviceStatus: unknown key ignored: %s", k)
 
     def copy(self) -> dict:
-        return dataclasses.asdict(self)
+        return {f.name: getattr(self, f.name) for f in fields(self)}
 
 
 class SendspinClient:

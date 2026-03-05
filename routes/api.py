@@ -57,6 +57,7 @@ from state import (
     finish_scan_job,
     get_adapter_name,
     get_scan_job,
+    is_scan_running,
     load_adapter_name_cache,
 )
 
@@ -1162,6 +1163,8 @@ def _run_bt_scan(job_id: str) -> None:
 @api_bp.route("/api/bt/scan", methods=["POST"])
 def api_bt_scan():
     """Start an async BT device scan; returns a job_id immediately."""
+    if is_scan_running():
+        return jsonify({"error": "A scan is already in progress"}), 409
     job_id = str(uuid.uuid4())
     create_scan_job(job_id)
     t = threading.Thread(target=_run_bt_scan, args=(job_id,), daemon=True, name=f"bt-scan-{job_id[:8]}")

@@ -21,6 +21,7 @@ __all__ = [
     "get_adapter_name",
     "get_main_loop",
     "get_scan_job",
+    "is_scan_running",
     "load_adapter_name_cache",
     "notify_status_changed",
     "set_clients",
@@ -156,6 +157,12 @@ def finish_scan_job(job_id: str, result: dict) -> None:
         if job_id in _scan_jobs:
             _scan_jobs[job_id]["status"] = "done"
             _scan_jobs[job_id].update(result)
+
+
+def is_scan_running() -> bool:
+    """Return True if any BT scan job is currently running."""
+    with _scan_jobs_lock:
+        return any(j["status"] == "running" for j in _scan_jobs.values())
 
 
 def get_scan_job(job_id: str) -> "dict | None":

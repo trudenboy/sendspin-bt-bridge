@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import subprocess
+import threading
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -271,15 +272,16 @@ async def aget_server_name() -> str:
 # ---------------------------------------------------------------------------
 
 
+_thread_local = threading.local()
+
+
 def _run(coro):
-    """Run *coro* synchronously in a fresh event loop (safe from any thread)."""
-    loop = None
-    try:
+    """Run *coro* synchronously, reusing a thread-local event loop."""
+    loop = getattr(_thread_local, "loop", None)
+    if loop is None or loop.is_closed():
         loop = asyncio.new_event_loop()
-        return loop.run_until_complete(coro)
-    finally:
-        if loop is not None:
-            loop.close()
+        _thread_local.loop = loop
+    return loop.run_until_complete(coro)
 
 
 def list_sinks() -> list[dict]:
