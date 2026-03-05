@@ -27,6 +27,12 @@ app = Flask(__name__, template_folder="templates", static_folder="static")
 _startup_config = load_config()
 app.secret_key = ensure_secret_key(_startup_config)
 
+# Apply configured log level to root logger
+_startup_log_level = _startup_config.get("LOG_LEVEL", "INFO").upper()
+if _startup_log_level not in ("INFO", "DEBUG"):
+    _startup_log_level = "INFO"
+logging.getLogger().setLevel(getattr(logging, _startup_log_level))
+
 # Harden session cookies: SameSite=Lax prevents cross-site request forgery
 # (all POST endpoints also use request.get_json() which rejects form-encoded
 # bodies, providing defence-in-depth).  HttpOnly prevents JS cookie access.

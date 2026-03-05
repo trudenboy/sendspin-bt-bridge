@@ -730,6 +730,7 @@ def api_config():
         "AUTH_ENABLED",
         "LAST_VOLUMES",
         "LAST_VOLUME",
+        "LOG_LEVEL",
         "_new_device_default_volume",
     }
     config = {k: v for k, v in config.items() if k in _ALLOWED_POST_KEYS}
@@ -836,6 +837,50 @@ def api_set_password():
         os.replace(tmp, str(CONFIG_FILE))
 
     return jsonify({"success": True})
+
+
+@api_bp.route("/api/settings/log_level", methods=["POST"])
+def api_set_log_level():
+    """Apply log level immediately (INFO or DEBUG) and persist to config.json."""
+    import asyncio
+
+    data = request.get_json(force=True, silent=True) or {}
+    level = str(data.get("level", "")).upper()
+    if level not in ("INFO", "DEBUG"):
+        return jsonify({"error": "level must be 'info' or 'debug'"}), 400
+
+    # Apply to main process root logger immediately
+    logging.getLogger().setLevel(getattr(logging, level))
+    os.environ["LOG_LEVEL"] = level
+
+    # Persist to config.json
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    with _config_lock:
+        existing: dict = {}
+        if CONFIG_FILE.exists():
+            try:
+                with open(CONFIG_FILE) as f:
+                    existing = json.load(f)
+            except Exception:
+                pass
+        existing["LOG_LEVEL"] = level
+        tmp = str(CONFIG_FILE) + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump(existing, f, indent=2)
+        os.replace(tmp, str(CONFIG_FILE))
+
+    # Propagate to all running subprocesses via stdin IPC
+    loop = state.get_main_loop()
+    if loop is not None:
+        cmd = {"cmd": "set_log_level", "level": level}
+        for client in _clients:
+            if client.is_running():
+                try:
+                    asyncio.run_coroutine_threadsafe(client._send_subprocess_command(cmd), loop).result(timeout=2.0)
+                except Exception as exc:
+                    logger.debug("Could not send set_log_level to %s: %s", client.player_name, exc)
+
+    return jsonify({"success": True, "level": level})
 
 
 @api_bp.route("/api/logs")

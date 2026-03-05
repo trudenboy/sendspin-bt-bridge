@@ -294,8 +294,8 @@ function populateDeviceCard(i, dev) {
 
     var groupBadge = document.getElementById('dgroup-' + i);
     if (groupBadge) {
-        var groupLabel = dev.group_name || '';
-        // Show only last UUID segment (e.g. "a1b2c3d4-e5f6-7890-abcd-ef1234" → "ef1234")
+        var groupLabel = dev.group_name || dev.group_id || '';
+        // Show only last segment (last UUID octet or last word of group name)
         var groupDisplay = groupLabel ? groupLabel.split('-').pop() : '';
         groupBadge.textContent = groupDisplay ? '\uD83D\uDD17 ' + groupDisplay : '';
         groupBadge.title = groupLabel;
@@ -700,16 +700,15 @@ function _updateGroupFilter() {
     // Collect unique group names from current devices
     var groups = [];
     lastDevices.forEach(function(dev) {
-        var g = dev.group_name || '';
+        var g = dev.group_name || dev.group_id || '';
         if (g && groups.indexOf(g) === -1) groups.push(g);
-    });
     // Rebuild options, preserving current selection
     var cur = sel.value;
     sel.innerHTML = '<option value="">All groups</option>';
     groups.sort().forEach(function(g) {
         var opt = document.createElement('option');
         opt.value = g;
-        opt.textContent = '\uD83D\uDD17 ' + g;
+        opt.textContent = '\uD83D\uDD17 ' + g.split('-').pop();
         sel.appendChild(opt);
     });
     // Hide/show based on whether any groups exist
@@ -727,8 +726,7 @@ function onGroupFilterChange(val) {
     _groupFilter = val;
     if (!lastDevices) return;
     lastDevices.forEach(function(dev, i) {
-        var g = dev.group_name || '';
-        var inGroup = !val || g === val;
+        var g = dev.group_name || dev.group_id || '';
         _groupSelected[i] = inGroup;
         var cb = document.getElementById('dsel-' + i);
         if (cb) cb.checked = inGroup;
@@ -1394,6 +1392,31 @@ async function setPassword() {
     }
 }
 
+// ---- Apply log level immediately ----
+
+async function applyLogLevel() {
+    var sel = document.getElementById('log-level-select');
+    var msg = document.getElementById('log-level-msg');
+    if (!sel) return;
+    var level = sel.value;
+    try {
+        var resp = await fetch(API_BASE + '/api/settings/log_level', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ level: level }),
+        });
+        if (resp.status === 401) { _handleUnauthorized(); return; }
+        var data = await resp.json().catch(function() { return {}; });
+        if (resp.ok) {
+            if (msg) { msg.textContent = '\u2713 Applied'; setTimeout(function() { if (msg) msg.textContent = ''; }, 3000); }
+        } else {
+            alert('Error: ' + (data.error || 'Unknown error'));
+        }
+    } catch (err) {
+        alert('Error: ' + err.message);
+    }
+}
+
 document.getElementById('config-form').addEventListener('submit', async function(e) {
     e.preventDefault();
     try {
@@ -1454,6 +1477,8 @@ async function loadConfig() {
         if (sbcCheck) sbcCheck.checked = !!config.PREFER_SBC_CODEC;
         var authCheck = document.getElementById('auth-enabled');
         if (authCheck) authCheck.checked = !!config.AUTH_ENABLED;
+        var logLevelSel = document.getElementById('log-level-select');
+        if (logLevelSel && config.LOG_LEVEL) logLevelSel.value = config.LOG_LEVEL.toUpperCase();
         updateTzPreview();
 
         // Restore manual adapters before re-running loadBtAdapters so merging picks them up

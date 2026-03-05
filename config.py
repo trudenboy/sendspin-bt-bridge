@@ -17,8 +17,8 @@ import threading
 import uuid as _uuid
 from pathlib import Path
 
-VERSION = "2.7.3"
-BUILD_DATE = "2026-03-04"
+VERSION = "2.7.4"
+BUILD_DATE = "2026-03-05"
 
 DEFAULT_CONFIG = {
     "SENDSPIN_SERVER": "auto",
@@ -34,6 +34,7 @@ DEFAULT_CONFIG = {
     "AUTH_ENABLED": False,
     "AUTH_PASSWORD_HASH": "",
     "SECRET_KEY": "",
+    "LOG_LEVEL": "INFO",
 }
 
 logger = logging.getLogger(__name__)
@@ -91,6 +92,7 @@ def load_config() -> dict:
         "AUTH_ENABLED",
         "AUTH_PASSWORD_HASH",
         "SECRET_KEY",
+        "LOG_LEVEL",
     }
 
     if CONFIG_FILE.exists():

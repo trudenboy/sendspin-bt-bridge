@@ -216,6 +216,18 @@
                 </label>
             </div>
 
+            <div class="form-group">
+                <label>Log level — DEBUG produces verbose output for troubleshooting (takes effect immediately)</label>
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                    <select name="LOG_LEVEL" id="log-level-select" style="width:auto;">
+                        <option value="INFO">INFO</option>
+                        <option value="DEBUG">DEBUG</option>
+                    </select>
+                    <button type="button" class="btn btn-sm" onclick="applyLogLevel()">Apply now</button>
+                    <span id="log-level-msg" style="font-size:12px;color:var(--secondary-text-color);"></span>
+                </div>
+            </div>
+
             </div><!-- /adv-body -->
         </form>
     </details>

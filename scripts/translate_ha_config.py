@@ -87,6 +87,7 @@ def main() -> None:
         "BT_CHECK_INTERVAL": int(opts.get("bt_check_interval") or 10),
         "BT_MAX_RECONNECT_FAILS": int(opts.get("bt_max_reconnect_fails") or 0),
         "AUTH_ENABLED": bool(opts.get("auth_enabled", False)),
+        "LOG_LEVEL": (opts.get("log_level") or "info").upper(),
     }
 
     # Normalize: devices without explicit 'enabled' field default to True

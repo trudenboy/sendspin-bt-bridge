@@ -603,6 +603,14 @@ async def main():
     os.environ["PULSE_LATENCY_MSEC"] = str(pulse_latency_msec)
     logger.info(f"PULSE_LATENCY_MSEC: {pulse_latency_msec} ms")
 
+    # Log level — apply to root logger and inherit in subprocesses via env var
+    log_level = config.get("LOG_LEVEL", "INFO").upper()
+    if log_level not in ("INFO", "DEBUG"):
+        log_level = "INFO"
+    logging.getLogger().setLevel(getattr(logging, log_level))
+    os.environ["LOG_LEVEL"] = log_level
+    logger.info(f"Log level: {log_level}")
+
     prefer_sbc = bool(config.get("PREFER_SBC_CODEC", False))
     if prefer_sbc:
         logger.info("PREFER_SBC_CODEC: enabled — will request SBC codec after BT connect")

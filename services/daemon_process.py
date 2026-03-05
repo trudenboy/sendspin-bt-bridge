@@ -94,7 +94,9 @@ _json_handler = _JsonLineHandler()
 
 def _setup_logging() -> None:
     root = logging.getLogger()
-    root.setLevel(logging.INFO)
+    level_name = os.environ.get("LOG_LEVEL", "INFO").upper()
+    level = getattr(logging, level_name, logging.INFO)
+    root.setLevel(level)
     root.handlers.clear()
     root.addHandler(_json_handler)
 
@@ -190,6 +192,10 @@ async def _read_commands(daemon_ref: list, stop_event: asyncio.Event) -> None:
                 daemon._bridge_status["volume"] = vol
                 daemon._sync_bt_sink_volume(vol)
                 daemon._notify()
+        elif cmd.get("cmd") == "set_log_level":
+            level_name = str(cmd.get("level", "INFO")).upper()
+            level = getattr(logging, level_name, logging.INFO)
+            logging.getLogger().setLevel(level)
 
 
 # ---------------------------------------------------------------------------
