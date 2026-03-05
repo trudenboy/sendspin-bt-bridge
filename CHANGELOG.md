@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.9.0] - 2026-03-05
+
+### Added
+- **Music Assistant API integration** (`MA_API_URL` + `MA_API_TOKEN` config options): when configured, the bridge connects to the MA WebSocket API at startup to discover persistent MA syncgroup players.
+- **`GET /api/ma/groups`** — returns all MA syncgroup players with full member info (id, name, playback state, volume, availability) from the MA API.
+- **Correct group resume**: `POST /api/group/pause` with `action=play` now sends play to the **persistent MA syncgroup player** (`syncgroup_*`) via MA API instead of the transient Sendspin session group. This correctly restores all group members in sync, matching the behaviour of the MA UI resume button. Falls back to Sendspin session group command if MA API is not configured.
+- `music-assistant-client` dependency added.
+
+### Changed
+- MA group names in bridge UI now reflect the persistent MA group name (e.g. "Sendspin BT") when MA API is configured.
+
 ## [2.8.2] - 2026-03-05
 
 ### Fixed

@@ -17,7 +17,7 @@ import threading
 import uuid as _uuid
 from pathlib import Path
 
-VERSION = "2.8.2"
+VERSION = "2.9.0"
 BUILD_DATE = "2026-03-05"
 
 __all__ = [
@@ -49,6 +49,8 @@ DEFAULT_CONFIG = {
     "AUTH_PASSWORD_HASH": "",
     "SECRET_KEY": "",
     "LOG_LEVEL": "INFO",
+    "MA_API_URL": "",
+    "MA_API_TOKEN": "",
 }
 
 logger = logging.getLogger(__name__)

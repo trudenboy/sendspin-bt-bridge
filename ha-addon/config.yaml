@@ -38,6 +38,8 @@ options:
   bt_max_reconnect_fails: 0
   auth_enabled: false
   log_level: "info"
+  ma_api_url: ""
+  ma_api_token: ""
   bluetooth_devices: []
   bluetooth_adapters: []
 
@@ -53,6 +55,8 @@ schema:
   bt_max_reconnect_fails: int?
   auth_enabled: bool?
   log_level: "list(info|debug)?"
+  ma_api_url: str?
+  ma_api_token: str?
   bluetooth_devices:
     - mac: "match(([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2})"
       player_name: str

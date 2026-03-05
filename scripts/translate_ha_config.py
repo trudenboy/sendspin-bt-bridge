@@ -108,6 +108,8 @@ def main() -> None:
         "BT_MAX_RECONNECT_FAILS": int(opts.get("bt_max_reconnect_fails") or 0),
         "AUTH_ENABLED": bool(opts.get("auth_enabled", False)),
         "LOG_LEVEL": (opts.get("log_level") or "info").upper(),
+        "MA_API_URL": opts.get("ma_api_url") or "",
+        "MA_API_TOKEN": opts.get("ma_api_token") or "",
     }
 
     # Normalize: devices without explicit 'enabled' field default to True

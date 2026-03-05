@@ -413,13 +413,12 @@ def pause_all():
 def api_group_pause():
     """Pause or resume a specific MA sync group by group_id.
 
-    Sends MediaCommand.PAUSE or MediaCommand.PLAY to ONE member of the group.
-    MA propagates the action to all group members — sending to each member
-    individually would break group sync.
+    For action="play": if MA API (MA_API_URL + MA_API_TOKEN) is configured,
+    sends play to the persistent MA syncgroup player so all members resume in sync.
+    Falls back to Sendspin session group command when MA API is not configured.
 
-    Use action="play" to resume a paused group. Note: this is a resume command
-    only. Starting fresh playback with an empty queue must be done from MA UI
-    or HA actions.
+    For action="pause": always uses Sendspin session group command (one member,
+    MA propagates to all).
     """
     data = request.get_json() or {}
     group_id = data.get("group_id")
@@ -439,6 +438,30 @@ def api_group_pause():
     if not target:
         return jsonify({"success": False, "error": "Group not found or no running members"}), 404
 
+    # For play: prefer MA API so the persistent syncgroup resumes all members in sync
+    if action == "play":
+        ma_url, ma_token = state.get_ma_api_credentials()
+        if ma_url and ma_token:
+            ma_group = state.get_ma_group_for_player(target.player_name)
+            if ma_group:
+                try:
+                    from services.ma_client import ma_group_play
+
+                    fut = asyncio.run_coroutine_threadsafe(ma_group_play(ma_url, ma_token, ma_group["id"]), loop)
+                    ok = fut.result(timeout=10.0)
+                    if ok:
+                        return jsonify(
+                            {
+                                "success": True,
+                                "action": action,
+                                "group_id": group_id,
+                                "ma_syncgroup_id": ma_group["id"],
+                                "ma_syncgroup_name": ma_group["name"],
+                            }
+                        )
+                except Exception as exc:
+                    logger.warning("MA API group play failed, falling back: %s", exc)
+
     try:
         fut = asyncio.run_coroutine_threadsafe(target._send_subprocess_command({"cmd": action}), loop)
         fut.result(timeout=2.0)
@@ -446,6 +469,16 @@ def api_group_pause():
         return jsonify({"success": True, "action": action, "group_id": group_id, "group_name": group_name})
     except Exception as exc:
         return jsonify({"success": False, "error": str(exc)}), 500
+
+
+@api_bp.route("/api/ma/groups", methods=["GET"])
+def api_ma_groups():
+    """Return all MA syncgroup players discovered from the MA API.
+
+    Each group includes id, name, and members with id/name/state/volume/available.
+    Returns empty list if MA API is not configured or discovery has not run yet.
+    """
+    return jsonify(state.get_ma_groups())
 
 
 @api_bp.route("/api/pause", methods=["POST"])
