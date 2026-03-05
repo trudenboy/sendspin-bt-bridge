@@ -473,6 +473,18 @@
         .device-card:hover .ma-secondary-controls.ma-ready { display: flex; }
         .ma-secondary-controls .card-icon-btn { margin-left: 0; }
 
+        /* Album art + track row */
+        .track-art-row { position: relative; display: flex; align-items: center; margin-top: 2px; }
+        .album-art {
+            display: none; position: absolute;
+            bottom: calc(100% + 4px); left: 0;
+            width: 120px; height: 120px;
+            border-radius: 6px; object-fit: cover;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.35);
+            z-index: 50;
+        }
+        .track-art-row:hover .album-art:not([src=""]) { display: block; }
+
         /* Released badge on device card */
         .released-badge {
             display: inline-block; font-size: 10px; font-weight: 700;

@@ -244,7 +244,10 @@ function buildDeviceCard(i) {
               '<button type="button" class="card-icon-btn transport-btn" id="dma-next-' + i + '" ' +
                 'onclick="maQueueCmd(\'next\')" title="Next" style="display:none;">&#9654;&#9654;</button>' +
             '</div>' +
-            '<div id="dtrack-' + i + '" class="device-track-inline"></div>' +
+            '<div class="track-art-row">' +
+              '<img id="dart-' + i + '" class="album-art" src="" alt="" style="display:none;">' +
+              '<div id="dtrack-' + i + '" class="device-track-inline"></div>' +
+            '</div>' +
             '<div class="track-progress-wrap" id="dprog-wrap-' + i + '" style="display:none;">' +
               '<div class="track-progress-bar"><div class="track-progress-fill" id="dprog-fill-' + i + '"></div></div>' +
               '<div class="track-progress-time" id="dprog-time-' + i + '"></div>' +
@@ -471,6 +474,7 @@ function populateDeviceCard(i, dev) {
     }
 
     var trackEl = document.getElementById('dtrack-' + i);
+    var artEl   = document.getElementById('dart-' + i);
     if (trackEl) {
         // When MA connected, prefer MA now-playing metadata
         var maArtist = _maNowPlaying && _maNowPlaying.connected ? (_maNowPlaying.artist || '') : '';
@@ -493,6 +497,11 @@ function populateDeviceCard(i, dev) {
             trackEl.textContent = '';
             trackEl.title = '';
         }
+    }
+    // Album art
+    if (artEl) {
+        var imgUrl = _maNowPlaying && _maNowPlaying.connected ? (_maNowPlaying.image_url || '') : '';
+        if (artEl.src !== imgUrl) artEl.src = imgUrl;
     }
 
     // MA transport buttons (prev/next flanking pause) + hover secondary controls
