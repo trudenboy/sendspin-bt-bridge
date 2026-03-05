@@ -439,7 +439,7 @@ function populateDeviceCard(i, dev) {
                 : Date.now(),
         };
     }
-    var deviceMaActive = maActive && !!dev.has_sink;
+    var deviceMaActive = maActive && !!dev.has_sink && !!dev.group_id;
     if (deviceMaActive && maHasProg) {
         if (progWrap) progWrap.style.display = '';
         delete _progSnapshots[i];
@@ -484,9 +484,9 @@ function populateDeviceCard(i, dev) {
     var trackEl = document.getElementById('dtrack-' + i);
     var artEl   = document.getElementById('dart-' + i);
     if (trackEl) {
-        // When MA connected, prefer MA now-playing metadata
-        var maArtist = _maNowPlaying && _maNowPlaying.connected ? (_maNowPlaying.artist || '') : '';
-        var maTrack  = _maNowPlaying && _maNowPlaying.connected ? (_maNowPlaying.track  || '') : '';
+        // When MA connected AND device is in the MA group, prefer MA now-playing metadata
+        var maArtist = _maNowPlaying && _maNowPlaying.connected && dev.group_id ? (_maNowPlaying.artist || '') : '';
+        var maTrack  = _maNowPlaying && _maNowPlaying.connected && dev.group_id ? (_maNowPlaying.track  || '') : '';
         var showArtist = maArtist || dev.current_artist;
         var showTrack  = maTrack  || dev.current_track;
         // Persist track on pause — clear only when both fields are empty
@@ -497,7 +497,7 @@ function populateDeviceCard(i, dev) {
             trackEl.textContent = _firstOfSlash(showArtist) && _firstOfSlash(showTrack)
                 ? _firstOfSlash(showArtist) + ' \u2014 ' + _firstOfSlash(showTrack)
                 : _firstOfSlash(showArtist || showTrack || '');
-            var tipAlbum = _maNowPlaying && _maNowPlaying.album ? ' \u00b7 ' + _maNowPlaying.album : '';
+            var tipAlbum = _maNowPlaying && _maNowPlaying.album && dev.group_id ? ' \u00b7 ' + _maNowPlaying.album : '';
             trackEl.title = fullText + tipAlbum;
             trackEl.style.color = dev.playing
                 ? 'var(--primary-text-color)' : 'var(--secondary-text-color)';
@@ -508,7 +508,7 @@ function populateDeviceCard(i, dev) {
     }
     // Album art
     if (artEl) {
-        var imgUrl = _maNowPlaying && _maNowPlaying.connected ? (_maNowPlaying.image_url || '') : '';
+        var imgUrl = _maNowPlaying && _maNowPlaying.connected && dev.group_id ? (_maNowPlaying.image_url || '') : '';
         if (artEl.src !== imgUrl) artEl.src = imgUrl;
     }
 
@@ -518,7 +518,7 @@ function populateDeviceCard(i, dev) {
     var secCtrl     = document.getElementById('dma-secondary-' + i);
     var maShuffleBtn = document.getElementById('dma-shuffle-' + i);
     var maRepeatBtn  = document.getElementById('dma-repeat-' + i);
-    var deviceMaActive = maActive && !!dev.has_sink;
+    var deviceMaActive = maActive && !!dev.has_sink && !!dev.group_id;
     if (prevBtn) prevBtn.style.display = deviceMaActive ? '' : 'none';
     if (nextBtn) nextBtn.style.display = deviceMaActive ? '' : 'none';
     if (secCtrl) secCtrl.classList.toggle('ma-ready', deviceMaActive);
