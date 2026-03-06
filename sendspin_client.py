@@ -407,8 +407,13 @@ class SendspinClient:
         This causes the subprocess to send a fresh client_hello with the
         current bridge version and hostname, updating stale device_info in MA.
         Only call when the player is not actively playing.
+
+        A 3-second delay is inserted after disconnect so that MA has time to
+        process ClientRemovedEvent and unregister the old player before the
+        new client_hello arrives (workaround for MA using register() instead
+        of register_or_update() — see music-assistant/support#5049).
         """
-        await self._send_subprocess_command({"cmd": "reconnect"})
+        await self._send_subprocess_command({"cmd": "reconnect", "delay": 3.0})
 
     async def _keepalive_loop(self) -> None:
         """Periodically send a short silence burst to the BT sink to prevent speaker auto-disconnect."""

@@ -201,8 +201,17 @@ async def _read_commands(daemon_ref: list, stop_event: asyncio.Event) -> None:
         elif cmd.get("cmd") == "reconnect":
             daemon = daemon_ref[0] if daemon_ref else None
             if daemon and getattr(daemon, "_client", None):
-                asyncio.ensure_future(daemon._client.disconnect()).add_done_callback(
-                    lambda t: logger.debug("disconnect error: %s", t.exception()) if t.exception() else None
+                delay = float(cmd.get("delay", 0))
+
+                async def _delayed_reconnect(_d=daemon, _delay=delay):
+                    await _d._client.disconnect()
+                    if _delay > 0:
+                        # Give MA time to process ClientRemovedEvent and unregister
+                        # the old player before the auto-reconnect sends a new client_hello
+                        await asyncio.sleep(_delay)
+
+                asyncio.ensure_future(_delayed_reconnect()).add_done_callback(
+                    lambda t: logger.debug("reconnect error: %s", t.exception()) if t.exception() else None
                 )
         elif cmd.get("cmd") == "set_log_level":
             level_name = str(cmd.get("level", "INFO")).upper()
