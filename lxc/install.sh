@@ -131,6 +131,12 @@ usermod -aG audio    pulse 2>/dev/null || true
 mkdir -p /var/run/pulse
 chown pulse:pulse /var/run/pulse
 chmod 755 /var/run/pulse
+
+# Ensure /var/run/pulse is recreated on boot (tmpfs)
+cat > /etc/tmpfiles.d/pulse.conf <<'EOF'
+d /var/run/pulse 0755 pulse pulse -
+EOF
+
 ok "pulse user configured (bluetooth + audio groups)"
 
 # ─── 7. PulseAudio system configuration ──────────────────────────────────────
