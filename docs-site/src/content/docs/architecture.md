@@ -572,16 +572,106 @@ sequenceDiagram
 
 ## MPRIS D-Bus Integration
 
-The bridge registers a minimal **MPRIS MediaPlayer2** service on the session D-Bus so that Music Assistant can discover this bridge by player name. One service is registered per device.
+The bridge registers a minimal **MPRIS MediaPlayer2** service on the **session D-Bus** so that Music Assistant can discover this bridge by its configured player name. One service is registered **per device** in the main process.
 
 ```
 org.mpris.MediaPlayer2.SendspinBridge.<SafeName>
   /org/mpris/MediaPlayer2
     MediaPlayer2.Identity → "<player_name>"
+    MediaPlayer2.CanQuit  → False
+    MediaPlayer2.HasTrackList → False
 ```
 
-- `MprisIdentityService` is defined in `mpris.py` and gracefully degrades (`_DBUS_MPRIS_AVAILABLE = False`) when `dbus-python` is not available.
-- Subprocesses (`daemon_process.py`) set `use_mpris=False` because they run without a D-Bus session bus. MPRIS is only registered in the main process.
+`<SafeName>` is derived from `player_name` by stripping all non-alphanumeric characters (max 32 chars), ensuring a valid D-Bus bus name.
+
+```mermaid
+graph TD
+    subgraph "Main Process"
+        SC[SendspinClient × N<br/>player_name per device]
+        MPRIS_SVC[MprisIdentityService × N<br/>org.mpris.MediaPlayer2.SendspinBridge.Name]
+        GLIB[GLib.MainLoop<br/>daemon thread — mpris-glib]
+        SC --> MPRIS_SVC
+        MPRIS_SVC --> DBUS_SES[D-Bus Session Bus<br/>DBUS_SESSION_BUS_ADDRESS]
+        GLIB -.->|dispatches D-Bus calls| DBUS_SES
+    end
+
+    subgraph "Subprocess"
+        DP[daemon_process.py<br/>use_mpris=False]
+    end
+
+    MA[Music Assistant] -->|discovers player by Identity| DBUS_SES
+```
+
+**Lifecycle:**
+
+1. `entrypoint.sh` starts a D-Bus session daemon and exports `DBUS_SESSION_BUS_ADDRESS`.
+2. `main()` checks `_DBUS_MPRIS_AVAILABLE` — gracefully skips MPRIS if `dbus-python` or `gi.repository.GLib` is missing.
+3. For each device a `MprisIdentityService` is created and registered on the session bus.
+4. A single `GLib.MainLoop` runs in a **daemon thread** (`mpris-glib`) to dispatch D-Bus property calls from MA.
+5. Subprocesses do **not** register MPRIS services — they run without a session bus.
+
+The `pause_all_via_mpris()` function in `mpris.py` can send MPRIS `Pause` to all playing sendspin instances on the session bus by iterating `org.mpris.MediaPlayer2.*` bus names.
+
+---
+
+## Authentication
+
+The web UI supports **optional password protection** via `routes/auth.py`. Authentication is disabled by default (`AUTH_ENABLED = False`) and enabled the moment a password is set via the Configuration panel.
+
+```mermaid
+flowchart TD
+    REQ[Incoming HTTP request] --> HOOK[before_request hook<br/>web_interface.py]
+    HOOK -->|AUTH_ENABLED = False| PASS[Allow through]
+    HOOK -->|session.authenticated = True| PASS
+    HOOK -->|not authenticated| LOGIN[Redirect → /login]
+
+    LOGIN --> MODE{Mode?}
+    MODE -->|Standalone| PBKDF2[Compare PBKDF2-SHA256<br/>against AUTH_PASSWORD_HASH<br/>in config.json]
+    MODE -->|HA Addon<br/>SUPERVISOR_TOKEN set| HA_FLOW
+
+    subgraph "HA Core Auth Flow"
+        HA_FLOW[POST /auth/login_flow<br/>HA Core :8123]
+        HA_FLOW -->|step 1: username + password| HA_STEP[POST /auth/login_flow/flow_id]
+        HA_STEP -->|type=create_entry| OK[session.authenticated = True]
+        HA_STEP -->|type=form step_id=mfa| MFA[2FA step<br/>TOTP code input]
+        MFA -->|step 2: code| HA_STEP2[POST /auth/login_flow/flow_id]
+        HA_STEP2 -->|type=create_entry| OK
+        HA_STEP2 -->|type=abort| FAIL[Error — session expired]
+    end
+
+    HA_FLOW -->|HA Core unreachable<br/>network error only| SUPER[Supervisor /auth fallback<br/>bypasses 2FA — safe only<br/>if Core is unreachable]
+    SUPER --> OK
+
+    PBKDF2 -->|match| OK
+    PBKDF2 -->|mismatch| BF[Brute-force counter]
+    BF -->|< 5 fails| FAIL2[Error — invalid password]
+    BF -->|≥ 5 fails in 60s| LOCK[Lockout 5 min<br/>HTTP 429]
+```
+
+### Brute-Force Protection
+
+In-memory rate limiter (`_failed` dict in `routes/auth.py`) tracks failures per client IP:
+
+| Threshold | Window | Action |
+|---|---|---|
+| 5 failed attempts | 60 seconds | IP locked out for 5 minutes |
+| 1 successful login | — | Failure counter cleared |
+| 5-minute lockout expires | — | Counter reset automatically |
+
+### HA Addon Auth (2FA-aware)
+
+When `SUPERVISOR_TOKEN` is present, the bridge authenticates against **HA Core** (not just the Supervisor API) to support **2FA / TOTP**:
+
+1. Start a login flow via `POST {HA_CORE_URL}/auth/login_flow`
+2. Submit credentials via `POST {HA_CORE_URL}/auth/login_flow/{flow_id}`
+3. If the response is `type=form, step_id=mfa` → prompt for TOTP code
+4. Submit code via another flow step
+
+**Fallback to Supervisor `/auth`** is only used if HA Core is **network-unreachable** (DNS failure, connection refused). If HA Core responds with an HTTP error, the fallback is **blocked** to prevent MFA bypass.
+
+### Session
+
+Flask server-side session with a randomly generated `SECRET_KEY` stored in `config.json`. The key persists across restarts (generated once on first start and saved). Session cookies are `HttpOnly` and expire when the browser closes.
 
 ---
 
