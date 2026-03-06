@@ -879,12 +879,17 @@ function onGroupSelectAll(cb) {
 }
 
 var _groupVolTimer = null;
+var _groupVolTouchTimer = null;
 function onGroupVolumeInput(val) {
     var pct = document.getElementById('group-vol-pct');
     if (pct) pct.textContent = val + '%';
     // Mark slider as user-controlled so auto-sync doesn't override it
     var slider = document.getElementById('group-vol-slider');
     if (slider) slider._userTouched = true;
+    clearTimeout(_groupVolTouchTimer);
+    _groupVolTouchTimer = setTimeout(function() {
+        if (slider) slider._userTouched = false;
+    }, 3000);
     clearTimeout(_groupVolTimer);
     _groupVolTimer = setTimeout(function() {
         var names = _getSelectedNames();
@@ -894,7 +899,7 @@ function onGroupVolumeInput(val) {
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({volume: parseInt(val, 10), player_names: names})
         });
-    }, 250);
+    }, 300);
 }
 
 function onGroupMute() {

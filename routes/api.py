@@ -338,13 +338,22 @@ def set_volume():
             ok = set_sink_volume(client.bluetooth_sink_name, volume)
             if ok:
                 client._update_status({"volume": volume})
+                # Sync volume into daemon subprocess so it doesn't revert on next status emit
+                loop = state.get_main_loop()
+                if loop:
+                    asyncio.run_coroutine_threadsafe(
+                        client._send_subprocess_command({"cmd": "set_volume", "value": volume}), loop
+                    )
                 mac = getattr(getattr(client, "bt_manager", None), "mac_address", None)
                 if mac:
                     _schedule_volume_persist(mac, volume)
             return {"player": getattr(client, "player_name", "?"), "ok": ok}
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=len(targets) or 1) as pool:
-            results = [r for r in pool.map(_set_one, targets) if r is not None]
+        if len(targets) <= 3:
+            results = [r for r in (_set_one(c) for c in targets) if r is not None]
+        else:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(targets), 20)) as pool:
+                results = [r for r in pool.map(_set_one, targets) if r is not None]
         if not results:
             return jsonify({"success": False, "error": "No clients available"}), 503
         return jsonify({"success": True, "volume": volume, "results": results})
