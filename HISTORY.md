@@ -73,6 +73,48 @@ Bluetooth-менеджер опрашивает соединение раз в 1
 
 **Идентификация в MA-группах** (v1.3.19): проблема в том, что MA строит syncgroup по именам плееров. Добавлена логика `BRIDGE_NAME` + суффикс + MPRIS Identity, чтобы имя плеера в MA совпадало с именем MPRIS-объекта — иначе группа не собирается.
 
+### Переработка UI в стиле HA/MA с поддержкой тем (1 марта, v1.3.7)
+
+До этой версии веб-интерфейс выглядел как generic-дашборд: фиолетовый градиентный хедер (`#667eea`), жёсткие HSL-цвета, системный шрифт. При открытии через HA Ingress он визуально выбивался из экосистемы.
+
+В v1.3.7 UI полностью переписан под визуальный язык Home Assistant и Music Assistant:
+
+**CSS custom properties вместо хардкода**
+
+```css
+/* было */
+background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+color: #28a745;
+
+/* стало */
+background: var(--app-header-background-color, #03a9f4);
+color: var(--success-color, #4CAF50);
+```
+
+Все цвета — через HA design tokens (`--primary-color`, `--error-color`, `--success-color`, `--warning-color`, `--ha-card-border-radius`, `--ha-card-box-shadow`). Хедер стилизован как `app-toolbar` HA. Шрифт — Roboto (тот же, что в HA).
+
+**Двойная тема: media query + Ingress postMessage**
+
+```css
+/* статическая тема — работает везде */
+@media (prefers-color-scheme: dark) {
+  :root { --primary-background-color: #111; ... }
+}
+```
+
+```javascript
+// живая инъекция темы из HA — только в Ingress
+window.addEventListener('message', (e) => {
+  if (e.data?.type === 'setTheme') applyTheme(e.data.theme);
+});
+```
+
+Когда пользователь открывает UI через HA sidebar, HA посылает `postMessage` с текущей темой. Переключение темы в HA → мгновенно меняется в веб-UI без перезагрузки страницы. Если UI открыт напрямую (не через Ingress) — тема определяется системным `prefers-color-scheme`.
+
+**Итог:** с v1.3.7 веб-интерфейс неотличим по стилю от нативных HA-панелей. Пользователи, которые добавили мост в HA sidebar, видят единый дизайн.
+
+Последующие итерации UI (v2.6.5, v2.6.6, v2.7.x) продолжили полировку: прогресс-бар трека, транспортные кнопки, обложка альбома, hover-действия, анимированный BT-scan, мобильная адаптация, UX-аудит с 20 улучшениями (v2.10.x).
+
 ### Безопасность и надёжность (1–2 марта, v1.4–1.7)
 
 - **Модуляризация** (v1.4.0): монолитный `sendspin_client.py` разбит на `config.py`, `mpris.py`, `bluetooth_manager.py`.
