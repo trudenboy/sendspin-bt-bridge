@@ -425,6 +425,24 @@ def set_volume():
                 # Do NOT update local status — bridge_daemon will receive the
                 # VolumeChanged echo from MA via sendspin protocol, apply pactl,
                 # and report the actual volume through subprocess stdout.
+                #
+                # However, devices NOT in a MA sync group won't receive the
+                # echo.  Apply volume locally for those orphan devices.
+                if is_group:
+                    orphans = [c for c in targets if not c.status.get("group_id")]
+                    for client in orphans:
+                        if client.bluetooth_sink_name:
+                            ok = set_sink_volume(client.bluetooth_sink_name, volume)
+                            if ok:
+                                client._update_status({"volume": volume})
+                                _loop = state.get_main_loop()
+                                if _loop:
+                                    asyncio.run_coroutine_threadsafe(
+                                        client._send_subprocess_command({"cmd": "set_volume", "value": volume}), _loop
+                                    )
+                                mac = getattr(getattr(client, "bt_manager", None), "mac_address", None)
+                                if mac:
+                                    _schedule_volume_persist(mac, volume)
                 return jsonify({"success": True, "volume": volume, "via": "ma"})
             logger.debug("MA volume proxy failed, falling back to local pactl")
 
