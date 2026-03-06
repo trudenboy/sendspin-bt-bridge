@@ -1,6 +1,6 @@
 # Sendspin Bluetooth Bridge
 
-[Read in English](README.md) · [📖 Документация](https://trudenboy.github.io/sendspin-bt-bridge/)
+[Read in English](README.md) · [📖 Документация](https://trudenboy.github.io/sendspin-bt-bridge/) · [📋 История](HISTORY.ru.md)
 
 Bluetooth-мост для [Music Assistant](https://www.music-assistant.io/) — подключает Bluetooth-колонки к протоколу Sendspin в MA. Работает как Docker-контейнер, аддон для Home Assistant или нативный LXC-контейнер на Proxmox VE. Предназначен для систем без монитора.
 

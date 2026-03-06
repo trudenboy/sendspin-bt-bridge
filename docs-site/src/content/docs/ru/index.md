@@ -123,5 +123,6 @@ automation:
   <LinkCard title="Установка: Proxmox LXC" href="/sendspin-bt-bridge/installation/lxc/" />
   <LinkCard title="Настройка" href="/sendspin-bt-bridge/configuration/" />
   <LinkCard title="Архитектура" href="/sendspin-bt-bridge/architecture/" description="Процессная модель, IPC, маршрутизация звука, автомат BT, аутентификация" />
+  <LinkCard title="История проекта" href="https://github.com/trudenboy/sendspin-bt-bridge/blob/main/HISTORY.ru.md" description="Архитектурная эволюция, вехи, миграция v1 → v2" />
   <LinkCard title="API Reference" href="/sendspin-bt-bridge/api/" />
 </CardGrid>
