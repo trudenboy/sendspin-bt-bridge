@@ -18,6 +18,7 @@ import uuid as _uuid
 from pathlib import Path
 
 VERSION = "2.10.11"
+VERSION = "2.10.12"
 BUILD_DATE = "2026-03-05"
 
 __all__ = [
@@ -51,6 +52,7 @@ DEFAULT_CONFIG = {
     "LOG_LEVEL": "INFO",
     "MA_API_URL": "",
     "MA_API_TOKEN": "",
+    "VOLUME_VIA_MA": True,
 }
 
 logger = logging.getLogger(__name__)

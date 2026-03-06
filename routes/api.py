@@ -419,17 +419,12 @@ def set_volume():
             targets = list(_clients)
 
         # --- MA path: proxy through MA API when connected ---
-        if not force_local and state.is_ma_connected() and targets:
+        if not force_local and load_config().get("VOLUME_VIA_MA", True) and state.is_ma_connected() and targets:
             ma_ok = _set_volume_via_ma(targets, volume, is_group=is_group)
             if ma_ok:
-                # Update local status + persist so UI reflects change immediately.
-                # Do NOT send set_volume to subprocess — MA echoes VolumeChanged
-                # back through the sendspin protocol, bridge_daemon applies it.
-                for client in targets:
-                    client._update_status({"volume": volume})
-                    mac = getattr(getattr(client, "bt_manager", None), "mac_address", None)
-                    if mac:
-                        _schedule_volume_persist(mac, volume)
+                # Do NOT update local status — bridge_daemon will receive the
+                # VolumeChanged echo from MA via sendspin protocol, apply pactl,
+                # and report the actual volume through subprocess stdout.
                 return jsonify({"success": True, "volume": volume, "via": "ma"})
             logger.debug("MA volume proxy failed, falling back to local pactl")
 
@@ -484,14 +479,12 @@ def set_mute():
             targets = _clients[:1]
 
         # --- MA path ---
-        if not force_local and state.is_ma_connected() and targets:
+        if not force_local and load_config().get("VOLUME_VIA_MA", True) and state.is_ma_connected() and targets:
             # Resolve desired mute state
             desired = bool(mute_value) if mute_value is not None else not targets[0].status.get("muted", False)
             if _set_mute_via_ma(targets, desired):
-                # Update local status so UI reflects change immediately.
-                # Do NOT send set_mute to subprocess — MA echoes back via sendspin.
-                for client in targets:
-                    client._update_status({"muted": desired})
+                # Do NOT update local status — bridge_daemon receives the
+                # mute echo from MA via sendspin protocol and updates status.
                 return jsonify({"success": True, "muted": desired, "via": "ma"})
             logger.debug("MA mute proxy failed, falling back to local pactl")
 

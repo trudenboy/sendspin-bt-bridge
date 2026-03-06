@@ -1466,6 +1466,7 @@ async function saveConfig() {
     // Checkbox → bool (FormData only includes it when checked, with value "on")
     config.PREFER_SBC_CODEC = !!(document.getElementById('prefer-sbc-codec') || {}).checked;
     config.AUTH_ENABLED = !!(document.getElementById('auth-enabled') || {}).checked;
+    config.VOLUME_VIA_MA = !!(document.getElementById('volume-via-ma') || {}).checked;
     // Cast numeric BT settings to integers
     config.BT_CHECK_INTERVAL = parseInt(config.BT_CHECK_INTERVAL, 10) || 10;
     config.BT_MAX_RECONNECT_FAILS = parseInt(config.BT_MAX_RECONNECT_FAILS, 10) || 0;
@@ -1607,6 +1608,8 @@ async function loadConfig() {
         if (sbcCheck) sbcCheck.checked = !!config.PREFER_SBC_CODEC;
         var authCheck = document.getElementById('auth-enabled');
         if (authCheck) authCheck.checked = !!config.AUTH_ENABLED;
+        var volMaCheck = document.getElementById('volume-via-ma');
+        if (volMaCheck) volMaCheck.checked = config.VOLUME_VIA_MA !== false;
         var logLevelSel = document.getElementById('log-level-select');
         if (logLevelSel && config.LOG_LEVEL) logLevelSel.value = config.LOG_LEVEL.toUpperCase();
         updateTzPreview();

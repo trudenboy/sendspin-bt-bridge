@@ -113,6 +113,7 @@ def main() -> None:
         "LOG_LEVEL": (opts.get("log_level") or "info").upper(),
         "MA_API_URL": opts.get("ma_api_url") or "",
         "MA_API_TOKEN": opts.get("ma_api_token") or "",
+        "VOLUME_VIA_MA": bool(opts.get("volume_via_ma", True)),
     }
 
     # Normalize: devices without explicit 'enabled' field default to True

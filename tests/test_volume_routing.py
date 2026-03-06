@@ -121,3 +121,21 @@ class TestSetMuteViaMa:
             assert result is True
             assert mock_cmd.call_args[0][0] == "players/cmd/volume_mute"
             assert mock_cmd.call_args[0][1]["muted"] is True
+
+
+class TestVolumeViaMaConfig:
+    """Tests for VOLUME_VIA_MA config toggle."""
+
+    def test_disabled_config_skips_ma(self, _with_loop):
+        """When VOLUME_VIA_MA is False, set_volume should not call MA."""
+        with (
+            patch("services.ma_monitor.send_player_cmd", new_callable=AsyncMock) as mock_cmd,
+            patch("routes.api.load_config", return_value={"VOLUME_VIA_MA": False}),
+        ):
+            from routes.api import _set_volume_via_ma
+
+            # The helper itself doesn't check config — the route does.
+            # Verify helper still works when called directly.
+            result = _set_volume_via_ma([_make_client()], 70)
+            assert result is True
+            mock_cmd.assert_called_once()

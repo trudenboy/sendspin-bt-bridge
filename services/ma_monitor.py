@@ -311,7 +311,7 @@ class MaMonitor:
                     await self._poll_queues(ws)
                     _poll_deadline = time.monotonic() + _POLL_INTERVAL
                 elif event == "player_updated":
-                    await self._handle_player_updated(data.get("data") or {})
+                    pass  # Volume sync handled by bridge_daemon via sendspin echo
             except Exception as exc:
                 logger.debug("MA monitor event error: %s", exc)
                 raise  # bubble up to reconnect loop
@@ -321,35 +321,6 @@ class MaMonitor:
         while self._running:
             await asyncio.sleep(_POLL_INTERVAL)
             await self._poll_queues(ws)
-
-    async def _handle_player_updated(self, player: dict) -> None:
-        """Sync MA player volume → BT sink volume."""
-        player_id = player.get("player_id", "")
-        volume_level = player.get("volume_level")
-        if volume_level is None:
-            return
-
-        # Find the bridge client matching this MA player_id
-        for client in _state.clients:
-            ma_info = _state.get_ma_group_for_player(getattr(client, "player_name", ""))
-            if not ma_info:
-                continue
-            # Check if this MA player is a member of the client's syncgroup
-            groups = _state.get_ma_groups()
-            for g in groups:
-                if g["id"] == ma_info["id"]:
-                    member_ids = [m["id"] for m in g.get("members", [])]
-                    if player_id in member_ids:
-                        await self._sync_bt_volume(client, volume_level)
-
-    async def _sync_bt_volume(self, client, volume_level: float) -> None:
-        """Sync local status with MA volume — pactl is handled by bridge_daemon."""
-        target = int(round(volume_level))
-        current_volume = client.status.get("volume")
-        if current_volume is not None and abs(current_volume - target) < 2:
-            return
-        client._update_status({"volume": target})
-        logger.debug("MA volume sync (status only): %s → %d%%", getattr(client, "player_name", "?"), target)
 
     async def run(self) -> None:
         """Main entry point — reconnect loop with exponential backoff."""

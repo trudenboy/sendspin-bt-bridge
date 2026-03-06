@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.10.12] - 2026-03-06
+
+### Changed
+- **Single-writer volume architecture**: bridge_daemon (subprocess) is now the sole writer to PulseAudio sink volume. API no longer optimistically updates local status on MA path — waits for the actual echo from MA via sendspin protocol. Eliminates all feedback loops, bouncing, and group volume desync.
+- **Removed `_handle_player_updated` volume sync** from MA monitor — was a redundant third path causing stale volume overwrites.
+
+### Added
+- **`VOLUME_VIA_MA` config option** (default: `true`): toggle to disable MA API volume proxy entirely, forcing all volume/mute changes through direct pactl. Available in web UI Settings and HA addon config.
+
+### Fixed
+- **Group volume bounce**: setting group volume to 40 no longer jumps to 47 then 55 — MA's proportional recalculation now flows cleanly through a single path.
+- **Volume jump on track change**: eliminated competing volume writers that caused speakers to briefly change volume when a new track starts.
+
 ## [2.10.11] - 2026-03-06
 
 ### Fixed
