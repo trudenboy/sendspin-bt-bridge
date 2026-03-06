@@ -343,28 +343,13 @@ class MaMonitor:
                         await self._sync_bt_volume(client, volume_level)
 
     async def _sync_bt_volume(self, client, volume_level: float) -> None:
-        """Apply MA volume_level (0-100) to the client's BT sink."""
-        sink = getattr(client, "bluetooth_sink_name", None)
-        if not sink:
-            return
+        """Sync local status with MA volume — pactl is handled by bridge_daemon."""
         target = int(round(volume_level))
-        # Skip if volume hasn't meaningfully changed
         current_volume = client.status.get("volume")
         if current_volume is not None and abs(current_volume - target) < 2:
             return
-        try:
-            proc = await asyncio.create_subprocess_exec(
-                "pactl",
-                "set-sink-volume",
-                sink,
-                f"{target}%",
-                stdout=asyncio.subprocess.DEVNULL,
-                stderr=asyncio.subprocess.DEVNULL,
-            )
-            await proc.wait()
-            logger.debug("MA volume sync: %s → %d%%", sink, target)
-        except Exception as exc:
-            logger.debug("MA volume sync error: %s", exc)
+        client._update_status({"volume": target})
+        logger.debug("MA volume sync (status only): %s → %d%%", getattr(client, "player_name", "?"), target)
 
     async def run(self) -> None:
         """Main entry point — reconnect loop with exponential backoff."""
