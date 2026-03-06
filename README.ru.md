@@ -20,9 +20,19 @@ Bluetooth-мост для [Music Assistant](https://www.music-assistant.io/) —
 - **Эндпоинт диагностики**: `/api/diagnostics` возвращает структурированную информацию о состоянии — адаптеры, синки, D-Bus, статус каждого устройства
 - **Несколько экземпляров bridge**: Можно запустить несколько bridge (контейнеров/LXC/аддонов) против одного сервера MA — каждый регистрирует свои плееры независимо
 
-<img width="1228" height="2694" alt="192 168 10 180_8080_ (1)" src="https://github.com/user-attachments/assets/ff3d99bc-7f8a-459b-ba9a-9ba3c10bedd6" />
+<img width="1400" alt="Веб-панель мониторинга — полная страница, тёмная тема" src="https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/docs-site/public/screenshots/screenshot-dashboard-full.png" />
 <br><br>
-<img width="1019" height="245" alt="Screenshot 2026-02-28 at 17 03 49" src="https://github.com/user-attachments/assets/7654570b-bada-4cca-a195-4ced53c8d398" />
+<img width="1019" height="245" alt="Плееры в MA" src="https://github.com/user-attachments/assets/7654570b-bada-4cca-a195-4ced53c8d398" />
+<br><br>
+<img width="733" height="782" alt="Плееры в MA" src="https://github.com/user-attachments/assets/8bbdd3b0-b61f-4139-a0f0-03d4b904d555" />
+
+---
+
+## Развёртывание нескольких bridge
+
+Запустите несколько экземпляров bridge, указывающих на один сервер Music Assistant, чтобы охватить все комнаты — каждый bridge обслуживает колонки в пределах своей зоны Bluetooth.
+
+[![Схема развёртывания: план этажа с зонами и адаптерами](https://trudenboy.github.io/sendspin-bt-bridge/diagrams/multiroom-diagram.png)](https://trudenboy.github.io/sendspin-bt-bridge/diagrams/multiroom-diagram/)
 
 ---
 
@@ -42,9 +52,13 @@ Bluetooth-мост для [Music Assistant](https://www.music-assistant.io/) —
 
 ### Установка
 
-1. В Home Assistant перейдите в **Настройки → Аддоны → Магазин аддонов → ⋮ → Репозитории**
-2. Добавьте: `https://github.com/trudenboy/sendspin-bt-bridge`
-3. Найдите **Sendspin Bluetooth Bridge** в магазине и нажмите **Установить**
+**1. Добавьте репозиторий аддонов в Home Assistant:**
+
+[![Добавить репозиторий в HA](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Ftrudenboy%2Fsendspin-bt-bridge)
+
+Или вручную: **Настройки → Аддоны → Магазин аддонов → ⋮ → Репозитории** → добавьте `https://github.com/trudenboy/sendspin-bt-bridge`
+
+**2.** Найдите **Sendspin Bluetooth Bridge** в магазине и нажмите **Установить**.
 
 ### Настройка
 
@@ -140,7 +154,9 @@ docker compose up -d
 
 ## Вариант В — Proxmox VE (LXC)
 
-Запуск в виде **нативного LXC-контейнера** — Docker не нужен. Контейнер запускает собственные `bluetoothd`, `pulseaudio` и `avahi-daemon` с проброской USB Bluetooth-оборудования через правила cgroup.
+Запуск в виде **нативного LXC-контейнера** — Docker не нужен. Контейнер использует **`bluetoothd` хоста через D-Bus bridge** (AF_BLUETOOTH недоступен в LXC-пространствах имён), с `pulseaudio --system` и `avahi-daemon` внутри контейнера.
+
+Полная документация, предварительные требования, шаги ручной установки, инструкции по сопряжению и команды мониторинга — в **[lxc/README.md](lxc/README.md)**.
 
 ### Установка одной командой (на хосте Proxmox от root)
 
@@ -148,11 +164,19 @@ docker compose up -d
 bash <(curl -fsSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/lxc/proxmox-create.sh)
 ```
 
+Либо скачайте и проверьте скрипт перед запуском:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/lxc/proxmox-create.sh -o proxmox-create.sh
+less proxmox-create.sh
+bash proxmox-create.sh
+```
+
 Скрипт интерактивно запрашивает ID контейнера, имя хоста, RAM, диск, сеть и проброску USB Bluetooth.
 
 ### Ручная установка (через интерфейс Proxmox)
 
-1. Создайте новый **привилегированный** LXC-контейнер (Debian 12, 512 МБ RAM, 4 ГБ диск)
+1. Создайте новый **привилегированный** LXC-контейнер (**Ubuntu 24.04**, 512 МБ RAM, 4 ГБ диск)
 2. Запустите контейнер и откройте оболочку (`pct enter <CTID>`)
 3. Запустите установщик:
    ```bash
@@ -160,9 +184,11 @@ bash <(curl -fsSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge
    ```
 4. Добавьте в `/etc/pve/lxc/<CTID>.conf` на **хосте Proxmox**:
    ```
+   lxc.apparmor.profile: unconfined
    lxc.cgroup2.devices.allow: c 166:* rwm
    lxc.cgroup2.devices.allow: c 13:* rwm
-   lxc.mount.entry: /dev/bus/usb dev/bus/usb none bind,optional,create=dir 0 0
+   lxc.cgroup2.devices.allow: c 10:232 rwm
+   lxc.mount.entry: /run/dbus bt-dbus none bind,create=dir 0 0
    lxc.cgroup2.devices.allow: c 189:* rwm
    ```
 5. Перезапустите контейнер: `pct restart <CTID>`
@@ -171,7 +197,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge
 
 ```bash
 pct enter <CTID>
-bluetoothctl
+btctl
 power on
 scan on
 pair  XX:XX:XX:XX:XX:XX
@@ -190,9 +216,9 @@ pct exec <CTID> -- systemctl restart sendspin-client
 
 ```bash
 pct exec <CTID> -- journalctl -u sendspin-client -f
-pct exec <CTID> -- systemctl status sendspin-client pulseaudio-system bluetooth avahi-daemon --no-pager
+pct exec <CTID> -- systemctl status sendspin-client pulseaudio-system avahi-daemon --no-pager
 pct exec <CTID> -- pactl list sinks short
-pct exec <CTID> -- bluetoothctl show
+pct exec <CTID> -- btctl show
 ```
 
 ---
@@ -247,6 +273,8 @@ pct exec <CTID> -- bluetoothctl show
 | `BLUETOOTH_MAC` | `` | MAC одной колонки (устарело; используйте `BLUETOOTH_DEVICES` в config.json) |
 | `TZ` | `Australia/Melbourne` | Часовой пояс контейнера |
 | `WEB_PORT` | `8080` | Порт веб-интерфейса |
+| `MA_API_URL` | `` | Базовый URL REST API Music Assistant (напр. `http://192.168.1.10:8123`) — включает метаданные воспроизведения и транспортные кнопки |
+| `MA_API_TOKEN` | `` | Долгосрочный токен доступа HA для MA API |
 
 Переменные окружения перекрываются значениями из `/config/config.json`, если файл существует.
 
@@ -266,6 +294,8 @@ pct exec <CTID> -- bluetoothctl show
 ---
 
 ## Архитектура
+
+Bridge работает как **многопроцессное приложение**: один главный процесс управляет Bluetooth, веб-API и интеграцией с Music Assistant, тогда как каждая настроенная колонка получает собственный изолированный subprocess с выделенным контекстом PulseAudio (`PULSE_SINK`).
 
 ```
 ┌─────────────────────────────────────┐
@@ -302,6 +332,9 @@ pct exec <CTID> -- bluetoothctl show
     │  Колонка 1  │  Колонка 2  │  ...
     └─────────────┘
 ```
+
+📖 **Полная документация по архитектуре** с диаграммами Mermaid — модель процессов, IPC-протокол, маршрутизация аудио, конечный автомат Bluetooth, интеграция с MA, аутентификация и graceful degradation:
+**[trudenboy.github.io/sendspin-bt-bridge/architecture/](https://trudenboy.github.io/sendspin-bt-bridge/architecture/)**
 
 ---
 
@@ -391,18 +424,33 @@ python sendspin_client.py
 
 ### Структура проекта
 
-| Файл | Назначение |
+| Файл / Директория | Назначение |
 |------|---------|
-| `sendspin_client.py` | Основное приложение — `BluetoothManager`, `SendspinClient`, `main()` |
-| `web_interface.py` | Веб-интерфейс Flask, обслуживаемый Waitress |
-| `entrypoint.sh` | Запуск контейнера — D-Bus, определение аудио-сокета, запуск приложения |
+| `sendspin_client.py` | Основная оркестрация — инициализация `SendspinClient`, `BluetoothManager`, `main()` |
+| `bluetooth_manager.py` | `BluetoothManager` — сопряжение/подключение/переподключение через subprocess `bluetoothctl` |
+| `config.py` | Управление конфигурацией — `load_config()`, `DEFAULT_CONFIG`, `VERSION`, вспомогательные функции auth |
+| `state.py` | Общее состояние рантайма — список клиентов, SSE-сигнализация, задачи сканирования, кэш MA |
+| `mpris.py` | MPRIS D-Bus интеграция — регистрирует каждый плеер в медиашине хоста |
+| `web_interface.py` | Точка входа Flask — регистрирует blueprints, запускает сервер Waitress |
+| `routes/api.py` | Все REST-эндпоинты `/api/*` |
+| `routes/views.py` | Рендеринг HTML-страниц |
+| `routes/auth.py` | Опциональная защита веб-интерфейса паролем |
+| `services/daemon_process.py` | Точка входа subprocess — каждая колонка работает здесь с собственным `PULSE_SINK` |
+| `services/bridge_daemon.py` | Подкласс `BridgeDaemon` — обрабатывает события Sendspin внутри subprocess |
+| `services/ma_monitor.py` | Постоянный WebSocket-монитор MA — подписывается на события `player_queue_updated` |
+| `services/ma_client.py` | Вспомогательные функции MA REST API — обнаружение групп, групповое воспроизведение |
+| `services/bluetooth.py` | BT-утилиты — `bt_remove_device()`, `persist_device_enabled()` |
+| `services/pulse.py` | Async-утилиты PulseAudio — обнаружение синков, коррекция маршрутизации потоков |
+| `scripts/translate_ha_config.py` | Транслятор options.json → config.json для HA аддона (вызывается из entrypoint.sh) |
+| `entrypoint.sh` | Запуск контейнера — D-Bus, определение аудио-сокета, трансляция конфига HA, запуск приложения |
 | `Dockerfile` | Образ контейнера |
 | `docker-compose.yml` | Оркестрация Docker Compose |
 | `ha-addon/config.yaml` | Манифест аддона Home Assistant |
 | `ha-addon/Dockerfile` | Образ аддона HA (тонкая обёртка над основным образом) |
-| `ha-addon/run.sh` | Точка входа HA — преобразует options.json → config.json |
+| `ha-addon/run.sh` | Точка входа HA |
 | `ha-addon/translations/en.yaml` | Метки UI для HA |
 | `lxc/` | Скрипты установки Proxmox LXC |
+| `docs-site/` | Документационный сайт Astro Starlight (деплоится на GitHub Pages) |
 
 ---
 
@@ -438,3 +486,5 @@ python sendspin_client.py
 ## История изменений
 
 Полная история версий в [CHANGELOG.md](CHANGELOG.md).
+
+Нарративная история развития проекта (архитектурные решения, вехи, миграция v1 → v2) — в [HISTORY.md](HISTORY.md).
