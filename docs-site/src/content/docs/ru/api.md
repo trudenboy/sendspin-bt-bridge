@@ -23,6 +23,7 @@ description: REST API Sendspin Bluetooth Bridge
 [
   {
     "player_name": "Колонка в гостиной",
+    "mac": "AA:BB:CC:DD:EE:FF",
     "connected": true,
     "server_connected": true,
     "bluetooth_connected": true,
@@ -76,15 +77,6 @@ data: [{"player_name": "Колонка в гостиной", "playing": false, .
 { "version": "2.10.6", "build_date": "2026-03-05" }
 ```
 
-### `GET /api/logs`
-
-Последние строки лога приложения.
-
-**Query параметры:**
-- `lines` — количество строк (по умолчанию 100)
-
-## Управление воспроизведением
-
 ### `GET /api/groups`
 
 Возвращает список устройств, сгруппированных по MA-группам синхронизации. Устройства с одинаковым `group_id` объединяются в одну запись; одиночные плееры (без группы) отображаются отдельно с `group_id: null`.
@@ -99,9 +91,20 @@ data: [{"player_name": "Колонка в гостиной", "playing": false, .
     "members": [
       { "player_name": "Гостиная", "volume": 48, "playing": true, "connected": true, "bluetooth_connected": true }
     ]
+  },
+  {
+    "group_id": null,
+    "group_name": null,
+    "avg_volume": 70,
+    "playing": false,
+    "members": [
+      { "player_name": "Спальня", "volume": 70, "playing": false, "connected": true, "bluetooth_connected": false }
+    ]
   }
 ]
 ```
+
+## Управление воспроизведением
 
 ### `POST /api/pause_all`
 
@@ -154,7 +157,10 @@ data: [{"player_name": "Колонка в гостиной", "playing": false, .
 
 Повторное обнаружение MA-групп без перезапуска бриджа. Считывает текущие `MA_API_URL` / `MA_API_TOKEN` из `config.json`.
 
-**Ответ:** `{ "success": true, "syncgroups": 2, "mapped_players": 3 }`
+**Ответ:**
+```json
+{ "success": true, "syncgroups": 2, "mapped_players": 3, "groups": [{"id": "...", "name": "Sendspin BT"}] }
+```
 
 ### `GET /api/ma/nowplaying`
 
@@ -169,6 +175,7 @@ data: [{"player_name": "Колонка в гостиной", "playing": false, .
   "album": "Album Name",
   "image_url": "http://...",
   "elapsed": 142.5,
+  "elapsed_updated_at": "2026-03-05T10:01:30",
   "duration": 279,
   "shuffle": false,
   "repeat": "off",
@@ -196,6 +203,15 @@ data: [{"player_name": "Колонка в гостиной", "playing": false, .
 ### `GET /api/debug/ma`
 
 Дамп состояния MA-интеграции для диагностики: ключи кэша now-playing, обнаруженные группы, ID плееров, живые ID очередей из MA WebSocket.
+
+```json
+{
+  "cache_keys": ["ma-syncgroup-abc123"],
+  "groups": [...],
+  "clients": [{ "player_name": "Гостиная", "player_id": "...", "group_id": "abc123" }],
+  "live_queue_ids": ["up_abc123def456"]
+}
+```
 
 ## Bluetooth-управление
 
@@ -255,18 +271,6 @@ data: [{"player_name": "Колонка в гостиной", "playing": false, .
 
 Список спаренных устройств по каждому адаптеру.
 
-## Конфигурация
-
-### `GET /api/config`
-
-Текущая конфигурация из `config.json`.
-
-### `POST /api/config`
-
-Сохранить конфигурацию.
-
-**Body:** JSON объект с полями конфигурации (см. раздел [Настройка](/sendspin-bt-bridge/ru/configuration/)).
-
 ## Сервис
 
 ### `GET /api/logs`
@@ -274,7 +278,7 @@ data: [{"player_name": "Колонка в гостиной", "playing": false, .
 Последние строки лога приложения.
 
 **Query параметры:**
-- `lines` — количество строк (по умолчанию 100)
+- `lines` — количество строк (по умолчанию `100`)
 
 ### `POST /api/restart`
 
@@ -295,6 +299,18 @@ data: [{"player_name": "Колонка в гостиной", "playing": false, .
 **Body:** `{ "level": "debug" }` — `"info"` или `"debug"`
 
 **Ответ:** `{ "success": true, "level": "DEBUG" }`
+
+## Конфигурация
+
+### `GET /api/config`
+
+Текущая конфигурация из `config.json`.
+
+### `POST /api/config`
+
+Сохранить конфигурацию.
+
+**Body:** JSON объект с полями конфигурации (см. раздел [Настройка](/sendspin-bt-bridge/ru/configuration/)).
 
 ## Примеры использования
 
