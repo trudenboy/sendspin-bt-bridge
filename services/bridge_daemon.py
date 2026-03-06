@@ -221,8 +221,10 @@ class BridgeDaemon(SendspinDaemon):
         if cmd.command == PlayerCommand.VOLUME and cmd.volume is not None:
             self._bridge_status["volume"] = cmd.volume
             self._sync_bt_sink_volume(cmd.volume)
+            self._notify()
         elif cmd.command == PlayerCommand.MUTE and cmd.mute is not None:
             self._bridge_status["muted"] = cmd.mute
+            self._notify()
 
     def _sync_bt_sink_volume(self, volume: int) -> None:
         """Apply volume to the specific Bluetooth sink via pulsectl_asyncio."""
