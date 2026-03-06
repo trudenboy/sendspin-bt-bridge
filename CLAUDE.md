@@ -127,13 +127,11 @@ On BT reconnect: PulseAudio's `module-rescue-streams` may move streams to the de
 
 ### Network topology
 
-| Host | IP | SSH alias | Key |
-|------|-----|-----------|-----|
-| Turris router | 192.168.10.1 | `turris` | `~/.ssh/id_turris` |
-| Proxmox | 192.168.10.12 | `proxmox` | `~/.ssh/id_proxmox` |
-| HAOS VM 104 | 192.168.10.10 | `haos` | `~/.ssh/id_turris` ⚠️ same key as Turris, different host |
-
-> The `haos` SSH alias connects directly to the HAOS SSH addon (port 22) using the `id_turris` key, which was reused from the Turris router key pair.
+| Host | IP | SSH alias |
+|------|-----|-----------|
+| Turris router | 192.168.10.1 | `turris` |
+| Proxmox | 192.168.10.12 | `proxmox` |
+| HAOS VM 104 | 192.168.10.10 | `haos` |
 
 ### Proxmox host
 
