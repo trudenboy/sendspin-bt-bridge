@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.10.10] - 2026-03-06
+
+### Fixed
+- MA volume/mute via API now updates local status and subprocess immediately.
+- Progress timer no longer runs past track end when playback is stopped.
+
 ## [2.10.9] - 2026-03-06
 
 ### Added
