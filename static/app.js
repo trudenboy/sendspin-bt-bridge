@@ -126,11 +126,20 @@ async function updateStatus() {
         var devices = status.devices || [status];
         var sorted = devices.slice().sort(function(a, b) {
             var score = function(d) { return d.playing ? 2 : (d.bluetooth_connected ? 1 : 0); };
-            var sd = score(b) - score(a);
-            if (sd !== 0) return sd;
-            var ga = a.group_id || '\uffff';
-            var gb = b.group_id || '\uffff';
-            return ga < gb ? -1 : ga > gb ? 1 : 0;
+            var gka = a.group_id || ('_' + a.player_name);
+            var gkb = b.group_id || ('_' + b.player_name);
+            // best score of any member in the same group (keeps active groups first)
+            var groupScore = function(gk) {
+                var best = 0;
+                devices.forEach(function(d) {
+                    if ((d.group_id || ('_' + d.player_name)) === gk) best = Math.max(best, score(d));
+                });
+                return best;
+            };
+            var gsa = groupScore(gka), gsb = groupScore(gkb);
+            if (gsa !== gsb) return gsb - gsa;          // active groups first
+            if (gka !== gkb) return gka < gkb ? -1 : 1; // same-score groups together
+            return score(b) - score(a);                 // within group: playing first
         });
         // Reset index-keyed state if device list changes (avoids stale mappings)
         if (lastDevices.length !== sorted.length ||
@@ -1928,6 +1937,18 @@ var _statusInterval = null;
             var devices = status.devices || [status];
             var sorted = devices.slice().sort(function(a, b) {
                 var score = function(d) { return d.playing ? 2 : (d.bluetooth_connected ? 1 : 0); };
+                var gka = a.group_id || ('_' + a.player_name);
+                var gkb = b.group_id || ('_' + b.player_name);
+                var groupScore = function(gk) {
+                    var best = 0;
+                    devices.forEach(function(d) {
+                        if ((d.group_id || ('_' + d.player_name)) === gk) best = Math.max(best, score(d));
+                    });
+                    return best;
+                };
+                var gsa = groupScore(gka), gsb = groupScore(gkb);
+                if (gsa !== gsb) return gsb - gsa;
+                if (gka !== gkb) return gka < gkb ? -1 : 1;
                 return score(b) - score(a);
             });
             if (lastDevices.length !== sorted.length ||
