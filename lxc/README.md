@@ -1,6 +1,25 @@
-# Sendspin Client — Proxmox VE LXC Deployment
+# Sendspin Client — LXC Deployment
 
-Run Sendspin Client as a **native LXC container** on Proxmox VE — no Docker required.
+Run Sendspin Client as a **native LXC container** — no Docker required.
+
+## Supported Platforms
+
+| Platform | Script | Status |
+|----------|--------|--------|
+| **Proxmox VE** 7/8 | [`proxmox-create.sh`](proxmox-create.sh) | ✅ Stable |
+| **OpenWrt** (Turris, x86, ARM SBCs) | [`openwrt/create.sh`](openwrt/create.sh) | ✅ Stable |
+
+Both platforms use the same `install.sh` inside the container — the host-side scripts differ.
+
+### Minimum Requirements (OpenWrt)
+
+| Resource | Minimum |
+|----------|---------|
+| RAM | 768 MB |
+| Storage | 2 GB free |
+| Bluetooth | USB BT 4.0+ adapter |
+
+Proxmox VE has no practical resource constraints for this container.
 
 ## Architecture
 
@@ -13,20 +32,23 @@ The LXC container **cannot** run its own `bluetoothd` due to `AF_BLUETOOTH` kern
 
 ## Docker vs LXC comparison
 
-| Feature | Docker | LXC (Proxmox) |
-|---------|--------|---------------|
-| Deployment target | Any Docker host | Proxmox VE 7/8 |
-| Bluetooth | Uses host's bluetoothd via D-Bus socket | Uses host's bluetoothd via D-Bus socket (`/bt-dbus`) |
-| Audio | Uses host's PulseAudio/PipeWire socket | Own `pulseaudio --system` inside container |
-| mDNS discovery | Uses host's avahi-daemon | Own avahi-daemon inside container |
-| Config changes | Container restart | `systemctl restart sendspin-client` |
-| USB BT adapter | Host passthrough | cgroup passthrough to LXC |
+| Feature | Docker | LXC (Proxmox) | LXC (OpenWrt) |
+|---------|--------|---------------|---------------|
+| Deployment target | Any Docker host | Proxmox VE 7/8 | OpenWrt 23+ with LXC |
+| Bluetooth | Uses host's bluetoothd via D-Bus socket | Uses host's bluetoothd via D-Bus socket (`/bt-dbus`) | Uses host's bluetoothd via D-Bus socket (`/bt-dbus`) |
+| Audio | Uses host's PulseAudio/PipeWire socket | Own `pulseaudio --system` inside container | Own `pulseaudio --system` inside container |
+| mDNS discovery | Uses host's avahi-daemon | Own avahi-daemon inside container | Own avahi-daemon inside container |
+| Config changes | Container restart | `systemctl restart sendspin-client` | `systemctl restart sendspin-client` |
+| USB BT adapter | Host passthrough | cgroup passthrough to LXC | cgroup passthrough to LXC |
+| Host init system | systemd/other | systemd (PVE) | procd (OpenWrt) |
 
 ## Prerequisites
 
 - Proxmox VE 7 or 8
 - USB Bluetooth adapter (or onboard Bluetooth on the Proxmox host)
 - **Ubuntu 24.04** LXC template available in Proxmox (the script downloads it automatically)
+
+> **OpenWrt users:** See the [OpenWrt deployment guide](openwrt/README.md) for OpenWrt-specific instructions.
 
 ## Quick Install
 
@@ -158,3 +180,29 @@ lxc.mount.entry: /dev/bus/usb dev/bus/usb none bind,optional,create=dir 0 0
 - `btctl` is a wrapper for `bluetoothctl` that sets `DBUS_SYSTEM_BUS_ADDRESS` to the bind-mounted host socket at `/bt-dbus`
 - Config changes in `/config/config.json` take effect after `systemctl restart sendspin-client` (no container restart needed)
 - The privileged container and `lxc.apparmor.profile: unconfined` are required for Bluetooth hardware passthrough; hardening further would require upstream PVE support for AppArmor profiles that permit Bluetooth management sockets
+
+## OpenWrt Deployment
+
+For OpenWrt-based devices (Turris Omnia, x86 boxes, ARM SBCs with OpenWrt), see the dedicated guide:
+
+📖 **[OpenWrt LXC Deployment Guide](openwrt/README.md)**
+
+Quick install on the OpenWrt host:
+
+```sh
+wget -qO- https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/lxc/openwrt/create.sh | sh
+```
+
+## Upgrading
+
+To update the application inside an existing LXC container (works on both Proxmox and OpenWrt):
+
+```bash
+# From the host:
+pct exec <CTID> -- bash -c "wget -qO- https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/lxc/upgrade.sh | bash"
+
+# Or on OpenWrt:
+lxc-attach -n sendspin -- bash -c "wget -qO- https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/lxc/upgrade.sh | bash"
+```
+
+This preserves `/config/config.json` and only updates application files and dependencies.
