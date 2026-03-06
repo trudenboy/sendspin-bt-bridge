@@ -14,6 +14,7 @@ A Bluetooth bridge for [Music Assistant](https://www.music-assistant.io/) — co
 - **PipeWire & PulseAudio**: Auto-detects the host audio system
 - **Audio format display**: Codec, sample rate, and bit depth shown per device (e.g. `flac 48000Hz/24-bit/2ch`)
 - **Group controls**: Volume and mute controls across multiple players from the web UI
+- **MA API integration**: Rich now-playing data (track, artist, album, queue position) and transport controls (prev/next/shuffle/repeat) sourced from the MA REST API — works for both syncgroup members and solo players
 - **BT adapter management**: Auto-detect adapters with manual override; pin each speaker to a specific adapter
 - **Per-device latency compensation**: `static_delay_ms` field to compensate A2DP buffer latency
 - **Diagnostics endpoint**: `/api/diagnostics` returns structured health info — adapters, sinks, D-Bus status, per-device state

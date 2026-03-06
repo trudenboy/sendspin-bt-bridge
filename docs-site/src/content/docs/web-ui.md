@@ -10,7 +10,7 @@ The web interface is available on port **8080** (Docker/LXC) or via **HA Ingress
 
 ![Full dashboard showing 6 device cards with group controls and header](/sendspin-bt-bridge/screenshots/screenshot-dashboard-full.png)
 
-The dashboard shows all configured Bluetooth devices as cards. Cards are sorted automatically: playing devices first, then connected-but-idle, then inactive — so the most relevant speakers are always at the top. Within each tier, devices in the same MA sync group stay together.
+The dashboard shows all configured Bluetooth devices as cards. Cards are sorted so that active groups appear first — all members of an MA sync group are always shown together. Within a group, playing devices come before idle ones. Ungrouped (solo) speakers follow after all groups.
 
 ---
 
@@ -92,13 +92,17 @@ The adapter name (`hci0`, `hci1`) is shown next to the dot. Hover to see the ful
 
 The MA server `host:port` is shown (or `auto:9000` for mDNS discovery). Hover to see the full resolved WebSocket URL.
 
+When the bridge is actively receiving now-playing data from the MA REST API, a small **`api`** badge appears next to the MA connection indicator. This means full transport controls (prev/next/shuffle/repeat) and queue metadata are available for this device.
+
 ### Playback Column
 
 - **Status** — `▶ Playing` (green dot), `⏸ Stopped` (amber dot), `● No Sink` (red, device not connected)
-- **Per-device Pause/Play button** — `▮▮` while playing, `▶` while stopped; only visible when a sink is active
+- **Transport controls** — visible when a sink is active:
+  - `◀◀` prev track, `▮▮` / `▶` pause/play, `▶▶` next track — always shown when sink is active
+  - `⇄` shuffle, `↻` repeat — shown when MA API is connected; reflect the actual MA queue state and toggle it on click
 - **Track / artist** — shown below the status; persists on pause (cleared only when MA sends empty values)
   - **Compilation albums**: if multiple slash-separated artists are present (e.g. `Frank Sinatra/Louis Armstrong/Elvis Presley`), the display shows `Frank Sinatra +2` — hover the element for the full text
-- **Progress** — current position / total duration (e.g. `7:05 / 72:00`)
+- **Progress** — current position / total duration (e.g. `3:22 / 4:39`)
 
 ### Volume Column
 
@@ -135,13 +139,14 @@ The MA server `host:port` is shown (or `auto:9000` for mDNS discovery). Hover to
 
 ## Device Sorting
 
-Cards are automatically ordered as follows:
+Cards are ordered to keep groups together:
 
-1. **Playing** devices — at the top
-2. **Connected but idle** — stopped devices that are still connected
-3. **Inactive** — disconnected or released devices
+1. **Groups with active members first** — a group where at least one device is playing appears before an all-idle group
+2. **Group members stay adjacent** — all devices sharing the same MA sync group are always shown together, regardless of individual play state
+3. **Within a group** — playing devices come before idle/disconnected ones
+4. **Solo (ungrouped) devices** — appear after all groups, ordered by individual play state
 
-Within each tier, devices are grouped by their MA sync group (sorted by group name). Ungrouped devices appear at the end of their tier.
+Within groups, the group badge (`🔗 GroupName`) is shown on each member card. Solo players do not show a group badge.
 
 ---
 
