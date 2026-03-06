@@ -87,11 +87,44 @@ Bluetooth-менеджер опрашивает соединение раз в 1
 
 Это самый технически насыщенный период. Решалась одна проблема — **детерминированная маршрутизация звука в PulseAudio при нескольких динамиках** — и было пройдено четыре принципиально разных архитектурных подхода.
 
-### Корень проблемы
+### Переход с sendspin CLI на in-process aiosendspin (v2.0, 2 марта) — источник проблемы
 
-MA запускает один `sendspin`-процесс, который создаёт PA-поток. PA выбирает **default sink** — обычно последний подключённый BT-динамик. При двух динамиках гарантии нет: поток мог попасть в любой из них, или переключиться при переподключении.
+До v2.0 каждый BT-динамик управлялся отдельным **системным процессом** `sendspin`:
 
-### Итерация 1: реактивный `move-sink-input` (v2.1, 2 марта)
+```
+main process
+    ├── subprocess: sendspin (PID A, env PULSE_SINK=bt_sink_A) → Speaker A
+    └── subprocess: sendspin (PID B, env PULSE_SINK=bt_sink_B) → Speaker B
+```
+
+Каждый `sendspin`-процесс имел **собственный PulseAudio-контекст** и свою переменную `PULSE_SINK`. Маршрутизация работала — но ценой хрупкости: статус воспроизведения парсился из stdout по регулярным выражениям (~230 строк парсинга), трек и метаданные опрашивались через MPRIS с задержкой до 10 секунд.
+
+В v2.0 (2 марта) `sendspin` CLI заменён на прямой вызов Python-библиотеки:
+
+```python
+# До v2.0: subprocess + stdout parsing
+process = subprocess.Popen(['sendspin', '--headless', ...])
+# ~230 строк парсинга stdout по regex
+
+# С v2.0: in-process BridgeDaemon
+class BridgeDaemon(SendspinDaemon):  # из пакета aiosendspin
+    def on_stream_start(self, ...): ...  # typed callback
+    def on_volume_change(self, ...): ...
+```
+
+`SendspinDaemon` — asyncio-класс из PyPI-пакета `sendspin` (внутренняя реализация — `aiosendspin`). Все события через typed callbacks, без парсинга. Убрано ~230 строк хрупкого кода, метаданные трека теперь приходят мгновенно.
+
+**Но:** теперь все `BridgeDaemon`-экземпляры живут **в одном Python-процессе** с единым PulseAudio-контекстом. `PULSE_SINK` — переменная окружения процесса: задать разные значения для разных daemons внутри одного процесса невозможно.
+
+```
+main process (единый PA-контекст)
+    ├── BridgeDaemon A → PA stream → default sink → Speaker ???
+    └── BridgeDaemon B → PA stream → default sink → Speaker ???
+```
+
+PA выбирает **default sink** — обычно последний подключённый BT-динамик. Гарантии нет: поток мог попасть в любую из колонок. Это и стало корнем всех последующих проблем.
+
+### Итерация 1: реактивный `move-sink-input` (v2.1, 3 марта)
 
 ```
 sendspin process
@@ -243,10 +276,11 @@ Solo-плееры (не входящие в syncgroup) получают own queu
 | v1.3.16 | 1 мар | MPRIS D-Bus MediaPlayer2 | Нет связи MA ↔ bridge через стандартный интерфейс |
 | v1.4.0 | 2 мар | Разбивка монолита на модули | Неуправляемый рост единого файла |
 | v1.7.0 | 2 мар | D-Bus event BT monitor | 10-секундная задержка детекции разрыва |
-| v2.1 | 2 мар | Реактивный `move-sink-input` | Звук шёл в любой синк |
+| **v2.0** | 2 мар | **sendspin CLI → in-process aiosendspin** | Хрупкий stdout-парсинг, задержка метаданных — **породило проблему default sink** |
+| v2.1 | 3 мар | Реактивный `move-sink-input` | Звук шёл в default sink (не тот динамик) |
 | v2.2 | 3 мар | null-sink + loopback | Гонка на `move-sink-input` |
 | v2.4 | 3 мар | Проактивный `PULSE_SINK` env | Задержка loopback ломала синхронизацию |
-| **v2.5** | 3 мар | **Subprocess-изоляция per speaker** | **Унаследование PULSE_SINK в едином процессе** |
+| **v2.5** | 3 мар | **Subprocess-изоляция per speaker** | **PULSE_SINK неприменим внутри единого процесса** |
 | v2.5.1 | 3 мар | PA rescue-streams коррекция | BT reconnect перебрасывал потоки на fallback |
 | v2.5.5 | 4 мар | `preferred_format` per device | Ресемплинг в мультирум-группах |
 | v2.6.0 | 4 мар | routes/, services/, state.py | Монолитный web_interface.py |
