@@ -233,6 +233,44 @@ bluez_sink.{MAC_UNDERSCORED}              # PulseAudio fallback
 
 При переподключении Bluetooth модуль PulseAudio `module-rescue-streams` может переместить sink-inputs на синк по умолчанию. `BridgeDaemon._ensure_sink_routing()` исправляет это один раз при запуске потока — флаг `_sink_routed` предотвращает повторные корректировки в цикле.
 
+### Управление громкостью (архитектура единственного писателя)
+
+Громкость и mute управляются по модели **единственного писателя**: только `bridge_daemon` (внутри каждого подпроцесса) записывает в PulseAudio. Это устраняет петли обратной связи, при которых несколько писателей конкурировали и вызывали «прыжки» громкости.
+
+```mermaid
+sequenceDiagram
+    participant UI as Веб-интерфейс
+    participant API as Flask API
+    participant MA as Music Assistant
+    participant BD as bridge_daemon<br/>(подпроцесс)
+    participant PA as PulseAudio
+
+    Note over UI,PA: Путь через MA (VOLUME_VIA_MA = true, MA подключён)
+    UI->>API: POST /api/volume {volume: 40, group: true}
+    API->>MA: WS: players/cmd/group_volume
+    API-->>UI: {"via": "ma"} (без локального обновления статуса)
+    MA->>BD: VolumeChanged эхо (протокол sendspin)
+    BD->>PA: pactl set-sink-volume (единственный писатель)
+    BD->>BD: _bridge_status["volume"] = N; _notify()
+    BD-->>API: stdout: {"type":"status","volume": N}
+    API-->>UI: SSE обновление статуса
+
+    Note over UI,PA: Локальный фоллбэк (MA недоступен или force_local)
+    UI->>API: POST /api/volume {volume: 40, force_local: true}
+    API->>PA: pactl set-sink-volume (напрямую)
+    API->>BD: stdin: {"cmd":"set_volume","value": 40}
+    API-->>UI: {"via": "local"} + мгновенное обновление
+```
+
+**Маршрутизация групповой громкости:**
+
+| Тип устройства | Метод | Поведение |
+|---|---|---|
+| В группе синхронизации MA | MA `group_volume` (один вызов на уникальную группу) | Пропорциональная дельта — сохраняет соотношение громкости между колонками |
+| Одиночное (без группы) | Прямой PulseAudio (`pactl`) | Точное значение — значение слайдера = громкость колонки |
+
+Параметр конфигурации `VOLUME_VIA_MA` (по умолчанию: `true`) определяет, маршрутизируются ли изменения громкости через MA. Установите `false` для прямого использования PulseAudio — при этом MA не будет отражать изменения громкости, сделанные через бридж.
+
 ---
 
 ## Управление Bluetooth
