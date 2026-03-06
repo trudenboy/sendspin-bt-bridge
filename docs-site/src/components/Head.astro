@@ -1,9 +1,77 @@
 ---
-// Custom Head override — adds Mermaid.js for diagram rendering.
+// Custom Head override — adds Mermaid.js for diagram rendering + lightbox on click.
 import Default from '@astrojs/starlight/components/Head.astro';
 ---
 
 <Default {...Astro.props}><slot /></Default>
+
+<style is:global>
+  .mermaid-wrapper {
+    position: relative;
+    cursor: zoom-in;
+  }
+  .mermaid-wrapper::after {
+    content: '🔍';
+    position: absolute;
+    top: 6px;
+    right: 10px;
+    font-size: 1rem;
+    opacity: 0.35;
+    pointer-events: none;
+    transition: opacity 0.15s;
+  }
+  .mermaid-wrapper:hover::after { opacity: 0.75; }
+
+  #mermaid-lightbox {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    background: rgba(0,0,0,0.85);
+    cursor: zoom-out;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+  }
+  #mermaid-lightbox.open { display: flex; }
+  #mermaid-lightbox-inner {
+    background: var(--sl-color-bg, #fff);
+    border-radius: 8px;
+    padding: 1.5rem 2rem;
+    max-width: 95vw;
+    max-height: 92vh;
+    overflow: auto;
+    cursor: default;
+    box-shadow: 0 8px 48px rgba(0,0,0,0.5);
+    position: relative;
+  }
+  #mermaid-lightbox-inner svg {
+    max-width: none !important;
+    height: auto;
+  }
+  #mermaid-lightbox-close {
+    position: absolute;
+    top: 8px;
+    right: 12px;
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+    color: var(--sl-color-text, #333);
+    line-height: 1;
+    padding: 2px 6px;
+    border-radius: 4px;
+    opacity: 0.6;
+  }
+  #mermaid-lightbox-close:hover { opacity: 1; background: var(--sl-color-gray-6, #eee); }
+</style>
+
+<div id="mermaid-lightbox" role="dialog" aria-modal="true" aria-label="Diagram viewer">
+  <div id="mermaid-lightbox-inner">
+    <button id="mermaid-lightbox-close" aria-label="Close">✕</button>
+    <div id="mermaid-lightbox-content"></div>
+  </div>
+</div>
 
 <script is:inline>
   function initMermaid() {
@@ -12,20 +80,48 @@ import Default from '@astrojs/starlight/components/Head.astro';
 
     const isDark = document.documentElement.dataset.theme === 'dark';
 
-    if (window.__mermaidLoaded) {
+    const render = () => {
       window.mermaid.initialize({ startOnLoad: false, theme: isDark ? 'dark' : 'default', securityLevel: 'loose' });
       window.mermaid.run({ nodes: diagrams });
-      return;
-    }
+      attachLightbox();
+    };
+
+    if (window.__mermaidLoaded) { render(); return; }
 
     const script = document.createElement('script');
     script.src = 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js';
-    script.onload = () => {
-      window.__mermaidLoaded = true;
-      window.mermaid.initialize({ startOnLoad: false, theme: isDark ? 'dark' : 'default', securityLevel: 'loose' });
-      window.mermaid.run({ nodes: diagrams });
-    };
+    script.onload = () => { window.__mermaidLoaded = true; render(); };
     document.head.appendChild(script);
+  }
+
+  function attachLightbox() {
+    const lb = document.getElementById('mermaid-lightbox');
+    const lbContent = document.getElementById('mermaid-lightbox-content');
+    const lbClose = document.getElementById('mermaid-lightbox-close');
+    if (!lb || !lbContent || !lbClose) return;
+
+    document.querySelectorAll('.mermaid-wrapper').forEach(wrapper => {
+      if (wrapper.dataset.lightbox) return; // already wired
+      wrapper.dataset.lightbox = '1';
+      wrapper.addEventListener('click', () => {
+        const svg = wrapper.querySelector('svg');
+        if (!svg) return;
+        // Clone and scale up 2×
+        const clone = svg.cloneNode(true);
+        const w = svg.getBoundingClientRect().width || 600;
+        clone.style.width = Math.min(w * 2, 2400) + 'px';
+        clone.style.height = 'auto';
+        lbContent.innerHTML = '';
+        lbContent.appendChild(clone);
+        lb.classList.add('open');
+        document.body.style.overflow = 'hidden';
+      });
+    });
+
+    const close = () => { lb.classList.remove('open'); document.body.style.overflow = ''; };
+    lbClose.addEventListener('click', close);
+    lb.addEventListener('click', e => { if (e.target === lb) close(); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
   }
 
   document.addEventListener('DOMContentLoaded', initMermaid);
