@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.10.8] - 2026-03-06
+
+### Improved
+- **Observability**: all 27 silent `except: pass` blocks now log exception details at DEBUG level — issues are visible with `LOG_LEVEL=DEBUG` without changing runtime behavior.
+- **Thread safety**: `run_coroutine_threadsafe` calls now have a 5-second timeout to prevent deadlocks; all fire-and-forget asyncio tasks have `done_callback` for exception logging.
+- **Test infrastructure**: added pytest with 9 unit tests covering config loading, volume persistence, MAC-to-player-ID mapping, and password hashing.
+
 ## [2.10.7] - 2026-03-06
 
 ### Fixed

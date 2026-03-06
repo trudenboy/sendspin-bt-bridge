@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.10.8] - 2026-03-06
+
+### Improved
+- **Observability**: silent exception handlers now log at DEBUG level for easier troubleshooting.
+- **Thread safety**: timeouts and callbacks on all async fire-and-forget tasks.
+- **Tests**: added 9 unit tests for core config functions.
+
 ## [2.10.7] - 2026-03-06
 
 ### Fixed
