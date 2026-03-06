@@ -1,49 +1,79 @@
 ---
-title: Установка — Proxmox LXC
-description: Установка Sendspin Bluetooth Bridge в Proxmox LXC контейнер
+title: Установка — LXC (Proxmox и OpenWrt)
+description: Установка Sendspin Bluetooth Bridge в LXC контейнер на Proxmox VE или OpenWrt
 ---
 
 
 ## Преимущества LXC перед Docker
 
-В отличие от Docker, LXC-контейнер имеет **собственный bluetoothd и PulseAudio**, что даёт более стабильную работу с Bluetooth: паринг сохраняется между перезапусками, нет конфликтов с хостовым bluetoothd.
+В отличие от Docker, LXC-контейнер имеет **собственный bluetoothd и PulseAudio** (Proxmox) или использует bluetoothd хоста через D-Bus (OpenWrt), что даёт более стабильную работу с Bluetooth: паринг сохраняется между перезапусками, нет конфликтов с хостовым bluetoothd.
 
-## Требования
+## Поддерживаемые платформы
+
+| Платформа | Скрипт | Статус |
+|-----------|--------|--------|
+| **Proxmox VE** 7/8 | [`proxmox-create.sh`](https://github.com/trudenboy/sendspin-bt-bridge/blob/main/lxc/proxmox-create.sh) | ✅ Стабильно |
+| **OpenWrt** 23.x+ / TurrisOS 9.x | [`openwrt/create.sh`](https://github.com/trudenboy/sendspin-bt-bridge/blob/main/lxc/openwrt/create.sh) | ✅ Стабильно |
+
+## Proxmox VE
+
+### Требования
 
 - Proxmox VE 7.x или 8.x
 - USB Bluetooth-адаптер (рекомендуется один адаптер — одна колонка)
 
-## Установка
+### Быстрая установка
+
+На хосте Proxmox:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/lxc/proxmox-create.sh)
+```
+
+Скрипт интерактивно запрашивает ID контейнера, имя хоста, RAM, диск, сеть и проброску USB Bluetooth.
+
+### Ручная установка
 
 <Steps>
 
-1. **Запустите скрипт установки**
-
-   На хосте Proxmox выполните:
-
+1. Создайте новый **привилегированный** LXC-контейнер (**Ubuntu 24.04**, 512 МБ RAM, 4 ГБ диск)
+2. Запустите контейнер и откройте оболочку (`pct enter <CTID>`)
+3. Запустите установщик:
    ```bash
-   bash -c "$(wget -qO - https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/lxc/install.sh)"
+   bash <(curl -fsSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/lxc/install.sh)
    ```
-
-   Скрипт создаст LXC контейнер, установит все зависимости, настроит PulseAudio и запустит сервис.
-
-2. **Войдите в консоль контейнера**
-
-   ```bash
-   pct enter <ID>
+4. Добавьте в `/etc/pve/lxc/<CTID>.conf` на **хосте Proxmox**:
    ```
-
-3. **Откройте веб-интерфейс**
-
+   lxc.apparmor.profile: unconfined
+   lxc.cgroup2.devices.allow: c 166:* rwm
+   lxc.cgroup2.devices.allow: c 13:* rwm
+   lxc.cgroup2.devices.allow: c 10:232 rwm
+   lxc.mount.entry: /run/dbus bt-dbus none bind,create=dir 0 0
+   lxc.cgroup2.devices.allow: c 189:* rwm
    ```
-   http://<IP-контейнера>:8080
-   ```
-
-4. **Добавьте Bluetooth-устройство**
-
-   В веб-интерфейсе перейдите в **Конфигурация → Bluetooth Devices**, нажмите **Scan** для поиска устройств или **+ Add Device** для ручного ввода MAC-адреса.
+5. Перезапустите контейнер: `pct restart <CTID>`
 
 </Steps>
+
+## OpenWrt / TurrisOS
+
+### Требования
+
+- OpenWrt 23.x+ или TurrisOS 9.x
+- ≥1 ГБ RAM, ≥2 ГБ свободного места
+- USB Bluetooth-адаптер
+
+### Быстрая установка
+
+На хосте OpenWrt:
+
+```sh
+wget -qO- https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/lxc/openwrt/create.sh | sh
+```
+
+Скрипт устанавливает LXC и Bluetooth-пакеты через `opkg`, создаёт контейнер Ubuntu 24.04, настраивает D-Bus bridge и cgroup-правила, устанавливает procd-скрипт для автозапуска.
+
+Полные шаги ручной установки и известные проблемы — в [lxc/openwrt/README.md](https://github.com/trudenboy/sendspin-bt-bridge/blob/main/lxc/openwrt/README.md).
 
 ## Паринг колонки
 
@@ -75,9 +105,7 @@ journalctl -u sendspin-client -f
 ## Обновление
 
 ```bash
-cd /opt/sendspin-bt-bridge
-git pull
-systemctl restart sendspin-client
+bash <(curl -fsSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/lxc/upgrade.sh)
 ```
 
 <Aside type="tip">

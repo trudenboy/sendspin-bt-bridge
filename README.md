@@ -2,7 +2,7 @@
 
 [Читать на русском](README.ru.md) · [📖 Documentation](https://trudenboy.github.io/sendspin-bt-bridge/) · [📋 History](HISTORY.md)
 
-A Bluetooth bridge for [Music Assistant](https://www.music-assistant.io/) — connects your Bluetooth speakers to the MA Sendspin protocol. Runs as a Docker container, a Home Assistant addon, or a native LXC container on Proxmox VE. Designed for headless systems.
+A Bluetooth bridge for [Music Assistant](https://www.music-assistant.io/) — connects your Bluetooth speakers to the MA Sendspin protocol. Runs as a Docker container, a Home Assistant addon, or a native LXC container on Proxmox VE / OpenWrt. Designed for headless systems.
 
 ## Features
 
@@ -10,7 +10,7 @@ A Bluetooth bridge for [Music Assistant](https://www.music-assistant.io/) — co
 - **Multi-device**: Bridge multiple Bluetooth speakers simultaneously, each appearing as its own MA player
 - **Auto-reconnect**: Monitors speaker connections every 10 s and reconnects automatically
 - **HA-aligned Web UI**: Dashboard styled to match Home Assistant/Music Assistant — CSS design tokens, automatic dark/light theme, Roboto font; live theme injection when opened via HA Ingress
-- **Three deployment options**: Home Assistant addon, Docker Compose, or Proxmox LXC
+- **Four deployment options**: Home Assistant addon, Docker Compose, Proxmox LXC, or OpenWrt LXC
 - **PipeWire & PulseAudio**: Auto-detects the host audio system
 - **Audio format display**: Codec, sample rate, and bit depth shown per device (e.g. `flac 48000Hz/24-bit/2ch`)
 - **Group controls**: Volume and mute controls across multiple players from the web UI
@@ -38,13 +38,13 @@ Run multiple bridge instances pointing at the same Music Assistant server to cov
 
 ## Deployment Options
 
-| | Home Assistant Addon | Docker Compose | Proxmox LXC |
-|---|---|---|---|
-| Install method | HA Addon Store (one-click) | `docker compose up` | One-line script |
-| Bluetooth | Host bluetoothd via D-Bus | Host bluetoothd via D-Bus | Own bluetoothd inside LXC |
-| Audio | HA Supervisor bridge | Host PulseAudio/PipeWire | Own PulseAudio inside LXC |
-| Config UI | HA panel + web UI | Web UI at :8080 | Web UI at :8080 |
-| Config changes | Addon restart | Container restart | `systemctl restart` |
+| | Home Assistant Addon | Docker Compose | Proxmox LXC | OpenWrt LXC |
+|---|---|---|---|---|
+| Install method | HA Addon Store (one-click) | `docker compose up` | One-line script | One-line script |
+| Bluetooth | Host bluetoothd via D-Bus | Host bluetoothd via D-Bus | Own bluetoothd inside LXC | Host bluetoothd via D-Bus |
+| Audio | HA Supervisor bridge | Host PulseAudio/PipeWire | Own PulseAudio inside LXC | Own PulseAudio inside LXC |
+| Config UI | HA panel + web UI | Web UI at :8080 | Web UI at :8080 | Web UI at :8080 |
+| Config changes | Addon restart | Container restart | `systemctl restart` | `systemctl restart` |
 
 ---
 
@@ -219,6 +219,41 @@ pct exec <CTID> -- journalctl -u sendspin-client -f
 pct exec <CTID> -- systemctl status sendspin-client pulseaudio-system avahi-daemon --no-pager
 pct exec <CTID> -- pactl list sinks short
 pct exec <CTID> -- btctl show
+```
+
+---
+
+## Option D — OpenWrt LXC
+
+Run as a **native LXC container** on OpenWrt-based routers (Turris Omnia, x86 OpenWrt, etc.) — no Docker required. The container uses the **host's `bluetoothd` via a D-Bus bridge** with `pulseaudio --system` inside the container.
+
+For full documentation, prerequisites, manual install steps, and known issues, see **[lxc/openwrt/README.md](lxc/openwrt/README.md)**.
+
+**Requirements:** ≥1 GB RAM, ≥2 GB free storage, USB Bluetooth adapter.
+
+### One-line install (on OpenWrt host as root)
+
+```sh
+wget -qO- https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/lxc/openwrt/create.sh | sh
+```
+
+Or download and review first:
+
+```sh
+wget https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/lxc/openwrt/create.sh
+less create.sh
+sh create.sh
+```
+
+The script installs LXC and Bluetooth packages via `opkg`, creates an Ubuntu 24.04 container, configures D-Bus bridge and cgroup rules, runs the in-container installer, and installs a procd init.d script for autostart.
+
+### Key monitoring commands
+
+```sh
+lxc-attach -n sendspin -- journalctl -u sendspin-client -f
+lxc-attach -n sendspin -- systemctl status sendspin-client pulseaudio-system --no-pager
+lxc-attach -n sendspin -- pactl list sinks short
+lxc-attach -n sendspin -- btctl show
 ```
 
 ---
@@ -449,7 +484,7 @@ python sendspin_client.py
 | `ha-addon/Dockerfile` | HA addon image (thin wrapper over main image) |
 | `ha-addon/run.sh` | HA entry point |
 | `ha-addon/translations/en.yaml` | HA UI labels |
-| `lxc/` | Proxmox LXC install scripts |
+| `lxc/` | LXC install scripts (Proxmox and OpenWrt) |
 | `docs-site/` | Astro Starlight documentation site (deployed to GitHub Pages) |
 
 ---

@@ -88,7 +88,33 @@ ok "Application files downloaded"
 
 # ─── 3. Python dependencies ───────────────────────────────────────────────────
 msg "Installing Python dependencies..."
-pip3 install --break-system-packages -q -r /opt/sendspin-client/requirements.txt
+
+# Force-upgrade system-managed packages that pip can't uninstall (no RECORD file)
+for pkg in typing-extensions blinker; do
+  pip3 install --break-system-packages --ignore-installed -q "$pkg" 2>/dev/null || true
+done
+
+ARCH=$(uname -m)
+if [[ "$ARCH" == "armv7l" || "$ARCH" == "armhf" ]]; then
+  warn "ARM 32-bit detected — applying av compatibility workaround"
+  # av>=14 (required by sendspin) fails to compile on armhf: AV_HWDEVICE_TYPE_D3D12VA
+  # is absent in Ubuntu 24.04's ffmpeg 6.1. av==12.3.0 is the latest compatible version.
+  pip3 install --break-system-packages -q av==12.3.0
+
+  # Install sendspin without its av>=14 dependency
+  pip3 install --break-system-packages -q --no-deps 'sendspin>=5.1.3,<6'
+
+  # Install sendspin's other transitive dependencies
+  pip3 install --break-system-packages -q \
+    aiosendspin aiosendspin-mpris pychromecast qrcode readchar sounddevice \
+    numpy pillow zeroconf casttube protobuf ifaddr
+
+  # Install remaining requirements.txt deps (exclude sendspin line)
+  grep -v '^sendspin' /opt/sendspin-client/requirements.txt | \
+    pip3 install --break-system-packages -q -r /dev/stdin
+else
+  pip3 install --break-system-packages -q -r /opt/sendspin-client/requirements.txt
+fi
 ok "Python dependencies installed"
 
 # ─── 4. Config directory ──────────────────────────────────────────────────────
@@ -204,9 +230,28 @@ wget -q "${BASE}/lxc/sendspin-client.service"   -O /etc/systemd/system/sendspin-
 
 ok "Systemd units installed"
 
-# ─── 11. btctl wrapper ────────────────────────────────────────────────────────
+# ─── 11. Network configuration (LXC) ─────────────────────────────────────────
+# In LXC containers, netplan may fail (udevadm not available). Use systemd-networkd
+# as a reliable fallback for DHCP on eth0.
+if [[ -d /proc/1/ns/pid ]] && ! command -v netplan &>/dev/null; then
+  if [[ ! -f /etc/systemd/network/10-eth0.network ]]; then
+    msg "Configuring systemd-networkd for eth0 (DHCP)..."
+    mkdir -p /etc/systemd/network
+    cat > /etc/systemd/network/10-eth0.network <<'NETEOF'
+[Match]
+Name=eth0
+
+[Network]
+DHCP=yes
+NETEOF
+    systemctl enable systemd-networkd 2>/dev/null || true
+    ok "systemd-networkd configured with DHCP on eth0"
+  fi
+fi
+
+# ─── 12. btctl wrapper ────────────────────────────────────────────────────────
 # btctl wraps bluetoothctl to use the host's D-Bus socket at /bt-dbus.
-# Bluetooth runs on the Proxmox HOST; the container accesses it via bind-mount.
+# Bluetooth runs on the HOST; the container accesses it via bind-mount.
 msg "Installing btctl wrapper..."
 cat > /usr/local/bin/btctl <<'BTCTL'
 #!/usr/bin/env bash
@@ -215,7 +260,7 @@ BTCTL
 chmod +x /usr/local/bin/btctl
 ok "btctl installed at /usr/local/bin/btctl"
 
-# ─── 12. Enable and start services ───────────────────────────────────────────
+# ─── 13. Enable and start services ───────────────────────────────────────────
 msg "Enabling and starting services..."
 systemctl daemon-reload
 

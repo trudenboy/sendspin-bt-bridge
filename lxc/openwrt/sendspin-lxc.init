@@ -1,0 +1,77 @@
+#!/bin/sh /etc/rc.common
+# sendspin-lxc — Manage Sendspin BT Bridge LXC container
+# Install: cp sendspin-lxc.init /etc/init.d/sendspin-lxc && chmod +x /etc/init.d/sendspin-lxc
+# Enable:  /etc/init.d/sendspin-lxc enable
+
+START=99
+STOP=10
+USE_PROCD=1
+
+# Container name — override via UCI if needed:
+#   uci set sendspin.@container[0].name='my-container'
+CONTAINER_NAME="${SENDSPIN_LXC_NAME:-sendspin}"
+
+start_service() {
+    local state
+    state="$(lxc-info -n "$CONTAINER_NAME" -sH 2>/dev/null)"
+
+    if [ "$state" = "RUNNING" ]; then
+        logger -t sendspin-lxc "Container '$CONTAINER_NAME' is already running"
+        return 0
+    fi
+
+    logger -t sendspin-lxc "Starting container '$CONTAINER_NAME'"
+    lxc-start -n "$CONTAINER_NAME" -d
+
+    # Wait up to 30s for the container to reach RUNNING state
+    local i=0
+    while [ $i -lt 30 ]; do
+        state="$(lxc-info -n "$CONTAINER_NAME" -sH 2>/dev/null)"
+        [ "$state" = "RUNNING" ] && break
+        sleep 1
+        i=$((i + 1))
+    done
+
+    if [ "$state" = "RUNNING" ]; then
+        logger -t sendspin-lxc "Container '$CONTAINER_NAME' started successfully"
+    else
+        logger -t sendspin-lxc -p user.err "Container '$CONTAINER_NAME' failed to start (state: $state)"
+        return 1
+    fi
+}
+
+stop_service() {
+    local state
+    state="$(lxc-info -n "$CONTAINER_NAME" -sH 2>/dev/null)"
+
+    if [ "$state" != "RUNNING" ]; then
+        logger -t sendspin-lxc "Container '$CONTAINER_NAME' is not running (state: $state)"
+        return 0
+    fi
+
+    logger -t sendspin-lxc "Stopping container '$CONTAINER_NAME'"
+    lxc-stop -n "$CONTAINER_NAME" -t 30
+
+    state="$(lxc-info -n "$CONTAINER_NAME" -sH 2>/dev/null)"
+    if [ "$state" = "STOPPED" ]; then
+        logger -t sendspin-lxc "Container '$CONTAINER_NAME' stopped"
+    else
+        logger -t sendspin-lxc -p user.warn "Container '$CONTAINER_NAME' state after stop: $state"
+    fi
+}
+
+service_running() {
+    local state
+    state="$(lxc-info -n "$CONTAINER_NAME" -sH 2>/dev/null)"
+    [ "$state" = "RUNNING" ]
+}
+
+restart() {
+    stop_service
+    sleep 2
+    start_service
+}
+
+status() {
+    lxc-info -n "$CONTAINER_NAME" 2>/dev/null || echo "Container '$CONTAINER_NAME' not found"
+}

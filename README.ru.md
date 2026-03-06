@@ -2,7 +2,7 @@
 
 [Read in English](README.md) · [📖 Документация](https://trudenboy.github.io/sendspin-bt-bridge/) · [📋 История](HISTORY.ru.md)
 
-Bluetooth-мост для [Music Assistant](https://www.music-assistant.io/) — подключает Bluetooth-колонки к протоколу Sendspin в MA. Работает как Docker-контейнер, аддон для Home Assistant или нативный LXC-контейнер на Proxmox VE. Предназначен для систем без монитора.
+Bluetooth-мост для [Music Assistant](https://www.music-assistant.io/) — подключает Bluetooth-колонки к протоколу Sendspin в MA. Работает как Docker-контейнер, аддон для Home Assistant или нативный LXC-контейнер на Proxmox VE / OpenWrt. Предназначен для систем без монитора.
 
 ## Возможности
 
@@ -10,7 +10,7 @@ Bluetooth-мост для [Music Assistant](https://www.music-assistant.io/) —
 - **Несколько устройств**: Одновременное подключение нескольких Bluetooth-колонок, каждая отображается как отдельный плеер в MA
 - **Авто-переподключение**: Мониторинг соединений каждые 10 с с автоматическим переподключением
 - **Веб-интерфейс в стиле HA**: Панель мониторинга оформлена в визуальном языке Home Assistant/Music Assistant — CSS design tokens, автоматическая тёмная/светлая тема, шрифт Roboto; живая инъекция темы при открытии через HA Ingress
-- **Три варианта развёртывания**: Аддон Home Assistant, Docker Compose или Proxmox LXC
+- **Четыре варианта развёртывания**: Аддон Home Assistant, Docker Compose, Proxmox LXC или OpenWrt LXC
 - **PipeWire и PulseAudio**: Автоматическое определение аудиосистемы хоста
 - **Отображение аудио формата**: Кодек, частота дискретизации и битность отображаются для каждого устройства (например, `flac 48000Hz/24-bit/2ch`)
 - **Групповое управление**: Регулировка громкости и отключение звука на нескольких плеерах из веб-интерфейса
@@ -38,13 +38,13 @@ Bluetooth-мост для [Music Assistant](https://www.music-assistant.io/) —
 
 ## Варианты развёртывания
 
-| | Аддон Home Assistant | Docker Compose | Proxmox LXC |
-|---|---|---|---|
-| Установка | Магазин аддонов HA (один клик) | `docker compose up` | Однострочный скрипт |
-| Bluetooth | bluetoothd хоста через D-Bus | bluetoothd хоста через D-Bus | Собственный bluetoothd внутри LXC |
-| Аудио | Мост через HA Supervisor | PulseAudio/PipeWire хоста | Собственный PulseAudio внутри LXC |
-| UI настройки | Панель HA + веб-интерфейс | Веб-интерфейс на :8080 | Веб-интерфейс на :8080 |
-| Применение изменений | Перезапуск аддона | Перезапуск контейнера | `systemctl restart` |
+| | Аддон Home Assistant | Docker Compose | Proxmox LXC | OpenWrt LXC |
+|---|---|---|---|---|
+| Установка | Магазин аддонов HA (один клик) | `docker compose up` | Однострочный скрипт | Однострочный скрипт |
+| Bluetooth | bluetoothd хоста через D-Bus | bluetoothd хоста через D-Bus | Собственный bluetoothd внутри LXC | bluetoothd хоста через D-Bus |
+| Аудио | Мост через HA Supervisor | PulseAudio/PipeWire хоста | Собственный PulseAudio внутри LXC | Собственный PulseAudio внутри LXC |
+| UI настройки | Панель HA + веб-интерфейс | Веб-интерфейс на :8080 | Веб-интерфейс на :8080 | Веб-интерфейс на :8080 |
+| Применение изменений | Перезапуск аддона | Перезапуск контейнера | `systemctl restart` | `systemctl restart` |
 
 ---
 
@@ -219,6 +219,41 @@ pct exec <CTID> -- journalctl -u sendspin-client -f
 pct exec <CTID> -- systemctl status sendspin-client pulseaudio-system avahi-daemon --no-pager
 pct exec <CTID> -- pactl list sinks short
 pct exec <CTID> -- btctl show
+```
+
+---
+
+## Вариант Г — OpenWrt LXC
+
+Запуск в виде **нативного LXC-контейнера** на роутерах OpenWrt (Turris Omnia, x86 OpenWrt и др.) — Docker не нужен. Контейнер использует **`bluetoothd` хоста через D-Bus bridge** с `pulseaudio --system` внутри контейнера.
+
+Полная документация, предварительные требования, шаги ручной установки и известные проблемы — в **[lxc/openwrt/README.md](lxc/openwrt/README.md)**.
+
+**Требования:** ≥1 ГБ RAM, ≥2 ГБ свободного места, USB Bluetooth-адаптер.
+
+### Установка одной командой (на хосте OpenWrt от root)
+
+```sh
+wget -qO- https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/lxc/openwrt/create.sh | sh
+```
+
+Либо скачайте и проверьте скрипт перед запуском:
+
+```sh
+wget https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/lxc/openwrt/create.sh
+less create.sh
+sh create.sh
+```
+
+Скрипт устанавливает LXC и Bluetooth-пакеты через `opkg`, создаёт контейнер Ubuntu 24.04, настраивает D-Bus bridge и cgroup-правила, запускает установщик внутри контейнера и устанавливает procd-скрипт для автозапуска.
+
+### Основные команды мониторинга
+
+```sh
+lxc-attach -n sendspin -- journalctl -u sendspin-client -f
+lxc-attach -n sendspin -- systemctl status sendspin-client pulseaudio-system --no-pager
+lxc-attach -n sendspin -- pactl list sinks short
+lxc-attach -n sendspin -- btctl show
 ```
 
 ---
@@ -449,7 +484,7 @@ python sendspin_client.py
 | `ha-addon/Dockerfile` | Образ аддона HA (тонкая обёртка над основным образом) |
 | `ha-addon/run.sh` | Точка входа HA |
 | `ha-addon/translations/en.yaml` | Метки UI для HA |
-| `lxc/` | Скрипты установки Proxmox LXC |
+| `lxc/` | Скрипты установки LXC (Proxmox и OpenWrt) |
 | `docs-site/` | Документационный сайт Astro Starlight (деплоится на GitHub Pages) |
 
 ---
