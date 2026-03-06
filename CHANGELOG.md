@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.10.6] - 2026-03-06
+
+### Fixed
+- Device sorting: group members now always appear adjacent. Sort order: group score → group_id → individual score (previously score-first could split same-group devices apart).
+
 ## [2.10.5] - 2026-03-05
 
 ### Fixed
