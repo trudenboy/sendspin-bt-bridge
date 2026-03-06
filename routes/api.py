@@ -979,8 +979,8 @@ def api_status_stream():
     """Server-Sent Events endpoint — pushes status when it changes.
 
     Clients connect once and receive real-time updates instead of polling
-    /api/status every 2 seconds.  A heartbeat comment is sent every 30 s to
-    keep the connection alive through proxies.
+    /api/status every 2 seconds.  A heartbeat comment is sent every 15 s to
+    keep the connection alive through proxies (including HA ingress).
 
     Uses ``threading.Condition.wait_for()`` to avoid the race between reading
     ``_status_version`` and blocking: the Condition lock ensures that any
@@ -989,30 +989,42 @@ def api_status_stream():
     """
 
     def _generate():
-        last_version = -1
+        def _build_snapshot():
+            with _clients_lock:
+                snapshot = list(_clients)
+            if not snapshot:
+                return None
+            if len(snapshot) == 1:
+                data = get_client_status_for(snapshot[0])
+            else:
+                first = get_client_status_for(snapshot[0])
+                data = {**first, "devices": [get_client_status_for(c) for c in snapshot]}
+            data["groups"] = _build_groups_summary(snapshot)
+            return data
+
+        # Send current status immediately so the client doesn't have to wait
+        # for the first change event (important through HA ingress proxy).
+        initial = _build_snapshot()
+        if initial:
+            yield f"data: {json.dumps(initial)}\n\n"
+
+        last_version = state._status_version
         while True:
             with state._status_condition:
-                # Wait until version changes or 30 s elapse (heartbeat).
+                # Wait until version changes or 15 s elapse (heartbeat).
                 # Capture last_version as default arg to avoid B023 late-binding.
                 changed = state._status_condition.wait_for(
                     lambda v=last_version: state._status_version != v,
-                    timeout=30,
+                    timeout=15,
                 )
 
             if changed:
                 last_version = state._status_version
-                with _clients_lock:
-                    snapshot = list(_clients)
-                if snapshot:
-                    if len(snapshot) == 1:
-                        data = get_client_status_for(snapshot[0])
-                    else:
-                        first = get_client_status_for(snapshot[0])
-                        data = {**first, "devices": [get_client_status_for(c) for c in snapshot]}
-                    data["groups"] = _build_groups_summary(snapshot)
+                data = _build_snapshot()
+                if data:
                     yield f"data: {json.dumps(data)}\n\n"
             else:
-                # 30 s timeout — send a keepalive comment so proxies don't close the connection
+                # 15 s timeout — send a keepalive comment so proxies don't close
                 yield ": heartbeat\n\n"
 
     return Response(
