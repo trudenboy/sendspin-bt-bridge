@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.10.16] - 2026-03-06
+
+### Fixed
+- **LXC installer**: download all app modules (config, state, routes, services, templates, static) instead of only 2 files
+- **LXC PulseAudio**: replace deprecated `enable-lfe-remixing` with `remixing-produce-lfe`/`remixing-consume-lfe` for PA 17+ (Ubuntu 24.04)
+- **LXC PulseAudio**: remove `User=pulse`/`Group=pulse` from systemd unit — PA `--system` mode requires root
+- **LXC PulseAudio**: add tmpfiles.d entry for `/var/run/pulse` persistence across reboots
+- **Config save**: empty string values for numeric fields (`SENDSPIN_PORT`, `PULSE_LATENCY_MSEC`, `BT_CHECK_INTERVAL`, `BT_MAX_RECONNECT_FAILS`) no longer crash with `ValueError`
+- **Config save**: `VOLUME_VIA_MA` added to POST whitelist — setting was silently dropped on save
+
 ## [2.10.15] - 2026-03-06
 
 ### Fixed
