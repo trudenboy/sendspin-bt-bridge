@@ -612,7 +612,7 @@ async def main():
 
     config = load_config()
     server_host = config.get("SENDSPIN_SERVER", "auto")
-    server_port = int(config.get("SENDSPIN_PORT", 9000))
+    server_port = int(config.get("SENDSPIN_PORT") or 9000)
 
     # Bridge name identification
     raw_bridge = config.get("BRIDGE_NAME", "") or os.getenv("BRIDGE_NAME", "")
@@ -630,7 +630,7 @@ async def main():
     logger.info("Timezone: %s", tz)
 
     # PulseAudio latency — larger buffer reduces underflows on slow hardware
-    pulse_latency_msec = int(config.get("PULSE_LATENCY_MSEC", 200))
+    pulse_latency_msec = int(config.get("PULSE_LATENCY_MSEC") or 200)
     os.environ["PULSE_LATENCY_MSEC"] = str(pulse_latency_msec)
     logger.info("PULSE_LATENCY_MSEC: %s ms", pulse_latency_msec)
 
@@ -646,8 +646,8 @@ async def main():
     if prefer_sbc:
         logger.info("PREFER_SBC_CODEC: enabled — will request SBC codec after BT connect")
 
-    bt_check_interval = int(config.get("BT_CHECK_INTERVAL", 10))
-    bt_max_reconnect_fails = int(config.get("BT_MAX_RECONNECT_FAILS", 0))
+    bt_check_interval = int(config.get("BT_CHECK_INTERVAL") or 10)
+    bt_max_reconnect_fails = int(config.get("BT_MAX_RECONNECT_FAILS") or 0)
 
     # Normalise device list — fall back to legacy BLUETOOTH_MAC
     bt_devices = config.get("BLUETOOTH_DEVICES", [])
