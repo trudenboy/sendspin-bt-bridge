@@ -686,6 +686,52 @@ device.keepalive_interval = 0   →  disabled (default)
 
 ---
 
+## Graceful Degradation
+
+The bridge is designed to remain functional when optional system libraries or services are unavailable. Each optional dependency has a defined fallback:
+
+```mermaid
+graph TD
+    subgraph "Optional: dbus-python + GLib"
+        MPRIS_CHK{dbus-python<br/>available?}
+        MPRIS_CHK -->|Yes| MPRIS_ON[MPRIS services registered<br/>MA discovers bridge by name]
+        MPRIS_CHK -->|No| MPRIS_OFF[_DBUS_MPRIS_AVAILABLE = False<br/>Bridge works, MA discovers<br/>via mDNS / manual config]
+    end
+
+    subgraph "Optional: dbus-fast"
+        DBUS_CHK{dbus-fast<br/>available?}
+        DBUS_CHK -->|Yes| DBUS_ON[Instant disconnect detection<br/>via PropertiesChanged signal]
+        DBUS_CHK -->|No| DBUS_OFF[Fallback to bluetoothctl polling<br/>check_interval = 10s]
+    end
+
+    subgraph "Optional: pulsectl_asyncio"
+        PA_CHK{pulsectl_asyncio<br/>available?}
+        PA_CHK -->|Yes| PA_ON[Native async PulseAudio control<br/>sink list · volume · sink-input move]
+        PA_CHK -->|No| PA_OFF[_PULSECTL_AVAILABLE = False<br/>Fallback: pactl subprocess calls<br/>for every PA operation]
+    end
+
+    subgraph "Optional: websockets + MA API"
+        WS_CHK{websockets installed<br/>+ MA_API_URL set?}
+        WS_CHK -->|Yes| WS_ON[MaMonitor: real-time events<br/>player_queue_updated subscription]
+        WS_CHK -->|Events fail| WS_POLL[Polling fallback<br/>every 15s via REST]
+        WS_CHK -->|No| WS_OFF[MaMonitor disabled<br/>now-playing from Sendspin WS only]
+    end
+```
+
+| Optional Dependency | Flag / Check | Full Mode | Degraded Mode |
+|---|---|---|---|
+| `dbus-python` + `gi.repository.GLib` | `_DBUS_MPRIS_AVAILABLE` | MPRIS MediaPlayer2 registered; MA discovers bridge by player name | MPRIS skipped; MA discovery relies on mDNS or manual player ID |
+| `dbus-fast` (async D-Bus) | `ImportError` on import | Instant BT disconnect via `PropertiesChanged` signal | `bluetoothctl` polling every `check_interval` (10 s) |
+| `pulsectl_asyncio` | `_PULSECTL_AVAILABLE` | Native async PulseAudio: sink list, volume, move sink-inputs | All PA operations fall back to `pactl` subprocess calls |
+| `websockets` + `MA_API_URL` configured | `ImportError` + config check | Real-time MA events (`player_queue_updated`) | Polling every 15 s; if MA API not configured, MaMonitor disabled entirely |
+| `dbus-daemon` (session bus) | `DBUS_SESSION_BUS_ADDRESS` set | MPRIS + `pause_all_via_mpris()` functional | MPRIS not registered; per-device Pause via API stdin command only |
+
+<Aside type="note">
+All fallbacks are logged at `WARNING` or `INFO` level at startup so operators can diagnose which features are active. Check container logs for lines like `"pulsectl_asyncio unavailable — falling back to pactl subprocess"` or `"D-Bus monitor unavailable — using bluetoothctl polling"`.
+</Aside>
+
+---
+
 ## Thread & Task Model
 
 ```mermaid
