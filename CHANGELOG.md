@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.10.11] - 2026-03-06
+
+### Fixed
+- **Volume bounce/jump on track change and individual adjustment**: eliminated triple feedback loop where API, sendspin protocol echo, and MA monitor event all set PA sink volume simultaneously. Now bridge_daemon is the single writer to pactl.
+
 ## [2.10.10] - 2026-03-06
 
 ### Fixed
