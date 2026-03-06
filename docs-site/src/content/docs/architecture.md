@@ -3,8 +3,6 @@ title: Architecture
 description: Detailed technical architecture of sendspin-bt-bridge — processes, data flows, IPC, Bluetooth management, MA integration, and web API.
 ---
 
-import { Aside } from '@astrojs/starlight/components';
-
 ## Overview
 
 `sendspin-bt-bridge` is a **multi-process Python bridge** that connects Music Assistant's Sendspin audio protocol to Bluetooth speakers. Each configured speaker runs in its own **isolated subprocess** with a dedicated PulseAudio context, ensuring correct audio routing without cross-device interference.
@@ -726,9 +724,7 @@ graph TD
 | `websockets` + `MA_API_URL` configured | `ImportError` + config check | Real-time MA events (`player_queue_updated`) | Polling every 15 s; if MA API not configured, MaMonitor disabled entirely |
 | `dbus-daemon` (session bus) | `DBUS_SESSION_BUS_ADDRESS` set | MPRIS + `pause_all_via_mpris()` functional | MPRIS not registered; per-device Pause via API stdin command only |
 
-<Aside type="note">
-All fallbacks are logged at `WARNING` or `INFO` level at startup so operators can diagnose which features are active. Check container logs for lines like `"pulsectl_asyncio unavailable — falling back to pactl subprocess"` or `"D-Bus monitor unavailable — using bluetoothctl polling"`.
-</Aside>
+> **Note:** All fallbacks are logged at `WARNING` or `INFO` level at startup so operators can diagnose which features are active. Check container logs for lines like `"pulsectl_asyncio unavailable — falling back to pactl subprocess"` or `"D-Bus monitor unavailable — using bluetoothctl polling"`.
 
 ---
 
@@ -763,9 +759,7 @@ graph TD
     T7 <-->|acquire| LOCK
 ```
 
-<Aside type="note">
-All `bluetoothctl` subprocess calls in the async BT monitor loop are dispatched via `loop.run_in_executor(None, …)` to avoid blocking the event loop. The `_bt_executor` is a dedicated `ThreadPoolExecutor(max_workers=2)`.
-</Aside>
+> **Note:** All `bluetoothctl` subprocess calls in the async BT monitor loop are dispatched via `loop.run_in_executor(None, …)` to avoid blocking the event loop. The `_bt_executor` is a dedicated `ThreadPoolExecutor(max_workers=2)`.
 
 ---
 
