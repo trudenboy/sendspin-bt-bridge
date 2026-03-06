@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.10.15] - 2026-03-06
+
+### Fixed
+- **Group volume with multiple sync groups**: `group_volume` is now sent once per unique MA sync group among the selected targets, instead of only the first. Devices not in any sync group still get local pactl fallback.
+
 ## [2.10.14] - 2026-03-06
 
 ### Fixed

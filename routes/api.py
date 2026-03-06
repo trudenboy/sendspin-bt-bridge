@@ -319,10 +319,10 @@ def _set_volume_via_ma(targets, volume: int, *, is_group: bool = False) -> bool:
     """Proxy volume change through MA WebSocket API.
 
     For group requests (is_group=True), uses ``players/cmd/group_volume``
-    which applies MA's delta-approach (preserves relative speaker volumes).
+    once per unique sync group among the targets.
     For individual requests, uses ``players/cmd/volume_set`` (flat).
 
-    Returns True if *all* targets were set successfully via MA.
+    Returns True if at least one target was set successfully via MA.
     """
     from services.ma_monitor import send_player_cmd
 
@@ -331,19 +331,26 @@ def _set_volume_via_ma(targets, volume: int, *, is_group: bool = False) -> bool:
         return False
 
     if is_group and targets:
-        # Group volume: send to first target's player_id — MA applies delta to all group members
-        pid = getattr(targets[0], "player_id", None)
-        if not pid:
-            return False
-        try:
-            fut = asyncio.run_coroutine_threadsafe(
-                send_player_cmd("players/cmd/group_volume", {"player_id": pid, "volume_level": volume}),
-                loop,
-            )
-            return fut.result(timeout=5.0)
-        except Exception:
-            logger.debug("MA group_volume failed", exc_info=True)
-            return False
+        # Group volume: send one group_volume per unique sync group
+        seen_groups: set[str] = set()
+        for client in targets:
+            gid = client.status.get("group_id")
+            if not gid or gid in seen_groups:
+                continue
+            seen_groups.add(gid)
+            pid = getattr(client, "player_id", None)
+            if not pid:
+                continue
+            try:
+                fut = asyncio.run_coroutine_threadsafe(
+                    send_player_cmd("players/cmd/group_volume", {"player_id": pid, "volume_level": volume}),
+                    loop,
+                )
+                fut.result(timeout=5.0)
+            except Exception:
+                logger.debug("MA group_volume failed for group %s", gid, exc_info=True)
+                return False
+        return bool(seen_groups)
 
     # Individual / all: flat volume_set for each target
     for client in targets:

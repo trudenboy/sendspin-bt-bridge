@@ -22,14 +22,16 @@ _pulse_mock.set_sink_mute = MagicMock(return_value=True)
 _pulse_mock.get_sink_mute = MagicMock(return_value=False)
 
 
-def _make_client(player_name="Speaker1", player_id="sendspin-speaker1", volume=50, sink="bluez_sink.AA"):
+def _make_client(player_name="Speaker1", player_id="sendspin-speaker1", volume=50, sink="bluez_sink.AA", group_id=None):
     """Create a minimal mock SendspinClient."""
     client = MagicMock()
     client.player_name = player_name
     client.player_id = player_id
     client.bluetooth_sink_name = sink
     client.status = MagicMock()
-    client.status.get = MagicMock(side_effect=lambda k, d=None: {"volume": volume, "muted": False}.get(k, d))
+    client.status.get = MagicMock(
+        side_effect=lambda k, d=None: {"volume": volume, "muted": False, "group_id": group_id}.get(k, d)
+    )
     client._update_status = MagicMock()
     client._send_subprocess_command = AsyncMock()
     client.bt_manager = MagicMock()
@@ -93,7 +95,7 @@ class TestSetVolumeViaMa:
         with patch("services.ma_monitor.send_player_cmd", new_callable=AsyncMock, return_value=True) as mock_cmd:
             from routes.api import _set_volume_via_ma
 
-            result = _set_volume_via_ma([_make_client()], 80, is_group=True)
+            result = _set_volume_via_ma([_make_client(group_id="grp1")], 80, is_group=True)
             assert result is True
             mock_cmd.assert_called_once()
             assert mock_cmd.call_args[0][0] == "players/cmd/group_volume"
