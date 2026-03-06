@@ -20,7 +20,7 @@ A Bluetooth bridge for [Music Assistant](https://www.music-assistant.io/) — co
 - **Diagnostics endpoint**: `/api/diagnostics` returns structured health info — adapters, sinks, D-Bus status, per-device state
 - **Multiple bridge instances**: Run several bridge instances (containers/LXC/addons) against the same MA server — each registers its own set of players independently
 
-<img width="1351" height="968" alt="Web dashboard" src="https://github.com/user-attachments/assets/862e7bd6-667f-4af6-b060-435c7918faf6" />
+<img width="1400" alt="Web dashboard — full page, dark mode, all sections expanded" src="https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/docs-site/public/screenshots/screenshot-dashboard-full.png" />
 <br><br>
 <img width="1019" height="245" alt="Players in MA" src="https://github.com/user-attachments/assets/7654570b-bada-4cca-a195-4ced53c8d398" />
 <br><br>
