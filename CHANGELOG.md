@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.10.9] - 2026-03-06
+
+### Added
+- **Hybrid volume control**: volume and mute commands are now routed through the MA WebSocket API when connected, keeping MA's UI in sync. Falls back to direct pactl when MA is unavailable.
+- **Delta-based group volume**: group volume slider uses MA's `players/cmd/group_volume` (preserves relative speaker proportions) instead of flat value.
+- **`force_local` API parameter**: bypass MA proxy and use direct pactl for volume/mute when needed.
+- 6 new unit tests for hybrid volume routing logic (15 total).
+
+### Fixed
+- **Volume subprocess desync**: web UI volume changes now sync into the daemon subprocess, preventing reverts on next status emit.
+- **Group slider lock**: `_userTouched` flag on group volume slider now resets after 3 seconds, restoring auto-sync with average device volume.
+- **MA metadata stale on restart**: added 3-second delay between disconnect and reconnect to allow MA to process `ClientRemovedEvent` before re-registration (ref: music-assistant/support#5049).
+
+### Improved
+- Adaptive ThreadPool for volume: ≤3 devices use simple loop, 4+ use ThreadPoolExecutor.
+- Unified debounce to 300ms for both individual and group volume sliders.
+
 ## [2.10.8] - 2026-03-06
 
 ### Improved

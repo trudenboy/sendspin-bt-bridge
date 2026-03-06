@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.10.9] - 2026-03-06
+
+### Added
+- Hybrid volume control: routes through MA API when connected (delta group volume), falls back to direct pactl.
+- 6 new unit tests for volume routing.
+
+### Fixed
+- Volume subprocess desync, group slider lock, MA metadata stale on restart.
+
 ## [2.10.8] - 2026-03-06
 
 ### Improved
