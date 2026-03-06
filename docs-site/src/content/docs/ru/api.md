@@ -23,23 +23,33 @@ description: REST API Sendspin Bluetooth Bridge
 [
   {
     "player_name": "Колонка в гостиной",
-    "mac": "AA:BB:CC:DD:EE:FF",
-    "websocket_url": "ws://192.168.1.10:8928/sendspin",
     "connected": true,
-    "playing": true,
-    "bluetooth_connected": true,
-    "bluetooth_since": "2026-03-02T10:00:00",
     "server_connected": true,
-    "server_since": "2026-03-02T10:00:01",
+    "bluetooth_connected": true,
+    "bluetooth_since": "2026-03-05T10:00:00",
+    "server_since": "2026-03-05T10:00:01",
+    "playing": true,
     "volume": 48,
+    "muted": false,
     "current_track": "Song Title",
     "current_artist": "Artist Name",
     "audio_format": "flac 48000Hz/24-bit/2ch",
-    "adapter_mac": "C0:FB:F9:62:D6:9D",
-    "adapter_id": "hci0",
+    "connected_server_url": "ws://192.168.1.10:8928/sendspin",
+    "bluetooth_mac": "AA:BB:CC:DD:EE:FF",
+    "bluetooth_adapter": "C0:FB:F9:62:D6:9D",
+    "bluetooth_adapter_name": "Адаптер в гостиной",
+    "bluetooth_adapter_hci": "hci0",
+    "has_sink": true,
+    "sink_name": "bluez_sink.AA_BB_CC_DD_EE_FF.a2dp_sink",
+    "bt_management_enabled": true,
+    "group_id": "abc123",
+    "group_name": "Sendspin BT",
     "sync_status": "In sync",
     "sync_delay_ms": -600,
-    "management_enabled": true
+    "static_delay_ms": -600,
+    "listen_port": 8928,
+    "version": "2.10.6",
+    "build_date": "2026-03-05"
   }
 ]
 ```
@@ -63,7 +73,7 @@ data: [{"player_name": "Колонка в гостиной", "playing": false, .
 ### `GET /api/version`
 
 ```json
-{ "version": "2.6.2", "build_date": "2026-03-04" }
+{ "version": "2.10.6", "build_date": "2026-03-05" }
 ```
 
 ### `GET /api/logs`
@@ -75,17 +85,35 @@ data: [{"player_name": "Колонка в гостиной", "playing": false, .
 
 ## Управление воспроизведением
 
-### `POST /api/pause`
+### `GET /api/groups`
 
-Пауза/воспроизведение для конкретного плеера.
+Возвращает список устройств, сгруппированных по MA-группам синхронизации. Устройства с одинаковым `group_id` объединяются в одну запись; одиночные плееры (без группы) отображаются отдельно с `group_id: null`.
 
-**Body:** `{ "player_name": "Гостиная" }`
+```json
+[
+  {
+    "group_id": "abc123",
+    "group_name": "Sendspin BT",
+    "avg_volume": 52,
+    "playing": true,
+    "members": [
+      { "player_name": "Гостиная", "volume": 48, "playing": true, "connected": true, "bluetooth_connected": true }
+    ]
+  }
+]
+```
 
 ### `POST /api/pause_all`
 
 Пауза/воспроизведение на всех плеерах.
 
 **Body:** `{ "action": "pause" }` или `{ "action": "play" }`
+
+### `POST /api/group/pause`
+
+Пауза или воспроизведение конкретной MA-группы. При `action="play"` использует MA REST API (если настроен), чтобы все участники группы возобновили воспроизведение синхронно.
+
+**Body:** `{ "group_id": "abc123", "action": "pause" }` — action: `"pause"` или `"play"`
 
 ### `POST /api/volume`
 
@@ -101,6 +129,73 @@ data: [{"player_name": "Колонка в гостиной", "playing": false, .
 Включить/выключить mute.
 
 **Body:** `{ "mac": "AA:BB:CC:DD:EE:FF", "muted": true }`
+
+## Интеграция с Music Assistant
+
+Эти эндпоинты требуют настройки `MA_API_URL` и `MA_API_TOKEN`.
+
+### `GET /api/ma/groups`
+
+Возвращает MA-группы синхронизации, обнаруженные через MA REST API.
+
+```json
+[
+  {
+    "id": "ma-syncgroup-abc123",
+    "name": "Sendspin BT",
+    "members": [
+      { "id": "...", "name": "Гостиная", "state": "playing", "volume": 48, "available": true }
+    ]
+  }
+]
+```
+
+### `POST /api/ma/rediscover`
+
+Повторное обнаружение MA-групп без перезапуска бриджа. Считывает текущие `MA_API_URL` / `MA_API_TOKEN` из `config.json`.
+
+**Ответ:** `{ "success": true, "syncgroups": 2, "mapped_players": 3 }`
+
+### `GET /api/ma/nowplaying`
+
+Текущие данные о воспроизведении из MA. Возвращает `{"connected": false}` если MA-интеграция не активна.
+
+```json
+{
+  "connected": true,
+  "state": "playing",
+  "track": "Song Title",
+  "artist": "Artist Name",
+  "album": "Album Name",
+  "image_url": "http://...",
+  "elapsed": 142.5,
+  "duration": 279,
+  "shuffle": false,
+  "repeat": "off",
+  "queue_index": 3,
+  "queue_total": 12,
+  "syncgroup_id": "ma-syncgroup-abc123"
+}
+```
+
+### `POST /api/ma/queue/cmd`
+
+Команда управления воспроизведением для активной MA-группы.
+
+**Body:**
+```json
+{ "action": "next", "syncgroup_id": "ma-syncgroup-abc123" }
+```
+
+| Поле | Описание |
+|---|---|
+| `action` | `"next"`, `"previous"`, `"shuffle"`, `"repeat"` или `"seek"` |
+| `value` | Для `shuffle`: `true`/`false`. Для `repeat`: `"off"`, `"all"`, `"one"`. Для `seek`: секунды (int) |
+| `syncgroup_id` | Опционально — целевая группа; без этого поля используется первая активная группа |
+
+### `GET /api/debug/ma`
+
+Дамп состояния MA-интеграции для диагностики: ключи кэша now-playing, обнаруженные группы, ID плееров, живые ID очередей из MA WebSocket.
 
 ## Bluetooth-управление
 
@@ -174,11 +269,32 @@ data: [{"player_name": "Колонка в гостиной", "playing": false, .
 
 ## Сервис
 
+### `GET /api/logs`
+
+Последние строки лога приложения.
+
+**Query параметры:**
+- `lines` — количество строк (по умолчанию 100)
+
 ### `POST /api/restart`
 
-Перезапустить сервис. Поддерживаемые методы: `systemd`, `docker`, `ha`.
+Перезапустить сервис.
 
-**Body:** `{ "method": "auto" }`
+### `POST /api/set-password`
+
+Установить или изменить пароль веб-интерфейса. Недоступно в режиме HA addon (используйте управление пользователями HA).
+
+**Body:** `{ "password": "mysecretpassword" }` (минимум 8 символов)
+
+**Ответ:** `{ "success": true }`
+
+### `POST /api/settings/log_level`
+
+Изменить уровень логирования немедленно и сохранить в `config.json`. Изменение распространяется на все подпроцессы — перезапуск не нужен.
+
+**Body:** `{ "level": "debug" }` — `"info"` или `"debug"`
+
+**Ответ:** `{ "success": true, "level": "DEBUG" }`
 
 ## Примеры использования
 
@@ -194,20 +310,30 @@ curl -X POST http://localhost:8080/api/volume \
   -H 'Content-Type: application/json' \
   -d '{"mac": "AA:BB:CC:DD:EE:FF", "value": 50}'
 
-# Поставить на паузу конкретный плеер
-curl -X POST http://localhost:8080/api/pause \
-  -H 'Content-Type: application/json' \
-  -d '{"player_name": "Гостиная"}'
-
 # Поставить на паузу все плееры
 curl -X POST http://localhost:8080/api/pause_all \
   -H 'Content-Type: application/json' \
   -d '{"action": "pause"}'
 
-# Получить диагностику
-curl http://localhost:8080/api/diagnostics | python3 -m json.tool
+# Поставить на паузу конкретную MA-группу
+curl -X POST http://localhost:8080/api/group/pause \
+  -H 'Content-Type: application/json' \
+  -d '{"group_id": "abc123", "action": "pause"}'
+
+# Перейти к следующему треку (требует настройки MA API)
+curl -X POST http://localhost:8080/api/ma/queue/cmd \
+  -H 'Content-Type: application/json' \
+  -d '{"action": "next"}'
 
 # Запустить BT-сканирование и опросить результат
 JOB=$(curl -s -X POST http://localhost:8080/api/bt/scan | python3 -c "import sys,json; print(json.load(sys.stdin)['job_id'])")
 curl http://localhost:8080/api/bt/scan/result/$JOB
+
+# Получить диагностику
+curl http://localhost:8080/api/diagnostics | python3 -m json.tool
+
+# Изменить уровень логирования
+curl -X POST http://localhost:8080/api/settings/log_level \
+  -H 'Content-Type: application/json' \
+  -d '{"level": "debug"}'
 ```

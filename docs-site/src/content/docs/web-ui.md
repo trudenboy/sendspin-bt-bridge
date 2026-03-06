@@ -92,7 +92,7 @@ The adapter name (`hci0`, `hci1`) is shown next to the dot. Hover to see the ful
 
 The MA server `host:port` is shown (or `auto:9000` for mDNS discovery). Hover to see the full resolved WebSocket URL.
 
-When the bridge is actively receiving now-playing data from the MA REST API, a small **`api`** badge appears next to the MA connection indicator. This means full transport controls (prev/next/shuffle/repeat) and queue metadata are available for this device.
+When the bridge is actively receiving now-playing data from the MA REST API, a small **`api`** badge appears next to the MA connection indicator. This means full transport controls (prev/next/shuffle/repeat), queue metadata, and album art are available for this device. The badge only appears when `MA_API_URL` and `MA_API_TOKEN` are configured and MA is delivering data for this specific device.
 
 ### Playback Column
 
@@ -102,6 +102,7 @@ When the bridge is actively receiving now-playing data from the MA REST API, a s
   - `⇄` shuffle, `↻` repeat — shown when MA API is connected; reflect the actual MA queue state and toggle it on click
 - **Track / artist** — shown below the status; persists on pause (cleared only when MA sends empty values)
   - **Compilation albums**: if multiple slash-separated artists are present (e.g. `Frank Sinatra/Louis Armstrong/Elvis Presley`), the display shows `Frank Sinatra +2` — hover the element for the full text
+  - **Album art tooltip**: hovering over the track name row shows a 120×120 album cover popup (from MA now-playing `image_url`). Only visible when MA API integration is active and delivering cover art.
 - **Progress** — current position / total duration (e.g. `3:22 / 4:39`)
 
 ### Volume Column
@@ -199,12 +200,19 @@ The **Already paired** box lists previously paired devices from bluetoothctl. Cl
 
 Click **▶ Advanced settings** to expand:
 
-- **SENDSPIN_SERVER** — MA server hostname/IP; `auto` uses mDNS
-- **SENDSPIN_PORT** — WebSocket port (default 9000)
-- **PULSE_LATENCY_MSEC** — PulseAudio latency hint
-- **BT_CHECK_INTERVAL** — reconnect check interval in seconds
-- **BT_MAX_RECONNECT_FAILS** — max consecutive reconnect failures before giving up
-- **Prefer SBC codec** — force SBC negotiation instead of AAC or aptX
+![Advanced settings panel showing MA server, latency, BT interval, SBC codec, log level, and MA API fields](/sendspin-bt-bridge/screenshots/screenshot-advanced-settings.png)
+
+| Field | Default | Description |
+|---|---|---|
+| **Music Assistant server** | `auto` | MA server hostname/IP; `auto` uses mDNS discovery |
+| **Music Assistant WebSocket port** | `9000` | Sendspin WebSocket port |
+| **PulseAudio latency (ms)** | `200` | Larger value reduces dropouts on slow hardware |
+| **BT check interval (s)** | `10` | How often to probe each device's BT connection |
+| **Auto-disable after N failed reconnects** | `0` | Set Enabled=Off after N consecutive failures; `0` = never |
+| **Prefer SBC codec** | on | Force SBC after each BT connect (requires PulseAudio 15+) |
+| **Log level** | `INFO` | `DEBUG` for verbose troubleshooting; takes effect immediately via **Apply now** |
+| **Music Assistant API URL** | _(blank)_ | MA REST API base URL (e.g. `http://192.168.1.x:8095`) for group resume |
+| **Music Assistant API token** | _(blank)_ | HA long-lived access token (MA → Settings → API Tokens) |
 
 ### Save Actions
 

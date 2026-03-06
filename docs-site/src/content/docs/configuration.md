@@ -28,6 +28,8 @@ Go to **Settings → Add-ons → Sendspin Bluetooth Bridge → Configuration**.
 | **bt_check_interval** | Reconnect polling interval in seconds (used when D-Bus events are unavailable). Default `10`. |
 | **bt_max_reconnect_fails** | Stop retrying reconnects after N consecutive failures. `0` = retry forever. |
 | **auth_enabled** | Toggle — enables password protection for the web UI. |
+| **ma_api_url** | Music Assistant REST API base URL (e.g. `http://192.168.1.10:8123`). Required for now-playing metadata, transport controls, and group play. |
+| **ma_api_token** | Home Assistant long-lived access token for the MA API. Generate in HA: **Profile → Long-lived access tokens**. |
 
 ### Bluetooth Devices and Adapters
 
@@ -70,6 +72,8 @@ After editing options, click **Save** at the bottom of the Options section. The 
 | `BT_CHECK_INTERVAL` | integer | `10` | BT polling interval in seconds when D-Bus is unavailable |
 | `BT_MAX_RECONNECT_FAILS` | integer | `0` | Auto-disable BT management after N consecutive failures. `0` = retry forever |
 | `AUTH_ENABLED` | boolean | `false` | Enable password protection for the web UI |
+| `MA_API_URL` | string | `""` | Music Assistant REST API base URL (e.g. `http://192.168.1.10:8123`). Required for now-playing metadata, transport controls, and group play via MA |
+| `MA_API_TOKEN` | string | `""` | Home Assistant long-lived access token for the MA API. Generate in HA: **Profile → Long-lived access tokens** |
 
 ## Bluetooth Devices
 
@@ -103,6 +107,8 @@ The device list is set in `BLUETOOTH_DEVICES`. Each device becomes a separate pl
 | `listen_host` | string | — | IP for sendspin WebSocket listener (default `0.0.0.0`) |
 | `listen_port` | integer | — | sendspin WebSocket port (default `9000 + index`) |
 | `enabled` | boolean | — | `false` = device is disabled and skipped on startup |
+| `keepalive_silence` | boolean | — | Send periodic silence packets to keep the A2DP connection alive. Legacy flag; use `keepalive_interval` instead |
+| `keepalive_interval` | integer | — | Seconds between keepalive silence bursts (minimum 30). Set to any value ≥ 30 to enable; `0` or absent = disabled |
 
 ## Bluetooth Adapters
 

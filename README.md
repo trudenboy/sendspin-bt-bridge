@@ -269,6 +269,8 @@ The `adapter` field is optional — omit it if you only have one Bluetooth adapt
 | `BLUETOOTH_MAC` | `` | Single speaker MAC (legacy; use `BLUETOOTH_DEVICES` in config.json instead) |
 | `TZ` | `Australia/Melbourne` | Container timezone |
 | `WEB_PORT` | `8080` | Web interface port |
+| `MA_API_URL` | `` | Music Assistant REST API base URL (e.g. `http://192.168.1.10:8123`) — enables now-playing metadata and transport controls |
+| `MA_API_TOKEN` | `` | HA long-lived access token for the MA API |
 
 Environment variables are overridden by values in `/config/config.json` if the file exists.
 
@@ -413,18 +415,33 @@ python sendspin_client.py
 
 ### Project structure
 
-| File | Purpose |
-|------|---------|
-| `sendspin_client.py` | Core app — `BluetoothManager`, `SendspinClient`, `main()` |
-| `web_interface.py` | Flask web UI served by Waitress |
-| `entrypoint.sh` | Container startup — D-Bus, audio socket detection, app launch |
+| File / Directory | Purpose |
+|---|---|
+| `sendspin_client.py` | Core orchestration — `SendspinClient`, `BluetoothManager` instantiation, `main()` |
+| `bluetooth_manager.py` | `BluetoothManager` — BT pairing/connection/reconnect via `bluetoothctl` subprocess |
+| `config.py` | Configuration management — `load_config()`, `DEFAULT_CONFIG`, `VERSION`, auth helpers |
+| `state.py` | Shared runtime state — client list, SSE signaling, scan jobs, MA group/now-playing cache |
+| `mpris.py` | MPRIS D-Bus integration — advertises each player to the host media bus |
+| `web_interface.py` | Flask app entry point — registers blueprints, starts Waitress server |
+| `routes/api.py` | All `/api/*` REST endpoints |
+| `routes/views.py` | HTML page renders |
+| `routes/auth.py` | Optional web UI password protection |
+| `services/daemon_process.py` | Subprocess entry point — each speaker runs here with its own `PULSE_SINK` |
+| `services/bridge_daemon.py` | `BridgeDaemon` subclass — handles Sendspin events inside each subprocess |
+| `services/ma_monitor.py` | Persistent MA WebSocket monitor — subscribes to `player_queue_updated` events |
+| `services/ma_client.py` | MA REST API helpers — group discovery, group play |
+| `services/bluetooth.py` | BT helpers — `bt_remove_device()`, `persist_device_enabled()` |
+| `services/pulse.py` | PulseAudio async helpers — sink discovery, stream routing correction |
+| `scripts/translate_ha_config.py` | HA addon options.json → config.json translator (called by entrypoint.sh) |
+| `entrypoint.sh` | Container startup — D-Bus, audio socket detection, HA config translation, app launch |
 | `Dockerfile` | Container image |
 | `docker-compose.yml` | Docker Compose orchestration |
 | `ha-addon/config.yaml` | Home Assistant addon manifest |
 | `ha-addon/Dockerfile` | HA addon image (thin wrapper over main image) |
-| `ha-addon/run.sh` | HA entry point — translates options.json → config.json |
+| `ha-addon/run.sh` | HA entry point |
 | `ha-addon/translations/en.yaml` | HA UI labels |
 | `lxc/` | Proxmox LXC install scripts |
+| `docs-site/` | Astro Starlight documentation site (deployed to GitHub Pages) |
 
 ---
 
