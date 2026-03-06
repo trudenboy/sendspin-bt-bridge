@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.11.0] - 2026-03-07
+
+### Added
+- **OpenWrt LXC deployment**: new `lxc/install-openwrt.sh` installer for OpenWrt-based routers (Turris Omnia, etc.) with procd service management
+- **Documentation**: English and Russian infographics added to README and docs-site
+
+### Fixed
+- **SSE (HA ingress)**: send current status immediately on SSE connect and reduce heartbeat from 30s to 15s — fixes delayed updates when opening the web UI through Home Assistant menu
+
 ## [2.10.16] - 2026-03-06
 
 ### Fixed
