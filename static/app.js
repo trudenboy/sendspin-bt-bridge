@@ -181,7 +181,7 @@ setInterval(function() {
     Object.keys(_maProgSnapshots).forEach(function(idx) {
         var snap = _maProgSnapshots[idx];
         if (!snap) return;
-        var elapsedSec = snap.elapsed + (now - snap.t) / 1000;
+        var elapsedSec = Math.min(snap.elapsed + (now - snap.t) / 1000, snap.duration);
         var pct = Math.min(100, (elapsedSec / snap.duration) * 100);
         var fill = document.getElementById('dprog-fill-' + idx);
         var timeEl = document.getElementById('dprog-time-' + idx);
@@ -444,7 +444,7 @@ function populateDeviceCard(i, dev) {
     var ma = dev.ma_now_playing || {};
     var maActive = !!(ma.connected);
     var deviceMaActive = maActive && !!dev.has_sink;
-    var maHasProg = deviceMaActive && ma.duration > 0 && ma.elapsed != null;
+    var maHasProg = deviceMaActive && ma.state === 'playing' && ma.duration > 0 && ma.elapsed != null;
     if (maHasProg) {
         _maProgSnapshots[i] = {
             elapsed: ma.elapsed,
