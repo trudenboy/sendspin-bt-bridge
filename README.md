@@ -52,9 +52,13 @@ Run multiple bridge instances pointing at the same Music Assistant server to cov
 
 ### Install
 
-1. In Home Assistant go to **Settings → Add-ons → Add-on store → ⋮ → Repositories**
-2. Add: `https://github.com/trudenboy/sendspin-bt-bridge`
-3. Find **Sendspin Bluetooth Bridge** in the store and click **Install**
+**1. Add the addon repository to Home Assistant:**
+
+[![Add repository to HA](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Ftrudenboy%2Fsendspin-bt-bridge)
+
+Or manually: **Settings → Add-ons → Add-on store → ⋮ → Repositories** → add `https://github.com/trudenboy/sendspin-bt-bridge`
+
+**2.** Find **Sendspin Bluetooth Bridge** in the store and click **Install**.
 
 ### Configure
 
