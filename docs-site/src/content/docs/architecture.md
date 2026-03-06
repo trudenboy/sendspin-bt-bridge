@@ -478,7 +478,7 @@ graph TD
         ADAPTERS[Bluetooth Adapters:<br/>hci_name · mac · display_name]
     end
 
-    JSON[/config/config.json] --> LOAD
+    JSON["/config/config.json"] --> LOAD
     LOAD --> GLOBAL
     LOAD --> DEVICES
     LOAD --> ADAPTERS
@@ -486,10 +486,10 @@ graph TD
     SAVE -->|thread-safe| JSON
 
     subgraph "HA Addon Path"
-        HA_OPT[/data/options.json<br/>written by HA Supervisor]
+        HA_OPT["/data/options.json<br/>written by HA Supervisor"]
         HA_SCRIPT[scripts/translate_ha_config.py]
         HA_OPT --> HA_SCRIPT
-        HA_SCRIPT -->|generates| HA_JSON[/data/config.json]
+        HA_SCRIPT -->|generates| HA_JSON["/data/config.json"]
         HA_JSON --> LOAD
     end
 ```
