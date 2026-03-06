@@ -73,8 +73,8 @@ class BridgeDaemon(SendspinDaemon):
         if self._on_status_change:
             try:
                 self._on_status_change()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("on_status_change callback failed: %s", exc)
 
     # ── Client creation ──────────────────────────────────────────────────────
 
@@ -190,7 +190,10 @@ class BridgeDaemon(SendspinDaemon):
             # Guard with _sink_routed so we only move once per stream — moving a
             # sink-input causes a PA glitch that triggers re-anchoring, creating a loop.
             self._sink_routed = True
-            asyncio.ensure_future(self._ensure_sink_routing())
+            _task = asyncio.ensure_future(self._ensure_sink_routing())
+            _task.add_done_callback(
+                lambda t: logger.debug("_ensure_sink_routing error: %s", t.exception()) if t.exception() else None
+            )
         logger.debug("[%s] stream event: %s", self._bridge_status.get("player_name", "?"), event)
 
     async def _ensure_sink_routing(self) -> None:

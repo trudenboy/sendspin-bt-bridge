@@ -216,7 +216,10 @@ class MaMonitor:
                 manufacturer,
                 expected_host,
             )
-            asyncio.create_task(matched_client.send_reconnect())
+            _task = asyncio.create_task(matched_client.send_reconnect())
+            _task.add_done_callback(
+                lambda t: logger.debug("MA send_reconnect error: %s", t.exception()) if t.exception() else None
+            )
 
     async def _connect_and_run(self) -> None:
         """Single connection session: auth, subscribe events, poll loop."""

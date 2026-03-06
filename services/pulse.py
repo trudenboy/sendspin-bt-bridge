@@ -359,8 +359,8 @@ def _fallback_get_description(sink_name: str) -> str | None:
                 return s.split(":", 1)[1].strip()
             elif in_target and s.startswith("Name:"):
                 break
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("get sink description failed: %s", exc)
     return None
 
 
@@ -390,8 +390,8 @@ def _fallback_get_volume(sink_name: str) -> int | None:
 
             m = re.search(r"(\d+)%", r.stdout)
             return int(m.group(1)) if m else None
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("get sink volume failed: %s", exc)
     return None
 
 
@@ -419,8 +419,8 @@ def _fallback_get_mute(sink_name: str) -> bool | None:
         )
         if r.returncode == 0:
             return "yes" in r.stdout.lower()
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("get sink mute failed: %s", exc)
     return None
 
 
@@ -431,8 +431,8 @@ def _fallback_server_name() -> str:
             for line in r.stdout.splitlines():
                 if "Server Name" in line:
                     return line.split(":", 1)[-1].strip()
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("get server name failed: %s", exc)
     return "not available"
 
 
@@ -450,8 +450,8 @@ def _fallback_sink_input_ids() -> set[int]:
             if parts:
                 try:
                     ids.add(int(parts[0]))
-                except ValueError:
-                    pass
+                except ValueError as exc:
+                    logger.debug("parse sink-input id failed: %s", exc)
         return ids
     except Exception:
         return set()

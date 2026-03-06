@@ -12,10 +12,13 @@ can trust the types it receives from config.json.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import subprocess
 import sys
+
+logger = logging.getLogger(__name__)
 
 OPTIONS_FILE = "/data/options.json"
 CONFIG_FILE = "/data/config.json"
@@ -34,8 +37,8 @@ def _mac_to_hci(mac: str) -> str:
                 addr = addr_file.read_text().strip().replace(":", "").lower()
                 if addr == mac_norm:
                     return hci.name  # e.g. "hci0"
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("sysfs adapter lookup failed: %s", exc)
     return ""
 
 
@@ -56,8 +59,8 @@ def _detect_adapters() -> list[dict]:
                         "name": m.group(2).strip() or hci_name,
                     }
                 )
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("detect adapters via bluetoothctl failed: %s", exc)
     return detected
 
 
@@ -142,8 +145,8 @@ def main() -> None:
                 for field in ("keepalive_silence", "keepalive_interval"):
                     if field not in dev and field in existing_devs[mac]:
                         dev[field] = existing_devs[mac][field]
-    except (FileNotFoundError, json.JSONDecodeError):
-        pass
+    except (FileNotFoundError, json.JSONDecodeError) as exc:
+        logger.debug("preserve existing device settings failed: %s", exc)
 
     with open(CONFIG_FILE, "w") as f:
         json.dump(config, f, indent=2)

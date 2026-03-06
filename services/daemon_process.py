@@ -42,6 +42,8 @@ _SYNC_ERROR_PREFIX = "Sync error "
 # bridge_daemon on_stream_event("start") guard fires too early to clear the flag.
 _REANCHOR_AUTO_CLEAR_S = 5.0
 
+logger = logging.getLogger(__name__)
+
 
 class _JsonLineHandler(logging.Handler):
     """Emit log records as {"type":"log", ...} JSON lines on stdout."""
@@ -70,12 +72,12 @@ class _JsonLineHandler(logging.Handler):
                         after = msg.split(_SYNC_ERROR_PREFIX, 1)[1]
                         self._status["last_sync_error_ms"] = float(after.split()[0])
                     except (IndexError, ValueError):
-                        pass
+                        pass  # best-effort parse inside log handler
                 if callable(self._on_status_change):
                     try:
                         self._on_status_change()
                     except Exception:
-                        pass
+                        pass  # cannot log inside log handler
             line = json.dumps(
                 {
                     "type": "log",
@@ -86,7 +88,7 @@ class _JsonLineHandler(logging.Handler):
             )
             print(line, flush=True)
         except Exception:
-            pass
+            pass  # cannot log inside log handler
 
 
 _json_handler = _JsonLineHandler()
@@ -149,8 +151,8 @@ async def _reanchor_watcher(status: dict, on_status_change, stop_event: asyncio.
                 if callable(on_status_change):
                     try:
                         on_status_change()
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.debug("reanchor auto-clear callback failed: %s", exc)
 
 
 async def _read_commands(daemon_ref: list, stop_event: asyncio.Event) -> None:
@@ -180,7 +182,10 @@ async def _read_commands(daemon_ref: list, stop_event: asyncio.Event) -> None:
                 from aiosendspin.models.types import MediaCommand
 
                 mc = MediaCommand.PAUSE if cmd["cmd"] == "pause" else MediaCommand.PLAY
-                asyncio.ensure_future(daemon._client.send_group_command(mc))
+                _task = asyncio.ensure_future(daemon._client.send_group_command(mc))
+                _task.add_done_callback(
+                    lambda t: logger.debug("send_group_command error: %s", t.exception()) if t.exception() else None
+                )
         elif cmd.get("cmd") == "set_volume":
             daemon = daemon_ref[0] if daemon_ref else None
             if daemon and cmd.get("value") is not None:
@@ -196,7 +201,9 @@ async def _read_commands(daemon_ref: list, stop_event: asyncio.Event) -> None:
         elif cmd.get("cmd") == "reconnect":
             daemon = daemon_ref[0] if daemon_ref else None
             if daemon and getattr(daemon, "_client", None):
-                asyncio.ensure_future(daemon._client.disconnect())
+                asyncio.ensure_future(daemon._client.disconnect()).add_done_callback(
+                    lambda t: logger.debug("disconnect error: %s", t.exception()) if t.exception() else None
+                )
         elif cmd.get("cmd") == "set_log_level":
             level_name = str(cmd.get("level", "INFO")).upper()
             level = getattr(logging, level_name, logging.INFO)

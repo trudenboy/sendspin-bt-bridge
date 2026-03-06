@@ -751,8 +751,8 @@ def api_bt_management():
         with config_lock, open(CONFIG_FILE) as _f:
             _cfg = json.load(_f)
         threading.Thread(target=_sync_ha_options, args=(_cfg,), daemon=True).start()
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("sync HA options after toggle failed: %s", exc)
     action = "reclaimed" if enabled else "released"
     return jsonify({"success": True, "message": f"BT adapter {action}", "enabled": enabled})
 
@@ -1115,8 +1115,8 @@ def api_config():
             # Remove partial temp file on failure
             try:
                 os.unlink(tmp)
-            except OSError:
-                pass
+            except OSError as exc:
+                logger.debug("cleanup temp config file failed: %s", exc)
             raise
 
     # Invalidate adapter name cache so next status poll picks up changes
@@ -1156,8 +1156,8 @@ def api_set_password():
             try:
                 with open(CONFIG_FILE) as f:
                     existing = json.load(f)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("read config for auth update failed: %s", exc)
         existing["AUTH_PASSWORD_HASH"] = pw_hash
         tmp = str(CONFIG_FILE) + ".tmp"
         with open(tmp, "w") as f:
@@ -1187,8 +1187,8 @@ def api_set_log_level():
             try:
                 with open(CONFIG_FILE) as f:
                     existing = json.load(f)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("read config for log level update failed: %s", exc)
         existing["LOG_LEVEL"] = level
         tmp = str(CONFIG_FILE) + ".tmp"
         with open(tmp, "w") as f:

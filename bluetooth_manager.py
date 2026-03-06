@@ -117,7 +117,7 @@ class BluetoothManager:
         self.client = client
         self.on_sink_found = on_sink_found  # Callable[[str, int | None], None] | None
         self.prefer_sbc = prefer_sbc
-        self.connected = False
+        self.connected = False  # GIL-atomic bool; safe for cross-thread reads without lock
         self.last_check = 0
         self.check_interval = check_interval
         self.max_reconnect_fails = max_reconnect_fails
@@ -175,8 +175,8 @@ class BluetoothManager:
                     addr = addr_file.read_text().strip().replace(":", "").lower()
                     if addr == mac_norm:
                         return hci.name
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("sysfs adapter lookup failed: %s", exc)
         # Fallback: count adapter positions in bluetoothctl output (fragile, but last resort)
         try:
             result = subprocess.run(["bluetoothctl", "list"], capture_output=True, text=True, timeout=5)
@@ -190,8 +190,8 @@ class BluetoothManager:
                             return f"hci{idx}"
                         idx += 1
                         break
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("bluetoothctl adapter fallback failed: %s", exc)
         return ""
 
     def _resolve_adapter_select(self, adapter: str) -> str:
@@ -353,8 +353,8 @@ class BluetoothManager:
             if proc is not None:
                 try:
                     proc.kill()
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("pair_device proc.kill failed: %s", exc)
             return False
 
     def trust_device(self) -> bool:
@@ -658,8 +658,8 @@ class BluetoothManager:
                     if bus is not None:
                         try:
                             bus.disconnect()
-                        except Exception:
-                            pass
+                        except Exception as exc:
+                            logger.debug("D-Bus disconnect before reconnect failed: %s", exc)
                     bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
 
                 # Introspect the device object (may fail if device not yet registered with BlueZ)
@@ -744,8 +744,8 @@ class BluetoothManager:
                     if bus:
                         try:
                             bus.disconnect()
-                        except Exception:
-                            pass
+                        except Exception as exc:
+                            logger.debug("D-Bus cleanup on failure failed: %s", exc)
                         bus = None
                     raise RuntimeError(f"D-Bus monitor failed {connect_failures} consecutive times: {e}")
             await asyncio.sleep(10)
@@ -782,8 +782,8 @@ class BluetoothManager:
                                     }
                                 )
                             disconnect_event.set()
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.debug("heartbeat connected-state check failed: %s", exc)
             else:
                 # Device is disconnected — attempt reconnect
                 disconnect_event.clear()
@@ -839,8 +839,8 @@ class BluetoothManager:
                     # Re-read state in case external reconnect happened
                     try:
                         self.connected = bool(await device_iface.get_connected())
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.debug("re-read connected state failed: %s", exc)
                     if self.connected:
                         # Device reconnected on its own while we were sleeping —
                         # configure audio and start sendspin, then restart D-Bus subscription

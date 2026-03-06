@@ -317,6 +317,7 @@ class SendspinClient:
                     logger.error("[%s] stdout reader error: %s", self.player_name, t.exception())
 
             self._daemon_task.add_done_callback(_on_reader_done)
+            self._stderr_task.add_done_callback(_on_reader_done)
             logger.info("Sendspin daemon subprocess started (PID %s) for '%s'", self._daemon_proc.pid, self.player_name)
 
         except Exception as e:
@@ -579,13 +580,17 @@ class SendspinClient:
                 logger.info("[%s] BT released — stopping sendspin daemon", self.player_name)
                 loop = _state.get_main_loop()
                 if loop and loop.is_running():
-                    asyncio.run_coroutine_threadsafe(self.stop_sendspin(), loop)
+                    fut = asyncio.run_coroutine_threadsafe(self.stop_sendspin(), loop)
+                    try:
+                        fut.result(timeout=5.0)
+                    except Exception:
+                        logger.debug("[%s] stop_sendspin timed out on BT release", self.player_name)
                 else:
                     # Fallback: direct os.kill is safe from any thread
                     try:
                         self._daemon_proc.kill()
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.debug("daemon proc kill on BT release failed: %s", exc)
             # Disconnect BT device (synchronous subprocess call, safe from any thread)
             if self.bt_manager:
                 try:
@@ -722,8 +727,8 @@ async def main():
                 _saved_vol = _saved.get("LAST_VOLUMES", {}).get(mac)
                 if _saved_vol is not None and isinstance(_saved_vol, int) and 0 <= _saved_vol <= 100:
                     client._update_status({"volume": _saved_vol})
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("pre-fill saved volume failed: %s", exc)
         clients.append(client)
         logger.info("  Player: '%s', BT: %s, Adapter: %s", player_name, mac or "none", adapter or "default")
 

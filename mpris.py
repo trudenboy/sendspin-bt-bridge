@@ -57,8 +57,8 @@ try:
             return {}
 
     _DBUS_MPRIS_AVAILABLE = True
-except Exception:
-    pass
+except Exception as exc:
+    logger.debug("D-Bus/MPRIS not available: %s", exc)
 
 
 # ---------------------------------------------------------------------------
