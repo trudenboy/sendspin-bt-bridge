@@ -1059,14 +1059,14 @@ def _sync_ha_options(config: dict) -> None:
         sup_opts = {
             "options": {
                 "sendspin_server": config.get("SENDSPIN_SERVER", "auto"),
-                "sendspin_port": int(config.get("SENDSPIN_PORT", 9000)),
+                "sendspin_port": int(config.get("SENDSPIN_PORT") or 9000),
                 "bridge_name": config.get("BRIDGE_NAME", ""),
                 "bridge_name_suffix": bool(config.get("BRIDGE_NAME_SUFFIX", False)),
                 "tz": config.get("TZ", ""),
-                "pulse_latency_msec": int(config.get("PULSE_LATENCY_MSEC", 200)),
+                "pulse_latency_msec": int(config.get("PULSE_LATENCY_MSEC") or 200),
                 "prefer_sbc_codec": bool(config.get("PREFER_SBC_CODEC", False)),
-                "bt_check_interval": int(config.get("BT_CHECK_INTERVAL", 10)),
-                "bt_max_reconnect_fails": int(config.get("BT_MAX_RECONNECT_FAILS", 0)),
+                "bt_check_interval": int(config.get("BT_CHECK_INTERVAL") or 10),
+                "bt_max_reconnect_fails": int(config.get("BT_MAX_RECONNECT_FAILS") or 0),
                 "auth_enabled": bool(config.get("AUTH_ENABLED", False)),
                 "bluetooth_devices": sup_devices,
                 "bluetooth_adapters": sup_adapters,
@@ -1165,9 +1165,9 @@ def api_config():
         if amac and not _MAC_RE.match(amac):
             return jsonify({"error": f"Invalid adapter MAC address: {amac}"}), 400
 
-    # Validate top-level port
+    # Validate top-level port (empty string treated as unset)
     sp = config.get("SENDSPIN_PORT")
-    if sp is not None:
+    if sp is not None and sp != "":
         try:
             sp = int(sp)
             if not (1 <= sp <= 65535):
@@ -1195,6 +1195,7 @@ def api_config():
         "LOG_LEVEL",
         "MA_API_URL",
         "MA_API_TOKEN",
+        "VOLUME_VIA_MA",
         "_new_device_default_volume",
     }
     config = {k: v for k, v in config.items() if k in _ALLOWED_POST_KEYS}
