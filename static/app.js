@@ -897,7 +897,7 @@ function onGroupVolumeInput(val) {
         fetch(API_BASE + '/api/volume', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({volume: parseInt(val, 10), player_names: names})
+            body: JSON.stringify({volume: parseInt(val, 10), player_names: names, group: true})
         });
     }, 300);
 }

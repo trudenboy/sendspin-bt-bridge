@@ -310,9 +310,93 @@ def api_restart():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+# ---------------------------------------------------------------------------
+#  MA volume proxy helpers
+# ---------------------------------------------------------------------------
+
+
+def _set_volume_via_ma(targets, volume: int, *, is_group: bool = False) -> bool:
+    """Proxy volume change through MA WebSocket API.
+
+    For group requests (is_group=True), uses ``players/cmd/group_volume``
+    which applies MA's delta-approach (preserves relative speaker volumes).
+    For individual requests, uses ``players/cmd/volume_set`` (flat).
+
+    Returns True if *all* targets were set successfully via MA.
+    """
+    from services.ma_monitor import send_player_cmd
+
+    loop = state.get_main_loop()
+    if not loop:
+        return False
+
+    if is_group and targets:
+        # Group volume: send to first target's player_id — MA applies delta to all group members
+        pid = getattr(targets[0], "player_id", None)
+        if not pid:
+            return False
+        try:
+            fut = asyncio.run_coroutine_threadsafe(
+                send_player_cmd("players/cmd/group_volume", {"player_id": pid, "volume_level": volume}),
+                loop,
+            )
+            return fut.result(timeout=5.0)
+        except Exception:
+            logger.debug("MA group_volume failed", exc_info=True)
+            return False
+
+    # Individual / all: flat volume_set for each target
+    for client in targets:
+        pid = getattr(client, "player_id", None)
+        if not pid:
+            continue
+        try:
+            fut = asyncio.run_coroutine_threadsafe(
+                send_player_cmd("players/cmd/volume_set", {"player_id": pid, "volume_level": volume}),
+                loop,
+            )
+            if not fut.result(timeout=5.0):
+                return False
+        except Exception:
+            logger.debug("MA volume_set failed for %s", pid, exc_info=True)
+            return False
+    return bool(targets)
+
+
+def _set_mute_via_ma(targets, muted: bool) -> bool:
+    """Proxy mute change through MA WebSocket API."""
+    from services.ma_monitor import send_player_cmd
+
+    loop = state.get_main_loop()
+    if not loop:
+        return False
+
+    for client in targets:
+        pid = getattr(client, "player_id", None)
+        if not pid:
+            continue
+        try:
+            fut = asyncio.run_coroutine_threadsafe(
+                send_player_cmd("players/cmd/volume_mute", {"player_id": pid, "muted": muted}),
+                loop,
+            )
+            if not fut.result(timeout=5.0):
+                return False
+        except Exception:
+            logger.debug("MA volume_mute failed for %s", pid, exc_info=True)
+            return False
+    return bool(targets)
+
+
 @api_bp.route("/api/volume", methods=["POST"])
 def set_volume():
-    """Set player volume. Accepts player_name (single), player_names (list), or neither (all)."""
+    """Set player volume. Accepts player_name (single), player_names (list), or neither (all).
+
+    When MA is connected (and ``force_local`` is not set), routes volume changes
+    through the MA WebSocket API so that MA's own UI stays in sync.  Group
+    requests (``group: true``) use the delta-approach ``players/cmd/group_volume``.
+    Falls back to direct pactl on MA failure.
+    """
     try:
         data = request.get_json()
         try:
@@ -322,6 +406,8 @@ def set_volume():
         player_names = data.get("player_names")
         player_name = data.get("player_name")
         group_id = data.get("group_id")
+        is_group = data.get("group", False)
+        force_local = data.get("force_local", False)
 
         if group_id is not None:
             targets = [c for c in _clients if c.status.get("group_id") == group_id]
@@ -332,13 +418,20 @@ def set_volume():
         else:
             targets = list(_clients)
 
+        # --- MA path: proxy through MA API when connected ---
+        if not force_local and state.is_ma_connected() and targets:
+            ma_ok = _set_volume_via_ma(targets, volume, is_group=is_group)
+            if ma_ok:
+                return jsonify({"success": True, "volume": volume, "via": "ma"})
+            logger.debug("MA volume proxy failed, falling back to local pactl")
+
+        # --- Local fallback: direct pactl ---
         def _set_one(client):
             if not client.bluetooth_sink_name:
                 return None
             ok = set_sink_volume(client.bluetooth_sink_name, volume)
             if ok:
                 client._update_status({"volume": volume})
-                # Sync volume into daemon subprocess so it doesn't revert on next status emit
                 loop = state.get_main_loop()
                 if loop:
                     asyncio.run_coroutine_threadsafe(
@@ -363,12 +456,17 @@ def set_volume():
 
 @api_bp.route("/api/mute", methods=["POST"])
 def set_mute():
-    """Toggle or set mute."""
+    """Toggle or set mute.
+
+    When MA is connected, proxies through ``players/cmd/volume_mute`` so that
+    MA's UI stays in sync.  Falls back to direct pactl on failure.
+    """
     try:
         data = request.get_json() or {}
         player_names = data.get("player_names")
         player_name = data.get("player_name")
         mute_value = data.get("mute")
+        force_local = data.get("force_local", False)
 
         if player_names is not None:
             targets = [c for c in _clients if getattr(c, "player_name", None) in player_names]
@@ -377,6 +475,15 @@ def set_mute():
         else:
             targets = _clients[:1]
 
+        # --- MA path ---
+        if not force_local and state.is_ma_connected() and targets:
+            # Resolve desired mute state
+            desired = bool(mute_value) if mute_value is not None else not targets[0].status.get("muted", False)
+            if _set_mute_via_ma(targets, desired):
+                return jsonify({"success": True, "muted": desired, "via": "ma"})
+            logger.debug("MA mute proxy failed, falling back to local pactl")
+
+        # --- Local fallback ---
         results = []
         loop = state.get_main_loop()
         for client in targets:
@@ -387,7 +494,6 @@ def set_mute():
                     if muted is None:
                         muted = bool(mute_value) if mute_value is not None else not client.status.get("muted", False)
                     client._update_status({"muted": muted})
-                    # Sync muted state into daemon subprocess so it doesn't override on next emit
                     if loop:
                         asyncio.run_coroutine_threadsafe(
                             client._send_subprocess_command({"cmd": "set_mute", "muted": muted}), loop

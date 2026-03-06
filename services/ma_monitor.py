@@ -455,3 +455,38 @@ async def send_queue_cmd(action: str, value=None, syncgroup_id: str | None = Non
     except Exception as exc:
         logger.warning("MA queue cmd %s failed: %s", action, exc)
         return False
+
+
+async def send_player_cmd(command: str, args: dict) -> bool:
+    """Send a player command to MA via a fresh WS connection.
+
+    Useful commands:
+      players/cmd/volume_set      {player_id, volume_level}
+      players/cmd/group_volume    {player_id, volume_level}  (delta approach)
+      players/cmd/volume_mute     {player_id, muted}
+      players/cmd/group_volume_mute {player_id, muted}
+
+    Returns True on success.
+    """
+    from services.ma_client import _normalize_ma_url
+
+    ma_url, ma_token = _state.get_ma_api_credentials()
+    if not ma_url or not ma_token:
+        return False
+
+    try:
+        import websockets
+
+        normalized = await _normalize_ma_url(ma_url)
+        ws_url = normalized.replace("http://", "ws://").replace("https://", "wss://") + "/ws"
+        async with websockets.connect(ws_url) as ws:
+            await _recv(ws, timeout=5.0)  # server info
+            await _send(ws, 1, "auth", {"token": ma_token})
+            await _recv(ws, timeout=5.0)  # auth result
+            await _send(ws, 2, command, args)
+            await _recv(ws, timeout=5.0)  # ack
+        logger.info("MA player cmd: %s args=%s", command, args)
+        return True
+    except Exception as exc:
+        logger.warning("MA player cmd %s failed: %s", command, exc)
+        return False
