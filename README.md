@@ -291,6 +291,8 @@ The web UI at `http://your-host:8080` (or via HA Ingress) provides:
 
 ## Architecture
 
+The bridge runs as a **multi-process application**: one main process manages Bluetooth, the web API, and Music Assistant integration, while each configured speaker gets its own isolated subprocess with a dedicated PulseAudio context (`PULSE_SINK`).
+
 ```
 ┌─────────────────────────────────────┐
 │     Music Assistant Server          │
@@ -326,6 +328,9 @@ The web UI at `http://your-host:8080` (or via HA Ingress) provides:
     │  Speaker 1  │  Speaker 2  │  ...
     └─────────────┘
 ```
+
+📖 **Full architecture documentation** with Mermaid diagrams — process model, IPC protocol, audio routing, Bluetooth state machine, MA integration, auth, and graceful degradation:
+**[trudenboy.github.io/sendspin-bt-bridge/architecture/](https://trudenboy.github.io/sendspin-bt-bridge/architecture/)**
 
 ---
 
@@ -477,3 +482,5 @@ MIT License — see [LICENSE](LICENSE) for details.
 ## Changelog
 
 See [CHANGELOG.md](CHANGELOG.md) for the full version history.
+
+For a narrative history of the project's evolution (architecture decisions, milestones, v1 → v2 migration), see [HISTORY.md](HISTORY.md).

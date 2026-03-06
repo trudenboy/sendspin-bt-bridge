@@ -98,3 +98,9 @@ lxc/                  # Proxmox LXC установочный скрипт
 ## Attribution
 
 Проект вырос из [loryanstrant/Sendspin-client](https://github.com/loryanstrant/Sendspin-client). Благодарность команде [Music Assistant](https://www.music-assistant.io/) за протокол Sendspin и CLI.
+
+## Дополнительные материалы
+
+- [Архитектура](/sendspin-bt-bridge/architecture/) — процессная модель, IPC-протокол, маршрутизация звука, автомат состояний Bluetooth, интеграция с MA, аутентификация и graceful degradation
+- [HISTORY.md](https://github.com/trudenboy/sendspin-bt-bridge/blob/main/HISTORY.md) — история эволюции проекта (v1 → v2, ключевые архитектурные решения)
+- [CHANGELOG.md](https://github.com/trudenboy/sendspin-bt-bridge/blob/main/CHANGELOG.md) — полная история версий

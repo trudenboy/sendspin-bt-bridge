@@ -88,3 +88,9 @@ Pushing a `v*` tag to `main` automatically:
 ## Attribution
 
 This project grew out of [loryanstrant/Sendspin-client](https://github.com/loryanstrant/Sendspin-client). Thanks to the [Music Assistant](https://www.music-assistant.io/) team for the Sendspin protocol and CLI.
+
+## Further reading
+
+- [Architecture](/sendspin-bt-bridge/architecture/) — deep dive into the process model, IPC protocol, audio routing, Bluetooth state machine, MA integration, authentication, and graceful degradation
+- [HISTORY.md](https://github.com/trudenboy/sendspin-bt-bridge/blob/main/HISTORY.md) — narrative history of the project's evolution (v1 → v2, key design decisions)
+- [CHANGELOG.md](https://github.com/trudenboy/sendspin-bt-bridge/blob/main/CHANGELOG.md) — full version history

@@ -122,4 +122,6 @@ automation:
   <LinkCard title="Установка: Docker Compose" href="/sendspin-bt-bridge/installation/docker/" />
   <LinkCard title="Установка: Proxmox LXC" href="/sendspin-bt-bridge/installation/lxc/" />
   <LinkCard title="Настройка" href="/sendspin-bt-bridge/configuration/" />
+  <LinkCard title="Архитектура" href="/sendspin-bt-bridge/architecture/" description="Процессная модель, IPC, маршрутизация звука, автомат BT, аутентификация" />
+  <LinkCard title="API Reference" href="/sendspin-bt-bridge/api/" />
 </CardGrid>
