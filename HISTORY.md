@@ -1,150 +1,150 @@
-# История проекта
+# Project History
 
-История архитектурной и функциональной эволюции sendspin-bt-bridge — для тех, кто разбирается в Home Assistant, Music Assistant и организации мультирум-аудио.
+A history of the architectural and functional evolution of sendspin-bt-bridge — for readers familiar with Home Assistant, Music Assistant, and multiroom audio setups.
 
-**Период:** 1 января — 6 марта 2026 г. · **Всего коммитов:** ~550 · **Версии:** 1.0.0 → 2.10.6
+**Period:** January 1 – March 6, 2026 · **Total commits:** ~550 · **Versions:** 1.0.0 → 2.10.6
 
 ---
 
-## Предыстория: откуда проект взялся
+## Background: where the project came from
 
-### loryanstrant/Sendspin-client — сервис создан и опубликован (1 января 2026)
+### loryanstrant/Sendspin-client — service created and published (January 1, 2026)
 
-**1 января 2026** Loryan Strant (Австралия, AEDT +1100) создал и опубликовал сервис [SendspinClient](https://github.com/loryanstrant/Sendspin-client) — Docker-контейнер, связывающий Music Assistant (через протокол Sendspin) с Bluetooth-колонкой на Linux-машине.
+**January 1, 2026** Loryan Strant (Australia, AEDT +1100) created and published [SendspinClient](https://github.com/loryanstrant/Sendspin-client) — a Docker container bridging Music Assistant (via the Sendspin protocol) to a Bluetooth speaker on a Linux machine.
 
-Поводом послужил сугубо личный сценарий: инфракрасная сауна с Bluetooth-колонками, Surface Pro 4 на Ubuntu рядом — уже знакомый паттерн домашней автоматизации. Loryan попробовал Squeezelite, но ESP32 + WiFi + A2DP давали нестабильное соединение. Идея оказалась элегантной: раз MA умеет стримить по Sendspin (WebSocket + FLAC/RAW), а `sendspin`-бинарник воспроизводит на любом PulseAudio-устройстве — нужен только мост в контейнере.
+The motivation was entirely personal: an infrared sauna with Bluetooth speakers and a Surface Pro 4 running Ubuntu nearby — a familiar home-automation scenario. Loryan tried Squeezelite, but ESP32 + WiFi + A2DP gave an unstable connection. The idea was elegant: since MA can stream via Sendspin (WebSocket + FLAC/RAW) and the `sendspin` binary plays back to any PulseAudio device, all that's needed is a bridge in a container.
 
-Исходный код: один Python-скрипт, `sendspin` как дочерний процесс, `bluetoothctl` для подключения к колонке, простая HTML-страница статуса. Loryan опубликовал проект в MA Community в треде [#4677](https://github.com/orgs/music-assistant/discussions/4677) и за один день закрыл 4 PR — улучшение детекции обрыва BT, расширение README.
+The original source was a single Python script, `sendspin` as a child process, `bluetoothctl` for connecting to the speaker, and a simple HTML status page. Loryan published the project in the MA Community thread [#4677](https://github.com/orgs/music-assistant/discussions/4677) and merged 4 PRs in a single day — improving BT disconnect detection and expanding the README.
 
-### Моё появление в проекте и форк
+### My involvement and the fork
 
-Я нашёл тред #4677. У меня была похожая задача — подключить Bluetooth-колонки через Proxmox LXC, что loryanstrant'овский Docker-вариант не поддерживал: LXC-контейнеры не имеют доступа к AF_BLUETOOTH-сокетам из-за ограничений kernel namespaces.
+I found thread #4677. My use case was similar — connecting Bluetooth speakers through Proxmox LXC, which loryanstrant's Docker approach didn't support: LXC containers have no access to AF_BLUETOOTH sockets due to kernel namespace restrictions.
 
-**27 февраля 2026** я оставил первый комментарий в дискуссии с описанием решения и отправил [PR #6](https://github.com/loryanstrant/Sendspin-client/pull/6) в оригинальный репозиторий: новая директория `lxc/` с `proxmox-create.sh` (запускается на хосте PVE — создаёт LXC, bind-mount D-Bus сокета, настраивает Bluetooth-passthrough) и `install.sh` для установки внутри контейнера. Проверено на PVE 8.4.16 с Sony WH-1000XM4.
+**February 27, 2026** I left my first comment in the discussion describing the solution and submitted [PR #6](https://github.com/loryanstrant/Sendspin-client/pull/6) to the original repository: a new `lxc/` directory with `proxmox-create.sh` (runs on the PVE host — creates the LXC, bind-mounts the D-Bus socket, configures Bluetooth passthrough) and `install.sh` for setup inside the container. Tested on PVE 8.4.16 with a Sony WH-1000XM4.
 
-**28 февраля 2026** я опубликовал расширенный форк `sendspin-bt-bridge` с принципиальными новинками и в том же треде спросил Loryan'а — не против ли он, что я развиваю проект самостоятельно и публикую как отдельный HA addon, пообещав, что он навсегда останется указан как автор-основатель. Среди нового в первом релизе форка:
+**February 28, 2026** I published an extended fork, `sendspin-bt-bridge`, with fundamental new capabilities and asked Loryan in the same thread whether he minded me developing the project independently and publishing it as a standalone HA addon, with the commitment that he would always be credited as the founding author. New in the first fork release:
 
-- **Мульти-устройство**: несколько Bluetooth-колонок одновременно, каждая — отдельный плеер в MA
-- **Home Assistant addon** с Ingress (веб-UI в боковой панели HA без пробрасывания портов)
-- **`static_delay_ms`** — компенсация A2DP-задержки на уровне устройства
-- **`/api/diagnostics`** — структурированный healthcheck по адаптерам, синкам, D-Bus
-- **Аудиоформат** в статусе (кодек, частота, битность — например `flac 48000Hz/24-bit/2ch`)
-- **Сохранение громкости** по MAC в `LAST_VOLUMES` и автовосстановление при реконнекте
+- **Multi-device**: multiple Bluetooth speakers simultaneously, each as a separate player in MA
+- **Home Assistant addon** with Ingress (web UI in the HA sidebar without port forwarding)
+- **`static_delay_ms`** — per-device A2DP latency compensation
+- **`/api/diagnostics`** — structured healthcheck for adapters, sinks, and D-Bus
+- **Audio format** in status (codec, sample rate, bit depth — e.g. `flac 48000Hz/24-bit/2ch`)
+- **Volume persistence** per MAC in `LAST_VOLUMES` with automatic restore on reconnect
 
-Явный разрыв с upstream зафиксирован коммитом от 1 марта 2026:
+The explicit break from upstream was recorded in a commit dated March 1, 2026:
 ```
 chore: detach from loryanstrant/Sendspin-client upstream
 ```
 
-После этого момента проект развивается полностью независимо. История коммитов с 1 января унаследована — 14 коммитов loryanstrant'а остаются частью git-истории репозитория.
+From that point the project develops entirely independently. The commit history from January 1 is inherited — loryanstrant's 14 commits remain part of the repository's git history.
 
 ---
 
-## Январь 2026 — Архитектура v0: один файл, одна колонка
+## January 2026 — Architecture v0: one file, one speaker
 
-**Состояние кода:** один файл `sendspin_client.py` ≈ 400 строк.
+**Code state:** a single `sendspin_client.py` file ≈ 400 lines.
 
-Схема предельно простая:
+The scheme is as simple as it gets:
 
 ```
 MA Server ──(WebSocket/Sendspin)──► sendspin CLI ──(PulseAudio)──► bluetoothctl ──► BT Speaker
 ```
 
-Bluetooth-менеджер опрашивает соединение раз в 10 секунд через `bluetoothctl info <MAC>`. Разрыв обнаруживается с задержкой до 10 с. Веб-интерфейс — минимальный статус, ничего настраивать нельзя.
+The Bluetooth manager polls the connection once every 10 seconds via `bluetoothctl info <MAC>`. A disconnect is detected with up to 10 s of lag. The web interface shows minimal status; nothing is configurable.
 
-Первые PR из родительского репозитория добавляют реальный мониторинг D-Bus вместо таймерного пинга — BT-статус обновляется мгновенно при событии системы.
+The first PRs from the parent repository add real D-Bus monitoring to replace the timer-based ping — BT status updates instantly on a system event.
 
-**Ключевая проблема этого этапа:** невозможность работы с несколькими колонками. В PulseAudio единственный `PULSE_SINK` — куда льётся звук из `sendspin`, туда и идёт. Два динамика = неопределённость.
+**The key limitation of this phase:** no support for multiple speakers. In PulseAudio there is a single `PULSE_SINK` — wherever `sendspin` sends its audio is where it goes. Two speakers = ambiguity.
 
 ---
 
-## 27 февраля — 1 марта 2026 — Взрыв функционала (v1.0–1.7, ~130 коммитов за 3 дня)
+## February 27 – March 1, 2026 — Feature explosion (v1.0–1.7, ~130 commits in 3 days)
 
-Самый стремительный период разработки. 73 коммита только 28 февраля.
+The most rapid period of development. 73 commits on February 28 alone.
 
-### Многоустройственная поддержка и HA-аддон (28 февраля)
+### Multi-device support and the HA addon (February 28)
 
-**Репозиторий переименован** из `sendspin-client` в `sendspin-bt-bridge` — название отражает новую роль: не клиент, а мост.
+**Repository renamed** from `sendspin-client` to `sendspin-bt-bridge` — the name reflects the new role: not a client, but a bridge.
 
-Ключевые добавления за один день:
+Key additions in a single day:
 
-- **Мультиустройственность**: каждый элемент `BLUETOOTH_DEVICES` в конфиге запускает отдельную пару `BluetoothManager` + `SendspinClient`. В MA появляются несколько независимых плееров.
-- **Home Assistant addon** (`ha-addon/`): манифест, Dockerfile, `run.sh`. Мост интегрируется в Ingress-панель HA, тема подтягивается через postMessage API.
-- **Proxmox LXC**: скрипт `proxmox-create.sh` разворачивает нативный контейнер одной командой. Внутри — собственный `bluetoothd` через D-Bus bridge, `pulseaudio --system`, `avahi-daemon`.
-- **Полноценный веб-интерфейс**: карточки устройств, BT-сканирование, регулятор громкости, кнопки переподключения/перепривязки, диагностика.
-- **Управление BT-адаптерами**: автоопределение, ручной выбор, привязка колонки к конкретному `hci`.
+- **Multi-device**: each entry in `BLUETOOTH_DEVICES` in the config launches its own `BluetoothManager` + `SendspinClient` pair. Multiple independent players appear in MA.
+- **Home Assistant addon** (`ha-addon/`): manifest, Dockerfile, `run.sh`. The bridge integrates into the HA Ingress panel; the theme is injected via the postMessage API.
+- **Proxmox LXC**: `proxmox-create.sh` deploys a native container in a single command. Inside — its own `bluetoothd` via D-Bus bridge, `pulseaudio --system`, `avahi-daemon`.
+- **Full-featured web interface**: device cards, BT scanning, volume control, reconnect/re-pair buttons, diagnostics.
+- **BT adapter management**: auto-detection, manual selection, binding a speaker to a specific `hci`.
 
-### Идентификация плеера в MA (1 марта, v1.3.x)
+### Player identification in MA (March 1, v1.3.x)
 
-Первичная задача — поддержка нескольких bridge-инстанций, подключённых к одному MA-серверу. Когда два bridge регистрируют плеер с именем, например `"Living Room"`, MA не может отличить их по имени — при появлении второго он сбрасывал очередь первого или путал их между собой. `player_id` должен быть глобально уникальным и стабильным независимо от имени.
+The primary goal was supporting multiple bridge instances connected to a single MA server. When two bridges register a player with the same name — for example `"Living Room"` — MA cannot tell them apart by name: when the second one appeared it would reset the queue of the first or confuse them. The `player_id` must be globally unique and stable regardless of the player name.
 
-Решение: **UUID5 из MAC-адреса** (`v1.3.0`). UUID детерминирован (одинаковый при каждом перезапуске), уникален глобально (MAC уникален физически), и не зависит от имени плеера. Два bridge с разными колонками → два разных `player_id` → MA видит их как полностью независимых плееров, даже если имена совпадают.
+Solution: **UUID5 from the MAC address** (`v1.3.0`). The UUID is deterministic (identical on every restart), globally unique (the MAC is physically unique), and independent of the player name. Two bridges with different speakers → two different `player_id` values → MA sees them as completely independent players, even if their names are identical.
 
-Это же решило вторичную, но тоже ощутимую проблему: до этого MA терял плеер при перезапуске моста или переименовании — очереди и группы слетали. После v1.3.0 `player_id` не меняется никогда.
+This also solved a secondary but equally noticeable problem: previously MA would lose the player on bridge restart or rename — queues and groups would reset. After v1.3.0 the `player_id` never changes.
 
-Параллельно — **MPRIS D-Bus интеграция** (v1.3.16): мост регистрируется как MediaPlayer2-объект на session bus. MA может читать статус воспроизведения и управлять плеером через стандартный интерфейс. При остановке сервиса сначала отправляется MPRIS `Pause` — MA корректно останавливает группу перед тем, как плеер исчезает из сети.
+In parallel — **MPRIS D-Bus integration** (v1.3.16): the bridge registers itself as a MediaPlayer2 object on the session bus. MA can read playback status and control the player via the standard interface. When the service stops, an MPRIS `Pause` is sent first — MA correctly stops the group before the player disappears from the network.
 
-**Идентификация в MA-группах** (v1.3.19): проблема в том, что MA строит syncgroup по именам плееров. Добавлена логика `BRIDGE_NAME` + суффикс + MPRIS Identity, чтобы имя плеера в MA совпадало с именем MPRIS-объекта — иначе группа не собирается.
+**Player identification in MA groups** (v1.3.19): the problem is that MA builds syncgroups by player name. Logic was added to ensure `BRIDGE_NAME` + suffix + MPRIS Identity match — so the player name in MA matches the MPRIS object name; otherwise the group doesn't form.
 
-### Переработка UI в стиле HA/MA с поддержкой тем (1 марта, v1.3.7)
+### Redesigned UI in HA/MA style with theme support (March 1, v1.3.7)
 
-До этой версии веб-интерфейс выглядел как generic-дашборд: фиолетовый градиентный хедер (`#667eea`), жёсткие HSL-цвета, системный шрифт. При открытии через HA Ingress он визуально выбивался из экосистемы.
+Before this version, the web interface looked like a generic dashboard: purple gradient header (`#667eea`), hard-coded HSL colours, system font. When opened through HA Ingress it was visually out of place in the ecosystem.
 
-В v1.3.7 UI полностью переписан под визуальный язык Home Assistant и Music Assistant:
+In v1.3.7 the UI is fully rewritten to match the visual language of Home Assistant and Music Assistant:
 
-**CSS custom properties вместо хардкода**
+**CSS custom properties instead of hard-coded values**
 
 ```css
-/* было */
+/* before */
 background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
 color: #28a745;
 
-/* стало */
+/* after */
 background: var(--app-header-background-color, #03a9f4);
 color: var(--success-color, #4CAF50);
 ```
 
-Все цвета — через HA design tokens (`--primary-color`, `--error-color`, `--success-color`, `--warning-color`, `--ha-card-border-radius`, `--ha-card-box-shadow`). Хедер стилизован как `app-toolbar` HA. Шрифт — Roboto (тот же, что в HA).
+All colours go through HA design tokens (`--primary-color`, `--error-color`, `--success-color`, `--warning-color`, `--ha-card-border-radius`, `--ha-card-box-shadow`). The header is styled as an HA `app-toolbar`. Font: Roboto (the same one HA uses).
 
-**Двойная тема: media query + Ingress postMessage**
+**Dual theming: media query + Ingress postMessage**
 
 ```css
-/* статическая тема — работает везде */
+/* static theme — works everywhere */
 @media (prefers-color-scheme: dark) {
   :root { --primary-background-color: #111; ... }
 }
 ```
 
 ```javascript
-// живая инъекция темы из HA — только в Ingress
+// live theme injection from HA — Ingress only
 window.addEventListener('message', (e) => {
   if (e.data?.type === 'setTheme') applyTheme(e.data.theme);
 });
 ```
 
-Когда пользователь открывает UI через HA sidebar, HA посылает `postMessage` с текущей темой. Переключение темы в HA → мгновенно меняется в веб-UI без перезагрузки страницы. Если UI открыт напрямую (не через Ingress) — тема определяется системным `prefers-color-scheme`.
+When the user opens the UI through the HA sidebar, HA sends a `postMessage` with the current theme. Switching the theme in HA → instantly reflected in the web UI without a page reload. If the UI is opened directly (not through Ingress) — the theme is determined by the system `prefers-color-scheme`.
 
-**Итог:** с v1.3.7 веб-интерфейс неотличим по стилю от нативных HA-панелей. Пользователи, которые добавили мост в HA sidebar, видят единый дизайн.
+**Result:** from v1.3.7 the web interface is visually indistinguishable from native HA panels. Users who add the bridge to the HA sidebar see a consistent design.
 
-Последующие итерации UI (v2.6.5, v2.6.6, v2.7.x) продолжили полировку: прогресс-бар трека, транспортные кнопки, обложка альбома, hover-действия, анимированный BT-scan, мобильная адаптация, UX-аудит с 20 улучшениями (v2.10.x).
+Subsequent UI iterations (v2.6.5, v2.6.6, v2.7.x) continued polishing: track progress bar, transport controls, album art, hover actions, animated BT scan, mobile adaptation, UX audit with 20 improvements (v2.10.x).
 
-### Безопасность и надёжность (1–2 марта, v1.4–1.7)
+### Security and reliability (March 1–2, v1.4–1.7)
 
-- **Модуляризация** (v1.4.0): монолитный `sendspin_client.py` разбит на `config.py`, `mpris.py`, `bluetooth_manager.py`.
-- **Документационный сайт** (v1.4.2): Astro Starlight, двуязычный (EN/RU), деплой на GitHub Pages.
-- **Аутентификация веб-интерфейса** (v1.6.0): PBKDF2-SHA256 для standalone-режима; в HA addon — проксирование через HA Core login_flow с поддержкой 2FA/TOTP.
-- **D-Bus BT-монитор** (v1.7.0): переход с polling к event-driven подходу для мониторинга Bluetooth — мост узнаёт о разрыве в момент события, а не через 10 секунд.
-- **Настраиваемый интервал проверки BT** и автоотключение на N неудачных попытках переподключения.
+- **Modularisation** (v1.4.0): monolithic `sendspin_client.py` split into `config.py`, `mpris.py`, `bluetooth_manager.py`.
+- **Documentation site** (v1.4.2): Astro Starlight, bilingual (EN/RU), deployed to GitHub Pages.
+- **Web interface authentication** (v1.6.0): PBKDF2-SHA256 for standalone mode; in the HA addon — proxied through HA Core login_flow with 2FA/TOTP support.
+- **D-Bus BT monitor** (v1.7.0): switched from polling to event-driven Bluetooth monitoring — the bridge learns of a disconnect at the moment of the event, not after 10 seconds.
+- **Configurable BT check interval** and auto-disable after N failed reconnect attempts.
 
 ---
 
-## 2–3 марта 2026 — Архитектурная перестройка: 4 итерации за 2 дня (v2.0–v2.5)
+## March 2–3, 2026 — Architectural overhaul: 4 iterations in 2 days (v2.0–v2.5)
 
-Это самый технически насыщенный период. Решалась одна проблема — **детерминированная маршрутизация звука в PulseAudio при нескольких динамиках** — и было пройдено четыре принципиально разных архитектурных подхода.
+This is the most technically intensive period. One problem was being solved — **deterministic audio routing in PulseAudio with multiple speakers** — and four fundamentally different architectural approaches were explored.
 
-### Переход с sendspin CLI на in-process aiosendspin (v2.0, 2 марта) — источник проблемы
+### Switching from the sendspin CLI to in-process aiosendspin (v2.0, March 2) — the root of the problem
 
-До v2.0 каждый BT-динамик управлялся отдельным **системным процессом** `sendspin`:
+Before v2.0, each BT speaker was managed by a separate **system process** running `sendspin`:
 
 ```
 main process
@@ -152,67 +152,67 @@ main process
     └── subprocess: sendspin (PID B, env PULSE_SINK=bt_sink_B) → Speaker B
 ```
 
-Каждый `sendspin`-процесс имел **собственный PulseAudio-контекст** и свою переменную `PULSE_SINK`. Маршрутизация работала — но ценой хрупкости: статус воспроизведения парсился из stdout по регулярным выражениям (~230 строк парсинга), трек и метаданные опрашивались через MPRIS с задержкой до 10 секунд.
+Each `sendspin` process had **its own PulseAudio context** and its own `PULSE_SINK` variable. Routing worked — but at the cost of fragility: playback status was parsed from stdout via regular expressions (~230 lines of parsing), and track metadata was polled through MPRIS with up to 10 seconds of lag.
 
-В v2.0 (2 марта) `sendspin` CLI заменён на прямой вызов Python-библиотеки:
+In v2.0 (March 2), the `sendspin` CLI is replaced with a direct Python library call:
 
 ```python
-# До v2.0: subprocess + stdout parsing
+# Before v2.0: subprocess + stdout parsing
 process = subprocess.Popen(['sendspin', '--headless', ...])
-# ~230 строк парсинга stdout по regex
+# ~230 lines of stdout parsing via regex
 
-# С v2.0: in-process BridgeDaemon
-class BridgeDaemon(SendspinDaemon):  # из пакета aiosendspin
+# From v2.0: in-process BridgeDaemon
+class BridgeDaemon(SendspinDaemon):  # from the aiosendspin package
     def on_stream_start(self, ...): ...  # typed callback
     def on_volume_change(self, ...): ...
 ```
 
-`SendspinDaemon` — asyncio-класс из PyPI-пакета `sendspin` (внутренняя реализация — `aiosendspin`). Все события через typed callbacks, без парсинга. Убрано ~230 строк хрупкого кода, метаданные трека теперь приходят мгновенно.
+`SendspinDaemon` is an asyncio class from the `sendspin` PyPI package (internally `aiosendspin`). All events come through typed callbacks, no parsing required. ~230 lines of fragile code removed; track metadata now arrives instantly.
 
-**Но:** теперь все `BridgeDaemon`-экземпляры живут **в одном Python-процессе** с единым PulseAudio-контекстом. `PULSE_SINK` — переменная окружения процесса: задать разные значения для разных daemons внутри одного процесса невозможно.
+**However:** now all `BridgeDaemon` instances live **in a single Python process** with a single PulseAudio context. `PULSE_SINK` is a process environment variable: setting different values for different daemons inside the same process is impossible.
 
 ```
-main process (единый PA-контекст)
+main process (single PA context)
     ├── BridgeDaemon A → PA stream → default sink → Speaker ???
     └── BridgeDaemon B → PA stream → default sink → Speaker ???
 ```
 
-PA выбирает **default sink** — обычно последний подключённый BT-динамик. Гарантии нет: поток мог попасть в любую из колонок. Это и стало корнем всех последующих проблем.
+PA picks the **default sink** — typically the most recently connected BT speaker. There is no guarantee: a stream could end up in either speaker. This became the root of all subsequent problems.
 
-### Итерация 1: реактивный `move-sink-input` (v2.1, 3 марта)
+### Iteration 1: reactive `move-sink-input` (v2.1, March 3)
 
 ```
 sendspin process
     └─► PA stream ──(move-sink-input on stream event)──► correct BT sink
 ```
 
-`BridgeDaemon` подписывается на PA-события потоков. Как только появляется новый sink-input — перемещает его командой `pactl move-sink-input` в нужный синк.
+`BridgeDaemon` subscribes to PA stream events. As soon as a new sink-input appears it is moved via `pactl move-sink-input` to the correct sink.
 
-**Проблема:** гонка условий. Между появлением потока и его перемещением успевало воспроизводиться 0.5–2 секунды не в ту колонку. При быстрой смене треков — нестабильно.
+**Problem:** race condition. Between the stream appearing and being moved, 0.5–2 seconds of audio could play through the wrong speaker. Unstable under rapid track changes.
 
-### Итерация 2: null-sink + loopback (v2.2, 3 марта)
+### Iteration 2: null-sink + loopback (v2.2, March 3)
 
 ```
 sendspin ──► PA null-sink (virtual) ──(loopback module)──► real BT sink
 ```
 
-Создаётся виртуальный синк через `module-null-sink`, а `module-loopback` соединяет его с реальным BT-синком. `sendspin` направляется в виртуальный синк — он всегда стабилен.
+A virtual sink is created via `module-null-sink`, and `module-loopback` connects it to the real BT sink. `sendspin` is directed to the virtual sink — always stable.
 
-**Проблема:** `module-loopback` добавляет дополнительную буферную задержку. Синхронизация в мультирум-группе ломается. Плюс — хрупкость: PA мог сбросить модуль при переподключении BT.
+**Problem:** `module-loopback` adds extra buffer latency. Synchronisation in a multiroom group breaks. Additionally fragile: PA could drop the module on BT reconnect.
 
-### Итерация 3: проактивный `PULSE_SINK` (v2.4, 3 марта)
+### Iteration 3: proactive `PULSE_SINK` (v2.4, March 3)
 
-Ключевой инсайт: вместо того чтобы реагировать на неправильно направленный поток, нужно задать направление **до** его создания.
+Key insight: instead of reacting to a misrouted stream, set the direction **before** it is created.
 
 ```bash
 PULSE_SINK=bluez_sink.AA_BB_CC_DD_EE_FF.a2dp_sink sendspin ...
 ```
 
-Переменная окружения `PULSE_SINK` говорит PA-клиенту использовать конкретный синк при создании любого потока. Никакой реактивности, никаких гонок.
+The `PULSE_SINK` environment variable tells the PA client to use a specific sink when creating any stream. No reactivity, no race conditions.
 
-**Проблема:** всё ещё один процесс. При нескольких `sendspin`-подпроцессах переменная окружения унаследовалась не так, как ожидалось.
+**Problem:** still a single process. With multiple `sendspin` subprocesses the environment variable was not inherited as expected.
 
-### Итерация 4: subprocess-изоляция (v2.5, 3 марта) — финальное решение
+### Iteration 4: subprocess isolation (v2.5, March 3) — the final solution
 
 ```
 main process
@@ -223,227 +223,227 @@ main process
     └── ...
 ```
 
-Каждый динамик получает **собственный Python-процесс** с `PULSE_SINK` в `os.environ`. Каждый процесс создаёт независимый PA-контекст. Потоки физически изолированы — невозможно, чтобы звук попал не туда.
+Each speaker gets **its own Python process** with `PULSE_SINK` in `os.environ`. Each process creates an independent PA context. Streams are physically isolated — it is impossible for audio to go to the wrong place.
 
-IPC: subprocess → main через JSON-строки в stdout; main → subprocess через JSON в stdin (`set_volume`, `stop`).
+IPC: subprocess → main via JSON lines on stdout; main → subprocess via JSON on stdin (`set_volume`, `stop`).
 
-**Доработки на этом же этапе:**
+**Follow-up work at the same stage:**
 
-- **v2.5.1**: PA `module-rescue-streams` — при переподключении BT-устройства PA перемещает осиротевшие потоки на fallback-синк. Добавлена коррекция: обнаруживаем переезд и возвращаем поток обратно через `pactl move-sink-input` по PID.
-- **v2.5.2**: защита от feedback loop — коррекция `move-sink-input` сама генерирует событие потока, которое снова запускает коррекцию. Добавлен флаг `_sink_routed`, блокирующий повторный вход.
+- **v2.5.1**: PA `module-rescue-streams` — on BT device reconnect, PA moves orphaned streams to a fallback sink. A correction was added: detect the move and return the stream via `pactl move-sink-input` by PID.
+- **v2.5.2**: protection against a feedback loop — the corrective `move-sink-input` itself generates a stream event which triggers the correction again. A `_sink_routed` flag was added to block re-entry.
 
 ---
 
-## 4 марта 2026 — Модуляризация и UI (v2.5.5–2.6.10, ~77 коммитов)
+## March 4, 2026 — Modularisation and UI (v2.5.5–2.6.10, ~77 commits)
 
-После решения проблемы маршрутизации — период полировки и расширения.
+After solving the routing problem — a period of polish and expansion.
 
-### Код разбит на модули
+### Code split into modules
 
-| Модуль | Что внутри |
-|--------|-----------|
-| `services/daemon_process.py` | Точка входа subprocess |
+| Module | Contents |
+|--------|----------|
+| `services/daemon_process.py` | Subprocess entry point |
 | `services/bridge_daemon.py` | `BridgeDaemon` — Sendspin + PA events |
 | `services/pulse.py` | Async PulseAudio helpers |
-| `services/bluetooth.py` | BT утилиты |
+| `services/bluetooth.py` | BT utilities |
 | `services/ma_monitor.py` | MA WebSocket monitor |
-| `services/ma_client.py` | MA REST API клиент |
+| `services/ma_client.py` | MA REST API client |
 | `routes/api.py` | REST API Flask blueprint |
-| `routes/views.py` | HTML-страницы |
-| `routes/auth.py` | Аутентификация |
+| `routes/views.py` | HTML pages |
+| `routes/auth.py` | Authentication |
 | `state.py` | Shared runtime state, SSE |
-| `config.py` | Конфигурация, `VERSION` |
+| `config.py` | Configuration, `VERSION` |
 
-### Пользовательский интерфейс
+### User interface
 
-- **Preferred audio format per device** (v2.5.5): поле `preferred_format` в конфиге устройства. MA может пытаться применить ресемплинг при мультирум-синхронизации — если прибить формат, ресемплинг исчезает.
-- **Track progress bar** (v2.6.6): полоса прогрека с интерполяцией на клиенте (JS). Позиция трека из MPRIS-метаданных.
-- **Sync status**: счётчик re-anchor событий, предупреждение при частых переключениях.
-- **Sink name** в колонке Volume по hover — для диагностики без `/api/diagnostics`.
+- **Preferred audio format per device** (v2.5.5): `preferred_format` field in the device config. MA can attempt resampling during multiroom sync — pinning the format eliminates resampling.
+- **Track progress bar** (v2.6.6): progress bar with client-side interpolation (JS). Track position from MPRIS metadata.
+- **Sync status**: re-anchor event counter, warning on frequent switches.
+- **Sink name** in the Volume column on hover — for diagnostics without `/api/diagnostics`.
 
-### Безопасность и производительность
+### Security and performance
 
-- **v2.6.0–2.6.1**: аудит безопасности — проверка входных данных, защита от path traversal в конфиге, корректная инвалидация Flask-сессий.
-- `pause_all` отправляет команду раз на MA-группу, не по одному клиенту.
+- **v2.6.0–2.6.1**: security audit — input validation, protection against path traversal in config, correct Flask session invalidation.
+- `pause_all` sends the command once per MA group, not per client.
 
-### Масштабирование и поддержка нескольких bridge (v2.7.x)
+### Scaling and multi-bridge support (v2.7.x)
 
-К этому моменту накопились две задачи, важные для нетривиальных deployments:
+By this point two requirements had accumulated that matter for non-trivial deployments:
 
-**1. Поддержка 100+ колонок в одном bridge**
+**1. Support for 100+ speakers in a single bridge**
 
-При большом числе устройств монопроцессная модель начинала испытывать проблемы с параллелизмом. Целевой рефакторинг (v2.7.x) включал несколько изменений:
+With a large number of devices the single-process model began running into concurrency issues. The targeted refactor (v2.7.x) included several changes:
 
-- **SSE-батчинг**: `notify_status_changed()` накапливает обновления в 100-миллисекундном окне перед отправкой клиентам. При массовом переподключении (например, все 50 колонок встали после ночи) без батчинга генерируется шторм из 50 SSE-событий подряд — браузеры не успевали обрабатывать. Батчинг снижает число событий примерно в 10 раз.
-- **ThreadPoolExecutor** с явным размером пула: `min(64, N_devices×2+4)` воркеров. При 100+ устройствах дефолтный пул Python (`os.cpu_count()*5`) мог выстраивать в очередь BT-операции — переподключение одного устройства блокировало остальные.
-- **Переиспользование D-Bus MessageBus**: ранее при каждой итерации внешнего цикла переподключения создавался и уничтожался новый bus-объект. При 100 устройствах это 100 параллельных bus-соединений с D-Bus daemon'ом — избыточно. Теперь соединение переиспользуется; новое создаётся только если bus перестал отвечать.
-- **Keepalive jitter**: при старте все устройства могли одновременно запустить `paplay silence.wav` — пик CPU. Добавлен случайный старт в диапазоне 0..interval секунд.
-- **`_status_monitor_loop` sleep** увеличен с 2 с до 5 с: при 100 устройствах 50 asyncio-пробуждений в секунду (2 с × 100 / ... = нагрузка) без реальной пользы — D-Bus сигналы ловят разрыв мгновенно.
-- **`WEB_THREADS`**: конфигурируемое число воркеров Waitress (по умолчанию 8, рекомендуется 16 при 20+ устройствах). Каждый браузер держит SSE-соединение на своём воркере — при нескольких вкладках пул заканчивается.
+- **SSE batching**: `notify_status_changed()` accumulates updates in a 100 ms window before pushing to clients. On a mass reconnect (e.g. all 50 speakers coming back after the night) without batching a storm of 50 SSE events fires in rapid succession — browsers couldn't keep up. Batching reduces the event count roughly tenfold.
+- **ThreadPoolExecutor** with an explicit pool size: `min(64, N_devices×2+4)` workers. With 100+ devices Python's default pool (`os.cpu_count()*5`) could queue BT operations — reconnecting one device blocked others.
+- **D-Bus MessageBus reuse**: previously each iteration of the outer reconnect loop created and destroyed a new bus object. With 100 devices that is 100 parallel bus connections to the D-Bus daemon — excessive. The connection is now reused; a new one is created only when the bus stops responding.
+- **Keepalive jitter**: at startup all devices could simultaneously run `paplay silence.wav` — CPU spike. A random start offset in the range 0..interval seconds was added.
+- **`_status_monitor_loop` sleep** increased from 2 s to 5 s: with 100 devices, 50 asyncio wake-ups per second (2 s × 100 / … = load) with no real benefit — D-Bus signals catch a disconnect instantly.
+- **`WEB_THREADS`**: configurable number of Waitress workers (default 8, recommended 16 with 20+ devices). Each browser holds an SSE connection on its own worker — with multiple tabs the pool runs out.
 
-**2. Несколько bridge на один MA-сервер**
+**2. Multiple bridges against a single MA server**
 
-Сценарий: большой дом, несколько зон Bluetooth-покрытия. Один bridge физически не достаёт до всех колонок. Решение — несколько bridge-инстанций (Docker-контейнеров, LXC-контейнеров, HA-аддонов) против одного MA.
+Scenario: a large home, several Bluetooth coverage zones. A single bridge physically can't reach all speakers. The solution — multiple bridge instances (Docker containers, LXC containers, HA addons) against one MA server.
 
-Проблема: если два bridge регистрируют плеер с одинаковым именем → MA считает их одним плеером и сбрасывает очередь.
+Problem: if two bridges register a player with the same name → MA treats them as the same player and resets the queue.
 
-Решение (v1.3.0, заложено заранее): **UUID5 из MAC-адреса** в качестве `player_id` в Sendspin:
+Solution (v1.3.0, designed in advance): **UUID5 from the MAC address** as `player_id` in Sendspin:
 
 ```python
 player_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, mac_address))
 ```
 
-UUID детерминирован (одинаковый при каждом перезапуске), уникален глобально (MAC уникален), и не зависит от имени. Два bridge с разными MAC'ами → два разных `player_id` → MA видит двух независимых плееров даже с одинаковыми именами.
+The UUID is deterministic (identical on every restart), globally unique (the MAC is unique), and independent of the name. Two bridges with different MACs → two different `player_id` values → MA sees two independent players even with identical names.
 
-Имя bridge по умолчанию — `Sendspin-<hostname>` — тоже уникализировано, чтобы в MA сразу было понятно, с какой машины пришёл плеер.
+The default bridge name — `Sendspin-<hostname>` — is also made unique so it's immediately clear in MA which machine the player came from.
 
 ---
 
-## 5 марта 2026 — Группы и интеграция с MA (v2.7–v2.10, ~141 коммит)
+## March 5, 2026 — Groups and MA integration (v2.7–v2.10, ~141 commits)
 
-### Keepalive-тишина (v2.7.x)
+### Keepalive silence (v2.7.x)
 
-BT-колонки автоматически отключаются после ~30 секунд тишины. Для мультирум-сценария это критично: если между треками в очереди пауза, колонка уходит в режим сна, и следующий трек начинается с задержкой переподключения (2–5 секунд) — группа рассинхронизируется.
+BT speakers automatically disconnect after ~30 seconds of silence. In a multiroom scenario this is critical: if there is a gap between queue tracks, the speaker goes to sleep and the next track starts with a reconnect delay of 2–5 seconds — the group goes out of sync.
 
-Решение: генерировать беззвучный PCM-сигнал (`silence_stream`) через PulseAudio, пока колонка считается "активной". Это удерживает A2DP-соединение без реального аудио.
+Solution: generate a silent PCM signal (`silence_stream`) via PulseAudio while the speaker is considered "active". This keeps the A2DP connection alive without real audio.
 
-### Групповая пауза через MPRIS (v2.7.x)
+### Group pause via MPRIS (v2.7.x)
 
-Первая реализация паузы отправляла команду stop непосредственно в subprocess каждого устройства. Проблема: MA при этом не знал о паузе — статус плееров в MA оставался "Playing", syncgroup не синхронизировался.
+The first pause implementation sent a stop command directly to each device's subprocess. Problem: MA was unaware of the pause — player status in MA remained "Playing" and the syncgroup didn't synchronise.
 
-Правильное решение: пауза через MPRIS D-Bus интерфейс (`org.mpris.MediaPlayer2.Player.Pause`). MA является инициатором через MPRIS → MA корректно обновляет статус всей группы.
+The correct solution: pause via the MPRIS D-Bus interface (`org.mpris.MediaPlayer2.Player.Pause`). MA is the initiator through MPRIS → MA correctly updates the status of the entire group.
 
-Кнопка паузы для устройства-участника группы (2+ участников) управляет **всей группой**, а не только одним плеером — чтобы нельзя было случайно рассинхронизировать группу из веб-интерфейса.
+The pause button for a device that is a group member (2+ participants) controls **the entire group**, not just the one player — so it's impossible to accidentally desync the group from the web interface.
 
 ### Group API (v2.8.0)
 
-REST API для управления группами: `POST /api/group/pause`, `POST /api/group/play`, `POST /api/group/volume`. Групповые элементы управления в веб-UI — устанавливают громкость и мьют на всех участниках группы одновременно.
+REST API for group management: `POST /api/group/pause`, `POST /api/group/play`, `POST /api/group/volume`. Group controls in the web UI — set volume and mute on all group members simultaneously.
 
-### Нативная интеграция с MA REST API (v2.9.0)
+### Native MA REST API integration (v2.9.0)
 
-До этой версии мост «не знал» о группах MA — только видел несколько своих плееров. Если MA объединял их в syncgroup, возобновление воспроизведения после паузы могло дать рассинхронизацию, так как мост пробовал возобновить каждый плеер независимо.
+Before this version, the bridge "didn't know" about MA groups — it only saw its own players. If MA merged them into a syncgroup, resuming playback after a pause could cause desync because the bridge tried to resume each player independently.
 
-С v2.9.0 мост подключается к MA REST API:
-- Находит syncgroup, в которую входят его плееры, по нечёткому совпадению имён.
-- При возобновлении воспроизведения вызывает `POST /api/players/player_queues/{group_id}/play` — MA возобновляет группу как единое целое.
-- `MA_API_URL` и `MA_API_TOKEN` — новые поля конфигурации.
+From v2.9.0 the bridge connects to the MA REST API:
+- Finds the syncgroup containing its players via fuzzy name matching.
+- On playback resume calls `POST /api/players/player_queues/{group_id}/play` — MA resumes the group as a whole.
+- `MA_API_URL` and `MA_API_TOKEN` are new configuration fields.
 
-Серия исправлений v2.9.1–2.9.4: настройки API не сохранялись через перезапуск аддона (`translate_ha_config.py` не переносил ключи), URL не нормализовывался, конфигурация не попадала в `allowed_keys`.
+A series of fixes in v2.9.1–2.9.4: API settings were not persisted across addon restarts (`translate_ha_config.py` didn't carry over the keys), the URL wasn't normalised, and configuration wasn't included in `allowed_keys`.
 
 ### Persistent MA WebSocket monitor (v2.9.5)
 
-Самое значительное добавление функционала после subprocess-изоляции.
+The most significant feature addition since subprocess isolation.
 
-`services/ma_monitor.py` устанавливает **постоянное WebSocket-соединение** к MA (`/api/ws`) и подписывается на события `player_queue_updated`. При изменении очереди плеера — мост немедленно получает обновление.
+`services/ma_monitor.py` establishes a **persistent WebSocket connection** to MA (`/api/ws`) and subscribes to `player_queue_updated` events. When a player's queue changes, the bridge receives the update immediately.
 
-Что это даёт:
-- **Now-playing** в веб-интерфейсе: трек, исполнитель, альбом, обложка, позиция в очереди.
-- **Transport controls**: prev/next/shuffle/repeat кнопки в карточке устройства — через MA REST API.
-- **Album art**: tooltip при наведении на название трека.
-- **Прогресс-бар**: синхронизирован с позицией из MA.
-- **Автообновление метаданных**: при подключении монитора запрашиваются актуальные данные всех активных плееров.
+What this enables:
+- **Now-playing** in the web interface: track, artist, album, album art, queue position.
+- **Transport controls**: prev/next/shuffle/repeat buttons on the device card — via MA REST API.
+- **Album art**: tooltip on hovering over the track name.
+- **Progress bar**: synchronised with the position from MA.
+- **Metadata auto-refresh**: when the monitor connects, current data for all active players is fetched.
 
-### Мультигрупповая поддержка (v2.9.9–2.10.x)
+### Multi-group support (v2.9.9–2.10.x)
 
-При первой реализации MA-интеграции all now-playing кэш был глобальным — один объект на весь мост. Если мост управлял двумя MA-syncgroup (например, «Гостиная + Кухня» и «Спальня»), данные второй группы перезаписывали первую.
+In the initial MA integration implementation the now-playing cache was global — a single object for the whole bridge. If the bridge managed two MA syncgroups (e.g. "Living Room + Kitchen" and "Bedroom"), data from the second group would overwrite the first.
 
-Рефакторинг на per-group кэш: `dict[group_id, NowPlayingData]`. Каждая карточка устройства показывает метаданные своей группы.
+Refactored to a per-group cache: `dict[group_id, NowPlayingData]`. Each device card shows its own group's metadata.
 
-Solo-плееры (не входящие в syncgroup) получают own queue_id по формату `up<uuid_без_дефисов>`.
-
----
-
-## Хронология архитектурных трансформаций
-
-| Версия | Дата | Архитектурное решение | Проблема, которую решало |
-|--------|------|----------------------|--------------------------|
-| v0 (origin) | 1 янв | Один процесс, один BT, polling | — |
-| v1.3.0 | 1 мар | UUID player_id из MAC | Несколько bridge на один MA + стабильный ID при перезапуске |
-| v1.3.16 | 1 мар | MPRIS D-Bus MediaPlayer2 | Нет связи MA ↔ bridge через стандартный интерфейс |
-| v1.4.0 | 2 мар | Разбивка монолита на модули | Неуправляемый рост единого файла |
-| v1.7.0 | 2 мар | D-Bus event BT monitor | 10-секундная задержка детекции разрыва |
-| **v2.0** | 2 мар | **sendspin CLI → in-process aiosendspin** | Хрупкий stdout-парсинг, задержка метаданных — **породило проблему default sink** |
-| v2.1 | 3 мар | Реактивный `move-sink-input` | Звук шёл в default sink (не тот динамик) |
-| v2.2 | 3 мар | null-sink + loopback | Гонка на `move-sink-input` |
-| v2.4 | 3 мар | Проактивный `PULSE_SINK` env | Задержка loopback ломала синхронизацию |
-| **v2.5** | 3 мар | **Subprocess-изоляция per speaker** | **PULSE_SINK неприменим внутри единого процесса** |
-| v2.5.1 | 3 мар | PA rescue-streams коррекция | BT reconnect перебрасывал потоки на fallback |
-| v2.5.5 | 4 мар | `preferred_format` per device | Ресемплинг в мультирум-группах |
-| v2.6.0 | 4 мар | routes/, services/, state.py | Монолитный web_interface.py |
-| v2.7.x | 5 мар | Keepalive silence stream | BT disconnects при тишине между треками |
-| v2.7.x | 5 мар | Групповая пауза через MPRIS | MA не знал о паузе, группа не синхронизировалась |
-| v2.8.0 | 5 мар | Group REST API | Нет API для управления группами |
-| v2.9.0 | 5 мар | MA REST API integration | Возобновление группы без MA как инициатора |
-| v2.9.5 | 5 мар | Persistent MA WebSocket monitor | Нет real-time данных о воспроизведении |
-| v2.9.9 | 5 мар | Per-group MA now-playing cache | Один глобальный кэш ломал несколько syncgroup |
+Solo players (not part of any syncgroup) get their own queue_id in the format `up<uuid_without_hyphens>`.
 
 ---
 
-## Общая картина
+## Architecture transformation timeline
 
-| Период | Коммитов | Главный вектор |
-|--------|----------|----------------|
-| 1 января | 14 | Сервис loryanstrant'а создан и опубликован (+1100 AEDT) |
-| 27–28 фев | ~80 | Первые собственные коммиты (+0300 MSK): Proxmox LXC, мультиустройственность, HA addon |
-| 1 марта | ~49 | Идентификация в MA, MPRIS, HA Ingress, аутентификация, detach от upstream |
-| 2 марта | ~55 | Модуляризация, D-Bus BT monitor, первые audio routing попытки |
-| 3 марта | ~91 | 4 итерации audio routing → subprocess isolation |
-| 4 марта | ~77 | Полировка, preferred_format, UI, безопасность |
-| 5 марта | ~141 | Keepalive, группы, MA API, real-time monitor |
-| 6 марта | ~41 | MA multi-syncgroup, solo players, документация |
-
-За 7 дней активной разработки проект прошёл путь от однофайлового скрипта с одной колонкой до production-ready решения с subprocess-изоляцией звука, нативной интеграцией в экосистему Music Assistant и Home Assistant, поддержкой мультирум-конфигураций с синхронизацией через MA syncgroup.
+| Version | Date | Architectural decision | Problem it solved |
+|---------|------|----------------------|-------------------|
+| v0 (origin) | Jan 1 | Single process, single BT, polling | — |
+| v1.3.0 | Mar 1 | UUID player_id from MAC | Multiple bridges against one MA + stable ID across restarts |
+| v1.3.16 | Mar 1 | MPRIS D-Bus MediaPlayer2 | No standard interface between MA ↔ bridge |
+| v1.4.0 | Mar 2 | Monolith split into modules | Unmanageable growth of a single file |
+| v1.7.0 | Mar 2 | D-Bus event BT monitor | 10-second delay in disconnect detection |
+| **v2.0** | Mar 2 | **sendspin CLI → in-process aiosendspin** | Fragile stdout parsing, metadata lag — **introduced the default sink problem** |
+| v2.1 | Mar 3 | Reactive `move-sink-input` | Audio went to default sink (wrong speaker) |
+| v2.2 | Mar 3 | null-sink + loopback | Race condition on `move-sink-input` |
+| v2.4 | Mar 3 | Proactive `PULSE_SINK` env | Loopback latency broke synchronisation |
+| **v2.5** | Mar 3 | **Subprocess isolation per speaker** | **PULSE_SINK not applicable inside a single process** |
+| v2.5.1 | Mar 3 | PA rescue-streams correction | BT reconnect moved streams to fallback |
+| v2.5.5 | Mar 4 | `preferred_format` per device | Resampling in multiroom groups |
+| v2.6.0 | Mar 4 | routes/, services/, state.py | Monolithic web_interface.py |
+| v2.7.x | Mar 5 | Keepalive silence stream | BT disconnects during silence between tracks |
+| v2.7.x | Mar 5 | Group pause via MPRIS | MA unaware of pause, group not synced |
+| v2.8.0 | Mar 5 | Group REST API | No API for group management |
+| v2.9.0 | Mar 5 | MA REST API integration | Group resume without MA as initiator |
+| v2.9.5 | Mar 5 | Persistent MA WebSocket monitor | No real-time playback data |
+| v2.9.9 | Mar 5 | Per-group MA now-playing cache | Single global cache broke multiple syncgroups |
 
 ---
 
-## Статистика проекта
+## Overview
 
-### Git и релизы
+| Period | Commits | Main focus |
+|--------|---------|------------|
+| January 1 | 14 | loryanstrant's service created and published (+1100 AEDT) |
+| Feb 27–28 | ~80 | First personal commits (+0300 MSK): Proxmox LXC, multi-device, HA addon |
+| March 1 | ~49 | MA identification, MPRIS, HA Ingress, authentication, detach from upstream |
+| March 2 | ~55 | Modularisation, D-Bus BT monitor, first audio routing attempts |
+| March 3 | ~91 | 4 audio routing iterations → subprocess isolation |
+| March 4 | ~77 | Polish, preferred_format, UI, security |
+| March 5 | ~141 | Keepalive, groups, MA API, real-time monitor |
+| March 6 | ~41 | MA multi-syncgroup, solo players, documentation |
 
-| Метрика | Значение |
-|---------|----------|
-| Всего коммитов | ~466 |
-| Автор (Mikhail Nevskiy) | ~414 коммитов |
-| Loryan Strant (основа) | 14 коммитов |
-| GitHub Actions (CI/CD) | 38 коммитов |
-| Активных дней разработки | 9 (27 фев — 6 мар 2026) |
-| Выпущено версий | 120 (v1.0.0 → v2.10.6) |
+Over 7 days of active development the project went from a single-file script for one speaker to a production-ready solution with per-subprocess audio isolation, native integration into the Music Assistant and Home Assistant ecosystems, and multiroom support with MA syncgroup synchronisation.
+
+---
+
+## Project statistics
+
+### Git and releases
+
+| Metric | Value |
+|--------|-------|
+| Total commits | ~466 |
+| Author (Mikhail Nevskiy) | ~414 commits |
+| Loryan Strant (foundation) | 14 commits |
+| GitHub Actions (CI/CD) | 38 commits |
+| Active development days | 9 (Feb 27 – Mar 6, 2026) |
+| Versions released | 120 (v1.0.0 → v2.10.6) |
 | Pull Requests | 54 |
-| Самый насыщенный день | 5 марта: 119 коммитов |
+| Busiest day | March 5: 119 commits |
 
-### Кодовая база
+### Codebase
 
-| Метрика | Значение |
-|---------|----------|
-| Python-файлов | 44 |
-| Строк Python-кода | ~12 700 |
-| Наиболее изменяемый файл | `sendspin_client.py` (108 правок) |
-| Следующие по частоте | `config.py` (102), `web_interface.py` (100) |
-| Python-зависимостей | 11 |
+| Metric | Value |
+|--------|-------|
+| Python files | 44 |
+| Lines of Python code | ~12 700 |
+| Most-modified file | `sendspin_client.py` (108 revisions) |
+| Next most modified | `config.py` (102), `web_interface.py` (100) |
+| Python dependencies | 11 |
 
-### Python-зависимости
+### Python dependencies
 
-| Пакет | Назначение |
-|-------|-----------|
-| `sendspin` / `aiosendspin` | Sendspin-протокол, `BridgeDaemon`, `SendspinDaemon` |
-| `music-assistant-client` | MA REST API и WebSocket |
-| `flask` + `waitress` | Веб-интерфейс и HTTP-сервер |
-| `pulsectl-asyncio` | Управление PulseAudio из asyncio |
-| `dbus-fast` + `dbus-python` | D-Bus: BT-мониторинг и MPRIS |
-| `websockets` | Обмен данными с MA WebSocket |
-| `psutil` | Системная информация |
-| `python-dotenv` | Переменные окружения |
-| `flask-cors` | CORS для REST API |
+| Package | Purpose |
+|---------|---------|
+| `sendspin` / `aiosendspin` | Sendspin protocol, `BridgeDaemon`, `SendspinDaemon` |
+| `music-assistant-client` | MA REST API and WebSocket |
+| `flask` + `waitress` | Web interface and HTTP server |
+| `pulsectl-asyncio` | PulseAudio management from asyncio |
+| `dbus-fast` + `dbus-python` | D-Bus: BT monitoring and MPRIS |
+| `websockets` | Communication with MA WebSocket |
+| `psutil` | System information |
+| `python-dotenv` | Environment variables |
+| `flask-cors` | CORS for the REST API |
 
-### AI-агенты
+### AI agents
 
-Весь проект разработан человеком совместно с AI-агентами — от архитектурных решений и отладки до документации.
+The entire project was developed by a human in collaboration with AI agents — from architectural decisions and debugging through to documentation.
 
-| AI-агент | Роль | Коммитов (Co-authored-by) |
+| AI agent | Role | Commits (Co-authored-by) |
 |----------|------|--------------------------|
-| **GitHub Copilot** (Claude Sonnet 4.6) | Основной рабочий агент: рефакторинг, код, код-ревью, документация | ~286 |
-| **Claude Code** (Anthropic, Claude Sonnet 4.6) | Архитектурный дизайн, сложный дебаггинг, итерации audio routing | ~168 |
+| **GitHub Copilot** (Claude Sonnet 4.6) | Primary working agent: refactoring, code, code review, documentation | ~286 |
+| **Claude Code** (Anthropic, Claude Sonnet 4.6) | Architectural design, complex debugging, audio routing iterations | ~168 |
 
-Copilot использовался как интерактивный CLI-агент прямо в терминале (`gh copilot`), Claude Code — для сессий глубокого рефакторинга и диагностики. Фраза «с определённым AI-другом» в первом анонсе в MA-дискуссии отсылает именно к этому рабочему процессу.
+Copilot was used as an interactive CLI agent directly in the terminal (`gh copilot`); Claude Code was used for deep refactoring and diagnostic sessions. The phrase "with a certain AI buddy" in the first announcement in the MA discussion refers precisely to this workflow.
 
-Часть коммитов содержит оба тега одновременно — в сессиях, где решение вырабатывалось в Claude Code, а финальный PR проходил ревью в Copilot CLI.
+Some commits carry both tags simultaneously — in sessions where the solution was worked out in Claude Code and the final PR was reviewed in Copilot CLI.

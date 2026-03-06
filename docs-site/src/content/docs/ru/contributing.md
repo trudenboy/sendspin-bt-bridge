@@ -102,5 +102,5 @@ lxc/                  # Proxmox LXC установочный скрипт
 ## Дополнительные материалы
 
 - [Архитектура](/sendspin-bt-bridge/architecture/) — процессная модель, IPC-протокол, маршрутизация звука, автомат состояний Bluetooth, интеграция с MA, аутентификация и graceful degradation
-- [HISTORY.md](https://github.com/trudenboy/sendspin-bt-bridge/blob/main/HISTORY.md) — история эволюции проекта (v1 → v2, ключевые архитектурные решения)
+- [HISTORY.ru.md](https://github.com/trudenboy/sendspin-bt-bridge/blob/main/HISTORY.ru.md) — история эволюции проекта (v1 → v2, ключевые архитектурные решения)
 - [CHANGELOG.md](https://github.com/trudenboy/sendspin-bt-bridge/blob/main/CHANGELOG.md) — полная история версий
