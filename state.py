@@ -77,6 +77,8 @@ def notify_status_changed() -> None:
     """
     global _notify_timer
     with _notify_lock:
+        # Race between is_alive() and start() is benign: worst case two timers
+        # fire, producing two increments + notify_all() calls which is harmless.
         if _notify_timer is None or not _notify_timer.is_alive():
             _notify_timer = threading.Timer(0.1, _flush_notify)
             _notify_timer.daemon = True
@@ -97,7 +99,6 @@ logger = logging.getLogger(__name__)
 # references (imported via `from state import clients`) stay valid.
 clients: list = []
 clients_lock = threading.Lock()
-_clients_lock = clients_lock  # backward-compat alias
 
 
 def set_clients(new_clients: list) -> None:

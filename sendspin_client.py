@@ -16,19 +16,16 @@ import socket
 import sys
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field, fields
 from datetime import datetime
 
 import state as _state
 from bluetooth_manager import BluetoothManager
 from config import (
-    CONFIG_FILE as _CONFIG_PATH,
-)
-from config import (
+    CONFIG_FILE,
     _player_id_from_mac,
-    _save_device_volume,
     load_config,
+    save_device_volume,
 )
 from mpris import (
     _DBUS_MPRIS_AVAILABLE,
@@ -159,7 +156,6 @@ class SendspinClient:
         self._daemon_proc: asyncio.subprocess.Process | None = None
         self._daemon_task: asyncio.Task | None = None  # stdout reader task
         self._stderr_task: asyncio.Task | None = None  # stderr reader task
-        self._bridge_daemon = None  # kept for API compatibility, always None in subprocess mode
         self._monitor_task: asyncio.Task | None = None
         self._restart_delay: float = 1.0  # exponential backoff for unexpected daemon restarts
         self._start_sendspin_lock: asyncio.Lock | None = None  # set in run(), guards concurrent starts
@@ -380,7 +376,7 @@ class SendspinClient:
                 new_volume = self.status.get("volume")
                 _mac = self.bt_manager.mac_address if self.bt_manager else None
                 if new_volume is not None and isinstance(new_volume, int) and new_volume != prev_volume and _mac:
-                    _save_device_volume(_mac, new_volume)
+                    save_device_volume(_mac, new_volume)
             elif msg.get("type") == "log":
                 log_fn = _LOG_METHODS.get(msg.get("level", "info"), logger.info)
                 log_fn("[%s/proc] %s", self.player_name, msg.get("msg", ""))
@@ -477,7 +473,6 @@ class SendspinClient:
             except Exception as exc:
                 logger.debug("stop_sendspin: %s", exc)
         self._daemon_proc = None
-        self._bridge_daemon = None
 
         with self._status_lock:
             self.status["server_connected"] = False
@@ -533,6 +528,9 @@ class SendspinClient:
                     # At start_sendspin() time bluetooth_sink_name was None (BT not yet
                     # connected), so the daemon was bound to the default audio device.
                     # Re-starting here ensures each player routes audio to its own BT sink.
+                    # NOTE: bluetooth_sink_name is set by _on_sink_found() which runs
+                    # synchronously inside connect_device() → configure_bluetooth_audio(),
+                    # so it is guaranteed to be set before run_in_executor returns.
                     if bt_now and self.bluetooth_sink_name:
                         logger.info(
                             "[%s] BT connected with sink %s — restarting daemon on correct audio device",
@@ -576,10 +574,18 @@ class SendspinClient:
         if self.bt_manager:
             self.bt_manager.management_enabled = enabled
         if not enabled:
-            # Terminate the daemon subprocess (safe from any thread via kill)
+            # Stop daemon via asyncio event loop (subprocess objects are not thread-safe)
             if self.is_running() and self._daemon_proc:
                 logger.info("[%s] BT released — stopping sendspin daemon", self.player_name)
-                self._daemon_proc.kill()
+                loop = _state.get_main_loop()
+                if loop and loop.is_running():
+                    asyncio.run_coroutine_threadsafe(self.stop_sendspin(), loop)
+                else:
+                    # Fallback: direct os.kill is safe from any thread
+                    try:
+                        self._daemon_proc.kill()
+                    except Exception:
+                        pass
             # Disconnect BT device (synchronous subprocess call, safe from any thread)
             if self.bt_manager:
                 try:
@@ -687,8 +693,6 @@ async def main():
                 logger.info("Stored Bluetooth sink for volume sync: %s", sink_name)
                 if restored_volume is not None:
                     _c._update_status({"volume": restored_volume})
-                if hasattr(_c, "volume_restore_done"):
-                    _c.volume_restore_done = True
 
             bt_mgr = BluetoothManager(
                 mac,
@@ -713,7 +717,7 @@ async def main():
                 logger.info("  Player '%s': BT management disabled at startup", player_name)
             # Pre-fill volume from saved LAST_VOLUMES so UI shows correct value before BT connects
             try:
-                with open(_CONFIG_PATH) as _f:
+                with open(CONFIG_FILE) as _f:
                     _saved = json.load(_f)
                 _saved_vol = _saved.get("LAST_VOLUMES", {}).get(mac)
                 if _saved_vol is not None and isinstance(_saved_vol, int) and 0 <= _saved_vol <= 100:
@@ -764,6 +768,8 @@ async def main():
 
     # Size the thread pool to support concurrent BT reconnects across all devices.
     # Default asyncio executor has too few threads when many devices reconnect simultaneously.
+    from concurrent.futures import ThreadPoolExecutor
+
     _pool_size = min(64, max(8, len(clients) * 2 + 4))
     asyncio.get_running_loop().set_default_executor(ThreadPoolExecutor(max_workers=_pool_size))
     logger.debug("ThreadPoolExecutor: max_workers=%s", _pool_size)

@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.10.7] - 2026-03-06
+
+### Fixed
+- **MA→BT volume sync broken**: `_sync_bt_volume()` accessed non-existent attribute `_bt_sink_name` on `BluetoothManager` instead of `bluetooth_sink_name` on the client — volume sync from Music Assistant to Bluetooth speakers was completely non-functional.
+- **Volume restore at 0% ignored**: falsy check `if not restored_volume` treated volume=0 as "no saved volume"; now uses `if restored_volume is None`.
+- **`/api/pause` endpoint returning 404**: `pause_player()` function was defined but missing the `@api_bp.route` decorator, causing per-device pause to fail for solo players and filtered Pause All.
+- **Thread safety**: `set_bt_management_enabled()` now stops the daemon subprocess via `asyncio.run_coroutine_threadsafe()` instead of calling `kill()` directly from a Flask WSGI thread.
+- **Config read consistency**: GET `/api/config` now acquires `config_lock` to prevent torn reads during concurrent writes.
+
+### Removed
+- Dead code: `_bridge_daemon` attribute (always None), `volume_restore_done` (never read), backward-compat aliases (`_save_device_volume`, `_config_lock`, `_clients_lock`).
+- Legacy shell-based volume restore in `entrypoint.sh` (Python handles this).
+- Dead anti-feedback attributes `_volume_sync_pending` and `_last_bt_volume` in MA volume sync (never set anywhere).
+
+### Changed
+- Normalized `CONFIG_FILE` imports across all modules (removed inconsistent aliases `_CONFIG_PATH`, `_CONFIG_FILE`).
+- Misleading log "Failed to connect after 5 attempts" → "Failed to connect (not connected after 5 status checks)".
+- `ThreadPoolExecutor` import moved from module level to `main()` where it's used.
+- Added design note to `services/pulse.py` explaining per-call PA connection trade-off.
+
 ## [2.10.6] - 2026-03-06
 
 ### Fixed

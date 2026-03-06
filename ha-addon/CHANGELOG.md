@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.10.7] - 2026-03-06
+
+### Fixed
+- **MA→BT volume sync**: was completely broken — wrong attribute lookup prevented volume changes from Music Assistant from reaching Bluetooth speakers.
+- **Volume restore at 0%**: volume=0 was incorrectly treated as "no saved volume".
+- **Pause button (solo players)**: `/api/pause` endpoint was returning 404 due to missing route decorator.
+- **Thread safety**: daemon subprocess stop and config reads are now properly synchronized.
+
+### Removed
+- Dead code and legacy backward-compat aliases.
+- Redundant shell-based volume restore in entrypoint (Python handles this).
+
 ## [2.10.6] - 2026-03-06
 
 ### Fixed

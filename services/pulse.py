@@ -3,6 +3,11 @@
 Replaces all subprocess ``pactl`` calls with native PA API calls.
 Both sync wrappers (safe from any thread) and async coroutines are provided.
 
+Design note: each call creates a fresh PulseAsync() context rather than keeping
+a persistent connection.  This simplifies error recovery (no stale-connection
+handling) at the cost of slightly higher overhead per call.  The volume-persist
+debounce in routes/api.py limits call frequency in practice.
+
 Graceful fallback: if pulsectl_asyncio is unavailable (import error or
 libpulse0 not installed), every function falls back to the equivalent
 ``pactl`` subprocess invocation so the rest of the codebase never needs

@@ -51,27 +51,6 @@ fi
 echo "Available audio sinks:"
 pactl list short sinks 2>/dev/null || echo "Could not list sinks"
 
-# If BLUETOOTH_MAC is set, configure it as default
-if [ -n "${BLUETOOTH_MAC:-}" ]; then
-    echo "Will configure Bluetooth audio for $BLUETOOTH_MAC after connection..."
-
-    # Try to restore last volume if saved
-    if [ -f /config/config.json ]; then
-        LAST_VOLUME=$(python3 -c "import json; print(json.load(open('/config/config.json')).get('LAST_VOLUME', ''))" 2>/dev/null || echo "")
-        if [ -n "$LAST_VOLUME" ] && [ "$LAST_VOLUME" -gt 0 ] 2>/dev/null; then
-            # Format MAC address for PipeWire (replace : with _)
-            BT_SINK="bluez_output.$(echo "$BLUETOOTH_MAC" | tr ':' '_').1"
-            echo "Attempting to restore volume to $LAST_VOLUME%..."
-            sleep 3  # Give PipeWire time to detect the device
-            if pactl set-sink-volume "$BT_SINK" "${LAST_VOLUME}%" 2>/dev/null; then
-                echo "✓ Restored volume to $LAST_VOLUME%"
-            else
-                echo "Could not restore volume (device may not be ready yet)"
-            fi
-        fi
-    fi
-fi
-
 # Start a D-Bus session bus so sendspin's MPRIS interface works (track/artist metadata)
 if command -v dbus-daemon > /dev/null 2>&1; then
     DBUS_ADDR=$(dbus-daemon --session --fork --print-address 2>/dev/null || true)

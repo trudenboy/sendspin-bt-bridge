@@ -17,7 +17,7 @@ import threading
 import uuid as _uuid
 from pathlib import Path
 
-VERSION = "2.10.6"
+VERSION = "2.10.7"
 BUILD_DATE = "2026-03-05"
 
 __all__ = [
@@ -58,7 +58,6 @@ logger = logging.getLogger(__name__)
 CONFIG_DIR = Path(os.getenv("CONFIG_DIR", "/config"))
 CONFIG_FILE = CONFIG_DIR / "config.json"
 config_lock = threading.Lock()  # serializes all config.json read-modify-write ops
-_config_lock = config_lock  # backward-compat alias
 
 
 def _player_id_from_mac(mac: str) -> str:
@@ -81,10 +80,6 @@ def save_device_volume(mac: str | None, volume: int) -> None:
             os.replace(tmp, str(CONFIG_FILE))
     except Exception as e:
         logger.debug("Could not save volume for %s: %s", mac, e)
-
-
-# Keep private alias for backward compatibility with internal callers
-_save_device_volume = save_device_volume
 
 
 def load_config() -> dict:

@@ -18,7 +18,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
-from config import CONFIG_FILE as _CONFIG_FILE
+from config import CONFIG_FILE
 from config import config_lock as config_lock
 from services.pulse import get_sink_volume, list_sinks, set_sink_volume
 
@@ -412,8 +412,8 @@ class BluetoothManager:
                 # Resolve last saved volume for this device
                 restored_volume = None
                 try:
-                    if _CONFIG_FILE.exists():
-                        with config_lock, open(_CONFIG_FILE) as f:
+                    if CONFIG_FILE.exists():
+                        with config_lock, open(CONFIG_FILE) as f:
                             cfg = json.load(f)
                         volumes = cfg.get("LAST_VOLUMES", {})
                         last_volume = volumes.get(self.mac_address) or cfg.get("LAST_VOLUME")
@@ -424,7 +424,7 @@ class BluetoothManager:
                 except Exception as e:
                     logger.debug("Could not restore volume: %s", e)
 
-                if not restored_volume:
+                if restored_volume is None:
                     logger.info("No saved volume to restore, will use current volume")
 
                 # Notify caller via callback (decoupled) or fall back to direct client mutation
@@ -435,8 +435,6 @@ class BluetoothManager:
                     logger.info("Stored Bluetooth sink for volume sync: %s", configured_sink)
                     if restored_volume is not None:
                         self.client._update_status({"volume": restored_volume})
-                    if hasattr(self.client, "volume_restore_done"):
-                        self.client.volume_restore_done = True
             elif not success:
                 logger.warning("Could not find Bluetooth sink for %s", self.mac_address)
                 logger.warning("Audio may play from default device instead of Bluetooth")
@@ -494,7 +492,7 @@ class BluetoothManager:
                 self.configure_bluetooth_audio()
                 return True
 
-        logger.warning("Failed to connect after 5 attempts")
+        logger.warning("Failed to connect (not connected after 5 status checks)")
         return False
 
     def disconnect_device(self) -> bool:

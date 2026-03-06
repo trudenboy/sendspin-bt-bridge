@@ -341,19 +341,14 @@ class MaMonitor:
 
     async def _sync_bt_volume(self, client, volume_level: float) -> None:
         """Apply MA volume_level (0-100) to the client's BT sink."""
-        bt_mgr = getattr(client, "bt_manager", None)
-        if not bt_mgr:
-            return
-        sink = getattr(bt_mgr, "_bt_sink_name", None)
+        sink = getattr(client, "bluetooth_sink_name", None)
         if not sink:
             return
-        # Avoid feedback loop: skip if bridge itself triggered this update
-        if getattr(client, "_volume_sync_pending", False):
-            return
         target = int(round(volume_level))
-        current = getattr(client, "_last_bt_volume", None)
-        if current is not None and abs(current - target) < 2:
-            return  # no meaningful change
+        # Skip if volume hasn't meaningfully changed
+        current_volume = client.status.get("volume")
+        if current_volume is not None and abs(current_volume - target) < 2:
+            return
         try:
             proc = await asyncio.create_subprocess_exec(
                 "pactl",

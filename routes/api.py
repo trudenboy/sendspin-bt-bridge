@@ -27,10 +27,8 @@ from config import (
     CONFIG_FILE,
     DEFAULT_CONFIG,
     VERSION,
+    config_lock,
     load_config,
-)
-from config import (
-    _config_lock as config_lock,
 )
 from config import (
     save_device_volume as _save_device_volume,
@@ -646,6 +644,7 @@ def api_ma_queue_cmd():
         return jsonify({"success": False, "error": str(exc)}), 500
 
 
+@api_bp.route("/api/pause", methods=["POST"])
 def pause_player():
     """Pause or play a single daemon subprocess via WS controller command.
 
@@ -948,7 +947,7 @@ def api_config():
     """Read or write the service configuration."""
     if request.method == "GET":
         if CONFIG_FILE.exists():
-            with open(CONFIG_FILE) as f:
+            with config_lock, open(CONFIG_FILE) as f:
                 config = json.load(f)
         else:
             config = DEFAULT_CONFIG.copy()
