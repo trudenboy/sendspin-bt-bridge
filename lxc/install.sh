@@ -53,9 +53,36 @@ ok "System packages installed"
 msg "Downloading application files from GitHub..."
 mkdir -p /opt/sendspin-client
 
-wget -q "${BASE}/sendspin_client.py" -O /opt/sendspin-client/sendspin_client.py
-wget -q "${BASE}/web_interface.py"   -O /opt/sendspin-client/web_interface.py
-wget -q "${BASE}/requirements.txt"   -O /opt/sendspin-client/requirements.txt
+# Root Python files
+for file in sendspin_client.py web_interface.py config.py state.py bluetooth_manager.py mpris.py; do
+  wget -q "${BASE}/${file}" -O "/opt/sendspin-client/${file}"
+done
+
+# services/ module
+mkdir -p /opt/sendspin-client/services
+for file in __init__.py bluetooth.py ma_client.py bridge_daemon.py daemon_process.py ma_monitor.py pulse.py; do
+  wget -q "${BASE}/services/${file}" -O "/opt/sendspin-client/services/${file}"
+done
+
+# routes/ module
+mkdir -p /opt/sendspin-client/routes
+for file in __init__.py api.py views.py auth.py; do
+  wget -q "${BASE}/routes/${file}" -O "/opt/sendspin-client/routes/${file}"
+done
+
+# HTML templates
+mkdir -p /opt/sendspin-client/templates
+for file in index.html login.html; do
+  wget -q "${BASE}/templates/${file}" -O "/opt/sendspin-client/templates/${file}"
+done
+
+# Static assets
+mkdir -p /opt/sendspin-client/static
+for file in app.js style.css favicon.svg favicon.png; do
+  wget -q "${BASE}/static/${file}" -O "/opt/sendspin-client/static/${file}"
+done
+
+wget -q "${BASE}/requirements.txt" -O /opt/sendspin-client/requirements.txt
 chmod +x /opt/sendspin-client/sendspin_client.py
 ok "Application files downloaded"
 
@@ -114,48 +141,9 @@ mkdir -p /etc/pulse/client.conf.d
 wget -q "${BASE}/lxc/pulse-daemon.conf" -O /etc/pulse/daemon.conf
 ok "PulseAudio daemon.conf written (trivial resampler + 48kHz + s16le)"
 
-cat > /etc/pulse/system.pa <<'EOF'
-# /etc/pulse/system.pa
-# PulseAudio system-mode configuration for Sendspin LXC deployment
-
-.ifexists module-udev-detect.so
-    load-module module-udev-detect
-.endif
-
-.ifexists module-bluetooth-policy.so
-    load-module module-bluetooth-policy
-.endif
-
-.ifexists module-bluetooth-discover.so
-    load-module module-bluetooth-discover
-.endif
-
-.ifexists module-native-protocol-unix.so
-    load-module module-native-protocol-unix auth-anonymous=1 socket=/var/run/pulse/native
-.endif
-
-.ifexists module-native-protocol-tcp.so
-    load-module module-native-protocol-tcp auth-ip-acl=127.0.0.1 auth-anonymous=1
-.endif
-
-.ifexists module-stream-restore.so
-    load-module module-stream-restore restore_device=false
-.endif
-
-.ifexists module-device-restore.so
-    load-module module-device-restore
-.endif
-
-.ifexists module-card-restore.so
-    load-module module-card-restore
-.endif
-
-# Fallback null sink — used when no Bluetooth sink is available yet.
-# sendspin requires at least one sink to initialise.
-.ifexists module-null-sink.so
-    load-module module-null-sink sink_name=fallback rate=44100 channels=2
-.endif
-EOF
+# System-mode PA config with Bluetooth modules
+wget -q "${BASE}/lxc/pulse-system.pa" -O /etc/pulse/system.pa
+ok "PulseAudio system.pa written (bluetooth-discover + null fallback)"
 
 cat > /etc/pulse/client.conf.d/00-no-autospawn.conf <<'EOF'
 autospawn = no
@@ -205,63 +193,8 @@ ok "Environment variables set"
 # ─── 10. Systemd units ────────────────────────────────────────────────────────
 msg "Installing systemd service units..."
 
-cat > /etc/systemd/system/pulseaudio-system.service <<'EOF'
-[Unit]
-Description=PulseAudio System-Mode Daemon (Sendspin)
-After=dbus.service
-Requires=dbus.service
-Before=sendspin-client.service
-
-[Service]
-Type=notify
-User=pulse
-Group=pulse
-Environment=PULSE_RUNTIME_PATH=/var/run/pulse
-# Use the host's D-Bus socket (bind-mounted at /bt-dbus) for Bluetooth A2DP
-Environment=DBUS_SYSTEM_BUS_ADDRESS=unix:path=/bt-dbus/system_bus_socket
-ExecStart=/usr/bin/pulseaudio --system --realtime --disallow-exit --no-cpu-limit --log-target=journal
-ExecReload=/bin/kill -HUP $MAINPID
-Restart=on-failure
-RestartSec=5
-LockPersonality=yes
-NoNewPrivileges=yes
-RestrictRealtime=no
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-cat > /etc/systemd/system/sendspin-client.service <<'EOF'
-[Unit]
-Description=Sendspin Client (Music Assistant Player with Bluetooth)
-Documentation=https://github.com/trudenboy/sendspin-bt-bridge
-After=network-online.target dbus.service pulseaudio-system.service avahi-daemon.service
-Wants=network-online.target
-Requires=pulseaudio-system.service dbus.service
-
-[Service]
-Type=simple
-EnvironmentFile=/etc/environment
-Environment=PYTHONUNBUFFERED=1
-Environment=HOME=/root
-Environment=PULSE_SERVER=unix:/var/run/pulse/native
-# Use the host's D-Bus socket (bind-mounted at /bt-dbus) for Bluetooth control
-Environment=DBUS_SYSTEM_BUS_ADDRESS=unix:path=/bt-dbus/system_bus_socket
-Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-ExecStartPre=/bin/bash -c 'i=0; while [ $i -lt 30 ]; do [ -S /var/run/pulse/native ] && [ -e /bt-dbus/system_bus_socket ] && exit 0; sleep 1; i=$((i+1)); done; echo "Timeout waiting for PulseAudio/D-Bus sockets" >&2; exit 1'
-ExecStart=/usr/bin/python3 /opt/sendspin-client/sendspin_client.py
-WorkingDirectory=/opt/sendspin-client
-Restart=on-failure
-RestartSec=10
-NoNewPrivileges=yes
-PrivateTmp=yes
-StandardOutput=journal
-StandardError=journal
-SyslogIdentifier=sendspin-client
-
-[Install]
-WantedBy=multi-user.target
-EOF
+wget -q "${BASE}/lxc/pulseaudio-system.service" -O /etc/systemd/system/pulseaudio-system.service
+wget -q "${BASE}/lxc/sendspin-client.service"   -O /etc/systemd/system/sendspin-client.service
 
 ok "Systemd units installed"
 
