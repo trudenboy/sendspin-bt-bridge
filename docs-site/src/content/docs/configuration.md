@@ -30,6 +30,7 @@ Go to **Settings → Add-ons → Sendspin Bluetooth Bridge → Configuration**.
 | **auth_enabled** | Toggle — enables password protection for the web UI. |
 | **ma_api_url** | Music Assistant REST API base URL (e.g. `http://192.168.1.10:8123`). Required for now-playing metadata, transport controls, and group play. |
 | **ma_api_token** | Home Assistant long-lived access token for the MA API. Generate in HA: **Profile → Long-lived access tokens**. |
+| **volume_via_ma** | Toggle — route volume/mute through MA API (keeps MA UI in sync). Disable to use direct PulseAudio only. Default: on. |
 
 ### Bluetooth Devices and Adapters
 
@@ -74,6 +75,7 @@ After editing options, click **Save** at the bottom of the Options section. The 
 | `AUTH_ENABLED` | boolean | `false` | Enable password protection for the web UI |
 | `MA_API_URL` | string | `""` | Music Assistant REST API base URL (e.g. `http://192.168.1.10:8123`). Required for now-playing metadata, transport controls, and group play via MA |
 | `MA_API_TOKEN` | string | `""` | Home Assistant long-lived access token for the MA API. Generate in HA: **Profile → Long-lived access tokens** |
+| `VOLUME_VIA_MA` | boolean | `true` | Route volume/mute changes through the MA API when MA is connected. Keeps the MA UI in sync with the bridge. Set to `false` to always use direct PulseAudio (`pactl`) |
 
 ## Bluetooth Devices
 

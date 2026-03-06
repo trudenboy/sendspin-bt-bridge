@@ -121,9 +121,40 @@ Pause or resume a specific MA sync group. For `action="play"`, uses the MA REST 
 
 ### `POST /api/volume`
 
-Set volume on a device.
+Set volume on one or more devices. Supports individual, group, and multi-target modes.
 
-**Body:** `{ "mac": "AA:BB:CC:DD:EE:FF", "value": 75 }` (value: 0–100)
+**Body parameters:**
+
+| Field | Type | Description |
+|---|---|---|
+| `volume` | integer | Target volume (0–100). Required. |
+| `mac` | string | Target a single device by MAC address |
+| `player_name` | string | Target a single device by player name |
+| `player_names` | string[] | Target multiple devices by name |
+| `group_id` | string | Target all devices in a specific MA sync group |
+| `group` | boolean | When `true`, uses MA's proportional `group_volume` for sync group members |
+| `force_local` | boolean | When `true`, bypasses MA API and uses direct PulseAudio (`pactl`) |
+
+If no targeting field is provided (`mac`, `player_name`, `player_names`, `group_id`), volume is applied to **all** devices.
+
+**Routing logic** (when `VOLUME_VIA_MA` is enabled and MA is connected):
+
+- **`group: true`** — sends `group_volume` once per unique MA sync group among selected targets. MA applies a proportional delta, preserving relative volumes. Devices **not** in any sync group receive the exact value via direct PulseAudio.
+- **`group: false`** (default) — sends `volume_set` to each target individually via MA API.
+- The response returns immediately with `"via": "ma"`. The UI updates when bridge_daemon receives the echo from MA (~500 ms).
+
+**Fallback:** if MA is offline, `VOLUME_VIA_MA` is disabled, or `force_local: true`, volume is set directly via PulseAudio and status updates immediately.
+
+```json
+// Individual
+{ "mac": "AA:BB:CC:DD:EE:FF", "volume": 75 }
+
+// Group (proportional for sync groups, exact for solo devices)
+{ "volume": 40, "group": true }
+
+// Force local pactl
+{ "mac": "AA:BB:CC:DD:EE:FF", "volume": 50, "force_local": true }
+```
 
 ### `POST /api/mute`
 

@@ -234,6 +234,44 @@ Retries up to **3×** with 3-second delays (the A2DP sink takes a few seconds to
 
 When Bluetooth reconnects, PulseAudio's `module-rescue-streams` may move sink-inputs to the default sink. `BridgeDaemon._ensure_sink_routing()` corrects this once per stream start — guarded by `_sink_routed` flag to prevent re-anchor feedback loops.
 
+### Volume Control (Single-Writer Architecture)
+
+Volume and mute are controlled through a **single-writer model**: only `bridge_daemon` (running inside each subprocess) writes to PulseAudio. This eliminates feedback loops where multiple writers would compete and cause volume bouncing.
+
+```mermaid
+sequenceDiagram
+    participant UI as Web UI
+    participant API as Flask API
+    participant MA as Music Assistant
+    participant BD as bridge_daemon<br/>(subprocess)
+    participant PA as PulseAudio
+
+    Note over UI,PA: MA path (VOLUME_VIA_MA = true, MA connected)
+    UI->>API: POST /api/volume {volume: 40, group: true}
+    API->>MA: WS: players/cmd/group_volume
+    API-->>UI: {"via": "ma"} (no local status update)
+    MA->>BD: VolumeChanged echo (sendspin protocol)
+    BD->>PA: pactl set-sink-volume (single writer)
+    BD->>BD: _bridge_status["volume"] = N; _notify()
+    BD-->>API: stdout: {"type":"status","volume": N}
+    API-->>UI: SSE status update
+
+    Note over UI,PA: Local fallback (MA offline or force_local)
+    UI->>API: POST /api/volume {volume: 40, force_local: true}
+    API->>PA: pactl set-sink-volume (direct)
+    API->>BD: stdin: {"cmd":"set_volume","value": 40}
+    API-->>UI: {"via": "local"} + immediate status update
+```
+
+**Group volume routing:**
+
+| Device type | Method | Behavior |
+|---|---|---|
+| In MA sync group | MA `group_volume` (one call per unique group) | Proportional delta — preserves relative volumes between speakers |
+| Solo (no sync group) | Direct PulseAudio (`pactl`) | Exact value — slider value = speaker volume |
+
+The `VOLUME_VIA_MA` config option (default: `true`) controls whether volume changes are routed through MA. Set to `false` to always use direct PulseAudio, which bypasses MA entirely but means the MA UI won't reflect volume changes made from the bridge.
+
 ---
 
 ## Bluetooth Management

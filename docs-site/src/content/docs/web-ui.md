@@ -46,6 +46,21 @@ The controls bar appears above the device cards. All operations apply only to cu
   **Pause All** is group-aware: it sends the pause command once per MA sync group, not once per device. This keeps multi-speaker groups in sync.
 </Aside>
 
+### How the Group Volume Slider Works
+
+The group **VOL slider** uses a hybrid approach depending on whether a device belongs to a Music Assistant sync group:
+
+**Devices in a MA sync group** (showing a `🔗 GroupName` badge):
+- Volume is sent via the MA API using `group_volume`, which applies MA's **proportional (delta) algorithm** — it adjusts each member's volume relative to its current level, preserving the ratio between speakers. For example, if Speaker A is at 60% and Speaker B is at 40%, dragging the group slider down by 10 will set A to ~50% and B to ~33%.
+- One `group_volume` command is sent per unique sync group. If selected devices span two groups, both groups are adjusted.
+- The UI updates when MA echoes the actual new values back through the sendspin protocol (typically within ~500 ms).
+
+**Devices not in any sync group** (solo players, no badge):
+- Volume is set directly via PulseAudio (`pactl`) to the exact slider value. A solo device set to 35% will be exactly 35%.
+- The UI updates immediately.
+
+This means after a group slider change, devices in a sync group may show different percentages (proportional), while solo devices show the exact slider value.
+
 ---
 
 ## Device Cards
@@ -112,6 +127,8 @@ When the bridge is actively receiving now-playing data from the MA REST API, a s
 - **Mute button** — 🔈 (unmuted) / 🔇 (muted, red background)
 - **Audio format** — small text showing the negotiated codec and stream parameters (e.g. `44100Hz/16-bit/2ch`)
 - **Sink name** — revealed on hover (e.g. `bluez_sink.FC_58_FA_EB_08_6C.a2dp_sink`); a ⚠ yellow warning is shown if no sink is configured
+
+Individual volume sliders follow the same routing logic as the group slider: when `VOLUME_VIA_MA` is enabled and MA is connected, volume changes are proxied through the MA API. The UI waits for the actual value echoed back from MA before updating. When MA is offline or `VOLUME_VIA_MA` is disabled, changes go directly to PulseAudio.
 
 ### Sync Column
 
