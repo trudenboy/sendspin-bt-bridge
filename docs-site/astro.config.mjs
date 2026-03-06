@@ -1,13 +1,20 @@
 // @ts-check
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
+import remarkMermaid from './src/plugins/remark-mermaid.mjs';
 
 export default defineConfig({
   site: 'https://trudenboy.github.io/sendspin-bt-bridge',
   base: '/sendspin-bt-bridge',
+  markdown: {
+    remarkPlugins: [remarkMermaid],
+  },
   integrations: [
     starlight({
       title: 'Sendspin BT Bridge',
+      components: {
+        Head: './src/components/Head.astro',
+      },
       locales: {
         root: { label: 'English', lang: 'en' },
         ru: { label: 'Русский', lang: 'ru' },
