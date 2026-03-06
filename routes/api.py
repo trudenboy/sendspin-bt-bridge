@@ -422,6 +422,18 @@ def set_volume():
         if not force_local and state.is_ma_connected() and targets:
             ma_ok = _set_volume_via_ma(targets, volume, is_group=is_group)
             if ma_ok:
+                # Update local status + persist so UI reflects change immediately
+                for client in targets:
+                    client._update_status({"volume": volume})
+                    loop = state.get_main_loop()
+                    if loop:
+                        asyncio.run_coroutine_threadsafe(
+                            client._send_subprocess_command({"cmd": "set_volume", "value": volume}),
+                            loop,
+                        )
+                    mac = getattr(getattr(client, "bt_manager", None), "mac_address", None)
+                    if mac:
+                        _schedule_volume_persist(mac, volume)
                 return jsonify({"success": True, "volume": volume, "via": "ma"})
             logger.debug("MA volume proxy failed, falling back to local pactl")
 
@@ -480,6 +492,15 @@ def set_mute():
             # Resolve desired mute state
             desired = bool(mute_value) if mute_value is not None else not targets[0].status.get("muted", False)
             if _set_mute_via_ma(targets, desired):
+                # Update local status so UI reflects change immediately
+                loop = state.get_main_loop()
+                for client in targets:
+                    client._update_status({"muted": desired})
+                    if loop:
+                        asyncio.run_coroutine_threadsafe(
+                            client._send_subprocess_command({"cmd": "set_mute", "muted": desired}),
+                            loop,
+                        )
                 return jsonify({"success": True, "muted": desired, "via": "ma"})
             logger.debug("MA mute proxy failed, falling back to local pactl")
 
