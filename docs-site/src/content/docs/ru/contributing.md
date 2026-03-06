@@ -50,7 +50,7 @@ routes/
 
 entrypoint.sh         # Docker entrypoint: D-Bus, аудио инициализация
 ha-addon/             # Home Assistant addon конфигурация
-lxc/                  # Proxmox LXC установочный скрипт
+lxc/                  # LXC установочные скрипты (Proxmox и OpenWrt)
 ```
 
 > **Архитектура**: каждая Bluetooth-колонка работает как изолированный asyncio-subprocess (`services/daemon_process.py`) с переменной `PULSE_SINK=<bt_sink_name>` в окружении. Это даёт каждой колонке собственный PulseAudio-контекст — аудио направляется в нужную колонку с первого семпла, без `move-sink-input` при старте.

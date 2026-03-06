@@ -45,7 +45,7 @@ routes/
 
 entrypoint.sh         # Docker entrypoint: D-Bus, audio init
 ha-addon/             # Home Assistant addon configuration
-lxc/                  # Proxmox LXC install script
+lxc/                  # LXC install scripts (Proxmox & OpenWrt)
 ```
 
 > **Architecture note**: each Bluetooth speaker runs as an isolated asyncio subprocess (`services/daemon_process.py`) with `PULSE_SINK=<bt_sink_name>` in its environment. This gives every speaker its own PulseAudio context so audio routes to the correct speaker from the first sample, without any `move-sink-input` calls at startup.

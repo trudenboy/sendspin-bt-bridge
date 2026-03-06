@@ -2,7 +2,7 @@
 
 ## Vision
 
-Bring Bluetooth speakers into Music Assistant as first-class players — no extra hardware, no cloud dependency, works headless on Raspberry Pi, Home Assistant, and Proxmox LXC.
+Bring Bluetooth speakers into Music Assistant as first-class players — no extra hardware, no cloud dependency, works headless on Raspberry Pi, Home Assistant, Proxmox LXC, and OpenWrt LXC.
 
 ---
 

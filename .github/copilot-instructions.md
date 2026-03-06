@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Dockerized Python bridge between Music Assistant's Sendspin protocol and Bluetooth speakers. Designed for headless systems (Raspberry Pi, Home Assistant addon, Proxmox LXC).
+Dockerized Python bridge between Music Assistant's Sendspin protocol and Bluetooth speakers. Designed for headless systems (Raspberry Pi, Home Assistant addon, Proxmox LXC, OpenWrt LXC).
 
 ## Build & Run
 
