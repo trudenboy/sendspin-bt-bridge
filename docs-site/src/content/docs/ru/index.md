@@ -20,6 +20,8 @@ hero:
 ---
 
 
+![Инфографика Sendspin Bluetooth Bridge — возможности, архитектура и варианты развёртывания](/sendspin-bt-bridge/screenshots/sbb_infographic_ru.png)
+
 ## Что это такое
 
 У вас наверняка уже есть Bluetooth-колонки — портативная на кухне, беспроводные наушники, звуковая панель в спальне. **Sendspin Bluetooth Bridge** позволяет использовать их все в [Music Assistant](https://www.music-assistant.io/) без покупки нового оборудования.
@@ -110,12 +112,12 @@ automation:
 
 ## Варианты развёртывания
 
-| | Home Assistant Addon | Docker Compose | Proxmox LXC |
-|---|---|---|---|
-| Установка | Магазин аддонов HA | `docker compose up` | Однострочный скрипт |
-| Bluetooth | bluetoothd хоста через D-Bus | bluetoothd хоста через D-Bus | Собственный bluetoothd |
-| Аудио | HA Supervisor bridge | PulseAudio/PipeWire хоста | Собственный PulseAudio |
-| Настройка | Панель HA + веб UI | Веб UI на :8080 | Веб UI на :8080 |
+| | Home Assistant Addon | Docker Compose | Proxmox LXC | OpenWrt LXC |
+|---|---|---|---|---|
+| Установка | Магазин аддонов HA | `docker compose up` | Однострочный скрипт | Однострочный скрипт |
+| Bluetooth | bluetoothd хоста через D-Bus | bluetoothd хоста через D-Bus | Собственный bluetoothd | bluetoothd хоста через D-Bus |
+| Аудио | HA Supervisor bridge | PulseAudio/PipeWire хоста | Собственный PulseAudio | Собственный PulseAudio |
+| Настройка | Панель HA + веб UI | Веб UI на :8080 | Веб UI на :8080 | Веб UI на :8080 |
 
 <CardGrid>
   <LinkCard title="Установка: Home Assistant Addon" href="/sendspin-bt-bridge/installation/ha-addon/" />
