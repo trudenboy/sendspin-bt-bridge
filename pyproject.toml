@@ -40,7 +40,6 @@ known-first-party = [
     "web_interface",
     "sendspin_client",
     "bluetooth_manager",
-    "mpris",
     "routes",
     "services",
 ]

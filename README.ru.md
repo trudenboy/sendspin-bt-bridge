@@ -33,7 +33,6 @@ Bluetooth-мост для [Music Assistant](https://www.music-assistant.io/) —
 - **Транспортные кнопки** — предыдущий / следующий / shuffle / repeat для syncgroup и соло-плееров
 - **Групповая громкость** — delta-based `group_volume` с сохранением пропорций между колонками
 - **Пауза / воспроизведение** — для отдельного устройства, группы или всех плееров сразу
-- **MPRIS-сервис** — регистрация как MediaPlayer2 на D-Bus для обнаружения MA по имени плеера
 
 ### 🖥️ Веб-интерфейс
 - **Дизайн в стиле HA** — CSS design tokens, автоматическая тёмная/светлая тема, шрифт Roboto; живая инъекция темы через HA Ingress
@@ -503,7 +502,6 @@ python sendspin_client.py
 | `bluetooth_manager.py` | `BluetoothManager` — сопряжение/подключение/переподключение через subprocess `bluetoothctl` |
 | `config.py` | Управление конфигурацией — `load_config()`, `DEFAULT_CONFIG`, `VERSION`, вспомогательные функции auth |
 | `state.py` | Общее состояние рантайма — список клиентов, SSE-сигнализация, задачи сканирования, кэш MA |
-| `mpris.py` | MPRIS D-Bus интеграция — регистрирует каждый плеер в медиашине хоста |
 | `web_interface.py` | Точка входа Flask — регистрирует blueprints, запускает сервер Waitress |
 | `routes/api.py` | Все REST-эндпоинты `/api/*` |
 | `routes/views.py` | Рендеринг HTML-страниц |

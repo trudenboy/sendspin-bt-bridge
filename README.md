@@ -31,7 +31,6 @@ A Bluetooth bridge for [Music Assistant](https://www.music-assistant.io/) — co
 - **Transport controls** — prev / next / shuffle / repeat for syncgroup and solo players
 - **Group volume** — delta-based `group_volume` preserving relative speaker proportions
 - **Pause / resume** — per-device, per-group, or all players at once
-- **MPRIS service** — registers as MediaPlayer2 on D-Bus so MA discovers each player by name
 
 ### 🖥️ Web UI
 - **HA-aligned design** — CSS design tokens, automatic dark / light theme, Roboto font; live theme injection via HA Ingress
@@ -507,7 +506,6 @@ python sendspin_client.py
 | `bluetooth_manager.py` | `BluetoothManager` — BT pairing/connection/reconnect via `bluetoothctl` subprocess |
 | `config.py` | Configuration management — `load_config()`, `DEFAULT_CONFIG`, `VERSION`, auth helpers |
 | `state.py` | Shared runtime state — client list, SSE signaling, scan jobs, MA group/now-playing cache |
-| `mpris.py` | MPRIS D-Bus integration — advertises each player to the host media bus |
 | `web_interface.py` | Flask app entry point — registers blueprints, starts Waitress server |
 | `routes/api.py` | All `/api/*` REST endpoints |
 | `routes/views.py` | HTML page renders |

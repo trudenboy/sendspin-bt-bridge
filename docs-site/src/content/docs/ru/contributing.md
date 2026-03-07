@@ -34,7 +34,6 @@ python sendspin_client.py
 sendspin_client.py    # Точка входа: SendspinClient + main()
 bluetooth_manager.py  # BluetoothManager — BT подключения через bluetoothctl
 config.py             # Конфигурация, shared lock, load_config()
-mpris.py              # MPRIS D-Bus интеграция, MprisIdentityService
 state.py              # Общее runtime-состояние (список SendspinClient)
 
 services/

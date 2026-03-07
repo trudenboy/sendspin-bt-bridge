@@ -100,7 +100,6 @@ class BridgeDaemon(SendspinDaemon):
         if self._audio_handler is None:
             raise RuntimeError("BridgeDaemon: audio handler not initialised")
         client_roles = [Roles.PLAYER, Roles.METADATA, Roles.CONTROLLER]
-        # MPRIS is handled separately (requires D-Bus session bus, not available in subprocesses)
 
         supported_formats = detect_supported_audio_formats(self._args.audio_device.index)
         if self._args.preferred_format is not None:

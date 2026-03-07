@@ -15,7 +15,7 @@ description: Detailed technical architecture of sendspin-bt-bridge — processes
 │  │              Main Python Process                         │   │
 │  │  sendspin_client.py  ·  asyncio event loop               │   │
 │  │  Flask/Waitress API  ·  BluetoothManager × N             │   │
-│  │  MaMonitor  ·  MprisIdentityService  ·  state.py         │   │
+│  │  MaMonitor  ·  state.py                                   │   │
 │  └───────────────┬──────────────────────────────────────────┘   │
 │                  │ asyncio.create_subprocess_exec (per device)  │
 │        ┌─────────┼─────────┐                                    │
@@ -51,7 +51,6 @@ graph TD
             MP --> BM[BluetoothManager × N]
             MP --> WS[Waitress HTTP server<br/>daemon thread]
             MP --> MM[MaMonitor<br/>asyncio task]
-            MP --> MPRIS[MprisIdentityService<br/>D-Bus session]
 
             SC -->|asyncio subprocess| DP
             SC <-->|JSON stdin/stdout| DP
@@ -591,7 +590,6 @@ sequenceDiagram
         PY->>SC: state.register_client(SC)
     end
 
-    PY->>DB: MprisIdentityService (per device, if D-Bus available)
     PY->>PY: threading.Thread → waitress.serve(app, port=8080)
     PY->>PY: asyncio.gather(SC.run()×N, BM.monitor_and_reconnect()×N, MaMonitor.run())
 
@@ -603,50 +601,6 @@ sequenceDiagram
         SC->>SC: asyncio.create_subprocess_exec(daemon_process.py, env={PULSE_SINK})
     end
 ```
-
----
-
-## MPRIS D-Bus Integration
-
-The bridge registers a minimal **MPRIS MediaPlayer2** service on the **session D-Bus** so that Music Assistant can discover this bridge by its configured player name. One service is registered **per device** in the main process.
-
-```
-org.mpris.MediaPlayer2.SendspinBridge.<SafeName>
-  /org/mpris/MediaPlayer2
-    MediaPlayer2.Identity → "<player_name>"
-    MediaPlayer2.CanQuit  → False
-    MediaPlayer2.HasTrackList → False
-```
-
-`<SafeName>` is derived from `player_name` by stripping all non-alphanumeric characters (max 32 chars), ensuring a valid D-Bus bus name.
-
-```mermaid
-graph TD
-    subgraph "Main Process"
-        SC[SendspinClient × N<br/>player_name per device]
-        MPRIS_SVC[MprisIdentityService × N<br/>org.mpris.MediaPlayer2.SendspinBridge.Name]
-        GLIB[GLib.MainLoop<br/>daemon thread — mpris-glib]
-        SC --> MPRIS_SVC
-        MPRIS_SVC --> DBUS_SES[D-Bus Session Bus<br/>DBUS_SESSION_BUS_ADDRESS]
-        GLIB -.->|dispatches D-Bus calls| DBUS_SES
-    end
-
-    subgraph "Subprocess"
-        DP[daemon_process.py<br/>use_mpris=False]
-    end
-
-    MA[Music Assistant] -->|discovers player by Identity| DBUS_SES
-```
-
-**Lifecycle:**
-
-1. `entrypoint.sh` starts a D-Bus session daemon and exports `DBUS_SESSION_BUS_ADDRESS`.
-2. `main()` checks `_DBUS_MPRIS_AVAILABLE` — gracefully skips MPRIS if `dbus-python` or `gi.repository.GLib` is missing.
-3. For each device a `MprisIdentityService` is created and registered on the session bus.
-4. A single `GLib.MainLoop` runs in a **daemon thread** (`mpris-glib`) to dispatch D-Bus property calls from MA.
-5. Subprocesses do **not** register MPRIS services — they run without a session bus.
-
-The `pause_all_via_mpris()` function in `mpris.py` can send MPRIS `Pause` to all playing sendspin instances on the session bus by iterating `org.mpris.MediaPlayer2.*` bus names.
 
 ---
 
@@ -728,12 +682,6 @@ The bridge is designed to remain functional when optional system libraries or se
 
 ```mermaid
 graph TD
-    subgraph "Optional: dbus-python + GLib"
-        MPRIS_CHK{dbus-python<br/>available?}
-        MPRIS_CHK -->|Yes| MPRIS_ON[MPRIS services registered<br/>MA discovers bridge by name]
-        MPRIS_CHK -->|No| MPRIS_OFF[_DBUS_MPRIS_AVAILABLE = False<br/>Bridge works, MA discovers<br/>via mDNS / manual config]
-    end
-
     subgraph "Optional: dbus-fast"
         DBUS_CHK{dbus-fast<br/>available?}
         DBUS_CHK -->|Yes| DBUS_ON[Instant disconnect detection<br/>via PropertiesChanged signal]
@@ -756,11 +704,9 @@ graph TD
 
 | Optional Dependency | Flag / Check | Full Mode | Degraded Mode |
 |---|---|---|---|
-| `dbus-python` + `gi.repository.GLib` | `_DBUS_MPRIS_AVAILABLE` | MPRIS MediaPlayer2 registered; MA discovers bridge by player name | MPRIS skipped; MA discovery relies on mDNS or manual player ID |
 | `dbus-fast` (async D-Bus) | `ImportError` on import | Instant BT disconnect via `PropertiesChanged` signal | `bluetoothctl` polling every `check_interval` (10 s) |
 | `pulsectl_asyncio` | `_PULSECTL_AVAILABLE` | Native async PulseAudio: sink list, volume, move sink-inputs | All PA operations fall back to `pactl` subprocess calls |
 | `websockets` + `MA_API_URL` configured | `ImportError` + config check | Real-time MA events (`player_queue_updated`) | Polling every 15 s; if MA API not configured, MaMonitor disabled entirely |
-| `dbus-daemon` (session bus) | `DBUS_SESSION_BUS_ADDRESS` set | MPRIS + `pause_all_via_mpris()` functional | MPRIS not registered; per-device Pause via API stdin command only |
 
 > **Note:** All fallbacks are logged at `WARNING` or `INFO` level at startup so operators can diagnose which features are active. Check container logs for lines like `"pulsectl_asyncio unavailable — falling back to pactl subprocess"` or `"D-Bus monitor unavailable — using bluetoothctl polling"`.
 
@@ -788,7 +734,6 @@ graph TD
 
     subgraph "Background Threads"
         BT1[_run_bt_scan&#40;&#41;<br/>threading.Thread<br/>per scan request]
-        BT2[GLib.MainLoop&#40;&#41;<br/>threading.Thread<br/>D-Bus MPRIS]
     end
 
     LOCK[threading.Lock<br/>state._clients_lock<br/>config.config_lock<br/>SendspinClient._status_lock]
@@ -833,7 +778,6 @@ graph LR
     SC[sendspin_client.py] --> BM[bluetooth_manager.py]
     SC --> ST[state.py]
     SC --> CFG[config.py]
-    SC --> MPRIS[mpris.py]
     SC --> SVC_BD[services/bridge_daemon.py]
 
     WI[web_interface.py] --> FLASK[Flask + Waitress]
@@ -873,7 +817,6 @@ graph LR
 | `Flask` + `Waitress` | Web UI and REST API server |
 | `pulsectl_asyncio` | Async PulseAudio control (sink routing, volume) |
 | `dbus-fast` | Async D-Bus for instant BT disconnect detection |
-| `dbus-python` | Sync D-Bus for MPRIS service registration |
 | `websockets` | MA API WebSocket connection in `MaMonitor` |
 | `aiohttp` / `httpx` | MA REST API calls in `ma_client.py` |
 | `bluetoothctl` | System BT management (subprocess) |

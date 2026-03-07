@@ -54,7 +54,7 @@ msg "Downloading application files from GitHub..."
 mkdir -p /opt/sendspin-client
 
 # Root Python files
-for file in sendspin_client.py web_interface.py config.py state.py bluetooth_manager.py mpris.py; do
+for file in sendspin_client.py web_interface.py config.py state.py bluetooth_manager.py; do
   wget -q "${BASE}/${file}" -O "/opt/sendspin-client/${file}"
 done
 
@@ -106,7 +106,7 @@ if [[ "$ARCH" == "armv7l" || "$ARCH" == "armhf" ]]; then
 
   # Install sendspin's other transitive dependencies
   pip3 install --break-system-packages -q \
-    aiosendspin aiosendspin-mpris pychromecast qrcode readchar sounddevice \
+    aiosendspin pychromecast qrcode readchar sounddevice \
     numpy pillow zeroconf casttube protobuf ifaddr
 
   # Install remaining requirements.txt deps (exclude sendspin line)

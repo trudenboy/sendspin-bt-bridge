@@ -60,9 +60,6 @@ IPC: subprocess→parent via JSON lines on stdout; parent→subprocess via JSON 
 - `load_config()`, `_player_id_from_mac()`, `save_device_volume()` (public; `_save_device_volume` alias retained for compatibility)
 - `VERSION = "2.12.0"`, `BUILD_DATE = "2026-03-05"`
 
-**`mpris.py`** — MPRIS D-Bus integration:
-- `MprisIdentityService` — registers MediaPlayer2 D-Bus service so MA discovers the bridge by player name
-
 **`services/` module:**
 - `bridge_daemon.py` — `BridgeDaemon` subclass. Runs inside each subprocess. Handles `on_status_change` callbacks, stream events. `_sink_routed` flag prevents re-anchor feedback loop after PA rescue-streams correction.
 - `daemon_process.py` — subprocess entry point. Reads JSON args from argv, sets up `BridgeDaemon`, emits status as JSON to stdout, reads commands from stdin.

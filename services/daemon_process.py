@@ -279,7 +279,7 @@ async def _run(params: dict) -> None:
         url=server_url,
         static_delay_ms=static_delay_ms,
         listen_port=listen_port,
-        use_mpris=False,  # MPRIS requires D-Bus session which subprocesses don't have
+        use_mpris=False,
         use_hardware_volume=False,
         preferred_format=preferred_fmt,
     )

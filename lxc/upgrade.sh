@@ -51,7 +51,7 @@ echo ""
 msg "Downloading application files..."
 
 # Root Python files
-for file in sendspin_client.py web_interface.py config.py state.py bluetooth_manager.py mpris.py; do
+for file in sendspin_client.py web_interface.py config.py state.py bluetooth_manager.py; do
   wget -q "${BASE}/${file}" -O "${APP_DIR}/${file}"
 done
 

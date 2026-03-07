@@ -29,7 +29,6 @@ python sendspin_client.py
 sendspin_client.py    # Entry point: SendspinClient + main()
 bluetooth_manager.py  # BluetoothManager — BT connections via bluetoothctl
 config.py             # Configuration, shared lock, load_config()
-mpris.py              # MPRIS D-Bus integration, MprisIdentityService
 state.py              # Shared runtime state (list of SendspinClient instances)
 
 services/

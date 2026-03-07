@@ -27,11 +27,6 @@ from config import (
     load_config,
     save_device_volume,
 )
-from mpris import (
-    _DBUS_MPRIS_AVAILABLE,
-    MprisIdentityService,
-    _GLib,
-)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -816,19 +811,6 @@ async def main():
             _persist_enabled(_c.player_name, _c.bt_management_enabled)
     except Exception as _e:
         logger.debug("Could not sync enabled state to options.json: %s", _e)
-
-    # Register MPRIS Identity services on the session bus (one per player)
-    if _DBUS_MPRIS_AVAILABLE and _GLib is not None:
-        try:
-            import dbus.mainloop.glib as _dbus_ml
-
-            _dbus_ml.DBusGMainLoop(set_as_default=True)
-            for _i, _c in enumerate(clients):
-                MprisIdentityService(_c.player_name, _i)
-            threading.Thread(target=_GLib.MainLoop().run, daemon=True, name="mpris-glib").start()
-            logger.info("MPRIS Identity service(s) registered on session bus")
-        except Exception as _e:
-            logger.warning("MPRIS Identity service unavailable: %s", _e)
 
     # Warn about listen_port collisions (all containers share host network)
     used_ports: set = set()

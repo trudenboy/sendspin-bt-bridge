@@ -15,7 +15,7 @@ description: Подробная техническая архитектура se
 │  │              Main Python Process                         │   │
 │  │  sendspin_client.py  ·  asyncio event loop               │   │
 │  │  Flask/Waitress API  ·  BluetoothManager × N             │   │
-│  │  MaMonitor  ·  MprisIdentityService  ·  state.py         │   │
+│  │  MaMonitor  ·  state.py                                   │   │
 │  └───────────────┬──────────────────────────────────────────┘   │
 │                  │ asyncio.create_subprocess_exec (per device)  │
 │        ┌─────────┼─────────┐                                    │
@@ -51,7 +51,6 @@ graph TD
             MP --> BM[BluetoothManager × N]
             MP --> WS[Waitress HTTP server<br/>daemon thread]
             MP --> MM[MaMonitor<br/>asyncio task]
-            MP --> MPRIS[MprisIdentityService<br/>D-Bus session]
 
             SC -->|asyncio subprocess| DP
             SC <-->|JSON stdin/stdout| DP
@@ -590,7 +589,6 @@ sequenceDiagram
         PY->>SC: state.register_client(SC)
     end
 
-    PY->>DB: MprisIdentityService (per device, if D-Bus available)
     PY->>PY: threading.Thread → waitress.serve(app, port=8080)
     PY->>PY: asyncio.gather(SC.run()×N, BM.monitor_and_reconnect()×N, MaMonitor.run())
 
@@ -602,50 +600,6 @@ sequenceDiagram
         SC->>SC: asyncio.create_subprocess_exec(daemon_process.py, env={PULSE_SINK})
     end
 ```
-
----
-
-## Интеграция MPRIS D-Bus
-
-Бридж регистрирует минимальный **MPRIS MediaPlayer2**-сервис на **сессионной шине D-Bus**, чтобы Music Assistant мог обнаружить этот бридж по настроенному имени плеера. Один сервис регистрируется **на каждое устройство** в основном процессе.
-
-```
-org.mpris.MediaPlayer2.SendspinBridge.<SafeName>
-  /org/mpris/MediaPlayer2
-    MediaPlayer2.Identity → "<player_name>"
-    MediaPlayer2.CanQuit  → False
-    MediaPlayer2.HasTrackList → False
-```
-
-`<SafeName>` выводится из `player_name` путём удаления всех не буквенно-цифровых символов (максимум 32 символа), обеспечивая валидное имя шины D-Bus.
-
-```mermaid
-graph TD
-    subgraph "Main Process"
-        SC[SendspinClient × N<br/>player_name per device]
-        MPRIS_SVC[MprisIdentityService × N<br/>org.mpris.MediaPlayer2.SendspinBridge.Name]
-        GLIB[GLib.MainLoop<br/>daemon thread — mpris-glib]
-        SC --> MPRIS_SVC
-        MPRIS_SVC --> DBUS_SES[D-Bus Session Bus<br/>DBUS_SESSION_BUS_ADDRESS]
-        GLIB -.->|dispatches D-Bus calls| DBUS_SES
-    end
-
-    subgraph "Subprocess"
-        DP[daemon_process.py<br/>use_mpris=False]
-    end
-
-    MA[Music Assistant] -->|discovers player by Identity| DBUS_SES
-```
-
-**Жизненный цикл:**
-
-1. `entrypoint.sh` запускает демон сессионной шины D-Bus и экспортирует `DBUS_SESSION_BUS_ADDRESS`.
-2. `main()` проверяет `_DBUS_MPRIS_AVAILABLE` — при отсутствии `dbus-python` или `gi.repository.GLib` MPRIS пропускается без ошибки.
-3. Для каждого устройства создаётся `MprisIdentityService` и регистрируется на сессионной шине.
-4. Один `GLib.MainLoop` работает в **потоке-демоне** (`mpris-glib`) для диспетчеризации вызовов D-Bus свойств из MA.
-5. Подпроцессы **не регистрируют** MPRIS-сервисы — они работают без сессионной шины.
-
-Функция `pause_all_via_mpris()` в `mpris.py` может отправить MPRIS `Pause` всем воспроизводящим экземплярам Sendspin на сессионной шине, перебирая имена шин `org.mpris.MediaPlayer2.*`.
 
 ---
 
@@ -727,12 +681,6 @@ device.keepalive_interval = 0   →  disabled (default)
 
 ```mermaid
 graph TD
-    subgraph "Optional: dbus-python + GLib"
-        MPRIS_CHK{dbus-python<br/>available?}
-        MPRIS_CHK -->|Yes| MPRIS_ON[MPRIS services registered<br/>MA discovers bridge by name]
-        MPRIS_CHK -->|No| MPRIS_OFF[_DBUS_MPRIS_AVAILABLE = False<br/>Bridge works, MA discovers<br/>via mDNS / manual config]
-    end
-
     subgraph "Optional: dbus-fast"
         DBUS_CHK{dbus-fast<br/>available?}
         DBUS_CHK -->|Yes| DBUS_ON[Instant disconnect detection<br/>via PropertiesChanged signal]
@@ -755,11 +703,9 @@ graph TD
 
 | Опциональная зависимость | Флаг / Проверка | Полный режим | Режим деградации |
 |---|---|---|---|
-| `dbus-python` + `gi.repository.GLib` | `_DBUS_MPRIS_AVAILABLE` | MPRIS MediaPlayer2 зарегистрирован; MA обнаруживает бридж по имени плеера | MPRIS пропущен; MA обнаруживает через mDNS или ручную настройку ID плеера |
 | `dbus-fast` (async D-Bus) | `ImportError` при импорте | Мгновенное обнаружение отключения BT через сигнал `PropertiesChanged` | Опрос через `bluetoothctl` каждые `check_interval` (10 с) |
 | `pulsectl_asyncio` | `_PULSECTL_AVAILABLE` | Нативный async PulseAudio: список синков, громкость, перемещение sink-inputs | Все PA-операции через подпроцессы `pactl` |
 | `websockets` + настроенный `MA_API_URL` | `ImportError` + проверка конфигурации | События MA в реальном времени (`player_queue_updated`) | Опрос каждые 15 с; без настроенного MA API — MaMonitor полностью отключён |
-| `dbus-daemon` (сессионная шина) | установлен `DBUS_SESSION_BUS_ADDRESS` | MPRIS + `pause_all_via_mpris()` работают | MPRIS не зарегистрирован; пауза для каждого устройства только через stdin API |
 
 > **Примечание:** При запуске все откаты записываются в лог на уровне `WARNING` или `INFO`, чтобы операторы могли диагностировать активные функции. Проверьте логи контейнера на наличие строк вида `"pulsectl_asyncio unavailable — falling back to pactl subprocess"` или `"D-Bus monitor unavailable — using bluetoothctl polling"`.
 
@@ -787,7 +733,6 @@ graph TD
 
     subgraph "Background Threads"
         BT1[_run_bt_scan&#40;&#41;<br/>threading.Thread<br/>per scan request]
-        BT2[GLib.MainLoop&#40;&#41;<br/>threading.Thread<br/>D-Bus MPRIS]
     end
 
     LOCK[threading.Lock<br/>state._clients_lock<br/>config.config_lock<br/>SendspinClient._status_lock]
@@ -832,7 +777,6 @@ graph LR
     SC[sendspin_client.py] --> BM[bluetooth_manager.py]
     SC --> ST[state.py]
     SC --> CFG[config.py]
-    SC --> MPRIS[mpris.py]
     SC --> SVC_BD[services/bridge_daemon.py]
 
     WI[web_interface.py] --> FLASK[Flask + Waitress]
@@ -872,7 +816,6 @@ graph LR
 | `Flask` + `Waitress` | Веб-интерфейс и REST API сервер |
 | `pulsectl_asyncio` | Асинхронное управление PulseAudio (маршрутизация синков, громкость) |
 | `dbus-fast` | Async D-Bus для мгновенного обнаружения отключения BT |
-| `dbus-python` | Sync D-Bus для регистрации MPRIS-сервиса |
 | `websockets` | WebSocket-соединение MA API в `MaMonitor` |
 | `aiohttp` / `httpx` | Вызовы MA REST API в `ma_client.py` |
 | `bluetoothctl` | Системное управление BT (подпроцесс) |

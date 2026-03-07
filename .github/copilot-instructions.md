@@ -35,7 +35,6 @@ Tests: `tests/test_config.py` and `tests/test_volume_routing.py` (pytest). Manua
 - **`sendspin_client.py`** — Core orchestration. `SendspinClient` manages per-device subprocess lifecycle, `DeviceStatus` dataclass for typed status. `main()` loads config, spawns `BluetoothManager` + `SendspinClient` per device, starts Waitress in daemon thread, runs asyncio loop.
 - **`bluetooth_manager.py`** — `BluetoothManager`: pairing/connection/reconnect via `bluetoothctl`, D-Bus disconnect detection, exponential backoff, churn isolation.
 - **`config.py`** — `VERSION`, `load_config()`, `save_device_volume()`, `hash_password()`, thread-safe config persistence.
-- **`mpris.py`** — `MprisIdentityService` for MA discovery via D-Bus. Gracefully degrades without `dbus-python`.
 - **`state.py`** — Shared runtime state, SSE signaling with batched notifications (100ms), async BT-scan jobs, MA groups cache.
 - **`web_interface.py`** — Flask app with Waitress, HA Ingress middleware, auth enforcement, blueprint registration.
 
