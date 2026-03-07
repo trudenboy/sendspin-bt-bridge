@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.12.0] - 2026-03-07
+
+### Added
+- Zombie playback watchdog: auto-restarts subprocess after 15s of playing with no audio data, up to 3 retries
+- BT churn isolation (opt-in): auto-disables BT management for devices that reconnect too often; configurable via `BT_CHURN_THRESHOLD` and `BT_CHURN_WINDOW`
+- Stale equalizer indicator: frozen red bars when MA reports playing but no audio is streaming; playback shows "▶ No Audio"
+
+### Fixed
+- Clear playing/streaming status when subprocess is stopped, preventing stale indicators
+
+## [2.11.0] - 2026-03-07
+
+### Added
+- OpenWrt LXC deployment support
+- SSE: send current status immediately on connect, reduce heartbeat from 30s to 15s
+
+## [2.10.16] - 2026-03-06
+
+### Fixed
+- LXC installer: download all app modules instead of only 2 files
+- LXC PulseAudio: fix deprecated config for PA 17+ (Ubuntu 24.04)
+- Config save: empty string values for numeric fields no longer crash
+- Config save: `VOLUME_VIA_MA` added to POST whitelist
+
 ## [2.10.15] - 2026-03-06
 
 ### Fixed
