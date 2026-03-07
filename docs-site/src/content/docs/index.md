@@ -46,7 +46,7 @@ It runs entirely on your local network: no cloud accounts, no subscriptions, no 
     Connect several speakers simultaneously. Each appears as its own player in Music Assistant — play different tracks in different rooms, or group them for synchronized audio.
   </Card>
   <Card title="Stays connected" icon="refresh">
-    Monitors Bluetooth connections every 10 s and reconnects automatically if a speaker drops out — no manual intervention needed.
+    Detects disconnections instantly via D-Bus (falls back to 10 s polling when D-Bus is unavailable) and reconnects automatically — no manual intervention needed.
   </Card>
   <Card title="Synchronized multiroom" icon="seti:clock">
     Speakers can be grouped in Music Assistant for simultaneous playback. Latency compensation (`static_delay_ms`) keeps them in sync even across different A2DP buffer sizes.

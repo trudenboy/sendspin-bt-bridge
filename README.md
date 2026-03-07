@@ -17,7 +17,7 @@ A Bluetooth bridge for [Music Assistant](https://www.music-assistant.io/) — co
 - **SBC codec preference** — `PREFER_SBC_CODEC` forces SBC after BT connect for lower CPU / stable latency
 
 ### 📡 Bluetooth
-- **Auto-reconnect** — monitors connections every 10 s, reconnects with exponential backoff
+- **Auto-reconnect** — instant disconnect detection via D-Bus; falls back to 10 s polling when D-Bus is unavailable; reconnects with exponential backoff
 - **BT adapter management** — auto-detect adapters with manual override; pin each speaker to a specific adapter
 - **D-Bus disconnect detection** — instant reaction via dbus-fast; falls back to bluetoothctl polling
 - **Device pairing/removal** — scan, pair, trust, and remove devices from the web UI
