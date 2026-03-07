@@ -6,20 +6,53 @@ A Bluetooth bridge for [Music Assistant](https://www.music-assistant.io/) — co
 
 ## Features
 
-- **Sendspin Protocol**: Full support for Music Assistant's native Sendspin streaming protocol
-- **Multi-device**: Bridge multiple Bluetooth speakers simultaneously, each appearing as its own MA player
-- **Auto-reconnect**: Monitors speaker connections every 10 s and reconnects automatically
-- **HA-aligned Web UI**: Dashboard styled to match Home Assistant/Music Assistant — CSS design tokens, automatic dark/light theme, Roboto font; live theme injection when opened via HA Ingress
-- **Four deployment options**: Home Assistant addon, Docker Compose, Proxmox LXC, or OpenWrt LXC
-- **PipeWire & PulseAudio**: Auto-detects the host audio system
-- **Audio format display**: Codec, sample rate, and bit depth shown per device (e.g. `flac 48000Hz/24-bit/2ch`)
-- **Group controls**: Volume and mute controls across multiple players from the web UI
-- **MA API integration**: Rich now-playing data (track, artist, album, queue position) and transport controls (prev/next/shuffle/repeat) sourced from the MA REST API — works for both syncgroup members and solo players
-- **BT adapter management**: Auto-detect adapters with manual override; pin each speaker to a specific adapter
-- **Per-device latency compensation**: `static_delay_ms` field to compensate A2DP buffer latency
-- **Diagnostics endpoint**: `/api/diagnostics` returns structured health info — adapters, sinks, D-Bus status, per-device state
-- **Multiple bridge instances**: Run several bridge instances (containers/LXC/addons) against the same MA server — each registers its own set of players independently
-- **Web UI authentication** — optional password protection and HA 2FA login
+### 🔊 Audio & Playback
+- **Sendspin Protocol** — full support for Music Assistant's native streaming protocol
+- **Multi-device** — bridge multiple Bluetooth speakers simultaneously, each as its own MA player
+- **PipeWire & PulseAudio** — auto-detects the host audio system; per-device `PULSE_SINK` isolation
+- **Audio format display** — codec, sample rate, bit depth per device (e.g. `flac 48000Hz/24-bit/2ch`)
+- **Per-device latency compensation** — `static_delay_ms` for A2DP buffer latency sync in multiroom
+- **Preferred audio format** — per-device format selection (e.g. `flac:44100:16:2`)
+- **Volume routing** — hybrid: through MA API (keeps MA UI in sync) or direct PulseAudio (`VOLUME_VIA_MA`)
+- **SBC codec preference** — `PREFER_SBC_CODEC` forces SBC after BT connect for lower CPU / stable latency
+
+### 📡 Bluetooth
+- **Auto-reconnect** — monitors connections every 10 s, reconnects with exponential backoff
+- **BT adapter management** — auto-detect adapters with manual override; pin each speaker to a specific adapter
+- **D-Bus disconnect detection** — instant reaction via dbus-fast; falls back to bluetoothctl polling
+- **Device pairing/removal** — scan, pair, trust, and remove devices from the web UI
+- **Release / Reclaim** — temporarily release a speaker for phone/PC pairing, then reclaim
+- **Churn isolation** — auto-disables BT management for devices that reconnect too often (`BT_CHURN_THRESHOLD`)
+- **Zombie playback watchdog** — auto-restarts subprocess if playing but no audio data for 15 s
+- **Keepalive silence** — optional periodic silence bursts to prevent BT speaker auto-off (`keepalive_interval`)
+
+### 🎵 Music Assistant Integration
+- **Now-playing metadata** — track, artist, album art, queue position from MA REST API
+- **Transport controls** — prev / next / shuffle / repeat for syncgroup and solo players
+- **Group volume** — delta-based `group_volume` preserving relative speaker proportions
+- **Pause / resume** — per-device, per-group, or all players at once
+- **MPRIS service** — registers as MediaPlayer2 on D-Bus so MA discovers each player by name
+
+### 🖥️ Web UI
+- **HA-aligned design** — CSS design tokens, automatic dark / light theme, Roboto font; live theme injection via HA Ingress
+- **Real-time updates** — Server-Sent Events (SSE) push status changes to the dashboard instantly
+- **Album art tooltip** — hover over the track name to see the album cover
+- **EQ visualizer** — animated equalizer bars; frozen red when playing but no audio stream
+- **Group filter** — dropdown to show only devices from a specific MA syncgroup
+- **Diagnostics panel** — adapters, sinks, D-Bus, per-device state at a glance
+- **Log viewer** — browse / filter logs by severity with auto-refresh
+- **Configuration editor** — server address, devices, adapters, timezone — all editable in the UI
+
+### 🔐 Security
+- **Password protection** — optional PBKDF2-SHA256 password for standalone mode
+- **HA 2FA login** — full HA login_flow with TOTP / MFA when running as addon
+- **Brute-force lockout** — 5 failed attempts → 5-minute IP lockout
+
+### 🚀 Deployment
+- **Four deployment options** — Home Assistant addon, Docker Compose, Proxmox LXC, OpenWrt LXC
+- **Multiple bridge instances** — run several bridges against the same MA server; each registers its own players
+- **28-endpoint REST API** — full programmatic control (`/api/status`, `/api/volume`, `/api/bt/*`, `/api/ma/*`, …)
+- **Dynamic log level** — change `LOG_LEVEL` at runtime via API or web UI without restart
 
 <img width="1400" alt="Web dashboard — full page, dark mode, all sections expanded" src="https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/docs-site/public/screenshots/screenshot-dashboard-full.png" />
 <br><br>
