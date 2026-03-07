@@ -1935,67 +1935,89 @@ updateStatus();
 var _statusInterval = null;
 (function _initStatusStream() {
     if (typeof EventSource === 'undefined') {
-        // No SSE support — poll every 2 s
         _statusInterval = setInterval(updateStatus, 2000);
         return;
     }
-    var es = new EventSource(API_BASE + '/api/status/stream');
-    var _sseAlive = true;
-    es.onmessage = function(e) {
-        try {
-            var status = JSON.parse(e.data);
-            // Reuse the same rendering logic as updateStatus()
-            var info = [];
-            if (status.hostname)   info.push(status.hostname);
-            if (status.ip_address) info.push(status.ip_address);
-            if (status.uptime)     info.push('up ' + status.uptime);
-            var sysEl = document.getElementById('system-info');
-            if (sysEl) sysEl.textContent = info.join(' \u00b7 ');
-            var devices = status.devices || [status];
-            var sorted = devices.slice().sort(function(a, b) {
-                var score = function(d) { return d.playing ? 2 : (d.bluetooth_connected ? 1 : 0); };
-                var gka = a.group_id || ('_' + a.player_name);
-                var gkb = b.group_id || ('_' + b.player_name);
-                var groupScore = function(gk) {
-                    var best = 0;
-                    devices.forEach(function(d) {
-                        if ((d.group_id || ('_' + d.player_name)) === gk) best = Math.max(best, score(d));
-                    });
-                    return best;
-                };
-                var gsa = groupScore(gka), gsb = groupScore(gkb);
-                if (gsa !== gsb) return gsb - gsa;
-                if (gka !== gkb) return gka < gkb ? -1 : 1;
-                return score(b) - score(a);
-            });
-            if (lastDevices.length !== sorted.length ||
-                !lastDevices.every(function(d, idx) { return d.player_name === sorted[idx].player_name; })) {
-                _groupSelected = {};
-                lastReanchorCount = {};
-                reanchorShownAt = {};
-                lastReanchorAt = {};
+
+    var _sseRetries = 0;
+    var _maxRetries = 5;
+
+    function connectSSE() {
+        var es = new EventSource(API_BASE + '/api/status/stream');
+
+        es.onopen = function() {
+            _sseRetries = 0;
+            // SSE connected — stop polling fallback
+            if (_statusInterval) { clearInterval(_statusInterval); _statusInterval = null; }
+        };
+
+        es.onmessage = function(e) {
+            try {
+                var status = JSON.parse(e.data);
+                var info = [];
+                if (status.hostname)   info.push(status.hostname);
+                if (status.ip_address) info.push(status.ip_address);
+                if (status.uptime)     info.push('up ' + status.uptime);
+                var sysEl = document.getElementById('system-info');
+                if (sysEl) sysEl.textContent = info.join(' \u00b7 ');
+                var devices = status.devices || [status];
+                var sorted = devices.slice().sort(function(a, b) {
+                    var score = function(d) { return d.playing ? 2 : (d.bluetooth_connected ? 1 : 0); };
+                    var gka = a.group_id || ('_' + a.player_name);
+                    var gkb = b.group_id || ('_' + b.player_name);
+                    var groupScore = function(gk) {
+                        var best = 0;
+                        devices.forEach(function(d) {
+                            if ((d.group_id || ('_' + d.player_name)) === gk) best = Math.max(best, score(d));
+                        });
+                        return best;
+                    };
+                    var gsa = groupScore(gka), gsb = groupScore(gkb);
+                    if (gsa !== gsb) return gsb - gsa;
+                    if (gka !== gkb) return gka < gkb ? -1 : 1;
+                    return score(b) - score(a);
+                });
+                if (lastDevices.length !== sorted.length ||
+                    !lastDevices.every(function(d, idx) { return d.player_name === sorted[idx].player_name; })) {
+                    _groupSelected = {};
+                    lastReanchorCount = {};
+                    reanchorShownAt = {};
+                    lastReanchorAt = {};
+                }
+                lastDevices = sorted;
+                var grid = document.getElementById('status-grid');
+                sorted.forEach(function(dev, i) {
+                    var card = document.getElementById('device-card-' + i);
+                    if (!card) { card = buildDeviceCard(i); grid.appendChild(card); }
+                    populateDeviceCard(i, dev);
+                });
+                Array.from(grid.querySelectorAll('.device-card'))
+                    .slice(sorted.length).forEach(function(c) { c.remove(); });
+                _updateGroupPanel();
+                updateHealthIndicator(sorted);
+            } catch (err) { console.error('SSE parse error:', err); }
+        };
+
+        es.onerror = function() {
+            es.close();
+            _sseRetries++;
+            if (_sseRetries <= _maxRetries) {
+                // Exponential backoff: 1s, 2s, 4s, 8s, 16s
+                var delay = Math.min(1000 * Math.pow(2, _sseRetries - 1), 16000);
+                console.warn('SSE error, reconnecting in ' + delay + 'ms (attempt ' + _sseRetries + '/' + _maxRetries + ')');
+                // Start polling while waiting to reconnect
+                if (!_statusInterval) _statusInterval = setInterval(updateStatus, 2000);
+                setTimeout(connectSSE, delay);
+            } else {
+                console.warn('SSE failed after ' + _maxRetries + ' retries, using polling');
+                if (!_statusInterval) _statusInterval = setInterval(updateStatus, 2000);
             }
-            lastDevices = sorted;
-            var grid = document.getElementById('status-grid');
-            sorted.forEach(function(dev, i) {
-                var card = document.getElementById('device-card-' + i);
-                if (!card) { card = buildDeviceCard(i); grid.appendChild(card); }
-                populateDeviceCard(i, dev);
-            });
-            Array.from(grid.querySelectorAll('.device-card'))
-                .slice(sorted.length).forEach(function(c) { c.remove(); });
-            _updateGroupPanel();
-            updateHealthIndicator(sorted);
-        } catch (err) { console.error('SSE parse error:', err); }
-    };
-    es.onerror = function() {
-        if (!_sseAlive) return;
-        console.warn('SSE disconnected, falling back to polling');
-        _sseAlive = false;
-        es.close();
-        _statusInterval = setInterval(updateStatus, 2000);
-    };
-    window.addEventListener('beforeunload', function() { es.close(); });
+        };
+
+        window.addEventListener('beforeunload', function() { es.close(); });
+    }
+
+    connectSSE();
 })();
 
 window.addEventListener('beforeunload', function() {

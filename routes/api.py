@@ -1004,6 +1004,12 @@ def api_status_stream():
 
         # Send current status immediately so the client doesn't have to wait
         # for the first change event (important through HA ingress proxy).
+        #
+        # Leading 2 KB padding flushes proxy buffers (Nginx, HA Ingress,
+        # Cloudflare) so they start streaming instead of buffering the
+        # entire response.
+        yield ": " + " " * 2048 + "\n\n"
+
         initial = _build_snapshot()
         if initial:
             yield f"data: {json.dumps(initial)}\n\n"
@@ -1030,7 +1036,11 @@ def api_status_stream():
     return Response(
         _generate(),
         mimetype="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
     )
 
 
