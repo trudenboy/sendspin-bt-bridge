@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.12.2] - 2026-03-07
+
+### Changed
+- **Lazy player registration** — sendspin daemon now starts only after Bluetooth actually connects, eliminating phantom players in Music Assistant and unnecessary double-restart at container startup
+- Devices without Bluetooth (no MAC configured) still start immediately on default audio
+
 ## [2.12.1] - 2026-03-07
 
 ### Removed
