@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.12.1] - 2026-03-07
+
+### Removed
+- MPRIS module (`mpris.py`): dead code — MA discovers players via sendspin WebSocket, not D-Bus MPRIS
+- D-Bus session bus startup from entrypoint (was only needed for MPRIS)
+- `aiosendspin-mpris` dependency from LXC install scripts
+
+### Changed
+- Documentation synchronized with v2.12.0 codebase
+- Auto-reconnect: instant D-Bus detection, 10s polling only as fallback
+
 ## [2.12.0] - 2026-03-07
 
 ### Added

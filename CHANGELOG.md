@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.12.1] - 2026-03-07
+
+### Removed
+- **MPRIS module** (`mpris.py`): deleted `MprisIdentityService`, `pause_all_via_mpris()`, `play_via_mpris()` — all were dead code with zero call sites. MA discovers players via sendspin WebSocket, not D-Bus MPRIS
+- D-Bus session bus startup from `entrypoint.sh` (was only needed for MPRIS)
+- `aiosendspin-mpris` dependency from LXC install scripts
+
+### Changed
+- Documentation fully synchronized with v2.12.0 codebase: rewrote `.github/copilot-instructions.md`, updated `CLAUDE.md`, `CONTRIBUTING.md`, README features (categorized into 6 groups), docs-site API/architecture/configuration/contributing pages
+- Auto-reconnect description clarified: instant disconnect detection via D-Bus, 10s polling only as fallback
+
 ## [2.12.0] - 2026-03-07
 
 ### Added
