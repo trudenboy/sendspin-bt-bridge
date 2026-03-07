@@ -483,6 +483,12 @@ class SendspinClient:
         with self._status_lock:
             self.status["server_connected"] = False
             self.status["connected"] = False
+            self.status["playing"] = False
+            self.status["audio_streaming"] = False
+            self.status["current_track"] = None
+            self.status["current_artist"] = None
+            self.status["audio_format"] = None
+            self.status["reanchoring"] = False
             self.status["group_name"] = None
             self.status["group_id"] = None
 
