@@ -242,6 +242,9 @@ class BluetoothManager:
                 timeout=10,
             )
             return result.returncode == 0, result.stdout
+        except subprocess.TimeoutExpired:
+            logger.warning("Bluetoothctl timed out after 10s for commands: %s", commands)
+            return False, "timeout"
         except Exception as e:
             logger.error("Bluetoothctl error: %s", e)
             return False, str(e)
@@ -350,12 +353,14 @@ class BluetoothManager:
             return ok
         except Exception as e:
             logger.error("Pair error: %s", e)
-            if proc is not None:
+            return False
+        finally:
+            if proc is not None and proc.poll() is None:
                 try:
                     proc.kill()
+                    proc.wait(timeout=3)
                 except Exception as exc:
-                    logger.debug("pair_device proc.kill failed: %s", exc)
-            return False
+                    logger.debug("pair_device proc cleanup failed: %s", exc)
 
     def trust_device(self) -> bool:
         """Trust the Bluetooth device"""
