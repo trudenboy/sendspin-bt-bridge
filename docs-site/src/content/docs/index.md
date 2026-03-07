@@ -20,6 +20,8 @@ hero:
 ---
 
 
+![Sendspin Bluetooth Bridge infographic — features, architecture and deployment options](/sendspin-bt-bridge/screenshots/sbb_infographic_en.png)
+
 ## What is it?
 
 You probably already have Bluetooth speakers — a portable speaker in the kitchen, wireless headphones, a soundbar in the bedroom. **Sendspin Bluetooth Bridge** lets you use all of them in [Music Assistant](https://www.music-assistant.io/) without buying any new hardware.
