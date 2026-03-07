@@ -77,6 +77,21 @@ Two bridge instances connected to one MA server — an HA addon on HAOS (4 speak
 
 ---
 
+## Tested hardware
+
+| Platform | Host | BT adapter | Speakers |
+|----------|------|------------|----------|
+| **HA Addon** | Proxmox VM (HAOS), x86_64 | CSR8510 A10 USB | IKEA ENEBY20, Yandex Station mini, Lenco LS-500 |
+| **Proxmox LXC** | HP ProLiant MicroServer Gen8, Ubuntu 24.04 | CSR8510 A10 USB | IKEA ENEBY Portable |
+| **OpenWrt LXC** | Turris Omnia (ARMv7), Ubuntu 24.04 | CSR8510 A10 USB | AfterShokz |
+
+Software: Python 3.12, BlueZ 5.72, PulseAudio 16.1, aiosendspin 4.3.2.
+All three instances run v2.12.2 against a single Music Assistant server with multiroom sync.
+
+📖 [Full test stand details →](https://trudenboy.github.io/sendspin-bt-bridge/test-stand/)
+
+---
+
 ## Deployment Options
 
 | | Home Assistant Addon | Docker Compose | Proxmox LXC | OpenWrt LXC |

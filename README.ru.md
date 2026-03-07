@@ -71,6 +71,21 @@ Bluetooth-мост для [Music Assistant](https://www.music-assistant.io/) —
 
 ---
 
+## Протестированное оборудование
+
+| Платформа | Хост | BT адаптер | Колонки |
+|-----------|------|------------|---------|
+| **HA Addon** | Proxmox VM (HAOS), x86_64 | CSR8510 A10 USB | IKEA ENEBY20, Yandex Station mini, Lenco LS-500 |
+| **Proxmox LXC** | HP ProLiant MicroServer Gen8, Ubuntu 24.04 | CSR8510 A10 USB | IKEA ENEBY Portable |
+| **OpenWrt LXC** | Turris Omnia (ARMv7), Ubuntu 24.04 | CSR8510 A10 USB | AfterShokz |
+
+ПО: Python 3.12, BlueZ 5.72, PulseAudio 16.1, aiosendspin 4.3.2.
+Все три экземпляра работают на v2.12.2 с одним сервером Music Assistant и мультирум-синхронизацией.
+
+📖 [Подробное описание тестового стенда →](https://trudenboy.github.io/sendspin-bt-bridge/ru/test-stand/)
+
+---
+
 ## Варианты развёртывания
 
 | | Аддон Home Assistant | Docker Compose | Proxmox LXC | OpenWrt LXC |
