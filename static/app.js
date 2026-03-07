@@ -425,13 +425,13 @@ function populateDeviceCard(i, dev) {
     var playTxt   = document.getElementById('dplay-' + i);
     var fmtEl = document.getElementById('daudiofmt-' + i);
 
-    // Color indicator: red=no sink, primary blue=playing+streaming,
+    // Color indicator: red=no sink (BT not ready), green=playing+streaming,
     // red=playing but no audio (stale), yellow=stopped
     if (!dev.has_sink && dev.bluetooth_mac) {
         if (playInd) playInd.className = 'status-indicator inactive';
         if (playTxt) playTxt.textContent = 'No Sink';
     } else if (dev.playing && dev.audio_streaming) {
-        if (playInd) playInd.className = 'status-indicator streaming';
+        if (playInd) playInd.className = 'status-indicator active';
         if (playTxt) playTxt.textContent = '\u25b6 Playing';
     } else if (dev.playing && !dev.audio_streaming) {
         if (playInd) playInd.className = 'status-indicator inactive';

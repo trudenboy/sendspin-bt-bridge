@@ -207,7 +207,6 @@
             border-radius: 50%; margin-right: 6px; flex-shrink: 0;
         }
         .status-indicator.active   { background: var(--success-color); box-shadow: 0 0 8px var(--success-color); }
-        .status-indicator.streaming { background: var(--primary-color); box-shadow: 0 0 8px var(--primary-color); }
         .status-indicator.inactive { background: var(--error-color); }
         .status-indicator.warning  { background: #f59e0b; }
         .status-indicator.reconnecting {
