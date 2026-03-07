@@ -553,11 +553,15 @@ class SendspinClient:
         self.running = True
         self._start_sendspin_lock = asyncio.Lock()
 
-        # Start Sendspin player first (don't block on Bluetooth)
-        if self.bt_management_enabled:
+        # Start Sendspin player: immediately if no BT device, deferred if BT configured
+        if not self.bt_management_enabled:
+            logger.info("[%s] BT management disabled — skipping sendspin startup", self.player_name)
+        elif not self.bt_manager:
+            # No BT device configured — start on default audio immediately
             await self.start_sendspin()
         else:
-            logger.info("[%s] BT management disabled — skipping sendspin startup", self.player_name)
+            # BT device configured — defer daemon start until BT actually connects
+            logger.info("[%s] Waiting for BT connection before starting player", self.player_name)
 
         # Start background tasks
         tasks = [asyncio.create_task(self._status_monitor_loop())]
@@ -597,7 +601,7 @@ class SendspinClient:
                     # so it is guaranteed to be set before run_in_executor returns.
                     if bt_now and self.bluetooth_sink_name:
                         logger.info(
-                            "[%s] BT connected with sink %s — restarting daemon on correct audio device",
+                            "[%s] BT connected with sink %s — starting player",
                             self.player_name,
                             self.bluetooth_sink_name,
                         )
