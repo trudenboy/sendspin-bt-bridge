@@ -38,6 +38,7 @@ export default defineConfig({
         { label: 'API Reference', slug: 'api' },
         { label: 'Architecture', slug: 'architecture' },
         { label: 'Troubleshooting', translations: { ru: 'Устранение неполадок' }, slug: 'troubleshooting' },
+        { label: 'Test Stand', translations: { ru: 'Тестовый стенд' }, slug: 'test-stand' },
         { label: 'Contributing', translations: { ru: 'Разработка' }, slug: 'contributing' },
       ],
     }),
