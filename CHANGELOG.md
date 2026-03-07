@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.12.5] - 2026-03-08
+
+### Fixed
+- **HA Ingress cache bypass** — Static assets (JS/CSS) now use path-based versioning (`/static/v2.12.5/app.js`) instead of query-string (`?v=`). HA Ingress proxy strips query parameters, causing stale cached assets to be served; embedding the version in the URL path guarantees a fresh fetch on every upgrade
+
 ## [2.12.4] - 2026-03-08
 
 ### Fixed

@@ -11,7 +11,7 @@ routes/api.py and routes/views.py; shared helpers live in config.py and state.py
 import logging
 import os
 
-from flask import Flask, jsonify, redirect, request, session, url_for
+from flask import Flask, jsonify, redirect, request, send_from_directory, session, url_for
 from waitress import serve  # type: ignore[import-untyped]
 
 from config import VERSION, ensure_secret_key, load_config
@@ -88,6 +88,19 @@ app.register_blueprint(auth_bp)
 def inject_version():
     """Make VERSION available in all templates for cache-busting."""
     return {"VERSION": VERSION}
+
+
+@app.route("/static/v<version>/<path:filename>")
+def vstatic(version, filename):
+    """Serve static files with version in the path for cache-busting.
+
+    HA Ingress proxy strips query parameters, so ``?v=`` cache busting does
+    not work.  Embedding the version in the *path* guarantees a fresh fetch
+    on every upgrade.
+    """
+    resp = send_from_directory(app.static_folder, filename)
+    resp.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    return resp
 
 
 @app.after_request
