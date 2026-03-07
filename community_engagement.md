@@ -31,15 +31,13 @@
 
 ---
 
-## Шаг 3 — Community Extensions List
+## Шаг 3 — Community Extensions List ✅
 
-- Сделай форк репозитория `music-assistant/music-assistant.io`
-- Добавь запись на странице community-extensions:
-  - Название: **Sendspin Bluetooth Bridge**
-  - Описание: Bridge Music Assistant Sendspin protocol to Bluetooth speakers
-  - Ссылка: https://github.com/trudenboy/sendspin-bt-bridge
-  - Категория: **Player**
-- Открой Pull Request
+- ✅ PR открыт: https://github.com/music-assistant/music-assistant.io/pull/527
+- Добавлено в два места:
+  1. **Sendspin player provider page** → таблица "Supported Clients"
+  2. **Community Extensions** → секция с описанием и скриншотом
+- Ветка: `add-sendspin-bt-bridge` → `beta`
 
 ---
 
