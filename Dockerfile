@@ -55,7 +55,7 @@ COPY entrypoint.sh ./
 RUN chmod +x entrypoint.sh
 
 # Copy application files
-COPY sendspin_client.py web_interface.py config.py mpris.py bluetooth_manager.py state.py ./
+COPY sendspin_client.py web_interface.py config.py bluetooth_manager.py state.py ./
 COPY routes/ routes/
 COPY services/ services/
 COPY scripts/ scripts/
