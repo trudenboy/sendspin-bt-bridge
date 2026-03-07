@@ -34,6 +34,12 @@ Run multiple bridge instances pointing at the same Music Assistant server to cov
 
 [![Deployment diagram: multiroom floorplan with zones and adapters](https://trudenboy.github.io/sendspin-bt-bridge/diagrams/multiroom-diagram.png)](https://trudenboy.github.io/sendspin-bt-bridge/diagrams/multiroom-diagram/)
 
+### Live topology example
+
+Two bridge instances connected to one MA server — an HA addon on HAOS (4 speakers, 2 BT adapters) and a Docker container on a Proxmox LXC (2 speakers, 1 adapter). All active speakers are grouped into a single sync group for synchronized playback.
+
+![Multi-bridge live topology](multiroom-live.png)
+
 ---
 
 ## Deployment Options
