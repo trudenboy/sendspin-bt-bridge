@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.12.0] - 2026-03-07
+
+### Added
+- **Zombie playback watchdog**: auto-restarts subprocess after 15s of `playing=True` with no audio data (`streaming=False`), up to 3 retries
+- **BT churn isolation** (opt-in): auto-disables BT management for devices that reconnect too often within a sliding window; configurable via `BT_CHURN_THRESHOLD` (0=disabled, default) and `BT_CHURN_WINDOW` (default 300s)
+- **Stale equalizer indicator**: frozen red equalizer bars when MA reports playing but no audio is streaming; playback text shows "▶ No Audio"
+
+### Fixed
+- **Playback state cleanup**: clear playing/streaming status when subprocess is stopped, preventing stale indicators after manual stop
+
 ## [2.11.0] - 2026-03-07
 
 ### Added
