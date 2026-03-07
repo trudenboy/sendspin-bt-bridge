@@ -231,6 +231,17 @@
             height: 14px;
         }
         .eq-bars.active { display: flex; }
+        .eq-bars.stale { display: flex; }
+        .eq-bars.stale .eq-bar {
+            background: #e53935;
+            animation: none;
+            height: 8px;
+            opacity: 0.7;
+        }
+        .eq-bars.stale .eq-bar:nth-child(1) { height: 5px; }
+        .eq-bars.stale .eq-bar:nth-child(2) { height: 10px; }
+        .eq-bars.stale .eq-bar:nth-child(3) { height: 7px; }
+        .eq-bars.stale .eq-bar:nth-child(4) { height: 12px; }
         .eq-bar {
             width: 3px;
             border-radius: 1px;

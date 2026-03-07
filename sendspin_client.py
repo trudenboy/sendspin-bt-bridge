@@ -159,10 +159,22 @@ class SendspinClient:
         self._monitor_task: asyncio.Task | None = None
         self._restart_delay: float = 1.0  # exponential backoff for unexpected daemon restarts
         self._start_sendspin_lock: asyncio.Lock | None = None  # set in run(), guards concurrent starts
+        self._playing_since: float | None = None  # monotonic time when playing became True
+        self._zombie_restart_count: int = 0  # consecutive zombie restarts (reset on real stream)
 
     def _update_status(self, updates: dict) -> None:
         """Thread-safe update of self.status; notifies SSE listeners."""
         with self._status_lock:
+            # Track zombie-playback timing: record when playing goes True
+            if "playing" in updates:
+                if updates["playing"] and not self.status.get("playing"):
+                    self._playing_since = time.monotonic()
+                elif not updates["playing"]:
+                    self._playing_since = None
+                    self._zombie_restart_count = 0
+            # Reset zombie tracking when real audio arrives
+            if updates.get("audio_streaming"):
+                self._zombie_restart_count = 0
             self.status.update(updates)
         _state.notify_status_changed()
 
@@ -223,10 +235,55 @@ class SendspinClient:
                         # Daemon alive — reset backoff
                         self._restart_delay = 1.0
 
+                # Zombie playback watchdog: playing=True but no audio data for too long
+                self._check_zombie_playback()
+
                 await asyncio.sleep(5)
             except Exception as e:
                 logger.error("Error updating status: %s", e)
                 await asyncio.sleep(5)
+
+    _ZOMBIE_TIMEOUT_S = 15  # seconds of playing=True without audio_streaming before restart
+    _MAX_ZOMBIE_RESTARTS = 3  # stop retrying after this many consecutive zombie restarts
+
+    def _check_zombie_playback(self) -> None:
+        """Detect zombie state (playing=True, streaming=False) and schedule restart."""
+        with self._status_lock:
+            is_playing = self.status.get("playing")
+            is_streaming = self.status.get("audio_streaming")
+            is_alive = self._daemon_proc is not None and (
+                self._daemon_proc.returncode is None if self._daemon_proc else False
+            )
+
+        if not is_playing or is_streaming or not is_alive:
+            return
+        if self._playing_since is None:
+            return
+        if self._zombie_restart_count >= self._MAX_ZOMBIE_RESTARTS:
+            return  # already gave up
+
+        elapsed = time.monotonic() - self._playing_since
+        if elapsed < self._ZOMBIE_TIMEOUT_S:
+            return
+
+        self._zombie_restart_count += 1
+        self._playing_since = None  # reset so we don't fire again immediately
+        logger.warning(
+            "[%s] Zombie playback detected: playing=True but no audio for %.0fs "
+            "(restart %d/%d) — restarting subprocess",
+            self.player_name,
+            elapsed,
+            self._zombie_restart_count,
+            self._MAX_ZOMBIE_RESTARTS,
+        )
+        # Schedule restart on the event loop (we're called from an async context)
+        asyncio.ensure_future(self._zombie_restart())
+
+    async def _zombie_restart(self) -> None:
+        """Restart subprocess to recover from zombie playback."""
+        await self.stop_sendspin()
+        await asyncio.sleep(1)
+        await self.start_sendspin()
 
     async def start_sendspin(self) -> None:
         """Start the sendspin daemon as an isolated subprocess with PULSE_SINK routing."""

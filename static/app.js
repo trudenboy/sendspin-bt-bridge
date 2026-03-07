@@ -425,13 +425,17 @@ function populateDeviceCard(i, dev) {
     var playTxt   = document.getElementById('dplay-' + i);
     var fmtEl = document.getElementById('daudiofmt-' + i);
 
-    // Color indicator: red=no sink (BT not ready), green=playing, yellow=stopped
+    // Color indicator: red=no sink (BT not ready), green=playing+streaming,
+    // orange=playing but no audio data (stale), yellow=stopped
     if (!dev.has_sink && dev.bluetooth_mac) {
         if (playInd) playInd.className = 'status-indicator inactive';
         if (playTxt) playTxt.textContent = 'No Sink';
-    } else if (dev.playing) {
+    } else if (dev.playing && dev.audio_streaming) {
         if (playInd) playInd.className = 'status-indicator active';
         if (playTxt) playTxt.textContent = '\u25b6 Playing';
+    } else if (dev.playing && !dev.audio_streaming) {
+        if (playInd) playInd.className = 'status-indicator inactive';
+        if (playTxt) playTxt.textContent = '\u25b6 No Audio';
     } else {
         if (playInd) playInd.className = 'status-indicator warning';
         if (playTxt) playTxt.textContent = '\u23f8 Stopped';
@@ -630,9 +634,14 @@ function populateDeviceCard(i, dev) {
         }
     }
 
-    // Equalizer — show only when audio data is actually streaming
+    // Equalizer — animated green when streaming, frozen red when playing without audio
     var eqEl = document.getElementById('deq-' + i);
-    if (eqEl) eqEl.classList.toggle('active', !!dev.playing);
+    if (eqEl) {
+        var isStreaming = !!dev.playing && !!dev.audio_streaming;
+        var isStale = !!dev.playing && !dev.audio_streaming;
+        eqEl.classList.toggle('active', isStreaming);
+        eqEl.classList.toggle('stale', isStale);
+    }
 
     // Mute button — attach handler once, update icon on every poll
     var muteBtn = document.getElementById('dmute-' + i);

@@ -128,6 +128,9 @@ class BluetoothManager:
         self._adapter_select = self._resolve_adapter_select(adapter) if adapter else ""
         self.management_enabled: bool = True  # False = released; monitor loop skips reconnect
         self._connect_lock = threading.Lock()  # prevents concurrent connect_device() calls
+        self._reconnect_timestamps: list[float] = []  # monotonic timestamps of recent reconnects
+        self._CHURN_WINDOW = 300.0  # seconds (5 min)
+        self._CHURN_THRESHOLD = 4  # reconnects within window to trigger isolation
 
         # Resolve effective adapter MAC for display (handles empty/default adapter case)
         if self._adapter_select:
@@ -519,6 +522,50 @@ class BluetoothManager:
         """
         return min(self.check_interval * (2 ** max(0, attempt - 3)), 300.0)
 
+    def _record_reconnect(self) -> None:
+        """Record a BT reconnect event for churn detection."""
+        now = time.monotonic()
+        self._reconnect_timestamps.append(now)
+        # Prune old entries
+        cutoff = now - self._CHURN_WINDOW
+        self._reconnect_timestamps = [t for t in self._reconnect_timestamps if t > cutoff]
+
+    def _check_reconnect_churn(self) -> bool:
+        """Auto-disable device if too many reconnects in the time window.
+
+        Returns True if management was disabled.
+        """
+        now = time.monotonic()
+        cutoff = now - self._CHURN_WINDOW
+        self._reconnect_timestamps = [t for t in self._reconnect_timestamps if t > cutoff]
+        if len(self._reconnect_timestamps) < self._CHURN_THRESHOLD:
+            return False
+
+        logger.warning(
+            "[%s] BT churn detected: %d reconnects in %.0fs — auto-disabling to protect group",
+            self.device_name,
+            len(self._reconnect_timestamps),
+            self._CHURN_WINDOW,
+        )
+        self.management_enabled = False
+        if self.client:
+            self.client.bt_management_enabled = False
+            self.client._update_status(
+                {
+                    "bt_management_enabled": False,
+                    "reconnecting": False,
+                    "last_error": f"Auto-disabled: {len(self._reconnect_timestamps)} reconnects in {int(self._CHURN_WINDOW)}s",
+                    "last_error_at": datetime.now().isoformat(),
+                }
+            )
+        try:
+            from services.bluetooth import persist_device_enabled
+
+            persist_device_enabled(self.device_name, False)
+        except Exception as _e:
+            logger.debug("persist_device_enabled failed: %s", _e)
+        return True
+
     def _handle_reconnect_failure(self, attempt: int) -> bool:
         """Disable BT management after too many consecutive failed reconnects.
 
@@ -526,6 +573,9 @@ class BluetoothManager:
         Side-effects: sets self.management_enabled=False, updates client status,
         calls persist_device_enabled().
         """
+        # Also check time-windowed churn (many successful-then-failed cycles)
+        if self._check_reconnect_churn():
+            return True
         if self.max_reconnect_fails <= 0 or attempt < self.max_reconnect_fails:
             return False
         logger.warning(
@@ -623,6 +673,7 @@ class BluetoothManager:
                         success = await loop.run_in_executor(_bt_executor, self.connect_device)
                         if success and self.client:
                             reconnect_attempt = 0
+                            self._record_reconnect()
                             self.client._update_status({"reconnecting": False, "reconnect_attempt": 0})
                             logger.info("BT reconnected for %s, starting sendspin...", self.device_name)
                             await self.client.start_sendspin()
@@ -820,6 +871,7 @@ class BluetoothManager:
 
                 if success:
                     reconnect_attempt = 0
+                    self._record_reconnect()
                     self.connected = True
                     if self.client:
                         self.client._update_status(
@@ -852,6 +904,7 @@ class BluetoothManager:
                         logger.info("[%s] External reconnect detected, configuring audio...", self.device_name)
                         await loop.run_in_executor(_bt_executor, self.configure_bluetooth_audio)
                         reconnect_attempt = 0
+                        self._record_reconnect()
                         if self.client:
                             self.client._update_status(
                                 {
