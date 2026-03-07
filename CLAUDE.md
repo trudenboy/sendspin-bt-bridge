@@ -23,11 +23,11 @@ docker logs -f sendspin-client
 docker exec -it sendspin-client bluetoothctl
 ```
 
-There is no test suite. Manual testing is via `docker logs` and the web UI at `http://localhost:8080`.
+Unit tests: `pytest` (see `tests/`). Manual testing via `docker logs` and the web UI at `http://localhost:8080`.
 
 CI/CD builds multi-platform Docker images (`linux/amd64`, `linux/arm64`) to `ghcr.io/trudenboy/sendspin-bt-bridge` on `v*` tag push. Automatically syncs `ha-addon/config.yaml` version from `VERSION` in `config.py` before the build.
 
-## Architecture (v2.7.4)
+## Architecture (v2.12.0)
 
 **Subprocess isolation**: each Bluetooth speaker runs as a dedicated Python subprocess (`services/daemon_process.py`) with `PULSE_SINK=<bt_sink_name>` in env. This gives every speaker its own PulseAudio context → correct audio routing from the first sample, no `move-sink-input` needed.
 
@@ -58,7 +58,7 @@ IPC: subprocess→parent via JSON lines on stdout; parent→subprocess via JSON 
 - `CONFIG_FILE: Path` — single source of truth for config path (replaces old `_CONFIG_PATH` string)
 - `_config_lock` (threading.Lock shared across modules)
 - `load_config()`, `_player_id_from_mac()`, `save_device_volume()` (public; `_save_device_volume` alias retained for compatibility)
-- `VERSION = "2.6.2"`
+- `VERSION = "2.12.0"`, `BUILD_DATE = "2026-03-05"`
 
 **`mpris.py`** — MPRIS D-Bus integration:
 - `MprisIdentityService` — registers MediaPlayer2 D-Bus service so MA discovers the bridge by player name
@@ -70,15 +70,17 @@ IPC: subprocess→parent via JSON lines on stdout; parent→subprocess via JSON 
 - `pulse.py` — PulseAudio async helpers: `afind_sink_for_mac()`, `amove_pid_sink_inputs()` (corrects streams after PA module-rescue-streams moves them on BT reconnect), `_PULSECTL_AVAILABLE` flag
 
 **`routes/` module (Flask blueprints):**
-- `api.py` — all `/api/*` endpoints; includes `GET /api/status/stream` (SSE), `POST /api/bt/scan` → `{job_id}`, `GET /api/bt/scan/result/<id>` (async scan), `_schedule_volume_persist()` (1 s debounce before writing config.json)
+- `api.py` — 28 `/api/*` endpoints; includes SSE (`/api/status/stream`), async BT scan, MA groups/nowplaying/queue control, hybrid volume routing (MA API or direct pactl via `VOLUME_VIA_MA`), `_schedule_volume_persist()` (1 s debounce)
 - `views.py` — HTML page renders
-- `auth.py` — optional web UI password protection
+- `auth.py` — optional web UI password protection (PBKDF2-SHA256); HA login_flow with 2FA/TOTP support; brute-force lockout (5 attempts / 5 min)
 
 **`state.py`** — shared runtime state:
 - List of `SendspinClient` instances + global lock
 - `notify_status_changed()` — SSE signaling (increments version, wakes threading.Condition)
 - `_adapter_cache_lock` — double-checked locking in `get_adapter_name()`
 - `create_scan_job()` / `get_scan_job()` / `finish_scan_job()` — storage for async BT-scan jobs (TTL 2 min)
+- `set_ma_groups()` / `set_ma_now_playing_for_group()` — MA sync group and now-playing cache
+- Batched SSE notifications (100 ms debounce window) to prevent event storms
 
 **`scripts/translate_ha_config.py`** — called from `entrypoint.sh` in HA addon mode:
 - Converts `/data/options.json` → `/data/config.json` with full field typing

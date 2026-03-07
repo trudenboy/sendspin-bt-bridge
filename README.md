@@ -19,6 +19,7 @@ A Bluetooth bridge for [Music Assistant](https://www.music-assistant.io/) — co
 - **Per-device latency compensation**: `static_delay_ms` field to compensate A2DP buffer latency
 - **Diagnostics endpoint**: `/api/diagnostics` returns structured health info — adapters, sinks, D-Bus status, per-device state
 - **Multiple bridge instances**: Run several bridge instances (containers/LXC/addons) against the same MA server — each registers its own set of players independently
+- **Web UI authentication** — optional password protection and HA 2FA login
 
 <img width="1400" alt="Web dashboard — full page, dark mode, all sections expanded" src="https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/docs-site/public/screenshots/screenshot-dashboard-full.png" />
 <br><br>
@@ -316,6 +317,8 @@ The `adapter` field is optional — omit it if you only have one Bluetooth adapt
 | `WEB_PORT` | `8080` | Web interface port |
 | `MA_API_URL` | `` | Music Assistant REST API base URL (e.g. `http://192.168.1.10:8123`) — enables now-playing metadata and transport controls |
 | `MA_API_TOKEN` | `` | HA long-lived access token for the MA API |
+| `VOLUME_VIA_MA` | `true` | Route volume/mute through MA API; `false` = direct PulseAudio |
+| `LOG_LEVEL` | `INFO` | Log verbosity (`INFO` or `DEBUG`); changeable at runtime via API |
 
 Environment variables are overridden by values in `/config/config.json` if the file exists.
 

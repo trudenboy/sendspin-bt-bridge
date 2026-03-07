@@ -801,6 +801,31 @@ graph TD
 
 ---
 
+## Reliability Subsystems
+
+### Zombie Playback Watchdog
+
+The main process runs a periodic status monitor (`_status_monitor_loop`) that detects **zombie playback** — situations where `playing=True` but `streaming=False` for more than 15 seconds. This catches broken audio pipelines where the sendspin connection is alive but no audio data flows.
+
+```mermaid
+stateDiagram-v2
+    [*] --> Healthy: playing + streaming
+    Healthy --> Suspicious: streaming stops
+    Suspicious --> Healthy: streaming resumes
+    Suspicious --> Zombie: 15s timeout
+    Zombie --> Restarting: kill subprocess
+    Restarting --> Healthy: new subprocess
+    Restarting --> Disabled: 3 retries exhausted
+```
+
+On detection, the subprocess is killed and restarted, up to 3 retries. After 3 failures, the watchdog stops retrying for that device.
+
+### BT Churn Isolation
+
+Optional feature (`BT_CHURN_THRESHOLD`, default 0 = disabled) that tracks reconnection frequency per device within a sliding window (`BT_CHURN_WINDOW`, default 300 s). If a device reconnects more than the threshold within the window, BT management is automatically disabled for that device — preventing a flaky speaker from consuming adapter time and destabilizing other speakers.
+
+---
+
 ## Dependency Graph
 
 ```mermaid

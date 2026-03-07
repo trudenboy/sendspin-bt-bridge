@@ -31,6 +31,7 @@ Go to **Settings → Add-ons → Sendspin Bluetooth Bridge → Configuration**.
 | **ma_api_url** | Music Assistant REST API base URL (e.g. `http://192.168.1.10:8123`). Required for now-playing metadata, transport controls, and group play. |
 | **ma_api_token** | Home Assistant long-lived access token for the MA API. Generate in HA: **Profile → Long-lived access tokens**. |
 | **volume_via_ma** | Toggle — route volume/mute through MA API (keeps MA UI in sync). Disable to use direct PulseAudio only. Default: on. |
+| **log_level** | Log verbosity (`info` or `debug`). Can also be changed at runtime via the web UI without a restart. |
 
 ### Bluetooth Devices and Adapters
 
@@ -76,6 +77,9 @@ After editing options, click **Save** at the bottom of the Options section. The 
 | `MA_API_URL` | string | `""` | Music Assistant REST API base URL (e.g. `http://192.168.1.10:8123`). Required for now-playing metadata, transport controls, and group play via MA |
 | `MA_API_TOKEN` | string | `""` | Home Assistant long-lived access token for the MA API. Generate in HA: **Profile → Long-lived access tokens** |
 | `VOLUME_VIA_MA` | boolean | `true` | Route volume/mute changes through the MA API when MA is connected. Keeps the MA UI in sync with the bridge. Set to `false` to always use direct PulseAudio (`pactl`) |
+| `LOG_LEVEL` | string | `"INFO"` | Log verbosity (`INFO` or `DEBUG`). Also changeable at runtime via `POST /api/settings/log_level` without a restart |
+| `BT_CHURN_THRESHOLD` | integer | `0` | Number of reconnections within the churn window that trigger auto-disable of BT management. `0` = disabled |
+| `BT_CHURN_WINDOW` | integer | `300` | Sliding window in seconds for churn counting |
 
 ## Bluetooth Devices
 

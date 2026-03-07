@@ -156,6 +156,12 @@ If no targeting field is provided (`mac`, `player_name`, `player_names`, `group_
 { "mac": "AA:BB:CC:DD:EE:FF", "volume": 50, "force_local": true }
 ```
 
+### `POST /api/pause`
+
+Pause or resume a single player. Sends the command via IPC to the target daemon subprocess which forwards it over the existing WebSocket connection to MA.
+
+**Body:** `{ "player_name": "Living Room Speaker", "action": "pause" }` — action is `"pause"` or `"play"`
+
 ### `POST /api/mute`
 
 Toggle mute on a device.

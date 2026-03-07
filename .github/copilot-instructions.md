@@ -14,6 +14,9 @@ docker compose up --build
 pip install -r requirements.txt
 python sendspin_client.py
 
+# Run tests
+pytest
+
 # Logs
 docker logs -f sendspin-client
 
@@ -21,36 +24,47 @@ docker logs -f sendspin-client
 docker exec -it sendspin-client bluetoothctl
 ```
 
-There is no test suite. Manual verification uses `docker logs` and the web UI at `http://localhost:8080`. See `CONTRIBUTING.md` for the manual test checklist.
+Tests: `tests/test_config.py` and `tests/test_volume_routing.py` (pytest). Manual verification uses `docker logs` and the web UI at `http://localhost:8080`. See `CONTRIBUTING.md` for the manual test checklist.
 
-## Architecture
+## Architecture (v2.12.0)
 
-**Two Python files + a shell entrypoint:**
+**Multi-process Python bridge.** Main process handles BT management, Flask/Waitress web API, and MA integration. Each BT speaker runs as an isolated subprocess (`services/daemon_process.py`) with `PULSE_SINK=<bt_sink_name>` for correct audio routing.
 
-- **`sendspin_client.py`** — Core async application. `BluetoothManager` handles pairing/connection/reconnect via `bluetoothctl` subprocess. `SendspinClient` wraps the `sendspin` CLI (run as subprocess with `--headless`) and tracks playback state by parsing its stdout. `main()` reads config, spawns one `BluetoothManager` + `SendspinClient` pair per configured device, starts the web server in a daemon thread, then drives everything through an `asyncio` event loop.
+**Key modules:**
 
-- **`web_interface.py`** — Flask app served by Waitress on port 8080. All HTML/CSS/JS is inline via `render_template_string` — there are no template files or static assets. Shares state with `sendspin_client.py` via the `_clients` list injected at startup.
+- **`sendspin_client.py`** — Core orchestration. `SendspinClient` manages per-device subprocess lifecycle, `DeviceStatus` dataclass for typed status. `main()` loads config, spawns `BluetoothManager` + `SendspinClient` per device, starts Waitress in daemon thread, runs asyncio loop.
+- **`bluetooth_manager.py`** — `BluetoothManager`: pairing/connection/reconnect via `bluetoothctl`, D-Bus disconnect detection, exponential backoff, churn isolation.
+- **`config.py`** — `VERSION`, `load_config()`, `save_device_volume()`, `hash_password()`, thread-safe config persistence.
+- **`mpris.py`** — `MprisIdentityService` for MA discovery via D-Bus. Gracefully degrades without `dbus-python`.
+- **`state.py`** — Shared runtime state, SSE signaling with batched notifications (100ms), async BT-scan jobs, MA groups cache.
+- **`web_interface.py`** — Flask app with Waitress, HA Ingress middleware, auth enforcement, blueprint registration.
 
-- **`entrypoint.sh`** — Runs before the Python app. In HA addon mode it translates `/data/options.json` → `/data/config.json`. Sets up D-Bus, detects PipeWire vs PulseAudio socket, and exports `CONFIG_DIR=/data` when running as an HA addon.
+- **`services/bridge_daemon.py`** — `BridgeDaemon(SendspinDaemon)` inside each subprocess.
+- **`services/daemon_process.py`** — Subprocess entry point. JSON-line IPC (stdin/stdout).
+- **`services/bluetooth.py`** — `bt_remove_device()`, `persist_device_enabled()`, `is_audio_device()`.
+- **`services/pulse.py`** — PulseAudio helpers: `afind_sink_for_mac()`, `amove_pid_sink_inputs()`. Dual-mode: pulsectl or pactl fallback.
 
-**Multi-device:** `BLUETOOTH_DEVICES` in config is a list; each entry spawns its own `BluetoothManager` + `SendspinClient` pair running concurrently.
+- **`routes/api.py`** — All `/api/*` endpoints (28 total), SSE stream, async BT scan.
+- **`routes/views.py`** — HTML page renders via `templates/index.html`.
+- **`routes/auth.py`** — Password auth (PBKDF2-SHA256), HA login_flow with 2FA, brute-force protection.
+
+- **`templates/`** — `index.html`, `login.html`.
+- **`static/`** — `app.js`, `style.css`, `favicon.png`, `favicon.svg`.
+- **`scripts/translate_ha_config.py`** — Converts HA `/data/options.json` → `/data/config.json`.
+- **`entrypoint.sh`** — D-Bus setup, audio detection, HA addon config translation.
 
 ## Key Conventions
 
-**Version management:** `CLIENT_VERSION` in `sendspin_client.py` and `VERSION` in `web_interface.py` must always match. CI auto-syncs `ha-addon/config.yaml`'s `version` field from `CLIENT_VERSION` on tag push — never edit `ha-addon/config.yaml` version manually.
+**Version management:** Single `VERSION` in `config.py`. CI auto-syncs `ha-addon/config.yaml` version on tag push — never edit it manually.
 
-**Config file:** `/config/config.json` (or `/data/config.json` in HA addon mode). `CONFIG_DIR` env var controls which path is used. Written as raw JSON with `indent=2`; no schema library. Changes require a container restart.
+**Config file:** `/config/config.json` (or `/data/config.json` in HA addon). `CONFIG_DIR` env var controls path. Raw JSON with `indent=2`.
 
-**Blocking calls never touch the event loop directly:** All `bluetoothctl`/`pactl` subprocesses in the async `monitor_and_reconnect` loop are dispatched via `loop.run_in_executor(None, ...)`.
+**Thread safety:** `_status_lock` + `_update_status()` for status mutation. `_config_lock` for config file access. All `bluetoothctl`/`pactl` subprocesses dispatched via `run_in_executor()`.
 
-**bluetoothctl interaction:** Always goes through `BluetoothManager._run_bluetoothctl(commands)`, which prepends `select <adapter_mac>` when an adapter is configured. In LXC containers, selecting by MAC (not `hciN`) is required because D-Bus objects use MACs.
+**Audio sink discovery:** `BluetoothManager.configure_bluetooth_audio()` tries four sink patterns — `bluez_output.{MAC}.1` (PipeWire), `bluez_output.{MAC}.a2dp-sink`, `bluez_sink.{MAC}.a2dp_sink`, `bluez_sink.{MAC}` — retrying up to 3×. Per-process routing uses `PULSE_SINK` env var.
 
-**Audio sink discovery:** `BluetoothManager.configure_bluetooth_audio()` tries four sink name patterns in order — `bluez_output.{MAC}.1` (PipeWire), `bluez_output.{MAC}.a2dp-sink`, `bluez_sink.{MAC}.a2dp_sink`, `bluez_sink.{MAC}` — retrying up to 3× because the A2DP sink takes a few seconds to appear after BT connects. Per-process routing uses `PULSE_SINK` env var; the system default sink is not changed.
-
-**dbus-python is optional:** MPRIS metadata (`_read_mpris_metadata_for`, `MprisIdentityService`) gracefully degrades when `dbus-python` isn't available. Always guard D-Bus usage with `try/except`.
-
-**HA addon config:** Defined in `ha-addon/config.yaml`. The schema there controls what options appear in the HA UI. Option names map to `config.json` keys via the Python snippet in `entrypoint.sh`.
+**IPC protocol:** Parent↔subprocess communicate via JSON lines on stdin/stdout. Commands: `set_volume`, `set_mute`, `stop`, `pause`/`play`, `reconnect`, `set_log_level`.
 
 ## CI/CD
 
-Builds multi-platform images (`linux/amd64`, `linux/arm64`) to `ghcr.io/trudenboy/sendspin-bt-bridge` on `v*` tag push or manual `workflow_dispatch`. PRs against `main` build but do not push. Branch naming: `feat/<description>` or `fix/<description>`.
+Builds multi-platform images (`linux/amd64`, `linux/arm64`) to `ghcr.io/trudenboy/sendspin-bt-bridge` on `v*` tag push or `workflow_dispatch`. PRs against `main` build but do not push. Branch naming: `feat/<description>` or `fix/<description>`.

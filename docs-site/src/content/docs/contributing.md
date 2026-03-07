@@ -52,7 +52,7 @@ lxc/                  # LXC install scripts (Proxmox & OpenWrt)
 
 ## Manual Test Checklist
 
-There is no automated test suite. Use this checklist when making changes:
+Run `pytest` for automated unit tests (`tests/`). Additionally, use this manual checklist when making changes:
 
 - [ ] Container starts without errors (`docker logs -f sendspin-client`)
 - [ ] Web UI loads at `http://localhost:8080`

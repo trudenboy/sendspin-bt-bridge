@@ -155,6 +155,12 @@ data: [{"player_name": "Колонка в гостиной", "playing": false, .
 { "mac": "AA:BB:CC:DD:EE:FF", "volume": 50, "force_local": true }
 ```
 
+### `POST /api/pause`
+
+Пауза или воспроизведение одного плеера. Команда отправляется через IPC в целевой подпроцесс, который передаёт её по WebSocket-соединению в MA.
+
+**Body:** `{ "player_name": "Колонка в гостиной", "action": "pause" }` — action: `"pause"` или `"play"`
+
 ### `POST /api/mute`
 
 Включить/выключить mute.

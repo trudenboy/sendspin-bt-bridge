@@ -21,6 +21,7 @@ Bluetooth-мост для [Music Assistant](https://www.music-assistant.io/) —
 - **Компенсация задержки**: Поле `static_delay_ms` компенсирует буферную задержку A2DP
 - **Эндпоинт диагностики**: `/api/diagnostics` возвращает структурированную информацию о состоянии — адаптеры, синки, D-Bus, статус каждого устройства
 - **Несколько экземпляров bridge**: Можно запустить несколько bridge (контейнеров/LXC/аддонов) против одного сервера MA — каждый регистрирует свои плееры независимо
+- **Аутентификация Web UI** — опциональная защита паролем и авторизация HA 2FA
 
 <img width="1400" alt="Веб-панель мониторинга — полная страница, тёмная тема" src="https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/docs-site/public/screenshots/screenshot-dashboard-full.png" />
 <br><br>
@@ -312,6 +313,8 @@ lxc-attach -n sendspin -- btctl show
 | `WEB_PORT` | `8080` | Порт веб-интерфейса |
 | `MA_API_URL` | `` | Базовый URL REST API Music Assistant (напр. `http://192.168.1.10:8123`) — включает метаданные воспроизведения и транспортные кнопки |
 | `MA_API_TOKEN` | `` | Долгосрочный токен доступа HA для MA API |
+| `VOLUME_VIA_MA` | `true` | Маршрутизация громкости/mute через MA API; `false` = прямой PulseAudio |
+| `LOG_LEVEL` | `INFO` | Уровень логирования (`INFO` или `DEBUG`); изменяется через API в реальном времени |
 
 Переменные окружения перекрываются значениями из `/config/config.json`, если файл существует.
 

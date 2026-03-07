@@ -2,7 +2,7 @@
 
 A history of the architectural and functional evolution of sendspin-bt-bridge — for readers familiar with Home Assistant, Music Assistant, and multiroom audio setups.
 
-**Period:** January 1 – March 6, 2026 · **Total commits:** ~550 · **Versions:** 1.0.0 → 2.10.6
+**Period:** January 1 – March 7, 2026 · **Total commits:** ~570 · **Versions:** 1.0.0 → 2.12.0
 
 ---
 
@@ -407,7 +407,7 @@ Over 7 days of active development the project went from a single-file script for
 | Loryan Strant (foundation) | 14 commits |
 | GitHub Actions (CI/CD) | 38 commits |
 | Active development days | 9 (Feb 27 – Mar 6, 2026) |
-| Versions released | 120 (v1.0.0 → v2.10.6) |
+| Versions released | ~130 (v1.0.0 → v2.12.0) |
 | Pull Requests | 54 |
 | Busiest day | March 5: 119 commits |
 
@@ -434,6 +434,37 @@ Over 7 days of active development the project went from a single-file script for
 | `psutil` | System information |
 | `python-dotenv` | Environment variables |
 | `flask-cors` | CORS for the REST API |
+
+## March 7, 2026 — Reliability & deployment (v2.10.7 → v2.12.0)
+
+### Volume architecture overhaul (v2.10.7 – v2.10.13)
+
+The hybrid volume path — routing volume commands through the MA WebSocket API to keep MA's UI in sync — introduced a triple feedback loop: the API, the sendspin protocol echo, and the MA monitor event all tried to set the PulseAudio sink volume simultaneously. The result was volume bouncing (set 40 → jumps to 47 → settles at 55) and unexpected jumps on track change.
+
+The fix was architectural: **bridge_daemon became the single writer** to PulseAudio sink volume. The API no longer optimistically updates local status on the MA path — it waits for the actual echo from MA via sendspin protocol. The `_handle_player_updated` volume sync in the MA monitor was removed as a redundant third path. A new `VOLUME_VIA_MA` config option (default: `true`) allows disabling the MA proxy entirely, forcing all volume/mute changes through direct pactl.
+
+### Observability and test infrastructure (v2.10.8)
+
+All 27 silent `except: pass` blocks were replaced with DEBUG-level logging — issues are now visible with `LOG_LEVEL=DEBUG` without changing runtime behavior. Thread safety was hardened: `run_coroutine_threadsafe` calls got 5-second timeouts, and fire-and-forget asyncio tasks got `done_callback` for exception logging. The project gained its first automated tests: pytest with 9 unit tests covering config loading, volume persistence, MAC-to-player-ID mapping, and password hashing (later expanded to 15 tests).
+
+### LXC installer modernization (v2.10.16)
+
+The LXC installer was updated to download all app modules (config, state, routes, services, templates, static) instead of the original 2 files. PulseAudio configuration was fixed for PA 17+ on Ubuntu 24.04: deprecated `enable-lfe-remixing` replaced with `remixing-produce-lfe`/`remixing-consume-lfe`, the systemd unit no longer sets `User=pulse`/`Group=pulse` (PA `--system` mode requires root), and a tmpfiles.d entry ensures `/var/run/pulse` survives reboots.
+
+### OpenWrt LXC deployment (v2.11.0)
+
+A new `lxc/install-openwrt.sh` installer added support for OpenWrt-based routers (Turris Omnia, etc.) with procd service management — expanding deployment from 3 methods (Docker, HA addon, Proxmox LXC) to 4.
+
+### Zombie playback watchdog and churn isolation (v2.12.0)
+
+Two reliability features were added:
+
+- **Zombie playback watchdog**: auto-restarts the subprocess after 15 seconds of `playing=True` with no audio data (`streaming=False`), up to 3 retries. This catches situations where the sendspin connection is alive but the audio pipeline is broken.
+- **BT churn isolation** (opt-in): auto-disables BT management for devices that reconnect too often within a sliding window, configurable via `BT_CHURN_THRESHOLD` (0 = disabled, default) and `BT_CHURN_WINDOW` (default 300 s). Prevents a flaky Bluetooth device from consuming adapter time and destabilizing other speakers.
+
+A new **stale equalizer indicator** shows frozen red bars when MA reports playing but no audio is streaming, with playback text showing "▶ No Audio".
+
+---
 
 ### AI agents
 
