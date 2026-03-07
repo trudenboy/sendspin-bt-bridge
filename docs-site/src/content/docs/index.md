@@ -108,9 +108,6 @@ Run multiple bridge instances against the same Music Assistant server to cover e
 
 [![Deployment diagram: multiroom floorplan with zones and adapters](/sendspin-bt-bridge/diagrams/multiroom-diagram.png)](/sendspin-bt-bridge/diagrams/multiroom-diagram/)
 
-[![Multiroom Audio — Floor Plan](/sendspin-bt-bridge/diagrams/multiroom-floorplan.png)](/sendspin-bt-bridge/diagrams/multiroom-floorplan.html)
-
-[🔷 Interactive D3-Graphviz diagram](/sendspin-bt-bridge/diagrams/multiroom-d3graphviz.html)
 
 ## Deployment options
 
