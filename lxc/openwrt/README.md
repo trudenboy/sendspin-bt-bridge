@@ -63,10 +63,11 @@ sh create.sh --name sendspin --ip 192.168.1.200/24 --yes
 The script will:
 1. Install LXC and Bluetooth packages on the host via `opkg`
 2. Load and persist Bluetooth kernel modules
-3. Create an Ubuntu 24.04 LXC container
-4. Configure D-Bus bridge, cgroup rules, and autostart
-5. Run `install.sh` inside the container (installs app + dependencies)
-6. Install a procd init.d script for container autostart
+3. Install D-Bus policy and add `pulse` user on host (required for PulseAudio ↔ BlueZ)
+4. Create an Ubuntu 24.04 LXC container
+5. Configure D-Bus bridge, cgroup rules, and autostart
+6. Run `install.sh` inside the container (installs app + dependencies)
+7. Install a procd init.d script for container autostart
 
 ## Manual Install
 
@@ -102,6 +103,15 @@ echo btusb > /etc/modules.d/99-btusb
 wget -q https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/lxc/openwrt/dbus-pulseaudio.conf \
      -O /etc/dbus-1/system.d/pulseaudio-lxc.conf
 /etc/init.d/dbus reload
+```
+
+### 4b. Add `pulse` user on host
+
+PulseAudio inside the container runs as `pulse` (uid 109). D-Bus EXTERNAL auth requires this uid to exist on the host:
+
+```sh
+echo "pulse:x:109:109:PulseAudio:/var/run/pulse:/bin/false" >> /etc/passwd
+echo "pulse:x:109:" >> /etc/group
 ```
 
 ### 5. Create container
@@ -225,6 +235,22 @@ OpenWrt symlinks `/var/run` → `/tmp/run`. The LXC mount entry must use the **r
 ```sh
 readlink -f /var/run/dbus
 # Output: /tmp/run/dbus  ← use this in lxc.mount.entry
+```
+
+### `module-bluez5-discover` fails to load
+
+If PulseAudio logs show `Failed to get D-Bus connection` and `Failed to load module "module-bluez5-discover"`, the most common cause is the `pulse` user (uid 109) missing on the OpenWrt host. D-Bus EXTERNAL auth rejects connections from unknown uids:
+
+```sh
+# Check if pulse user exists on host
+grep pulse /etc/passwd
+
+# Add if missing
+echo "pulse:x:109:109:PulseAudio:/var/run/pulse:/bin/false" >> /etc/passwd
+echo "pulse:x:109:" >> /etc/group
+
+# Restart PulseAudio inside the container
+lxc-attach -n sendspin -- systemctl restart pulseaudio-system
 ```
 
 ### Python package compilation time

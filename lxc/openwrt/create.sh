@@ -236,6 +236,18 @@ if [ -x /etc/init.d/dbus ]; then
 fi
 ok "D-Bus policy installed"
 
+# ─── 3b. Add pulse user on host (required for D-Bus EXTERNAL auth) ──────────
+# PulseAudio inside the LXC container runs as user 'pulse' (uid 109).
+# D-Bus EXTERNAL auth verifies the connecting UID via SO_PEERCRED — if the
+# uid doesn't exist on the host, the connection is rejected.
+if ! grep -q "^pulse:" /etc/passwd 2>/dev/null; then
+    echo "pulse:x:109:109:PulseAudio:/var/run/pulse:/bin/false" >> /etc/passwd
+    grep -q "^pulse:" /etc/group 2>/dev/null || echo "pulse:x:109:" >> /etc/group
+    ok "Added pulse user (uid 109) on host for D-Bus auth"
+else
+    ok "pulse user already exists on host"
+fi
+
 # ─── 4. Interactive prompts ───────────────────────────────────────────────────
 msg "Container configuration"
 printf "\n"
