@@ -242,7 +242,7 @@ sequenceDiagram
     participant UI as Web UI
     participant API as Flask API
     participant MA as Music Assistant
-    participant BD as bridge_daemon<br/>(subprocess)
+    participant BD as bridge_daemon (subprocess)
     participant PA as PulseAudio
 
     Note over UI,PA: MA path (VOLUME_VIA_MA = true, MA connected)
