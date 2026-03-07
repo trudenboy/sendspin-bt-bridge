@@ -90,6 +90,16 @@ def inject_version():
     return {"VERSION": VERSION}
 
 
+@app.after_request
+def _set_cache_headers(response):
+    """Prevent HA Ingress proxy and browsers from caching HTML pages."""
+    if response.content_type and "text/html" in response.content_type:
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
+
+
 # Public paths that never require authentication
 _PUBLIC_PATHS = {"/login", "/logout", "/api/status"}
 
