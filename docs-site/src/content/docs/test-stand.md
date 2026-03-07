@@ -14,9 +14,9 @@ graph TB
 
         subgraph turris["Turris Omnia — Marvell Armada 385 ARMv7 / 2 GB RAM"]
             direction TB
-            T_HOST["TurrisOS 9.0.4 / OpenWrt<br/>192.168.10.1<br/>router + DHCP + DNS"]
+            T_HOST["TurrisOS 9.0.4 / OpenWrt<br/>turris.my.lan<br/>router + DHCP + DNS"]
             T_USB["USB: CSR8510 A10<br/>0a12:0001"]
-            subgraph T_LXC["LXC sendspin — Ubuntu 24.04 armv7l — 192.168.10.200"]
+            subgraph T_LXC["LXC sendspin — Ubuntu 24.04 armv7l — turris-lxc.my.lan"]
                 T_DBUS["D-Bus system bus<br/>bind-mount from host"]
                 T_PA["PulseAudio 16.1 --system<br/>user pulse uid=109"]
                 T_BLUEZ["BlueZ 5.72<br/>bluetoothctl"]
@@ -34,13 +34,13 @@ graph TB
 
         subgraph proxmox["HP ProLiant MicroServer Gen8 — Celeron G1610T 2.3 GHz / 16 GB RAM"]
             direction TB
-            P_HOST["Proxmox VE 8.4.16<br/>Debian 12 Bookworm<br/>Kernel 6.8.12-18-pve<br/>192.168.10.12"]
+            P_HOST["Proxmox VE 8.4.16<br/>Debian 12 Bookworm<br/>Kernel 6.8.12-18-pve<br/>proxmox.my.lan"]
             P_USB1["USB Bus 4: CSR8510 A10<br/>PVE mapping: Audio"]
             P_USB2["USB Bus 2: CSR8510 A10<br/>PVE mapping: aTick"]
             P_ZIG["USB: SONOFF Zigbee 3.0<br/>1a86:55d4"]
 
             subgraph P_VM["VM 104 haos — QEMU/KVM — 2 vCPU / 6 GB RAM / 64 GB disk"]
-                P_HAOS["Home Assistant OS<br/>192.168.10.10"]
+                P_HAOS["Home Assistant OS<br/>haos.my.lan"]
                 P_ADDON["SBB v2.12.2 addon<br/>85b1ecde-sendspin-bt-bridge<br/>3 devices / sync group"]
                 P_HAOS --> P_ADDON
             end
@@ -155,7 +155,7 @@ graph TB
 
 ## Bridge instances
 
-### 1. HAOS Addon — `192.168.10.10:8080`
+### 1. HAOS Addon — `haos.my.lan:8080`
 
 Runs as a Home Assistant addon inside HAOS VM on Proxmox.
 
@@ -179,7 +179,7 @@ Runs as a Home Assistant addon inside HAOS VM on Proxmox.
 
 All 3 devices share MA sync group `b55d7f67-acc2-4cba-b37e-9fbd3eb3b410` for multiroom playback. MA API integration is active (bi-directional volume/transport sync).
 
-### 2. Proxmox LXC — `192.168.10.218:8080`
+### 2. Proxmox LXC — `proxmox-lxc.my.lan:8080`
 
 Runs as a systemd service inside an unprivileged LXC container on Proxmox.
 
@@ -205,7 +205,7 @@ Runs as a systemd service inside an unprivileged LXC container on Proxmox.
 
 MA API integration active.
 
-### 3. Turris LXC — `192.168.10.200:8080`
+### 3. Turris LXC — `turris-lxc.my.lan:8080`
 
 Runs as a systemd service inside an LXC container on Turris Omnia router (OpenWrt).
 
@@ -274,15 +274,15 @@ All adapters are CSR8510 A10 (Cambridge Silicon Radio) USB dongles, USB ID `0a12
 
 ## Network
 
-All devices on a flat `192.168.10.0/24` LAN. Turris Omnia is the router/gateway at `192.168.10.1`.
+All devices on a flat `192.168.10.0/24` LAN. Turris Omnia is the router/gateway at `turris.my.lan`.
 
 | IP | Host | Service |
 |----|------|---------|
-| `192.168.10.1` | Turris Omnia | Router, LXC host |
-| `192.168.10.10` | HAOS VM | Music Assistant (:8095), Bridge addon (:8080) |
-| `192.168.10.12` | Proxmox VE | Hypervisor web UI (:8006) |
-| `192.168.10.200` | Turris LXC | Bridge (:8080) |
-| `192.168.10.218` | Proxmox CT 101 | Bridge (:8080) |
+| `turris.my.lan` | Turris Omnia | Router, LXC host |
+| `haos.my.lan` | HAOS VM | Music Assistant (:8095), Bridge addon (:8080) |
+| `proxmox.my.lan` | Proxmox VE | Hypervisor web UI (:8006) |
+| `turris-lxc.my.lan` | Turris LXC | Bridge (:8080) |
+| `proxmox-lxc.my.lan` | Proxmox CT 101 | Bridge (:8080) |
 
 ## Software stack (common)
 

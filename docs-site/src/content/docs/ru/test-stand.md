@@ -14,9 +14,9 @@ graph TB
 
         subgraph turris["Turris Omnia — Marvell Armada 385 ARMv7 / 2 ГБ ОЗУ"]
             direction TB
-            T_HOST["TurrisOS 9.0.4 / OpenWrt<br/>192.168.10.1<br/>роутер + DHCP + DNS"]
+            T_HOST["TurrisOS 9.0.4 / OpenWrt<br/>turris.my.lan<br/>роутер + DHCP + DNS"]
             T_USB["USB: CSR8510 A10<br/>0a12:0001"]
-            subgraph T_LXC["LXC sendspin — Ubuntu 24.04 armv7l — 192.168.10.200"]
+            subgraph T_LXC["LXC sendspin — Ubuntu 24.04 armv7l — turris-lxc.my.lan"]
                 T_DBUS["D-Bus system bus<br/>bind-mount с хоста"]
                 T_PA["PulseAudio 16.1 --system<br/>user pulse uid=109"]
                 T_BLUEZ["BlueZ 5.72<br/>bluetoothctl"]
@@ -34,13 +34,13 @@ graph TB
 
         subgraph proxmox["HP ProLiant MicroServer Gen8 — Celeron G1610T 2.3 ГГц / 16 ГБ ОЗУ"]
             direction TB
-            P_HOST["Proxmox VE 8.4.16<br/>Debian 12 Bookworm<br/>Kernel 6.8.12-18-pve<br/>192.168.10.12"]
+            P_HOST["Proxmox VE 8.4.16<br/>Debian 12 Bookworm<br/>Kernel 6.8.12-18-pve<br/>proxmox.my.lan"]
             P_USB1["USB Bus 4: CSR8510 A10<br/>PVE mapping: Audio"]
             P_USB2["USB Bus 2: CSR8510 A10<br/>PVE mapping: aTick"]
             P_ZIG["USB: SONOFF Zigbee 3.0<br/>1a86:55d4"]
 
             subgraph P_VM["VM 104 haos — QEMU/KVM — 2 vCPU / 6 ГБ ОЗУ / 64 ГБ диск"]
-                P_HAOS["Home Assistant OS<br/>192.168.10.10"]
+                P_HAOS["Home Assistant OS<br/>haos.my.lan"]
                 P_ADDON["SBB v2.12.2 addon<br/>85b1ecde-sendspin-bt-bridge<br/>3 устройства / группа синхронизации"]
                 P_HAOS --> P_ADDON
             end
@@ -155,7 +155,7 @@ graph TB
 
 ## Экземпляры мостов
 
-### 1. HAOS Addon — `192.168.10.10:8080`
+### 1. HAOS Addon — `haos.my.lan:8080`
 
 Работает как аддон Home Assistant внутри ВМ HAOS на Proxmox.
 
@@ -179,7 +179,7 @@ graph TB
 
 Все 3 устройства объединены в группу синхронизации MA `b55d7f67-acc2-4cba-b37e-9fbd3eb3b410` для мультирум-воспроизведения. Интеграция MA API активна (двусторонняя синхронизация громкости и управления).
 
-### 2. Proxmox LXC — `192.168.10.218:8080`
+### 2. Proxmox LXC — `proxmox-lxc.my.lan:8080`
 
 Работает как systemd-сервис внутри LXC-контейнера на Proxmox.
 
@@ -205,7 +205,7 @@ graph TB
 
 Интеграция MA API активна.
 
-### 3. Turris LXC — `192.168.10.200:8080`
+### 3. Turris LXC — `turris-lxc.my.lan:8080`
 
 Работает как systemd-сервис внутри LXC-контейнера на роутере Turris Omnia (OpenWrt).
 
@@ -274,15 +274,15 @@ graph TB
 
 ## Сеть
 
-Все устройства в плоской сети `192.168.10.0/24`. Turris Omnia — роутер/шлюз по адресу `192.168.10.1`.
+Все устройства в плоской сети `192.168.10.0/24`. Turris Omnia — роутер/шлюз по адресу `turris.my.lan`.
 
 | IP | Хост | Сервис |
 |----|------|--------|
-| `192.168.10.1` | Turris Omnia | Роутер, хост LXC |
-| `192.168.10.10` | HAOS VM | Music Assistant (:8095), аддон моста (:8080) |
-| `192.168.10.12` | Proxmox VE | Веб-интерфейс гипервизора (:8006) |
-| `192.168.10.200` | Turris LXC | Мост (:8080) |
-| `192.168.10.218` | Proxmox CT 101 | Мост (:8080) |
+| `turris.my.lan` | Turris Omnia | Роутер, хост LXC |
+| `haos.my.lan` | HAOS VM | Music Assistant (:8095), аддон моста (:8080) |
+| `proxmox.my.lan` | Proxmox VE | Веб-интерфейс гипервизора (:8006) |
+| `turris-lxc.my.lan` | Turris LXC | Мост (:8080) |
+| `proxmox-lxc.my.lan` | Proxmox CT 101 | Мост (:8080) |
 
 ## Общий программный стек
 
