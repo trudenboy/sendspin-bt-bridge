@@ -711,6 +711,10 @@ async def main():
 
     bt_check_interval = int(config.get("BT_CHECK_INTERVAL") or 10)
     bt_max_reconnect_fails = int(config.get("BT_MAX_RECONNECT_FAILS") or 0)
+    bt_churn_threshold = int(config.get("BT_CHURN_THRESHOLD") or 0)
+    bt_churn_window = float(config.get("BT_CHURN_WINDOW") or 300)
+    if bt_churn_threshold > 0:
+        logger.info("BT churn isolation: enabled (threshold=%d in %.0fs)", bt_churn_threshold, bt_churn_window)
 
     # Normalise device list — fall back to legacy BLUETOOTH_MAC
     bt_devices = config.get("BLUETOOTH_DEVICES", [])
@@ -776,6 +780,8 @@ async def main():
                 check_interval=bt_check_interval,
                 max_reconnect_fails=bt_max_reconnect_fails,
                 on_sink_found=_on_sink_found,
+                churn_threshold=bt_churn_threshold,
+                churn_window=bt_churn_window,
             )
             bt_available = bt_mgr.check_bluetooth_available()
             if not bt_available:

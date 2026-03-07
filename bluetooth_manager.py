@@ -110,6 +110,8 @@ class BluetoothManager:
         check_interval: int = 10,
         max_reconnect_fails: int = 0,
         on_sink_found=None,
+        churn_threshold: int = 0,
+        churn_window: float = 300.0,
     ):
         self.mac_address = mac_address
         self.adapter = adapter  # "hci0", "hci1", etc. — empty = use default
@@ -129,8 +131,8 @@ class BluetoothManager:
         self.management_enabled: bool = True  # False = released; monitor loop skips reconnect
         self._connect_lock = threading.Lock()  # prevents concurrent connect_device() calls
         self._reconnect_timestamps: list[float] = []  # monotonic timestamps of recent reconnects
-        self._CHURN_WINDOW = 300.0  # seconds (5 min)
-        self._CHURN_THRESHOLD = 4  # reconnects within window to trigger isolation
+        self._CHURN_WINDOW = churn_window  # seconds; 0 threshold = disabled
+        self._CHURN_THRESHOLD = churn_threshold  # 0 = disabled
 
         # Resolve effective adapter MAC for display (handles empty/default adapter case)
         if self._adapter_select:
@@ -533,8 +535,10 @@ class BluetoothManager:
     def _check_reconnect_churn(self) -> bool:
         """Auto-disable device if too many reconnects in the time window.
 
-        Returns True if management was disabled.
+        Returns True if management was disabled.  Disabled when threshold <= 0.
         """
+        if self._CHURN_THRESHOLD <= 0:
+            return False
         now = time.monotonic()
         cutoff = now - self._CHURN_WINDOW
         self._reconnect_timestamps = [t for t in self._reconnect_timestamps if t > cutoff]
