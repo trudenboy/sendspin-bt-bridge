@@ -245,20 +245,20 @@ sequenceDiagram
     participant PA as PulseAudio
 
     Note over UI,PA: Путь через MA (VOLUME_VIA_MA = true, MA подключён)
-    UI->>API: POST /api/volume {volume: 40, group: true}
-    API->>MA: WS: players/cmd/group_volume
-    API-->>UI: {"via": "ma"} (без локального обновления статуса)
+    UI->>API: POST /api/volume (volume 40, group true)
+    API->>MA: WS players/cmd/group_volume
+    API-->>UI: via ma (без локального обновления статуса)
     MA->>BD: VolumeChanged эхо (протокол sendspin)
     BD->>PA: pactl set-sink-volume (единственный писатель)
-    BD->>BD: _bridge_status["volume"] = N; _notify()
-    BD-->>API: stdout: {"type":"status","volume": N}
+    BD->>BD: _bridge_status volume = N, _notify()
+    BD-->>API: stdout status volume N
     API-->>UI: SSE обновление статуса
 
     Note over UI,PA: Локальный фоллбэк (MA недоступен или force_local)
-    UI->>API: POST /api/volume {volume: 40, force_local: true}
+    UI->>API: POST /api/volume (volume 40, force_local true)
     API->>PA: pactl set-sink-volume (напрямую)
-    API->>BD: stdin: {"cmd":"set_volume","value": 40}
-    API-->>UI: {"via": "local"} + мгновенное обновление
+    API->>BD: stdin set_volume value 40
+    API-->>UI: via local + мгновенное обновление
 ```
 
 **Маршрутизация групповой громкости:**

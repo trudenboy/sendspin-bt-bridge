@@ -246,20 +246,20 @@ sequenceDiagram
     participant PA as PulseAudio
 
     Note over UI,PA: MA path (VOLUME_VIA_MA = true, MA connected)
-    UI->>API: POST /api/volume {volume: 40, group: true}
-    API->>MA: WS: players/cmd/group_volume
-    API-->>UI: {"via": "ma"} (no local status update)
+    UI->>API: POST /api/volume (volume 40, group true)
+    API->>MA: WS players/cmd/group_volume
+    API-->>UI: via ma (no local status update)
     MA->>BD: VolumeChanged echo (sendspin protocol)
     BD->>PA: pactl set-sink-volume (single writer)
-    BD->>BD: _bridge_status["volume"] = N; _notify()
-    BD-->>API: stdout: {"type":"status","volume": N}
+    BD->>BD: _bridge_status volume = N, _notify()
+    BD-->>API: stdout status volume N
     API-->>UI: SSE status update
 
     Note over UI,PA: Local fallback (MA offline or force_local)
-    UI->>API: POST /api/volume {volume: 40, force_local: true}
+    UI->>API: POST /api/volume (volume 40, force_local true)
     API->>PA: pactl set-sink-volume (direct)
-    API->>BD: stdin: {"cmd":"set_volume","value": 40}
-    API-->>UI: {"via": "local"} + immediate status update
+    API->>BD: stdin set_volume value 40
+    API-->>UI: via local + immediate status update
 ```
 
 **Group volume routing:**
