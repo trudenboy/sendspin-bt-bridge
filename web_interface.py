@@ -14,7 +14,7 @@ import os
 from flask import Flask, jsonify, redirect, request, session, url_for
 from waitress import serve  # type: ignore[import-untyped]
 
-from config import ensure_secret_key, load_config
+from config import VERSION, ensure_secret_key, load_config
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -82,6 +82,13 @@ from routes.views import views_bp  # noqa: E402
 app.register_blueprint(views_bp)
 app.register_blueprint(api_bp)
 app.register_blueprint(auth_bp)
+
+
+@app.context_processor
+def inject_version():
+    """Make VERSION available in all templates for cache-busting."""
+    return {"VERSION": VERSION}
+
 
 # Public paths that never require authentication
 _PUBLIC_PATHS = {"/login", "/logout", "/api/status"}
