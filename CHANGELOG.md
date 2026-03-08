@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.13.0] - 2026-03-08
+
+### Added
+- **Auto-populate BRIDGE_NAME** — on first startup, `BRIDGE_NAME` is automatically set to the machine hostname and persisted to `config.json`. Users can see and modify it in the Web UI before adding any Bluetooth devices, eliminating duplicate player names in multi-bridge setups
+- **Cross-bridge sync group visibility** — group badge now shows `🔗 GroupName +N` where N is the count of players from other bridges in the same MA sync group. Hovering reveals the full member list with ✓ (local) and 🌐 (external) markers
+- **GitHub Issues infrastructure** — 3 structured issue templates (Bug Report, Bluetooth/Audio, Feature Request), 16 project labels, and Discussions Welcome post for community support routing
+
+### Changed
+- Bridge name config label updated to indicate auto-fill behavior
+- Group badge stays permanently visible (not hover-only) when cross-bridge members exist in the sync group
+- `_build_groups_summary()` now enriches group data with external member info from MA API cache
+
+### Removed
+- **`BRIDGE_NAME_SUFFIX`** option — no longer needed since `BRIDGE_NAME` is auto-populated with hostname. Existing configs with this option are silently ignored
+
 ## [2.12.6] - 2026-03-08
 
 ### Fixed

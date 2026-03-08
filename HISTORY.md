@@ -2,7 +2,7 @@
 
 A history of the architectural and functional evolution of sendspin-bt-bridge — for readers familiar with Home Assistant, Music Assistant, and multiroom audio setups.
 
-**Period:** January 1 – March 7, 2026 · **Total commits:** ~570 · **Versions:** 1.0.0 → 2.12.0
+**Period:** January 1 – March 8, 2026 · **Total commits:** ~580 · **Versions:** 1.0.0 → 2.13.0
 
 ---
 
@@ -407,7 +407,7 @@ Over 7 days of active development the project went from a single-file script for
 | Loryan Strant (foundation) | 14 commits |
 | GitHub Actions (CI/CD) | 38 commits |
 | Active development days | 9 (Feb 27 – Mar 6, 2026) |
-| Versions released | ~130 (v1.0.0 → v2.12.0) |
+| Versions released | ~135 (v1.0.0 → v2.13.0) |
 | Pull Requests | 54 |
 | Busiest day | March 5: 119 commits |
 
@@ -463,6 +463,28 @@ Two reliability features were added:
 - **BT churn isolation** (opt-in): auto-disables BT management for devices that reconnect too often within a sliding window, configurable via `BT_CHURN_THRESHOLD` (0 = disabled, default) and `BT_CHURN_WINDOW` (default 300 s). Prevents a flaky Bluetooth device from consuming adapter time and destabilizing other speakers.
 
 A new **stale equalizer indicator** shows frozen red bars when MA reports playing but no audio is streaming, with playback text showing "▶ No Audio".
+
+## March 8, 2026 — Multi-bridge & community (v2.12.1 → v2.13.0)
+
+### Caching, SSE reliability, and HA Ingress fixes (v2.12.1 → v2.12.6)
+
+A series of quick-fire releases addressed progressive discovery of HA Ingress proxy behavior: static asset cache-busting via query string (`?v=`) was ineffective because Ingress strips query parameters — switched to path-based versioning (`/static/v2.12.5/app.js`). HTML responses gained `Cache-Control: no-cache` headers. The SSE stream got 2 KB initial padding to flush proxy buffers, and the client-side SSE reconnect logic was upgraded from "fail once → poll forever" to exponential backoff with 5 retries.
+
+### Lazy player registration (v2.12.2)
+
+The sendspin daemon now starts only after Bluetooth actually connects, eliminating phantom players in Music Assistant at container startup.
+
+### Multi-bridge architecture analysis and improvements (v2.13.0)
+
+A deep analysis of the multi-bridge scenario (multiple bridges → one MA instance, cross-bridge sync groups) identified 6 potential problems and led to two key improvements:
+
+- **Auto-populated BRIDGE_NAME**: on first startup, the machine hostname is written to `config.json["BRIDGE_NAME"]` so users see a pre-filled value in the Web UI before adding devices. The old `BRIDGE_NAME_SUFFIX` boolean was removed — no longer needed when the name is auto-populated. This prevents duplicate player names (e.g. two "JBL Flip 6" from different hosts) which confused MA's player list.
+
+- **Cross-bridge sync group visibility**: when players from multiple bridges belong to the same MA sync group, the group badge now shows `🔗 Kitchen Music +2` (where +2 = players from other bridges). Hovering the badge reveals the full member list with ✓ for local and 🌐 for external players. Data comes from the MA API cache (`/api/players` → sync group member lists) that the bridge already maintains.
+
+### GitHub Issues & Discussions infrastructure (v2.13.0)
+
+The project gained structured issue management: 3 YAML-based issue form templates (Bug Report with deployment/audio dropdowns, Bluetooth/Audio specialist form, Feature Request), 16 project labels (`type:bug`, `area:bluetooth`, `deploy:ha-addon`, etc.), and a Discussions Welcome post with routing guidance (Issues for bugs/features, Discussions for help/ideas).
 
 ---
 
