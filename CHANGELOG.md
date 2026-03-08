@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.13.2] - 2026-03-08
+
+### Fixed
+- **Local devices shown as external in group tooltip** — on multi-device bridges (e.g. HAOS with 3 speakers), Sendspin assigns unique UUID `group_id` per session even when devices share the same MA sync group. Each local device appeared as 🌐 (external) to the others. Now merges group entries that resolve to the same MA syncgroup before computing external members
+- **JS group lookup mismatch after merge** — group badge lookup now matches by `player_name` membership instead of `group_id` equality, since merged groups use one arbitrary Sendspin UUID
+
 ## [2.13.1] - 2026-03-08
 
 ### Fixed

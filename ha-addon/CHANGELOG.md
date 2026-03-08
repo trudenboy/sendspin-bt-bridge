@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.13.2] - 2026-03-08
+
+### Fixed
+- Local devices shown as external in group tooltip on multi-device bridges — merged group entries sharing same MA syncgroup
+- JS group badge lookup now matches by player_name membership
+
 ## [2.13.1] - 2026-03-08
 
 ### Fixed
