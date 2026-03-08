@@ -962,6 +962,7 @@ def _build_groups_summary(clients: list) -> list[dict]:
             "volume": status.get("volume", 100),
             "playing": bool(status.get("playing")),
             "connected": bool(status.get("connected")),
+            "server_connected": bool(status.get("server_connected")),
             "bluetooth_connected": bool(status.get("bluetooth_connected")),
         }
 

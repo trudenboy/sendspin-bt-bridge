@@ -378,12 +378,22 @@ function populateDeviceCard(i, dev) {
         var extSuffix = extCount > 0 ? '  +' + extCount : '';
         groupBadge.textContent = groupDisplay ? '\uD83D\uDD17 ' + groupDisplay + extSuffix : '';
 
-        // Rich tooltip: local members (✓) + external members (🌐)
+        // Rich tooltip: local members with status + external members
         var tipLines = [groupLabel];
         if (grp && grp.members && grp.members.length > 0) {
             tipLines.push('───');
-            grp.members.forEach(function(m) { tipLines.push('✓ ' + (m.player_name || '?')); });
-            (grp.external_members || []).forEach(function(m) { tipLines.push('\uD83C\uDF10 ' + m.name); });
+            grp.members.forEach(function(m) {
+                var icon;
+                if (m.playing) icon = '▶';
+                else if (!m.server_connected) icon = '✕';
+                else if (!m.bluetooth_connected) icon = '⚡';
+                else icon = '✓';
+                tipLines.push(icon + ' ' + (m.player_name || '?'));
+            });
+            (grp.external_members || []).forEach(function(m) {
+                var icon = m.available === false ? '⊘' : '\uD83C\uDF10';
+                tipLines.push(icon + ' ' + m.name);
+            });
         }
         groupBadge.title = tipLines.join('\n');
 
