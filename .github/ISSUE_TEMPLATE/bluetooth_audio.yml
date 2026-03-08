@@ -1,0 +1,123 @@
+name: 🔊 Bluetooth & Audio Issue
+description: Report Bluetooth connection or audio playback problems
+labels: ["bug", "bluetooth"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form for Bluetooth and audio-specific issues:
+        pairing failures, no sound, intermittent disconnects, codec problems, audio artifacts.
+
+        For general bugs (web UI, config, API) use the **[Bug Report](https://github.com/trudenboy/sendspin-bt-bridge/issues/new?template=bug_report.yml)** template.
+
+  - type: dropdown
+    id: problem_type
+    validations:
+      required: true
+    attributes:
+      label: Problem Type
+      options:
+        - Cannot pair / device not found
+        - Pairs but no audio output
+        - Intermittent disconnects
+        - Wrong codec / poor audio quality
+        - Silence during playback (connected but no sound)
+        - Audio artifacts / crackling / stuttering
+
+  - type: input
+    id: speaker_model
+    validations:
+      required: true
+    attributes:
+      label: Bluetooth Speaker Model
+      placeholder: "JBL Flip 6 / Sony SRS-XB43 / Marshall Stanmore II"
+
+  - type: input
+    id: bt_adapter
+    validations:
+      required: true
+    attributes:
+      label: Bluetooth Adapter
+      description: Model, chipset, or "built-in"
+      placeholder: "Intel AX200 / TP-Link UB500 / built-in RPi 4"
+
+  - type: input
+    id: version
+    validations:
+      required: true
+    attributes:
+      label: Bridge Version
+      placeholder: "2.7.4"
+
+  - type: dropdown
+    id: deployment
+    validations:
+      required: true
+    attributes:
+      label: Deployment Method
+      options:
+        - Home Assistant Addon
+        - Docker Compose
+        - Proxmox LXC
+        - OpenWrt LXC
+        - Bare Metal (pip install)
+
+  - type: dropdown
+    id: audio_system
+    validations:
+      required: true
+    attributes:
+      label: Audio System
+      options:
+        - PipeWire
+        - PulseAudio
+        - Not sure
+
+  - type: input
+    id: host_os
+    validations:
+      required: true
+    attributes:
+      label: Host OS
+      placeholder: "HAOS 14.1 / Debian 12 / Ubuntu 24.04"
+
+  - type: textarea
+    id: bluetoothctl_info
+    attributes:
+      label: "Output of `bluetoothctl info <MAC>`"
+      description: |
+        Run inside the container:
+        - Docker: `docker exec sendspin-client bluetoothctl info AA:BB:CC:DD:EE:FF`
+        - LXC: `bluetoothctl info AA:BB:CC:DD:EE:FF`
+      render: shell
+
+  - type: textarea
+    id: pactl_sinks
+    attributes:
+      label: "Output of `pactl list sinks short`"
+      description: |
+        Run inside the container:
+        - Docker: `docker exec sendspin-client pactl list sinks short`
+        - LXC: `pactl list sinks short`
+      render: shell
+
+  - type: textarea
+    id: logs
+    validations:
+      required: true
+    attributes:
+      label: Logs
+      description: |
+        Paste relevant log output. Include lines around the connection/audio event.
+        - Docker: `docker logs sendspin-client --tail 100`
+        - HA Addon: Addon → Log tab
+        - LXC: `journalctl -u sendspin-client --no-pager -n 100`
+      render: shell
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: |
+        Any other relevant details: distance to speaker, number of connected devices,
+        whether the speaker works with other apps on the same host, etc.

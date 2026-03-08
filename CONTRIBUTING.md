@@ -60,14 +60,37 @@ For HA addon changes, additionally test via the HA Addon Store dev workflow (loc
 
 ---
 
-## Reporting Bugs
+## Reporting Bugs & Requesting Features
 
-Open an issue at [GitHub Issues](https://github.com/trudenboy/sendspin-bt-bridge/issues). Include:
+We use **GitHub Issues** for actionable bug reports and feature requests, and **GitHub Discussions** for questions, ideas, and community help.
 
-- Deployment method (Docker / HA Addon / Proxmox LXC)
-- Relevant log output (`docker logs sendspin-client` or `journalctl -u sendspin-client`)
-- Host OS, audio system (PipeWire or PulseAudio), Bluetooth adapter model
-- Steps to reproduce
+### Issues (bugs & features)
+
+Open a new issue using one of the structured templates:
+
+| Template | When to use |
+|----------|-------------|
+| [🐛 Bug Report](https://github.com/trudenboy/sendspin-bt-bridge/issues/new?template=bug_report.yml) | Something is broken — reproducible unexpected behavior |
+| [🔊 Bluetooth & Audio](https://github.com/trudenboy/sendspin-bt-bridge/issues/new?template=bluetooth_audio.yml) | BT pairing failures, no sound, disconnects, codec issues |
+| [💡 Feature Request](https://github.com/trudenboy/sendspin-bt-bridge/issues/new?template=feature_request.yml) | Suggest a new feature or enhancement |
+
+**Tips for good bug reports:**
+- Include your deployment method (Docker / HA Addon / Proxmox LXC / OpenWrt LXC)
+- Paste log output: `docker logs sendspin-client --tail 100` or `journalctl -u sendspin-client`
+- For BT/audio issues: include `bluetoothctl info <MAC>` and `pactl list sinks short` output
+- Mention your host OS, audio system (PipeWire/PulseAudio), and BT adapter model
+
+### Discussions (questions & ideas)
+
+For questions, setup help, and early-stage ideas — use [GitHub Discussions](https://github.com/trudenboy/sendspin-bt-bridge/discussions):
+
+| Category | When to use |
+|----------|-------------|
+| 🙏 Q&A | General usage questions and troubleshooting |
+| 🔊 Bluetooth & Audio | Speaker compatibility, audio routing, codec questions |
+| 🏗️ Deployment | Help with Docker, HA Addon, Proxmox LXC, OpenWrt setup |
+| 💡 Ideas | Early-stage feature ideas and brainstorming |
+| 🛠️ Show and Tell | Share your setup, config, or creative use case |
 
 ---
 
