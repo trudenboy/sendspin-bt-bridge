@@ -151,7 +151,7 @@ async function updateStatus() {
             lastReanchorAt = {};
         }
         lastDevices = sorted;
-        lastGroups = data.groups || [];
+        lastGroups = status.groups || [];
         var grid = document.getElementById('status-grid');
 
         sorted.forEach(function(dev, i) {
@@ -2003,7 +2003,7 @@ var _statusInterval = null;
                     lastReanchorAt = {};
                 }
                 lastDevices = sorted;
-                lastGroups = data.groups || [];
+                lastGroups = status.groups || [];
                 var grid = document.getElementById('status-grid');
                 sorted.forEach(function(dev, i) {
                     var card = document.getElementById('device-card-' + i);
