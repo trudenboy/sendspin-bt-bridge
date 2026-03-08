@@ -910,9 +910,11 @@ def api_status():
     if not snapshot:
         return jsonify({"error": "No clients"}), 503
     if len(snapshot) == 1:
-        return jsonify(get_client_status_for(snapshot[0]))
-    first = get_client_status_for(snapshot[0])
-    result = {**first, "devices": [get_client_status_for(c) for c in snapshot]}
+        result = get_client_status_for(snapshot[0])
+    else:
+        first = get_client_status_for(snapshot[0])
+        result = {**first, "devices": [get_client_status_for(c) for c in snapshot]}
+    result["groups"] = _build_groups_summary(snapshot)
     return jsonify(result)
 
 
@@ -964,14 +966,29 @@ def _build_groups_summary(clients: list) -> list[dict]:
         entry["external_count"] = 0
         result.append(entry)
 
-    # Enrich with cross-bridge member info from MA API cache
+    # Enrich with cross-bridge member info from MA API cache.
+    # NOTE: Sendspin's group_id (UUID) differs from MA's syncgroup id
+    # ("syncgroup_XXX"), so we resolve the MA syncgroup via player-name mapping.
     ma_groups = state.get_ma_groups()
     if ma_groups:
         for entry in result:
-            gid = entry["group_id"]
-            if not gid:
+            if not entry["group_id"]:
                 continue
-            ma_group = next((g for g in ma_groups if g["id"] == gid), None)
+            # Find MA syncgroup id via any local member's player name
+            ma_syncgroup_id = None
+            for m in entry["members"]:
+                pname = m.get("player_name")
+                if not pname:
+                    continue
+                ma_info = state.get_ma_group_for_player(pname)
+                if ma_info:
+                    ma_syncgroup_id = ma_info["id"]
+                    if not entry["group_name"] and ma_info.get("name"):
+                        entry["group_name"] = ma_info["name"]
+                    break
+            if not ma_syncgroup_id:
+                continue
+            ma_group = next((g for g in ma_groups if g["id"] == ma_syncgroup_id), None)
             if not ma_group:
                 continue
             local_names = {(m["player_name"] or "").lower() for m in entry["members"]}
