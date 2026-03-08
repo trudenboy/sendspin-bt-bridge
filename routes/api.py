@@ -1890,7 +1890,9 @@ def api_diagnostics():
                     member_info["server_connected"] = bridge_client.status.get("server_connected", False)
                     member_info["playing"] = bridge_client.status.get("playing", False)
                     member_info["sink"] = getattr(bridge_client, "bluetooth_sink_name", None)
-                    member_info["bt_mac"] = getattr(bridge_client.bt_manager, "mac_address", None) if bridge_client.bt_manager else None
+                    member_info["bt_mac"] = (
+                        getattr(bridge_client.bt_manager, "mac_address", None) if bridge_client.bt_manager else None
+                    )
                 members_detail.append(member_info)
 
             np = state.get_ma_now_playing_for_group(g["id"])
