@@ -265,9 +265,11 @@ msg "Enabling and starting services..."
 systemctl daemon-reload
 
 # bluetooth.service (local bluetoothd) is NOT needed — we use the host's bluetoothd.
-# Disable it to prevent noise in logs from failed start attempts.
-systemctl disable bluetooth 2>/dev/null || true
+# Mask it to prevent accidental starts which crash (no mgmt socket in LXC)
+# and can disrupt PulseAudio's A2DP state.
 systemctl stop    bluetooth 2>/dev/null || true
+systemctl disable bluetooth 2>/dev/null || true
+systemctl mask    bluetooth 2>/dev/null || true
 
 for svc in dbus avahi-daemon pulseaudio-system sendspin-client; do
   systemctl enable "$svc" 2>/dev/null || warn "Could not enable $svc (may not exist yet)"

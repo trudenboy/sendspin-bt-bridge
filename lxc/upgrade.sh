@@ -104,6 +104,15 @@ wget -q "${BASE}/lxc/sendspin-client.service"   -O /etc/systemd/system/sendspin-
 systemctl daemon-reload
 ok "Systemd units updated"
 
+# Mask bluetooth.service — bluetoothd runs on the HOST, not in the container.
+# An accidental restart inside LXC crashes (no mgmt socket) and breaks A2DP.
+if ! systemctl is-enabled bluetooth 2>/dev/null | grep -q masked; then
+  systemctl stop    bluetooth 2>/dev/null || true
+  systemctl disable bluetooth 2>/dev/null || true
+  systemctl mask    bluetooth 2>/dev/null || true
+  ok "bluetooth.service masked (uses host bluetoothd)"
+fi
+
 # ─── 4. Restart service ──────────────────────────────────────────────────────
 msg "Restarting sendspin-client..."
 systemctl restart sendspin-client

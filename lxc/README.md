@@ -141,7 +141,7 @@ systemctl restart sendspin-client
 pct exec <CTID> -- journalctl -u sendspin-client -f
 
 # Check service statuses
-# Note: bluetooth.service is intentionally disabled inside the container
+# Note: bluetooth.service is intentionally masked inside the container
 pct exec <CTID> -- systemctl status sendspin-client pulseaudio-system avahi-daemon --no-pager
 
 # List audio sinks (confirm Bluetooth sink is present)
@@ -176,7 +176,7 @@ lxc.mount.entry: /dev/bus/usb dev/bus/usb none bind,optional,create=dir 0 0
 
 ## Notes
 
-- `bluetooth.service` is intentionally **disabled** inside the container — the host's `bluetoothd` is used instead
+- `bluetooth.service` is intentionally **masked** inside the container — the host's `bluetoothd` is used instead. Running `bluetoothd` inside LXC crashes (no mgmt socket) and breaks PulseAudio A2DP state
 - `btctl` is a wrapper for `bluetoothctl` that sets `DBUS_SYSTEM_BUS_ADDRESS` to the bind-mounted host socket at `/bt-dbus`
 - Config changes in `/config/config.json` take effect after `systemctl restart sendspin-client` (no container restart needed)
 - The privileged container and `lxc.apparmor.profile: unconfined` are required for Bluetooth hardware passthrough; hardening further would require upstream PVE support for AppArmor profiles that permit Bluetooth management sockets
