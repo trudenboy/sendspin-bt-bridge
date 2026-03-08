@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.13.1] - 2026-03-08
+
+### Fixed
+- **Cross-bridge group badge not showing** — `_build_groups_summary()` compared Sendspin's `group_id` (UUID) against MA's `syncgroup_id` (`syncgroup_XXX`), which are different ID systems and never matched. Now resolves MA syncgroup via player-name mapping first
+- **Group badge missing on single-device bridges** — `/api/status` didn't include `groups` in the response for single-device setups (only SSE did). The polling handler in `app.js` reads `status.groups`, so the badge never rendered
+- **`group_name` always null in groups API** — Sendspin sends `group_name=None`; now enriched from MA API syncgroup name in `_build_groups_summary()`
+- **Waitress 3.x SSE crash** — removed `Connection: keep-alive` hop-by-hop header from SSE response that caused `AssertionError` in Waitress 3.x (strict PEP 3333 enforcement)
+- **Devices not rendering in Web UI** — fixed `ReferenceError: data is not defined` in `app.js` where both polling and SSE handlers referenced `data.groups` instead of `status.groups`
+
+### Changed
+- **LXC: mask bluetooth.service** — container's `bluetooth.service` is now masked (not just disabled) to prevent accidental restarts that crash `bluetoothd` and break PulseAudio A2DP state
+- **LXC: service stop timeout** — `sendspin-client.service` now has `TimeoutStopSec=15` and `KillMode=mixed` to prevent indefinite hang during service stop
+
 ## [2.13.0] - 2026-03-08
 
 ### Added

@@ -2,7 +2,7 @@
 
 A history of the architectural and functional evolution of sendspin-bt-bridge — for readers familiar with Home Assistant, Music Assistant, and multiroom audio setups.
 
-**Period:** January 1 – March 8, 2026 · **Total commits:** ~580 · **Versions:** 1.0.0 → 2.13.0
+**Period:** January 1 – March 8, 2026 · **Total commits:** ~580 · **Versions:** 1.0.0 → 2.13.1
 
 ---
 
@@ -407,7 +407,7 @@ Over 7 days of active development the project went from a single-file script for
 | Loryan Strant (foundation) | 14 commits |
 | GitHub Actions (CI/CD) | 38 commits |
 | Active development days | 9 (Feb 27 – Mar 6, 2026) |
-| Versions released | ~135 (v1.0.0 → v2.13.0) |
+| Versions released | ~135 (v1.0.0 → v2.13.1) |
 | Pull Requests | 54 |
 | Busiest day | March 5: 119 commits |
 
@@ -464,7 +464,7 @@ Two reliability features were added:
 
 A new **stale equalizer indicator** shows frozen red bars when MA reports playing but no audio is streaming, with playback text showing "▶ No Audio".
 
-## March 8, 2026 — Multi-bridge & community (v2.12.1 → v2.13.0)
+## March 8, 2026 — Multi-bridge & community (v2.12.1 → v2.13.1)
 
 ### Caching, SSE reliability, and HA Ingress fixes (v2.12.1 → v2.12.6)
 
@@ -481,6 +481,16 @@ A deep analysis of the multi-bridge scenario (multiple bridges → one MA instan
 - **Auto-populated BRIDGE_NAME**: on first startup, the machine hostname is written to `config.json["BRIDGE_NAME"]` so users see a pre-filled value in the Web UI before adding devices. The old `BRIDGE_NAME_SUFFIX` boolean was removed — no longer needed when the name is auto-populated. This prevents duplicate player names (e.g. two "JBL Flip 6" from different hosts) which confused MA's player list.
 
 - **Cross-bridge sync group visibility**: when players from multiple bridges belong to the same MA sync group, the group badge now shows `🔗 Kitchen Music +2` (where +2 = players from other bridges). Hovering the badge reveals the full member list with ✓ for local and 🌐 for external players. Data comes from the MA API cache (`/api/players` → sync group member lists) that the bridge already maintains.
+
+### Production deployment fixes (v2.13.1)
+
+Deploying v2.13.0 to two live LXC bridges (Proxmox + Turris OpenWrt) uncovered a chain of issues:
+
+- **Waitress 3.x broke SSE**: upgrading `waitress` pulled in v3.x which strictly enforces PEP 3333 and rejects hop-by-hop headers. The `Connection: keep-alive` in the SSE response caused an `AssertionError` crash — removed the header entirely.
+- **JS variable name mismatch**: both polling and SSE handlers in `app.js` referenced `data.groups` but the parsed variable is named `status` — devices never rendered. Fixed to `status.groups`.
+- **Group enrichment ID mismatch**: `_build_groups_summary()` compared Sendspin's `group_id` (UUID) against MA's syncgroup ID (`syncgroup_XXX`) — different ID systems that never matched. Fixed by resolving MA syncgroup via player-name mapping.
+- **Groups missing in polling response**: `/api/status` for single-device bridges omitted the `groups` field (only SSE included it), so the badge never appeared via polling.
+- **LXC bluetooth.service incident**: accidentally restarting `bluetooth.service` inside the Turris container (where bluetoothd cannot run) broke PulseAudio's A2DP state, requiring device re-pair from host. Hardened: `bluetooth.service` is now **masked** (not just disabled), and `sendspin-client.service` gained `TimeoutStopSec=15` to prevent hung shutdowns.
 
 ### GitHub Issues & Discussions infrastructure (v2.13.0)
 
