@@ -1851,6 +1851,7 @@ def api_diagnostics():
                     "name": getattr(client, "player_name", "Unknown"),
                     "mac": bt_mgr.mac_address if bt_mgr else None,
                     "connected": client.status.get("bluetooth_connected", False),
+                    "enabled": getattr(client, "bt_management_enabled", True),
                     "sink": getattr(client, "bluetooth_sink_name", None),
                     "last_error": client.status.get("last_error"),
                 }
@@ -1884,6 +1885,7 @@ def api_diagnostics():
                     "is_bridge": bridge_client is not None,
                 }
                 if bridge_client:
+                    member_info["enabled"] = getattr(bridge_client, "bt_management_enabled", True)
                     member_info["bt_connected"] = bridge_client.status.get("bluetooth_connected", False)
                     member_info["server_connected"] = bridge_client.status.get("server_connected", False)
                     member_info["playing"] = bridge_client.status.get("playing", False)

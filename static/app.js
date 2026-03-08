@@ -1884,8 +1884,12 @@ function renderDiagnostics(d) {
         '</td></tr>';
 
     (d.devices || []).forEach(function(dev) {
+        var enabledTag = dev.enabled === false
+            ? ' <span style="color:#f59e0b;font-size:11px;">Disabled</span>'
+            : '';
         rows += '<tr><td>' + escHtml(dev.name || dev.mac || 'Unknown') + '</td><td>' +
             dot(dev.connected) + (dev.connected ? 'Connected' : 'Disconnected') +
+            enabledTag +
             (dev.sink ? ' <span style="color:#6b7280;font-family:monospace;font-size:11px;">' +
                 escHtml(dev.sink) + '</span>' : '') +
             (dev.last_error
@@ -1915,9 +1919,11 @@ function renderDiagnostics(d) {
                 npHtml + '</td></tr>';
             mList.forEach(function(m) {
                 var icon = m.is_bridge
-                    ? (m.bt_connected ? (m.playing ? '▶' : '✓') : '⚡')
+                    ? (m.enabled === false ? '⊘' : (m.bt_connected ? (m.playing ? '▶' : '✓') : '⚡'))
                     : (m.available ? '🌐' : '⊘');
                 var stateText = m.state || '';
+                var enabledText = m.is_bridge && m.enabled === false
+                    ? ' <span style="color:#f59e0b;font-size:10px;">Disabled</span>' : '';
                 var volText = m.volume != null ? '  vol ' + m.volume + '%' : '';
                 var sinkText = m.is_bridge && m.sink
                     ? ' <code style="font-size:10px;color:#6b7280;">' + escHtml(m.sink) + '</code>'
@@ -1928,8 +1934,8 @@ function renderDiagnostics(d) {
                 rows += '<tr><td style="padding-left:40px;font-size:12px;">' +
                     icon + ' ' + escHtml(m.name || m.id) +
                     '</td><td style="font-size:12px;">' +
-                    dot(m.available !== false) +
-                    escHtml(stateText) + volText + macText + sinkText +
+                    dot(m.available !== false && m.enabled !== false) +
+                    escHtml(stateText) + enabledText + volText + macText + sinkText +
                     '</td></tr>';
             });
         });
