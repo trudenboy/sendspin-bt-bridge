@@ -378,12 +378,22 @@ function populateDeviceCard(i, dev) {
         var extSuffix = extCount > 0 ? '  +' + extCount : '';
         groupBadge.textContent = groupDisplay ? '\uD83D\uDD17 ' + groupDisplay + extSuffix : '';
 
-        // Rich tooltip: local members (✓) + external members (🌐)
+        // Rich tooltip: local members with status + external members
         var tipLines = [groupLabel];
         if (grp && grp.members && grp.members.length > 0) {
             tipLines.push('───');
-            grp.members.forEach(function(m) { tipLines.push('✓ ' + (m.player_name || '?')); });
-            (grp.external_members || []).forEach(function(m) { tipLines.push('\uD83C\uDF10 ' + m.name); });
+            grp.members.forEach(function(m) {
+                var icon;
+                if (m.playing) icon = '▶';
+                else if (!m.server_connected) icon = '✕';
+                else if (!m.bluetooth_connected) icon = '⚡';
+                else icon = '✓';
+                tipLines.push(icon + ' ' + (m.player_name || '?'));
+            });
+            (grp.external_members || []).forEach(function(m) {
+                var icon = m.available === false ? '⊘' : '\uD83C\uDF10';
+                tipLines.push(icon + ' ' + m.name);
+            });
         }
         groupBadge.title = tipLines.join('\n');
 
@@ -1874,8 +1884,12 @@ function renderDiagnostics(d) {
         '</td></tr>';
 
     (d.devices || []).forEach(function(dev) {
+        var enabledTag = dev.enabled === false
+            ? ' <span style="color:#f59e0b;font-size:11px;">Disabled</span>'
+            : '';
         rows += '<tr><td>' + escHtml(dev.name || dev.mac || 'Unknown') + '</td><td>' +
             dot(dev.connected) + (dev.connected ? 'Connected' : 'Disconnected') +
+            enabledTag +
             (dev.sink ? ' <span style="color:#6b7280;font-family:monospace;font-size:11px;">' +
                 escHtml(dev.sink) + '</span>' : '') +
             (dev.last_error
@@ -1893,9 +1907,37 @@ function renderDiagnostics(d) {
             (ma.url ? ' <span style="color:#6b7280;font-size:11px;">(' + escHtml(ma.url) + ')</span>' : '') +
             '</td></tr>';
         (ma.syncgroups || []).forEach(function(g) {
+            var mList = g.members || [];
+            var npHtml = '';
+            if (g.now_playing && g.now_playing.title) {
+                npHtml = ' <span style="color:#6b7280;font-size:11px;">♫ ' +
+                    escHtml(g.now_playing.artist ? g.now_playing.artist + ' — ' + g.now_playing.title : g.now_playing.title) +
+                    (g.now_playing.state ? ' (' + escHtml(g.now_playing.state) + ')' : '') + '</span>';
+            }
             rows += '<tr><td style="padding-left:20px;">↳ ' + escHtml(g.name || g.id) + '</td><td>' +
-                '<span style="color:#6b7280;font-size:11px;">' + g.members + ' member' + (g.members !== 1 ? 's' : '') + '</span>' +
-                '</td></tr>';
+                '<span style="color:#6b7280;font-size:11px;">' + mList.length + ' member' + (mList.length !== 1 ? 's' : '') + '</span>' +
+                npHtml + '</td></tr>';
+            mList.forEach(function(m) {
+                var icon = m.is_bridge
+                    ? (m.enabled === false ? '⊘' : (m.bt_connected ? (m.playing ? '▶' : '✓') : '⚡'))
+                    : (m.available ? '🌐' : '⊘');
+                var stateText = m.state || '';
+                var enabledText = m.is_bridge && m.enabled === false
+                    ? ' <span style="color:#f59e0b;font-size:10px;">Disabled</span>' : '';
+                var volText = m.volume != null ? '  vol ' + m.volume + '%' : '';
+                var sinkText = m.is_bridge && m.sink
+                    ? ' <code style="font-size:10px;color:#6b7280;">' + escHtml(m.sink) + '</code>'
+                    : '';
+                var macText = m.is_bridge && m.bt_mac
+                    ? ' <span style="font-size:10px;color:#9ca3af;">' + escHtml(m.bt_mac) + '</span>'
+                    : '';
+                rows += '<tr><td style="padding-left:40px;font-size:12px;">' +
+                    icon + ' ' + escHtml(m.name || m.id) +
+                    '</td><td style="font-size:12px;">' +
+                    dot(m.available !== false && m.enabled !== false) +
+                    escHtml(stateText) + enabledText + volText + macText + sinkText +
+                    '</td></tr>';
+            });
         });
     }
 

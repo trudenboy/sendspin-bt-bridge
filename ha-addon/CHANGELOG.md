@@ -5,6 +5,48 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.15.0] - 2026-03-09
+
+### Added
+- Group player list in Diagnostics — full per-member details: state, volume, availability, now-playing info
+- Bridge players in diagnostics show BT connection, server status, playing state, audio sink, MAC address
+- Enabled/Disabled status for devices and group members in Diagnostics
+- 35 new unit tests (53 total)
+
+### Fixed
+- TOCTOU race in zombie playback detection (concurrent status read)
+- MA WebSocket command/response mismatch (match by message_id)
+
+### Changed
+- Timezone-aware UTC timestamps throughout
+- SSE state encapsulation via public accessors
+- Configurable `TRUSTED_PROXIES` in config.json
+- Shared `list_bt_adapters()` helper (DRY)
+- Removed unused dependencies (flask-cors, psutil, python-dotenv)
+
+## [2.14.1] - 2026-03-08
+
+### Fixed
+- Fixed JSON serialization crash on SSE status stream (`frozenset is not JSON serializable`)
+
+### Added
+- Player status icons in group tooltip: ▶ playing, ✓ idle, ⚡ BT disconnected, ✕ offline, ⊘ unavailable
+
+## [2.14.0] - 2026-03-08
+
+### Fixed
+- `VOLUME_VIA_MA` setting silently lost on config reload
+
+### Added
+- MA WebSocket connection reuse for player/queue commands (lower latency)
+- Atomic `update_config()` helper (DRY config writes)
+
+### Changed
+- Cached `VOLUME_VIA_MA` flag at module level (no disk I/O per volume change)
+- Replaced deprecated `asyncio.ensure_future` with `create_task`
+- MA auth failure now triggers proper exponential backoff
+- Split BT scan into smaller testable helpers
+
 ## [2.13.3] - 2026-03-08
 
 ### Added

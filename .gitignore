@@ -61,3 +61,4 @@ sendspin-cli/
 !ha-addon/icon.png
 !static/favicon.png
 !docs-site/public/screenshots/sbb_infographic_ru.png
+.venv

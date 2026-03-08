@@ -17,7 +17,7 @@ import sys
 import threading
 import time
 from dataclasses import dataclass, field, fields
-from datetime import datetime
+from datetime import UTC, datetime
 
 import state as _state
 from bluetooth_manager import BluetoothManager
@@ -66,7 +66,7 @@ class DeviceStatus:
     hostname: str = ""
     last_error: str | None = None
     last_error_at: str | None = None
-    uptime_start: datetime = field(default_factory=datetime.now)
+    uptime_start: datetime = field(default_factory=lambda: datetime.now(tz=UTC))
     reconnecting: bool = False
     reconnect_attempt: int = 0
     bt_management_enabled: bool = True
@@ -86,26 +86,32 @@ class DeviceStatus:
             raise KeyError(key)
 
     def __setitem__(self, key: str, value) -> None:
-        if hasattr(self, key):
+        if key in self._field_names:
             setattr(self, key, value)
         else:
             logger.debug("DeviceStatus: unknown key ignored: %s", key)
 
+    _field_names: frozenset = field(default=frozenset(), init=False, repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        # Cache field names once for fast __contains__ / __setitem__ lookups
+        object.__setattr__(self, "_field_names", frozenset(f.name for f in fields(self) if f.name != "_field_names"))
+
     def __contains__(self, key: object) -> bool:
-        return hasattr(self, key) if isinstance(key, str) else False
+        return key in self._field_names if isinstance(key, str) else False
 
     def get(self, key: str, default=None):
         return getattr(self, key, default)
 
     def update(self, d: dict) -> None:
         for k, v in d.items():
-            if hasattr(self, k):
+            if k in self._field_names:
                 setattr(self, k, v)
             else:
                 logger.debug("DeviceStatus: unknown key ignored: %s", k)
 
-    def copy(self) -> dict:
-        return {f.name: getattr(self, f.name) for f in fields(self)}
+    def copy(self) -> dict[str, object]:
+        return {f.name: getattr(self, f.name) for f in fields(self) if f.name != "_field_names"}
 
 
 class SendspinClient:
@@ -198,7 +204,7 @@ class SendspinClient:
                         self._update_status(
                             {
                                 "bluetooth_connected": bt_connected,
-                                "bluetooth_connected_at": datetime.now().isoformat(),
+                                "bluetooth_connected_at": datetime.now(tz=UTC).isoformat(),
                             }
                         )
 
@@ -251,15 +257,17 @@ class SendspinClient:
             is_alive = self._daemon_proc is not None and (
                 self._daemon_proc.returncode is None if self._daemon_proc else False
             )
+            playing_since = self._playing_since
+            zombie_count = self._zombie_restart_count
 
         if not is_playing or is_streaming or not is_alive:
             return
-        if self._playing_since is None:
+        if playing_since is None:
             return
-        if self._zombie_restart_count >= self._MAX_ZOMBIE_RESTARTS:
+        if zombie_count >= self._MAX_ZOMBIE_RESTARTS:
             return  # already gave up
 
-        elapsed = time.monotonic() - self._playing_since
+        elapsed = time.monotonic() - playing_since
         if elapsed < self._ZOMBIE_TIMEOUT_S:
             return
 
@@ -274,7 +282,7 @@ class SendspinClient:
             self._MAX_ZOMBIE_RESTARTS,
         )
         # Schedule restart on the event loop (we're called from an async context)
-        asyncio.ensure_future(self._zombie_restart())
+        asyncio.create_task(self._zombie_restart())
 
     async def _zombie_restart(self) -> None:
         """Restart subprocess to recover from zombie playback."""
@@ -471,17 +479,20 @@ class SendspinClient:
 
     async def _keepalive_loop(self) -> None:
         """Periodically send a short silence burst to the BT sink to prevent speaker auto-disconnect."""
-        # Stagger startup across devices to avoid simultaneous paplay bursts
-        await asyncio.sleep(random.uniform(0, self.keepalive_interval))
-        while self.running:
-            await asyncio.sleep(self.keepalive_interval)
-            if (
-                self.bt_manager
-                and self.bt_manager.connected
-                and self.bluetooth_sink_name
-                and not self.status.get("audio_streaming")
-            ):
-                await self._send_keepalive_burst()
+        try:
+            # Stagger startup across devices to avoid simultaneous paplay bursts
+            await asyncio.sleep(random.uniform(0, self.keepalive_interval))
+            while self.running:
+                await asyncio.sleep(self.keepalive_interval)
+                if (
+                    self.bt_manager
+                    and self.bt_manager.connected
+                    and self.bluetooth_sink_name
+                    and not self.status.get("audio_streaming")
+                ):
+                    await self._send_keepalive_burst()
+        except asyncio.CancelledError:
+            return
 
     async def _send_keepalive_burst(self) -> None:
         """Write 500 ms of PCM silence to the BT PulseAudio sink via paplay."""
@@ -591,7 +602,7 @@ class SendspinClient:
                         self._update_status(
                             {
                                 "bluetooth_connected": bt_now,
-                                "bluetooth_connected_at": datetime.now().isoformat(),
+                                "bluetooth_connected_at": datetime.now(tz=UTC).isoformat(),
                             }
                         )
                     # Restart daemon with correct BT audio device now that sink is known.

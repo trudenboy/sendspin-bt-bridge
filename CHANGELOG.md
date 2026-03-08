@@ -5,6 +5,59 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.15.0] - 2026-03-09
+
+### Added
+- **Group player list in Diagnostics** — `/api/diagnostics` now returns full per-member details in `syncgroups[].members[]`: player state, volume, availability, and now-playing info per group
+- **Bridge player enrichment in group diagnostics** — bridge members show BT connection, server connection, playing status, audio sink name, and BT MAC address
+- **Enabled/Disabled status in Diagnostics** — `devices[]` and group members show `enabled` flag reflecting `bt_management_enabled` state; UI shows amber "Disabled" label for disabled devices
+- **Diagnostics UI member list** — group members rendered with status icons (▶ playing, ✓ connected, ⚡ disconnected, 🌐 external, ⊘ disabled/unavailable) and now-playing track info
+- **35 new unit tests** — `test_device_status.py` (11), `test_auth.py` (11), `test_state.py` (7), `test_ingress_middleware.py` (5). Total: 53 tests
+
+### Fixed
+- **TOCTOU race in zombie playback detection** — `_playing_since` and `_zombie_restart_count` were read outside `_status_lock`, risking `TypeError` on concurrent status updates
+- **MA WebSocket command/response mismatch** — `_drain_cmd_queue` now matches responses by `message_id` instead of assuming the next message is the response (interleaved events could be consumed as responses)
+
+### Changed
+- **Timezone-aware timestamps** — all `datetime.now()` calls replaced with `datetime.now(tz=timezone.utc)` for consistent, unambiguous ISO timestamps
+- **SSE state encapsulated** — `routes/api.py` no longer accesses private `state._status_version`/`_status_condition`; uses new public `get_status_version()` and `wait_for_status_change()` accessors
+- **`_TRUSTED_PROXIES` configurable** — `TRUSTED_PROXIES` list in `config.json` extends the default set (127.0.0.1, ::1, 172.30.32.2)
+- **`save_device_volume` readability** — replaced chained `__setitem__` lambda with named inner function
+- **`DeviceStatus.copy()` return annotation** — now typed as `-> dict[str, object]`
+- **Shared `list_bt_adapters()` helper** — extracted `bluetoothctl list` parsing into `services/bluetooth.py`, replacing inline duplicates
+
+### Removed
+- **Unused dependencies** — `flask-cors`, `psutil`, `python-dotenv` removed from `requirements.txt` (never imported)
+
+## [2.14.1] - 2026-03-08
+
+### Fixed
+- **`DeviceStatus.copy()` included internal `_field_names` frozenset** — the `frozenset` added for fast `__contains__` lookups was included in `copy()` output, causing `TypeError: Object of type frozenset is not JSON serializable` on SSE status stream and API responses. Now excluded from serialization
+
+### Added
+- **Player status icons in group tooltip** — group badge tooltip now shows per-member status: ▶ playing, ✓ idle, ⚡ BT disconnected, ✕ offline. External members show ⊘ when unavailable (previously always 🌐)
+
+## [2.14.0] - 2026-03-08
+
+### Fixed
+- **`VOLUME_VIA_MA` config silently lost on reload** — key was missing from `load_config()` allowed list, so the setting was dropped every time config was re-read from disk
+
+### Added
+- **`update_config()` helper** — atomic read-modify-write pattern extracted into a reusable function, replacing 6 duplicated implementations across `config.py`, `routes/api.py`, and `services/bluetooth.py`
+- **MA WebSocket connection reuse** — player and queue commands now prefer the persistent MA monitor WebSocket instead of opening a fresh connection per command (halves latency), with automatic fallback to fresh connection on failure
+- **Type hints on `BluetoothManager.__init__`** — `on_sink_found` and `client` parameters now have proper type annotations
+
+### Changed
+- **`VOLUME_VIA_MA` cached at module level** — eliminates per-request disk I/O on volume slider drags
+- **`DeviceStatus.__contains__`** checks only declared dataclass fields via cached `frozenset` (was using `hasattr` which matched methods and dunders)
+- **`asyncio.ensure_future` → `create_task`** — replaces deprecated API
+- **`CancelledError` handling in `_keepalive_loop`** — clean shutdown without traceback
+- **MA auth failure raises exception** — enables proper exponential backoff instead of rapid 2 s retries
+- **`_run_bt_scan` split into 4 helpers** — `_run_bluetoothctl_scan`, `_parse_scan_output`, `_resolve_unnamed_devices`, `_enrich_audio_device` for testability
+- **`_enrich_status_with_ma` extracted** from `get_client_status_for` — reduces function complexity
+- **`_ma_syncgroup_id` temp key removed** — replaced with index-based `entry_syncgroup` mapping in `_build_groups_summary`
+- **`pathlib` import moved to top level** in `bluetooth_manager.py` (was lazy-imported inside method)
+
 ## [2.13.3] - 2026-03-08
 
 ### Added

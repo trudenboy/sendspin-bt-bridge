@@ -49,6 +49,9 @@ if _auth_enabled:
 
 
 _TRUSTED_PROXIES = {"127.0.0.1", "::1", "172.30.32.2"}
+_extra = _startup_config.get("TRUSTED_PROXIES") or []
+if isinstance(_extra, list):
+    _TRUSTED_PROXIES |= set(_extra)
 
 
 class _IngressMiddleware:
