@@ -921,6 +921,10 @@ def _build_groups_summary(clients: list) -> list[dict]:
 
     Players sharing the same non-None group_id are merged into one group entry.
     Solo players (group_id=None) each appear as their own single-member group.
+
+    When MA API group data is available, each grouped entry is enriched with
+    ``external_members`` (players from other bridges in the same sync group)
+    and ``external_count``.
     """
     groups: dict[str | None, dict] = {}
     solo_counter = 0
@@ -956,7 +960,28 @@ def _build_groups_summary(clients: list) -> list[dict]:
         volumes = [m["volume"] for m in members]
         entry["avg_volume"] = round(sum(volumes) / len(volumes)) if volumes else 100
         entry["playing"] = any(m["playing"] for m in members)
+        entry["external_members"] = []
+        entry["external_count"] = 0
         result.append(entry)
+
+    # Enrich with cross-bridge member info from MA API cache
+    ma_groups = state.get_ma_groups()
+    if ma_groups:
+        for entry in result:
+            gid = entry["group_id"]
+            if not gid:
+                continue
+            ma_group = next((g for g in ma_groups if g["id"] == gid), None)
+            if not ma_group:
+                continue
+            local_names = {(m["player_name"] or "").lower() for m in entry["members"]}
+            external = [
+                {"name": m["name"], "available": m.get("available", True)}
+                for m in ma_group.get("members", [])
+                if m.get("name", "").lower() not in local_names
+            ]
+            entry["external_members"] = external
+            entry["external_count"] = len(external)
 
     return result
 
@@ -1083,7 +1108,6 @@ def _sync_ha_options(config: dict) -> None:
                 "sendspin_server": config.get("SENDSPIN_SERVER", "auto"),
                 "sendspin_port": int(config.get("SENDSPIN_PORT") or 9000),
                 "bridge_name": config.get("BRIDGE_NAME", ""),
-                "bridge_name_suffix": bool(config.get("BRIDGE_NAME_SUFFIX", False)),
                 "tz": config.get("TZ", ""),
                 "pulse_latency_msec": int(config.get("PULSE_LATENCY_MSEC") or 200),
                 "prefer_sbc_codec": bool(config.get("PREFER_SBC_CODEC", False)),
@@ -1202,7 +1226,6 @@ def api_config():
         "SENDSPIN_SERVER",
         "SENDSPIN_PORT",
         "BRIDGE_NAME",
-        "BRIDGE_NAME_SUFFIX",
         "BLUETOOTH_MAC",
         "BLUETOOTH_DEVICES",
         "BLUETOOTH_ADAPTERS",
