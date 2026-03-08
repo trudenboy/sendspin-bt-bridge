@@ -25,6 +25,10 @@ _RECONNECT_BASE = 2  # seconds — first reconnect delay
 _RECONNECT_MAX = 60  # seconds — max reconnect delay
 
 
+class _AuthFailed(Exception):
+    """Raised when MA WebSocket authentication fails."""
+
+
 def _build_now_playing(queue: dict) -> dict:
     """Extract now-playing metadata from a player_queues/all queue entry."""
     ci = queue.get("current_item") or {}
@@ -132,10 +136,38 @@ class MaMonitor:
         self._ws_url = _url.replace("http://", "ws://").replace("https://", "wss://") + "/ws"
         self._running = False
         self._msg_id = 0
+        self._cmd_queue: asyncio.Queue[tuple[str, dict, asyncio.Future]] = asyncio.Queue()
+        self._ws = None  # current websocket, set while connected
 
     def _next_id(self) -> int:
         self._msg_id += 1
         return self._msg_id
+
+    async def execute_cmd(self, command: str, args: dict) -> dict:
+        """Send a command through the persistent WS. Returns response or raises."""
+        if not self._running or self._ws is None:
+            raise RuntimeError("Monitor not connected")
+        loop = asyncio.get_event_loop()
+        fut: asyncio.Future = loop.create_future()
+        await self._cmd_queue.put((command, args, fut))
+        return await asyncio.wait_for(fut, timeout=10.0)
+
+    async def _drain_cmd_queue(self, ws) -> None:
+        """Process any pending commands from the command queue."""
+        while not self._cmd_queue.empty():
+            try:
+                command, args, fut = self._cmd_queue.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+            try:
+                mid = self._next_id()
+                await _send(ws, mid, command, args)
+                resp = await _recv(ws, timeout=5.0)
+                if not fut.done():
+                    fut.set_result(resp)
+            except Exception as e:
+                if not fut.done():
+                    fut.set_exception(e)
 
     async def _send_queue_cmd(self, ws, command: str, args: dict) -> dict:
         mid = self._next_id()
@@ -240,33 +272,39 @@ class MaMonitor:
             if not auth_resp.get("result", {}).get("authenticated"):
                 logger.warning("MA monitor: authentication failed — check MA_API_TOKEN")
                 _state.set_ma_connected(False)
-                return
+                raise _AuthFailed("check MA_API_TOKEN")
 
             logger.info("MA monitor: connected and authenticated")
             _state.set_ma_connected(True)
+            self._ws = ws
 
-            # Check and refresh stale player metadata (once per connect session)
-            await self._refresh_stale_player_metadata(ws)
-
-            # Initial poll
-            await self._poll_queues(ws)
-
-            # Subscribe to events
-            events_ok = False
             try:
-                mid = self._next_id()
-                await _send(ws, mid, "subscribe_events", {"event_types": ["player_queue_updated", "player_updated"]})
-                sub_resp = await _recv(ws, timeout=5.0)
-                events_ok = sub_resp.get("error") is None
-            except Exception:
-                events_ok = False
+                # Check and refresh stale player metadata (once per connect session)
+                await self._refresh_stale_player_metadata(ws)
 
-            if events_ok:
-                logger.info("MA monitor: subscribed to MA events")
-                await self._event_loop(ws)
-            else:
-                logger.info("MA monitor: events unavailable, using polling every %ds", _POLL_INTERVAL)
-                await self._polling_loop(ws)
+                # Initial poll
+                await self._poll_queues(ws)
+
+                # Subscribe to events
+                events_ok = False
+                try:
+                    mid = self._next_id()
+                    await _send(
+                        ws, mid, "subscribe_events", {"event_types": ["player_queue_updated", "player_updated"]}
+                    )
+                    sub_resp = await _recv(ws, timeout=5.0)
+                    events_ok = sub_resp.get("error") is None
+                except Exception:
+                    events_ok = False
+
+                if events_ok:
+                    logger.info("MA monitor: subscribed to MA events")
+                    await self._event_loop(ws)
+                else:
+                    logger.info("MA monitor: events unavailable, using polling every %ds", _POLL_INTERVAL)
+                    await self._polling_loop(ws)
+            finally:
+                self._ws = None
 
     async def _poll_queues(self, ws) -> None:
         """Fetch player_queues/all and update now-playing cache per syncgroup and solo player."""
@@ -296,7 +334,10 @@ class MaMonitor:
         _poll_deadline = time.monotonic() + _POLL_INTERVAL
         while self._running:
             try:
-                timeout = max(1.0, _poll_deadline - time.monotonic())
+                # Drain any pending commands before waiting for events
+                await self._drain_cmd_queue(ws)
+
+                timeout = max(0.5, _poll_deadline - time.monotonic())
                 try:
                     msg = await asyncio.wait_for(ws.recv(), timeout=timeout)
                 except TimeoutError:
@@ -319,6 +360,7 @@ class MaMonitor:
     async def _polling_loop(self, ws) -> None:
         """Fallback: poll every POLL_INTERVAL seconds."""
         while self._running:
+            await self._drain_cmd_queue(ws)
             await asyncio.sleep(_POLL_INTERVAL)
             await self._poll_queues(ws)
 
@@ -331,6 +373,15 @@ class MaMonitor:
                 await self._connect_and_run()
             except Exception as exc:
                 logger.warning("MA monitor disconnected: %s — reconnecting in %ds", exc, delay)
+            self._ws = None
+            # Cancel any pending command futures
+            while not self._cmd_queue.empty():
+                try:
+                    _, _, fut = self._cmd_queue.get_nowait()
+                    if not fut.done():
+                        fut.cancel()
+                except asyncio.QueueEmpty:
+                    break
             _state.set_ma_connected(False)
             _state.clear_ma_now_playing()
             if not self._running:
@@ -360,18 +411,12 @@ def start_monitor(ma_url: str, ma_token: str) -> MaMonitor:
 
 
 async def send_queue_cmd(action: str, value=None, syncgroup_id: str | None = None) -> bool:
-    """Send a queue command to MA. Uses a fresh connection (monitor shared conn not easily accessible).
+    """Send a queue command to MA, preferring the monitor's persistent WS.
 
     Supported actions: next, previous, shuffle, repeat, seek.
     syncgroup_id: target specific group; falls back to first known group.
     Returns True on success.
     """
-    from services.ma_client import _normalize_ma_url
-
-    ma_url, ma_token = _state.get_ma_api_credentials()
-    if not ma_url or not ma_token:
-        return False
-
     groups = _state.get_ma_groups()
     if not groups:
         return False
@@ -380,6 +425,39 @@ async def send_queue_cmd(action: str, value=None, syncgroup_id: str | None = Non
         queue_id = syncgroup_id
     else:
         queue_id = groups[0]["id"]  # fallback: first syncgroup
+
+    # Build the command + args
+    _QUEUE_ACTIONS = {
+        "next": ("player_queues/next", {"queue_id": queue_id}),
+        "previous": ("player_queues/previous", {"queue_id": queue_id}),
+        "shuffle": ("player_queues/shuffle", {"queue_id": queue_id, "shuffle_enabled": bool(value)}),
+        "repeat": ("player_queues/repeat", {"queue_id": queue_id, "repeat_mode": str(value)}),
+        "seek": ("player_queues/seek", {"queue_id": queue_id, "position": int(value)}),
+    }
+    if action not in _QUEUE_ACTIONS:
+        logger.warning("Unknown MA queue action: %s", action)
+        return False
+    command: str
+    args: dict
+    command, args = _QUEUE_ACTIONS[action]  # type: ignore[assignment]
+
+    # Try the persistent monitor connection first
+    mon = _monitor_instance
+    if mon and mon._ws is not None:
+        try:
+            resp = await mon.execute_cmd(command, args)
+            if resp.get("error") is None:
+                logger.info("MA queue cmd (monitor): %s value=%s → %s", action, value, queue_id)
+                return True
+        except Exception as exc:
+            logger.debug("MA queue cmd via monitor failed, falling back: %s", exc)
+
+    # Fallback: fresh WS connection
+    from services.ma_client import _normalize_ma_url
+
+    ma_url, ma_token = _state.get_ma_api_credentials()
+    if not ma_url or not ma_token:
+        return False
 
     try:
         import websockets
@@ -390,21 +468,7 @@ async def send_queue_cmd(action: str, value=None, syncgroup_id: str | None = Non
             await _recv(ws, timeout=5.0)  # server info
             await _send(ws, 1, "auth", {"token": ma_token})
             await _recv(ws, timeout=5.0)  # auth
-
-            if action == "next":
-                await _send(ws, 2, "player_queues/next", {"queue_id": queue_id})
-            elif action == "previous":
-                await _send(ws, 2, "player_queues/previous", {"queue_id": queue_id})
-            elif action == "shuffle":
-                await _send(ws, 2, "player_queues/shuffle", {"queue_id": queue_id, "shuffle_enabled": bool(value)})
-            elif action == "repeat":
-                await _send(ws, 2, "player_queues/repeat", {"queue_id": queue_id, "repeat_mode": str(value)})
-            elif action == "seek":
-                await _send(ws, 2, "player_queues/seek", {"queue_id": queue_id, "position": int(value)})
-            else:
-                logger.warning("Unknown MA queue action: %s", action)
-                return False
-
+            await _send(ws, 2, command, args)
             await _recv(ws, timeout=5.0)  # ack
         logger.info("MA queue cmd: %s value=%s → %s", action, value, queue_id)
         return True
@@ -414,7 +478,7 @@ async def send_queue_cmd(action: str, value=None, syncgroup_id: str | None = Non
 
 
 async def send_player_cmd(command: str, args: dict) -> bool:
-    """Send a player command to MA via a fresh WS connection.
+    """Send a player command to MA, preferring the monitor's persistent WS.
 
     Useful commands:
       players/cmd/volume_set      {player_id, volume_level}
@@ -424,6 +488,18 @@ async def send_player_cmd(command: str, args: dict) -> bool:
 
     Returns True on success.
     """
+    # Try the persistent monitor connection first (lower latency)
+    mon = _monitor_instance
+    if mon and mon._ws is not None:
+        try:
+            resp = await mon.execute_cmd(command, args)
+            if resp.get("error") is None:
+                logger.info("MA player cmd (monitor): %s args=%s", command, args)
+                return True
+        except Exception as exc:
+            logger.debug("MA player cmd via monitor failed, falling back: %s", exc)
+
+    # Fallback: fresh WS connection
     from services.ma_client import _normalize_ma_url
 
     ma_url, ma_token = _state.get_ma_api_credentials()

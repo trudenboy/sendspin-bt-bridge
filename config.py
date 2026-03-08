@@ -18,7 +18,7 @@ import threading
 import uuid as _uuid
 from pathlib import Path
 
-VERSION = "2.13.3"
+VERSION = "2.14.0"
 BUILD_DATE = "2026-03-08"
 
 __all__ = [
@@ -34,6 +34,7 @@ __all__ = [
     "hash_password",
     "load_config",
     "save_device_volume",
+    "update_config",
 ]
 
 DEFAULT_CONFIG = {
@@ -63,6 +64,25 @@ CONFIG_FILE = CONFIG_DIR / "config.json"
 config_lock = threading.Lock()  # serializes all config.json read-modify-write ops
 
 
+def update_config(mutator) -> None:
+    """Atomically read-modify-write config.json under config_lock.
+
+    ``mutator`` is called with the current config dict and should modify it
+    in-place.  The result is written to a temp file and atomically renamed.
+    """
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    with config_lock:
+        existing: dict = {}
+        if CONFIG_FILE.exists():
+            with open(CONFIG_FILE) as f:
+                existing = json.load(f)
+        mutator(existing)
+        tmp = str(CONFIG_FILE) + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump(existing, f, indent=2)
+        os.replace(tmp, str(CONFIG_FILE))
+
+
 def _player_id_from_mac(mac: str) -> str:
     """Stable, globally-unique player ID derived from BT MAC address."""
     return str(_uuid.uuid5(_uuid.NAMESPACE_DNS, mac.lower()))
@@ -73,14 +93,7 @@ def save_device_volume(mac: str | None, volume: int) -> None:
     if not mac or not CONFIG_FILE.exists():
         return
     try:
-        with config_lock:
-            with open(CONFIG_FILE) as f:
-                cfg = json.load(f)
-            cfg.setdefault("LAST_VOLUMES", {})[mac] = volume
-            tmp = str(CONFIG_FILE) + ".tmp"
-            with open(tmp, "w") as f:
-                json.dump(cfg, f, indent=2)
-            os.replace(tmp, str(CONFIG_FILE))
+        update_config(lambda cfg: cfg.setdefault("LAST_VOLUMES", {}).__setitem__(mac, volume))
     except Exception as e:
         logger.debug("Could not save volume for %s: %s", mac, e)
 
@@ -110,6 +123,7 @@ def load_config() -> dict:
         "LOG_LEVEL",
         "MA_API_URL",
         "MA_API_TOKEN",
+        "VOLUME_VIA_MA",
     }
 
     if CONFIG_FILE.exists():
@@ -145,17 +159,7 @@ def ensure_bridge_name(config: dict | None = None) -> str:
 
     hostname = _socket.gethostname()
     try:
-        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-        with config_lock:
-            existing: dict = {}
-            if CONFIG_FILE.exists():
-                with open(CONFIG_FILE) as f:
-                    existing = json.load(f)
-            existing["BRIDGE_NAME"] = hostname
-            tmp = str(CONFIG_FILE) + ".tmp"
-            with open(tmp, "w") as f:
-                json.dump(existing, f, indent=2)
-            os.replace(tmp, str(CONFIG_FILE))
+        update_config(lambda cfg: cfg.__setitem__("BRIDGE_NAME", hostname))
         logger.info("Auto-set BRIDGE_NAME to '%s' (hostname)", hostname)
     except Exception as e:
         logger.warning("Could not persist BRIDGE_NAME: %s", e)
@@ -194,17 +198,7 @@ def ensure_secret_key(config: dict) -> str:
         return key
     key = _secrets.token_hex(32)
     try:
-        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-        with config_lock:
-            existing: dict = {}
-            if CONFIG_FILE.exists():
-                with open(CONFIG_FILE) as f:
-                    existing = json.load(f)
-            existing["SECRET_KEY"] = key
-            tmp = str(CONFIG_FILE) + ".tmp"
-            with open(tmp, "w") as f:
-                json.dump(existing, f, indent=2)
-            os.replace(tmp, str(CONFIG_FILE))
+        update_config(lambda cfg: cfg.__setitem__("SECRET_KEY", key))
     except Exception as e:
         logger.warning("Could not persist SECRET_KEY: %s", e)
     return key

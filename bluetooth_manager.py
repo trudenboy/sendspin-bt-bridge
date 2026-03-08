@@ -17,10 +17,17 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
+from pathlib import Path
+from typing import TYPE_CHECKING
 
 from config import CONFIG_FILE
 from config import config_lock as config_lock
 from services.pulse import get_sink_volume, list_sinks, set_sink_volume
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from sendspin_client import SendspinClient
 
 logger = logging.getLogger(__name__)
 
@@ -118,11 +125,11 @@ class BluetoothManager:
         mac_address: str,
         adapter: str = "",
         device_name: str = "",
-        client=None,
+        client: SendspinClient | None = None,
         prefer_sbc: bool = False,
         check_interval: int = 10,
         max_reconnect_fails: int = 0,
-        on_sink_found=None,
+        on_sink_found: Callable[[str, int | None], None] | None = None,
         churn_threshold: int = 0,
         churn_window: float = 300.0,
     ):
@@ -130,7 +137,7 @@ class BluetoothManager:
         self.adapter = adapter  # "hci0", "hci1", etc. — empty = use default
         self.device_name = device_name or mac_address
         self.client = client
-        self.on_sink_found = on_sink_found  # Callable[[str, int | None], None] | None
+        self.on_sink_found = on_sink_found
         self.prefer_sbc = prefer_sbc
         self.connected = False  # GIL-atomic bool; safe for cross-thread reads without lock
         self.last_check = 0
@@ -183,10 +190,8 @@ class BluetoothManager:
             return ""
         # Prefer sysfs lookup — it maps MACs to hciN names without relying on
         # the ordering of 'bluetoothctl list' output which may not match hciN indices.
-        import pathlib
-
         mac_norm = effective.replace(":", "").lower()
-        bt_sysfs = pathlib.Path("/sys/class/bluetooth")
+        bt_sysfs = Path("/sys/class/bluetooth")
         try:
             for hci in sorted(bt_sysfs.iterdir()):
                 addr_file = hci / "address"

@@ -29,6 +29,7 @@ from config import (
     VERSION,
     config_lock,
     load_config,
+    update_config,
 )
 from config import (
     save_device_volume as _save_device_volume,
@@ -87,6 +88,17 @@ _SHOW_DEV_PAT = re.compile(r"^Device\s+([0-9A-Fa-f:]{17})")
 _volume_timers: dict[str, threading.Timer] = {}
 _volume_timers_lock = threading.Lock()
 
+# Cached config flag — avoid reading config.json on every volume/mute request
+_volume_via_ma: bool = True
+
+
+def _reload_volume_via_ma() -> None:
+    global _volume_via_ma
+    _volume_via_ma = load_config().get("VOLUME_VIA_MA", True)
+
+
+_reload_volume_via_ma()
+
 
 def _persist_volume(mac: str, volume: int) -> None:
     """Write volume to config.json (called via debounce timer, not inline)."""
@@ -123,6 +135,26 @@ def _detect_runtime() -> str:
         return "ha_addon"
     else:
         return "docker"
+
+
+def _enrich_status_with_ma(status: dict, client) -> None:
+    """Add MA syncgroup name and now-playing metadata to a client status dict."""
+    player_name = getattr(client, "player_name", None)
+    if not player_name:
+        return
+    ma_group = get_ma_group_for_player(player_name)
+    if ma_group and ma_group.get("name"):
+        status["group_name"] = ma_group["name"]
+    # Per-device MA now-playing: prefer name-matched syncgroup, then Sendspin-reported
+    # group_id (which IS the MA syncgroup id), then solo player_id queue
+    if ma_group:
+        status["ma_now_playing"] = get_ma_now_playing_for_group(ma_group["id"])
+    else:
+        dev_group_id: str = status.get("group_id", "")
+        pid: str = getattr(client, "player_id", "")
+        status["ma_now_playing"] = (
+            get_ma_now_playing_for_group(dev_group_id) or (get_ma_now_playing_for_group(pid) if pid else {}) or {}
+        )
 
 
 def get_client_status_for(client):
@@ -191,24 +223,7 @@ def get_client_status_for(client):
         status["bt_management_enabled"] = getattr(client, "bt_management_enabled", True)
         status["battery_level"] = getattr(bt_mgr, "battery_level", None) if bt_mgr else None
 
-        # Enrich group_name with MA syncgroup name (Sendspin sends name=None)
-        player_name = getattr(client, "player_name", None)
-        if player_name:
-            ma_group = get_ma_group_for_player(player_name)
-            if ma_group and ma_group.get("name"):
-                status["group_name"] = ma_group["name"]
-            # Per-device MA now-playing: prefer name-matched syncgroup, then Sendspin-reported
-            # group_id (which IS the MA syncgroup id), then solo player_id queue
-            if ma_group:
-                status["ma_now_playing"] = get_ma_now_playing_for_group(ma_group["id"])
-            else:
-                dev_group_id = status.get("group_id")
-                pid = getattr(client, "player_id", "")
-                status["ma_now_playing"] = (
-                    get_ma_now_playing_for_group(dev_group_id)
-                    or (get_ma_now_playing_for_group(pid) if pid else {})
-                    or {}
-                )
+        _enrich_status_with_ma(status, client)
 
         logger.debug("Status retrieved: %s", status)
         return status
@@ -427,7 +442,7 @@ def set_volume():
             targets = list(_clients)
 
         # --- MA path: proxy through MA API when connected ---
-        if not force_local and load_config().get("VOLUME_VIA_MA", True) and state.is_ma_connected() and targets:
+        if not force_local and _volume_via_ma and state.is_ma_connected() and targets:
             ma_ok = _set_volume_via_ma(targets, volume, is_group=is_group)
             if ma_ok:
                 # Do NOT update local status — bridge_daemon will receive the
@@ -505,7 +520,7 @@ def set_mute():
             targets = _clients[:1]
 
         # --- MA path ---
-        if not force_local and load_config().get("VOLUME_VIA_MA", True) and state.is_ma_connected() and targets:
+        if not force_local and _volume_via_ma and state.is_ma_connected() and targets:
             # Resolve desired mute state
             desired = bool(mute_value) if mute_value is not None else not targets[0].status.get("muted", False)
             if _set_mute_via_ma(targets, desired):
@@ -963,9 +978,10 @@ def _build_groups_summary(clients: list) -> list[dict]:
     # Sendspin assigns a unique UUID per session, so two local devices in
     # the same MA syncgroup appear as separate entries — merge them here.
     ma_groups = state.get_ma_groups()
+    entry_syncgroup: dict[int, str] = {}  # index in merged → ma_syncgroup_id
     if ma_groups:
         syncgroup_map: dict[str, dict] = {}  # ma_syncgroup_id → merged entry
-        merged = []
+        merged: list[dict] = []
         for entry in groups.values():
             ma_syncgroup_id = None
             if entry["group_id"]:
@@ -988,38 +1004,35 @@ def _build_groups_summary(clients: list) -> list[dict]:
             else:
                 if ma_syncgroup_id:
                     syncgroup_map[ma_syncgroup_id] = entry
-                    entry["_ma_syncgroup_id"] = ma_syncgroup_id
+                    entry_syncgroup[len(merged)] = ma_syncgroup_id
                 merged.append(entry)
     else:
         merged = list(groups.values())
 
     result = []
-    for entry in merged:
+    for idx, entry in enumerate(merged):
         members = entry["members"]
         volumes = [m["volume"] for m in members]
         entry["avg_volume"] = round(sum(volumes) / len(volumes)) if volumes else 100
         entry["playing"] = any(m["playing"] for m in members)
         entry["external_members"] = []
         entry["external_count"] = 0
-        result.append(entry)
 
-    # Enrich with cross-bridge member info from MA API cache
-    if ma_groups:
-        for entry in result:
-            ma_sid = entry.pop("_ma_syncgroup_id", None)
-            if not ma_sid:
-                continue
+        # Enrich with cross-bridge member info from MA API cache
+        ma_sid = entry_syncgroup.get(idx)
+        if ma_sid and ma_groups:
             ma_group = next((g for g in ma_groups if g["id"] == ma_sid), None)
-            if not ma_group:
-                continue
-            local_names = {(m["player_name"] or "").lower() for m in entry["members"]}
-            external = [
-                {"name": m["name"], "available": m.get("available", True)}
-                for m in ma_group.get("members", [])
-                if m.get("name", "").lower() not in local_names
-            ]
-            entry["external_members"] = external
-            entry["external_count"] = len(external)
+            if ma_group:
+                local_names = {(m["player_name"] or "").lower() for m in members}
+                external = [
+                    {"name": m["name"], "available": m.get("available", True)}
+                    for m in ma_group.get("members", [])
+                    if m.get("name", "").lower() not in local_names
+                ]
+                entry["external_members"] = external
+                entry["external_count"] = len(external)
+
+        result.append(entry)
 
     return result
 
@@ -1351,6 +1364,7 @@ def api_config():
     with _adapter_cache_lock:
         load_adapter_name_cache()
 
+    _reload_volume_via_ma()
     _sync_ha_options(config)
 
     return jsonify({"success": True})
@@ -1377,20 +1391,10 @@ def api_set_password():
 
     pw_hash = _hash_pw(password)
 
-    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    with config_lock:
-        existing: dict = {}
-        if CONFIG_FILE.exists():
-            try:
-                with open(CONFIG_FILE) as f:
-                    existing = json.load(f)
-            except Exception as exc:
-                logger.debug("read config for auth update failed: %s", exc)
-        existing["AUTH_PASSWORD_HASH"] = pw_hash
-        tmp = str(CONFIG_FILE) + ".tmp"
-        with open(tmp, "w") as f:
-            json.dump(existing, f, indent=2)
-        os.replace(tmp, str(CONFIG_FILE))
+    try:
+        update_config(lambda cfg: cfg.__setitem__("AUTH_PASSWORD_HASH", pw_hash))
+    except Exception as exc:
+        logger.debug("read config for auth update failed: %s", exc)
 
     return jsonify({"success": True})
 
@@ -1408,20 +1412,10 @@ def api_set_log_level():
     os.environ["LOG_LEVEL"] = level
 
     # Persist to config.json
-    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    with config_lock:
-        existing: dict = {}
-        if CONFIG_FILE.exists():
-            try:
-                with open(CONFIG_FILE) as f:
-                    existing = json.load(f)
-            except Exception as exc:
-                logger.debug("read config for log level update failed: %s", exc)
-        existing["LOG_LEVEL"] = level
-        tmp = str(CONFIG_FILE) + ".tmp"
-        with open(tmp, "w") as f:
-            json.dump(existing, f, indent=2)
-        os.replace(tmp, str(CONFIG_FILE))
+    try:
+        update_config(lambda cfg: cfg.__setitem__("LOG_LEVEL", level))
+    except Exception as exc:
+        logger.debug("read config for log level update failed: %s", exc)
 
     # Propagate to all running subprocesses via stdin IPC
     loop = state.get_main_loop()
@@ -1565,140 +1559,158 @@ def api_bt_paired():
         return jsonify({"devices": [], "error": str(e)})
 
 
+def _run_bluetoothctl_scan(adapter_macs: "list[str]") -> str:
+    """Run a bluetoothctl scan session and return combined stdout."""
+    post_scan_cmds: list[str] = []
+    for m in adapter_macs:
+        post_scan_cmds.extend([f"select {m}", "show", "devices"])
+    bt_timeout = 12 + len(adapter_macs) * 2
+
+    proc = subprocess.Popen(
+        ["bluetoothctl"],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    try:
+        if adapter_macs:
+            init_cmds: list[str] = []
+            for m in adapter_macs:
+                init_cmds.extend([f"select {m}", "power on", "scan on"])
+        else:
+            init_cmds = ["power on", "agent on", "scan on"]
+        if proc.stdin is None:
+            raise RuntimeError("bluetoothctl subprocess stdin unavailable")
+        proc.stdin.write("\n".join(init_cmds) + "\n")
+        proc.stdin.flush()
+        time.sleep(10)
+        proc.stdin.write("scan off\n" + "\n".join(post_scan_cmds) + "\n")
+        proc.stdin.flush()
+        time.sleep(1)
+        result_stdout, _ = proc.communicate(timeout=bt_timeout + 4)
+    except Exception:
+        proc.kill()
+        proc.wait()
+        raise
+    return result_stdout
+
+
+def _parse_scan_output(stdout: str) -> "tuple[set[str], dict[str, str], dict[str, str], set[str]]":
+    """Parse bluetoothctl scan output into (seen_macs, names, device_adapter, active_macs)."""
+    seen: set[str] = set()
+    names: dict[str, str] = {}
+    device_adapter: dict[str, str] = {}
+    active_macs: set[str] = set()
+    current_show_adapter: str = ""
+    for line in stdout.splitlines():
+        clean = _ANSI_RE.sub("", line).strip()
+        if not clean.startswith("["):
+            ctrl_m = _SHOW_CTRL_PAT.match(clean)
+            if ctrl_m:
+                current_show_adapter = ctrl_m.group(1).upper()
+                continue
+            if current_show_adapter:
+                dev_m = _SHOW_DEV_PAT.match(clean)
+                if dev_m:
+                    dmac = dev_m.group(1).upper()
+                    if dmac not in device_adapter:
+                        device_adapter[dmac] = current_show_adapter
+                    continue
+        scan_m = _NEW_DEV_PAT.search(clean)
+        if scan_m:
+            mac = scan_m.group(1).upper()
+            name = scan_m.group(2).strip()
+            seen.add(mac)
+            if name and not re.match(r"^[0-9A-Fa-f]{2}[-:]", name):
+                names[mac] = name
+            continue
+        chg_n = _CHG_NAME_PAT.search(clean)
+        if chg_n:
+            mac = chg_n.group(1).upper()
+            names[mac] = chg_n.group(2).strip()
+            continue
+        chg_r = _CHG_RSSI_PAT.search(clean)
+        if chg_r:
+            active_macs.add(chg_r.group(1).upper())
+    return seen, names, device_adapter, active_macs
+
+
+def _resolve_unnamed_devices(all_macs: "set[str]", names: "dict[str, str]") -> None:
+    """Look up names for unnamed devices from the bluetoothctl device cache."""
+    unnamed = {mac for mac in all_macs if mac not in names}
+    if not unnamed:
+        return
+    db_result = subprocess.run(
+        ["bluetoothctl"],
+        input="devices\n",
+        capture_output=True,
+        text=True,
+        timeout=5,
+    )
+    for line in db_result.stdout.splitlines():
+        clean = _ANSI_RE.sub("", line)
+        db_m = _DEV_PAT.search(clean)
+        if db_m:
+            mac = db_m.group(1).upper()
+            name = db_m.group(2).strip()
+            if mac in unnamed and name and not re.match(r"^[0-9A-Fa-f]{2}[-:]", name):
+                names[mac] = name
+
+
+def _enrich_audio_device(mac: str, names: "dict[str, str]") -> "dict | None":
+    """Return device info dict if the device is audio-capable, else None."""
+    try:
+        r = subprocess.run(
+            ["bluetoothctl", "info", mac],
+            capture_output=True,
+            text=True,
+            timeout=4,
+        )
+        out = r.stdout
+        out_lower = out.lower()
+    except Exception:
+        return {"mac": mac, "name": names.get(mac, mac)}
+    if mac not in names:
+        nm = re.search(r"\bName:\s+(.*)", out)
+        if nm:
+            n = nm.group(1).strip()
+            if n and not re.match(r"^[0-9A-Fa-f]{2}[-:]", n):
+                names[mac] = n
+    class_m = re.search(r"Class:\s+(0x[0-9A-Fa-f]+)", out)
+    if class_m:
+        cls = int(class_m.group(1), 16)
+        if (cls >> 8) & 0x1F != 4:
+            return None
+    elif any(u in out_lower for u in _AUDIO_UUIDS):
+        pass
+    elif "UUID:" in out:
+        return None
+    return {"mac": mac, "name": names.get(mac, mac)}
+
+
+_MAX_SCAN_RESULTS = 50
+
+
 def _run_bt_scan(job_id: str) -> None:
     """Perform BT scan in a background thread and store result in state."""
     try:
         list_result = subprocess.run(["bluetoothctl", "list"], capture_output=True, text=True, timeout=5)
         adapter_macs = re.findall(r"Controller\s+([0-9A-Fa-f:]{17})", list_result.stdout)
 
-        post_scan_cmds = []
-        for m in adapter_macs:
-            post_scan_cmds.extend([f"select {m}", "show", "devices"])
-        bt_timeout = 12 + len(adapter_macs) * 2
-
-        proc = subprocess.Popen(
-            ["bluetoothctl"],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-        )
-        try:
-            if adapter_macs:
-                init_cmds: list[str] = []
-                for m in adapter_macs:
-                    init_cmds.extend([f"select {m}", "power on", "scan on"])
-            else:
-                init_cmds = ["power on", "agent on", "scan on"]
-            if proc.stdin is None:
-                raise RuntimeError("bluetoothctl subprocess stdin unavailable")
-            proc.stdin.write("\n".join(init_cmds) + "\n")
-            proc.stdin.flush()
-            time.sleep(10)
-            proc.stdin.write("scan off\n" + "\n".join(post_scan_cmds) + "\n")
-            proc.stdin.flush()
-            time.sleep(1)
-            result_stdout, _ = proc.communicate(timeout=bt_timeout + 4)
-        except Exception:
-            proc.kill()
-            proc.wait()
-            raise
-
-        seen: set = set()
-        names: dict = {}
-        device_adapter: dict = {}
-        active_macs: set = set()
-        current_show_adapter: str = ""
-        for line in result_stdout.splitlines():
-            clean = _ANSI_RE.sub("", line).strip()
-            if not clean.startswith("["):
-                ctrl_m = _SHOW_CTRL_PAT.match(clean)
-                if ctrl_m:
-                    current_show_adapter = ctrl_m.group(1).upper()
-                    continue
-                if current_show_adapter:
-                    dev_m = _SHOW_DEV_PAT.match(clean)
-                    if dev_m:
-                        dmac = dev_m.group(1).upper()
-                        if dmac not in device_adapter:
-                            device_adapter[dmac] = current_show_adapter
-                        continue
-            scan_m = _NEW_DEV_PAT.search(clean)
-            if scan_m:
-                mac = scan_m.group(1).upper()
-                name = scan_m.group(2).strip()
-                seen.add(mac)
-                if name and not re.match(r"^[0-9A-Fa-f]{2}[-:]", name):
-                    names[mac] = name
-                continue
-            chg_n = _CHG_NAME_PAT.search(clean)
-            if chg_n:
-                mac = chg_n.group(1).upper()
-                names[mac] = chg_n.group(2).strip()
-                continue
-            chg_r = _CHG_RSSI_PAT.search(clean)
-            if chg_r:
-                active_macs.add(chg_r.group(1).upper())
+        result_stdout = _run_bluetoothctl_scan(adapter_macs)
+        seen, names, device_adapter, active_macs = _parse_scan_output(result_stdout)
         all_macs = seen | active_macs
 
-        # Cap results to avoid DoS in dense BT environments
-        _MAX_SCAN_RESULTS = 50
         if len(all_macs) > _MAX_SCAN_RESULTS:
             logger.warning("BT scan found %d devices, capping to %d", len(all_macs), _MAX_SCAN_RESULTS)
             all_macs = set(list(all_macs)[:_MAX_SCAN_RESULTS])
 
-        # Look up names for devices seen only by RSSI (already-paired/cached)
-        unnamed = {mac for mac in all_macs if mac not in names}
-        if unnamed:
-            db_result = subprocess.run(
-                ["bluetoothctl"],
-                input="devices\n",
-                capture_output=True,
-                text=True,
-                timeout=5,
-            )
-            for line in db_result.stdout.splitlines():
-                clean = _ANSI_RE.sub("", line)
-                db_m = _DEV_PAT.search(clean)
-                if db_m:
-                    mac = db_m.group(1).upper()
-                    name = db_m.group(2).strip()
-                    if mac in unnamed and name and not re.match(r"^[0-9A-Fa-f]{2}[-:]", name):
-                        names[mac] = name
-
-        # Filter to audio-capable devices and enrich with bluetoothctl info (parallel)
-        def _enrich_device(mac: str) -> "dict | None":
-            try:
-                r = subprocess.run(
-                    ["bluetoothctl", "info", mac],
-                    capture_output=True,
-                    text=True,
-                    timeout=4,
-                )
-                out = r.stdout
-                out_lower = out.lower()
-            except Exception:
-                return {"mac": mac, "name": names.get(mac, mac)}
-            if mac not in names:
-                nm = re.search(r"\bName:\s+(.*)", out)
-                if nm:
-                    n = nm.group(1).strip()
-                    if n and not re.match(r"^[0-9A-Fa-f]{2}[-:]", n):
-                        names[mac] = n
-            class_m = re.search(r"Class:\s+(0x[0-9A-Fa-f]+)", out)
-            if class_m:
-                cls = int(class_m.group(1), 16)
-                if (cls >> 8) & 0x1F != 4:
-                    return None
-            elif any(u in out_lower for u in _AUDIO_UUIDS):
-                pass
-            elif "UUID:" in out:
-                return None
-            return {"mac": mac, "name": names.get(mac, mac)}
+        _resolve_unnamed_devices(all_macs, names)
 
         devices = []
         with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
-            futures = {pool.submit(_enrich_device, mac): mac for mac in all_macs}
+            futures = {pool.submit(_enrich_audio_device, mac, names): mac for mac in all_macs}
             for fut in concurrent.futures.as_completed(futures):
                 result = fut.result()
                 if result is not None:

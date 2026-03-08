@@ -86,20 +86,26 @@ class DeviceStatus:
             raise KeyError(key)
 
     def __setitem__(self, key: str, value) -> None:
-        if hasattr(self, key):
+        if key in self._field_names:
             setattr(self, key, value)
         else:
             logger.debug("DeviceStatus: unknown key ignored: %s", key)
 
+    _field_names: frozenset = field(default=frozenset(), init=False, repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        # Cache field names once for fast __contains__ / __setitem__ lookups
+        object.__setattr__(self, "_field_names", frozenset(f.name for f in fields(self) if f.name != "_field_names"))
+
     def __contains__(self, key: object) -> bool:
-        return hasattr(self, key) if isinstance(key, str) else False
+        return key in self._field_names if isinstance(key, str) else False
 
     def get(self, key: str, default=None):
         return getattr(self, key, default)
 
     def update(self, d: dict) -> None:
         for k, v in d.items():
-            if hasattr(self, k):
+            if k in self._field_names:
                 setattr(self, k, v)
             else:
                 logger.debug("DeviceStatus: unknown key ignored: %s", k)
@@ -274,7 +280,7 @@ class SendspinClient:
             self._MAX_ZOMBIE_RESTARTS,
         )
         # Schedule restart on the event loop (we're called from an async context)
-        asyncio.ensure_future(self._zombie_restart())
+        asyncio.create_task(self._zombie_restart())
 
     async def _zombie_restart(self) -> None:
         """Restart subprocess to recover from zombie playback."""
@@ -471,17 +477,20 @@ class SendspinClient:
 
     async def _keepalive_loop(self) -> None:
         """Periodically send a short silence burst to the BT sink to prevent speaker auto-disconnect."""
-        # Stagger startup across devices to avoid simultaneous paplay bursts
-        await asyncio.sleep(random.uniform(0, self.keepalive_interval))
-        while self.running:
-            await asyncio.sleep(self.keepalive_interval)
-            if (
-                self.bt_manager
-                and self.bt_manager.connected
-                and self.bluetooth_sink_name
-                and not self.status.get("audio_streaming")
-            ):
-                await self._send_keepalive_burst()
+        try:
+            # Stagger startup across devices to avoid simultaneous paplay bursts
+            await asyncio.sleep(random.uniform(0, self.keepalive_interval))
+            while self.running:
+                await asyncio.sleep(self.keepalive_interval)
+                if (
+                    self.bt_manager
+                    and self.bt_manager.connected
+                    and self.bluetooth_sink_name
+                    and not self.status.get("audio_streaming")
+                ):
+                    await self._send_keepalive_burst()
+        except asyncio.CancelledError:
+            return
 
     async def _send_keepalive_burst(self) -> None:
         """Write 500 ms of PCM silence to the BT PulseAudio sink via paplay."""

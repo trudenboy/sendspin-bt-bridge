@@ -86,3 +86,37 @@ def test_check_password_handles_garbage():
 
     assert not check_password("x", "")
     assert not check_password("x", "not_a_hash")
+
+
+def test_load_volume_via_ma(tmp_path):
+    """VOLUME_VIA_MA must survive load_config() round-trip."""
+    _write_config(tmp_path, {"VOLUME_VIA_MA": False})
+    from config import load_config
+
+    assert load_config()["VOLUME_VIA_MA"] is False
+
+
+def test_update_config(tmp_path):
+    """update_config should atomically modify config.json."""
+    _write_config(tmp_path, {"SENDSPIN_PORT": 9000})
+    from config import update_config
+
+    update_config(lambda cfg: cfg.__setitem__("SENDSPIN_PORT", 1234))
+    with open(tmp_path / "config.json") as f:
+        assert json.load(f)["SENDSPIN_PORT"] == 1234
+
+
+def test_update_config_creates_dir(tmp_path, monkeypatch):
+    """update_config should create CONFIG_DIR if it doesn't exist."""
+    import config
+
+    sub = tmp_path / "sub"
+    monkeypatch.setattr(config, "CONFIG_DIR", sub)
+    monkeypatch.setattr(config, "CONFIG_FILE", sub / "config.json")
+
+    from config import update_config
+
+    update_config(lambda cfg: cfg.__setitem__("key", "val"))
+    assert sub.exists()
+    with open(sub / "config.json") as f:
+        assert json.load(f)["key"] == "val"

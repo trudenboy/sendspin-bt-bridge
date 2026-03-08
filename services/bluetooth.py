@@ -14,6 +14,7 @@ from pathlib import Path
 
 from config import CONFIG_FILE as _CONFIG_FILE
 from config import config_lock as _config_lock
+from config import update_config as _update_config
 
 logger = logging.getLogger(__name__)
 _OPTIONS_FILE = Path("/data/options.json")
@@ -61,18 +62,15 @@ def persist_device_enabled(player_name: str, enabled: bool) -> None:
     """Persist the enabled flag to config.json and (in HA mode) to options.json."""
     if not _CONFIG_FILE.exists():
         return
+
+    def _set_enabled(cfg: dict) -> None:
+        for dev in cfg.get("BLUETOOTH_DEVICES", []):
+            if dev.get("player_name") == player_name:
+                dev["enabled"] = enabled
+                break
+
     try:
-        with _config_lock:
-            with open(_CONFIG_FILE) as f:
-                cfg = json.load(f)
-            for dev in cfg.get("BLUETOOTH_DEVICES", []):
-                if dev.get("player_name") == player_name:
-                    dev["enabled"] = enabled
-                    break
-            tmp = str(_CONFIG_FILE) + ".tmp"
-            with open(tmp, "w") as f:
-                json.dump(cfg, f, indent=2)
-            os.replace(tmp, str(_CONFIG_FILE))
+        _update_config(_set_enabled)
     except Exception as e:
         logger.warning("Could not persist enabled flag for '%s': %s", player_name, e)
 
