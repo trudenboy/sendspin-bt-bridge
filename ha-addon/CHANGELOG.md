@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.13.1] - 2026-03-08
+
+### Fixed
+- Cross-bridge group badge not rendering — fixed syncgroup ID resolution and groups missing from polling response
+- Waitress 3.x SSE crash — removed hop-by-hop `Connection` header from SSE response
+- Devices not rendering — fixed JS variable name mismatch (`data.groups` → `status.groups`)
+
+### Added
+- Auto-populate BRIDGE_NAME from hostname on first startup
+- Cross-bridge sync group visibility: `🔗 GroupName +N` badge with hover tooltip
+
+### Removed
+- `BRIDGE_NAME_SUFFIX` option (replaced by auto-populated BRIDGE_NAME)
+
 ## [2.12.6] - 2026-03-08
 
 ### Fixed

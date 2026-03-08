@@ -13,11 +13,12 @@ import json
 import logging
 import os
 import secrets as _secrets
+import socket as _socket
 import threading
 import uuid as _uuid
 from pathlib import Path
 
-VERSION = "2.12.6"
+VERSION = "2.13.1"
 BUILD_DATE = "2026-03-08"
 
 __all__ = [
@@ -28,6 +29,7 @@ __all__ = [
     "VERSION",
     "check_password",
     "config_lock",
+    "ensure_bridge_name",
     "ensure_secret_key",
     "hash_password",
     "load_config",
@@ -124,6 +126,40 @@ def load_config() -> dict:
         logger.info("Config file not found at %s, using defaults", CONFIG_FILE)
 
     return result
+
+
+def ensure_bridge_name(config: dict | None = None) -> str:
+    """Return BRIDGE_NAME, auto-populating it with the hostname if empty.
+
+    On first startup the config will have ``BRIDGE_NAME: ""``.  This function
+    writes the machine hostname into ``config.json`` so that the user can see
+    and edit it in the Web UI *before* adding any Bluetooth devices.
+    """
+    if config is None:
+        config = load_config()
+    raw = config.get("BRIDGE_NAME", "") or os.getenv("BRIDGE_NAME", "")
+    if raw.lower() in ("auto", "hostname"):
+        raw = _socket.gethostname()
+    if raw:
+        return raw
+
+    hostname = _socket.gethostname()
+    try:
+        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        with config_lock:
+            existing: dict = {}
+            if CONFIG_FILE.exists():
+                with open(CONFIG_FILE) as f:
+                    existing = json.load(f)
+            existing["BRIDGE_NAME"] = hostname
+            tmp = str(CONFIG_FILE) + ".tmp"
+            with open(tmp, "w") as f:
+                json.dump(existing, f, indent=2)
+            os.replace(tmp, str(CONFIG_FILE))
+        logger.info("Auto-set BRIDGE_NAME to '%s' (hostname)", hostname)
+    except Exception as e:
+        logger.warning("Could not persist BRIDGE_NAME: %s", e)
+    return hostname
 
 
 # ---------------------------------------------------------------------------

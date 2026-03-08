@@ -29,6 +29,7 @@ var currentLogLevel = 'all';
 var btAdapters = [];
 var btManualAdapters = [];
 var lastDevices = [];
+var lastGroups = [];
 
 // Return first slash-separated segment with "+N" suffix if list has more items.
 // E.g. "A/B/C" → "A +2". Single values pass through unchanged.
@@ -150,6 +151,7 @@ async function updateStatus() {
             lastReanchorAt = {};
         }
         lastDevices = sorted;
+        lastGroups = status.groups || [];
         var grid = document.getElementById('status-grid');
 
         sorted.forEach(function(dev, i) {
@@ -340,13 +342,29 @@ function populateDeviceCard(i, dev) {
     if (groupBadge) {
         var groupLabel = dev.group_name || dev.group_id || '';
         var groupDisplay = groupLabel ? groupLabel.split('-').pop() : '';
-        groupBadge.textContent = groupDisplay ? '\uD83D\uDD17 ' + groupDisplay : '';
-        groupBadge.title = groupLabel;
-        // Solo = no other bridge device shares this group_id
+
+        // Find matching group entry to get external (cross-bridge) members
+        var grp = dev.group_id
+            ? (lastGroups || []).find(function(g) { return g.group_id === dev.group_id; })
+            : null;
+        var extCount = grp ? (grp.external_count || 0) : 0;
+        var extSuffix = extCount > 0 ? '  +' + extCount : '';
+        groupBadge.textContent = groupDisplay ? '\uD83D\uDD17 ' + groupDisplay + extSuffix : '';
+
+        // Rich tooltip: local members (✓) + external members (🌐)
+        var tipLines = [groupLabel];
+        if (grp && grp.members && grp.members.length > 0) {
+            tipLines.push('───');
+            grp.members.forEach(function(m) { tipLines.push('✓ ' + (m.player_name || '?')); });
+            (grp.external_members || []).forEach(function(m) { tipLines.push('\uD83C\uDF10 ' + m.name); });
+        }
+        groupBadge.title = tipLines.join('\n');
+
+        // Solo = no other bridge device shares this group_id and no external members
         var groupPeers = dev.group_id
             ? (lastDevices || []).filter(function(d) { return d !== dev && d.group_id === dev.group_id; }).length
             : 0;
-        var isSolo = !groupPeers;
+        var isSolo = !groupPeers && !extCount;
         groupBadge.classList.toggle('hover-only', isSolo);
         groupBadge.style.display = groupDisplay ? '' : 'none';
     }
@@ -1985,6 +2003,7 @@ var _statusInterval = null;
                     lastReanchorAt = {};
                 }
                 lastDevices = sorted;
+                lastGroups = status.groups || [];
                 var grid = document.getElementById('status-grid');
                 sorted.forEach(function(dev, i) {
                     var card = document.getElementById('device-card-' + i);

@@ -24,6 +24,7 @@ from bluetooth_manager import BluetoothManager
 from config import (
     CONFIG_FILE,
     _player_id_from_mac,
+    ensure_bridge_name,
     load_config,
     save_device_volume,
 )
@@ -676,15 +677,8 @@ async def main():
     server_host = config.get("SENDSPIN_SERVER", "auto")
     server_port = int(config.get("SENDSPIN_PORT") or 9000)
 
-    # Bridge name identification
-    raw_bridge = config.get("BRIDGE_NAME", "") or os.getenv("BRIDGE_NAME", "")
-    if raw_bridge.lower() in ("auto", "hostname"):
-        effective_bridge = socket.gethostname()
-    elif bool(config.get("BRIDGE_NAME_SUFFIX", False)) and not raw_bridge:
-        # No explicit bridge name but suffix enabled → use hostname
-        effective_bridge = socket.gethostname()
-    else:
-        effective_bridge = raw_bridge  # '' = disabled
+    # Bridge name identification (auto-populated with hostname on first run)
+    effective_bridge = ensure_bridge_name(config)
     # Set timezone
     tz = os.getenv("TZ", config.get("TZ", "UTC"))
     os.environ["TZ"] = tz

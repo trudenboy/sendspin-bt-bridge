@@ -101,7 +101,6 @@ def main() -> None:
         "SENDSPIN_SERVER": str(opts.get("sendspin_server") or "auto"),
         "SENDSPIN_PORT": int(opts.get("sendspin_port") or 9000),
         "BRIDGE_NAME": str(opts.get("bridge_name") or ""),
-        "BRIDGE_NAME_SUFFIX": bool(opts.get("bridge_name_suffix", False)),
         "BLUETOOTH_DEVICES": list(opts.get("bluetooth_devices") or []),
         "BLUETOOTH_ADAPTERS": adapters,
         "TZ": tz,
