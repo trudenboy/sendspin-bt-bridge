@@ -1,0 +1,135 @@
+name: 🐛 Bug Report
+description: Report a bug or unexpected behavior
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug! Please fill out the form below so we can reproduce and fix the issue.
+
+        **Before submitting:** check [existing issues](https://github.com/trudenboy/sendspin-bt-bridge/issues) and [Q&A discussions](https://github.com/trudenboy/sendspin-bt-bridge/discussions/categories/q-a).
+
+        For Bluetooth/Audio specific problems (no sound, pairing failures, codec issues) use the **[Bluetooth & Audio Issue](https://github.com/trudenboy/sendspin-bt-bridge/issues/new?template=bluetooth_audio.yml)** template instead.
+
+  - type: textarea
+    id: description
+    validations:
+      required: true
+    attributes:
+      label: Description
+      description: A clear description of the bug. What happened? What did you expect?
+      placeholder: |
+        When I try to ... the bridge does ... instead of ...
+
+  - type: input
+    id: version
+    validations:
+      required: true
+    attributes:
+      label: Bridge Version
+      description: Shown in the web UI header or `docker logs` at startup
+      placeholder: "2.7.4"
+
+  - type: dropdown
+    id: deployment
+    validations:
+      required: true
+    attributes:
+      label: Deployment Method
+      options:
+        - Home Assistant Addon
+        - Docker Compose
+        - Proxmox LXC
+        - OpenWrt LXC
+        - Bare Metal (pip install)
+
+  - type: input
+    id: host_os
+    validations:
+      required: true
+    attributes:
+      label: Host OS
+      description: Operating system and version
+      placeholder: "HAOS 14.1 / Debian 12 / Ubuntu 24.04 / Proxmox 8.3"
+
+  - type: dropdown
+    id: audio_system
+    validations:
+      required: true
+    attributes:
+      label: Audio System
+      options:
+        - PipeWire
+        - PulseAudio
+        - Not sure
+
+  - type: dropdown
+    id: device_count
+    attributes:
+      label: Number of Bluetooth Devices
+      options:
+        - "1"
+        - "2-3"
+        - "4+"
+
+  - type: input
+    id: bt_adapter
+    attributes:
+      label: Bluetooth Adapter
+      description: Model or chipset (optional)
+      placeholder: "Intel AX200 / TP-Link UB500 / built-in RPi"
+
+  - type: textarea
+    id: steps
+    validations:
+      required: true
+    attributes:
+      label: Steps to Reproduce
+      description: Minimal steps to reproduce the behavior
+      placeholder: |
+        1. Start the bridge with config ...
+        2. Open the web UI
+        3. Click on ...
+        4. See error ...
+
+  - type: textarea
+    id: expected
+    validations:
+      required: true
+    attributes:
+      label: Expected Behavior
+      description: What should have happened instead?
+
+  - type: textarea
+    id: logs
+    validations:
+      required: true
+    attributes:
+      label: Logs
+      description: |
+        Paste relevant log output. Get logs with:
+        - Docker: `docker logs sendspin-client --tail 100`
+        - HA Addon: Addon → Log tab
+        - LXC: `journalctl -u sendspin-client --no-pager -n 100`
+      render: shell
+
+  - type: textarea
+    id: config
+    attributes:
+      label: Configuration
+      description: |
+        Paste your `config.json` (remove passwords/tokens).
+        Docker: `docker exec sendspin-client cat /config/config.json`
+      render: json
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots
+      description: If applicable, add screenshots of the web UI or error messages.
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: Any other relevant information.

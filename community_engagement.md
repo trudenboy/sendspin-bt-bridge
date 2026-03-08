@@ -66,3 +66,31 @@
 - Если в проект добавлен значительный оригинальный код — обсуди с Loryan Strant
   добавление себя как соавтора копирайта
 - MA использует Apache 2.0, но для companion-проектов MIT допустим
+
+---
+
+## Шаг 7 — Reddit (r/homeassistant)
+
+- Сабреддит: [r/homeassistant](https://www.reddit.com/r/homeassistant/)
+- Flair: `I Made This!`
+- Формат: Gallery post (инфографика + скриншоты) + развёрнутый комментарий от автора
+- Лучшее время: вторник–четверг, 14:00–17:00 UTC
+- Требования перед публикацией:
+  - Активный аккаунт с полезными комментариями в сабреддите
+  - Соблюдение правила 90/10 (не более 10% промоушн)
+- Изображения для gallery:
+  1. `sbb_infographic_en.png` — инфографика (первое изображение, главный hook)
+  2. `screenshot-dashboard-full.png` — полный дашборд
+  3. `screenshot-device-card-playing.png` — карточка устройства
+  4. `ma-players.png` — вид плееров в Music Assistant
+  5. `screenshot-diagnostics.png` — панель диагностики
+  6. `multiroom-floorplan.png` — мультирум схема (опционально)
+- Заголовок: `I built a Bluetooth Bridge for Music Assistant — multi-device multiroom audio from any BT speaker (HA Addon / Docker / Proxmox LXC)`
+- Содержание поста:
+  - Проблема: MA не поддерживает BT-колонки нативно
+  - Решение: мост, превращающий любую BT-колонку в полноценный MA-плеер
+  - Ключевые фичи: multi-device, multiroom sync, auto-reconnect, web UI, REST API
+  - 4 варианта развёртывания
+  - Ссылки: GitHub, документация, MA Discussion (#5061)
+  - Призыв к обратной связи и feature requests
+- После публикации: активно отвечать на комментарии в первые 24 часа

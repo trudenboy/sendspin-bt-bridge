@@ -1,0 +1,75 @@
+name: 💡 Feature Request
+description: Suggest a new feature or enhancement
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Have an idea for a new feature? We'd love to hear it!
+
+        **Tip:** For early-stage ideas or brainstorming, consider starting a [Discussion in Ideas](https://github.com/trudenboy/sendspin-bt-bridge/discussions/categories/ideas) first.
+
+  - type: textarea
+    id: description
+    validations:
+      required: true
+    attributes:
+      label: Feature Description
+      description: A clear description of the feature you'd like to see.
+      placeholder: |
+        I'd like the bridge to support ...
+
+  - type: textarea
+    id: motivation
+    validations:
+      required: true
+    attributes:
+      label: Motivation / Use Case
+      description: What problem does this solve? Why do you need it?
+      placeholder: |
+        Currently I have to ... which is inconvenient because ...
+
+  - type: checkboxes
+    id: deployment_modes
+    attributes:
+      label: Affected Deployment Modes
+      options:
+        - label: Home Assistant Addon
+        - label: Docker Compose
+        - label: Proxmox LXC
+        - label: OpenWrt LXC
+        - label: All / Not deployment-specific
+
+  - type: checkboxes
+    id: components
+    attributes:
+      label: Affected Components
+      options:
+        - label: Web UI
+        - label: Bluetooth connectivity
+        - label: Audio / PulseAudio
+        - label: REST API
+        - label: Configuration
+        - label: Multiroom sync
+        - label: Music Assistant integration
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Have you considered any workarounds or alternative approaches?
+
+  - type: dropdown
+    id: contribution
+    attributes:
+      label: Willingness to Contribute
+      options:
+        - I can submit a PR
+        - I can help with testing
+        - Just an idea
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: Mockups, screenshots, links to related projects or discussions.

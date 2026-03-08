@@ -1,0 +1,17 @@
+blank_issues_enabled: false
+contact_links:
+  - name: ❓ Question or Setup Help
+    url: https://github.com/trudenboy/sendspin-bt-bridge/discussions/categories/q-a
+    about: For setup questions and troubleshooting — use GitHub Discussions Q&A
+  - name: 🔊 Bluetooth & Audio Help
+    url: https://github.com/trudenboy/sendspin-bt-bridge/discussions
+    about: Questions about speaker compatibility, audio routing, codecs — ask in Discussions
+  - name: 🏗️ Deployment Help
+    url: https://github.com/trudenboy/sendspin-bt-bridge/discussions
+    about: Help with Docker, HA Addon, Proxmox LXC, or OpenWrt setup
+  - name: 💬 Music Assistant Discussion
+    url: https://github.com/orgs/music-assistant/discussions/5061
+    about: Discuss the project in the Music Assistant community
+  - name: 📖 Documentation
+    url: https://trudenboy.github.io/sendspin-bt-bridge/
+    about: Check the docs — your answer might already be there
