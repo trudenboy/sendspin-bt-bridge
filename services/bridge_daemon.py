@@ -15,7 +15,7 @@ import asyncio
 import logging
 import os
 import socket
-from datetime import datetime
+from datetime import UTC, datetime
 from importlib.metadata import version as _pkg_version
 from typing import TYPE_CHECKING
 
@@ -132,7 +132,7 @@ class BridgeDaemon(SendspinDaemon):
     async def _handle_server_connection(self, ws) -> None:
         """Mark server connected before passing to parent handler (mDNS mode)."""
         if not self._bridge_status.get("server_connected"):
-            self._bridge_status["server_connected_at"] = datetime.now().isoformat()
+            self._bridge_status["server_connected_at"] = datetime.now(tz=UTC).isoformat()
         self._bridge_status["server_connected"] = True
         self._bridge_status["connected"] = True
         # Clear group state on new connection so stale IDs don't persist
@@ -176,7 +176,7 @@ class BridgeDaemon(SendspinDaemon):
         is_playing = event == "start"
         if self._bridge_status.get("playing") != is_playing:
             self._bridge_status["playing"] = is_playing
-            self._bridge_status["state_changed_at"] = datetime.now().isoformat()
+            self._bridge_status["state_changed_at"] = datetime.now(tz=UTC).isoformat()
             self._notify()
         if event == "stop":
             self._bridge_status["audio_streaming"] = False

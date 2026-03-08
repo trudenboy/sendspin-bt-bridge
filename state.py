@@ -5,7 +5,9 @@ Single source of truth for the active SendspinClient list, shared between
 web_interface.py (reads for API responses) and sendspin_client.py (writes via set_clients).
 """
 
-import asyncio
+from __future__ import annotations
+
+import asyncio  # noqa: TC003 — used at runtime for event loop storage
 import json
 import logging
 import threading
@@ -93,6 +95,24 @@ def _flush_notify() -> None:
         _status_condition.notify_all()
 
 
+def get_status_version() -> int:
+    """Return the current status version counter (for SSE change detection)."""
+    return _status_version
+
+
+def wait_for_status_change(last_version: int, timeout: float = 15) -> tuple[bool, int]:
+    """Block until status version changes or *timeout* seconds elapse.
+
+    Returns ``(changed, current_version)``.
+    """
+    with _status_condition:
+        changed = _status_condition.wait_for(
+            lambda: _status_version != last_version,
+            timeout=timeout,
+        )
+        return changed, _status_version
+
+
 logger = logging.getLogger(__name__)
 
 # Active SendspinClient instances. Mutated in-place so all existing
@@ -140,7 +160,7 @@ def load_adapter_name_cache() -> None:
     _adapter_cache_ready.set()
 
 
-def get_adapter_name(mac_upper: str) -> "str | None":
+def get_adapter_name(mac_upper: str) -> str | None:
     """Return adapter friendly name for the given MAC (uppercase), loading cache if needed."""
     if not _adapter_cache_ready.is_set():
         with _adapter_cache_lock:
@@ -183,7 +203,7 @@ def is_scan_running() -> bool:
         return any(j["status"] == "running" for j in _scan_jobs.values())
 
 
-def get_scan_job(job_id: str) -> "dict | None":
+def get_scan_job(job_id: str) -> dict | None:
     """Return the job dict or None if not found."""
     with _scan_jobs_lock:
         return _scan_jobs.get(job_id)
@@ -201,7 +221,7 @@ _ma_api_url: str = ""
 _ma_api_token: str = ""
 
 
-def set_ma_groups(mapping: "dict[str, dict]", all_groups: "list[dict] | None" = None) -> None:
+def set_ma_groups(mapping: dict[str, dict], all_groups: list[dict] | None = None) -> None:
     """Store the MA player_name → syncgroup mapping and full group list discovered from MA API."""
     with _ma_groups_lock:
         _ma_groups.clear()
@@ -219,18 +239,18 @@ def set_ma_api_credentials(url: str, token: str) -> None:
     _ma_api_token = token
 
 
-def get_ma_api_credentials() -> "tuple[str, str]":
+def get_ma_api_credentials() -> tuple[str, str]:
     """Return (ma_api_url, ma_api_token)."""
     return _ma_api_url, _ma_api_token
 
 
-def get_ma_group_for_player(player_name: str) -> "dict | None":
+def get_ma_group_for_player(player_name: str) -> dict | None:
     """Return MA syncgroup info {id, name} for the given bridge player name, or None."""
     with _ma_groups_lock:
         return _ma_groups.get(player_name.lower())
 
 
-def get_ma_groups() -> "list[dict]":
+def get_ma_groups() -> list[dict]:
     """Return all MA syncgroup players with their members."""
     with _ma_groups_lock:
         return list(_ma_all_groups)

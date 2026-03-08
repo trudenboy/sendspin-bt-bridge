@@ -162,9 +162,16 @@ class MaMonitor:
             try:
                 mid = self._next_id()
                 await _send(ws, mid, command, args)
-                resp = await _recv(ws, timeout=5.0)
-                if not fut.done():
-                    fut.set_result(resp)
+                # Match response by message_id to avoid consuming interleaved events
+                for _ in range(10):
+                    resp = await _recv(ws, timeout=5.0)
+                    if str(resp.get("message_id")) == str(mid):
+                        if not fut.done():
+                            fut.set_result(resp)
+                        break
+                else:
+                    if not fut.done():
+                        fut.set_exception(TimeoutError(f"No matching response for {command}"))
             except Exception as e:
                 if not fut.done():
                     fut.set_exception(e)

@@ -22,6 +22,7 @@ _OPTIONS_FILE = Path("/data/options.json")
 __all__ = [
     "bt_remove_device",
     "is_audio_device",
+    "list_bt_adapters",
     "persist_device_enabled",
 ]
 
@@ -32,6 +33,22 @@ _AUDIO_UUIDS = {
     "0000110c",  # AV Remote Control Target
     "0000111e",  # Hands-Free
 }
+
+_ADAPTER_RE = re.compile(r"Controller\s+([\dA-F:]{17})\s", re.IGNORECASE)
+
+
+def list_bt_adapters(timeout: int = 5) -> list[str]:
+    """Return list of BT adapter MAC addresses from ``bluetoothctl list``."""
+    try:
+        result = subprocess.run(
+            ["bluetoothctl", "list"],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+        return _ADAPTER_RE.findall(result.stdout)
+    except Exception:
+        return []
 
 
 def bt_remove_device(mac: str, adapter_mac: str = "") -> None:

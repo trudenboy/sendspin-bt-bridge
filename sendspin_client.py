@@ -17,7 +17,7 @@ import sys
 import threading
 import time
 from dataclasses import dataclass, field, fields
-from datetime import datetime
+from datetime import UTC, datetime
 
 import state as _state
 from bluetooth_manager import BluetoothManager
@@ -66,7 +66,7 @@ class DeviceStatus:
     hostname: str = ""
     last_error: str | None = None
     last_error_at: str | None = None
-    uptime_start: datetime = field(default_factory=datetime.now)
+    uptime_start: datetime = field(default_factory=lambda: datetime.now(tz=UTC))
     reconnecting: bool = False
     reconnect_attempt: int = 0
     bt_management_enabled: bool = True
@@ -110,7 +110,7 @@ class DeviceStatus:
             else:
                 logger.debug("DeviceStatus: unknown key ignored: %s", k)
 
-    def copy(self) -> dict:
+    def copy(self) -> dict[str, object]:
         return {f.name: getattr(self, f.name) for f in fields(self) if f.name != "_field_names"}
 
 
@@ -204,7 +204,7 @@ class SendspinClient:
                         self._update_status(
                             {
                                 "bluetooth_connected": bt_connected,
-                                "bluetooth_connected_at": datetime.now().isoformat(),
+                                "bluetooth_connected_at": datetime.now(tz=UTC).isoformat(),
                             }
                         )
 
@@ -257,15 +257,17 @@ class SendspinClient:
             is_alive = self._daemon_proc is not None and (
                 self._daemon_proc.returncode is None if self._daemon_proc else False
             )
+            playing_since = self._playing_since
+            zombie_count = self._zombie_restart_count
 
         if not is_playing or is_streaming or not is_alive:
             return
-        if self._playing_since is None:
+        if playing_since is None:
             return
-        if self._zombie_restart_count >= self._MAX_ZOMBIE_RESTARTS:
+        if zombie_count >= self._MAX_ZOMBIE_RESTARTS:
             return  # already gave up
 
-        elapsed = time.monotonic() - self._playing_since
+        elapsed = time.monotonic() - playing_since
         if elapsed < self._ZOMBIE_TIMEOUT_S:
             return
 
@@ -600,7 +602,7 @@ class SendspinClient:
                         self._update_status(
                             {
                                 "bluetooth_connected": bt_now,
-                                "bluetooth_connected_at": datetime.now().isoformat(),
+                                "bluetooth_connected_at": datetime.now(tz=UTC).isoformat(),
                             }
                         )
                     # Restart daemon with correct BT audio device now that sink is known.

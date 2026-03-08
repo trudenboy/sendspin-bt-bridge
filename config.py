@@ -18,7 +18,7 @@ import threading
 import uuid as _uuid
 from pathlib import Path
 
-VERSION = "2.14.0"
+VERSION = "2.14.2"
 BUILD_DATE = "2026-03-08"
 
 __all__ = [
@@ -92,8 +92,12 @@ def save_device_volume(mac: str | None, volume: int) -> None:
     """Persist per-device volume to config.json under LAST_VOLUMES[mac]."""
     if not mac or not CONFIG_FILE.exists():
         return
+
+    def _set_vol(cfg: dict) -> None:
+        cfg.setdefault("LAST_VOLUMES", {})[mac] = volume
+
     try:
-        update_config(lambda cfg: cfg.setdefault("LAST_VOLUMES", {}).__setitem__(mac, volume))
+        update_config(_set_vol)
     except Exception as e:
         logger.debug("Could not save volume for %s: %s", mac, e)
 

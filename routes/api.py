@@ -16,7 +16,7 @@ import subprocess
 import threading
 import time
 import uuid
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from flask import Blueprint, Response, jsonify, request
 
@@ -40,7 +40,7 @@ from services import (
 from services import (
     persist_device_enabled as _persist_device_enabled,
 )
-from services.bluetooth import _AUDIO_UUIDS
+from services.bluetooth import _AUDIO_UUIDS, list_bt_adapters
 from services.pulse import (
     get_server_name,
     get_sink_mute,
@@ -88,7 +88,9 @@ _SHOW_DEV_PAT = re.compile(r"^Device\s+([0-9A-Fa-f:]{17})")
 _volume_timers: dict[str, threading.Timer] = {}
 _volume_timers_lock = threading.Lock()
 
-# Cached config flag — avoid reading config.json on every volume/mute request
+# Cached config flag — avoid reading config.json on every volume/mute request.
+# Reloaded in api_config() (line ~1361) after config save; also valid on process
+# restart since config.py is re-read.  Does NOT auto-reload on manual file edit.
 _volume_via_ma: bool = True
 
 
@@ -190,7 +192,7 @@ def get_client_status_for(client):
             status = client.status.copy()
 
         if "uptime_start" in status:
-            uptime = datetime.now() - status["uptime_start"]
+            uptime = datetime.now(tz=UTC) - status["uptime_start"]
             status["uptime"] = str(timedelta(seconds=int(uptime.total_seconds())))
             del status["uptime_start"]
 
@@ -1091,18 +1093,11 @@ def api_status_stream():
         if initial:
             yield f"data: {json.dumps(initial)}\n\n"
 
-        last_version = state._status_version
+        last_version = state.get_status_version()
         while True:
-            with state._status_condition:
-                # Wait until version changes or 15 s elapse (heartbeat).
-                # Capture last_version as default arg to avoid B023 late-binding.
-                changed = state._status_condition.wait_for(
-                    lambda v=last_version: state._status_version != v,
-                    timeout=15,
-                )
+            changed, last_version = state.wait_for_status_change(last_version, timeout=15)
 
             if changed:
-                last_version = state._status_version
                 data = _build_snapshot()
                 if data:
                     yield f"data: {json.dumps(data)}\n\n"
@@ -1495,15 +1490,7 @@ def api_logs():
 def api_bt_adapters():
     """List available Bluetooth adapters."""
     try:
-        result = subprocess.run(["bluetoothctl", "list"], capture_output=True, text=True, timeout=5)
-        macs = []
-        for line in result.stdout.splitlines():
-            if "Controller" not in line:
-                continue
-            parts = line.split()
-            mac = next((p for p in parts if len(p) == 17 and p.count(":") == 5), None)
-            if mac:
-                macs.append(mac)
+        macs = list_bt_adapters()
         adapters = []
         for i, mac in enumerate(macs):
             show_out = subprocess.run(
@@ -1696,8 +1683,7 @@ _MAX_SCAN_RESULTS = 50
 def _run_bt_scan(job_id: str) -> None:
     """Perform BT scan in a background thread and store result in state."""
     try:
-        list_result = subprocess.run(["bluetoothctl", "list"], capture_output=True, text=True, timeout=5)
-        adapter_macs = re.findall(r"Controller\s+([0-9A-Fa-f:]{17})", list_result.stdout)
+        adapter_macs = list_bt_adapters()
 
         result_stdout = _run_bluetoothctl_scan(adapter_macs)
         seen, names, device_adapter, active_macs = _parse_scan_output(result_stdout)

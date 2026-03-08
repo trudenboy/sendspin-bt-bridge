@@ -16,7 +16,7 @@ import subprocess
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -578,7 +578,7 @@ class BluetoothManager:
                     "bt_management_enabled": False,
                     "reconnecting": False,
                     "last_error": f"Auto-disabled: {len(self._reconnect_timestamps)} reconnects in {int(self._CHURN_WINDOW)}s",
-                    "last_error_at": datetime.now().isoformat(),
+                    "last_error_at": datetime.now(tz=UTC).isoformat(),
                 }
             )
         try:
@@ -661,7 +661,7 @@ class BluetoothManager:
                             self.client._update_status(
                                 {
                                     "bluetooth_connected": connected,
-                                    "bluetooth_connected_at": datetime.now().isoformat(),
+                                    "bluetooth_connected_at": datetime.now(tz=UTC).isoformat(),
                                 }
                             )
 
@@ -776,7 +776,7 @@ class BluetoothManager:
                     self.client._update_status(
                         {
                             "bluetooth_connected": self.connected,
-                            "bluetooth_connected_at": datetime.now().isoformat(),
+                            "bluetooth_connected_at": datetime.now(tz=UTC).isoformat(),
                         }
                     )
 
@@ -793,7 +793,7 @@ class BluetoothManager:
                         if new_connected == self.connected:
                             return
                         self.connected = new_connected
-                        ts = datetime.now().isoformat()
+                        ts = datetime.now(tz=UTC).isoformat()
                         if self.client:
                             self.client._update_status(
                                 {
@@ -860,7 +860,7 @@ class BluetoothManager:
                                 self.client._update_status(
                                     {
                                         "bluetooth_connected": False,
-                                        "bluetooth_connected_at": datetime.now().isoformat(),
+                                        "bluetooth_connected_at": datetime.now(tz=UTC).isoformat(),
                                     }
                                 )
                             disconnect_event.set()
@@ -910,7 +910,7 @@ class BluetoothManager:
                                 "reconnecting": False,
                                 "reconnect_attempt": 0,
                                 "bluetooth_connected": True,
-                                "bluetooth_connected_at": datetime.now().isoformat(),
+                                "bluetooth_connected_at": datetime.now(tz=UTC).isoformat(),
                             }
                         )
                     # Re-subscribe signals — device object may have changed
@@ -942,7 +942,7 @@ class BluetoothManager:
                                     "reconnecting": False,
                                     "reconnect_attempt": 0,
                                     "bluetooth_connected": True,
-                                    "bluetooth_connected_at": datetime.now().isoformat(),
+                                    "bluetooth_connected_at": datetime.now(tz=UTC).isoformat(),
                                 }
                             )
                             logger.info("BT reconnected for %s, starting sendspin...", self.device_name)

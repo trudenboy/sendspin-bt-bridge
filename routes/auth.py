@@ -12,6 +12,8 @@ When AUTH_ENABLED is False (default) all requests bypass this entirely;
 the before_request hook in web_interface.py is the gatekeeper.
 """
 
+from __future__ import annotations
+
 import json
 import logging
 import os
