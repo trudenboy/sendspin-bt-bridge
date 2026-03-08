@@ -1860,13 +1860,56 @@ def api_diagnostics():
         # MA API integration status
         ma_url, ma_token = state.get_ma_api_credentials()
         ma_groups = state.get_ma_groups()
+
+        # Build a name→client lookup for matching MA members to bridge devices
+        bridge_by_name = {getattr(c, "player_name", "").lower(): c for c in _clients}
+
+        enriched_groups = []
+        for g in ma_groups:
+            members_detail = []
+            for m in g.get("members", []):
+                mname = (m.get("name") or m.get("id", "")).lower()
+                # Match to a local bridge client by name (case-insensitive substring)
+                bridge_client = None
+                for bname, bc in bridge_by_name.items():
+                    if bname and (bname in mname or mname in bname):
+                        bridge_client = bc
+                        break
+                member_info: dict = {
+                    "id": m.get("id", ""),
+                    "name": m.get("name", m.get("id", "")),
+                    "state": m.get("state"),
+                    "volume": m.get("volume"),
+                    "available": m.get("available", True),
+                    "is_bridge": bridge_client is not None,
+                }
+                if bridge_client:
+                    member_info["bt_connected"] = bridge_client.status.get("bluetooth_connected", False)
+                    member_info["server_connected"] = bridge_client.status.get("server_connected", False)
+                    member_info["playing"] = bridge_client.status.get("playing", False)
+                    member_info["sink"] = getattr(bridge_client, "bluetooth_sink_name", None)
+                    member_info["bt_mac"] = getattr(bridge_client.bt_manager, "mac_address", None) if bridge_client.bt_manager else None
+                members_detail.append(member_info)
+
+            np = state.get_ma_now_playing_for_group(g["id"])
+            group_info: dict = {
+                "id": g["id"],
+                "name": g.get("name", ""),
+                "members": members_detail,
+            }
+            if np:
+                group_info["now_playing"] = {
+                    "title": np.get("title"),
+                    "artist": np.get("artist"),
+                    "state": np.get("state"),
+                }
+            enriched_groups.append(group_info)
+
         diag["ma_integration"] = {
             "configured": bool(ma_url and ma_token),
             "connected": state.is_ma_connected(),
             "url": ma_url or "",
-            "syncgroups": [
-                {"id": g["id"], "name": g.get("name", ""), "members": len(g.get("members", []))} for g in ma_groups
-            ],
+            "syncgroups": enriched_groups,
         }
 
         # PA sink-inputs with properties (for routing diagnostics)

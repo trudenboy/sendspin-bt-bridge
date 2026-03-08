@@ -1903,9 +1903,35 @@ function renderDiagnostics(d) {
             (ma.url ? ' <span style="color:#6b7280;font-size:11px;">(' + escHtml(ma.url) + ')</span>' : '') +
             '</td></tr>';
         (ma.syncgroups || []).forEach(function(g) {
+            var mList = g.members || [];
+            var npHtml = '';
+            if (g.now_playing && g.now_playing.title) {
+                npHtml = ' <span style="color:#6b7280;font-size:11px;">♫ ' +
+                    escHtml(g.now_playing.artist ? g.now_playing.artist + ' — ' + g.now_playing.title : g.now_playing.title) +
+                    (g.now_playing.state ? ' (' + escHtml(g.now_playing.state) + ')' : '') + '</span>';
+            }
             rows += '<tr><td style="padding-left:20px;">↳ ' + escHtml(g.name || g.id) + '</td><td>' +
-                '<span style="color:#6b7280;font-size:11px;">' + g.members + ' member' + (g.members !== 1 ? 's' : '') + '</span>' +
-                '</td></tr>';
+                '<span style="color:#6b7280;font-size:11px;">' + mList.length + ' member' + (mList.length !== 1 ? 's' : '') + '</span>' +
+                npHtml + '</td></tr>';
+            mList.forEach(function(m) {
+                var icon = m.is_bridge
+                    ? (m.bt_connected ? (m.playing ? '▶' : '✓') : '⚡')
+                    : (m.available ? '🌐' : '⊘');
+                var stateText = m.state || '';
+                var volText = m.volume != null ? '  vol ' + m.volume + '%' : '';
+                var sinkText = m.is_bridge && m.sink
+                    ? ' <code style="font-size:10px;color:#6b7280;">' + escHtml(m.sink) + '</code>'
+                    : '';
+                var macText = m.is_bridge && m.bt_mac
+                    ? ' <span style="font-size:10px;color:#9ca3af;">' + escHtml(m.bt_mac) + '</span>'
+                    : '';
+                rows += '<tr><td style="padding-left:40px;font-size:12px;">' +
+                    icon + ' ' + escHtml(m.name || m.id) +
+                    '</td><td style="font-size:12px;">' +
+                    dot(m.available !== false) +
+                    escHtml(stateText) + volText + macText + sinkText +
+                    '</td></tr>';
+            });
         });
     }
 
