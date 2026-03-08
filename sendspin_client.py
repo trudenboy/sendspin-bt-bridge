@@ -70,6 +70,7 @@ class DeviceStatus:
     reconnecting: bool = False
     reconnect_attempt: int = 0
     bt_management_enabled: bool = True
+    battery_level: int | None = None
     group_name: str | None = None
     group_id: str | None = None
     connected_server_url: str | None = None

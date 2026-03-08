@@ -518,6 +518,11 @@
             vertical-align: middle; margin-left: 4px;
         }
 
+        .battery-badge {
+            font-size: 11px; opacity: 0.85; white-space: nowrap;
+            vertical-align: middle; margin-left: 4px;
+        }
+
         /* Config dirty indicator */
         .config-dirty-dot {
             display: inline-block; width: 7px; height: 7px;

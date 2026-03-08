@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.13.3] - 2026-03-08
+
+### Added
+- **Battery level indicator** — displays battery percentage next to device name for Bluetooth devices that report battery via `org.bluez.Battery1` (e.g. headphones, portable speakers). SVG battery icon fills proportionally to charge level with color coding: green (>25%), yellow (≤25%), red (≤15%). Mains-powered devices show nothing. Polled every monitoring heartbeat (~10-30s). Requires `Experimental = true` in `/etc/bluetooth/main.conf` on the host for classic BT devices (HFP)
+
 ## [2.13.2] - 2026-03-08
 
 ### Fixed

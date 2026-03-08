@@ -189,6 +189,7 @@ def get_client_status_for(client):
         status["has_sink"] = bool(getattr(client, "bluetooth_sink_name", None))
         status["sink_name"] = getattr(client, "bluetooth_sink_name", None)
         status["bt_management_enabled"] = getattr(client, "bt_management_enabled", True)
+        status["battery_level"] = getattr(bt_mgr, "battery_level", None) if bt_mgr else None
 
         # Enrich group_name with MA syncgroup name (Sendspin sends name=None)
         player_name = getattr(client, "player_name", None)

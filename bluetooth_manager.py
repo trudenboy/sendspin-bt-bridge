@@ -79,6 +79,19 @@ def _dbus_get_device_property(device_path: str, property_name: str, adapter_hci:
         return None
 
 
+def _dbus_get_battery_level(device_path: str) -> int | None:
+    """Read battery percentage via org.bluez.Battery1, or None if unsupported."""
+    try:
+        import dbus as _dbus
+
+        bus = _dbus.SystemBus()
+        device = bus.get_object("org.bluez", device_path)
+        props = _dbus.Interface(device, "org.freedesktop.DBus.Properties")
+        return int(props.Get("org.bluez.Battery1", "Percentage"))
+    except Exception:
+        return None
+
+
 def _dbus_call_device_method(device_path: str, method_name: str) -> bool:
     """Call a BlueZ Device1 method synchronously via dbus-python.
 
@@ -145,6 +158,7 @@ class BluetoothManager:
         _mac_dbus = self.mac_address.upper().replace(":", "_")
         _hci = self.adapter_hci_name or "hci0"
         self._dbus_device_path: str = f"/org/bluez/{_hci}/dev_{_mac_dbus}"
+        self.battery_level: int | None = None
 
     def _detect_default_adapter_mac(self) -> str:
         """Return the MAC of the default Bluetooth controller, or empty string."""
@@ -647,6 +661,7 @@ class BluetoothManager:
                             )
 
                     if not connected:
+                        self.battery_level = None
                         reconnect_attempt += 1
                         if self.client:
                             self.client._update_status(
@@ -690,6 +705,8 @@ class BluetoothManager:
                         if self.client and self.client.status.get("reconnecting"):
                             self.client._update_status({"reconnecting": False, "reconnect_attempt": 0})
                         reconnect_attempt = 0
+                        # Read battery level (None if device doesn't support it)
+                        self.battery_level = _dbus_get_battery_level(self._dbus_device_path)
 
                 await asyncio.sleep(5)
             except Exception as e:
@@ -844,8 +861,13 @@ class BluetoothManager:
                             disconnect_event.set()
                     except Exception as exc:
                         logger.debug("heartbeat connected-state check failed: %s", exc)
+                    # Read battery level during heartbeat (None if unsupported)
+                    self.battery_level = await loop.run_in_executor(
+                        None, _dbus_get_battery_level, self._dbus_device_path
+                    )
             else:
                 # Device is disconnected — attempt reconnect
+                self.battery_level = None
                 disconnect_event.clear()
                 reconnect_attempt += 1
                 if self.client:
