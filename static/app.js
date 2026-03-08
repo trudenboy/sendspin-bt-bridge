@@ -323,9 +323,17 @@ function populateDeviceCard(i, dev) {
     var batteryEl = document.getElementById('dbattery-' + i);
     if (batteryEl) {
         if (dev.battery_level != null) {
-            var batIcon = dev.battery_level <= 15 ? '\uD83E\uDEAB' : '\uD83D\uDD0B';
-            batteryEl.textContent = batIcon + ' ' + dev.battery_level + '%';
-            batteryEl.title = 'Battery: ' + dev.battery_level + '%';
+            var bl = dev.battery_level;
+            var batColor = bl <= 15 ? '#ef4444' : bl <= 25 ? '#f59e0b' : '#22c55e';
+            var batW = Math.max(2, Math.round(bl / 100 * 12));
+            batteryEl.innerHTML =
+                '<svg width="20" height="11" viewBox="0 0 20 11" style="vertical-align:-1px">' +
+                '<rect x="0.5" y="0.5" width="16" height="10" rx="1.5" fill="none" stroke="' + batColor + '" stroke-width="1"/>' +
+                '<rect x="17" y="3" width="2" height="5" rx="0.5" fill="' + batColor + '"/>' +
+                '<rect x="2" y="2" width="' + batW + '" height="7" rx="1" fill="' + batColor + '"/>' +
+                '</svg> ' + bl + '%';
+            batteryEl.title = 'Battery: ' + bl + '%';
+            batteryEl.style.color = batColor;
             batteryEl.style.display = '';
         } else {
             batteryEl.style.display = 'none';
