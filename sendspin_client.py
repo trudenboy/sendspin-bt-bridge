@@ -154,7 +154,7 @@ class SendspinClient:
         self.running = False
         self.player_id: str = ""  # set in _start_sendspin_inner; used for solo MA queue lookup
         self.bt_management_enabled: bool = True
-        self.bluetooth_sink_name = None  # Store Bluetooth sink name for volume sync
+        self.bluetooth_sink_name: str | None = None  # Store Bluetooth sink name for volume sync
         self.connected_server_url: str = ""  # actual resolved ws:// URL (populated after connect)
         self._daemon_proc: asyncio.subprocess.Process | None = None
         self._daemon_task: asyncio.Task | None = None  # stdout reader task
