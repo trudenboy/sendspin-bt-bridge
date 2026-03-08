@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [2.13.3] - 2026-03-08
 
 ### Added
-- Battery level indicator for Bluetooth devices supporting `org.bluez.Battery1` (headphones, portable speakers)
+- Battery level indicator with SVG icon and color coding (green >25%, yellow ≤25%, red ≤15%) for BT devices supporting `org.bluez.Battery1`
 
 ## [2.13.2] - 2026-03-08
 
