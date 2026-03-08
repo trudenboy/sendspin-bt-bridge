@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.15.0] - 2026-03-09
+
+### Added
+- Group player list in Diagnostics — full per-member details: state, volume, availability, now-playing info
+- Bridge players in diagnostics show BT connection, server status, playing state, audio sink, MAC address
+- Enabled/Disabled status for devices and group members in Diagnostics
+- 35 new unit tests (53 total)
+
+### Fixed
+- TOCTOU race in zombie playback detection (concurrent status read)
+- MA WebSocket command/response mismatch (match by message_id)
+
+### Changed
+- Timezone-aware UTC timestamps throughout
+- SSE state encapsulation via public accessors
+- Configurable `TRUSTED_PROXIES` in config.json
+- Shared `list_bt_adapters()` helper (DRY)
+- Removed unused dependencies (flask-cors, psutil, python-dotenv)
+
 ## [2.14.1] - 2026-03-08
 
 ### Fixed
