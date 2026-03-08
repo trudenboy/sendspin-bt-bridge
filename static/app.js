@@ -217,6 +217,7 @@ function buildDeviceCard(i) {
               '<div class="eq-bar"></div><div class="eq-bar"></div>' +
               '<div class="eq-bar"></div><div class="eq-bar"></div>' +
             '</div>' +
+            '<span class="battery-badge" id="dbattery-' + i + '" style="display:none"></span>' +
           '</div>' +
           '<div class="group-badge" id="dgroup-' + i + '" style="display:none"></div>' +
           '<div class="device-mac identity-detail" id="dmac-' + i + '"></div>' +
@@ -316,6 +317,19 @@ function populateDeviceCard(i, dev) {
     if (releasedBadge) {
         var isReleased = dev.bt_management_enabled === false;
         releasedBadge.style.display = isReleased ? '' : 'none';
+    }
+
+    // Battery badge (only shown when device reports battery level)
+    var batteryEl = document.getElementById('dbattery-' + i);
+    if (batteryEl) {
+        if (dev.battery_level != null) {
+            var batIcon = dev.battery_level <= 15 ? '\uD83E\uDEAB' : '\uD83D\uDD0B';
+            batteryEl.textContent = batIcon + ' ' + dev.battery_level + '%';
+            batteryEl.title = 'Battery: ' + dev.battery_level + '%';
+            batteryEl.style.display = '';
+        } else {
+            batteryEl.style.display = 'none';
+        }
     }
 
     var mac = dev.bluetooth_mac || '';
