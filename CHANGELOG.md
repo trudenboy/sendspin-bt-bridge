@@ -5,7 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.14.2] - 2026-03-08
+## [2.15.0] - 2026-03-09
+
+### Added
+- **Group player list in Diagnostics** — `/api/diagnostics` now returns full per-member details in `syncgroups[].members[]`: player state, volume, availability, and now-playing info per group
+- **Bridge player enrichment in group diagnostics** — bridge members show BT connection, server connection, playing status, audio sink name, and BT MAC address
+- **Enabled/Disabled status in Diagnostics** — `devices[]` and group members show `enabled` flag reflecting `bt_management_enabled` state; UI shows amber "Disabled" label for disabled devices
+- **Diagnostics UI member list** — group members rendered with status icons (▶ playing, ✓ connected, ⚡ disconnected, 🌐 external, ⊘ disabled/unavailable) and now-playing track info
+- **35 new unit tests** — `test_device_status.py` (11), `test_auth.py` (11), `test_state.py` (7), `test_ingress_middleware.py` (5). Total: 53 tests
 
 ### Fixed
 - **TOCTOU race in zombie playback detection** — `_playing_since` and `_zombie_restart_count` were read outside `_status_lock`, risking `TypeError` on concurrent status updates
@@ -21,9 +28,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 - **Unused dependencies** — `flask-cors`, `psutil`, `python-dotenv` removed from `requirements.txt` (never imported)
-
-### Added
-- **35 new unit tests** — `test_device_status.py` (11), `test_auth.py` (11), `test_state.py` (7), `test_ingress_middleware.py` (5). Total: 53 tests
 
 ## [2.14.1] - 2026-03-08
 
