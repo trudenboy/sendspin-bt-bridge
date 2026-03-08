@@ -924,9 +924,11 @@ def _build_groups_summary(clients: list) -> list[dict]:
     Players sharing the same non-None group_id are merged into one group entry.
     Solo players (group_id=None) each appear as their own single-member group.
 
-    When MA API group data is available, each grouped entry is enriched with
-    ``external_members`` (players from other bridges in the same sync group)
-    and ``external_count``.
+    When MA API group data is available, entries that resolve to the same MA
+    syncgroup are merged (Sendspin assigns unique UUIDs per session, so two
+    local devices in the same MA syncgroup have different group_ids).  Each
+    merged entry is then enriched with ``external_members`` (players from
+    other bridges) and ``external_count``.
     """
     groups: dict[str | None, dict] = {}
     solo_counter = 0
@@ -956,8 +958,42 @@ def _build_groups_summary(clients: list) -> list[dict]:
 
         groups[key]["members"].append(member)
 
+    # Merge entries that resolve to the same MA syncgroup.
+    # Sendspin assigns a unique UUID per session, so two local devices in
+    # the same MA syncgroup appear as separate entries — merge them here.
+    ma_groups = state.get_ma_groups()
+    if ma_groups:
+        syncgroup_map: dict[str, dict] = {}  # ma_syncgroup_id → merged entry
+        merged = []
+        for entry in groups.values():
+            ma_syncgroup_id = None
+            if entry["group_id"]:
+                for m in entry["members"]:
+                    pname = m.get("player_name")
+                    if not pname:
+                        continue
+                    ma_info = state.get_ma_group_for_player(pname)
+                    if ma_info:
+                        ma_syncgroup_id = ma_info["id"]
+                        if not entry["group_name"] and ma_info.get("name"):
+                            entry["group_name"] = ma_info["name"]
+                        break
+            if ma_syncgroup_id and ma_syncgroup_id in syncgroup_map:
+                # Merge into existing entry
+                target = syncgroup_map[ma_syncgroup_id]
+                target["members"].extend(entry["members"])
+                if not target["group_name"] and entry.get("group_name"):
+                    target["group_name"] = entry["group_name"]
+            else:
+                if ma_syncgroup_id:
+                    syncgroup_map[ma_syncgroup_id] = entry
+                    entry["_ma_syncgroup_id"] = ma_syncgroup_id
+                merged.append(entry)
+    else:
+        merged = list(groups.values())
+
     result = []
-    for entry in groups.values():
+    for entry in merged:
         members = entry["members"]
         volumes = [m["volume"] for m in members]
         entry["avg_volume"] = round(sum(volumes) / len(volumes)) if volumes else 100
@@ -966,29 +1002,13 @@ def _build_groups_summary(clients: list) -> list[dict]:
         entry["external_count"] = 0
         result.append(entry)
 
-    # Enrich with cross-bridge member info from MA API cache.
-    # NOTE: Sendspin's group_id (UUID) differs from MA's syncgroup id
-    # ("syncgroup_XXX"), so we resolve the MA syncgroup via player-name mapping.
-    ma_groups = state.get_ma_groups()
+    # Enrich with cross-bridge member info from MA API cache
     if ma_groups:
         for entry in result:
-            if not entry["group_id"]:
+            ma_sid = entry.pop("_ma_syncgroup_id", None)
+            if not ma_sid:
                 continue
-            # Find MA syncgroup id via any local member's player name
-            ma_syncgroup_id = None
-            for m in entry["members"]:
-                pname = m.get("player_name")
-                if not pname:
-                    continue
-                ma_info = state.get_ma_group_for_player(pname)
-                if ma_info:
-                    ma_syncgroup_id = ma_info["id"]
-                    if not entry["group_name"] and ma_info.get("name"):
-                        entry["group_name"] = ma_info["name"]
-                    break
-            if not ma_syncgroup_id:
-                continue
-            ma_group = next((g for g in ma_groups if g["id"] == ma_syncgroup_id), None)
+            ma_group = next((g for g in ma_groups if g["id"] == ma_sid), None)
             if not ma_group:
                 continue
             local_names = {(m["player_name"] or "").lower() for m in entry["members"]}

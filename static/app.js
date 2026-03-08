@@ -343,9 +343,14 @@ function populateDeviceCard(i, dev) {
         var groupLabel = dev.group_name || dev.group_id || '';
         var groupDisplay = groupLabel ? groupLabel.split('-').pop() : '';
 
-        // Find matching group entry to get external (cross-bridge) members
+        // Find matching group entry to get external (cross-bridge) members.
+        // Match by player_name membership (not group_id) because Sendspin
+        // assigns unique UUIDs per session — merged groups use one arbitrary id.
+        var devName = dev.player_name || '';
         var grp = dev.group_id
-            ? (lastGroups || []).find(function(g) { return g.group_id === dev.group_id; })
+            ? (lastGroups || []).find(function(g) {
+                return g.members && g.members.some(function(m) { return m.player_name === devName; });
+            })
             : null;
         var extCount = grp ? (grp.external_count || 0) : 0;
         var extSuffix = extCount > 0 ? '  +' + extCount : '';
