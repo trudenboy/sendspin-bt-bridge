@@ -111,7 +111,7 @@ class DeviceStatus:
                 logger.debug("DeviceStatus: unknown key ignored: %s", k)
 
     def copy(self) -> dict:
-        return {f.name: getattr(self, f.name) for f in fields(self)}
+        return {f.name: getattr(self, f.name) for f in fields(self) if f.name != "_field_names"}
 
 
 class SendspinClient:
