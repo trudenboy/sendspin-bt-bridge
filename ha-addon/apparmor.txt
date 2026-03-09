@@ -24,8 +24,8 @@ profile sendspin_bt_bridge flags=(attach_disconnected,mediate_deleted) {
 
   # Application
   /app/** ixr,
-  /usr/local/bin/python3* ix,
-  /usr/local/lib/python3*/** r,
+  /usr/local/bin/** ix,
+  /usr/local/lib/** mr,
 
   # Bluetooth
   /dev/bus/usb/** rw,
