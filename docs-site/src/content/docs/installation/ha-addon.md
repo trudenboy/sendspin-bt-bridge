@@ -10,6 +10,14 @@ description: Step-by-step installation of Sendspin Bluetooth Bridge as a Home As
 - Bluetooth adapter accessible to the HA host
 - Music Assistant Server running on your network
 
+## Supported platforms
+
+| Architecture | HA devices | Status |
+|---|---|---|
+| **amd64** (x86_64) | Intel NUC, Mini PCs, Proxmox/VMware VMs | ✅ Tested |
+| **aarch64** (ARM64) | HA Green, HA Yellow, Raspberry Pi 4/5, ODROID N2+ | ✅ Community-tested |
+| **armv7** (ARM 32-bit) | Raspberry Pi 3, ODROID XU4, Tinker Board | ⚠️ Best-effort |
+
 ## Installation
 
 <Steps>

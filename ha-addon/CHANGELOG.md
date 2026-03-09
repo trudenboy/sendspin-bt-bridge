@@ -8,8 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [2.15.2] - 2026-03-09
 
 ### Fixed
-- ARM64 (aarch64) Docker build — HA Green, Raspberry Pi 4/5, and other ARM64 devices can now install the addon
-- Removed armv7 from declared architectures (not built)
+- ARM64 (aarch64) and armv7 Docker builds — HA Green, Raspberry Pi 3/4/5, and other ARM devices can now install the addon
+- Parallel CI builds — each architecture builds in its own runner for faster releases
 
 ## [2.15.1] - 2026-03-09
 

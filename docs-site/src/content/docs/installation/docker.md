@@ -11,6 +11,8 @@ description: Running Sendspin Bluetooth Bridge with Docker Compose
 - PulseAudio or PipeWire on the host
 - Music Assistant Server on your network
 
+The Docker image supports `linux/amd64`, `linux/arm64`, and `linux/arm/v7` architectures.
+
 ## Quick Start
 
 <Steps>

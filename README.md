@@ -92,6 +92,20 @@ All three instances run v2.12.2 against a single Music Assistant server with mul
 
 ---
 
+## Supported Platforms
+
+Docker images are built for three architectures. All popular Home Assistant devices are supported.
+
+| Architecture | Docker platform | HA devices | Status |
+|---|---|---|---|
+| **amd64** (x86_64) | `linux/amd64` | Intel NUC, Mini PCs, Proxmox/VMware VMs | ✅ Tested |
+| **aarch64** (ARM64) | `linux/arm64` | HA Green, HA Yellow, Raspberry Pi 4/5, ODROID N2+ | ✅ Community-tested |
+| **armv7** (ARM 32-bit) | `linux/arm/v7` | Raspberry Pi 3, ODROID XU4, Tinker Board | ⚠️ Best-effort |
+
+> **Note:** armv7 devices (e.g. Raspberry Pi 3 with 1 GB RAM) may experience resource constraints when running multiple Bluetooth speakers. We recommend aarch64 or amd64 for the best experience.
+
+---
+
 ## Deployment Options
 
 | | Home Assistant Addon | Docker Compose | Proxmox LXC | OpenWrt LXC |

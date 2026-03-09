@@ -8,8 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [2.15.2] - 2026-03-09
 
 ### Fixed
-- **ARM64 (aarch64) Docker build** — CI now builds multi-platform images for `linux/amd64` and `linux/arm64`, enabling installation on HA Green, Raspberry Pi 4/5, and other ARM64 devices
-- **Removed armv7 from declared architectures** — `ha-addon/config.yaml` no longer advertises `armv7` support since we don't build for it
+- **ARM64 (aarch64) Docker build** — CI now builds multi-platform images for `linux/amd64`, `linux/arm64`, and `linux/arm/v7`, enabling installation on HA Green, Raspberry Pi 4/5, and other ARM/ARM64 devices
+- **Parallel CI builds** — each architecture builds in its own runner (arm64 natively on `ubuntu-24.04-arm`), then manifests are merged — faster than sequential QEMU builds
+- **Removed and re-added armv7** — `ha-addon/config.yaml` now correctly declares all three supported architectures
 
 ## [2.15.1] - 2026-03-09
 

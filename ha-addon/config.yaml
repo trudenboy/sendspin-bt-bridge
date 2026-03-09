@@ -9,6 +9,7 @@ homeassistant: "2024.1.0"
 arch:
   - aarch64
   - amd64
+  - armv7
 startup: application
 boot: auto
 host_network: true
