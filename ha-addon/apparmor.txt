@@ -1,0 +1,60 @@
+#include <tunables/global>
+
+profile sendspin_bt_bridge flags=(attach_disconnected,mediate_deleted) {
+  #include <abstractions/base>
+
+  # Capabilities
+  capability net_admin,
+  capability net_raw,
+  capability sys_admin,
+  capability dac_read_search,
+
+  # S6 Overlay / Process management
+  /init ix,
+  /bin/** ix,
+  /usr/bin/** ix,
+  /usr/lib/** ix,
+  /run/{s6,s6-rc*,service}/** ixrw,
+  /package/** ix,
+  /command/** ix,
+  /etc/s6/** ixrw,
+  /etc/s6-overlay/** ixrw,
+  /etc/cont-init.d/** ix,
+  /etc/services.d/** ix,
+
+  # Application
+  /app/** ixr,
+  /usr/local/bin/python3* ix,
+  /usr/local/lib/python3*/** r,
+
+  # Bluetooth
+  /dev/bus/usb/** rw,
+  /sys/bus/usb/** r,
+  /sys/class/bluetooth/** r,
+  /sys/devices/** r,
+  /run/dbus/** rw,
+
+  # Audio
+  /run/audio/** rw,
+  /run/user/*/pulse/** rw,
+  /tmp/pulse-* rw,
+
+  # Config
+  /config/** rw,
+  /data/** rw,
+
+  # Network (host mode)
+  network inet stream,
+  network inet dgram,
+  network inet6 stream,
+  network inet6 dgram,
+  network bluetooth,
+  network netlink raw,
+
+  # Proc/sys access
+  /proc/** r,
+  /sys/** r,
+  /dev/null rw,
+  /dev/urandom r,
+  /tmp/** rw,
+}

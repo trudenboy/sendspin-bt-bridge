@@ -11,6 +11,11 @@ configuration:
       WebSocket port exposed by the Music Assistant Sendspin provider.
       The default (9000) matches the MA default; only change if you have
       multiple instances or a custom port.
+  bridge_name:
+    name: "Bridge name"
+    description: >-
+      Custom name for this bridge instance. Useful when running multiple
+      bridges on the same network. Leave empty to use the default name.
   tz:
     name: "Timezone"
     description: >-
@@ -33,6 +38,46 @@ configuration:
       the device is already using SBC. Enable this alongside changing the
       Music Assistant audio format to PCM 44.1 kHz / 16-bit for maximum CPU
       savings.
+  bt_check_interval:
+    name: "Bluetooth check interval"
+    description: >-
+      Bluetooth reconnect check interval in seconds. The bridge polls each
+      device at this rate and reconnects automatically if the connection drops.
+      Default is 10 seconds.
+  bt_max_reconnect_fails:
+    name: "Max reconnect failures"
+    description: >-
+      Maximum consecutive reconnect failures before the bridge stops trying
+      to reconnect a device. Set to 0 for unlimited retries (default).
+  auth_enabled:
+    name: "Enable authentication"
+    description: >-
+      Enable password protection for the web UI. When enabled, users must
+      log in before accessing the bridge dashboard. Set the password in the
+      web UI after enabling this option.
+  log_level:
+    name: "Log level"
+    description: >-
+      Logging level for the bridge. Use "info" for normal operation or
+      "debug" for detailed troubleshooting output. Debug mode produces
+      significantly more log data.
+  ma_api_url:
+    name: "Music Assistant API URL"
+    description: >-
+      Music Assistant REST API URL for volume routing
+      (e.g. http://192.168.1.100:8095). Required when "Volume via MA" is
+      enabled. Leave empty if not using MA volume routing.
+  ma_api_token:
+    name: "Music Assistant API token"
+    description: >-
+      Authentication token for the Music Assistant REST API. Required only
+      if your MA instance has authentication enabled. Leave empty otherwise.
+  volume_via_ma:
+    name: "Volume via Music Assistant"
+    description: >-
+      Route volume changes through the Music Assistant API instead of
+      direct PulseAudio control. Ensures MA stays in sync with actual
+      speaker volume. Requires "Music Assistant API URL" to be set.
   bluetooth_devices:
     name: "Bluetooth devices"
     description: >-
@@ -59,6 +104,36 @@ configuration:
         description: >-
           Fixed latency offset in milliseconds. Use negative values to compensate
           for Bluetooth A2DP buffering (typical: -500). Leave 0 for no adjustment.
+      listen_host:
+        name: "Listen host"
+        description: >-
+          Override the network address this player listens on. Leave empty
+          to use the default address. Only needed in advanced network setups.
+      listen_port:
+        name: "Listen port"
+        description: >-
+          Override the port this player listens on. Leave empty to use an
+          automatically assigned port.
+      enabled:
+        name: "Enabled"
+        description: >-
+          Enable or disable this Bluetooth device. Disabled devices are
+          not connected or bridged until re-enabled.
+      preferred_format:
+        name: "Preferred audio format"
+        description: >-
+          Preferred audio format string (e.g. "pcm,44100,16,2"). Leave
+          empty to use the Music Assistant default format.
+      keepalive_silence:
+        name: "Keepalive silence"
+        description: >-
+          Send silent audio when idle to keep the Bluetooth connection
+          alive. Prevents some speakers from auto-powering off.
+      keepalive_interval:
+        name: "Keepalive interval"
+        description: >-
+          Interval in seconds between keepalive silence packets. Only
+          applies when "Keepalive silence" is enabled.
   bluetooth_adapters:
     name: "Bluetooth adapters"
     description: >-
@@ -75,3 +150,8 @@ configuration:
         name: "Adapter MAC"
         description: >-
           MAC address of this Bluetooth adapter (optional, for display only).
+      name:
+        name: "Adapter name"
+        description: >-
+          Display name for this Bluetooth adapter. Used in the web UI to
+          help identify adapters. Leave empty to use the adapter ID.
