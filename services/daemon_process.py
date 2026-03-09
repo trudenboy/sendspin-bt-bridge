@@ -31,16 +31,45 @@ import time
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
-# PyAV compatibility: older PyAV (<13) uses len(layout.channels) instead of
-# layout.nb_channels.  The sendspin decoder expects nb_channels, so patch it.
+# PyAV compatibility: older PyAV (<13) has no AudioLayout.nb_channels.
+# The sendspin decoder uses frame.layout.nb_channels, so we monkey-patch
+# the decoder's _append_frame_to_pcm to use len(layout.channels) instead.
+# AudioLayout is a C extension type (immutable), so we replace the method.
 # ---------------------------------------------------------------------------
 try:
-    import av.audio.layout
+    import av.audio.layout as _av_layout
 
-    if not hasattr(av.audio.layout.AudioLayout, "nb_channels"):
-        av.audio.layout.AudioLayout.nb_channels = property(  # type: ignore[attr-defined]
-            lambda self: len(self.channels)
-        )
+    if not hasattr(_av_layout.AudioLayout("stereo"), "nb_channels"):
+        import sendspin.decoder as _sd
+
+        def _append_compat(self, frame, output):  # type: ignore[no-untyped-def]
+            """Patched: len(layout.channels) instead of layout.nb_channels."""
+            src_bits = frame.format.bits
+            src_bytes_per_sample = frame.format.bytes
+            samples_per_channel = frame.samples
+            channel_count = len(frame.layout.channels)  # <-- patched line
+            total_samples = samples_per_channel * channel_count
+            exact_src_bytes = total_samples * src_bytes_per_sample
+
+            if src_bits not in (16, 32):
+                _sd.logger.warning("Unsupported FLAC sample format: %s", frame.format.name)
+                output.extend(memoryview(frame.planes[0])[:exact_src_bytes])
+                return
+
+            self._samples_decoded += total_samples
+
+            if not frame.format.is_planar:
+                self._append_packed_frame(
+                    output,
+                    memoryview(frame.planes[0])[:exact_src_bytes],
+                    total_samples,
+                    src_bits,
+                )
+                return
+
+            self._append_planar_frame(output, frame, samples_per_channel, channel_count, src_bits)
+
+        _sd.FlacDecoder._append_frame_to_pcm = _append_compat  # type: ignore[assignment]
 except Exception:
     pass
 
