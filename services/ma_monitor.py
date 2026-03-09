@@ -268,7 +268,8 @@ class MaMonitor:
             logger.warning("websockets not installed — MA monitor disabled")
             return
 
-        async with websockets.connect(self._ws_url, proxy=None) as ws:
+        _ws_kw: dict = {"proxy": None} if int(websockets.__version__.split(".")[0]) >= 15 else {}
+        async with websockets.connect(self._ws_url, **_ws_kw) as ws:
             # Server info
             await _recv(ws, timeout=10.0)
 
@@ -469,9 +470,10 @@ async def send_queue_cmd(action: str, value=None, syncgroup_id: str | None = Non
     try:
         import websockets
 
+        _ws_kw: dict = {"proxy": None} if int(websockets.__version__.split(".")[0]) >= 15 else {}
         normalized = await _normalize_ma_url(ma_url)
         ws_url = normalized.replace("http://", "ws://").replace("https://", "wss://") + "/ws"
-        async with websockets.connect(ws_url, proxy=None) as ws:
+        async with websockets.connect(ws_url, **_ws_kw) as ws:
             await _recv(ws, timeout=5.0)  # server info
             await _send(ws, 1, "auth", {"token": ma_token})
             await _recv(ws, timeout=5.0)  # auth
@@ -516,9 +518,10 @@ async def send_player_cmd(command: str, args: dict) -> bool:
     try:
         import websockets
 
+        _ws_kw: dict = {"proxy": None} if int(websockets.__version__.split(".")[0]) >= 15 else {}
         normalized = await _normalize_ma_url(ma_url)
         ws_url = normalized.replace("http://", "ws://").replace("https://", "wss://") + "/ws"
-        async with websockets.connect(ws_url, proxy=None) as ws:
+        async with websockets.connect(ws_url, **_ws_kw) as ws:
             await _recv(ws, timeout=5.0)  # server info
             await _send(ws, 1, "auth", {"token": ma_token})
             await _recv(ws, timeout=5.0)  # auth result

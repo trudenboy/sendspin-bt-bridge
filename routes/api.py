@@ -1760,10 +1760,12 @@ def api_debug_ma():
         try:
             import websockets
 
+            _ws_kw: dict = {"proxy": None} if int(websockets.__version__.split(".")[0]) >= 15 else {}
+
             async def _fetch():
                 ws_url = ma_url.replace("http://", "ws://").replace("https://", "wss://") + "/ws"
                 async with websockets.connect(
-                    ws_url, additional_headers={"Authorization": f"Bearer {ma_token}"}, proxy=None
+                    ws_url, additional_headers={"Authorization": f"Bearer {ma_token}"}, **_ws_kw
                 ) as ws:
                     import json as _json
 
