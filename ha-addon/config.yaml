@@ -21,7 +21,7 @@ privileged:
 devices:
   - /dev/bus/usb
 audio: true
-apparmor: true
+apparmor: false
 init: true
 ingress: true
 ingress_port: 8080
