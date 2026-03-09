@@ -1,0 +1,98 @@
+name: Archive Traffic Stats
+
+on:
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  archive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout traffic-data branch
+        uses: actions/checkout@v4
+        with:
+          ref: traffic-data
+          fetch-depth: 1
+        continue-on-error: true
+
+      - name: Initialize branch if needed
+        run: |
+          if [ ! -d .git ]; then
+            git init
+            git remote add origin "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git"
+            git checkout -b traffic-data
+          fi
+          mkdir -p traffic/clones traffic/views traffic/referrers
+
+      - name: Fetch traffic data
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const date = new Date().toISOString().split('T')[0];
+            const [owner, repo] = process.env.GITHUB_REPOSITORY.split('/');
+
+            const [clones, views, referrers] = await Promise.all([
+              github.rest.repos.getClones({ owner, repo, per: 'day' }),
+              github.rest.repos.getViews({ owner, repo, per: 'day' }),
+              github.rest.repos.getTopReferrers({ owner, repo }),
+            ]);
+
+            fs.writeFileSync(
+              `traffic/clones/${date}.json`,
+              JSON.stringify(clones.data, null, 2) + '\n'
+            );
+            fs.writeFileSync(
+              `traffic/views/${date}.json`,
+              JSON.stringify(views.data, null, 2) + '\n'
+            );
+            fs.writeFileSync(
+              `traffic/referrers/${date}.json`,
+              JSON.stringify(referrers.data, null, 2) + '\n'
+            );
+
+            // Update cumulative summary
+            let summary = {};
+            const summaryPath = 'traffic/summary.json';
+            if (fs.existsSync(summaryPath)) {
+              summary = JSON.parse(fs.readFileSync(summaryPath, 'utf8'));
+            }
+
+            // Merge daily clone data (deduplicate by timestamp)
+            if (!summary.clones) summary.clones = {};
+            for (const entry of clones.data.clones || []) {
+              summary.clones[entry.timestamp] = { count: entry.count, uniques: entry.uniques };
+            }
+
+            // Merge daily view data (deduplicate by timestamp)
+            if (!summary.views) summary.views = {};
+            for (const entry of views.data.views || []) {
+              summary.views[entry.timestamp] = { count: entry.count, uniques: entry.uniques };
+            }
+
+            // Update latest referrers snapshot
+            summary.referrers = referrers.data;
+            summary.last_updated = new Date().toISOString();
+
+            fs.writeFileSync(summaryPath, JSON.stringify(summary, null, 2) + '\n');
+
+            console.log(`Archived traffic data for ${date}`);
+            console.log(`Clones: ${clones.data.count} total, ${clones.data.uniques} unique`);
+            console.log(`Views: ${views.data.count} total, ${views.data.uniques} unique`);
+            console.log(`Referrers: ${referrers.data.length} sources`);
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add traffic/
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "📊 Traffic data $(date -I)"
+            git push origin traffic-data
+          fi
