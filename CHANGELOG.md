@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.15.4] - 2026-03-09
+
+### Fixed
+- **AppArmor profile blocking Python startup on HAOS** — the custom AppArmor profile only allowed `/usr/local/lib/python3*/**` which covers site-packages but not `libpython3.12.so.1.0`. Broadened to `/usr/local/lib/** mr` and `/usr/local/bin/** ix`
+
+## [2.15.3] - 2026-03-09
+
+### Fixed
+- **Re-anchor loop on stream start** — upgraded to sendspin-cli 5.1.4 which preserves the re-anchor cooldown timer across `clear()` calls, preventing rapid back-to-back re-anchors that caused audio dropouts on Bluetooth speakers
+
+### Changed
+- **Split armv7 CI into separate parallel workflow** — amd64/arm64 images publish immediately; armv7 builds via QEMU independently and appends to the manifest
+- **Added git to Docker builder stage** — required for git-based pip dependencies
+
 ## [2.15.2] - 2026-03-09
 
 ### Fixed

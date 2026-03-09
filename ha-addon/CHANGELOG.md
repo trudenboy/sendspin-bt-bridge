@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.15.4] - 2026-03-09
+
+### Fixed
+- AppArmor profile was blocking Python startup — `libpython3.12.so.1.0` not covered by the restricted path rules. Addon now starts correctly on HAOS
+
+## [2.15.3] - 2026-03-09
+
+### Fixed
+- Re-anchor loop on stream start — sendspin-cli 5.1.4 preserves cooldown timer, preventing rapid audio restarts on Bluetooth speakers
+
+### Changed
+- armv7 builds split into a separate CI workflow (amd64/arm64 publish faster)
+
 ## [2.15.2] - 2026-03-09
 
 ### Fixed
