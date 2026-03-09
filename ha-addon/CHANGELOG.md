@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.15.6] - 2026-03-09
+
+### Fixed
+- Auto-unmute Bluetooth sink on connect — PulseAudio may mute sinks silently on BT reconnect; bridge now ensures sink is unmuted before volume restore
+
+### Changed
+- Switched to official PyPI sendspin package (5.3.2) — upstream includes re-anchor fix and other improvements
+- Removed `git` from Docker builder stage (no longer needed)
+
 ## [2.15.5] - 2026-03-09
 
 ### Fixed

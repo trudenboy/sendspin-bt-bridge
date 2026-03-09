@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING
 
 from config import CONFIG_FILE
 from config import config_lock as config_lock
-from services.pulse import get_sink_volume, list_sinks, set_sink_volume
+from services.pulse import get_sink_volume, list_sinks, set_sink_mute, set_sink_volume
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -437,6 +437,9 @@ class BluetoothManager:
                 # Try to force SBC codec (lowest CPU A2DP codec) if requested
                 if self.prefer_sbc:
                     _force_sbc_codec(pa_mac)
+
+                # Ensure sink is unmuted (PulseAudio may mute on BT reconnect)
+                set_sink_mute(configured_sink, False)
 
                 # Resolve last saved volume for this device
                 restored_volume = None
