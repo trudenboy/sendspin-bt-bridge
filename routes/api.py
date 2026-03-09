@@ -88,6 +88,15 @@ _SHOW_DEV_PAT = re.compile(r"^Device\s+([0-9A-Fa-f:]{17})")
 _volume_timers: dict[str, threading.Timer] = {}
 _volume_timers_lock = threading.Lock()
 
+# ---------------------------------------------------------------------------
+# SSE connection limiting — prevent resource exhaustion
+# ---------------------------------------------------------------------------
+
+_sse_count = 0
+_sse_lock = threading.Lock()
+_MAX_SSE = 4
+_SSE_MAX_LIFETIME = 1800  # 30 minutes
+
 # Cached config flag — avoid reading config.json on every volume/mute request.
 # Reloaded in api_config() (line ~1361) after config save; also valid on process
 # restart since config.py is re-read.  Does NOT auto-reload on manual file edit.
@@ -247,7 +256,9 @@ def get_client_status_for(client):
 
 def get_client_status():
     """Get status from the first client (backward compatibility)."""
-    if not _clients:
+    with _clients_lock:
+        snapshot = list(_clients)
+    if not snapshot:
         return {
             "connected": False,
             "server_connected": False,
@@ -259,7 +270,7 @@ def get_client_status():
             "build_date": BUILD_DATE,
             "bluetooth_mac": None,
         }
-    return get_client_status_for(_clients[0])
+    return get_client_status_for(snapshot[0])
 
 
 # ---------------------------------------------------------------------------
@@ -324,8 +335,9 @@ def api_restart():
             threading.Thread(target=_do_docker, daemon=True).start()
 
         return jsonify({"success": True, "runtime": runtime})
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+    except Exception:
+        logger.exception("Restart failed")
+        return jsonify({"success": False, "error": "Internal error"}), 500
 
 
 # ---------------------------------------------------------------------------
@@ -423,25 +435,29 @@ def set_volume():
     Falls back to direct pactl on MA failure.
     """
     try:
-        data = request.get_json()
+        data = request.get_json() or {}
         try:
             volume = max(0, min(100, int(data.get("volume", 100))))
         except (ValueError, TypeError):
             return jsonify({"success": False, "error": "Invalid volume value"}), 400
         player_names = data.get("player_names")
+        if player_names is not None and not isinstance(player_names, list):
+            return jsonify({"error": "player_names must be a list"}), 400
         player_name = data.get("player_name")
         group_id = data.get("group_id")
         is_group = data.get("group", False)
         force_local = data.get("force_local", False)
 
+        with _clients_lock:
+            snapshot = list(_clients)
         if group_id is not None:
-            targets = [c for c in _clients if c.status.get("group_id") == group_id]
+            targets = [c for c in snapshot if c.status.get("group_id") == group_id]
         elif player_names is not None:
-            targets = [c for c in _clients if getattr(c, "player_name", None) in player_names]
+            targets = [c for c in snapshot if getattr(c, "player_name", None) in player_names]
         elif player_name:
-            targets = [c for c in _clients if getattr(c, "player_name", None) == player_name]
+            targets = [c for c in snapshot if getattr(c, "player_name", None) == player_name]
         else:
-            targets = list(_clients)
+            targets = snapshot
 
         # --- MA path: proxy through MA API when connected ---
         if not force_local and _volume_via_ma and state.is_ma_connected() and targets:
@@ -496,8 +512,9 @@ def set_volume():
         if not results:
             return jsonify({"success": False, "error": "No clients available"}), 503
         return jsonify({"success": True, "volume": volume, "results": results})
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+    except Exception:
+        logger.exception("Volume update failed")
+        return jsonify({"success": False, "error": "Internal error"}), 500
 
 
 @api_bp.route("/api/mute", methods=["POST"])
@@ -510,16 +527,20 @@ def set_mute():
     try:
         data = request.get_json() or {}
         player_names = data.get("player_names")
+        if player_names is not None and not isinstance(player_names, list):
+            return jsonify({"error": "player_names must be a list"}), 400
         player_name = data.get("player_name")
         mute_value = data.get("mute")
         force_local = data.get("force_local", False)
 
+        with _clients_lock:
+            snapshot = list(_clients)
         if player_names is not None:
-            targets = [c for c in _clients if getattr(c, "player_name", None) in player_names]
+            targets = [c for c in snapshot if getattr(c, "player_name", None) in player_names]
         elif player_name:
-            targets = [c for c in _clients if getattr(c, "player_name", None) == player_name]
+            targets = [c for c in snapshot if getattr(c, "player_name", None) == player_name]
         else:
-            targets = _clients[:1]
+            targets = snapshot[:1]
 
         # --- MA path ---
         if not force_local and _volume_via_ma and state.is_ma_connected() and targets:
@@ -559,8 +580,9 @@ def set_mute():
             return jsonify({"success": False, "error": "Client not available"}), 503
         muted = results[0].get("muted", False) if results else False
         return jsonify({"success": True, "muted": muted, "results": results})
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+    except Exception:
+        logger.exception("Mute update failed")
+        return jsonify({"success": False, "error": "Internal error"}), 500
 
 
 @api_bp.route("/api/pause_all", methods=["POST"])
@@ -585,10 +607,13 @@ def pause_all():
 
     count = 0
 
+    with _clients_lock:
+        snapshot = list(_clients)
+
     if action == "pause":
         # One pause command per unique Sendspin session group (MA propagates to all members)
         seen_groups: set = set()
-        for client in _clients:
+        for client in snapshot:
             if not client.is_running():
                 continue
             gid = client.status.get("group_id")
@@ -608,7 +633,7 @@ def pause_all():
         seen_ma_syncgroups: set = set()
         seen_session_groups: set = set()
 
-        for client in _clients:
+        for client in snapshot:
             if not client.is_running():
                 continue
 
@@ -670,8 +695,10 @@ def api_group_pause():
         return jsonify({"success": False, "error": "Event loop not available"}), 503
 
     # Find one running member of the specified group
+    with _clients_lock:
+        snapshot = list(_clients)
     target = next(
-        (c for c in _clients if c.is_running() and c.status.get("group_id") == group_id),
+        (c for c in snapshot if c.is_running() and c.status.get("group_id") == group_id),
         None,
     )
     if not target:
@@ -706,8 +733,9 @@ def api_group_pause():
         fut.result(timeout=2.0)
         group_name = target.status.get("group_name")
         return jsonify({"success": True, "action": action, "group_id": group_id, "group_name": group_name})
-    except Exception as exc:
-        return jsonify({"success": False, "error": str(exc)}), 500
+    except Exception:
+        logger.exception("Group pause/play failed")
+        return jsonify({"success": False, "error": "Internal error"}), 500
 
 
 @api_bp.route("/api/ma/groups", methods=["GET"])
@@ -740,7 +768,9 @@ def api_ma_rediscover():
     try:
         from services.ma_client import discover_ma_groups
 
-        player_names = [c.player_name for c in _clients]
+        with _clients_lock:
+            snapshot = list(_clients)
+        player_names = [c.player_name for c in snapshot]
         fut = asyncio.run_coroutine_threadsafe(discover_ma_groups(ma_url, ma_token, player_names), loop)
         name_map, all_groups = fut.result(timeout=15.0)
         state.set_ma_api_credentials(ma_url, ma_token)
@@ -753,9 +783,9 @@ def api_ma_rediscover():
                 "groups": [{"id": g["id"], "name": g["name"]} for g in all_groups],
             }
         )
-    except Exception as exc:
-        logger.warning("MA rediscover failed: %s", exc)
-        return jsonify({"success": False, "error": str(exc)}), 500
+    except Exception:
+        logger.exception("MA rediscover failed")
+        return jsonify({"success": False, "error": "Internal error"}), 500
 
 
 @api_bp.route("/api/ma/nowplaying", methods=["GET"])
@@ -802,9 +832,9 @@ def api_ma_queue_cmd():
         fut = asyncio.run_coroutine_threadsafe(send_queue_cmd(action, value, syncgroup_id), loop)
         ok = fut.result(timeout=10.0)
         return jsonify({"success": ok})
-    except Exception as exc:
-        logger.warning("MA queue cmd %s failed: %s", action, exc)
-        return jsonify({"success": False, "error": str(exc)}), 500
+    except Exception:
+        logger.exception("MA queue command '%s' failed", action)
+        return jsonify({"success": False, "error": "Internal error"}), 500
 
 
 @api_bp.route("/api/pause", methods=["POST"])
@@ -818,7 +848,9 @@ def pause_player():
     data = request.get_json() or {}
     player_name = data.get("player_name", "")
     action = data.get("action", "pause")
-    target = next((c for c in _clients if getattr(c, "player_name", None) == player_name), None)
+    with _clients_lock:
+        snapshot = list(_clients)
+    target = next((c for c in snapshot if getattr(c, "player_name", None) == player_name), None)
     if not target or not target.is_running():
         return jsonify({"success": False, "error": "Player not found or not running"}), 404
     loop = state.get_main_loop()
@@ -828,22 +860,24 @@ def pause_player():
         fut = asyncio.run_coroutine_threadsafe(target._send_subprocess_command({"cmd": action}), loop)
         fut.result(timeout=2.0)
         return jsonify({"success": True, "action": action, "count": 1})
-    except Exception as exc:
-        return jsonify({"success": False, "error": str(exc)}), 500
+    except Exception:
+        logger.exception("Pause/play command failed")
+        return jsonify({"success": False, "error": "Internal error"}), 500
 
 
-@api_bp.route("/api/bt/reconnect", methods=["POST"])
 def api_bt_reconnect():
     """Force reconnect a BT device (connect without re-pairing)."""
     try:
         data = request.get_json() or {}
         player_name = data.get("player_name")
+        with _clients_lock:
+            snapshot = list(_clients)
         client = next(
-            (c for c in _clients if getattr(c, "player_name", None) == player_name),
+            (c for c in snapshot if getattr(c, "player_name", None) == player_name),
             None,
         )
-        if client is None and _clients:
-            client = _clients[0]
+        if client is None and snapshot:
+            client = snapshot[0]
         if not client or not client.bt_manager:
             return jsonify({"success": False, "error": "No BT manager for this player"}), 503
 
@@ -859,8 +893,9 @@ def api_bt_reconnect():
 
         threading.Thread(target=_do_reconnect, daemon=True).start()
         return jsonify({"success": True, "message": "Reconnect started"})
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+    except Exception:
+        logger.exception("BT reconnect failed")
+        return jsonify({"success": False, "error": "Internal error"}), 500
 
 
 @api_bp.route("/api/bt/pair", methods=["POST"])
@@ -869,12 +904,14 @@ def api_bt_pair():
     try:
         data = request.get_json() or {}
         player_name = data.get("player_name")
+        with _clients_lock:
+            snapshot = list(_clients)
         client = next(
-            (c for c in _clients if getattr(c, "player_name", None) == player_name),
+            (c for c in snapshot if getattr(c, "player_name", None) == player_name),
             None,
         )
-        if client is None and _clients:
-            client = _clients[0]
+        if client is None and snapshot:
+            client = snapshot[0]
         if not client or not client.bt_manager:
             return jsonify({"success": False, "error": "No BT manager for this player"}), 503
 
@@ -889,8 +926,9 @@ def api_bt_pair():
 
         threading.Thread(target=_do_pair, daemon=True).start()
         return jsonify({"success": True, "message": "Pairing started (~25s)"})
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+    except Exception:
+        logger.exception("BT pairing failed")
+        return jsonify({"success": False, "error": "Internal error"}), 500
 
 
 @api_bp.route("/api/bt/management", methods=["POST"])
@@ -901,9 +939,11 @@ def api_bt_management():
     enabled = data.get("enabled")
     if enabled is None:
         return jsonify({"success": False, "error": 'Missing "enabled" field'}), 400
-    client = next((c for c in _clients if getattr(c, "player_name", None) == player_name), None)
-    if not client and _clients:
-        client = _clients[0]
+    with _clients_lock:
+        snapshot = list(_clients)
+    client = next((c for c in snapshot if getattr(c, "player_name", None) == player_name), None)
+    if not client and snapshot:
+        client = snapshot[0]
     if not client:
         return jsonify({"success": False, "error": "No client found"}), 503
     enabled = bool(enabled)
@@ -1066,44 +1106,60 @@ def api_status_stream():
     ``notify_status_changed()`` call either happens before we start waiting
     (so ``wait_for`` returns immediately) or wakes us up cleanly.
     """
+    global _sse_count
+    with _sse_lock:
+        if _sse_count >= _MAX_SSE:
+            return 'data: {"error": "too many listeners"}\n\n', 503, {"Content-Type": "text/event-stream"}
+        _sse_count += 1
 
     def _generate():
-        def _build_snapshot():
-            with _clients_lock:
-                snapshot = list(_clients)
-            if not snapshot:
-                return None
-            if len(snapshot) == 1:
-                data = get_client_status_for(snapshot[0])
-            else:
-                first = get_client_status_for(snapshot[0])
-                data = {**first, "devices": [get_client_status_for(c) for c in snapshot]}
-            data["groups"] = _build_groups_summary(snapshot)
-            return data
+        global _sse_count
+        try:
 
-        # Send current status immediately so the client doesn't have to wait
-        # for the first change event (important through HA ingress proxy).
-        #
-        # Leading 2 KB padding flushes proxy buffers (Nginx, HA Ingress,
-        # Cloudflare) so they start streaming instead of buffering the
-        # entire response.
-        yield ": " + " " * 2048 + "\n\n"
+            def _build_snapshot():
+                with _clients_lock:
+                    snapshot = list(_clients)
+                if not snapshot:
+                    return None
+                if len(snapshot) == 1:
+                    data = get_client_status_for(snapshot[0])
+                else:
+                    first = get_client_status_for(snapshot[0])
+                    data = {**first, "devices": [get_client_status_for(c) for c in snapshot]}
+                data["groups"] = _build_groups_summary(snapshot)
+                return data
 
-        initial = _build_snapshot()
-        if initial:
-            yield f"data: {json.dumps(initial)}\n\n"
+            # Send current status immediately so the client doesn't have to wait
+            # for the first change event (important through HA ingress proxy).
+            #
+            # Leading 2 KB padding flushes proxy buffers (Nginx, HA Ingress,
+            # Cloudflare) so they start streaming instead of buffering the
+            # entire response.
+            yield ": " + " " * 2048 + "\n\n"
 
-        last_version = state.get_status_version()
-        while True:
-            changed, last_version = state.wait_for_status_change(last_version, timeout=15)
+            initial = _build_snapshot()
+            if initial:
+                yield f"data: {json.dumps(initial)}\n\n"
 
-            if changed:
-                data = _build_snapshot()
-                if data:
-                    yield f"data: {json.dumps(data)}\n\n"
-            else:
-                # 15 s timeout — send a keepalive comment so proxies don't close
-                yield ": heartbeat\n\n"
+            last_version = state.get_status_version()
+            started = time.monotonic()
+            while True:
+                if time.monotonic() - started >= _SSE_MAX_LIFETIME:
+                    yield 'data: {"error": "session expired"}\n\n'
+                    break
+
+                changed, last_version = state.wait_for_status_change(last_version, timeout=15)
+
+                if changed:
+                    data = _build_snapshot()
+                    if data:
+                        yield f"data: {json.dumps(data)}\n\n"
+                else:
+                    # 15 s timeout — send a keepalive comment so proxies don't close
+                    yield ": heartbeat\n\n"
+        finally:
+            with _sse_lock:
+                _sse_count -= 1
 
     return Response(
         _generate(),
@@ -1194,8 +1250,10 @@ def api_config():
         config.pop("SECRET_KEY", None)
 
         # Enrich BLUETOOTH_DEVICES with resolved listen_port / listen_host from running clients
-        client_map = {getattr(c, "player_name", None): c for c in _clients}
-        mac_map = {getattr(getattr(c, "bt_manager", None), "mac_address", None): c for c in _clients}
+        with _clients_lock:
+            snapshot = list(_clients)
+        client_map = {getattr(c, "player_name", None): c for c in snapshot}
+        mac_map = {getattr(getattr(c, "bt_manager", None), "mac_address", None): c for c in snapshot}
         for dev in config.get("BLUETOOTH_DEVICES", []):
             client = client_map.get(dev.get("player_name")) or mac_map.get(dev.get("mac"))
             if client:
@@ -1376,7 +1434,7 @@ def api_set_password():
     if os.environ.get("SUPERVISOR_TOKEN"):
         return jsonify({"error": "Use HA user management in HA addon mode"}), 400
 
-    data = request.get_json(force=True, silent=True) or {}
+    data = request.get_json(silent=True) or {}
     password = data.get("password", "")
     if not password:
         return jsonify({"error": "password is required"}), 400
@@ -1417,7 +1475,9 @@ def api_set_log_level():
     loop = state.get_main_loop()
     if loop is not None:
         cmd = {"cmd": "set_log_level", "level": level}
-        for client in _clients:
+        with _clients_lock:
+            snapshot = list(_clients)
+        for client in snapshot:
             if client.is_running():
                 try:
                     asyncio.run_coroutine_threadsafe(client._send_subprocess_command(cmd), loop).result(timeout=2.0)
@@ -1848,7 +1908,9 @@ def api_diagnostics():
             diag["sinks"] = []
 
         device_diag = []
-        for client in _clients:
+        with _clients_lock:
+            snapshot = list(_clients)
+        for client in snapshot:
             bt_mgr = getattr(client, "bt_manager", None)
             device_diag.append(
                 {
@@ -1867,7 +1929,7 @@ def api_diagnostics():
         ma_groups = state.get_ma_groups()
 
         # Build a name→client lookup for matching MA members to bridge devices
-        bridge_by_name = {getattr(c, "player_name", "").lower(): c for c in _clients}
+        bridge_by_name = {getattr(c, "player_name", "").lower(): c for c in snapshot}
 
         enriched_groups = []
         for g in ma_groups:
@@ -1960,8 +2022,15 @@ def api_diagnostics():
             diag["portaudio_devices"] = [{"error": str(e)}]
 
         return jsonify(diag)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        logger.exception("Diagnostics collection failed")
+        return jsonify({"error": "Internal error"}), 500
+
+
+@api_bp.route("/api/health")
+def api_health():
+    """Lightweight health check — no auth required, no sensitive data."""
+    return jsonify({"ok": True})
 
 
 @api_bp.route("/api/version")

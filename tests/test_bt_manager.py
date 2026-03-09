@@ -1,0 +1,124 @@
+"""Tests for bluetooth_manager.py — BluetoothManager class.
+
+bluetooth_manager.py imports services.pulse (which gracefully handles missing
+pulsectl_asyncio) and only imports ``dbus`` inside function bodies.  No
+module-level sys.modules stubbing is needed for Python 3.9 compatibility.
+"""
+
+from unittest.mock import patch
+
+import pytest
+
+# ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def _isolated_config(tmp_path, monkeypatch):
+    """Redirect config to a temp directory."""
+    import config
+
+    monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.json")
+
+
+@pytest.fixture()
+def bt_manager():
+    """Create a BluetoothManager with reasonable defaults for testing."""
+    from bluetooth_manager import BluetoothManager
+
+    # Mock subprocess calls that happen in __init__ (adapter resolution)
+    with patch("subprocess.check_output", return_value=""):
+        mgr = BluetoothManager(
+            mac_address="AA:BB:CC:DD:EE:FF",
+            device_name="TestSpeaker",
+        )
+    return mgr
+
+
+# ---------------------------------------------------------------------------
+# Tests
+# ---------------------------------------------------------------------------
+
+
+def test_bt_executor_pool_size():
+    """The module-level thread pool must have at least 4 workers."""
+    from bluetooth_manager import _bt_executor
+
+    assert _bt_executor._max_workers >= 4
+
+
+def test_running_flag_default(bt_manager):
+    """BluetoothManager instances must start with _running = True."""
+    assert bt_manager._running is True
+
+
+def test_shutdown_sets_running_false(bt_manager):
+    """shutdown() must set _running to False."""
+    bt_manager.shutdown()
+    assert bt_manager._running is False
+
+
+def test_configure_bluetooth_audio_pipewire_pattern(bt_manager):
+    """Finds a PipeWire-format sink (bluez_output.MAC.1)."""
+    pa_mac = bt_manager.mac_address.replace(":", "_")
+    sink_name = f"bluez_output.{pa_mac}.1"
+
+    fake_sinks = [{"name": sink_name, "description": "BT Speaker"}]
+    with (
+        patch("bluetooth_manager.list_sinks", return_value=fake_sinks),
+        patch("bluetooth_manager.get_sink_volume", return_value=50),
+        patch("bluetooth_manager.set_sink_mute", return_value=True),
+        patch("bluetooth_manager.set_sink_volume", return_value=True),
+        patch("time.sleep"),
+    ):
+        result = bt_manager.configure_bluetooth_audio()
+
+    assert result is True
+
+
+def test_configure_bluetooth_audio_pulseaudio_pattern(bt_manager):
+    """Finds a PulseAudio-format sink (bluez_sink.MAC.a2dp_sink)."""
+    pa_mac = bt_manager.mac_address.replace(":", "_")
+    sink_name = f"bluez_sink.{pa_mac}.a2dp_sink"
+
+    fake_sinks = [{"name": sink_name, "description": "BT Speaker"}]
+    with (
+        patch("bluetooth_manager.list_sinks", return_value=fake_sinks),
+        patch("bluetooth_manager.get_sink_volume", return_value=50),
+        patch("bluetooth_manager.set_sink_mute", return_value=True),
+        patch("bluetooth_manager.set_sink_volume", return_value=True),
+        patch("time.sleep"),
+    ):
+        result = bt_manager.configure_bluetooth_audio()
+
+    assert result is True
+
+
+def test_configure_bluetooth_audio_no_sink(bt_manager):
+    """Returns False when no matching sink is found."""
+    with (
+        patch("bluetooth_manager.list_sinks", return_value=[]),
+        patch("bluetooth_manager.get_sink_volume", return_value=None),
+        patch("bluetooth_manager.set_sink_mute", return_value=True),
+        patch("time.sleep"),
+    ):
+        result = bt_manager.configure_bluetooth_audio()
+
+    assert result is False
+
+
+def test_connected_default(bt_manager):
+    """BluetoothManager instances must start with connected = False."""
+    assert bt_manager.connected is False
+
+
+def test_device_name_fallback():
+    """When no device_name is given, it falls back to the MAC address."""
+    from bluetooth_manager import BluetoothManager
+
+    with patch("subprocess.check_output", return_value=""):
+        mgr = BluetoothManager(mac_address="11:22:33:44:55:66")
+
+    assert mgr.device_name == "11:22:33:44:55:66"

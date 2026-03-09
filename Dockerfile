@@ -79,7 +79,11 @@ EXPOSE 8080
 
 # Health check — verify only that the web UI is reachable (BT disconnected is normal)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD python3 -c "import urllib.request, os; urllib.request.urlopen(f'http://localhost:{os.environ.get(\"WEB_PORT\",\"8080\")}/api/status')" || exit 1
+    CMD python3 -c "import urllib.request, os; urllib.request.urlopen(f'http://localhost:{os.environ.get(\"WEB_PORT\",\"8080\")}/api/health')" || exit 1
+
+# NOTE: Container runs as root because entrypoint.sh needs root for D-Bus
+# and Bluetooth adapter setup. The Python app itself doesn't require root
+# after initialization. Consider using gosu for privilege drop in the future.
 
 # Run entrypoint script
 ENTRYPOINT ["/app/entrypoint.sh"]

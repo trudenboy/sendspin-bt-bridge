@@ -38,12 +38,12 @@ services:
 
     devices:
       # Grant access to Bluetooth adapter
-      - /dev/bus/usb:/dev/bus/usb
+      - /dev/bus/usb:/dev/bus/usb  # All USB — restrict to specific HCI if possible, e.g. /dev/bus/usb/001/002
 
     cap_add:
       - NET_ADMIN   # Bluetooth adapter control
       - NET_RAW     # Raw BT/HCI socket access
-      - SYS_ADMIN   # BlueZ kernel operations (D-Bus, rfkill)
+      # SYS_ADMIN removed — not needed for D-Bus/rfkill (handled via socket mount)
 
     labels:
       - "com.centurylinklabs.watchtower.enable=true"

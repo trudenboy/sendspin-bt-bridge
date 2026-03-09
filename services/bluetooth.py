@@ -35,6 +35,7 @@ _AUDIO_UUIDS = {
 }
 
 _ADAPTER_RE = re.compile(r"Controller\s+([\dA-F:]{17})\s", re.IGNORECASE)
+_MAC_RE = re.compile(r"^[\dA-Fa-f]{2}(:[\dA-Fa-f]{2}){5}$")
 
 
 def list_bt_adapters(timeout: int = 5) -> list[str]:
@@ -53,6 +54,12 @@ def list_bt_adapters(timeout: int = 5) -> list[str]:
 
 def bt_remove_device(mac: str, adapter_mac: str = "") -> None:
     """Remove device from BT stack (disconnect + unpair). Fire-and-forget."""
+    if not _MAC_RE.match(mac):
+        logger.warning("Invalid MAC: %s", mac)
+        return
+    if adapter_mac and not _MAC_RE.match(adapter_mac):
+        logger.warning("Invalid adapter MAC: %s", adapter_mac)
+        return
 
     def _run():
         cmds = []
@@ -112,6 +119,8 @@ def persist_device_enabled(player_name: str, enabled: bool) -> None:
 
 def is_audio_device(mac: str) -> bool:
     """Return True if the BT device is an audio device (A2DP/HFP)."""
+    if not _MAC_RE.match(mac):
+        return False
     try:
         r = subprocess.run(["bluetoothctl", "info", mac], capture_output=True, text=True, timeout=4)
         out = r.stdout

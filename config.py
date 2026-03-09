@@ -18,7 +18,7 @@ import threading
 import uuid as _uuid
 from pathlib import Path
 
-VERSION = "2.15.8"
+VERSION = "2.16.0"
 BUILD_DATE = "2026-03-09"
 
 __all__ = [
@@ -80,6 +80,8 @@ def update_config(mutator) -> None:
         tmp = str(CONFIG_FILE) + ".tmp"
         with open(tmp, "w") as f:
             json.dump(existing, f, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
         os.replace(tmp, str(CONFIG_FILE))
 
 

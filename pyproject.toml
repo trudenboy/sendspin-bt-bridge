@@ -56,4 +56,5 @@ warn_unused_ignores = false
 show_error_codes = true
 exclude = [
     "sendspin-cli/",
+    "scripts/",
 ]

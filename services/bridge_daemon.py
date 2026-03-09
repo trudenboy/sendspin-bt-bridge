@@ -67,6 +67,7 @@ class BridgeDaemon(SendspinDaemon):
         self._on_volume_save = on_volume_save
         self._on_status_change = on_status_change
         self._sink_routed = False  # True after first move-sink-input for current stream
+        self._background_tasks: set = set()
 
     def _notify(self) -> None:
         """Notify subscriber that status has changed (no-op if no callback)."""
@@ -74,7 +75,7 @@ class BridgeDaemon(SendspinDaemon):
             try:
                 self._on_status_change()
             except Exception as exc:
-                logger.debug("on_status_change callback failed: %s", exc)
+                logger.warning("on_status_change callback failed: %s", exc)
 
     # ── Client creation ──────────────────────────────────────────────────────
 
@@ -190,6 +191,8 @@ class BridgeDaemon(SendspinDaemon):
             # sink-input causes a PA glitch that triggers re-anchoring, creating a loop.
             self._sink_routed = True
             _task = asyncio.ensure_future(self._ensure_sink_routing())
+            self._background_tasks.add(_task)
+            _task.add_done_callback(self._background_tasks.discard)
             _task.add_done_callback(
                 lambda t: logger.debug("_ensure_sink_routing error: %s", t.exception()) if t.exception() else None
             )
@@ -218,8 +221,9 @@ class BridgeDaemon(SendspinDaemon):
             return
         cmd = payload.player
         if cmd.command == PlayerCommand.VOLUME and cmd.volume is not None:
-            self._bridge_status["volume"] = cmd.volume
-            self._sync_bt_sink_volume(cmd.volume)
+            vol = max(0, min(100, cmd.volume))
+            self._bridge_status["volume"] = vol
+            self._sync_bt_sink_volume(vol)
             self._notify()
         elif cmd.command == PlayerCommand.MUTE and cmd.mute is not None:
             self._bridge_status["muted"] = cmd.mute
@@ -231,6 +235,8 @@ class BridgeDaemon(SendspinDaemon):
             return
         try:
             task = asyncio.ensure_future(aset_sink_volume(self._bluetooth_sink_name, volume))
+            self._background_tasks.add(task)
+            task.add_done_callback(self._background_tasks.discard)
             task.add_done_callback(
                 lambda t: (
                     logger.info("✓ Synced Bluetooth speaker volume to %d%%", volume)

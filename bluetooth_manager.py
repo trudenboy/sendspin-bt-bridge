@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import re
 import subprocess
 import threading
@@ -31,7 +32,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_bt_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="bt-blocking")
+_bt_executor = ThreadPoolExecutor(max_workers=min(4, os.cpu_count() or 4), thread_name_prefix="bt-blocking")
 
 
 def _force_sbc_codec(pa_mac: str) -> None:
@@ -149,6 +150,7 @@ class BluetoothManager:
         # selecting by MAC address works because D-Bus objects use MACs, not hciN names.
         self._adapter_select = self._resolve_adapter_select(adapter) if adapter else ""
         self.management_enabled: bool = True  # False = released; monitor loop skips reconnect
+        self._running: bool = True  # False = shutdown; monitor loops exit
         self._connect_lock = threading.Lock()  # prevents concurrent connect_device() calls
         self._reconnect_timestamps: list[float] = []  # monotonic timestamps of recent reconnects
         self._CHURN_WINDOW = churn_window  # seconds; 0 threshold = disabled
@@ -166,6 +168,10 @@ class BluetoothManager:
         _hci = self.adapter_hci_name or "hci0"
         self._dbus_device_path: str = f"/org/bluez/{_hci}/dev_{_mac_dbus}"
         self.battery_level: int | None = None
+
+    def shutdown(self) -> None:
+        """Signal all monitor loops to exit."""
+        self._running = False
 
     def _detect_default_adapter_mac(self) -> str:
         """Return the MAC of the default Bluetooth controller, or empty string."""
@@ -644,7 +650,7 @@ class BluetoothManager:
         loop = asyncio.get_running_loop()
         iteration = 0
         reconnect_attempt = 0
-        while True:
+        while self._running:
             iteration += 1
             try:
                 if not self.management_enabled:
@@ -736,7 +742,7 @@ class BluetoothManager:
         # Recreated only when it becomes unresponsive or on first start.
         bus = None
 
-        while True:
+        while self._running:
             bus_needs_reconnect = bus is None or not bus.connected
             try:
                 if bus_needs_reconnect:
@@ -838,7 +844,7 @@ class BluetoothManager:
     async def _inner_dbus_monitor(self, device_iface, disconnect_event, loop):
         """Inner D-Bus monitor loop; returns when D-Bus re-subscription is needed."""
         reconnect_attempt = 0
-        while True:
+        while self._running:
             if not self.management_enabled:
                 await asyncio.sleep(5)
                 continue

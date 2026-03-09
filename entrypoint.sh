@@ -38,10 +38,10 @@ elif [ -S /run/audio/pulse.sock ]; then
     # HA OS audio bridge socket (Supervisor injects this path in some versions)
     export PULSE_SERVER=unix:/run/audio/pulse.sock
     echo "HA audio bridge socket found: /run/audio/pulse.sock"
-elif [ -S /run/user/1000/pulse/native ]; then
+elif [ -S "/run/user/${AUDIO_UID:-1000}/pulse/native" ]; then
     echo "Host PulseAudio socket found"
-    export PULSE_SERVER=unix:/run/user/1000/pulse/native
-elif [ -S /run/user/1000/pipewire-0 ]; then
+    export PULSE_SERVER="unix:/run/user/${AUDIO_UID:-1000}/pulse/native"
+elif [ -S "/run/user/${AUDIO_UID:-1000}/pipewire-0" ]; then
     echo "Host PipeWire socket found"
 else
     echo "WARNING: Host audio socket not found"

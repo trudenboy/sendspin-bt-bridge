@@ -2,7 +2,7 @@
 
 A history of the architectural and functional evolution of sendspin-bt-bridge — for readers familiar with Home Assistant, Music Assistant, and multiroom audio setups.
 
-**Period:** January 1 – March 9, 2026 · **Total commits:** ~590 · **Versions:** 1.0.0 → 2.15.8
+**Period:** January 1 – March 9, 2026 · **Total commits:** ~590 · **Versions:** 1.0.0 → 2.16.0
 
 ---
 
@@ -495,6 +495,18 @@ Deploying v2.13.0 to two live LXC bridges (Proxmox + Turris OpenWrt) uncovered a
 ### GitHub Issues & Discussions infrastructure (v2.13.0)
 
 The project gained structured issue management: 3 YAML-based issue form templates (Bug Report with deployment/audio dropdowns, Bluetooth/Audio specialist form, Feature Request), 16 project labels (`type:bug`, `area:bluetooth`, `deploy:ha-addon`, etc.), and a Discussions Welcome post with routing guidance (Issues for bugs/features, Discussions for help/ideas).
+
+### Comprehensive security hardening & code quality audit (v2.16.0)
+
+A full-codebase code review surfaced 42 issues across security, thread safety, error handling, robustness, and test coverage. All were resolved in a single coordinated release:
+
+**Security (5 fixes):** SSRF via `flow_id` path traversal in HA auth flow; SSE endpoint could exhaust all Waitress threads (capped at 4); unclamped volume from server could overdrive speakers at 200%+; MAC address injection into `bluetoothctl` stdin; `/api/status` leaked MACs, IPs, and player metadata without auth.
+
+**Thread safety (6 fixes):** `_clients` list iterated without lock across ~15 API endpoints; `stop_sendspin()` bypassed SSE notification; zombie restart counter race condition; config file reads without `config_lock`; unsynchronized MA API credential writes; BT executor pool too small (2→4) for multi-device reconnect.
+
+**Error handling & input validation (7 fixes):** `request.get_json()` crash on non-JSON POST; internal exception strings leaked in 15 error responses; IPC volume command crash on non-numeric input; path traversal via crafted `client_id`; `player_names` type confusion (string vs list); `set_log_level` accepted arbitrary `getattr` targets; `force=True` weakened CSRF protection on password endpoint.
+
+**Test coverage (65 new tests):** from 42 to 107 tests. New test files for `services/bluetooth.py`, `services/pulse.py`, `bluetooth_manager.py`, `services/daemon_process.py`, `scripts/translate_ha_config.py`, and `routes/api.py`. Shared `conftest.py` added. `datetime.UTC` replaced with `timezone.utc` across 4 files for Python 3.9 test compatibility.
 
 ---
 

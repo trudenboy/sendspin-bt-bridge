@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import threading
 import time
 import urllib.request as _ur
@@ -36,6 +37,8 @@ auth_bp = Blueprint("auth", __name__)
 _HA_CORE_URL = os.environ.get("HA_CORE_URL", "http://homeassistant:8123").rstrip("/")
 # client_id must be an HTTP URL; HA accepts any valid URL as client_id.
 _FLOW_CLIENT_ID = f"{_HA_CORE_URL}/"
+
+_UUID_RE = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", re.IGNORECASE)
 
 # ---------------------------------------------------------------------------
 # Brute-force protection — in-memory, no external dependency
@@ -76,6 +79,9 @@ def _record_failure(ip: str) -> None:
                 _failed[ip] = (count + 1, first_ts)
         else:
             _failed[ip] = (1, now)
+        if len(_failed) > 1000:
+            oldest = min(_failed, key=lambda k: _failed[k][1])
+            del _failed[oldest]
 
 
 def _clear_failures(ip: str) -> None:
@@ -130,6 +136,9 @@ def _ha_flow_start() -> dict | None:
 
 def _ha_flow_step(flow_id: str, data: dict) -> dict | None:
     """Submit a step to an HA Core auth login_flow."""
+    if not _UUID_RE.fullmatch(flow_id or ""):
+        logger.warning("Invalid flow_id rejected: %s", flow_id)
+        return None
     try:
         payload = {"client_id": _FLOW_CLIENT_ID, **data}
         body = json.dumps(payload).encode()
@@ -211,8 +220,8 @@ def login():
                 mfa_module_id = request.form.get("mfa_module_id", "totp")
                 # Normalize: remove spaces/dashes (common in copy-pasted TOTP codes)
                 code = request.form.get("code", "").replace(" ", "").replace("-", "")
-                # Missing flow_id means the session/flow expired — restart login
-                if not flow_id:
+                # Missing or invalid flow_id means the session/flow expired — restart login
+                if not flow_id or not _UUID_RE.fullmatch(flow_id):
                     error = "Session expired — please sign in again"
                     return render_template("login.html", error=error, ha_mode=ha_mode)
                 # Missing code — keep user on the MFA step so they can retry

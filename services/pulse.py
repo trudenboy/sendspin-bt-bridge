@@ -17,6 +17,7 @@ to branch on availability.
 from __future__ import annotations
 
 import asyncio
+import atexit
 import logging
 import subprocess
 import threading
@@ -278,6 +279,8 @@ async def aget_server_name() -> str:
 
 
 _thread_local = threading.local()
+_thread_loops: list = []  # Track for cleanup
+_thread_loops_lock = threading.Lock()
 
 
 def _run(coro):
@@ -286,7 +289,18 @@ def _run(coro):
     if loop is None or loop.is_closed():
         loop = asyncio.new_event_loop()
         _thread_local.loop = loop
+        with _thread_loops_lock:
+            _thread_loops.append(loop)
     return loop.run_until_complete(coro)
+
+
+@atexit.register
+def _cleanup_loops():
+    with _thread_loops_lock:
+        for loop in _thread_loops:
+            if not loop.is_closed():
+                loop.close()
+        _thread_loops.clear()
 
 
 def list_sinks() -> list[dict]:
@@ -365,6 +379,7 @@ def _fallback_get_description(sink_name: str) -> str | None:
 
 
 def _fallback_set_volume(sink_name: str, volume_pct: int) -> bool:
+    volume_pct = max(0, min(100, volume_pct))
     try:
         r = subprocess.run(
             ["pactl", "set-sink-volume", sink_name, f"{volume_pct}%"],

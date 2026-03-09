@@ -24,6 +24,7 @@ from bluetooth_manager import BluetoothManager
 from config import (
     CONFIG_FILE,
     _player_id_from_mac,
+    config_lock,
     ensure_bridge_name,
     load_config,
     save_device_volume,
@@ -251,6 +252,9 @@ class SendspinClient:
 
     def _check_zombie_playback(self) -> None:
         """Detect zombie state (playing=True, streaming=False) and schedule restart."""
+        need_restart = False
+        elapsed = 0.0
+        restart_count = 0
         with self._status_lock:
             is_playing = self.status.get("playing")
             is_streaming = self.status.get("audio_streaming")
@@ -260,25 +264,24 @@ class SendspinClient:
             playing_since = self._playing_since
             zombie_count = self._zombie_restart_count
 
-        if not is_playing or is_streaming or not is_alive:
-            return
-        if playing_since is None:
-            return
-        if zombie_count >= self._MAX_ZOMBIE_RESTARTS:
-            return  # already gave up
+            if is_playing and not is_streaming and is_alive and playing_since is not None:
+                if zombie_count < self._MAX_ZOMBIE_RESTARTS:
+                    elapsed = time.monotonic() - playing_since
+                    if elapsed >= self._ZOMBIE_TIMEOUT_S:
+                        self._zombie_restart_count += 1
+                        self._playing_since = None
+                        restart_count = self._zombie_restart_count
+                        need_restart = True
 
-        elapsed = time.monotonic() - playing_since
-        if elapsed < self._ZOMBIE_TIMEOUT_S:
+        if not need_restart:
             return
 
-        self._zombie_restart_count += 1
-        self._playing_since = None  # reset so we don't fire again immediately
         logger.warning(
             "[%s] Zombie playback detected: playing=True but no audio for %.0fs "
             "(restart %d/%d) — restarting subprocess",
             self.player_name,
             elapsed,
-            self._zombie_restart_count,
+            restart_count,
             self._MAX_ZOMBIE_RESTARTS,
         )
         # Schedule restart on the event loop (we're called from an async context)
@@ -545,17 +548,20 @@ class SendspinClient:
                 logger.debug("stop_sendspin: %s", exc)
         self._daemon_proc = None
 
-        with self._status_lock:
-            self.status["server_connected"] = False
-            self.status["connected"] = False
-            self.status["playing"] = False
-            self.status["audio_streaming"] = False
-            self.status["current_track"] = None
-            self.status["current_artist"] = None
-            self.status["audio_format"] = None
-            self.status["reanchoring"] = False
-            self.status["group_name"] = None
-            self.status["group_id"] = None
+        self._update_status(
+            {
+                "server_connected": False,
+                "connected": False,
+                "playing": False,
+                "audio_streaming": False,
+                "current_track": None,
+                "current_artist": None,
+                "audio_format": None,
+                "reanchoring": False,
+                "group_name": None,
+                "group_id": None,
+            }
+        )
 
     def is_running(self) -> bool:
         """Return True if the daemon subprocess is alive."""
@@ -801,7 +807,7 @@ async def main():
                 logger.info("  Player '%s': BT management disabled at startup", player_name)
             # Pre-fill volume from saved LAST_VOLUMES so UI shows correct value before BT connects
             try:
-                with open(CONFIG_FILE) as _f:
+                with config_lock, open(CONFIG_FILE) as _f:
                     _saved = json.load(_f)
                 _saved_vol = _saved.get("LAST_VOLUMES", {}).get(mac)
                 if _saved_vol is not None and isinstance(_saved_vol, int) and 0 <= _saved_vol <= 100:

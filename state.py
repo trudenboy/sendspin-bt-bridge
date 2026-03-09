@@ -232,16 +232,21 @@ def set_ma_groups(mapping: dict[str, dict], all_groups: list[dict] | None = None
     logger.info("MA syncgroup cache updated: %d mapped, %d total group(s)", len(mapping), len(_ma_all_groups))
 
 
+_ma_api_lock = threading.Lock()
+
+
 def set_ma_api_credentials(url: str, token: str) -> None:
     """Store resolved MA API URL and token for use across modules."""
     global _ma_api_url, _ma_api_token
-    _ma_api_url = url
-    _ma_api_token = token
+    with _ma_api_lock:
+        _ma_api_url = url
+        _ma_api_token = token
 
 
 def get_ma_api_credentials() -> tuple[str, str]:
     """Return (ma_api_url, ma_api_token)."""
-    return _ma_api_url, _ma_api_token
+    with _ma_api_lock:
+        return _ma_api_url, _ma_api_token
 
 
 def get_ma_group_for_player(player_name: str) -> dict | None:

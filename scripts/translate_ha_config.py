@@ -83,6 +83,12 @@ def _merge_adapters(detected: list[dict], raw_adapters: list[dict]) -> list[dict
     return detected
 
 
+def _int_opt(opts: dict, key: str, default: int) -> int:
+    """Return opts[key] as int, falling back to *default* only when absent/None."""
+    v = opts.get(key)
+    return int(v) if v is not None else default
+
+
 def main() -> None:
     if not os.path.exists(OPTIONS_FILE):
         print(f"[translate_ha_config] {OPTIONS_FILE} not found — nothing to do")
@@ -99,15 +105,15 @@ def main() -> None:
 
     config: dict = {
         "SENDSPIN_SERVER": str(opts.get("sendspin_server") or "auto"),
-        "SENDSPIN_PORT": int(opts.get("sendspin_port") or 9000),
+        "SENDSPIN_PORT": _int_opt(opts, "sendspin_port", 9000),
         "BRIDGE_NAME": str(opts.get("bridge_name") or ""),
         "BLUETOOTH_DEVICES": list(opts.get("bluetooth_devices") or []),
         "BLUETOOTH_ADAPTERS": adapters,
         "TZ": tz,
-        "PULSE_LATENCY_MSEC": int(opts.get("pulse_latency_msec") or 200),
+        "PULSE_LATENCY_MSEC": _int_opt(opts, "pulse_latency_msec", 200),
         "PREFER_SBC_CODEC": bool(opts.get("prefer_sbc_codec", False)),
-        "BT_CHECK_INTERVAL": int(opts.get("bt_check_interval") or 10),
-        "BT_MAX_RECONNECT_FAILS": int(opts.get("bt_max_reconnect_fails") or 0),
+        "BT_CHECK_INTERVAL": _int_opt(opts, "bt_check_interval", 10),
+        "BT_MAX_RECONNECT_FAILS": _int_opt(opts, "bt_max_reconnect_fails", 0),
         "AUTH_ENABLED": bool(opts.get("auth_enabled", False)),
         "LOG_LEVEL": (opts.get("log_level") or "info").upper(),
         "MA_API_URL": opts.get("ma_api_url") or "",

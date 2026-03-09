@@ -5,6 +5,51 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.16.0] - 2026-03-09
+
+### Security
+- **SSRF prevention in HA auth flow** — `flow_id` is now validated as UUID format before interpolation into HA Core URLs, preventing path traversal to arbitrary endpoints
+- **SSE connection limit** — Server-Sent Events endpoint now caps at 4 concurrent connections (was unlimited) with 30-minute max lifetime; prevents Waitress thread pool exhaustion
+- **Volume clamping** — all volume entry points (server command, IPC, PulseAudio fallback) now clamp to 0–100 range, preventing speaker damage from malformed payloads
+- **MAC address validation** — `bt_remove_device()` and `is_audio_device()` now validate MAC format via regex before passing to `bluetoothctl`, preventing command injection via crafted MAC strings
+- **`/api/status` removed from public paths** — endpoint now requires authentication when `AUTH_ENABLED=True`; replaced with minimal `/api/health` for Docker healthcheck
+
+### Fixed
+- **SSE not notified on stop** — `stop_sendspin()` now calls `_update_status()` instead of direct dict mutation, so the web UI reflects player stop immediately
+- **`_clients` race condition** — all ~15 endpoints iterating the client list now take a snapshot under `_clients_lock`, preventing inconsistent reads during device add/remove
+- **Zombie counter race** — `_zombie_restart_count` increment moved inside `_status_lock` to prevent TOCTOU race between concurrent checks
+- **Config read without lock** — config file reads in `main()` now use `config_lock` to prevent reading partially-written files
+- **`request.get_json()` crash** — `set_volume` endpoint now uses `or {}` fallback (matching other endpoints), preventing `AttributeError` on non-JSON requests
+- **Error response info leak** — 15 endpoints replaced `str(e)` in error responses with generic `"Internal error"` message; full details logged server-side
+- **`int(cmd["value"])` crash** — invalid volume values in IPC no longer crash the command reader task; wrapped in `try/except` with warning
+- **`set_log_level` injection** — now validated against an allowlist of valid Python log level names
+- **`client_id` path traversal** — subprocess settings directory path is sanitized and verified to stay under `/tmp/`
+- **`player_names` type validation** — `set_volume` and `set_mute` now reject non-list `player_names` with 400 error
+- **`force=True` removed from `set_password`** — Content-Type bypass removed, strengthening CSRF defense
+- **`0`-as-falsy in HA config translation** — `pulse_latency_msec=0` and `bt_check_interval=0` no longer silently replaced with defaults
+- **`datetime.UTC` compatibility** — replaced with `timezone.utc` across 4 files for Python 3.9+ compatibility
+
+### Changed
+- **`_bt_executor` pool size** — increased from 2 to 4 threads to handle concurrent multi-device reconnections
+- **Config write durability** — added `fsync()` before atomic rename for power-failure safety on Raspberry Pi
+- **D-Bus monitor loop** — now checks `_running` flag for clean shutdown instead of running indefinitely
+- **Fire-and-forget tasks** — `BridgeDaemon` now retains references in a `_background_tasks` set to prevent GC collection before completion
+- **Callback error logging** — `on_status_change` failures raised from `debug` to `warning` level
+- **`postMessage` origin check** — theme injection listener now validates message origin
+- **`escHtml()` hardened** — added `"` and `'` encoding for attribute context safety
+- **Thread-local event loop cleanup** — `atexit` handler closes leaked asyncio loops in PulseAudio helper threads
+- **Brute-force dict capped** — `_failed` rate-limit dictionary limited to 1000 entries with oldest eviction
+- **`AUDIO_UID` env var** — PulseAudio socket detection in `entrypoint.sh` now uses `${AUDIO_UID:-1000}` instead of hardcoded UID
+- **`SYS_ADMIN` capability removed** — `docker-compose.yml` no longer requests unnecessary capability
+- **Dependency bounds tightened** — `waitress<3.0.0` (was `<4`), `websockets<14.0` (was `<16`)
+- **mypy checks enabled** — `check_untyped_defs` and `warn_return_any` now active
+- **MA API credentials lock** — `set_ma_api_credentials()` now protected by dedicated mutex
+
+### Added
+- **`/api/health` endpoint** — lightweight, auth-free healthcheck returning `{"ok": true}`
+- **`dev-requirements.txt`** — declares test/lint dependencies (pytest, pytest-asyncio, ruff, mypy)
+- **65 new tests** (42 → 107 total) — new test files for `services/bluetooth.py`, `services/pulse.py`, `bluetooth_manager.py`, `services/daemon_process.py`, `scripts/translate_ha_config.py`, `routes/api.py`; shared `conftest.py` with `tmp_config` fixture
+
 ## [2.15.8] - 2026-03-09
 
 ### Fixed

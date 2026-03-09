@@ -25,14 +25,18 @@ import asyncio
 import json
 import logging
 import os
+import re
 import sys
 import time
+from pathlib import Path
 
 # ---------------------------------------------------------------------------
 # Minimal JSON-line log handler (forwarded to parent via stdout)
 # ---------------------------------------------------------------------------
 
 _LOG_LEVELS = {"DEBUG": 10, "INFO": 20, "WARNING": 30, "ERROR": 40, "CRITICAL": 50}
+
+_VALID_LOG_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
 
 # Pattern that audio.py logs when re-anchoring is triggered
 _REANCHOR_MSG = "re-anchoring"
@@ -189,7 +193,11 @@ async def _read_commands(daemon_ref: list, stop_event: asyncio.Event) -> None:
         elif cmd.get("cmd") == "set_volume":
             daemon = daemon_ref[0] if daemon_ref else None
             if daemon and cmd.get("value") is not None:
-                vol = int(cmd["value"])
+                try:
+                    vol = max(0, min(100, int(cmd["value"])))
+                except (ValueError, TypeError):
+                    logger.warning("Invalid volume value: %s", cmd.get("value"))
+                    continue
                 daemon._bridge_status["volume"] = vol
                 daemon._sync_bt_sink_volume(vol)
                 daemon._notify()
@@ -215,8 +223,10 @@ async def _read_commands(daemon_ref: list, stop_event: asyncio.Event) -> None:
                 )
         elif cmd.get("cmd") == "set_log_level":
             level_name = str(cmd.get("level", "INFO")).upper()
-            level = getattr(logging, level_name, logging.INFO)
-            logging.getLogger().setLevel(level)
+            if level_name not in _VALID_LOG_LEVELS:
+                logger.warning("Invalid log level requested: %s", level_name)
+                continue
+            logging.getLogger().setLevel(getattr(logging, level_name))
 
 
 # ---------------------------------------------------------------------------
@@ -239,7 +249,13 @@ async def _run(params: dict) -> None:
     bluetooth_sink_name: str | None = params.get("bluetooth_sink_name")
     initial_volume: int = params.get("volume", 100)
     initial_muted: bool = bool(params.get("muted", False))
-    settings_dir: str = params.get("settings_dir", f"/tmp/sendspin-{client_id}")
+    # sanitize client_id for safe path usage
+    safe_id = re.sub(r"[^a-zA-Z0-9_:-]", "_", client_id)
+    settings_dir: str = params.get("settings_dir", f"/tmp/sendspin-{safe_id}")
+    # Verify resolved path stays under /tmp
+    resolved = str(Path(settings_dir).resolve())
+    if not resolved.startswith("/tmp/"):
+        settings_dir = f"/tmp/sendspin-{safe_id}"
     preferred_format_str: str | None = params.get("preferred_format")
 
     logger = logging.getLogger(__name__)

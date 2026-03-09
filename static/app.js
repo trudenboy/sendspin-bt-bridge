@@ -14,6 +14,8 @@ var API_BASE = (function() {
 window.addEventListener('message', function(e) {
     if (!e.data || typeof e.data !== 'object') return;
     if (e.data.type !== 'setTheme') return;
+    // Only accept theme messages from same origin or parent (HA Ingress)
+    if (e.origin !== window.location.origin && e.source !== window.parent) return;
     var theme = e.data.theme || {};
     var root = document.documentElement;
     Object.keys(theme).forEach(function(key) {
@@ -784,7 +786,12 @@ async function sendVolume(deviceIndex, vol) {
 // ---- Logs ----
 
 function escHtml(s) {
-    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
 }
 
 function getLogClass(line) {
