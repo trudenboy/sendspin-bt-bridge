@@ -1,0 +1,120 @@
+name: Build and Push Docker Image (armv7)
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to build (e.g. v1.3.0)'
+        required: false
+        default: ''
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build-armv7:
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/arm/v7
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=linux/arm/v7
+          cache-to: type=gha,mode=max,scope=linux/arm/v7
+          outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
+
+      - name: Export digest
+        run: |
+          digest="${{ steps.build.outputs.digest }}"
+          echo "armv7_digest=${digest}" >> $GITHUB_OUTPUT
+          echo "ARMv7 digest: ${digest}"
+        id: digest
+
+      - name: Compute dispatch version
+        if: github.event_name == 'workflow_dispatch' && inputs.tag != ''
+        run: echo "DISPATCH_VERSION=${INPUT_TAG#v}" >> $GITHUB_ENV
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+
+      - name: Extract metadata for tags
+        id: tags
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=raw,value=latest
+            type=raw,value=${{ env.DISPATCH_VERSION }},enable=${{ github.event_name == 'workflow_dispatch' && inputs.tag != '' }}
+
+      - name: Append armv7 to manifest
+        run: |
+          # Get existing manifest digests (amd64 + arm64 from main workflow)
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+          TAG=$(jq -cr '.tags[0]' <<< "$DOCKER_METADATA_OUTPUT_JSON" | sed "s|${IMAGE}:||")
+
+          echo "Waiting for main workflow manifest (tag: ${TAG})..."
+          for i in $(seq 1 60); do
+            if docker buildx imagetools inspect "${IMAGE}:${TAG}" > /dev/null 2>&1; then
+              echo "Manifest found after ${i} attempts"
+              break
+            fi
+            if [ "$i" -eq 60 ]; then
+              echo "::warning::Main manifest not found — publishing armv7-only manifest"
+              docker buildx imagetools create \
+                $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+                "${IMAGE}@${{ steps.build.outputs.digest }}"
+              exit 0
+            fi
+            sleep 30
+          done
+
+          # Collect existing digests from the manifest
+          EXISTING=$(docker buildx imagetools inspect "${IMAGE}:${TAG}" --format '{{range .Manifest.Manifests}}{{.Digest}} {{end}}')
+          echo "Existing digests: ${EXISTING}"
+          echo "ARMv7 digest: ${{ steps.build.outputs.digest }}"
+
+          # Re-create manifest with all architectures
+          DIGEST_ARGS=""
+          for d in ${EXISTING}; do
+            DIGEST_ARGS="${DIGEST_ARGS} ${IMAGE}@${d}"
+          done
+          DIGEST_ARGS="${DIGEST_ARGS} ${IMAGE}@${{ steps.build.outputs.digest }}"
+
+          docker buildx imagetools create \
+            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            ${DIGEST_ARGS}
+
+          echo "✅ Manifest updated with armv7"
