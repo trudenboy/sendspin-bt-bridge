@@ -37,7 +37,7 @@ RUN apt-get update && apt-get install -y \
     dbus \
     libdbus-1-3 \
     libdbus-glib-1-2 \
-    libglib2.0-0 \
+    libglib2.0-0t64 \
     tzdata \
     && rm -rf /var/lib/apt/lists/*
 
