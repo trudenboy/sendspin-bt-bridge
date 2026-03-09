@@ -21,6 +21,9 @@ RUN apt-get update && apt-get install -y \
     libavfilter-dev \
     libswscale-dev \
     libswresample-dev \
+    libjpeg-dev \
+    zlib1g-dev \
+    libtiff-dev \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
