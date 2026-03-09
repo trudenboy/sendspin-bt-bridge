@@ -2,7 +2,8 @@ FROM python:3.12-slim AS builder
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Build-time system dependencies (needed to compile dbus-python and portaudio bindings)
+# Build-time system dependencies (needed to compile dbus-python, portaudio bindings,
+# and PyAV on architectures without pre-built wheels)
 RUN apt-get update && apt-get install -y \
     gcc \
     pkg-config \
@@ -12,6 +13,13 @@ RUN apt-get update && apt-get install -y \
     libglib2.0-dev \
     libbluetooth-dev \
     portaudio19-dev \
+    libavformat-dev \
+    libavcodec-dev \
+    libavdevice-dev \
+    libavutil-dev \
+    libavfilter-dev \
+    libswscale-dev \
+    libswresample-dev \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
