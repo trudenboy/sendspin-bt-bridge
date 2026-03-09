@@ -127,3 +127,23 @@ journalctl -u sendspin-client --no-pager > bridge.log
 - Методом деплоя (Docker/HA/LXC)
 - Аудиосистемой (PipeWire/PulseAudio)
 - Версией из `/api/version`
+
+## Нет звука на armv7l (ARM 32-бит)
+
+**Симптом:** Bluetooth подключён, веб-интерфейс показывает «playing», но полная тишина. В логах ошибки `Audio worker is not running`.
+
+**Причина:** PyAV 12.3.0 (единственная версия, компилирующаяся на armv7l) не имеет атрибута `AudioLayout.nb_channels`, который использует FLAC-декодер sendspin. Поток audio worker падает на первом FLAC-фрейме.
+
+**Решение:** Обновитесь до v2.16.0+ — monkey-patch в `services/daemon_process.py` автоматически адаптирует FLAC-декодер для PyAV <13. Запустите скрипт обновления:
+
+```bash
+# Внутри LXC-контейнера
+bash <(wget -qO- https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/lxc/upgrade.sh)
+systemctl restart sendspin-client
+```
+
+**Проверка:** В логах не должно быть строк `Audio worker is not running` или `daemon stderr`:
+
+```bash
+journalctl -u sendspin-client --since "30 sec ago" | grep -E "Audio worker|daemon stderr"
+```

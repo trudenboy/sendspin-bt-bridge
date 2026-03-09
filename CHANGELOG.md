@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`/api/status` removed from public paths** — endpoint now requires authentication when `AUTH_ENABLED=True`; replaced with minimal `/api/health` for Docker healthcheck
 
 ### Fixed
+- **PyAV armv7l compatibility** — monkey-patch `FlacDecoder._append_frame_to_pcm` to use `len(frame.layout.channels)` instead of `frame.layout.nb_channels` (missing in PyAV <13); fixes silent playback on ARM 32-bit systems with `av==12.3.0`
 - **SSE not notified on stop** — `stop_sendspin()` now calls `_update_status()` instead of direct dict mutation, so the web UI reflects player stop immediately
 - **`_clients` race condition** — all ~15 endpoints iterating the client list now take a snapshot under `_clients_lock`, preventing inconsistent reads during device add/remove
 - **Zombie counter race** — `_zombie_restart_count` increment moved inside `_status_lock` to prevent TOCTOU race between concurrent checks

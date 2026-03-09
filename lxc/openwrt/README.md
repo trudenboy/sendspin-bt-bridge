@@ -215,9 +215,10 @@ lxc-info -n sendspin
 
 The `sendspin` Python package requires `av>=14.0.0`, but av 14+ fails to compile on armv7l due to a missing `AV_HWDEVICE_TYPE_D3D12VA` constant in Ubuntu 24.04's ffmpeg 6.1.
 
-**Workaround (handled automatically by `install.sh`):**
-- `av==12.3.0` is installed instead (last armhf-compatible version)
+**Workaround (handled automatically):**
+- `install.sh` installs `av==12.3.0` instead (last armhf-compatible version)
 - `sendspin` is installed with `--no-deps` to skip the av>=14 requirement
+- `services/daemon_process.py` applies a monkey-patch at startup to replace `FlacDecoder._append_frame_to_pcm` — av 12.x lacks `AudioLayout.nb_channels` which the sendspin FLAC decoder uses; the patch uses `len(frame.layout.channels)` instead. On av 13+ the patch is skipped automatically
 
 ### DNS resolution on some OpenWrt devices
 

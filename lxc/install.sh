@@ -100,6 +100,8 @@ if [[ "$ARCH" == "armv7l" || "$ARCH" == "armhf" ]]; then
   warn "ARM 32-bit detected — applying av compatibility workaround"
   # av>=14 (required by sendspin) fails to compile on armhf: AV_HWDEVICE_TYPE_D3D12VA
   # is absent in Ubuntu 24.04's ffmpeg 6.1. av==12.3.0 is the latest compatible version.
+  # The FLAC decoder API difference (nb_channels missing in av<13) is handled by
+  # a monkey-patch in services/daemon_process.py at startup.
   pip3 install --break-system-packages -q av==12.3.0
 
   # Install sendspin without its av>=14 dependency
