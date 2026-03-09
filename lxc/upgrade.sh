@@ -89,7 +89,7 @@ ARCH=$(uname -m)
 if [[ "$ARCH" == "armv7l" || "$ARCH" == "armhf" ]]; then
   # armv7l: sendspin requires av>=14 which doesn't compile on armhf.
   # Keep av==12.3.0 and install sendspin with --no-deps.
-  pip3 install --break-system-packages -q --no-deps 'sendspin>=5.1.3,<6' 2>/dev/null || true
+  pip3 install --break-system-packages -q --no-deps 'sendspin>=5.3.0,<6' 2>/dev/null || true
   grep -v '^sendspin' "${APP_DIR}/requirements.txt" | \
     pip3 install --break-system-packages -q -r /dev/stdin 2>/dev/null || true
 else

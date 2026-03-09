@@ -26,4 +26,3 @@ Roadmap for HA addon standards compliance and improvements.
 
 - [ ] **Create `ha-addon/logo.png`** — wide-format logo for HA store listing
 - [ ] **Add HA discovery integration** — support HA discovery protocol for auto-configuring Music Assistant connection
-- [ ] **Revert to PyPI sendspin** — when upstream publishes 5.1.4, revert `requirements.txt` back to `sendspin>=5.1.4,<6` and remove `git` from Dockerfile builder stage

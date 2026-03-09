@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.15.7] - 2026-03-09
+
+### Changed
+- **Updated websockets to v15** — raised upper bound from `<15` to `<16`; added explicit `proxy=None` to all `websockets.connect()` calls to prevent unexpected proxy usage (websockets 15 auto-detects system proxies)
+- **LXC: added `gcc` and `python3-dev`** to system packages in `install.sh` — enables compilation of sendspin's C volume-scaling extension (`_volume.c`) on platforms without pre-built wheels
+- **LXC: bumped sendspin version** in `install.sh` and `upgrade.sh` from `>=5.1.3` to `>=5.3.0` to match `requirements.txt`
+
 ## [2.15.6] - 2026-03-09
 
 ### Fixed

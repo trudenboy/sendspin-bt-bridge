@@ -46,7 +46,8 @@ apt-get install -y -qq \
   pulseaudio pulseaudio-module-bluetooth \
   alsa-utils dbus libportaudio2 \
   avahi-daemon avahi-utils libnss-mdns \
-  curl wget ca-certificates git jq tzdata procps
+  curl wget ca-certificates git jq tzdata procps \
+  gcc python3-dev
 ok "System packages installed"
 
 # ─── 2. App directory and files from GitHub ───────────────────────────────────
@@ -102,7 +103,7 @@ if [[ "$ARCH" == "armv7l" || "$ARCH" == "armhf" ]]; then
   pip3 install --break-system-packages -q av==12.3.0
 
   # Install sendspin without its av>=14 dependency
-  pip3 install --break-system-packages -q --no-deps 'sendspin>=5.1.3,<6'
+  pip3 install --break-system-packages -q --no-deps 'sendspin>=5.3.0,<6'
 
   # Install sendspin's other transitive dependencies
   pip3 install --break-system-packages -q \
