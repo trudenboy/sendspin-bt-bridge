@@ -6,6 +6,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 # and PyAV on architectures without pre-built wheels)
 RUN apt-get update && apt-get install -y \
     gcc \
+    g++ \
     pkg-config \
     python3-dev \
     libdbus-1-dev \
