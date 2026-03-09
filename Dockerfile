@@ -7,6 +7,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
+    git \
     pkg-config \
     python3-dev \
     libdbus-1-dev \
