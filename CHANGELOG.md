@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.16.1] - 2026-03-09
+
+### Fixed
+- **PyAV armv7l compatibility** — monkey-patch `FlacDecoder._append_frame_to_pcm` to use `len(frame.layout.channels)` instead of `frame.layout.nb_channels` (missing in PyAV <13); fixes silent playback on ARM 32-bit systems with `av==12.3.0`
+- **LXC scripts updated** — `install.sh` and `upgrade.sh` document the monkey-patch; `openwrt/README.md` Known Issues section expanded
+- **Troubleshooting docs** — added "No sound on armv7l" section (en/ru) with symptom, cause, and fix
+
 ## [2.16.0] - 2026-03-09
 
 ### Security
@@ -15,7 +22,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`/api/status` removed from public paths** — endpoint now requires authentication when `AUTH_ENABLED=True`; replaced with minimal `/api/health` for Docker healthcheck
 
 ### Fixed
-- **PyAV armv7l compatibility** — monkey-patch `FlacDecoder._append_frame_to_pcm` to use `len(frame.layout.channels)` instead of `frame.layout.nb_channels` (missing in PyAV <13); fixes silent playback on ARM 32-bit systems with `av==12.3.0`
 - **SSE not notified on stop** — `stop_sendspin()` now calls `_update_status()` instead of direct dict mutation, so the web UI reflects player stop immediately
 - **`_clients` race condition** — all ~15 endpoints iterating the client list now take a snapshot under `_clients_lock`, preventing inconsistent reads during device add/remove
 - **Zombie counter race** — `_zombie_restart_count` increment moved inside `_status_lock` to prevent TOCTOU race between concurrent checks
