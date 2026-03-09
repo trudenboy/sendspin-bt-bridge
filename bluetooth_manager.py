@@ -17,7 +17,7 @@ import subprocess
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -29,6 +29,8 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from sendspin_client import SendspinClient
+
+UTC = timezone.utc
 
 logger = logging.getLogger(__name__)
 

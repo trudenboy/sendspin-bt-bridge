@@ -15,7 +15,7 @@ import asyncio
 import logging
 import os
 import socket
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from importlib.metadata import version as _pkg_version
 from typing import TYPE_CHECKING
 
@@ -36,6 +36,8 @@ from services.pulse import (
     amove_pid_sink_inputs,
     aset_sink_volume,
 )
+
+UTC = timezone.utc
 
 logger = logging.getLogger(__name__)
 

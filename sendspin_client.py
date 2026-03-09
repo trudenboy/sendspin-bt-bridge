@@ -17,7 +17,7 @@ import sys
 import threading
 import time
 from dataclasses import dataclass, field, fields
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 
 import state as _state
 from bluetooth_manager import BluetoothManager
@@ -29,6 +29,8 @@ from config import (
     load_config,
     save_device_volume,
 )
+
+UTC = timezone.utc
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")

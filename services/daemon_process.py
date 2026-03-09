@@ -31,6 +31,20 @@ import time
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
+# PyAV compatibility: older PyAV (<13) uses len(layout.channels) instead of
+# layout.nb_channels.  The sendspin decoder expects nb_channels, so patch it.
+# ---------------------------------------------------------------------------
+try:
+    import av.audio.layout
+
+    if not hasattr(av.audio.layout.AudioLayout, "nb_channels"):
+        av.audio.layout.AudioLayout.nb_channels = property(  # type: ignore[attr-defined]
+            lambda self: len(self.channels)
+        )
+except Exception:
+    pass
+
+# ---------------------------------------------------------------------------
 # Minimal JSON-line log handler (forwarded to parent via stdout)
 # ---------------------------------------------------------------------------
 

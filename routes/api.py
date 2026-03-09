@@ -16,7 +16,7 @@ import subprocess
 import threading
 import time
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from flask import Blueprint, Response, jsonify, request
 
@@ -63,6 +63,8 @@ from state import clients as _clients
 from state import (
     clients_lock as _clients_lock,
 )
+
+UTC = timezone.utc
 
 logger = logging.getLogger(__name__)
 
