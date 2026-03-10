@@ -3,7 +3,7 @@ title: Installation — Docker Compose
 description: Running Sendspin Bluetooth Bridge with Docker Compose
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+import { Aside, Steps } from '@astrojs/starlight/components';
 
 ## Requirements
 
@@ -15,7 +15,7 @@ import { Aside } from '@astrojs/starlight/components';
 The Docker image supports `linux/amd64`, `linux/arm64`, and `linux/arm/v7` architectures.
 
 <Aside type="tip">
-  Using a **Raspberry Pi**? See the dedicated [Raspberry Pi guide](/installation/raspberry-pi/) for model-specific instructions and a pre-flight check script.
+  Using a **Raspberry Pi**? See the dedicated [Raspberry Pi guide](/installation/raspberry-pi/) for model-specific instructions, a pre-flight check script, and a **one-liner installer**.
 </Aside>
 
 ## Pre-flight Check

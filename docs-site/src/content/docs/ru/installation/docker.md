@@ -3,7 +3,7 @@ title: Установка — Docker Compose
 description: Запуск Sendspin Bluetooth Bridge в Docker Compose
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+import { Aside, Steps } from '@astrojs/starlight/components';
 
 ## Требования
 
@@ -15,7 +15,7 @@ import { Aside } from '@astrojs/starlight/components';
 Docker-образ поддерживает архитектуры `linux/amd64`, `linux/arm64` и `linux/arm/v7`.
 
 <Aside type="tip">
-  Используете **Raspberry Pi**? Смотрите отдельное [руководство по Raspberry Pi](/ru/installation/raspberry-pi/) с инструкциями для конкретных моделей и скриптом предварительной проверки.
+  Используете **Raspberry Pi**? Смотрите отдельное [руководство по Raspberry Pi](/ru/installation/raspberry-pi/) с инструкциями для конкретных моделей, скриптом предварительной проверки и **установщиком одной командой**.
 </Aside>
 
 ## Предварительная проверка

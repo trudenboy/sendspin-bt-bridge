@@ -3,7 +3,7 @@ title: Installation — Raspberry Pi
 description: Running Sendspin Bluetooth Bridge on Raspberry Pi with Docker
 ---
 
-import { Aside, Steps } from '@astrojs/starlight/components';
+import { Aside, Steps, Tabs, TabItem } from '@astrojs/starlight/components';
 
 ## Supported Models
 
@@ -19,7 +19,37 @@ import { Aside, Steps } from '@astrojs/starlight/components';
   32-bit OS (armv7) works but may have resource constraints with multiple speakers.
 </Aside>
 
-## Prerequisites
+## Quick Start (One-liner Installer)
+
+The fastest way to get started — a single command that handles everything:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/scripts/rpi-install.sh | bash
+```
+
+The installer will:
+- Check your system (architecture, RAM, Docker, Bluetooth, audio)
+- Install Docker if not present
+- Download `docker-compose.yml`
+- Generate `.env` with detected settings
+- Offer to pair a Bluetooth speaker interactively
+- Pull the image and start the container
+
+<Aside type="tip">
+  For CI/automation, use non-interactive mode:
+  ```bash
+  NONINTERACTIVE=1 curl -sSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/scripts/rpi-install.sh | bash
+  ```
+  It will auto-detect settings and skip interactive prompts.
+</Aside>
+
+After the installer finishes, the web UI is available at `http://<raspberry-pi-ip>:8080`.
+
+## Manual Installation
+
+If you prefer step-by-step control, follow the instructions below.
+
+### Prerequisites
 
 <Steps>
 
@@ -57,7 +87,7 @@ import { Aside, Steps } from '@astrojs/starlight/components';
 
 </Steps>
 
-## Pre-flight Check
+### Pre-flight Check
 
 Run the diagnostic script **before** starting the container:
 
@@ -67,7 +97,9 @@ curl -sSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/sc
 
 This checks Docker, Bluetooth, audio, UID, and memory — and outputs recommended `.env` values.
 
-Example output:
+<details>
+<summary>Example output</summary>
+
 ```
 ═══════════════════════════════════════════════════════
   Sendspin Bluetooth Bridge — Pre-flight Check
@@ -113,14 +145,16 @@ Recommended .env file:
   TZ=Europe/London
 ```
 
-## Installation
+</details>
+
+### Setup
 
 <Steps>
 
 1. **Create a project directory**
 
    ```bash
-   mkdir ~/sendspin && cd ~/sendspin
+   mkdir ~/sendspin-bt-bridge && cd ~/sendspin-bt-bridge
    ```
 
 2. **Save the `.env` file** from the pre-flight check output:
@@ -131,7 +165,13 @@ Recommended .env file:
    TZ=Europe/London
    ```
 
-3. **Create `docker-compose.yml`**
+3. **Download `docker-compose.yml`**
+
+   ```bash
+   curl -sSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/docker-compose.yml -o docker-compose.yml
+   ```
+
+   Or create it manually:
 
    ```yaml
    services:
@@ -175,13 +215,19 @@ Recommended .env file:
    You should see the diagnostics table showing all checks passed:
    ```
    ╔══════════════════════════════════════════════════════╗
-   ║  Sendspin Bridge v2.16.1 Diagnostics
+   ║  Sendspin Bridge v2.16.3 Diagnostics
    ╠══════════════════════════════════════════════════════╣
    ║  Platform:    aarch64 (arm64)
    ║  Audio:       ✓ PulseAudio (...)
    ║  Bluetooth:   ✓ 00:1A:7D:DA:71:13
    ║  D-Bus:       ✓ host socket mounted
    ╚══════════════════════════════════════════════════════╝
+   ```
+
+   You can also check the preflight endpoint via the API:
+
+   ```bash
+   curl -s http://localhost:8080/api/preflight | python3 -m json.tool
    ```
 
 6. **Open the web interface**
@@ -191,6 +237,14 @@ Recommended .env file:
    ```
 
 </Steps>
+
+## Updating
+
+```bash
+cd ~/sendspin-bt-bridge
+docker compose pull
+docker compose up -d
+```
 
 ## Troubleshooting
 

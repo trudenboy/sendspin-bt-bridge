@@ -19,7 +19,37 @@ import { Aside, Steps } from '@astrojs/starlight/components';
   32-битная ОС (armv7) работает, но может быть ограничена при нескольких колонках.
 </Aside>
 
-## Предварительные требования
+## Быстрый старт (Установка одной командой)
+
+Самый быстрый способ начать — одна команда, которая сделает всё:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/scripts/rpi-install.sh | bash
+```
+
+Установщик выполнит:
+- Проверку системы (архитектура, RAM, Docker, Bluetooth, аудио)
+- Установку Docker, если не установлен
+- Загрузку `docker-compose.yml`
+- Генерацию `.env` с автоопределёнными настройками
+- Интерактивное сопряжение Bluetooth-колонки (по желанию)
+- Скачивание образа и запуск контейнера
+
+<Aside type="tip">
+  Для CI/автоматизации используйте неинтерактивный режим:
+  ```bash
+  NONINTERACTIVE=1 curl -sSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/scripts/rpi-install.sh | bash
+  ```
+  Он автоматически определит настройки и пропустит интерактивные вопросы.
+</Aside>
+
+После завершения установки веб-интерфейс доступен по адресу `http://<ip-raspberry-pi>:8080`.
+
+## Ручная установка
+
+Если вы предпочитаете пошаговый контроль, следуйте инструкциям ниже.
+
+### Предварительные требования
 
 <Steps>
 
@@ -57,7 +87,7 @@ import { Aside, Steps } from '@astrojs/starlight/components';
 
 </Steps>
 
-## Предварительная проверка
+### Предварительная проверка
 
 Запустите диагностический скрипт **перед** запуском контейнера:
 
@@ -67,14 +97,14 @@ curl -sSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/sc
 
 Скрипт проверяет Docker, Bluetooth, аудиосистему, UID и память — и выводит рекомендуемые значения для `.env`.
 
-## Установка
+### Установка
 
 <Steps>
 
 1. **Создайте директорию проекта**
 
    ```bash
-   mkdir ~/sendspin && cd ~/sendspin
+   mkdir ~/sendspin-bt-bridge && cd ~/sendspin-bt-bridge
    ```
 
 2. **Сохраните файл `.env`** из вывода диагностического скрипта:
@@ -85,7 +115,13 @@ curl -sSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/sc
    TZ=Europe/Moscow
    ```
 
-3. **Создайте `docker-compose.yml`**
+3. **Скачайте `docker-compose.yml`**
+
+   ```bash
+   curl -sSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/docker-compose.yml -o docker-compose.yml
+   ```
+
+   Или создайте вручную:
 
    ```yaml
    services:
@@ -129,13 +165,19 @@ curl -sSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/sc
    Вы должны увидеть таблицу диагностики со всеми проверками:
    ```
    ╔══════════════════════════════════════════════════════╗
-   ║  Sendspin Bridge v2.16.1 Diagnostics
+   ║  Sendspin Bridge v2.16.3 Diagnostics
    ╠══════════════════════════════════════════════════════╣
    ║  Platform:    aarch64 (arm64)
    ║  Audio:       ✓ PulseAudio (...)
    ║  Bluetooth:   ✓ 00:1A:7D:DA:71:13
    ║  D-Bus:       ✓ host socket mounted
    ╚══════════════════════════════════════════════════════╝
+   ```
+
+   Также можно проверить через API:
+
+   ```bash
+   curl -s http://localhost:8080/api/preflight | python3 -m json.tool
    ```
 
 6. **Откройте веб-интерфейс**
@@ -145,6 +187,14 @@ curl -sSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/sc
    ```
 
 </Steps>
+
+## Обновление
+
+```bash
+cd ~/sendspin-bt-bridge
+docker compose pull
+docker compose up -d
+```
 
 ## Устранение неполадок
 
