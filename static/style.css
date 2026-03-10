@@ -337,7 +337,9 @@
         .scan-result-item {
             display: flex; align-items: center; gap: 10px;
             padding: 5px 4px; border-bottom: 1px solid var(--divider-color); font-size: 13px;
+            cursor: pointer; border-radius: 4px; transition: background 0.15s;
         }
+        .scan-result-item:hover { background: var(--primary-color-alpha, rgba(3,169,244,0.08)); }
         .scan-result-item:last-child { border-bottom: none; }
         .scan-result-mac { font-family: monospace; color: var(--secondary-text-color); font-size: 12px; }
         .paired-box {

@@ -1467,16 +1467,16 @@ async function startBtScan() {
         } else {
             status.textContent = 'Found ' + devices.length + ' device(s)';
             listDiv.innerHTML = devices.map(function(d, i) {
-                return '<div class="scan-result-item">' +
+                return '<div class="scan-result-item" data-scan-idx="' + i + '">' +
                     '<span class="scan-result-mac">' + escHtml(d.mac) + '</span>' +
                     '<span>' + escHtml(d.name) + '</span>' +
-                    '<button type="button" data-scan-idx="' + i + '" style="margin-left:auto;padding:3px 10px;' +
+                    '<button type="button" style="padding:3px 10px;' +
                         'background:var(--primary-color);color:white;border:none;border-radius:4px;' +
                         'cursor:pointer;font-size:12px;">Add</button>' +
                     '</div>';
             }).join('');
-            listDiv.querySelectorAll('[data-scan-idx]').forEach(function(btn) {
-                btn.addEventListener('click', function() {
+            listDiv.querySelectorAll('[data-scan-idx]').forEach(function(row) {
+                row.addEventListener('click', function() {
                     var d = devices[parseInt(this.dataset.scanIdx)];
                     addFromScan(d.mac, d.name, d.adapter);
                 });
@@ -1534,16 +1534,16 @@ async function loadPairedDevices() {
         listDiv.innerHTML = devices.map(function(d, idx) {
             // Replace raw RSSI-only strings with a friendlier label
             var displayName = /^RSSI:/i.test(d.name) ? 'Unknown device' : d.name;
-            return '<div class="scan-result-item">' +
+            return '<div class="scan-result-item" data-paired-idx="' + idx + '">' +
                 '<span class="scan-result-mac">' + escHtml(d.mac) + '</span>' +
                 '<span>' + escHtml(displayName) + '</span>' +
-                '<button type="button" data-paired-idx="' + idx + '" style="margin-left:auto;padding:3px 10px;' +
+                '<button type="button" style="padding:3px 10px;' +
                     'background:var(--primary-color);color:white;border:none;border-radius:4px;' +
                     'cursor:pointer;font-size:12px;">Add</button>' +
                 '</div>';
         }).join('');
-        listDiv.querySelectorAll('[data-paired-idx]').forEach(function(btn) {
-            btn.addEventListener('click', function() {
+        listDiv.querySelectorAll('[data-paired-idx]').forEach(function(row) {
+            row.addEventListener('click', function() {
                 var d = devices[parseInt(this.dataset.pairedIdx)];
                 addFromPaired(d.mac, d.name);
             });
