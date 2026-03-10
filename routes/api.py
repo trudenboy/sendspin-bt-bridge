@@ -785,7 +785,7 @@ def api_ma_discover():
 
     # --- HA addon shortcut: MA is on the same HA host ---
     if is_addon:
-        for candidate in ("http://homeassistant.local:8095",):
+        for candidate in ("http://localhost:8095", "http://homeassistant.local:8095"):
             try:
                 fut = asyncio.run_coroutine_threadsafe(validate_ma_url(candidate), loop)
                 info = fut.result(timeout=5.0)
