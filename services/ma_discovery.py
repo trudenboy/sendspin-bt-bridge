@@ -127,6 +127,7 @@ async def validate_ma_url(url: str) -> dict[str, Any] | None:
             "server_id": info.server_id,
             "schema_version": info.schema_version,
             "onboard_done": info.onboard_done,
+            "homeassistant_addon": info.homeassistant_addon,
         }
     except Exception:
         logger.debug("MA server not reachable at %s", url, exc_info=True)

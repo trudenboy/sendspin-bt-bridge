@@ -1613,6 +1613,10 @@ async function maDiscover() {
                 msgEl.textContent = '\u2714 Found: MA v' + (s.version || '?') + ' at ' + s.url;
                 msgEl.style.color = 'var(--success-color, green)';
             }
+            // Detect HA addon mode — hide login form, show token hint
+            if (s.homeassistant_addon) {
+                _setMaAddonMode(true);
+            }
         } else {
             if (msgEl) {
                 msgEl.textContent = '\u2716 No MA server found on network';
@@ -1623,6 +1627,23 @@ async function maDiscover() {
         if (msgEl) { msgEl.textContent = '\u2716 Discovery error: ' + err.message; msgEl.style.color = 'var(--error-color, red)'; }
     } finally {
         if (btn) btn.disabled = false;
+    }
+}
+
+function _setMaAddonMode(isAddon) {
+    var creds = document.getElementById('ma-login-creds');
+    var hint = document.getElementById('ma-addon-hint');
+    var loginBtn = document.getElementById('ma-login-btn');
+    var tokenDetails = document.getElementById('ma-token-details');
+    if (isAddon) {
+        if (creds) creds.style.display = 'none';
+        if (hint) hint.style.display = 'block';
+        if (loginBtn) loginBtn.style.display = 'none';
+        if (tokenDetails) tokenDetails.open = true;
+    } else {
+        if (creds) creds.style.display = 'flex';
+        if (hint) hint.style.display = 'none';
+        if (loginBtn) loginBtn.style.display = '';
     }
 }
 
