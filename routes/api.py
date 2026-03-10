@@ -944,6 +944,204 @@ async def _rediscover_after_login(
 # ---------------------------------------------------------------------------
 
 
+@api_bp.route("/api/ma/ha-auth-page")
+def api_ma_ha_auth_page():
+    """Self-contained popup page for HA → MA OAuth login.
+
+    Opens in a popup window from the main UI.  Handles credentials + MFA,
+    then posts the result back to ``window.opener`` via ``postMessage``.
+    """
+    ma_url = request.args.get("ma_url", "")
+    return Response(
+        _HA_AUTH_PAGE_HTML.replace("__MA_URL__", ma_url),
+        content_type="text/html; charset=utf-8",
+    )
+
+
+_HA_AUTH_PAGE_HTML = """\
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sign in with Home Assistant</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+     background:#1c1c1e;color:#e5e5e7;display:flex;align-items:center;
+     justify-content:center;min-height:100vh;padding:20px}
+.card{background:#2c2c2e;border-radius:16px;padding:36px 32px;width:100%;
+      max-width:360px;box-shadow:0 8px 32px rgba(0,0,0,.4)}
+.logo{text-align:center;font-size:48px;margin-bottom:8px}
+h2{text-align:center;font-size:18px;font-weight:600;margin-bottom:4px}
+.sub{text-align:center;font-size:13px;color:#98989d;margin-bottom:24px}
+label{display:block;font-size:13px;color:#98989d;margin-bottom:4px}
+input{width:100%;padding:10px 12px;border:1px solid #48484a;border-radius:8px;
+      background:#1c1c1e;color:#e5e5e7;font-size:15px;outline:none;
+      margin-bottom:14px;transition:border-color .2s}
+input:focus{border-color:#0a84ff}
+input.mfa-code{text-align:center;font-size:24px;letter-spacing:8px;
+               font-variant-numeric:tabular-nums}
+.btn{width:100%;padding:12px;border:none;border-radius:10px;font-size:15px;
+     font-weight:600;cursor:pointer;transition:opacity .2s}
+.btn-primary{background:#0a84ff;color:#fff}
+.btn-primary:hover{opacity:.85}
+.btn-primary:disabled{opacity:.5;cursor:not-allowed}
+.msg{text-align:center;font-size:13px;margin-top:12px;min-height:18px}
+.msg.error{color:#ff453a}.msg.ok{color:#30d158}
+.step{display:none}.step.active{display:block}
+.spinner{display:inline-block;width:16px;height:16px;border:2px solid #48484a;
+         border-top-color:#0a84ff;border-radius:50%;animation:spin .6s linear infinite;
+         vertical-align:middle;margin-right:6px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.success-icon{text-align:center;font-size:56px;margin:16px 0}
+</style>
+</head>
+<body>
+<div class="card">
+  <!-- Step 1: Credentials -->
+  <div id="step-creds" class="step active">
+    <div class="logo">🏠</div>
+    <h2>Home Assistant</h2>
+    <div class="sub">Sign in to connect Music Assistant</div>
+    <form id="creds-form" onsubmit="submitCreds(event)">
+      <label for="username">Username</label>
+      <input type="text" id="username" autocomplete="username" autofocus required>
+      <label for="password">Password</label>
+      <input type="password" id="password" autocomplete="current-password" required>
+      <button type="submit" class="btn btn-primary" id="creds-btn">Sign in</button>
+    </form>
+    <div id="creds-msg" class="msg"></div>
+  </div>
+
+  <!-- Step 2: MFA -->
+  <div id="step-mfa" class="step">
+    <div class="logo">🔐</div>
+    <h2>Two-factor authentication</h2>
+    <div class="sub" id="mfa-label">Enter code from your authenticator app</div>
+    <form id="mfa-form" onsubmit="submitMfa(event)">
+      <input type="text" id="mfa-code" class="mfa-code" inputmode="numeric"
+             maxlength="6" autocomplete="one-time-code" autofocus required
+             placeholder="------">
+      <button type="submit" class="btn btn-primary" id="mfa-btn">Verify</button>
+    </form>
+    <div id="mfa-msg" class="msg"></div>
+  </div>
+
+  <!-- Step 3: Success -->
+  <div id="step-done" class="step">
+    <div class="success-icon">✅</div>
+    <h2>Connected!</h2>
+    <div class="sub">Music Assistant token saved.<br>This window will close automatically.</div>
+  </div>
+</div>
+
+<script>
+var API_BASE = window.location.origin;
+var MA_URL = '__MA_URL__';
+var haState = {};
+
+function showStep(id) {
+  document.querySelectorAll('.step').forEach(function(el) { el.classList.remove('active'); });
+  document.getElementById('step-' + id).classList.add('active');
+}
+
+function setMsg(id, text, isError) {
+  var el = document.getElementById(id);
+  el.textContent = text;
+  el.className = 'msg ' + (isError ? 'error' : '');
+}
+
+function setLoading(btnId, loading) {
+  var btn = document.getElementById(btnId);
+  if (loading) {
+    btn.disabled = true;
+    btn._origText = btn.textContent;
+    btn.innerHTML = '<span class="spinner"></span>Signing in\u2026';
+  } else {
+    btn.disabled = false;
+    btn.textContent = btn._origText || 'Sign in';
+  }
+}
+
+async function submitCreds(e) {
+  e.preventDefault();
+  var user = document.getElementById('username').value.trim();
+  var pass = document.getElementById('password').value;
+  if (!user || !pass) return;
+  setLoading('creds-btn', true);
+  setMsg('creds-msg', '', false);
+  try {
+    var resp = await fetch(API_BASE + '/api/ma/ha-login', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({step: 'init', username: user, password: pass, ma_url: MA_URL}),
+    });
+    var data = await resp.json();
+    if (data.success && data.step === 'mfa') {
+      haState = data;
+      haState.username = user;
+      var label = document.getElementById('mfa-label');
+      label.textContent = 'Enter code from ' + (data.mfa_module_name || 'authenticator app');
+      showStep('mfa');
+      document.getElementById('mfa-code').focus();
+    } else if (data.success && data.step === 'done') {
+      onSuccess(data);
+    } else {
+      setMsg('creds-msg', data.error || 'Authentication failed', true);
+    }
+  } catch (err) {
+    setMsg('creds-msg', 'Network error: ' + err.message, true);
+  } finally {
+    setLoading('creds-btn', false);
+  }
+}
+
+async function submitMfa(e) {
+  e.preventDefault();
+  var code = document.getElementById('mfa-code').value.trim();
+  if (!code) return;
+  setLoading('mfa-btn', true);
+  setMsg('mfa-msg', '', false);
+  try {
+    var resp = await fetch(API_BASE + '/api/ma/ha-login', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        step: 'mfa', flow_id: haState.flow_id, ha_url: haState.ha_url,
+        client_id: haState.client_id, state: haState.state,
+        code: code, username: haState.username, ma_url: MA_URL,
+      }),
+    });
+    var data = await resp.json();
+    if (data.success && data.step === 'done') {
+      onSuccess(data);
+    } else {
+      setMsg('mfa-msg', data.error || 'Invalid code', true);
+      document.getElementById('mfa-code').value = '';
+      document.getElementById('mfa-code').focus();
+    }
+  } catch (err) {
+    setMsg('mfa-msg', 'Network error: ' + err.message, true);
+  } finally {
+    setLoading('mfa-btn', false);
+  }
+}
+
+function onSuccess(data) {
+  showStep('done');
+  if (window.opener) {
+    window.opener.postMessage({type: 'ma-ha-auth-done', success: true,
+      url: data.url, username: data.username, message: data.message}, '*');
+    setTimeout(function() { window.close(); }, 1500);
+  }
+}
+</script>
+</body>
+</html>
+"""
+
+
 @api_bp.route("/api/ma/ha-login", methods=["POST"])
 def api_ma_ha_login():
     """Authenticate with MA via Home Assistant OAuth flow.
