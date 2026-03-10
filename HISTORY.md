@@ -2,7 +2,7 @@
 
 A history of the architectural and functional evolution of sendspin-bt-bridge — for readers familiar with Home Assistant, Music Assistant, and multiroom audio setups.
 
-**Period:** January 1 – March 11, 2026 · **Total commits:** ~650 · **Versions:** 1.0.0 → 2.20.3
+**Period:** January 1 – March 11, 2026 · **Total commits:** ~650 · **Versions:** 1.0.0 → 2.20.4
 
 ---
 
@@ -579,6 +579,8 @@ The bigger outcome was splitting the 3 178-line `routes/api.py` monolith — the
 Thread-safety received targeted fixes: six places that iterated the global `_clients` list without acquiring `_clients_lock` were patched — three in `ma_monitor.py` via a new `state.get_clients_snapshot()` helper, two in config and MA routes. The `MaMonitor._msg_id` counter, previously a bare `int` incremented across threads, was replaced with `itertools.count(1)` — atomic under CPython. A duplicate MAC-address regex was consolidated into `services/bluetooth.py` as the canonical `is_valid_mac()` helper.
 
 All 138 tests passed after the refactoring; `ruff check` stayed clean throughout.
+
+A follow-up patch (v2.20.4) fixed the JWT token `<details>` section's disclosure marker — the native ▼ was replaced with a CSS `::before` ▶ that rotates on open, matching other collapsible sections — and corrected the Music Assistant API token hint to point to "Settings → Profile → Long-lived access tokens".
 
 ---
 
