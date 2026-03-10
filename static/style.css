@@ -268,7 +268,14 @@
             cursor: pointer; list-style: none; user-select: none; margin-bottom: 0;
         }
         .config-section summary::-webkit-details-marker,
-        .logs-section summary::-webkit-details-marker { display: none; }
+        .logs-section summary::-webkit-details-marker,
+        #ma-token-details summary::-webkit-details-marker { display: none; }
+        #ma-token-details summary { list-style: none; }
+        #ma-token-details summary::before {
+            content: '\25B6'; display: inline-block; margin-right: 6px;
+            font-size: 10px; transition: transform 0.2s;
+        }
+        #ma-token-details[open] summary::before { transform: rotate(90deg); }
         .config-section summary::before, .logs-section summary::before {
             content: '\25B6';
             display: inline-block; margin-right: 8px; transition: transform 0.2s;
