@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.17.0] - 2026-03-10
+
+### Added
+- **MA auto-discovery** — Discover button finds Music Assistant servers on local network via mDNS
+- **MA auto-login** — enter username/password to auto-create API token (no manual JWT copy needed)
+- New "Music Assistant Integration" panel in web UI with connection status indicator
+- Manual JWT token entry preserved as collapsible fallback
+
+### Changed
+- Improved MA auth failure message — guides user to web UI for reconfiguration
+
 ## [2.16.3] - 2026-03-10
 
 ### Added
