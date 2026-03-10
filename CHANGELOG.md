@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.20.2] - 2026-03-10
+
+### Fixed
+- **MA addon mode auto-detection** — detect `homeassistant_addon` from MA server info, not just the bridge's own addon flag; fixes "Sign in with Home Assistant" button not appearing when bridge runs standalone but MA is an HA addon
+- **HA OAuth fallback on builtin login failure** — when builtin username/password login returns 401, automatically attempt HA OAuth flow with the same credentials; prompts for TOTP if MFA is required
+- **Reconfigure addon detection** — opening the Reconfigure form now probes the MA `/info` endpoint to detect addon mode dynamically
+
 ## [2.20.1] - 2026-03-10
 
 ### Changed
