@@ -1309,15 +1309,28 @@ def _ma_callback_exchange(ma_url: str, code: str, oauth_state: str):
 _MA_TOKEN_NAME = "Sendspin BT Bridge"
 
 
+def _ws_connect(url: str, **kwargs):
+    """Wrapper around websockets.sync.client.connect that handles proxy kwarg compatibility.
+
+    Older websockets versions (<14) don't support the ``proxy`` parameter.
+    """
+    from websockets.sync.client import connect as ws_connect
+
+    try:
+        return ws_connect(url, proxy=None, **kwargs)
+    except TypeError:
+        return ws_connect(url, **kwargs)
+
+
 def _validate_ma_token(ma_url: str, token: str) -> bool:
     """Quick WS auth check — returns True if the token authenticates with MA."""
     try:
-        from websockets.sync.client import connect as ws_connect
+        from websockets.sync.client import connect as ws_connect  # noqa: F401 — availability check
     except ImportError:
         return False
     ws_url = ma_url.replace("http://", "ws://").replace("https://", "wss://") + "/ws"
     try:
-        with ws_connect(ws_url, proxy=None, close_timeout=5) as ws:
+        with _ws_connect(ws_url, close_timeout=5) as ws:
             ws.recv(timeout=5)  # server_info
             ws.send(json.dumps({"command": "auth", "args": {"token": token}, "message_id": 1}))
             resp = json.loads(ws.recv(timeout=5))
@@ -1334,13 +1347,13 @@ def _exchange_for_long_lived_token(ma_url: str, session_token: str) -> str:
     Returns the long-lived token on success, or the original session_token as fallback.
     """
     try:
-        from websockets.sync.client import connect as ws_connect
+        from websockets.sync.client import connect as ws_connect  # noqa: F401 — availability check
     except ImportError:
         logger.warning("websockets.sync.client not available — using session token as-is")
         return session_token
     ws_url = ma_url.replace("http://", "ws://").replace("https://", "wss://") + "/ws"
     try:
-        with ws_connect(ws_url, proxy=None, close_timeout=5) as ws:
+        with _ws_connect(ws_url, close_timeout=5) as ws:
             ws.recv(timeout=5)  # server_info
             # Auth with session token
             ws.send(json.dumps({"command": "auth", "args": {"token": session_token}, "message_id": 1}))
@@ -1399,14 +1412,14 @@ def _get_ha_user_via_ws(ha_token: str):
     Uses the internal Supervisor DNS name in addon mode.
     """
     try:
-        from websockets.sync.client import connect as ws_connect
+        from websockets.sync.client import connect as ws_connect  # noqa: F401 — availability check
     except ImportError:
         logger.warning("websockets.sync.client not available")
         return None
 
     ha_ws_url = "ws://homeassistant:8123/api/websocket"
     try:
-        with ws_connect(ha_ws_url, proxy=None, close_timeout=5) as ws:
+        with _ws_connect(ha_ws_url, close_timeout=5) as ws:
             hello = json.loads(ws.recv(timeout=5))
             if hello.get("type") != "auth_required":
                 logger.warning("HA WS unexpected hello: %s", hello.get("type"))
