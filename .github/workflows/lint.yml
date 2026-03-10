@@ -31,11 +31,13 @@ jobs:
         uses: hadolint/hadolint-action@v3.0.0
         with:
           dockerfile: Dockerfile
+          config: .hadolint.yaml
 
       - name: Lint ha-addon/Dockerfile
         uses: hadolint/hadolint-action@v3.0.0
         with:
           dockerfile: ha-addon/Dockerfile
+          config: .hadolint.yaml
 
   lint:
     runs-on: ubuntu-latest
