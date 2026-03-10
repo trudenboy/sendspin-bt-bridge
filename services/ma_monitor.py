@@ -262,6 +262,17 @@ class MaMonitor:
 
     async def _connect_and_run(self) -> None:
         """Single connection session: auth, subscribe events, poll loop."""
+        # Re-read credentials from state — they may have been updated by
+        # silent auth or manual login since the monitor was created.
+        fresh_url, fresh_token = _state.get_ma_api_credentials()
+        if fresh_url and fresh_token:
+            self._token = fresh_token
+            _url = fresh_url.strip()
+            if _url and "://" not in _url:
+                _url = f"http://{_url}"
+            self._url = _url
+            self._ws_url = _url.replace("http://", "ws://").replace("https://", "wss://") + "/ws"
+
         try:
             import websockets
         except ImportError:
@@ -379,9 +390,11 @@ class MaMonitor:
         """Main entry point — reconnect loop with exponential backoff."""
         self._running = True
         delay = _RECONNECT_BASE
+        _prev_token = self._token
         while self._running:
             try:
                 await self._connect_and_run()
+                delay = _RECONNECT_BASE  # reset on successful connection
             except Exception as exc:
                 logger.warning("MA monitor disconnected: %s — reconnecting in %ds", exc, delay)
             self._ws = None
@@ -398,7 +411,13 @@ class MaMonitor:
             if not self._running:
                 break
             await asyncio.sleep(delay)
-            delay = min(delay * 2, _RECONNECT_MAX)
+            # Reset backoff if credentials changed (e.g. silent auth obtained new token)
+            _, fresh_token = _state.get_ma_api_credentials()
+            if fresh_token and fresh_token != _prev_token:
+                delay = _RECONNECT_BASE
+                _prev_token = fresh_token
+            else:
+                delay = min(delay * 2, _RECONNECT_MAX)
 
     def stop(self) -> None:
         self._running = False
