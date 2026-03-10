@@ -121,7 +121,19 @@ def _dbus_call_device_method(device_path: str, method_name: str) -> bool:
 
 
 class BluetoothManager:
-    """Manages Bluetooth speaker connections using bluetoothctl and D-Bus"""
+    """Manages the Bluetooth connection lifecycle for a single speaker.
+
+    Responsibilities:
+    - Pairing and connecting via ``bluetoothctl`` subprocesses
+    - Auto-reconnecting on disconnect (exponential backoff, configurable interval)
+    - Discovering the PulseAudio/PipeWire sink name for the connected device
+    - Real-time disconnect detection via D-Bus (``dbus-fast``), with polling fallback
+    - Churn isolation: auto-disabling a device after too many reconnects in a window
+
+    Thread-safety: BT operations are dispatched via ``run_in_executor()`` to avoid
+    blocking the asyncio event loop.  The ``_status_lock`` on the parent
+    ``SendspinClient`` protects shared status mutations.
+    """
 
     def __init__(
         self,

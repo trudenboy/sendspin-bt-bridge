@@ -79,11 +79,19 @@ app.wsgi_app = _IngressMiddleware(app.wsgi_app)
 
 # Register blueprints (imported after app is created to avoid circular imports)
 from routes.api import api_bp  # noqa: E402
+from routes.api_bt import bt_bp  # noqa: E402
+from routes.api_config import config_bp  # noqa: E402
+from routes.api_ma import ma_bp  # noqa: E402
+from routes.api_status import status_bp  # noqa: E402
 from routes.auth import auth_bp  # noqa: E402
 from routes.views import views_bp  # noqa: E402
 
 app.register_blueprint(views_bp)
 app.register_blueprint(api_bp)
+app.register_blueprint(bt_bp)
+app.register_blueprint(config_bp)
+app.register_blueprint(ma_bp)
+app.register_blueprint(status_bp)
 app.register_blueprint(auth_bp)
 
 

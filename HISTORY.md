@@ -2,7 +2,7 @@
 
 A history of the architectural and functional evolution of sendspin-bt-bridge — for readers familiar with Home Assistant, Music Assistant, and multiroom audio setups.
 
-**Period:** January 1 – March 10, 2026 · **Total commits:** ~650 · **Versions:** 1.0.0 → 2.20.2
+**Period:** January 1 – March 11, 2026 · **Total commits:** ~650 · **Versions:** 1.0.0 → 2.20.3
 
 ---
 
@@ -569,6 +569,16 @@ The overhaul reorganized the form into clearly labeled sections — General, Blu
 Community feedback on the v2.19.0 release drove a second round of polish. Users noted that the Add button in the scan/paired device list was too far from the device name, making it hard to target. The Advanced settings panel (which now contained only 4 fields) was dissolved entirely — fields were moved into their respective sections and the extra panel removed.
 
 Key changes: the MA form now auto-collapses to a summary when connected (a "Reconfigure" link expands it); auth fields hide when disabled; BT device expand chevron was moved to the left side of the row for conventional tree-style interaction; devices start collapsed by default; scan/paired device rows became fully clickable with hover highlight; the Scan button was moved before +Add Device for a discovery-first workflow. A `_configLoading` guard was added to prevent programmatic field population from triggering the dirty-state indicator on page load.
+
+### Code audit and internal refactoring (v2.20.3)
+
+A comprehensive code review of the entire codebase (~10 700 lines across 35 Python files) exposed two critical issues: a dead `/api/bt/reconnect` endpoint (the function existed but lacked a `@route` decorator — no HTTP request could reach it) and a `postMessage('*')` wildcard in the HA OAuth popup callback, which violated the same-origin principle. Both were fixed immediately.
+
+The bigger outcome was splitting the 3 178-line `routes/api.py` monolith — the single largest file in the project — into five focused modules: core volume/mute/pause routes stayed in `api.py` (581 lines); Bluetooth scan/pair/reconnect moved to `api_bt.py` (396); Music Assistant integration and OAuth flow to `api_ma.py` (1 216); config and settings to `api_config.py` (502); status, SSE streaming, and diagnostics to `api_status.py` (647). Each module registers its own Flask Blueprint; `web_interface.py` wires all five. Backward-compatible re-exports were added so existing tests and external callers continue to work without changes.
+
+Thread-safety received targeted fixes: six places that iterated the global `_clients` list without acquiring `_clients_lock` were patched — three in `ma_monitor.py` via a new `state.get_clients_snapshot()` helper, two in config and MA routes. The `MaMonitor._msg_id` counter, previously a bare `int` incremented across threads, was replaced with `itertools.count(1)` — atomic under CPython. A duplicate MAC-address regex was consolidated into `services/bluetooth.py` as the canonical `is_valid_mac()` helper.
+
+All 138 tests passed after the refactoring; `ruff check` stayed clean throughout.
 
 ---
 

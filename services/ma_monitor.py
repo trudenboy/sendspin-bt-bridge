@@ -12,6 +12,7 @@ Auto-reconnects with exponential backoff on connection loss.
 from __future__ import annotations
 
 import asyncio
+import itertools
 import json
 import logging
 import time
@@ -84,7 +85,7 @@ async def _find_syncgroup_queues(queues: list[dict]) -> list[dict]:
     groups = _state.get_ma_groups()
     group_ids = {g["id"] for g in groups}
     # Also include any group_id reported by Sendspin-connected bridge devices
-    for client in _state.clients:
+    for client in _state.get_clients_snapshot():
         gid = client.status.get("group_id") if hasattr(client, "status") else None
         if gid:
             group_ids.add(gid)
@@ -99,7 +100,7 @@ def _find_solo_player_queues(queues: list[dict]) -> list[tuple[str, dict]]:
     groups = _state.get_ma_groups()
     group_ids = {g["id"] for g in groups}
     result = []
-    for client in _state.clients:
+    for client in _state.get_clients_snapshot():
         pid = getattr(client, "player_id", "")
         if not pid or pid in group_ids:
             continue  # already handled as syncgroup member
@@ -135,13 +136,12 @@ class MaMonitor:
         self._url = _url
         self._ws_url = _url.replace("http://", "ws://").replace("https://", "wss://") + "/ws"
         self._running = False
-        self._msg_id = 0
+        self._msg_id = itertools.count(1)
         self._cmd_queue: asyncio.Queue[tuple[str, dict, asyncio.Future]] = asyncio.Queue()
         self._ws = None  # current websocket, set while connected
 
     def _next_id(self) -> int:
-        self._msg_id += 1
-        return self._msg_id
+        return next(self._msg_id)
 
     async def execute_cmd(self, command: str, args: dict) -> dict:
         """Send a command through the persistent WS. Returns response or raises."""
@@ -217,7 +217,7 @@ class MaMonitor:
             return
 
         # Build bridge player lookup by name (lowercase)
-        bridge_clients = {getattr(c, "player_name", "").lower(): c for c in _state.clients}
+        bridge_clients = {getattr(c, "player_name", "").lower(): c for c in _state.get_clients_snapshot()}
 
         for p in players:
             pname = (p.get("display_name") or p.get("name") or "").lower()

@@ -129,6 +129,12 @@ def set_clients(new_clients: list) -> None:
     logger.info("Client references updated: %s client(s)", len(clients))
 
 
+def get_clients_snapshot() -> list:
+    """Return a snapshot copy of the active clients list (thread-safe)."""
+    with clients_lock:
+        return list(clients)
+
+
 # ---------------------------------------------------------------------------
 # Adapter name cache — populated from config.json on first use, invalidated on save
 # ---------------------------------------------------------------------------

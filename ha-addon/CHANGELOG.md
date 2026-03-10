@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.20.3] - 2026-03-11
+
+### Changed
+- Split monolithic API into 5 focused route modules (api, api_bt, api_ma, api_config, api_status)
+- Thread-safe client list access and message ID counter
+- Shared MAC address validation helper
+- Improved class docstrings and type hints
+
+### Fixed
+- Dead `/api/bt/reconnect` endpoint (missing route decorator)
+- `postMessage('*')` security in HA OAuth popup (now uses `window.location.origin`)
+
 ## [2.20.2] - 2026-03-10
 
 ### Fixed

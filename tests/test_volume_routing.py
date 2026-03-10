@@ -130,10 +130,7 @@ class TestVolumeViaMaConfig:
 
     def test_disabled_config_skips_ma(self, _with_loop):
         """When VOLUME_VIA_MA is False, set_volume should not call MA."""
-        with (
-            patch("services.ma_monitor.send_player_cmd", new_callable=AsyncMock) as mock_cmd,
-            patch("routes.api.load_config", return_value={"VOLUME_VIA_MA": False}),
-        ):
+        with patch("services.ma_monitor.send_player_cmd", new_callable=AsyncMock) as mock_cmd:
             from routes.api import _set_volume_via_ma
 
             # The helper itself doesn't check config — the route does.

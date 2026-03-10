@@ -35,17 +35,21 @@ def client():
     # collection (before any tests run).  Remove the stub so we get the real
     # module with actual route definitions.
     _stashed = {}
-    for mod_name in ["routes.api", "routes.auth", "routes.views", "routes"]:
+    for mod_name in ["routes.api", "routes.api_config", "routes.api_status", "routes.auth", "routes.views", "routes"]:
         cached = sys.modules.get(mod_name)
         if cached is not None and getattr(cached, "__file__", None) is None:
             _stashed[mod_name] = sys.modules.pop(mod_name)
 
     from routes.api import api_bp
+    from routes.api_config import config_bp
+    from routes.api_status import status_bp
 
     app = Flask(__name__)
     app.secret_key = "testing"
     app.config["TESTING"] = True
     app.register_blueprint(api_bp)
+    app.register_blueprint(config_bp)
+    app.register_blueprint(status_bp)
 
     yield app.test_client()
 

@@ -27,17 +27,19 @@ def client():
     from flask import Flask
 
     _stashed = {}
-    for mod_name in ["routes.api", "routes.auth", "routes.views", "routes"]:
+    for mod_name in ["routes.api", "routes.api_ma", "routes.auth", "routes.views", "routes"]:
         cached = sys.modules.get(mod_name)
         if cached is not None and getattr(cached, "__file__", None) is None:
             _stashed[mod_name] = sys.modules.pop(mod_name)
 
     from routes.api import api_bp
+    from routes.api_ma import ma_bp
 
     app = Flask(__name__)
     app.secret_key = "testing"
     app.config["TESTING"] = True
     app.register_blueprint(api_bp)
+    app.register_blueprint(ma_bp)
 
     yield app.test_client()
 
@@ -74,7 +76,7 @@ class TestGetHaUserViaWs:
         ws.__exit__ = MagicMock(return_value=False)
         mock_connect.return_value = ws
 
-        from routes.api import _get_ha_user_via_ws
+        from routes.api_ma import _get_ha_user_via_ws
 
         result = _get_ha_user_via_ws("test_token")
         assert result is not None
@@ -95,13 +97,13 @@ class TestGetHaUserViaWs:
         ws.__exit__ = MagicMock(return_value=False)
         mock_connect.return_value = ws
 
-        from routes.api import _get_ha_user_via_ws
+        from routes.api_ma import _get_ha_user_via_ws
 
         assert _get_ha_user_via_ws("bad_token") is None
 
     @patch("websockets.sync.client.connect", side_effect=ConnectionError("no HA"))
     def test_connection_error_returns_none(self, _mock_connect):
-        from routes.api import _get_ha_user_via_ws
+        from routes.api_ma import _get_ha_user_via_ws
 
         assert _get_ha_user_via_ws("any_token") is None
 
@@ -112,7 +114,7 @@ class TestGetHaUserViaWs:
 
 
 class TestCreateMaTokenViaIngress:
-    @patch("routes.api._find_ma_ingress_url", return_value="http://localhost:8094")
+    @patch("routes.api_ma._find_ma_ingress_url", return_value="http://localhost:8094")
     @patch("urllib.request.urlopen")
     def test_success_returns_token(self, mock_urlopen, _mock_find):
         resp_body = json.dumps({"result": "long_lived_token_123"}).encode()
@@ -122,7 +124,7 @@ class TestCreateMaTokenViaIngress:
         mock_resp.__exit__ = MagicMock(return_value=False)
         mock_urlopen.return_value = mock_resp
 
-        from routes.api import _create_ma_token_via_ingress
+        from routes.api_ma import _create_ma_token_via_ingress
 
         result = _create_ma_token_via_ingress("user123", "admin", "Admin User")
         assert result == "long_lived_token_123"
@@ -131,7 +133,7 @@ class TestCreateMaTokenViaIngress:
         assert req.get_header("X-remote-user-id") == "user123"
         assert req.get_header("X-remote-user-name") == "admin"
 
-    @patch("routes.api._find_ma_ingress_url", return_value="http://localhost:8094")
+    @patch("routes.api_ma._find_ma_ingress_url", return_value="http://localhost:8094")
     @patch("urllib.request.urlopen")
     def test_error_response_returns_none(self, mock_urlopen, _mock_find):
         resp_body = json.dumps({"error": {"code": 403, "message": "Insufficient permissions"}}).encode()
@@ -141,14 +143,14 @@ class TestCreateMaTokenViaIngress:
         mock_resp.__exit__ = MagicMock(return_value=False)
         mock_urlopen.return_value = mock_resp
 
-        from routes.api import _create_ma_token_via_ingress
+        from routes.api_ma import _create_ma_token_via_ingress
 
         assert _create_ma_token_via_ingress("user123", "user") is None
 
-    @patch("routes.api._find_ma_ingress_url", return_value="http://localhost:8094")
+    @patch("routes.api_ma._find_ma_ingress_url", return_value="http://localhost:8094")
     @patch("urllib.request.urlopen", side_effect=ConnectionError("refused"))
     def test_connection_error_returns_none(self, _mock, _mock_find):
-        from routes.api import _create_ma_token_via_ingress
+        from routes.api_ma import _create_ma_token_via_ingress
 
         assert _create_ma_token_via_ingress("user123", "user") is None
 
@@ -166,8 +168,8 @@ def test_missing_params_returns_400(client):
     assert resp.status_code == 400
 
 
-@patch("routes.api.state")
-@patch("routes.api._validate_ma_token", return_value=True)
+@patch("routes.api_ma.state")
+@patch("routes.api_ma._validate_ma_token", return_value=True)
 def test_idempotent_reuse(_mock_validate, mock_state, client):
     mock_state.get_ma_api_credentials.return_value = (
         "http://localhost:8095",
@@ -182,8 +184,8 @@ def test_idempotent_reuse(_mock_validate, mock_state, client):
     assert "Already connected" in data["message"]
 
 
-@patch("routes.api.state")
-@patch("routes.api._get_ha_user_via_ws", return_value=None)
+@patch("routes.api_ma.state")
+@patch("routes.api_ma._get_ha_user_via_ws", return_value=None)
 def test_ha_ws_failure_returns_401(_mock_ws, mock_state, client):
     mock_state.get_ma_api_credentials.return_value = ("", "")
     resp = client.post(
@@ -193,12 +195,12 @@ def test_ha_ws_failure_returns_401(_mock_ws, mock_state, client):
     assert resp.status_code == 401
 
 
-@patch("routes.api.state")
-@patch("routes.api._save_ma_token_and_rediscover")
-@patch("routes.api._validate_ma_token", return_value=True)
-@patch("routes.api._create_ma_token_via_ingress", return_value="new_ma_token")
+@patch("routes.api_ma.state")
+@patch("routes.api_ma._save_ma_token_and_rediscover")
+@patch("routes.api_ma._validate_ma_token", return_value=True)
+@patch("routes.api_ma._create_ma_token_via_ingress", return_value="new_ma_token")
 @patch(
-    "routes.api._get_ha_user_via_ws",
+    "routes.api_ma._get_ha_user_via_ws",
     return_value={"id": "u1", "name": "admin", "is_admin": True},
 )
 def test_full_flow_success(_ws, _ingress, _validate, _save, mock_state, client):
@@ -213,10 +215,10 @@ def test_full_flow_success(_ws, _ingress, _validate, _save, mock_state, client):
     _save.assert_called_once()
 
 
-@patch("routes.api.state")
-@patch("routes.api._create_ma_token_via_ingress", return_value=None)
+@patch("routes.api_ma.state")
+@patch("routes.api_ma._create_ma_token_via_ingress", return_value=None)
 @patch(
-    "routes.api._get_ha_user_via_ws",
+    "routes.api_ma._get_ha_user_via_ws",
     return_value={"id": "u1", "name": "user", "is_admin": False},
 )
 def test_ingress_failure_returns_502(_ws, _ingress, mock_state, client):

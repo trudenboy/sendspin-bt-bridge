@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.20.3] - 2026-03-11
+
+### Changed
+- **api.py monolith split** — extracted 3 178-line `routes/api.py` into 5 focused modules: `api.py` (581, core volume/mute/pause), `api_bt.py` (396, BT scan/pair/reconnect), `api_ma.py` (1 216, MA integration & OAuth), `api_config.py` (502, config & settings), `api_status.py` (647, status/SSE/diagnostics)
+- **Thread-safe `_clients` access** — added `state.get_clients_snapshot()` helper; fixed 6 unprotected iterations in `api_config.py`, `api_ma.py`, and `ma_monitor.py`
+- **Thread-safe `MaMonitor._msg_id`** — replaced bare `int` counter with `itertools.count(1)` (atomic under CPython)
+- **Shared MAC validation** — extracted `is_valid_mac()` and canonical `_MAC_RE` into `services/bluetooth.py`; removed duplicate regex in config routes
+- **Class docstrings** — added design-rationale docstrings to `DeviceStatus`, `SendspinClient`, and `BluetoothManager`
+- **Return type hints** — added missing `-> None` annotations on `SendspinClient.run()` and `.stop()`
+
+### Fixed
+- **Dead reconnect endpoint** — `api_bt_reconnect()` was missing its `@api_bp.route("/api/bt/reconnect")` decorator; endpoint was unreachable
+- **`postMessage('*')` security** — HA OAuth popup callback now uses `window.location.origin` instead of wildcard origin
+
 ## [2.20.2] - 2026-03-10
 
 ### Fixed

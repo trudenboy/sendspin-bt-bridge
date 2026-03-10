@@ -38,6 +38,11 @@ _ADAPTER_RE = re.compile(r"Controller\s+([\dA-F:]{17})\s", re.IGNORECASE)
 _MAC_RE = re.compile(r"^[\dA-Fa-f]{2}(:[\dA-Fa-f]{2}){5}$")
 
 
+def is_valid_mac(mac: str) -> bool:
+    """Return True if *mac* looks like a valid colon-separated MAC address."""
+    return bool(_MAC_RE.match(mac))
+
+
 def list_bt_adapters(timeout: int = 5) -> list[str]:
     """Return list of BT adapter MAC addresses from ``bluetoothctl list``."""
     try:

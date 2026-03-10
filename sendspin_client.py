@@ -41,10 +41,23 @@ logger = logging.getLogger(__name__)
 class DeviceStatus:
     """Typed status container for a single Sendspin device.
 
-    Supports dict-style access (``status["key"]``, ``status.get("key")``,
-    ``status.update({...})``, ``status.copy()``) so existing callers require
-    no changes.  Only declared fields can be set — this prevents unbounded
-    dict growth from unexpected subprocess keys.
+    **Why both dataclass AND dict interface?**
+
+    The subprocess (``daemon_process.py``) emits status updates as JSON dicts,
+    and Flask routes historically read ``status["key"]`` everywhere.  Switching
+    all callers to attribute access at once was impractical, so this class
+    provides a transitional dict-compatible interface (``__getitem__``,
+    ``get``, ``update``, ``copy``, ``__contains__``) on top of typed fields.
+
+    Benefits of the hybrid approach:
+    - **Type safety at definition time:** typos in field names are caught by
+      IDE / mypy, unlike bare dicts.
+    - **Controlled mutation:** only declared fields can be set — prevents
+      unbounded growth from unexpected subprocess keys.
+    - **Backward compat:** existing ``status["key"]`` / ``status.get(...)``
+      callers work without modification.
+
+    Long-term, callers should migrate to attribute access (``status.playing``).
     """
 
     connected: bool = False
@@ -118,7 +131,17 @@ class DeviceStatus:
 
 
 class SendspinClient:
-    """Wrapper for sendspin CLI with status tracking"""
+    """Per-device orchestrator for a single Bluetooth speaker.
+
+    Manages the full lifecycle of a Sendspin subprocess: spawning it with the
+    correct ``PULSE_SINK`` environment variable, reading JSON-line status from
+    its stdout, sending commands (volume, stop, reconnect) via its stdin, and
+    tearing it down gracefully on disconnect or shutdown.
+
+    Thread-safety: status mutations go through ``_update_status()`` which
+    acquires ``_status_lock``.  Flask routes, the asyncio event loop, and
+    D-Bus callbacks all read/write status through this single gate.
+    """
 
     def __init__(
         self,
@@ -569,8 +592,8 @@ class SendspinClient:
         """Return True if the daemon subprocess is alive."""
         return self._daemon_proc is not None and self._daemon_proc.returncode is None
 
-    async def run(self):
-        """Main run loop"""
+    async def run(self) -> None:
+        """Main run loop — connects BT, starts subprocess, monitors health."""
         self.running = True
         self._start_sendspin_lock = asyncio.Lock()
 
@@ -652,8 +675,8 @@ class SendspinClient:
                 task.cancel()
             await self.stop_sendspin()
 
-    async def stop(self):
-        """Stop the client"""
+    async def stop(self) -> None:
+        """Stop the client and its subprocess."""
         self.running = False
 
     def set_bt_management_enabled(self, enabled: bool) -> None:
