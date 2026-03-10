@@ -1793,9 +1793,12 @@ async function _maSilentAuth(maUrl) {
 }
 
 async function _maAutoConnect() {
-    // 1. Auto-discover MA server
+    // 1. Auto-discover MA server (also detects addon mode for UI)
     await maDiscover();
-    // 2. In Ingress mode with addon detected, try silent auth
+    // 2. If already connected (token exists), no need for silent auth
+    var statusText = document.getElementById('ma-status-text');
+    if (statusText && statusText.textContent.indexOf('Connected') === 0) return;
+    // 3. In Ingress mode with addon detected, try silent auth
     if (!_isIngress()) return;
     var hint = document.getElementById('ma-addon-hint');
     if (!hint || hint.style.display !== 'block') return;
@@ -1912,13 +1915,12 @@ async function loadConfig() {
         // Show count of non-default advanced fields
         _updateAdvancedCounter();
 
-        // Update MA connection status
+        // Update MA connection status and detect addon mode
         if (config.MA_API_TOKEN) {
             _setMaStatus(true, config.MA_USERNAME || '', config.MA_API_URL || '');
-        } else {
-            // Auto-discover MA and attempt silent auth in Ingress mode
-            _maAutoConnect();
         }
+        // Always discover to detect addon mode and set correct UI
+        _maAutoConnect();
     } catch (err) {
         console.error('Error loading config:', err);
     }
