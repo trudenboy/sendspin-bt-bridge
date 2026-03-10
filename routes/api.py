@@ -1522,16 +1522,25 @@ def _create_ma_token_via_ingress(ha_user_id: str, ha_username: str, ha_display_n
     try:
         req = _ur.Request(url, data=payload, headers=headers, method="POST")
         with _ur.urlopen(req, timeout=10) as resp:
-            data = json.loads(resp.read().decode())
+            raw = resp.read().decode()
+            logger.debug("MA Ingress raw response: %s", raw[:200])
+            data = json.loads(raw)
 
-        if data.get("error"):
-            logger.warning("MA Ingress token/create error: %s", data["error"])
-            return None
-
-        token = data.get("result")
-        if token and isinstance(token, str):
+        # MA JSONRPC may return the result directly as a string (the token),
+        # or as {"result": "token"}, or as {"error": {...}} on failure.
+        if isinstance(data, str):
             logger.info("Created long-lived MA token via Ingress for user '%s'", ha_username)
-            return token
+            return data
+
+        if isinstance(data, dict):
+            if data.get("error"):
+                logger.warning("MA Ingress token/create error: %s", data["error"])
+                return None
+
+            token = data.get("result")
+            if token and isinstance(token, str):
+                logger.info("Created long-lived MA token via Ingress for user '%s'", ha_username)
+                return token
 
         logger.warning("MA Ingress token/create unexpected result: %s", data)
         return None
