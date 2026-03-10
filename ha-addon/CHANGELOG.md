@@ -5,6 +5,55 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.16.2] - 2026-03-10
+
+### Added
+- Pre-flight diagnostic script (`scripts/rpi-check.sh`) — checks Docker, Bluetooth, audio, UID, RAM, architecture before first run
+- `/api/preflight` endpoint — auth-free JSON status for setup verification
+- Raspberry Pi installation guide (en/ru) with model-specific instructions
+- Startup diagnostics table in `docker logs` — platform, audio, BT, D-Bus, config status at a glance
+
+### Fixed
+- Docker docs: removed stale `SYS_ADMIN` capability, added missing `PULSE_SERVER`/`XDG_RUNTIME_DIR`/`AUDIO_UID` env vars, added pre-pairing step
+
+## [2.16.1] - 2026-03-09
+
+### Fixed
+- PyAV armv7l compatibility — fixed silent playback on 32-bit ARM systems (PyAV 12.x lacks `AudioLayout.nb_channels`)
+
+## [2.16.0] - 2026-03-09
+
+### Security
+- SSRF prevention in HA auth flow — `flow_id` validated as UUID before use in HA Core URLs
+- SSE connection limit — max 4 concurrent connections, 30-minute lifetime
+- Volume clamping — all entry points enforce 0–100 range
+- MAC address validation — regex check before `bluetoothctl` calls
+- `/api/status` now requires auth; replaced with `/api/health` for healthcheck
+- Error responses no longer leak internal details (`str(e)` → generic message)
+- `set_log_level` validated against allowlist
+- `client_id` path traversal prevention
+
+### Fixed
+- SSE not notified on player stop
+- `_clients` race condition — all endpoints snapshot client list under lock
+- Zombie counter race — increment moved inside `_status_lock`
+- Config read without lock in `main()`
+- `request.get_json()` crash on non-JSON requests
+- `0`-as-falsy bug in HA config translation (`pulse_latency_msec=0` kept as 0)
+- `datetime.UTC` → `timezone.utc` for Python 3.9+ compatibility
+
+### Changed
+- BT executor pool: 2 → 4 threads for concurrent multi-device reconnections
+- Config writes use `fsync()` before atomic rename (power-failure safety)
+- D-Bus monitor checks `_running` flag for clean shutdown
+- `SYS_ADMIN` capability removed from `docker-compose.yml`
+- Dependency bounds tightened: `waitress<3.0.0`, `websockets<14.0`
+- MA API credentials protected by dedicated mutex
+
+### Added
+- `/api/health` — lightweight auth-free healthcheck
+- 65 new tests (42 → 107 total)
+
 ## [2.15.8] - 2026-03-09
 
 ### Fixed
