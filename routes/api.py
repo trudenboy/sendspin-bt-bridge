@@ -742,15 +742,49 @@ def api_group_pause():
 
 @api_bp.route("/api/ma/discover", methods=["GET"])
 def api_ma_discover():
-    """Discover Music Assistant servers on the local network via mDNS.
+    """Discover Music Assistant servers.
 
-    Returns a list of servers found, each with url, version, server_id.
-    Runs an mDNS scan for up to 5 seconds.
+    Priority: 1) already-configured MA_API_URL, 2) sendspin server IP + port 8095,
+    3) mDNS scan as fallback.
     """
     loop = state.get_main_loop()
     if not loop:
         return jsonify({"success": False, "error": "Event loop not available"}), 503
 
+    from services.ma_discovery import validate_ma_url
+
+    # 1) Try already-known MA_API_URL
+    ma_url, _ = state.get_ma_api_credentials()
+    if ma_url:
+        fut = asyncio.run_coroutine_threadsafe(validate_ma_url(ma_url), loop)
+        info = fut.result(timeout=5.0)
+        if info:
+            return jsonify({"success": True, "servers": [info]})
+
+    # 2) Derive from SENDSPIN_SERVER (same host, default MA port 8095)
+    cfg = load_config()
+    sendspin_host = (cfg.get("SENDSPIN_SERVER") or "").strip()
+    if sendspin_host and sendspin_host.lower() not in ("auto", "discover", ""):
+        candidate = f"http://{sendspin_host}:8095"
+        fut = asyncio.run_coroutine_threadsafe(validate_ma_url(candidate), loop)
+        info = fut.result(timeout=5.0)
+        if info:
+            return jsonify({"success": True, "servers": [info]})
+
+    # 3) Check connected sendspin clients — MA lives on the same host
+    with _clients_lock:
+        snapshot = list(_clients)
+    for client in snapshot:
+        host = getattr(client, "server_host", None)
+        if host and host.lower() not in ("auto", "discover", ""):
+            candidate = f"http://{host}:8095"
+            fut = asyncio.run_coroutine_threadsafe(validate_ma_url(candidate), loop)
+            info = fut.result(timeout=5.0)
+            if info:
+                return jsonify({"success": True, "servers": [info]})
+            break  # all clients share the same server
+
+    # 4) Fallback: mDNS scan
     try:
         from services.ma_discovery import discover_ma_servers
 
@@ -786,19 +820,57 @@ def api_ma_login():
 
     # Auto-discover MA URL if not provided
     if not ma_url:
-        try:
-            from services.ma_discovery import discover_ma_servers
+        # Try deriving from already-known sources before mDNS
+        from services.ma_discovery import validate_ma_url
 
-            fut = asyncio.run_coroutine_threadsafe(discover_ma_servers(timeout=5.0), loop)
-            servers = fut.result(timeout=10.0)
-            if servers:
-                ma_url = servers[0]["url"]
-                logger.info("Auto-discovered MA server: %s", ma_url)
-            else:
-                return jsonify({"success": False, "error": "No MA server found on network. Enter URL manually."}), 404
-        except Exception:
-            logger.exception("MA discovery failed during login")
-            return jsonify({"success": False, "error": "Discovery failed. Enter URL manually."}), 500
+        ma_url_candidate = ""
+
+        # From existing MA config
+        known_url, _ = state.get_ma_api_credentials()
+        if known_url:
+            ma_url_candidate = known_url
+
+        # From SENDSPIN_SERVER config
+        if not ma_url_candidate:
+            cfg = load_config()
+            sh = (cfg.get("SENDSPIN_SERVER") or "").strip()
+            if sh and sh.lower() not in ("auto", "discover", ""):
+                ma_url_candidate = f"http://{sh}:8095"
+
+        # From connected sendspin clients
+        if not ma_url_candidate:
+            with _clients_lock:
+                snapshot = list(_clients)
+            for client in snapshot:
+                host = getattr(client, "server_host", None)
+                if host and host.lower() not in ("auto", "discover", ""):
+                    ma_url_candidate = f"http://{host}:8095"
+                    break
+
+        if ma_url_candidate:
+            fut = asyncio.run_coroutine_threadsafe(validate_ma_url(ma_url_candidate), loop)
+            info = fut.result(timeout=5.0)
+            if info:
+                ma_url = info["url"]
+                logger.info("Using known MA server: %s", ma_url)
+
+        # Last resort: mDNS scan
+        if not ma_url:
+            try:
+                from services.ma_discovery import discover_ma_servers
+
+                fut = asyncio.run_coroutine_threadsafe(discover_ma_servers(timeout=5.0), loop)
+                servers = fut.result(timeout=10.0)
+                if servers:
+                    ma_url = servers[0]["url"]
+                    logger.info("Auto-discovered MA server: %s", ma_url)
+                else:
+                    return jsonify(
+                        {"success": False, "error": "No MA server found on network. Enter URL manually."}
+                    ), 404
+            except Exception:
+                logger.exception("MA discovery failed during login")
+                return jsonify({"success": False, "error": "Discovery failed. Enter URL manually."}), 500
 
     # Normalize URL
     if "://" not in ma_url:
