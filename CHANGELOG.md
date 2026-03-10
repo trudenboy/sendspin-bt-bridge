@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.16.2] - 2026-03-10
+
+### Added
+- **`scripts/rpi-check.sh`** — pre-flight diagnostic script for Docker hosts: checks Docker, Bluetooth, audio system, UID, RAM, architecture; outputs recommended `.env` values
+- **`/api/preflight` endpoint** — auth-free JSON endpoint returning platform, audio, Bluetooth, D-Bus, and memory status for setup verification
+- **Raspberry Pi installation guide** — dedicated docs page (en/ru) with model-specific instructions, prerequisites, and troubleshooting
+- **Startup diagnostics table** — `entrypoint.sh` now prints a structured status summary (platform, audio, BT, D-Bus, config) visible in `docker logs`
+
+### Fixed
+- **Docker docs: stale `SYS_ADMIN`** — removed from capabilities table and docker-compose example (was removed from repo in v2.16.0 but docs still listed it)
+- **Docker docs: missing env vars** — added `PULSE_SERVER`, `XDG_RUNTIME_DIR`, and `AUDIO_UID` documentation
+- **Docker docs: no pre-pairing step** — added explicit "pair speaker on host first" instruction before `docker compose up`
+
 ## [2.16.1] - 2026-03-09
 
 ### Fixed

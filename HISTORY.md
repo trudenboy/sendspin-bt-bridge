@@ -2,7 +2,7 @@
 
 A history of the architectural and functional evolution of sendspin-bt-bridge — for readers familiar with Home Assistant, Music Assistant, and multiroom audio setups.
 
-**Period:** January 1 – March 9, 2026 · **Total commits:** ~590 · **Versions:** 1.0.0 → 2.16.1
+**Period:** January 1 – March 10, 2026 · **Total commits:** ~595 · **Versions:** 1.0.0 → 2.16.2
 
 ---
 
@@ -509,6 +509,8 @@ A full-codebase code review surfaced 42 issues across security, thread safety, e
 **Test coverage (65 new tests):** from 42 to 107 tests. New test files for `services/bluetooth.py`, `services/pulse.py`, `bluetooth_manager.py`, `services/daemon_process.py`, `scripts/translate_ha_config.py`, and `routes/api.py`. Shared `conftest.py` added. `datetime.UTC` replaced with `timezone.utc` across 4 files for Python 3.9 test compatibility.
 
 **armv7l compatibility (post-release hotfix):** PyAV 12.3.0 (the only version that compiles on armv7l) lacks `AudioLayout.nb_channels`, causing the sendspin FLAC decoder to crash with `AttributeError` — total audio silence. A monkey-patch in `services/daemon_process.py` replaces `FlacDecoder._append_frame_to_pcm` with a version using `len(frame.layout.channels)`. The patch auto-detects PyAV version at startup and is a no-op on PyAV 13+.
+
+**Raspberry Pi & Docker UX (v2.16.2):** After the first community user tried Docker on a Raspberry Pi and hit configuration issues, we added: a pre-flight diagnostic script (`scripts/rpi-check.sh`) that checks Docker, Bluetooth, audio, UID, and architecture before `docker compose up`; an auth-free `/api/preflight` endpoint for programmatic setup verification; a structured startup diagnostics table in `entrypoint.sh` (visible in `docker logs`); a dedicated Raspberry Pi installation guide (en/ru); and fixed stale Docker docs that still listed removed `SYS_ADMIN` capability and were missing `PULSE_SERVER`/`XDG_RUNTIME_DIR` env vars.
 
 ---
 
