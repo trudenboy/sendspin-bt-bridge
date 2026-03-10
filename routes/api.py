@@ -812,7 +812,7 @@ def api_ma_login():
             login_with_token(ma_url, username, password, token_name="Sendspin BT Bridge"),
             loop,
         )
-        user, token = fut.result(timeout=30.0)
+        _user, token = fut.result(timeout=30.0)
     except Exception as exc:
         err_msg = str(exc)
         if "auth" in err_msg.lower() or "401" in err_msg or "credentials" in err_msg.lower():
