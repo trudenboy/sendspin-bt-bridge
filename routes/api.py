@@ -2229,9 +2229,9 @@ def api_config():
                 ):
                     if key in existing and key not in config:
                         config[key] = existing[key]
-                # Preserve MA_API_TOKEN if form submitted empty (user didn't change it)
-                if not config.get("MA_API_TOKEN") and existing.get("MA_API_TOKEN"):
-                    config["MA_API_TOKEN"] = existing["MA_API_TOKEN"]
+                # The form pre-fills MA_API_TOKEN with the stored value.
+                # Empty string = user explicitly cleared it → do NOT restore.
+                # (No implicit preserve needed — the field is always submitted.)
                 # Preserve MA_USERNAME if not submitted
                 if not config.get("MA_USERNAME") and existing.get("MA_USERNAME"):
                     config["MA_USERNAME"] = existing["MA_USERNAME"]
