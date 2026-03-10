@@ -20,6 +20,7 @@ Roadmap for HA addon standards compliance and improvements.
 ## Next
 
 - [ ] **Add HA discovery integration** — support HA discovery protocol for auto-configuring MA connection
+- [x] **MA auto-discovery & auto-login** — mDNS discovery of MA servers + login with username/password to auto-create token (no manual JWT copy needed)
 
 ## Future
 

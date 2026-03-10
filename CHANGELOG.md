@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **MA auto-discovery** — `GET /api/ma/discover` finds Music Assistant servers on local network via mDNS (`_music-assistant._tcp`)
+- **MA auto-login** — `POST /api/ma/login` with username/password creates long-lived token automatically (no manual JWT copy needed)
+- **MA connect UI** — new "Music Assistant Integration" panel in web UI with Discover button, username/password login, connection status; manual JWT token entry preserved as collapsible fallback
+- **`services/ma_discovery.py`** — mDNS discovery module using zeroconf; `discover_ma_servers()` and `validate_ma_url()` helpers
+- **`MA_USERNAME`** config field — stores connected username for display (password is never stored)
+- **6 new tests** — `tests/test_ma_discovery.py` covering discovery, validation, URL normalization, config defaults
+
+### Changed
+- **MA auth failure message** — improved guidance in `ma_monitor.py`: points user to web UI for reconfiguration
+- **Config POST** — preserves `MA_USERNAME` on form save (same pattern as `MA_API_TOKEN`)
+
 ## [2.16.3] - 2026-03-10
 
 ### Added

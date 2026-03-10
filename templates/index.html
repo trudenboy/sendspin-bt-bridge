@@ -229,14 +229,48 @@
             </div>
 
             <hr style="border:none;border-top:1px solid var(--divider-color);margin:20px 0;">
-            <div class="form-group">
-                <label>Music Assistant API URL <span style="font-size:11px;color:var(--secondary-text-color);">(for correct group resume — e.g. <code>http://192.168.1.x:8095</code>; leave blank to disable)</span></label>
-                <input type="text" name="MA_API_URL" placeholder="http://homeassistant.local:8095">
+            <h4 style="margin:0 0 12px;">Music Assistant Integration</h4>
+
+            <!-- MA quick-connect panel -->
+            <div id="ma-connect-panel" style="background:var(--card-bg);border:1px solid var(--divider-color);border-radius:8px;padding:14px;margin-bottom:14px;">
+                <div id="ma-status-bar" style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+                    <span id="ma-status-icon">⚪</span>
+                    <span id="ma-status-text" style="font-size:13px;color:var(--secondary-text-color);">Not connected</span>
+                </div>
+
+                <!-- Discover + URL row -->
+                <div style="display:flex;gap:8px;margin-bottom:8px;">
+                    <input type="text" id="ma-login-url" placeholder="http://homeassistant.local:8095" style="flex:1;">
+                    <button type="button" class="btn btn-sm" onclick="maDiscover()" id="ma-discover-btn">🔍 Discover</button>
+                </div>
+
+                <!-- Username / Password row -->
+                <div style="display:flex;gap:8px;margin-bottom:8px;">
+                    <input type="text" id="ma-login-user" placeholder="MA username" autocomplete="username" style="flex:1;">
+                    <input type="password" id="ma-login-pass" placeholder="MA password" autocomplete="current-password" style="flex:1;">
+                </div>
+
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <button type="button" class="btn btn-sm" onclick="maLogin()" id="ma-login-btn" style="min-width:100px;">🔗 Connect</button>
+                    <span id="ma-login-msg" style="font-size:12px;"></span>
+                </div>
             </div>
-            <div class="form-group">
-                <label>Music Assistant API token <span style="font-size:11px;color:var(--secondary-text-color);">(create in MA → Settings → API Tokens)</span></label>
-                <input type="password" name="MA_API_TOKEN" autocomplete="new-password" placeholder="eyJ...">
-            </div>
+
+            <!-- Manual token fallback (collapsible) -->
+            <details style="margin-bottom:10px;">
+                <summary style="cursor:pointer;font-size:13px;color:var(--secondary-text-color);">Advanced: manual JWT token</summary>
+                <div style="padding:8px 0;">
+                    <div class="form-group">
+                        <label>Music Assistant API URL</label>
+                        <input type="text" name="MA_API_URL" placeholder="http://homeassistant.local:8095">
+                    </div>
+                    <div class="form-group">
+                        <label>Music Assistant API token <span style="font-size:11px;color:var(--secondary-text-color);">(create in MA → Settings → API Tokens)</span></label>
+                        <input type="password" name="MA_API_TOKEN" autocomplete="new-password" placeholder="eyJ...">
+                    </div>
+                </div>
+            </details>
+
             <div class="form-group">
                 <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
                     <input type="checkbox" name="VOLUME_VIA_MA" id="volume-via-ma" style="width:auto;margin:0;" checked>

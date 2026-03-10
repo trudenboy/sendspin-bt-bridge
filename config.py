@@ -54,6 +54,7 @@ DEFAULT_CONFIG = {
     "LOG_LEVEL": "INFO",
     "MA_API_URL": "",
     "MA_API_TOKEN": "",
+    "MA_USERNAME": "",
     "VOLUME_VIA_MA": True,
 }
 

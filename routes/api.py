@@ -740,6 +740,133 @@ def api_group_pause():
         return jsonify({"success": False, "error": "Internal error"}), 500
 
 
+@api_bp.route("/api/ma/discover", methods=["GET"])
+def api_ma_discover():
+    """Discover Music Assistant servers on the local network via mDNS.
+
+    Returns a list of servers found, each with url, version, server_id.
+    Runs an mDNS scan for up to 5 seconds.
+    """
+    loop = state.get_main_loop()
+    if not loop:
+        return jsonify({"success": False, "error": "Event loop not available"}), 503
+
+    try:
+        from services.ma_discovery import discover_ma_servers
+
+        fut = asyncio.run_coroutine_threadsafe(discover_ma_servers(timeout=5.0), loop)
+        servers = fut.result(timeout=10.0)
+        return jsonify({"success": True, "servers": servers})
+    except Exception:
+        logger.exception("MA mDNS discovery failed")
+        return jsonify({"success": False, "error": "Discovery failed"}), 500
+
+
+@api_bp.route("/api/ma/login", methods=["POST"])
+def api_ma_login():
+    """Login to Music Assistant with username/password and auto-create token.
+
+    Request JSON: {"url": "http://...:8095", "username": "...", "password": "..."}
+    If url is empty, tries mDNS discovery first.
+
+    On success, saves MA_API_URL, MA_API_TOKEN, MA_USERNAME to config.json
+    and returns server info.  Password is NOT stored.
+    """
+    data = request.get_json(silent=True) or {}
+    ma_url = (data.get("url") or "").strip()
+    username = (data.get("username") or "").strip()
+    password = data.get("password") or ""
+
+    if not username or not password:
+        return jsonify({"success": False, "error": "Username and password are required"}), 400
+
+    loop = state.get_main_loop()
+    if not loop:
+        return jsonify({"success": False, "error": "Event loop not available"}), 503
+
+    # Auto-discover MA URL if not provided
+    if not ma_url:
+        try:
+            from services.ma_discovery import discover_ma_servers
+
+            fut = asyncio.run_coroutine_threadsafe(discover_ma_servers(timeout=5.0), loop)
+            servers = fut.result(timeout=10.0)
+            if servers:
+                ma_url = servers[0]["url"]
+                logger.info("Auto-discovered MA server: %s", ma_url)
+            else:
+                return jsonify({"success": False, "error": "No MA server found on network. Enter URL manually."}), 404
+        except Exception:
+            logger.exception("MA discovery failed during login")
+            return jsonify({"success": False, "error": "Discovery failed. Enter URL manually."}), 500
+
+    # Normalize URL
+    if "://" not in ma_url:
+        ma_url = f"http://{ma_url}"
+
+    # Login and create long-lived token
+    try:
+        from music_assistant_client import login_with_token
+
+        fut = asyncio.run_coroutine_threadsafe(
+            login_with_token(ma_url, username, password, token_name="Sendspin BT Bridge"),
+            loop,
+        )
+        user, token = fut.result(timeout=30.0)
+    except Exception as exc:
+        err_msg = str(exc)
+        if "auth" in err_msg.lower() or "401" in err_msg or "credentials" in err_msg.lower():
+            return jsonify({"success": False, "error": "Invalid username or password"}), 401
+        logger.exception("MA login failed")
+        return jsonify({"success": False, "error": f"Login failed: {err_msg}"}), 500
+
+    # Save to config.json
+    def _save_ma_creds(cfg: dict) -> None:
+        cfg["MA_API_URL"] = ma_url
+        cfg["MA_API_TOKEN"] = token
+        cfg["MA_USERNAME"] = username
+
+    update_config(_save_ma_creds)
+    state.set_ma_api_credentials(ma_url, token)
+
+    # Trigger MA group rediscovery in background
+    try:
+        with _clients_lock:
+            snapshot = list(_clients)
+        player_names = [c.player_name for c in snapshot]
+        asyncio.run_coroutine_threadsafe(
+            _rediscover_after_login(ma_url, token, player_names),
+            loop,
+        )
+    except Exception:
+        pass  # Non-critical — groups will be discovered on next poll
+
+    return jsonify(
+        {
+            "success": True,
+            "url": ma_url,
+            "username": username,
+            "message": "Connected to Music Assistant. Token saved.",
+        }
+    )
+
+
+async def _rediscover_after_login(
+    ma_url: str,
+    ma_token: str,
+    player_names: list[str],
+) -> None:
+    """Background task: rediscover MA groups after successful login."""
+    try:
+        from services.ma_client import discover_ma_groups
+
+        name_map, all_groups = await discover_ma_groups(ma_url, ma_token, player_names)
+        state.set_ma_groups(name_map, all_groups)
+        logger.info("MA groups rediscovered after login: %d groups", len(all_groups))
+    except Exception:
+        logger.debug("MA group rediscovery after login failed", exc_info=True)
+
+
 @api_bp.route("/api/ma/groups", methods=["GET"])
 def api_ma_groups():
     """Return all MA syncgroup players discovered from the MA API.
@@ -1346,6 +1473,7 @@ def api_config():
         "LOG_LEVEL",
         "MA_API_URL",
         "MA_API_TOKEN",
+        "MA_USERNAME",
         "VOLUME_VIA_MA",
         "_new_device_default_volume",
     }
@@ -1370,6 +1498,9 @@ def api_config():
                 # Preserve MA_API_TOKEN if form submitted empty (user didn't change it)
                 if not config.get("MA_API_TOKEN") and existing.get("MA_API_TOKEN"):
                     config["MA_API_TOKEN"] = existing["MA_API_TOKEN"]
+                # Preserve MA_USERNAME if not submitted
+                if not config.get("MA_USERNAME") and existing.get("MA_USERNAME"):
+                    config["MA_USERNAME"] = existing["MA_USERNAME"]
             except Exception as _exc:
                 logger.debug("Could not read existing config for merge: %s", _exc)
 

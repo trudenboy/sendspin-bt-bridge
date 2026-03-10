@@ -278,7 +278,10 @@ class MaMonitor:
             await _send(ws, mid, "auth", {"token": self._token})
             auth_resp = await _recv(ws, timeout=10.0)
             if not auth_resp.get("result", {}).get("authenticated"):
-                logger.warning("MA monitor: authentication failed — check MA_API_TOKEN")
+                logger.warning(
+                    "MA monitor: authentication failed — token invalid or expired. "
+                    "Reconfigure via web UI → Music Assistant section (login or paste new token)"
+                )
                 _state.set_ma_connected(False)
                 raise _AuthFailed("check MA_API_TOKEN")
 

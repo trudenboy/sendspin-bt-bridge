@@ -1594,6 +1594,96 @@ async function setPassword() {
     }
 }
 
+// ---- Music Assistant discover & login ----
+
+async function maDiscover() {
+    var btn = document.getElementById('ma-discover-btn');
+    var urlInput = document.getElementById('ma-login-url');
+    var msgEl = document.getElementById('ma-login-msg');
+    if (btn) btn.disabled = true;
+    if (msgEl) { msgEl.textContent = 'Scanning network...'; msgEl.style.color = 'var(--secondary-text-color)'; }
+    try {
+        var resp = await fetch(API_BASE + '/api/ma/discover');
+        if (resp.status === 401) { _handleUnauthorized(); return; }
+        var data = await resp.json().catch(function() { return {}; });
+        if (data.success && data.servers && data.servers.length > 0) {
+            var s = data.servers[0];
+            if (urlInput) urlInput.value = s.url;
+            if (msgEl) {
+                msgEl.textContent = '\u2714 Found: MA v' + (s.version || '?') + ' at ' + s.url;
+                msgEl.style.color = 'var(--success-color, green)';
+            }
+        } else {
+            if (msgEl) {
+                msgEl.textContent = '\u2716 No MA server found on network';
+                msgEl.style.color = 'var(--error-color, red)';
+            }
+        }
+    } catch (err) {
+        if (msgEl) { msgEl.textContent = '\u2716 Discovery error: ' + err.message; msgEl.style.color = 'var(--error-color, red)'; }
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}
+
+async function maLogin() {
+    var btn = document.getElementById('ma-login-btn');
+    var msgEl = document.getElementById('ma-login-msg');
+    var url = (document.getElementById('ma-login-url').value || '').trim();
+    var user = (document.getElementById('ma-login-user').value || '').trim();
+    var pass = document.getElementById('ma-login-pass').value || '';
+    if (!user || !pass) {
+        if (msgEl) { msgEl.textContent = 'Enter MA username and password'; msgEl.style.color = 'var(--error-color, red)'; }
+        return;
+    }
+    if (btn) btn.disabled = true;
+    if (msgEl) { msgEl.textContent = 'Connecting...'; msgEl.style.color = 'var(--secondary-text-color)'; }
+    try {
+        var resp = await fetch(API_BASE + '/api/ma/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: url, username: user, password: pass }),
+        });
+        if (resp.status === 401 && !url) { _handleUnauthorized(); return; }
+        var data = await resp.json().catch(function() { return {}; });
+        if (data.success) {
+            // Clear password field
+            document.getElementById('ma-login-pass').value = '';
+            // Update status
+            _setMaStatus(true, data.username, data.url);
+            // Update the hidden MA_API_URL field too
+            var urlField = document.querySelector('input[name="MA_API_URL"]');
+            if (urlField) urlField.value = data.url;
+            if (msgEl) {
+                msgEl.textContent = '\u2714 ' + data.message;
+                msgEl.style.color = 'var(--success-color, green)';
+            }
+            showToast('\u2714 Connected to Music Assistant', 'success');
+        } else {
+            if (msgEl) {
+                msgEl.textContent = '\u2716 ' + (data.error || 'Login failed');
+                msgEl.style.color = 'var(--error-color, red)';
+            }
+        }
+    } catch (err) {
+        if (msgEl) { msgEl.textContent = '\u2716 Error: ' + err.message; msgEl.style.color = 'var(--error-color, red)'; }
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}
+
+function _setMaStatus(connected, username, url) {
+    var icon = document.getElementById('ma-status-icon');
+    var text = document.getElementById('ma-status-text');
+    if (connected) {
+        if (icon) icon.textContent = '\u2705';
+        if (text) text.innerHTML = 'Connected' + (username ? ' as <b>' + escHtml(username) + '</b>' : '') + (url ? ' \u2014 ' + escHtml(url) : '');
+    } else {
+        if (icon) icon.textContent = '\u26aa';
+        if (text) text.textContent = 'Not connected';
+    }
+}
+
 // ---- Apply log level immediately ----
 
 async function applyLogLevel() {
@@ -1701,6 +1791,11 @@ async function loadConfig() {
 
         // Show count of non-default advanced fields
         _updateAdvancedCounter();
+
+        // Update MA connection status
+        if (config.MA_API_TOKEN) {
+            _setMaStatus(true, config.MA_USERNAME || '', config.MA_API_URL || '');
+        }
     } catch (err) {
         console.error('Error loading config:', err);
     }
