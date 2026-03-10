@@ -2,29 +2,31 @@
 
 Roadmap for HA addon standards compliance and improvements.
 
-## Done (v2.15.3–v2.15.5)
+## Done (v2.15.0–v2.16.2)
 
-- [x] **Fix re-anchor loop on stream start** — sendspin-cli 5.1.4 preserves cooldown timer across `clear()` calls
-- [x] **Split armv7 CI into separate workflow** — amd64/arm64 publish immediately; armv7 builds independently via QEMU
-- [x] **Fix AppArmor profile** — custom profile was too restrictive, blocked Python shared libs and module imports on HAOS; temporarily disabled (`apparmor: false`)
+- [x] **35 unit tests, diagnostics enrichment, TOCTOU fix, MA WS response matching** (v2.15.0)
+- [x] **Multi-arch Docker builds** — amd64/arm64/armv7 (v2.15.2)
+- [x] **Fix re-anchor loop on stream start** — sendspin-cli 5.1.4 preserves cooldown timer across `clear()` calls (v2.15.3)
+- [x] **Split armv7 CI into separate workflow** — amd64/arm64 publish immediately; armv7 builds independently via QEMU (v2.15.4)
+- [x] **Fix AppArmor profile** — temporarily disabled (`apparmor: false`), was blocking Python imports on HAOS (v2.15.5)
+- [x] **Auto-unmute BT sink, switched to PyPI sendspin** (v2.15.6)
+- [x] **Security audit** — 42 issues fixed, 65 new tests (107 total), `SYS_ADMIN` capability removed (v2.16.0)
+- [x] **PyAV armv7l compatibility fix** (v2.16.1)
+- [x] **RPi preflight script, `/api/preflight`, startup diagnostics, RPi & Docker docs** (v2.16.2)
+- [x] **Add Hadolint config** — `.hadolint.yaml` + Dockerfile linting in CI (v2.16.3)
+- [x] **Create `ha-addon/logo.png`** — wide-format logo for HA store listing (v2.16.3)
+- [x] **One-liner RPi installer** — `scripts/rpi-install.sh`: install Docker, generate compose, pair BT, start (v2.16.3)
 
-## Phase 2: HA Base Images & Build Pipeline
+## Next
 
-- [ ] **Migrate to HA Debian base images** — switch from `python:3.12-slim` to `ghcr.io/home-assistant/{arch}-base-debian:bookworm`, install Python and all dependencies on top
-- [ ] **Adopt `rootfs/` overlay pattern** — move entrypoint scripts into `rootfs/etc/` structure, use single `COPY rootfs /` in Dockerfile *(depends on: base images)*
-- [ ] **Merge into single Dockerfile** — eliminate the two-image chain (root Dockerfile → ha-addon/Dockerfile), single Dockerfile in `ha-addon/` with `ARG BUILD_FROM` pattern *(depends on: base images)*
-- [ ] **Add Hadolint config** — create `.hadolint.yaml`, add Dockerfile linting to CI
+- [ ] **Add HA discovery integration** — support HA discovery protocol for auto-configuring MA connection
 
-## Phase 3: S6 Overlay & Security
+## Future
 
-- [ ] **Adopt S6 Overlay** — create `s6-rc.d` service structure for process supervision, set `init: false` in config.yaml *(depends on: base images, rootfs)*
-- [ ] **Implement proper signal handling** — S6 SIGTERM handling, clean subprocess shutdown, finish scripts *(depends on: S6 overlay)*
-- [ ] **Write proper AppArmor profile** — run in complain mode on HAOS, collect denied ops from audit log, build tested whitelist. Currently disabled since v2.15.5 *(depends on: S6 overlay)*
-- [ ] **Security hardening** — minimize privileged capabilities, review `SYS_ADMIN` necessity *(depends on: AppArmor profile)*
-
-## Other
-
-- [ ] **Create `ha-addon/logo.png`** — wide-format logo for HA store listing
-- [ ] **Add HA discovery integration** — support HA discovery protocol for auto-configuring Music Assistant connection
-- [ ] **One-liner RPi installer** — `curl | bash` script that installs Docker (if missing), generates `docker-compose.yml` with detected settings, runs interactive BT pairing, starts container
-- [ ] **Web UI setup wizard** — first-run wizard in the web dashboard: detect speakers, select, pair, configure MA connection — all from the browser without editing config files
+- [ ] **Migrate to HA Debian base images** — switch from `python:3.12-slim` to `ghcr.io/home-assistant/{arch}-base-debian:bookworm`
+- [ ] **Adopt `rootfs/` overlay pattern** — move entrypoint scripts into `rootfs/etc/` structure *(depends on: base images)*
+- [ ] **Merge into single Dockerfile** — eliminate two-image chain, single `ha-addon/Dockerfile` with `ARG BUILD_FROM` *(depends on: base images)*
+- [ ] **Adopt S6 Overlay** — `s6-rc.d` service structure for process supervision *(depends on: base images, rootfs)*
+- [ ] **Implement proper signal handling** — S6 SIGTERM handling, clean subprocess shutdown *(depends on: S6 overlay)*
+- [ ] **Write proper AppArmor profile** — complain mode → audit log → tested whitelist *(depends on: S6 overlay)*
+- [ ] **Web UI setup wizard** — first-run wizard: detect speakers, pair, configure MA — all from the browser

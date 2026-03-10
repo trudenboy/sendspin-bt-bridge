@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.16.3] - 2026-03-10
+
+### Added
+- **`ha-addon/logo.png`** — wide-format logo for HA addon store listing
+- **`scripts/rpi-install.sh`** — one-liner Raspberry Pi installer: installs Docker, downloads docker-compose.yml, generates `.env`, interactive BT pairing, starts container
+- **Hadolint Dockerfile linting** — `.hadolint.yaml` config + CI job linting both Dockerfiles
+
+### Changed
+- **TODO.md restructured** — expanded Done section (v2.15.0–v2.16.3), reorganized remaining items into Next / Future priorities
+
 ## [2.16.2] - 2026-03-10
 
 ### Added
