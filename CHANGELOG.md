@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.17.4] - 2026-03-10
+
+### Added
+- **Silent MA authentication in Ingress mode** — when accessed via HA Ingress, the bridge automatically reads the HA session token from `localStorage` and exchanges it for an MA token without any user interaction
+- **`/api/ma/ha-silent-auth`** — new endpoint that accepts an HA access token and performs the full OAuth exchange server-side
+- **Auto-discover on page load** — MA server discovery runs automatically when the page loads (no need to click "Discover" first)
+
+### Changed
+- **Refactored MA↔HA OAuth helpers** — extracted shared helpers (`_get_ma_oauth_params`, `_ha_login_flow_start`, `_ha_login_flow_step`, `_ma_callback_exchange`, `_save_ma_token_and_rediscover`) to module level for reuse across endpoints
+
 ## [2.17.3] - 2026-03-10
 
 ### Added
