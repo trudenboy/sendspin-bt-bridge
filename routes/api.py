@@ -740,12 +740,34 @@ def api_group_pause():
         return jsonify({"success": False, "error": "Internal error"}), 500
 
 
+def _ma_host_from_sendspin_clients():
+    """Extract MA server host from connected sendspin clients.
+
+    Checks server_host first (explicit config), then falls back to the
+    resolved address from the live sendspin WebSocket connection.
+    Returns host string or None.
+    """
+    with _clients_lock:
+        snapshot = list(_clients)
+    for client in snapshot:
+        host = getattr(client, "server_host", None)
+        if host and host.lower() not in ("auto", "discover", ""):
+            return host
+    # Fallback: resolved address from active sendspin connection
+    for client in snapshot:
+        resolved = getattr(client, "connected_server_url", "") or ""
+        # Format: "host:port" (e.g. "192.168.10.10:9000")
+        if resolved and ":" in resolved:
+            return resolved.rsplit(":", 1)[0]
+    return None
+
+
 @api_bp.route("/api/ma/discover", methods=["GET"])
 def api_ma_discover():
     """Discover Music Assistant servers.
 
     Priority: 1) already-configured MA_API_URL, 2) sendspin server IP + port 8095,
-    3) mDNS scan as fallback.
+    3) resolved sendspin connection host, 4) mDNS scan as fallback.
     """
     loop = state.get_main_loop()
     if not loop:
@@ -772,17 +794,13 @@ def api_ma_discover():
             return jsonify({"success": True, "servers": [info]})
 
     # 3) Check connected sendspin clients — MA lives on the same host
-    with _clients_lock:
-        snapshot = list(_clients)
-    for client in snapshot:
-        host = getattr(client, "server_host", None)
-        if host and host.lower() not in ("auto", "discover", ""):
-            candidate = f"http://{host}:8095"
-            fut = asyncio.run_coroutine_threadsafe(validate_ma_url(candidate), loop)
-            info = fut.result(timeout=5.0)
-            if info:
-                return jsonify({"success": True, "servers": [info]})
-            break  # all clients share the same server
+    sendspin_ma_host = _ma_host_from_sendspin_clients()
+    if sendspin_ma_host:
+        candidate = f"http://{sendspin_ma_host}:8095"
+        fut = asyncio.run_coroutine_threadsafe(validate_ma_url(candidate), loop)
+        info = fut.result(timeout=5.0)
+        if info:
+            return jsonify({"success": True, "servers": [info]})
 
     # 4) Fallback: mDNS scan
     try:
@@ -837,15 +855,11 @@ def api_ma_login():
             if sh and sh.lower() not in ("auto", "discover", ""):
                 ma_url_candidate = f"http://{sh}:8095"
 
-        # From connected sendspin clients
+        # From connected sendspin clients (explicit or resolved address)
         if not ma_url_candidate:
-            with _clients_lock:
-                snapshot = list(_clients)
-            for client in snapshot:
-                host = getattr(client, "server_host", None)
-                if host and host.lower() not in ("auto", "discover", ""):
-                    ma_url_candidate = f"http://{host}:8095"
-                    break
+            sendspin_ma_host = _ma_host_from_sendspin_clients()
+            if sendspin_ma_host:
+                ma_url_candidate = f"http://{sendspin_ma_host}:8095"
 
         if ma_url_candidate:
             fut = asyncio.run_coroutine_threadsafe(validate_ma_url(ma_url_candidate), loop)
