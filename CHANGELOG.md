@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.17.3] - 2026-03-10
+
+### Added
+- **Sign in with Home Assistant** — when MA runs as HA addon, a popup-based OAuth flow lets users authenticate with HA credentials (including 2FA/TOTP) to get an MA token; no manual JWT copy needed
+- **`/api/ma/ha-login`** — multi-step API endpoint for programmatic HA → MA OAuth token exchange
+- **`/api/ma/ha-auth-page`** — self-contained dark-themed popup page for the HA login flow with postMessage communication back to the opener
+
+### Changed
+- **MA addon mode UX** — replaced static "use manual JWT" hint with a prominent "Sign in with Home Assistant" button that opens the auth popup
+
 ## [2.17.2] - 2026-03-10
 
 ### Fixed
