@@ -1613,8 +1613,8 @@ async function maDiscover() {
                 msgEl.textContent = '\u2714 Found: MA v' + (s.version || '?') + ' at ' + s.url;
                 msgEl.style.color = 'var(--success-color, green)';
             }
-            // Detect HA addon mode — hide login form, show token hint
-            if (s.homeassistant_addon) {
+            // Detect HA addon mode — use bridge's own flag (not MA server's)
+            if (data.is_addon) {
                 _setMaAddonMode(true);
             }
         } else {
@@ -1643,6 +1643,27 @@ function _setMaAddonMode(isAddon) {
         if (hint) hint.style.display = 'none';
         if (loginBtn) loginBtn.style.display = '';
     }
+}
+
+async function maHaConnect() {
+    var maUrl = (document.getElementById('ma-login-url').value || '').trim();
+    var msgEl = document.getElementById('ma-ha-login-msg');
+    if (!maUrl) {
+        if (msgEl) { msgEl.textContent = 'Discover MA server first'; msgEl.style.color = 'var(--error-color, red)'; }
+        return;
+    }
+    // In Ingress: one-click silent auth (no popup needed)
+    if (_isIngress()) {
+        var btn = document.getElementById('ma-ha-login-btn');
+        if (btn) btn.disabled = true;
+        if (msgEl) { msgEl.textContent = 'Connecting via Home Assistant...'; msgEl.style.color = 'var(--secondary-text-color)'; }
+        var ok = await _maSilentAuth(maUrl);
+        if (btn) btn.disabled = false;
+        if (!ok && msgEl) { msgEl.textContent = '\u2716 Silent auth failed — try popup'; msgEl.style.color = 'var(--error-color, red)'; }
+        return;
+    }
+    // Outside Ingress: OAuth popup flow
+    maHaAuthPopup();
 }
 
 function maHaAuthPopup() {
@@ -1793,18 +1814,9 @@ async function _maSilentAuth(maUrl) {
 }
 
 async function _maAutoConnect() {
-    // 1. Auto-discover MA server (also detects addon mode for UI)
+    // Auto-discover MA server and detect addon mode for UI
     await maDiscover();
-    // 2. If already connected (token exists), no need for silent auth
-    var statusText = document.getElementById('ma-status-text');
-    if (statusText && statusText.textContent.indexOf('Connected') === 0) return;
-    // 3. In Ingress mode with addon detected, try silent auth
-    if (!_isIngress()) return;
-    var hint = document.getElementById('ma-addon-hint');
-    if (!hint || hint.style.display !== 'block') return;
-    var maUrl = (document.getElementById('ma-login-url').value || '').trim();
-    if (!maUrl) return;
-    await _maSilentAuth(maUrl);
+    // No auto silent auth — user clicks "Sign in with HA" button explicitly
 }
 
 // ---- Apply log level immediately ----

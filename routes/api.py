@@ -766,8 +766,11 @@ def _ma_host_from_sendspin_clients():
 def api_ma_discover():
     """Discover Music Assistant servers.
 
-    Priority: 1) already-configured MA_API_URL, 2) sendspin server IP + port 8095,
-    3) resolved sendspin connection host, 4) mDNS scan as fallback.
+    HA addon mode: 1) homeassistant.local:8095 (Supervisor DNS), 2) saved MA_API_URL.
+    Other modes: 1) saved MA_API_URL, 2) SENDSPIN_SERVER host, 3) sendspin
+    client connection host, 4) mDNS scan.
+
+    Always returns ``is_addon`` flag so frontend can adjust UI.
     """
     loop = state.get_main_loop()
     if not loop:
@@ -775,32 +778,61 @@ def api_ma_discover():
 
     from services.ma_discovery import validate_ma_url
 
+    is_addon = _detect_runtime() == "ha_addon"
+
+    def _ok(servers):
+        return jsonify({"success": True, "is_addon": is_addon, "servers": servers})
+
+    # --- HA addon shortcut: MA is on the same HA host ---
+    if is_addon:
+        for candidate in ("http://homeassistant.local:8095",):
+            try:
+                fut = asyncio.run_coroutine_threadsafe(validate_ma_url(candidate), loop)
+                info = fut.result(timeout=5.0)
+                if info:
+                    return _ok([info])
+            except Exception:
+                pass
+
     # 1) Try already-known MA_API_URL
     ma_url, _ = state.get_ma_api_credentials()
     if ma_url:
-        fut = asyncio.run_coroutine_threadsafe(validate_ma_url(ma_url), loop)
-        info = fut.result(timeout=5.0)
-        if info:
-            return jsonify({"success": True, "servers": [info]})
+        try:
+            fut = asyncio.run_coroutine_threadsafe(validate_ma_url(ma_url), loop)
+            info = fut.result(timeout=5.0)
+            if info:
+                return _ok([info])
+        except Exception:
+            pass
+
+    # In addon mode, no need for further heuristics — fall through to error
+    if is_addon:
+        return _ok([])
 
     # 2) Derive from SENDSPIN_SERVER (same host, default MA port 8095)
     cfg = load_config()
     sendspin_host = (cfg.get("SENDSPIN_SERVER") or "").strip()
     if sendspin_host and sendspin_host.lower() not in ("auto", "discover", ""):
         candidate = f"http://{sendspin_host}:8095"
-        fut = asyncio.run_coroutine_threadsafe(validate_ma_url(candidate), loop)
-        info = fut.result(timeout=5.0)
-        if info:
-            return jsonify({"success": True, "servers": [info]})
+        try:
+            fut = asyncio.run_coroutine_threadsafe(validate_ma_url(candidate), loop)
+            info = fut.result(timeout=5.0)
+            if info:
+                return _ok([info])
+        except Exception:
+            pass
 
     # 3) Check connected sendspin clients — MA lives on the same host
     sendspin_ma_host = _ma_host_from_sendspin_clients()
     if sendspin_ma_host:
         candidate = f"http://{sendspin_ma_host}:8095"
-        fut = asyncio.run_coroutine_threadsafe(validate_ma_url(candidate), loop)
-        info = fut.result(timeout=5.0)
-        if info:
-            return jsonify({"success": True, "servers": [info]})
+        try:
+            fut = asyncio.run_coroutine_threadsafe(validate_ma_url(candidate), loop)
+            info = fut.result(timeout=5.0)
+            if info:
+                return _ok([info])
+        except Exception:
+            pass
 
     # 4) Fallback: mDNS scan
     try:
@@ -808,10 +840,10 @@ def api_ma_discover():
 
         fut = asyncio.run_coroutine_threadsafe(discover_ma_servers(timeout=5.0), loop)
         servers = fut.result(timeout=10.0)
-        return jsonify({"success": True, "servers": servers})
+        return _ok(servers)
     except Exception:
         logger.exception("MA mDNS discovery failed")
-        return jsonify({"success": False, "error": "Discovery failed"}), 500
+        return jsonify({"success": False, "is_addon": is_addon, "error": "Discovery failed"}), 500
 
 
 @api_bp.route("/api/ma/login", methods=["POST"])
