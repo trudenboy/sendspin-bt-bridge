@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.18.2] - 2026-03-10
+
+### Fixed
+- **MA Ingress connectivity** — in HAOS, the bridge addon can't reach MA's Ingress port via `localhost:8094` because each addon runs in its own Docker container; now discovers the MA addon's Docker hostname via the Supervisor API and connects via Docker DNS (e.g. `http://d5369777-music-assistant:8094`)
+- Added `hassio_api` and `homeassistant_api` permissions to addon config
+
 ## [2.18.1] - 2026-03-10
 
 ### Fixed

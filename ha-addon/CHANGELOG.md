@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.18.2] - 2026-03-10
+
+### Fixed
+- MA Ingress connectivity: discover MA addon hostname via Supervisor API instead of `localhost:8094`
+- Added `hassio_api` and `homeassistant_api` addon permissions
+
 ## [2.18.1] - 2026-03-10
 
 ### Fixed
