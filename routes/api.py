@@ -1448,13 +1448,54 @@ def _get_ha_user_via_ws(ha_token: str):
         return None
 
 
-_MA_INGRESS_PORT = 8094
+def _find_ma_ingress_url():
+    """Discover the MA addon's Ingress base URL via the Supervisor API.
+
+    Returns e.g. ``http://d5369777-music-assistant:8094`` or falls back
+    to ``http://localhost:8094``.  Uses the addon's Docker hostname which
+    is resolvable from any addon on the hassio network.
+    """
+    import urllib.request as _ur
+
+    token = os.environ.get("SUPERVISOR_TOKEN", "")
+    if not token:
+        return "http://localhost:8094"
+
+    # Known MA addon slugs (stable, beta, dev)
+    ma_slugs = [
+        "d5369777_music_assistant",
+        "d5369777_music_assistant_beta",
+        "d5369777_music_assistant_dev",
+    ]
+
+    for slug in ma_slugs:
+        try:
+            req = _ur.Request(
+                f"http://supervisor/addons/{slug}/info",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            with _ur.urlopen(req, timeout=5) as resp:
+                info = json.loads(resp.read().decode()).get("data", {})
+
+            if info.get("state") != "started":
+                continue
+
+            hostname = info.get("hostname", slug.replace("_", "-"))
+            port = info.get("ingress_port", 8094)
+            url = f"http://{hostname}:{port}"
+            logger.debug("Discovered MA Ingress at %s (slug=%s)", url, slug)
+            return url
+        except Exception:
+            continue
+
+    logger.debug("No MA addon found via Supervisor — falling back to localhost:8094")
+    return "http://localhost:8094"
 
 
 def _create_ma_token_via_ingress(ha_user_id: str, ha_username: str, ha_display_name: str = ""):
     """Create a long-lived MA token via MA's Ingress JSONRPC endpoint.
 
-    MA's Ingress server (port 8094) auto-authenticates requests that carry
+    MA's Ingress server auto-authenticates requests that carry
     X-Remote-User-ID / X-Remote-User-Name headers.  We POST a JSONRPC call
     to ``auth/token/create`` which works for any authenticated user.
 
@@ -1462,7 +1503,8 @@ def _create_ma_token_via_ingress(ha_user_id: str, ha_username: str, ha_display_n
     """
     import urllib.request as _ur
 
-    url = f"http://localhost:{_MA_INGRESS_PORT}/api"
+    base_url = _find_ma_ingress_url()
+    url = f"{base_url}/api"
     headers = {
         "Content-Type": "application/json",
         "X-Remote-User-ID": ha_user_id,
@@ -1494,7 +1536,7 @@ def _create_ma_token_via_ingress(ha_user_id: str, ha_username: str, ha_display_n
         logger.warning("MA Ingress token/create unexpected result: %s", data)
         return None
     except Exception as exc:
-        logger.warning("MA Ingress JSONRPC failed: %s", exc)
+        logger.warning("MA Ingress JSONRPC failed (%s): %s", url, exc)
         return None
 
 

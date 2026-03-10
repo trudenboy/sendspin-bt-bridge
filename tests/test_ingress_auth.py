@@ -112,8 +112,9 @@ class TestGetHaUserViaWs:
 
 
 class TestCreateMaTokenViaIngress:
+    @patch("routes.api._find_ma_ingress_url", return_value="http://localhost:8094")
     @patch("urllib.request.urlopen")
-    def test_success_returns_token(self, mock_urlopen):
+    def test_success_returns_token(self, mock_urlopen, _mock_find):
         resp_body = json.dumps({"result": "long_lived_token_123"}).encode()
         mock_resp = MagicMock()
         mock_resp.read.return_value = resp_body
@@ -130,8 +131,9 @@ class TestCreateMaTokenViaIngress:
         assert req.get_header("X-remote-user-id") == "user123"
         assert req.get_header("X-remote-user-name") == "admin"
 
+    @patch("routes.api._find_ma_ingress_url", return_value="http://localhost:8094")
     @patch("urllib.request.urlopen")
-    def test_error_response_returns_none(self, mock_urlopen):
+    def test_error_response_returns_none(self, mock_urlopen, _mock_find):
         resp_body = json.dumps({"error": {"code": 403, "message": "Insufficient permissions"}}).encode()
         mock_resp = MagicMock()
         mock_resp.read.return_value = resp_body
@@ -143,8 +145,9 @@ class TestCreateMaTokenViaIngress:
 
         assert _create_ma_token_via_ingress("user123", "user") is None
 
+    @patch("routes.api._find_ma_ingress_url", return_value="http://localhost:8094")
     @patch("urllib.request.urlopen", side_effect=ConnectionError("refused"))
-    def test_connection_error_returns_none(self, _mock):
+    def test_connection_error_returns_none(self, _mock, _mock_find):
         from routes.api import _create_ma_token_via_ingress
 
         assert _create_ma_token_via_ingress("user123", "user") is None
