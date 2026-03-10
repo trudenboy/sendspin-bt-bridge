@@ -229,7 +229,18 @@ Click **▶ Advanced settings** to expand:
 | **Prefer SBC codec** | on | Force SBC after each BT connect (requires PulseAudio 15+) |
 | **Log level** | `INFO` | `DEBUG` for verbose troubleshooting; takes effect immediately via **Apply now** |
 | **Music Assistant API URL** | _(blank)_ | MA REST API base URL (e.g. `http://192.168.1.x:8095`) for group resume |
-| **Music Assistant API token** | _(blank)_ | HA long-lived access token (MA → Settings → API Tokens) |
+| **Music Assistant API token** | _(blank)_ | MA API token — auto-created via "Sign in with Home Assistant" in addon mode |
+
+### Music Assistant Integration
+
+The **Music Assistant Integration** subsection appears below the log level setting:
+
+| Element | Description |
+|---|---|
+| **Status indicator** | ⚪ Not connected / ✅ Connected as *Username* — shows current MA API connection state |
+| **MA URL** | Editable field pre-filled by auto-discovery; click **🔍 Discover** to detect the MA server |
+| **🏠 Sign in with Home Assistant** | One-click button (addon mode only) — creates a long-lived MA API token via HA Ingress JSONRPC. No credentials or popups needed. The token is saved to `config.json` and persists across restarts. |
+| **Advanced: manual JWT token** | Expandable section for Docker/LXC users — paste MA API URL and token manually |
 
 ### Save Actions
 

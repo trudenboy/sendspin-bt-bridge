@@ -2,7 +2,7 @@
 
 Roadmap for HA addon standards compliance and improvements.
 
-## Done (v2.15.0–v2.16.2)
+## Done (v2.15.0–v2.18.3)
 
 - [x] **35 unit tests, diagnostics enrichment, TOCTOU fix, MA WS response matching** (v2.15.0)
 - [x] **Multi-arch Docker builds** — amd64/arm64/armv7 (v2.15.2)
@@ -16,11 +16,11 @@ Roadmap for HA addon standards compliance and improvements.
 - [x] **Add Hadolint config** — `.hadolint.yaml` + Dockerfile linting in CI (v2.16.3)
 - [x] **Create `ha-addon/logo.png`** — wide-format logo for HA store listing (v2.16.3)
 - [x] **One-liner RPi installer** — `scripts/rpi-install.sh`: install Docker, generate compose, pair BT, start (v2.16.3)
+- [x] **MA auto-discovery & auto-login** — mDNS discovery of MA servers + passwordless auth via Ingress JSONRPC in addon mode (v2.17.0–v2.18.3)
 
 ## Next
 
 - [ ] **Add HA discovery integration** — support HA discovery protocol for auto-configuring MA connection
-- [x] **MA auto-discovery & auto-login** — mDNS discovery of MA servers + login with username/password to auto-create token (no manual JWT copy needed)
 
 ## Future
 

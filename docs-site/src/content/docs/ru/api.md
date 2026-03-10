@@ -169,7 +169,7 @@ data: [{"player_name": "Колонка в гостиной", "playing": false, .
 
 ## Интеграция с Music Assistant
 
-Эти эндпоинты требуют настройки `MA_API_URL` и `MA_API_TOKEN`.
+Эти эндпоинты требуют настройки `MA_API_URL` и `MA_API_TOKEN` (заполняются автоматически через «Sign in with Home Assistant» в режиме аддона, или задаются вручную).
 
 ### `GET /api/ma/groups`
 

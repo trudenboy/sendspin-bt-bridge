@@ -368,7 +368,7 @@ graph LR
 
 ### MA REST API Integration (MaMonitor)
 
-When `MA_API_URL` and `MA_API_TOKEN` are configured, the main process runs a `MaMonitor` task that maintains a persistent **WebSocket connection to MA's `/ws` endpoint** for real-time event subscription.
+When `MA_API_URL` and `MA_API_TOKEN` are configured (auto-created via "Sign in with Home Assistant" in addon mode, or set manually), the main process runs a `MaMonitor` task that maintains a persistent **WebSocket connection to MA's `/ws` endpoint** for real-time event subscription.
 
 ```mermaid
 sequenceDiagram
@@ -401,6 +401,31 @@ POST /api/ma/queue/cmd
 
 → ma_client.ma_group_play(url, token, syncgroup_id)
 → POST {MA_API_URL}/api/players/cmd/play?player_id={syncgroup_id}
+```
+
+### Passwordless MA Auth (Addon Mode)
+
+In HA addon mode, the bridge creates an MA API token automatically via MA's Ingress JSONRPC — no manual token setup needed.
+
+```mermaid
+sequenceDiagram
+    participant UI as Browser (Ingress)
+    participant API as Bridge /api/ma/ha-silent-auth
+    participant HA as HA WebSocket
+    participant SUP as Supervisor API
+    participant MA as MA Ingress :8094
+
+    UI->>API: POST {ha_token, ma_url}
+    API->>HA: ws://homeassistant:8123/api/websocket
+    API->>HA: auth/current_user
+    HA-->>API: {id, name, is_admin}
+    API->>SUP: GET /addons/{slug}/info
+    SUP-->>API: {hostname, ingress_port}
+    API->>MA: POST /api (JSONRPC auth/token/create)
+    Note over API,MA: X-Remote-User-ID, X-Remote-User-Name headers
+    MA-->>API: long-lived JWT (10-year)
+    API->>API: save token to config.json
+    API-->>UI: {success: true, username: "..."}
 ```
 
 ---

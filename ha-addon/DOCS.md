@@ -75,8 +75,8 @@ simultaneously.
 
 | Option | Type | Default | Description |
 |---|---|---|---|
-| `ma_api_url` | string | _(empty)_ | Music Assistant REST API URL (e.g. `http://192.168.1.100:8095`). Required only when `volume_via_ma` is enabled. |
-| `ma_api_token` | string | _(empty)_ | Authentication token for the MA API. |
+| `ma_api_url` | string | _(empty)_ | Music Assistant REST API URL (e.g. `http://192.168.1.100:8095`). Auto-detected in addon mode. |
+| `ma_api_token` | string | _(empty)_ | MA API token. **In addon mode** — click "Sign in with Home Assistant" in the web UI to create one automatically (no manual setup needed). For Docker/LXC — create a token in MA → Settings → API Tokens and paste it here. |
 | `volume_via_ma` | bool | `true` | Route volume commands through the MA API instead of controlling PulseAudio directly. Keeps MA and the speaker in sync. |
 
 ### Bluetooth devices
@@ -158,6 +158,9 @@ The web interface provides:
 - **Bluetooth scanning** — discover and pair new Bluetooth devices.
 - **Configuration** — edit settings without restarting (some changes require a
   restart to take effect).
+- **Music Assistant integration** — connect to MA with one click via
+  "Sign in with Home Assistant" (Configuration → Advanced settings). The bridge
+  creates a long-lived MA API token automatically — no manual token setup needed.
 - **Diagnostics** — system info, adapter status, and log viewer.
 
 If `auth_enabled` is set to `true`, the web UI is protected by a password.

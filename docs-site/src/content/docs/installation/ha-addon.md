@@ -57,6 +57,10 @@ description: Step-by-step installation of Sendspin Bluetooth Bridge as a Home As
 
    Click **Start**. The addon will appear in the HA sidebar.
 
+5. **Connect to Music Assistant**
+
+   Open the web UI → Configuration → Advanced settings → click **🏠 Sign in with Home Assistant**. The bridge creates an MA API token automatically — enabling now-playing metadata, transport controls, and group volume sync.
+
 </Steps>
 
 ## Opening the web interface

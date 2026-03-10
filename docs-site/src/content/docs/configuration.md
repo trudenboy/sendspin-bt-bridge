@@ -28,8 +28,8 @@ Go to **Settings → Add-ons → Sendspin Bluetooth Bridge → Configuration**.
 | **bt_check_interval** | Reconnect polling interval in seconds (used when D-Bus events are unavailable). Default `10`. |
 | **bt_max_reconnect_fails** | Stop retrying reconnects after N consecutive failures. `0` = retry forever. |
 | **auth_enabled** | Toggle — enables password protection for the web UI. |
-| **ma_api_url** | Music Assistant REST API base URL (e.g. `http://192.168.1.10:8123`). Required for now-playing metadata, transport controls, and group play. |
-| **ma_api_token** | Home Assistant long-lived access token for the MA API. Generate in HA: **Profile → Long-lived access tokens**. |
+| **ma_api_url** | Music Assistant REST API URL (e.g. `http://192.168.1.10:8095`). Auto-detected in addon mode. |
+| **ma_api_token** | MA API token. **Auto-created** via "Sign in with Home Assistant" in the web UI — no manual setup needed in addon mode. For Docker/LXC create manually in MA → Settings → API Tokens. |
 | **volume_via_ma** | Toggle — route volume/mute through MA API (keeps MA UI in sync). Disable to use direct PulseAudio only. Default: on. |
 | **log_level** | Log verbosity (`info` or `debug`). Can also be changed at runtime via the web UI without a restart. |
 
@@ -74,8 +74,8 @@ After editing options, click **Save** at the bottom of the Options section. The 
 | `BT_CHECK_INTERVAL` | integer | `10` | BT polling interval in seconds when D-Bus is unavailable |
 | `BT_MAX_RECONNECT_FAILS` | integer | `0` | Auto-disable BT management after N consecutive failures. `0` = retry forever |
 | `AUTH_ENABLED` | boolean | `false` | Enable password protection for the web UI |
-| `MA_API_URL` | string | `""` | Music Assistant REST API base URL (e.g. `http://192.168.1.10:8123`). Required for now-playing metadata, transport controls, and group play via MA |
-| `MA_API_TOKEN` | string | `""` | Home Assistant long-lived access token for the MA API. Generate in HA: **Profile → Long-lived access tokens** |
+| `MA_API_URL` | string | `""` | Music Assistant REST API base URL (e.g. `http://192.168.1.10:8095`). Auto-detected in addon mode |
+| `MA_API_TOKEN` | string | `""` | MA API token. Auto-created via "Sign in with Home Assistant" in addon mode; for Docker/LXC create manually in MA → Settings → API Tokens |
 | `VOLUME_VIA_MA` | boolean | `true` | Route volume/mute changes through the MA API when MA is connected. Keeps the MA UI in sync with the bridge. Set to `false` to always use direct PulseAudio (`pactl`) |
 | `LOG_LEVEL` | string | `"INFO"` | Log verbosity (`INFO` or `DEBUG`). Also changeable at runtime via `POST /api/settings/log_level` without a restart |
 | `BT_CHURN_THRESHOLD` | integer | `0` | Number of reconnections within the churn window that trigger auto-disable of BT management. `0` = disabled |

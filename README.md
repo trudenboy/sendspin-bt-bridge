@@ -34,6 +34,7 @@ A Bluetooth bridge for [Music Assistant](https://www.music-assistant.io/) — co
 - **Keepalive silence** — optional periodic silence bursts to prevent BT speaker auto-off (`keepalive_interval`)
 
 ### 🎵 Music Assistant Integration
+- **Passwordless auth in addon mode** — one-click "Sign in with Home Assistant" creates a long-lived MA token via Ingress JSONRPC — no credentials needed
 - **Now-playing metadata** — track, artist, album art, queue position from MA REST API
 - **Transport controls** — prev / next / shuffle / repeat for syncgroup and solo players
 - **Group volume** — delta-based `group_volume` preserving relative speaker proportions

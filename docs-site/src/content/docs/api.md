@@ -170,7 +170,20 @@ Toggle mute on a device.
 
 ## Music Assistant Integration
 
-These endpoints require `MA_API_URL` and `MA_API_TOKEN` to be configured.
+These endpoints require `MA_API_URL` and `MA_API_TOKEN` to be configured (auto-filled via "Sign in with Home Assistant" in addon mode, or set manually).
+
+### `POST /api/ma/ha-silent-auth`
+
+Creates an MA API token silently using the HA session token. Available only in addon mode (running as an HA addon with Ingress).
+
+**Body:** `{ "ha_token": "<HA access token>", "ma_url": "http://192.168.1.x:8095" }`
+
+**Flow:** The bridge connects to HA WebSocket with the provided token, calls `auth/current_user` to get user info, then POSTs a JSONRPC request to MA's Ingress endpoint with `X-Remote-User-*` headers to create a long-lived token. The token is saved to `config.json` and the MA API connection is established immediately.
+
+**Response:**
+```json
+{ "success": true, "url": "http://192.168.1.x:8095", "username": "Renso", "message": "Connected to Music Assistant via Home Assistant." }
+```
 
 ### `GET /api/ma/groups`
 
