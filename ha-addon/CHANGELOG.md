@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.17.7] - 2026-03-10
+
+### Fixed
+- OAuth flow now obtains long-lived MA API token (10-year) instead of short-lived session JWT
+- Fixed token corruption when MA callback URL contains Vue Router hash fragment
+- Silent auth skips OAuth when existing token is still valid for the same MA instance
+
 ## [2.17.6] - 2026-03-10
 
 ### Fixed

@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.17.7] - 2026-03-10
+
+### Fixed
+- **Long-lived MA API token** — the OAuth flow now exchanges the short-lived session JWT (30-day, sliding) for a proper long-lived MA API token (10-year) via WebSocket `auth/token/create` command; previously the bridge stored the session token which expired and could not be used for MA API calls
+- **Token regex corruption** — fixed regex in `_ma_callback_exchange` that captured Vue Router hash fragment (`#/`) as part of the JWT token, corrupting it
+- **Idempotent token acquisition** — silent auth checks if an existing valid token already matches the target MA URL before initiating OAuth, preventing duplicate long-lived tokens on page reload or addon restart
+
 ## [2.17.6] - 2026-03-10
 
 ### Fixed

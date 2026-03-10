@@ -2,7 +2,7 @@
 
 A history of the architectural and functional evolution of sendspin-bt-bridge — for readers familiar with Home Assistant, Music Assistant, and multiroom audio setups.
 
-**Period:** January 1 – March 10, 2026 · **Total commits:** ~600 · **Versions:** 1.0.0 → 2.17.6
+**Period:** January 1 – March 10, 2026 · **Total commits:** ~600 · **Versions:** 1.0.0 → 2.17.7
 
 ---
 
@@ -511,6 +511,26 @@ A full-codebase code review surfaced 42 issues across security, thread safety, e
 **armv7l compatibility (post-release hotfix):** PyAV 12.3.0 (the only version that compiles on armv7l) lacks `AudioLayout.nb_channels`, causing the sendspin FLAC decoder to crash with `AttributeError` — total audio silence. A monkey-patch in `services/daemon_process.py` replaces `FlacDecoder._append_frame_to_pcm` with a version using `len(frame.layout.channels)`. The patch auto-detects PyAV version at startup and is a no-op on PyAV 13+.
 
 **Raspberry Pi & Docker UX (v2.16.2):** After the first community user tried Docker on a Raspberry Pi and hit configuration issues, we added: a pre-flight diagnostic script (`scripts/rpi-check.sh`) that checks Docker, Bluetooth, audio, UID, and architecture before `docker compose up`; an auth-free `/api/preflight` endpoint for programmatic setup verification; a structured startup diagnostics table in `entrypoint.sh` (visible in `docker logs`); a dedicated Raspberry Pi installation guide (en/ru); and fixed stale Docker docs that still listed removed `SYS_ADMIN` capability and were missing `PULSE_SERVER`/`XDG_RUNTIME_DIR` env vars.
+
+---
+
+## March 10, 2026 — HA OAuth & MA API authentication (v2.17.0–v2.17.7, ~20 commits)
+
+### HA OAuth popup flow for MA addon (v2.17.3)
+
+In addon mode, MA is on a private Docker network — unreachable from the user's browser. The bridge added an HA OAuth popup flow: the web UI opens a popup to the HA OAuth authorize endpoint, HA authenticates the user (including 2FA/TOTP), and the bridge exchanges the resulting code for an MA session token via server-side HTTP calls through HA Ingress. This eliminates the need for users to manually configure `MA_API_TOKEN`.
+
+### Silent MA auth via Ingress (v2.17.4)
+
+The popup flow required user interaction. In Ingress mode the HA session token is already available in `localStorage` (`hassTokens`). The bridge now reads it automatically on page load, calls `/api/ma/ha-silent-auth` which performs the full OAuth exchange server-side — zero clicks. Auto-discover also runs on page load, so the MA connection is established transparently.
+
+### Long-lived MA API token (v2.17.7)
+
+Investigation of persistent "authentication failed" errors in MA monitor revealed a fundamental issue: the OAuth callback returns a short-lived session JWT (30-day sliding expiry, `is_long_lived=False`), not an API token. Additionally, a regex bug captured `#/` (Vue Router hash fragment) as part of the JWT, corrupting it.
+
+The fix: after obtaining the session JWT via OAuth, the bridge connects to MA's WebSocket API, authenticates with the session token, and calls `auth/token/create` to obtain a proper long-lived JWT (10-year expiry). The session token is never persisted.
+
+Idempotency: before initiating OAuth, `_validate_ma_token()` checks if the existing token is still valid for the target MA URL — preventing duplicate long-lived tokens on page reload or addon restart.
 
 ---
 
