@@ -1633,8 +1633,8 @@ async function maDiscover() {
                 msgEl.textContent = '\u2714 Found: MA v' + (s.version || '?') + ' at ' + s.url;
                 msgEl.style.color = 'var(--success-color, green)';
             }
-            // Detect HA addon mode — use bridge's own flag (not MA server's)
-            if (data.is_addon) {
+            // Detect HA addon mode — check both bridge flag and MA server flag
+            if (data.is_addon || s.homeassistant_addon) {
                 _setMaAddonMode(true);
             }
         } else {
@@ -1748,6 +1748,14 @@ async function maLogin() {
                 msgEl.style.color = 'var(--success-color, green)';
             }
             showToast('\u2714 Connected to Music Assistant', 'success');
+        } else if (resp.status === 401) {
+            // Builtin login failed — try HA OAuth with same credentials
+            if (msgEl) { msgEl.textContent = 'Trying Home Assistant login...'; msgEl.style.color = 'var(--secondary-text-color)'; }
+            var ok = await _maHaLoginWithCreds(url, user, pass, msgEl);
+            if (!ok && msgEl) {
+                msgEl.textContent = '\u2716 ' + (data.error || 'Login failed');
+                msgEl.style.color = 'var(--error-color, red)';
+            }
         } else {
             if (msgEl) {
                 msgEl.textContent = '\u2716 ' + (data.error || 'Login failed');
@@ -1780,6 +1788,68 @@ function _setMaStatus(connected, username, url) {
 function toggleMaForm(show) {
     var form = document.getElementById('ma-conn-form');
     if (form) form.style.display = show ? '' : 'none';
+    if (show) _detectMaAddonMode();
+}
+
+async function _detectMaAddonMode() {
+    var urlInput = document.getElementById('ma-login-url');
+    var maUrl = urlInput ? (urlInput.value || '').trim() : '';
+    if (!maUrl) return;
+    try {
+        var resp = await fetch(maUrl + '/info', { signal: AbortSignal.timeout(5000) });
+        if (!resp.ok) return;
+        var info = await resp.json();
+        if (info.homeassistant_addon) _setMaAddonMode(true);
+    } catch (_) { /* ignore — not critical */ }
+}
+
+async function _maHaLoginWithCreds(maUrl, username, password, msgEl) {
+    try {
+        var resp = await fetch(API_BASE + '/api/ma/ha-login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ step: 'init', ma_url: maUrl, username: username, password: password }),
+        });
+        var data = await resp.json().catch(function() { return {}; });
+        if (!data.success) {
+            if (msgEl) { msgEl.textContent = '\u2716 ' + (data.error || 'HA login failed'); msgEl.style.color = 'var(--error-color, red)'; }
+            return false;
+        }
+        if (data.step === 'done') {
+            document.getElementById('ma-login-pass').value = '';
+            _setMaStatus(true, data.username, data.url);
+            if (msgEl) { msgEl.textContent = '\u2714 ' + (data.message || 'Connected via HA'); msgEl.style.color = 'var(--success-color, green)'; }
+            showToast('\u2714 Connected to Music Assistant via HA', 'success');
+            return true;
+        }
+        if (data.step === 'mfa') {
+            var code = prompt('Enter ' + (data.mfa_module_name || 'TOTP') + ' code:');
+            if (!code) { if (msgEl) { msgEl.textContent = 'MFA cancelled'; msgEl.style.color = 'var(--error-color, red)'; } return false; }
+            var resp2 = await fetch(API_BASE + '/api/ma/ha-login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    step: 'mfa', flow_id: data.flow_id, ha_url: data.ha_url,
+                    client_id: data.client_id, state: data.state,
+                    code: code, ma_url: maUrl, username: username,
+                }),
+            });
+            var data2 = await resp2.json().catch(function() { return {}; });
+            if (data2.success && data2.step === 'done') {
+                document.getElementById('ma-login-pass').value = '';
+                _setMaStatus(true, data2.username, data2.url);
+                if (msgEl) { msgEl.textContent = '\u2714 ' + (data2.message || 'Connected via HA'); msgEl.style.color = 'var(--success-color, green)'; }
+                showToast('\u2714 Connected to Music Assistant via HA', 'success');
+                return true;
+            }
+            if (msgEl) { msgEl.textContent = '\u2716 ' + (data2.error || 'MFA failed'); msgEl.style.color = 'var(--error-color, red)'; }
+            return false;
+        }
+        return false;
+    } catch (err) {
+        if (msgEl) { msgEl.textContent = '\u2716 HA login error: ' + err.message; msgEl.style.color = 'var(--error-color, red)'; }
+        return false;
+    }
 }
 
 function _isIngress() {
