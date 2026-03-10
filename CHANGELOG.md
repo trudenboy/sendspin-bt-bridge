@@ -5,10 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.17.1] - 2026-03-10
+
+### Fixed
+- **MA mDNS discovery** — changed service type from `_music-assistant._tcp` to `_mass._tcp` (matches what Music Assistant actually advertises); discovery now works on HAOS and other installations
+- **MA login hint** — clarified that Music Assistant credentials are required (not Home Assistant login); added hint pointing to MA → Settings → Users
+
 ## [2.17.0] - 2026-03-10
 
 ### Added
-- **MA auto-discovery** — `GET /api/ma/discover` finds Music Assistant servers on local network via mDNS (`_music-assistant._tcp`)
+- **MA auto-discovery** — `GET /api/ma/discover` finds Music Assistant servers on local network via mDNS (`_mass._tcp`)
 - **MA auto-login** — `POST /api/ma/login` with username/password creates long-lived token automatically (no manual JWT copy needed)
 - **MA connect UI** — new "Music Assistant Integration" panel in web UI with Discover button, username/password login, connection status; manual JWT token entry preserved as collapsible fallback
 - **`services/ma_discovery.py`** — mDNS discovery module using zeroconf; `discover_ma_servers()` and `validate_ma_url()` helpers
