@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.20.1] - 2026-03-10
+
+### Changed
+- **Delay replaces Format in device row** — Delay (ms) shown in the main device row; Format moved to the expandable detail sub-row
+- **Adapters panel restyled** — bordered card with hover highlight, consistent with paired/scan device lists
+- **Adapters toolbar** — Refresh and +Add buttons moved below the table (consistent with Devices section)
+- **Static Save & Restart button** — always-visible button at the bottom of the Configuration form as a safety net
+
 ## [2.20.0] - 2026-03-10
 
 ### Changed
