@@ -157,16 +157,16 @@
                     <label>Devices</label>
                     <div class="bt-table-wrap">
                         <div class="bt-header">
-                            <span>Player Name</span><span>MAC Address</span>
-                            <span>Adapter</span><span>Format</span><span></span><span></span>
+                            <span></span><span>Player Name</span><span>MAC Address</span>
+                            <span>Adapter</span><span>Format</span><span></span>
                         </div>
                         <div id="bt-devices-table"></div>
                     </div>
                     <div class="bt-toolbar">
-                        <button type="button" id="add-dev-btn" onclick="addBtDeviceRow()" class="btn btn-sm">+ Add Device</button>
                         <button type="button" onclick="startBtScan()" class="btn btn-sm btn-scan" id="scan-btn">
                             &#128269; Scan
                         </button>
+                        <button type="button" id="add-dev-btn" onclick="addBtDeviceRow()" class="btn btn-sm">+ Add Device</button>
                         <span id="scan-status" class="scan-badge"></span>
                     </div>
                     <div id="paired-box" class="paired-box" style="display:none;">

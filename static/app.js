@@ -1324,6 +1324,7 @@ function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabl
         if (kaVal > 0 && kaVal < 30) kaVal = 30;
     }
     row.innerHTML =
+        '<button type="button" class="bt-expand-btn" title="Show advanced fields">&#9654;</button>' +
         '<input type="text" placeholder="Player Name" class="bt-name" value="' +
             escHtmlAttr(name || '') + '">' +
         '<input type="text" placeholder="AA:BB:CC:DD:EE:FF" class="bt-mac" value="' +
@@ -1331,7 +1332,6 @@ function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabl
         '<select class="bt-adapter">' + btAdapterOptions(adapter || '') + '</select>' +
         '<input type="text" class="bt-preferred-format" placeholder="flac:44100:16:2" title="codec:samplerate:bitdepth:channels" value="' +
             escHtmlAttr(fmtVal) + '">' +
-        '<button type="button" class="bt-expand-btn" title="Show advanced fields">&#9654;</button>' +
         '<button type="button" class="btn-remove-dev">\u00d7</button>';
 
     // Detail sub-row with advanced fields
@@ -1367,12 +1367,7 @@ function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabl
         this.classList.toggle('open', !open);
     });
 
-    // Auto-expand if any advanced field has a non-default value
-    var hasAdvanced = (listenHost && listenHost.trim()) || portVal || delayVal || kaVal;
-    if (hasAdvanced) {
-        detail.style.display = 'grid';
-        row.querySelector('.bt-expand-btn').classList.add('open');
-    }
+    // Keep devices collapsed by default
 
     wrap.appendChild(row);
     wrap.appendChild(detail);
@@ -1469,7 +1464,7 @@ async function startBtScan() {
             listDiv.innerHTML = devices.map(function(d, i) {
                 return '<div class="scan-result-item" data-scan-idx="' + i + '">' +
                     '<span class="scan-result-mac">' + escHtml(d.mac) + '</span>' +
-                    '<span>' + escHtml(d.name) + '</span>' +
+                    '<span class="scan-result-name">' + escHtml(d.name) + '</span>' +
                     '<button type="button" style="padding:3px 10px;' +
                         'background:var(--primary-color);color:white;border:none;border-radius:4px;' +
                         'cursor:pointer;font-size:12px;">Add</button>' +
@@ -1536,7 +1531,7 @@ async function loadPairedDevices() {
             var displayName = /^RSSI:/i.test(d.name) ? 'Unknown device' : d.name;
             return '<div class="scan-result-item" data-paired-idx="' + idx + '">' +
                 '<span class="scan-result-mac">' + escHtml(d.mac) + '</span>' +
-                '<span>' + escHtml(displayName) + '</span>' +
+                '<span class="scan-result-name">' + escHtml(displayName) + '</span>' +
                 '<button type="button" style="padding:3px 10px;' +
                     'background:var(--primary-color);color:white;border:none;border-radius:4px;' +
                     'cursor:pointer;font-size:12px;">Add</button>' +
