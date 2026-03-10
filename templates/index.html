@@ -140,15 +140,12 @@
                 <!-- Bluetooth Adapters panel -->
                 <div class="form-group">
                     <label>Adapters</label>
-                    <div class="adapters-card">
-                        <div class="adapters-card-header">
-                            <span>Detected &amp; manual adapters</span>
-                            <div>
-                                <button type="button" class="btn btn-sm btn-refresh" onclick="loadBtAdapters()">&#x21BA; Refresh</button>
-                                <button type="button" class="btn btn-sm" onclick="addManualAdapterRow('','','')">+ Add</button>
-                            </div>
-                        </div>
+                    <div class="adapters-box">
                         <div id="adapters-table"></div>
+                    </div>
+                    <div class="bt-toolbar">
+                        <button type="button" class="btn btn-sm btn-refresh" onclick="loadBtAdapters()">&#x21BA; Refresh</button>
+                        <button type="button" class="btn btn-sm" onclick="addManualAdapterRow('','','')">+ Add</button>
                     </div>
                 </div>
 
@@ -158,7 +155,7 @@
                     <div class="bt-table-wrap">
                         <div class="bt-header">
                             <span></span><span>Player Name</span><span>MAC Address</span>
-                            <span>Adapter</span><span>Format</span><span></span>
+                            <span>Adapter</span><span>Delay (ms)</span><span></span>
                         </div>
                         <div id="bt-devices-table"></div>
                     </div>
@@ -316,6 +313,11 @@
             {% endif %}
 
         </form>
+
+        <!-- Static save & restart button -->
+        <div class="config-static-save">
+            <button type="button" class="btn btn-sm btn-restart" onclick="saveAndRestart()">Save &amp; Restart</button>
+        </div>
     </details>
 
     <!-- Sticky save bar (shown when config is dirty) -->

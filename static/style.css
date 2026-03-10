@@ -350,23 +350,19 @@
         .paired-box-title { font-size: 12px; color: var(--secondary-text-color); margin-bottom: 6px; }
 
         /* Adapters panel */
-        .adapters-card {
-            border: 1px solid var(--divider-color); border-radius: 8px;
-            margin-bottom: 18px; overflow: hidden;
+        /* Adapters panel */
+        .adapters-box {
+            border: 1px solid var(--divider-color); border-radius: 6px;
+            padding: 6px 10px; background: var(--secondary-background-color);
         }
-        .adapters-card-header {
-            display: flex; align-items: center; justify-content: space-between;
-            padding: 10px 14px; background: var(--secondary-background-color);
-            border-bottom: 1px solid var(--divider-color); font-weight: 600;
-            color: var(--primary-text-color); font-size: 13px;
-        }
-        .adapters-card-header div { display: flex; gap: 8px; }
         .adapter-row {
             display: grid;
             grid-template-columns: 5rem 1fr 1.4fr 2.5rem 2rem;
             gap: 8px; align-items: center;
-            padding: 7px 14px; border-bottom: 1px solid var(--divider-color); font-size: 13px;
+            padding: 7px 10px; border-bottom: 1px solid var(--divider-color); font-size: 13px;
+            cursor: default; border-radius: 4px; transition: background 0.15s;
         }
+        .adapter-row:hover { background: var(--primary-color-alpha, rgba(3,169,244,0.08)); }
         .adapter-row:last-child { border-bottom: none; }
         .adapter-row.detected { color: var(--primary-text-color); }
         .adapter-row input {
@@ -673,6 +669,10 @@
         .config-save-bar .dirty-label {
             font-size: 13px; color: var(--warning-color); font-weight: 500; margin-right: 8px;
         }
+        .config-static-save {
+            text-align: right; padding: 16px 0 0; margin-top: 8px;
+            border-top: 1px solid var(--divider-color);
+        }
 
         /* BT device detail sub-row */
         .bt-detail-row {
@@ -746,8 +746,6 @@
             .bt-header, .bt-device-row { min-width: 480px; }
 
             /* Adapters panel → horizontal scroll */
-            .adapters-card { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-            .adapters-card-header { min-width: 420px; }
             .adapter-row { min-width: 420px; }
 
             /* Touch targets */

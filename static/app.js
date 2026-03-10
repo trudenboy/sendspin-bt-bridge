@@ -1330,8 +1330,8 @@ function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabl
         '<input type="text" placeholder="AA:BB:CC:DD:EE:FF" class="bt-mac" value="' +
             escHtmlAttr(mac || '') + '">' +
         '<select class="bt-adapter">' + btAdapterOptions(adapter || '') + '</select>' +
-        '<input type="text" class="bt-preferred-format" placeholder="flac:44100:16:2" title="codec:samplerate:bitdepth:channels" value="' +
-            escHtmlAttr(fmtVal) + '">' +
+        '<input type="number" class="bt-delay" title="Static delay. Negative = compensate latency" placeholder="0" value="' +
+            escHtmlAttr(String(delayVal)) + '" step="50">' +
         '<button type="button" class="btn-remove-dev">\u00d7</button>';
 
     // Detail sub-row with advanced fields
@@ -1339,15 +1339,15 @@ function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabl
     detail.className = 'bt-detail-row';
     detail.style.display = 'none';
     detail.innerHTML =
+        '<div><label>Format</label>' +
+            '<input type="text" class="bt-preferred-format" placeholder="flac:44100:16:2" title="codec:samplerate:bitdepth:channels" value="' +
+            escHtmlAttr(fmtVal) + '"></div>' +
         '<div><label>Listen Address</label>' +
             '<input type="text" class="bt-listen-host" placeholder="auto" title="IP address this player advertises" value="' +
             escHtmlAttr(listenHost || '') + '"></div>' +
         '<div><label>Port</label>' +
             '<input type="number" class="bt-listen-port" placeholder="8928" min="1024" max="65535" value="' +
             escHtmlAttr(String(portVal)) + '"></div>' +
-        '<div><label>Delay (ms)</label>' +
-            '<input type="number" class="bt-delay" title="Static delay. Negative = compensate latency" value="' +
-            escHtmlAttr(String(delayVal)) + '" step="50"></div>' +
         '<div><label>Keep-alive (s)</label>' +
             '<input type="number" class="bt-keepalive-interval" min="0" placeholder="0" ' +
             'title="0 = disabled, min 30 when enabled" value="' +
@@ -1382,15 +1382,15 @@ function collectBtDevices() {
         var name       = row.querySelector('.bt-name').value.trim();
         var mac        = row.querySelector('.bt-mac').value.trim().toUpperCase();
         var adapter    = row.querySelector('.bt-adapter').value;
-        var fmtEl      = row.querySelector('.bt-preferred-format');
-        var preferredFormat = fmtEl ? fmtEl.value.trim() : 'flac:44100:16:2';
+        var delayEl    = row.querySelector('.bt-delay');
+        var delay      = delayEl ? parseFloat(delayEl.value) : 0;
+        if (isNaN(delay)) delay = 0;
         // Advanced fields are in the detail sub-row
+        var fmtEl      = detail ? detail.querySelector('.bt-preferred-format') : null;
+        var preferredFormat = fmtEl ? fmtEl.value.trim() : 'flac:44100:16:2';
         var listenHost = detail ? (detail.querySelector('.bt-listen-host') || {}).value || '' : '';
         var portEl     = detail ? detail.querySelector('.bt-listen-port') : null;
         var listenPort = portEl && portEl.value.trim() ? parseInt(portEl.value, 10) : null;
-        var delayEl    = detail ? detail.querySelector('.bt-delay') : null;
-        var delay      = delayEl ? parseFloat(delayEl.value) : 0;
-        if (isNaN(delay)) delay = 0;
         var kaIntEl    = detail ? detail.querySelector('.bt-keepalive-interval') : null;
         var kaVal      = kaIntEl ? parseInt(kaIntEl.value, 10) : 0;
         if (isNaN(kaVal) || kaVal < 0) kaVal = 0;
