@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.17.1] - 2026-03-10
+
+### Fixed
+- **MA discovery not working** — wrong mDNS service type (`_music-assistant._tcp` → `_mass._tcp`); Discover button now finds MA servers correctly
+- **Login form confusion** — clarified that MA credentials are needed (not Home Assistant login); added hint to MA → Settings → Users
+
 ## [2.17.0] - 2026-03-10
 
 ### Added
