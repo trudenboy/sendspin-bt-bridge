@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.20.0] - 2026-03-10
+
+### Changed
+- **Advanced settings dissolved** — moved Listen Address, Port, Delay, and Keep-alive fields out of the separate Advanced panel into their proper sections (General, Bluetooth, Music Assistant); Advanced section removed entirely
+- **MA form auto-collapse** — when Music Assistant is connected, the configuration form collapses to a summary with a "Reconfigure" link; reduces visual noise for the common case
+- **Auth fields auto-hide** — password/secret fields hidden when authentication is disabled; shown only when toggled on
+- **BT device rows collapsed by default** — advanced detail sub-row starts hidden regardless of field values; expand chevron moved to the left side of each row for conventional tree-style interaction
+- **Scan/paired device list UX** — entire row is clickable (not just the Add button); hover highlight on rows; Add buttons aligned in a vertical column independent of device name length
+- **Toolbar button order** — Scan button moved before +Add Device for discovery-first workflow
+- **Adapter tooltip** — BT adapter select shows "Powered on/off" status on hover
+
+### Fixed
+- **False dirty state on page load** — config form no longer shows unsaved-changes indicator immediately after loading; `_configLoading` guard prevents programmatic field population from triggering dirty tracking
+- **Duplicate save buttons removed** — kept only the sticky bottom bar; added `padding-bottom: 80px` to prevent overlap with the last form field
+
 ## [2.19.0] - 2026-03-10
 
 ### Changed

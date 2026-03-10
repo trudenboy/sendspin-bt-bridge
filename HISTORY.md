@@ -2,7 +2,7 @@
 
 A history of the architectural and functional evolution of sendspin-bt-bridge — for readers familiar with Home Assistant, Music Assistant, and multiroom audio setups.
 
-**Period:** January 1 – March 10, 2026 · **Total commits:** ~635 · **Versions:** 1.0.0 → 2.19.0
+**Period:** January 1 – March 10, 2026 · **Total commits:** ~640 · **Versions:** 1.0.0 → 2.20.0
 
 ---
 
@@ -514,7 +514,7 @@ A full-codebase code review surfaced 42 issues across security, thread safety, e
 
 ---
 
-## March 10, 2026 — HA OAuth & MA API authentication (v2.17.0–v2.19.0, ~40 commits)
+## March 10, 2026 — HA OAuth & MA API authentication (v2.17.0–v2.20.0, ~45 commits)
 
 ### HA OAuth popup flow for MA addon (v2.17.3)
 
@@ -563,6 +563,12 @@ Three rapid-fire patches addressed real-world deployment issues discovered durin
 The Configuration section had grown organically and needed restructuring. Save buttons were in the middle of the form, Music Assistant Integration was buried inside Advanced settings (two clicks deep), the BT Devices table had 9 columns with 700px horizontal scroll on mobile, and labels were verbose paragraphs.
 
 The overhaul reorganized the form into clearly labeled sections — General, Bluetooth, Music Assistant (promoted to top level), Advanced, and Authentication — each with icon headings and visual separation. A sticky save bar now appears at the bottom when config has unsaved changes. The BT Devices table was split into a main row (Name, MAC, Adapter, Format) and an expandable detail sub-row for advanced fields (Listen Address, Port, Delay, Keep-alive) that auto-opens when non-default values exist.
+
+### Configuration UX polish and community feedback (v2.20.0)
+
+Community feedback on the v2.19.0 release drove a second round of polish. Users noted that the Add button in the scan/paired device list was too far from the device name, making it hard to target. The Advanced settings panel (which now contained only 4 fields) was dissolved entirely — fields were moved into their respective sections and the extra panel removed.
+
+Key changes: the MA form now auto-collapses to a summary when connected (a "Reconfigure" link expands it); auth fields hide when disabled; BT device expand chevron was moved to the left side of the row for conventional tree-style interaction; devices start collapsed by default; scan/paired device rows became fully clickable with hover highlight; the Scan button was moved before +Add Device for a discovery-first workflow. A `_configLoading` guard was added to prevent programmatic field population from triggering the dirty-state indicator on page load.
 
 ---
 
