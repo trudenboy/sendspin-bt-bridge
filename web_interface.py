@@ -117,7 +117,7 @@ def _set_cache_headers(response):
 
 
 # Public paths that never require authentication
-_PUBLIC_PATHS = {"/login", "/logout", "/api/health"}
+_PUBLIC_PATHS = {"/login", "/logout", "/api/health", "/api/preflight"}
 
 
 @app.before_request

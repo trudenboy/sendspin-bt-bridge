@@ -2035,6 +2035,83 @@ def api_health():
     return jsonify({"ok": True})
 
 
+@api_bp.route("/api/preflight")
+def api_preflight():
+    """Setup verification endpoint — no auth required, no sensitive data.
+
+    Returns platform, audio, bluetooth, and D-Bus status for
+    quick troubleshooting without exposing device details.
+    """
+    import platform as _platform
+
+    # Platform
+    arch = _platform.machine()
+
+    # Audio
+    audio_info: dict = {"system": "unknown", "socket": None, "sinks": 0}
+    try:
+        srv = get_server_name()
+        if srv and "pipewire" in srv.lower():
+            audio_info["system"] = "pipewire"
+        elif srv:
+            audio_info["system"] = "pulseaudio"
+        pulse_sock = os.environ.get("PULSE_SERVER", "")
+        if pulse_sock:
+            audio_info["socket"] = pulse_sock
+        sinks = list_sinks()
+        audio_info["sinks"] = len(sinks) if sinks else 0
+    except Exception:
+        pass
+
+    # Bluetooth
+    bt_info: dict = {"controller": False, "adapter": None, "paired_devices": 0}
+    try:
+        result = subprocess.run(
+            ["bluetoothctl", "list"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if "Controller" in result.stdout:
+            bt_info["controller"] = True
+            bt_info["adapter"] = result.stdout.split()[1] if result.stdout.split() else None
+        paired = subprocess.run(
+            ["bluetoothctl", "devices", "Paired"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        bt_info["paired_devices"] = paired.stdout.strip().count("Device")
+    except Exception:
+        pass
+
+    # D-Bus
+    dbus_ok = os.path.exists("/var/run/dbus/system_bus_socket") or os.path.exists("/run/dbus/system_bus_socket")
+
+    # Memory
+    mem_mb = 0
+    try:
+        with open("/proc/meminfo") as f:
+            for line in f:
+                if line.startswith("MemTotal:"):
+                    mem_mb = int(line.split()[1]) // 1024
+                    break
+    except Exception:
+        pass
+
+    return jsonify(
+        {
+            "ok": True,
+            "platform": arch,
+            "audio": audio_info,
+            "bluetooth": bt_info,
+            "dbus": dbus_ok,
+            "memory_mb": mem_mb,
+            "version": VERSION,
+        }
+    )
+
+
 @api_bp.route("/api/version")
 def api_version():
     """Return git version information."""

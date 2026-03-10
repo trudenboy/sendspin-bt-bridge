@@ -26,3 +26,5 @@ Roadmap for HA addon standards compliance and improvements.
 
 - [ ] **Create `ha-addon/logo.png`** — wide-format logo for HA store listing
 - [ ] **Add HA discovery integration** — support HA discovery protocol for auto-configuring Music Assistant connection
+- [ ] **One-liner RPi installer** — `curl | bash` script that installs Docker (if missing), generates `docker-compose.yml` with detected settings, runs interactive BT pairing, starts container
+- [ ] **Web UI setup wizard** — first-run wizard in the web dashboard: detect speakers, select, pair, configure MA connection — all from the browser without editing config files
