@@ -2,7 +2,7 @@
 
 A history of the architectural and functional evolution of sendspin-bt-bridge — for readers familiar with Home Assistant, Music Assistant, and multiroom audio setups.
 
-**Period:** January 1 – March 10, 2026 · **Total commits:** ~600 · **Versions:** 1.0.0 → 2.17.10
+**Period:** January 1 – March 10, 2026 · **Total commits:** ~600 · **Versions:** 1.0.0 → 2.18.0
 
 ---
 
@@ -514,7 +514,7 @@ A full-codebase code review surfaced 42 issues across security, thread safety, e
 
 ---
 
-## March 10, 2026 — HA OAuth & MA API authentication (v2.17.0–v2.17.10, ~25 commits)
+## March 10, 2026 — HA OAuth & MA API authentication (v2.17.0–v2.18.0, ~30 commits)
 
 ### HA OAuth popup flow for MA addon (v2.17.3)
 
@@ -541,6 +541,12 @@ In addon mode with `SENDSPIN_SERVER=auto`, the MA server discovery relied on mDN
 The previous approach had a fundamental problem: addon mode detection depended on the MA server's `homeassistant_addon` field from its `/info` endpoint — but when discovery used the mDNS path (via `_enrich_with_server_info` instead of `validate_ma_url`), this field was missing, so addon mode was never detected and silent auth never triggered.
 
 The fix simplified the entire flow. The bridge now reports its own `is_addon` flag (from `_detect_runtime()`) in the discover response — no dependency on MA server metadata. In addon mode, discovery tries `http://homeassistant.local:8095` first (Supervisor internal DNS — nearly instant), skipping SENDSPIN_SERVER heuristics and mDNS entirely. The fully-automatic silent auth on page load was replaced with a semi-automatic approach: the "Sign in with Home Assistant" button is shown after discover detects addon mode, and the user clicks it explicitly. In Ingress mode this performs one-click silent auth (no popup); outside Ingress it opens the OAuth popup.
+
+### Passwordless MA auth via Ingress JSONRPC (v2.18.0)
+
+The silent auth in v2.17.4–v2.17.12 attempted to POST to HA's `/auth/authorize` with a Bearer token to obtain an OAuth code — but HA's authorize endpoint is GET-only (it serves an HTML consent page) and returns HTTP 405. The popup fallback worked but required entering credentials.
+
+The v2.18.0 approach bypasses HA OAuth entirely. MA's Ingress server (port 8094) auto-authenticates requests via `X-Remote-User-ID` / `X-Remote-User-Name` headers — the same mechanism HA uses internally for Ingress traffic. Since both addons use `host_network: true`, the bridge can reach MA's Ingress port at `localhost:8094`. The flow: (1) frontend sends the HA access token from `hassTokens` in localStorage; (2) backend connects to HA's WebSocket API and calls `auth/current_user` to get the user's ID and username; (3) backend POSTs a JSONRPC request to MA's Ingress endpoint (`http://localhost:8094/api`) with the user headers, calling `auth/token/create`; (4) MA auto-authenticates the Ingress request and creates a long-lived 10-year JWT. The entire flow is invisible to the user — one button click, no credentials, no popup.
 
 ---
 

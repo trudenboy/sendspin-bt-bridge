@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.18.0] - 2026-03-10
+
+### Added
+- **Passwordless MA auth in addon mode** — when running as an HA addon, clicking "Sign in with Home Assistant" now creates an MA API token silently via Ingress JSONRPC — no credentials popup needed; the bridge reads the HA access token from the browser, verifies the user via HA WebSocket, and calls MA's Ingress endpoint to create a long-lived token
+
+### Removed
+- Removed broken `_ha_authorize_with_token()` — HA's `/auth/authorize` is GET-only and returns 405 for POST requests
+
 ## [2.17.12] - 2026-03-10
 
 ### Fixed
