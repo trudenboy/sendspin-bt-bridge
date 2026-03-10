@@ -1791,8 +1791,8 @@ async function _getHaAccessToken() {
 async function _maSilentAuth(maUrl) {
     var haToken = await _getHaAccessToken();
     if (!haToken) return false;
-    var msgEl = document.getElementById('ma-login-msg');
-    if (msgEl) { msgEl.textContent = 'Connecting via Home Assistant...'; msgEl.style.color = 'var(--secondary-text-color)'; }
+    var msgEl = document.getElementById('ma-ha-login-msg');
+    if (msgEl) { msgEl.textContent = 'Authenticating via Ingress…'; msgEl.style.color = 'var(--secondary-text-color)'; }
     try {
         var resp = await fetch(API_BASE + '/api/ma/ha-silent-auth', {
             method: 'POST',
@@ -1802,12 +1802,14 @@ async function _maSilentAuth(maUrl) {
         var data = await resp.json().catch(function() { return {}; });
         if (data.success) {
             _setMaStatus(true, data.username || '', data.url || maUrl);
-            showToast('\u2714 Auto-connected to Music Assistant', 'success');
-            if (msgEl) { msgEl.textContent = '\u2714 Connected automatically'; msgEl.style.color = 'var(--success-color, green)'; }
+            showToast('\u2714 Connected to Music Assistant', 'success');
+            if (msgEl) { msgEl.textContent = '\u2714 Connected'; msgEl.style.color = 'var(--success-color, green)'; }
             return true;
         }
+        if (msgEl) { msgEl.textContent = data.error || 'Silent auth failed'; msgEl.style.color = 'var(--error-color, red)'; }
     } catch (e) {
         console.warn('Silent MA auth failed:', e);
+        if (msgEl) { msgEl.textContent = 'Connection error'; msgEl.style.color = 'var(--error-color, red)'; }
     }
     return false;
 }

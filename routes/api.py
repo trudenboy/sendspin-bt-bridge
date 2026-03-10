@@ -1392,64 +1392,111 @@ def _save_ma_token_and_rediscover(ma_url: str, ma_token: str, username: str = ""
             pass
 
 
-def _ha_authorize_with_token(ha_url: str, ha_token: str, client_id: str, redirect_uri: str, oauth_state: str):
-    """POST to HA /auth/authorize with Bearer token to obtain an auth code.
+def _get_ha_user_via_ws(ha_token: str):
+    """Connect to HA WebSocket with an access token and return user info.
 
-    HA returns 302 to redirect_uri?code=AUTH_CODE — we extract the code
-    from the Location header without following the redirect.
+    Returns dict with keys: id, name, is_admin (or None on failure).
+    Uses the internal Supervisor DNS name in addon mode.
     """
-    import http.client
-    import urllib.parse as _up
-
-    parsed = _up.urlparse(ha_url)
-    hostname = parsed.hostname or "localhost"
     try:
-        if parsed.scheme == "https":
-            import ssl
+        from websockets.sync.client import connect as ws_connect
+    except ImportError:
+        logger.warning("websockets.sync.client not available")
+        return None
 
-            ctx = ssl.create_default_context()
-            conn: http.client.HTTPConnection = http.client.HTTPSConnection(
-                hostname, parsed.port or 443, timeout=10, context=ctx
-            )
-        else:
-            conn = http.client.HTTPConnection(hostname, parsed.port or 8123, timeout=10)
+    ha_ws_url = "ws://homeassistant:8123/api/websocket"
+    try:
+        with ws_connect(ha_ws_url, proxy=None, close_timeout=5) as ws:
+            hello = json.loads(ws.recv(timeout=5))
+            if hello.get("type") != "auth_required":
+                logger.warning("HA WS unexpected hello: %s", hello.get("type"))
+                return None
 
-        body = _up.urlencode({"client_id": client_id, "redirect_uri": redirect_uri, "state": oauth_state})
-        conn.request(
-            "POST",
-            "/auth/authorize",
-            body=body,
-            headers={
-                "Authorization": f"Bearer {ha_token}",
-                "Content-Type": "application/x-www-form-urlencoded",
-            },
-        )
-        resp = conn.getresponse()
-        resp.read()
-        conn.close()
+            ws.send(json.dumps({"type": "auth", "access_token": ha_token}))
+            auth_resp = json.loads(ws.recv(timeout=5))
+            if auth_resp.get("type") != "auth_ok":
+                logger.warning("HA WS auth failed: %s", auth_resp.get("message", ""))
+                return None
 
-        if resp.status in (301, 302, 303, 307, 308):
-            location = resp.getheader("Location", "")
-            if location:
-                params = _up.parse_qs(_up.urlparse(location).query)
-                return params.get("code", [""])[0] or None
-        logger.warning("HA authorize returned %s (expected 302)", resp.status)
+            ws.send(json.dumps({"id": 1, "type": "auth/current_user"}))
+            user_resp = json.loads(ws.recv(timeout=5))
+            result = user_resp.get("result", {})
+            if not result.get("id"):
+                logger.warning("HA WS auth/current_user returned no id")
+                return None
+
+            return {
+                "id": result["id"],
+                "name": result.get("name") or result.get("id"),
+                "is_admin": result.get("is_admin", False),
+            }
+    except Exception as exc:
+        logger.warning("HA WS user lookup failed: %s", exc)
+        return None
+
+
+_MA_INGRESS_PORT = 8094
+
+
+def _create_ma_token_via_ingress(ha_user_id: str, ha_username: str, ha_display_name: str = ""):
+    """Create a long-lived MA token via MA's Ingress JSONRPC endpoint.
+
+    MA's Ingress server (port 8094) auto-authenticates requests that carry
+    X-Remote-User-ID / X-Remote-User-Name headers.  We POST a JSONRPC call
+    to ``auth/token/create`` which works for any authenticated user.
+
+    Returns the MA token string on success, or None on failure.
+    """
+    import urllib.request as _ur
+
+    url = f"http://localhost:{_MA_INGRESS_PORT}/api"
+    headers = {
+        "Content-Type": "application/json",
+        "X-Remote-User-ID": ha_user_id,
+        "X-Remote-User-Name": ha_username,
+        "X-Remote-User-Display-Name": ha_display_name or ha_username,
+    }
+    payload = json.dumps(
+        {
+            "command": "auth/token/create",
+            "args": {"name": _MA_TOKEN_NAME},
+            "message_id": "1",
+        }
+    ).encode()
+
+    try:
+        req = _ur.Request(url, data=payload, headers=headers, method="POST")
+        with _ur.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read().decode())
+
+        if data.get("error"):
+            logger.warning("MA Ingress token/create error: %s", data["error"])
+            return None
+
+        token = data.get("result")
+        if token and isinstance(token, str):
+            logger.info("Created long-lived MA token via Ingress for user '%s'", ha_username)
+            return token
+
+        logger.warning("MA Ingress token/create unexpected result: %s", data)
         return None
     except Exception as exc:
-        logger.warning("HA authorize request failed: %s", exc)
+        logger.warning("MA Ingress JSONRPC failed: %s", exc)
         return None
 
 
 @api_bp.route("/api/ma/ha-silent-auth", methods=["POST"])
 def api_ma_ha_silent_auth():
-    """Silent auth: exchange HA access token for MA token (Ingress mode).
+    """Silent auth: create MA token via Ingress JSONRPC (addon mode).
 
-    When the bridge is accessed via HA Ingress, the browser shares HA's origin
-    and has hassTokens in localStorage.  The frontend sends the HA access_token
-    here; we use it to create an HA auth code and exchange it for an MA token.
+    Flow:
+    1. Frontend sends HA access token (from hassTokens localStorage)
+    2. Backend connects to HA WS → gets user_id, username
+    3. Backend POSTs JSONRPC to MA Ingress (port 8094) with user headers
+    4. MA auto-authenticates → auth/token/create → long-lived MA token
+    5. Backend saves token and triggers group rediscovery
 
-    Idempotent: if an existing long-lived token is valid for the same MA URL,
-    returns success without creating a new token.
+    Idempotent: if an existing long-lived token is valid, returns success.
 
     Request JSON: {"ha_token": "eyJ...", "ma_url": "http://...:8095"}
     """
@@ -1474,45 +1521,52 @@ def api_ma_ha_silent_auth():
                 }
             )
 
-    # 1. Get OAuth state from MA
-    oauth = _get_ma_oauth_params(ma_url)
-    if not oauth:
-        return jsonify({"success": False, "error": "MA does not support HA authentication"}), 400
-    ha_base, client_id, redirect_uri, oauth_state = oauth
-
-    # In addon mode, prefer internal HA URL for reliability
-    if _detect_runtime() == "ha_addon":
-        ha_base = "http://homeassistant:8123"
-
-    # 2. Create HA auth code using the user's access token
-    ha_code = _ha_authorize_with_token(ha_base, ha_token, client_id, redirect_uri, oauth_state)
-    if not ha_code:
+    # 1. Get HA user info via WebSocket
+    ha_user = _get_ha_user_via_ws(ha_token)
+    if not ha_user:
         return (
             jsonify(
                 {
                     "success": False,
-                    "error": "HA authorization failed — token may be expired",
+                    "error": "Could not verify HA user — token may be expired",
                 }
             ),
             401,
         )
 
-    # 3. Exchange HA auth code for MA session token
-    ma_session_token = _ma_callback_exchange(ma_url, ha_code, oauth_state)
-    if not ma_session_token:
-        return jsonify({"success": False, "error": "Failed to exchange HA code for MA token"}), 500
+    # 2. Create MA token via Ingress JSONRPC
+    ma_token = _create_ma_token_via_ingress(ha_user["id"], ha_user["name"], ha_user.get("name", ""))
+    if not ma_token:
+        return (
+            jsonify(
+                {
+                    "success": False,
+                    "error": "Could not create MA token via Ingress — is Music Assistant running?",
+                }
+            ),
+            502,
+        )
 
-    # 4. Exchange session token for a long-lived API token
-    ma_token = _exchange_for_long_lived_token(ma_url, ma_session_token)
+    # 3. Validate the new token against MA's regular port
+    if not _validate_ma_token(ma_url, ma_token):
+        return (
+            jsonify(
+                {
+                    "success": False,
+                    "error": "MA token created but validation failed",
+                }
+            ),
+            500,
+        )
 
-    # 5. Save and rediscover
-    _save_ma_token_and_rediscover(ma_url, ma_token)
+    # 4. Save and rediscover
+    _save_ma_token_and_rediscover(ma_url, ma_token, ha_user.get("name", ""))
 
     return jsonify(
         {
             "success": True,
             "url": ma_url,
-            "username": "",
+            "username": ha_user.get("name", ""),
             "message": "Connected to Music Assistant via Home Assistant.",
         }
     )
