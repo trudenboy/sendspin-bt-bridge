@@ -2,4 +2,5 @@
 ignored:
   - DL3008  # Pin versions in apt-get install
   - DL3013  # Pin versions in pip install
+  - DL3015  # Avoid additional packages by specifying --no-install-recommends
   - DL3042  # Avoid use of cache directory with pip
