@@ -250,10 +250,26 @@
                     <input type="password" id="ma-login-pass" placeholder="MA password" autocomplete="current-password" style="flex:1;">
                 </div>
 
-                <!-- HA addon hint (hidden by default, shown when addon detected) -->
-                <div id="ma-addon-hint" style="display:none;font-size:12px;color:var(--secondary-text-color);margin-bottom:8px;padding:8px;background:var(--bg-color);border-radius:4px;">
-                    ⓘ MA is running as HA addon — username/password login is not available.<br>
-                    Use the <b>manual JWT token</b> section below: create a token in MA → Settings → API Tokens.
+                <!-- HA addon hint → HA login form (hidden by default, shown when addon detected) -->
+                <div id="ma-addon-hint" style="display:none;margin-bottom:8px;">
+                    <div style="font-size:12px;color:var(--secondary-text-color);padding:6px 8px;background:var(--bg-color);border-radius:4px;margin-bottom:8px;">
+                        ⓘ MA is running as HA addon — sign in with your <b>Home Assistant</b> credentials.
+                    </div>
+                    <div id="ma-ha-creds" style="display:flex;gap:8px;margin-bottom:8px;">
+                        <input type="text" id="ma-ha-user" placeholder="HA username" autocomplete="username" style="flex:1;">
+                        <input type="password" id="ma-ha-pass" placeholder="HA password" autocomplete="current-password" style="flex:1;">
+                    </div>
+                    <div id="ma-ha-mfa" style="display:none;margin-bottom:8px;">
+                        <div style="font-size:12px;color:var(--secondary-text-color);margin-bottom:4px;">
+                            🔐 <span id="ma-ha-mfa-label">Enter authenticator code</span>
+                        </div>
+                        <input type="text" id="ma-ha-mfa-code" placeholder="6-digit code" autocomplete="one-time-code"
+                               inputmode="numeric" maxlength="6" style="width:140px;text-align:center;font-size:16px;letter-spacing:4px;">
+                    </div>
+                    <div style="display:flex;align-items:center;gap:8px;">
+                        <button type="button" class="btn btn-sm" onclick="maHaLogin()" id="ma-ha-login-btn" style="min-width:130px;">🏠 Sign in with HA</button>
+                        <span id="ma-ha-login-msg" style="font-size:12px;"></span>
+                    </div>
                 </div>
 
                 <div style="display:flex;align-items:center;gap:8px;">

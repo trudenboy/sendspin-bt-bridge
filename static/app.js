@@ -1639,11 +1639,120 @@ function _setMaAddonMode(isAddon) {
         if (creds) creds.style.display = 'none';
         if (hint) hint.style.display = 'block';
         if (loginBtn) loginBtn.style.display = 'none';
-        if (tokenDetails) tokenDetails.open = true;
     } else {
         if (creds) creds.style.display = 'flex';
         if (hint) hint.style.display = 'none';
         if (loginBtn) loginBtn.style.display = '';
+    }
+}
+
+// HA OAuth login for MA addon mode — state for MFA flow
+var _maHaState = {};
+
+async function maHaLogin() {
+    var btn = document.getElementById('ma-ha-login-btn');
+    var msgEl = document.getElementById('ma-ha-login-msg');
+    var mfaDiv = document.getElementById('ma-ha-mfa');
+    var maUrl = (document.getElementById('ma-login-url').value || '').trim();
+
+    if (!maUrl) {
+        if (msgEl) { msgEl.textContent = 'Discover MA server first'; msgEl.style.color = 'var(--error-color, red)'; }
+        return;
+    }
+
+    if (btn) btn.disabled = true;
+    if (msgEl) { msgEl.textContent = 'Authenticating...'; msgEl.style.color = 'var(--secondary-text-color)'; }
+
+    try {
+        var payload;
+        if (_maHaState.flow_id) {
+            // MFA step
+            var code = (document.getElementById('ma-ha-mfa-code').value || '').trim();
+            if (!code) {
+                if (msgEl) { msgEl.textContent = 'Enter the authentication code'; msgEl.style.color = 'var(--error-color, red)'; }
+                if (btn) btn.disabled = false;
+                return;
+            }
+            payload = {
+                step: 'mfa',
+                flow_id: _maHaState.flow_id,
+                ha_url: _maHaState.ha_url,
+                client_id: _maHaState.client_id,
+                state: _maHaState.state,
+                code: code,
+                username: _maHaState.username,
+                ma_url: maUrl,
+            };
+        } else {
+            // Init step
+            var user = (document.getElementById('ma-ha-user').value || '').trim();
+            var pass = document.getElementById('ma-ha-pass').value || '';
+            if (!user || !pass) {
+                if (msgEl) { msgEl.textContent = 'Enter HA username and password'; msgEl.style.color = 'var(--error-color, red)'; }
+                if (btn) btn.disabled = false;
+                return;
+            }
+            payload = { step: 'init', username: user, password: pass, ma_url: maUrl };
+        }
+
+        var resp = await fetch(API_BASE + '/api/ma/ha-login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        if (resp.status === 401 && !maUrl) { _handleUnauthorized(); return; }
+        var data = await resp.json().catch(function() { return {}; });
+
+        if (data.success && data.step === 'mfa') {
+            // Show MFA input
+            _maHaState = {
+                flow_id: data.flow_id,
+                ha_url: data.ha_url,
+                client_id: data.client_id,
+                state: data.state,
+                username: (document.getElementById('ma-ha-user').value || '').trim(),
+            };
+            if (mfaDiv) mfaDiv.style.display = 'block';
+            var label = document.getElementById('ma-ha-mfa-label');
+            if (label) label.textContent = 'Enter code from ' + (data.mfa_module_name || 'authenticator app');
+            if (btn) btn.textContent = '🔐 Verify code';
+            document.getElementById('ma-ha-pass').value = '';
+            var credsDiv = document.getElementById('ma-ha-creds');
+            if (credsDiv) credsDiv.style.display = 'none';
+            if (msgEl) { msgEl.textContent = '2FA required'; msgEl.style.color = 'var(--secondary-text-color)'; }
+            setTimeout(function() { document.getElementById('ma-ha-mfa-code').focus(); }, 100);
+        } else if (data.success && data.step === 'done') {
+            // Success!
+            _maHaState = {};
+            _setMaStatus(true, data.username, data.url);
+            var urlField = document.querySelector('input[name="MA_API_URL"]');
+            if (urlField) urlField.value = data.url;
+            if (msgEl) { msgEl.textContent = '\u2714 ' + data.message; msgEl.style.color = 'var(--success-color, green)'; }
+            showToast('\u2714 Connected to Music Assistant via HA', 'success');
+            // Reset form
+            if (mfaDiv) mfaDiv.style.display = 'none';
+            document.getElementById('ma-ha-pass').value = '';
+            document.getElementById('ma-ha-mfa-code').value = '';
+            if (btn) btn.textContent = '🏠 Sign in with HA';
+            var credsDiv = document.getElementById('ma-ha-creds');
+            if (credsDiv) credsDiv.style.display = 'flex';
+        } else {
+            // Error
+            _maHaState = {};
+            if (mfaDiv) mfaDiv.style.display = 'none';
+            if (btn) btn.textContent = '🏠 Sign in with HA';
+            var credsDiv = document.getElementById('ma-ha-creds');
+            if (credsDiv) credsDiv.style.display = 'flex';
+            if (msgEl) {
+                msgEl.textContent = '\u2716 ' + (data.error || 'Login failed');
+                msgEl.style.color = 'var(--error-color, red)';
+            }
+        }
+    } catch (err) {
+        _maHaState = {};
+        if (msgEl) { msgEl.textContent = '\u2716 Error: ' + err.message; msgEl.style.color = 'var(--error-color, red)'; }
+    } finally {
+        if (btn) btn.disabled = false;
     }
 }
 
