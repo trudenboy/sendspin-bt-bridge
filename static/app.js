@@ -1652,17 +1652,16 @@ async function maHaConnect() {
         if (msgEl) { msgEl.textContent = 'Discover MA server first'; msgEl.style.color = 'var(--error-color, red)'; }
         return;
     }
-    // In Ingress: one-click silent auth (no popup needed)
+    // In Ingress: try silent auth first, fall back to popup
     if (_isIngress()) {
         var btn = document.getElementById('ma-ha-login-btn');
         if (btn) btn.disabled = true;
         if (msgEl) { msgEl.textContent = 'Connecting via Home Assistant...'; msgEl.style.color = 'var(--secondary-text-color)'; }
         var ok = await _maSilentAuth(maUrl);
         if (btn) btn.disabled = false;
-        if (!ok && msgEl) { msgEl.textContent = '\u2716 Silent auth failed — try popup'; msgEl.style.color = 'var(--error-color, red)'; }
-        return;
+        if (ok) return;
+        // Silent failed — fall through to popup
     }
-    // Outside Ingress: OAuth popup flow
     maHaAuthPopup();
 }
 
