@@ -2,7 +2,7 @@
 
 A history of the architectural and functional evolution of sendspin-bt-bridge — for readers familiar with Home Assistant, Music Assistant, and multiroom audio setups.
 
-**Period:** January 1 – March 10, 2026 · **Total commits:** ~600 · **Versions:** 1.0.0 → 2.17.8
+**Period:** January 1 – March 10, 2026 · **Total commits:** ~600 · **Versions:** 1.0.0 → 2.17.9
 
 ---
 
@@ -514,7 +514,7 @@ A full-codebase code review surfaced 42 issues across security, thread safety, e
 
 ---
 
-## March 10, 2026 — HA OAuth & MA API authentication (v2.17.0–v2.17.7, ~20 commits)
+## March 10, 2026 — HA OAuth & MA API authentication (v2.17.0–v2.17.9, ~25 commits)
 
 ### HA OAuth popup flow for MA addon (v2.17.3)
 
@@ -531,6 +531,10 @@ Investigation of persistent "authentication failed" errors in MA monitor reveale
 The fix: after obtaining the session JWT via OAuth, the bridge connects to MA's WebSocket API, authenticates with the session token, and calls `auth/token/create` to obtain a proper long-lived JWT (10-year expiry). The session token is never persisted.
 
 Idempotency: before initiating OAuth, `_validate_ma_token()` checks if the existing token is still valid for the target MA URL — preventing duplicate long-lived tokens on page reload or addon restart.
+
+### MA server discovery from sendspin connection (v2.17.9)
+
+In addon mode with `SENDSPIN_SERVER=auto`, the MA server discovery relied on mDNS as a last resort — but a zeroconf API change (kwargs vs positional args) broke the callback. The fix: before falling back to mDNS, the bridge now extracts the MA server host from the resolved sendspin WebSocket connection (`connected_server_url`). Since sendspin already discovered the MA server via its own mDNS, the bridge reuses that resolved address for the MA API endpoint (same host, port 8095). This eliminates the need for a separate mDNS scan in most cases.
 
 ---
 

@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.17.9] - 2026-03-10
+
+### Fixed
+- **MA server discovery in auto mode** — when `SENDSPIN_SERVER=auto`, the discover endpoint now extracts the MA server host from the resolved sendspin WebSocket connection (`connected_server_url`) instead of relying solely on mDNS; this makes silent auth work reliably in HA addon mode
+- **zeroconf compatibility** — fixed `TypeError` crash in mDNS discovery callback caused by newer zeroconf versions (0.131+) passing parameters as keyword arguments
+
 ## [2.17.8] - 2026-03-10
 
 ### Fixed
