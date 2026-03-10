@@ -1,5 +1,6 @@
 ---
 ignored:
+  - DL3006  # Always tag the version of an image explicitly (HA addon uses dynamic BUILD_FROM)
   - DL3008  # Pin versions in apt-get install
   - DL3013  # Pin versions in pip install
   - DL3015  # Avoid additional packages by specifying --no-install-recommends
