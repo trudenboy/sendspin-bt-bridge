@@ -8,7 +8,7 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-_MA_SERVICE_TYPE = "_music-assistant._tcp.local."
+_MA_SERVICE_TYPE = "_mass._tcp.local."
 _DEFAULT_TIMEOUT = 5.0
 
 

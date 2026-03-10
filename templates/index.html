@@ -244,10 +244,13 @@
                     <button type="button" class="btn btn-sm" onclick="maDiscover()" id="ma-discover-btn">🔍 Discover</button>
                 </div>
 
-                <!-- Username / Password row -->
+                <!-- Username / Password row (MA's own credentials, not HA) -->
                 <div style="display:flex;gap:8px;margin-bottom:8px;">
-                    <input type="text" id="ma-login-user" placeholder="MA username" autocomplete="username" style="flex:1;">
+                    <input type="text" id="ma-login-user" placeholder="MA username (not HA)" autocomplete="username" style="flex:1;">
                     <input type="password" id="ma-login-pass" placeholder="MA password" autocomplete="current-password" style="flex:1;">
+                </div>
+                <div style="font-size:11px;color:var(--secondary-text-color);margin:-4px 0 8px;">
+                    Use credentials from MA → Settings → Users (not Home Assistant login)
                 </div>
 
                 <div style="display:flex;align-items:center;gap:8px;">
