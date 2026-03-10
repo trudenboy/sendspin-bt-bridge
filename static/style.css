@@ -284,6 +284,7 @@
         }
         .form-group input:focus { outline: none; border-color: var(--primary-color); }
         .form-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 15px; }
+        #config-form { padding-bottom: 80px; }
 
         /* BT device table */
         .bt-header {
@@ -638,20 +639,6 @@
         .health-dot.warn  { background: #fbbf24; }
         .health-dot.error { background: #f87171; }
 
-        /* Config advanced toggle */
-        .config-advanced-toggle {
-            display: flex; align-items: center; gap: 6px;
-            font-size: 13px; color: var(--primary-color);
-            cursor: pointer; margin: 16px 0 4px; user-select: none;
-            background: none; border: none; padding: 0;
-        }
-        .config-advanced-toggle::before {
-            content: '\25B6'; display: inline-block; transition: transform 0.2s; font-size: 10px;
-        }
-        .config-advanced-toggle.open::before { transform: rotate(90deg); }
-        .config-advanced-body { display: none; }
-        .config-advanced-body.open { display: block; }
-
         /* Config section groups */
         .config-group { margin-bottom: 24px; }
         .config-group:last-child { margin-bottom: 0; }
@@ -703,7 +690,11 @@
             background: none; border: none; color: var(--secondary-text-color);
             cursor: pointer; font-size: 14px; padding: 0; line-height: 1;
             transition: transform 0.2s;
+            min-width: 28px; min-height: 28px;
+            display: flex; align-items: center; justify-content: center;
+            border-radius: 4px;
         }
+        .bt-expand-btn:hover { background: var(--divider-color); }
         .bt-expand-btn.open { transform: rotate(90deg); }
 
         /* Keyboard shortcuts hint */

@@ -110,6 +110,27 @@
                         <span id="tz-preview" class="tz-preview"></span>
                     </div>
                 </div>
+
+                <div class="form-group">
+                    <label>PulseAudio latency (ms)
+                        <span class="form-hint">Higher values reduce dropouts on slow hardware (default 200)</span>
+                    </label>
+                    <input type="number" name="PULSE_LATENCY_MSEC" placeholder="200" min="50" max="2000">
+                </div>
+
+                <div class="form-group">
+                    <label>Log level
+                        <span class="form-hint">DEBUG produces verbose output for troubleshooting</span>
+                    </label>
+                    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                        <select name="LOG_LEVEL" id="log-level-select" style="width:auto;">
+                            <option value="INFO">INFO</option>
+                            <option value="DEBUG">DEBUG</option>
+                        </select>
+                        <button type="button" class="btn btn-sm" onclick="applyLogLevel()">Apply now</button>
+                        <span id="log-level-msg" style="font-size:12px;color:var(--secondary-text-color);"></span>
+                    </div>
+                </div>
             </div>
 
             <!-- ── Bluetooth ── -->
@@ -162,6 +183,28 @@
                         <div id="scan-results-list"></div>
                     </div>
                 </div>
+
+                <div class="form-group">
+                    <label>BT check interval (s)
+                        <span class="form-hint">How often to probe each device connection (default 10)</span>
+                    </label>
+                    <input type="number" name="BT_CHECK_INTERVAL" placeholder="10" min="5" max="300">
+                </div>
+
+                <div class="form-group">
+                    <label>Auto-disable threshold
+                        <span class="form-hint">Disable device after N failed reconnects (0 = never)</span>
+                    </label>
+                    <input type="number" name="BT_MAX_RECONNECT_FAILS" placeholder="0" min="0" max="100">
+                </div>
+
+                <div class="form-group">
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                        <input type="checkbox" name="PREFER_SBC_CODEC" id="prefer-sbc-codec" style="width:auto;margin:0;">
+                        Prefer SBC codec
+                        <span class="form-hint" style="display:inline;margin:0;">— reduces CPU on slow hardware (PulseAudio 15+)</span>
+                    </label>
+                </div>
             </div>
 
             <!-- ── Music Assistant ── -->
@@ -173,8 +216,11 @@
                     <div id="ma-status-bar" style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
                         <span id="ma-status-icon">⚪</span>
                         <span id="ma-status-text" style="font-size:13px;color:var(--secondary-text-color);">Not connected</span>
+                        <a href="#" id="ma-reconfigure" style="display:none;font-size:12px;margin-left:auto;color:var(--primary-color,#0a84ff);"
+                           onclick="event.preventDefault();toggleMaForm(true)">Reconfigure</a>
                     </div>
 
+                    <div id="ma-conn-form">
                     <!-- Discover + URL row -->
                     <div style="display:flex;gap:8px;margin-bottom:8px;">
                         <input type="text" id="ma-login-url" placeholder="http://homeassistant.local:8095" style="flex:1;">
@@ -200,6 +246,19 @@
                         <button type="button" class="btn btn-sm" onclick="maLogin()" id="ma-login-btn" style="min-width:100px;">🔗 Connect</button>
                         <span id="ma-login-msg" style="font-size:12px;"></span>
                     </div>
+                    </div><!-- /ma-conn-form -->
+                </div>
+
+                <div class="form-group">
+                    <label>MA server
+                        <span class="form-hint">IP/hostname, or <code>auto</code> for mDNS discovery</span>
+                    </label>
+                    <input type="text" name="SENDSPIN_SERVER" placeholder="auto" required>
+                </div>
+
+                <div class="form-group">
+                    <label>MA WebSocket port</label>
+                    <input type="number" name="SENDSPIN_PORT" placeholder="9000" min="1024" max="65535">
                 </div>
 
                 <!-- Manual token fallback (collapsible) -->
@@ -228,68 +287,6 @@
                 </div>
             </div>
 
-            <!-- ── Advanced ── -->
-            <button type="button" class="config-advanced-toggle" id="adv-toggle"
-                    onclick="toggleAdvanced()">Advanced settings</button>
-            <div class="config-advanced-body" id="adv-body">
-
-            <div class="form-group">
-                <label>MA server
-                    <span class="form-hint">IP/hostname, or <code>auto</code> for mDNS discovery</span>
-                </label>
-                <input type="text" name="SENDSPIN_SERVER" placeholder="auto" required>
-            </div>
-
-            <div class="form-group">
-                <label>MA WebSocket port</label>
-                <input type="number" name="SENDSPIN_PORT" placeholder="9000" min="1024" max="65535">
-            </div>
-
-            <div class="form-group">
-                <label>PulseAudio latency (ms)
-                    <span class="form-hint">Higher values reduce dropouts on slow hardware (default 200)</span>
-                </label>
-                <input type="number" name="PULSE_LATENCY_MSEC" placeholder="200" min="50" max="2000">
-            </div>
-
-            <div class="form-group">
-                <label>BT check interval (s)
-                    <span class="form-hint">How often to probe each device connection (default 10)</span>
-                </label>
-                <input type="number" name="BT_CHECK_INTERVAL" placeholder="10" min="5" max="300">
-            </div>
-
-            <div class="form-group">
-                <label>Auto-disable threshold
-                    <span class="form-hint">Disable device after N failed reconnects (0 = never)</span>
-                </label>
-                <input type="number" name="BT_MAX_RECONNECT_FAILS" placeholder="0" min="0" max="100">
-            </div>
-
-            <div class="form-group">
-                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-                    <input type="checkbox" name="PREFER_SBC_CODEC" id="prefer-sbc-codec" style="width:auto;margin:0;">
-                    Prefer SBC codec
-                    <span class="form-hint" style="display:inline;margin:0;">— reduces CPU on slow hardware (PulseAudio 15+)</span>
-                </label>
-            </div>
-
-            <div class="form-group">
-                <label>Log level
-                    <span class="form-hint">DEBUG produces verbose output for troubleshooting</span>
-                </label>
-                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-                    <select name="LOG_LEVEL" id="log-level-select" style="width:auto;">
-                        <option value="INFO">INFO</option>
-                        <option value="DEBUG">DEBUG</option>
-                    </select>
-                    <button type="button" class="btn btn-sm" onclick="applyLogLevel()">Apply now</button>
-                    <span id="log-level-msg" style="font-size:12px;color:var(--secondary-text-color);"></span>
-                </div>
-            </div>
-
-            </div><!-- /adv-body -->
-
             {% if not ha_mode %}
             <!-- ── Authentication (standalone only) ── -->
             <div class="config-group" style="margin-top:20px;">
@@ -301,6 +298,7 @@
                         <span class="form-hint" style="display:inline;margin:0;">— protect with a password</span>
                     </label>
                 </div>
+                <div id="auth-password-fields" style="display:none;">
                 <div class="form-group">
                     <label>Set / change password
                         <span class="form-hint">Minimum 8 characters — set before enabling auth</span>
@@ -313,16 +311,9 @@
                         <button type="button" onclick="setPassword()" class="btn btn-sm">Set Password</button>
                     </div>
                 </div>
+                </div><!-- /auth-password-fields -->
             </div>
             {% endif %}
-
-            <!-- ── Save Actions (at the bottom) ── -->
-            <div class="form-actions">
-                <button type="submit" class="btn">Save Configuration</button>
-                <button type="button" onclick="saveAndRestart()" class="btn btn-restart">
-                    Save &amp; Restart
-                </button>
-            </div>
 
         </form>
     </details>

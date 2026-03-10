@@ -1235,7 +1235,7 @@ function renderAdaptersTable() {
                 '<span>' + escHtml(a.id) + '</span>' +
                 '<span class="mono">' + escHtml(a.mac) + '</span>' +
                 '<span>' + escHtml(a.name || '') + '</span>' +
-                '<span class="dot ' + (a.powered ? 'green' : 'grey') + '">\u25cf</span>' +
+                '<span class="dot ' + (a.powered ? 'green' : 'grey') + '" title="' + (a.powered ? 'Powered on' : 'Powered off') + '">\u25cf</span>' +
                 '<span></span>';
             el.appendChild(row);
         }
@@ -1776,6 +1776,15 @@ function _setMaStatus(connected, username, url) {
         if (icon) icon.textContent = '\u26aa';
         if (text) text.textContent = 'Not connected';
     }
+    var form = document.getElementById('ma-conn-form');
+    var reconf = document.getElementById('ma-reconfigure');
+    if (form) form.style.display = connected ? 'none' : '';
+    if (reconf) reconf.style.display = connected ? '' : 'none';
+}
+
+function toggleMaForm(show) {
+    var form = document.getElementById('ma-conn-form');
+    if (form) form.style.display = show ? '' : 'none';
 }
 
 function _isIngress() {
@@ -1887,7 +1896,9 @@ document.getElementById('config-form').addEventListener('submit', async function
 
 // ---- Config dirty-state tracking ----
 var _configDirty = false;
+var _configLoading = false;
 function _setConfigDirty(dirty) {
+    if (_configLoading) return;
     _configDirty = dirty;
     var summary = document.querySelector('.config-section summary');
     if (summary) {
@@ -1908,16 +1919,27 @@ function _setConfigDirty(dirty) {
     if (bar) bar.classList.toggle('visible', dirty);
 }
 // Watch config form for any change
-document.getElementById('config-form').addEventListener('input', function() { _setConfigDirty(true); _updateAdvancedCounter(); });
-document.getElementById('config-form').addEventListener('change', function() { _setConfigDirty(true); _updateAdvancedCounter(); });
+document.getElementById('config-form').addEventListener('input', function() { _setConfigDirty(true); });
+document.getElementById('config-form').addEventListener('change', function() { _setConfigDirty(true); });
 window.addEventListener('beforeunload', function(e) {
     if (_configDirty) {
         e.preventDefault();
         e.returnValue = '';
     }
 });
+// Toggle auth password fields visibility
+(function() {
+    var authCheck = document.getElementById('auth-enabled');
+    if (authCheck) {
+        authCheck.addEventListener('change', function() {
+            var fields = document.getElementById('auth-password-fields');
+            if (fields) fields.style.display = this.checked ? '' : 'none';
+        });
+    }
+})();
 
 async function loadConfig() {
+    _configLoading = true;
     try {
         var resp = await fetch(API_BASE + '/api/config');
         if (resp.status === 401) { _handleUnauthorized(); return; }
@@ -1934,6 +1956,8 @@ async function loadConfig() {
         if (sbcCheck) sbcCheck.checked = !!config.PREFER_SBC_CODEC;
         var authCheck = document.getElementById('auth-enabled');
         if (authCheck) authCheck.checked = !!config.AUTH_ENABLED;
+        var authPw = document.getElementById('auth-password-fields');
+        if (authPw && authCheck) authPw.style.display = authCheck.checked ? '' : 'none';
         var volMaCheck = document.getElementById('volume-via-ma');
         if (volMaCheck) volMaCheck.checked = config.VOLUME_VIA_MA !== false;
         var logLevelSel = document.getElementById('log-level-select');
@@ -1954,16 +1978,17 @@ async function loadConfig() {
             addBtDeviceRow('', config.BLUETOOTH_MAC, '');
         }
 
-        // Show count of non-default advanced fields
-        _updateAdvancedCounter();
-
         // Update MA connection status and detect addon mode
         if (config.MA_API_TOKEN) {
             _setMaStatus(true, config.MA_USERNAME || '', config.MA_API_URL || '');
         }
         // Always discover to detect addon mode and set correct UI
-        _maAutoConnect();
+        await _maAutoConnect();
+
+        _configLoading = false;
+        _setConfigDirty(false);
     } catch (err) {
+        _configLoading = false;
         console.error('Error loading config:', err);
     }
 }
@@ -2223,33 +2248,6 @@ function reloadDiagnostics() {
     var content = document.getElementById('diag-content');
     delete content.dataset.loaded;
     loadDiagnostics(content);
-}
-
-// ---- Config advanced toggle ----
-function toggleAdvanced() {
-    var btn = document.getElementById('adv-toggle');
-    var body = document.getElementById('adv-body');
-    if (!btn || !body) return;
-    var open = body.classList.toggle('open');
-    btn.classList.toggle('open', open);
-}
-
-function _updateAdvancedCounter() {
-    var btn = document.getElementById('adv-toggle');
-    if (!btn) return;
-    var defaults = { SENDSPIN_SERVER: 'auto', SENDSPIN_PORT: '9000',
-        PULSE_LATENCY_MSEC: '200', BT_CHECK_INTERVAL: '10',
-        BT_MAX_RECONNECT_FAILS: '0', PREFER_SBC_CODEC: false };
-    var count = 0;
-    Object.keys(defaults).forEach(function(name) {
-        var el = document.querySelector('#adv-body [name="' + name + '"]');
-        if (!el) return;
-        var val = el.type === 'checkbox' ? el.checked : (el.value || '').trim();
-        var def = defaults[name];
-        if (el.type === 'checkbox') { if (val !== def) count++; }
-        else if (val && val !== String(def)) count++;
-    });
-    btn.textContent = count > 0 ? 'Advanced settings (' + count + ')' : 'Advanced settings';
 }
 
 // ---- Global Health Indicator ----
