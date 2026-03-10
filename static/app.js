@@ -1733,6 +1733,77 @@ function _setMaStatus(connected, username, url) {
     }
 }
 
+function _isIngress() {
+    return window.location.pathname.indexOf('/api/hassio_ingress/') !== -1;
+}
+
+async function _getHaAccessToken() {
+    // Read HA tokens from localStorage (available in Ingress — same origin)
+    var raw = localStorage.getItem('hassTokens');
+    if (!raw) return null;
+    try {
+        var tokens = JSON.parse(raw);
+        if (!tokens || !tokens.access_token) return null;
+        // If expired, try to refresh
+        if (tokens.expires && Date.now() / 1000 > tokens.expires - 30) {
+            var clientId = window.location.protocol + '//' + window.location.host + '/';
+            var resp = await fetch('/auth/token', {
+                method: 'POST',
+                body: new URLSearchParams({
+                    grant_type: 'refresh_token',
+                    refresh_token: tokens.refresh_token,
+                    client_id: clientId,
+                }),
+            });
+            if (!resp.ok) return null;
+            var fresh = await resp.json();
+            tokens.access_token = fresh.access_token;
+            tokens.expires_in = fresh.expires_in;
+            tokens.expires = Date.now() / 1000 + fresh.expires_in;
+            localStorage.setItem('hassTokens', JSON.stringify(tokens));
+        }
+        return tokens.access_token;
+    } catch (e) {
+        return null;
+    }
+}
+
+async function _maSilentAuth(maUrl) {
+    var haToken = await _getHaAccessToken();
+    if (!haToken) return false;
+    var msgEl = document.getElementById('ma-login-msg');
+    if (msgEl) { msgEl.textContent = 'Connecting via Home Assistant...'; msgEl.style.color = 'var(--secondary-text-color)'; }
+    try {
+        var resp = await fetch(API_BASE + '/api/ma/ha-silent-auth', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ha_token: haToken, ma_url: maUrl }),
+        });
+        var data = await resp.json().catch(function() { return {}; });
+        if (data.success) {
+            _setMaStatus(true, data.username || '', data.url || maUrl);
+            showToast('\u2714 Auto-connected to Music Assistant', 'success');
+            if (msgEl) { msgEl.textContent = '\u2714 Connected automatically'; msgEl.style.color = 'var(--success-color, green)'; }
+            return true;
+        }
+    } catch (e) {
+        console.warn('Silent MA auth failed:', e);
+    }
+    return false;
+}
+
+async function _maAutoConnect() {
+    // 1. Auto-discover MA server
+    await maDiscover();
+    // 2. In Ingress mode with addon detected, try silent auth
+    if (!_isIngress()) return;
+    var hint = document.getElementById('ma-addon-hint');
+    if (!hint || hint.style.display !== 'block') return;
+    var maUrl = (document.getElementById('ma-login-url').value || '').trim();
+    if (!maUrl) return;
+    await _maSilentAuth(maUrl);
+}
+
 // ---- Apply log level immediately ----
 
 async function applyLogLevel() {
@@ -1844,6 +1915,9 @@ async function loadConfig() {
         // Update MA connection status
         if (config.MA_API_TOKEN) {
             _setMaStatus(true, config.MA_USERNAME || '', config.MA_API_URL || '');
+        } else {
+            // Auto-discover MA and attempt silent auth in Ingress mode
+            _maAutoConnect();
         }
     } catch (err) {
         console.error('Error loading config:', err);

@@ -1142,6 +1142,252 @@ function onSuccess(data) {
 """
 
 
+# ── MA ↔ HA OAuth helpers (shared by ha-login and ha-silent-auth) ─────────
+
+
+def _get_ma_oauth_params(ma_url: str):
+    """Call MA /auth/authorize → parse HA URL, client_id, redirect_uri, state."""
+    import urllib.parse as _up
+    import urllib.request as _ur
+
+    try:
+        resp = _ur.urlopen(f"{ma_url}/auth/authorize?provider_id=homeassistant", timeout=10)
+        info = json.loads(resp.read())
+        auth_url = info.get("authorization_url", "")
+        if not auth_url:
+            return None
+        parsed = _up.urlparse(auth_url)
+        params = _up.parse_qs(parsed.query)
+        ha_base = f"{parsed.scheme}://{parsed.netloc}"
+        client_id = params.get("client_id", [""])[0]
+        redirect_uri = params.get("redirect_uri", [""])[0]
+        oauth_state = params.get("state", [""])[0]
+        return ha_base, client_id, redirect_uri, oauth_state
+    except Exception as exc:
+        logger.warning("MA /auth/authorize failed: %s", exc)
+        return None
+
+
+def _ha_login_flow_start(ha_url: str, client_id: str, redirect_uri: str):
+    """Start HA login_flow for the MA OAuth flow."""
+    import urllib.request as _ur
+
+    try:
+        body = json.dumps(
+            {
+                "client_id": client_id,
+                "handler": ["homeassistant", None],
+                "redirect_uri": redirect_uri,
+            }
+        ).encode()
+        req = _ur.Request(
+            f"{ha_url}/auth/login_flow",
+            data=body,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with _ur.urlopen(req, timeout=10) as resp:
+            return json.loads(resp.read())
+    except Exception as exc:
+        logger.warning("HA login_flow start failed: %s", exc)
+        return None
+
+
+def _ha_login_flow_step(ha_url: str, flow_id: str, payload: dict, client_id: str):
+    """Submit a step to HA login_flow."""
+    import urllib.request as _ur
+    from urllib.error import HTTPError
+
+    try:
+        body = json.dumps({"client_id": client_id, **payload}).encode()
+        req = _ur.Request(
+            f"{ha_url}/auth/login_flow/{flow_id}",
+            data=body,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with _ur.urlopen(req, timeout=10) as resp:
+            return json.loads(resp.read())
+    except HTTPError as exc:
+        try:
+            return json.loads(exc.read())
+        except Exception:
+            pass
+        logger.warning("HA flow step HTTP %s", exc.code)
+        return None
+    except Exception as exc:
+        logger.warning("HA flow step error: %s", exc)
+        return None
+
+
+def _ma_callback_exchange(ma_url: str, code: str, oauth_state: str):
+    """Call MA /auth/callback to exchange HA code for MA token."""
+    import http.client
+    import urllib.parse as _up
+
+    try:
+        cb_url = (
+            f"{ma_url}/auth/callback?code={_up.quote(code)}&state={_up.quote(oauth_state)}&provider_id=homeassistant"
+        )
+        parsed_cb = _up.urlparse(cb_url)
+        hostname = parsed_cb.hostname or "localhost"
+        conn = http.client.HTTPConnection(hostname, parsed_cb.port or 80, timeout=15)
+        path = f"{parsed_cb.path}?{parsed_cb.query}"
+        conn.request("GET", path)
+        resp = conn.getresponse()
+
+        if resp.status in (301, 302, 303, 307, 308):
+            location = resp.getheader("Location", "")
+            loc_parsed = _up.urlparse(location)
+            loc_params = _up.parse_qs(loc_parsed.query)
+            ma_token = loc_params.get("code", [""])[0]
+            conn.close()
+            if ma_token:
+                return ma_token
+            logger.warning("MA callback redirect missing code: %s", location)
+            return None
+
+        body = resp.read().decode("utf-8", errors="replace")
+        conn.close()
+        if resp.status == 200:
+            m = re.search(r'[?&]code=([^&"\'<>\s]+)', body)
+            if m:
+                return m.group(1)
+        logger.warning("MA callback returned %s: %s", resp.status, body[:200])
+        return None
+    except Exception as exc:
+        logger.exception("MA callback exchange failed: %s", exc)
+        return None
+
+
+def _save_ma_token_and_rediscover(ma_url: str, ma_token: str, username: str = "") -> None:
+    """Save MA token to config and trigger group rediscovery."""
+
+    def _save(cfg: dict) -> None:
+        cfg["MA_API_URL"] = ma_url
+        cfg["MA_API_TOKEN"] = ma_token
+        if username:
+            cfg["MA_USERNAME"] = username
+
+    update_config(_save)
+    state.set_ma_api_credentials(ma_url, ma_token)
+
+    loop = state.get_main_loop()
+    if loop:
+        try:
+            with _clients_lock:
+                names = [c.player_name for c in _clients]
+            asyncio.run_coroutine_threadsafe(_rediscover_after_login(ma_url, ma_token, names), loop)
+        except Exception:
+            pass
+
+
+def _ha_authorize_with_token(ha_url: str, ha_token: str, client_id: str, redirect_uri: str, oauth_state: str):
+    """POST to HA /auth/authorize with Bearer token to obtain an auth code.
+
+    HA returns 302 to redirect_uri?code=AUTH_CODE — we extract the code
+    from the Location header without following the redirect.
+    """
+    import http.client
+    import urllib.parse as _up
+
+    parsed = _up.urlparse(ha_url)
+    hostname = parsed.hostname or "localhost"
+    try:
+        if parsed.scheme == "https":
+            import ssl
+
+            ctx = ssl.create_default_context()
+            conn: http.client.HTTPConnection = http.client.HTTPSConnection(
+                hostname, parsed.port or 443, timeout=10, context=ctx
+            )
+        else:
+            conn = http.client.HTTPConnection(hostname, parsed.port or 8123, timeout=10)
+
+        body = _up.urlencode({"client_id": client_id, "redirect_uri": redirect_uri, "state": oauth_state})
+        conn.request(
+            "POST",
+            "/auth/authorize",
+            body=body,
+            headers={
+                "Authorization": f"Bearer {ha_token}",
+                "Content-Type": "application/x-www-form-urlencoded",
+            },
+        )
+        resp = conn.getresponse()
+        resp.read()
+        conn.close()
+
+        if resp.status in (301, 302, 303, 307, 308):
+            location = resp.getheader("Location", "")
+            if location:
+                params = _up.parse_qs(_up.urlparse(location).query)
+                return params.get("code", [""])[0] or None
+        logger.warning("HA authorize returned %s (expected 302)", resp.status)
+        return None
+    except Exception as exc:
+        logger.warning("HA authorize request failed: %s", exc)
+        return None
+
+
+@api_bp.route("/api/ma/ha-silent-auth", methods=["POST"])
+def api_ma_ha_silent_auth():
+    """Silent auth: exchange HA access token for MA token (Ingress mode).
+
+    When the bridge is accessed via HA Ingress, the browser shares HA's origin
+    and has hassTokens in localStorage.  The frontend sends the HA access_token
+    here; we use it to create an HA auth code and exchange it for an MA token.
+
+    Request JSON: {"ha_token": "eyJ...", "ma_url": "http://...:8095"}
+    """
+    data = request.get_json(silent=True) or {}
+    ha_token = (data.get("ha_token") or "").strip()
+    ma_url = (data.get("ma_url") or "").strip().rstrip("/")
+
+    if not ha_token or not ma_url:
+        return jsonify({"success": False, "error": "Missing ha_token or ma_url"}), 400
+
+    # 1. Get OAuth state from MA
+    oauth = _get_ma_oauth_params(ma_url)
+    if not oauth:
+        return jsonify({"success": False, "error": "MA does not support HA authentication"}), 400
+    ha_base, client_id, redirect_uri, oauth_state = oauth
+
+    # In addon mode, prefer internal HA URL for reliability
+    if _detect_runtime() == "ha_addon":
+        ha_base = "http://homeassistant:8123"
+
+    # 2. Create HA auth code using the user's access token
+    ha_code = _ha_authorize_with_token(ha_base, ha_token, client_id, redirect_uri, oauth_state)
+    if not ha_code:
+        return (
+            jsonify(
+                {
+                    "success": False,
+                    "error": "HA authorization failed — token may be expired",
+                }
+            ),
+            401,
+        )
+
+    # 3. Exchange HA auth code for MA token
+    ma_token = _ma_callback_exchange(ma_url, ha_code, oauth_state)
+    if not ma_token:
+        return jsonify({"success": False, "error": "Failed to exchange HA code for MA token"}), 500
+
+    # 4. Save and rediscover
+    _save_ma_token_and_rediscover(ma_url, ma_token)
+
+    return jsonify(
+        {
+            "success": True,
+            "url": ma_url,
+            "username": "",
+            "message": "Connected to Music Assistant via Home Assistant.",
+        }
+    )
+
+
 @api_bp.route("/api/ma/ha-login", methods=["POST"])
 def api_ma_ha_login():
     """Authenticate with MA via Home Assistant OAuth flow.
@@ -1156,131 +1402,12 @@ def api_ma_ha_login():
 
     On success (step=done), the MA token is saved to config.json.
     """
-    import urllib.parse as _up
-    import urllib.request as _ur
-    from urllib.error import HTTPError
-
     data = request.get_json(silent=True) or {}
     step = (data.get("step") or "init").strip()
     ma_url = (data.get("ma_url") or "").strip().rstrip("/")
 
     if not ma_url:
         return jsonify({"success": False, "error": "MA URL is required"}), 400
-
-    # ── Helper: derive HA URL from MA's OAuth authorize endpoint ──────────
-    def _get_ma_oauth_state() -> tuple[str, str, str, str] | None:
-        """Call MA /auth/authorize → parse HA URL, client_id, redirect_uri, state."""
-        try:
-            resp = _ur.urlopen(f"{ma_url}/auth/authorize?provider_id=homeassistant", timeout=10)
-            info = json.loads(resp.read())
-            auth_url = info.get("authorization_url", "")
-            if not auth_url:
-                return None
-            parsed = _up.urlparse(auth_url)
-            params = _up.parse_qs(parsed.query)
-            ha_base = f"{parsed.scheme}://{parsed.netloc}"
-            client_id = params.get("client_id", [""])[0]
-            redirect_uri = params.get("redirect_uri", [""])[0]
-            oauth_state = params.get("state", [""])[0]
-            return ha_base, client_id, redirect_uri, oauth_state
-        except Exception as exc:
-            logger.warning("MA /auth/authorize failed: %s", exc)
-            return None
-
-    def _ha_flow_start(ha_url: str, client_id: str, redirect_uri: str) -> dict | None:
-        """Start HA login_flow for the MA OAuth flow."""
-        try:
-            body = json.dumps(
-                {
-                    "client_id": client_id,
-                    "handler": ["homeassistant", None],
-                    "redirect_uri": redirect_uri,
-                }
-            ).encode()
-            req = _ur.Request(
-                f"{ha_url}/auth/login_flow",
-                data=body,
-                headers={"Content-Type": "application/json"},
-                method="POST",
-            )
-            with _ur.urlopen(req, timeout=10) as resp:
-                return json.loads(resp.read())
-        except Exception as exc:
-            logger.warning("HA login_flow start failed: %s", exc)
-            return None
-
-    def _ha_flow_step(ha_url: str, flow_id: str, payload: dict, client_id: str) -> dict | None:
-        """Submit a step to HA login_flow."""
-        try:
-            body = json.dumps({"client_id": client_id, **payload}).encode()
-            req = _ur.Request(
-                f"{ha_url}/auth/login_flow/{flow_id}",
-                data=body,
-                headers={"Content-Type": "application/json"},
-                method="POST",
-            )
-            with _ur.urlopen(req, timeout=10) as resp:
-                return json.loads(resp.read())
-        except HTTPError as exc:
-            try:
-                return json.loads(exc.read())
-            except Exception:
-                pass
-            logger.warning("HA flow step HTTP %s", exc.code)
-            return None
-        except Exception as exc:
-            logger.warning("HA flow step error: %s", exc)
-            return None
-
-    def _ma_callback_exchange(code: str, oauth_state: str) -> str | None:
-        """Call MA /auth/callback to exchange HA code for MA token.
-
-        MA redirects to /?code=<ma_token>; we follow the redirect and extract it.
-        """
-        try:
-            cb_url = (
-                f"{ma_url}/auth/callback"
-                f"?code={_up.quote(code)}"
-                f"&state={_up.quote(oauth_state)}"
-                f"&provider_id=homeassistant"
-            )
-            # Follow redirects manually to extract token from final URL
-            import http.client
-
-            parsed_cb = _up.urlparse(cb_url)
-            hostname = parsed_cb.hostname or "localhost"
-            conn = http.client.HTTPConnection(hostname, parsed_cb.port or 80, timeout=15)
-            path = f"{parsed_cb.path}?{parsed_cb.query}"
-            conn.request("GET", path)
-            resp = conn.getresponse()
-
-            if resp.status in (301, 302, 303, 307, 308):
-                location = resp.getheader("Location", "")
-                loc_parsed = _up.urlparse(location)
-                loc_params = _up.parse_qs(loc_parsed.query)
-                ma_token = loc_params.get("code", [""])[0]
-                conn.close()
-                if ma_token:
-                    return ma_token
-                logger.warning("MA callback redirect missing code: %s", location)
-                return None
-
-            # Not a redirect — check body for error
-            body = resp.read().decode("utf-8", errors="replace")
-            conn.close()
-            if resp.status == 200:
-                # Sometimes MA returns the token page directly
-                # Try to find code= in any redirect meta or JS
-                import re as _re
-
-                m = _re.search(r'[?&]code=([^&"\'<>\s]+)', body)
-                if m:
-                    return m.group(1)
-            logger.warning("MA callback returned %s: %s", resp.status, body[:200])
-            return None
-        except Exception as exc:
-            logger.exception("MA callback exchange failed: %s", exc)
-            return None
 
     # ── Step dispatcher ───────────────────────────────────────────────────
 
@@ -1291,48 +1418,31 @@ def api_ma_ha_login():
             return jsonify({"success": False, "error": "Username and password are required"}), 400
 
         # Get OAuth state from MA
-        oauth_info = _get_ma_oauth_state()
+        oauth_info = _get_ma_oauth_params(ma_url)
         if not oauth_info:
             return jsonify({"success": False, "error": "MA does not support HA authentication"}), 400
         ha_url, client_id, redirect_uri, oauth_state = oauth_info
 
         # Start HA login flow
-        flow = _ha_flow_start(ha_url, client_id, redirect_uri)
+        flow = _ha_login_flow_start(ha_url, client_id, redirect_uri)
         if not flow or not flow.get("flow_id"):
             return jsonify({"success": False, "error": "Could not start HA authentication"}), 502
 
         flow_id = flow["flow_id"]
 
         # Submit credentials
-        result = _ha_flow_step(ha_url, flow_id, {"username": username, "password": password}, client_id)
+        result = _ha_login_flow_step(ha_url, flow_id, {"username": username, "password": password}, client_id)
         if not result:
             return jsonify({"success": False, "error": "Authentication service unavailable"}), 502
 
         if result.get("type") == "create_entry":
             # No MFA — got auth code directly
             ha_code = result.get("result", "")
-            ma_token = _ma_callback_exchange(ha_code, oauth_state)
+            ma_token = _ma_callback_exchange(ma_url, ha_code, oauth_state)
             if not ma_token:
                 return jsonify({"success": False, "error": "Failed to exchange HA code for MA token"}), 500
 
-            # Save token
-            def _save(cfg: dict) -> None:
-                cfg["MA_API_URL"] = ma_url
-                cfg["MA_API_TOKEN"] = ma_token
-                cfg["MA_USERNAME"] = username
-
-            update_config(_save)
-            state.set_ma_api_credentials(ma_url, ma_token)
-
-            # Trigger group rediscovery
-            loop = state.get_main_loop()
-            if loop:
-                try:
-                    with _clients_lock:
-                        names = [c.player_name for c in _clients]
-                    asyncio.run_coroutine_threadsafe(_rediscover_after_login(ma_url, ma_token, names), loop)
-                except Exception:
-                    pass
+            _save_ma_token_and_rediscover(ma_url, ma_token, username)
 
             return jsonify(
                 {
@@ -1375,33 +1485,17 @@ def api_ma_ha_login():
         if not flow_id or not ha_url or not oauth_state or not code:
             return jsonify({"success": False, "error": "Missing required fields"}), 400
 
-        result = _ha_flow_step(ha_url, flow_id, {"code": code}, client_id)
+        result = _ha_login_flow_step(ha_url, flow_id, {"code": code}, client_id)
         if not result:
             return jsonify({"success": False, "error": "Authentication service unavailable"}), 502
 
         if result.get("type") == "create_entry":
             ha_code = result.get("result", "")
-            ma_token = _ma_callback_exchange(ha_code, oauth_state)
+            ma_token = _ma_callback_exchange(ma_url, ha_code, oauth_state)
             if not ma_token:
                 return jsonify({"success": False, "error": "Failed to exchange HA code for MA token"}), 500
 
-            def _save(cfg: dict) -> None:
-                cfg["MA_API_URL"] = ma_url
-                cfg["MA_API_TOKEN"] = ma_token
-                if username:
-                    cfg["MA_USERNAME"] = username
-
-            update_config(_save)
-            state.set_ma_api_credentials(ma_url, ma_token)
-
-            loop = state.get_main_loop()
-            if loop:
-                try:
-                    with _clients_lock:
-                        names = [c.player_name for c in _clients]
-                    asyncio.run_coroutine_threadsafe(_rediscover_after_login(ma_url, ma_token, names), loop)
-                except Exception:
-                    pass
+            _save_ma_token_and_rediscover(ma_url, ma_token, username)
 
             return jsonify(
                 {
