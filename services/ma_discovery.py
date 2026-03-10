@@ -29,13 +29,14 @@ async def discover_ma_servers(timeout: float = _DEFAULT_TIMEOUT) -> list[dict[st
     event = asyncio.Event()
 
     def _on_service_state_change(
-        zc: Any,
-        service_type: str,
-        name: str,
-        state_change: ServiceStateChange,
+        zeroconf: Any = None,
+        service_type: str = "",
+        name: str = "",
+        state_change: Any = None,
+        **_kwargs: Any,
     ) -> None:
         if state_change is ServiceStateChange.Added:
-            asyncio.ensure_future(_resolve(zc, service_type, name, found, event))
+            asyncio.ensure_future(_resolve(zeroconf, service_type, name, found, event))
 
     async def _resolve(
         zc: Any,
