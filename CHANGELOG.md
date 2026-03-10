@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.17.6] - 2026-03-10
+
+### Fixed
+- **MA monitor token refresh** — `MaMonitor` now re-reads credentials from shared state before each reconnect attempt; previously it used the token from init time, so silent auth or manual HA login could not fix a stale/missing token at runtime
+- **Backoff reset on new token** — reconnect backoff resets immediately when a new MA token is detected, instead of waiting up to 60 s
+
 ## [2.17.5] - 2026-03-10
 
 ### Fixed
