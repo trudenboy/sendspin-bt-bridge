@@ -1250,7 +1250,7 @@ def _ma_callback_exchange(ma_url: str, code: str, oauth_state: str):
         body = resp.read().decode("utf-8", errors="replace")
         conn.close()
         if resp.status == 200:
-            m = re.search(r'[?&]code=([^&"\'<>\s]+)', body)
+            m = re.search(r'[?&]code=([^&#"\'<>\s]+)', body)
             if m:
                 return m.group(1)
         logger.warning("MA callback returned %s: %s", resp.status, body[:200])
@@ -1258,6 +1258,70 @@ def _ma_callback_exchange(ma_url: str, code: str, oauth_state: str):
     except Exception as exc:
         logger.exception("MA callback exchange failed: %s", exc)
         return None
+
+
+_MA_TOKEN_NAME = "Sendspin BT Bridge"
+
+
+def _validate_ma_token(ma_url: str, token: str) -> bool:
+    """Quick WS auth check — returns True if the token authenticates with MA."""
+    try:
+        from websockets.sync.client import connect as ws_connect
+    except ImportError:
+        return False
+    ws_url = ma_url.replace("http://", "ws://").replace("https://", "wss://") + "/ws"
+    try:
+        with ws_connect(ws_url, proxy=None, close_timeout=5) as ws:
+            ws.recv(timeout=5)  # server_info
+            ws.send(json.dumps({"command": "auth", "args": {"token": token}, "message_id": 1}))
+            resp = json.loads(ws.recv(timeout=5))
+            return bool(resp.get("result", {}).get("authenticated"))
+    except Exception as exc:
+        logger.debug("MA token validation failed: %s", exc)
+        return False
+
+
+def _exchange_for_long_lived_token(ma_url: str, session_token: str) -> str:
+    """Exchange a short-lived MA session token for a long-lived API token.
+
+    Connects to MA WS, authenticates, calls auth/token/create.
+    Returns the long-lived token on success, or the original session_token as fallback.
+    """
+    try:
+        from websockets.sync.client import connect as ws_connect
+    except ImportError:
+        logger.warning("websockets.sync.client not available — using session token as-is")
+        return session_token
+    ws_url = ma_url.replace("http://", "ws://").replace("https://", "wss://") + "/ws"
+    try:
+        with ws_connect(ws_url, proxy=None, close_timeout=5) as ws:
+            ws.recv(timeout=5)  # server_info
+            # Auth with session token
+            ws.send(json.dumps({"command": "auth", "args": {"token": session_token}, "message_id": 1}))
+            auth_resp = json.loads(ws.recv(timeout=5))
+            if not auth_resp.get("result", {}).get("authenticated"):
+                logger.warning("MA WS auth failed with session token — using it as-is")
+                return session_token
+            # Create long-lived token
+            ws.send(
+                json.dumps(
+                    {
+                        "command": "auth/token/create",
+                        "args": {"name": _MA_TOKEN_NAME},
+                        "message_id": 2,
+                    }
+                )
+            )
+            create_resp = json.loads(ws.recv(timeout=10))
+            long_lived = create_resp.get("result")
+            if long_lived and isinstance(long_lived, str):
+                logger.info("Created long-lived MA API token '%s'", _MA_TOKEN_NAME)
+                return long_lived
+            logger.warning("auth/token/create returned unexpected result: %s", create_resp)
+            return session_token
+    except Exception as exc:
+        logger.warning("Long-lived token exchange failed (%s) — using session token", exc)
+        return session_token
 
 
 def _save_ma_token_and_rediscover(ma_url: str, ma_token: str, username: str = "") -> None:
@@ -1338,6 +1402,9 @@ def api_ma_ha_silent_auth():
     and has hassTokens in localStorage.  The frontend sends the HA access_token
     here; we use it to create an HA auth code and exchange it for an MA token.
 
+    Idempotent: if an existing long-lived token is valid for the same MA URL,
+    returns success without creating a new token.
+
     Request JSON: {"ha_token": "eyJ...", "ma_url": "http://...:8095"}
     """
     data = request.get_json(silent=True) or {}
@@ -1346,6 +1413,20 @@ def api_ma_ha_silent_auth():
 
     if not ha_token or not ma_url:
         return jsonify({"success": False, "error": "Missing ha_token or ma_url"}), 400
+
+    # Idempotency: reuse existing token if it still works for this MA instance
+    existing_url, existing_token = state.get_ma_api_credentials()
+    if existing_token and existing_url and existing_url.rstrip("/") == ma_url:
+        if _validate_ma_token(ma_url, existing_token):
+            logger.debug("Silent auth: existing MA token still valid — reusing")
+            return jsonify(
+                {
+                    "success": True,
+                    "url": ma_url,
+                    "username": "",
+                    "message": "Already connected to Music Assistant.",
+                }
+            )
 
     # 1. Get OAuth state from MA
     oauth = _get_ma_oauth_params(ma_url)
@@ -1370,12 +1451,15 @@ def api_ma_ha_silent_auth():
             401,
         )
 
-    # 3. Exchange HA auth code for MA token
-    ma_token = _ma_callback_exchange(ma_url, ha_code, oauth_state)
-    if not ma_token:
+    # 3. Exchange HA auth code for MA session token
+    ma_session_token = _ma_callback_exchange(ma_url, ha_code, oauth_state)
+    if not ma_session_token:
         return jsonify({"success": False, "error": "Failed to exchange HA code for MA token"}), 500
 
-    # 4. Save and rediscover
+    # 4. Exchange session token for a long-lived API token
+    ma_token = _exchange_for_long_lived_token(ma_url, ma_session_token)
+
+    # 5. Save and rediscover
     _save_ma_token_and_rediscover(ma_url, ma_token)
 
     return jsonify(
@@ -1438,10 +1522,11 @@ def api_ma_ha_login():
         if result.get("type") == "create_entry":
             # No MFA — got auth code directly
             ha_code = result.get("result", "")
-            ma_token = _ma_callback_exchange(ma_url, ha_code, oauth_state)
-            if not ma_token:
+            ma_session_token = _ma_callback_exchange(ma_url, ha_code, oauth_state)
+            if not ma_session_token:
                 return jsonify({"success": False, "error": "Failed to exchange HA code for MA token"}), 500
 
+            ma_token = _exchange_for_long_lived_token(ma_url, ma_session_token)
             _save_ma_token_and_rediscover(ma_url, ma_token, username)
 
             return jsonify(
@@ -1491,10 +1576,11 @@ def api_ma_ha_login():
 
         if result.get("type") == "create_entry":
             ha_code = result.get("result", "")
-            ma_token = _ma_callback_exchange(ma_url, ha_code, oauth_state)
-            if not ma_token:
+            ma_session_token = _ma_callback_exchange(ma_url, ha_code, oauth_state)
+            if not ma_session_token:
                 return jsonify({"success": False, "error": "Failed to exchange HA code for MA token"}), 500
 
+            ma_token = _exchange_for_long_lived_token(ma_url, ma_session_token)
             _save_ma_token_and_rediscover(ma_url, ma_token, username)
 
             return jsonify(
