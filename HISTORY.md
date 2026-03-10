@@ -2,7 +2,7 @@
 
 A history of the architectural and functional evolution of sendspin-bt-bridge — for readers familiar with Home Assistant, Music Assistant, and multiroom audio setups.
 
-**Period:** January 1 – March 10, 2026 · **Total commits:** ~600 · **Versions:** 1.0.0 → 2.17.9
+**Period:** January 1 – March 10, 2026 · **Total commits:** ~600 · **Versions:** 1.0.0 → 2.17.10
 
 ---
 
@@ -514,7 +514,7 @@ A full-codebase code review surfaced 42 issues across security, thread safety, e
 
 ---
 
-## March 10, 2026 — HA OAuth & MA API authentication (v2.17.0–v2.17.9, ~25 commits)
+## March 10, 2026 — HA OAuth & MA API authentication (v2.17.0–v2.17.10, ~25 commits)
 
 ### HA OAuth popup flow for MA addon (v2.17.3)
 
@@ -535,6 +535,12 @@ Idempotency: before initiating OAuth, `_validate_ma_token()` checks if the exist
 ### MA server discovery from sendspin connection (v2.17.9)
 
 In addon mode with `SENDSPIN_SERVER=auto`, the MA server discovery relied on mDNS as a last resort — but a zeroconf API change (kwargs vs positional args) broke the callback. The fix: before falling back to mDNS, the bridge now extracts the MA server host from the resolved sendspin WebSocket connection (`connected_server_url`). Since sendspin already discovered the MA server via its own mDNS, the bridge reuses that resolved address for the MA API endpoint (same host, port 8095). This eliminates the need for a separate mDNS scan in most cases.
+
+### Simplified addon discovery and semi-auto auth (v2.17.10)
+
+The previous approach had a fundamental problem: addon mode detection depended on the MA server's `homeassistant_addon` field from its `/info` endpoint — but when discovery used the mDNS path (via `_enrich_with_server_info` instead of `validate_ma_url`), this field was missing, so addon mode was never detected and silent auth never triggered.
+
+The fix simplified the entire flow. The bridge now reports its own `is_addon` flag (from `_detect_runtime()`) in the discover response — no dependency on MA server metadata. In addon mode, discovery tries `http://homeassistant.local:8095` first (Supervisor internal DNS — nearly instant), skipping SENDSPIN_SERVER heuristics and mDNS entirely. The fully-automatic silent auth on page load was replaced with a semi-automatic approach: the "Sign in with Home Assistant" button is shown after discover detects addon mode, and the user clicks it explicitly. In Ingress mode this performs one-click silent auth (no popup); outside Ingress it opens the OAuth popup.
 
 ---
 

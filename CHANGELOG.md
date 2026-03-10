@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.17.10] - 2026-03-10
+
+### Changed
+- **Simplified MA discovery in addon mode** — in HA addon mode, the bridge now tries `homeassistant.local:8095` first (Supervisor internal DNS) instead of mDNS scan; non-addon discovery chain unchanged
+- **Addon mode detection from bridge** — the `/api/ma/discover` response now includes `is_addon` flag based on the bridge's own runtime detection, instead of relying on MA server's `homeassistant_addon` field which was missing via mDNS path
+- **Semi-automatic MA auth** — removed automatic silent auth on page load; user now clicks "Sign in with Home Assistant" button explicitly; in Ingress mode this performs one-click silent auth, outside Ingress opens OAuth popup
+
 ## [2.17.9] - 2026-03-10
 
 ### Fixed
