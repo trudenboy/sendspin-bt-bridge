@@ -90,134 +90,194 @@
     <details class="config-section">
         <summary>&#9881;&#65039; Configuration</summary>
         <form id="config-form">
-            <div class="form-group">
-                <label>Bridge name — appended to every player name in MA as <em>Player @ Name</em> (auto-filled with hostname)</label>
-                <input type="text" name="BRIDGE_NAME" placeholder="e.g. Living Room">
-            </div>
 
-            <div class="form-group">
-                <label>Timezone</label>
-                <div style="display:flex;gap:10px;align-items:center;">
-                    <input type="text" name="TZ" id="tz-input" placeholder="Australia/Melbourne" style="flex:1;"
-                        list="tz-list" autocomplete="off" oninput="updateTzPreview()">
-                    <datalist id="tz-list"></datalist>
-                    <span id="tz-preview" class="tz-preview"></span>
+            <!-- ── General ── -->
+            <div class="config-group">
+                <h4 class="config-group-title"><span class="cg-icon">🏷️</span> General</h4>
+                <div class="form-group">
+                    <label>Bridge name
+                        <span class="form-hint">Appended to player names in MA as "Player @ Name"</span>
+                    </label>
+                    <input type="text" name="BRIDGE_NAME" placeholder="e.g. Living Room">
+                </div>
+
+                <div class="form-group">
+                    <label>Timezone</label>
+                    <div style="display:flex;gap:10px;align-items:center;">
+                        <input type="text" name="TZ" id="tz-input" placeholder="Australia/Melbourne" style="flex:1;"
+                            list="tz-list" autocomplete="off" oninput="updateTzPreview()">
+                        <datalist id="tz-list"></datalist>
+                        <span id="tz-preview" class="tz-preview"></span>
+                    </div>
                 </div>
             </div>
 
-            <!-- Bluetooth Adapters panel -->
-            <div class="form-group">
-                <label>Bluetooth Adapters</label>
-                <div class="adapters-card">
-                    <div class="adapters-card-header">
-                        <span>Detected &amp; manual adapters</span>
-                        <div>
-                            <button type="button" class="btn btn-sm btn-refresh" onclick="loadBtAdapters()">&#x21BA; Refresh</button>
-                            <button type="button" class="btn btn-sm" onclick="addManualAdapterRow('','','')">+ Add</button>
+            <!-- ── Bluetooth ── -->
+            <div class="config-group">
+                <h4 class="config-group-title"><span class="cg-icon">📡</span> Bluetooth</h4>
+
+                <!-- Bluetooth Adapters panel -->
+                <div class="form-group">
+                    <label>Adapters</label>
+                    <div class="adapters-card">
+                        <div class="adapters-card-header">
+                            <span>Detected &amp; manual adapters</span>
+                            <div>
+                                <button type="button" class="btn btn-sm btn-refresh" onclick="loadBtAdapters()">&#x21BA; Refresh</button>
+                                <button type="button" class="btn btn-sm" onclick="addManualAdapterRow('','','')">+ Add</button>
+                            </div>
+                        </div>
+                        <div id="adapters-table"></div>
+                    </div>
+                </div>
+
+                <!-- BT devices table -->
+                <div class="form-group">
+                    <label>Devices</label>
+                    <div class="bt-table-wrap">
+                        <div class="bt-header">
+                            <span>Player Name</span><span>MAC Address</span>
+                            <span>Adapter</span><span>Format</span><span></span><span></span>
+                        </div>
+                        <div id="bt-devices-table"></div>
+                    </div>
+                    <div class="bt-toolbar">
+                        <button type="button" id="add-dev-btn" onclick="addBtDeviceRow()" class="btn btn-sm">+ Add Device</button>
+                        <button type="button" onclick="startBtScan()" class="btn btn-sm btn-scan" id="scan-btn">
+                            &#128269; Scan
+                        </button>
+                        <span id="scan-status" class="scan-badge"></span>
+                    </div>
+                    <div id="paired-box" class="paired-box" style="display:none;">
+                        <div class="paired-box-title" style="display:flex;align-items:center;gap:8px;">
+                            <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Already paired &#8212; click to add:</span>
+                            <label style="flex-shrink:0;font-size:12px;color:var(--secondary-text-color);cursor:pointer;white-space:nowrap;">
+                                <input type="checkbox" id="paired-show-all" onchange="loadPairedDevices()"> Show all
+                            </label>
+                        </div>
+                        <div id="paired-list"></div>
+                    </div>
+                    <div id="scan-results-box" class="scan-results-box">
+                        <div class="scan-results-title">Discovered devices &#8212; click to add:</div>
+                        <div id="scan-results-list"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── Music Assistant ── -->
+            <div class="config-group" id="config-group-ma">
+                <h4 class="config-group-title"><span class="cg-icon">🎵</span> Music Assistant</h4>
+
+                <!-- MA quick-connect panel -->
+                <div id="ma-connect-panel" style="background:var(--card-bg);border:1px solid var(--divider-color);border-radius:8px;padding:14px;margin-bottom:14px;">
+                    <div id="ma-status-bar" style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+                        <span id="ma-status-icon">⚪</span>
+                        <span id="ma-status-text" style="font-size:13px;color:var(--secondary-text-color);">Not connected</span>
+                    </div>
+
+                    <!-- Discover + URL row -->
+                    <div style="display:flex;gap:8px;margin-bottom:8px;">
+                        <input type="text" id="ma-login-url" placeholder="http://homeassistant.local:8095" style="flex:1;">
+                        <button type="button" class="btn btn-sm" onclick="maDiscover()" id="ma-discover-btn">🔍 Discover</button>
+                    </div>
+
+                    <!-- Username / Password row (standalone MA only) -->
+                    <div id="ma-login-creds" style="display:flex;gap:8px;margin-bottom:8px;">
+                        <input type="text" id="ma-login-user" placeholder="MA username" autocomplete="username" style="flex:1;">
+                        <input type="password" id="ma-login-pass" placeholder="MA password" autocomplete="current-password" style="flex:1;">
+                    </div>
+
+                    <!-- HA addon: single OAuth button (hidden by default, shown when addon detected) -->
+                    <div id="ma-addon-hint" style="display:none;margin-bottom:8px;">
+                        <button type="button" class="btn btn-sm" onclick="maHaConnect()" id="ma-ha-login-btn"
+                                style="width:100%;padding:10px;font-size:14px;background:var(--primary-color,#0a84ff);color:#fff;border:none;border-radius:8px;cursor:pointer;">
+                            🏠 Sign in with Home Assistant
+                        </button>
+                        <span id="ma-ha-login-msg" style="display:block;font-size:12px;margin-top:6px;text-align:center;"></span>
+                    </div>
+
+                    <div style="display:flex;align-items:center;gap:8px;">
+                        <button type="button" class="btn btn-sm" onclick="maLogin()" id="ma-login-btn" style="min-width:100px;">🔗 Connect</button>
+                        <span id="ma-login-msg" style="font-size:12px;"></span>
+                    </div>
+                </div>
+
+                <!-- Manual token fallback (collapsible) -->
+                <details id="ma-token-details" style="margin-bottom:10px;">
+                    <summary style="cursor:pointer;font-size:13px;color:var(--secondary-text-color);">Advanced: manual JWT token</summary>
+                    <div style="padding:8px 0;">
+                        <div class="form-group">
+                            <label>Music Assistant API URL</label>
+                            <input type="text" name="MA_API_URL" placeholder="http://homeassistant.local:8095">
+                        </div>
+                        <div class="form-group">
+                            <label>Music Assistant API token
+                                <span class="form-hint">Create in MA → Settings → API Tokens</span>
+                            </label>
+                            <input type="password" name="MA_API_TOKEN" autocomplete="new-password" placeholder="eyJ...">
                         </div>
                     </div>
-                    <div id="adapters-table"></div>
+                </details>
+
+                <div class="form-group">
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                        <input type="checkbox" name="VOLUME_VIA_MA" id="volume-via-ma" style="width:auto;margin:0;" checked>
+                        Route volume through MA
+                        <span class="form-hint" style="display:inline;margin:0;">— keeps MA UI sliders in sync</span>
+                    </label>
                 </div>
             </div>
 
-            <!-- BT devices table (replaces raw JSON textarea + single MAC input) -->
-            <div class="form-group">
-                <label>Bluetooth Devices</label>
-                <div class="bt-table-wrap">
-                    <div class="bt-header">
-                        <span>Player Name</span><span>MAC Address</span>
-                        <span>Adapter</span><span>Listen Address</span><span>Port</span><span>Delay ms</span><span>Format</span><span title="Keep-alive interval in seconds. 0 = disabled. Min 30 when enabled.">KA s</span><span></span>
-                    </div>
-                    <div id="bt-devices-table"></div>
-                </div>
-                <div class="bt-toolbar">
-                    <button type="button" id="add-dev-btn" onclick="addBtDeviceRow()" class="btn btn-sm">+ Add Device</button>
-                    <button type="button" onclick="startBtScan()" class="btn btn-sm btn-scan" id="scan-btn">
-                        &#128269; Scan
-                    </button>
-                    <span id="scan-status" class="scan-badge"></span>
-                </div>
-                <div id="paired-box" class="paired-box" style="display:none;">
-                    <div class="paired-box-title" style="display:flex;align-items:center;gap:8px;">
-                        <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Already paired &#8212; click to add:</span>
-                        <label style="flex-shrink:0;font-size:12px;color:var(--secondary-text-color);cursor:pointer;white-space:nowrap;">
-                            <input type="checkbox" id="paired-show-all" onchange="loadPairedDevices()"> Show all
-                        </label>
-                    </div>
-                    <div id="paired-list"></div>
-                </div>
-                <div id="scan-results-box" class="scan-results-box">
-                    <div class="scan-results-title">Discovered devices &#8212; click to add:</div>
-                    <div id="scan-results-list"></div>
-                </div>
-            </div>
-
-            <div class="form-actions">
-                <button type="submit" class="btn">Save Configuration</button>
-                <button type="button" onclick="saveAndRestart()" class="btn btn-restart">
-                    Save &amp; Restart
-                </button>
-            </div>
-
-            {% if not ha_mode %}
-            <!-- Authentication (standalone mode only) -->
-            <hr style="border:none;border-top:1px solid var(--divider-color);margin:20px 0;">
-            <div class="form-group">
-                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-                    <input type="checkbox" name="AUTH_ENABLED" id="auth-enabled" style="width:auto;margin:0;">
-                    Enable web UI authentication — protect the interface with a password
-                </label>
-            </div>
-            <div class="form-group">
-                <label>Set / change password <span style="font-size:11px;color:var(--secondary-text-color);">(minimum 8 characters — set before enabling auth)</span></label>
-                <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                    <input type="password" id="new-password" autocomplete="new-password"
-                           placeholder="New password" style="flex:1;min-width:180px;">
-                    <input type="password" id="new-password-confirm" autocomplete="new-password"
-                           placeholder="Confirm password" style="flex:1;min-width:180px;">
-                    <button type="button" onclick="setPassword()" class="btn btn-sm">Set Password</button>
-                </div>
-            </div>
-            {% endif %}
-
+            <!-- ── Advanced ── -->
             <button type="button" class="config-advanced-toggle" id="adv-toggle"
                     onclick="toggleAdvanced()">Advanced settings</button>
             <div class="config-advanced-body" id="adv-body">
 
             <div class="form-group">
-                <label>Music Assistant server &mdash; IP/hostname, or <code>auto</code> to discover via mDNS</label>
+                <label>MA server
+                    <span class="form-hint">IP/hostname, or <code>auto</code> for mDNS discovery</span>
+                </label>
                 <input type="text" name="SENDSPIN_SERVER" placeholder="auto" required>
             </div>
 
             <div class="form-group">
-                <label>Music Assistant WebSocket port</label>
+                <label>MA WebSocket port</label>
                 <input type="number" name="SENDSPIN_PORT" placeholder="9000" min="1024" max="65535">
             </div>
 
             <div class="form-group">
-                <label>PulseAudio latency (ms) — larger value reduces audio dropouts on slow hardware (default 200)</label>
+                <label>PulseAudio latency (ms)
+                    <span class="form-hint">Higher values reduce dropouts on slow hardware (default 200)</span>
+                </label>
                 <input type="number" name="PULSE_LATENCY_MSEC" placeholder="200" min="50" max="2000">
             </div>
 
             <div class="form-group">
-                <label>BT check interval (s) — how often to probe each device connection (default 10)</label>
+                <label>BT check interval (s)
+                    <span class="form-hint">How often to probe each device connection (default 10)</span>
+                </label>
                 <input type="number" name="BT_CHECK_INTERVAL" placeholder="10" min="5" max="300">
             </div>
 
             <div class="form-group">
-                <label>Auto-disable after N failed reconnects — set Enabled=Off after this many consecutive failures (0 = never)</label>
+                <label>Auto-disable threshold
+                    <span class="form-hint">Disable device after N failed reconnects (0 = never)</span>
+                </label>
                 <input type="number" name="BT_MAX_RECONNECT_FAILS" placeholder="0" min="0" max="100">
             </div>
 
             <div class="form-group">
                 <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
                     <input type="checkbox" name="PREFER_SBC_CODEC" id="prefer-sbc-codec" style="width:auto;margin:0;">
-                    Prefer SBC codec — forces the simplest A2DP codec after each BT connect, reducing encoder CPU load on slow hardware (requires PulseAudio 15+)
+                    Prefer SBC codec
+                    <span class="form-hint" style="display:inline;margin:0;">— reduces CPU on slow hardware (PulseAudio 15+)</span>
                 </label>
             </div>
 
             <div class="form-group">
-                <label>Log level — DEBUG produces verbose output for troubleshooting (takes effect immediately)</label>
+                <label>Log level
+                    <span class="form-hint">DEBUG produces verbose output for troubleshooting</span>
+                </label>
                 <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
                     <select name="LOG_LEVEL" id="log-level-select" style="width:auto;">
                         <option value="INFO">INFO</option>
@@ -228,68 +288,51 @@
                 </div>
             </div>
 
-            <hr style="border:none;border-top:1px solid var(--divider-color);margin:20px 0;">
-            <h4 style="margin:0 0 12px;">Music Assistant Integration</h4>
-
-            <!-- MA quick-connect panel -->
-            <div id="ma-connect-panel" style="background:var(--card-bg);border:1px solid var(--divider-color);border-radius:8px;padding:14px;margin-bottom:14px;">
-                <div id="ma-status-bar" style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
-                    <span id="ma-status-icon">⚪</span>
-                    <span id="ma-status-text" style="font-size:13px;color:var(--secondary-text-color);">Not connected</span>
-                </div>
-
-                <!-- Discover + URL row -->
-                <div style="display:flex;gap:8px;margin-bottom:8px;">
-                    <input type="text" id="ma-login-url" placeholder="http://homeassistant.local:8095" style="flex:1;">
-                    <button type="button" class="btn btn-sm" onclick="maDiscover()" id="ma-discover-btn">🔍 Discover</button>
-                </div>
-
-                <!-- Username / Password row (standalone MA only) -->
-                <div id="ma-login-creds" style="display:flex;gap:8px;margin-bottom:8px;">
-                    <input type="text" id="ma-login-user" placeholder="MA username" autocomplete="username" style="flex:1;">
-                    <input type="password" id="ma-login-pass" placeholder="MA password" autocomplete="current-password" style="flex:1;">
-                </div>
-
-                <!-- HA addon: single OAuth button (hidden by default, shown when addon detected) -->
-                <div id="ma-addon-hint" style="display:none;margin-bottom:8px;">
-                    <button type="button" class="btn btn-sm" onclick="maHaConnect()" id="ma-ha-login-btn"
-                            style="width:100%;padding:10px;font-size:14px;background:var(--primary-color,#0a84ff);color:#fff;border:none;border-radius:8px;cursor:pointer;">
-                        🏠 Sign in with Home Assistant
-                    </button>
-                    <span id="ma-ha-login-msg" style="display:block;font-size:12px;margin-top:6px;text-align:center;"></span>
-                </div>
-
-                <div style="display:flex;align-items:center;gap:8px;">
-                    <button type="button" class="btn btn-sm" onclick="maLogin()" id="ma-login-btn" style="min-width:100px;">🔗 Connect</button>
-                    <span id="ma-login-msg" style="font-size:12px;"></span>
-                </div>
-            </div>
-
-            <!-- Manual token fallback (collapsible) -->
-            <details id="ma-token-details" style="margin-bottom:10px;">
-                <summary style="cursor:pointer;font-size:13px;color:var(--secondary-text-color);">Advanced: manual JWT token</summary>
-                <div style="padding:8px 0;">
-                    <div class="form-group">
-                        <label>Music Assistant API URL</label>
-                        <input type="text" name="MA_API_URL" placeholder="http://homeassistant.local:8095">
-                    </div>
-                    <div class="form-group">
-                        <label>Music Assistant API token <span style="font-size:11px;color:var(--secondary-text-color);">(create in MA → Settings → API Tokens)</span></label>
-                        <input type="password" name="MA_API_TOKEN" autocomplete="new-password" placeholder="eyJ...">
-                    </div>
-                </div>
-            </details>
-
-            <div class="form-group">
-                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-                    <input type="checkbox" name="VOLUME_VIA_MA" id="volume-via-ma" style="width:auto;margin:0;" checked>
-                    Route volume/mute through MA API — keeps MA UI in sync; disable to use direct pactl only
-                </label>
-            </div>
-
             </div><!-- /adv-body -->
+
+            {% if not ha_mode %}
+            <!-- ── Authentication (standalone only) ── -->
+            <div class="config-group" style="margin-top:20px;">
+                <h4 class="config-group-title"><span class="cg-icon">🔒</span> Authentication</h4>
+                <div class="form-group">
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                        <input type="checkbox" name="AUTH_ENABLED" id="auth-enabled" style="width:auto;margin:0;">
+                        Enable web UI authentication
+                        <span class="form-hint" style="display:inline;margin:0;">— protect with a password</span>
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label>Set / change password
+                        <span class="form-hint">Minimum 8 characters — set before enabling auth</span>
+                    </label>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                        <input type="password" id="new-password" autocomplete="new-password"
+                               placeholder="New password" style="flex:1;min-width:180px;">
+                        <input type="password" id="new-password-confirm" autocomplete="new-password"
+                               placeholder="Confirm password" style="flex:1;min-width:180px;">
+                        <button type="button" onclick="setPassword()" class="btn btn-sm">Set Password</button>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- ── Save Actions (at the bottom) ── -->
+            <div class="form-actions">
+                <button type="submit" class="btn">Save Configuration</button>
+                <button type="button" onclick="saveAndRestart()" class="btn btn-restart">
+                    Save &amp; Restart
+                </button>
+            </div>
+
         </form>
     </details>
+
+    <!-- Sticky save bar (shown when config is dirty) -->
+    <div class="config-save-bar" id="config-save-bar">
+        <span class="dirty-label">⚠ Unsaved changes</span>
+        <button type="button" class="btn btn-sm" onclick="document.getElementById('config-form').dispatchEvent(new Event('submit',{cancelable:true}))">Save</button>
+        <button type="button" class="btn btn-sm btn-restart" onclick="saveAndRestart()">Save &amp; Restart</button>
+    </div>
 
     <!-- Diagnostics (collapsible) -->
     <details class="diag-section" id="diag-details" ontoggle="onDiagToggle(this)">

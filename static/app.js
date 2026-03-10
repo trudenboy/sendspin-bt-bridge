@@ -1321,7 +1321,6 @@ function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabl
         if (kaVal < 30) kaVal = 30;
     } else {
         kaVal = (keepaliveInterval !== undefined && keepaliveInterval !== null && keepaliveInterval !== '') ? parseInt(keepaliveInterval, 10) : 0;
-        // If migrated from a config that only has keepalive_interval without keepalive_silence, treat >0 as enabled
         if (kaVal > 0 && kaVal < 30) kaVal = 30;
     }
     row.innerHTML =
@@ -1330,18 +1329,29 @@ function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabl
         '<input type="text" placeholder="AA:BB:CC:DD:EE:FF" class="bt-mac" value="' +
             escHtmlAttr(mac || '') + '">' +
         '<select class="bt-adapter">' + btAdapterOptions(adapter || '') + '</select>' +
-        '<input type="text" class="bt-listen-host" placeholder="auto" title="IP address this player advertises/listens on. Leave blank to auto-detect." value="' +
-            escHtmlAttr(listenHost || '') + '">' +
-        '<input type="number" class="bt-listen-port" placeholder="8928" title="Port this player listens on (default: 8928, 8929 for 2nd\u2026)" value="' +
-            escHtmlAttr(String(portVal)) + '" min="1024" max="65535">' +
-        '<input type="number" class="bt-delay" title="Static delay (ms). Negative = compensate for output latency. Typical BT A2DP: -500" value="' +
-            escHtmlAttr(String(delayVal)) + '" step="50">' +
-        '<input type="text" class="bt-preferred-format" placeholder="flac:44100:16:2" title="Preferred audio format: codec:samplerate:bitdepth:channels. Default flac:44100:16:2 matches SBC A2DP (no resampling)." value="' +
+        '<input type="text" class="bt-preferred-format" placeholder="flac:44100:16:2" title="codec:samplerate:bitdepth:channels" value="' +
             escHtmlAttr(fmtVal) + '">' +
-        '<input type="number" class="bt-keepalive-interval" min="0" placeholder="0" ' +
-            'title="Keep-alive silence interval in seconds. 0 = disabled. Minimum 30 when enabled." value="' +
-            escHtmlAttr(String(kaVal)) + '">' +
+        '<button type="button" class="bt-expand-btn" title="Show advanced fields">&#9654;</button>' +
         '<button type="button" class="btn-remove-dev">\u00d7</button>';
+
+    // Detail sub-row with advanced fields
+    var detail = document.createElement('div');
+    detail.className = 'bt-detail-row';
+    detail.style.display = 'none';
+    detail.innerHTML =
+        '<div><label>Listen Address</label>' +
+            '<input type="text" class="bt-listen-host" placeholder="auto" title="IP address this player advertises" value="' +
+            escHtmlAttr(listenHost || '') + '"></div>' +
+        '<div><label>Port</label>' +
+            '<input type="number" class="bt-listen-port" placeholder="8928" min="1024" max="65535" value="' +
+            escHtmlAttr(String(portVal)) + '"></div>' +
+        '<div><label>Delay (ms)</label>' +
+            '<input type="number" class="bt-delay" title="Static delay. Negative = compensate latency" value="' +
+            escHtmlAttr(String(delayVal)) + '" step="50"></div>' +
+        '<div><label>Keep-alive (s)</label>' +
+            '<input type="number" class="bt-keepalive-interval" min="0" placeholder="0" ' +
+            'title="0 = disabled, min 30 when enabled" value="' +
+            escHtmlAttr(String(kaVal)) + '"></div>';
 
     row.querySelector('.btn-remove-dev').addEventListener('click', function() {
         wrap.remove();
@@ -1351,8 +1361,21 @@ function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabl
         var valid = /^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$/.test(v);
         this.classList.toggle('invalid', v !== '' && !valid);
     });
+    row.querySelector('.bt-expand-btn').addEventListener('click', function() {
+        var open = detail.style.display !== 'none';
+        detail.style.display = open ? 'none' : 'grid';
+        this.classList.toggle('open', !open);
+    });
+
+    // Auto-expand if any advanced field has a non-default value
+    var hasAdvanced = (listenHost && listenHost.trim()) || portVal || delayVal || kaVal;
+    if (hasAdvanced) {
+        detail.style.display = 'grid';
+        row.querySelector('.bt-expand-btn').classList.add('open');
+    }
 
     wrap.appendChild(row);
+    wrap.appendChild(detail);
     tbody.appendChild(wrap);
 }
 
@@ -1360,21 +1383,23 @@ function collectBtDevices() {
     var devices = [];
     document.querySelectorAll('#bt-devices-table .bt-device-wrap').forEach(function(wrap) {
         var row    = wrap.querySelector('.bt-device-row');
+        var detail = wrap.querySelector('.bt-detail-row');
         var name       = row.querySelector('.bt-name').value.trim();
         var mac        = row.querySelector('.bt-mac').value.trim().toUpperCase();
         var adapter    = row.querySelector('.bt-adapter').value;
-        var listenHost = (row.querySelector('.bt-listen-host') || {}).value || '';
-        var portEl     = row.querySelector('.bt-listen-port');
-        var listenPort = portEl && portEl.value.trim() ? parseInt(portEl.value, 10) : null;
-        var delayEl    = row.querySelector('.bt-delay');
-        var delay      = delayEl ? parseFloat(delayEl.value) : 0;
-        if (isNaN(delay)) delay = 0;
         var fmtEl      = row.querySelector('.bt-preferred-format');
         var preferredFormat = fmtEl ? fmtEl.value.trim() : 'flac:44100:16:2';
-        var kaIntEl    = row.querySelector('.bt-keepalive-interval');
+        // Advanced fields are in the detail sub-row
+        var listenHost = detail ? (detail.querySelector('.bt-listen-host') || {}).value || '' : '';
+        var portEl     = detail ? detail.querySelector('.bt-listen-port') : null;
+        var listenPort = portEl && portEl.value.trim() ? parseInt(portEl.value, 10) : null;
+        var delayEl    = detail ? detail.querySelector('.bt-delay') : null;
+        var delay      = delayEl ? parseFloat(delayEl.value) : 0;
+        if (isNaN(delay)) delay = 0;
+        var kaIntEl    = detail ? detail.querySelector('.bt-keepalive-interval') : null;
         var kaVal      = kaIntEl ? parseInt(kaIntEl.value, 10) : 0;
         if (isNaN(kaVal) || kaVal < 0) kaVal = 0;
-        if (kaVal > 0 && kaVal < 30) kaVal = 30;  // enforce minimum
+        if (kaVal > 0 && kaVal < 30) kaVal = 30;
         var dev = { mac: mac, adapter: adapter, player_name: name, static_delay_ms: delay, preferred_format: preferredFormat || 'flac:44100:16:2' };
         if (listenHost) dev.listen_host = listenHost;
         if (listenPort) dev.listen_port = listenPort;
@@ -1865,18 +1890,22 @@ var _configDirty = false;
 function _setConfigDirty(dirty) {
     _configDirty = dirty;
     var summary = document.querySelector('.config-section summary');
-    if (!summary) return;
-    var dot = summary.querySelector('.config-dirty-dot');
-    if (dirty) {
-        if (!dot) {
-            dot = document.createElement('span');
-            dot.className = 'config-dirty-dot';
-            dot.title = 'Unsaved changes';
-            summary.appendChild(dot);
+    if (summary) {
+        var dot = summary.querySelector('.config-dirty-dot');
+        if (dirty) {
+            if (!dot) {
+                dot = document.createElement('span');
+                dot.className = 'config-dirty-dot';
+                dot.title = 'Unsaved changes';
+                summary.appendChild(dot);
+            }
+        } else {
+            if (dot) dot.remove();
         }
-    } else {
-        if (dot) dot.remove();
     }
+    // Toggle sticky save bar
+    var bar = document.getElementById('config-save-bar');
+    if (bar) bar.classList.toggle('visible', dirty);
 }
 // Watch config form for any change
 document.getElementById('config-form').addEventListener('input', function() { _setConfigDirty(true); _updateAdvancedCounter(); });

@@ -287,13 +287,13 @@
 
         /* BT device table */
         .bt-header {
-            display: grid; grid-template-columns: 1fr 1.3fr 0.9fr 9rem 4.5rem 5.5rem 8rem 5rem 30px;
+            display: grid; grid-template-columns: 1fr 1.3fr 0.9fr 8rem 30px 30px;
             gap: 8px; margin-bottom: 4px; padding: 0 2px;
             font-size: 11px; font-weight: 600; color: var(--secondary-text-color); text-transform: uppercase;
         }
         .bt-device-wrap { margin-bottom: 10px; }
         .bt-device-row {
-            display: grid; grid-template-columns: 1fr 1.3fr 0.9fr 9rem 4.5rem 5.5rem 8rem 5rem 30px;
+            display: grid; grid-template-columns: 1fr 1.3fr 0.9fr 8rem 30px 30px;
             gap: 8px; align-items: center; margin-bottom: 0;
         }
         .bt-device-row input, .bt-device-row select {
@@ -652,6 +652,60 @@
         .config-advanced-body { display: none; }
         .config-advanced-body.open { display: block; }
 
+        /* Config section groups */
+        .config-group { margin-bottom: 24px; }
+        .config-group:last-child { margin-bottom: 0; }
+        .config-group-title {
+            display: flex; align-items: center; gap: 8px;
+            font-size: 15px; font-weight: 600; color: var(--primary-text-color);
+            margin: 0 0 14px; padding-bottom: 8px;
+            border-bottom: 1px solid var(--divider-color);
+        }
+        .config-group-title .cg-icon { font-size: 17px; flex-shrink: 0; }
+        .form-hint {
+            display: block; font-size: 12px; font-weight: 400;
+            color: var(--secondary-text-color); margin-top: 2px; line-height: 1.4;
+        }
+
+        /* Sticky save bar */
+        .config-save-bar {
+            position: fixed; bottom: 0; left: 0; right: 0;
+            background: var(--card-background-color);
+            border-top: 2px solid var(--warning-color);
+            padding: 12px 24px;
+            display: flex; gap: 10px; justify-content: center; align-items: center;
+            transform: translateY(100%);
+            transition: transform 0.3s ease;
+            z-index: 100;
+            box-shadow: 0 -4px 12px rgba(0,0,0,0.15);
+        }
+        .config-save-bar.visible { transform: translateY(0); }
+        .config-save-bar .dirty-label {
+            font-size: 13px; color: var(--warning-color); font-weight: 500; margin-right: 8px;
+        }
+
+        /* BT device detail sub-row */
+        .bt-detail-row {
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+            gap: 8px; padding: 8px 2px 4px;
+        }
+        .bt-detail-row label {
+            font-size: 11px; font-weight: 600; color: var(--secondary-text-color);
+            text-transform: uppercase; margin-bottom: 2px; display: block;
+        }
+        .bt-detail-row input {
+            padding: 6px 8px; border: 1px solid var(--divider-color);
+            border-radius: 4px; font-size: 13px; width: 100%;
+            background: var(--card-background-color); color: var(--primary-text-color);
+        }
+        .bt-detail-row input:focus { outline: none; border-color: var(--primary-color); }
+        .bt-expand-btn {
+            background: none; border: none; color: var(--secondary-text-color);
+            cursor: pointer; font-size: 14px; padding: 0; line-height: 1;
+            transition: transform 0.2s;
+        }
+        .bt-expand-btn.open { transform: rotate(90deg); }
+
         /* Keyboard shortcuts hint */
         .kbd-hint {
             text-align: center; font-size: 11px;
@@ -695,7 +749,7 @@
 
             /* BT device table → horizontal scroll */
             .bt-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-            .bt-header, .bt-device-row { min-width: 700px; }
+            .bt-header, .bt-device-row { min-width: 480px; }
 
             /* Adapters panel → horizontal scroll */
             .adapters-card { overflow-x: auto; -webkit-overflow-scrolling: touch; }
@@ -714,6 +768,13 @@
             .conn-hover-sub { display: block; }
             .device-card .identity-detail { max-height: 60px; opacity: 1; }
             .device-card .dsink-value { display: block; }
+
+            /* BT device detail row — stack on mobile */
+            .bt-detail-row { grid-template-columns: 1fr 1fr; }
+
+            /* Sticky save bar — compact on mobile */
+            .config-save-bar { padding: 10px 16px; }
+            .config-save-bar .dirty-label { display: none; }
 
             /* Toast — full-width on mobile */
             .toast-container { left: 12px; right: 12px; bottom: 16px; }
