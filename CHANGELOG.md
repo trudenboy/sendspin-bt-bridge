@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.19.0] - 2026-03-10
+
+### Changed
+- **Configuration UI overhaul** — restructured into clearly labeled sections (General, Bluetooth, Music Assistant, Advanced, Authentication) with icon headings and visual separation
+- **Music Assistant Integration promoted** — moved out of Advanced settings into its own top-level section for immediate discoverability
+- **Save buttons moved to bottom** of the form (standard UX pattern)
+- **Sticky save bar** — fixed bottom bar appears when config has unsaved changes, visible regardless of scroll position
+- **BT Devices table simplified** — main row shows Name, MAC, Adapter, Format; advanced fields (Listen Address, Port, Delay, Keep-alive) in expandable detail sub-row that auto-opens when non-default values exist
+- **Shortened labels** — concise primary text with secondary hint descriptions instead of verbose inline paragraphs
+
 ## [2.18.3] - 2026-03-10
 
 ### Fixed

@@ -2,7 +2,7 @@
 
 A history of the architectural and functional evolution of sendspin-bt-bridge — for readers familiar with Home Assistant, Music Assistant, and multiroom audio setups.
 
-**Period:** January 1 – March 10, 2026 · **Total commits:** ~630 · **Versions:** 1.0.0 → 2.18.3
+**Period:** January 1 – March 10, 2026 · **Total commits:** ~635 · **Versions:** 1.0.0 → 2.19.0
 
 ---
 
@@ -514,7 +514,7 @@ A full-codebase code review surfaced 42 issues across security, thread safety, e
 
 ---
 
-## March 10, 2026 — HA OAuth & MA API authentication (v2.17.0–v2.18.3, ~35 commits)
+## March 10, 2026 — HA OAuth & MA API authentication (v2.17.0–v2.19.0, ~40 commits)
 
 ### HA OAuth popup flow for MA addon (v2.17.3)
 
@@ -557,6 +557,12 @@ Three rapid-fire patches addressed real-world deployment issues discovered durin
 **v2.18.2 — HAOS addon networking.** In HAOS each addon runs in its own Docker container with its own network namespace — `localhost:8094` from the bridge addon does *not* reach MA's Ingress port. The fix: `_find_ma_ingress_url()` queries the HA Supervisor API (`http://supervisor/addons/{slug}/info`) to discover the MA addon's Docker hostname and Ingress port, then connects via Docker DNS (e.g. `http://d5369777-music-assistant:8094`). Known MA addon slugs (`d5369777_music_assistant`, `_beta`, `_dev`) are tried in order. The addon config gained `hassio_api: true` and `homeassistant_api: true` permissions.
 
 **v2.18.3 — JSONRPC response format.** MA's `auth/token/create` returns the token as a raw JSON string when called via the Ingress port, not wrapped in `{"result": "..."}`. The response parser now handles both formats and logs the raw response for diagnostics.
+
+### Configuration UI overhaul (v2.19.0)
+
+The Configuration section had grown organically and needed restructuring. Save buttons were in the middle of the form, Music Assistant Integration was buried inside Advanced settings (two clicks deep), the BT Devices table had 9 columns with 700px horizontal scroll on mobile, and labels were verbose paragraphs.
+
+The overhaul reorganized the form into clearly labeled sections — General, Bluetooth, Music Assistant (promoted to top level), Advanced, and Authentication — each with icon headings and visual separation. A sticky save bar now appears at the bottom when config has unsaved changes. The BT Devices table was split into a main row (Name, MAC, Adapter, Format) and an expandable detail sub-row for advanced fields (Listen Address, Port, Delay, Keep-alive) that auto-opens when non-default values exist.
 
 ---
 

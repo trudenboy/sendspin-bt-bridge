@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.19.0] - 2026-03-10
+
+### Changed
+- Configuration UI overhaul: clear section groupings, promoted MA Integration, save buttons at bottom, sticky save bar, simplified BT device table with expandable detail rows
+
 ## [2.18.3] - 2026-03-10
 
 ### Fixed
