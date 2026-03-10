@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.17.5] - 2026-03-10
+
+### Fixed
+- **MA addon mode UI** — `maDiscover()` now runs on every page load so the addon-mode UI (HA login button) is shown even when MA token is already saved
+
 ## [2.17.4] - 2026-03-10
 
 ### Added
