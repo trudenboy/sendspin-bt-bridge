@@ -286,13 +286,16 @@
                     <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
                         <input type="checkbox" name="AUTH_ENABLED" id="auth-enabled" style="width:auto;margin:0;">
                         Enable web UI authentication
-                        <span class="form-hint" style="display:inline;margin:0;">— protect with a password</span>
+                        <span class="form-hint" style="display:inline;margin:0;">— protect access to this page</span>
                     </label>
+                </div>
+                <div id="auth-methods-hint" style="display:none;margin:-4px 0 8px 0;">
+                    <span class="form-hint" id="auth-methods-text"></span>
                 </div>
                 <div id="auth-password-fields" style="display:none;">
                 <div class="form-group">
                     <label>Set / change password
-                        <span class="form-hint">Minimum 8 characters — set before enabling auth</span>
+                        <span class="form-hint">Optional if Music Assistant is connected (MA credentials can be used to sign in)</span>
                     </label>
                     <div style="display:flex;gap:8px;flex-wrap:wrap;">
                         <input type="password" id="new-password" autocomplete="new-password"

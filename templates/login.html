@@ -55,6 +55,55 @@
             font-weight: 600;
             margin-top: 8px;
         }
+        .login-tabs {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 20px;
+            background: var(--secondary-background-color, #f0f0f0);
+            border-radius: 8px;
+            padding: 3px;
+        }
+        .login-tab {
+            flex: 1;
+            padding: 8px 4px;
+            font-size: 12px;
+            font-weight: 500;
+            text-align: center;
+            border: none;
+            background: transparent;
+            color: var(--secondary-text-color);
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .login-tab:hover { background: rgba(0,0,0,0.05); }
+        .login-tab.active {
+            background: var(--card-background-color);
+            color: var(--primary-text-color);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .login-method { display: none; }
+        .login-method.active { display: block; }
+        .login-divider {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin: 16px 0;
+            color: var(--secondary-text-color);
+            font-size: 12px;
+        }
+        .login-divider::before, .login-divider::after {
+            content: "";
+            flex: 1;
+            border-top: 1px solid var(--divider-color, #e0e0e0);
+        }
+        .login-no-methods {
+            text-align: center;
+            color: var(--secondary-text-color);
+            font-size: 13px;
+            padding: 20px 0;
+            line-height: 1.5;
+        }
     </style>
 </head>
 <body>
@@ -73,9 +122,10 @@
         <div class="login-error">{{ error }}</div>
         {% endif %}
 
+        {% if mfa_step %}
+        {# ── MFA step (HA login_flow only) ── #}
         <form method="post" autocomplete="on">
-            {% if mfa_step %}
-            {# ── Step 2: MFA code ── #}
+            <input type="hidden" name="method" value="ha">
             <input type="hidden" name="step" value="mfa">
             <input type="hidden" name="flow_id" value="{{ flow_id }}">
             <input type="hidden" name="mfa_module_id" value="{{ mfa_module_id }}">
@@ -86,24 +136,100 @@
                     placeholder="6-digit code" style="letter-spacing: 0.15em;">
             </div>
             <button type="submit" class="btn login-submit">Verify</button>
-            {% else %}
-            {# ── Step 1: credentials ── #}
-            <input type="hidden" name="step" value="credentials">
-            {% if ha_mode %}
-            <div class="form-group">
-                <label>Home Assistant username</label>
-                <input type="text" name="username" autocomplete="username" required autofocus>
-            </div>
+        </form>
+
+        {% elif auth_methods|length == 0 %}
+        {# ── No auth methods configured ── #}
+        <div class="login-no-methods">
+            No authentication method available.<br>
+            Set a password in the Configuration panel<br>
+            or connect to Music Assistant first.
+        </div>
+
+        {% else %}
+        {# ── Method selection ── #}
+        {% if auth_methods|length > 1 %}
+        <div class="login-tabs">
+            {% if "ma" in auth_methods %}
+            <button class="login-tab{% if auth_methods[0] == 'ma' %} active{% endif %}"
+                    onclick="switchMethod('ma')">Music Assistant</button>
             {% endif %}
+            {% if "ha" in auth_methods %}
+            <button class="login-tab{% if auth_methods[0] == 'ha' %} active{% endif %}"
+                    onclick="switchMethod('ha')">Home Assistant</button>
+            {% endif %}
+            {% if "password" in auth_methods %}
+            <button class="login-tab{% if auth_methods[0] == 'password' %} active{% endif %}"
+                    onclick="switchMethod('password')">Password</button>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        {# ── MA login form ── #}
+        {% if "ma" in auth_methods %}
+        <form method="post" autocomplete="on" class="login-method{% if auth_methods[0] == 'ma' %} active{% endif %}" id="method-ma">
+            <input type="hidden" name="method" value="ma">
+            <input type="hidden" name="step" value="credentials">
+            <div class="form-group">
+                <label>Username</label>
+                <input type="text" name="username" autocomplete="username" required
+                    {% if auth_methods[0] == 'ma' %}autofocus{% endif %}>
+            </div>
             <div class="form-group">
                 <label>Password</label>
-                <input type="password" name="password" autocomplete="current-password"
-                    required {% if not ha_mode %}autofocus{% endif %}>
+                <input type="password" name="password" autocomplete="current-password" required>
+            </div>
+            <button type="submit" class="btn login-submit">Sign in with Music Assistant</button>
+        </form>
+        {% endif %}
+
+        {# ── HA login form ── #}
+        {% if "ha" in auth_methods %}
+        <form method="post" autocomplete="on" class="login-method{% if auth_methods[0] == 'ha' %} active{% endif %}" id="method-ha">
+            <input type="hidden" name="method" value="ha">
+            <input type="hidden" name="step" value="credentials">
+            <div class="form-group">
+                <label>Home Assistant username</label>
+                <input type="text" name="username" autocomplete="username" required
+                    {% if auth_methods[0] == 'ha' %}autofocus{% endif %}>
+            </div>
+            <div class="form-group">
+                <label>Password</label>
+                <input type="password" name="password" autocomplete="current-password" required>
+            </div>
+            <button type="submit" class="btn login-submit">Sign in with Home Assistant</button>
+        </form>
+        {% endif %}
+
+        {# ── Local password form ── #}
+        {% if "password" in auth_methods %}
+        <form method="post" autocomplete="on" class="login-method{% if auth_methods[0] == 'password' %} active{% endif %}" id="method-password">
+            <input type="hidden" name="method" value="password">
+            <input type="hidden" name="step" value="credentials">
+            <div class="form-group">
+                <label>Password</label>
+                <input type="password" name="password" autocomplete="current-password" required
+                    {% if auth_methods[0] == 'password' %}autofocus{% endif %}>
             </div>
             <button type="submit" class="btn login-submit">Sign in</button>
-            {% endif %}
         </form>
+        {% endif %}
+
+        {% endif %}
     </div>
 </div>
+<script>
+function switchMethod(m) {
+    document.querySelectorAll('.login-method').forEach(function(el) { el.classList.remove('active'); });
+    document.querySelectorAll('.login-tab').forEach(function(el) { el.classList.remove('active'); });
+    var form = document.getElementById('method-' + m);
+    if (form) {
+        form.classList.add('active');
+        var inp = form.querySelector('input[type="text"], input[type="password"]');
+        if (inp) inp.focus();
+    }
+    event.target.classList.add('active');
+}
+</script>
 </body>
 </html>

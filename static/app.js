@@ -2078,9 +2078,27 @@ window.addEventListener('beforeunload', function(e) {
         authCheck.addEventListener('change', function() {
             var fields = document.getElementById('auth-password-fields');
             if (fields) fields.style.display = this.checked ? '' : 'none';
+            _updateAuthMethodsHint();
         });
     }
 })();
+
+function _updateAuthMethodsHint() {
+    var hint = document.getElementById('auth-methods-hint');
+    var text = document.getElementById('auth-methods-text');
+    var authCheck = document.getElementById('auth-enabled');
+    if (!hint || !text || !authCheck || !authCheck.checked) {
+        if (hint) hint.style.display = 'none';
+        return;
+    }
+    var methods = [];
+    var maUrl = (document.querySelector('input[name="MA_API_URL"]') || {}).value;
+    var maToken = (document.querySelector('input[name="MA_API_TOKEN"]') || {}).value;
+    if (maUrl && maToken) methods.push('Music Assistant credentials');
+    methods.push('local password');
+    text.textContent = 'Sign-in methods: ' + methods.join(', ');
+    hint.style.display = '';
+}
 
 async function loadConfig() {
     _configLoading = true;
@@ -2102,6 +2120,7 @@ async function loadConfig() {
         if (authCheck) authCheck.checked = !!config.AUTH_ENABLED;
         var authPw = document.getElementById('auth-password-fields');
         if (authPw && authCheck) authPw.style.display = authCheck.checked ? '' : 'none';
+        _updateAuthMethodsHint();
         var volMaCheck = document.getElementById('volume-via-ma');
         if (volMaCheck) volMaCheck.checked = config.VOLUME_VIA_MA !== false;
         var logLevelSel = document.getElementById('log-level-select');

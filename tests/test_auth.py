@@ -1,6 +1,7 @@
 """Unit tests for brute-force protection and URL validation in routes/auth.py."""
 
 import time
+from unittest.mock import patch
 
 import pytest
 from flask import Flask
@@ -10,7 +11,9 @@ from routes.auth import (
     _LOCKOUT_WINDOW_SECS,
     _check_rate_limit,
     _clear_failures,
+    _detect_auth_methods,
     _failed,
+    _ma_validate_credentials,
     _record_failure,
     _safe_next_url,
 )
@@ -107,3 +110,109 @@ def test_rejects_no_leading_slash():
 def test_default_is_root():
     with _app.test_request_context("/"):
         assert _safe_next_url() == "/"
+
+
+# ── _detect_auth_methods ─────────────────────────────────────────────────
+
+
+def test_detect_no_methods():
+    """No config keys set → empty list."""
+    with patch("routes.auth.load_config", return_value={}), patch.dict("os.environ", {}, clear=True):
+        methods = _detect_auth_methods()
+    assert methods == []
+
+
+def test_detect_ma_method():
+    """MA_API_URL + MA_API_TOKEN present → 'ma' in methods."""
+    cfg = {"MA_API_URL": "http://ma:8095", "MA_API_TOKEN": "tok123"}
+    with patch("routes.auth.load_config", return_value=cfg), patch.dict("os.environ", {}, clear=True):
+        methods = _detect_auth_methods()
+    assert "ma" in methods
+
+
+def test_detect_ha_method():
+    """SUPERVISOR_TOKEN env → 'ha' in methods."""
+    with (
+        patch("routes.auth.load_config", return_value={}),
+        patch.dict("os.environ", {"SUPERVISOR_TOKEN": "abc"}, clear=False),
+    ):
+        methods = _detect_auth_methods()
+    assert "ha" in methods
+
+
+def test_detect_password_method():
+    """AUTH_PASSWORD_HASH set → 'password' in methods."""
+    cfg = {"AUTH_PASSWORD_HASH": "pbkdf2:sha256:..."}
+    with patch("routes.auth.load_config", return_value=cfg), patch.dict("os.environ", {}, clear=True):
+        methods = _detect_auth_methods()
+    assert "password" in methods
+
+
+def test_detect_multiple_methods():
+    """All three methods available at once."""
+    cfg = {
+        "MA_API_URL": "http://ma:8095",
+        "MA_API_TOKEN": "tok",
+        "AUTH_PASSWORD_HASH": "hash",
+    }
+    with (
+        patch("routes.auth.load_config", return_value=cfg),
+        patch.dict("os.environ", {"SUPERVISOR_TOKEN": "x"}, clear=False),
+    ):
+        methods = _detect_auth_methods()
+    assert methods == ["ma", "ha", "password"]
+
+
+def test_detect_ma_requires_both_url_and_token():
+    """MA_API_URL without token → no 'ma' method."""
+    cfg = {"MA_API_URL": "http://ma:8095"}
+    with patch("routes.auth.load_config", return_value=cfg), patch.dict("os.environ", {}, clear=True):
+        methods = _detect_auth_methods()
+    assert "ma" not in methods
+
+
+# ── _ma_validate_credentials ─────────────────────────────────────────────
+
+
+def test_ma_validate_no_url():
+    """No MA_API_URL → fails with descriptive message."""
+    with patch("routes.auth.load_config", return_value={}):
+        ok, msg = _ma_validate_credentials("user", "pass")
+    assert not ok
+    assert "not connected" in msg.lower()
+
+
+def test_ma_validate_success():
+    """Successful MA login → True."""
+    cfg = {"MA_API_URL": "http://ma:8095"}
+    with (
+        patch("routes.auth.load_config", return_value=cfg),
+        patch("routes.api_ma._ma_http_login", return_value="token123"),
+    ):
+        ok, msg = _ma_validate_credentials("user", "pass")
+    assert ok
+    assert msg == ""
+
+
+def test_ma_validate_bad_credentials():
+    """RuntimeError from _ma_http_login → invalid credentials."""
+    cfg = {"MA_API_URL": "http://ma:8095"}
+    with (
+        patch("routes.auth.load_config", return_value=cfg),
+        patch("routes.api_ma._ma_http_login", side_effect=RuntimeError("Invalid username or password")),
+    ):
+        ok, msg = _ma_validate_credentials("user", "wrong")
+    assert not ok
+    assert "invalid" in msg.lower()
+
+
+def test_ma_validate_unreachable():
+    """ConnectionError → server unreachable message."""
+    cfg = {"MA_API_URL": "http://ma:8095"}
+    with (
+        patch("routes.auth.load_config", return_value=cfg),
+        patch("routes.api_ma._ma_http_login", side_effect=ConnectionError("refused")),
+    ):
+        ok, msg = _ma_validate_credentials("user", "pass")
+    assert not ok
+    assert "unreachable" in msg.lower()
