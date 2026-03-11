@@ -505,3 +505,96 @@ def api_version():
         )
     except Exception:
         return jsonify({"version": VERSION, "git_sha": "unknown", "built_at": BUILD_DATE})
+
+
+# ---------------------------------------------------------------------------
+# Update check & apply
+# ---------------------------------------------------------------------------
+
+
+@config_bp.route("/api/update/check", methods=["POST"])
+def api_update_check():
+    """Force an immediate version check against GitHub releases."""
+    loop = state.get_main_loop()
+    if not loop:
+        return jsonify({"success": False, "error": "Event loop not available"}), 503
+    try:
+        from services.update_checker import _parse_version, check_latest_version
+
+        fut = asyncio.run_coroutine_threadsafe(check_latest_version(), loop)
+        latest = fut.result(timeout=20)
+        if not latest:
+            return jsonify({"success": False, "error": "Could not reach GitHub API"}), 502
+
+        current = _parse_version(VERSION)
+        remote = _parse_version(latest["version"])
+        if remote > current:
+            latest["current_version"] = VERSION
+            state.set_update_available(latest)
+            return jsonify({"success": True, "update_available": True, **latest})
+        state.set_update_available(None)
+        return jsonify({"success": True, "update_available": False, "latest": latest["version"]})
+    except Exception:
+        logger.exception("Update check failed")
+        return jsonify({"success": False, "error": "Internal error"}), 500
+
+
+@config_bp.route("/api/update/info")
+def api_update_info():
+    """Return cached update availability information."""
+    info = state.get_update_available()
+    runtime = _detect_runtime()
+    result: dict = {"update_available": info is not None, "runtime": runtime}
+    if info:
+        result.update(info)
+    if runtime == "systemd":
+        result["update_method"] = "one_click"
+        result["instructions"] = "Click 'Update Now' to upgrade automatically."
+    elif runtime == "ha_addon":
+        result["update_method"] = "ha_store"
+        result["instructions"] = "Update via Home Assistant → Add-ons → Sendspin BT Bridge → Update."
+    else:
+        result["update_method"] = "manual"
+        result["instructions"] = "Run: docker compose pull && docker compose up -d"
+    return jsonify(result)
+
+
+@config_bp.route("/api/update/apply", methods=["POST"])
+def api_update_apply():
+    """Run upgrade.sh (LXC/systemd only). Returns progress lines."""
+    runtime = _detect_runtime()
+    if runtime != "systemd":
+        methods = {
+            "ha_addon": "Update via Home Assistant → Add-ons → Sendspin BT Bridge → Update.",
+            "docker": "Run: docker compose pull && docker compose up -d",
+        }
+        return jsonify({"success": False, "error": methods.get(runtime, "Unsupported runtime")}), 400
+
+    upgrade_script = "/opt/sendspin-client/lxc/upgrade.sh"
+    if not os.path.isfile(upgrade_script):
+        # Try relative path (dev mode)
+        base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        upgrade_script = os.path.join(base, "lxc", "upgrade.sh")
+    if not os.path.isfile(upgrade_script):
+        return jsonify({"success": False, "error": "upgrade.sh not found"}), 404
+
+    try:
+        result = subprocess.run(
+            ["bash", upgrade_script],
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        return jsonify(
+            {
+                "success": result.returncode == 0,
+                "returncode": result.returncode,
+                "stdout": result.stdout[-4000:] if result.stdout else "",
+                "stderr": result.stderr[-2000:] if result.stderr else "",
+            }
+        )
+    except subprocess.TimeoutExpired:
+        return jsonify({"success": False, "error": "Upgrade timed out (120s)"}), 504
+    except Exception:
+        logger.exception("Upgrade failed")
+        return jsonify({"success": False, "error": "Internal error"}), 500

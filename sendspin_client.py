@@ -23,6 +23,7 @@ import state as _state
 from bluetooth_manager import BluetoothManager
 from config import (
     CONFIG_FILE,
+    VERSION,
     _player_id_from_mac,
     config_lock,
     ensure_bridge_name,
@@ -968,6 +969,11 @@ async def main():
         from demo.simulator import run_simulator
 
         tasks.append(asyncio.create_task(run_simulator(clients)))
+
+    # Background update checker (all deployment types)
+    from services.update_checker import run_update_checker
+
+    tasks.append(asyncio.create_task(run_update_checker(VERSION)))
 
     await asyncio.gather(*tasks)
 

@@ -356,3 +356,24 @@ def set_ma_now_playing(data: dict) -> None:
     with _ma_now_playing_lock:
         _ma_now_playing[syncgroup_id] = data
     notify_status_changed()
+
+
+# ---------------------------------------------------------------------------
+# Update availability
+# ---------------------------------------------------------------------------
+
+_update_available: dict | None = None
+_update_available_lock = threading.Lock()
+
+
+def get_update_available() -> dict | None:
+    """Return update info dict if a newer version is available, else None."""
+    with _update_available_lock:
+        return dict(_update_available) if _update_available else None
+
+
+def set_update_available(data: dict | None) -> None:
+    """Store update availability info. Called by update_checker."""
+    global _update_available
+    with _update_available_lock:
+        _update_available = dict(data) if data else None

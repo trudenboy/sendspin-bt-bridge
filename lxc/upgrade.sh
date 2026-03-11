@@ -57,14 +57,20 @@ done
 
 # services/ module
 mkdir -p "${APP_DIR}/services"
-for file in __init__.py bluetooth.py ma_client.py bridge_daemon.py daemon_process.py ma_monitor.py pulse.py; do
+for file in __init__.py bluetooth.py ma_client.py bridge_daemon.py daemon_process.py ma_monitor.py pulse.py update_checker.py; do
   wget -q "${BASE}/services/${file}" -O "${APP_DIR}/services/${file}"
 done
 
 # routes/ module
 mkdir -p "${APP_DIR}/routes"
-for file in __init__.py api.py views.py auth.py; do
+for file in __init__.py api.py api_bt.py api_config.py api_ma.py api_status.py views.py auth.py; do
   wget -q "${BASE}/routes/${file}" -O "${APP_DIR}/routes/${file}"
+done
+
+# demo/ module
+mkdir -p "${APP_DIR}/demo"
+for file in __init__.py bt_manager.py fixtures.py simulator.py; do
+  wget -q "${BASE}/demo/${file}" -O "${APP_DIR}/demo/${file}"
 done
 
 # HTML templates

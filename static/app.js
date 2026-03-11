@@ -127,6 +127,8 @@ async function updateStatus() {
         var sysEl = document.getElementById('system-info');
         if (sysEl) sysEl.textContent = info.join(' \u00b7 ');
 
+        _showUpdateBadge(status.update_available);
+
         var devices = status.devices || (status.error ? [] : [status]);
         var grid = document.getElementById('status-grid');
 
@@ -2431,6 +2433,20 @@ async function loadVersionInfo() {
             sha +
             '<div>' + escHtml(data.built_at || '') + '</div>';
     } catch (_) { /* Keep static Jinja2-rendered values */ }
+}
+
+function _showUpdateBadge(upd) {
+    var badge = document.getElementById('update-badge');
+    if (!badge) return;
+    if (upd && upd.version) {
+        var link = document.getElementById('update-link');
+        var ver = document.getElementById('update-version');
+        if (ver) ver.textContent = 'v' + upd.version;
+        if (link) link.href = upd.url || '#';
+        badge.style.display = '';
+    } else {
+        badge.style.display = 'none';
+    }
 }
 
 // ---- Diagnostics ----
