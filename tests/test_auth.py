@@ -148,7 +148,21 @@ def test_detect_password_always_present():
 
 
 def test_detect_multiple_methods():
-    """All three methods available at once."""
+    """In standalone mode all three methods can be available."""
+    cfg = {
+        "MA_API_URL": "http://ma:8095",
+        "MA_API_TOKEN": "tok",
+    }
+    with (
+        patch("routes.auth.load_config", return_value=cfg),
+        patch.dict("os.environ", {}, clear=True),
+    ):
+        methods = _detect_auth_methods()
+    assert methods == ["ma", "password"]
+
+
+def test_detect_addon_mode_only_ha():
+    """In addon mode only HA auth is offered."""
     cfg = {
         "MA_API_URL": "http://ma:8095",
         "MA_API_TOKEN": "tok",
@@ -158,7 +172,7 @@ def test_detect_multiple_methods():
         patch.dict("os.environ", {"SUPERVISOR_TOKEN": "x"}, clear=False),
     ):
         methods = _detect_auth_methods()
-    assert methods == ["ma", "ha", "password"]
+    assert methods == ["ha"]
 
 
 def test_detect_ha_via_ma():

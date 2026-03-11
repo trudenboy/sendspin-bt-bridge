@@ -42,10 +42,17 @@ app.config["SESSION_COOKIE_HTTPONLY"] = True
 # Cache AUTH_ENABLED at startup so _check_auth() never reads config.json
 # on every request.  Like all other settings, a change takes effect after
 # the service is restarted (same behaviour as SENDSPIN_SERVER, etc.).
-_auth_enabled: bool = bool(_startup_config.get("AUTH_ENABLED", False))
+_is_ha_addon = bool(os.environ.get("SUPERVISOR_TOKEN"))
+# In HA addon mode, auth is always enforced (users log in via HA credentials).
+# In Docker/standalone mode, the AUTH_ENABLED toggle controls auth.
+_auth_enabled: bool = _is_ha_addon or bool(_startup_config.get("AUTH_ENABLED", False))
 app.config["AUTH_ENABLED"] = _auth_enabled
+app.config["IS_HA_ADDON"] = _is_ha_addon
 if _auth_enabled:
-    logger.info("Web UI password protection is enabled (restart required to change)")
+    if _is_ha_addon:
+        logger.info("Web UI password protection is enabled (HA addon — always on)")
+    else:
+        logger.info("Web UI password protection is enabled (restart required to change)")
 
 
 _TRUSTED_PROXIES = {"127.0.0.1", "::1", "172.30.32.2"}

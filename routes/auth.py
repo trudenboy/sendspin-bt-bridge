@@ -3,17 +3,17 @@
 Handles /login (GET/POST) and /logout.
 
 Three authentication backends are supported (auto-detected at login time):
+  - **HA addon mode** (SUPERVISOR_TOKEN env var present): validates via the
+    Home Assistant Core login_flow using the user's HA credentials.
+    Supports 2FA/MFA.  This is the *only* method offered in addon mode.
   - **Music Assistant** — validates credentials via the MA HTTP API when the
     bridge is connected to MA (MA_API_URL + MA_API_TOKEN in config).
     Works for standalone MA and MA running as an HA addon.
-  - **HA addon mode** (SUPERVISOR_TOKEN env var present): validates via the
-    Home Assistant Supervisor auth API using the user's HA credentials.
-    Supports 2FA/MFA via HA Core login_flow.
   - **Local password** — compares against a PBKDF2-SHA256 password hash
     stored in config.json as AUTH_PASSWORD_HASH.
 
-When AUTH_ENABLED is False (default) all requests bypass this entirely;
-the before_request hook in web_interface.py is the gatekeeper.
+In HA addon mode, auth is always enforced (no AUTH_ENABLED toggle).
+In Docker/standalone mode, the AUTH_ENABLED flag controls auth enforcement.
 """
 
 from __future__ import annotations
@@ -103,15 +103,14 @@ def _detect_auth_methods() -> list[str]:
 
     Possible values: ``"ha_via_ma"``, ``"ma"``, ``"ha"``, ``"password"``.
 
-    - ``"ha_via_ma"`` — MA connected and authenticated via HA; uses HA Core
-      login_flow on the remote HA URL (supports 2FA).
-    - ``"ma"`` — MA connected with builtin auth; simple username/password.
-    - ``"ha"`` — running as HA addon (SUPERVISOR_TOKEN); uses local HA Core.
-    - ``"password"`` — local PBKDF2 hash in config.json (always present).
-
-    ``"password"`` is always included as the mandatory fallback.
-    Other methods are optional and auto-detected from config/runtime.
+    In HA addon mode only ``"ha"`` is returned (HA Core login_flow with 2FA).
+    In standalone/Docker mode all available methods are auto-detected, with
+    ``"password"`` always included as the mandatory fallback.
     """
+    # HA addon mode — only HA Core auth (supports 2FA)
+    if _is_ha_addon():
+        return ["ha"]
+
     methods: list[str] = []
     config = load_config()
 
@@ -123,10 +122,6 @@ def _detect_auth_methods() -> list[str]:
             methods.append("ha_via_ma")
         else:
             methods.append("ma")
-
-    # HA addon mode
-    if _is_ha_addon():
-        methods.append("ha")
 
     # Local password — always present as mandatory fallback
     methods.append("password")
@@ -367,6 +362,7 @@ def login():
             if ok:
                 _clear_failures(client_ip)
                 session["authenticated"] = True
+                session["ha_user"] = username
                 return redirect(_safe_next_url())
             _record_failure(client_ip)
             error = err_msg or "Invalid credentials"
@@ -406,6 +402,7 @@ def login():
                     if result and result.get("type") == "create_entry":
                         _clear_failures(client_ip)
                         session["authenticated"] = True
+                        session["ha_user"] = session.get("_ha_login_user", "")
                         return redirect(_safe_next_url())
                     _record_failure(client_ip)
                     if result and result.get("type") == "abort":
@@ -442,8 +439,10 @@ def login():
                         elif result.get("type") == "create_entry":
                             _clear_failures(client_ip)
                             session["authenticated"] = True
+                            session["ha_user"] = username
                             return redirect(_safe_next_url())
                         elif result.get("type") == "form" and result.get("step_id") == "mfa":
+                            session["_ha_login_user"] = username
                             placeholders = result.get("description_placeholders") or {}
                             mfa_module_id = placeholders.get("mfa_module_id", "totp")
                             return render_template(
@@ -497,6 +496,7 @@ def login():
                 if result and result.get("type") == "create_entry":
                     _clear_failures(client_ip)
                     session["authenticated"] = True
+                    session["ha_user"] = session.get("_ha_login_user", "")
                     return redirect(_safe_next_url())
                 _record_failure(client_ip)
                 if result and result.get("type") == "abort":
@@ -529,6 +529,7 @@ def login():
                     if _supervisor_auth(username, password):
                         _clear_failures(client_ip)
                         session["authenticated"] = True
+                        session["ha_user"] = username
                         return redirect(_safe_next_url())
                     _record_failure(client_ip)
                     error = "Invalid credentials"
@@ -543,8 +544,10 @@ def login():
                     elif result.get("type") == "create_entry":
                         _clear_failures(client_ip)
                         session["authenticated"] = True
+                        session["ha_user"] = username
                         return redirect(_safe_next_url())
                     elif result.get("type") == "form" and result.get("step_id") == "mfa":
+                        session["_ha_login_user"] = username
                         placeholders = result.get("description_placeholders") or {}
                         mfa_module_id = placeholders.get("mfa_module_id", "totp")
                         return render_template(

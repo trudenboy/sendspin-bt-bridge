@@ -45,7 +45,6 @@ options:
   prefer_sbc_codec: false
   bt_check_interval: 10
   bt_max_reconnect_fails: 0
-  auth_enabled: false
   log_level: "info"
   ma_api_url: ""
   ma_api_token: ""
@@ -62,7 +61,6 @@ schema:
   prefer_sbc_codec: bool?
   bt_check_interval: int?
   bt_max_reconnect_fails: int?
-  auth_enabled: bool?
   log_level: "list(info|debug)?"
   ma_api_url: str?
   ma_api_token: str?

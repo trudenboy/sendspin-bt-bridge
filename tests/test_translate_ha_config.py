@@ -40,7 +40,6 @@ def _minimal_options(**overrides) -> dict:
         "bluetooth_devices": [{"mac": "AA:BB:CC:DD:EE:FF", "name": "Speaker"}],
         "bluetooth_adapters": [],
         "tz": "UTC",
-        "auth_enabled": False,
         "log_level": "info",
         "volume_via_ma": True,
     }
@@ -196,7 +195,6 @@ def test_basic_translation(tmp_path):
             {"mac": "11:22:33:44:55:66", "name": "Bedroom"},
         ],
         tz="Europe/London",
-        auth_enabled=True,
         log_level="debug",
         volume_via_ma=False,
         prefer_sbc_codec=True,
@@ -220,7 +218,7 @@ def test_basic_translation(tmp_path):
     assert cfg["BLUETOOTH_DEVICES"][0]["mac"] == "AA:BB:CC:DD:EE:FF"
     assert cfg["BLUETOOTH_DEVICES"][1]["name"] == "Bedroom"
     assert cfg["TZ"] == "Europe/London"
-    assert cfg["AUTH_ENABLED"] is True
+    assert "AUTH_ENABLED" not in cfg  # managed by web_interface in addon mode
     assert cfg["LOG_LEVEL"] == "DEBUG"
     assert cfg["VOLUME_VIA_MA"] is False
     assert cfg["PREFER_SBC_CODEC"] is True

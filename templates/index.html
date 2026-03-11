@@ -48,6 +48,9 @@
             <div id="health-indicator" class="health-indicator"></div>
             {% if auth_enabled %}
             <div style="margin-top:8px;">
+                {% if ha_user %}
+                <span style="color:rgba(255,255,255,0.7);font-size:12px;margin-right:8px;">{{ ha_user }}</span>
+                {% endif %}
                 <a href="{{ url_for('auth.logout') }}"
                    style="color:rgba(255,255,255,0.8);font-size:12px;text-decoration:none;
                           border:1px solid rgba(255,255,255,0.4);border-radius:4px;padding:3px 10px;">

@@ -114,7 +114,6 @@ def main() -> None:
         "PREFER_SBC_CODEC": bool(opts.get("prefer_sbc_codec", False)),
         "BT_CHECK_INTERVAL": _int_opt(opts, "bt_check_interval", 10),
         "BT_MAX_RECONNECT_FAILS": _int_opt(opts, "bt_max_reconnect_fails", 0),
-        "AUTH_ENABLED": bool(opts.get("auth_enabled", False)),
         "LOG_LEVEL": (opts.get("log_level") or "info").upper(),
         "MA_API_URL": opts.get("ma_api_url") or "",
         "MA_API_TOKEN": opts.get("ma_api_token") or "",
