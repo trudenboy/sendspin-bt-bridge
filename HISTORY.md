@@ -2,7 +2,7 @@
 
 A history of the architectural and functional evolution of sendspin-bt-bridge — for readers familiar with Home Assistant, Music Assistant, and multiroom audio setups.
 
-**Period:** January 1 – March 11, 2026 · **Total commits:** ~650 · **Versions:** 1.0.0 → 2.20.5
+**Period:** January 1 – March 11, 2026 · **Total commits:** ~650 · **Versions:** 1.0.0 → 2.21.0
 
 ---
 
@@ -583,6 +583,16 @@ All 138 tests passed after the refactoring; `ruff check` stayed clean throughout
 A follow-up patch (v2.20.4) fixed the JWT token `<details>` section's disclosure marker — the native ▼ was replaced with a CSS `::before` ▶ that rotates on open, matching other collapsible sections — and corrected the Music Assistant API token hint to point to "Settings → Profile → Long-lived access tokens".
 
 A documentation audit (v2.20.5) refreshed the entire doc corpus: version references updated from 2.10.6/2.12.2 to 2.20.4, the API route split reflected in CLAUDE.md, READMEs, and contributing guides, web-ui.md rewritten to dissolve the obsolete "Advanced Settings" section, and 6 screenshots recaptured from the live HAOS UI (battery badges, restructured config panels, diagnostics). A "Show all" checkbox in the paired-devices header that overflowed the container boundary was also fixed by repositioning the label before the checkbox with proper margin alignment.
+
+### Legacy cleanup (v2.21.0)
+
+A systematic audit of historical config keys and dead code removed accumulated legacy from 20+ versions of organic growth.
+
+The `BLUETOOTH_MAC` single-device config key — the project's original parameter from its first commit — was fully deprecated. An auto-migration in `load_config()` converts it to a `BLUETOOTH_DEVICES` array entry on startup, then removes the old key from `config.json`. The migration was propagated across 23 files: config schema, API whitelist, web UI JavaScript, Docker Compose, entrypoint script, install scripts (RPi, LXC, OpenWrt), and all documentation in both English and Russian.
+
+Five additional legacy keys were removed: `BRIDGE_NAME_SUFFIX` (dead since v2.13.0 when `BRIDGE_NAME` auto-population replaced it), `LAST_VOLUME` (the old single-integer volume, superseded by per-MAC `LAST_VOLUMES` dict), `keepalive_silence` (boolean toggle, replaced by `keepalive_interval > 0`), and the `port` device key (renamed to `listen_port`). Each removal included auto-migration where old configs could still exist.
+
+Dead code was cleaned up: `get_client_status()` (a backward-compat wrapper from the v2.20.3 API modularization that was never called externally), unused re-exports in `routes/api.py`, and the `_save_device_volume` internal alias. The config schema was completed by adding `TRUSTED_PROXIES` and `MA_USERNAME` to `allowed_keys` — both were already read at runtime but could be silently dropped during config round-trips.
 
 ---
 

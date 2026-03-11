@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.21.0] - 2026-03-11
+
+### Changed
+- **`BLUETOOTH_MAC` fully deprecated** — legacy single-device `BLUETOOTH_MAC` config key auto-migrates to `BLUETOOTH_DEVICES` array on startup; removed from config schema, API whitelist, web UI, entrypoint, Docker Compose, install scripts, and all documentation (23 files updated)
+- **Legacy config keys removed** — `BRIDGE_NAME_SUFFIX` (unused since v2.13.0), `LAST_VOLUME` (singular, superseded by per-MAC `LAST_VOLUMES`), `keepalive_silence` (boolean, replaced by `keepalive_interval` integer), and `port` (renamed to `listen_port`) all cleaned up with auto-migration where needed
+- **Dead code removed** — `get_client_status()` backward-compat function, unused re-exports from the v2.20.3 API modularization, `_save_device_volume` internal alias
+- **Config schema completed** — `TRUSTED_PROXIES` and `MA_USERNAME` added to `allowed_keys` and `DEFAULT_CONFIG` so they survive config round-trips
+
 ## [2.20.5] - 2026-03-11
 
 ### Fixed
