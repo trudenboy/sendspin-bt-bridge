@@ -18,21 +18,8 @@ import time
 from flask import Blueprint, jsonify, request
 
 import state
-from config import (
-    save_device_volume as _save_device_volume,
-)
-
-# Re-export moved symbols so existing ``from routes.api import …`` still works
-from routes.api_config import (  # noqa: F401
-    _detect_runtime,
-    _reload_volume_via_ma,
-    _sync_ha_options,
-    get_volume_via_ma,
-)
-from routes.api_status import (  # noqa: F401
-    get_client_status,
-    get_client_status_for,
-)
+from config import save_device_volume
+from routes.api_config import _detect_runtime, get_volume_via_ma
 from services.pulse import (
     get_sink_mute,
     set_sink_mute,
@@ -72,7 +59,7 @@ def _persist_volume(mac: str, volume: int) -> None:
     """Write volume to config.json (called via debounce timer, not inline)."""
     with _volume_timers_lock:
         _volume_timers.pop(mac, None)
-    _save_device_volume(mac, volume)
+    save_device_volume(mac, volume)
 
 
 def _schedule_volume_persist(mac: str, volume: int) -> None:

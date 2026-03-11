@@ -55,6 +55,7 @@ DEFAULT_CONFIG = {
     "MA_API_TOKEN": "",
     "MA_USERNAME": "",
     "VOLUME_VIA_MA": True,
+    "TRUSTED_PROXIES": [],
 }
 
 logger = logging.getLogger(__name__)
@@ -114,10 +115,8 @@ def load_config() -> dict:
         "BRIDGE_NAME",
         "BLUETOOTH_DEVICES",
         "TZ",
-        "LAST_VOLUME",
         "LAST_VOLUMES",
         "BLUETOOTH_ADAPTERS",
-        "BRIDGE_NAME_SUFFIX",
         "PULSE_LATENCY_MSEC",
         "PREFER_SBC_CODEC",
         "BT_CHECK_INTERVAL",
@@ -128,7 +127,9 @@ def load_config() -> dict:
         "LOG_LEVEL",
         "MA_API_URL",
         "MA_API_TOKEN",
+        "MA_USERNAME",
         "VOLUME_VIA_MA",
+        "TRUSTED_PROXIES",
     }
 
     if CONFIG_FILE.exists():
@@ -145,29 +146,34 @@ def load_config() -> dict:
                 result["BLUETOOTH_DEVICES"] = [
                     {"mac": legacy_mac, "adapter": "", "player_name": "Sendspin Player"},
                 ]
-                _migrate_legacy_mac = True
+                _needs_migration = True
             else:
-                _migrate_legacy_mac = False
+                _needs_migration = False
+
+            # Auto-migrate legacy LAST_VOLUME (single int) → LAST_VOLUMES (dict)
+            legacy_vol = saved_config.get("LAST_VOLUME")
+            if legacy_vol is not None and not result.get("LAST_VOLUMES"):
+                result["LAST_VOLUMES"] = {}
+                _needs_migration = True
 
             logger.info("Loaded config from %s", CONFIG_FILE)
         except Exception as e:
             logger.warning("Error loading config: %s, using defaults", e)
-            _migrate_legacy_mac = False
+            _needs_migration = False
 
-        if _migrate_legacy_mac:
+        if _needs_migration:
             try:
-                update_config(
-                    lambda cfg: (
-                        cfg.__setitem__("BLUETOOTH_DEVICES", result["BLUETOOTH_DEVICES"]),
-                        cfg.pop("BLUETOOTH_MAC", None),
-                    )
-                )
-                logger.info(
-                    "Migrated legacy BLUETOOTH_MAC=%s → BLUETOOTH_DEVICES",
-                    legacy_mac,
-                )
+
+                def _do_migrate(cfg: dict) -> None:
+                    if legacy_mac and not cfg.get("BLUETOOTH_DEVICES"):
+                        cfg["BLUETOOTH_DEVICES"] = result["BLUETOOTH_DEVICES"]
+                    cfg.pop("BLUETOOTH_MAC", None)
+                    cfg.pop("LAST_VOLUME", None)
+
+                update_config(_do_migrate)
+                logger.info("Migrated legacy config keys to current format")
             except Exception as exc:
-                logger.warning("Could not persist BLUETOOTH_MAC migration: %s", exc)
+                logger.warning("Could not persist config migration: %s", exc)
     else:
         logger.info("Config file not found at %s, using defaults", CONFIG_FILE)
 

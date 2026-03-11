@@ -772,16 +772,14 @@ async def main():
         player_name = device.get("player_name") or _default_player_name
         if effective_bridge:
             player_name = f"{player_name} @ {effective_bridge}"
-        # 'listen_port' is the preferred key; 'port' kept for backward compat
-        listen_port = int(device.get("listen_port") or device.get("port") or base_listen_port + i)
+        listen_port = int(device.get("listen_port") or base_listen_port + i)
         listen_host = device.get("listen_host")
         static_delay_ms = device.get("static_delay_ms")
         if static_delay_ms is not None:
             static_delay_ms = float(static_delay_ms)
         preferred_format = device.get("preferred_format", "flac:44100:16:2")
         keepalive_interval = int(device.get("keepalive_interval") or 0)
-        # keepalive_silence (bool) is the legacy key; interval > 0 is the new canonical form
-        keepalive_enabled = keepalive_interval > 0 or bool(device.get("keepalive_silence", False))
+        keepalive_enabled = keepalive_interval > 0
         keepalive_interval = max(30, keepalive_interval) if keepalive_enabled else 30
 
         client = SendspinClient(

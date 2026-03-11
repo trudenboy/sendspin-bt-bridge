@@ -252,7 +252,6 @@ def api_config():
         "BT_MAX_RECONNECT_FAILS",
         "AUTH_ENABLED",
         "LAST_VOLUMES",
-        "LAST_VOLUME",
         "LOG_LEVEL",
         "MA_API_URL",
         "MA_API_TOKEN",
@@ -272,7 +271,6 @@ def api_config():
                 # Preserve keys that are never submitted via the form
                 for key in (
                     "LAST_VOLUMES",
-                    "LAST_VOLUME",
                     "AUTH_PASSWORD_HASH",
                     "SECRET_KEY",
                 ):

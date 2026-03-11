@@ -155,25 +155,6 @@ def get_client_status_for(client):
         }
 
 
-def get_client_status():
-    """Get status from the first client (backward compatibility)."""
-    with _clients_lock:
-        snapshot = list(_clients)
-    if not snapshot:
-        return {
-            "connected": False,
-            "server_connected": False,
-            "bluetooth_connected": False,
-            "bluetooth_available": False,
-            "playing": False,
-            "error": "No clients",
-            "version": VERSION,
-            "build_date": BUILD_DATE,
-            "bluetooth_mac": None,
-        }
-    return get_client_status_for(snapshot[0])
-
-
 def _build_groups_summary(clients: list) -> list[dict]:
     """Build a list of group objects from the current client list.
 

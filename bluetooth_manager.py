@@ -468,7 +468,7 @@ class BluetoothManager:
                         with config_lock, open(CONFIG_FILE) as f:
                             cfg = json.load(f)
                         volumes = cfg.get("LAST_VOLUMES", {})
-                        last_volume = volumes.get(self.mac_address) or cfg.get("LAST_VOLUME")
+                        last_volume = volumes.get(self.mac_address)
                         if last_volume is not None and isinstance(last_volume, int) and 0 <= last_volume <= 100:
                             if set_sink_volume(configured_sink, last_volume):
                                 logger.info("✓ Restored volume to %s%% for %s", last_volume, self.mac_address)

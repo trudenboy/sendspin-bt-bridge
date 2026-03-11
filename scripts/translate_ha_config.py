@@ -132,8 +132,6 @@ def main() -> None:
             existing: dict = json.load(f)
         if "LAST_VOLUMES" in existing:
             config["LAST_VOLUMES"] = existing["LAST_VOLUMES"]
-        elif "LAST_VOLUME" in existing:
-            config["LAST_VOLUME"] = existing["LAST_VOLUME"]
         for key in ("AUTH_PASSWORD_HASH", "SECRET_KEY"):
             if key in existing:
                 config[key] = existing[key]

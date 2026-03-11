@@ -1303,7 +1303,7 @@ function btAdapterOptions(selected) {
     return opts;
 }
 
-function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabled, preferredFormat, keepaliveSilence, keepaliveInterval) {
+function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabled, preferredFormat, keepaliveInterval) {
     var tbody = document.getElementById('bt-devices-table');
     var wrap = document.createElement('div');
     wrap.className = 'bt-device-wrap';
@@ -1314,15 +1314,8 @@ function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabl
     var delayVal = (delay !== undefined && delay !== null && delay !== '') ? delay : 0;
     var portVal  = (listenPort !== undefined && listenPort !== null && listenPort !== '') ? listenPort : '';
     var fmtVal   = (preferredFormat !== undefined && preferredFormat !== null) ? preferredFormat : 'flac:44100:16:2';
-    // keepalive: 0 = disabled; ≥30 = enabled. Migrate old checkbox+interval format.
-    var kaVal;
-    if (keepaliveSilence) {
-        kaVal = (keepaliveInterval !== undefined && keepaliveInterval !== null && keepaliveInterval !== '') ? parseInt(keepaliveInterval, 10) || 30 : 30;
-        if (kaVal < 30) kaVal = 30;
-    } else {
-        kaVal = (keepaliveInterval !== undefined && keepaliveInterval !== null && keepaliveInterval !== '') ? parseInt(keepaliveInterval, 10) : 0;
-        if (kaVal > 0 && kaVal < 30) kaVal = 30;
-    }
+    var kaVal = (keepaliveInterval !== undefined && keepaliveInterval !== null && keepaliveInterval !== '') ? parseInt(keepaliveInterval, 10) : 0;
+    if (kaVal > 0 && kaVal < 30) kaVal = 30;
     row.innerHTML =
         '<button type="button" class="bt-expand-btn" title="Show advanced fields">&#9654;</button>' +
         '<input type="text" placeholder="Player Name" class="bt-name" value="' +
@@ -1399,9 +1392,6 @@ function collectBtDevices() {
         if (listenHost) dev.listen_host = listenHost;
         if (listenPort) dev.listen_port = listenPort;
         dev.keepalive_interval = kaVal;
-        if (kaVal > 0) {
-            dev.keepalive_silence = true;
-        }
         // Preserve enabled flag: live status takes precedence, then config-loaded value from dataset
         var livedev = lastDevices && lastDevices.find(function(d) {
             return d.player_name === name || d.bluetooth_mac === mac;
@@ -1421,7 +1411,7 @@ function populateBtDeviceRows(devices) {
     devices.forEach(function(d) {
         addBtDeviceRow(d.player_name || '', d.mac || '', d.adapter || '',
                        d.static_delay_ms, d.listen_host, d.listen_port, d.enabled,
-                       d.preferred_format, d.keepalive_silence, d.keepalive_interval);
+                       d.preferred_format, d.keepalive_interval);
     });
 }
 
