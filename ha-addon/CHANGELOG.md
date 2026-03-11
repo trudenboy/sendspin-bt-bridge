@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.22.2] - 2026-03-11
+
+### Added
+- Music Assistant as web UI auth provider (direct MA login or HA-via-MA flow)
+- Separate MUTE_VIA_MA setting (independent from VOLUME_VIA_MA)
+- Phased restart progress with per-subsystem status (BT · PA · SS · MA), click to expand per-device details
+
+### Fixed
+- HA login flow_id format — accept plain 32-char hex IDs from HA Core
+- Mute via MA now also syncs PulseAudio sink state
+- SSE mute state race condition (2 s debounce for optimistic UI)
+- Config footer excessive padding
+
+### Changed
+- Log Level selector moved from Configuration to Logs toolbar
+- Mute: optimistic UI update with reduced timeouts (5→2 s, 10→3 s)
+
 ## [2.22.0] - 2026-03-11
 
 ### Added

@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.22.2] - 2026-03-11
+
+### Added
+- **Music Assistant as web UI auth provider** — authenticate the bridge web UI using MA credentials (direct MA login or HA-via-MA flow)
+- **HA-via-MA authentication** — new auth provider lets users authenticate against Home Assistant through the MA API endpoint; password auth always remains available as fallback
+- **Separate MUTE_VIA_MA setting** — independent toggle for routing mute/unmute through Music Assistant API, separate from volume routing (`VOLUME_VIA_MA`)
+- **Phased restart progress** — Save & Restart shows real-time initialization status per subsystem (BT · PA · SS · MA) with expandable per-device details on click
+
+### Fixed
+- **HA login flow_id format** — accept both dashed UUID and plain 32-char hex formats from HA Core
+- **Mute via MA now syncs PulseAudio sink** — previously only sent command to MA, leaving PA sink in the old mute state
+- **SSE mute state race condition** — optimistic mute UI no longer reverted by SSE updates (2 s debounce window)
+- **Config footer padding** — removed excessive spacing between last config group and footer
+
+### Changed
+- **Log Level selector** moved from Configuration section to Logs toolbar for quicker access
+- **Mute performance** — optimistic UI update (instant icon toggle) with reduced API timeouts (5 → 2 s, 10 → 3 s)
+
 ## [2.22.0] - 2026-03-11
 
 ### Added
