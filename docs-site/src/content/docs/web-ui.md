@@ -30,7 +30,7 @@ If multiple methods are available, tab buttons appear at the top of the form. In
 
 ## Overview
 
-![Full dashboard showing 6 device cards with group controls and header](/sendspin-bt-bridge/screenshots/screenshot-dashboard-full.png)
+![Full dashboard in dark mode — device cards, configuration, MA integration, and logs](/sendspin-bt-bridge/screenshots/screenshot-dashboard-full.png)
 
 The dashboard shows all configured Bluetooth devices as cards. Cards are sorted so that active groups appear first — all members of an MA sync group are always shown together. Within a group, playing devices come before idle ones. Ungrouped (solo) speakers follow after all groups.
 
