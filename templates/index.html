@@ -314,8 +314,9 @@
 
         </form>
 
-        <!-- Static save & restart button -->
+        <!-- Static save buttons -->
         <div class="config-static-save">
+            <button type="button" class="btn btn-sm" onclick="document.getElementById('config-form').dispatchEvent(new Event('submit',{cancelable:true}))">Save</button>
             <button type="button" class="btn btn-sm btn-restart" onclick="saveAndRestart()">Save &amp; Restart</button>
         </div>
     </details>

@@ -693,9 +693,11 @@
             font-size: 13px; color: var(--warning-color); font-weight: 500; margin-right: 8px;
         }
         .config-static-save {
-            text-align: right; padding: 16px 0 0; margin-top: 8px;
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 16px 0 0; margin-top: 8px;
             border-top: 1px solid var(--divider-color);
         }
+        .config-static-save .btn:first-child { margin-right: auto; }
 
         /* BT device detail sub-row */
         .bt-detail-row {
