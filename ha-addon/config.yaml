@@ -24,8 +24,8 @@ privileged:
 devices:
   - /dev/bus/usb
 audio: true
-apparmor: false
-init: true
+apparmor: true
+init: false
 ingress: true
 ingress_port: 8080
 panel_icon: mdi:bluetooth-audio

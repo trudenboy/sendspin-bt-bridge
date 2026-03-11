@@ -1,15 +1,11 @@
 # Home Assistant Addon — thin wrapper over the main Sendspin Bluetooth Bridge image.
-# HA Supervisor will build this Dockerfile using the ha-addon/ directory as the
-# build context.  The base image already contains all Python source and
-# dependencies; we only add the HA-specific entry point.
+# The base image already contains S6 overlay, Python source, dependencies,
+# and the S6 sendspin service definition.
 ARG BUILD_FROM=ghcr.io/trudenboy/sendspin-bt-bridge:latest
 FROM ${BUILD_FROM}
 
-# HA Supervisor expects the entry point to be at /run.sh by convention, but any
-# path is fine as long as config.yaml's `entrypoint` field (or CMD/ENTRYPOINT)
-# points to it.  We place it at /ha_run.sh to avoid collisions.
-COPY run.sh /ha_run.sh
-RUN chmod +x /ha_run.sh
-
-# Override the base image ENTRYPOINT so HA Supervisor starts our bootstrap.
-ENTRYPOINT ["/ha_run.sh"]
+# No additional layers needed — the base image includes everything:
+# - S6 overlay for process supervision
+# - rootfs/etc/s6-overlay/s6-rc.d/sendspin service
+# - entrypoint.sh (auto-detects HA addon mode via /data/options.json)
+# - ENTRYPOINT ["/init"] (S6 manages the lifecycle)

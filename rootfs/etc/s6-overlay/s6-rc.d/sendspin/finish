@@ -1,0 +1,12 @@
+#!/command/with-contenv bash
+# S6 finish script: runs when sendspin exits.
+# $1 = exit code, $2 = signal that killed it (if any)
+EXIT_CODE=${1:-0}
+SIGNAL=${2:-0}
+
+if [ "$EXIT_CODE" -eq 0 ] || [ "$SIGNAL" -eq 15 ]; then
+    echo "[s6-finish] Sendspin exited cleanly (code=$EXIT_CODE signal=$SIGNAL)"
+else
+    echo "[s6-finish] Sendspin exited unexpectedly (code=$EXIT_CODE signal=$SIGNAL), restarting in 5s..."
+    sleep 5
+fi
