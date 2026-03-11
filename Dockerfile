@@ -63,6 +63,7 @@ RUN apt-get update && apt-get install -y \
 
 # Install S6 overlay (multi-arch aware)
 ARG TARGETARCH
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN S6_ARCH="" && \
     case "${TARGETARCH}" in \
         amd64)  S6_ARCH="x86_64" ;; \
