@@ -2,7 +2,7 @@
 
 A history of the architectural and functional evolution of sendspin-bt-bridge — for readers familiar with Home Assistant, Music Assistant, and multiroom audio setups.
 
-**Period:** January 1 – March 11, 2026 · **Total commits:** ~690 · **Versions:** 1.0.0 → 2.22.3
+**Period:** January 1 – March 11, 2026 · **Total commits:** ~760 · **Versions:** 1.0.0 → 2.23.0
 
 ---
 
@@ -604,13 +604,23 @@ Additional UX improvements: a context-aware empty state that detects whether a B
 
 ---
 
+### Demo Mode and update checker (v2.23.0)
+
+A fully functional **Demo Mode** was added — setting `DEMO_MODE=true` launches the bridge with emulated BT devices and simulated MA playback, no hardware required. Five realistic devices (JBL Flip 6, Sony WH-1000XM4, Marshall Stanmore, Bose SoundLink, Harman Kardon Onyx) cycle through real track metadata from a curated playlist with proper durations and progress. The demo is deployed on Render.com as a one-click live demo: [sendspin-bt-bridge.onrender.com](https://sendspin-bt-bridge.onrender.com).
+
+A **universal version update checker** runs as a background asyncio task, polling the GitHub releases API every hour. When a newer version is detected, a green badge appears in the UI header linking to the release notes. Three new API endpoints (`/api/update/check`, `/api/update/info`, `/api/update/apply`) provide platform-aware update instructions: LXC installations get a one-click "Update Now" button that executes `upgrade.sh`; Docker shows the `docker compose pull` command; HA addon directs users to the Supervisor.
+
+The LXC `upgrade.sh` was fixed to download all route sub-modules (`api_bt.py`, `api_config.py`, `api_ma.py`, `api_status.py`) and new files (`update_checker.py`, `demo/` module) that had been added since the script was last updated.
+
+---
+
 ### AI agents
 
 The entire project was developed by a human in collaboration with AI agents — from architectural decisions and debugging through to documentation.
 
 | AI agent | Role | Commits (Co-authored-by) |
 |----------|------|--------------------------|
-| **GitHub Copilot** (Claude Sonnet 4.6) | Primary working agent: refactoring, code, code review, documentation | ~286 |
+| **GitHub Copilot** (Claude Sonnet 4.6) | Primary working agent: refactoring, code, code review, documentation | ~540 |
 | **Claude Code** (Anthropic, Claude Sonnet 4.6) | Architectural design, complex debugging, audio routing iterations | ~168 |
 
 Copilot was used as an interactive CLI agent directly in the terminal (`gh copilot`); Claude Code was used for deep refactoring and diagnostic sessions. The phrase "with a certain AI buddy" in the first announcement in the MA discussion refers precisely to this workflow.

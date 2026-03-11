@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.23.0] - 2026-03-11
+
+### Added
+- Demo Mode — full UI demo with emulated BT devices and MA playback (`DEMO_MODE=true`)
+- Universal version update checker with green badge in UI header
+- Update API endpoints for checking and applying updates
+- Platform-aware update instructions (HA addon: directs to Supervisor)
+
+### Fixed
+- LXC upgrade.sh — added missing route modules and new files
+
 ## [2.22.3] - 2026-03-11
 
 ### Fixed

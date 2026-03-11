@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.23.0] - 2026-03-11
+
+### Added
+- **Demo Mode** — full UI demo with emulated BT devices and MA playback; no hardware needed. Enable with `DEMO_MODE=true` or try at [sendspin-bt-bridge.onrender.com](https://sendspin-bt-bridge.onrender.com)
+- **Render.com deployment** — one-click deploy button for live demo hosting (`render.yaml` Blueprint)
+- **Universal version update checker** — background task polls GitHub releases API hourly; shows green update badge in UI header linking to release notes
+- **Update API endpoints** — `POST /api/update/check` (force check), `GET /api/update/info` (cached info + platform instructions), `POST /api/update/apply` (one-click LXC upgrade via `upgrade.sh`)
+- **Platform-aware update instructions** — LXC: one-click "Update Now" button; Docker: `docker compose pull` command; HA addon: directs to Supervisor
+
+### Fixed
+- **Demo playback controls** — stateful pulse mocks, `is_running()` sentinel, MA command patches for realistic demo behavior
+- **LXC upgrade.sh** — added missing route modules (`api_bt.py`, `api_config.py`, `api_ma.py`, `api_status.py`), `update_checker.py`, and `demo/` module
+
 ## [2.22.3] - 2026-03-11
 
 ### Fixed
