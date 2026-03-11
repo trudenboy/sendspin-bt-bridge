@@ -283,8 +283,8 @@
             color: var(--primary-color); font-size: 20px; font-weight: 700;
             cursor: pointer; list-style: none; user-select: none; margin-bottom: 0;
         }
-        .config-section summary::-webkit-details-marker,
-        .logs-section summary::-webkit-details-marker,
+        .config-section > summary::-webkit-details-marker,
+        .logs-section > summary::-webkit-details-marker,
         #ma-token-details summary::-webkit-details-marker { display: none; }
         #ma-token-details summary { list-style: none; }
         #ma-token-details summary::before {
@@ -292,12 +292,12 @@
             font-size: 10px; transition: transform 0.2s;
         }
         #ma-token-details[open] summary::before { transform: rotate(90deg); }
-        .config-section summary::before, .logs-section summary::before {
+        .config-section > summary::before, .logs-section > summary::before {
             content: '\25B6';
             display: inline-block; margin-right: 8px; transition: transform 0.2s;
         }
-        .logs-section[open] summary::before, .config-section[open] summary::before { transform: rotate(90deg); }
-        .config-section[open] summary, .logs-section[open] summary { margin-bottom: 15px; }
+        .logs-section[open] > summary::before, .config-section[open] > summary::before { transform: rotate(90deg); }
+        .config-section[open] > summary, .logs-section[open] > summary { margin-bottom: 15px; }
         .form-group { margin-bottom: 15px; }
         .form-group label { display: block; margin-bottom: 5px; color: var(--primary-text-color); font-weight: 500; }
         .form-group input {
