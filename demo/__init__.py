@@ -79,12 +79,37 @@ def install() -> None:
         }
         for d in DEMO_DEVICES
     ]
-    _sp.set_sink_volume = lambda sink_name, volume_pct: True
-    _sp.get_sink_volume = lambda sink_name: 100
-    _sp.set_sink_mute = lambda sink_name, muted: True
-    _sp.get_sink_mute = lambda sink_name: False
+    # Stateful sink volume/mute so API reads back correct values
+    _demo_sink_vol: dict[str, int] = {}
+    _demo_sink_mute: dict[str, bool] = {}
+
+    def _sp_set_volume(sink_name: str, volume_pct: int) -> bool:
+        _demo_sink_vol[sink_name] = volume_pct
+        return True
+
+    def _sp_get_volume(sink_name: str) -> int:
+        return _demo_sink_vol.get(sink_name, 100)
+
+    def _sp_set_mute(sink_name: str, muted: object) -> bool:
+        _demo_sink_mute[sink_name] = bool(muted)
+        return True
+
+    def _sp_get_mute(sink_name: str) -> bool:
+        return _demo_sink_mute.get(sink_name, False)
+
+    _sp.set_sink_volume = _sp_set_volume
+    _sp.get_sink_volume = _sp_get_volume
+    _sp.set_sink_mute = _sp_set_mute
+    _sp.get_sink_mute = _sp_get_mute
     _sp.get_sink_description = lambda sink_name: "Demo BT Speaker"
     _sp.get_server_name = lambda: "pulseaudio (demo)"
+
+    # Also patch names already imported into routes.api (from X import Y binds locally)
+    import routes.api as _api_mod
+
+    _api_mod.set_sink_volume = _sp_set_volume
+    _api_mod.set_sink_mute = _sp_set_mute
+    _api_mod.get_sink_mute = _sp_get_mute
 
     # ------------------------------------------------------------------
     # 4. Patch SendspinClient methods
@@ -100,7 +125,8 @@ def install() -> None:
 
         safe_id = "".join(c if c.isalnum() or c == "-" else "-" for c in self.player_name.lower()).strip("-")
         self.player_id = f"sendspin-demo-{safe_id}"
-        self._daemon_proc = None
+        # Sentinel so is_running() returns True (checks returncode is None)
+        self._daemon_proc = type("_FakeProc", (), {"returncode": None})()
         self._daemon_task = None
         self._stderr_task = None
 
@@ -137,11 +163,18 @@ def install() -> None:
         if action == "set_volume":
             self._update_status({"volume": cmd.get("value", 100)})
         elif action == "set_mute":
-            self._update_status({"muted": cmd.get("value", False)})
-        elif action == "pause":
-            self._update_status({"playing": False, "audio_streaming": False})
-        elif action == "play":
-            self._update_status({"playing": True, "audio_streaming": True})
+            self._update_status({"muted": cmd.get("muted", cmd.get("value", False))})
+        elif action in ("pause", "play"):
+            is_play = action == "play"
+            self._update_status({"playing": is_play, "audio_streaming": is_play})
+            # Propagate to other group members (in real system MA does this via WS)
+            gid = self.status.get("group_id")
+            if gid:
+                with _st.clients_lock:
+                    peers = list(_st.clients)
+                for peer in peers:
+                    if peer is not self and peer.status.get("group_id") == gid:
+                        peer._update_status({"playing": is_play, "audio_streaming": is_play})
         elif action == "stop":
             self._update_status({"server_connected": False, "playing": False, "audio_streaming": False})
 
@@ -345,6 +378,20 @@ def install() -> None:
         return True
 
     _ma_monitor.send_queue_cmd = _demo_send_queue_cmd
+
+    async def _demo_send_player_cmd(command: str, args: dict) -> bool:
+        """Accept any player command in demo mode (volume_set, volume_mute, etc.)."""
+        logger.debug("[demo] send_player_cmd: %s %s", command, args)
+        return True
+
+    _ma_monitor.send_player_cmd = _demo_send_player_cmd
+
+    # Also patch ma_group_play (used by group/pause play action)
+    async def _demo_ma_group_play(ma_url: str, ma_token: str, syncgroup_id: str) -> bool:
+        logger.debug("[demo] ma_group_play: %s", syncgroup_id)
+        return True
+
+    _ma_client.ma_group_play = _demo_ma_group_play
 
     # ------------------------------------------------------------------
     # 10. Patch MA discovery (validate_ma_url, discover_ma_servers)
