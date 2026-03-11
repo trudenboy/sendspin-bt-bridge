@@ -244,6 +244,20 @@
                         <span id="ma-login-msg" style="font-size:12px;"></span>
                     </div>
                     </div><!-- /ma-conn-form -->
+
+                    <!-- MA API fields (shown after successful auth, under reconfigure) -->
+                    <div id="ma-api-fields" style="display:none;margin-top:10px;border-top:1px solid var(--divider-color);padding-top:10px;">
+                        <div class="form-group" style="margin-bottom:8px;">
+                            <label style="font-size:12px;color:var(--secondary-text-color);">Music Assistant API URL</label>
+                            <input type="text" name="MA_API_URL" placeholder="http://homeassistant.local:8095" style="font-size:13px;">
+                        </div>
+                        <div class="form-group" style="margin-bottom:0;">
+                            <label style="font-size:12px;color:var(--secondary-text-color);">Music Assistant API token
+                                <span class="form-hint">Create in MA → Settings → Profile → Long-lived access tokens</span>
+                            </label>
+                            <input type="password" name="MA_API_TOKEN" autocomplete="new-password" placeholder="eyJ..." style="font-size:13px;">
+                        </div>
+                    </div>
                 </div>
 
                 <div class="form-group">
@@ -257,23 +271,6 @@
                     <label>MA WebSocket port</label>
                     <input type="number" name="SENDSPIN_PORT" placeholder="9000" min="1024" max="65535">
                 </div>
-
-                <!-- Manual token fallback (collapsible) -->
-                <details id="ma-token-details" style="margin-bottom:10px;">
-                    <summary style="cursor:pointer;font-size:13px;color:var(--secondary-text-color);">Advanced: manual JWT token</summary>
-                    <div style="padding:8px 0;">
-                        <div class="form-group">
-                            <label>Music Assistant API URL</label>
-                            <input type="text" name="MA_API_URL" placeholder="http://homeassistant.local:8095">
-                        </div>
-                        <div class="form-group">
-                            <label>Music Assistant API token
-                                <span class="form-hint">Create in MA → Settings → Profile → Long-lived access tokens</span>
-                            </label>
-                            <input type="password" name="MA_API_TOKEN" autocomplete="new-password" placeholder="eyJ...">
-                        </div>
-                    </div>
-                </details>
 
                 <div class="form-group">
                     <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">

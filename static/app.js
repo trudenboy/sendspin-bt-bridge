@@ -1850,8 +1850,10 @@ function _setMaStatus(connected, username, url) {
     }
     var form = document.getElementById('ma-conn-form');
     var reconf = document.getElementById('ma-reconfigure');
+    var apiFields = document.getElementById('ma-api-fields');
     if (form) form.style.display = connected ? 'none' : '';
     if (reconf) reconf.style.display = connected ? '' : 'none';
+    if (apiFields) apiFields.style.display = connected ? '' : 'none';
 }
 
 function toggleMaForm(show) {
