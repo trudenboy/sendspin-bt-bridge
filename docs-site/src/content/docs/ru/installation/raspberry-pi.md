@@ -110,7 +110,7 @@ curl -sSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/sc
 2. **Сохраните файл `.env`** из вывода диагностического скрипта:
 
    ```env
-   BLUETOOTH_MAC=AA:BB:CC:DD:EE:FF
+   # Настройте Bluetooth-устройства через веб-интерфейс: http://localhost:8080
    AUDIO_UID=1000
    TZ=Europe/Moscow
    ```
@@ -137,7 +137,6 @@ curl -sSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/sc
          - ./config:/config
        environment:
          - SENDSPIN_SERVER=auto
-         - BLUETOOTH_MAC=${BLUETOOTH_MAC:-}
          - TZ=${TZ:-UTC}
          - WEB_PORT=8080
          - CONFIG_DIR=/config

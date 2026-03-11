@@ -127,9 +127,8 @@ mkdir -p /config
 if [[ ! -f /config/config.json ]]; then
   cat > /config/config.json <<'EOF'
 {
-  "SENDSPIN_NAME": "Sendspin-LXC",
   "SENDSPIN_SERVER": "auto",
-  "BLUETOOTH_MAC": "",
+  "BLUETOOTH_DEVICES": [],
   "TZ": "UTC"
 }
 EOF

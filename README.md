@@ -365,15 +365,6 @@ Each device in `BLUETOOTH_DEVICES` spawns an independent Sendspin player and Blu
 
 The `adapter` field is optional — omit it if you only have one Bluetooth adapter. Set it to `hci0`, `hci1`, etc. when you have multiple adapters and want to pin a speaker to a specific one.
 
-### Legacy single-device config (still supported)
-
-```json
-{
-  "SENDSPIN_SERVER": "auto",
-  "BLUETOOTH_MAC": "AA:BB:CC:DD:EE:FF"
-}
-```
-
 ### Environment Variables
 
 | Variable | Default | Description |
@@ -381,7 +372,6 @@ The `adapter` field is optional — omit it if you only have one Bluetooth adapt
 | `SENDSPIN_NAME` | `Docker-{hostname}` | Base player name shown in Music Assistant |
 | `SENDSPIN_SERVER` | `auto` | MA server hostname/IP; `auto` uses mDNS discovery |
 | `SENDSPIN_PORT` | `9000` | MA Sendspin WebSocket port |
-| `BLUETOOTH_MAC` | `` | Single speaker MAC (legacy; use `BLUETOOTH_DEVICES` in config.json instead) |
 | `TZ` | `Australia/Melbourne` | Container timezone |
 | `WEB_PORT` | `8080` | Web interface port |
 | `MA_API_URL` | `` | Music Assistant REST API base URL (e.g. `http://192.168.1.10:8123`) — enables now-playing metadata and transport controls |

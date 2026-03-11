@@ -243,7 +243,6 @@ def api_config():
         "SENDSPIN_SERVER",
         "SENDSPIN_PORT",
         "BRIDGE_NAME",
-        "BLUETOOTH_MAC",
         "BLUETOOTH_DEVICES",
         "BLUETOOTH_ADAPTERS",
         "TZ",

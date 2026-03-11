@@ -128,7 +128,7 @@ connect XX:XX:XX:XX:XX:XX
 exit
 ```
 
-Then set `BLUETOOTH_MAC` in `/config/config.json` and restart the service:
+Then add your speaker via the web UI at `http://<host-ip>:8080`, or add it to the `BLUETOOTH_DEVICES` array in `/config/config.json`, and restart the service:
 
 ```bash
 systemctl restart sendspin-client

@@ -344,15 +344,6 @@ lxc-attach -n sendspin -- btctl show
 
 Поле `adapter` опционально — опустите его, если у вас один Bluetooth-адаптер. Укажите `hci0`, `hci1` и т.д. при наличии нескольких адаптеров, чтобы привязать колонку к конкретному.
 
-### Конфигурация одного устройства (поддерживается)
-
-```json
-{
-  "SENDSPIN_SERVER": "auto",
-  "BLUETOOTH_MAC": "AA:BB:CC:DD:EE:FF"
-}
-```
-
 ### Переменные окружения
 
 | Переменная | По умолчанию | Описание |
@@ -360,7 +351,6 @@ lxc-attach -n sendspin -- btctl show
 | `SENDSPIN_NAME` | `Docker-{hostname}` | Базовое имя плеера в Music Assistant |
 | `SENDSPIN_SERVER` | `auto` | Hostname/IP сервера MA; `auto` — обнаружение через mDNS |
 | `SENDSPIN_PORT` | `9000` | Порт WebSocket Sendspin в MA |
-| `BLUETOOTH_MAC` | `` | MAC одной колонки (устарело; используйте `BLUETOOTH_DEVICES` в config.json) |
 | `TZ` | `Australia/Melbourne` | Часовой пояс контейнера |
 | `WEB_PORT` | `8080` | Порт веб-интерфейса |
 | `MA_API_URL` | `` | Базовый URL REST API Music Assistant (напр. `http://192.168.1.10:8123`) — включает метаданные воспроизведения и транспортные кнопки |

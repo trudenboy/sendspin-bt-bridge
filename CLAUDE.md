@@ -100,7 +100,6 @@ IPC: subprocess→parent via JSON lines on stdout; parent→subprocess via JSON 
 |----------|---------|---------|
 | `SENDSPIN_SERVER` | `auto` | MA server hostname/IP; `auto` uses mDNS discovery |
 | `SENDSPIN_PORT` | `9000` | WebSocket port |
-| `BLUETOOTH_MAC` | `` | Single-device MAC (legacy); use `BLUETOOTH_DEVICES` in config.json for multi-device |
 | `WEB_PORT` | `8080` | Web interface port |
 | `TZ` | `Australia/Melbourne` | Container timezone |
 | `CONFIG_DIR` | `/config` | Config directory path |

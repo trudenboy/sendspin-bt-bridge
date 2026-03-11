@@ -752,13 +752,11 @@ async def main():
     if bt_churn_threshold > 0:
         logger.info("BT churn isolation: enabled (threshold=%d in %.0fs)", bt_churn_threshold, bt_churn_window)
 
-    # Normalise device list — fall back to legacy BLUETOOTH_MAC
     bt_devices = config.get("BLUETOOTH_DEVICES", [])
-    if not bt_devices:
-        mac = config.get("BLUETOOTH_MAC", "")
-        bt_devices = [{"mac": mac, "adapter": "", "player_name": "Sendspin Player"}]
 
     logger.info("Starting %s player instance(s)", len(bt_devices))
+    if not bt_devices:
+        logger.warning("No Bluetooth devices configured — bridge will run without players")
     if server_host and server_host.lower() not in ["auto", "discover", ""]:
         logger.info("Server: %s:%s", server_host, server_port)
     else:

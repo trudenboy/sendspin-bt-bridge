@@ -140,7 +140,6 @@ This checks Docker, Bluetooth, audio, UID, and memory — and outputs recommende
 
 Recommended .env file:
 
-  BLUETOOTH_MAC=AA:BB:CC:DD:EE:FF
   AUDIO_UID=1000
   TZ=Europe/London
 ```
@@ -160,7 +159,7 @@ Recommended .env file:
 2. **Save the `.env` file** from the pre-flight check output:
 
    ```env
-   BLUETOOTH_MAC=AA:BB:CC:DD:EE:FF
+   # Configure Bluetooth devices via web UI at http://localhost:8080
    AUDIO_UID=1000
    TZ=Europe/London
    ```
@@ -187,7 +186,6 @@ Recommended .env file:
          - ./config:/config
        environment:
          - SENDSPIN_SERVER=auto
-         - BLUETOOTH_MAC=${BLUETOOTH_MAC:-}
          - TZ=${TZ:-UTC}
          - WEB_PORT=8080
          - CONFIG_DIR=/config

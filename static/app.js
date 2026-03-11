@@ -1566,12 +1566,6 @@ async function saveConfig() {
     config._new_device_default_volume = groupSlider ? parseInt(groupSlider.value, 10) : 100;
     // Save all adapters (auto-detected + manual) so native HA Config tab shows them
     config.BLUETOOTH_ADAPTERS = btAdapters.filter(function(a) { return a.id; });
-    // Keep single BLUETOOTH_MAC for backward compat if exactly one device
-    if (config.BLUETOOTH_DEVICES.length === 1) {
-        config.BLUETOOTH_MAC = config.BLUETOOTH_DEVICES[0].mac;
-    } else {
-        config.BLUETOOTH_MAC = '';
-    }
 
     try {
         var resp = await fetch(API_BASE + '/api/config', {
@@ -2038,9 +2032,6 @@ async function loadConfig() {
         var devices = config.BLUETOOTH_DEVICES;
         if (devices && Array.isArray(devices) && devices.length > 0) {
             populateBtDeviceRows(devices);
-        } else if (config.BLUETOOTH_MAC) {
-            // Migrate single BLUETOOTH_MAC to table
-            addBtDeviceRow('', config.BLUETOOTH_MAC, '');
         }
 
         // Update MA connection status and detect addon mode

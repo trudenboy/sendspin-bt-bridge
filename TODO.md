@@ -30,6 +30,9 @@ Roadmap for HA addon standards compliance and improvements.
 
 ## Future
 
+- [ ] **IPC: add ack, heartbeat, ready signal** — evolve JSON Lines protocol: message IDs + ack/nack for critical commands (`stop`, `set_volume`), `{"type": "ready"}` signal at subprocess start, heartbeat every 10s, move logs from stdout JSON to stderr
+- [ ] **IPC: Unix Domain Sockets transport** — replace stdin/stdout with per-device UDS (`/tmp/sendspin-{mac}.sock`), full duplex, asyncio `open_unix_connection()`, socket cleanup on crash *(depends on: IPC ack/heartbeat)*
+- [x] **Deprecate `BLUETOOTH_MAC`** — remove legacy single-device fallback, migrate all scripts/docs to `BLUETOOTH_DEVICES[]` (v2.21.0)
 - [ ] **Migrate to HA Debian base images** — switch from `python:3.12-slim` to `ghcr.io/home-assistant/{arch}-base-debian:bookworm`
 - [ ] **Adopt `rootfs/` overlay pattern** — move entrypoint scripts into `rootfs/etc/` structure *(depends on: base images)*
 - [ ] **Merge into single Dockerfile** — eliminate two-image chain, single `ha-addon/Dockerfile` with `ARG BUILD_FROM` *(depends on: base images)*

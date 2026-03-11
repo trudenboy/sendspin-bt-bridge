@@ -205,24 +205,36 @@ if [ "$fail" -gt 0 ]; then
   echo ""
 fi
 
-# ── Recommended .env ─────────────────────────────────────────────────────────
+# ── Recommended config ────────────────────────────────────────────────────────
+echo -e "${BOLD}Recommended config.json:${NC}"
+echo ""
+echo '  {'
+echo '    "SENDSPIN_SERVER": "auto",'
+
+# BLUETOOTH_DEVICES
+if [ ${#PAIRED_MACS[@]} -gt 0 ]; then
+  echo '    "BLUETOOTH_DEVICES": ['
+  for mac in "${PAIRED_MACS[@]}"; do
+    echo "      {\"mac\": \"$mac\", \"adapter\": \"\", \"player_name\": \"\"},"
+  done
+  echo '    ],'
+else
+  echo '    "BLUETOOTH_DEVICES": [],'
+  echo '    # Add speakers via web UI at http://localhost:8080'
+fi
+
+# TZ
+TZ_CURRENT=$(cat /etc/timezone 2>/dev/null || echo "UTC")
+echo "    \"TZ\": \"$TZ_CURRENT\""
+echo '  }'
+echo ""
+
 echo -e "${BOLD}Recommended .env file:${NC}"
 echo ""
 echo "  # Save this as .env next to docker-compose.yml"
 
-# BLUETOOTH_MAC
-if [ ${#PAIRED_MACS[@]} -gt 0 ]; then
-  echo "  BLUETOOTH_MAC=${PAIRED_MACS[0]}"
-else
-  echo "  BLUETOOTH_MAC=AA:BB:CC:DD:EE:FF  # Replace with your speaker MAC"
-fi
-
 # AUDIO_UID
 echo "  AUDIO_UID=$DETECTED_UID"
-
-# TZ
-TZ_CURRENT=$(cat /etc/timezone 2>/dev/null || echo "UTC")
-echo "  TZ=$TZ_CURRENT"
 
 echo ""
 echo -e "${CYAN}  Next: docker compose up -d && docker logs -f sendspin-client${NC}"

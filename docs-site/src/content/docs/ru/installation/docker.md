@@ -46,7 +46,7 @@ curl -sSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/sc
 2. **Создайте `.env`** с вашими настройками:
 
    ```env
-   BLUETOOTH_MAC=AA:BB:CC:DD:EE:FF
+   # Настройте Bluetooth-устройства через веб-интерфейс: http://localhost:8080
    AUDIO_UID=1000
    TZ=Europe/Moscow
    ```
@@ -71,7 +71,6 @@ curl -sSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/sc
          - /etc/docker/Sendspin:/config
        environment:
          - SENDSPIN_SERVER=auto
-         - BLUETOOTH_MAC=${BLUETOOTH_MAC:-}
          - TZ=${TZ:-UTC}
          - WEB_PORT=8080
          - CONFIG_DIR=/config
@@ -137,7 +136,6 @@ curl -sSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/sc
 | Переменная | По умолчанию | Описание |
 |---|---|---|
 | `SENDSPIN_SERVER` | `auto` | Адрес MA сервера; `auto` использует mDNS |
-| `BLUETOOTH_MAC` | — | MAC колонки (можно настроить через веб-интерфейс) |
 | `AUDIO_UID` | `1000` | UID пользователя хоста для путей аудио-сокетов |
 | `TZ` | `UTC` | Часовой пояс контейнера |
 | `WEB_PORT` | `8080` | Порт веб-интерфейса |

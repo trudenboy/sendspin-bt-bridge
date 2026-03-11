@@ -24,9 +24,8 @@ services:
       - SENDSPIN_SERVER=auto  # Use 'auto' for mDNS discovery, or specify hostname/IP
       # - SENDSPIN_NAME=Living-Room  # Override default player name (default: Sendspin-<hostname>)
 
-      # Bluetooth Configuration (can also be configured via web UI)
-      # Set your speaker's MAC address here, e.g.: AA:BB:CC:DD:EE:FF
-      - BLUETOOTH_MAC=${BLUETOOTH_MAC:-}
+      # Bluetooth Configuration — configure devices via web UI at http://localhost:8080
+      # or set BLUETOOTH_DEVICES in /config/config.json
 
       # System Configuration
       - TZ=Australia/Melbourne

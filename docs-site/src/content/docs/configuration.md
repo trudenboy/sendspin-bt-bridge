@@ -142,7 +142,6 @@ Environment variables override `config.json` values:
 |---|---|
 | `SENDSPIN_SERVER` | MA server address |
 | `SENDSPIN_PORT` | WebSocket port |
-| `BLUETOOTH_MAC` | Device MAC (single-device config) |
 | `WEB_PORT` | Web UI port (default `8080`) |
 | `TZ` | Timezone |
 | `CONFIG_DIR` | Config directory path (default `/config`) |

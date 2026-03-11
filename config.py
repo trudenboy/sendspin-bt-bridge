@@ -41,7 +41,6 @@ DEFAULT_CONFIG = {
     "SENDSPIN_SERVER": "auto",
     "SENDSPIN_PORT": 9000,
     "BRIDGE_NAME": "",
-    "BLUETOOTH_MAC": "",
     "BLUETOOTH_DEVICES": [],
     "TZ": "Australia/Melbourne",
     "PULSE_LATENCY_MSEC": 200,
@@ -113,7 +112,6 @@ def load_config() -> dict:
         "SENDSPIN_SERVER",
         "SENDSPIN_PORT",
         "BRIDGE_NAME",
-        "BLUETOOTH_MAC",
         "BLUETOOTH_DEVICES",
         "TZ",
         "LAST_VOLUME",
@@ -140,9 +138,36 @@ def load_config() -> dict:
             for key, value in saved_config.items():
                 if key in allowed_keys:
                     result[key] = value
+
+            # Auto-migrate legacy BLUETOOTH_MAC → BLUETOOTH_DEVICES
+            legacy_mac = saved_config.get("BLUETOOTH_MAC", "")
+            if legacy_mac and not result.get("BLUETOOTH_DEVICES"):
+                result["BLUETOOTH_DEVICES"] = [
+                    {"mac": legacy_mac, "adapter": "", "player_name": "Sendspin Player"},
+                ]
+                _migrate_legacy_mac = True
+            else:
+                _migrate_legacy_mac = False
+
             logger.info("Loaded config from %s", CONFIG_FILE)
         except Exception as e:
             logger.warning("Error loading config: %s, using defaults", e)
+            _migrate_legacy_mac = False
+
+        if _migrate_legacy_mac:
+            try:
+                update_config(
+                    lambda cfg: (
+                        cfg.__setitem__("BLUETOOTH_DEVICES", result["BLUETOOTH_DEVICES"]),
+                        cfg.pop("BLUETOOTH_MAC", None),
+                    )
+                )
+                logger.info(
+                    "Migrated legacy BLUETOOTH_MAC=%s → BLUETOOTH_DEVICES",
+                    legacy_mac,
+                )
+            except Exception as exc:
+                logger.warning("Could not persist BLUETOOTH_MAC migration: %s", exc)
     else:
         logger.info("Config file not found at %s, using defaults", CONFIG_FILE)
 

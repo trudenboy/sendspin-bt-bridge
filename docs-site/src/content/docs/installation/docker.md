@@ -46,7 +46,7 @@ This checks Docker, Bluetooth, audio system, UID, and outputs recommended `.env`
 2. **Create `.env`** with your settings:
 
    ```env
-   BLUETOOTH_MAC=AA:BB:CC:DD:EE:FF
+   # Configure Bluetooth devices via web UI at http://localhost:8080
    AUDIO_UID=1000
    TZ=America/New_York
    ```
@@ -71,7 +71,6 @@ This checks Docker, Bluetooth, audio system, UID, and outputs recommended `.env`
          - /etc/docker/Sendspin:/config
        environment:
          - SENDSPIN_SERVER=auto
-         - BLUETOOTH_MAC=${BLUETOOTH_MAC:-}
          - TZ=${TZ:-UTC}
          - WEB_PORT=8080
          - CONFIG_DIR=/config
@@ -137,7 +136,6 @@ The container uses `network_mode: host`, required for:
 | Variable | Default | Description |
 |---|---|---|
 | `SENDSPIN_SERVER` | `auto` | MA server address; `auto` uses mDNS |
-| `BLUETOOTH_MAC` | — | Speaker MAC (can also configure via web UI) |
 | `AUDIO_UID` | `1000` | Host user UID for audio socket paths |
 | `TZ` | `UTC` | Container timezone |
 | `WEB_PORT` | `8080` | Web interface port |

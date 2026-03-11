@@ -177,7 +177,7 @@ btctl
 > quit
 ```
 
-Set `BLUETOOTH_MAC` via the web UI at `http://<container-ip>:8080` and restart:
+Add your Bluetooth speaker via the web UI at `http://<container-ip>:8080` and restart:
 
 ```sh
 lxc-attach -n sendspin -- systemctl restart sendspin-client

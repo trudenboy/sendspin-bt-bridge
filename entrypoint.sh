@@ -61,7 +61,7 @@ VERSION=$(python3 -c "from config import VERSION; print(VERSION)" 2>/dev/null ||
 # Detect config
 CONFIG_PATH="${CONFIG_DIR:-/config}/config.json"
 if [ -f "$CONFIG_PATH" ]; then
-    DEV_COUNT=$(python3 -c "import json; c=json.load(open('$CONFIG_PATH')); print(len(c.get('BLUETOOTH_DEVICES',{})) or (1 if c.get('BLUETOOTH_MAC') else 0))" 2>/dev/null || echo "?")
+    DEV_COUNT=$(python3 -c "import json; c=json.load(open('$CONFIG_PATH')); print(len(c.get('BLUETOOTH_DEVICES',[])))" 2>/dev/null || echo "?")
     CONFIG_STATUS="✓ $CONFIG_PATH ($DEV_COUNT devices)"
 else
     CONFIG_STATUS="✗ $CONFIG_PATH not found (will use defaults)"
