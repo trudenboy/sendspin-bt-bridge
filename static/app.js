@@ -2426,12 +2426,11 @@ async function loadVersionInfo() {
         var data = await resp.json();
         var el = document.getElementById('version-display');
         if (!el) return;
-        var sha = data.git_sha && data.git_sha !== 'unknown'
-            ? '<div style="font-family:monospace;">' + escHtml(data.git_sha) + '</div>' : '';
-        el.innerHTML =
-            '<div>' + escHtml(data.version || '') + '</div>' +
-            sha +
-            '<div>' + escHtml(data.built_at || '') + '</div>';
+        var ver = data.version || el.textContent;
+        var title = data.built_at || '';
+        if (data.git_sha && data.git_sha !== 'unknown') title += ' · ' + data.git_sha;
+        el.textContent = 'v' + ver;
+        if (title) el.title = title;
     } catch (_) { /* Keep static Jinja2-rendered values */ }
 }
 
