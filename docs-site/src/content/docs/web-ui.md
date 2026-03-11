@@ -140,6 +140,8 @@ Individual volume sliders follow the same routing logic as the group slider: whe
 
 **Delay badge** — `delay: -600ms` shown in the Sync column while the device is playing when `static_delay_ms ≠ 0`. This compensates for A2DP buffer latency to keep the speaker in sync with the group.
 
+**Battery badge** — `🔋 60%` shown next to the device name when the speaker reports battery level via BlueZ Battery1 interface. Requires `Experimental = true` in `/etc/bluetooth/main.conf`.
+
 ### Action Buttons (revealed on hover)
 
 | Button | Action |
@@ -200,51 +202,46 @@ A row per configured speaker:
 
 | Column | Description |
 |---|---|
+| **▶** | Expand/collapse per-device detail row (Listen Address, Port, Format) |
 | **Player Name** | Name shown in Music Assistant |
 | **MAC Address** | Bluetooth MAC of the speaker |
 | **Adapter** | Which BT adapter manages this device (`default`, `hci0`, `hci1`) |
-| **Listen Address** | IP the MA player advertises; leave blank to auto-detect |
-| **Port** | WebSocket port for this player (default starts at 8928, increments per device) |
-| **Delay ms** | `static_delay_ms` — negative value compensates A2DP buffer latency (typical: `-500` to `-700`) |
-| **Format** | Preferred audio format (`flac:44100:16:2` matches SBC A2DP with no resampling) |
+| **Delay (ms)** | `static_delay_ms` — negative value compensates A2DP buffer latency (typical: `-500` to `-700`) |
 | **×** | Remove this device |
 
 **+ Add Device** appends a blank row. **🔍 Scan** runs a ~10 s background Bluetooth scan across all adapters and shows discovered devices. Click a result to populate a new row.
 
 The **Already paired** box lists previously paired devices from bluetoothctl. Click **Add** to add one to the table without scanning.
 
-### Advanced Settings
+### Bluetooth Settings
 
-Click **▶ Advanced settings** to expand:
-
-![Advanced settings panel showing MA server, latency, BT interval, SBC codec, log level, and MA API fields](/sendspin-bt-bridge/screenshots/screenshot-advanced-settings.png)
+Below the devices table, additional Bluetooth options:
 
 | Field | Default | Description |
 |---|---|---|
-| **Music Assistant server** | `auto` | MA server hostname/IP; `auto` uses mDNS discovery |
-| **Music Assistant WebSocket port** | `9000` | Sendspin WebSocket port |
-| **PulseAudio latency (ms)** | `200` | Larger value reduces dropouts on slow hardware |
 | **BT check interval (s)** | `10` | How often to probe each device's BT connection |
-| **Auto-disable after N failed reconnects** | `0` | Set Enabled=Off after N consecutive failures; `0` = never |
-| **Prefer SBC codec** | on | Force SBC after each BT connect (requires PulseAudio 15+) |
-| **Log level** | `INFO` | `DEBUG` for verbose troubleshooting; takes effect immediately via **Apply now** |
-| **Music Assistant API URL** | _(blank)_ | MA REST API base URL (e.g. `http://192.168.1.x:8095`) for group resume |
-| **Music Assistant API token** | _(blank)_ | MA API token — auto-created via "Sign in with Home Assistant" in addon mode |
+| **Auto-disable threshold** | `0` | Disable device after N consecutive failed reconnects; `0` = never |
+| **Prefer SBC codec** | on | Force SBC after each BT connect — reduces CPU on slow hardware (requires PulseAudio 15+) |
 
 ### Music Assistant Integration
 
-The **Music Assistant Integration** subsection appears below the log level setting:
+The **🎵 Music Assistant** section in the Configuration panel:
+
+![Music Assistant integration showing connection status, server settings, and sign-in options](/sendspin-bt-bridge/screenshots/screenshot-advanced-settings.png)
 
 | Element | Description |
 |---|---|
-| **Status indicator** | ⚪ Not connected / ✅ Connected as *Username* — shows current MA API connection state |
-| **MA URL** | Editable field pre-filled by auto-discovery; click **🔍 Discover** to detect the MA server |
-| **🏠 Sign in with Home Assistant** | One-click button (addon mode only) — creates a long-lived MA API token via HA Ingress JSONRPC. No credentials or popups needed. The token is saved to `config.json` and persists across restarts. |
-| **Advanced: manual JWT token** | Expandable section for Docker/LXC users — paste MA API URL and token manually |
+| **Status indicator** | ⚪ Not connected / ✅ Connected — http://ip:port — shows current MA API connection state. Click **Reconfigure** to change. |
+| **MA server** | IP/hostname, or `auto` for mDNS discovery |
+| **MA WebSocket port** | Sendspin WebSocket port (default `9000`) |
+| **PulseAudio latency (ms)** | Higher values reduce dropouts on slow hardware (default `200`). Located in General section. |
+| **🏠 Sign in with Home Assistant** | One-click button (addon mode only) — creates a long-lived MA API token via HA Ingress. No credentials needed. |
+| **Advanced: manual JWT token** | Expandable `<details>` for Docker/LXC users — paste MA API URL and token manually. Create token in MA → Settings → Profile → Long-lived access tokens. |
+| **Route volume through MA** | When checked, volume changes go through MA API — keeps MA UI sliders in sync |
 
 ### Save Actions
 
-- **Save Configuration** — writes `config.json`; takes effect after restart
+- **Save** — writes `config.json`; takes effect after restart
 - **Save & Restart** — saves and immediately restarts the bridge service
 
 <Aside type="caution">
@@ -267,6 +264,8 @@ The collapsible **Diagnostics** section shows a system health table:
 | Adapter hci0 / hci1 | Adapter present, MAC shown |
 | BT audio sinks | List of active `bluez_sink.*` or `bluez_output.*` PulseAudio/PipeWire sinks |
 | Per-device rows | Connection status + assigned sink name; red dot if disconnected |
+| **Enabled/Disabled** | Shows "Disabled" label in orange next to disconnected devices that have been auto-disabled |
+| **MA API** | Music Assistant API connection status and URL |
 
 Click **↻ Refresh** to re-run the checks.
 

@@ -3,7 +3,7 @@ title: Тестовый стенд
 description: Референсная топология развёртывания с характеристиками оборудования, версиями ПО и сетевой схемой
 ---
 
-Референсное развёртывание, используемое при разработке и тестировании Sendspin BT Bridge v2.12.2.
+Референсное развёртывание, используемое при разработке и тестировании Sendspin BT Bridge v2.20.4.
 
 ## Физическая топология
 
@@ -20,7 +20,7 @@ graph TB
                 T_DBUS["D-Bus system bus<br/>bind-mount с хоста"]
                 T_PA["PulseAudio 16.1 --system<br/>user pulse uid=109"]
                 T_BLUEZ["BlueZ 5.72<br/>bluetoothctl"]
-                T_SBB["SBB v2.12.2<br/>Python 3.12.3<br/>aiosendspin 4.3.2"]
+                T_SBB["SBB v2.20.4<br/>Python 3.12.3<br/>aiosendspin 4.3.2"]
                 T_WEB["Flask 3.1.3 + Waitress 3.0.2<br/>:8080"]
                 T_DBUS --> T_BLUEZ
                 T_DBUS --> T_PA
@@ -41,7 +41,7 @@ graph TB
 
             subgraph P_VM["VM 104 haos — QEMU/KVM — 2 vCPU / 6 ГБ ОЗУ / 64 ГБ диск"]
                 P_HAOS["Home Assistant OS<br/>haos.my.lan"]
-                P_ADDON["SBB v2.12.2 addon<br/>85b1ecde-sendspin-bt-bridge<br/>3 устройства / группа синхронизации"]
+                P_ADDON["SBB v2.20.4 addon<br/>85b1ecde-sendspin-bt-bridge<br/>3 устройства / группа синхронизации"]
                 P_HAOS --> P_ADDON
             end
 
@@ -49,7 +49,7 @@ graph TB
                 P_DBUS["D-Bus system bus"]
                 P_PA["PulseAudio 16.1"]
                 P_BLUEZ2["BlueZ 5.72"]
-                P_SBB["SBB v2.12.2<br/>Ubuntu 24.04 x86_64<br/>Python 3.12.3"]
+                P_SBB["SBB v2.20.4<br/>Ubuntu 24.04 x86_64<br/>Python 3.12.3"]
                 P_WEB2["Flask 3.1.3 + Waitress 3.0.2<br/>:8080"]
                 P_DBUS --> P_BLUEZ2
                 P_DBUS --> P_PA
@@ -164,7 +164,7 @@ graph TB
 | **Хост** | Proxmox VE 8.4.16, VM 104 (HAOS), 2 ядра, 6 ГБ ОЗУ |
 | **Платформа** | Home Assistant OS |
 | **Имя хоста** | `85b1ecde-sendspin-bt-bridge` |
-| **Версия моста** | 2.12.2 (сборка 2026-03-05) |
+| **Версия моста** | 2.20.4 (сборка 2026-03-11) |
 | **BT адаптер** | CSR8510 A10 через USB passthrough (`C0:FB:F9:62:D6:9D`, hci0) |
 | **Аудио** | PulseAudio 16.1, A2DP sinks |
 | **Сервер MA** | auto:9000 (mDNS) |
@@ -188,7 +188,7 @@ graph TB
 | **Хост** | Proxmox VE 8.4.16, CT 101, 2 ядра, 1 ГБ ОЗУ, 8 ГБ диск |
 | **ОС** | Ubuntu 24.04 LTS (Noble Numbat), x86_64 |
 | **Имя хоста** | `sendspin` |
-| **Версия моста** | 2.12.2 (сборка 2026-03-05) |
+| **Версия моста** | 2.20.4 (сборка 2026-03-11) |
 | **Python** | 3.12.3 |
 | **BlueZ** | 5.72 |
 | **PulseAudio** | 16.1 |
@@ -214,7 +214,7 @@ graph TB
 | **Хост** | Turris Omnia, TurrisOS 9.0.4 (OpenWrt), Marvell Armada 385 ARMv7, 2 ГБ ОЗУ, 8 ГБ eMMC |
 | **ОС** | Ubuntu 24.04.4 LTS (Noble Numbat), armv7l |
 | **Имя хоста** | `ubuntu` |
-| **Версия моста** | 2.12.2 (сборка 2026-03-05) |
+| **Версия моста** | 2.20.4 (сборка 2026-03-11) |
 | **Python** | 3.12.3 |
 | **BlueZ** | 5.72 |
 | **PulseAudio** | 16.1 |
@@ -290,7 +290,7 @@ graph TB
 
 | Компонент | Версия |
 |-----------|--------|
-| **Sendspin BT Bridge** | 2.12.2 |
+| **Sendspin BT Bridge** | 2.20.4 |
 | **Ubuntu** | 24.04 LTS |
 | **Python** | 3.12.3 |
 | **BlueZ** | 5.72 |

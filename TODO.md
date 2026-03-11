@@ -2,7 +2,7 @@
 
 Roadmap for HA addon standards compliance and improvements.
 
-## Done (v2.15.0–v2.18.3)
+## Done (v2.15.0–v2.20.4)
 
 - [x] **35 unit tests, diagnostics enrichment, TOCTOU fix, MA WS response matching** (v2.15.0)
 - [x] **Multi-arch Docker builds** — amd64/arm64/armv7 (v2.15.2)
@@ -17,6 +17,12 @@ Roadmap for HA addon standards compliance and improvements.
 - [x] **Create `ha-addon/logo.png`** — wide-format logo for HA store listing (v2.16.3)
 - [x] **One-liner RPi installer** — `scripts/rpi-install.sh`: install Docker, generate compose, pair BT, start (v2.16.3)
 - [x] **MA auto-discovery & auto-login** — mDNS discovery of MA servers + passwordless auth via Ingress JSONRPC in addon mode (v2.17.0–v2.18.3)
+- [x] **API modularization** — split `routes/api.py` into 5 modules (`api.py`, `api_bt.py`, `api_ma.py`, `api_config.py`, `api_status.py`) (v2.20.3)
+- [x] **Thread-safety audit** — added locks, fixed race conditions (v2.20.3)
+- [x] **Remove dead endpoint** — removed unused `/api/set_volume_device` (v2.20.3)
+- [x] **Fix postMessage origin** — corrected HA Ingress iframe communication (v2.20.3)
+- [x] **Fix JWT folding marker CSS** — corrected ▶/▼ display (v2.20.4)
+- [x] **Fix MA API token hint text** — updated to "Create in MA → Settings → Profile → Long-lived access tokens" (v2.20.4)
 
 ## Next
 

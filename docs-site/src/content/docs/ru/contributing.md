@@ -43,7 +43,11 @@ services/
   pulse.py            # PulseAudio хелперы (pulsectl + pactl): поиск синка, перемещение sink-inputs
 
 routes/
-  api.py              # Все /api/* Flask-эндпоинты
+  api.py              # Основные playback и громкость (6 маршрутов)
+  api_bt.py           # Управление Bluetooth (7 маршрутов)
+  api_ma.py           # Интеграция с Music Assistant (10 маршрутов)
+  api_config.py       # Конфигурация (5 маршрутов)
+  api_status.py       # Статус и диагностика (6 маршрутов)
   views.py            # Рендер HTML-страниц
   auth.py             # Опциональная парольная защита веб UI
 

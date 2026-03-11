@@ -38,7 +38,11 @@ services/
   pulse.py            # PulseAudio helpers (pulsectl + pactl): find sink, move sink-inputs
 
 routes/
-  api.py              # All /api/* Flask endpoints
+  api.py              # Core playback & volume (6 routes)
+  api_bt.py           # Bluetooth management (7 routes)
+  api_ma.py           # Music Assistant integration (10 routes)
+  api_config.py       # Configuration (5 routes)
+  api_status.py       # Status & diagnostics (6 routes)
   views.py            # HTML page renders
   auth.py             # Optional web UI password protection
 

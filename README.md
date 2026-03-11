@@ -58,7 +58,7 @@ A Bluetooth bridge for [Music Assistant](https://www.music-assistant.io/) — co
 ### 🚀 Deployment
 - **Four deployment options** — Home Assistant addon, Docker Compose, Proxmox LXC, OpenWrt LXC
 - **Multiple bridge instances** — run several bridges against the same MA server; each registers its own players
-- **28-endpoint REST API** — full programmatic control (`/api/status`, `/api/volume`, `/api/bt/*`, `/api/ma/*`, …)
+- **37-endpoint REST API** — full programmatic control (`/api/status`, `/api/volume`, `/api/bt/*`, `/api/ma/*`, …)
 - **Dynamic log level** — change `LOG_LEVEL` at runtime via API or web UI without restart
 
 <img width="1400" alt="Web dashboard — full page, dark mode, all sections expanded" src="https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/docs-site/public/screenshots/screenshot-dashboard-full.png" />
@@ -92,7 +92,7 @@ Two bridge instances connected to one MA server — an HA addon on HAOS (4 speak
 | **OpenWrt LXC** | Turris Omnia (ARMv7), Ubuntu 24.04 | CSR8510 A10 USB | AfterShokz |
 
 Software: Python 3.12, BlueZ 5.72, PulseAudio 16.1, aiosendspin 4.3.2.
-All three instances run v2.12.2 against a single Music Assistant server with multiroom sync.
+All three instances run v2.20.4 against a single Music Assistant server with multiroom sync.
 
 📖 [Full test stand details →](https://trudenboy.github.io/sendspin-bt-bridge/test-stand/)
 
@@ -544,7 +544,11 @@ python sendspin_client.py
 | `config.py` | Configuration management — `load_config()`, `DEFAULT_CONFIG`, `VERSION`, auth helpers |
 | `state.py` | Shared runtime state — client list, SSE signaling, scan jobs, MA group/now-playing cache |
 | `web_interface.py` | Flask app entry point — registers blueprints, starts Waitress server |
-| `routes/api.py` | All `/api/*` REST endpoints |
+| `routes/api.py` | Core playback & volume (6 routes) |
+| `routes/api_bt.py` | Bluetooth management (7 routes) |
+| `routes/api_ma.py` | Music Assistant integration (10 routes) |
+| `routes/api_config.py` | Configuration (5 routes) |
+| `routes/api_status.py` | Status & diagnostics (6 routes) |
 | `routes/views.py` | HTML page renders |
 | `routes/auth.py` | Optional web UI password protection |
 | `services/daemon_process.py` | Subprocess entry point — each speaker runs here with its own `PULSE_SINK` |
@@ -553,6 +557,7 @@ python sendspin_client.py
 | `services/ma_client.py` | MA REST API helpers — group discovery, group play |
 | `services/bluetooth.py` | BT helpers — `bt_remove_device()`, `persist_device_enabled()` |
 | `services/pulse.py` | PulseAudio async helpers — sink discovery, stream routing correction |
+| `services/ma_discovery.py` | mDNS discovery for Music Assistant servers |
 | `scripts/translate_ha_config.py` | HA addon options.json → config.json translator (called by entrypoint.sh) |
 | `entrypoint.sh` | Container startup — D-Bus, audio socket detection, HA config translation, app launch |
 | `Dockerfile` | Container image |

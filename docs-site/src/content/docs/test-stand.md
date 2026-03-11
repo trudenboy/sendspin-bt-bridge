@@ -3,7 +3,7 @@ title: Test Stand
 description: Reference deployment topology with hardware specifications, software versions, and network layout
 ---
 
-Reference deployment used for development and testing of Sendspin BT Bridge v2.12.2.
+Reference deployment used for development and testing of Sendspin BT Bridge v2.20.4.
 
 ## Physical topology
 
@@ -20,7 +20,7 @@ graph TB
                 T_DBUS["D-Bus system bus<br/>bind-mount from host"]
                 T_PA["PulseAudio 16.1 --system<br/>user pulse uid=109"]
                 T_BLUEZ["BlueZ 5.72<br/>bluetoothctl"]
-                T_SBB["SBB v2.12.2<br/>Python 3.12.3<br/>aiosendspin 4.3.2"]
+                T_SBB["SBB v2.20.4<br/>Python 3.12.3<br/>aiosendspin 4.3.2"]
                 T_WEB["Flask 3.1.3 + Waitress 3.0.2<br/>:8080"]
                 T_DBUS --> T_BLUEZ
                 T_DBUS --> T_PA
@@ -41,7 +41,7 @@ graph TB
 
             subgraph P_VM["VM 104 haos — QEMU/KVM — 2 vCPU / 6 GB RAM / 64 GB disk"]
                 P_HAOS["Home Assistant OS<br/>haos.my.lan"]
-                P_ADDON["SBB v2.12.2 addon<br/>85b1ecde-sendspin-bt-bridge<br/>3 devices / sync group"]
+                P_ADDON["SBB v2.20.4 addon<br/>85b1ecde-sendspin-bt-bridge<br/>3 devices / sync group"]
                 P_HAOS --> P_ADDON
             end
 
@@ -49,7 +49,7 @@ graph TB
                 P_DBUS["D-Bus system bus"]
                 P_PA["PulseAudio 16.1"]
                 P_BLUEZ2["BlueZ 5.72"]
-                P_SBB["SBB v2.12.2<br/>Ubuntu 24.04 x86_64<br/>Python 3.12.3"]
+                P_SBB["SBB v2.20.4<br/>Ubuntu 24.04 x86_64<br/>Python 3.12.3"]
                 P_WEB2["Flask 3.1.3 + Waitress 3.0.2<br/>:8080"]
                 P_DBUS --> P_BLUEZ2
                 P_DBUS --> P_PA
@@ -164,7 +164,7 @@ Runs as a Home Assistant addon inside HAOS VM on Proxmox.
 | **Host** | Proxmox VE 8.4.16, VM 104 (HAOS), 2 cores, 6 GB RAM |
 | **Platform** | Home Assistant OS |
 | **Hostname** | `85b1ecde-sendspin-bt-bridge` |
-| **Bridge version** | 2.12.2 (build 2026-03-05) |
+| **Bridge version** | 2.20.4 (build 2026-03-11) |
 | **BT adapter** | CSR8510 A10 via USB passthrough (`C0:FB:F9:62:D6:9D`, hci0) |
 | **Audio** | PulseAudio 16.1, A2DP sinks |
 | **MA server** | auto:9000 (mDNS) |
@@ -188,7 +188,7 @@ Runs as a systemd service inside an unprivileged LXC container on Proxmox.
 | **Host** | Proxmox VE 8.4.16, CT 101, 2 cores, 1 GB RAM, 8 GB disk |
 | **OS** | Ubuntu 24.04 LTS (Noble Numbat), x86_64 |
 | **Hostname** | `sendspin` |
-| **Bridge version** | 2.12.2 (build 2026-03-05) |
+| **Bridge version** | 2.20.4 (build 2026-03-11) |
 | **Python** | 3.12.3 |
 | **BlueZ** | 5.72 |
 | **PulseAudio** | 16.1 |
@@ -214,7 +214,7 @@ Runs as a systemd service inside an LXC container on Turris Omnia router (OpenWr
 | **Host** | Turris Omnia, TurrisOS 9.0.4 (OpenWrt), Marvell Armada 385 ARMv7, 2 GB RAM, 8 GB eMMC |
 | **OS** | Ubuntu 24.04.4 LTS (Noble Numbat), armv7l |
 | **Hostname** | `ubuntu` |
-| **Bridge version** | 2.12.2 (build 2026-03-05) |
+| **Bridge version** | 2.20.4 (build 2026-03-11) |
 | **Python** | 3.12.3 |
 | **BlueZ** | 5.72 |
 | **PulseAudio** | 16.1 |
@@ -290,7 +290,7 @@ All LXC bridge instances share the same software stack:
 
 | Component | Version |
 |-----------|---------|
-| **Sendspin BT Bridge** | 2.12.2 |
+| **Sendspin BT Bridge** | 2.20.4 |
 | **Ubuntu** | 24.04 LTS |
 | **Python** | 3.12.3 |
 | **BlueZ** | 5.72 |

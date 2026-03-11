@@ -62,6 +62,7 @@ sendspin-cli/
 !ha-addon/logo.png
 !static/favicon.png
 !docs-site/public/screenshots/sbb_infographic_ru.png
+!docs-site/public/screenshots/screenshot-advanced-settings.png
 .venv
 .claude/
 community_engagement.md

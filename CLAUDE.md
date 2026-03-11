@@ -23,11 +23,11 @@ docker logs -f sendspin-client
 docker exec -it sendspin-client bluetoothctl
 ```
 
-Unit tests: `pytest` (see `tests/`). Manual testing via `docker logs` and the web UI at `http://localhost:8080`.
+Unit tests: `pytest` (see `tests/`). 138 tests across 16 files. Manual testing via `docker logs` and the web UI at `http://localhost:8080`.
 
 CI/CD builds multi-platform Docker images (`linux/amd64`, `linux/arm64`) to `ghcr.io/trudenboy/sendspin-bt-bridge` on `v*` tag push. Automatically syncs `ha-addon/config.yaml` version from `VERSION` in `config.py` before the build.
 
-## Architecture (v2.12.0)
+## Architecture (v2.20.4)
 
 **Subprocess isolation**: each Bluetooth speaker runs as a dedicated Python subprocess (`services/daemon_process.py`) with `PULSE_SINK=<bt_sink_name>` in env. This gives every speaker its own PulseAudio context → correct audio routing from the first sample, no `move-sink-input` needed.
 
@@ -58,16 +58,21 @@ IPC: subprocess→parent via JSON lines on stdout; parent→subprocess via JSON 
 - `CONFIG_FILE: Path` — single source of truth for config path (replaces old `_CONFIG_PATH` string)
 - `_config_lock` (threading.Lock shared across modules)
 - `load_config()`, `_player_id_from_mac()`, `save_device_volume()` (public; `_save_device_volume` alias retained for compatibility)
-- `VERSION = "2.12.0"`, `BUILD_DATE = "2026-03-05"`
+- `VERSION = "2.20.4"`, `BUILD_DATE = "2026-03-11"`
 
 **`services/` module:**
 - `bridge_daemon.py` — `BridgeDaemon` subclass. Runs inside each subprocess. Handles `on_status_change` callbacks, stream events. `_sink_routed` flag prevents re-anchor feedback loop after PA rescue-streams correction.
 - `daemon_process.py` — subprocess entry point. Reads JSON args from argv, sets up `BridgeDaemon`, emits status as JSON to stdout, reads commands from stdin.
 - `bluetooth.py` — BT helpers: `bt_remove_device()`, `persist_device_enabled()` (sync to config.json + options.json), `is_audio_device()`
 - `pulse.py` — PulseAudio async helpers: `afind_sink_for_mac()`, `amove_pid_sink_inputs()` (corrects streams after PA module-rescue-streams moves them on BT reconnect), `_PULSECTL_AVAILABLE` flag
+- `ma_discovery.py` — mDNS-based Music Assistant server discovery
 
 **`routes/` module (Flask blueprints):**
-- `api.py` — 28 `/api/*` endpoints; includes SSE (`/api/status/stream`), async BT scan, MA groups/nowplaying/queue control, hybrid volume routing (MA API or direct pactl via `VOLUME_VIA_MA`), `_schedule_volume_persist()` (1 s debounce)
+- `api.py` — core volume/mute/pause endpoints (6 routes), SSE stream (`/api/status/stream`), `_schedule_volume_persist()` (1 s debounce)
+- `api_bt.py` — BT scan/pair/remove/reconnect/enable/disable (7 routes)
+- `api_ma.py` — MA integration, OAuth sign-in, groups/nowplaying/queue control (10 routes)
+- `api_config.py` — configuration CRUD, adapter management (5 routes)
+- `api_status.py` — status/diagnostics/version/logs (6 routes)
 - `views.py` — HTML page renders
 - `auth.py` — optional web UI password protection (PBKDF2-SHA256); HA login_flow with 2FA/TOTP support; brute-force lockout (5 attempts / 5 min)
 

@@ -35,7 +35,7 @@ python sendspin_client.py
 
 ## Manual Test Checklist
 
-Run `pytest` for automated unit tests (`tests/test_config.py`, `tests/test_volume_routing.py`). Additionally, use this manual checklist when testing changes:
+Run `pytest` for the automated test suite (138 tests across 16 files covering config, volume routing, device status, state management, auth, ingress middleware, API endpoints, and more). Additionally, use this manual checklist when testing changes:
 
 - [ ] Container starts without errors (`docker logs -f sendspin-client`)
 - [ ] Web UI loads at `http://localhost:8080`
