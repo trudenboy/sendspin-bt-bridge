@@ -865,6 +865,15 @@ graph LR
     ST --> MM[services/ma_monitor.py]
     MM --> SVC_MAC
 
+    SC --> UC[services/update_checker.py]
+    UC -.->|GitHub API| GH[(GitHub Releases)]
+
+    DEMO[demo/__init__.py] -.->|patches| SC
+    DEMO -.->|patches| BM
+    DEMO -.->|patches| SVC_PA
+    DEMO_SIM[demo/simulator.py] --> ST
+    DEMO_FIX[demo/fixtures.py] --> DEMO
+
     CFG -.->|config.json| JSON[(config.json)]
     HA_SCRIPT[scripts/translate_ha_config.py] -.->|options.json→config.json| JSON
 ```
@@ -884,3 +893,125 @@ graph LR
 | `aiohttp` / `httpx` | MA REST API calls in `ma_client.py` |
 | `bluetoothctl` | System BT management (subprocess) |
 | `pactl` | Audio sink discovery (subprocess, legacy path) |
+
+---
+
+## C4 Context Diagram
+
+High-level view of sendspin-bt-bridge and its external interactions.
+
+```mermaid
+C4Context
+    title System Context — Sendspin Bluetooth Bridge
+
+    Person(user, "User", "Controls speakers via<br/>web UI or HA dashboard")
+
+    System(bridge, "Sendspin BT Bridge", "Multi-process Python service<br/>bridging MA audio → BT speakers")
+
+    System_Ext(ma, "Music Assistant", "Music streaming server<br/>Sendspin protocol (WS + FLAC)")
+    System_Ext(ha, "Home Assistant", "Smart home platform<br/>Addon host / Auth provider")
+    System_Ext(bt, "Bluetooth Speakers", "A2DP audio sinks<br/>via BlueZ / PulseAudio")
+    System_Ext(github, "GitHub Releases", "Version update checks<br/>API polling hourly")
+
+    Rel(user, bridge, "Web UI / REST API", "HTTP / SSE")
+    Rel(user, ha, "HA Dashboard", "HTTP")
+    Rel(bridge, ma, "Sendspin WebSocket", "WS + FLAC/RAW")
+    Rel(bridge, ma, "MA REST API", "HTTP")
+    Rel(bridge, bt, "A2DP audio stream", "Bluetooth")
+    Rel(bridge, ha, "Ingress / Auth", "HTTP")
+    Rel(bridge, github, "Update check", "HTTPS")
+    Rel(ha, ma, "Integration", "API")
+```
+
+---
+
+## IPC Sequence — Volume Change
+
+End-to-end flow when a user adjusts volume via the web UI.
+
+```mermaid
+sequenceDiagram
+    participant UI as Web UI (browser)
+    participant API as Flask API<br/>routes/api.py
+    participant SC as SendspinClient
+    participant DP as daemon_process.py<br/>(subprocess)
+    participant PA as PulseAudio
+    participant MA as Music Assistant
+
+    UI->>API: POST /api/volume {mac, volume: 60}
+    API->>SC: send_command({cmd: set_volume, value: 60})
+    SC->>DP: stdin JSON: {"cmd":"set_volume","value":60}
+    DP->>PA: pulsectl set_sink_volume(60)
+    PA-->>DP: OK
+    DP->>MA: MediaCommand.VOLUME_SET (if VOLUME_VIA_MA)
+    DP-->>SC: stdout JSON: {"type":"status","volume":60}
+    SC->>SC: _update_status({volume: 60})
+    SC->>SC: save_device_volume(mac, 60) [debounced 1s]
+    SC-->>API: notify_status_changed()
+    API-->>UI: SSE event: {"volume": 60, ...}
+```
+
+---
+
+## Update Checker Flow
+
+Background version polling and platform-aware update mechanism (v2.23.0+).
+
+```mermaid
+flowchart TD
+    START([main&#40;&#41; startup]) --> DELAY[Wait 30s<br/>let app initialize]
+    DELAY --> CHECK[Fetch GitHub Releases API<br/>api.github.com/repos/.../releases/latest]
+
+    CHECK --> PARSE{Parse tag_name<br/>compare with VERSION}
+    PARSE -->|remote > current| FOUND[Store update info in state.py<br/>version, url, release notes]
+    PARSE -->|current ≥ remote| CLEAR[Clear update_available = None]
+
+    FOUND --> BADGE[UI: green badge appears<br/>⬆ vX.Y.Z available]
+    CLEAR --> SLEEP
+
+    BADGE --> SLEEP[Sleep 3600s]
+    SLEEP --> CHECK
+
+    subgraph "User-triggered"
+        BADGE --> CLICK[User clicks badge]
+        CLICK --> MODAL{GET /api/update/info<br/>detect runtime}
+        MODAL -->|systemd / LXC| LXC_BTN["'Update Now' button<br/>POST /api/update/apply<br/>→ runs upgrade.sh"]
+        MODAL -->|docker| DOCKER_CMD["Show command:<br/>docker compose pull &&<br/>docker compose up -d"]
+        MODAL -->|ha_addon| HA_MSG["Directs to:<br/>HA → Add-ons → Update"]
+    end
+```
+
+---
+
+## Demo Mode Architecture
+
+When `DEMO_MODE=true`, the bridge runs with fully emulated hardware (v2.23.0+).
+
+```mermaid
+graph TD
+    subgraph "Demo Mode Patches — demo/__init__.py"
+        INSTALL["install(config)<br/>Called from main()"]
+        INSTALL --> BT_PATCH[Patch BluetoothManager<br/>Simulated connect/disconnect<br/>Random battery levels]
+        INSTALL --> PULSE_PATCH[Patch services.pulse<br/>Dict-backed volume/mute state<br/>per-sink tracking]
+        INSTALL --> CLIENT_PATCH[Patch SendspinClient<br/>No real subprocess<br/>_FakeProc sentinel]
+        INSTALL --> MA_PATCH[Patch MA commands<br/>send_player_cmd → noop<br/>ma_group_play → group propagate]
+        INSTALL --> FIXTURES[Load fixtures.py<br/>5 devices + 3 sync groups<br/>BT adapters + MA discovery]
+    end
+
+    subgraph "Demo Simulator — demo/simulator.py"
+        SIM[run_simulator] --> TRACKS[Curated playlist<br/>10 real tracks with metadata]
+        SIM --> CYCLE[Rotate tracks per device<br/>Update elapsed_ms each tick]
+        SIM --> PLAY_PAUSE[Random play/pause transitions<br/>Realistic timing]
+    end
+
+    subgraph "Result"
+        WEB[Web UI at :8080<br/>All features work]
+        SSE[SSE updates<br/>Real-time status changes]
+        API[REST API<br/>28 endpoints respond]
+    end
+
+    INSTALL --> SIM
+    SIM --> WEB
+    SIM --> SSE
+    SIM --> API
+```
