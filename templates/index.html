@@ -118,19 +118,6 @@
                     <input type="number" name="PULSE_LATENCY_MSEC" placeholder="200" min="50" max="2000">
                 </div>
 
-                <div class="form-group">
-                    <label>Log level
-                        <span class="form-hint">DEBUG produces verbose output for troubleshooting</span>
-                    </label>
-                    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-                        <select name="LOG_LEVEL" id="log-level-select" style="width:auto;">
-                            <option value="INFO">INFO</option>
-                            <option value="DEBUG">DEBUG</option>
-                        </select>
-                        <button type="button" class="btn btn-sm" onclick="applyLogLevel()">Apply now</button>
-                        <span id="log-level-msg" style="font-size:12px;color:var(--secondary-text-color);"></span>
-                    </div>
-                </div>
             </div>
 
             <!-- ── Bluetooth ── -->
@@ -342,6 +329,14 @@
                 <button onclick="setLogLevel('error')"   id="filter-error"   class="filter-btn">Error</button>
                 <button onclick="setLogLevel('warning')" id="filter-warning" class="filter-btn">Warning</button>
                 <button onclick="setLogLevel('info')"    id="filter-info"    class="filter-btn">Info</button>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;margin-left:auto;">
+                <select id="log-level-select" style="width:auto;padding:4px 8px;font-size:13px;">
+                    <option value="INFO">INFO</option>
+                    <option value="DEBUG">DEBUG</option>
+                </select>
+                <button type="button" class="btn btn-sm" onclick="applyLogLevel()">Apply</button>
+                <span id="log-level-msg" style="font-size:12px;color:var(--secondary-text-color);"></span>
             </div>
         </div>
         <div class="logs-container" id="logs"></div>

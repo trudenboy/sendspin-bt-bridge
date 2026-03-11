@@ -1628,6 +1628,9 @@ async function saveConfig() {
     config.PREFER_SBC_CODEC = !!(document.getElementById('prefer-sbc-codec') || {}).checked;
     config.AUTH_ENABLED = !!(document.getElementById('auth-enabled') || {}).checked;
     config.VOLUME_VIA_MA = !!(document.getElementById('volume-via-ma') || {}).checked;
+    // Log level lives outside the config form (in Logs section)
+    var logSel = document.getElementById('log-level-select');
+    if (logSel) config.LOG_LEVEL = logSel.value;
     // Cast numeric BT settings to integers
     config.BT_CHECK_INTERVAL = parseInt(config.BT_CHECK_INTERVAL, 10) || 10;
     config.BT_MAX_RECONNECT_FAILS = parseInt(config.BT_MAX_RECONNECT_FAILS, 10) || 0;
