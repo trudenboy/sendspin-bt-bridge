@@ -1,3 +1,4 @@
 #!/command/with-contenv bash
 # S6 longrun service: start the Sendspin Bridge Python application.
+cd /app
 exec /app/entrypoint.sh

@@ -395,6 +395,7 @@ class SendspinClient:
                 stdin=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 env=env,
+                cwd=os.path.dirname(os.path.abspath(__file__)),
             )
             with self._status_lock:
                 self.status["playing"] = False
