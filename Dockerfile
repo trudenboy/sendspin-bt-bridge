@@ -110,7 +110,12 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD python3 -c "import urllib.request, os; urllib.request.urlopen(f'http://localhost:{os.environ.get(\"WEB_PORT\",\"8080\")}/api/health')" || exit 1
 
+# S6 init wrapper — ensures /init is executable on every start.
+# Docker overlayfs can strip permissions on container restart.
+RUN printf '#!/bin/sh\nchmod +x /init 2>/dev/null\nexec /init "$@"\n' > /s6-init && \
+    chmod +x /s6-init
+
 # S6 overlay manages process lifecycle (PID 1, signal forwarding, zombie reaping).
 # The sendspin longrun service (rootfs/etc/s6-overlay/s6-rc.d/sendspin/run)
 # calls /app/entrypoint.sh which handles D-Bus, audio, and app startup.
-ENTRYPOINT ["/init"]
+ENTRYPOINT ["/s6-init"]
