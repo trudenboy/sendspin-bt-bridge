@@ -126,7 +126,7 @@ async function updateStatus() {
         var sysEl = document.getElementById('system-info');
         if (sysEl) sysEl.textContent = info.join(' \u00b7 ');
 
-        var devices = status.devices || [status];
+        var devices = status.devices || (status.error ? [] : [status]);
         var sorted = devices.slice().sort(function(a, b) {
             var score = function(d) { return d.playing ? 2 : (d.bluetooth_connected ? 1 : 0); };
             var gka = a.group_id || ('_' + a.player_name);
@@ -2360,7 +2360,7 @@ var _statusInterval = null;
                 if (status.uptime)     info.push('up ' + status.uptime);
                 var sysEl = document.getElementById('system-info');
                 if (sysEl) sysEl.textContent = info.join(' \u00b7 ');
-                var devices = status.devices || [status];
+                var devices = status.devices || (status.error ? [] : [status]);
                 var sorted = devices.slice().sort(function(a, b) {
                     var score = function(d) { return d.playing ? 2 : (d.bluetooth_connected ? 1 : 0); };
                     var gka = a.group_id || ('_' + a.player_name);
