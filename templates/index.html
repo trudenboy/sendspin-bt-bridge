@@ -21,13 +21,18 @@
             <div class="header-title">
                 <h1>&#127925; Sendspin Bluetooth Bridge</h1>
                 <span class="header-version" id="version-display" title="{{ BUILD_DATE }}">v{{ VERSION }}</span>
-                <span id="update-badge" style="display:none;">
-                    <a id="update-link" href="#" target="_blank" rel="noopener" class="update-badge-link">
-                        ⬆ <span id="update-version"></span>
+                <span id="update-badge">
+                    <a id="update-link" href="#" class="update-badge-link" title="Check for updates"
+                       onclick="return _onUpdateBadgeClick(event)">
+                        <span id="update-icon">⟳</span> <span id="update-version">check</span>
                     </a>
                 </span>
             </div>
             <div class="header-actions">
+                <a href="https://trudenboy.github.io/sendspin-bt-bridge/" target="_blank" rel="noopener"
+                   class="header-link">Docs</a>
+                <a href="https://github.com/trudenboy/sendspin-bt-bridge" target="_blank" rel="noopener"
+                   class="header-link">GitHub</a>
                 {% if auth_enabled %}
                 {% if ha_user %}
                 <span class="header-user">{{ ha_user }}</span>
@@ -40,12 +45,6 @@
         <div class="header-row2">
             <div id="system-info" class="header-sysinfo"></div>
             <div id="health-indicator" class="health-indicator"></div>
-        </div>
-        <!-- Row 3: Links -->
-        <div class="header-links">
-            <a href="https://trudenboy.github.io/sendspin-bt-bridge/" target="_blank" rel="noopener">Docs</a>
-            <span class="header-links-sep">·</span>
-            <a href="https://github.com/trudenboy/sendspin-bt-bridge" target="_blank" rel="noopener">GitHub</a>
         </div>
     </div>
 

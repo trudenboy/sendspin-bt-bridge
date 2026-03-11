@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio  # noqa: TC003 — used at runtime for event loop storage
 import json
 import logging
+import os
 import socket
 import threading
 import time as _time
@@ -52,6 +53,15 @@ __all__ = [
 bridge_start_time: datetime = datetime.now(tz=timezone.utc)
 
 
+def _detect_runtime_type() -> str:
+    """Detect whether we're running as HA addon, Docker, or LXC/bare metal."""
+    if os.environ.get("SUPERVISOR_TOKEN"):
+        return "ha-addon"
+    if os.path.exists("/.dockerenv"):
+        return "docker"
+    return "lxc"
+
+
 def get_bridge_system_info() -> dict:
     """Return hostname, IP, uptime and version — always available."""
     from config import BUILD_DATE, VERSION
@@ -71,6 +81,7 @@ def get_bridge_system_info() -> dict:
         "hostname": socket.gethostname(),
         "ip_address": ip,
         "uptime": str(timedelta(seconds=int(uptime.total_seconds()))),
+        "runtime": _detect_runtime_type(),
     }
 
 

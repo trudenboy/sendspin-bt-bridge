@@ -108,6 +108,7 @@ def get_client_status_for(client):
 
         status["version"] = VERSION
         status["build_date"] = BUILD_DATE
+        status["runtime"] = state._detect_runtime_type()
         status["connected"] = client.is_running()
         status["player_name"] = getattr(client, "player_name", None)
         status["listen_port"] = getattr(client, "listen_port", None)

@@ -67,16 +67,27 @@
         }
         .header h1 { color: var(--app-header-text-color); font-size: 24px; margin-bottom: 0; }
         .header-version {
-            font-size: 13px; color: var(--app-header-text-color); opacity: 0.7;
+            font-size: 13px; color: var(--app-header-text-color); opacity: 0.9;
             cursor: default;
         }
         .update-badge-link {
-            font-size: 12px; color: #4ade80; text-decoration: none;
-            background: rgba(34,197,94,0.2); border: 1px solid rgba(34,197,94,0.5);
+            font-size: 12px; text-decoration: none;
             border-radius: 12px; padding: 2px 10px; white-space: nowrap;
-            font-weight: 500;
+            font-weight: 500; cursor: pointer;
+            transition: background 0.2s;
         }
-        .update-badge-link:hover { background: rgba(34,197,94,0.3); }
+        .update-badge-link.has-update {
+            color: #4ade80;
+            background: rgba(34,197,94,0.2); border: 1px solid rgba(34,197,94,0.5);
+        }
+        .update-badge-link.has-update:hover { background: rgba(34,197,94,0.3); }
+        .update-badge-link.no-update {
+            color: rgba(255,255,255,0.6);
+            background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.2);
+        }
+        .update-badge-link.no-update:hover { background: rgba(255,255,255,0.15); }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .update-badge-link.checking #update-icon { display: inline-block; animation: spin 1s linear infinite; }
         .header-actions {
             display: flex; align-items: center; gap: 10px;
         }
@@ -88,27 +99,33 @@
             border: 1px solid rgba(255,255,255,0.3); border-radius: 4px; padding: 3px 10px;
         }
         .header-signout:hover { background: rgba(255,255,255,0.1); }
+        .header-link {
+            font-size: 12px; color: rgba(255,255,255,0.75); text-decoration: none;
+            padding: 3px 8px; border-radius: 4px;
+        }
+        .header-link:hover { color: #fff; background: rgba(255,255,255,0.1); }
         .header-row2 {
             display: flex; justify-content: space-between; align-items: center;
             margin-top: 6px; flex-wrap: wrap; gap: 4px 16px;
         }
         .header-sysinfo {
-            font-size: 12px; color: rgba(255,255,255,0.6);
+            font-size: 12px; color: rgba(255,255,255,0.8);
+        }
+        .runtime-badge {
+            display: inline-block;
+            background: rgba(255,255,255,0.22);
+            color: #fff;
+            font-size: 10px; font-weight: 600; letter-spacing: 0.5px;
+            padding: 1px 6px; border-radius: 3px;
+            vertical-align: middle;
+            margin-right: 4px;
         }
         .health-indicator {
             display: flex; gap: 12px;
             font-size: 12px; color: rgba(255,255,255,0.8);
         }
-        .header-links {
-            margin-top: 6px; display: flex; gap: 4px; align-items: center;
-        }
-        .header-links a {
-            font-size: 12px; color: rgba(255,255,255,0.55); text-decoration: none;
-        }
-        .header-links a:hover { color: rgba(255,255,255,0.85); }
-        .header-links-sep { color: rgba(255,255,255,0.3); font-size: 12px; }
-        .version-info { text-align: right; font-size: 12px; color: var(--app-header-text-color); opacity: 0.85; }
-        #system-info { color: rgba(255,255,255,0.6) !important; }
+        .version-info { text-align: right; font-size: 12px; color: var(--app-header-text-color); opacity: 0.95; }
+        #system-info { color: rgba(255,255,255,0.8) !important; }
 
         /* Restart banner */
         .restart-banner {

@@ -125,7 +125,18 @@ async function updateStatus() {
         if (status.ip_address) info.push(status.ip_address);
         if (status.uptime)     info.push('up ' + status.uptime);
         var sysEl = document.getElementById('system-info');
-        if (sysEl) sysEl.textContent = info.join(' \u00b7 ');
+        if (sysEl) {
+            sysEl.innerHTML = '';
+            if (status.runtime) {
+                var badge = document.createElement('span');
+                badge.className = 'runtime-badge';
+                badge.textContent = status.runtime.toUpperCase();
+                sysEl.appendChild(badge);
+            }
+            if (info.length) {
+                sysEl.appendChild(document.createTextNode(' ' + info.join(' \u00b7 ')));
+            }
+        }
 
         _showUpdateBadge(status.update_available);
 
@@ -2436,16 +2447,55 @@ async function loadVersionInfo() {
 
 function _showUpdateBadge(upd) {
     var badge = document.getElementById('update-badge');
-    if (!badge) return;
+    var link = document.getElementById('update-link');
+    var ver = document.getElementById('update-version');
+    var icon = document.getElementById('update-icon');
+    if (!badge || !link) return;
+    link.classList.remove('checking');
     if (upd && upd.version) {
-        var link = document.getElementById('update-link');
-        var ver = document.getElementById('update-version');
         if (ver) ver.textContent = 'v' + upd.version;
-        if (link) link.href = upd.url || '#';
-        badge.style.display = '';
+        if (icon) icon.textContent = '⬆';
+        link.href = upd.url || '#';
+        link.target = '_blank';
+        link.rel = 'noopener';
+        link.title = 'Update available — click to view release';
+        link.classList.remove('no-update');
+        link.classList.add('has-update');
     } else {
-        badge.style.display = 'none';
+        if (ver) ver.textContent = 'up to date';
+        if (icon) icon.textContent = '⟳';
+        link.removeAttribute('target');
+        link.removeAttribute('rel');
+        link.href = '#';
+        link.title = 'Check for updates';
+        link.classList.remove('has-update');
+        link.classList.add('no-update');
     }
+}
+
+function _onUpdateBadgeClick(e) {
+    var link = document.getElementById('update-link');
+    if (link && link.classList.contains('has-update')) return true; // follow href
+    e.preventDefault();
+    if (link) link.classList.add('checking');
+    var ver = document.getElementById('update-version');
+    if (ver) ver.textContent = 'checking…';
+    fetch(API_BASE + '/api/update/check', {method: 'POST'})
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.update_available) {
+                _showUpdateBadge({version: data.version, url: data.url});
+                showToast('Update v' + data.version + ' available', 'info');
+            } else {
+                _showUpdateBadge(null);
+                showToast('Already on the latest version', 'info');
+            }
+        })
+        .catch(function() {
+            _showUpdateBadge(null);
+            showToast('Update check failed', 'error');
+        });
+    return false;
 }
 
 // ---- Diagnostics ----
@@ -2583,19 +2633,25 @@ function reloadDiagnostics() {
 function updateHealthIndicator(devices) {
     var el = document.getElementById('health-indicator');
     if (!el || !devices || !devices.length) return;
-    var playing = devices.filter(function(d) { return d.playing; }).length;
-    var disconnected = devices.filter(function(d) { return !d.bluetooth_connected; }).length;
     var total = devices.length;
+    var playing = 0, btOk = 0, maOk = 0;
+    devices.forEach(function(d) {
+        if (d.playing) playing++;
+        if (d.bluetooth_connected) btOk++;
+        if (d.connected) maOk++;
+    });
     var parts = [];
+    // BT status
+    var btClass = btOk === total ? 'ok' : btOk > 0 ? 'warn' : 'error';
+    parts.push('<span class="health-dot ' + btClass + '"></span>BT ' + btOk + '/' + total);
+    // MA status
+    var maClass = maOk === total ? 'ok' : maOk > 0 ? 'warn' : 'error';
+    parts.push('<span class="health-dot ' + maClass + '"></span>MA ' + maOk + '/' + total);
+    // Playback
     if (playing > 0) {
-        parts.push('<span class="health-dot ok"></span>' + playing + '/' + total + ' playing');
-    } else {
-        parts.push('<span class="health-dot warn"></span>0/' + total + ' playing');
+        parts.push('<span class="health-dot ok"></span>▶ ' + playing);
     }
-    if (disconnected > 0) {
-        parts.push('<span class="health-dot error"></span>' + disconnected + ' disconnected');
-    }
-    el.innerHTML = parts.join('<span style="opacity:0.4;padding:0 2px;">·</span>');
+    el.innerHTML = parts.join('<span style="opacity:0.3;padding:0 4px;">·</span>');
 }
 
 // ---- Keyboard shortcuts ----
@@ -2642,7 +2698,18 @@ var _statusInterval = null;
                 if (status.ip_address) info.push(status.ip_address);
                 if (status.uptime)     info.push('up ' + status.uptime);
                 var sysEl = document.getElementById('system-info');
-                if (sysEl) sysEl.textContent = info.join(' \u00b7 ');
+                if (sysEl) {
+                    sysEl.innerHTML = '';
+                    if (status.runtime) {
+                        var badge = document.createElement('span');
+                        badge.className = 'runtime-badge';
+                        badge.textContent = status.runtime.toUpperCase();
+                        sysEl.appendChild(badge);
+                    }
+                    if (info.length) {
+                        sysEl.appendChild(document.createTextNode(' ' + info.join(' \u00b7 ')));
+                    }
+                }
                 var devices = status.devices || (status.error ? [] : [status]);
                 var grid = document.getElementById('status-grid');
 
