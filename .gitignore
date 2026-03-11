@@ -57,12 +57,8 @@ community_engagement.md
 # IDE / tool artifacts
 .playwright-mcp/
 sendspin-cli/
-*.png
-!ha-addon/icon.png
-!ha-addon/logo.png
-!static/favicon.png
-!docs-site/public/screenshots/sbb_infographic_ru.png
-!docs-site/public/screenshots/screenshot-advanced-settings.png
+# Debug screenshots (docs screenshots live in docs-site/public/screenshots/)
+/*.png
 .venv
 .claude/
 community_engagement.md
