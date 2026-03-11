@@ -430,6 +430,8 @@ The web UI at `http://your-host:8080` (or via HA Ingress) provides:
 
 The bridge runs as a **multi-process application**: one main process manages Bluetooth, the web API, and Music Assistant integration, while each configured speaker gets its own isolated subprocess with a dedicated PulseAudio context (`PULSE_SINK`).
 
+**S6 overlay** provides PID 1 process supervision — zombie reaping, SIGTERM forwarding, and automatic restarts. AppArmor enforces a mandatory access control profile in the HA addon.
+
 ```
 ┌─────────────────────────────────────┐
 │     Music Assistant Server          │

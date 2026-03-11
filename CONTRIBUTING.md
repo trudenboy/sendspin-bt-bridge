@@ -61,6 +61,20 @@ For HA addon changes, additionally test via the HA Addon Store dev workflow (loc
 
 ---
 
+## Docker & HA Addon Architecture
+
+The single `Dockerfile` builds a multi-arch image (`linux/amd64`, `linux/arm64`, `linux/arm/v7`) pushed to `ghcr.io/trudenboy/sendspin-bt-bridge`.
+
+**S6 overlay** (v3.2.0.2) provides PID 1 process supervision:
+- `/init` → S6 boot → `rootfs/etc/s6-overlay/s6-rc.d/sendspin/run` → `/app/entrypoint.sh` → `python3 sendspin_client.py`
+- Handles zombie reaping, signal forwarding (SIGTERM → graceful shutdown), and automatic restarts on crash
+
+**HA addon** (`ha-addon/Dockerfile`) is a thin `FROM` wrapper — no additional layers. HA Supervisor pulls the pre-built image via the `image:` field in `config.yaml`.
+
+**AppArmor** is enabled in enforce mode (`ha-addon/apparmor.txt`). The profile covers S6, Python, bluetoothctl, pactl, D-Bus, and all runtime paths.
+
+---
+
 ## Branching Strategy
 
 - `main` — stable, always releasable
