@@ -885,12 +885,11 @@ def api_ma_login():
         )
         _user, token = fut.result(timeout=30.0)
     except Exception as lib_exc:
-        lib_err = str(lib_exc)
-        # If it's a clear auth error from stable MA, don't retry
-        if "invalid username" in lib_err.lower() or "invalid password" in lib_err.lower():
-            return jsonify({"success": False, "error": "Invalid username or password"}), 401
-        # Otherwise try direct HTTP login (handles both old and new MA formats)
-        logger.debug("Library login failed (%s), trying direct HTTP login", lib_err)
+        # Library login failed — always try direct HTTP fallback.
+        # The library raises generic "Invalid username or password" for any 401,
+        # including format mismatches with MA beta, so we can't distinguish
+        # real auth errors from format issues at this level.
+        logger.info("Library login failed (%s), trying direct HTTP login", lib_exc)
         try:
             session_token = _ma_http_login(ma_url, username, password)
             token = _exchange_for_long_lived_token(ma_url, session_token)
