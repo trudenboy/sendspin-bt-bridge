@@ -668,7 +668,7 @@
             display: flex; align-items: center; gap: 8px;
             font-size: 20px; font-weight: 700; color: var(--primary-text-color);
             margin: 0 0 16px; padding-bottom: 10px;
-            border-bottom: 3px solid #4fc3f7;
+            border-bottom: 2px solid rgba(79, 195, 247, 0.3);
         }
         .config-group-title .cg-icon { font-size: 22px; flex-shrink: 0; }
         .form-hint {
