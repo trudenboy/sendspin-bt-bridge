@@ -116,10 +116,10 @@ def test_default_is_root():
 
 
 def test_detect_no_methods():
-    """No config keys set → empty list."""
+    """No config keys set → password always present."""
     with patch("routes.auth.load_config", return_value={}), patch.dict("os.environ", {}, clear=True):
         methods = _detect_auth_methods()
-    assert methods == []
+    assert methods == ["password"]
 
 
 def test_detect_ma_method():
@@ -140,10 +140,9 @@ def test_detect_ha_method():
     assert "ha" in methods
 
 
-def test_detect_password_method():
-    """AUTH_PASSWORD_HASH set → 'password' in methods."""
-    cfg = {"AUTH_PASSWORD_HASH": "pbkdf2:sha256:..."}
-    with patch("routes.auth.load_config", return_value=cfg), patch.dict("os.environ", {}, clear=True):
+def test_detect_password_always_present():
+    """'password' is always in methods, even without hash."""
+    with patch("routes.auth.load_config", return_value={}), patch.dict("os.environ", {}, clear=True):
         methods = _detect_auth_methods()
     assert "password" in methods
 
@@ -153,7 +152,6 @@ def test_detect_multiple_methods():
     cfg = {
         "MA_API_URL": "http://ma:8095",
         "MA_API_TOKEN": "tok",
-        "AUTH_PASSWORD_HASH": "hash",
     }
     with (
         patch("routes.auth.load_config", return_value=cfg),
@@ -161,6 +159,15 @@ def test_detect_multiple_methods():
     ):
         methods = _detect_auth_methods()
     assert methods == ["ma", "ha", "password"]
+
+
+def test_detect_ha_via_ma():
+    """MA_AUTH_PROVIDER == 'ha' → 'ha_via_ma' instead of 'ma'."""
+    cfg = {"MA_API_URL": "http://ma:8095", "MA_API_TOKEN": "tok", "MA_AUTH_PROVIDER": "ha"}
+    with patch("routes.auth.load_config", return_value=cfg), patch.dict("os.environ", {}, clear=True):
+        methods = _detect_auth_methods()
+    assert "ha_via_ma" in methods
+    assert "ma" not in methods
 
 
 def test_detect_ma_requires_both_url_and_token():

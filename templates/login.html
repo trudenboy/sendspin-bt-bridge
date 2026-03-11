@@ -123,9 +123,9 @@
         {% endif %}
 
         {% if mfa_step %}
-        {# ── MFA step (HA login_flow only) ── #}
+        {# ── MFA step (HA login_flow — local or remote) ── #}
         <form method="post" autocomplete="on">
-            <input type="hidden" name="method" value="ha">
+            <input type="hidden" name="method" value="{{ mfa_method|default('ha') }}">
             <input type="hidden" name="step" value="mfa">
             <input type="hidden" name="flow_id" value="{{ flow_id }}">
             <input type="hidden" name="mfa_module_id" value="{{ mfa_module_id }}">
@@ -150,6 +150,10 @@
         {# ── Method selection ── #}
         {% if auth_methods|length > 1 %}
         <div class="login-tabs">
+            {% if "ha_via_ma" in auth_methods %}
+            <button class="login-tab{% if auth_methods[0] == 'ha_via_ma' %} active{% endif %}"
+                    onclick="switchMethod('ha_via_ma')">Home Assistant</button>
+            {% endif %}
             {% if "ma" in auth_methods %}
             <button class="login-tab{% if auth_methods[0] == 'ma' %} active{% endif %}"
                     onclick="switchMethod('ma')">Music Assistant</button>
@@ -163,6 +167,24 @@
                     onclick="switchMethod('password')">Password</button>
             {% endif %}
         </div>
+        {% endif %}
+
+        {# ── HA via MA login form (remote HA Core login_flow) ── #}
+        {% if "ha_via_ma" in auth_methods %}
+        <form method="post" autocomplete="on" class="login-method{% if auth_methods[0] == 'ha_via_ma' %} active{% endif %}" id="method-ha_via_ma">
+            <input type="hidden" name="method" value="ha_via_ma">
+            <input type="hidden" name="step" value="credentials">
+            <div class="form-group">
+                <label>Home Assistant username</label>
+                <input type="text" name="username" autocomplete="username" required
+                    {% if auth_methods[0] == 'ha_via_ma' %}autofocus{% endif %}>
+            </div>
+            <div class="form-group">
+                <label>Password</label>
+                <input type="password" name="password" autocomplete="current-password" required>
+            </div>
+            <button type="submit" class="btn login-submit">Sign in with Home Assistant</button>
+        </form>
         {% endif %}
 
         {# ── MA login form ── #}

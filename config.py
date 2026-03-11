@@ -127,6 +127,7 @@ def load_config() -> dict:
         "LOG_LEVEL",
         "MA_API_URL",
         "MA_API_TOKEN",
+        "MA_AUTH_PROVIDER",
         "MA_USERNAME",
         "VOLUME_VIA_MA",
         "TRUSTED_PROXIES",

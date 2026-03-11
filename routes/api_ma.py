@@ -215,7 +215,7 @@ async def _rediscover_after_login(
         logger.debug("MA group rediscovery after login failed", exc_info=True)
 
 
-def _save_ma_token_and_rediscover(ma_url: str, ma_token: str, username: str = "") -> None:
+def _save_ma_token_and_rediscover(ma_url: str, ma_token: str, username: str = "", auth_provider: str = "") -> None:
     """Save MA token to config and trigger group rediscovery."""
 
     def _save(cfg: dict) -> None:
@@ -223,6 +223,8 @@ def _save_ma_token_and_rediscover(ma_url: str, ma_token: str, username: str = ""
         cfg["MA_API_TOKEN"] = ma_token
         if username:
             cfg["MA_USERNAME"] = username
+        if auth_provider:
+            cfg["MA_AUTH_PROVIDER"] = auth_provider
 
     update_config(_save)
     state.set_ma_api_credentials(ma_url, ma_token)
@@ -912,6 +914,7 @@ def api_ma_login():
         cfg["MA_API_URL"] = ma_url
         cfg["MA_API_TOKEN"] = token
         cfg["MA_USERNAME"] = username
+        cfg["MA_AUTH_PROVIDER"] = "builtin"
 
     update_config(_save_ma_creds)
     state.set_ma_api_credentials(ma_url, token)
@@ -1032,7 +1035,7 @@ def api_ma_ha_silent_auth():
         )
 
     # 4. Save and rediscover
-    _save_ma_token_and_rediscover(ma_url, ma_token, ha_user.get("name", ""))
+    _save_ma_token_and_rediscover(ma_url, ma_token, ha_user.get("name", ""), auth_provider="ha")
 
     return jsonify(
         {
@@ -1099,7 +1102,7 @@ def api_ma_ha_login():
                 return jsonify({"success": False, "error": "Failed to exchange HA code for MA token"}), 500
 
             ma_token = _exchange_for_long_lived_token(ma_url, ma_session_token)
-            _save_ma_token_and_rediscover(ma_url, ma_token, username)
+            _save_ma_token_and_rediscover(ma_url, ma_token, username, auth_provider="ha")
 
             return jsonify(
                 {
@@ -1153,7 +1156,7 @@ def api_ma_ha_login():
                 return jsonify({"success": False, "error": "Failed to exchange HA code for MA token"}), 500
 
             ma_token = _exchange_for_long_lived_token(ma_url, ma_session_token)
-            _save_ma_token_and_rediscover(ma_url, ma_token, username)
+            _save_ma_token_and_rediscover(ma_url, ma_token, username, auth_provider="ha")
 
             return jsonify(
                 {
