@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.23.1] - 2026-03-11
+
+### Added
+- **S6 overlay process supervision** — proper PID 1 (zombie reaping, signal forwarding) via S6 overlay v3.2.0.2; replaces Docker `--init` flag
+- **AppArmor profile re-enabled** — security profile enabled in complain mode for safe initial testing; was disabled since v2.15.5
+
+### Changed
+- **Dockerfile** — ENTRYPOINT changed from `/app/entrypoint.sh` to `/init` (S6 manages lifecycle); added `curl`/`xz-utils` to runtime deps
+- **HA addon Dockerfile** — simplified to thin wrapper (removed redundant `run.sh`)
+- **HA addon config** — `init: false` (S6 is in the image), `apparmor: true`
+
+### Removed
+- **`ha-addon/run.sh`** — redundant; `entrypoint.sh` already handles HA addon detection and config translation
+
 ## [2.23.0] - 2026-03-11
 
 ### Added
