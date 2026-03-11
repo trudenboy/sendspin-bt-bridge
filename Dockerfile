@@ -91,6 +91,7 @@ COPY rootfs/ /
 # Copy entrypoint separately so its layer is independent of Python code changes
 COPY entrypoint.sh ./
 RUN chmod +x entrypoint.sh && \
+    chmod +x /init && \
     chmod +x /etc/s6-overlay/s6-rc.d/sendspin/run && \
     chmod +x /etc/s6-overlay/s6-rc.d/sendspin/finish
 
