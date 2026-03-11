@@ -77,6 +77,22 @@
             display: flex; flex-direction: column;
             gap: 12px; margin-bottom: 20px;
         }
+        .no-devices-hint {
+            text-align: center; padding: 40px 20px;
+            background: var(--card-background-color);
+            border-radius: var(--ha-card-border-radius);
+            box-shadow: var(--ha-card-box-shadow);
+            color: var(--secondary-text-color, #888);
+        }
+        .no-devices-icon { font-size: 2.5em; margin-bottom: 10px; }
+        .no-devices-text { font-size: 1.1em; margin-bottom: 14px; }
+        .no-devices-link {
+            display: inline-block; padding: 8px 18px;
+            background: var(--primary-color, #4fc3f7); color: #fff;
+            border-radius: 6px; text-decoration: none; font-weight: 500;
+            transition: opacity 0.2s;
+        }
+        .no-devices-link:hover { opacity: 0.85; }
         .device-card {
             background: var(--card-background-color);
             border-radius: var(--ha-card-border-radius); padding: 16px 20px;

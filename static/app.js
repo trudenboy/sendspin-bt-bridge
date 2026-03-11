@@ -127,11 +127,33 @@ async function updateStatus() {
         if (sysEl) sysEl.textContent = info.join(' \u00b7 ');
 
         var devices = status.devices || (status.error ? [] : [status]);
+        var grid = document.getElementById('status-grid');
+
+        // Show/hide empty-state placeholder
+        var emptyEl = document.getElementById('no-devices-hint');
+        if (devices.length === 0) {
+            if (!emptyEl && grid) {
+                emptyEl = document.createElement('div');
+                emptyEl.id = 'no-devices-hint';
+                emptyEl.className = 'no-devices-hint';
+                emptyEl.innerHTML =
+                    '<div class="no-devices-icon">📡</div>' +
+                    '<div class="no-devices-text">No Bluetooth devices configured</div>' +
+                    '<a href="#" class="no-devices-link" onclick="openConfigAndAddDevice(); return false;">➕ Add a device in Configuration</a>';
+                grid.appendChild(emptyEl);
+            }
+            // Remove stale device cards
+            if (grid) Array.from(grid.querySelectorAll('.device-card')).forEach(function(c) { c.remove(); });
+            _updateGroupPanel();
+            updateHealthIndicator([]);
+            return;
+        }
+        if (emptyEl) emptyEl.remove();
+
         var sorted = devices.slice().sort(function(a, b) {
             var score = function(d) { return d.playing ? 2 : (d.bluetooth_connected ? 1 : 0); };
             var gka = a.group_id || ('_' + a.player_name);
             var gkb = b.group_id || ('_' + b.player_name);
-            // best score of any member in the same group (keeps active groups first)
             var groupScore = function(gk) {
                 var best = 0;
                 devices.forEach(function(d) {
@@ -140,11 +162,10 @@ async function updateStatus() {
                 return best;
             };
             var gsa = groupScore(gka), gsb = groupScore(gkb);
-            if (gsa !== gsb) return gsb - gsa;          // active groups first
-            if (gka !== gkb) return gka < gkb ? -1 : 1; // same-score groups together
-            return score(b) - score(a);                 // within group: playing first
+            if (gsa !== gsb) return gsb - gsa;
+            if (gka !== gkb) return gka < gkb ? -1 : 1;
+            return score(b) - score(a);
         });
-        // Reset index-keyed state if device list changes (avoids stale mappings)
         if (lastDevices.length !== sorted.length ||
             !lastDevices.every(function(d, idx) { return d.player_name === sorted[idx].player_name; })) {
             _groupSelected = {};
@@ -154,7 +175,6 @@ async function updateStatus() {
         }
         lastDevices = sorted;
         lastGroups = status.groups || [];
-        var grid = document.getElementById('status-grid');
 
         sorted.forEach(function(dev, i) {
             var card = document.getElementById('device-card-' + i);
@@ -1415,6 +1435,18 @@ function populateBtDeviceRows(devices) {
     });
 }
 
+function openConfigAndAddDevice() {
+    var details = document.querySelector('.config-section');
+    if (details) details.open = true;
+    var addBtn = document.getElementById('add-dev-btn');
+    if (addBtn) {
+        addBtn.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        addBtn.click();
+    } else if (details) {
+        details.scrollIntoView({ behavior: 'smooth' });
+    }
+}
+
 // ---- BT Scan ----
 
 async function startBtScan() {
@@ -2361,6 +2393,27 @@ var _statusInterval = null;
                 var sysEl = document.getElementById('system-info');
                 if (sysEl) sysEl.textContent = info.join(' \u00b7 ');
                 var devices = status.devices || (status.error ? [] : [status]);
+                var grid = document.getElementById('status-grid');
+
+                var emptyEl = document.getElementById('no-devices-hint');
+                if (devices.length === 0) {
+                    if (!emptyEl && grid) {
+                        emptyEl = document.createElement('div');
+                        emptyEl.id = 'no-devices-hint';
+                        emptyEl.className = 'no-devices-hint';
+                        emptyEl.innerHTML =
+                            '<div class="no-devices-icon">📡</div>' +
+                            '<div class="no-devices-text">No Bluetooth devices configured</div>' +
+                            '<a href="#" class="no-devices-link" onclick="openConfigAndAddDevice(); return false;">➕ Add a device in Configuration</a>';
+                        grid.appendChild(emptyEl);
+                    }
+                    if (grid) Array.from(grid.querySelectorAll('.device-card')).forEach(function(c) { c.remove(); });
+                    _updateGroupPanel();
+                    updateHealthIndicator([]);
+                    return;
+                }
+                if (emptyEl) emptyEl.remove();
+
                 var sorted = devices.slice().sort(function(a, b) {
                     var score = function(d) { return d.playing ? 2 : (d.bluetooth_connected ? 1 : 0); };
                     var gka = a.group_id || ('_' + a.player_name);
@@ -2386,7 +2439,6 @@ var _statusInterval = null;
                 }
                 lastDevices = sorted;
                 lastGroups = status.groups || [];
-                var grid = document.getElementById('status-grid');
                 sorted.forEach(function(dev, i) {
                     var card = document.getElementById('device-card-' + i);
                     if (!card) { card = buildDeviceCard(i); grid.appendChild(card); }
