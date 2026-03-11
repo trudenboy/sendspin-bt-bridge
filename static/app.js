@@ -136,11 +136,10 @@ async function updateStatus() {
                 emptyEl = document.createElement('div');
                 emptyEl.id = 'no-devices-hint';
                 emptyEl.className = 'no-devices-hint';
-                emptyEl.innerHTML =
-                    '<div class="no-devices-icon">📡</div>' +
-                    '<div class="no-devices-text">No Bluetooth devices configured</div>' +
-                    '<a href="#" class="no-devices-link" onclick="openConfigAndAddDevice(); return false;">➕ Add a device in Configuration</a>';
+                emptyEl.innerHTML = _buildEmptyStateHTML();
                 grid.appendChild(emptyEl);
+            } else if (emptyEl) {
+                emptyEl.innerHTML = _buildEmptyStateHTML();
             }
             // Remove stale device cards
             if (grid) Array.from(grid.querySelectorAll('.device-card')).forEach(function(c) { c.remove(); });
@@ -1437,15 +1436,62 @@ function populateBtDeviceRows(devices) {
     });
 }
 
-function openConfigAndAddDevice() {
+function _hasDetectedAdapter() {
+    return btAdapters.some(function(a) { return !a.manual; });
+}
+
+function _buildEmptyStateHTML() {
+    if (!_hasDetectedAdapter()) {
+        return '<div class="no-devices-icon">🔌</div>' +
+            '<div class="no-devices-text">No Bluetooth adapter detected</div>' +
+            '<a href="#" class="no-devices-link" onclick="_goToAdapters(); return false;">🔍 Check adapter connection</a>';
+    }
+    return '<div class="no-devices-icon">📡</div>' +
+        '<div class="no-devices-text">No Bluetooth devices configured</div>' +
+        '<a href="#" class="no-devices-link" onclick="_goToDevicesAndScan(); return false;">🔍 Scan for devices</a>';
+}
+
+function _goToAdapters() {
     var details = document.querySelector('.config-section');
     if (details) details.open = true;
-    var addBtn = document.getElementById('add-dev-btn');
-    if (addBtn) {
-        addBtn.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        addBtn.click();
+    var refreshBtn = document.querySelector('.btn-refresh[onclick*="loadBtAdapters"]');
+    if (refreshBtn) {
+        refreshBtn.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        setTimeout(function() {
+            loadBtAdapters().then(function() {
+                if (!_hasDetectedAdapter()) {
+                    showToast('No adapter found — check USB connection or add manually with "+ Add"', 'warn');
+                } else {
+                    showToast('Adapter detected! You can now add devices.', 'ok');
+                    _refreshEmptyState();
+                }
+            });
+        }, 400);
     } else if (details) {
         details.scrollIntoView({ behavior: 'smooth' });
+    }
+}
+
+function _goToDevicesAndScan() {
+    var details = document.querySelector('.config-section');
+    if (details) details.open = true;
+    var scanBtn = document.getElementById('scan-btn');
+    if (scanBtn) {
+        scanBtn.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        setTimeout(function() { scanBtn.click(); }, 400);
+    }
+}
+
+function _refreshEmptyState() {
+    var el = document.getElementById('no-devices-hint');
+    if (el) el.innerHTML = _buildEmptyStateHTML();
+}
+
+function openConfigAndAddDevice() {
+    if (!_hasDetectedAdapter()) {
+        _goToAdapters();
+    } else {
+        _goToDevicesAndScan();
     }
 }
 
@@ -2050,6 +2096,7 @@ async function loadConfig() {
         // Restore manual adapters before re-running loadBtAdapters so merging picks them up
         btManualAdapters = config.BLUETOOTH_ADAPTERS || [];
         await loadBtAdapters();
+        _refreshEmptyState();
         loadPairedDevices();
 
         // Populate BT device table
@@ -2403,11 +2450,10 @@ var _statusInterval = null;
                         emptyEl = document.createElement('div');
                         emptyEl.id = 'no-devices-hint';
                         emptyEl.className = 'no-devices-hint';
-                        emptyEl.innerHTML =
-                            '<div class="no-devices-icon">📡</div>' +
-                            '<div class="no-devices-text">No Bluetooth devices configured</div>' +
-                            '<a href="#" class="no-devices-link" onclick="openConfigAndAddDevice(); return false;">➕ Add a device in Configuration</a>';
+                        emptyEl.innerHTML = _buildEmptyStateHTML();
                         grid.appendChild(emptyEl);
+                    } else if (emptyEl) {
+                        emptyEl.innerHTML = _buildEmptyStateHTML();
                     }
                     if (grid) Array.from(grid.querySelectorAll('.device-card')).forEach(function(c) { c.remove(); });
                     _updateGroupPanel();
