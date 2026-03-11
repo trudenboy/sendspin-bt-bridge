@@ -1853,12 +1853,14 @@ function _setMaStatus(connected, username, url) {
     var apiFields = document.getElementById('ma-api-fields');
     if (form) form.style.display = connected ? 'none' : '';
     if (reconf) reconf.style.display = connected ? '' : 'none';
-    if (apiFields) apiFields.style.display = connected ? '' : 'none';
+    if (apiFields) apiFields.style.display = 'none';
 }
 
 function toggleMaForm(show) {
     var form = document.getElementById('ma-conn-form');
+    var apiFields = document.getElementById('ma-api-fields');
     if (form) form.style.display = show ? '' : 'none';
+    if (apiFields) apiFields.style.display = show ? '' : 'none';
     if (show) _detectMaAddonMode();
 }
 
