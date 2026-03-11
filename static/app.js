@@ -2189,36 +2189,84 @@ async function loadConfig() {
 
 // ---- Restart ----
 
+function _restartDeviceStats(statusData) {
+    var devs = statusData.devices || [statusData];
+    var total = devs.length;
+    var bt = 0, pa = 0, ss = 0;
+    var perDevice = [];
+    for (var i = 0; i < devs.length; i++) {
+        var d = devs[i];
+        var dBt = !!d.bluetooth_connected;
+        var dPa = !!d.has_sink;
+        var dSs = !!d.server_connected;
+        if (dBt) bt++;
+        if (dPa) pa++;
+        if (dSs) ss++;
+        perDevice.push({
+            name: d.player_name || d.bluetooth_mac || ('Device ' + (i + 1)),
+            bt: dBt, pa: dPa, ss: dSs
+        });
+    }
+    return { total: total, bt: bt, pa: pa, ss: ss, ma: !!statusData.ma_connected, perDevice: perDevice };
+}
+
+function _restartCompactLine(s, elapsed) {
+    var tick = '\u2713', wait = '\u2026';
+    var parts = [];
+    parts.push('BT ' + (s.bt >= s.total ? tick : s.bt + '/' + s.total));
+    parts.push('PA ' + (s.pa >= s.total ? tick : s.pa + '/' + s.total));
+    parts.push('Sendspin ' + (s.ss >= s.total ? tick : s.ss + '/' + s.total));
+    parts.push('MA ' + (s.ma ? tick : wait));
+    return '\uD83D\uDD04 ' + parts.join(' \u00b7 ') +
+        ' <span style="opacity:0.5">' + elapsed + 's</span>';
+}
+
+function _restartDetailBlock(s) {
+    var tick = '\u2705', wait = '\u23F3';
+    var rows = '';
+    for (var i = 0; i < s.perDevice.length; i++) {
+        var d = s.perDevice[i];
+        rows += '<div style="padding:2px 0">' +
+            '<span style="font-weight:600">' + d.name + ':</span> ' +
+            (d.bt ? tick : wait) + ' BT  ' +
+            (d.pa ? tick : wait) + ' PA  ' +
+            (d.ss ? tick : wait) + ' Sendspin' +
+            '</div>';
+    }
+    rows += '<div style="padding:2px 0">' +
+        '<span style="font-weight:600">MA:</span> ' +
+        (s.ma ? tick : wait) + '</div>';
+    return rows;
+}
+
 async function saveAndRestart() {
     var banner = document.getElementById('restart-banner');
     banner.style.display = 'block';
     banner.className = 'restart-banner restarting';
-    banner.innerHTML = '💾 Saving configuration\u2026';
+    banner.innerHTML = '\uD83D\uDCBE Saving configuration\u2026';
 
     try {
         var saved = await saveConfig();
         if (!saved) {
             banner.className = 'restart-banner warning';
-            banner.innerHTML = '✗ Failed to save configuration';
+            banner.innerHTML = '\u2717 Failed to save configuration';
             setTimeout(function() { banner.style.display = 'none'; }, 3000);
             return;
         }
         _setConfigDirty(false);
 
-        // Phase 2: Send restart command
-        banner.innerHTML = '🔄 Stopping service\u2026';
+        banner.innerHTML = '\uD83D\uDD04 Stopping service\u2026';
         try {
             await fetch(API_BASE + '/api/restart', { method: 'POST' });
         } catch (_) { /* Service dropped connection — expected */ }
 
-        // Phase 3: Wait for service to go down, then poll for it to come back
         await new Promise(function(r) { setTimeout(r, 2000); });
-        banner.innerHTML = '⏳ Waiting for service to start\u2026';
+        banner.innerHTML = '\u23F3 Waiting for service to start\u2026';
 
         var serviceUp = false;
         var statusData = null;
         for (var attempt = 1; attempt <= 40; attempt++) {
-            banner.innerHTML = '⏳ Waiting for service\u2026 <span style="opacity:0.6">' + attempt + 's</span>';
+            banner.innerHTML = '\u23F3 Waiting for service\u2026 <span style="opacity:0.5">' + attempt + 's</span>';
             await new Promise(function(r) { setTimeout(r, 1000); });
             try {
                 var resp = await fetch(API_BASE + '/api/status');
@@ -2227,53 +2275,65 @@ async function saveAndRestart() {
                     serviceUp = true;
                     break;
                 }
-            } catch (_) { /* Not yet back */ }
+            } catch (_) {}
         }
 
         if (!serviceUp) {
             banner.className = 'restart-banner warning';
-            banner.innerHTML = '\u26a0\ufe0f Service did not respond within 40s — check logs';
+            banner.innerHTML = '\u26a0\ufe0f Service did not respond within 40s \u2014 check logs';
             return;
         }
 
-        // Phase 4+5: Service is up — check BT and MA connectivity
-        var devs = statusData.devices || [statusData];
-        var totalDevices = devs.length;
-        var btReady = devs.filter(function(d) { return d.bluetooth_connected; }).length;
-        var maReady = !!statusData.ma_connected;
+        // Device initialization phase — compact + expandable details
+        var detailsOpen = false;
+        var stats = _restartDeviceStats(statusData);
+        var allReady = stats.bt >= stats.total && stats.pa >= stats.total &&
+                       stats.ss >= stats.total && stats.ma;
 
-        if (btReady < totalDevices || !maReady) {
-            // Give BT/MA time to reconnect — poll for up to 30 more seconds
+        if (!allReady) {
             for (var w = 1; w <= 30; w++) {
-                var parts = [];
-                if (btReady < totalDevices) parts.push('📡 Bluetooth ' + btReady + '/' + totalDevices);
-                if (!maReady) parts.push('🎵 Music Assistant\u2026');
-                banner.innerHTML = parts.join(' · ') + ' <span style="opacity:0.6">' + w + 's</span>';
+                var html = _restartCompactLine(stats, w);
+                if (detailsOpen) {
+                    html += '<div class="restart-details" style="margin-top:8px;text-align:left;font-size:13px">' +
+                            _restartDetailBlock(stats) + '</div>';
+                }
+                banner.innerHTML = html;
+                // Toggle details on banner click
+                banner.onclick = function() {
+                    detailsOpen = !detailsOpen;
+                };
+                banner.style.cursor = 'pointer';
 
                 await new Promise(function(r) { setTimeout(r, 1000); });
                 try {
                     var r2 = await fetch(API_BASE + '/api/status');
                     if (r2.ok) {
                         statusData = await r2.json();
-                        devs = statusData.devices || [statusData];
-                        btReady = devs.filter(function(d) { return d.bluetooth_connected; }).length;
-                        maReady = !!statusData.ma_connected;
-                        if (btReady >= totalDevices && maReady) break;
+                        stats = _restartDeviceStats(statusData);
+                        allReady = stats.bt >= stats.total && stats.pa >= stats.total &&
+                                   stats.ss >= stats.total && stats.ma;
+                        if (allReady) break;
                     }
                 } catch (_) {}
             }
         }
 
-        // Final status
-        var allGood = btReady >= totalDevices && maReady;
-        banner.className = 'restart-banner ' + (allGood ? 'online' : 'online');
-        var summary = '✓ Service restarted';
-        var details = [];
-        details.push(btReady >= totalDevices ? '📡 BT ✓' : '📡 BT ' + btReady + '/' + totalDevices);
-        if (maReady) details.push('🎵 MA ✓');
-        else details.push('🎵 MA ✗');
-        banner.innerHTML = summary + ' <span style="opacity:0.7;font-size:13px;">(' + details.join(' · ') + ')</span>';
-        setTimeout(function() { banner.style.display = 'none'; }, allGood ? 4000 : 8000);
+        // Final summary
+        stats = _restartDeviceStats(statusData);
+        allReady = stats.bt >= stats.total && stats.pa >= stats.total &&
+                   stats.ss >= stats.total && stats.ma;
+        banner.className = 'restart-banner online';
+        var tick = '\u2713', cross = '\u2717';
+        var summary = [];
+        summary.push('BT ' + (stats.bt >= stats.total ? tick : stats.bt + '/' + stats.total));
+        summary.push('PA ' + (stats.pa >= stats.total ? tick : stats.pa + '/' + stats.total));
+        summary.push('Sendspin ' + (stats.ss >= stats.total ? tick : stats.ss + '/' + stats.total));
+        summary.push('MA ' + (stats.ma ? tick : cross));
+        banner.innerHTML = (allReady ? '\u2705' : '\u26a0\ufe0f') + ' Restart complete ' +
+            '<span style="opacity:0.7;font-size:13px">(' + summary.join(' \u00b7 ') + ')</span>';
+        banner.onclick = null;
+        banner.style.cursor = '';
+        setTimeout(function() { banner.style.display = 'none'; }, allReady ? 4000 : 10000);
         updateStatus();
 
     } catch (err) {
