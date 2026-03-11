@@ -1774,6 +1774,7 @@ function maHaAuthPopup() {
             if (urlField) urlField.value = ev.data.url;
             if (msgEl) { msgEl.textContent = '\u2714 ' + (ev.data.message || 'Connected'); msgEl.style.color = 'var(--success-color, green)'; }
             showToast('\u2714 Connected to Music Assistant via HA', 'success');
+            _setConfigDirty(true);
         }
     }
     window.addEventListener('message', onMessage);
@@ -1812,6 +1813,7 @@ async function maLogin() {
                 msgEl.style.color = 'var(--success-color, green)';
             }
             showToast('\u2714 Connected to Music Assistant', 'success');
+            _setConfigDirty(true);
         } else if (resp.status === 401) {
             // Builtin login failed — try HA OAuth with same credentials
             if (msgEl) { msgEl.textContent = 'Trying Home Assistant login...'; msgEl.style.color = 'var(--secondary-text-color)'; }
@@ -1884,6 +1886,7 @@ async function _maHaLoginWithCreds(maUrl, username, password, msgEl) {
             _setMaStatus(true, data.username, data.url);
             if (msgEl) { msgEl.textContent = '\u2714 ' + (data.message || 'Connected via HA'); msgEl.style.color = 'var(--success-color, green)'; }
             showToast('\u2714 Connected to Music Assistant via HA', 'success');
+            _setConfigDirty(true);
             return true;
         }
         if (data.step === 'mfa') {
@@ -1904,6 +1907,7 @@ async function _maHaLoginWithCreds(maUrl, username, password, msgEl) {
                 _setMaStatus(true, data2.username, data2.url);
                 if (msgEl) { msgEl.textContent = '\u2714 ' + (data2.message || 'Connected via HA'); msgEl.style.color = 'var(--success-color, green)'; }
                 showToast('\u2714 Connected to Music Assistant via HA', 'success');
+                _setConfigDirty(true);
                 return true;
             }
             if (msgEl) { msgEl.textContent = '\u2716 ' + (data2.error || 'MFA failed'); msgEl.style.color = 'var(--error-color, red)'; }
@@ -1966,6 +1970,7 @@ async function _maSilentAuth(maUrl) {
         if (data.success) {
             _setMaStatus(true, data.username || '', data.url || maUrl);
             showToast('\u2714 Connected to Music Assistant', 'success');
+            _setConfigDirty(true);
             if (msgEl) { msgEl.textContent = '\u2714 Connected'; msgEl.style.color = 'var(--success-color, green)'; }
             return true;
         }
