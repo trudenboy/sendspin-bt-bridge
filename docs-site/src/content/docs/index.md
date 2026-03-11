@@ -127,3 +127,9 @@ Run multiple bridge instances against the same Music Assistant server to cover e
   <LinkCard title="Project History" href="https://github.com/trudenboy/sendspin-bt-bridge/blob/main/HISTORY.md" description="Architectural evolution, milestones, v1 → v2 migration" />
   <LinkCard title="API Reference" href="/sendspin-bt-bridge/api/" />
 </CardGrid>
+
+## Community
+
+- [MA community discussion](https://github.com/orgs/music-assistant/discussions/5061)
+- [HA community thread](https://community.home-assistant.io/t/sendspin-bluetooth-bridge-turn-any-bt-speaker-into-an-ma-player-and-ha/993762)
+- [Discord channel](https://discord.com/channels/330944238910963714/1479933490991599836)

@@ -581,8 +581,10 @@ python sendspin_client.py
 ## Support
 
 - **Issues**: [GitHub Issues](https://github.com/trudenboy/sendspin-bt-bridge/issues)
+- **MA community discussion**: [music-assistant/discussions #5061](https://github.com/orgs/music-assistant/discussions/5061)
+- **HA community thread**: [Sendspin Bluetooth Bridge on HA Community](https://community.home-assistant.io/t/sendspin-bluetooth-bridge-turn-any-bt-speaker-into-an-ma-player-and-ha/993762)
+- **Discord**: [#sendspin-bt-bridge on MA Discord](https://discord.com/channels/330944238910963714/1479933490991599836)
 - **Original discussion**: [music-assistant/discussions #4677](https://github.com/orgs/music-assistant/discussions/4677)
-- **Music Assistant community**: [Discord](https://discord.gg/kaVm8hGpne)
 
 ## License
 
