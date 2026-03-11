@@ -457,12 +457,12 @@ async def send_queue_cmd(action: str, value=None, syncgroup_id: str | None = Non
         queue_id = groups[0]["id"]  # fallback: first syncgroup
 
     # Build the command + args
-    _QUEUE_ACTIONS = {
+    _QUEUE_ACTIONS: dict[str, tuple[str, dict]] = {
         "next": ("player_queues/next", {"queue_id": queue_id}),
         "previous": ("player_queues/previous", {"queue_id": queue_id}),
         "shuffle": ("player_queues/shuffle", {"queue_id": queue_id, "shuffle_enabled": bool(value)}),
         "repeat": ("player_queues/repeat", {"queue_id": queue_id, "repeat_mode": str(value)}),
-        "seek": ("player_queues/seek", {"queue_id": queue_id, "position": int(value)}),
+        "seek": ("player_queues/seek", {"queue_id": queue_id, "position": int(value) if value is not None else 0}),
     }
     if action not in _QUEUE_ACTIONS:
         logger.warning("Unknown MA queue action: %s", action)
