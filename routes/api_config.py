@@ -544,7 +544,12 @@ def api_update_info():
     """Return cached update availability information."""
     info = state.get_update_available()
     runtime = _detect_runtime()
-    result: dict = {"update_available": info is not None, "runtime": runtime}
+    cfg = load_config()
+    result: dict = {
+        "update_available": info is not None,
+        "runtime": runtime,
+        "auto_update": cfg.get("AUTO_UPDATE", False),
+    }
     if info:
         result.update(info)
     if runtime == "systemd":

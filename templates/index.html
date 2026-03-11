@@ -265,6 +265,20 @@
             </div>
 
             {% if not ha_mode %}
+            <!-- ── Updates (standalone only) ── -->
+            <div class="config-group" style="margin-top:20px;margin-bottom:0;">
+                <h4 class="config-group-title"><span class="cg-icon">⬆️</span> Updates</h4>
+                <div class="form-group">
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                        <input type="checkbox" name="AUTO_UPDATE" id="auto-update" style="width:auto;margin:0;">
+                        Auto-update
+                        <span class="form-hint" style="display:inline;margin:0;">— automatically apply updates when available (LXC only)</span>
+                    </label>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if not ha_mode %}
             <!-- ── Authentication (standalone only) ── -->
             <div class="config-group" style="margin-top:20px;margin-bottom:0;">
                 <h4 class="config-group-title"><span class="cg-icon">🔒</span> Authentication</h4>

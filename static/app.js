@@ -1679,6 +1679,7 @@ async function saveConfig() {
     config.AUTH_ENABLED = !!(document.getElementById('auth-enabled') || {}).checked;
     config.VOLUME_VIA_MA = !!(document.getElementById('volume-via-ma') || {}).checked;
     config.MUTE_VIA_MA = !!(document.getElementById('mute-via-ma') || {}).checked;
+    config.AUTO_UPDATE = !!(document.getElementById('auto-update') || {}).checked;
     // Log level lives outside the config form (in Logs section)
     var logSel = document.getElementById('log-level-select');
     if (logSel) config.LOG_LEVEL = logSel.value;
@@ -2179,6 +2180,8 @@ async function loadConfig() {
         if (volMaCheck) volMaCheck.checked = config.VOLUME_VIA_MA !== false;
         var muteMaCheck = document.getElementById('mute-via-ma');
         if (muteMaCheck) muteMaCheck.checked = !!config.MUTE_VIA_MA;
+        var autoUpdateCheck = document.getElementById('auto-update');
+        if (autoUpdateCheck) autoUpdateCheck.checked = !!config.AUTO_UPDATE;
         var logLevelSel = document.getElementById('log-level-select');
         if (logLevelSel && config.LOG_LEVEL) logLevelSel.value = config.LOG_LEVEL.toUpperCase();
         updateTzPreview();

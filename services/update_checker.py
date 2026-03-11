@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import subprocess
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -66,6 +67,9 @@ async def run_update_checker(current_version: str) -> None:
                         latest["version"],
                         latest["url"],
                     )
+                    # Auto-apply if enabled and on LXC/systemd
+                    if _should_auto_update():
+                        await _auto_apply_update(latest["version"])
                 else:
                     state.set_update_available(None)
                     logger.debug("Version %s is current (latest: %s)", current_version, latest["version"])
@@ -73,3 +77,56 @@ async def run_update_checker(current_version: str) -> None:
             logger.debug("Update check iteration failed", exc_info=True)
 
         await asyncio.sleep(CHECK_INTERVAL)
+
+
+def _should_auto_update() -> bool:
+    """Check if auto-update is enabled and runtime supports it."""
+    import os
+
+    from config import load_config
+
+    cfg = load_config()
+    if not cfg.get("AUTO_UPDATE", False):
+        return False
+    # Only auto-update on LXC/systemd (not Docker or HA addon)
+    if os.environ.get("SUPERVISOR_TOKEN") or os.path.isfile("/.dockerenv"):
+        return False
+    return True
+
+
+async def _auto_apply_update(new_version: str) -> None:
+    """Run upgrade.sh automatically in background."""
+    import os
+
+    upgrade_script = "/opt/sendspin-client/lxc/upgrade.sh"
+    if not os.path.isfile(upgrade_script):
+        base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        upgrade_script = os.path.join(base, "lxc", "upgrade.sh")
+    if not os.path.isfile(upgrade_script):
+        logger.warning("Auto-update: upgrade.sh not found, skipping")
+        return
+
+    logger.info("Auto-update: applying v%s via %s", new_version, upgrade_script)
+    loop = asyncio.get_running_loop()
+    try:
+        result = await loop.run_in_executor(
+            None,
+            lambda: subprocess.run(
+                ["bash", upgrade_script],
+                capture_output=True,
+                text=True,
+                timeout=120,
+            ),
+        )
+        if result.returncode == 0:
+            logger.info("Auto-update: successfully upgraded to v%s", new_version)
+        else:
+            logger.error(
+                "Auto-update: upgrade.sh failed (rc=%d): %s",
+                result.returncode,
+                result.stderr[-500:] if result.stderr else "",
+            )
+    except subprocess.TimeoutExpired:
+        logger.error("Auto-update: upgrade.sh timed out (120s)")
+    except Exception:
+        logger.exception("Auto-update: unexpected error")
