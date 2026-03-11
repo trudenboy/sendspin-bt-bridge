@@ -59,6 +59,10 @@ graph TD
 
             WS --> FLASK[Flask app<br/>web_interface.py]
             FLASK --> BP_API[routes/api.py<br/>Blueprint]
+            FLASK --> BP_BT[routes/api_bt.py<br/>Blueprint]
+            FLASK --> BP_MA[routes/api_ma.py<br/>Blueprint]
+            FLASK --> BP_CFG[routes/api_config.py<br/>Blueprint]
+            FLASK --> BP_STS[routes/api_status.py<br/>Blueprint]
             FLASK --> BP_VIEW[routes/views.py<br/>Blueprint]
             FLASK --> BP_AUTH[routes/auth.py<br/>Blueprint]
             BP_API --> ST
@@ -270,6 +274,8 @@ sequenceDiagram
 
 Параметр конфигурации `VOLUME_VIA_MA` (по умолчанию: `true`) определяет, маршрутизируются ли изменения громкости через MA. Установите `false` для прямого использования PulseAudio — при этом MA не будет отражать изменения громкости, сделанные через бридж.
 
+`MUTE_VIA_MA` (по умолчанию: `false`) управляет маршрутизацией mute независимо. При `false` команды mute идут напрямую в PulseAudio для мгновенного отклика. При `true` mute маршрутизируется через MA API — полезно для синхронизации UI MA, но добавляет сетевую задержку.
+
 ---
 
 ## Управление Bluetooth
@@ -369,6 +375,15 @@ graph LR
 
 При настроенных `MA_API_URL` и `MA_API_TOKEN` основной процесс запускает задачу `MaMonitor`, которая поддерживает постоянное **WebSocket-соединение с конечной точкой `/ws` MA** для подписки на события в реальном времени.
 
+**Поддерживаемые провайдеры аутентификации MA:**
+
+| Метод | Эндпоинт | Сценарий |
+|---|---|---|
+| Прямые учётные данные MA | `POST /api/ma/login` | Автономная установка — логин и пароль отправляются в MA |
+| HA OAuth (через браузер) | `GET /api/ma/ha-auth-page` → callback | Кнопка «Войти через Home Assistant» в интерфейсе |
+| Учётные данные HA через MA | `POST /api/ma/ha-login` | Логин и пароль пересылаются в HA `login_flow` через MA |
+| Тихая аутентификация HA (аддон) | `POST /api/ma/ha-silent-auth` | Автоматически — через заголовки Ingress, без участия пользователя |
+
 ```mermaid
 sequenceDiagram
     participant MM as MaMonitor
@@ -437,7 +452,7 @@ def notify_status_changed():
         _status_version += 1
         _status_condition.notify_all()
 
-# Flask SSE handler (api.py)
+# Flask SSE handler (api_status.py)
 def api_status_stream():
     def generate():
         last_version = 0
@@ -449,11 +464,15 @@ def api_status_stream():
     return Response(generate(), mimetype="text/event-stream")
 ```
 
+События объединяются с **окном дебаунса 100 мс** — `notify_status_changed()` группирует частые обновления (перетаскивание ползунка громкости, переподключение нескольких устройств) в одну SSE-отправку для предотвращения шторма событий.
+
+Первый SSE-ответ включает **2 КБ комментария-заполнителя** (`<!-- ... -->`), который сбрасывает буферы прокси HA Ingress — первое реальное событие доставляется немедленно, а не задерживается обратным прокси.
+
 ---
 
 ## Веб-API
 
-Все API-эндпоинты находятся в `routes/api.py` (Flask Blueprint `api_bp`), подключённом к Flask-приложению, созданному в `web_interface.py` и обслуживаемому **Waitress** на порту 8080.
+37 API-эндпоинтов распределены по **5 модулям маршрутов** (Flask Blueprint), подключённым к Flask-приложению, созданному в `web_interface.py` и обслуживаемому **Waitress** на порту 8080.
 
 ```mermaid
 graph TD
@@ -461,15 +480,30 @@ graph TD
     WAITRESS --> FLASK[Flask app]
     FLASK --> AUTH[routes/auth.py<br/>optional password]
     AUTH --> VIEW[routes/views.py<br/>HTML pages]
-    AUTH --> API[routes/api.py<br/>JSON API]
+    AUTH --> API_MOD[5 API Blueprints]
 
-    subgraph "API Endpoint Groups"
-        API --> STATUS[Status<br/>GET /api/status<br/>GET /api/groups<br/>GET /api/status/stream SSE]
-        API --> CTRL[Playback Control<br/>POST /api/restart<br/>POST /api/pause_all<br/>POST /api/group/pause<br/>POST /api/volume<br/>POST /api/mute]
-        API --> BT[Bluetooth<br/>GET /api/bt/adapters<br/>GET /api/bt/paired<br/>POST /api/bt/scan<br/>GET /api/bt/scan/result/<id><br/>POST /api/bt/reconnect<br/>POST /api/bt/pair<br/>POST /api/bt/management]
-        API --> CFG[Configuration<br/>GET POST /api/config<br/>POST /api/settings/log_level<br/>POST /api/set-password]
-        API --> MAAPI[MA Integration<br/>GET /api/ma/groups<br/>POST /api/ma/rediscover<br/>GET /api/ma/nowplaying<br/>POST /api/ma/queue/cmd]
-        API --> DIAG[Diagnostics<br/>GET /api/diagnostics<br/>GET /api/logs<br/>GET /api/version<br/>GET /api/debug/ma]
+    subgraph "routes/api.py — Управление воспроизведением (6)"
+        API_MOD --> CTRL[POST /api/restart<br/>POST /api/volume<br/>POST /api/mute<br/>POST /api/pause_all<br/>POST /api/group/pause<br/>POST /api/pause]
+    end
+
+    subgraph "routes/api_bt.py — Bluetooth (7)"
+        API_MOD --> BT[POST /api/bt/reconnect<br/>POST /api/bt/pair<br/>POST /api/bt/management<br/>GET /api/bt/adapters<br/>GET /api/bt/paired<br/>POST /api/bt/scan<br/>GET /api/bt/scan/result/id]
+    end
+
+    subgraph "routes/api_ma.py — Интеграция MA (10)"
+        API_MOD --> MAAPI[POST /api/ma/discover<br/>POST /api/ma/login<br/>GET /api/ma/ha-auth-page<br/>POST /api/ma/ha-silent-auth<br/>POST /api/ma/ha-login<br/>GET /api/ma/groups<br/>POST /api/ma/rediscover<br/>GET /api/ma/nowplaying<br/>POST /api/ma/queue/cmd<br/>GET /api/debug/ma]
+    end
+
+    subgraph "routes/api_config.py — Конфигурация (6)"
+        API_MOD --> CFG[GET POST /api/config<br/>POST /api/set-password<br/>POST /api/settings/log_level<br/>GET /api/logs<br/>GET /api/version]
+    end
+
+    subgraph "routes/api_status.py — Статус (6)"
+        API_MOD --> STATUS[GET /api/status<br/>GET /api/groups<br/>GET /api/status/stream SSE<br/>GET /api/diagnostics<br/>GET /api/health<br/>GET /api/preflight]
+    end
+
+    subgraph "routes/views.py — HTML (2)"
+        API_MOD --> VIEWS[GET /<br/>GET /login]
     end
 ```
 
@@ -781,13 +815,17 @@ graph LR
 
     WI[web_interface.py] --> FLASK[Flask + Waitress]
     WI --> R_API[routes/api.py]
+    WI --> R_BT[routes/api_bt.py]
+    WI --> R_MA[routes/api_ma.py]
+    WI --> R_CFG[routes/api_config.py]
+    WI --> R_STS[routes/api_status.py]
     WI --> R_VIEW[routes/views.py]
     WI --> R_AUTH[routes/auth.py]
 
     R_API --> ST
     R_API --> CFG
-    R_API --> SVC_MAC[services/ma_client.py]
-    R_API --> SVC_BT[services/bluetooth.py]
+    R_MA --> SVC_MAC[services/ma_client.py]
+    R_BT --> SVC_BT[services/bluetooth.py]
 
     BM --> SVC_PA[services/pulse.py]
     BM --> SVC_BT
