@@ -2,7 +2,7 @@
 
 A history of the architectural and functional evolution of sendspin-bt-bridge — for readers familiar with Home Assistant, Music Assistant, and multiroom audio setups.
 
-**Period:** January 1 – March 11, 2026 · **Total commits:** ~650 · **Versions:** 1.0.0 → 2.20.4
+**Period:** January 1 – March 11, 2026 · **Total commits:** ~650 · **Versions:** 1.0.0 → 2.20.5
 
 ---
 
@@ -581,6 +581,8 @@ Thread-safety received targeted fixes: six places that iterated the global `_cli
 All 138 tests passed after the refactoring; `ruff check` stayed clean throughout.
 
 A follow-up patch (v2.20.4) fixed the JWT token `<details>` section's disclosure marker — the native ▼ was replaced with a CSS `::before` ▶ that rotates on open, matching other collapsible sections — and corrected the Music Assistant API token hint to point to "Settings → Profile → Long-lived access tokens".
+
+A documentation audit (v2.20.5) refreshed the entire doc corpus: version references updated from 2.10.6/2.12.2 to 2.20.4, the API route split reflected in CLAUDE.md, READMEs, and contributing guides, web-ui.md rewritten to dissolve the obsolete "Advanced Settings" section, and 6 screenshots recaptured from the live HAOS UI (battery badges, restructured config panels, diagnostics). A "Show all" checkbox in the paired-devices header that overflowed the container boundary was also fixed by repositioning the label before the checkbox with proper margin alignment.
 
 ---
 

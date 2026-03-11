@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.20.5] - 2026-03-11
+
+### Fixed
+- **"Show all" checkbox overflow** — moved label text before the checkbox and added right margin to align the checkbox above the "Add" buttons in the paired-devices list
+
+### Changed
+- **Documentation update** — refreshed all docs to v2.20.4: 6 screenshots recaptured, version refs updated across 14 files, API split and test count reflected, web-ui.md rewritten (dissolved Advanced Settings, added battery badge docs)
+
 ## [2.20.4] - 2026-03-11
 
 ### Fixed
