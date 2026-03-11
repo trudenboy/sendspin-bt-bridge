@@ -662,15 +662,15 @@
         .health-dot.error { background: #f87171; }
 
         /* Config section groups */
-        .config-group { margin-bottom: 24px; }
+        .config-group { margin-bottom: 32px; }
         .config-group:last-child { margin-bottom: 0; }
         .config-group-title {
             display: flex; align-items: center; gap: 8px;
-            font-size: 15px; font-weight: 600; color: var(--primary-text-color);
-            margin: 0 0 14px; padding-bottom: 8px;
-            border-bottom: 1px solid var(--divider-color);
+            font-size: 20px; font-weight: 700; color: var(--primary-text-color);
+            margin: 0 0 16px; padding-bottom: 10px;
+            border-bottom: 3px solid #4fc3f7;
         }
-        .config-group-title .cg-icon { font-size: 17px; flex-shrink: 0; }
+        .config-group-title .cg-icon { font-size: 22px; flex-shrink: 0; }
         .form-hint {
             display: block; font-size: 12px; font-weight: 400;
             color: var(--secondary-text-color); margin-top: 2px; line-height: 1.4;
