@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.22.0] - 2026-03-11
+
+### Added
+- **MA beta 2.8+ authentication** — direct HTTP login fallback supports both stable (`{"username", "password"}`) and beta (`{"credentials": {...}, "provider_id": "builtin"}`) API formats; always falls through to direct HTTP when the library login fails
+- **Context-aware empty state** — when no devices are configured, the CTA detects whether a Bluetooth adapter is present: if not, links to the Adapters section with auto-refresh; if present, links to Devices and launches a scan
+- **Static Save button** in the configuration section footer (in addition to the sticky bar)
+- **Empty-state call-to-action** when no Bluetooth devices are configured
+
+### Fixed
+- **Token persistence after MA login** — `loadConfig()` is now called after successful login before marking the form dirty, preventing "Save & Restart" from overwriting the new token with the old form value
+- **"Unsaved changes" after MA login** — the dirty indicator now appears after all 5 login success paths (builtin, HA OAuth, HA credentials, silent auth, addon)
+- **Phantom player card** when bridge has zero configured clients
+- **System info API** now returns data even with zero configured devices
+- **Config dirty state** now triggers when adding or removing BT devices via scan/manual add
+- **JWT details toggle arrow** stuck in rotated state (CSS fix)
+
+### Changed
+- **MA auth panel redesigned** — API URL and token fields moved under the Reconfigure link; URL field removed (hidden input, no longer duplicated); "Sign in with Home Assistant" renamed to "🔑 Get token automatically"
+- **Config section headings** restyled with bolder text and accent dividers
+
 ## [2.21.0] - 2026-03-11
 
 ### Changed

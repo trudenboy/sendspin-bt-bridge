@@ -2,7 +2,7 @@
 
 A history of the architectural and functional evolution of sendspin-bt-bridge — for readers familiar with Home Assistant, Music Assistant, and multiroom audio setups.
 
-**Period:** January 1 – March 11, 2026 · **Total commits:** ~650 · **Versions:** 1.0.0 → 2.21.0
+**Period:** January 1 – March 11, 2026 · **Total commits:** ~670 · **Versions:** 1.0.0 → 2.22.0
 
 ---
 
@@ -593,6 +593,14 @@ The `BLUETOOTH_MAC` single-device config key — the project's original paramete
 Five additional legacy keys were removed: `BRIDGE_NAME_SUFFIX` (dead since v2.13.0 when `BRIDGE_NAME` auto-population replaced it), `LAST_VOLUME` (the old single-integer volume, superseded by per-MAC `LAST_VOLUMES` dict), `keepalive_silence` (boolean toggle, replaced by `keepalive_interval > 0`), and the `port` device key (renamed to `listen_port`). Each removal included auto-migration where old configs could still exist.
 
 Dead code was cleaned up: `get_client_status()` (a backward-compat wrapper from the v2.20.3 API modularization that was never called externally), unused re-exports in `routes/api.py`, and the `_save_device_volume` internal alias. The config schema was completed by adding `TRUSTED_PROXIES` and `MA_USERNAME` to `allowed_keys` — both were already read at runtime but could be silently dropped during config round-trips.
+
+### MA beta authentication and UI polish (v2.22.0)
+
+Music Assistant beta 2.8.0b19 changed its `/auth/login` API from a flat `{"username", "password"}` format to a nested `{"credentials": {"username", "password"}, "provider_id": "builtin"}` structure — breaking the bridge's login flow. A new `_ma_http_login()` helper in `routes/api_ma.py` tries the old format first (stable MA compatibility), then the new nested format, handling both `access_token` and `token` response fields. A critical bug was also fixed where the `music_assistant_client` library's generic "Invalid username or password" error message for any 401 caused a short-circuit that prevented the direct HTTP fallback from ever executing.
+
+The web UI received several fixes: a token persistence race condition (the form's hidden `MA_API_TOKEN` field still held the old value after login, so "Save & Restart" overwrote the new token) was fixed by calling `loadConfig()` after login success before marking the form dirty. The "unsaved changes" indicator now appears after all five login success paths. The MA auth panel was redesigned — API URL and token fields were moved from a separate "Advanced" collapsible into the Reconfigure section, the duplicate URL field was removed (kept as a hidden input), and the buttons were renamed to "🔑 Get token" and "🔑 Get token automatically".
+
+Additional UX improvements: a context-aware empty state that detects whether a BT adapter is present (linking to Adapters with auto-refresh if not, or launching a device scan if so), a static Save button in the config footer, a fix for phantom player cards with zero clients, and config dirty-state tracking for device add/remove operations.
 
 ---
 
