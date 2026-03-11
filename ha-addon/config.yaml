@@ -17,6 +17,7 @@ host_dbus: true
 hassio_api: true
 hassio_role: default
 homeassistant_api: true
+auth_api: true
 privileged:
   - SYS_ADMIN
   - NET_ADMIN
@@ -29,6 +30,11 @@ init: false
 ingress: true
 ingress_port: 8080
 panel_icon: mdi:bluetooth-audio
+panel_admin: false
+tmpfs: true
+backup_exclude:
+  - __pycache__/*
+  - "*.pyc"
 
 options:
   sendspin_server: "auto"
