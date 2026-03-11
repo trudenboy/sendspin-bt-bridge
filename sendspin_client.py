@@ -716,6 +716,13 @@ class SendspinClient:
 async def main():
     """Main entry point"""
 
+    # Demo mode — replace all hardware layers with mocks (BT, PulseAudio, D-Bus)
+    demo_mode = os.getenv("DEMO_MODE", "").lower() in ("1", "true", "yes")
+    if demo_mode:
+        from demo import install
+
+        install()
+
     config = load_config()
     server_host = config.get("SENDSPIN_SERVER", "auto")
     server_port = int(config.get("SENDSPIN_PORT") or 9000)
@@ -955,6 +962,13 @@ async def main():
     # Run all clients in parallel
     client_tasks = [asyncio.create_task(c.run()) for c in clients]
     tasks = client_tasks + ([ma_monitor_task] if ma_monitor_task else [])
+
+    # Start demo simulator if in demo mode
+    if demo_mode:
+        from demo.simulator import run_simulator
+
+        tasks.append(asyncio.create_task(run_simulator(clients)))
+
     await asyncio.gather(*tasks)
 
 
