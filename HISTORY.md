@@ -2,7 +2,7 @@
 
 A history of the architectural and functional evolution of sendspin-bt-bridge — for readers familiar with Home Assistant, Music Assistant, and multiroom audio setups.
 
-**Period:** January 1 – March 11, 2026 · **Total commits:** ~760 · **Versions:** 1.0.0 → 2.23.0
+**Period:** January 1 – March 12, 2026 · **Total commits:** ~770 · **Versions:** 1.0.0 → 2.23.9
 
 ---
 
@@ -611,6 +611,16 @@ A fully functional **Demo Mode** was added — setting `DEMO_MODE=true` launches
 A **universal version update checker** runs as a background asyncio task, polling the GitHub releases API every hour. When a newer version is detected, a green badge appears in the UI header linking to the release notes. Three new API endpoints (`/api/update/check`, `/api/update/info`, `/api/update/apply`) provide platform-aware update instructions: LXC installations get a one-click "Update Now" button that executes `upgrade.sh`; Docker shows the `docker compose pull` command; HA addon directs users to the Supervisor.
 
 The LXC `upgrade.sh` was fixed to download all route sub-modules (`api_bt.py`, `api_config.py`, `api_ma.py`, `api_status.py`) and new files (`update_checker.py`, `demo/` module) that had been added since the script was last updated.
+
+### S6 overlay, AppArmor enforce, and auth refactoring (v2.23.1–v2.23.9)
+
+**S6 overlay** (v2.23.1) replaced Docker's `--init` with proper PID 1 process supervision via S6 overlay v3.2.0.2 — zombie reaping, signal forwarding, and automatic restart on crash. The HA addon Dockerfile was simplified to a thin wrapper, and the standalone `run.sh` was removed.
+
+**AppArmor enforce mode** (v2.23.6–v2.23.8) proved trickier than expected. The initial attempt used granular path rules (`/app/** rixm`, `/bin/** rix`) — standard AppArmor practice — but Docker's overlayfs made them unreliable: AppArmor silently blocked execution without any audit log on HAOS. Three releases were needed to diagnose the issue (no `dmesg` access, error looked like a filesystem permission problem). The fix came from studying the Music Assistant addon's AppArmor profile: blanket `file,` + `signal,` rules instead of granular paths. Security boundaries are enforced via capabilities, network rules, and signal restrictions. This pattern works reliably on all container runtimes.
+
+**Auth refactoring** (v2.23.9) simplified authentication for the HA addon. In addon mode, authentication is now always enforced — the `auth_enabled` toggle was removed from the addon options. Only HA Core login_flow is offered (with full 2FA/MFA support); MA credentials and local password methods are hidden. The logged-in HA username is stored in the session and displayed next to the "Sign out" link. Ingress auto-auth (bypass via `X-Ingress-Path` from trusted proxies) continues unchanged. Docker/standalone mode retains the full set of auth methods.
+
+The addon config gained `tmpfs: true` (in-memory temp for better SD card longevity), `backup_exclude` (omits logs and cache from HA snapshots), `auth_api: true` (formal auth API access declaration), and `panel_admin: false`.
 
 ---
 

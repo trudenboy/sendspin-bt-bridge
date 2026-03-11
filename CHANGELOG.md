@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.23.9] - 2026-03-12
+
+### Changed
+- **HA addon auth refactoring** — authentication is always enforced in addon mode (no `auth_enabled` toggle); only HA Core login_flow offered (with 2FA/MFA support); Ingress auto-auth unchanged
+- **HA username in session** — logged-in HA username stored in session and displayed next to the "Sign out" link
+- **Addon config** — added `tmpfs`, `backup_exclude`, `auth_api`, `panel_admin` capabilities; removed `auth_enabled` option
+
+### Fixed
+- **AppArmor enforce mode** — rewrote profile with blanket `file,` + `signal,` rules (matching Music Assistant addon pattern); granular path rules broke on Docker overlayfs
+
 ## [2.23.6] - 2026-03-12
 
 ### Fixed
