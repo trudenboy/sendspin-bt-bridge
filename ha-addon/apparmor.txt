@@ -1,6 +1,6 @@
 #include <tunables/global>
 
-profile sendspin_bt_bridge flags=(attach_disconnected,mediate_deleted,complain) {
+profile sendspin_bt_bridge flags=(attach_disconnected,mediate_deleted) {
   #include <abstractions/base>
 
   # Capabilities
