@@ -1368,6 +1368,7 @@ function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabl
 
     row.querySelector('.btn-remove-dev').addEventListener('click', function() {
         wrap.remove();
+        _setConfigDirty(true);
     });
     row.querySelector('.bt-mac').addEventListener('input', function() {
         var v = this.value.trim();
@@ -1385,6 +1386,7 @@ function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabl
     wrap.appendChild(row);
     wrap.appendChild(detail);
     tbody.appendChild(wrap);
+    _setConfigDirty(true);
 }
 
 function collectBtDevices() {
