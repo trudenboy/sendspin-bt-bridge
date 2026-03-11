@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.22.3] - 2026-03-11
+
+### Fixed
+- Auto-detect MA auth provider — standalone bridges auto-set `MA_AUTH_PROVIDER=ha` when MA is an HA addon
+- mDNS discovery now includes `homeassistant_addon` flag
+
+### Changed
+- Config section dividers softened (2px semi-transparent instead of 3px bright blue)
+- Config section headings reduced to 16px for clearer hierarchy
+- Paired devices list auto-collapses when >5 items
+
 ## [2.22.2] - 2026-03-11
 
 ### Added

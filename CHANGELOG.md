@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.22.3] - 2026-03-11
+
+### Fixed
+- **Auto-detect MA auth provider** — standalone bridges now auto-set `MA_AUTH_PROVIDER=ha` when MA reports `homeassistant_addon=true`, showing the correct HA login flow instead of failing MA username/password form
+- **mDNS discovery enrichment** — `homeassistant_addon` flag now included in mDNS-discovered servers (consistency with `validate_ma_url`)
+
+### Changed
+- **Config section dividers** — softened from bright blue 3px to subtle 2px semi-transparent lines to avoid confusion with interactive elements
+- **Config section heading size** — reduced from 20px to 16px for clearer visual hierarchy between module headers and field labels
+- **Paired devices auto-collapse** — list auto-collapses when more than 5 devices, with click-to-expand toggle
+
 ## [2.22.2] - 2026-03-11
 
 ### Added

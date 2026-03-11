@@ -154,9 +154,10 @@
                         <span id="scan-status" class="scan-badge"></span>
                     </div>
                     <div id="paired-box" class="paired-box" style="display:none;">
-                        <div class="paired-box-title" style="display:flex;align-items:center;gap:8px;">
+                        <div class="paired-box-title" style="display:flex;align-items:center;gap:8px;cursor:pointer;" onclick="var l=document.getElementById('paired-list');l.style.display=l.style.display==='none'?'':'none';this.querySelector('.paired-arrow').textContent=l.style.display==='none'?'▶':'▼'">
+                            <span class="paired-arrow" style="font-size:10px;flex-shrink:0;">▼</span>
                             <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Already paired &#8212; click to add:</span>
-                            <label style="flex-shrink:0;font-size:12px;color:var(--secondary-text-color);cursor:pointer;white-space:nowrap;margin-right:40px;">
+                            <label onclick="event.stopPropagation()" style="flex-shrink:0;font-size:12px;color:var(--secondary-text-color);cursor:pointer;white-space:nowrap;margin-right:40px;">
                                 Show all <input type="checkbox" id="paired-show-all" onchange="loadPairedDevices()">
                             </label>
                         </div>

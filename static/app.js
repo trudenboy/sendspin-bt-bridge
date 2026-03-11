@@ -1612,7 +1612,7 @@ async function loadPairedDevices() {
         box.style.display = 'block';
 
         // Update title with count hint
-        var titleEl = box.querySelector('.paired-box-title span');
+        var titleEl = box.querySelector('.paired-box-title span:not(.paired-arrow)');
         if (titleEl) {
             var countHint = '';
             if (!showAllChecked && allCount > devices.length) {
@@ -1621,6 +1621,16 @@ async function loadPairedDevices() {
                 countHint = ' (' + devices.length + ')';
             }
             titleEl.textContent = 'Already paired \u2014 click to add:' + countHint;
+        }
+
+        // Auto-collapse list when more than 5 devices
+        var arrow = box.querySelector('.paired-arrow');
+        if (devices.length > 5) {
+            listDiv.style.display = 'none';
+            if (arrow) arrow.textContent = '▶';
+        } else {
+            listDiv.style.display = '';
+            if (arrow) arrow.textContent = '▼';
         }
 
         listDiv.innerHTML = devices.map(function(d, idx) {
