@@ -73,6 +73,51 @@ The per-device pause button matches the player by `player_name` via D-Bus. If it
 2. Check that the sendspin process is running: `docker exec sendspin-client ps aux | grep sendspin`
 3. Check logs for D-Bus errors: `docker logs sendspin-client | grep -i "dbus\|pause"`
 
+## Authentication issues
+
+### "Authentication service unavailable"
+
+When using HA login via MA, the bridge requests a `login_flow` from Home Assistant. If the response contains an unexpected `flow_id` format, authentication will fail.
+
+1. Ensure MA is connected: check the green "MA: Connected" badge in the header
+2. Verify HA is reachable from the bridge: `docker exec sendspin-client curl -s http://homeassistant:8123/api/ | head`
+3. Restart the bridge — the MA token may have expired
+
+### Brute-force lockout
+
+After **5 failed login attempts**, the IP is locked out for **5 minutes**. This applies to all auth methods (MA, HA, Password).
+
+Wait 5 minutes, or restart the container to clear the lockout counter.
+
+### MA token not obtained
+
+If `MA_API_URL` is set but `MA_API_TOKEN` is empty:
+1. Use the "Sign in with Home Assistant" or "Sign in with Music Assistant" buttons in the Configuration section
+2. Check logs for `MA auth` messages: `docker logs sendspin-client | grep -i "ma auth\|token"`
+3. Verify the MA server URL is reachable from the bridge
+
+## Mute not syncing
+
+If muting in the web UI doesn't reflect in Music Assistant (or vice versa):
+
+1. Check `MUTE_VIA_MA` setting in Configuration → Music Assistant Integration
+2. When `MUTE_VIA_MA` is **disabled** (default): mute goes directly to PulseAudio — instant but not visible in MA
+3. When `MUTE_VIA_MA` is **enabled**: mute is routed through MA API — synced with MA but may have slight delay
+4. Verify MA connection: the header should show "MA: Connected"
+
+## Restart phases explained
+
+When you click **Save & Restart**, the bridge performs a phased restart showing progress for each device:
+
+| Phase | Label | What happens |
+|---|---|---|
+| 1 | BT | Bluetooth reconnection |
+| 2 | PA | PulseAudio sink discovery |
+| 3 | SS | Sendspin subprocess start |
+| 4 | MA | Music Assistant sync |
+
+If a phase is stuck, check logs for errors related to that subsystem.
+
 ## Collecting logs for a bug report
 
 ```bash

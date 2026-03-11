@@ -110,7 +110,7 @@ Bluetooth-мост для [Music Assistant](https://www.music-assistant.io/) —
 | **OpenWrt LXC** | Turris Omnia (ARMv7), Ubuntu 24.04 | CSR8510 A10 USB | AfterShokz |
 
 ПО: Python 3.12, BlueZ 5.72, PulseAudio 16.1, aiosendspin 4.3.2.
-Все три экземпляра работают на v2.20.4 с одним сервером Music Assistant и мультирум-синхронизацией.
+Все три экземпляра работают на v2.22.2 с одним сервером Music Assistant и мультирум-синхронизацией.
 
 📖 [Подробное описание тестового стенда →](https://trudenboy.github.io/sendspin-bt-bridge/ru/test-stand/)
 
@@ -380,7 +380,8 @@ lxc-attach -n sendspin -- btctl show
 | `WEB_PORT` | `8080` | Порт веб-интерфейса |
 | `MA_API_URL` | `` | Базовый URL REST API Music Assistant (напр. `http://192.168.1.10:8123`) — включает метаданные воспроизведения и транспортные кнопки |
 | `MA_API_TOKEN` | `` | Долгосрочный токен доступа HA для MA API |
-| `VOLUME_VIA_MA` | `true` | Маршрутизация громкости/mute через MA API; `false` = прямой PulseAudio |
+| `VOLUME_VIA_MA` | `true` | Маршрутизация громкости через MA API; `false` = прямой PulseAudio |
+| `MUTE_VIA_MA` | `false` | Маршрутизация mute через MA API; `false` = прямой PulseAudio (мгновенно) |
 | `LOG_LEVEL` | `INFO` | Уровень логирования (`INFO` или `DEBUG`); изменяется через API в реальном времени |
 
 Переменные окружения перекрываются значениями из `/config/config.json`, если файл существует.

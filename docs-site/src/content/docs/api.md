@@ -43,13 +43,14 @@ Status of all players.
     "has_sink": true,
     "sink_name": "bluez_sink.AA_BB_CC_DD_EE_FF.a2dp_sink",
     "bt_management_enabled": true,
+    "ma_connected": true,
     "group_id": "abc123",
     "group_name": "Sendspin BT",
     "sync_status": "In sync",
     "sync_delay_ms": -600,
     "static_delay_ms": -600,
     "listen_port": 8928,
-    "version": "2.20.4",
+    "version": "2.22.2",
     "build_date": "2026-03-11"
   }
 ]
@@ -58,6 +59,8 @@ Status of all players.
 ### `GET /api/status/stream`
 
 Server-Sent Events stream. The browser connects once; the server pushes `data: {...}` on every device state change. The web UI uses this instead of polling.
+
+Events are batched with a 100 ms debounce window to prevent event storms during rapid state changes (e.g. BT reconnect). The initial response includes a 2 KB padding comment to flush HA Ingress proxy buffers.
 
 ```
 GET /api/status/stream
@@ -102,8 +105,16 @@ Returns all configured players grouped by MA syncgroup. Players sharing the same
 ### `GET /api/version`
 
 ```json
-{ "version": "2.20.4", "build_date": "2026-03-11" }
+{ "version": "2.22.2", "build_date": "2026-03-11" }
 ```
+
+### `GET /api/health`
+
+Health check endpoint. Returns `200 OK` with `{"status": "ok"}`. Useful for Docker health checks and load balancers.
+
+### `GET /api/preflight`
+
+CORS preflight endpoint. Returns `204 No Content` with appropriate CORS headers.
 
 ## Playback Control
 
@@ -164,13 +175,46 @@ Pause or resume a single player. Sends the command via IPC to the target daemon 
 
 ### `POST /api/mute`
 
-Toggle mute on a device.
+Toggle mute on a device. When `MUTE_VIA_MA` is enabled and MA is connected, the mute command is routed through the MA API. Otherwise, mute is applied directly via PulseAudio.
 
 **Body:** `{ "mac": "AA:BB:CC:DD:EE:FF", "muted": true }`
 
 ## Music Assistant Integration
 
 These endpoints require `MA_API_URL` and `MA_API_TOKEN` to be configured (auto-filled via "Sign in with Home Assistant" in addon mode, or set manually).
+
+### `GET /api/ma/discover`
+
+Discover Music Assistant servers on the network via mDNS. Returns a list of found servers.
+
+**Response:**
+```json
+{ "success": true, "servers": [{ "url": "http://192.168.1.10:8095", "name": "Music Assistant" }] }
+```
+
+### `POST /api/ma/login`
+
+Authenticate with MA using username and password. Supports multiple auth providers (`ma`, `ha`, `ha-via-ma`).
+
+**Body:**
+```json
+{ "ma_url": "http://192.168.1.10:8095", "username": "user", "password": "pass", "provider": "ma" }
+```
+
+| Field | Description |
+|---|---|
+| `ma_url` | MA server URL (optional if already configured) |
+| `username` | MA or HA username |
+| `password` | Password |
+| `provider` | Auth provider: `"ma"` (MA built-in), `"ha"` (HA via MA OAuth), `"ha-via-ma"` (HA credentials sent to MA) |
+
+**Response:** `{ "success": true, "url": "...", "username": "...", "message": "..." }`
+
+### `GET /api/ma/ha-auth-page`
+
+Returns the HA OAuth authorization URL for browser-based sign-in via Home Assistant.
+
+**Response:** `{ "auth_url": "http://haos:8123/auth/authorize?..." }`
 
 ### `POST /api/ma/ha-silent-auth`
 
@@ -200,6 +244,19 @@ Returns all MA syncgroup players discovered from the MA REST API. Empty list if 
   }
 ]
 ```
+
+### `POST /api/ma/ha-login`
+
+Authenticate with HA using username and password credentials, then exchange the HA token for an MA API token. Used in Docker/LXC mode when MA runs as an HA addon.
+
+**Body:**
+```json
+{ "ma_url": "http://192.168.1.10:8095", "username": "ha_user", "password": "ha_pass" }
+```
+
+**Response:** `{ "success": true, "url": "...", "username": "...", "message": "Connected to Music Assistant via Home Assistant credentials." }`
+
+Supports 2FA: if the HA login flow requires MFA, the response includes `"step": "mfa"` with a `flow_id` to continue the flow.
 
 ### `POST /api/ma/rediscover`
 

@@ -6,6 +6,28 @@ description: Complete guide to the Sendspin Bluetooth Bridge web interface — d
 
 The web interface is available on port **8080** (Docker/LXC) or via **HA Ingress** (Home Assistant addon). It updates in real time over Server-Sent Events — no page refresh needed.
 
+## Login Page
+
+When `AUTH_ENABLED` is turned on, the bridge shows a login screen before granting access to the dashboard.
+
+![Login page with Music Assistant and Password tabs](/sendspin-bt-bridge/screenshots/screenshot-login.png)
+
+Available sign-in methods depend on your setup:
+
+| Method | When available | Fields |
+|---|---|---|
+| **Music Assistant** | MA is connected (`MA_API_URL` + `MA_API_TOKEN` configured) | Username + Password |
+| **Home Assistant** | Running as HA addon — authenticates via HA login flow (supports 2FA) | Username + Password |
+| **Password** | A local password hash is set in config | Password only |
+
+If multiple methods are available, tab buttons appear at the top of the form. In HA addon mode through Ingress, login is automatic — HA passes the authenticated user identity to the addon.
+
+<Aside type="tip">
+  Brute-force protection locks the login page after **5 failed attempts** for **5 minutes**.
+</Aside>
+
+---
+
 ## Overview
 
 ![Full dashboard showing 6 device cards with group controls and header](/sendspin-bt-bridge/screenshots/screenshot-dashboard-full.png)
@@ -238,11 +260,32 @@ The **🎵 Music Assistant** section in the Configuration panel:
 | **🏠 Sign in with Home Assistant** | One-click button (addon mode only) — creates a long-lived MA API token via HA Ingress. No credentials needed. |
 | **Advanced: manual JWT token** | Expandable `<details>` for Docker/LXC users — paste MA API URL and token manually. Create token in MA → Settings → Profile → Long-lived access tokens. |
 | **Route volume through MA** | When checked, volume changes go through MA API — keeps MA UI sliders in sync |
+| **Route mute through MA** | When checked, mute/unmute goes through MA API — keeps MA UI mute state in sync. When unchecked, mute is applied directly via PulseAudio |
 
 ### Save Actions
 
 - **Save** — writes `config.json`; takes effect after restart
 - **Save & Restart** — saves and immediately restarts the bridge service
+
+After pressing **Save & Restart**, a progress banner appears at the top of the page showing the restart phases:
+
+1. **Saving** — writing `config.json`
+2. **Stopping** — stopping the current service
+3. **Waiting** — waiting for the service to come back online
+4. **Initializing** — monitoring per-device subsystem readiness
+
+The initialization phase shows a compact status line:
+
+```
+BT 1/2 · PA 0/2 · SS 0/2 · MA … — 5s
+```
+
+- **BT** — Bluetooth connections established
+- **PA** — PulseAudio sinks found
+- **SS** — Sendspin subprocesses connected
+- **MA** — Music Assistant API connected
+
+Click the banner to expand per-device detail showing ✅/⏳ for each subsystem on each device.
 
 <Aside type="caution">
   Configuration changes require a restart. In Home Assistant addon mode, the addon restarts automatically when you press **Save & Restart**. In Docker/LXC mode, the Python process is restarted.
@@ -282,6 +325,7 @@ The collapsible **📋 Logs** section shows the last 150 lines of the applicatio
 | **Refresh Logs** | Fetch latest log output |
 | **Auto-Refresh: Off/On** | Toggle 2-second automatic refresh |
 | **All / Error / Warning / Info** | Filter displayed lines by severity |
+| **Log Level dropdown** | Change the runtime log level (`INFO` / `DEBUG`) without restarting. Click **Apply** to propagate the change to all subprocesses |
 
 Log lines are color-coded:
 - **Red** — ERROR

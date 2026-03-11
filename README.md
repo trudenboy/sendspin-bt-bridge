@@ -118,7 +118,7 @@ Two bridge instances connected to one MA server — an HA addon on HAOS (4 speak
 | **OpenWrt LXC** | Turris Omnia (ARMv7), Ubuntu 24.04 | CSR8510 A10 USB | AfterShokz |
 
 Software: Python 3.12, BlueZ 5.72, PulseAudio 16.1, aiosendspin 4.3.2.
-All three instances run v2.20.4 against a single Music Assistant server with multiroom sync.
+All three instances run v2.22.2 against a single Music Assistant server with multiroom sync.
 
 📖 [Full test stand details →](https://trudenboy.github.io/sendspin-bt-bridge/test-stand/)
 
@@ -402,7 +402,8 @@ The `adapter` field is optional — omit it if you only have one Bluetooth adapt
 | `WEB_PORT` | `8080` | Web interface port |
 | `MA_API_URL` | `` | Music Assistant REST API base URL (e.g. `http://192.168.1.10:8123`) — enables now-playing metadata and transport controls |
 | `MA_API_TOKEN` | `` | HA long-lived access token for the MA API |
-| `VOLUME_VIA_MA` | `true` | Route volume/mute through MA API; `false` = direct PulseAudio |
+| `VOLUME_VIA_MA` | `true` | Route volume through MA API; `false` = direct PulseAudio |
+| `MUTE_VIA_MA` | `false` | Route mute through MA API; `false` = direct PulseAudio (instant) |
 | `LOG_LEVEL` | `INFO` | Log verbosity (`INFO` or `DEBUG`); changeable at runtime via API |
 
 Environment variables are overridden by values in `/config/config.json` if the file exists.

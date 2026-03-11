@@ -53,9 +53,26 @@ lxc/                  # LXC install scripts (Proxmox & OpenWrt)
 
 > **Architecture note**: each Bluetooth speaker runs as an isolated asyncio subprocess (`services/daemon_process.py`) with `PULSE_SINK=<bt_sink_name>` in its environment. This gives every speaker its own PulseAudio context so audio routes to the correct speaker from the first sample, without any `move-sink-input` calls at startup.
 
-## Manual Test Checklist
+## Testing
 
-Run `pytest` for automated unit tests (`tests/`). Additionally, use this manual checklist when making changes:
+Run `pytest` for automated unit tests:
+
+```bash
+python3 -m pytest tests/ -v
+```
+
+The test suite has **149 tests** across 15 test files covering config, volume routing, device status, state management, authentication, and Ingress middleware.
+
+### Linting
+
+```bash
+ruff check .                    # Fast Python linter
+ruff format --check .           # Code formatting check
+```
+
+### Manual Test Checklist
+
+Use this checklist when making changes:
 
 - [ ] Container starts without errors (`docker logs -f sendspin-client`)
 - [ ] Web UI loads at `http://localhost:8080`

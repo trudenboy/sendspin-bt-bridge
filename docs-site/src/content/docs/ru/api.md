@@ -43,13 +43,14 @@ description: REST API Sendspin Bluetooth Bridge
     "has_sink": true,
     "sink_name": "bluez_sink.AA_BB_CC_DD_EE_FF.a2dp_sink",
     "bt_management_enabled": true,
+    "ma_connected": true,
     "group_id": "abc123",
     "group_name": "Sendspin BT",
     "sync_status": "In sync",
     "sync_delay_ms": -600,
     "static_delay_ms": -600,
     "listen_port": 8928,
-    "version": "2.20.4",
+    "version": "2.22.2",
     "build_date": "2026-03-11"
   }
 ]
@@ -58,6 +59,8 @@ description: REST API Sendspin Bluetooth Bridge
 ### `GET /api/status/stream`
 
 Server-Sent Events поток. Браузер подключается один раз; сервер отправляет `data: {...}` при каждом изменении состояния устройства. Веб-интерфейс использует его вместо polling.
+
+События группируются с debounce-окном 100 мс для предотвращения шторма событий при быстрых изменениях состояния (например, BT-переподключение). Начальный ответ содержит 2 КБ padding-комментарий для сброса буферов HA Ingress прокси.
 
 ```
 GET /api/status/stream
@@ -74,8 +77,16 @@ data: [{"player_name": "Колонка в гостиной", "playing": false, .
 ### `GET /api/version`
 
 ```json
-{ "version": "2.20.4", "build_date": "2026-03-11" }
+{ "version": "2.22.2", "build_date": "2026-03-11" }
 ```
+
+### `GET /api/health`
+
+Эндпоинт проверки здоровья. Возвращает `200 OK` с `{"status": "ok"}`. Полезен для Docker health checks и балансировщиков нагрузки.
+
+### `GET /api/preflight`
+
+CORS preflight эндпоинт. Возвращает `204 No Content` с соответствующими CORS-заголовками.
 
 ### `GET /api/groups`
 
@@ -163,7 +174,7 @@ data: [{"player_name": "Колонка в гостиной", "playing": false, .
 
 ### `POST /api/mute`
 
-Включить/выключить mute.
+Включить/выключить mute. При включённом `MUTE_VIA_MA` и подключённом MA команда mute маршрутизируется через MA API. В противном случае mute применяется напрямую через PulseAudio.
 
 **Body:** `{ "mac": "AA:BB:CC:DD:EE:FF", "muted": true }`
 
@@ -171,9 +182,55 @@ data: [{"player_name": "Колонка в гостиной", "playing": false, .
 
 Эти эндпоинты требуют настройки `MA_API_URL` и `MA_API_TOKEN` (заполняются автоматически через «Sign in with Home Assistant» в режиме аддона, или задаются вручную).
 
+### `GET /api/ma/discover`
+
+Обнаружение серверов Music Assistant в сети через mDNS. Возвращает список найденных серверов.
+
+**Ответ:**
+```json
+{ "success": true, "servers": [{ "url": "http://192.168.1.10:8095", "name": "Music Assistant" }] }
+```
+
+### `POST /api/ma/login`
+
+Аутентификация с MA по логину и паролю. Поддерживает несколько провайдеров авторизации (`ma`, `ha`, `ha-via-ma`).
+
+**Body:**
+```json
+{ "ma_url": "http://192.168.1.10:8095", "username": "user", "password": "pass", "provider": "ma" }
+```
+
+| Поле | Описание |
+|---|---|
+| `ma_url` | URL сервера MA (опционально, если уже настроен) |
+| `username` | Имя пользователя MA или HA |
+| `password` | Пароль |
+| `provider` | Провайдер авторизации: `"ma"` (встроенный MA), `"ha"` (HA через MA OAuth), `"ha-via-ma"` (HA credentials через MA) |
+
+**Ответ:** `{ "success": true, "url": "...", "username": "...", "message": "..." }`
+
+### `GET /api/ma/ha-auth-page`
+
+Возвращает URL OAuth-авторизации через Home Assistant для входа через браузер.
+
+**Ответ:** `{ "auth_url": "http://haos:8123/auth/authorize?..." }`
+
+### `POST /api/ma/ha-silent-auth`
+
+Создаёт MA API токен, используя HA сессионный токен. Доступно только в режиме аддона (запуск как HA addon с Ingress).
+
+**Body:** `{ "ha_token": "<HA access token>", "ma_url": "http://192.168.1.x:8095" }`
+
+**Процесс:** Бридж подключается к HA WebSocket с предоставленным токеном, вызывает `auth/current_user` для получения информации о пользователе, затем отправляет JSONRPC запрос на MA Ingress endpoint с заголовками `X-Remote-User-*` для создания долгоживущего токена. Токен сохраняется в `config.json` и подключение к MA API устанавливается немедленно.
+
+**Ответ:**
+```json
+{ "success": true, "url": "http://192.168.1.x:8095", "username": "Renso", "message": "Connected to Music Assistant via Home Assistant." }
+```
+
 ### `GET /api/ma/groups`
 
-Возвращает MA-группы синхронизации, обнаруженные через MA REST API.
+Возвращает MA-группы синхронизации, обнаруженные через MA REST API. Пустой список, если MA API не настроен или обнаружение ещё не выполнялось.
 
 ```json
 [
@@ -186,6 +243,19 @@ data: [{"player_name": "Колонка в гостиной", "playing": false, .
   }
 ]
 ```
+
+### `POST /api/ma/ha-login`
+
+Аутентификация через HA с помощью логина и пароля, затем обмен HA токена на MA API токен. Используется в режиме Docker/LXC, когда MA работает как HA addon.
+
+**Body:**
+```json
+{ "ma_url": "http://192.168.1.10:8095", "username": "ha_user", "password": "ha_pass" }
+```
+
+**Ответ:** `{ "success": true, "url": "...", "username": "...", "message": "Connected to Music Assistant via Home Assistant credentials." }`
+
+Поддерживает 2FA: если HA login flow требует MFA, ответ включает `"step": "mfa"` с `flow_id` для продолжения процесса.
 
 ### `POST /api/ma/rediscover`
 
