@@ -2519,47 +2519,104 @@ function _showUpdateDialog(ver, releaseUrl) {
         .then(function(r) { return r.json(); })
         .then(function(info) {
             var method = info.update_method || 'manual';
-            var runtime = info.runtime || 'unknown';
+
+            // Build modal overlay
+            var overlay = document.createElement('div');
+            overlay.className = 'update-modal-overlay';
+            var modal = document.createElement('div');
+            modal.className = 'update-modal';
+            modal.innerHTML = '<div class="update-modal-title">Update v' + ver + ' available</div>';
+
+            // Release notes body (if available)
+            if (info.body) {
+                var bodyEl = document.createElement('div');
+                bodyEl.className = 'update-modal-body';
+                bodyEl.style.whiteSpace = 'pre-line';
+                // Strip markdown to plain text
+                var plain = info.body
+                    .replace(/^## .+\n+/, '')
+                    .replace(/^### .+$/gm, '')
+                    .replace(/\*\*(.+?)\*\*/g, '$1')
+                    .replace(/^- /gm, '• ')
+                    .replace(/\n{3,}/g, '\n\n')
+                    .trim()
+                    .substring(0, 400);
+                bodyEl.textContent = plain;
+                modal.appendChild(bodyEl);
+            }
+
+            var actions = document.createElement('div');
+            actions.className = 'update-modal-actions';
+
+            // Release Notes button (always)
+            var notesBtn = document.createElement('a');
+            notesBtn.className = 'update-modal-btn secondary';
+            notesBtn.href = releaseUrl;
+            notesBtn.target = '_blank';
+            notesBtn.rel = 'noopener';
+            notesBtn.textContent = '📋 Release Notes';
+            notesBtn.onclick = function() { overlay.remove(); };
+            actions.appendChild(notesBtn);
 
             if (method === 'one_click') {
-                // LXC/systemd — confirm and apply
-                if (!confirm('Update to v' + ver + '?\n\nThe service will restart automatically.')) return;
-                var link = document.getElementById('update-link');
-                var verEl = document.getElementById('update-version');
-                var iconEl = document.getElementById('update-icon');
-                if (link) link.classList.add('checking');
-                if (verEl) verEl.textContent = 'updating…';
-                if (iconEl) iconEl.textContent = '⟳';
-                fetch(API_BASE + '/api/update/apply', {method: 'POST'})
-                    .then(function(r) { return r.json(); })
-                    .then(function(data) {
-                        if (data.success) {
-                            showToast('Update applied! Restarting…', 'info');
-                            setTimeout(function() { location.reload(); }, 5000);
-                        } else {
-                            showToast('Update failed: ' + (data.error || 'unknown error'), 'error');
-                            _showUpdateBadge({version: ver, url: releaseUrl});
-                        }
-                    })
-                    .catch(function() {
-                        // Service likely restarted mid-request
-                        showToast('Service restarting…', 'info');
-                        setTimeout(function() { location.reload(); }, 5000);
-                    });
+                var applyBtn = document.createElement('button');
+                applyBtn.className = 'update-modal-btn primary';
+                applyBtn.textContent = '⬆ Update Now';
+                applyBtn.onclick = function() {
+                    overlay.remove();
+                    _applyUpdate(ver, releaseUrl);
+                };
+                actions.appendChild(applyBtn);
             } else if (method === 'ha_store') {
-                // HA addon — open HA addon page
-                var haUrl = '/hassio/addon/85b1ecde_sendspin_bt_bridge/info';
-                window.open(haUrl, '_blank');
-                showToast('Update via Home Assistant Add-ons page', 'info');
+                var haBtn = document.createElement('a');
+                haBtn.className = 'update-modal-btn primary';
+                haBtn.href = '/hassio/addon/85b1ecde_sendspin_bt_bridge/info';
+                haBtn.target = '_blank';
+                haBtn.textContent = '🏠 Update in HA';
+                haBtn.onclick = function() { overlay.remove(); };
+                actions.appendChild(haBtn);
             } else {
-                // Docker — show instructions + link to release
-                window.open(releaseUrl, '_blank');
-                showToast('Run: docker compose pull && docker compose up -d', 'info');
+                var instrBtn = document.createElement('button');
+                instrBtn.className = 'update-modal-btn primary';
+                instrBtn.textContent = '📋 Show Instructions';
+                instrBtn.onclick = function() {
+                    overlay.remove();
+                    showToast('Run: docker compose pull && docker compose up -d', 'info');
+                };
+                actions.appendChild(instrBtn);
+            }
+
+            modal.appendChild(actions);
+            overlay.appendChild(modal);
+            overlay.onclick = function(ev) { if (ev.target === overlay) overlay.remove(); };
+            document.body.appendChild(overlay);
+        })
+        .catch(function() {
+            window.open(releaseUrl, '_blank');
+        });
+}
+
+function _applyUpdate(ver, releaseUrl) {
+    var link = document.getElementById('update-link');
+    var verEl = document.getElementById('update-version');
+    var iconEl = document.getElementById('update-icon');
+    if (link) link.classList.add('checking');
+    if (verEl) verEl.textContent = 'updating…';
+    if (iconEl) iconEl.textContent = '⟳';
+    fetch(API_BASE + '/api/update/apply', {method: 'POST'})
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) {
+                showToast('Update applied! Restarting…', 'info');
+                setTimeout(function() { location.reload(); }, 5000);
+            } else {
+                showToast('Update failed: ' + (data.error || 'unknown error'), 'error');
+                _showUpdateBadge({version: ver, url: releaseUrl});
             }
         })
         .catch(function() {
-            // Fallback — just open the release page
-            window.open(releaseUrl, '_blank');
+            showToast('Service restarting…', 'info');
+            setTimeout(function() { location.reload(); }, 5000);
         });
 }
 

@@ -88,6 +88,38 @@
         .update-badge-link.no-update:hover { background: rgba(255,255,255,0.15); }
         @keyframes spin { to { transform: rotate(360deg); } }
         .update-badge-link.checking #update-icon { display: inline-block; animation: spin 1s linear infinite; }
+        .update-modal-overlay {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+            display: flex; align-items: center; justify-content: center; z-index: 9999;
+        }
+        .update-modal {
+            background: var(--app-card-bg, #fff); color: var(--app-text-color, #333);
+            border-radius: 12px; padding: 24px; min-width: 320px; max-width: 420px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+        }
+        .update-modal-title {
+            font-size: 18px; font-weight: 600; margin-bottom: 12px;
+        }
+        .update-modal-body {
+            font-size: 13px; color: var(--app-text-muted, #666);
+            margin-bottom: 16px; line-height: 1.5;
+            max-height: 150px; overflow-y: auto;
+        }
+        .update-modal-actions {
+            display: flex; gap: 10px; justify-content: flex-end;
+        }
+        .update-modal-btn {
+            padding: 8px 16px; border-radius: 8px; font-size: 14px; font-weight: 500;
+            cursor: pointer; text-decoration: none; border: none; display: inline-block;
+        }
+        .update-modal-btn.secondary {
+            background: var(--app-border-color, #e0e0e0); color: var(--app-text-color, #333);
+        }
+        .update-modal-btn.secondary:hover { opacity: 0.8; }
+        .update-modal-btn.primary {
+            background: #2e7d32; color: #fff;
+        }
+        .update-modal-btn.primary:hover { background: #1b5e20; }
         .header-actions {
             display: flex; align-items: center; gap: 10px;
         }
