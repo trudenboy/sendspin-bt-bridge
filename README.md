@@ -4,8 +4,9 @@
 [![Docker Pulls](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fghcr-badge.elias.eu.org%2Fapi%2Ftrudenboy%2Fsendspin-bt-bridge%2Fsendspin-bt-bridge&query=downloadCount&label=Docker%20Pulls&logo=docker&color=blue)](https://github.com/trudenboy/sendspin-bt-bridge/pkgs/container/sendspin-bt-bridge)
 [![HA Installs](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fanalytics.home-assistant.io%2Faddons.json&query=%24%5B%2285b1ecde_sendspin_bt_bridge%22%5D.total&label=HA%20Installs&logo=homeassistant&color=18bcf2)](https://analytics.home-assistant.io/apps/)
 [![GitHub Stars](https://img.shields.io/github/stars/trudenboy/sendspin-bt-bridge?style=flat&logo=github)](https://github.com/trudenboy/sendspin-bt-bridge/stargazers)
+[![Try Demo](https://img.shields.io/badge/Try_Demo-Live-brightgreen?style=flat&logo=render)](https://sendspin-demo.onrender.com)
 
-[Читать на русском](README.ru.md) · [📖 Documentation](https://trudenboy.github.io/sendspin-bt-bridge/) · [📋 History](HISTORY.md)
+[Читать на русском](README.ru.md) · [📖 Documentation](https://trudenboy.github.io/sendspin-bt-bridge/) · [🎮 Live Demo](https://sendspin-demo.onrender.com) · [📋 History](HISTORY.md)
 
 A Bluetooth bridge for [Music Assistant](https://www.music-assistant.io/) — connects your Bluetooth speakers to the MA [Sendspin](https://www.music-assistant.io/player-support/sendspin/) protocol. Runs as a Docker container, a Home Assistant addon, or a native LXC container on Proxmox VE / OpenWrt. Designed for headless systems.
 
@@ -28,6 +29,7 @@ A Bluetooth bridge for [Music Assistant](https://www.music-assistant.io/) — co
 - [Configuration](#configuration)
 - [Architecture](#architecture)
 - [Troubleshooting](#troubleshooting)
+- [Demo Mode](#demo-mode)
 - [Development](#development)
 - [Contributing](#contributing)
 - [Credits](#credits)
@@ -405,6 +407,7 @@ The `adapter` field is optional — omit it if you only have one Bluetooth adapt
 | `VOLUME_VIA_MA` | `true` | Route volume through MA API; `false` = direct PulseAudio |
 | `MUTE_VIA_MA` | `false` | Route mute through MA API; `false` = direct PulseAudio (instant) |
 | `LOG_LEVEL` | `INFO` | Log verbosity (`INFO` or `DEBUG`); changeable at runtime via API |
+| `DEMO_MODE` | `false` | Run with simulated hardware — no BT/PulseAudio/MA needed |
 
 Environment variables are overridden by values in `/config/config.json` if the file exists.
 
@@ -533,6 +536,27 @@ docker exec -it sendspin-client pactl list short sinks
 ```
 
 ---
+
+## Demo Mode
+
+Try the web UI without any hardware — no Bluetooth adapter, no speakers, no Music Assistant needed.
+
+**[🎮 Live Demo →](https://sendspin-demo.onrender.com)**
+
+Set `DEMO_MODE=true` to replace all hardware layers (BlueZ, D-Bus, PulseAudio, MA API) with intelligent mocks. Five simulated speakers appear with realistic status, playback progress, battery levels, and sync groups. All UI controls (volume, mute, play/pause, next/previous, shuffle, repeat) work interactively.
+
+```bash
+# Run locally
+DEMO_MODE=true pip install sendspin flask waitress websockets
+DEMO_MODE=true python sendspin_client.py
+# Open http://localhost:8080
+```
+
+### Self-hosting on Render.com
+
+The repository includes `render.yaml` — click the button below to deploy your own instance:
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/trudenboy/sendspin-bt-bridge)
 
 ## Development
 
