@@ -1,6 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
+# Ensure cwd is /app — S6 overlay starts services from / regardless of WORKDIR
+cd /app
+
 echo "=== Starting Sendspin Client Container ==="
 
 # HA Addon mode: /data/options.json is written by HA Supervisor before start.
