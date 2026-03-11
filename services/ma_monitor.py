@@ -150,7 +150,7 @@ class MaMonitor:
         loop = asyncio.get_event_loop()
         fut: asyncio.Future = loop.create_future()
         await self._cmd_queue.put((command, args, fut))
-        return await asyncio.wait_for(fut, timeout=10.0)
+        return await asyncio.wait_for(fut, timeout=3.0)
 
     async def _drain_cmd_queue(self, ws) -> None:
         """Process any pending commands from the command queue."""

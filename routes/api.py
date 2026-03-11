@@ -218,7 +218,7 @@ def _set_mute_via_ma(targets, muted: bool) -> bool:
                 send_player_cmd("players/cmd/volume_mute", {"player_id": pid, "muted": muted}),
                 loop,
             )
-            if not fut.result(timeout=5.0):
+            if not fut.result(timeout=2.0):
                 return False
         except Exception:
             logger.debug("MA volume_mute failed for %s", pid, exc_info=True)

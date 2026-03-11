@@ -731,19 +731,31 @@ function populateDeviceCard(i, dev) {
             muteBtn._handlerSet = true;
             muteBtn.addEventListener('click', function() {
                 var dev = lastDevices && lastDevices[i]; if (!dev) return;
+                // Optimistic UI update — toggle immediately
+                var desired = !dev.muted;
+                dev.muted = desired;
+                var btn = document.getElementById('dmute-' + i);
+                if (btn) {
+                    btn.textContent = desired ? '\uD83D\uDD07' : '\uD83D\uDD08';
+                    btn.title = desired ? 'Unmute' : 'Mute';
+                    btn.classList.toggle('muted', desired);
+                }
                 fetch(API_BASE + '/api/mute', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ player_name: dev.player_name || null }),
+                    body: JSON.stringify({ player_name: dev.player_name || null, mute: desired }),
                 }).then(function(r) { return r.json(); }).then(function(d) {
                     if (d.success && lastDevices[i]) lastDevices[i].muted = d.muted;
-                    var btn = document.getElementById('dmute-' + i);
+                }).catch(function(e) {
+                    // Revert on failure
+                    if (lastDevices[i]) lastDevices[i].muted = !desired;
                     if (btn) {
-                        btn.textContent = d.muted ? '\uD83D\uDD07' : '\uD83D\uDD08';
-                        btn.title = d.muted ? 'Unmute' : 'Mute';
-                        btn.classList.toggle('muted', !!d.muted);
+                        btn.textContent = !desired ? '\uD83D\uDD07' : '\uD83D\uDD08';
+                        btn.title = !desired ? 'Unmute' : 'Mute';
+                        btn.classList.toggle('muted', !desired);
                     }
-                }).catch(function(e) { console.error('Mute failed:', e); });
+                    console.error('Mute failed:', e);
+                });
             });
         }
     }
