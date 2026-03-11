@@ -10,18 +10,22 @@ from __future__ import annotations
 import asyncio  # noqa: TC003 — used at runtime for event loop storage
 import json
 import logging
+import socket
 import threading
 import time as _time
+from datetime import datetime, timedelta, timezone
 
 from config import CONFIG_FILE as _config_file
 
 __all__ = [
+    "bridge_start_time",
     "clear_ma_now_playing",
     "clients",
     "clients_lock",
     "create_scan_job",
     "finish_scan_job",
     "get_adapter_name",
+    "get_bridge_system_info",
     "get_ma_api_credentials",
     "get_ma_group_for_player",
     "get_ma_groups",
@@ -41,6 +45,34 @@ __all__ = [
     "set_ma_now_playing_for_group",
     "set_main_loop",
 ]
+
+# ---------------------------------------------------------------------------
+# Bridge-level metadata (independent of any client)
+# ---------------------------------------------------------------------------
+bridge_start_time: datetime = datetime.now(tz=timezone.utc)
+
+
+def get_bridge_system_info() -> dict:
+    """Return hostname, IP, uptime and version — always available."""
+    from config import BUILD_DATE, VERSION
+
+    uptime = datetime.now(tz=timezone.utc) - bridge_start_time
+    ip = ""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+    except Exception:
+        pass
+    return {
+        "version": VERSION,
+        "build_date": BUILD_DATE,
+        "hostname": socket.gethostname(),
+        "ip_address": ip,
+        "uptime": str(timedelta(seconds=int(uptime.total_seconds()))),
+    }
+
 
 # ---------------------------------------------------------------------------
 # SSE status-change signalling — used by /api/status/stream

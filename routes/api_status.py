@@ -270,7 +270,11 @@ def api_status():
     with _clients_lock:
         snapshot = list(_clients)
     if not snapshot:
-        return jsonify({"error": "No clients"}), 503
+        result = state.get_bridge_system_info()
+        result["error"] = "No clients"
+        result["devices"] = []
+        result["groups"] = []
+        return jsonify(result)
     if len(snapshot) == 1:
         result = get_client_status_for(snapshot[0])
     else:
@@ -320,7 +324,10 @@ def api_status_stream():
                 with _clients_lock:
                     snapshot = list(_clients)
                 if not snapshot:
-                    return None
+                    data = state.get_bridge_system_info()
+                    data["devices"] = []
+                    data["groups"] = []
+                    return data
                 if len(snapshot) == 1:
                     data = get_client_status_for(snapshot[0])
                 else:
