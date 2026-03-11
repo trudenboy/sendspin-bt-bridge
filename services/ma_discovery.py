@@ -106,6 +106,7 @@ async def _enrich_with_server_info(entry: dict[str, Any]) -> dict[str, Any]:
         entry["server_id"] = info.server_id
         entry["schema_version"] = info.schema_version
         entry["onboard_done"] = info.onboard_done
+        entry["homeassistant_addon"] = info.homeassistant_addon
         if info.base_url:
             entry["url"] = info.base_url
     except Exception:

@@ -143,6 +143,23 @@ class MaMonitor:
     def _next_id(self) -> int:
         return next(self._msg_id)
 
+    @staticmethod
+    def _detect_ha_addon(server_info: dict) -> None:
+        """Auto-set MA_AUTH_PROVIDER=ha when MA reports homeassistant_addon."""
+        try:
+            is_addon = server_info.get("server_info", server_info).get("homeassistant_addon")
+            if not is_addon:
+                return
+            from config import load_config, update_config
+
+            cfg = load_config()
+            if cfg.get("MA_AUTH_PROVIDER") == "ha":
+                return
+            logger.info("MA is running as HA addon — setting MA_AUTH_PROVIDER=ha")
+            update_config(lambda c: c.__setitem__("MA_AUTH_PROVIDER", "ha"))
+        except Exception:
+            logger.debug("Failed to detect HA addon from server_info", exc_info=True)
+
     async def execute_cmd(self, command: str, args: dict) -> dict:
         """Send a command through the persistent WS. Returns response or raises."""
         if not self._running or self._ws is None:
@@ -282,7 +299,8 @@ class MaMonitor:
         _ws_kw: dict = {"proxy": None} if int(websockets.__version__.split(".")[0]) >= 15 else {}
         async with websockets.connect(self._ws_url, **_ws_kw) as ws:
             # Server info
-            await _recv(ws, timeout=10.0)
+            server_info = await _recv(ws, timeout=10.0)
+            self._detect_ha_addon(server_info)
 
             # Auth
             mid = self._next_id()
