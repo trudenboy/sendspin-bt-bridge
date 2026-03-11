@@ -2215,7 +2215,7 @@ function _restartCompactLine(s, elapsed) {
     var parts = [];
     parts.push('BT ' + (s.bt >= s.total ? tick : s.bt + '/' + s.total));
     parts.push('PA ' + (s.pa >= s.total ? tick : s.pa + '/' + s.total));
-    parts.push('Sendspin ' + (s.ss >= s.total ? tick : s.ss + '/' + s.total));
+    parts.push('SS ' + (s.ss >= s.total ? tick : s.ss + '/' + s.total));
     parts.push('MA ' + (s.ma ? tick : wait));
     return '\uD83D\uDD04 ' + parts.join(' \u00b7 ') +
         ' <span style="opacity:0.5">' + elapsed + 's</span>';
@@ -2230,7 +2230,7 @@ function _restartDetailBlock(s) {
             '<span style="font-weight:600">' + d.name + ':</span> ' +
             (d.bt ? tick : wait) + ' BT  ' +
             (d.pa ? tick : wait) + ' PA  ' +
-            (d.ss ? tick : wait) + ' Sendspin' +
+            (d.ss ? tick : wait) + ' SS' +
             '</div>';
     }
     rows += '<div style="padding:2px 0">' +
@@ -2327,7 +2327,7 @@ async function saveAndRestart() {
         var summary = [];
         summary.push('BT ' + (stats.bt >= stats.total ? tick : stats.bt + '/' + stats.total));
         summary.push('PA ' + (stats.pa >= stats.total ? tick : stats.pa + '/' + stats.total));
-        summary.push('Sendspin ' + (stats.ss >= stats.total ? tick : stats.ss + '/' + stats.total));
+        summary.push('SS ' + (stats.ss >= stats.total ? tick : stats.ss + '/' + stats.total));
         summary.push('MA ' + (stats.ma ? tick : cross));
         banner.innerHTML = (allReady ? '\u2705' : '\u26a0\ufe0f') + ' Restart complete ' +
             '<span style="opacity:0.7;font-size:13px">(' + summary.join(' \u00b7 ') + ')</span>';
