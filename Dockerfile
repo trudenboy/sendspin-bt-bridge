@@ -110,9 +110,8 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD python3 -c "import urllib.request, os; urllib.request.urlopen(f'http://localhost:{os.environ.get(\"WEB_PORT\",\"8080\")}/api/health')" || exit 1
 
-# S6 init wrapper — ensures /init is executable on every start.
-# Docker overlayfs can strip permissions on container restart.
-RUN printf '#!/bin/sh\nchmod +x /init 2>/dev/null\nexec /init "$@"\n' > /s6-init && \
+# S6 init wrapper — /init permissions are set at build time (line 94).
+RUN printf '#!/bin/sh\nexec /init "$@"\n' > /s6-init && \
     chmod +x /s6-init
 
 # S6 overlay manages process lifecycle (PID 1, signal forwarding, zombie reaping).
