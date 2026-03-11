@@ -19,7 +19,7 @@ from flask import Blueprint, jsonify, request
 
 import state
 from config import save_device_volume
-from routes.api_config import _detect_runtime, get_volume_via_ma
+from routes.api_config import _detect_runtime, get_mute_via_ma, get_volume_via_ma
 from services.pulse import (
     get_sink_mute,
     set_sink_mute,
@@ -344,7 +344,7 @@ def set_mute():
             targets = snapshot[:1]
 
         # --- MA path ---
-        if not force_local and get_volume_via_ma() and state.is_ma_connected() and targets:
+        if not force_local and get_mute_via_ma() and state.is_ma_connected() and targets:
             # Resolve desired mute state
             desired = bool(mute_value) if mute_value is not None else not targets[0].status.get("muted", False)
             if _set_mute_via_ma(targets, desired):

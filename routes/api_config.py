@@ -46,11 +46,14 @@ config_bp = Blueprint("api_config", __name__)
 # Reloaded in api_config() after config save; also valid on process restart
 # since config.py is re-read.  Does NOT auto-reload on manual file edit.
 _volume_via_ma: bool = True
+_mute_via_ma: bool = False
 
 
 def _reload_volume_via_ma() -> None:
-    global _volume_via_ma
-    _volume_via_ma = load_config().get("VOLUME_VIA_MA", True)
+    global _volume_via_ma, _mute_via_ma
+    cfg = load_config()
+    _volume_via_ma = cfg.get("VOLUME_VIA_MA", True)
+    _mute_via_ma = cfg.get("MUTE_VIA_MA", False)
 
 
 _reload_volume_via_ma()
@@ -59,6 +62,11 @@ _reload_volume_via_ma()
 def get_volume_via_ma() -> bool:
     """Return the cached VOLUME_VIA_MA flag for use by other modules."""
     return _volume_via_ma
+
+
+def get_mute_via_ma() -> bool:
+    """Return the cached MUTE_VIA_MA flag for use by other modules."""
+    return _mute_via_ma
 
 
 # ---------------------------------------------------------------------------
@@ -257,6 +265,7 @@ def api_config():
         "MA_API_TOKEN",
         "MA_USERNAME",
         "VOLUME_VIA_MA",
+        "MUTE_VIA_MA",
         "_new_device_default_volume",
     }
     config = {k: v for k, v in config.items() if k in _ALLOWED_POST_KEYS}

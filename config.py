@@ -55,6 +55,7 @@ DEFAULT_CONFIG = {
     "MA_API_TOKEN": "",
     "MA_USERNAME": "",
     "VOLUME_VIA_MA": True,
+    "MUTE_VIA_MA": False,
     "TRUSTED_PROXIES": [],
 }
 
@@ -130,6 +131,7 @@ def load_config() -> dict:
         "MA_AUTH_PROVIDER",
         "MA_USERNAME",
         "VOLUME_VIA_MA",
+        "MUTE_VIA_MA",
         "TRUSTED_PROXIES",
     }
 

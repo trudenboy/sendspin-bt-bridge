@@ -263,6 +263,13 @@
                         <span class="form-hint" style="display:inline;margin:0;">— keeps MA UI sliders in sync</span>
                     </label>
                 </div>
+                <div class="form-group">
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                        <input type="checkbox" name="MUTE_VIA_MA" id="mute-via-ma" style="width:auto;margin:0;">
+                        Route mute through MA
+                        <span class="form-hint" style="display:inline;margin:0;">— syncs mute state with MA UI</span>
+                    </label>
+                </div>
             </div>
 
             {% if not ha_mode %}
