@@ -11,6 +11,32 @@ A Bluetooth bridge for [Music Assistant](https://www.music-assistant.io/) — co
 
 <img width="1400" alt="Sendspin Bluetooth Bridge infographic — features, architecture and deployment options" src="https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/docs-site/public/screenshots/sbb_infographic_en.png" />
 
+---
+
+<details>
+<summary><strong>📑 Table of Contents</strong></summary>
+
+- [Features](#features)
+- [Multi-bridge deployment](#multi-bridge-deployment)
+- [Tested hardware](#tested-hardware)
+- [Supported Platforms](#supported-platforms)
+- [Deployment Options](#deployment-options)
+  - [Option A — Home Assistant Addon](#option-a--home-assistant-addon)
+  - [Option B — Docker Compose](#option-b--docker-compose)
+  - [Option C — Proxmox VE (LXC)](#option-c--proxmox-ve-lxc)
+  - [Option D — OpenWrt LXC](#option-d--openwrt-lxc)
+- [Configuration](#configuration)
+- [Architecture](#architecture)
+- [Troubleshooting](#troubleshooting)
+- [Development](#development)
+- [Contributing](#contributing)
+- [Credits](#credits)
+- [Support](#support)
+
+</details>
+
+---
+
 ## Features
 
 ### 🔊 Audio & Playback
