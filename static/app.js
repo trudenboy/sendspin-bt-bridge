@@ -32,6 +32,7 @@ var btAdapters = [];
 var btManualAdapters = [];
 var lastDevices = [];
 var lastGroups = [];
+var _muteDebounce = {};  // player_name → timestamp of last user mute action
 
 // Return first slash-separated segment with "+N" suffix if list has more items.
 // E.g. "A/B/C" → "A +2". Single values pass through unchanged.
@@ -172,8 +173,20 @@ async function updateStatus() {
             reanchorShownAt = {};
             lastReanchorAt = {};
         }
+        // Preserve optimistic mute state during debounce window
+        var now = Date.now();
+        var prevDevices = lastDevices;
         lastDevices = sorted;
         lastGroups = status.groups || [];
+        sorted.forEach(function(dev) {
+            var pn = dev.player_name || '__default__';
+            if (_muteDebounce[pn] && (now - _muteDebounce[pn]) < 2000) {
+                var prev = prevDevices.find(function(d) { return d.player_name === pn; });
+                if (prev) dev.muted = prev.muted;
+            } else {
+                delete _muteDebounce[pn];
+            }
+        });
 
         sorted.forEach(function(dev, i) {
             var card = document.getElementById('device-card-' + i);
@@ -731,9 +744,11 @@ function populateDeviceCard(i, dev) {
             muteBtn._handlerSet = true;
             muteBtn.addEventListener('click', function() {
                 var dev = lastDevices && lastDevices[i]; if (!dev) return;
-                // Optimistic UI update — toggle immediately
                 var desired = !dev.muted;
                 dev.muted = desired;
+                // Protect optimistic state from SSE overwrite for 2 seconds
+                var pn = dev.player_name || '__default__';
+                _muteDebounce[pn] = Date.now();
                 var btn = document.getElementById('dmute-' + i);
                 if (btn) {
                     btn.textContent = desired ? '\uD83D\uDD07' : '\uD83D\uDD08';
@@ -747,7 +762,7 @@ function populateDeviceCard(i, dev) {
                 }).then(function(r) { return r.json(); }).then(function(d) {
                     if (d.success && lastDevices[i]) lastDevices[i].muted = d.muted;
                 }).catch(function(e) {
-                    // Revert on failure
+                    delete _muteDebounce[pn];
                     if (lastDevices[i]) lastDevices[i].muted = !desired;
                     if (btn) {
                         btn.textContent = !desired ? '\uD83D\uDD07' : '\uD83D\uDD08';
@@ -2534,8 +2549,19 @@ var _statusInterval = null;
                     reanchorShownAt = {};
                     lastReanchorAt = {};
                 }
+                var now = Date.now();
+                var prevDevices = lastDevices;
                 lastDevices = sorted;
                 lastGroups = status.groups || [];
+                sorted.forEach(function(dev) {
+                    var pn = dev.player_name || '__default__';
+                    if (_muteDebounce[pn] && (now - _muteDebounce[pn]) < 2000) {
+                        var prev = prevDevices.find(function(d) { return d.player_name === pn; });
+                        if (prev) dev.muted = prev.muted;
+                    } else {
+                        delete _muteDebounce[pn];
+                    }
+                });
                 sorted.forEach(function(dev, i) {
                     var card = document.getElementById('device-card-' + i);
                     if (!card) { card = buildDeviceCard(i); grid.appendChild(card); }
