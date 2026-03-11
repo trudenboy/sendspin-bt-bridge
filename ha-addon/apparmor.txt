@@ -1,52 +1,18 @@
 #include <tunables/global>
 
 profile sendspin_bt_bridge flags=(attach_disconnected,mediate_deleted) {
-  #include <abstractions/base>
+  # Modeled after Music Assistant addon profile.
+  # Granular path rules break on Docker overlayfs — use blanket file/signal
+  # and restrict via capabilities and network rules instead.
+  file,
+  signal,
 
-  # Capabilities
   capability net_admin,
   capability net_raw,
   capability sys_admin,
   capability dac_read_search,
-
-  # S6 Overlay — process supervision (PID 1)
-  signal (send) set=(kill,term,int,hup,cont),
-  /init rix,
-  /s6-init rix,
-  /bin/** rix,
-  /usr/bin/** rix,
-  /run/{s6,s6-rc*,service}/** ixrw,
-  /run/{,**} rwk,
-  /package/** rix,
-  /command/** rix,
-  /etc/s6/** ixrw,
-  /etc/s6-overlay/** ixrw,
-  /etc/cont-init.d/** rixw,
-  /etc/cont-finish.d/** rixw,
-  /etc/services.d/** rixw,
-  /dev/tty rw,
-
-  # Application
-  /app/** rixm,
-  /usr/local/bin/** rix,
-  /usr/local/lib/** mr,
-  /usr/lib/** mr,
-
-  # Bluetooth
-  /dev/bus/usb/** rw,
-  /sys/bus/usb/** r,
-  /sys/class/bluetooth/** r,
-  /sys/devices/** r,
-  /run/dbus/** rw,
-
-  # Audio
-  /run/audio/** rw,
-  /run/user/*/pulse/** rw,
-  /tmp/pulse-* rw,
-
-  # Config
-  /config/** rw,
-  /data/** rw,
+  capability setgid,
+  capability setuid,
 
   # Network (host mode)
   network inet stream,
@@ -55,11 +21,16 @@ profile sendspin_bt_bridge flags=(attach_disconnected,mediate_deleted) {
   network inet6 dgram,
   network bluetooth,
   network netlink raw,
+  network unix dgram,
+  network unix stream,
 
-  # Proc/sys access
-  /proc/** r,
-  /sys/** r,
-  /dev/null rw,
-  /dev/urandom r,
-  /tmp/** rwk,
+  # Docker daemon signal
+  signal (receive) set=(kill,term) peer=/usr/bin/docker,
+
+  /dev/* mrwkl,
+  /tmp/** mrkwl,
+
+  # Data access
+  /data/** rw,
+  /config/** rw,
 }
