@@ -15,9 +15,9 @@ BOLD='\033[1m'; NC='\033[0m'
 
 pass=0; warn=0; fail=0
 
-ok()   { echo -e "  ${GREEN}✅ $1${NC}"; ((pass++)); }
-skip() { echo -e "  ${YELLOW}⚠️  $1${NC}"; ((warn++)); }
-bad()  { echo -e "  ${RED}❌ $1${NC}"; ((fail++)); }
+ok()   { echo -e "  ${GREEN}✅ $1${NC}"; ((++pass)); }
+skip() { echo -e "  ${YELLOW}⚠️  $1${NC}"; ((++warn)); }
+bad()  { echo -e "  ${RED}❌ $1${NC}"; ((++fail)); }
 info() { echo -e "  ${CYAN}ℹ  $1${NC}"; }
 
 echo ""
