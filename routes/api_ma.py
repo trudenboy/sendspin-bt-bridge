@@ -9,6 +9,7 @@ import json
 import logging
 import os
 import re
+import urllib.request as _ur
 
 from flask import Blueprint, Response, jsonify, request
 
@@ -132,6 +133,72 @@ def _exchange_for_long_lived_token(ma_url: str, session_token: str) -> str:
         return session_token
 
 
+def _ma_http_login(ma_url: str, username: str, password: str) -> str:
+    """Login to MA via HTTP and return a session token.
+
+    Supports both stable MA (flat body) and beta 2.8+ (nested credentials).
+    Raises RuntimeError on auth failure, ConnectionError on network issues.
+    """
+    login_url = ma_url.rstrip("/") + "/auth/login"
+
+    def _post(body: dict) -> dict:
+        data = json.dumps(body).encode()
+        req = _ur.Request(login_url, data=data, method="POST")
+        req.add_header("Content-Type", "application/json")
+        with _ur.urlopen(req, timeout=15) as resp:
+            return json.loads(resp.read())
+
+    # 1) Try stable format: {"username": ..., "password": ...}
+    try:
+        result = _post({"username": username, "password": password})
+        if result.get("success"):
+            token = result.get("access_token") or result.get("token")
+            if token:
+                logger.debug("MA login succeeded with stable (flat) format")
+                return token
+    except _ur.HTTPError as exc:
+        body = exc.read().decode(errors="replace")
+        # 401 with "Invalid username or password" = real auth error (stable MA)
+        if exc.code == 401:
+            try:
+                err_data = json.loads(body)
+                err_msg = err_data.get("error", body)
+            except (json.JSONDecodeError, ValueError):
+                err_msg = body
+            if "invalid" in err_msg.lower():
+                raise RuntimeError(err_msg) from exc
+            # Otherwise format may be wrong — fall through to new format
+        elif exc.code >= 500:
+            raise ConnectionError(f"MA server error: {exc.code}") from exc
+    except Exception as exc:
+        if not isinstance(exc, RuntimeError | ConnectionError):
+            logger.debug("Stable-format login failed: %s", exc)
+
+    # 2) Try beta format: {"credentials": {...}, "provider_id": "builtin"}
+    try:
+        result = _post(
+            {
+                "provider_id": "builtin",
+                "credentials": {"username": username, "password": password},
+            }
+        )
+        if result.get("success"):
+            token = result.get("token") or result.get("access_token")
+            if token:
+                logger.debug("MA login succeeded with beta (nested credentials) format")
+                return token
+        err = result.get("error", "Login failed")
+        raise RuntimeError(err)
+    except _ur.HTTPError as exc:
+        body = exc.read().decode(errors="replace")
+        try:
+            err_data = json.loads(body)
+            err_msg = err_data.get("error", body)
+        except (json.JSONDecodeError, ValueError):
+            err_msg = body
+        raise RuntimeError(err_msg) from exc
+
+
 async def _rediscover_after_login(
     ma_url: str,
     ma_token: str,
@@ -174,16 +241,13 @@ def _save_ma_token_and_rediscover(ma_url: str, ma_token: str, username: str = ""
 
 
 def _get_ma_oauth_params(ma_url: str):
-    """Call MA /auth/authorize → parse HA URL, client_id, redirect_uri, state."""
-    import urllib.parse as _up
-    import urllib.request as _ur
+    """Call MA /auth/authorize → parse HA URL, client_id, redirect_uri, state.
 
-    try:
-        resp = _ur.urlopen(f"{ma_url}/auth/authorize?provider_id=homeassistant", timeout=10)
-        info = json.loads(resp.read())
-        auth_url = info.get("authorization_url", "")
-        if not auth_url:
-            return None
+    Tries the stable GET endpoint first, then the beta JSONRPC format.
+    """
+    import urllib.parse as _up
+
+    def _parse_auth_url(auth_url: str):
         parsed = _up.urlparse(auth_url)
         params = _up.parse_qs(parsed.query)
         ha_base = f"{parsed.scheme}://{parsed.netloc}"
@@ -191,14 +255,44 @@ def _get_ma_oauth_params(ma_url: str):
         redirect_uri = params.get("redirect_uri", [""])[0]
         oauth_state = params.get("state", [""])[0]
         return ha_base, client_id, redirect_uri, oauth_state
+
+    # 1) Stable MA: GET /auth/authorize?provider_id=homeassistant
+    try:
+        resp = _ur.urlopen(f"{ma_url}/auth/authorize?provider_id=homeassistant", timeout=10)
+        info = json.loads(resp.read())
+        auth_url = info.get("authorization_url", "")
+        if auth_url:
+            return _parse_auth_url(auth_url)
+    except _ur.HTTPError:
+        pass  # Fall through to beta format
     except Exception as exc:
-        logger.warning("MA /auth/authorize failed: %s", exc)
-        return None
+        logger.debug("Stable /auth/authorize failed: %s", exc)
+
+    # 2) Beta MA: POST /api with JSONRPC command auth/authorization_url
+    try:
+        body = json.dumps(
+            {
+                "command": "auth/authorization_url",
+                "args": {"provider_id": "homeassistant"},
+                "message_id": "oauth",
+            }
+        ).encode()
+        req = _ur.Request(f"{ma_url}/api", data=body, method="POST")
+        req.add_header("Content-Type", "application/json")
+        with _ur.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read())
+            auth_url = data.get("result", "")
+            if auth_url:
+                return _parse_auth_url(auth_url)
+    except Exception as exc:
+        logger.debug("Beta /api auth/authorization_url failed: %s", exc)
+
+    logger.warning("MA OAuth params unavailable (both stable and beta methods failed)")
+    return None
 
 
 def _ha_login_flow_start(ha_url: str, client_id: str, redirect_uri: str):
     """Start HA login_flow for the MA OAuth flow."""
-    import urllib.request as _ur
 
     try:
         body = json.dumps(
@@ -223,7 +317,6 @@ def _ha_login_flow_start(ha_url: str, client_id: str, redirect_uri: str):
 
 def _ha_login_flow_step(ha_url: str, flow_id: str, payload: dict, client_id: str):
     """Submit a step to HA login_flow."""
-    import urllib.request as _ur
     from urllib.error import HTTPError
 
     try:
@@ -338,7 +431,6 @@ def _find_ma_ingress_url():
     to ``http://localhost:8094``.  Uses the addon's Docker hostname which
     is resolvable from any addon on the hassio network.
     """
-    import urllib.request as _ur
 
     token = os.environ.get("SUPERVISOR_TOKEN", "")
     if not token:
@@ -384,7 +476,6 @@ def _create_ma_token_via_ingress(ha_user_id: str, ha_username: str, ha_display_n
 
     Returns the MA token string on success, or None on failure.
     """
-    import urllib.request as _ur
 
     base_url = _find_ma_ingress_url()
     url = f"{base_url}/api"
@@ -782,20 +873,40 @@ def api_ma_login():
         ma_url = f"http://{ma_url}"
 
     # Login and create long-lived token
+    # Try the library first (works with stable MA), then fall back to direct HTTP
+    # which supports both stable and beta MA formats.
+    token = None
     try:
         from music_assistant_client import login_with_token
 
         fut = asyncio.run_coroutine_threadsafe(
-            login_with_token(ma_url, username, password, token_name="Sendspin BT Bridge"),
+            login_with_token(ma_url, username, password, token_name=_MA_TOKEN_NAME),
             loop,
         )
         _user, token = fut.result(timeout=30.0)
-    except Exception as exc:
-        err_msg = str(exc)
-        if "auth" in err_msg.lower() or "401" in err_msg or "credentials" in err_msg.lower():
+    except Exception as lib_exc:
+        lib_err = str(lib_exc)
+        # If it's a clear auth error from stable MA, don't retry
+        if "invalid username" in lib_err.lower() or "invalid password" in lib_err.lower():
             return jsonify({"success": False, "error": "Invalid username or password"}), 401
-        logger.exception("MA login failed")
-        return jsonify({"success": False, "error": f"Login failed: {err_msg}"}), 500
+        # Otherwise try direct HTTP login (handles both old and new MA formats)
+        logger.debug("Library login failed (%s), trying direct HTTP login", lib_err)
+        try:
+            session_token = _ma_http_login(ma_url, username, password)
+            token = _exchange_for_long_lived_token(ma_url, session_token)
+        except RuntimeError as exc:
+            err_msg = str(exc)
+            if "invalid" in err_msg.lower() or "password" in err_msg.lower():
+                return jsonify({"success": False, "error": "Invalid username or password"}), 401
+            return jsonify({"success": False, "error": f"Login failed: {err_msg}"}), 401
+        except ConnectionError as exc:
+            return jsonify({"success": False, "error": str(exc)}), 502
+        except Exception as exc:
+            logger.exception("MA direct login failed")
+            return jsonify({"success": False, "error": f"Login failed: {exc}"}), 500
+
+    if not token:
+        return jsonify({"success": False, "error": "Login succeeded but no token received"}), 500
 
     # Save to config.json
     def _save_ma_creds(cfg: dict) -> None:
