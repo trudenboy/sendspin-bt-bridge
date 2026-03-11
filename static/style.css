@@ -307,7 +307,7 @@
         }
         .form-group input:focus { outline: none; border-color: var(--primary-color); }
         .form-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 15px; }
-        #config-form { padding-bottom: 80px; }
+        #config-form { padding-bottom: 0; }
 
         /* BT device table */
         .bt-header {
@@ -694,7 +694,7 @@
         }
         .config-static-save {
             display: flex; justify-content: space-between; align-items: center;
-            padding: 16px 0 0; margin-top: 8px;
+            padding: 12px 0 0; margin-top: 0;
             border-top: 1px solid var(--divider-color);
         }
         .config-static-save .btn:first-child { margin-right: auto; }
