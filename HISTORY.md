@@ -2,7 +2,7 @@
 
 A history of the architectural and functional evolution of sendspin-bt-bridge — for readers familiar with Home Assistant, Music Assistant, and multiroom audio setups.
 
-**Period:** January 1 – March 12, 2026 · **Total commits:** ~770 · **Versions:** 1.0.0 → 2.23.9
+**Period:** January 1 – March 12, 2026 · **Total commits:** ~770 · **Versions:** 1.0.0 → 2.23.10
 
 ---
 
@@ -612,13 +612,15 @@ A **universal version update checker** runs as a background asyncio task, pollin
 
 The LXC `upgrade.sh` was fixed to download all route sub-modules (`api_bt.py`, `api_config.py`, `api_ma.py`, `api_status.py`) and new files (`update_checker.py`, `demo/` module) that had been added since the script was last updated.
 
-### S6 overlay, AppArmor enforce, and auth refactoring (v2.23.1–v2.23.9)
+### S6 overlay, AppArmor enforce, and auth refactoring (v2.23.1–v2.23.10)
 
 **S6 overlay** (v2.23.1) replaced Docker's `--init` with proper PID 1 process supervision via S6 overlay v3.2.0.2 — zombie reaping, signal forwarding, and automatic restart on crash. The HA addon Dockerfile was simplified to a thin wrapper, and the standalone `run.sh` was removed.
 
 **AppArmor enforce mode** (v2.23.6–v2.23.8) proved trickier than expected. The initial attempt used granular path rules (`/app/** rixm`, `/bin/** rix`) — standard AppArmor practice — but Docker's overlayfs made them unreliable: AppArmor silently blocked execution without any audit log on HAOS. Three releases were needed to diagnose the issue (no `dmesg` access, error looked like a filesystem permission problem). The fix came from studying the Music Assistant addon's AppArmor profile: blanket `file,` + `signal,` rules instead of granular paths. Security boundaries are enforced via capabilities, network rules, and signal restrictions. This pattern works reliably on all container runtimes.
 
 **Auth refactoring** (v2.23.9) simplified authentication for the HA addon. In addon mode, authentication is now always enforced — the `auth_enabled` toggle was removed from the addon options. Only HA Core login_flow is offered (with full 2FA/MFA support); MA credentials and local password methods are hidden. The logged-in HA username is stored in the session and displayed next to the "Sign out" link. Ingress auto-auth (bypass via `X-Ingress-Path` from trusted proxies) continues unchanged. Docker/standalone mode retains the full set of auth methods.
+
+**Header redesign** (v2.23.10) overhauled the web UI header into a compact 2-row layout. Row 1 shows the title, inline version with build date tooltip, an interactive update badge (gray "⟳ up to date" check button that morphs to green "⬆ vX.Y.Z" link when an update is found), and Docs/GitHub/Sign out links. Row 2 shows a runtime type badge (LXC / Docker / HA Addon), hostname, IP, uptime, and color-coded health indicators (BT x/n · MA x/n with green/yellow/red dots, plus ▶ playback count).
 
 The addon config gained `tmpfs: true` (in-memory temp for better SD card longevity), `backup_exclude` (omits logs and cache from HA snapshots), `auth_api: true` (formal auth API access declaration), and `panel_admin: false`.
 

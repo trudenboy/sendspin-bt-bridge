@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.23.10] - 2026-03-12
+
+### Added
+- Runtime type badge in header (LXC / Docker / HA Addon)
+- Interactive update check button with spinner animation
+- BT/MA health indicators with color-coded dots
+
+### Changed
+- Compact 2-row header layout; Docs/GitHub in actions area
+- Brighter version and system info text
+
 ## [2.23.9] - 2026-03-12
 
 ### Changed

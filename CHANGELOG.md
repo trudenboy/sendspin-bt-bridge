@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.23.10] - 2026-03-12
+
+### Added
+- **Runtime type badge** — header shows LXC, Docker, or HA Addon pill with contrasting style
+- **Update check button** — "⟳ up to date" pill acts as manual check trigger with spinner animation; morphs to green "⬆ vX.Y.Z" link when update found
+- **Health indicators** — BT x/n · MA x/n with color-coded dots (green/yellow/red) and ▶ playback count
+
+### Changed
+- Header redesigned to compact 2-row layout; Docs/GitHub links moved to header actions area
+- Version and system info text brightened for better contrast on blue header
+
 ## [2.23.9] - 2026-03-12
 
 ### Changed
