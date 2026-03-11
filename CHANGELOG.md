@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.23.11] - 2026-03-12
+
+### Added
+- **Update modal dialog** — clicking the update badge opens a modal with release notes preview and platform-aware action buttons instead of a plain browser confirm()
+- **"📋 Release Notes"** button links to the GitHub release page
+- **"⬆ Update Now"** for LXC/systemd one-click apply; **"🏠 Update in HA"** for addon mode; **"📋 Show Instructions"** for Docker
+- **One-click update** — `/api/update/apply` endpoint triggers `upgrade.sh` on LXC/systemd, service restarts automatically
+
+### Changed
+- Release notes in modal are cleaned from markdown (headers, bold) and displayed with bullet-point formatting
+
 ## [2.23.10] - 2026-03-12
 
 ### Added

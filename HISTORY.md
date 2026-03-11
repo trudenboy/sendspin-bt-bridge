@@ -2,7 +2,7 @@
 
 A history of the architectural and functional evolution of sendspin-bt-bridge — for readers familiar with Home Assistant, Music Assistant, and multiroom audio setups.
 
-**Period:** January 1 – March 12, 2026 · **Total commits:** ~770 · **Versions:** 1.0.0 → 2.23.10
+**Period:** January 1 – March 12, 2026 · **Total commits:** ~770 · **Versions:** 1.0.0 → 2.23.11
 
 ---
 
@@ -621,6 +621,8 @@ The LXC `upgrade.sh` was fixed to download all route sub-modules (`api_bt.py`, `
 **Auth refactoring** (v2.23.9) simplified authentication for the HA addon. In addon mode, authentication is now always enforced — the `auth_enabled` toggle was removed from the addon options. Only HA Core login_flow is offered (with full 2FA/MFA support); MA credentials and local password methods are hidden. The logged-in HA username is stored in the session and displayed next to the "Sign out" link. Ingress auto-auth (bypass via `X-Ingress-Path` from trusted proxies) continues unchanged. Docker/standalone mode retains the full set of auth methods.
 
 **Header redesign** (v2.23.10) overhauled the web UI header into a compact 2-row layout. Row 1 shows the title, inline version with build date tooltip, an interactive update badge (gray "⟳ up to date" check button that morphs to green "⬆ vX.Y.Z" link when an update is found), and Docs/GitHub/Sign out links. Row 2 shows a runtime type badge (LXC / Docker / HA Addon), hostname, IP, uptime, and color-coded health indicators (BT x/n · MA x/n with green/yellow/red dots, plus ▶ playback count).
+
+**Update modal** (v2.23.11) replaced the browser `confirm()` with a custom modal dialog. Clicking the update badge now shows a card with release notes preview (markdown stripped to clean bullet points) and two action buttons: "📋 Release Notes" (opens GitHub release) and a platform-aware apply button — "⬆ Update Now" for LXC/systemd (calls `/api/update/apply`, service restarts automatically), "🏠 Update in HA" for addon mode, or "📋 Show Instructions" for Docker.
 
 The addon config gained `tmpfs: true` (in-memory temp for better SD card longevity), `backup_exclude` (omits logs and cache from HA snapshots), `auth_api: true` (formal auth API access declaration), and `panel_admin: false`.
 
