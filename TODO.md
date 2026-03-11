@@ -26,6 +26,7 @@ Roadmap for HA addon standards compliance and improvements.
 
 ## Next
 
+- [ ] **LXC auto-update system** — version check via GitHub API + web UI notification badge + one-click update button (see [analysis](https://github.com/trudenboy/sendspin-bt-bridge/blob/main/TODO.md))
 - [ ] **Add HA discovery integration** — support HA discovery protocol for auto-configuring MA connection
 
 ## Future
