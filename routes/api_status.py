@@ -281,6 +281,7 @@ def api_status():
         first = get_client_status_for(snapshot[0])
         result = {**first, "devices": [get_client_status_for(c) for c in snapshot]}
     result["groups"] = _build_groups_summary(snapshot)
+    result["ma_connected"] = state.is_ma_connected()
     return jsonify(result)
 
 

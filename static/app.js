@@ -2193,42 +2193,92 @@ async function saveAndRestart() {
     var banner = document.getElementById('restart-banner');
     banner.style.display = 'block';
     banner.className = 'restart-banner restarting';
-    banner.textContent = 'Saving configuration\u2026';
+    banner.innerHTML = '💾 Saving configuration\u2026';
 
     try {
         var saved = await saveConfig();
         if (!saved) {
-            banner.style.display = 'none';
+            banner.className = 'restart-banner warning';
+            banner.innerHTML = '✗ Failed to save configuration';
+            setTimeout(function() { banner.style.display = 'none'; }, 3000);
             return;
         }
         _setConfigDirty(false);
-        banner.textContent = '🔄 Restarting service\u2026';
+
+        // Phase 2: Send restart command
+        banner.innerHTML = '🔄 Stopping service\u2026';
         try {
             await fetch(API_BASE + '/api/restart', { method: 'POST' });
         } catch (_) { /* Service dropped connection — expected */ }
 
-        await new Promise(function(r) { setTimeout(r, 2500); });
+        // Phase 3: Wait for service to go down, then poll for it to come back
+        await new Promise(function(r) { setTimeout(r, 2000); });
+        banner.innerHTML = '⏳ Waiting for service to start\u2026';
 
-        for (var attempt = 1; attempt <= 30; attempt++) {
-            banner.textContent = '🔄 Restarting\u2026 (' + attempt + 's)';
+        var serviceUp = false;
+        var statusData = null;
+        for (var attempt = 1; attempt <= 40; attempt++) {
+            banner.innerHTML = '⏳ Waiting for service\u2026 <span style="opacity:0.6">' + attempt + 's</span>';
             await new Promise(function(r) { setTimeout(r, 1000); });
             try {
                 var resp = await fetch(API_BASE + '/api/status');
                 if (resp.ok) {
-                    banner.className = 'restart-banner online';
-                    banner.textContent = '\u2713 Service restarted successfully';
-                    setTimeout(function() { banner.style.display = 'none'; }, 3000);
-                    updateStatus();
-                    return;
+                    statusData = await resp.json();
+                    serviceUp = true;
+                    break;
                 }
             } catch (_) { /* Not yet back */ }
         }
-        banner.className = 'restart-banner warning';
-        banner.textContent = '\u26a0\ufe0f Service may still be restarting \u2014 check logs';
+
+        if (!serviceUp) {
+            banner.className = 'restart-banner warning';
+            banner.innerHTML = '\u26a0\ufe0f Service did not respond within 40s — check logs';
+            return;
+        }
+
+        // Phase 4+5: Service is up — check BT and MA connectivity
+        var devs = statusData.devices || [statusData];
+        var totalDevices = devs.length;
+        var btReady = devs.filter(function(d) { return d.bluetooth_connected; }).length;
+        var maReady = !!statusData.ma_connected;
+
+        if (btReady < totalDevices || !maReady) {
+            // Give BT/MA time to reconnect — poll for up to 30 more seconds
+            for (var w = 1; w <= 30; w++) {
+                var parts = [];
+                if (btReady < totalDevices) parts.push('📡 Bluetooth ' + btReady + '/' + totalDevices);
+                if (!maReady) parts.push('🎵 Music Assistant\u2026');
+                banner.innerHTML = parts.join(' · ') + ' <span style="opacity:0.6">' + w + 's</span>';
+
+                await new Promise(function(r) { setTimeout(r, 1000); });
+                try {
+                    var r2 = await fetch(API_BASE + '/api/status');
+                    if (r2.ok) {
+                        statusData = await r2.json();
+                        devs = statusData.devices || [statusData];
+                        btReady = devs.filter(function(d) { return d.bluetooth_connected; }).length;
+                        maReady = !!statusData.ma_connected;
+                        if (btReady >= totalDevices && maReady) break;
+                    }
+                } catch (_) {}
+            }
+        }
+
+        // Final status
+        var allGood = btReady >= totalDevices && maReady;
+        banner.className = 'restart-banner ' + (allGood ? 'online' : 'online');
+        var summary = '✓ Service restarted';
+        var details = [];
+        details.push(btReady >= totalDevices ? '📡 BT ✓' : '📡 BT ' + btReady + '/' + totalDevices);
+        if (maReady) details.push('🎵 MA ✓');
+        else details.push('🎵 MA ✗');
+        banner.innerHTML = summary + ' <span style="opacity:0.7;font-size:13px;">(' + details.join(' · ') + ')</span>';
+        setTimeout(function() { banner.style.display = 'none'; }, allGood ? 4000 : 8000);
+        updateStatus();
 
     } catch (err) {
         banner.className = 'restart-banner warning';
-        banner.textContent = '\u26a0\ufe0f Error: ' + err.message;
+        banner.innerHTML = '\u26a0\ufe0f Error: ' + err.message;
     }
 }
 
