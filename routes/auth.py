@@ -42,7 +42,7 @@ _HA_CORE_URL = os.environ.get("HA_CORE_URL", "http://homeassistant:8123").rstrip
 # client_id must be an HTTP URL; HA accepts any valid URL as client_id.
 _FLOW_CLIENT_ID = f"{_HA_CORE_URL}/"
 
-_UUID_RE = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", re.IGNORECASE)
+_FLOW_ID_RE = re.compile(r"[0-9a-f-]{32,36}", re.IGNORECASE)
 
 # ---------------------------------------------------------------------------
 # Brute-force protection — in-memory, no external dependency
@@ -178,7 +178,7 @@ def _ha_remote_flow_start(ha_url: str) -> dict | None:
 
 def _ha_remote_flow_step(ha_url: str, flow_id: str, data: dict) -> dict | None:
     """Submit a step to a remote HA Core login_flow."""
-    if not _UUID_RE.fullmatch(flow_id or ""):
+    if not _FLOW_ID_RE.fullmatch(flow_id or ""):
         logger.warning("Invalid flow_id rejected: %s", flow_id)
         return None
     client_id = f"{ha_url}/"
@@ -276,7 +276,7 @@ def _ha_flow_start() -> dict | None:
 
 def _ha_flow_step(flow_id: str, data: dict) -> dict | None:
     """Submit a step to an HA Core auth login_flow."""
-    if not _UUID_RE.fullmatch(flow_id or ""):
+    if not _FLOW_ID_RE.fullmatch(flow_id or ""):
         logger.warning("Invalid flow_id rejected: %s", flow_id)
         return None
     try:
@@ -383,7 +383,7 @@ def login():
                     flow_id = request.form.get("flow_id", "").strip()
                     mfa_module_id = request.form.get("mfa_module_id", "totp")
                     code = request.form.get("code", "").replace(" ", "").replace("-", "")
-                    if not flow_id or not _UUID_RE.fullmatch(flow_id):
+                    if not flow_id or not _FLOW_ID_RE.fullmatch(flow_id):
                         error = "Session expired — please sign in again"
                         return render_template(
                             "login.html",
@@ -474,7 +474,7 @@ def login():
                 flow_id = request.form.get("flow_id", "").strip()
                 mfa_module_id = request.form.get("mfa_module_id", "totp")
                 code = request.form.get("code", "").replace(" ", "").replace("-", "")
-                if not flow_id or not _UUID_RE.fullmatch(flow_id):
+                if not flow_id or not _FLOW_ID_RE.fullmatch(flow_id):
                     error = "Session expired — please sign in again"
                     return render_template(
                         "login.html",
