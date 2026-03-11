@@ -1,6 +1,6 @@
 #include <tunables/global>
 
-profile sendspin_bt_bridge flags=(attach_disconnected,mediate_deleted,complain) {
+profile sendspin_bt_bridge flags=(attach_disconnected,mediate_deleted) {
   #include <abstractions/base>
 
   # Capabilities
@@ -9,25 +9,28 @@ profile sendspin_bt_bridge flags=(attach_disconnected,mediate_deleted,complain) 
   capability sys_admin,
   capability dac_read_search,
 
-  # S6 Overlay / Process management
-  /init ix,
-  /s6-init ix,
-  /bin/** ix,
-  /usr/bin/** ix,
-  /usr/lib/** ix,
+  # S6 Overlay — process supervision (PID 1)
+  signal (send) set=(kill,term,int,hup,cont),
+  /init rix,
+  /s6-init rix,
+  /bin/** rix,
+  /usr/bin/** rix,
   /run/{s6,s6-rc*,service}/** ixrw,
-  /package/** ix,
-  /command/** ix,
+  /run/{,**} rwk,
+  /package/** rix,
+  /command/** rix,
   /etc/s6/** ixrw,
   /etc/s6-overlay/** ixrw,
-  /etc/cont-init.d/** ix,
-  /etc/services.d/** ix,
-  /var/run/s6/** rwk,
+  /etc/cont-init.d/** rixw,
+  /etc/cont-finish.d/** rixw,
+  /etc/services.d/** rixw,
+  /dev/tty rw,
 
   # Application
-  /app/** ixr,
-  /usr/local/bin/** ix,
+  /app/** rixm,
+  /usr/local/bin/** rix,
   /usr/local/lib/** mr,
+  /usr/lib/** mr,
 
   # Bluetooth
   /dev/bus/usb/** rw,
@@ -58,5 +61,5 @@ profile sendspin_bt_bridge flags=(attach_disconnected,mediate_deleted,complain) 
   /sys/** r,
   /dev/null rw,
   /dev/urandom r,
-  /tmp/** rw,
+  /tmp/** rwk,
 }

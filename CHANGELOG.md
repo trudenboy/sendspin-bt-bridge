@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.23.6] - 2026-03-12
+
+### Fixed
+- **AppArmor enforce mode** — switched from complain to enforce; fixed `ix` → `rix` for shell script execution (kernel needs `read` for shebang parsing), added `signal (send)` rule for S6 process management, broadened `/run/` and `/tmp/` rules to match official HA addon profile
+- **`/s6-init` wrapper** — removed runtime `chmod +x /init` (already set at build time); avoids AppArmor write-deny on `/init`
+
 ## [2.23.1] - 2026-03-11
 
 ### Added
