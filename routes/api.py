@@ -348,8 +348,11 @@ def set_mute():
             # Resolve desired mute state
             desired = bool(mute_value) if mute_value is not None else not targets[0].status.get("muted", False)
             if _set_mute_via_ma(targets, desired):
-                # Do NOT update local status — bridge_daemon receives the
-                # mute echo from MA via sendspin protocol and updates status.
+                # Also apply to PulseAudio sink so audio actually mutes/unmutes
+                for client in targets:
+                    if client.bluetooth_sink_name:
+                        set_sink_mute(client.bluetooth_sink_name, desired)
+                    client._update_status({"muted": desired})
                 return jsonify({"success": True, "muted": desired, "via": "ma"})
             logger.debug("MA mute proxy failed, falling back to local pactl")
 
