@@ -2458,9 +2458,11 @@ function _showUpdateBadge(upd) {
         link.href = upd.url || '#';
         link.target = '_blank';
         link.rel = 'noopener';
-        link.title = 'Update available — click to view release';
+        link.title = 'Update available — click to apply';
         link.classList.remove('no-update');
         link.classList.add('has-update');
+        link.dataset.updateVersion = upd.version;
+        link.dataset.updateUrl = upd.url || '';
     } else {
         if (ver) ver.textContent = 'up to date';
         if (icon) icon.textContent = '⟳';
@@ -2470,16 +2472,29 @@ function _showUpdateBadge(upd) {
         link.title = 'Check for updates';
         link.classList.remove('has-update');
         link.classList.add('no-update');
+        delete link.dataset.updateVersion;
+        delete link.dataset.updateUrl;
     }
 }
 
 function _onUpdateBadgeClick(e) {
     var link = document.getElementById('update-link');
-    if (link && link.classList.contains('has-update')) return true; // follow href
+    if (!link) return true;
+
+    // Update available — show apply dialog
+    if (link.classList.contains('has-update')) {
+        e.preventDefault();
+        var ver = link.dataset.updateVersion || '?';
+        var url = link.dataset.updateUrl || '';
+        _showUpdateDialog(ver, url);
+        return false;
+    }
+
+    // No update — check for updates
     e.preventDefault();
     if (link) link.classList.add('checking');
-    var ver = document.getElementById('update-version');
-    if (ver) ver.textContent = 'checking…';
+    var verEl = document.getElementById('update-version');
+    if (verEl) verEl.textContent = 'checking…';
     fetch(API_BASE + '/api/update/check', {method: 'POST'})
         .then(function(r) { return r.json(); })
         .then(function(data) {
@@ -2496,6 +2511,56 @@ function _onUpdateBadgeClick(e) {
             showToast('Update check failed', 'error');
         });
     return false;
+}
+
+function _showUpdateDialog(ver, releaseUrl) {
+    // Fetch update info to determine runtime/method
+    fetch(API_BASE + '/api/update/info')
+        .then(function(r) { return r.json(); })
+        .then(function(info) {
+            var method = info.update_method || 'manual';
+            var runtime = info.runtime || 'unknown';
+
+            if (method === 'one_click') {
+                // LXC/systemd — confirm and apply
+                if (!confirm('Update to v' + ver + '?\n\nThe service will restart automatically.')) return;
+                var link = document.getElementById('update-link');
+                var verEl = document.getElementById('update-version');
+                var iconEl = document.getElementById('update-icon');
+                if (link) link.classList.add('checking');
+                if (verEl) verEl.textContent = 'updating…';
+                if (iconEl) iconEl.textContent = '⟳';
+                fetch(API_BASE + '/api/update/apply', {method: 'POST'})
+                    .then(function(r) { return r.json(); })
+                    .then(function(data) {
+                        if (data.success) {
+                            showToast('Update applied! Restarting…', 'info');
+                            setTimeout(function() { location.reload(); }, 5000);
+                        } else {
+                            showToast('Update failed: ' + (data.error || 'unknown error'), 'error');
+                            _showUpdateBadge({version: ver, url: releaseUrl});
+                        }
+                    })
+                    .catch(function() {
+                        // Service likely restarted mid-request
+                        showToast('Service restarting…', 'info');
+                        setTimeout(function() { location.reload(); }, 5000);
+                    });
+            } else if (method === 'ha_store') {
+                // HA addon — open HA addon page
+                var haUrl = '/hassio/addon/85b1ecde_sendspin_bt_bridge/info';
+                window.open(haUrl, '_blank');
+                showToast('Update via Home Assistant Add-ons page', 'info');
+            } else {
+                // Docker — show instructions + link to release
+                window.open(releaseUrl, '_blank');
+                showToast('Run: docker compose pull && docker compose up -d', 'info');
+            }
+        })
+        .catch(function() {
+            // Fallback — just open the release page
+            window.open(releaseUrl, '_blank');
+        });
 }
 
 // ---- Diagnostics ----
