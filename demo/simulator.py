@@ -32,40 +32,45 @@ async def run_simulator(clients: list) -> None:
     _track_index: dict[str, int] = {}  # player_name → current track index
 
     def _sync_ma_now_playing() -> None:
-        """Sync MA now-playing state from the 'playing' device to all syncgroups."""
+        """Sync MA now-playing state per syncgroup from its member devices."""
         import state as _st
 
         if not _st.is_ma_connected():
             return
 
-        # Find the first playing client (or first connected)
-        playing = next((c for c in clients if c.status.get("playing")), None)
-        if not playing:
-            # All idle → update to paused
-            for sg_id in DEMO_MA_NOW_PLAYING:
-                np = _st.get_ma_now_playing_for_group(sg_id) or {}
-                np["state"] = "paused"
-                np["elapsed_updated_at"] = time.time()
-                _st.set_ma_now_playing_for_group(sg_id, np)
-            return
+        # Build a map: group_id → list of clients in that group
+        groups: dict[str, list] = {}
+        for c in clients:
+            gid = c.status.get("group_id")
+            if gid:
+                groups.setdefault(gid, []).append(c)
 
-        # Update now-playing from the playing device's status
         for sg_id in DEMO_MA_NOW_PLAYING:
             np = _st.get_ma_now_playing_for_group(sg_id) or {}
-            np.update(
-                {
-                    "connected": True,
-                    "state": "playing",
-                    "track": playing.status.get("current_track", ""),
-                    "artist": playing.status.get("current_artist", ""),
-                    "album": "Demo Album",
-                    "elapsed": playing.status.get("track_progress_ms", 0),
-                    "elapsed_updated_at": time.time(),
-                    "duration": playing.status.get("track_duration_ms", 180_000),
-                    "queue_index": _track_index.get(playing.player_name, 0),
-                    "queue_total": len(DEMO_TRACKS),
-                }
-            )
+            members = groups.get(sg_id, [])
+            playing_member = next((c for c in members if c.status.get("playing")), None)
+
+            if playing_member:
+                prog_ms = playing_member.status.get("track_progress_ms", 0) or 0
+                dur_ms = playing_member.status.get("track_duration_ms", 180_000) or 180_000
+                np.update(
+                    {
+                        "connected": True,
+                        "state": "playing",
+                        "track": playing_member.status.get("current_track", ""),
+                        "artist": playing_member.status.get("current_artist", ""),
+                        "album": "Demo Album",
+                        "elapsed": prog_ms / 1000,
+                        "elapsed_updated_at": time.time(),
+                        "duration": dur_ms / 1000,
+                        "queue_index": _track_index.get(playing_member.player_name, 0),
+                        "queue_total": len(DEMO_TRACKS),
+                    }
+                )
+            else:
+                np["state"] = "paused"
+                np["elapsed_updated_at"] = time.time()
+
             _st.set_ma_now_playing_for_group(sg_id, np)
 
     async def _advance_tracks() -> None:
@@ -113,7 +118,7 @@ async def run_simulator(clients: list) -> None:
         target = random.choice(connected)
         is_playing = target.status.get("playing", False)
         if is_playing:
-            target._update_status({"playing": False})
+            target._update_status({"playing": False, "audio_streaming": False})
             logger.debug("[demo-sim] %s → idle", target.player_name)
         else:
             idx = _track_index.get(target.player_name, random.randint(0, len(DEMO_TRACKS) - 1))
@@ -122,6 +127,7 @@ async def run_simulator(clients: list) -> None:
             target._update_status(
                 {
                     "playing": True,
+                    "audio_streaming": True,
                     "current_track": title,
                     "current_artist": artist,
                     "track_duration_ms": dur,
@@ -144,6 +150,7 @@ async def run_simulator(clients: list) -> None:
                 "bluetooth_connected": False,
                 "server_connected": False,
                 "playing": False,
+                "audio_streaming": False,
                 "battery_level": None,
                 "reconnecting": True,
             }

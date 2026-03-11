@@ -104,11 +104,17 @@ def install() -> None:
         self._daemon_task = None
         self._stderr_task = None
 
+        # Set fake sink name so has_sink=True in the API
+        if mac:
+            self.bluetooth_sink_name = f"bluez_output.{mac.replace(':', '_')}.1"
+
+        is_playing = initial.get("playing", False)
         self._update_status(
             {
                 "server_connected": True,
                 "connected": True,
-                "playing": initial.get("playing", False),
+                "playing": is_playing,
+                "audio_streaming": is_playing,
                 "volume": initial.get("volume", 100),
                 "muted": initial.get("muted", False),
                 "audio_format": initial.get("audio_format"),
@@ -119,6 +125,8 @@ def install() -> None:
                 "battery_level": initial.get("battery_level"),
                 "bluetooth_connected": initial.get("bluetooth_connected", False),
                 "bluetooth_available": True,
+                "group_id": initial.get("group_id"),
+                "group_name": initial.get("group_name"),
             }
         )
         logger.info("[demo] Player '%s' started (no subprocess)", self.player_name)
@@ -131,11 +139,11 @@ def install() -> None:
         elif action == "set_mute":
             self._update_status({"muted": cmd.get("value", False)})
         elif action == "pause":
-            self._update_status({"playing": False})
+            self._update_status({"playing": False, "audio_streaming": False})
         elif action == "play":
-            self._update_status({"playing": True})
+            self._update_status({"playing": True, "audio_streaming": True})
         elif action == "stop":
-            self._update_status({"server_connected": False, "playing": False})
+            self._update_status({"server_connected": False, "playing": False, "audio_streaming": False})
 
     async def _demo_stop_sendspin(self: Any) -> None:
         """Update status without touching a real subprocess."""
@@ -229,6 +237,8 @@ def install() -> None:
         result = _original_load()
         if not result.get("BLUETOOTH_DEVICES"):
             result["BLUETOOTH_DEVICES"] = list(DEMO_DEVICES)
+        if not result.get("BRIDGE_NAME"):
+            result["BRIDGE_NAME"] = "DEMO"
         # Always inject MA credentials in demo mode
         if not result.get("MA_API_URL"):
             result["MA_API_URL"] = DEMO_MA_URL
@@ -301,7 +311,7 @@ def install() -> None:
                 {
                     "track": title,
                     "artist": artist,
-                    "duration": dur,
+                    "duration": dur / 1000,
                     "elapsed": 0,
                     "queue_index": idx,
                     "state": "playing",
@@ -314,7 +324,7 @@ def install() -> None:
                 {
                     "track": title,
                     "artist": artist,
-                    "duration": dur,
+                    "duration": dur / 1000,
                     "elapsed": 0,
                     "queue_index": idx,
                     "state": "playing",
@@ -325,7 +335,7 @@ def install() -> None:
         elif action == "repeat":
             np["repeat"] = value or "off"
         elif action == "seek":
-            np["elapsed"] = int(value or 0) * 1000
+            np["elapsed"] = int(value or 0)
 
         import time as _time
 
