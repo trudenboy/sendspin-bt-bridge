@@ -1,4 +1,4 @@
-# Sendspin Bluetooth Bridge
+# [Sendspin](https://www.sendspin-audio.com/) Bluetooth Bridge
 
 [![GitHub Release](https://img.shields.io/github/v/release/trudenboy/sendspin-bt-bridge?style=flat&logo=github)](https://github.com/trudenboy/sendspin-bt-bridge/releases/latest)
 [![Docker Pulls](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fghcr-badge.elias.eu.org%2Fapi%2Ftrudenboy%2Fsendspin-bt-bridge%2Fsendspin-bt-bridge&query=downloadCount&label=Docker%20Pulls&logo=docker&color=blue)](https://github.com/trudenboy/sendspin-bt-bridge/pkgs/container/sendspin-bt-bridge)
@@ -7,7 +7,7 @@
 
 [Читать на русском](README.ru.md) · [📖 Documentation](https://trudenboy.github.io/sendspin-bt-bridge/) · [📋 History](HISTORY.md)
 
-A Bluetooth bridge for [Music Assistant](https://www.music-assistant.io/) — connects your Bluetooth speakers to the MA Sendspin protocol. Runs as a Docker container, a Home Assistant addon, or a native LXC container on Proxmox VE / OpenWrt. Designed for headless systems.
+A Bluetooth bridge for [Music Assistant](https://www.music-assistant.io/) — connects your Bluetooth speakers to the MA [Sendspin](https://www.music-assistant.io/player-support/sendspin/) protocol. Runs as a Docker container, a Home Assistant addon, or a native LXC container on Proxmox VE / OpenWrt. Designed for headless systems.
 
 <img width="1400" alt="Sendspin Bluetooth Bridge infographic — features, architecture and deployment options" src="https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/docs-site/public/screenshots/sbb_infographic_en.png" />
 
@@ -40,7 +40,7 @@ A Bluetooth bridge for [Music Assistant](https://www.music-assistant.io/) — co
 ## Features
 
 ### 🔊 Audio & Playback
-- **Sendspin Protocol** — full support for Music Assistant's native streaming protocol
+- **[Sendspin Protocol](https://www.sendspin-audio.com/)** — full support for Music Assistant's native streaming protocol
 - **Multi-device** — bridge multiple Bluetooth speakers simultaneously, each as its own MA player
 - **PipeWire & PulseAudio** — auto-detects the host audio system; per-device `PULSE_SINK` isolation
 - **Audio format display** — codec, sample rate, bit depth per device (e.g. `flac 48000Hz/24-bit/2ch`)

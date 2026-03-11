@@ -1,4 +1,4 @@
-# Sendspin Bluetooth Bridge
+# [Sendspin](https://www.sendspin-audio.com/) Bluetooth Bridge
 
 [![GitHub Release](https://img.shields.io/github/v/release/trudenboy/sendspin-bt-bridge?style=flat&logo=github)](https://github.com/trudenboy/sendspin-bt-bridge/releases/latest)
 [![Docker Pulls](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fghcr-badge.elias.eu.org%2Fapi%2Ftrudenboy%2Fsendspin-bt-bridge%2Fsendspin-bt-bridge&query=downloadCount&label=Docker%20Pulls&logo=docker&color=blue)](https://github.com/trudenboy/sendspin-bt-bridge/pkgs/container/sendspin-bt-bridge)
@@ -7,7 +7,7 @@
 
 [Read in English](README.md) · [📖 Документация](https://trudenboy.github.io/sendspin-bt-bridge/) · [📋 История](HISTORY.ru.md)
 
-Bluetooth-мост для [Music Assistant](https://www.music-assistant.io/) — подключает Bluetooth-колонки к протоколу Sendspin в MA. Работает как Docker-контейнер, аддон для Home Assistant или нативный LXC-контейнер на Proxmox VE / OpenWrt. Предназначен для систем без монитора.
+Bluetooth-мост для [Music Assistant](https://www.music-assistant.io/) — подключает Bluetooth-колонки к протоколу [Sendspin](https://www.music-assistant.io/player-support/sendspin/) в MA. Работает как Docker-контейнер, аддон для Home Assistant или нативный LXC-контейнер на Proxmox VE / OpenWrt. Предназначен для систем без монитора.
 
 <img width="1400" alt="Инфографика Sendspin Bluetooth Bridge — возможности, архитектура и варианты развёртывания" src="https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/docs-site/public/screenshots/sbb_infographic_ru.png" />
 
@@ -39,7 +39,7 @@ Bluetooth-мост для [Music Assistant](https://www.music-assistant.io/) —
 ## Возможности
 
 ### 🔊 Аудио и воспроизведение
-- **Протокол Sendspin** — полная поддержка нативного протокола потоковой передачи Music Assistant
+- **[Протокол Sendspin](https://www.sendspin-audio.com/)** — полная поддержка нативного протокола потоковой передачи Music Assistant
 - **Несколько устройств** — одновременное подключение нескольких Bluetooth-колонок, каждая как отдельный плеер в MA
 - **PipeWire и PulseAudio** — автоопределение аудиосистемы хоста; изолированный `PULSE_SINK` на каждое устройство
 - **Отображение аудио формата** — кодек, частота дискретизации, битность для каждого устройства (например, `flac 48000Hz/24-bit/2ch`)
