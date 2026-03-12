@@ -694,6 +694,13 @@
             vertical-align: middle; margin-left: 4px;
         }
 
+        /* Disabled devices section */
+        .disabled-grid .device-card {
+            opacity: 0.55; filter: grayscale(0.4);
+            transition: opacity 0.2s;
+        }
+        .disabled-grid .device-card:hover { opacity: 0.85; filter: none; }
+
         .battery-badge {
             font-size: 11px; opacity: 0.85; white-space: nowrap;
             vertical-align: middle; margin-left: 4px;

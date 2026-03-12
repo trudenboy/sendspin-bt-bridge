@@ -102,7 +102,7 @@ def api_bt_pair():
 
 @bt_bp.route("/api/bt/management", methods=["POST"])
 def api_bt_management():
-    """Release or reclaim the BT adapter for a player."""
+    """Release or reclaim the BT adapter for a player (hot toggle, BT-level only)."""
     data = request.get_json() or {}
     player_name = data.get("player_name")
     enabled = data.get("enabled")
@@ -127,6 +127,36 @@ def api_bt_management():
         logger.debug("sync HA options after toggle failed: %s", exc)
     action = "reclaimed" if enabled else "released"
     return jsonify({"success": True, "message": f"BT adapter {action}", "enabled": enabled})
+
+
+@bt_bp.route("/api/device/enabled", methods=["POST"])
+def api_device_enabled():
+    """Toggle global device enabled state (requires bridge restart to take effect)."""
+    data = request.get_json() or {}
+    player_name = data.get("player_name")
+    enabled = data.get("enabled")
+    if not player_name or enabled is None:
+        return jsonify({"success": False, "error": "Missing player_name or enabled"}), 400
+    enabled = bool(enabled)
+    _persist_device_enabled(player_name, enabled)
+    # Sync to HA Supervisor
+    try:
+        with config_lock, open(CONFIG_FILE) as _f:
+            _cfg = json.load(_f)
+        from routes.api_config import _sync_ha_options
+
+        threading.Thread(target=_sync_ha_options, args=(_cfg,), daemon=True).start()
+    except Exception as exc:
+        logger.debug("sync HA options after device enabled toggle: %s", exc)
+    action = "enabled" if enabled else "disabled"
+    return jsonify(
+        {
+            "success": True,
+            "enabled": enabled,
+            "restart_required": True,
+            "message": f"Device {action}. Restart bridge to apply.",
+        }
+    )
 
 
 @bt_bp.route("/api/bt/adapters")

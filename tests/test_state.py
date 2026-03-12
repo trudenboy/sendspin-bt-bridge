@@ -65,3 +65,42 @@ def test_finish_scan_job():
 def test_get_nonexistent_job():
     job_id = str(uuid.uuid4())
     assert state.get_scan_job(job_id) is None
+
+
+# ---------------------------------------------------------------------------
+# Disabled devices
+# ---------------------------------------------------------------------------
+
+
+def test_set_disabled_devices_empty():
+    state.set_disabled_devices([])
+    assert state.get_disabled_devices() == []
+
+
+def test_set_disabled_devices():
+    devices = [
+        {"player_name": "Speaker 1", "mac": "AA:BB:CC:DD:EE:FF", "enabled": False},
+        {"player_name": "Speaker 2", "mac": "11:22:33:44:55:66", "enabled": False},
+    ]
+    state.set_disabled_devices(devices)
+    result = state.get_disabled_devices()
+    assert len(result) == 2
+    assert result[0]["player_name"] == "Speaker 1"
+    assert result[1]["mac"] == "11:22:33:44:55:66"
+
+
+def test_get_disabled_devices_returns_copy():
+    """Returned list is a copy — mutations don't affect internal state."""
+    state.set_disabled_devices([{"player_name": "X", "mac": "AA:BB:CC:DD:EE:FF"}])
+    copy = state.get_disabled_devices()
+    copy.clear()
+    assert len(state.get_disabled_devices()) == 1
+
+
+def test_set_disabled_devices_replaces():
+    """Calling set_disabled_devices replaces the previous list."""
+    state.set_disabled_devices([{"player_name": "A"}])
+    state.set_disabled_devices([{"player_name": "B"}])
+    result = state.get_disabled_devices()
+    assert len(result) == 1
+    assert result[0]["player_name"] == "B"

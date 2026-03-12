@@ -278,6 +278,7 @@ def api_status():
         result["error"] = "No clients"
         result["devices"] = []
         result["groups"] = []
+        result["disabled_devices"] = state.get_disabled_devices()
         return jsonify(result)
     if len(snapshot) == 1:
         result = get_client_status_for(snapshot[0])
@@ -286,6 +287,7 @@ def api_status():
         result = {**first, "devices": [get_client_status_for(c) for c in snapshot]}
     result["groups"] = _build_groups_summary(snapshot)
     result["ma_connected"] = state.is_ma_connected()
+    result["disabled_devices"] = state.get_disabled_devices()
     _upd = state.get_update_available()
     if _upd:
         result["update_available"] = _upd

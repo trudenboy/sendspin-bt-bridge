@@ -28,6 +28,7 @@ __all__ = [
     "finish_scan_job",
     "get_adapter_name",
     "get_bridge_system_info",
+    "get_disabled_devices",
     "get_ma_api_credentials",
     "get_ma_group_for_player",
     "get_ma_groups",
@@ -41,6 +42,7 @@ __all__ = [
     "load_adapter_name_cache",
     "notify_status_changed",
     "set_clients",
+    "set_disabled_devices",
     "set_ma_api_credentials",
     "set_ma_connected",
     "set_ma_groups",
@@ -174,6 +176,28 @@ def get_clients_snapshot() -> list[Any]:
     """Return a snapshot copy of the active clients list (thread-safe)."""
     with clients_lock:
         return list(clients)
+
+
+# ---------------------------------------------------------------------------
+# Disabled devices — metadata for devices with enabled=false in config.
+# Not active (no client/BT/PA), but shown in UI for re-enabling.
+# ---------------------------------------------------------------------------
+_disabled_devices: list[dict] = []
+_disabled_devices_lock = threading.Lock()
+
+
+def set_disabled_devices(devices: list[dict]) -> None:
+    """Store disabled device metadata (called from main() at startup)."""
+    with _disabled_devices_lock:
+        _disabled_devices.clear()
+        _disabled_devices.extend(devices)
+    logger.info("Disabled devices registered: %d", len(devices))
+
+
+def get_disabled_devices() -> list[dict]:
+    """Return a copy of the disabled devices list (thread-safe)."""
+    with _disabled_devices_lock:
+        return list(_disabled_devices)
 
 
 # ---------------------------------------------------------------------------

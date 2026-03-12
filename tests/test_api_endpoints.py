@@ -35,12 +35,21 @@ def client():
     # collection (before any tests run).  Remove the stub so we get the real
     # module with actual route definitions.
     _stashed = {}
-    for mod_name in ["routes.api", "routes.api_config", "routes.api_status", "routes.auth", "routes.views", "routes"]:
+    for mod_name in [
+        "routes.api",
+        "routes.api_bt",
+        "routes.api_config",
+        "routes.api_status",
+        "routes.auth",
+        "routes.views",
+        "routes",
+    ]:
         cached = sys.modules.get(mod_name)
         if cached is not None and getattr(cached, "__file__", None) is None:
             _stashed[mod_name] = sys.modules.pop(mod_name)
 
     from routes.api import api_bp
+    from routes.api_bt import bt_bp
     from routes.api_config import config_bp
     from routes.api_status import status_bp
 
@@ -48,6 +57,7 @@ def client():
     app.secret_key = "testing"
     app.config["TESTING"] = True
     app.register_blueprint(api_bp)
+    app.register_blueprint(bt_bp)
     app.register_blueprint(config_bp)
     app.register_blueprint(status_bp)
 
@@ -136,3 +146,66 @@ def test_error_response_no_leak(client):
     assert "Traceback" not in body
     assert 'File "/' not in body
     assert '.py"' not in body
+
+
+# ---------------------------------------------------------------------------
+# Disabled devices
+# ---------------------------------------------------------------------------
+
+
+def test_status_includes_disabled_devices(client):
+    """GET /api/status includes disabled_devices list."""
+    import state
+
+    state.set_disabled_devices(
+        [
+            {"player_name": "Off Speaker", "mac": "AA:BB:CC:DD:EE:FF", "enabled": False},
+        ]
+    )
+    resp = client.get("/api/status")
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert "disabled_devices" in data
+    assert len(data["disabled_devices"]) == 1
+    assert data["disabled_devices"][0]["player_name"] == "Off Speaker"
+    # cleanup
+    state.set_disabled_devices([])
+
+
+def test_device_enabled_toggle(client, tmp_path):
+    """POST /api/device/enabled returns success with restart_required."""
+    import services.bluetooth as _bt_mod
+
+    # Seed config with a device and patch _CONFIG_FILE for persist
+    cfg = {"BLUETOOTH_DEVICES": [{"mac": "AA:BB:CC:DD:EE:FF", "player_name": "Test", "enabled": True}]}
+    (tmp_path / "config.json").write_text(json.dumps(cfg))
+    _orig = _bt_mod._CONFIG_FILE
+    _bt_mod._CONFIG_FILE = tmp_path / "config.json"
+    try:
+        resp = client.post(
+            "/api/device/enabled",
+            data=json.dumps({"player_name": "Test", "enabled": False}),
+            content_type="application/json",
+        )
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["success"] is True
+        assert data["restart_required"] is True
+        assert data["enabled"] is False
+
+        # Verify config was updated
+        saved = json.loads((tmp_path / "config.json").read_text())
+        dev = saved["BLUETOOTH_DEVICES"][0]
+        assert dev["enabled"] is False
+    finally:
+        _bt_mod._CONFIG_FILE = _orig
+
+
+def test_device_enabled_missing_fields(client):
+    """POST /api/device/enabled without required fields returns 400."""
+    resp = client.post(
+        "/api/device/enabled",
+        data=json.dumps({}),
+        content_type="application/json",
+    )
+    assert resp.status_code == 400

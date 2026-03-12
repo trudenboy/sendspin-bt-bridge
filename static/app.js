@@ -107,6 +107,12 @@ function showToast(msg, type) {
 
 // ---- Auth helper ----
 
+function _esc(s) {
+    var d = document.createElement('div');
+    d.appendChild(document.createTextNode(s || ''));
+    return d.innerHTML;
+}
+
 function _handleUnauthorized() {
     var loginUrl = (API_BASE || '') + '/login?next=' + encodeURIComponent(window.location.pathname);
     window.location.href = loginUrl;
@@ -217,6 +223,9 @@ async function updateStatus() {
 
         _updateGroupPanel();
         updateHealthIndicator(sorted);
+
+        // Render disabled devices section
+        _renderDisabledDevices(status.disabled_devices || []);
 
     } catch (err) {
         console.error('Status update failed:', err);
@@ -349,6 +358,9 @@ function buildDeviceCard(i) {
             ' onclick="btPair(' + i + ')" title="Put the device into pairing mode first">&#128279; Re-pair</button>' +
           '<button type="button" class="btn-bt-action btn-bt-release" id="dbtn-release-' + i + '"' +
             ' onclick="btToggleManagement(' + i + ')">&#128274; Release</button>' +
+          '<button type="button" class="btn-bt-action" id="dbtn-disable-' + i + '"' +
+            ' onclick="toggleDeviceEnabled(lastDevices[' + i + '].player_name, false)"' +
+            ' title="Disable device globally (restart required)">&#10060; Disable</button>' +
           '<span class="bt-action-status" id="dbt-action-status-' + i + '"></span>' +
         '</div>';
     return card;
@@ -1259,6 +1271,64 @@ async function btToggleManagement(i) {
     }
     if (btn) btn.disabled = false;
     setTimeout(function() { if (status) status.textContent = ''; }, 4000);
+}
+
+// ---- Disabled devices rendering ----
+
+function _renderDisabledDevices(disabledDevices) {
+    var section = document.getElementById('disabled-devices-section');
+    var grid = document.getElementById('disabled-devices-grid');
+    if (!section || !grid) return;
+    if (!disabledDevices || disabledDevices.length === 0) {
+        section.style.display = 'none';
+        grid.innerHTML = '';
+        return;
+    }
+    section.style.display = '';
+    // Build/update cards
+    var existing = grid.querySelectorAll('.device-card');
+    if (existing.length !== disabledDevices.length) {
+        grid.innerHTML = '';
+        disabledDevices.forEach(function(dev, idx) {
+            var card = document.createElement('div');
+            card.className = 'device-card';
+            card.id = 'disabled-card-' + idx;
+            card.innerHTML =
+                '<div class="device-card-identity">' +
+                  '<strong>' + _esc(dev.player_name || 'Unknown') + '</strong>' +
+                  ' <span class="released-badge">DISABLED</span>' +
+                '</div>' +
+                '<div style="padding:6px 10px;color:var(--secondary-text-color);font-size:12px">' +
+                  (dev.mac ? 'MAC: ' + _esc(dev.mac) : 'No MAC') +
+                  (dev.adapter ? ' &middot; Adapter: ' + _esc(dev.adapter) : '') +
+                '</div>' +
+                '<div class="device-card-actions">' +
+                  '<button type="button" class="btn-bt-action btn-bt-reconnect"' +
+                    ' onclick="toggleDeviceEnabled(\'' + _esc(dev.player_name) + '\', true)">' +
+                    '&#9989; Enable</button>' +
+                  '<span class="bt-action-status" id="ddisabled-status-' + idx + '"></span>' +
+                '</div>';
+            grid.appendChild(card);
+        });
+    }
+}
+
+async function toggleDeviceEnabled(playerName, enabled) {
+    try {
+        var resp = await fetch(API_BASE + '/api/device/enabled', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({player_name: playerName, enabled: enabled})
+        });
+        var d = await resp.json();
+        if (d.success) {
+            showToast(d.message, 'success');
+        } else {
+            showToast(d.error || 'Failed', 'error');
+        }
+    } catch (e) {
+        showToast('Error: ' + e.message, 'error');
+    }
 }
 
 function toggleAutoRefresh() {

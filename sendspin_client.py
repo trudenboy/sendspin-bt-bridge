@@ -790,12 +790,27 @@ async def main():
 
     base_listen_port = 8928
     clients: list[SendspinClient] = []
+    disabled_list: list[dict] = []
     for i, device in enumerate(bt_devices):
         mac = device.get("mac", "")
         adapter = device.get("adapter", "")
         player_name = device.get("player_name") or _default_player_name
         if effective_bridge:
             player_name = f"{player_name} @ {effective_bridge}"
+
+        # Global enabled check — skip entirely when disabled
+        if not device.get("enabled", True):
+            disabled_list.append(
+                {
+                    "player_name": player_name,
+                    "mac": mac,
+                    "adapter": adapter,
+                    "enabled": False,
+                }
+            )
+            logger.info("  Player '%s': globally disabled — skipping", player_name)
+            continue
+
         listen_port = int(device.get("listen_port") or base_listen_port + i)
         listen_host = device.get("listen_host")
         static_delay_ms = device.get("static_delay_ms")
@@ -844,12 +859,6 @@ async def main():
                 logger.warning("BT adapter '%s' not available for %s", adapter or "default", player_name)
             client.bt_manager = bt_mgr
             client._update_status({"bluetooth_available": bt_available})
-            bt_enabled = device.get("enabled", True)
-            if not bt_enabled:
-                client.bt_management_enabled = False
-                client._update_status({"bt_management_enabled": False})
-                bt_mgr.management_enabled = False
-                logger.info("  Player '%s': BT management disabled at startup", player_name)
             # Pre-fill volume from saved LAST_VOLUMES so UI shows correct value before BT connects
             try:
                 with config_lock, open(CONFIG_FILE) as _f:
@@ -863,6 +872,10 @@ async def main():
         logger.info("  Player: '%s', BT: %s, Adapter: %s", player_name, mac or "none", adapter or "default")
 
     logger.info("Client instance(s) registered")
+
+    # Register disabled devices in state for UI display
+    if disabled_list:
+        _state.set_disabled_devices(disabled_list)
 
     # Sync enabled state to options.json so HA addon config page reflects current state
     try:
