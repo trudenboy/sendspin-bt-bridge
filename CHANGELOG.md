@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.25.0] - 2026-03-12
+
+### Security
+- **Session variable leak fixed** — `_ha_login_user` MFA session key is now cleared after every successful auth path and on GET /login, preventing cross-user session leakage
+- **MAC address validation** — all Bluetooth MAC inputs validated against strict regex before passing to `bluetoothctl`, preventing command injection
+- **Fallback patterns removed** — 3 API endpoints no longer silently fall back to the first device when `player_name` is missing; return proper 400 errors instead
+
+### Improved
+- **Login handler split** — monolithic 260-line `login()` refactored into 4 per-flow handlers (`_handle_ma_login`, `_handle_ha_via_ma_login`, `_handle_ha_direct_login`, `_handle_local_password_login`) for maintainability
+- **Client lookup helper** — shared `get_client_or_error()` and `validate_mac()` in `routes/_helpers.py` eliminate duplicated device lookup logic across BT endpoints
+- **Exception handling narrowed** — top-20 broad `except Exception` clauses replaced with specific types (`OSError`, `subprocess.SubprocessError`, `json.JSONDecodeError`, `ValueError`) across 6 modules; silent `debug` upgraded to `warning` for user-visible failures
+- **Atomic config writes** — `update_config()` uses `tempfile.NamedTemporaryFile` + rename for crash-safe persistence
+- **BT scan cooldown** — 30-second cooldown between scans prevents adapter churn (HTTP 429)
+- **Named constants** — 7 magic numbers in `bluetooth_manager.py` replaced with descriptive constants
+- **IP detection deduplicated** — single `get_local_ip()` in `config.py` replaces 3 inline implementations
+- **Module-level imports** — `ThreadPoolExecutor` and `run_update_checker` moved from inside functions to module scope
+- **Type annotations** — added generic type parameters to client lists in `state.py` and `sendspin_client.py`
+- **Config scoping fix** — `_needs_migration` initialized before try block in `load_config()` to prevent `UnboundLocalError`
+
+### Tests
+- Added `tests/test_client_lookup.py` — 17 tests for `get_client_or_error()` and `validate_mac()` (multi-device lookup, injection attempts)
+- Added `tests/test_mfa_session.py` — 9 tests for MFA session lifecycle (variable cleanup, cross-user leak prevention)
+- Added `tests/test_scan_cooldown.py` — 4 tests for BT scan cooldown (429 during cooldown, 409 concurrent, timestamp update)
+
 ## [2.24.4] - 2026-03-12
 
 ### Fixed

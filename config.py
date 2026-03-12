@@ -14,11 +14,12 @@ import logging
 import os
 import secrets as _secrets
 import socket as _socket
+import tempfile
 import threading
 import uuid as _uuid
 from pathlib import Path
 
-VERSION = "2.24.4"
+VERSION = "2.25.0"
 BUILD_DATE = "2026-03-12"
 
 __all__ = [
@@ -31,6 +32,7 @@ __all__ = [
     "config_lock",
     "ensure_bridge_name",
     "ensure_secret_key",
+    "get_local_ip",
     "hash_password",
     "load_config",
     "save_device_volume",
@@ -74,19 +76,29 @@ def update_config(mutator) -> None:
     ``mutator`` is called with the current config dict and should modify it
     in-place.  The result is written to a temp file and atomically renamed.
     """
-    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     with config_lock:
+        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
         existing: dict = {}
         if CONFIG_FILE.exists():
             with open(CONFIG_FILE) as f:
                 existing = json.load(f)
         mutator(existing)
-        tmp = str(CONFIG_FILE) + ".tmp"
-        with open(tmp, "w") as f:
-            json.dump(existing, f, indent=2)
-            f.flush()
-            os.fsync(f.fileno())
-        os.replace(tmp, str(CONFIG_FILE))
+        tmp_f = tempfile.NamedTemporaryFile(  # noqa: SIM115
+            dir=str(CONFIG_DIR), delete=False, mode="w", suffix=".tmp"
+        )
+        try:
+            json.dump(existing, tmp_f, indent=2)
+            tmp_f.flush()
+            os.fsync(tmp_f.fileno())
+            tmp_f.close()
+            os.replace(tmp_f.name, str(CONFIG_FILE))
+        except BaseException:
+            tmp_f.close()
+            try:
+                os.unlink(tmp_f.name)
+            except OSError:
+                pass
+            raise
 
 
 def _player_id_from_mac(mac: str) -> str:
@@ -104,8 +116,8 @@ def save_device_volume(mac: str | None, volume: int) -> None:
 
     try:
         update_config(_set_vol)
-    except Exception as e:
-        logger.debug("Could not save volume for %s: %s", mac, e)
+    except (OSError, json.JSONDecodeError, ValueError) as e:
+        logger.warning("Could not save volume for %s: %s", mac, e)
 
 
 def load_config() -> dict:
@@ -139,6 +151,8 @@ def load_config() -> dict:
         "TRUSTED_PROXIES",
     }
 
+    _needs_migration = False
+
     if CONFIG_FILE.exists():
         try:
             with config_lock, open(CONFIG_FILE) as f:
@@ -164,7 +178,7 @@ def load_config() -> dict:
                 _needs_migration = True
 
             logger.info("Loaded config from %s", CONFIG_FILE)
-        except Exception as e:
+        except (OSError, json.JSONDecodeError, ValueError) as e:
             logger.warning("Error loading config: %s, using defaults", e)
             _needs_migration = False
 
@@ -179,7 +193,7 @@ def load_config() -> dict:
 
                 update_config(_do_migrate)
                 logger.info("Migrated legacy config keys to current format")
-            except Exception as exc:
+            except (OSError, json.JSONDecodeError) as exc:
                 logger.warning("Could not persist config migration: %s", exc)
     else:
         logger.info("Config file not found at %s, using defaults", CONFIG_FILE)
@@ -206,9 +220,19 @@ def ensure_bridge_name(config: dict | None = None) -> str:
     try:
         update_config(lambda cfg: cfg.__setitem__("BRIDGE_NAME", hostname))
         logger.info("Auto-set BRIDGE_NAME to '%s' (hostname)", hostname)
-    except Exception as e:
+    except (OSError, json.JSONDecodeError) as e:
         logger.warning("Could not persist BRIDGE_NAME: %s", e)
     return hostname
+
+
+def get_local_ip() -> str:
+    """Return the primary local IP address via a UDP socket probe."""
+    try:
+        with _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM) as s:
+            s.connect(("8.8.8.8", 80))
+            return s.getsockname()[0]
+    except OSError:
+        return ""
 
 
 # ---------------------------------------------------------------------------
@@ -232,7 +256,7 @@ def check_password(plain: str, stored: str) -> bool:
         salt = bytes.fromhex(salt_hex)
         h = hashlib.pbkdf2_hmac("sha256", plain.encode(), salt, _PBKDF2_ITERS)
         return _hmac.compare_digest(h.hex(), h_hex)
-    except Exception:
+    except (ValueError, TypeError):
         return False
 
 
@@ -244,6 +268,6 @@ def ensure_secret_key(config: dict) -> str:
     key = _secrets.token_hex(32)
     try:
         update_config(lambda cfg: cfg.__setitem__("SECRET_KEY", key))
-    except Exception as e:
+    except (OSError, json.JSONDecodeError) as e:
         logger.warning("Could not persist SECRET_KEY: %s", e)
     return key

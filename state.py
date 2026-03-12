@@ -15,6 +15,7 @@ import socket
 import threading
 import time as _time
 from datetime import datetime, timedelta, timezone
+from typing import Any
 
 from config import CONFIG_FILE as _config_file
 
@@ -69,14 +70,9 @@ def get_bridge_system_info() -> dict:
     from config import BUILD_DATE, VERSION
 
     uptime = datetime.now(tz=timezone.utc) - bridge_start_time
-    ip = ""
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
-        ip = s.getsockname()[0]
-        s.close()
-    except Exception:
-        pass
+    from config import get_local_ip
+
+    ip = get_local_ip()
     return {
         "version": VERSION,
         "build_date": BUILD_DATE,
@@ -162,11 +158,11 @@ logger = logging.getLogger(__name__)
 
 # Active SendspinClient instances. Mutated in-place so all existing
 # references (imported via `from state import clients`) stay valid.
-clients: list = []
+clients: list[Any] = []
 clients_lock = threading.Lock()
 
 
-def set_clients(new_clients: list) -> None:
+def set_clients(new_clients: list[Any]) -> None:
     """Replace active client list in-place (keeps existing references valid)."""
     with clients_lock:
         clients.clear()
@@ -174,7 +170,7 @@ def set_clients(new_clients: list) -> None:
     logger.info("Client references updated: %s client(s)", len(clients))
 
 
-def get_clients_snapshot() -> list:
+def get_clients_snapshot() -> list[Any]:
     """Return a snapshot copy of the active clients list (thread-safe)."""
     with clients_lock:
         return list(clients)
@@ -205,7 +201,7 @@ def load_adapter_name_cache() -> None:
             for a in _cfg.get("BLUETOOTH_ADAPTERS", [])
             if a.get("mac") or a.get("id")
         }
-    except Exception as _exc:
+    except (OSError, json.JSONDecodeError, ValueError) as _exc:
         _adapter_name_cache = {}
         logger.debug("Could not load adapter name cache: %s", _exc)
     _adapter_cache_ready.set()

@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.25.0] - 2026-03-12
+
+### Security
+- Session variable leak fixed — MFA key cleared after every auth path
+- MAC address validation — strict regex before passing to bluetoothctl
+- Fallback patterns removed — proper 400 errors instead of silent first-device fallback
+
+### Improved
+- Login handler split into 4 per-flow functions for maintainability
+- Client lookup helper eliminates duplicated device lookup logic
+- Exception handling narrowed — specific types replace broad `except Exception`
+- Atomic config writes with tempfile + rename
+- BT scan cooldown (30s, HTTP 429)
+- Named constants replace magic numbers in bluetooth_manager
+- IP detection deduplicated via `get_local_ip()`
+- Type annotations and module-level imports cleanup
+
+### Tests
+- 30 new tests: client lookup, MAC validation, MFA session lifecycle, scan cooldown
+
 ## [2.24.4] - 2026-03-12
 
 ### Fixed

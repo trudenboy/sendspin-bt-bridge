@@ -16,6 +16,7 @@ import socket
 import sys
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field, fields
 from datetime import datetime, timezone
 
@@ -30,6 +31,7 @@ from config import (
     load_config,
     save_device_volume,
 )
+from services.update_checker import run_update_checker
 
 UTC = timezone.utc
 
@@ -210,12 +212,9 @@ class SendspinClient:
 
     def get_ip_address(self) -> str:
         """Get the primary IP address of this machine"""
-        try:
-            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-                s.connect(("8.8.8.8", 80))
-                return s.getsockname()[0]
-        except Exception:
-            return "unknown"
+        from config import get_local_ip
+
+        return get_local_ip() or "unknown"
 
     async def _status_monitor_loop(self):
         """Periodic status monitoring loop (BT state + daemon health)."""
@@ -774,7 +773,7 @@ async def main():
     _default_player_name = os.getenv("SENDSPIN_NAME") or f"Sendspin-{socket.gethostname()}"
 
     base_listen_port = 8928
-    clients = []
+    clients: list[SendspinClient] = []
     for i, device in enumerate(bt_devices):
         mac = device.get("mac", "")
         adapter = device.get("adapter", "")
@@ -875,8 +874,6 @@ async def main():
 
     # Size the thread pool to support concurrent BT reconnects across all devices.
     # Default asyncio executor has too few threads when many devices reconnect simultaneously.
-    from concurrent.futures import ThreadPoolExecutor
-
     _pool_size = min(64, max(8, len(clients) * 2 + 4))
     asyncio.get_running_loop().set_default_executor(ThreadPoolExecutor(max_workers=_pool_size))
     logger.debug("ThreadPoolExecutor: max_workers=%s", _pool_size)
@@ -972,8 +969,6 @@ async def main():
         tasks.append(asyncio.create_task(run_simulator(clients)))
 
     # Background update checker (all deployment types)
-    from services.update_checker import run_update_checker
-
     tasks.append(asyncio.create_task(run_update_checker(VERSION)))
 
     await asyncio.gather(*tasks)

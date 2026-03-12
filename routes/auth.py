@@ -25,10 +25,10 @@ import re
 import threading
 import time
 import urllib.request as _ur
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 
-from flask import Blueprint, redirect, render_template, request, session, url_for
+from flask import Blueprint, Response, redirect, render_template, request, session, url_for
 
 from config import check_password, load_config
 
@@ -166,7 +166,7 @@ def _ha_remote_flow_start(ha_url: str) -> dict | None:
     except HTTPError as exc:
         logger.warning("Remote HA login_flow HTTP %s", exc.code)
         return {"_ha_error": True}
-    except Exception as exc:
+    except (URLError, OSError, ValueError) as exc:
         logger.warning("Remote HA login_flow unreachable: %s", exc)
         return None
 
@@ -196,10 +196,10 @@ def _ha_remote_flow_step(ha_url: str, flow_id: str, data: dict) -> dict | None:
             result = json.loads(body)
             logger.warning("Remote HA flow step HTTP %s: %s", exc.code, result)
             return result
-        except Exception:
+        except (json.JSONDecodeError, ValueError):
             logger.warning("Remote HA flow step HTTP %s (unparseable body)", exc.code)
             return None
-    except Exception as exc:
+    except (URLError, OSError, ValueError) as exc:
         logger.warning("Remote HA login flow step error: %s", exc)
         return None
 
@@ -262,7 +262,7 @@ def _ha_flow_start() -> dict | None:
         # Do NOT fall back to Supervisor /auth — that would bypass MFA.
         logger.warning("HA login_flow HTTP %s — service error, MFA bypass prevented", exc.code)
         return {"_ha_error": True}
-    except Exception as exc:
+    except (URLError, OSError, ValueError) as exc:
         # Network-level failure (DNS, connection refused, timeout).
         # HA Core is genuinely unreachable — Supervisor fallback is safe.
         logger.warning("HA login flow unreachable: %s", exc)
@@ -293,10 +293,10 @@ def _ha_flow_step(flow_id: str, data: dict) -> dict | None:
             result = json.loads(body)
             logger.warning("HA flow step HTTP %s: %s", exc.code, result)
             return result
-        except Exception:
+        except (json.JSONDecodeError, ValueError):
             logger.warning("HA flow step HTTP %s (unparseable body)", exc.code)
             return None
-    except Exception as exc:
+    except (URLError, OSError, ValueError) as exc:
         logger.warning("HA login flow step error: %s", exc)
         return None
 
@@ -319,7 +319,7 @@ def _supervisor_auth(username: str, password: str) -> bool:
         return True
     except HTTPError:
         return False
-    except Exception as exc:
+    except (URLError, OSError) as exc:
         logger.warning("HA supervisor auth fallback error: %s", exc)
         return False
 
@@ -334,251 +334,276 @@ def _safe_next_url() -> str:
     return target
 
 
-@auth_bp.route("/login", methods=["GET", "POST"])
-def login():
-    error = None
-    ha_mode = _is_ha_addon()
-    client_ip = request.remote_addr or "unknown"
-    auth_methods = _detect_auth_methods()
+def _handle_ma_login(
+    client_ip: str,
+) -> tuple[str | None, Response | None]:
+    """Handle ``method == "ma"`` — Music Assistant credential validation."""
+    username = request.form.get("username", "").strip()
+    password = request.form.get("password", "")
+    ok, err_msg = _ma_validate_credentials(username, password)
+    if ok:
+        _clear_failures(client_ip)
+        session["authenticated"] = True
+        session.pop("_ha_login_user", None)
+        session["ha_user"] = username
+        return None, redirect(_safe_next_url())
+    _record_failure(client_ip)
+    return err_msg or "Invalid credentials", None
 
-    if request.method == "POST":
-        if _check_rate_limit(client_ip):
-            error = "Too many failed attempts — try again in 5 minutes"
-            return render_template(
+
+def _handle_ha_via_ma_login(
+    client_ip: str,
+    ha_mode: bool,
+    auth_methods: list[str],
+) -> tuple[str | None, Response | None]:
+    """Handle ``method == "ha_via_ma"`` — remote HA Core login_flow with 2FA."""
+    ha_url = _get_ha_core_url_from_ma()
+    if not ha_url:
+        return "Music Assistant is not connected", None
+
+    step = request.form.get("step", "credentials")
+
+    if step == "mfa":
+        flow_id = request.form.get("flow_id", "").strip()
+        mfa_module_id = request.form.get("mfa_module_id", "totp")
+        code = request.form.get("code", "").replace(" ", "").replace("-", "")
+        if not flow_id or not _FLOW_ID_RE.fullmatch(flow_id):
+            return None, render_template(
                 "login.html",
-                error=error,
+                error="Session expired — please sign in again",
                 ha_mode=ha_mode,
                 auth_methods=auth_methods,
-            ), 429
+            )
+        if not code:
+            return None, render_template(
+                "login.html",
+                error="Authentication code is required",
+                ha_mode=ha_mode,
+                auth_methods=auth_methods,
+                mfa_step=True,
+                flow_id=flow_id,
+                mfa_module_id=mfa_module_id,
+            )
+        result = _ha_remote_flow_step(ha_url, flow_id, {"code": code})
+        if result and result.get("type") == "create_entry":
+            _clear_failures(client_ip)
+            session["authenticated"] = True
+            session["ha_user"] = session.pop("_ha_login_user", "")
+            return None, redirect(_safe_next_url())
+        _record_failure(client_ip)
+        if result and result.get("type") == "abort":
+            return None, render_template(
+                "login.html",
+                error="Session expired — please sign in again",
+                ha_mode=ha_mode,
+                auth_methods=auth_methods,
+            )
+        return None, render_template(
+            "login.html",
+            error="Invalid authentication code",
+            ha_mode=ha_mode,
+            auth_methods=auth_methods,
+            mfa_step=True,
+            flow_id=flow_id,
+            mfa_module_id=mfa_module_id,
+        )
 
-        config = load_config()
-        method = request.form.get("method", "").strip()
+    # Step 1: submit username + password
+    username = request.form.get("username", "").strip()
+    password = request.form.get("password", "")
 
-        # ── MA authentication ───────────────────────────────────────────
-        if method == "ma":
-            username = request.form.get("username", "").strip()
-            password = request.form.get("password", "")
-            ok, err_msg = _ma_validate_credentials(username, password)
-            if ok:
-                _clear_failures(client_ip)
-                session["authenticated"] = True
-                session["ha_user"] = username
-                return redirect(_safe_next_url())
-            _record_failure(client_ip)
-            error = err_msg or "Invalid credentials"
+    flow = _ha_remote_flow_start(ha_url)
+    if flow is None or (flow.get("_ha_error") or not flow.get("flow_id")):
+        return "Home Assistant authentication service unavailable", None
 
-        # ── HA via MA (remote HA Core login_flow with 2FA) ──────────────
-        elif method == "ha_via_ma":
-            ha_url = _get_ha_core_url_from_ma()
-            if not ha_url:
-                error = "Music Assistant is not connected"
-            else:
-                step = request.form.get("step", "credentials")
+    flow_id = flow["flow_id"]
+    result = _ha_remote_flow_step(ha_url, flow_id, {"username": username, "password": password})
+    if result is None:
+        return "Authentication service unavailable", None
+    if result.get("type") == "create_entry":
+        _clear_failures(client_ip)
+        session["authenticated"] = True
+        session.pop("_ha_login_user", None)
+        session["ha_user"] = username
+        return None, redirect(_safe_next_url())
+    if result.get("type") == "form" and result.get("step_id") == "mfa":
+        session["_ha_login_user"] = username
+        placeholders = result.get("description_placeholders") or {}
+        mfa_module_id = placeholders.get("mfa_module_id", "totp")
+        return None, render_template(
+            "login.html",
+            ha_mode=ha_mode,
+            auth_methods=auth_methods,
+            mfa_step=True,
+            flow_id=flow_id,
+            mfa_module_id=mfa_module_id,
+            mfa_module_name=placeholders.get("mfa_module_name", "Authenticator app"),
+            mfa_method="ha_via_ma",
+        )
 
-                if step == "mfa":
-                    flow_id = request.form.get("flow_id", "").strip()
-                    mfa_module_id = request.form.get("mfa_module_id", "totp")
-                    code = request.form.get("code", "").replace(" ", "").replace("-", "")
-                    if not flow_id or not _FLOW_ID_RE.fullmatch(flow_id):
-                        error = "Session expired — please sign in again"
-                        return render_template(
-                            "login.html",
-                            error=error,
-                            ha_mode=ha_mode,
-                            auth_methods=auth_methods,
-                        )
-                    if not code:
-                        error = "Authentication code is required"
-                        return render_template(
-                            "login.html",
-                            error=error,
-                            ha_mode=ha_mode,
-                            auth_methods=auth_methods,
-                            mfa_step=True,
-                            flow_id=flow_id,
-                            mfa_module_id=mfa_module_id,
-                        )
-                    result = _ha_remote_flow_step(ha_url, flow_id, {"code": code})
-                    if result and result.get("type") == "create_entry":
-                        _clear_failures(client_ip)
-                        session["authenticated"] = True
-                        session["ha_user"] = session.get("_ha_login_user", "")
-                        return redirect(_safe_next_url())
-                    _record_failure(client_ip)
-                    if result and result.get("type") == "abort":
-                        error = "Session expired — please sign in again"
-                        return render_template(
-                            "login.html",
-                            error=error,
-                            ha_mode=ha_mode,
-                            auth_methods=auth_methods,
-                        )
-                    error = "Invalid authentication code"
-                    return render_template(
-                        "login.html",
-                        error=error,
-                        ha_mode=ha_mode,
-                        auth_methods=auth_methods,
-                        mfa_step=True,
-                        flow_id=flow_id,
-                        mfa_module_id=mfa_module_id,
-                    )
+    _record_failure(client_ip)
+    errors = result.get("errors", {})
+    error = "Invalid credentials" if errors.get("base") == "invalid_auth" else "Authentication failed"
+    return error, None
 
-                else:
-                    username = request.form.get("username", "").strip()
-                    password = request.form.get("password", "")
 
-                    flow = _ha_remote_flow_start(ha_url)
-                    if flow is None or (flow.get("_ha_error") or not flow.get("flow_id")):
-                        error = "Home Assistant authentication service unavailable"
-                    else:
-                        flow_id = flow["flow_id"]
-                        result = _ha_remote_flow_step(ha_url, flow_id, {"username": username, "password": password})
-                        if result is None:
-                            error = "Authentication service unavailable"
-                        elif result.get("type") == "create_entry":
-                            _clear_failures(client_ip)
-                            session["authenticated"] = True
-                            session["ha_user"] = username
-                            return redirect(_safe_next_url())
-                        elif result.get("type") == "form" and result.get("step_id") == "mfa":
-                            session["_ha_login_user"] = username
-                            placeholders = result.get("description_placeholders") or {}
-                            mfa_module_id = placeholders.get("mfa_module_id", "totp")
-                            return render_template(
-                                "login.html",
-                                ha_mode=ha_mode,
-                                auth_methods=auth_methods,
-                                mfa_step=True,
-                                flow_id=flow_id,
-                                mfa_module_id=mfa_module_id,
-                                mfa_module_name=placeholders.get("mfa_module_name", "Authenticator app"),
-                                mfa_method="ha_via_ma",
-                            )
-                        else:
-                            _record_failure(client_ip)
-                            errors = result.get("errors", {})
-                            error = (
-                                "Invalid credentials"
-                                if errors.get("base") == "invalid_auth"
-                                else "Authentication failed"
-                            )
+def _handle_ha_direct_login(
+    client_ip: str,
+    ha_mode: bool,
+    auth_methods: list[str],
+) -> tuple[str | None, Response | None]:
+    """Handle ``method == "ha"`` — HA addon authentication with 2FA support."""
+    step = request.form.get("step", "credentials")
 
-        # ── HA addon authentication (with 2FA support) ──────────────────
-        elif method == "ha" or (ha_mode and method not in ("ma", "password")):
-            step = request.form.get("step", "credentials")
+    if step == "mfa":
+        # Step 2: submit TOTP / MFA code
+        flow_id = request.form.get("flow_id", "").strip()
+        mfa_module_id = request.form.get("mfa_module_id", "totp")
+        code = request.form.get("code", "").replace(" ", "").replace("-", "")
+        if not flow_id or not _FLOW_ID_RE.fullmatch(flow_id):
+            return None, render_template(
+                "login.html",
+                error="Session expired — please sign in again",
+                ha_mode=ha_mode,
+                auth_methods=auth_methods,
+            )
+        if not code:
+            return None, render_template(
+                "login.html",
+                error="Authentication code is required",
+                ha_mode=ha_mode,
+                auth_methods=auth_methods,
+                mfa_step=True,
+                flow_id=flow_id,
+                mfa_module_id=mfa_module_id,
+            )
+        result = _ha_flow_step(flow_id, {"code": code})
+        if result and result.get("type") == "create_entry":
+            _clear_failures(client_ip)
+            session["authenticated"] = True
+            session["ha_user"] = session.pop("_ha_login_user", "")
+            return None, redirect(_safe_next_url())
+        _record_failure(client_ip)
+        if result and result.get("type") == "abort":
+            return None, render_template(
+                "login.html",
+                error="Session expired — please sign in again",
+                ha_mode=ha_mode,
+                auth_methods=auth_methods,
+            )
+        return None, render_template(
+            "login.html",
+            error="Invalid authentication code",
+            ha_mode=ha_mode,
+            auth_methods=auth_methods,
+            mfa_step=True,
+            flow_id=flow_id,
+            mfa_module_id=mfa_module_id,
+        )
 
-            if step == "mfa":
-                # ── Step 2: submit TOTP / MFA code ──────────────────────
-                flow_id = request.form.get("flow_id", "").strip()
-                mfa_module_id = request.form.get("mfa_module_id", "totp")
-                code = request.form.get("code", "").replace(" ", "").replace("-", "")
-                if not flow_id or not _FLOW_ID_RE.fullmatch(flow_id):
-                    error = "Session expired — please sign in again"
-                    return render_template(
-                        "login.html",
-                        error=error,
-                        ha_mode=ha_mode,
-                        auth_methods=auth_methods,
-                    )
-                if not code:
-                    error = "Authentication code is required"
-                    return render_template(
-                        "login.html",
-                        error=error,
-                        ha_mode=ha_mode,
-                        auth_methods=auth_methods,
-                        mfa_step=True,
-                        flow_id=flow_id,
-                        mfa_module_id=mfa_module_id,
-                    )
-                result = _ha_flow_step(flow_id, {"code": code})
-                if result and result.get("type") == "create_entry":
-                    _clear_failures(client_ip)
-                    session["authenticated"] = True
-                    session["ha_user"] = session.get("_ha_login_user", "")
-                    return redirect(_safe_next_url())
-                _record_failure(client_ip)
-                if result and result.get("type") == "abort":
-                    error = "Session expired — please sign in again"
-                    return render_template(
-                        "login.html",
-                        error=error,
-                        ha_mode=ha_mode,
-                        auth_methods=auth_methods,
-                    )
-                error = "Invalid authentication code"
-                return render_template(
-                    "login.html",
-                    error=error,
-                    ha_mode=ha_mode,
-                    auth_methods=auth_methods,
-                    mfa_step=True,
-                    flow_id=flow_id,
-                    mfa_module_id=mfa_module_id,
-                )
+    # Step 1: submit username + password
+    username = request.form.get("username", "").strip()
+    password = request.form.get("password", "")
 
-            else:
-                # ── Step 1: submit username + password ──────────────────
-                username = request.form.get("username", "").strip()
-                password = request.form.get("password", "")
+    flow = _ha_flow_start()
+    if flow is None:
+        logger.warning("HA login flow unavailable, falling back to Supervisor auth")
+        if _supervisor_auth(username, password):
+            _clear_failures(client_ip)
+            session["authenticated"] = True
+            session.pop("_ha_login_user", None)
+            session["ha_user"] = username
+            return None, redirect(_safe_next_url())
+        _record_failure(client_ip)
+        return "Invalid credentials", None
+    if flow.get("_ha_error") or not flow.get("flow_id"):
+        logger.error("HA login_flow service error (flow=%r)", flow)
+        return "Authentication service unavailable", None
 
-                flow = _ha_flow_start()
-                if flow is None:
-                    logger.warning("HA login flow unavailable, falling back to Supervisor auth")
-                    if _supervisor_auth(username, password):
-                        _clear_failures(client_ip)
-                        session["authenticated"] = True
-                        session["ha_user"] = username
-                        return redirect(_safe_next_url())
-                    _record_failure(client_ip)
-                    error = "Invalid credentials"
-                elif flow.get("_ha_error") or not flow.get("flow_id"):
-                    logger.error("HA login_flow service error (flow=%r)", flow)
-                    error = "Authentication service unavailable"
-                else:
-                    flow_id = flow["flow_id"]
-                    result = _ha_flow_step(flow_id, {"username": username, "password": password})
-                    if result is None:
-                        error = "Authentication service unavailable"
-                    elif result.get("type") == "create_entry":
-                        _clear_failures(client_ip)
-                        session["authenticated"] = True
-                        session["ha_user"] = username
-                        return redirect(_safe_next_url())
-                    elif result.get("type") == "form" and result.get("step_id") == "mfa":
-                        session["_ha_login_user"] = username
-                        placeholders = result.get("description_placeholders") or {}
-                        mfa_module_id = placeholders.get("mfa_module_id", "totp")
-                        return render_template(
-                            "login.html",
-                            ha_mode=ha_mode,
-                            auth_methods=auth_methods,
-                            mfa_step=True,
-                            flow_id=flow_id,
-                            mfa_module_id=mfa_module_id,
-                            mfa_module_name=placeholders.get("mfa_module_name", "Authenticator app"),
-                        )
-                    else:
-                        _record_failure(client_ip)
-                        errors = result.get("errors", {})
-                        error = (
-                            "Invalid credentials" if errors.get("base") == "invalid_auth" else "Authentication failed"
-                        )
+    flow_id = flow["flow_id"]
+    result = _ha_flow_step(flow_id, {"username": username, "password": password})
+    if result is None:
+        return "Authentication service unavailable", None
+    if result.get("type") == "create_entry":
+        _clear_failures(client_ip)
+        session["authenticated"] = True
+        session.pop("_ha_login_user", None)
+        session["ha_user"] = username
+        return None, redirect(_safe_next_url())
+    if result.get("type") == "form" and result.get("step_id") == "mfa":
+        session["_ha_login_user"] = username
+        placeholders = result.get("description_placeholders") or {}
+        mfa_module_id = placeholders.get("mfa_module_id", "totp")
+        return None, render_template(
+            "login.html",
+            ha_mode=ha_mode,
+            auth_methods=auth_methods,
+            mfa_step=True,
+            flow_id=flow_id,
+            mfa_module_id=mfa_module_id,
+            mfa_module_name=placeholders.get("mfa_module_name", "Authenticator app"),
+        )
 
-        # ── Local password authentication ───────────────────────────────
-        else:
-            password = request.form.get("password", "")
-            stored = config.get("AUTH_PASSWORD_HASH", "")
-            if not stored:
-                error = "No password configured — set one via the Configuration panel"
-            elif check_password(password, stored):
-                _clear_failures(client_ip)
-                session["authenticated"] = True
-                return redirect(_safe_next_url())
-            else:
-                _record_failure(client_ip)
-                error = "Invalid password"
+    _record_failure(client_ip)
+    errors = result.get("errors", {})
+    error = "Invalid credentials" if errors.get("base") == "invalid_auth" else "Authentication failed"
+    return error, None
+
+
+def _handle_local_password_login(
+    client_ip: str,
+) -> tuple[str | None, Response | None]:
+    """Handle local password authentication via ``check_password``."""
+    config = load_config()
+    password = request.form.get("password", "")
+    stored = config.get("AUTH_PASSWORD_HASH", "")
+    if not stored:
+        return "No password configured — set one via the Configuration panel", None
+    if check_password(password, stored):
+        _clear_failures(client_ip)
+        session["authenticated"] = True
+        session.pop("_ha_login_user", None)
+        return None, redirect(_safe_next_url())
+    _record_failure(client_ip)
+    return "Invalid password", None
+
+
+@auth_bp.route("/login", methods=["GET", "POST"])
+def login():
+    ha_mode = _is_ha_addon()
+    auth_methods = _detect_auth_methods()
+
+    # Clear stale MFA username from abandoned login flows
+    if request.method == "GET":
+        session.pop("_ha_login_user", None)
+
+    if request.method != "POST":
+        return render_template("login.html", error=None, ha_mode=ha_mode, auth_methods=auth_methods)
+
+    client_ip = request.remote_addr or "unknown"
+    if _check_rate_limit(client_ip):
+        return render_template(
+            "login.html",
+            error="Too many failed attempts — try again in 5 minutes",
+            ha_mode=ha_mode,
+            auth_methods=auth_methods,
+        ), 429
+
+    method = request.form.get("method", "").strip()
+    error: str | None = None
+    response = None
+
+    if method == "ma":
+        error, response = _handle_ma_login(client_ip)
+    elif method == "ha_via_ma":
+        error, response = _handle_ha_via_ma_login(client_ip, ha_mode, auth_methods)
+    elif method == "ha" or (ha_mode and method not in ("ma", "password")):
+        error, response = _handle_ha_direct_login(client_ip, ha_mode, auth_methods)
+    else:
+        error, response = _handle_local_password_login(client_ip)
+
+    if response is not None:
+        return response
 
     return render_template(
         "login.html",

@@ -16,10 +16,9 @@ import uuid
 from flask import Blueprint, jsonify, request
 
 from config import CONFIG_FILE, config_lock, load_config
+from routes._helpers import get_client_or_error, validate_mac
 from services import persist_device_enabled as _persist_device_enabled
 from services.bluetooth import _AUDIO_UUIDS, list_bt_adapters
-from state import clients as _clients
-from state import clients_lock as _clients_lock
 from state import create_scan_job, finish_scan_job, get_scan_job, is_scan_running
 
 logger = logging.getLogger(__name__)
@@ -50,14 +49,9 @@ def api_bt_reconnect():
     try:
         data = request.get_json() or {}
         player_name = data.get("player_name")
-        with _clients_lock:
-            snapshot = list(_clients)
-        client = next(
-            (c for c in snapshot if getattr(c, "player_name", None) == player_name),
-            None,
-        )
-        if client is None and snapshot:
-            client = snapshot[0]
+        client, err = get_client_or_error(player_name)
+        if err:
+            return err
         if not client or not client.bt_manager:
             return jsonify({"success": False, "error": "No BT manager for this player"}), 503
 
@@ -84,14 +78,9 @@ def api_bt_pair():
     try:
         data = request.get_json() or {}
         player_name = data.get("player_name")
-        with _clients_lock:
-            snapshot = list(_clients)
-        client = next(
-            (c for c in snapshot if getattr(c, "player_name", None) == player_name),
-            None,
-        )
-        if client is None and snapshot:
-            client = snapshot[0]
+        client, err = get_client_or_error(player_name)
+        if err:
+            return err
         if not client or not client.bt_manager:
             return jsonify({"success": False, "error": "No BT manager for this player"}), 503
 
@@ -119,11 +108,9 @@ def api_bt_management():
     enabled = data.get("enabled")
     if enabled is None:
         return jsonify({"success": False, "error": 'Missing "enabled" field'}), 400
-    with _clients_lock:
-        snapshot = list(_clients)
-    client = next((c for c in snapshot if getattr(c, "player_name", None) == player_name), None)
-    if not client and snapshot:
-        client = snapshot[0]
+    client, err = get_client_or_error(player_name)
+    if err:
+        return err
     if not client:
         return jsonify({"success": False, "error": "No client found"}), 503
     enabled = bool(enabled)
@@ -208,6 +195,8 @@ def api_bt_scan():
     """Start an async BT device scan; returns a job_id immediately."""
     if is_scan_running():
         return jsonify({"error": "A scan is already in progress"}), 409
+    if time.monotonic() - _last_scan_completed < _SCAN_COOLDOWN:
+        return jsonify({"error": "Scan cooldown active, try again later"}), 429
     job_id = str(uuid.uuid4())
     create_scan_job(job_id)
     t = threading.Thread(target=_run_bt_scan, args=(job_id,), daemon=True, name=f"bt-scan-{job_id[:8]}")
@@ -231,6 +220,9 @@ def api_bt_scan_result(job_id: str):
 # ---------------------------------------------------------------------------
 
 _MAX_SCAN_RESULTS = 50
+
+_last_scan_completed: float = 0.0
+_SCAN_COOLDOWN = 30.0  # seconds between scans
 
 
 def _run_bluetoothctl_scan(adapter_macs: "list[str]") -> str:
@@ -334,6 +326,8 @@ def _resolve_unnamed_devices(all_macs: "set[str]", names: "dict[str, str]") -> N
 
 def _enrich_audio_device(mac: str, names: "dict[str, str]") -> "dict | None":
     """Return device info dict if the device is audio-capable, else None."""
+    if not validate_mac(mac):
+        return {"mac": mac, "name": mac}
     try:
         r = subprocess.run(
             ["bluetoothctl", "info", mac],
@@ -391,6 +385,8 @@ def _run_bt_scan(job_id: str) -> None:
 
         devices.sort(key=lambda d: (d["name"] == d["mac"], d["name"]))
         finish_scan_job(job_id, {"devices": devices})
+        global _last_scan_completed
+        _last_scan_completed = time.monotonic()
     except Exception as e:
         logger.error("BT scan failed: %s", e)
         finish_scan_job(job_id, {"devices": [], "error": str(e)})

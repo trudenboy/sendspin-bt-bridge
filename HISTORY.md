@@ -2,7 +2,7 @@
 
 A history of the architectural and functional evolution of sendspin-bt-bridge — for readers familiar with Home Assistant, Music Assistant, and multiroom audio setups.
 
-**Period:** January 1 – March 12, 2026 · **Total commits:** ~835 · **Versions:** 1.0.0 → 2.24.4
+**Period:** January 1 – March 12, 2026 · **Total commits:** ~845 · **Versions:** 1.0.0 → 2.25.0
 
 ---
 
@@ -643,6 +643,18 @@ The LXC `upgrade.sh` was fixed to download all route sub-modules (`api_bt.py`, `
 **Auto-update** (v2.23.12) added `AUTO_UPDATE` option for LXC installations. Toggle in Configuration → Updates (off by default). When enabled, the hourly update checker automatically runs `upgrade.sh` upon detecting a new version — the service updates and restarts without user intervention. Only works on LXC/systemd (not Docker or HA addon).
 
 The addon config gained `tmpfs: true` (in-memory temp for better SD card longevity), `backup_exclude` (omits logs and cache from HA snapshots), `auth_api: true` (formal auth API access declaration), and `panel_admin: false`.
+
+---
+
+### Code review and hardening (v2.25.0)
+
+**Comprehensive expert code review** of the entire codebase (~17K lines, 30+ files) identified 3 critical security issues, 7 major improvements, and 7 minor cleanups. All recommendations were implemented in a single session using fleet-mode parallelism (17 tasks across 4 waves).
+
+**Security fixes** (v2.25.0): the MFA session variable `_ha_login_user` was leaked between users on the same browser — now cleared at all 7 auth success paths and on GET /login. MAC addresses from `bluetoothctl` scan output were passed back to subprocess calls without re-validation — added strict `_MAC_RE` regex. Three API endpoints silently fell back to the first device when `player_name` was missing in multi-device setups — replaced with proper 400 errors.
+
+**Architecture improvements**: the monolithic 260-line `login()` handler was split into 4 per-flow functions (`_handle_ma_login`, `_handle_ha_via_ma_login`, `_handle_ha_direct_login`, `_handle_local_password_login`). Duplicated client lookup logic across BT endpoints was extracted into shared `get_client_or_error()` and `validate_mac()` helpers in `routes/_helpers.py`. Config writes gained atomic tempfile+rename. 27 broad `except Exception` clauses were narrowed to specific types across 6 modules.
+
+**Test coverage expanded**: 30 new tests covering client lookup (multi-device, injection attempts), MFA session lifecycle (variable cleanup, cross-user leak), and BT scan cooldown (429/409 codes). Total test count grew from 150 to 180.
 
 ---
 

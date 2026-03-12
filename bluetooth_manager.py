@@ -36,6 +36,15 @@ logger = logging.getLogger(__name__)
 
 _bt_executor = ThreadPoolExecutor(max_workers=min(4, os.cpu_count() or 4), thread_name_prefix="bt-blocking")
 
+# Timing constants for BT operations
+_PAIRING_SCAN_DURATION = 12  # seconds to scan before pairing
+_PAIRING_WAIT_DURATION = 10  # seconds to wait for pairing to complete
+_A2DP_PROFILE_DELAY = 3.0  # seconds to wait for A2DP profile after BT connect
+_SINK_RETRY_DELAY = 3.0  # seconds between sink discovery retries
+_SINK_RETRY_COUNT = 3  # max retries for sink discovery
+_MAX_RECONNECT_DELAY_S = 300.0  # max backoff for reconnect attempts (5 min)
+_CONNECT_CHECK_RETRIES = 5  # status checks after connect before giving up
+
 
 def _force_sbc_codec(pa_mac: str) -> None:
     """Attempt to force SBC codec on the BlueZ card for this device.
@@ -68,7 +77,7 @@ def _force_sbc_codec(pa_mac: str) -> None:
                 else:
                     logger.debug("SBC force failed for %s: %s", card_name, result.stderr.strip())
                 return
-    except Exception as e:
+    except (OSError, subprocess.SubprocessError) as e:
         logger.debug("SBC codec force skipped: %s", e)
 
 
@@ -85,7 +94,7 @@ def _dbus_get_device_property(device_path: str, property_name: str, adapter_hci:
         device = bus.get_object("org.bluez", device_path)
         props = _dbus.Interface(device, "org.freedesktop.DBus.Properties")
         return props.Get("org.bluez.Device1", property_name)
-    except Exception:
+    except (ImportError, OSError, ValueError):
         return None
 
 
@@ -98,7 +107,7 @@ def _dbus_get_battery_level(device_path: str) -> int | None:
         device = bus.get_object("org.bluez", device_path)
         props = _dbus.Interface(device, "org.freedesktop.DBus.Properties")
         return int(props.Get("org.bluez.Battery1", "Percentage"))
-    except Exception:
+    except (ImportError, OSError, ValueError):
         return None
 
 
@@ -115,7 +124,7 @@ def _dbus_call_device_method(device_path: str, method_name: str) -> bool:
         iface = _dbus.Interface(device, "org.bluez.Device1")
         getattr(iface, method_name)()
         return True
-    except Exception as e:
+    except (ImportError, OSError, ValueError) as e:
         logger.debug("D-Bus %s failed: %s", method_name, e)
         return False
 
@@ -198,7 +207,7 @@ class BluetoothManager:
             )
             m = re.search(r"Controller\s+([0-9A-Fa-f:]{17})", out)
             return m.group(1) if m else ""
-        except Exception:
+        except (OSError, subprocess.SubprocessError):
             return ""
 
     def _resolve_adapter_hci_name(self) -> str:
@@ -265,7 +274,7 @@ class BluetoothManager:
             if idx < len(macs):
                 logger.info("Resolved adapter %s → %s", adapter, macs[idx])
                 return macs[idx]
-        except Exception as e:
+        except (OSError, subprocess.SubprocessError) as e:
             logger.debug("Adapter MAC resolution failed: %s", e)
         return adapter  # Fall back to hciN name
 
@@ -289,7 +298,7 @@ class BluetoothManager:
         except subprocess.TimeoutExpired:
             logger.warning("Bluetoothctl timed out after 10s for commands: %s", commands)
             return False, "timeout"
-        except Exception as e:
+        except OSError as e:
             logger.error("Bluetoothctl error: %s", e)
             return False, str(e)
 
@@ -306,7 +315,7 @@ class BluetoothManager:
                 output_lower = result.stdout.lower()
                 return "controller" in output_lower and "no default controller" not in output_lower
             return False
-        except Exception as e:
+        except (OSError, subprocess.SubprocessError) as e:
             logger.error("Bluetooth not available: %s", e)
             return False
 
@@ -337,8 +346,8 @@ class BluetoothManager:
 
             self.connected = is_connected
             return self.connected
-        except Exception as e:
-            logger.debug("Error checking Bluetooth connection: %s", e)
+        except (OSError, subprocess.SubprocessError) as e:
+            logger.warning("Error checking Bluetooth connection: %s", e)
             self.connected = False
             return False
 
@@ -380,12 +389,12 @@ class BluetoothManager:
             proc.stdin.write("\n".join(initial_cmds) + "\n")
             proc.stdin.flush()
             # Wait for scan to discover device
-            time.sleep(12)
+            time.sleep(_PAIRING_SCAN_DURATION)
             # Send pair/trust commands
             proc.stdin.write("\n".join(pair_cmds) + "\n")
             proc.stdin.flush()
             # Wait for pairing to complete
-            time.sleep(10)
+            time.sleep(_PAIRING_WAIT_DURATION)
 
             out, _ = proc.communicate(timeout=5)
             logger.info("Pair output (last 600 chars): %s", out[-600:])
@@ -395,7 +404,7 @@ class BluetoothManager:
             else:
                 logger.warning("Pairing may have failed. Output: %s", out[-200:])
             return ok
-        except Exception as e:
+        except (OSError, subprocess.SubprocessError) as e:
             logger.error("Pair error: %s", e)
             return False
         finally:
@@ -416,7 +425,7 @@ class BluetoothManager:
         try:
             # Wait for PipeWire/PulseAudio to register the device.
             # A2DP profile takes a few seconds to appear after BT connects.
-            time.sleep(3)
+            time.sleep(_A2DP_PROFILE_DELAY)
 
             pa_mac = self.mac_address.replace(":", "_")
 
@@ -435,8 +444,8 @@ class BluetoothManager:
 
             success = False
             configured_sink = None
-            # Retry up to 3 times — A2DP sink may take a few extra seconds to appear
-            for attempt in range(3):
+            # Retry up to _SINK_RETRY_COUNT times — A2DP sink may take a few extra seconds to appear
+            for attempt in range(_SINK_RETRY_COUNT):
                 for sink_name in sink_names:
                     if sink_name in known_names or get_sink_volume(sink_name) is not None:
                         logger.info("✓ Found audio sink: %s", sink_name)
@@ -447,9 +456,11 @@ class BluetoothManager:
                         logger.debug("Sink %s not found, trying next...", sink_name)
                 if success:
                     break
-                if attempt < 2:
-                    logger.info("Sink not yet available, retrying in 3s... (attempt %s/3)", attempt + 1)
-                    time.sleep(3)
+                if attempt < _SINK_RETRY_COUNT - 1:
+                    logger.info(
+                        "Sink not yet available, retrying in 3s... (attempt %s/%s)", attempt + 1, _SINK_RETRY_COUNT
+                    )
+                    time.sleep(_SINK_RETRY_DELAY)
                     sinks = list_sinks()
                     known_names = {s["name"] for s in sinks}
 
@@ -473,8 +484,8 @@ class BluetoothManager:
                             if set_sink_volume(configured_sink, last_volume):
                                 logger.info("✓ Restored volume to %s%% for %s", last_volume, self.mac_address)
                                 restored_volume = last_volume
-                except Exception as e:
-                    logger.debug("Could not restore volume: %s", e)
+                except (OSError, json.JSONDecodeError, ValueError) as e:
+                    logger.warning("Could not restore volume: %s", e)
 
                 if restored_volume is None:
                     logger.info("No saved volume to restore, will use current volume")
@@ -493,7 +504,7 @@ class BluetoothManager:
 
             return success
 
-        except Exception as e:
+        except (OSError, subprocess.SubprocessError, json.JSONDecodeError) as e:
             logger.error("Error configuring Bluetooth audio: %s", e)
             return False
 
@@ -535,7 +546,7 @@ class BluetoothManager:
         _success, _output = self._run_bluetoothctl([f"connect {self.mac_address}"])
 
         # Wait for connection to establish
-        for _i in range(5):
+        for _i in range(_CONNECT_CHECK_RETRIES):
             time.sleep(1)
             if self.is_device_connected():
                 logger.info("Successfully connected to Bluetooth speaker")
@@ -564,7 +575,7 @@ class BluetoothManager:
         capped at 5 minutes. Reduces BT radio activity (and audio disruption
         on other devices sharing the same adapter) as failure count grows.
         """
-        return min(self.check_interval * (2 ** max(0, attempt - 3)), 300.0)
+        return min(self.check_interval * (2 ** max(0, attempt - 3)), _MAX_RECONNECT_DELAY_S)
 
     def _record_reconnect(self) -> None:
         """Record a BT reconnect event for churn detection."""
