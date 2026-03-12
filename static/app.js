@@ -293,7 +293,6 @@ function buildDeviceCard(i) {
           '</div>' +
           // Playback column (with inline track)
           '<div class="playback-col">' +
-            '<div class="status-label">Playback</div>' +
             '<div class="status-value" id="dma-secondary-' + i + '">' +
               '<span class="status-indicator" id="dplay-ind-' + i + '"></span>' +
               '<span id="dplay-' + i + '">-</span>' +
@@ -319,7 +318,6 @@ function buildDeviceCard(i) {
           '</div>' +
           // Volume column
           '<div class="volume-col">' +
-            '<div class="status-label">Volume</div>' +
             '<div class="volume-row">' +
               '<input type="range" min="0" max="100" value="100" ' +
                 'class="volume-slider" id="vslider-' + i + '" ' +
@@ -334,7 +332,6 @@ function buildDeviceCard(i) {
           '</div>' +
           // Sync column
           '<div>' +
-            '<div class="status-label">Sync</div>' +
             '<div class="status-value" id="dsync-' + i + '">&#8212;</div>' +
             '<div class="ts" id="dsync-detail-' + i + '"></div>' +
             '<div class="ts sync-hover" id="ddelay-' + i + '"></div>' +
