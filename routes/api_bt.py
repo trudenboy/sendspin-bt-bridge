@@ -232,9 +232,8 @@ def api_bt_remove():
     """Remove (unpair) a device from the BlueZ stack."""
     data = request.get_json(silent=True) or {}
     mac = (data.get("mac") or "").strip().upper()
-    err = validate_mac(mac)
-    if err:
-        return err
+    if not validate_mac(mac):
+        return jsonify({"error": "Invalid MAC address"}), 400
     _bt_remove_device(mac)
     return jsonify({"ok": True, "mac": mac})
 
