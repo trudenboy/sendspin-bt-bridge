@@ -2491,7 +2491,7 @@ function _openBugReport(e) {
     overlay.className = 'bugreport-overlay';
     var modal = document.createElement('div');
     modal.className = 'bugreport-modal';
-    modal.innerHTML = '<div class="bugreport-title">🐛 Submit Bug Report</div>';
+    modal.innerHTML = '<div class="bugreport-title">⚠ Submit Bug Report</div>';
 
     // Title field
     var titleField = document.createElement('div');
@@ -2566,13 +2566,13 @@ function _openBugReport(e) {
         .then(function(data) {
             reportMarkdown = data.markdown || '';
             previewBox.textContent = reportMarkdown || 'No data available';
-            submitBtn.innerHTML = '🐛 Submit to GitHub';
+            submitBtn.innerHTML = '⚠ Submit to GitHub';
             submitBtn.disabled = false;
             copyBtn.style.display = '';
 
             copyBtn.onclick = function() {
                 var fullBody = _buildBugReportBody(titleInput.value, descInput.value, reportMarkdown);
-                navigator.clipboard.writeText(fullBody).then(function() {
+                _copyToClipboard(fullBody).then(function() {
                     showToast('Report copied to clipboard', 'info');
                 }).catch(function() {
                     showToast('Could not copy to clipboard', 'error');
@@ -2585,7 +2585,7 @@ function _openBugReport(e) {
                 var body = _buildBugReportBody(title, desc, reportMarkdown);
                 var issueUrl = 'https://github.com/trudenboy/sendspin-bt-bridge/issues/new?title=' + encodeURIComponent(title);
 
-                navigator.clipboard.writeText(body).then(function() {
+                _copyToClipboard(body).then(function() {
                     showToast('Report copied to clipboard — paste it into the issue body on GitHub', 'info');
                     window.open(issueUrl, '_blank');
                 }).catch(function() {
@@ -2602,14 +2602,14 @@ function _openBugReport(e) {
         })
         .catch(function() {
             previewBox.textContent = 'Failed to load diagnostics';
-            submitBtn.innerHTML = '🐛 Submit to GitHub';
+            submitBtn.innerHTML = '⚠ Submit to GitHub';
             submitBtn.disabled = false;
             submitBtn.onclick = function() {
                 var title = titleInput.value.trim() || 'Bug report';
                 var desc = descInput.value.trim();
                 var body = '## Description\n\n' + (desc || '_No description provided_') + '\n\n_Diagnostics could not be loaded._';
                 var issueUrl = 'https://github.com/trudenboy/sendspin-bt-bridge/issues/new?title=' + encodeURIComponent(title);
-                navigator.clipboard.writeText(body).then(function() {
+                _copyToClipboard(body).then(function() {
                     showToast('Report copied — paste into the issue body on GitHub', 'info');
                     window.open(issueUrl, '_blank');
                 }).catch(function() {
@@ -2620,6 +2620,24 @@ function _openBugReport(e) {
         });
 
     return false;
+}
+
+function _copyToClipboard(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        return navigator.clipboard.writeText(text);
+    }
+    // Fallback for non-HTTPS contexts
+    return new Promise(function(resolve, reject) {
+        var ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.cssText = 'position:fixed;left:-9999px;top:-9999px';
+        document.body.appendChild(ta);
+        ta.select();
+        try {
+            document.execCommand('copy') ? resolve() : reject();
+        } catch (e) { reject(e); }
+        finally { document.body.removeChild(ta); }
+    });
 }
 
 function _buildBugReportBody(title, description, diagnostics) {
