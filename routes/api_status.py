@@ -2,21 +2,24 @@
 Status and diagnostics API Blueprint for sendspin-bt-bridge.
 
 Routes for device status, groups, SSE stream, diagnostics, health,
-and preflight checks.
+bug reports, and preflight checks.
 """
 
 import json
 import logging
 import os
+import platform as _platform
+import re
 import subprocess
+import sys
 import threading
 import time
 from datetime import datetime, timedelta, timezone
 
-from flask import Blueprint, Response, jsonify
+from flask import Blueprint, Response, jsonify, request
 
 import state
-from config import BUILD_DATE, VERSION
+from config import BUILD_DATE, VERSION, load_config
 from services.pulse import get_server_name, list_sinks
 from state import clients as _clients
 from state import (
@@ -560,6 +563,270 @@ def api_diagnostics():
         return jsonify({"error": "Internal error"}), 500
 
 
+# ---------------------------------------------------------------------------
+# /api/logs — recent log lines from in-memory ring buffer
+# ---------------------------------------------------------------------------
+
+
+@status_bp.route("/api/logs")
+def api_logs():
+    """Return the last N log lines from the in-memory ring buffer."""
+    from sendspin_client import log_ring_buffer
+
+    if log_ring_buffer is None:
+        return jsonify({"lines": [], "note": "Log buffer not initialized"})
+
+    try:
+        n = min(int(request.args.get("lines", 100)), 200)
+    except (ValueError, TypeError):
+        n = 100
+
+    return jsonify({"lines": log_ring_buffer.get_lines(n)})
+
+
+# ---------------------------------------------------------------------------
+# /api/bugreport — assembled bug report with masked sensitive data
+# ---------------------------------------------------------------------------
+
+_MAC_RE = re.compile(
+    r"([0-9A-Fa-f]{2}):([0-9A-Fa-f]{2}):([0-9A-Fa-f]{2}):([0-9A-Fa-f]{2}):([0-9A-Fa-f]{2}):([0-9A-Fa-f]{2})"
+)
+_IPV4_RE = re.compile(r"\b(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\b")
+
+
+def _mask_mac(m: re.Match) -> str:
+    """AA:BB:**:**:**:FF"""
+    g = m.groups()
+    return f"{g[0]}:{g[1]}:**:**:**:{g[5]}"
+
+
+def _mask_ip(m: re.Match) -> str:
+    """192.168.*.*"""
+    return f"{m.group(1)}.{m.group(2)}.*.*"
+
+
+def _mask_text(text: str) -> str:
+    """Mask MAC and IPv4 addresses in arbitrary text."""
+    text = _MAC_RE.sub(_mask_mac, text)
+    return _IPV4_RE.sub(_mask_ip, text)
+
+
+def _mask_obj(obj: object) -> object:
+    """Recursively mask MAC/IP in dicts, lists, and strings."""
+    if isinstance(obj, str):
+        return _mask_text(obj)
+    if isinstance(obj, dict):
+        return {k: _mask_obj(v) for k, v in obj.items()}
+    if isinstance(obj, list | tuple):
+        return [_mask_obj(item) for item in obj]
+    return obj
+
+
+def _collect_environment() -> dict:
+    """Gather system environment info for bug reports."""
+    env: dict = {
+        "python": sys.version,
+        "platform": _platform.platform(),
+        "arch": _platform.machine(),
+        "kernel": _platform.release(),
+    }
+
+    # BlueZ version
+    try:
+        r = subprocess.run(["bluetoothctl", "--version"], capture_output=True, text=True, timeout=3)
+        env["bluez"] = r.stdout.strip()
+    except Exception:
+        env["bluez"] = "unknown"
+
+    # PulseAudio / PipeWire version
+    for cmd in [["pulseaudio", "--version"], ["pipewire", "--version"]]:
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=3)
+            if r.returncode == 0:
+                env["audio_server"] = r.stdout.strip()
+                break
+        except FileNotFoundError:
+            continue
+    else:
+        try:
+            r = subprocess.run(["pactl", "info"], capture_output=True, text=True, timeout=3)
+            for line in r.stdout.splitlines():
+                if "Server Name" in line:
+                    env["audio_server"] = line.split(":", 1)[1].strip()
+                    break
+        except Exception:
+            env["audio_server"] = "unknown"
+
+    # Process memory (RSS)
+    try:
+        import resource
+
+        rss_kb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        # macOS reports bytes, Linux reports KB
+        if sys.platform == "darwin":
+            rss_kb //= 1024
+        env["process_rss_mb"] = round(rss_kb / 1024, 1)
+    except Exception:
+        pass
+
+    return env
+
+
+def _collect_subprocess_info() -> list[dict]:
+    """Gather per-device subprocess info."""
+    info = []
+    with _clients_lock:
+        snapshot = list(_clients)
+    for client in snapshot:
+        proc = getattr(client, "_daemon_proc", None)
+        entry: dict = {
+            "name": getattr(client, "player_name", "?"),
+            "pid": proc.pid if proc else None,
+            "alive": proc is not None and proc.returncode is None if proc else False,
+            "running": getattr(client, "running", False),
+            "restart_delay": getattr(client, "_restart_delay", 1.0),
+            "zombie_restarts": getattr(client, "_zombie_restart_count", 0),
+        }
+        # Reconnect info from status
+        status = getattr(client, "status", None)
+        if status:
+            entry["reconnecting"] = status.get("reconnecting", False)
+            entry["reconnect_attempt"] = status.get("reconnect_attempt", 0)
+            entry["last_error"] = status.get("last_error")
+            entry["last_error_at"] = status.get("last_error_at")
+        info.append(entry)
+    return info
+
+
+def _sanitized_config() -> dict:
+    """Return config with secrets redacted."""
+    try:
+        cfg = load_config()
+    except Exception:
+        return {"error": "could not load config"}
+
+    redacted_keys = {
+        "AUTH_PASSWORD_HASH",
+        "SECRET_KEY",
+        "MA_API_TOKEN",
+        "LAST_VOLUMES",
+    }
+    result: dict = {}
+    for k, v in cfg.items():
+        if k in redacted_keys:
+            result[k] = "***"
+        elif k == "MA_API_URL" and v:
+            result[k] = _mask_text(str(v))
+        elif k == "BLUETOOTH_DEVICES" and isinstance(v, list):
+            masked_devs: list = [
+                {dk: (_mask_text(str(dv)) if dk == "mac" else dv) for dk, dv in d.items()} if isinstance(d, dict) else d
+                for d in v
+            ]
+            result[k] = masked_devs
+        else:
+            result[k] = v
+    return result
+
+
+@status_bp.route("/api/bugreport")
+def api_bugreport():
+    """Assemble a full bug report with masked MAC/IP addresses."""
+    from sendspin_client import log_ring_buffer
+
+    try:
+        # Collect all diagnostic data
+        diag_resp = api_diagnostics()
+        diag = diag_resp.get_json() if hasattr(diag_resp, "get_json") else {}
+
+        env = _collect_environment()
+        subprocs = _collect_subprocess_info()
+        config_info = _sanitized_config()
+
+        log_lines = []
+        if log_ring_buffer:
+            log_lines = log_ring_buffer.get_lines(100)
+
+        # Detect runtime
+        runtime = "unknown"
+        if os.path.exists("/data/options.json"):
+            runtime = "ha_addon"
+        elif os.path.exists("/.dockerenv"):
+            runtime = "docker"
+        elif os.path.exists("/etc/systemd/system/sendspin-client.service"):
+            runtime = "systemd"
+
+        # Build structured report
+        report = {
+            "version": VERSION,
+            "build_date": BUILD_DATE,
+            "runtime": runtime,
+            "uptime": str(datetime.now(tz=UTC) - state.bridge_start_time),
+            "environment": env,
+            "diagnostics": diag,
+            "subprocesses": subprocs,
+            "config": config_info,
+            "logs": log_lines,
+        }
+
+        # Mask all MAC/IP in the report
+        masked = _mask_obj(report)
+
+        # Build markdown body for GitHub issue
+        md_parts = [
+            "## Bug Report",
+            "",
+            f"**Version:** {masked['version']} (built {masked['build_date']})",
+            f"**Runtime:** {masked['runtime']}",
+            f"**Uptime:** {masked['uptime']}",
+            "",
+        ]
+
+        # Environment
+        md_parts.append("<details><summary>🖥️ Environment</summary>\n")
+        md_parts.append("```")
+        for k, v in masked["environment"].items():
+            md_parts.append(f"{k}: {v}")
+        md_parts.append("```\n</details>\n")
+
+        # Diagnostics
+        md_parts.append("<details><summary>🔧 Diagnostics</summary>\n")
+        md_parts.append("```json")
+        md_parts.append(json.dumps(masked["diagnostics"], indent=2, default=str))
+        md_parts.append("```\n</details>\n")
+
+        # Subprocesses
+        md_parts.append("<details><summary>⚙️ Subprocesses</summary>\n")
+        md_parts.append("```json")
+        md_parts.append(json.dumps(masked["subprocesses"], indent=2, default=str))
+        md_parts.append("```\n</details>\n")
+
+        # Config (sanitized)
+        md_parts.append("<details><summary>📋 Config (sanitized)</summary>\n")
+        md_parts.append("```json")
+        md_parts.append(json.dumps(masked["config"], indent=2, default=str))
+        md_parts.append("```\n</details>\n")
+
+        # Logs
+        if masked["logs"]:
+            md_parts.append("<details><summary>📜 Recent Logs (last 100 lines)</summary>\n")
+            md_parts.append("```")
+            for line in masked["logs"]:
+                md_parts.append(str(line))
+            md_parts.append("```\n</details>")
+
+        markdown_body = "\n".join(md_parts)
+
+        return jsonify(
+            {
+                "markdown": markdown_body,
+                "report": masked,
+            }
+        )
+    except Exception:
+        logger.exception("Bug report assembly failed")
+        return jsonify({"error": "Internal error"}), 500
+
+
 @status_bp.route("/api/health")
 def api_health():
     """Lightweight health check — no auth required, no sensitive data."""
@@ -573,7 +840,6 @@ def api_preflight():
     Returns platform, audio, bluetooth, and D-Bus status for
     quick troubleshooting without exposing device details.
     """
-    import platform as _platform
 
     # Platform
     arch = _platform.machine()

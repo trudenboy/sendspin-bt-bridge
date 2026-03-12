@@ -7,6 +7,7 @@ Runs the sendspin CLI player with Bluetooth speaker management
 from __future__ import annotations
 
 import asyncio
+import collections
 import json
 import logging
 import os
@@ -36,6 +37,33 @@ UTC = timezone.utc
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
+
+
+class RingBufferHandler(logging.Handler):
+    """In-memory ring buffer that stores the last N formatted log records."""
+
+    def __init__(self, capacity: int = 200):
+        super().__init__()
+        self._buffer: collections.deque[str] = collections.deque(maxlen=capacity)
+        self._lock = threading.Lock()
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            msg = self.format(record)
+            with self._lock:
+                self._buffer.append(msg)
+        except Exception:
+            self.handleError(record)
+
+    def get_lines(self, n: int = 100) -> list[str]:
+        """Return the last *n* lines (oldest first)."""
+        with self._lock:
+            items = list(self._buffer)
+        return items[-n:] if n < len(items) else items
+
+
+# Global instance — installed in main(), queried by /api/logs
+log_ring_buffer: RingBufferHandler | None = None
 
 
 @dataclass
@@ -749,6 +777,12 @@ async def main():
     logging.getLogger().setLevel(getattr(logging, log_level))
     os.environ["LOG_LEVEL"] = log_level
     logger.info("Log level: %s", log_level)
+
+    # Install ring-buffer log handler for /api/logs
+    global log_ring_buffer
+    log_ring_buffer = RingBufferHandler(capacity=200)
+    log_ring_buffer.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
+    logging.getLogger().addHandler(log_ring_buffer)
 
     prefer_sbc = bool(config.get("PREFER_SBC_CODEC", False))
     if prefer_sbc:

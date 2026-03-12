@@ -2480,6 +2480,156 @@ function _showUpdateBadge(upd) {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Bug Report Modal
+// ---------------------------------------------------------------------------
+function _openBugReport(e) {
+    e.preventDefault();
+
+    // Build overlay + modal
+    var overlay = document.createElement('div');
+    overlay.className = 'bugreport-overlay';
+    var modal = document.createElement('div');
+    modal.className = 'bugreport-modal';
+    modal.innerHTML = '<div class="bugreport-title">🐛 Submit Bug Report</div>';
+
+    // Title field
+    var titleField = document.createElement('div');
+    titleField.className = 'bugreport-field';
+    titleField.innerHTML = '<label>Title</label>';
+    var titleInput = document.createElement('input');
+    titleInput.type = 'text';
+    titleInput.placeholder = 'Brief description of the issue';
+    titleInput.value = 'Bug: ';
+    titleField.appendChild(titleInput);
+    modal.appendChild(titleField);
+
+    // Description field
+    var descField = document.createElement('div');
+    descField.className = 'bugreport-field';
+    descField.innerHTML = '<label>Description</label>';
+    var descInput = document.createElement('textarea');
+    descInput.placeholder = 'What happened? What did you expect?';
+    descField.appendChild(descInput);
+    modal.appendChild(descField);
+
+    // Preview toggle
+    var previewToggle = document.createElement('div');
+    previewToggle.className = 'bugreport-preview-toggle';
+    previewToggle.textContent = '▶ Show diagnostic data (auto-attached)';
+    var previewBox = document.createElement('div');
+    previewBox.className = 'bugreport-preview';
+    previewBox.style.display = 'none';
+    previewBox.textContent = 'Loading diagnostics…';
+    previewToggle.onclick = function() {
+        var showing = previewBox.style.display !== 'none';
+        previewBox.style.display = showing ? 'none' : 'block';
+        previewToggle.textContent = (showing ? '▶' : '▼') + ' Diagnostic data (auto-attached)';
+    };
+    modal.appendChild(previewToggle);
+    modal.appendChild(previewBox);
+
+    // Action buttons
+    var actions = document.createElement('div');
+    actions.className = 'bugreport-actions';
+
+    var cancelBtn = document.createElement('button');
+    cancelBtn.className = 'bugreport-btn secondary';
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.onclick = function() { overlay.remove(); };
+    actions.appendChild(cancelBtn);
+
+    var copyBtn = document.createElement('button');
+    copyBtn.className = 'bugreport-btn secondary';
+    copyBtn.textContent = '📋 Copy';
+    copyBtn.style.display = 'none';
+    actions.appendChild(copyBtn);
+
+    var submitBtn = document.createElement('button');
+    submitBtn.className = 'bugreport-btn primary';
+    submitBtn.innerHTML = '<span class="bugreport-spinner">⟳</span> Loading…';
+    submitBtn.disabled = true;
+    actions.appendChild(submitBtn);
+
+    modal.appendChild(actions);
+    overlay.appendChild(modal);
+    overlay.onclick = function(ev) { if (ev.target === overlay) overlay.remove(); };
+    document.body.appendChild(overlay);
+
+    // Focus title
+    setTimeout(function() { titleInput.focus(); titleInput.setSelectionRange(5, 5); }, 100);
+
+    // Fetch diagnostics
+    var reportMarkdown = '';
+    fetch(API_BASE + '/api/bugreport')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            reportMarkdown = data.markdown || '';
+            previewBox.textContent = reportMarkdown || 'No data available';
+            submitBtn.innerHTML = '🐛 Submit to GitHub';
+            submitBtn.disabled = false;
+            copyBtn.style.display = '';
+
+            copyBtn.onclick = function() {
+                var fullBody = _buildBugReportBody(titleInput.value, descInput.value, reportMarkdown);
+                navigator.clipboard.writeText(fullBody).then(function() {
+                    showToast('Report copied to clipboard', 'info');
+                }).catch(function() {
+                    showToast('Could not copy to clipboard', 'error');
+                });
+            };
+
+            submitBtn.onclick = function() {
+                var title = titleInput.value.trim() || 'Bug report';
+                var desc = descInput.value.trim();
+                var body = _buildBugReportBody(title, desc, reportMarkdown);
+                var url = 'https://github.com/trudenboy/sendspin-bt-bridge/issues/new?'
+                    + 'title=' + encodeURIComponent(title)
+                    + '&body=' + encodeURIComponent(body);
+
+                // URL length limit ~8KB; fallback to clipboard
+                if (url.length > 8000) {
+                    navigator.clipboard.writeText(body).then(function() {
+                        showToast('Report copied to clipboard (too large for URL). Paste into the GitHub issue.', 'info');
+                        window.open('https://github.com/trudenboy/sendspin-bt-bridge/issues/new?title=' + encodeURIComponent(title), '_blank');
+                    }).catch(function() {
+                        showToast('Could not copy — please use the Copy button', 'error');
+                    });
+                } else {
+                    window.open(url, '_blank');
+                }
+                overlay.remove();
+            };
+        })
+        .catch(function() {
+            previewBox.textContent = 'Failed to load diagnostics';
+            submitBtn.innerHTML = '🐛 Submit to GitHub';
+            submitBtn.disabled = false;
+            submitBtn.onclick = function() {
+                var title = titleInput.value.trim() || 'Bug report';
+                var desc = descInput.value.trim();
+                var body = '## Description\n\n' + (desc || '_No description provided_') + '\n\n_Diagnostics could not be loaded._';
+                window.open('https://github.com/trudenboy/sendspin-bt-bridge/issues/new?title='
+                    + encodeURIComponent(title) + '&body=' + encodeURIComponent(body), '_blank');
+                overlay.remove();
+            };
+        });
+
+    return false;
+}
+
+function _buildBugReportBody(title, description, diagnostics) {
+    var parts = [];
+    parts.push('## Description\n');
+    parts.push(description || '_No description provided_');
+    parts.push('');
+    if (diagnostics) {
+        parts.push('---\n');
+        parts.push(diagnostics);
+    }
+    return parts.join('\n');
+}
+
 function _onUpdateBadgeClick(e) {
     var link = document.getElementById('update-link');
     if (!link) return true;

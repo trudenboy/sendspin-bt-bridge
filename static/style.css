@@ -120,6 +120,51 @@
             background: #2e7d32; color: #fff;
         }
         .update-modal-btn.primary:hover { background: #1b5e20; }
+
+        /* Bug Report Modal */
+        .bugreport-overlay {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+            display: flex; align-items: center; justify-content: center; z-index: 9999;
+        }
+        .bugreport-modal {
+            background: var(--app-card-bg, #fff); color: var(--app-text-color, #333);
+            border-radius: 12px; padding: 24px; width: 90vw; max-width: 560px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3); max-height: 85vh; display: flex; flex-direction: column;
+        }
+        .bugreport-title { font-size: 18px; font-weight: 600; margin-bottom: 16px; }
+        .bugreport-field { margin-bottom: 12px; }
+        .bugreport-field label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 4px; }
+        .bugreport-field input,
+        .bugreport-field textarea {
+            width: 100%; box-sizing: border-box; border: 1px solid var(--app-border-color, #ccc);
+            border-radius: 6px; padding: 8px 10px; font-size: 13px; font-family: inherit;
+            background: var(--app-input-bg, #fff); color: var(--app-text-color, #333);
+        }
+        .bugreport-field textarea { resize: vertical; min-height: 60px; }
+        .bugreport-preview {
+            flex: 1; overflow-y: auto; font-size: 11px; font-family: monospace;
+            background: var(--app-bg, #f5f5f5); border: 1px solid var(--app-border-color, #ddd);
+            border-radius: 6px; padding: 8px; margin-bottom: 12px; white-space: pre-wrap;
+            word-break: break-all; max-height: 200px; line-height: 1.4;
+        }
+        .bugreport-preview-toggle {
+            font-size: 12px; color: var(--app-text-muted, #666); cursor: pointer;
+            margin-bottom: 8px; user-select: none;
+        }
+        .bugreport-preview-toggle:hover { color: var(--app-text-color, #333); }
+        .bugreport-actions { display: flex; gap: 10px; justify-content: flex-end; flex-shrink: 0; }
+        .bugreport-btn {
+            padding: 8px 16px; border-radius: 8px; font-size: 14px; font-weight: 500;
+            cursor: pointer; text-decoration: none; border: none; display: inline-block;
+        }
+        .bugreport-btn.secondary {
+            background: var(--app-border-color, #e0e0e0); color: var(--app-text-color, #333);
+        }
+        .bugreport-btn.secondary:hover { opacity: 0.8; }
+        .bugreport-btn.primary { background: #1a73e8; color: #fff; }
+        .bugreport-btn.primary:hover { background: #1557b0; }
+        .bugreport-spinner { display: inline-block; animation: spin 1s linear infinite; }
+
         .header-actions {
             display: flex; align-items: center; gap: 10px;
         }
