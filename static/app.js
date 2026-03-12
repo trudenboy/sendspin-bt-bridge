@@ -2583,21 +2583,20 @@ function _openBugReport(e) {
                 var title = titleInput.value.trim() || 'Bug report';
                 var desc = descInput.value.trim();
                 var body = _buildBugReportBody(title, desc, reportMarkdown);
-                var url = 'https://github.com/trudenboy/sendspin-bt-bridge/issues/new?'
-                    + 'title=' + encodeURIComponent(title)
-                    + '&body=' + encodeURIComponent(body);
+                var issueUrl = 'https://github.com/trudenboy/sendspin-bt-bridge/issues/new?title=' + encodeURIComponent(title);
 
-                // URL length limit ~8KB; fallback to clipboard
-                if (url.length > 8000) {
-                    navigator.clipboard.writeText(body).then(function() {
-                        showToast('Report copied to clipboard (too large for URL). Paste into the GitHub issue.', 'info');
-                        window.open('https://github.com/trudenboy/sendspin-bt-bridge/issues/new?title=' + encodeURIComponent(title), '_blank');
-                    }).catch(function() {
-                        showToast('Could not copy — please use the Copy button', 'error');
-                    });
-                } else {
-                    window.open(url, '_blank');
-                }
+                navigator.clipboard.writeText(body).then(function() {
+                    showToast('Report copied to clipboard — paste it into the issue body on GitHub', 'info');
+                    window.open(issueUrl, '_blank');
+                }).catch(function() {
+                    // Clipboard failed — try full URL as fallback
+                    var fullUrl = issueUrl + '&body=' + encodeURIComponent(body);
+                    if (fullUrl.length > 8000) {
+                        showToast('Could not copy — please use the 📋 Copy button, then paste on GitHub', 'error');
+                    } else {
+                        window.open(fullUrl, '_blank');
+                    }
+                });
                 overlay.remove();
             };
         })
@@ -2609,8 +2608,13 @@ function _openBugReport(e) {
                 var title = titleInput.value.trim() || 'Bug report';
                 var desc = descInput.value.trim();
                 var body = '## Description\n\n' + (desc || '_No description provided_') + '\n\n_Diagnostics could not be loaded._';
-                window.open('https://github.com/trudenboy/sendspin-bt-bridge/issues/new?title='
-                    + encodeURIComponent(title) + '&body=' + encodeURIComponent(body), '_blank');
+                var issueUrl = 'https://github.com/trudenboy/sendspin-bt-bridge/issues/new?title=' + encodeURIComponent(title);
+                navigator.clipboard.writeText(body).then(function() {
+                    showToast('Report copied — paste into the issue body on GitHub', 'info');
+                    window.open(issueUrl, '_blank');
+                }).catch(function() {
+                    window.open(issueUrl + '&body=' + encodeURIComponent(body), '_blank');
+                });
                 overlay.remove();
             };
         });
