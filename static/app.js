@@ -2634,28 +2634,22 @@ function _openBugReport(e) {
                 };
                 var deployment = runtimeMap[runtime] || '';
 
-                // Detect audio system from environment
-                var audioServer = (env.audio_server || '').toLowerCase();
-                var audioSystem = audioServer.indexOf('pipewire') >= 0 ? 'PipeWire'
-                    : audioServer.indexOf('pulse') >= 0 ? 'PulseAudio' : '';
+                // Build environment string: "OS / Audio / BT adapter"
+                var envParts = [];
+                if (env.platform) envParts.push(env.platform);
+                var audioServer = (env.audio_server || '');
+                if (audioServer) envParts.push(audioServer);
+                var adapters = diag.adapters || [];
+                if (adapters.length) {
+                    envParts.push(adapters.map(function(a) {
+                        return (a.id || '') + ' ' + (a.mac || '');
+                    }).join(', ').trim());
+                }
+                var envString = envParts.join(' / ');
 
                 // Count devices
                 var devices = diag.devices || [];
                 var devCount = devices.length <= 1 ? '1' : devices.length <= 3 ? '2-3' : '4+';
-
-                // BT adapter info
-                var adapters = diag.adapters || [];
-                var adapterLabel = adapters.map(function(a) {
-                    return (a.id || '') + ' ' + (a.mac || '');
-                }).join(', ').trim();
-
-                // Logs: last 20 log lines from report
-                var logLines = rep.logs || [];
-                var logsText = logLines.slice(-20).join('\n');
-
-                // Sanitized config JSON
-                var configText = '';
-                try { configText = JSON.stringify(rep.config || {}, null, 2); } catch(e) {}
 
                 // Build issue URL with template prefill
                 var params = [
@@ -2663,30 +2657,14 @@ function _openBugReport(e) {
                     'title=' + encodeURIComponent(title),
                     'description=' + encodeURIComponent(desc),
                     'version=' + encodeURIComponent(rep.version || ''),
-                    'host_os=' + encodeURIComponent(env.platform || ''),
-                    'logs=' + encodeURIComponent(logsText),
-                    'additional=' + encodeURIComponent('📎 Full diagnostic report attached as file below')
+                    'diagnostics=' + encodeURIComponent('📎 See attached diagnostics file'),
+                    'additional=' + encodeURIComponent('Submitted via web UI Report button')
                 ];
                 if (deployment) params.push('deployment=' + encodeURIComponent(deployment));
-                if (audioSystem) params.push('audio_system=' + encodeURIComponent(audioSystem));
+                if (envString) params.push('environment=' + encodeURIComponent(envString));
                 if (devCount) params.push('device_count=' + encodeURIComponent(devCount));
-                if (adapterLabel) params.push('bt_adapter=' + encodeURIComponent(adapterLabel));
-                if (configText) params.push('config=' + encodeURIComponent(configText));
 
                 var issueUrl = 'https://github.com/trudenboy/sendspin-bt-bridge/issues/new?' + params.join('&');
-
-                // GitHub URL limit ~8KB; trim logs/config if too long
-                if (issueUrl.length > 7500) {
-                    params = params.filter(function(p) { return !p.startsWith('config='); });
-                    issueUrl = 'https://github.com/trudenboy/sendspin-bt-bridge/issues/new?' + params.join('&');
-                }
-                if (issueUrl.length > 7500) {
-                    params = params.map(function(p) {
-                        if (p.startsWith('logs=')) return 'logs=' + encodeURIComponent(logLines.slice(-5).join('\n'));
-                        return p;
-                    });
-                    issueUrl = 'https://github.com/trudenboy/sendspin-bt-bridge/issues/new?' + params.join('&');
-                }
 
                 window.open(issueUrl, '_blank');
                 showToast('Report downloaded — attach the file to the GitHub issue', 'info');
