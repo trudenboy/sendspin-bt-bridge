@@ -81,7 +81,7 @@ done
 
 # Static assets
 mkdir -p "${APP_DIR}/static"
-for file in app.js style.css favicon.svg favicon.png; do
+for file in app.js style.css favicon.svg favicon.png bridge-logo.svg bridge-logo-full.png bridge-logo-header.png; do
   wget -q "${BASE}/static/${file}" -O "${APP_DIR}/static/${file}"
 done
 

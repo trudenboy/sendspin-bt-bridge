@@ -61,14 +61,20 @@ done
 
 # services/ module
 mkdir -p /opt/sendspin-client/services
-for file in __init__.py bluetooth.py ma_client.py bridge_daemon.py daemon_process.py ma_monitor.py pulse.py; do
+for file in __init__.py bluetooth.py ma_client.py bridge_daemon.py daemon_process.py ma_monitor.py pulse.py update_checker.py; do
   wget -q "${BASE}/services/${file}" -O "/opt/sendspin-client/services/${file}"
 done
 
 # routes/ module
 mkdir -p /opt/sendspin-client/routes
-for file in __init__.py api.py views.py auth.py; do
+for file in __init__.py _helpers.py api.py api_bt.py api_config.py api_ma.py api_status.py views.py auth.py; do
   wget -q "${BASE}/routes/${file}" -O "/opt/sendspin-client/routes/${file}"
+done
+
+# demo/ module
+mkdir -p /opt/sendspin-client/demo
+for file in __init__.py bt_manager.py fixtures.py simulator.py; do
+  wget -q "${BASE}/demo/${file}" -O "/opt/sendspin-client/demo/${file}"
 done
 
 # HTML templates
@@ -79,7 +85,7 @@ done
 
 # Static assets
 mkdir -p /opt/sendspin-client/static
-for file in app.js style.css favicon.svg favicon.png; do
+for file in app.js style.css favicon.svg favicon.png bridge-logo.svg bridge-logo-full.png bridge-logo-header.png; do
   wget -q "${BASE}/static/${file}" -O "/opt/sendspin-client/static/${file}"
 done
 
