@@ -875,6 +875,10 @@ async def main():
             except Exception as exc:
                 logger.debug("pre-fill saved volume failed: %s", exc)
         clients.append(client)
+        # Restore released state from config
+        if device.get("released", False):
+            client.set_bt_management_enabled(False)
+            logger.info("  Player '%s': restored released state", player_name)
         logger.info("  Player: '%s', BT: %s, Adapter: %s", player_name, mac or "none", adapter or "default")
 
     logger.info("Client instance(s) registered")

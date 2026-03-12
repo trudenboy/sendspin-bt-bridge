@@ -20,6 +20,7 @@ from routes._helpers import get_client_or_error, validate_mac
 from services import persist_device_enabled as _persist_device_enabled
 from services.bluetooth import _AUDIO_UUIDS, list_bt_adapters
 from services.bluetooth import bt_remove_device as _bt_remove_device
+from services.bluetooth import persist_device_released as _persist_device_released
 from state import create_scan_job, finish_scan_job, get_scan_job, is_scan_running
 
 logger = logging.getLogger(__name__)
@@ -116,7 +117,7 @@ def api_bt_management():
         return jsonify({"success": False, "error": "No client found"}), 503
     enabled = bool(enabled)
     threading.Thread(target=client.set_bt_management_enabled, args=(enabled,), daemon=True).start()
-    _persist_device_enabled(player_name, enabled)
+    _persist_device_released(player_name, not enabled)
     # Sync enabled state to HA Supervisor so the Configuration page reflects it
     try:
         with config_lock, open(CONFIG_FILE) as _f:

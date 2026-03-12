@@ -24,6 +24,7 @@ __all__ = [
     "is_audio_device",
     "list_bt_adapters",
     "persist_device_enabled",
+    "persist_device_released",
 ]
 
 _AUDIO_UUIDS = {
@@ -120,6 +121,23 @@ def persist_device_enabled(player_name: str, enabled: bool) -> None:
             logger.debug("Synced enabled=%s for '%s' to options.json", enabled, player_name)
         except Exception as e:
             logger.debug("Could not sync enabled flag to options.json: %s", e)
+
+
+def persist_device_released(player_name: str, released: bool) -> None:
+    """Persist the released (bt_management_enabled=False) flag to config.json."""
+    if not _CONFIG_FILE.exists():
+        return
+
+    def _set_released(cfg: dict) -> None:
+        for dev in cfg.get("BLUETOOTH_DEVICES", []):
+            if dev.get("player_name") == player_name:
+                dev["released"] = released
+                break
+
+    try:
+        _update_config(_set_released)
+    except Exception as e:
+        logger.warning("Could not persist released flag for '%s': %s", player_name, e)
 
 
 def is_audio_device(mac: str) -> bool:
