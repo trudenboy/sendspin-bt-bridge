@@ -63,7 +63,7 @@ done
 
 # routes/ module
 mkdir -p "${APP_DIR}/routes"
-for file in __init__.py api.py api_bt.py api_config.py api_ma.py api_status.py views.py auth.py; do
+for file in __init__.py _helpers.py api.py api_bt.py api_config.py api_ma.py api_status.py views.py auth.py; do
   wget -q "${BASE}/routes/${file}" -O "${APP_DIR}/routes/${file}"
 done
 
