@@ -2910,51 +2910,74 @@ function _onUpdateBadgeClick(e) {
     return false;
 }
 
+// SVG icons for update modal
+var _UPD_ICON_ARROW = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="13" x2="8" y2="3"/><polyline points="3,7 8,2 13,7"/></svg>';
+var _UPD_ICON_REFRESH = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 8a5.5 5.5 0 019.77-3.5M13.5 8a5.5 5.5 0 01-9.77 3.5"/><polyline points="12,1 13,4.5 9.5,4.5"/><polyline points="4,11.5 3,15 6.5,15" transform="translate(0,-3)"/></svg>';
+var _UPD_ICON_NOTES = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="1" width="12" height="14" rx="1.5"/><line x1="5" y1="5" x2="11" y2="5"/><line x1="5" y1="8" x2="11" y2="8"/><line x1="5" y1="11" x2="9" y2="11"/></svg>';
+var _UPD_ICON_HA = '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 1L2 7.5V14a1 1 0 001 1h3.5v-4h3v4H13a1 1 0 001-1V7.5L8 1z"/></svg>';
+
 function _showUpdateDialog(ver, releaseUrl) {
     // Fetch update info to determine runtime/method
     fetch(API_BASE + '/api/update/info')
         .then(function(r) { return r.json(); })
         .then(function(info) {
             var method = info.update_method || 'manual';
+            var curVerEl = document.getElementById('version-display');
+            var curVer = curVerEl ? curVerEl.textContent : '';
 
-            // Build modal overlay
             var overlay = document.createElement('div');
             overlay.className = 'update-modal-overlay';
             var modal = document.createElement('div');
             modal.className = 'update-modal';
-            modal.innerHTML = '<div class="update-modal-title">Update v' + ver + ' available</div>';
 
-            // Release notes body (if available)
+            // Header
+            var header = document.createElement('div');
+            header.className = 'update-modal-header';
+            header.innerHTML = _UPD_ICON_ARROW +
+                '<span class="update-modal-header-title">Update Available</span>' +
+                '<button class="update-modal-header-close" title="Close">\u00d7</button>';
+            header.querySelector('.update-modal-header-close').onclick = function() { overlay.remove(); };
+            modal.appendChild(header);
+
+            // Version comparison
+            var verRow = document.createElement('div');
+            verRow.className = 'update-modal-version';
+            verRow.innerHTML = '<span>' + curVer + '</span>' +
+                '<span class="update-modal-version-arrow">\u2192</span>' +
+                '<span class="update-modal-version-new">v' + ver + '</span>';
+            modal.appendChild(verRow);
+
+            // Release notes body
             if (info.body) {
                 var bodyEl = document.createElement('div');
                 bodyEl.className = 'update-modal-body';
                 bodyEl.style.whiteSpace = 'pre-line';
-                // Strip markdown to plain text
                 var plain = info.body
                     .replace(/^## .+\n+/, '')
                     .replace(/^### .+$/gm, '')
                     .replace(/\*\*(.+?)\*\*/g, '$1')
-                    .replace(/^- /gm, '• ')
+                    .replace(/^- /gm, '\u2022 ')
                     .replace(/\n{3,}/g, '\n\n')
                     .trim()
-                    .substring(0, 400);
+                    .substring(0, 500);
                 bodyEl.textContent = plain;
                 modal.appendChild(bodyEl);
             }
 
-            var actions = document.createElement('div');
-            actions.className = 'update-modal-actions';
+            // Footer
+            var footer = document.createElement('div');
+            footer.className = 'update-modal-footer';
 
-            // Re-check button (always shown)
+            // Re-check
             var recheckBtn = document.createElement('button');
             recheckBtn.className = 'update-modal-btn secondary';
-            recheckBtn.textContent = '🔄 Re-check';
+            recheckBtn.innerHTML = _UPD_ICON_REFRESH + ' Re-check';
             recheckBtn.onclick = function() {
                 overlay.remove();
                 var link = document.getElementById('update-link');
                 if (link) link.classList.add('checking');
                 var verEl = document.getElementById('update-version');
-                if (verEl) verEl.textContent = 'checking…';
+                if (verEl) verEl.textContent = 'checking\u2026';
                 fetch(API_BASE + '/api/update/check', {method: 'POST'})
                     .then(function(r) { return r.json(); })
                     .then(function(data) {
@@ -2971,49 +2994,53 @@ function _showUpdateDialog(ver, releaseUrl) {
                         showToast('Update check failed', 'error');
                     });
             };
-            actions.appendChild(recheckBtn);
+            footer.appendChild(recheckBtn);
 
-            // Release Notes button (always)
+            // Release Notes
             var notesBtn = document.createElement('a');
             notesBtn.className = 'update-modal-btn secondary';
             notesBtn.href = releaseUrl;
             notesBtn.target = '_blank';
             notesBtn.rel = 'noopener';
-            notesBtn.textContent = '📋 Release Notes';
+            notesBtn.innerHTML = _UPD_ICON_NOTES + ' Release Notes';
             notesBtn.onclick = function() { overlay.remove(); };
-            actions.appendChild(notesBtn);
+            footer.appendChild(notesBtn);
 
+            // Primary action
             if (method === 'one_click') {
                 var applyBtn = document.createElement('button');
                 applyBtn.className = 'update-modal-btn primary';
-                applyBtn.textContent = '⬆ Update Now';
+                applyBtn.innerHTML = _UPD_ICON_ARROW + ' Update Now';
                 applyBtn.onclick = function() {
                     overlay.remove();
                     _applyUpdate(ver, releaseUrl);
                 };
-                actions.appendChild(applyBtn);
+                footer.appendChild(applyBtn);
             } else if (method === 'ha_store') {
                 var haBtn = document.createElement('a');
                 haBtn.className = 'update-modal-btn primary';
                 haBtn.href = '/hassio/addon/85b1ecde_sendspin_bt_bridge/info';
                 haBtn.target = '_blank';
-                haBtn.textContent = '🏠 Update in HA';
+                haBtn.innerHTML = _UPD_ICON_HA + ' Update in HA';
                 haBtn.onclick = function() { overlay.remove(); };
-                actions.appendChild(haBtn);
+                footer.appendChild(haBtn);
             } else {
                 var instrBtn = document.createElement('button');
                 instrBtn.className = 'update-modal-btn primary';
-                instrBtn.textContent = '📋 Show Instructions';
+                instrBtn.innerHTML = _UPD_ICON_NOTES + ' Instructions';
                 instrBtn.onclick = function() {
                     overlay.remove();
                     showToast('Run: docker compose pull && docker compose up -d', 'info');
                 };
-                actions.appendChild(instrBtn);
+                footer.appendChild(instrBtn);
             }
 
-            modal.appendChild(actions);
+            modal.appendChild(footer);
             overlay.appendChild(modal);
             overlay.onclick = function(ev) { if (ev.target === overlay) overlay.remove(); };
+            document.addEventListener('keydown', function _escUpdate(ev) {
+                if (ev.key === 'Escape') { overlay.remove(); document.removeEventListener('keydown', _escUpdate); }
+            });
             document.body.appendChild(overlay);
         })
         .catch(function() {
