@@ -2872,6 +2872,34 @@ function _showUpdateDialog(ver, releaseUrl) {
             var actions = document.createElement('div');
             actions.className = 'update-modal-actions';
 
+            // Re-check button (always shown)
+            var recheckBtn = document.createElement('button');
+            recheckBtn.className = 'update-modal-btn secondary';
+            recheckBtn.textContent = '🔄 Re-check';
+            recheckBtn.onclick = function() {
+                overlay.remove();
+                var link = document.getElementById('update-link');
+                if (link) link.classList.add('checking');
+                var verEl = document.getElementById('update-version');
+                if (verEl) verEl.textContent = 'checking…';
+                fetch(API_BASE + '/api/update/check', {method: 'POST'})
+                    .then(function(r) { return r.json(); })
+                    .then(function(data) {
+                        if (data.update_available) {
+                            _showUpdateBadge({version: data.version, url: data.url});
+                            showToast('Update v' + data.version + ' available', 'info');
+                        } else {
+                            _showUpdateBadge(null);
+                            showToast('Already on the latest version', 'info');
+                        }
+                    })
+                    .catch(function() {
+                        _showUpdateBadge(null);
+                        showToast('Update check failed', 'error');
+                    });
+            };
+            actions.appendChild(recheckBtn);
+
             // Release Notes button (always)
             var notesBtn = document.createElement('a');
             notesBtn.className = 'update-modal-btn secondary';
