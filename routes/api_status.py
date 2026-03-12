@@ -791,13 +791,14 @@ def api_bugreport():
         masked = _mask_obj(report)
 
         # --- Short markdown (for URL ?body=, fits ~4 KB) ---
+        env = masked["environment"]
         short = [
             "## Bug Report",
             "",
             f"**Version:** {masked['version']} (built {masked['build_date']})",
             f"**Runtime:** {masked['runtime']}  |  **Uptime:** {masked['uptime']}",
-            f"**Platform:** {masked['environment'].get('platform', '?')}  |  "
-            f"**Arch:** {masked['environment'].get('arch', '?')}",
+            f"**Platform:** {env.get('platform', '?')}  |  **Arch:** {env.get('arch', '?')}",
+            f"**BlueZ:** {env.get('bluez', '?')}  |  **Audio:** {env.get('audio_server', '?')}",
             "",
         ]
 
