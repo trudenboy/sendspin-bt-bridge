@@ -2566,7 +2566,7 @@ function _openBugReport(e) {
         .then(function(r) { return r.json(); })
         .then(function(data) {
             reportShort = data.markdown_short || '';
-            reportFull = data.markdown_full || '';
+            reportFull = data.text_full || '';
             previewBox.textContent = reportFull || 'No data available';
             submitBtn.innerHTML = '⚠ Submit to GitHub';
             submitBtn.disabled = false;
@@ -2637,13 +2637,13 @@ function _copyToClipboard(text) {
 }
 
 function _downloadBugReport(content, title) {
-    var blob = new Blob([content], { type: 'text/markdown' });
+    var blob = new Blob([content], { type: 'text/plain' });
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a');
     var date = new Date().toISOString().slice(0, 10);
     var slug = (title || 'bugreport').toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40);
     a.href = url;
-    a.download = 'bugreport-' + date + '-' + slug + '.md';
+    a.download = 'bugreport-' + date + '-' + slug + '.txt';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);

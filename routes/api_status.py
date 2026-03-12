@@ -826,116 +826,123 @@ def api_bugreport():
 
         markdown_short = "\n".join(short)
 
-        # --- Full markdown (for downloadable file) ---
+        # --- Full plain-text report (for downloadable file) ---
+        sep = "=" * 60
         full = [
-            "## Bug Report — Full Diagnostics",
+            sep,
+            "  BUG REPORT — FULL DIAGNOSTICS",
+            sep,
             "",
-            f"**Version:** {masked['version']} (built {masked['build_date']})",
-            f"**Runtime:** {masked['runtime']}  |  **Uptime:** {masked['uptime']}",
+            f"Version:  {masked['version']} (built {masked['build_date']})",
+            f"Runtime:  {masked['runtime']}  |  Uptime: {masked['uptime']}",
             "",
         ]
 
-        # Environment table
-        full.append("### Environment")
-        full.append("")
+        # Environment
+        full.append("--- ENVIRONMENT ---")
         for k, v in masked["environment"].items():
-            full.append(f"- **{k}:** {v}")
+            full.append(f"  {k + ':':<20s} {v}")
         full.append("")
 
-        # Device table
+        # Devices
         if devices:
-            full.append("### Devices")
-            full.append("| Name | MAC | BT | Sink | Enabled |")
-            full.append("|------|-----|-----|------|---------|")
+            full.append("--- DEVICES ---")
+            full.append(f"  {'Name':<24s} {'MAC':<20s} {'BT':<6s} {'Sink':<36s} {'Enabled'}")
             for d in devices:
-                bt = "✅" if d.get("connected") else "❌"
+                bt = "Yes" if d.get("connected") else "No"
                 sink = d.get("sink") or "—"
-                enabled = "✅" if d.get("enabled") else "❌"
-                full.append(f"| {d.get('name', '?')} | {d.get('mac', '?')} | {bt} | `{sink}` | {enabled} |")
+                enabled = "Yes" if d.get("enabled") else "No"
+                full.append(f"  {d.get('name', '?'):<24s} {d.get('mac', '?'):<20s} {bt:<6s} {sink:<36s} {enabled}")
             full.append("")
 
-        # Subprocess table
+        # Subprocesses
         if subprocs:
-            full.append("### Subprocesses")
-            full.append("| Name | PID | Alive | Running | Reconnect | Zombie | Last Error |")
-            full.append("|------|-----|-------|---------|-----------|--------|------------|")
+            full.append("--- SUBPROCESSES ---")
+            full.append(
+                f"  {'Name':<24s} {'PID':<8s} {'Alive':<8s} {'Running':<10s} {'Recon':<8s} {'Zombie':<8s} Last Error"
+            )
             for sp in subprocs:
-                pid = sp.get("pid") or "—"
-                alive = "✅" if sp.get("alive") else "❌"
-                running = "✅" if sp.get("running") else "❌"
-                recon = sp.get("reconnect_attempt", 0) or "—"
-                zombie = sp.get("zombie_restarts", 0)
+                pid = str(sp.get("pid") or "—")
+                alive = "Yes" if sp.get("alive") else "No"
+                running = "Yes" if sp.get("running") else "No"
+                recon = str(sp.get("reconnect_attempt", 0) or "—")
+                zombie = str(sp.get("zombie_restarts", 0))
                 err = sp.get("last_error") or "—"
-                full.append(f"| {sp.get('name', '?')} | {pid} | {alive} | {running} | {recon} | {zombie} | {err} |")
+                full.append(
+                    f"  {sp.get('name', '?'):<24s} {pid:<8s} {alive:<8s} {running:<10s} {recon:<8s} {zombie:<8s} {err}"
+                )
             full.append("")
 
         # MA integration
         if ma_info.get("configured"):
-            full.append("### Music Assistant")
-            full.append(f"- **URL:** {ma_info.get('url', '?')}")
-            full.append(f"- **Connected:** {'✅' if ma_info.get('connected') else '❌'}")
+            full.append("--- MUSIC ASSISTANT ---")
+            full.append(f"  URL:        {ma_info.get('url', '?')}")
+            full.append(f"  Connected:  {'Yes' if ma_info.get('connected') else 'No'}")
             groups = ma_info.get("syncgroups", [])
-            if groups:
-                for g in groups:
-                    full.append(f"- **Group:** {g.get('name', '?')}")
-                    np = g.get("now_playing", {})
-                    if np:
-                        full.append(
-                            f"  - Now playing: {np.get('artist', '?')} — {np.get('title', '?')} ({np.get('state', '?')})"
-                        )
-                    for m in g.get("members", []):
-                        avail = "✅" if m.get("available") else "❌"
-                        vol = f" vol={m.get('volume')}" if m.get("volume") is not None else ""
-                        full.append(f"  - {m.get('name', '?')}: {m.get('state', '?')} {avail}{vol}")
+            for g in groups:
+                full.append(f"  Group: {g.get('name', '?')}")
+                np = g.get("now_playing", {})
+                if np:
+                    full.append(
+                        f"    Now playing: {np.get('artist', '?')} — {np.get('title', '?')} ({np.get('state', '?')})"
+                    )
+                for m in g.get("members", []):
+                    avail = "OK" if m.get("available") else "FAIL"
+                    vol = f" vol={m.get('volume')}" if m.get("volume") is not None else ""
+                    full.append(f"    {m.get('name', '?')}: {m.get('state', '?')} [{avail}]{vol}")
             full.append("")
 
         # Adapters
         adapters = diag.get("adapters", [])
         if adapters:
-            full.append("### BT Adapters")
+            full.append("--- BT ADAPTERS ---")
             for a in adapters:
                 dflt = " (default)" if a.get("default") else ""
-                full.append(f"- **{a.get('id', '?')}** {a.get('mac', '?')}{dflt}")
+                full.append(f"  {a.get('id', '?')}  {a.get('mac', '?')}{dflt}")
             full.append("")
 
         # PA sinks
         if sinks:
-            full.append("### PA Sinks")
+            full.append("--- PA SINKS ---")
             for s in sinks:
-                full.append(f"- `{s}`")
+                full.append(f"  {s}")
             full.append("")
 
         # Service status
-        full.append("### Service Status")
-        full.append(f"- **D-Bus:** {'✅' if diag.get('dbus_available') else '❌'}")
-        full.append(f"- **bluetoothd:** {diag.get('bluetooth_daemon', '?')}")
-        full.append(f"- **PulseAudio:** {diag.get('pulseaudio', '?')}")
+        full.append("--- SERVICE STATUS ---")
+        full.append(f"  D-Bus:       {'OK' if diag.get('dbus_available') else 'FAIL'}")
+        full.append(f"  bluetoothd:  {diag.get('bluetooth_daemon', '?')}")
+        full.append(f"  PulseAudio:  {diag.get('pulseaudio', '?')}")
         full.append("")
 
-        # Raw JSON sections (collapsed)
-        full.append("<details><summary>🔧 Raw Diagnostics JSON</summary>\n")
-        full.append("```json")
+        # Raw diagnostics JSON
+        full.append(sep)
+        full.append("  RAW DIAGNOSTICS JSON")
+        full.append(sep)
         full.append(json.dumps(masked["diagnostics"], indent=2, default=str))
-        full.append("```\n</details>\n")
+        full.append("")
 
-        full.append("<details><summary>📋 Config (sanitized)</summary>\n")
-        full.append("```json")
+        # Config
+        full.append(sep)
+        full.append("  CONFIG (sanitized)")
+        full.append(sep)
         full.append(json.dumps(masked["config"], indent=2, default=str))
-        full.append("```\n</details>\n")
+        full.append("")
 
+        # Logs
         if masked["logs"]:
-            full.append("<details><summary>📜 Recent Logs (last 100 lines)</summary>\n")
-            full.append("```")
+            full.append(sep)
+            full.append(f"  RECENT LOGS (last {len(masked['logs'])} lines)")
+            full.append(sep)
             for line in masked["logs"]:
                 full.append(str(line))
-            full.append("```\n</details>")
 
-        markdown_full = "\n".join(full)
+        text_full = "\n".join(full)
 
         return jsonify(
             {
                 "markdown_short": markdown_short,
-                "markdown_full": markdown_full,
+                "text_full": text_full,
                 "report": masked,
             }
         )
