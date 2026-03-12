@@ -792,6 +792,18 @@ def api_bugreport():
 
         # --- Short markdown (for URL ?body=, fits ~4 KB) ---
         env = masked["environment"]
+        diag = masked.get("diagnostics", {})
+        devices = diag.get("devices", [])
+        subprocs = masked["subprocesses"]
+
+        bt_total = len(devices)
+        bt_conn = sum(1 for d in devices if d.get("connected"))
+        ma_info = diag.get("ma_integration", {})
+        ma_status = "connected" if ma_info.get("connected") else "disconnected"
+        sinks = diag.get("sinks", [])
+        sink_inputs = diag.get("sink_inputs", [])
+        alive_count = sum(1 for sp in subprocs if sp.get("alive"))
+
         short = [
             "## Bug Report",
             "",
@@ -799,34 +811,18 @@ def api_bugreport():
             f"**Runtime:** {masked['runtime']}  |  **Uptime:** {masked['uptime']}",
             f"**Platform:** {env.get('platform', '?')}  |  **Arch:** {env.get('arch', '?')}",
             f"**BlueZ:** {env.get('bluez', '?')}  |  **Audio:** {env.get('audio_server', '?')}",
+            f"**Python:** {env.get('python', '?').split()[0]}  |  **RSS:** {env.get('process_rss_mb', '?')} MB",
             "",
+            f"**BT:** {bt_conn}/{bt_total} connected  |  "
+            f"**MA:** {ma_status}  |  "
+            f"**Sinks:** {len(sinks)}  |  "
+            f"**Streams:** {len(sink_inputs)}",
+            f"**D-Bus:** {'✅' if diag.get('dbus_available') else '❌'}  |  "
+            f"**bluetoothd:** {diag.get('bluetooth_daemon', '?')}  |  "
+            f"**Subprocesses:** {alive_count}/{len(subprocs)} alive",
+            "",
+            "> 📎 **Full diagnostic report attached as file below**",
         ]
-
-        # Compact device summary
-        devices = masked.get("diagnostics", {}).get("devices", [])
-        if devices:
-            short.append("### Devices")
-            short.append("| Name | BT | Sink |")
-            short.append("|------|-----|------|")
-            for d in devices:
-                bt = "✅" if d.get("connected") else "❌"
-                sink = d.get("sink") or "—"
-                short.append(f"| {d.get('name', '?')} | {bt} | {sink} |")
-            short.append("")
-
-        # Compact subprocess summary
-        if masked["subprocesses"]:
-            short.append("### Subprocesses")
-            short.append("| Name | PID | Alive | Reconnect |")
-            short.append("|------|-----|-------|-----------|")
-            for sp in masked["subprocesses"]:
-                pid = sp.get("pid") or "—"
-                alive = "✅" if sp.get("alive") else "❌"
-                recon = sp.get("reconnect_attempt", 0) or "—"
-                short.append(f"| {sp.get('name', '?')} | {pid} | {alive} | {recon} |")
-            short.append("")
-
-        short.append("> 📎 **Full diagnostic report attached as file below**")
 
         markdown_short = "\n".join(short)
 
@@ -835,25 +831,91 @@ def api_bugreport():
             "## Bug Report — Full Diagnostics",
             "",
             f"**Version:** {masked['version']} (built {masked['build_date']})",
-            f"**Runtime:** {masked['runtime']}",
-            f"**Uptime:** {masked['uptime']}",
+            f"**Runtime:** {masked['runtime']}  |  **Uptime:** {masked['uptime']}",
             "",
         ]
 
-        full.append("<details><summary>🖥️ Environment</summary>\n")
-        full.append("```")
+        # Environment table
+        full.append("### Environment")
+        full.append("")
         for k, v in masked["environment"].items():
-            full.append(f"{k}: {v}")
-        full.append("```\n</details>\n")
+            full.append(f"- **{k}:** {v}")
+        full.append("")
 
-        full.append("<details><summary>🔧 Diagnostics</summary>\n")
+        # Device table
+        if devices:
+            full.append("### Devices")
+            full.append("| Name | MAC | BT | Sink | Enabled |")
+            full.append("|------|-----|-----|------|---------|")
+            for d in devices:
+                bt = "✅" if d.get("connected") else "❌"
+                sink = d.get("sink") or "—"
+                enabled = "✅" if d.get("enabled") else "❌"
+                full.append(f"| {d.get('name', '?')} | {d.get('mac', '?')} | {bt} | `{sink}` | {enabled} |")
+            full.append("")
+
+        # Subprocess table
+        if subprocs:
+            full.append("### Subprocesses")
+            full.append("| Name | PID | Alive | Running | Reconnect | Zombie | Last Error |")
+            full.append("|------|-----|-------|---------|-----------|--------|------------|")
+            for sp in subprocs:
+                pid = sp.get("pid") or "—"
+                alive = "✅" if sp.get("alive") else "❌"
+                running = "✅" if sp.get("running") else "❌"
+                recon = sp.get("reconnect_attempt", 0) or "—"
+                zombie = sp.get("zombie_restarts", 0)
+                err = sp.get("last_error") or "—"
+                full.append(f"| {sp.get('name', '?')} | {pid} | {alive} | {running} | {recon} | {zombie} | {err} |")
+            full.append("")
+
+        # MA integration
+        if ma_info.get("configured"):
+            full.append("### Music Assistant")
+            full.append(f"- **URL:** {ma_info.get('url', '?')}")
+            full.append(f"- **Connected:** {'✅' if ma_info.get('connected') else '❌'}")
+            groups = ma_info.get("syncgroups", [])
+            if groups:
+                for g in groups:
+                    full.append(f"- **Group:** {g.get('name', '?')}")
+                    np = g.get("now_playing", {})
+                    if np:
+                        full.append(
+                            f"  - Now playing: {np.get('artist', '?')} — {np.get('title', '?')} ({np.get('state', '?')})"
+                        )
+                    for m in g.get("members", []):
+                        avail = "✅" if m.get("available") else "❌"
+                        vol = f" vol={m.get('volume')}" if m.get("volume") is not None else ""
+                        full.append(f"  - {m.get('name', '?')}: {m.get('state', '?')} {avail}{vol}")
+            full.append("")
+
+        # Adapters
+        adapters = diag.get("adapters", [])
+        if adapters:
+            full.append("### BT Adapters")
+            for a in adapters:
+                dflt = " (default)" if a.get("default") else ""
+                full.append(f"- **{a.get('id', '?')}** {a.get('mac', '?')}{dflt}")
+            full.append("")
+
+        # PA sinks
+        if sinks:
+            full.append("### PA Sinks")
+            for s in sinks:
+                full.append(f"- `{s}`")
+            full.append("")
+
+        # Service status
+        full.append("### Service Status")
+        full.append(f"- **D-Bus:** {'✅' if diag.get('dbus_available') else '❌'}")
+        full.append(f"- **bluetoothd:** {diag.get('bluetooth_daemon', '?')}")
+        full.append(f"- **PulseAudio:** {diag.get('pulseaudio', '?')}")
+        full.append("")
+
+        # Raw JSON sections (collapsed)
+        full.append("<details><summary>🔧 Raw Diagnostics JSON</summary>\n")
         full.append("```json")
         full.append(json.dumps(masked["diagnostics"], indent=2, default=str))
-        full.append("```\n</details>\n")
-
-        full.append("<details><summary>⚙️ Subprocesses</summary>\n")
-        full.append("```json")
-        full.append(json.dumps(masked["subprocesses"], indent=2, default=str))
         full.append("```\n</details>\n")
 
         full.append("<details><summary>📋 Config (sanitized)</summary>\n")
