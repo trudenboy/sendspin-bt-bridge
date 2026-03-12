@@ -2634,21 +2634,21 @@ function _openBugReport(e) {
                 };
                 var deployment = runtimeMap[runtime] || '';
 
-                // Build environment string: "OS / Audio / BT adapter / Python / BlueZ"
-                var envParts = [];
-                if (env.platform) envParts.push(env.platform);
+                // Build environment summary (one item per line)
+                var envLines = [];
+                if (env.platform) envLines.push('OS: ' + env.platform);
+                if (env.kernel) envLines.push('Kernel: ' + env.kernel);
                 var audioServer = (env.audio_server || '');
-                if (audioServer) envParts.push(audioServer);
+                if (audioServer) envLines.push('Audio: ' + audioServer);
                 var adapters = diag.adapters || [];
                 if (adapters.length) {
-                    envParts.push(adapters.map(function(a) {
+                    envLines.push('BT: ' + adapters.map(function(a) {
                         return (a.id || '') + ' ' + (a.mac || '');
                     }).join(', ').trim());
                 }
-                if (env.python) envParts.push('Python ' + env.python.split(' ')[0]);
-                if (env.bluez) envParts.push(env.bluez);
-                if (env.kernel) envParts.push('kernel ' + env.kernel);
-                var envString = envParts.join(' / ');
+                if (env.python) envLines.push('Python: ' + env.python.split(' ')[0]);
+                if (env.bluez) envLines.push('BlueZ: ' + env.bluez);
+                var envString = envLines.join('\n');
 
                 // Version with build date
                 var versionStr = rep.version || '';

@@ -38,11 +38,12 @@ body:
     attributes:
       label: Deployment Method
 
-  - type: input
+  - type: textarea
     id: environment
     attributes:
       label: Environment
-      description: "OS / audio / BT adapter / Python / BlueZ"
+      description: "OS, audio, BT adapter, Python, BlueZ"
+      render: log
 
   - type: input
     id: device_count
