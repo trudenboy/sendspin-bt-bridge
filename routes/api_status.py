@@ -393,7 +393,24 @@ def api_status_stream():
 def api_diagnostics():
     """Return structured health diagnostics."""
     try:
-        diag: dict = {}
+        # Runtime detection
+        runtime = "unknown"
+        if os.path.exists("/data/options.json"):
+            runtime = "ha_addon"
+        elif os.path.exists("/.dockerenv"):
+            runtime = "docker"
+        elif os.path.exists("/etc/systemd/system/sendspin-client.service"):
+            runtime = "systemd"
+
+        uptime_str = str(datetime.now(tz=UTC) - state.bridge_start_time).split(".")[0]
+
+        diag: dict = {
+            "version": VERSION,
+            "build_date": BUILD_DATE,
+            "runtime": runtime,
+            "uptime": uptime_str,
+            "environment": _collect_environment(),
+        }
 
         try:
             r = subprocess.run(["bluetoothctl", "list"], capture_output=True, text=True, timeout=5)
@@ -557,6 +574,8 @@ def api_diagnostics():
             ]
         except Exception as e:
             diag["portaudio_devices"] = [{"error": str(e)}]
+
+        diag["subprocesses"] = _collect_subprocess_info()
 
         return jsonify(diag)
     except Exception:
@@ -841,118 +860,7 @@ def api_bugreport():
         markdown_short = "\n".join(short)
 
         # --- Full plain-text report (for downloadable file) ---
-        sep = "=" * 60
-        full = [
-            sep,
-            "  BUG REPORT — FULL DIAGNOSTICS",
-            sep,
-            "",
-            f"Version:  {masked['version']} (built {masked['build_date']})",
-            f"Runtime:  {masked['runtime']}  |  Uptime: {masked['uptime']}",
-            "",
-        ]
-
-        # Environment
-        full.append("--- ENVIRONMENT ---")
-        for k, v in masked["environment"].items():
-            full.append(f"  {k + ':':<20s} {v}")
-        full.append("")
-
-        # Devices
-        if devices:
-            full.append("--- DEVICES ---")
-            full.append(f"  {'Name':<24s} {'MAC':<20s} {'BT':<6s} {'Sink':<36s} {'Enabled'}")
-            for d in devices:
-                bt = "Yes" if d.get("connected") else "No"
-                sink = d.get("sink") or "—"
-                enabled = "Yes" if d.get("enabled") else "No"
-                full.append(f"  {d.get('name', '?'):<24s} {d.get('mac', '?'):<20s} {bt:<6s} {sink:<36s} {enabled}")
-            full.append("")
-
-        # Subprocesses
-        if subprocs:
-            full.append("--- SUBPROCESSES ---")
-            full.append(
-                f"  {'Name':<24s} {'PID':<8s} {'Alive':<8s} {'Running':<10s} {'Recon':<8s} {'Zombie':<8s} Last Error"
-            )
-            for sp in subprocs:
-                pid = str(sp.get("pid") or "—")
-                alive = "Yes" if sp.get("alive") else "No"
-                running = "Yes" if sp.get("running") else "No"
-                recon = str(sp.get("reconnect_attempt", 0) or "—")
-                zombie = str(sp.get("zombie_restarts", 0))
-                err = sp.get("last_error") or "—"
-                full.append(
-                    f"  {sp.get('name', '?'):<24s} {pid:<8s} {alive:<8s} {running:<10s} {recon:<8s} {zombie:<8s} {err}"
-                )
-            full.append("")
-
-        # MA integration
-        if ma_info.get("configured"):
-            full.append("--- MUSIC ASSISTANT ---")
-            full.append(f"  URL:        {ma_info.get('url', '?')}")
-            full.append(f"  Version:    {ma_info.get('version') or '?'}")
-            full.append(f"  Connected:  {'Yes' if ma_info.get('connected') else 'No'}")
-            groups = ma_info.get("syncgroups", [])
-            for g in groups:
-                full.append(f"  Group: {g.get('name', '?')}")
-                np = g.get("now_playing", {})
-                if np:
-                    full.append(
-                        f"    Now playing: {np.get('artist', '?')} — {np.get('title', '?')} ({np.get('state', '?')})"
-                    )
-                for m in g.get("members", []):
-                    avail = "OK" if m.get("available") else "FAIL"
-                    vol = f" vol={m.get('volume')}" if m.get("volume") is not None else ""
-                    full.append(f"    {m.get('name', '?')}: {m.get('state', '?')} [{avail}]{vol}")
-            full.append("")
-
-        # Adapters
-        adapters = diag.get("adapters", [])
-        if adapters:
-            full.append("--- BT ADAPTERS ---")
-            for a in adapters:
-                dflt = " (default)" if a.get("default") else ""
-                full.append(f"  {a.get('id', '?')}  {a.get('mac', '?')}{dflt}")
-            full.append("")
-
-        # PA sinks
-        if sinks:
-            full.append("--- PA SINKS ---")
-            for s in sinks:
-                full.append(f"  {s}")
-            full.append("")
-
-        # Service status
-        full.append("--- SERVICE STATUS ---")
-        full.append(f"  D-Bus:       {'OK' if diag.get('dbus_available') else 'FAIL'}")
-        full.append(f"  bluetoothd:  {diag.get('bluetooth_daemon', '?')}")
-        full.append(f"  PulseAudio:  {diag.get('pulseaudio', '?')}")
-        full.append("")
-
-        # Raw diagnostics JSON
-        full.append(sep)
-        full.append("  RAW DIAGNOSTICS JSON")
-        full.append(sep)
-        full.append(json.dumps(masked["diagnostics"], indent=2, default=str))
-        full.append("")
-
-        # Config
-        full.append(sep)
-        full.append("  CONFIG (sanitized)")
-        full.append(sep)
-        full.append(json.dumps(masked["config"], indent=2, default=str))
-        full.append("")
-
-        # Logs
-        if masked["logs"]:
-            full.append(sep)
-            full.append(f"  RECENT LOGS (last {len(masked['logs'])} lines)")
-            full.append(sep)
-            for line in masked["logs"]:
-                full.append(str(line))
-
-        text_full = "\n".join(full)
+        text_full = _build_full_text_report(masked, title="BUG REPORT — FULL DIAGNOSTICS")
 
         return jsonify(
             {
@@ -963,6 +871,183 @@ def api_bugreport():
         )
     except Exception:
         logger.exception("Bug report assembly failed")
+        return jsonify({"error": "Internal error"}), 500
+
+
+def _build_full_text_report(
+    masked: dict,
+    *,
+    title: str = "DIAGNOSTICS REPORT",
+) -> str:
+    """Build the full plain-text diagnostics report from masked data."""
+    sep = "=" * 60
+    full: list[str] = [
+        sep,
+        f"  {title}",
+        sep,
+        "",
+        f"Version:  {masked.get('version', '?')} (built {masked.get('build_date', '?')})",
+        f"Runtime:  {masked.get('runtime', '?')}  |  Uptime: {masked.get('uptime', '?')}",
+        "",
+    ]
+
+    env = masked.get("environment", {})
+    diag = masked.get("diagnostics", {})
+    devices = diag.get("devices", [])
+    subprocs = masked.get("subprocesses", [])
+    ma_info = diag.get("ma_integration", {})
+    sinks = diag.get("sinks", [])
+
+    # Environment
+    if env:
+        full.append("--- ENVIRONMENT ---")
+        for k, v in env.items():
+            full.append(f"  {k + ':':<20s} {v}")
+        full.append("")
+
+    # Devices
+    if devices:
+        full.append("--- DEVICES ---")
+        full.append(f"  {'Name':<24s} {'MAC':<20s} {'BT':<6s} {'Sink':<36s} {'Enabled'}")
+        for d in devices:
+            bt = "Yes" if d.get("connected") else "No"
+            sink = d.get("sink") or "—"
+            enabled = "Yes" if d.get("enabled") else "No"
+            full.append(f"  {d.get('name', '?'):<24s} {d.get('mac', '?'):<20s} {bt:<6s} {sink:<36s} {enabled}")
+        full.append("")
+
+    # Subprocesses
+    if subprocs:
+        full.append("--- SUBPROCESSES ---")
+        full.append(
+            f"  {'Name':<24s} {'PID':<8s} {'Alive':<8s} {'Running':<10s} {'Recon':<8s} {'Zombie':<8s} Last Error"
+        )
+        for sp in subprocs:
+            pid = str(sp.get("pid") or "—")
+            alive = "Yes" if sp.get("alive") else "No"
+            running = "Yes" if sp.get("running") else "No"
+            recon = str(sp.get("reconnect_attempt", 0) or "—")
+            zombie = str(sp.get("zombie_restarts", 0))
+            err = sp.get("last_error") or "—"
+            full.append(
+                f"  {sp.get('name', '?'):<24s} {pid:<8s} {alive:<8s} {running:<10s} {recon:<8s} {zombie:<8s} {err}"
+            )
+        full.append("")
+
+    # MA integration
+    if ma_info.get("configured"):
+        full.append("--- MUSIC ASSISTANT ---")
+        full.append(f"  URL:        {ma_info.get('url', '?')}")
+        full.append(f"  Version:    {ma_info.get('version') or '?'}")
+        full.append(f"  Connected:  {'Yes' if ma_info.get('connected') else 'No'}")
+        groups = ma_info.get("syncgroups", [])
+        for g in groups:
+            full.append(f"  Group: {g.get('name', '?')}")
+            np = g.get("now_playing", {})
+            if np:
+                full.append(
+                    f"    Now playing: {np.get('artist', '?')} — {np.get('title', '?')} ({np.get('state', '?')})"
+                )
+            for m in g.get("members", []):
+                avail = "OK" if m.get("available") else "FAIL"
+                vol = f" vol={m.get('volume')}" if m.get("volume") is not None else ""
+                full.append(f"    {m.get('name', '?')}: {m.get('state', '?')} [{avail}]{vol}")
+        full.append("")
+
+    # Adapters
+    adapters = diag.get("adapters", [])
+    if adapters:
+        full.append("--- BT ADAPTERS ---")
+        for a in adapters:
+            dflt = " (default)" if a.get("default") else ""
+            full.append(f"  {a.get('id', '?')}  {a.get('mac', '?')}{dflt}")
+        full.append("")
+
+    # PA sinks
+    if sinks:
+        full.append("--- PA SINKS ---")
+        for s in sinks:
+            full.append(f"  {s}")
+        full.append("")
+
+    # Service status
+    full.append("--- SERVICE STATUS ---")
+    full.append(f"  D-Bus:       {'OK' if diag.get('dbus_available') else 'FAIL'}")
+    full.append(f"  bluetoothd:  {diag.get('bluetooth_daemon', '?')}")
+    full.append(f"  PulseAudio:  {diag.get('pulseaudio', '?')}")
+    full.append("")
+
+    # Raw diagnostics JSON
+    full.append(sep)
+    full.append("  RAW DIAGNOSTICS JSON")
+    full.append(sep)
+    full.append(json.dumps(diag, indent=2, default=str))
+    full.append("")
+
+    # Config
+    config = masked.get("config")
+    if config:
+        full.append(sep)
+        full.append("  CONFIG (sanitized)")
+        full.append(sep)
+        full.append(json.dumps(config, indent=2, default=str))
+        full.append("")
+
+    # Logs
+    logs = masked.get("logs", [])
+    if logs:
+        full.append(sep)
+        full.append(f"  RECENT LOGS (last {len(logs)} lines)")
+        full.append(sep)
+        for line in logs:
+            full.append(str(line))
+
+    return "\n".join(full)
+
+
+@status_bp.route("/api/diagnostics/download")
+def api_diagnostics_download():
+    """Download full diagnostics as a plain-text file."""
+    try:
+        diag_resp = api_diagnostics()
+        diag = diag_resp.get_json() if hasattr(diag_resp, "get_json") else {}
+
+        config_info = _sanitized_config()
+        log_lines = _collect_recent_logs(100)
+
+        uptime_str = str(datetime.now(tz=UTC) - state.bridge_start_time)
+
+        runtime = "unknown"
+        if os.path.exists("/data/options.json"):
+            runtime = "ha_addon"
+        elif os.path.exists("/.dockerenv"):
+            runtime = "docker"
+        elif os.path.exists("/etc/systemd/system/sendspin-client.service"):
+            runtime = "systemd"
+
+        report = {
+            "version": VERSION,
+            "build_date": BUILD_DATE,
+            "runtime": runtime,
+            "uptime": uptime_str,
+            "environment": diag.get("environment", {}),
+            "diagnostics": diag,
+            "subprocesses": diag.get("subprocesses", []),
+            "config": config_info,
+            "logs": log_lines,
+        }
+
+        masked = _mask_obj(report)
+        text = _build_full_text_report(masked, title="DIAGNOSTICS REPORT")
+
+        ts = datetime.now(tz=UTC).strftime("%Y%m%d-%H%M%S")
+        return Response(
+            text,
+            mimetype="text/plain",
+            headers={"Content-Disposition": f'attachment; filename="diagnostics-{ts}.txt"'},
+        )
+    except Exception:
+        logger.exception("Diagnostics download failed")
         return jsonify({"error": "Internal error"}), 500
 
 

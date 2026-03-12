@@ -2857,6 +2857,46 @@ function dot(ok) {
 function renderDiagnostics(d) {
     var rows = '';
 
+    // Version & runtime info
+    if (d.version) {
+        rows += '<tr><td>Bridge version</td><td>' + escHtml(d.version) +
+            (d.build_date ? ' <span style="color:#6b7280;font-size:11px;">(built ' + escHtml(d.build_date) + ')</span>' : '') +
+            '</td></tr>';
+    }
+    if (d.runtime) {
+        rows += '<tr><td>Runtime</td><td>' + escHtml(d.runtime) +
+            (d.uptime ? ' <span style="color:#6b7280;font-size:11px;">uptime ' + escHtml(d.uptime) + '</span>' : '') +
+            '</td></tr>';
+    }
+
+    // Environment
+    var env = d.environment || {};
+    if (env.python) {
+        rows += '<tr><td>Python</td><td>' + escHtml(env.python.split('\n')[0]) + '</td></tr>';
+    }
+    if (env.platform) {
+        rows += '<tr><td>Platform</td><td>' + escHtml(env.platform) +
+            (env.arch ? ' (' + escHtml(env.arch) + ')' : '') + '</td></tr>';
+    }
+    if (env.bluez) {
+        rows += '<tr><td>BlueZ</td><td>' + escHtml(env.bluez) + '</td></tr>';
+    }
+    if (env.audio_server) {
+        rows += '<tr><td>Audio server</td><td>' + escHtml(env.audio_server) + '</td></tr>';
+    }
+    if (env.process_rss_mb != null) {
+        rows += '<tr><td>Memory (RSS)</td><td>' + env.process_rss_mb + ' MB</td></tr>';
+    }
+
+    // MA version (from integration block)
+    var ma = d.ma_integration || {};
+    if (ma.version) {
+        rows += '<tr><td>MA version</td><td>' + escHtml(ma.version) + '</td></tr>';
+    }
+
+    // Separator
+    rows += '<tr><td colspan="2" style="border:none;padding:4px 0;"><hr style="border:none;border-top:1px solid var(--border-color);margin:0;"></td></tr>';
+
     rows += '<tr><td>Bluetooth daemon</td><td>' +
         dot(d.bluetooth_daemon === 'active') + escHtml(d.bluetooth_daemon || 'unknown') +
         '</td></tr>';
@@ -2899,8 +2939,16 @@ function renderDiagnostics(d) {
             '</td></tr>';
     });
 
+    // Subprocesses
+    (d.subprocesses || []).forEach(function(sp) {
+        var icon = sp.alive ? (sp.running ? '▶' : '⏸') : '⏹';
+        var info = icon + ' pid ' + (sp.pid || '—');
+        if (sp.zombie_restarts > 0) info += ' <span style="color:#f59e0b;font-size:11px;">zombies: ' + sp.zombie_restarts + '</span>';
+        if (sp.last_error) info += '<br><span style="color:#ef4444;font-size:11px;">' + escHtml(sp.last_error) + '</span>';
+        rows += '<tr><td style="padding-left:20px;">↳ ' + escHtml(sp.name || '?') + '</td><td>' + info + '</td></tr>';
+    });
+
     // MA integration status
-    var ma = d.ma_integration || {};
     if (ma.configured !== undefined) {
         rows += '<tr><td>MA API</td><td>' +
             dot(ma.connected) +
@@ -2945,7 +2993,10 @@ function renderDiagnostics(d) {
     return '<table class="diag-table">' +
         '<tr><th>Component</th><th>Status</th></tr>' +
         rows + '</table>' +
-        '<div style="text-align:right;margin-top:8px;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;">' +
+          '<button type="button" onclick="downloadDiagnostics()" ' +
+          'style="font-size:12px;background:none;border:1px solid var(--border-color);border-radius:4px;padding:4px 10px;color:var(--text-color);cursor:pointer;">' +
+          '⬇ Download report</button>' +
           '<button type="button" onclick="reloadDiagnostics()" ' +
           'style="font-size:12px;background:none;border:none;color:var(--primary-color);cursor:pointer;">' +
           '&#8635; Refresh</button></div>';
@@ -2955,6 +3006,23 @@ function reloadDiagnostics() {
     var content = document.getElementById('diag-content');
     delete content.dataset.loaded;
     loadDiagnostics(content);
+}
+
+async function downloadDiagnostics() {
+    try {
+        var resp = await fetch(API_BASE + '/api/diagnostics/download');
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        var blob = await resp.blob();
+        var cd = resp.headers.get('content-disposition') || '';
+        var fname = (cd.match(/filename="?([^"]+)"?/) || [])[1] || 'diagnostics.txt';
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = fname;
+        a.click();
+        URL.revokeObjectURL(a.href);
+    } catch (err) {
+        alert('Download failed: ' + err.message);
+    }
 }
 
 // ---- Global Health Indicator ----
