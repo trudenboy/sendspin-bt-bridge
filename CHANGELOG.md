@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.28.0] - 2026-03-13
+
+### Fixed
+- **BT remove endpoint crash** — `POST /api/bt/remove` returned a bare `bool` from `validate_mac()` instead of a Flask response, causing 500 on Proxmox/LXC deployments
+- **HA addon username display** — read `X-Remote-User-Display-Name` / `X-Remote-User-Name` headers from the HA Supervisor Ingress proxy instead of showing generic "HA User"
+
+### Changed
+- **Bug report modal redesign** — accent header bar with `--primary-color`, SVG icons (bug, GitHub, copy, info) replacing emoji, CSS spinner for loading, inline validation, Escape key support, fade-in/slide-up animation, dark-themed diagnostic preview
+- **Compact connection column** — status text hidden by default (colored dots with native tooltips are sufficient); MAC and server URI hover details removed; column shrunk from ~176px to 85px fixed width, giving ~100px more to the identity column
+- **Identity column optimization** — restructured into clean two rows: player name (with ellipsis truncation) + eq-bars on top, badges (released, battery, group) in a compact meta row below; MAC address and WebSocket URL removed from dashboard display
+
 ## [2.27.1] - 2026-03-12
 
 ### Added

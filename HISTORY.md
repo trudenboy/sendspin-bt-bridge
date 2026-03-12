@@ -2,7 +2,7 @@
 
 A history of the architectural and functional evolution of sendspin-bt-bridge — for readers familiar with Home Assistant, Music Assistant, and multiroom audio setups.
 
-**Period:** January 1 – March 12, 2026 · **Total commits:** ~875 · **Versions:** 1.0.0 → 2.27.1
+**Period:** January 1 – March 13, 2026 · **Total commits:** ~880 · **Versions:** 1.0.0 → 2.28.0
 
 ---
 
@@ -699,6 +699,18 @@ This is distinct from BT Release/Reclaim (`set_bt_management_enabled`), which on
 **BT unpair from UI** (v2.27.1): the "Already paired" device list in Configuration now has a ✕ Remove button on each row. Clicking it calls `POST /api/bt/remove` → `bt_remove_device()` → `bluetoothctl remove <MAC>`. The row fades out and the list refreshes after 1.5 s. Previously, removing stale pairings required SSH access to run `bluetoothctl remove` manually.
 
 **Restart indicator redesign** (v2.27.1): the restart progress indicator was moved from a standalone full-width banner (between header and content) into the header card itself, as a third row. Visual changes: emoji status icons (💾🔇🔄⏳🔗🎵✅⚠️) replaced with CSS-styled elements — a spinning border-radius spinner during progress, an SVG checkmark on success, an SVG warning icon on failure. Background colors changed from hardcoded pastel values (`#fef3c7`, `#d1fae5`, `#fee2e2`) to theme-native white-on-primary, which works correctly in both light and dark modes. The progress bar uses `rgba(255,255,255,0.15)` track with `rgba(255,255,255,0.7)` fill — subtle but visible on the blue header. No layout shift for page content since the banner grows inside the header card.
+
+### Fixes and device card redesign (v2.27.1 → v2.28.0)
+
+**BT remove endpoint fix** (v2.28.0): `POST /api/bt/remove` crashed with a 500 error on Proxmox LXC because `validate_mac()` in `routes/_helpers.py` returns a `bool`, but the endpoint code used the `err = validate_mac(mac); if err: return err` pattern — returning `True` as a Flask response, which Flask rejected with `TypeError: return type must be a string, dict, list...`. Fixed to `if not validate_mac(mac): return jsonify({"error": "Invalid MAC address"}), 400`.
+
+**HA username from Ingress headers** (v2.28.0): the HA addon always showed "HA User" instead of the actual logged-in user's display name. Root cause: `_resolve_ingress_user()` fell back to the hardcoded string when `MA_USERNAME` wasn't in config. Fix: `_check_auth()` now reads `X-Remote-User-Display-Name` and `X-Remote-User-Name` headers that the HA Supervisor Ingress proxy sends since HA 2024.x (set in `supervisor/api/ingress.py:_init_header()` from `IngressSessionData`). Headers are only trusted from the Supervisor proxy IP (172.30.32.2/127.0.0.1/::1) — spoofed versions from external clients are stripped.
+
+**Bug report modal redesign** (v2.28.0): the bug report modal was visually inconsistent with the rest of the UI — emoji icons (⚠, 📋, ⟳), hardcoded `#1a73e8` blue that didn't match HA themes, no close button, no keyboard support. Redesigned with: `--primary-color` accent header bar with ✕ close button, inline SVG icons for bug/GitHub/copy/info using `currentColor` for theme compatibility, CSS border-radius spinner replacing the ⟳ emoji during loading, inline validation error messages (red border + text instead of alert box), Escape key to dismiss, fade-in/slide-up animation, and a dark-themed code-block for the diagnostic data preview.
+
+**Connection column compaction** (v2.28.0): the Connection column consumed ~176px with redundant "Connected"/"Disconnected" text that duplicated the colored status dots. Redesigned: status text hidden by default via `.conn-text { display: none }` — the dots (green/red/amber/grey) are self-explanatory, with full text available via native `title` tooltip (`btInd.title = 'BT: ' + text`). MAC address and server URI hover-sub elements removed entirely. Column shrunk to 85px fixed width, freeing ~100px for the identity column. The "Connection" label hidden (BT/MA tags self-describe). On mobile (≤840px), text and label are always visible since touch devices can't hover.
+
+**Identity column optimization** (v2.28.0): the identity column had all elements (checkbox, player name, released badge, eq-bars, battery) crammed into a single flex row that wrapped awkwardly with long names, plus group badge on its own line and hover-only MAC/URL. Restructured into clean two rows: Row 1 (`identity-title-row`) — checkbox + player name (with `flex:1; text-overflow:ellipsis` for clean truncation) + eq-bars; Row 2 (`identity-meta-row`) — released badge, battery badge, and group badge inline. MAC address and WebSocket URL removed from the dashboard entirely — MAC is visible in Configuration, and the WS URL was debug information.
 
 ---
 

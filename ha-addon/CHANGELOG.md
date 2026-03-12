@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.28.0] - 2026-03-13
+
+### Fixed
+- BT remove endpoint crash — `validate_mac()` returned bool instead of Flask response (500 on LXC)
+- HA addon username — reads Ingress `X-Remote-User-Display-Name` header instead of "HA User"
+
+### Changed
+- Bug report modal redesigned — themed accent header, SVG icons, CSS spinner, inline validation, Escape key, animations
+- Connection column compacted — dots-only with tooltips, MAC/URI hovers removed, column shrunk to 85px
+- Identity column optimized — two-row layout with ellipsis truncation, badges in meta row, MAC/URL removed
+
 ## [2.27.1] - 2026-03-12
 
 ### Added
