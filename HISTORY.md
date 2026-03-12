@@ -2,7 +2,7 @@
 
 A history of the architectural and functional evolution of sendspin-bt-bridge — for readers familiar with Home Assistant, Music Assistant, and multiroom audio setups.
 
-**Period:** January 1 – March 12, 2026 · **Total commits:** ~870 · **Versions:** 1.0.0 → 2.27.0
+**Period:** January 1 – March 12, 2026 · **Total commits:** ~875 · **Versions:** 1.0.0 → 2.27.1
 
 ---
 
@@ -693,6 +693,12 @@ This is distinct from BT Release/Reclaim (`set_bt_management_enabled`), which on
 **MA player cleanup on disable** (v2.27.0): when a device is disabled via the config checkbox, the API handler calls `set_bt_management_enabled(False)` on the active client before marking it disabled. This stops the daemon subprocess, which disconnects its WebSocket to MA, triggering MA's `ClientRemovedEvent` — the player is unregistered immediately rather than lingering as "unavailable" until MA's next cleanup cycle.
 
 **Smart health indicators** (v2.27.0): a new `bt_released_by` field in `DeviceStatus` tracks *why* a device was released — `"user"` for manual Release button, `"auto"` for churn detection (`_check_reconnect_churn`) or reconnect threshold (`_handle_reconnect_failure`), `null` when enabled. The health indicator in the header now excludes manually released devices from BT/MA totals entirely (they're shown as a separate grey count — "N released"). Auto-disabled devices still count as unhealthy, keeping the indicator yellow/red to signal that attention is needed. The device card badge changes accordingly: grey "Released" for manual, orange "Auto-disabled" for automatic.
+
+### UX polish (v2.27.0 → v2.27.1)
+
+**BT unpair from UI** (v2.27.1): the "Already paired" device list in Configuration now has a ✕ Remove button on each row. Clicking it calls `POST /api/bt/remove` → `bt_remove_device()` → `bluetoothctl remove <MAC>`. The row fades out and the list refreshes after 1.5 s. Previously, removing stale pairings required SSH access to run `bluetoothctl remove` manually.
+
+**Restart indicator redesign** (v2.27.1): the restart progress indicator was moved from a standalone full-width banner (between header and content) into the header card itself, as a third row. Visual changes: emoji status icons (💾🔇🔄⏳🔗🎵✅⚠️) replaced with CSS-styled elements — a spinning border-radius spinner during progress, an SVG checkmark on success, an SVG warning icon on failure. Background colors changed from hardcoded pastel values (`#fef3c7`, `#d1fae5`, `#fee2e2`) to theme-native white-on-primary, which works correctly in both light and dark modes. The progress bar uses `rgba(255,255,255,0.15)` track with `rgba(255,255,255,0.7)` fill — subtle but visible on the blue header. No layout shift for page content since the banner grows inside the header card.
 
 ---
 

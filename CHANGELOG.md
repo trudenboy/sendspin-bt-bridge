@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.27.1] - 2026-03-12
+
+### Added
+- **Remove from BT stack** — "Already paired" devices in Configuration now have a ✕ button to unpair from BlueZ without needing `bluetoothctl` manually
+
+### Changed
+- **Restart indicator redesign** — moved from a standalone full-width banner into the header card; emoji icons replaced with CSS spinner/checkmark/warning SVGs; uses theme-native white-on-primary colors (no more hardcoded pastel backgrounds that break dark mode); eliminates layout shift
+
 ## [2.27.0] - 2026-03-12
 
 ### Added
