@@ -142,28 +142,29 @@ _ingress_user_cache: Optional[str] = None
 
 
 def _resolve_ingress_user() -> str:
-    """Try to resolve the HA owner's display name via Supervisor API."""
+    """Try to resolve the HA owner's display name for Ingress sessions.
+
+    SUPERVISOR_TOKEN cannot access core/api/auth/current_user (401), so we
+    use MA_USERNAME from config (saved during HA login flow) as the primary
+    source, falling back to the Supervisor /core/api/config location_name.
+    """
     global _ingress_user_cache
     if _ingress_user_cache is not None:
         return _ingress_user_cache
-    token = os.environ.get("SUPERVISOR_TOKEN", "")
-    if not token:
-        _ingress_user_cache = "HA User"
-        return _ingress_user_cache
-    try:
-        import json
-        from urllib.request import Request, urlopen
 
-        req = Request(
-            "http://supervisor/core/api/auth/current_user",
-            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-        )
-        resp = urlopen(req, timeout=5)
-        data = json.loads(resp.read())
-        name = data.get("name") or data.get("id") or "HA User"
-        _ingress_user_cache = name
+    # 1. Use MA_USERNAME saved during MA auth setup (most reliable)
+    try:
+        from config import load_config
+
+        cfg = load_config()
+        username = cfg.get("MA_USERNAME", "")
+        if username:
+            _ingress_user_cache = username
+            return _ingress_user_cache
     except Exception:
-        _ingress_user_cache = "HA User"
+        pass
+
+    _ingress_user_cache = "HA User"
     return _ingress_user_cache
 
 
