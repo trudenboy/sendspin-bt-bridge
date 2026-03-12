@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.28.1] - 2026-03-13
+
+### Changed
+- **Update modal redesign** — green (`--success-color`) accent header with SVG arrow icon and ✕ close, version comparison row (`v2.28.0 → v2.28.1`), SVG icons on all buttons replacing emoji, Escape key support, fade-in/slide-up animation, theme CSS variables throughout
+- **Adapter badge** — BT adapter name (`hci0`) in connection column now styled as a neutral badge matching the `api` badge pattern
+- **Equalizer placement** — eq-bars now sit immediately after the player name instead of being pushed to the right edge
+- **Column labels removed** — Playback, Volume, and Sync column headers removed (content is self-evident)
+
 ## [2.28.0] - 2026-03-13
 
 ### Fixed

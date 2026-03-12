@@ -2,7 +2,7 @@
 
 A history of the architectural and functional evolution of sendspin-bt-bridge — for readers familiar with Home Assistant, Music Assistant, and multiroom audio setups.
 
-**Period:** January 1 – March 13, 2026 · **Total commits:** ~880 · **Versions:** 1.0.0 → 2.28.0
+**Period:** January 1 – March 13, 2026 · **Total commits:** ~885 · **Versions:** 1.0.0 → 2.28.1
 
 ---
 
@@ -711,6 +711,16 @@ This is distinct from BT Release/Reclaim (`set_bt_management_enabled`), which on
 **Connection column compaction** (v2.28.0): the Connection column consumed ~176px with redundant "Connected"/"Disconnected" text that duplicated the colored status dots. Redesigned: status text hidden by default via `.conn-text { display: none }` — the dots (green/red/amber/grey) are self-explanatory, with full text available via native `title` tooltip (`btInd.title = 'BT: ' + text`). MAC address and server URI hover-sub elements removed entirely. Column shrunk to 85px fixed width, freeing ~100px for the identity column. The "Connection" label hidden (BT/MA tags self-describe). On mobile (≤840px), text and label are always visible since touch devices can't hover.
 
 **Identity column optimization** (v2.28.0): the identity column had all elements (checkbox, player name, released badge, eq-bars, battery) crammed into a single flex row that wrapped awkwardly with long names, plus group badge on its own line and hover-only MAC/URL. Restructured into clean two rows: Row 1 (`identity-title-row`) — checkbox + player name (with `flex:1; text-overflow:ellipsis` for clean truncation) + eq-bars; Row 2 (`identity-meta-row`) — released badge, battery badge, and group badge inline. MAC address and WebSocket URL removed from the dashboard entirely — MAC is visible in Configuration, and the WS URL was debug information.
+
+### UI polish (v2.28.0 → v2.28.1)
+
+**Update modal redesign** (v2.28.1): the update dialog was visually inconsistent — emoji icons (🔄, 📋, ⬆, 🏠), hardcoded `#2e7d32` green, no close button, no keyboard support, no animation. Redesigned to match the bug report modal pattern: green (`--success-color`) accent header bar with SVG arrow-up icon and ✕ close button, version comparison row showing `v2.28.0 → v2.28.1`, SVG icons on all buttons (refresh, notes, arrow, home), Escape key to dismiss, `brFadeIn`/`brSlideUp` animations, and theme CSS variables throughout.
+
+**Adapter badge** (v2.28.1): the BT adapter name (`hci0`) in the connection column was plain 11px text. Restyled as a compact neutral badge — 9px uppercase, `--divider-color` background and border, 3px radius — matching the purple `api` badge pattern but in grey/white.
+
+**Equalizer placement** (v2.28.1): eq-bars were pushed to the far right edge of the identity column because `device-card-title` had `flex:1`. Removed `flex:1` so the eq-bars sit immediately after the player name text, which is the natural reading order.
+
+**Column labels removed** (v2.28.1): the Playback, Volume, and Sync column headers were removed — their content (transport controls, volume slider, sync offset) is self-evident without labels. The Connection column label was already hidden via CSS in v2.28.0.
 
 ---
 
