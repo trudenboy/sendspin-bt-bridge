@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.26.4] - 2026-03-12
+
+### Fixed
+- **Server-side graceful shutdown** — on SIGTERM the bridge now mutes PA sinks directly instead of pausing MA players; works correctly for all restart triggers (systemd, Docker, HA auto-update, CLI) not just the web UI
+- **False zombie-playback restarts** — zombie detection (red equalizer → subprocess restart) now only triggers when audio has never arrived in the current subprocess session; brief streaming gaps during re-anchor, group sync, or track changes no longer cause unnecessary restarts
+
 ## [2.26.3] - 2026-03-12
 
 ### Fixed
