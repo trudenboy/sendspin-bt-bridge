@@ -8,10 +8,11 @@ blueprint registration, and the main() entry-point.  All route handlers live in
 routes/api.py and routes/views.py; shared helpers live in config.py and state.py.
 """
 
+from __future__ import annotations
+
 import logging
 import os
 from datetime import timedelta
-from typing import Optional
 
 from flask import Flask, jsonify, redirect, request, send_from_directory, session, url_for
 from waitress import serve  # type: ignore[import-untyped]
@@ -138,7 +139,7 @@ def _set_cache_headers(response):
 _PUBLIC_PATHS = {"/login", "/logout", "/api/health", "/api/preflight"}
 
 # Cache for HA owner display name (resolved once per process lifetime)
-_ingress_user_cache: Optional[str] = None
+_ingress_user_cache: str | None = None
 
 
 def _resolve_ingress_user() -> str:
