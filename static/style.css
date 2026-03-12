@@ -880,9 +880,13 @@
             vertical-align: middle; flex-shrink: 0;
         }
         .conn-detail {
-            font-size: 11px; color: var(--secondary-text-color);
-            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-            flex: 1; min-width: 0;
+            font-size: 9px; font-weight: 700; text-transform: uppercase;
+            color: var(--secondary-text-color);
+            background: var(--divider-color, rgba(0,0,0,0.08));
+            border: 1px solid var(--divider-color, rgba(0,0,0,0.12));
+            border-radius: 3px; padding: 0 3px; margin-left: 4px;
+            line-height: 14px; vertical-align: middle; flex-shrink: 0;
+            white-space: nowrap;
         }
         .conn-since {
             font-size: 11px; color: var(--secondary-text-color);
