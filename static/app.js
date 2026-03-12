@@ -313,11 +313,13 @@ function buildDeviceCard(i) {
             '</div>' +
             '<div class="track-progress-wrap" id="dprog-wrap-' + i + '" style="display:none;">' +
               '<div class="track-progress-bar"><div class="track-progress-fill" id="dprog-fill-' + i + '"></div></div>' +
-              '<div class="track-progress-time" id="dprog-time-' + i + '"></div>' +
+              '<span class="track-progress-time" id="dprog-time-' + i + '"></span>' +
             '</div>' +
           '</div>' +
           // Volume column
           '<div class="volume-col">' +
+            '<div class="ts" id="daudiofmt-' + i + '"></div>' +
+            '<div class="dsink-value ts-sub" id="dsink-' + i + '"></div>' +
             '<div class="volume-row">' +
               '<input type="range" min="0" max="100" value="100" ' +
                 'class="volume-slider" id="vslider-' + i + '" ' +
@@ -327,8 +329,6 @@ function buildDeviceCard(i) {
                 'class="card-icon-btn" ' +
                 'title="Mute/Unmute">&#128264;</button>' +
             '</div>' +
-            '<div class="ts" id="daudiofmt-' + i + '"></div>' +
-            '<div class="dsink-value ts-sub" id="dsink-' + i + '"></div>' +
           '</div>' +
           // Sync column
           '<div>' +

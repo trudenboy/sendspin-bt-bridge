@@ -518,8 +518,8 @@
         }
 
         /* Volume slider */
-        .volume-row { display: flex; align-items: center; gap: 6px; }
-        .volume-slider { flex: 1; height: 4px; accent-color: var(--primary-color); cursor: pointer; }
+        .volume-row { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+        .volume-slider { flex: 1; height: 3px; accent-color: var(--primary-color); cursor: pointer; }
         .volume-pct { min-width: 36px; text-align: right; font-size: 13px; color: var(--secondary-text-color); }
 
         /* Equalizer animation (MA-style) — shown when audio data is actually streaming */
@@ -895,9 +895,11 @@
         }
 
         /* Track progress bar */
-        .track-progress-wrap { margin-top: 4px; }
+        .track-progress-wrap {
+            margin-top: 4px; display: flex; align-items: center; gap: 6px;
+        }
         .track-progress-bar {
-            height: 3px;
+            height: 3px; flex: 1; min-width: 0;
             background: var(--divider-color, rgba(0,0,0,0.12));
             border-radius: 2px; overflow: hidden;
         }
@@ -905,7 +907,10 @@
             height: 100%; background: var(--primary-color);
             border-radius: 2px; transition: width 0.5s linear;
         }
-        .track-progress-time { font-size: 12px; color: var(--secondary-text-color); margin-top: 2px; }
+        .track-progress-time {
+            font-size: 11px; color: var(--secondary-text-color);
+            white-space: nowrap; flex-shrink: 0;
+        }
         .conn-row-main .status-indicator { margin-right: 3px; }
 
         /* Volume column — sink name hidden, revealed on hover */
