@@ -10,6 +10,7 @@ routes/api.py and routes/views.py; shared helpers live in config.py and state.py
 
 import logging
 import os
+from datetime import timedelta
 
 from flask import Flask, jsonify, redirect, request, send_from_directory, session, url_for
 from waitress import serve  # type: ignore[import-untyped]
@@ -38,6 +39,7 @@ logging.getLogger().setLevel(getattr(logging, _startup_log_level))
 # bodies, providing defence-in-depth).  HttpOnly prevents JS cookie access.
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=24)
 
 # Cache AUTH_ENABLED at startup so _check_auth() never reads config.json
 # on every request.  Like all other settings, a change takes effect after
@@ -138,6 +140,7 @@ _PUBLIC_PATHS = {"/login", "/logout", "/api/health", "/api/preflight"}
 @app.before_request
 def _check_auth():
     """Enforce authentication when AUTH_ENABLED is True."""
+    session.permanent = True  # use PERMANENT_SESSION_LIFETIME (24h)
     if not _auth_enabled:
         return  # auth disabled — allow all
 

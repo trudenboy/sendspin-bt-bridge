@@ -916,12 +916,18 @@
             }
             .device-track-inline { white-space: normal; word-break: break-word; }
 
-            /* BT device table → horizontal scroll */
-            .bt-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-            .bt-header, .bt-device-row { min-width: 480px; }
+            /* BT device table → horizontal scroll with fade hint */
+            .bt-table-wrap {
+                overflow-x: auto; -webkit-overflow-scrolling: touch;
+                -webkit-mask-image: linear-gradient(to right, black 90%, transparent);
+                mask-image: linear-gradient(to right, black 90%, transparent);
+            }
+            .bt-table-wrap::-webkit-scrollbar { height: 4px; }
+            .bt-table-wrap::-webkit-scrollbar-thumb { background: var(--secondary-text-color); border-radius: 2px; }
+            .bt-header, .bt-device-row { min-width: 440px; }
 
             /* Adapters panel → horizontal scroll */
-            .adapter-row { min-width: 420px; }
+            .adapter-row { min-width: 380px; }
 
             /* Touch targets */
             .btn-bt-action  { padding: 8px 12px; }

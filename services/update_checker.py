@@ -30,7 +30,24 @@ async def check_latest_version() -> dict[str, Any] | None:
             headers={"Accept": "application/vnd.github+json", "User-Agent": "sendspin-bt-bridge"},
         )
         loop = asyncio.get_running_loop()
-        resp_text = await loop.run_in_executor(None, lambda: urllib.request.urlopen(req, timeout=15).read())
+
+        def _fetch() -> tuple[bytes, dict[str, str]]:
+            resp = urllib.request.urlopen(req, timeout=15)
+            headers = {k.lower(): v for k, v in resp.getheaders()}
+            return resp.read(), headers
+
+        resp_text, headers = await loop.run_in_executor(None, _fetch)
+
+        # Respect GitHub rate limits
+        remaining = headers.get("x-ratelimit-remaining")
+        if remaining is not None and int(remaining) <= 1:
+            reset_at = int(headers.get("x-ratelimit-reset", "0"))
+            import time
+
+            wait = max(reset_at - int(time.time()), 60)
+            logger.warning("GitHub API rate limit nearly exhausted, backing off %ds", wait)
+            await asyncio.sleep(wait)
+
         data = _json.loads(resp_text)
         tag = data.get("tag_name", "")
         return {
@@ -40,6 +57,12 @@ async def check_latest_version() -> dict[str, Any] | None:
             "published_at": data.get("published_at", ""),
             "body": (data.get("body") or "")[:2000],
         }
+    except urllib.request.HTTPError as exc:
+        if exc.code == 403:
+            logger.warning("GitHub API rate-limited (HTTP 403), will retry next cycle")
+        else:
+            logger.debug("Version check failed: HTTP %d", exc.code)
+        return None
     except Exception as exc:
         logger.debug("Version check failed: %s", exc)
         return None

@@ -919,7 +919,7 @@ async function downloadLogs() {
         a.click();
         URL.revokeObjectURL(a.href);
     } catch (err) {
-        alert('Download failed: ' + err.message);
+        showToast('Download failed: ' + err.message, 'error');
     }
 }
 
@@ -1712,7 +1712,7 @@ async function saveConfig() {
 
     // Require password before enabling auth (HA addon uses HA login instead)
     if (config.AUTH_ENABLED && !window._passwordSet) {
-        alert('Set a password before enabling authentication.');
+        showToast('Set a password before enabling authentication', 'error');
         var fields = document.getElementById('auth-password-fields');
         if (fields) fields.style.display = '';
         var pwInput = document.getElementById('new-password');
@@ -1726,10 +1726,14 @@ async function saveConfig() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(config),
         });
-        return resp.ok;
+        if (!resp.ok) {
+            var errData = await resp.json().catch(function() { return {}; });
+            return { ok: false, error: errData.error || 'Save failed (HTTP ' + resp.status + ')' };
+        }
+        return { ok: true };
     } catch (err) {
         console.error('Save config error:', err);
-        return false;
+        return { ok: false, error: 'Network error: ' + err.message };
     }
 }
 
@@ -1738,9 +1742,9 @@ async function saveConfig() {
 async function setPassword() {
     var pw  = (document.getElementById('new-password') || {}).value || '';
     var pw2 = (document.getElementById('new-password-confirm') || {}).value || '';
-    if (!pw) { alert('Please enter a password.'); return; }
-    if (pw.length < 8) { alert('Password must be at least 8 characters.'); return; }
-    if (pw !== pw2) { alert('Passwords do not match.'); return; }
+    if (!pw) { showToast('Please enter a password', 'error'); return; }
+    if (pw.length < 8) { showToast('Password must be at least 8 characters', 'error'); return; }
+    if (pw !== pw2) { showToast('Passwords do not match', 'error'); return; }
     try {
         var resp = await fetch(API_BASE + '/api/set-password', {
             method: 'POST',
@@ -1750,15 +1754,15 @@ async function setPassword() {
         if (resp.status === 401) { _handleUnauthorized(); return; }
         var data = await resp.json().catch(function() { return {}; });
         if (resp.ok) {
-            alert('Password set successfully.');
+            showToast('Password set successfully', 'success');
             window._passwordSet = true;
             document.getElementById('new-password').value = '';
             document.getElementById('new-password-confirm').value = '';
         } else {
-            alert('Error: ' + (data.error || 'Unknown error'));
+            showToast('Error: ' + (data.error || 'Unknown error'), 'error');
         }
     } catch (err) {
-        alert('Error setting password: ' + err.message);
+        showToast('Error setting password: ' + err.message, 'error');
     }
 }
 
@@ -2100,25 +2104,29 @@ async function applyLogLevel() {
         if (resp.ok) {
             if (msg) { msg.textContent = '\u2713 Applied'; setTimeout(function() { if (msg) msg.textContent = ''; }, 3000); }
         } else {
-            alert('Error: ' + (data.error || 'Unknown error'));
+            showToast('Error: ' + (data.error || 'Unknown error'), 'error');
         }
     } catch (err) {
-        alert('Error: ' + err.message);
+        showToast('Error: ' + err.message, 'error');
     }
 }
 
 document.getElementById('config-form').addEventListener('submit', async function(e) {
     e.preventDefault();
+    var saveBtns = document.querySelectorAll('.config-save-bar button, .config-section button[type="submit"]');
+    saveBtns.forEach(function(b) { b.disabled = true; });
     try {
-        var ok = await saveConfig();
-        if (ok) {
+        var result = await saveConfig();
+        if (result && result.ok) {
             _setConfigDirty(false);
             showToast('\u2713 Configuration saved \u2014 restart to apply', 'success');
         } else {
-            showToast('\u2717 Failed to save configuration', 'error');
+            showToast('\u2717 ' + (result && result.error || 'Failed to save configuration'), 'error');
         }
     } catch (err) {
         showToast('\u2717 Error: ' + err.message, 'error');
+    } finally {
+        saveBtns.forEach(function(b) { b.disabled = false; });
     }
 });
 
@@ -2289,9 +2297,9 @@ async function saveAndRestart() {
 
     try {
         var saved = await saveConfig();
-        if (!saved) {
+        if (!saved || !saved.ok) {
             banner.className = 'restart-banner warning';
-            banner.innerHTML = '✗ Failed to save configuration';
+            banner.innerHTML = '\u2717 ' + (saved && saved.error || 'Failed to save configuration');
             setTimeout(function() { banner.style.display = 'none'; }, 3000);
             return;
         }
@@ -3131,7 +3139,7 @@ async function downloadDiagnostics() {
         a.click();
         URL.revokeObjectURL(a.href);
     } catch (err) {
-        alert('Download failed: ' + err.message);
+        showToast('Download failed: ' + err.message, 'error');
     }
 }
 
