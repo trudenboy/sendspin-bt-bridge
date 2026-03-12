@@ -2551,6 +2551,15 @@ function _openBugReport(e) {
     submitBtn.disabled = true;
     actions.appendChild(submitBtn);
 
+    var dataReady = false;
+    function validateForm() {
+        var hasTitle = titleInput.value.trim().length > 0 && titleInput.value.trim() !== 'Bug:';
+        var hasDesc = descInput.value.trim().length > 0;
+        submitBtn.disabled = !dataReady || !hasTitle || !hasDesc;
+    }
+    titleInput.addEventListener('input', validateForm);
+    descInput.addEventListener('input', validateForm);
+
     modal.appendChild(actions);
 
     var hint = document.createElement('p');
@@ -2576,7 +2585,8 @@ function _openBugReport(e) {
             reportFull = data.text_full || '';
             previewBox.textContent = reportFull || 'No data available';
             submitBtn.innerHTML = '⚠ Submit to GitHub';
-            submitBtn.disabled = false;
+            dataReady = true;
+            validateForm();
             copyBtn.style.display = '';
             hint.style.display = '';
 
@@ -2610,7 +2620,8 @@ function _openBugReport(e) {
         .catch(function() {
             previewBox.textContent = 'Failed to load diagnostics';
             submitBtn.innerHTML = '⚠ Submit to GitHub';
-            submitBtn.disabled = false;
+            dataReady = true;
+            validateForm();
             submitBtn.onclick = function() {
                 var title = titleInput.value.trim() || 'Bug report';
                 var desc = descInput.value.trim();
