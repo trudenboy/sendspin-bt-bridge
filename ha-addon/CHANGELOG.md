@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.27.0] - 2026-03-12
+
+### Added
+- Two-tier device enabled/disabled — global toggle fully removes device from BT, PA, and MA stacks; config checkbox in Devices section
+- Smart health indicators — manually released devices shown as grey (neutral); auto-disabled shown as amber warning
+
+### Fixed
+- Disabling a device now stops its daemon subprocess and removes the MA player
+
 ## [2.26.5] - 2026-03-12
 
 ### Fixed

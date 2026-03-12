@@ -2,7 +2,7 @@
 
 A history of the architectural and functional evolution of sendspin-bt-bridge — for readers familiar with Home Assistant, Music Assistant, and multiroom audio setups.
 
-**Period:** January 1 – March 12, 2026 · **Total commits:** ~860 · **Versions:** 1.0.0 → 2.26.5
+**Period:** January 1 – March 12, 2026 · **Total commits:** ~870 · **Versions:** 1.0.0 → 2.27.0
 
 ---
 
@@ -683,6 +683,16 @@ The addon config gained `tmpfs: true` (in-memory temp for better SD card longevi
 **Post-start sink routing correction** (v2.26.5): despite `PULSE_SINK` being correctly set in the subprocess environment, PulseAudio can still route sink-inputs to the default sink. This happens because all subprocesses share the same `application.name` (`ALSA plug-in [python3.12]`), and PA's `module-stream-restore` remembers the last sink used for that application name — even with `restore_device=false`. The fix re-introduces `amove_pid_sink_inputs()` as a one-shot correction in `_startup_unmute_watcher`: after `audio_streaming=True`, the subprocess moves its own sink-inputs to the correct sink before unmuting. Unlike the removed `_ensure_sink_routing()` (which ran reactively on every format change inside BridgeDaemon), this runs once at startup in the watcher, after audio is confirmed flowing.
 
 **Equalizer indicator accuracy** (v2.26.5): `audio_streaming` was only set to `True` in `_handle_format_change()`, which fires when the first audio chunk arrives with codec/rate/depth/channels metadata. On re-anchor or track change with the same format, `_handle_format_change` is not called again — but `_on_stream_event("stop")` had already reset `audio_streaming=False`. Result: playing audio with a red (stale) equalizer indicator. Fixed by also setting `audio_streaming=True` in `_on_stream_event("start")` when `audio_format` is already configured.
+
+### Two-tier enabled/disabled and smart health (v2.26.5 → v2.27.0)
+
+**Global device enabled/disabled** (v2.27.0): the `enabled` flag was redesigned from a BT-only hint into a full device lifecycle control. When `enabled=false`, the device is completely removed from all stacks: no `SendspinClient` created, no `BluetoothManager`, no subprocess, no MA player registration. The device's metadata (name, MAC, adapter) is preserved in config and shown as a dimmed checkbox in Configuration → Devices. Re-enabling requires a container restart to re-create the full stack.
+
+This is distinct from BT Release/Reclaim (`set_bt_management_enabled`), which only affects the Bluetooth layer — the client object stays alive in memory, can be reclaimed without restart, and the device remains visible in the dashboard.
+
+**MA player cleanup on disable** (v2.27.0): when a device is disabled via the config checkbox, the API handler calls `set_bt_management_enabled(False)` on the active client before marking it disabled. This stops the daemon subprocess, which disconnects its WebSocket to MA, triggering MA's `ClientRemovedEvent` — the player is unregistered immediately rather than lingering as "unavailable" until MA's next cleanup cycle.
+
+**Smart health indicators** (v2.27.0): a new `bt_released_by` field in `DeviceStatus` tracks *why* a device was released — `"user"` for manual Release button, `"auto"` for churn detection (`_check_reconnect_churn`) or reconnect threshold (`_handle_reconnect_failure`), `null` when enabled. The health indicator in the header now excludes manually released devices from BT/MA totals entirely (they're shown as a separate grey count — "N released"). Auto-disabled devices still count as unhealthy, keeping the indicator yellow/red to signal that attention is needed. The device card badge changes accordingly: grey "Released" for manual, orange "Auto-disabled" for automatic.
 
 ---
 

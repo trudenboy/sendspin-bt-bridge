@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.27.0] - 2026-03-12
+
+### Added
+- **Two-tier device enabled/disabled** — global `enabled` flag fully removes a device from the BT stack, PulseAudio, and Music Assistant (player unregistered); separate BT Release/Reclaim remains for Bluetooth-only control
+- **Config checkbox** — enable/disable toggle moved to a checkbox in Configuration → Devices for immediate effect without a separate UI section
+- **Smart health indicators** — manually released devices (grey) are excluded from health totals; auto-disabled devices (churn/reconnect threshold) show as amber "needs attention" with warning badge
+
+### Fixed
+- **MA player cleanup on disable** — disabling a device now stops its daemon subprocess, which disconnects from MA WebSocket and removes the player registration
+
 ## [2.26.5] - 2026-03-12
 
 ### Fixed
