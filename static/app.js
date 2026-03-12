@@ -2583,11 +2583,13 @@ function _openBugReport(e) {
     // Fetch diagnostics
     var reportShort = '';
     var reportFull = '';
+    var reportData = null;
     fetch(API_BASE + '/api/bugreport')
         .then(function(r) { return r.json(); })
         .then(function(data) {
             reportShort = data.markdown_short || '';
             reportFull = data.text_full || '';
+            reportData = data.report || {};
             previewBox.textContent = reportFull || 'No data available';
             submitBtn.innerHTML = '⚠ Submit to GitHub';
             dataReady = true;
@@ -2614,16 +2616,51 @@ function _openBugReport(e) {
                 }
                 var title = titleInput.value.trim() || 'Bug report';
                 var desc = descInput.value.trim();
-                var shortBody = '## Description\n\n' + (desc || '_No description provided_') + '\n\n---\n\n' + reportShort;
                 var fullBody = _buildBugReportBody(title, desc, reportFull);
 
-                // Download full report as .md file
+                // Download full report as .txt file
                 _downloadBugReport(fullBody, title);
 
-                // Open GitHub with short summary in URL
-                var issueUrl = 'https://github.com/trudenboy/sendspin-bt-bridge/issues/new'
-                    + '?title=' + encodeURIComponent(title)
-                    + '&body=' + encodeURIComponent(shortBody);
+                // Map runtime to deployment option
+                var runtimeMap = {
+                    ha_addon: 'Home Assistant Addon',
+                    docker: 'Docker Compose',
+                    systemd: 'Proxmox LXC'
+                };
+                var rep = reportData || {};
+                var env = (rep.diagnostics || {}).environment || rep.environment || {};
+                var diag = rep.diagnostics || {};
+                var ma = diag.ma_integration || {};
+                var runtime = rep.runtime || '';
+                var deployment = runtimeMap[runtime] || '';
+
+                // Detect audio system from environment
+                var audioServer = (env.audio_server || '').toLowerCase();
+                var audioSystem = audioServer.indexOf('pipewire') >= 0 ? 'PipeWire'
+                    : audioServer.indexOf('pulse') >= 0 ? 'PulseAudio' : 'Not sure';
+
+                // Build diagnostics summary for logs field
+                var logsSummary = reportShort.replace(/^## Bug Report\n*/, '');
+
+                // Count devices
+                var devices = diag.devices || [];
+                var devCount = devices.length <= 1 ? '1' : devices.length <= 3 ? '2-3' : '4+';
+
+                // Build issue URL with template prefill
+                var params = [
+                    'template=bug_report.yml',
+                    'title=' + encodeURIComponent(title),
+                    'description=' + encodeURIComponent(desc),
+                    'version=' + encodeURIComponent(rep.version || ''),
+                    'host_os=' + encodeURIComponent(env.platform || ''),
+                    'logs=' + encodeURIComponent(logsSummary),
+                    'additional=' + encodeURIComponent('📎 Full diagnostic report attached as file below')
+                ];
+                if (deployment) params.push('deployment=' + encodeURIComponent(deployment));
+                if (audioSystem) params.push('audio_system=' + encodeURIComponent(audioSystem));
+                if (devCount) params.push('device_count=' + encodeURIComponent(devCount));
+
+                var issueUrl = 'https://github.com/trudenboy/sendspin-bt-bridge/issues/new?' + params.join('&');
                 window.open(issueUrl, '_blank');
                 showToast('Full report downloaded — drag the file into the GitHub issue', 'info');
                 overlay.remove();
@@ -2644,10 +2681,10 @@ function _openBugReport(e) {
                 }
                 var title = titleInput.value.trim() || 'Bug report';
                 var desc = descInput.value.trim();
-                var body = '## Description\n\n' + (desc || '_No description provided_') + '\n\n_Diagnostics could not be loaded._';
                 var issueUrl = 'https://github.com/trudenboy/sendspin-bt-bridge/issues/new'
-                    + '?title=' + encodeURIComponent(title)
-                    + '&body=' + encodeURIComponent(body);
+                    + '?template=bug_report.yml'
+                    + '&title=' + encodeURIComponent(title)
+                    + '&description=' + encodeURIComponent(desc + '\n\n_Diagnostics could not be loaded._');
                 window.open(issueUrl, '_blank');
                 overlay.remove();
             };
