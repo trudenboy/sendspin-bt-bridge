@@ -193,6 +193,7 @@ class SendspinClient:
         self._start_sendspin_lock: asyncio.Lock | None = None  # set in run(), guards concurrent starts
         self._playing_since: float | None = None  # monotonic time when playing became True
         self._zombie_restart_count: int = 0  # consecutive zombie restarts (reset on real stream)
+        self._has_streamed: bool = False  # True after first audio_streaming=True in this subprocess
 
     def _update_status(self, updates: dict) -> None:
         """Thread-safe update of self.status; notifies SSE listeners."""
@@ -204,8 +205,9 @@ class SendspinClient:
                 elif not updates["playing"]:
                     self._playing_since = None
                     self._zombie_restart_count = 0
-            # Reset zombie tracking when real audio arrives
+            # Mark that real audio has arrived in this subprocess session
             if updates.get("audio_streaming"):
+                self._has_streamed = True
                 self._zombie_restart_count = 0
             self.status.update(updates)
         _state.notify_status_changed()
@@ -272,11 +274,16 @@ class SendspinClient:
                 logger.error("Error updating status: %s", e)
                 await asyncio.sleep(5)
 
-    _ZOMBIE_TIMEOUT_S = 5  # seconds of playing=True without audio_streaming before restart
+    _ZOMBIE_TIMEOUT_S = 15  # seconds of playing=True without audio_streaming before restart
     _MAX_ZOMBIE_RESTARTS = 3  # stop retrying after this many consecutive zombie restarts
 
     def _check_zombie_playback(self) -> None:
-        """Detect zombie state (playing=True, streaming=False) and schedule restart."""
+        """Detect zombie state (playing=True, streaming=False) and schedule restart.
+
+        Only triggers when audio has NEVER arrived in this subprocess session.
+        If audio was streaming before (re-anchor, group resync, track change),
+        PA buffers keep playing — this is normal, not a zombie.
+        """
         need_restart = False
         elapsed = 0.0
         restart_count = 0
@@ -288,6 +295,12 @@ class SendspinClient:
             )
             playing_since = self._playing_since
             zombie_count = self._zombie_restart_count
+            has_streamed = self._has_streamed
+
+            # Skip if audio has already streamed in this session —
+            # brief gaps (re-anchor, track change) are normal.
+            if has_streamed:
+                return
 
             if is_playing and not is_streaming and is_alive and playing_since is not None:
                 if zombie_count < self._MAX_ZOMBIE_RESTARTS:
@@ -339,6 +352,9 @@ class SendspinClient:
 
             # Stop any existing subprocess first
             await self.stop_sendspin()
+
+            # Reset per-session tracking for new subprocess
+            self._has_streamed = False
 
             safe_id = "".join(c if c.isalnum() or c == "-" else "-" for c in self.player_name.lower()).strip("-")
             _mac = self.bt_manager.mac_address if self.bt_manager else None
