@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.26.1] - 2026-03-12
+
+### Improved
+- Smooth restart — sinks muted before restart, auto-unmuted after audio stabilises; eliminates audible glitches
+- Sink name cache — cached sink tried first on restart, skipping 3 s A2DP delay
+
+### Removed
+- Legacy move-sink-input routing removed (PULSE_SINK subprocess architecture handles routing natively)
+
 ## [2.26.0] - 2026-03-12
 
 ### Added

@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.26.1] - 2026-03-12
+
+### Improved
+- **Smooth restart** — all local PA sinks are muted before restart and auto-unmuted after audio streaming stabilises (1.5 s settling window, 60 s safety timeout); eliminates audible glitches during service restarts
+- **Sink name cache** — `LAST_SINKS[mac]` persisted to config.json; on restart the cached sink is tried first, skipping the 3 s A2DP profile delay and retry loop when the sink is still valid
+
+### Removed
+- **Legacy move-sink-input routing** — `_ensure_sink_routing()` and `_sink_routed` flag removed from `BridgeDaemon`; the `PULSE_SINK` subprocess architecture makes reactive sink-input moves unnecessary (and they caused PA glitches triggering re-anchoring)
+
 ## [2.26.0] - 2026-03-12
 
 ### Added
