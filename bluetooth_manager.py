@@ -359,6 +359,9 @@ class BluetoothManager:
         2. Pair + trust while device is still in cache / pairing mode
         The device MUST be in pairing/discoverable mode when this runs.
         Uses stdin pipe directly — no shell, no injection risk.
+
+        Reads stdout in real-time during pairing to auto-confirm SSP passkey
+        prompts (e.g. ``Confirm passkey 312997 (yes/no):``).
         """
         mac = self.mac_address
         if not re.fullmatch(r"([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}", mac):
@@ -383,22 +386,59 @@ class BluetoothManager:
                 stderr=subprocess.STDOUT,
                 text=True,
             )
-            # Send initial setup and start scanning
             if proc.stdin is None:
                 raise RuntimeError("bluetoothctl subprocess stdin unavailable")
+
             proc.stdin.write("\n".join(initial_cmds) + "\n")
             proc.stdin.flush()
-            # Wait for scan to discover device
             time.sleep(_PAIRING_SCAN_DURATION)
-            # Send pair/trust commands
+
             proc.stdin.write("\n".join(pair_cmds) + "\n")
             proc.stdin.flush()
-            # Wait for pairing to complete
-            time.sleep(_PAIRING_WAIT_DURATION)
 
-            out, _ = proc.communicate(timeout=5)
+            # Read stdout in real-time to detect and answer SSP passkey prompts
+            collected: list[str] = []
+            deadline = time.monotonic() + _PAIRING_WAIT_DURATION
+            import selectors
+
+            sel = selectors.DefaultSelector()
+            sel.register(proc.stdout, selectors.EVENT_READ)  # type: ignore[arg-type]
+            try:
+                while time.monotonic() < deadline and proc.poll() is None:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        break
+                    events = sel.select(timeout=min(remaining, 0.5))
+                    if not events:
+                        continue
+                    line = proc.stdout.readline()  # type: ignore[union-attr]
+                    if not line:
+                        break
+                    collected.append(line)
+                    stripped = line.strip()
+                    # SSP passkey confirmation prompt
+                    if "confirm passkey" in stripped.lower() or "request confirmation" in stripped.lower():
+                        logger.info("SSP passkey prompt detected — auto-confirming: %s", stripped)
+                        proc.stdin.write("yes\n")
+                        proc.stdin.flush()
+                    # Early exit on success
+                    if "pairing successful" in stripped.lower() or "already paired" in stripped.lower():
+                        # Give trust command time to complete
+                        time.sleep(1)
+                        break
+            finally:
+                sel.close()
+
+            # Drain remaining output
+            try:
+                out_tail, _ = proc.communicate(timeout=3)
+                collected.append(out_tail)
+            except subprocess.TimeoutExpired:
+                pass
+
+            out = "".join(collected)
             logger.info("Pair output (last 600 chars): %s", out[-600:])
-            ok = "Pairing successful" in out or "Already paired" in out or "Paired: yes" in out
+            ok = "pairing successful" in out.lower() or "already paired" in out.lower() or "paired: yes" in out.lower()
             if ok:
                 logger.info("Pairing successful")
             else:
