@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.24.0] - 2026-03-12
+
+### Added
+- Bug report button with auto-diagnostics collection and GitHub issue integration
+- Auth warning banner when web UI authentication is disabled
+- Enriched diagnostics section with version, environment, subprocess info
+- Diagnostics and log file download buttons
+- MA server version in bug reports
+
+### Changed
+- Restart banner redesigned with action steps and progress bar
+- Header links now use monochrome SVG icons
+- Bug report uses plain text format with form validation
+
 ## [2.23.12] - 2026-03-12
 
 ### Added

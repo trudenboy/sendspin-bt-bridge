@@ -2,7 +2,7 @@
 
 A history of the architectural and functional evolution of sendspin-bt-bridge — for readers familiar with Home Assistant, Music Assistant, and multiroom audio setups.
 
-**Period:** January 1 – March 12, 2026 · **Total commits:** ~770 · **Versions:** 1.0.0 → 2.23.12
+**Period:** January 1 – March 12, 2026 · **Total commits:** ~820 · **Versions:** 1.0.0 → 2.24.0
 
 ---
 
@@ -579,6 +579,22 @@ The bigger outcome was splitting the 3 178-line `routes/api.py` monolith — the
 Thread-safety received targeted fixes: six places that iterated the global `_clients` list without acquiring `_clients_lock` were patched — three in `ma_monitor.py` via a new `state.get_clients_snapshot()` helper, two in config and MA routes. The `MaMonitor._msg_id` counter, previously a bare `int` incremented across threads, was replaced with `itertools.count(1)` — atomic under CPython. A duplicate MAC-address regex was consolidated into `services/bluetooth.py` as the canonical `is_valid_mac()` helper.
 
 All 138 tests passed after the refactoring; `ruff check` stayed clean throughout.
+
+## March 12, 2026 — Observability & UX polish (v2.23.12 → v2.24.0, ~21 commits)
+
+### Bug report with auto-diagnostics (v2.23.13–v2.23.16)
+
+A Report button was added to the header that automates the entire bug reporting flow. On click it calls `/api/bugreport`, which collects all diagnostic data (devices, adapters, sinks, subprocesses, MA integration, environment, config, logs), masks sensitive data (MAC addresses partially, IPs, tokens), and returns two artifacts: a short Markdown summary (<4 KB, suitable for a GitHub issue URL's `?body=` parameter) and a detailed plain-text file for manual attachment.
+
+The initial implementation went through several iterations: the full report started as a Markdown-formatted file with tables and collapsible sections, but was simplified to plain text with aligned columns for universal readability. The short summary gained last 3 WARNING/ERROR/CRITICAL log lines and MA server version (extracted from the WS handshake `server_info`). Form validation was added — the submit button stays disabled until both title and description are filled, and empty fields get red border highlights on click.
+
+### Diagnostics enrichment (v2.23.17–v2.24.0)
+
+The Diagnostics section previously showed only live connection status (bluetoothd, D-Bus, sinks, devices, MA groups). It now includes a version/environment header (bridge version, runtime type, uptime, Python version, platform, BlueZ, audio server, RSS memory, MA version) and per-subprocess status (pid, alive, zombie restarts, last error). The full-text report assembly was extracted from the bug report endpoint into `_build_full_text_report()` and reused for a new `/api/diagnostics/download` endpoint. Similarly, log reading was extracted into `_read_log_lines()` and reused for a `/api/logs/download` endpoint (500 lines as a timestamped text file).
+
+### UX improvements
+
+The restart banner was redesigned from a compact status counter (BT ✓ · PA ✓ · SS ✓ · MA …) with expandable per-device details to a sequential step display with a progress bar — since device statuses are already visible in the main UI cards, the banner now focuses on what's happening (saving → stopping → starting → connecting devices → connecting MA → done). An auth warning banner was added when authentication is disabled — a yellow bar with a direct link that scrolls to and highlights the auth checkbox in Configuration. Header links (Report, Docs, GitHub) received monochrome inline SVG icons using `currentColor` for theme compatibility.
 
 A follow-up patch (v2.20.4) fixed the JWT token `<details>` section's disclosure marker — the native ▼ was replaced with a CSS `::before` ▶ that rotates on open, matching other collapsible sections — and corrected the Music Assistant API token hint to point to "Settings → Profile → Long-lived access tokens".
 

@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.24.0] - 2026-03-12
+
+### Added
+- **Bug report button** — one-click diagnostics: auto-collects system info, masks sensitive data, opens a pre-filled GitHub issue with a short summary, and downloads a detailed diagnostics file for attachment
+- **Auth warning banner** — yellow banner when web UI authentication is disabled, with a direct link to enable it in Configuration
+- **Enriched diagnostics** — version, runtime, uptime, Python, platform, BlueZ, audio server, memory (RSS), MA version, and subprocess status now shown in the Diagnostics section
+- **Diagnostics download** — "Download report" button in Diagnostics exports a full plain-text report (environment, devices, subprocesses, MA integration, config, and recent logs)
+- **Log file download** — "Download" button in the Logs section exports last 500 lines as a text file
+- **MA server version** — displayed in both short and full bug reports, sourced from WS handshake
+
+### Changed
+- **Restart banner redesigned** — replaced compact status counters (BT/PA/SS/MA) and expandable details with sequential action steps and a progress bar; device status is already visible in device cards
+- **Header icons** — Report, Docs, and GitHub links now use monochrome inline SVG icons
+- **Bug report format** — full downloadable report switched from Markdown to plain text; short report includes last 3 warnings/errors
+- **Bug report validation** — submit button disabled until title and description are filled; empty fields highlighted on click
+
+### Internal
+- Extracted `_build_full_text_report()` for reuse between bug report and diagnostics download
+- Extracted `_read_log_lines()` for reuse between logs API and download endpoint
+
 ## [2.23.12] - 2026-03-12
 
 ### Added
