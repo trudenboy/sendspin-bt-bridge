@@ -301,6 +301,11 @@ class MaMonitor:
             # Server info
             server_info = await _recv(ws, timeout=10.0)
             self._detect_ha_addon(server_info)
+            # Cache MA server version
+            si = server_info.get("server_info", server_info)
+            _ma_ver = si.get("server_version", "")
+            if _ma_ver:
+                _state.set_ma_server_version(_ma_ver)
 
             # Auth
             mid = self._next_id()

@@ -514,6 +514,7 @@ def api_diagnostics():
         diag["ma_integration"] = {
             "configured": bool(ma_url and ma_token),
             "connected": state.is_ma_connected(),
+            "version": state.get_ma_server_version(),
             "url": ma_url or "",
             "syncgroups": enriched_groups,
         }
@@ -808,6 +809,9 @@ def api_bugreport():
         warn_keywords = ("WARNING", "ERROR", "CRITICAL")
         recent_errors = [ln for ln in masked.get("logs", []) if any(k in ln for k in warn_keywords)][-3:]
 
+        ma_ver = ma_info.get("version") or "?"
+        ma_label = f"connected (v{ma_ver})" if ma_info.get("connected") and ma_ver != "?" else ma_status
+
         short = [
             "## Bug Report",
             "",
@@ -818,7 +822,7 @@ def api_bugreport():
             f"**Python:** {env.get('python', '?').split()[0]}  |  **RSS:** {env.get('process_rss_mb', '?')} MB",
             "",
             f"**BT:** {bt_conn}/{bt_total} connected  |  "
-            f"**MA:** {ma_status}  |  "
+            f"**MA:** {ma_label}  |  "
             f"**Sinks:** {len(sinks)}  |  "
             f"**Streams:** {len(sink_inputs)}",
             f"**D-Bus:** {'✅' if diag.get('dbus_available') else '❌'}  |  "

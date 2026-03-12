@@ -32,6 +32,7 @@ __all__ = [
     "get_ma_groups",
     "get_ma_now_playing",
     "get_ma_now_playing_for_group",
+    "get_ma_server_version",
     "get_main_loop",
     "get_scan_job",
     "is_ma_connected",
@@ -44,6 +45,7 @@ __all__ = [
     "set_ma_groups",
     "set_ma_now_playing",
     "set_ma_now_playing_for_group",
+    "set_ma_server_version",
     "set_main_loop",
 ]
 
@@ -316,6 +318,7 @@ def get_ma_groups() -> list[dict]:
 
 _ma_connected: bool = False
 _ma_connected_lock = threading.Lock()
+_ma_server_version: str = ""
 _ma_now_playing: dict[str, dict] = {}  # keyed by syncgroup_id
 _ma_now_playing_lock = threading.Lock()
 
@@ -331,6 +334,19 @@ def set_ma_connected(value: bool) -> None:
     global _ma_connected
     with _ma_connected_lock:
         _ma_connected = value
+
+
+def get_ma_server_version() -> str:
+    """Return cached MA server version string (e.g. '2.7.10')."""
+    with _ma_connected_lock:
+        return _ma_server_version
+
+
+def set_ma_server_version(version: str) -> None:
+    """Cache MA server version discovered during WS handshake."""
+    global _ma_server_version
+    with _ma_connected_lock:
+        _ma_server_version = version
 
 
 def get_ma_now_playing_for_group(syncgroup_id: str) -> dict:
