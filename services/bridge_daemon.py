@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 import socket
 from datetime import datetime, timezone
 from importlib.metadata import version as _pkg_version
@@ -33,7 +32,6 @@ from sendspin.daemon.daemon import DaemonArgs, SendspinDaemon
 
 from config import VERSION as _BRIDGE_VERSION
 from services.pulse import (
-    amove_pid_sink_inputs,
     aset_sink_volume,
 )
 
@@ -68,7 +66,6 @@ class BridgeDaemon(SendspinDaemon):
         self._bluetooth_sink_name = bluetooth_sink_name
         self._on_volume_save = on_volume_save
         self._on_status_change = on_status_change
-        self._sink_routed = False  # True after first move-sink-input for current stream
         self._background_tasks: set = set()
 
     def _notify(self) -> None:
@@ -171,7 +168,6 @@ class BridgeDaemon(SendspinDaemon):
         self._bridge_status["reanchor_count"] = 0  # reset per-stream re-anchor counter
         self._bridge_status["reanchoring"] = False
         self._bridge_status["last_reanchor_at"] = None
-        self._sink_routed = False  # new stream — allow one routing correction
         self._notify()
 
     def _on_stream_event(self, event: str) -> None:
@@ -187,33 +183,7 @@ class BridgeDaemon(SendspinDaemon):
         # NOTE: reanchoring flag is NOT cleared here because sendspin logs "re-anchoring"
         # AFTER restarting the stream — so this callback fires before the log handler sets
         # the flag. Auto-clear is handled by _reanchor_watcher in daemon_process.py.
-        if event == "start" and self._bluetooth_sink_name and not self._sink_routed:
-            # Correct any stream PA module-rescue-streams moved to the default sink.
-            # Guard with _sink_routed so we only move once per stream — moving a
-            # sink-input causes a PA glitch that triggers re-anchoring, creating a loop.
-            self._sink_routed = True
-            _task = asyncio.ensure_future(self._ensure_sink_routing())
-            self._background_tasks.add(_task)
-            _task.add_done_callback(self._background_tasks.discard)
-            _task.add_done_callback(
-                lambda t: logger.debug("_ensure_sink_routing error: %s", t.exception()) if t.exception() else None
-            )
         logger.debug("[%s] stream event: %s", self._bridge_status.get("player_name", "?"), event)
-
-    async def _ensure_sink_routing(self) -> None:
-        """Move any of our sink-inputs that ended up on the wrong sink."""
-        pid = os.getpid()
-        sink = self._bluetooth_sink_name
-        if not sink:
-            return
-        try:
-            moved = await amove_pid_sink_inputs(pid, sink)
-            if moved:
-                logger.info(
-                    "[%s] Corrected %d sink-input(s) → %s", self._bridge_status.get("player_name", "?"), moved, sink
-                )
-        except Exception as exc:
-            logger.debug("_ensure_sink_routing: %s", exc)
 
     # ── Server commands (volume / mute) ──────────────────────────────────────
 
