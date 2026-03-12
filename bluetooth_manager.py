@@ -94,7 +94,7 @@ def _dbus_get_device_property(device_path: str, property_name: str, adapter_hci:
         device = bus.get_object("org.bluez", device_path)
         props = _dbus.Interface(device, "org.freedesktop.DBus.Properties")
         return props.Get("org.bluez.Device1", property_name)
-    except (ImportError, OSError, ValueError):
+    except Exception:
         return None
 
 
@@ -107,7 +107,7 @@ def _dbus_get_battery_level(device_path: str) -> int | None:
         device = bus.get_object("org.bluez", device_path)
         props = _dbus.Interface(device, "org.freedesktop.DBus.Properties")
         return int(props.Get("org.bluez.Battery1", "Percentage"))
-    except (ImportError, OSError, ValueError):
+    except Exception:
         return None
 
 
@@ -124,7 +124,7 @@ def _dbus_call_device_method(device_path: str, method_name: str) -> bool:
         iface = _dbus.Interface(device, "org.bluez.Device1")
         getattr(iface, method_name)()
         return True
-    except (ImportError, OSError, ValueError) as e:
+    except Exception as e:
         logger.debug("D-Bus %s failed: %s", method_name, e)
         return False
 
@@ -346,7 +346,7 @@ class BluetoothManager:
 
             self.connected = is_connected
             return self.connected
-        except (OSError, subprocess.SubprocessError) as e:
+        except Exception as e:
             logger.warning("Error checking Bluetooth connection: %s", e)
             self.connected = False
             return False
@@ -744,6 +744,20 @@ class BluetoothManager:
                         if self.client and self.client.status.get("reconnecting"):
                             self.client._update_status({"reconnecting": False, "reconnect_attempt": 0})
                         reconnect_attempt = 0
+
+                        # Handle auto-reconnect: device connected externally (e.g. TWS
+                        # earbuds taken out of charging case), player not yet running.
+                        if self.client and not self.client.is_running():
+                            logger.info(
+                                "[%s] Device connected but player not running — configuring audio...",
+                                self.device_name,
+                            )
+                            await loop.run_in_executor(_bt_executor, self.configure_bluetooth_audio)
+                            self._record_reconnect()
+                            if self.client.bluetooth_sink_name:
+                                logger.info("[%s] Auto-reconnect: starting player", self.device_name)
+                                await self.client.start_sendspin()
+
                         # Read battery level (None if device doesn't support it)
                         self.battery_level = _dbus_get_battery_level(self._dbus_device_path)
 
