@@ -163,8 +163,11 @@
         .bugreport-btn.secondary:hover { opacity: 0.8; }
         .bugreport-btn.primary { background: #1a73e8; color: #fff; }
         .bugreport-btn.primary:hover { background: #1557b0; }
+        .bugreport-btn.primary:disabled, .bugreport-btn.btn-disabled { background: #9fc3f0; cursor: not-allowed; }
         .bugreport-spinner { display: inline-block; animation: spin 1s linear infinite; }
         .bugreport-hint { font-size: 12px; color: #888; margin: 8px 0 0; line-height: 1.4; }
+        .bugreport-field input.invalid,
+        .bugreport-field textarea.invalid { border: 2px solid #e53935; }
 
         .header-actions {
             display: flex; align-items: center; gap: 10px;

@@ -2546,16 +2546,20 @@ function _openBugReport(e) {
     actions.appendChild(copyBtn);
 
     var submitBtn = document.createElement('button');
-    submitBtn.className = 'bugreport-btn primary';
+    submitBtn.className = 'bugreport-btn primary btn-disabled';
     submitBtn.innerHTML = '<span class="bugreport-spinner">⟳</span> Loading…';
-    submitBtn.disabled = true;
+    submitBtn._formValid = false;
     actions.appendChild(submitBtn);
 
     var dataReady = false;
     function validateForm() {
         var hasTitle = titleInput.value.trim().length > 0 && titleInput.value.trim() !== 'Bug:';
         var hasDesc = descInput.value.trim().length > 0;
-        submitBtn.disabled = !dataReady || !hasTitle || !hasDesc;
+        var ready = dataReady && hasTitle && hasDesc;
+        submitBtn.classList.toggle('btn-disabled', !ready);
+        submitBtn._formValid = ready;
+        if (hasTitle) titleInput.classList.remove('invalid');
+        if (hasDesc) descInput.classList.remove('invalid');
     }
     titleInput.addEventListener('input', validateForm);
     descInput.addEventListener('input', validateForm);
@@ -2600,6 +2604,13 @@ function _openBugReport(e) {
             };
 
             submitBtn.onclick = function() {
+                if (!submitBtn._formValid) {
+                    var _hasTitle = titleInput.value.trim().length > 0 && titleInput.value.trim() !== 'Bug:';
+                    var _hasDesc = descInput.value.trim().length > 0;
+                    if (!_hasTitle) { titleInput.classList.add('invalid'); titleInput.focus(); }
+                    if (!_hasDesc) { descInput.classList.add('invalid'); }
+                    return;
+                }
                 var title = titleInput.value.trim() || 'Bug report';
                 var desc = descInput.value.trim();
                 var shortBody = '## Description\n\n' + (desc || '_No description provided_') + '\n\n---\n\n' + reportShort;
@@ -2623,6 +2634,13 @@ function _openBugReport(e) {
             dataReady = true;
             validateForm();
             submitBtn.onclick = function() {
+                if (!submitBtn._formValid) {
+                    var _hasTitle = titleInput.value.trim().length > 0 && titleInput.value.trim() !== 'Bug:';
+                    var _hasDesc = descInput.value.trim().length > 0;
+                    if (!_hasTitle) { titleInput.classList.add('invalid'); titleInput.focus(); }
+                    if (!_hasDesc) { descInput.classList.add('invalid'); }
+                    return;
+                }
                 var title = titleInput.value.trim() || 'Bug report';
                 var desc = descInput.value.trim();
                 var body = '## Description\n\n' + (desc || '_No description provided_') + '\n\n_Diagnostics could not be loaded._';
