@@ -2552,6 +2552,13 @@ function _openBugReport(e) {
     actions.appendChild(submitBtn);
 
     modal.appendChild(actions);
+
+    var hint = document.createElement('p');
+    hint.className = 'bugreport-hint';
+    hint.textContent = 'A new GitHub issue will open with a brief summary. A detailed diagnostics file will be downloaded — please attach it to the issue.';
+    hint.style.display = 'none';
+    modal.appendChild(hint);
+
     overlay.appendChild(modal);
     overlay.onclick = function(ev) { if (ev.target === overlay) overlay.remove(); };
     document.body.appendChild(overlay);
@@ -2571,6 +2578,7 @@ function _openBugReport(e) {
             submitBtn.innerHTML = '⚠ Submit to GitHub';
             submitBtn.disabled = false;
             copyBtn.style.display = '';
+            hint.style.display = '';
 
             copyBtn.onclick = function() {
                 var fullBody = _buildBugReportBody(titleInput.value, descInput.value, reportFull);
