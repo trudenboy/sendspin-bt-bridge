@@ -2560,18 +2560,20 @@ function _openBugReport(e) {
     setTimeout(function() { titleInput.focus(); titleInput.setSelectionRange(5, 5); }, 100);
 
     // Fetch diagnostics
-    var reportMarkdown = '';
+    var reportShort = '';
+    var reportFull = '';
     fetch(API_BASE + '/api/bugreport')
         .then(function(r) { return r.json(); })
         .then(function(data) {
-            reportMarkdown = data.markdown || '';
-            previewBox.textContent = reportMarkdown || 'No data available';
+            reportShort = data.markdown_short || '';
+            reportFull = data.markdown_full || '';
+            previewBox.textContent = reportFull || 'No data available';
             submitBtn.innerHTML = '⚠ Submit to GitHub';
             submitBtn.disabled = false;
             copyBtn.style.display = '';
 
             copyBtn.onclick = function() {
-                var fullBody = _buildBugReportBody(titleInput.value, descInput.value, reportMarkdown);
+                var fullBody = _buildBugReportBody(titleInput.value, descInput.value, reportFull);
                 _copyToClipboard(fullBody).then(function() {
                     showToast('Report copied to clipboard', 'info');
                 }).catch(function() {
@@ -2582,21 +2584,18 @@ function _openBugReport(e) {
             submitBtn.onclick = function() {
                 var title = titleInput.value.trim() || 'Bug report';
                 var desc = descInput.value.trim();
-                var body = _buildBugReportBody(title, desc, reportMarkdown);
-                var issueUrl = 'https://github.com/trudenboy/sendspin-bt-bridge/issues/new?title=' + encodeURIComponent(title);
+                var shortBody = '## Description\n\n' + (desc || '_No description provided_') + '\n\n---\n\n' + reportShort;
+                var fullBody = _buildBugReportBody(title, desc, reportFull);
 
-                _copyToClipboard(body).then(function() {
-                    showToast('Report copied to clipboard — paste it into the issue body on GitHub', 'info');
-                    window.open(issueUrl, '_blank');
-                }).catch(function() {
-                    // Clipboard failed — try full URL as fallback
-                    var fullUrl = issueUrl + '&body=' + encodeURIComponent(body);
-                    if (fullUrl.length > 8000) {
-                        showToast('Could not copy — please use the 📋 Copy button, then paste on GitHub', 'error');
-                    } else {
-                        window.open(fullUrl, '_blank');
-                    }
-                });
+                // Download full report as .md file
+                _downloadBugReport(fullBody, title);
+
+                // Open GitHub with short summary in URL
+                var issueUrl = 'https://github.com/trudenboy/sendspin-bt-bridge/issues/new'
+                    + '?title=' + encodeURIComponent(title)
+                    + '&body=' + encodeURIComponent(shortBody);
+                window.open(issueUrl, '_blank');
+                showToast('Full report downloaded — drag the file into the GitHub issue', 'info');
                 overlay.remove();
             };
         })
@@ -2608,13 +2607,10 @@ function _openBugReport(e) {
                 var title = titleInput.value.trim() || 'Bug report';
                 var desc = descInput.value.trim();
                 var body = '## Description\n\n' + (desc || '_No description provided_') + '\n\n_Diagnostics could not be loaded._';
-                var issueUrl = 'https://github.com/trudenboy/sendspin-bt-bridge/issues/new?title=' + encodeURIComponent(title);
-                _copyToClipboard(body).then(function() {
-                    showToast('Report copied — paste into the issue body on GitHub', 'info');
-                    window.open(issueUrl, '_blank');
-                }).catch(function() {
-                    window.open(issueUrl + '&body=' + encodeURIComponent(body), '_blank');
-                });
+                var issueUrl = 'https://github.com/trudenboy/sendspin-bt-bridge/issues/new'
+                    + '?title=' + encodeURIComponent(title)
+                    + '&body=' + encodeURIComponent(body);
+                window.open(issueUrl, '_blank');
                 overlay.remove();
             };
         });
@@ -2638,6 +2634,20 @@ function _copyToClipboard(text) {
         } catch (e) { reject(e); }
         finally { document.body.removeChild(ta); }
     });
+}
+
+function _downloadBugReport(content, title) {
+    var blob = new Blob([content], { type: 'text/markdown' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    var date = new Date().toISOString().slice(0, 10);
+    var slug = (title || 'bugreport').toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40);
+    a.href = url;
+    a.download = 'bugreport-' + date + '-' + slug + '.md';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
 }
 
 function _buildBugReportBody(title, description, diagnostics) {

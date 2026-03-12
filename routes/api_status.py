@@ -751,7 +751,7 @@ def _collect_recent_logs(n: int = 100) -> list[str]:
 
 @status_bp.route("/api/bugreport")
 def api_bugreport():
-    """Assemble a full bug report with masked MAC/IP addresses."""
+    """Assemble a bug report: short summary for URL + full file for download."""
     try:
         # Collect all diagnostic data
         diag_resp = api_diagnostics()
@@ -772,12 +772,14 @@ def api_bugreport():
         elif os.path.exists("/etc/systemd/system/sendspin-client.service"):
             runtime = "systemd"
 
+        uptime_str = str(datetime.now(tz=UTC) - state.bridge_start_time)
+
         # Build structured report
         report = {
             "version": VERSION,
             "build_date": BUILD_DATE,
             "runtime": runtime,
-            "uptime": str(datetime.now(tz=UTC) - state.bridge_start_time),
+            "uptime": uptime_str,
             "environment": env,
             "diagnostics": diag,
             "subprocesses": subprocs,
@@ -788,9 +790,48 @@ def api_bugreport():
         # Mask all MAC/IP in the report
         masked = _mask_obj(report)
 
-        # Build markdown body for GitHub issue
-        md_parts = [
+        # --- Short markdown (for URL ?body=, fits ~4 KB) ---
+        short = [
             "## Bug Report",
+            "",
+            f"**Version:** {masked['version']} (built {masked['build_date']})",
+            f"**Runtime:** {masked['runtime']}  |  **Uptime:** {masked['uptime']}",
+            f"**Platform:** {masked['environment'].get('platform', '?')}  |  "
+            f"**Arch:** {masked['environment'].get('arch', '?')}",
+            "",
+        ]
+
+        # Compact device summary
+        devices = masked.get("diagnostics", {}).get("devices", [])
+        if devices:
+            short.append("### Devices")
+            short.append("| Name | BT | Sink |")
+            short.append("|------|-----|------|")
+            for d in devices:
+                bt = "✅" if d.get("connected") else "❌"
+                sink = d.get("sink") or "—"
+                short.append(f"| {d.get('name', '?')} | {bt} | {sink} |")
+            short.append("")
+
+        # Compact subprocess summary
+        if masked["subprocesses"]:
+            short.append("### Subprocesses")
+            short.append("| Name | PID | Alive | Reconnect |")
+            short.append("|------|-----|-------|-----------|")
+            for sp in masked["subprocesses"]:
+                pid = sp.get("pid") or "—"
+                alive = "✅" if sp.get("alive") else "❌"
+                recon = sp.get("reconnect_attempt", 0) or "—"
+                short.append(f"| {sp.get('name', '?')} | {pid} | {alive} | {recon} |")
+            short.append("")
+
+        short.append("> 📎 **Full diagnostic report attached as file below**")
+
+        markdown_short = "\n".join(short)
+
+        # --- Full markdown (for downloadable file) ---
+        full = [
+            "## Bug Report — Full Diagnostics",
             "",
             f"**Version:** {masked['version']} (built {masked['build_date']})",
             f"**Runtime:** {masked['runtime']}",
@@ -798,44 +839,40 @@ def api_bugreport():
             "",
         ]
 
-        # Environment
-        md_parts.append("<details><summary>🖥️ Environment</summary>\n")
-        md_parts.append("```")
+        full.append("<details><summary>🖥️ Environment</summary>\n")
+        full.append("```")
         for k, v in masked["environment"].items():
-            md_parts.append(f"{k}: {v}")
-        md_parts.append("```\n</details>\n")
+            full.append(f"{k}: {v}")
+        full.append("```\n</details>\n")
 
-        # Diagnostics
-        md_parts.append("<details><summary>🔧 Diagnostics</summary>\n")
-        md_parts.append("```json")
-        md_parts.append(json.dumps(masked["diagnostics"], indent=2, default=str))
-        md_parts.append("```\n</details>\n")
+        full.append("<details><summary>🔧 Diagnostics</summary>\n")
+        full.append("```json")
+        full.append(json.dumps(masked["diagnostics"], indent=2, default=str))
+        full.append("```\n</details>\n")
 
-        # Subprocesses
-        md_parts.append("<details><summary>⚙️ Subprocesses</summary>\n")
-        md_parts.append("```json")
-        md_parts.append(json.dumps(masked["subprocesses"], indent=2, default=str))
-        md_parts.append("```\n</details>\n")
+        full.append("<details><summary>⚙️ Subprocesses</summary>\n")
+        full.append("```json")
+        full.append(json.dumps(masked["subprocesses"], indent=2, default=str))
+        full.append("```\n</details>\n")
 
-        # Config (sanitized)
-        md_parts.append("<details><summary>📋 Config (sanitized)</summary>\n")
-        md_parts.append("```json")
-        md_parts.append(json.dumps(masked["config"], indent=2, default=str))
-        md_parts.append("```\n</details>\n")
+        full.append("<details><summary>📋 Config (sanitized)</summary>\n")
+        full.append("```json")
+        full.append(json.dumps(masked["config"], indent=2, default=str))
+        full.append("```\n</details>\n")
 
-        # Logs
         if masked["logs"]:
-            md_parts.append("<details><summary>📜 Recent Logs (last 100 lines)</summary>\n")
-            md_parts.append("```")
+            full.append("<details><summary>📜 Recent Logs (last 100 lines)</summary>\n")
+            full.append("```")
             for line in masked["logs"]:
-                md_parts.append(str(line))
-            md_parts.append("```\n</details>")
+                full.append(str(line))
+            full.append("```\n</details>")
 
-        markdown_body = "\n".join(md_parts)
+        markdown_full = "\n".join(full)
 
         return jsonify(
             {
-                "markdown": markdown_body,
+                "markdown_short": markdown_short,
+                "markdown_full": markdown_full,
                 "report": masked,
             }
         )
