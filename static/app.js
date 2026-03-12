@@ -107,12 +107,6 @@ function showToast(msg, type) {
 
 // ---- Auth helper ----
 
-function _esc(s) {
-    var d = document.createElement('div');
-    d.appendChild(document.createTextNode(s || ''));
-    return d.innerHTML;
-}
-
 function _handleUnauthorized() {
     var loginUrl = (API_BASE || '') + '/login?next=' + encodeURIComponent(window.location.pathname);
     window.location.href = loginUrl;
@@ -223,9 +217,6 @@ async function updateStatus() {
 
         _updateGroupPanel();
         updateHealthIndicator(sorted);
-
-        // Render disabled devices section
-        _renderDisabledDevices(status.disabled_devices || []);
 
     } catch (err) {
         console.error('Status update failed:', err);
@@ -358,9 +349,6 @@ function buildDeviceCard(i) {
             ' onclick="btPair(' + i + ')" title="Put the device into pairing mode first">&#128279; Re-pair</button>' +
           '<button type="button" class="btn-bt-action btn-bt-release" id="dbtn-release-' + i + '"' +
             ' onclick="btToggleManagement(' + i + ')">&#128274; Release</button>' +
-          '<button type="button" class="btn-bt-action" id="dbtn-disable-' + i + '"' +
-            ' onclick="toggleDeviceEnabled(lastDevices[' + i + '].player_name, false)"' +
-            ' title="Disable device globally (restart required)">&#10060; Disable</button>' +
           '<span class="bt-action-status" id="dbt-action-status-' + i + '"></span>' +
         '</div>';
     return card;
@@ -1273,45 +1261,7 @@ async function btToggleManagement(i) {
     setTimeout(function() { if (status) status.textContent = ''; }, 4000);
 }
 
-// ---- Disabled devices rendering ----
-
-function _renderDisabledDevices(disabledDevices) {
-    var section = document.getElementById('disabled-devices-section');
-    var grid = document.getElementById('disabled-devices-grid');
-    if (!section || !grid) return;
-    if (!disabledDevices || disabledDevices.length === 0) {
-        section.style.display = 'none';
-        grid.innerHTML = '';
-        return;
-    }
-    section.style.display = '';
-    // Build/update cards
-    var existing = grid.querySelectorAll('.device-card');
-    if (existing.length !== disabledDevices.length) {
-        grid.innerHTML = '';
-        disabledDevices.forEach(function(dev, idx) {
-            var card = document.createElement('div');
-            card.className = 'device-card';
-            card.id = 'disabled-card-' + idx;
-            card.innerHTML =
-                '<div class="device-card-identity">' +
-                  '<strong>' + _esc(dev.player_name || 'Unknown') + '</strong>' +
-                  ' <span class="released-badge">DISABLED</span>' +
-                '</div>' +
-                '<div style="padding:6px 10px;color:var(--secondary-text-color);font-size:12px">' +
-                  (dev.mac ? 'MAC: ' + _esc(dev.mac) : 'No MAC') +
-                  (dev.adapter ? ' &middot; Adapter: ' + _esc(dev.adapter) : '') +
-                '</div>' +
-                '<div class="device-card-actions">' +
-                  '<button type="button" class="btn-bt-action btn-bt-reconnect"' +
-                    ' onclick="toggleDeviceEnabled(\'' + _esc(dev.player_name) + '\', true)">' +
-                    '&#9989; Enable</button>' +
-                  '<span class="bt-action-status" id="ddisabled-status-' + idx + '"></span>' +
-                '</div>';
-            grid.appendChild(card);
-        });
-    }
-}
+// ---- Device enabled toggle (used by config checkbox) ----
 
 async function toggleDeviceEnabled(playerName, enabled) {
     try {
@@ -1453,7 +1403,7 @@ function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabl
     var tbody = document.getElementById('bt-devices-table');
     var wrap = document.createElement('div');
     wrap.className = 'bt-device-wrap';
-    if (enabled === false) wrap.dataset.enabled = 'false';
+    var isEnabled = enabled !== false;
 
     var row = document.createElement('div');
     row.className = 'bt-device-row';
@@ -1463,6 +1413,7 @@ function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabl
     var kaVal = (keepaliveInterval !== undefined && keepaliveInterval !== null && keepaliveInterval !== '') ? parseInt(keepaliveInterval, 10) : 0;
     if (kaVal > 0 && kaVal < 30) kaVal = 30;
     row.innerHTML =
+        '<input type="checkbox" class="bt-enabled" title="Enable/disable device"' + (isEnabled ? ' checked' : '') + '>' +
         '<button type="button" class="bt-expand-btn" title="Show advanced fields">&#9654;</button>' +
         '<input type="text" placeholder="Player Name" class="bt-name" value="' +
             escHtmlAttr(name || '') + '">' +
@@ -1494,6 +1445,12 @@ function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabl
 
     row.querySelector('.btn-remove-dev').addEventListener('click', function() {
         wrap.remove();
+        _setConfigDirty(true);
+    });
+    row.querySelector('.bt-enabled').addEventListener('change', function() {
+        var pName = row.querySelector('.bt-name').value.trim();
+        var checked = this.checked;
+        if (pName) toggleDeviceEnabled(pName, checked);
         _setConfigDirty(true);
     });
     row.querySelector('.bt-mac').addEventListener('input', function() {
@@ -1540,15 +1497,9 @@ function collectBtDevices() {
         if (listenHost) dev.listen_host = listenHost;
         if (listenPort) dev.listen_port = listenPort;
         dev.keepalive_interval = kaVal;
-        // Preserve enabled flag: live status takes precedence, then config-loaded value from dataset
-        var livedev = lastDevices && lastDevices.find(function(d) {
-            return d.player_name === name || d.bluetooth_mac === mac;
-        });
-        if (livedev) {
-            if (livedev.bt_management_enabled === false) dev.enabled = false;
-        } else if (wrap.dataset.enabled === 'false') {
-            dev.enabled = false;
-        }
+        // Read enabled state from checkbox
+        var enabledCb = row.querySelector('.bt-enabled');
+        if (enabledCb && !enabledCb.checked) dev.enabled = false;
         if (mac) devices.push(dev);
     });
     return devices;

@@ -464,19 +464,22 @@
 
         /* BT device table */
         .bt-header {
-            display: grid; grid-template-columns: 30px 1fr 1.3fr 0.9fr 8rem 30px;
+            display: grid; grid-template-columns: 22px 30px 1fr 1.3fr 0.9fr 8rem 30px;
             gap: 8px; margin-bottom: 4px; padding: 0 2px;
             font-size: 11px; font-weight: 600; color: var(--secondary-text-color); text-transform: uppercase;
         }
         .bt-device-wrap { margin-bottom: 10px; }
         .bt-device-row {
-            display: grid; grid-template-columns: 30px 1fr 1.3fr 0.9fr 8rem 30px;
+            display: grid; grid-template-columns: 22px 30px 1fr 1.3fr 0.9fr 8rem 30px;
             gap: 8px; align-items: center; margin-bottom: 0;
         }
         .bt-device-row input, .bt-device-row select {
             padding: 7px 10px; border: 1px solid var(--divider-color);
             border-radius: 5px; font-size: 13px;
             background: var(--card-background-color); color: var(--primary-text-color); width: 100%;
+        }
+        .bt-device-row input[type="checkbox"] {
+            width: 16px; height: 16px; padding: 0; cursor: pointer;
         }
         .bt-device-row input:focus, .bt-device-row select:focus {
             outline: none; border-color: var(--primary-color);
@@ -693,13 +696,6 @@
             border: 1px solid var(--divider-color);
             vertical-align: middle; margin-left: 4px;
         }
-
-        /* Disabled devices section */
-        .disabled-grid .device-card {
-            opacity: 0.55; filter: grayscale(0.4);
-            transition: opacity 0.2s;
-        }
-        .disabled-grid .device-card:hover { opacity: 0.85; filter: none; }
 
         .battery-badge {
             font-size: 11px; opacity: 0.85; white-space: nowrap;
