@@ -444,23 +444,23 @@
             grid-column: 1; grid-row: 1;
             padding-right: 20px; border-right: 1px solid var(--divider-color);
         }
+        .identity-title-row {
+            display: flex; align-items: center; gap: 6px;
+        }
         .device-card-title {
-            font-size: 15px; font-weight: 700; color: var(--primary-text-color); margin-bottom: 2px;
+            font-size: 15px; font-weight: 700; color: var(--primary-text-color);
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+            flex: 1; min-width: 0;
         }
-        .device-mac {
-            font-size: 11px; color: var(--secondary-text-color); font-family: 'Courier New', monospace;
+        .identity-meta-row {
+            display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+            margin-top: 3px; min-height: 0;
         }
-        .device-card-identity .identity-detail {
-            max-height: 0; overflow: hidden; opacity: 0;
-            transition: max-height 0.15s, opacity 0.15s;
-        }
-        .device-card:hover .identity-detail, .device-card:focus-within .identity-detail {
-            max-height: 30px; opacity: 1;
-        }
+        .identity-meta-row:empty { display: none; }
         .group-badge {
-            font-size: 11px; color: var(--secondary-text-color); margin-top: 3px;
-            padding: 2px 6px; background: var(--divider-color, rgba(0,0,0,0.08));
-            border-radius: 3px; display: inline-block;
+            font-size: 11px; color: var(--secondary-text-color);
+            padding: 1px 6px; background: var(--divider-color, rgba(0,0,0,0.08));
+            border-radius: 3px; display: inline-block; white-space: nowrap;
         }
         .group-badge.hover-only { display: none !important; }
         .device-card:hover .group-badge.hover-only,
@@ -717,7 +717,6 @@
         .filter-btn:hover { color: var(--primary-text-color); }
         .filter-btn.active { background: var(--primary-color); color: white; }
         .ts     { font-size: 11px; color: var(--secondary-text-color); margin-top: 3px; }
-        .ts-sub { font-size: 11px; color: var(--secondary-text-color); margin-top: 3px; word-break: break-all; }
         .sync-hover { display: none; }
         .device-card:hover .sync-hover.has-delay,
         .device-card:focus-within .sync-hover.has-delay { display: block; }
@@ -803,7 +802,7 @@
             background: rgba(107, 114, 128, 0.15);
             color: var(--secondary-text-color);
             border: 1px solid var(--divider-color);
-            vertical-align: middle; margin-left: 4px;
+            vertical-align: middle;
         }
         .released-badge-warn {
             background: rgba(245, 158, 11, 0.15);
@@ -813,7 +812,7 @@
 
         .battery-badge {
             font-size: 11px; opacity: 0.85; white-space: nowrap;
-            vertical-align: middle; margin-left: 4px;
+            vertical-align: middle;
         }
 
         /* Config dirty indicator */
@@ -1050,7 +1049,6 @@
             /* Always show hover-only details on touch */
             .conn-text { display: inline !important; }
             .conn-col .status-label { display: block !important; }
-            .device-card .identity-detail { max-height: 60px; opacity: 1; }
             .device-card .dsink-value { display: block; }
 
             /* BT device detail row — stack on mobile */

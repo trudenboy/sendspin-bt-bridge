@@ -255,20 +255,20 @@ function buildDeviceCard(i) {
     card.id = 'device-card-' + i;
     card.innerHTML =
         '<div class="device-card-identity">' +
-          '<div style="display:flex;align-items:center;gap:6px;">' +
+          '<div class="identity-title-row">' +
             '<input type="checkbox" class="device-select-cb" id="dsel-' + i + '" checked' +
               ' onchange="onDeviceSelect(' + i + ', this.checked)">' +
             '<div class="device-card-title" id="dname-' + i + '">Device ' + (i+1) + '</div>' +
-            '<span class="released-badge" id="dreleased-badge-' + i + '" style="display:none;" title="BT management disabled — click Reclaim to resume">Released</span>' +
             '<div class="eq-bars" id="deq-' + i + '">' +
               '<div class="eq-bar"></div><div class="eq-bar"></div>' +
               '<div class="eq-bar"></div><div class="eq-bar"></div>' +
             '</div>' +
-            '<span class="battery-badge" id="dbattery-' + i + '" style="display:none"></span>' +
           '</div>' +
-          '<div class="group-badge" id="dgroup-' + i + '" style="display:none"></div>' +
-          '<div class="device-mac identity-detail" id="dmac-' + i + '"></div>' +
-          '<div class="ts-sub identity-detail" id="durl-' + i + '"></div>' +
+          '<div class="identity-meta-row">' +
+            '<span class="released-badge" id="dreleased-badge-' + i + '" style="display:none;" title="BT management disabled — click Reclaim to resume">Released</span>' +
+            '<span class="battery-badge" id="dbattery-' + i + '" style="display:none"></span>' +
+            '<span class="group-badge" id="dgroup-' + i + '" style="display:none"></span>' +
+          '</div>' +
         '</div>' +
         '<div class="device-rows">' +
           // Connection column (BT + MA server merged)
@@ -393,9 +393,6 @@ function populateDeviceCard(i, dev) {
         }
     }
 
-    var mac = dev.bluetooth_mac || '';
-    document.getElementById('dmac-' + i).textContent = mac ? 'MAC: ' + mac : '';
-
     // Card activity classes
     var card = document.getElementById('device-card-' + i);
     if (card) {
@@ -463,15 +460,6 @@ function populateDeviceCard(i, dev) {
     if (btAdapterEl) {
         btAdapterEl.textContent = dev.bluetooth_adapter_hci || '';
         if (dev.bluetooth_adapter) btAdapterEl.title = (dev.bluetooth_adapter_hci ? dev.bluetooth_adapter_hci + ' ' : '') + dev.bluetooth_adapter;
-    }
-
-    var urlEl = document.getElementById('durl-' + i);
-    if (urlEl) {
-        if (dev.ip_address && dev.listen_port) {
-            urlEl.textContent = 'ws://' + dev.ip_address + ':' + dev.listen_port + '/sendspin';
-        } else {
-            urlEl.textContent = '';
-        }
     }
 
     // Bluetooth
