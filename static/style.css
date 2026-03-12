@@ -209,14 +209,40 @@
         .version-info { text-align: right; font-size: 12px; color: var(--app-header-text-color); opacity: 0.95; }
         #system-info { color: rgba(255,255,255,0.8) !important; }
 
-        /* Restart banner */
+        /* Restart progress (inside header) */
         .restart-banner {
-            border-radius: 8px; padding: 12px 20px; margin-bottom: 20px;
-            font-size: 15px; font-weight: 500; text-align: center; display: none;
+            display: none; margin-top: 10px;
         }
-        .restart-banner.restarting { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
-        .restart-banner.online     { background: #d1fae5; color: #065f46; border: 1px solid #6ee7b7; }
-        .restart-banner.warning    { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+        .restart-banner.active { display: block; }
+        .restart-status {
+            display: flex; align-items: center; gap: 10px;
+            font-size: 13px; color: rgba(255,255,255,0.9);
+        }
+        .restart-spinner {
+            width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: #fff; border-radius: 50%;
+            animation: spin 0.8s linear infinite; flex-shrink: 0;
+        }
+        .restart-check {
+            width: 14px; height: 14px; flex-shrink: 0;
+            color: #4ade80;
+        }
+        .restart-warn {
+            width: 14px; height: 14px; flex-shrink: 0;
+            color: #fbbf24;
+        }
+        .restart-elapsed {
+            opacity: 0.5; font-size: 11px; margin-left: auto; white-space: nowrap;
+        }
+        .restart-progress-bar {
+            height: 3px; border-radius: 2px; margin-top: 8px;
+            background: rgba(255,255,255,0.15); overflow: hidden;
+        }
+        .restart-progress-fill {
+            height: 100%; border-radius: 2px;
+            background: rgba(255,255,255,0.7);
+            transition: width 0.5s ease;
+        }
         .auth-warning-banner {
             border-radius: 8px; padding: 10px 16px; margin-bottom: 16px;
             font-size: 13px; font-weight: 500; text-align: center;
