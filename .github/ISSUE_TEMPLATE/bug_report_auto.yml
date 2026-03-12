@@ -31,6 +31,7 @@ body:
     id: version
     attributes:
       label: Bridge Version
+      description: "Version and build date"
 
   - type: input
     id: deployment
@@ -41,12 +42,25 @@ body:
     id: environment
     attributes:
       label: Environment
-      description: "OS / audio system / BT adapter"
+      description: "OS / audio / BT adapter / Python / BlueZ"
 
   - type: input
     id: device_count
     attributes:
       label: Number of Bluetooth Devices
+
+  - type: textarea
+    id: status
+    attributes:
+      label: Runtime Status
+      description: "Auto-filled: uptime, device states, MA integration"
+
+  - type: textarea
+    id: recent_errors
+    attributes:
+      label: Recent Errors
+      description: "Last errors/warnings from the log"
+      render: log
 
   - type: textarea
     id: diagnostics

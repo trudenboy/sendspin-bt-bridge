@@ -2634,7 +2634,7 @@ function _openBugReport(e) {
                 };
                 var deployment = runtimeMap[runtime] || '';
 
-                // Build environment string: "OS / Audio / BT adapter"
+                // Build environment string: "OS / Audio / BT adapter / Python / BlueZ"
                 var envParts = [];
                 if (env.platform) envParts.push(env.platform);
                 var audioServer = (env.audio_server || '');
@@ -2645,24 +2645,65 @@ function _openBugReport(e) {
                         return (a.id || '') + ' ' + (a.mac || '');
                     }).join(', ').trim());
                 }
+                if (env.python) envParts.push('Python ' + env.python.split(' ')[0]);
+                if (env.bluez) envParts.push(env.bluez);
+                if (env.kernel) envParts.push('kernel ' + env.kernel);
                 var envString = envParts.join(' / ');
+
+                // Version with build date
+                var versionStr = rep.version || '';
+                if (rep.build_date) versionStr += ' (' + rep.build_date + ')';
 
                 // Count devices
                 var devices = diag.devices || [];
-                var devCount = devices.length <= 1 ? '1' : devices.length <= 3 ? '2-3' : '4+';
+                var devCount = String(devices.length || 1);
+
+                // Build runtime status summary
+                var statusLines = [];
+                statusLines.push('Uptime: ' + (rep.uptime || '?') +
+                    ' | RAM: ' + (env.process_rss_mb || '?') + ' MB' +
+                    ' | BT daemon: ' + (diag.bluetooth_daemon || '?') +
+                    ' | D-Bus: ' + (diag.dbus_available ? 'yes' : 'no'));
+                devices.forEach(function(d) {
+                    statusLines.push((d.name || d.mac) + ': BT=' +
+                        (d.connected ? 'connected' : 'disconnected') +
+                        ', sink=' + (d.sink || 'none'));
+                });
+                var ma = diag.ma_integration || {};
+                if (ma.configured) {
+                    statusLines.push('MA: ' + (ma.connected ? 'connected' : 'disconnected') +
+                        (ma.version ? ' v' + ma.version : '') +
+                        ', groups=' + ((ma.syncgroups || []).length));
+                }
+                var sinks = diag.sinks || [];
+                statusLines.push('Sinks: ' + (sinks.length ? sinks.map(function(s) { return s.name; }).join(', ') : 'none'));
+                var statusStr = statusLines.join('\n');
+
+                // Extract last 3 error/warning lines from logs
+                var logs = rep.logs || [];
+                var errorLines = logs.filter(function(l) {
+                    return l.indexOf('ERROR') !== -1 || l.indexOf('WARNING') !== -1;
+                });
+                var recentErrors = errorLines.slice(-3).map(function(l) {
+                    // Trim journald prefix (timestamp + host + service) to save space
+                    var m = l.match(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d+ - .+/);
+                    return m ? m[0] : l;
+                }).join('\n');
 
                 // Build issue URL with template prefill
                 var params = [
                     'template=bug_report_auto.yml',
                     'title=' + encodeURIComponent(title),
                     'description=' + encodeURIComponent(desc),
-                    'version=' + encodeURIComponent(rep.version || ''),
+                    'version=' + encodeURIComponent(versionStr),
                     'diagnostics=' + encodeURIComponent('📎 Drag and drop the downloaded diagnostics file here'),
                     'additional=' + encodeURIComponent('Submitted via web UI Report button')
                 ];
                 if (deployment) params.push('deployment=' + encodeURIComponent(deployment));
                 if (envString) params.push('environment=' + encodeURIComponent(envString));
                 if (devCount) params.push('device_count=' + encodeURIComponent(devCount));
+                if (statusStr) params.push('status=' + encodeURIComponent(statusStr));
+                if (recentErrors) params.push('recent_errors=' + encodeURIComponent(recentErrors));
 
                 var issueUrl = 'https://github.com/trudenboy/sendspin-bt-bridge/issues/new?' + params.join('&');
 
