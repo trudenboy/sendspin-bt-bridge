@@ -2,7 +2,7 @@
 
 A history of the architectural and functional evolution of sendspin-bt-bridge — for readers familiar with Home Assistant, Music Assistant, and multiroom audio setups.
 
-**Period:** January 1 – March 12, 2026 · **Total commits:** ~820 · **Versions:** 1.0.0 → 2.24.0
+**Period:** January 1 – March 12, 2026 · **Total commits:** ~830 · **Versions:** 1.0.0 → 2.24.3
 
 ---
 

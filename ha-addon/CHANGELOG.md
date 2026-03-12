@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.24.3] - 2026-03-12
+
+### Added
+- Dual issue templates: manual (with dropdowns) and auto-fill (from Report button)
+- Auto-fill now includes runtime status, environment details, and recent log errors
+- Bluetooth SVG icon in header
+
+### Changed
+- Merged Environment, Runtime Status, Device Count into single System Info field
+- Fixed issue template prefill field mapping; added GitHub auth hint
+
 ## [2.24.0] - 2026-03-12
 
 ### Added

@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.24.3] - 2026-03-12
+
+### Added
+- **Dual issue templates** — separate templates for manual filing (`bug_report.yml` with dropdowns) and auto-fill from Report button (`bug_report_auto.yml` with pre-filled fields)
+- **Enriched auto-fill diagnostics** — Report button now pre-fills runtime status (uptime, RAM, device states, MA integration), environment details (Python, BlueZ, kernel, audio server), and last 3 log errors/warnings
+- **Bluetooth SVG icon** in header — replaced music note emoji with monochrome BT icon
+
+### Changed
+- **Unified System Info field** — merged Environment, Runtime Status, and Device Count into a single `System Info` code block with clean key: value format
+- **Issue template field mapping** — fixed prefill parameter names to match GitHub template field IDs; added GitHub auth hint in modal
+- Additional Context field changed from textarea to single-line input in auto-fill template
+
 ## [2.24.0] - 2026-03-12
 
 ### Added
