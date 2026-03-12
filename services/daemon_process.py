@@ -214,9 +214,14 @@ async def _startup_unmute_watcher(status: dict, sink_name: str, stop_event: asyn
     audio_streaming=True, waits an additional stabilization delay, then unmutes.
     Times out after 60s — on timeout unmutes only if audio was streaming
     (avoids unmuting idle players that would immediately get muted again).
+
+    Also corrects sink routing: PA may ignore PULSE_SINK and route the
+    sink-input to the default sink instead (module-stream-restore or
+    default-sink override). After audio starts we move our PID's
+    sink-inputs to the correct sink.
     """
     _logger = logging.getLogger(__name__)
-    from services.pulse import aset_sink_mute
+    from services.pulse import amove_pid_sink_inputs, aset_sink_mute
 
     streamed = False
     deadline = time.monotonic() + 60.0
@@ -224,6 +229,14 @@ async def _startup_unmute_watcher(status: dict, sink_name: str, stop_event: asyn
         await asyncio.sleep(0.5)
         if status.get("audio_streaming"):
             streamed = True
+            # Correct sink routing before unmuting — PA may have routed
+            # our sink-input to the default sink instead of PULSE_SINK.
+            try:
+                moved = await amove_pid_sink_inputs(os.getpid(), sink_name)
+                if moved:
+                    _logger.info("[%s] Corrected %d sink-input(s) → %s", player_name, moved, sink_name)
+            except Exception as exc:
+                _logger.debug("[%s] Sink routing correction failed: %s", player_name, exc)
             _logger.info("[%s] Audio streaming, waiting %.1fs for stabilization", player_name, _STARTUP_UNMUTE_DELAY_S)
             await asyncio.sleep(_STARTUP_UNMUTE_DELAY_S)
             break
