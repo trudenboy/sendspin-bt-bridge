@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.26.3] - 2026-03-12
+
+### Fixed
+- **Daemon crash after 60 s idle** — the startup unmute watcher task was included in `asyncio.wait(FIRST_COMPLETED)`, so its completion after the 60 s timeout killed the entire daemon subprocess; now runs as fire-and-forget
+- **Spurious unmute on timeout** — unmute on timeout is now skipped if audio never started streaming, preventing unnecessary PA operations on idle players
+
 ## [2.26.2] - 2026-03-12
 
 ### Fixed

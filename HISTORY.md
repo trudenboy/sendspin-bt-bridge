@@ -2,7 +2,7 @@
 
 A history of the architectural and functional evolution of sendspin-bt-bridge — for readers familiar with Home Assistant, Music Assistant, and multiroom audio setups.
 
-**Period:** January 1 – March 12, 2026 · **Total commits:** ~860 · **Versions:** 1.0.0 → 2.26.2
+**Period:** January 1 – March 12, 2026 · **Total commits:** ~860 · **Versions:** 1.0.0 → 2.26.3
 
 ---
 
@@ -671,7 +671,7 @@ The addon config gained `tmpfs: true` (in-memory temp for better SD card longevi
 **Smooth restart** (v2.26.1): restarting the bridge previously caused audible glitches — PA sinks were destroyed and recreated, sendspin re-anchored streams, and audio would stutter for several seconds. Three improvements eliminate the disruption:
 
 1. **Pre-restart mute**: `saveAndRestart()` in the web UI mutes all local PA sinks via a `force_local` flag before triggering the restart. This doesn't touch MA (so sync group members on other bridges keep playing) — it's a PA-level mute only.
-2. **Startup mute + auto-unmute**: `daemon_process.py` mutes the PA sink immediately after creating `BridgeDaemon`. A `_startup_unmute_watcher` coroutine polls for `audio_streaming=True`, waits an additional 1.5 s for stabilisation, then unmutes. A 60 s safety timeout prevents permanently muted sinks.
+2. **Startup mute + auto-unmute**: `daemon_process.py` mutes the PA sink immediately after creating `BridgeDaemon`. A `_startup_unmute_watcher` coroutine polls for `audio_streaming=True`, waits an additional 1.5 s for stabilisation, then unmutes. If no audio streams within 60 s, unmute is skipped (v2.26.3 fix — previously the watcher's completion after timeout killed the daemon via `FIRST_COMPLETED`).
 3. **Sink name cache**: `LAST_SINKS[mac]` is persisted to `config.json` (parallel to `LAST_VOLUMES[mac]`). On restart, `configure_bluetooth_audio()` tries the cached sink first via a `get_sink_volume()` probe — if valid, it skips the 3 s A2DP profile delay and the multi-pattern retry loop.
 
 **Legacy move-sink-input removal** (v2.26.1): `_ensure_sink_routing()` and the `_sink_routed` flag were removed from `BridgeDaemon`. This code was a leftover from the pre-`PULSE_SINK` architecture (Iteration 1, v2.1) where streams had to be reactively moved to the correct sink. With the subprocess-per-speaker design (each process has `PULSE_SINK` in env), PA routes new sink-inputs to the correct sink from the first sample. The move-sink-input call was not only unnecessary but harmful — it caused a PA glitch that triggered re-anchoring, creating a potential feedback loop (guarded by `_sink_routed`, but still adding latency). `amove_pid_sink_inputs()` remains in `services/pulse.py` as a diagnostic utility.
