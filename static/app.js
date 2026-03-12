@@ -1659,6 +1659,22 @@ function addFromPaired(mac, name) {
     document.getElementById('paired-box').style.display = 'none';
 }
 
+async function removePairedDevice(mac, name, rowEl) {
+    if (!confirm('Remove ' + (name || mac) + ' from BT stack?\nThis will unpair the device.')) return;
+    try {
+        var resp = await fetch(API_BASE + '/api/bt/remove', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({mac: mac})
+        });
+        if (resp.ok) {
+            rowEl.style.opacity = '0.3';
+            rowEl.style.pointerEvents = 'none';
+            setTimeout(function() { loadPairedDevices(); }, 1500);
+        }
+    } catch (_) {}
+}
+
 async function loadPairedDevices() {
     try {
         var showAll = document.getElementById('paired-show-all');
@@ -1701,15 +1717,23 @@ async function loadPairedDevices() {
             return '<div class="scan-result-item" data-paired-idx="' + idx + '">' +
                 '<span class="scan-result-mac">' + escHtml(d.mac) + '</span>' +
                 '<span class="scan-result-name">' + escHtml(displayName) + '</span>' +
-                '<button type="button" style="padding:3px 10px;' +
+                '<button type="button" class="paired-add-btn" style="padding:3px 10px;' +
                     'background:var(--primary-color);color:white;border:none;border-radius:4px;' +
                     'cursor:pointer;font-size:12px;">Add</button>' +
+                '<button type="button" class="paired-remove-btn" style="padding:3px 8px;' +
+                    'background:transparent;color:var(--secondary-text-color);border:1px solid var(--divider-color);' +
+                    'border-radius:4px;cursor:pointer;font-size:12px;" title="Remove from BT stack">✕</button>' +
                 '</div>';
         }).join('');
         listDiv.querySelectorAll('[data-paired-idx]').forEach(function(row) {
-            row.addEventListener('click', function() {
-                var d = devices[parseInt(this.dataset.pairedIdx)];
+            var d = devices[parseInt(row.dataset.pairedIdx)];
+            row.querySelector('.paired-add-btn').addEventListener('click', function(e) {
+                e.stopPropagation();
                 addFromPaired(d.mac, d.name);
+            });
+            row.querySelector('.paired-remove-btn').addEventListener('click', function(e) {
+                e.stopPropagation();
+                removePairedDevice(d.mac, d.name, row);
             });
         });
     } catch (_) {}

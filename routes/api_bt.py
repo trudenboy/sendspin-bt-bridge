@@ -19,6 +19,7 @@ from config import CONFIG_FILE, config_lock, load_config
 from routes._helpers import get_client_or_error, validate_mac
 from services import persist_device_enabled as _persist_device_enabled
 from services.bluetooth import _AUDIO_UUIDS, list_bt_adapters
+from services.bluetooth import bt_remove_device as _bt_remove_device
 from state import create_scan_job, finish_scan_job, get_scan_job, is_scan_running
 
 logger = logging.getLogger(__name__)
@@ -224,6 +225,18 @@ def api_bt_paired():
         return jsonify({"devices": devices})
     except Exception as e:
         return jsonify({"devices": [], "error": str(e)})
+
+
+@bt_bp.route("/api/bt/remove", methods=["POST"])
+def api_bt_remove():
+    """Remove (unpair) a device from the BlueZ stack."""
+    data = request.get_json(silent=True) or {}
+    mac = (data.get("mac") or "").strip().upper()
+    err = validate_mac(mac)
+    if err:
+        return err
+    _bt_remove_device(mac)
+    return jsonify({"ok": True, "mac": mac})
 
 
 @bt_bp.route("/api/bt/scan", methods=["POST"])
