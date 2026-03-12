@@ -2653,11 +2653,11 @@ function _openBugReport(e) {
 
                 // Build issue URL with template prefill
                 var params = [
-                    'template=bug_report.yml',
+                    'template=bug_report_auto.yml',
                     'title=' + encodeURIComponent(title),
                     'description=' + encodeURIComponent(desc),
                     'version=' + encodeURIComponent(rep.version || ''),
-                    'diagnostics=' + encodeURIComponent('📎 See attached diagnostics file'),
+                    'diagnostics=' + encodeURIComponent('📎 Drag and drop the downloaded diagnostics file here'),
                     'additional=' + encodeURIComponent('Submitted via web UI Report button')
                 ];
                 if (deployment) params.push('deployment=' + encodeURIComponent(deployment));
@@ -2687,7 +2687,7 @@ function _openBugReport(e) {
                 var title = titleInput.value.trim() || 'Bug report';
                 var desc = descInput.value.trim();
                 var issueUrl = 'https://github.com/trudenboy/sendspin-bt-bridge/issues/new'
-                    + '?template=bug_report.yml'
+                    + '?template=bug_report_auto.yml'
                     + '&title=' + encodeURIComponent(title)
                     + '&description=' + encodeURIComponent(desc + '\n\n_Diagnostics could not be loaded._');
                 window.open(issueUrl, '_blank');

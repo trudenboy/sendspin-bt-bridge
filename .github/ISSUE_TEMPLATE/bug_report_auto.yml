@@ -1,0 +1,65 @@
+name: 🐛 Bug Report (from Web UI)
+description: Auto-generated bug report from the Report button
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This report was pre-filled by the web UI **Report** button.
+        Please fill in **Steps to Reproduce** and attach the downloaded diagnostics file.
+
+  - type: textarea
+    id: description
+    validations:
+      required: true
+    attributes:
+      label: Description
+      description: What happened? What did you expect?
+
+  - type: textarea
+    id: steps
+    validations:
+      required: true
+    attributes:
+      label: Steps to Reproduce
+      placeholder: |
+        1. Open the web UI
+        2. ...
+        3. See error
+
+  - type: input
+    id: version
+    attributes:
+      label: Bridge Version
+
+  - type: input
+    id: deployment
+    attributes:
+      label: Deployment Method
+
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: "OS / audio system / BT adapter"
+
+  - type: input
+    id: device_count
+    attributes:
+      label: Number of Bluetooth Devices
+
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics
+      description: Drag and drop the downloaded `.txt` diagnostics file here.
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
