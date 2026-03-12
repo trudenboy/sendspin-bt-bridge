@@ -21,7 +21,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from config import CONFIG_FILE
+from config import CONFIG_FILE, save_device_sink
 from config import config_lock as config_lock
 from services.pulse import get_sink_volume, list_sinks, set_sink_mute, set_sink_volume
 
@@ -463,46 +463,65 @@ class BluetoothManager:
     def configure_bluetooth_audio(self) -> bool:
         """Configure host's PipeWire/PulseAudio to use the Bluetooth device as audio output"""
         try:
-            # Wait for PipeWire/PulseAudio to register the device.
-            # A2DP profile takes a few seconds to appear after BT connects.
-            time.sleep(_A2DP_PROFILE_DELAY)
-
             pa_mac = self.mac_address.replace(":", "_")
 
-            # Log available sinks for diagnostics
-            sinks = list_sinks()
-            logger.info("Available audio sinks: %s", [s["name"] for s in sinks])
+            # Try cached sink name first — avoids 3s A2DP delay on service restart
+            cached_sink = None
+            try:
+                if CONFIG_FILE.exists():
+                    with config_lock, open(CONFIG_FILE) as f:
+                        cfg = json.load(f)
+                    cached_sink = cfg.get("LAST_SINKS", {}).get(self.mac_address)
+            except (OSError, json.JSONDecodeError, ValueError):
+                pass
 
-            # Find the Bluetooth sink (do NOT change system default — PULSE_SINK handles per-process routing)
-            sink_names = [
-                f"bluez_output.{pa_mac}.1",  # PipeWire format
-                f"bluez_output.{pa_mac}.a2dp-sink",
-                f"bluez_sink.{pa_mac}.a2dp_sink",  # Legacy PulseAudio format
-                f"bluez_sink.{pa_mac}",
-            ]
-            known_names = {s["name"] for s in sinks}
+            if cached_sink and get_sink_volume(cached_sink) is not None:
+                logger.info("✓ Using cached sink: %s (skipped A2DP delay)", cached_sink)
+                configured_sink = cached_sink
+                success = True
+            else:
+                if cached_sink:
+                    logger.debug("Cached sink %s not available, falling back to discovery", cached_sink)
+                # Wait for PipeWire/PulseAudio to register the device.
+                # A2DP profile takes a few seconds to appear after BT connects.
+                time.sleep(_A2DP_PROFILE_DELAY)
 
-            success = False
-            configured_sink = None
-            # Retry up to _SINK_RETRY_COUNT times — A2DP sink may take a few extra seconds to appear
-            for attempt in range(_SINK_RETRY_COUNT):
-                for sink_name in sink_names:
-                    if sink_name in known_names or get_sink_volume(sink_name) is not None:
-                        logger.info("✓ Found audio sink: %s", sink_name)
-                        configured_sink = sink_name
-                        success = True
+                # Log available sinks for diagnostics
+                sinks = list_sinks()
+                logger.info("Available audio sinks: %s", [s["name"] for s in sinks])
+
+                # Find the Bluetooth sink (do NOT change system default — PULSE_SINK handles per-process routing)
+                sink_names = [
+                    f"bluez_output.{pa_mac}.1",  # PipeWire format
+                    f"bluez_output.{pa_mac}.a2dp-sink",
+                    f"bluez_sink.{pa_mac}.a2dp_sink",  # Legacy PulseAudio format
+                    f"bluez_sink.{pa_mac}",
+                ]
+                known_names = {s["name"] for s in sinks}
+
+                success = False
+                configured_sink = None
+                # Retry up to _SINK_RETRY_COUNT times — A2DP sink may take a few extra seconds to appear
+                for attempt in range(_SINK_RETRY_COUNT):
+                    for sink_name in sink_names:
+                        if sink_name in known_names or get_sink_volume(sink_name) is not None:
+                            logger.info("✓ Found audio sink: %s", sink_name)
+                            configured_sink = sink_name
+                            success = True
+                            break
+                        else:
+                            logger.debug("Sink %s not found, trying next...", sink_name)
+                    if success:
                         break
-                    else:
-                        logger.debug("Sink %s not found, trying next...", sink_name)
-                if success:
-                    break
-                if attempt < _SINK_RETRY_COUNT - 1:
-                    logger.info(
-                        "Sink not yet available, retrying in 3s... (attempt %s/%s)", attempt + 1, _SINK_RETRY_COUNT
-                    )
-                    time.sleep(_SINK_RETRY_DELAY)
-                    sinks = list_sinks()
-                    known_names = {s["name"] for s in sinks}
+                    if attempt < _SINK_RETRY_COUNT - 1:
+                        logger.info(
+                            "Sink not yet available, retrying in 3s... (attempt %s/%s)",
+                            attempt + 1,
+                            _SINK_RETRY_COUNT,
+                        )
+                        time.sleep(_SINK_RETRY_DELAY)
+                        sinks = list_sinks()
+                        known_names = {s["name"] for s in sinks}
 
             if success and configured_sink:
                 # Try to force SBC codec (lowest CPU A2DP codec) if requested
@@ -538,6 +557,9 @@ class BluetoothManager:
                     logger.info("Stored Bluetooth sink for volume sync: %s", configured_sink)
                     if restored_volume is not None:
                         self.client._update_status({"volume": restored_volume})
+
+                # Cache sink name for faster restart
+                save_device_sink(self.mac_address, configured_sink)
             elif not success:
                 logger.warning("Could not find Bluetooth sink for %s", self.mac_address)
                 logger.warning("Audio may play from default device instead of Bluetooth")

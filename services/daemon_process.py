@@ -202,6 +202,39 @@ async def _reanchor_watcher(status: dict, on_status_change, stop_event: asyncio.
                         logger.debug("reanchor auto-clear callback failed: %s", exc)
 
 
+# Seconds after audio_streaming=True before unmuting the sink
+_STARTUP_UNMUTE_DELAY_S = 1.5
+
+
+async def _startup_unmute_watcher(status: dict, sink_name: str, stop_event: asyncio.Event, player_name: str) -> None:
+    """Wait for audio to stabilize after startup, then unmute the PA sink.
+
+    The sink is muted before BridgeDaemon starts to hide re-anchor clicks,
+    format probing noise, and routing glitches. This watcher polls for
+    audio_streaming=True, waits an additional stabilization delay, then unmutes.
+    Times out after 60s to avoid permanently muted sinks.
+    """
+    _logger = logging.getLogger(__name__)
+    from services.pulse import aset_sink_mute
+
+    deadline = time.monotonic() + 60.0
+    while not stop_event.is_set() and time.monotonic() < deadline:
+        await asyncio.sleep(0.5)
+        if status.get("audio_streaming"):
+            # Audio data is flowing — wait for sync to stabilize
+            _logger.info("[%s] Audio streaming, waiting %.1fs for stabilization", player_name, _STARTUP_UNMUTE_DELAY_S)
+            await asyncio.sleep(_STARTUP_UNMUTE_DELAY_S)
+            break
+
+    try:
+        if await aset_sink_mute(sink_name, False):
+            _logger.info("[%s] Unmuted sink %s (startup complete)", player_name, sink_name)
+        else:
+            _logger.warning("[%s] Failed to unmute sink %s", player_name, sink_name)
+    except Exception as exc:
+        _logger.warning("[%s] Error unmuting sink: %s", player_name, exc)
+
+
 async def _read_commands(daemon_ref: list, stop_event: asyncio.Event) -> None:
     """Read JSON commands from stdin and dispatch them."""
     loop = asyncio.get_running_loop()
@@ -387,19 +420,40 @@ async def _run(params: dict) -> None:
     )
     daemon_ref.append(daemon)
 
+    # Mute the PA sink before audio starts to hide re-anchor clicks and routing glitches.
+    # The _startup_unmute_watcher will unmute after audio_streaming becomes True + stabilization delay.
+    _startup_muted = False
+    if bluetooth_sink_name:
+        try:
+            from services.pulse import aset_sink_mute
+
+            if await aset_sink_mute(bluetooth_sink_name, True):
+                _startup_muted = True
+                logger.info("[%s] Muted sink %s during startup", player_name, bluetooth_sink_name)
+        except Exception as exc:
+            logger.debug("[%s] Could not mute sink on startup: %s", player_name, exc)
+
     cmd_task = asyncio.create_task(_read_commands(daemon_ref, stop_event))
     daemon_task = asyncio.create_task(daemon.run())
     watcher_task = asyncio.create_task(_reanchor_watcher(status, _on_status_change, stop_event))
+    unmute_task = None
+    if _startup_muted and bluetooth_sink_name:
+        unmute_task = asyncio.create_task(_startup_unmute_watcher(status, bluetooth_sink_name, stop_event, player_name))
 
     # Wait until stop command or daemon exits
+    all_tasks = [cmd_task, daemon_task, watcher_task, asyncio.create_task(stop_event.wait())]
+    if unmute_task:
+        all_tasks.append(unmute_task)
     _done, pending = await asyncio.wait(
-        [cmd_task, daemon_task, watcher_task, asyncio.create_task(stop_event.wait())],
+        all_tasks,
         return_when=asyncio.FIRST_COMPLETED,
     )
 
     daemon_task.cancel()
     cmd_task.cancel()
     watcher_task.cancel()
+    if unmute_task:
+        unmute_task.cancel()
     for t in pending:
         t.cancel()
 

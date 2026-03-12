@@ -2293,7 +2293,7 @@ async function saveAndRestart() {
     var banner = document.getElementById('restart-banner');
     banner.style.display = 'block';
     banner.className = 'restart-banner restarting';
-    banner.innerHTML = _restartProgressHtml(0, 5, '💾 Saving configuration…', 0);
+    banner.innerHTML = _restartProgressHtml(0, 6, '💾 Saving configuration…', 0);
 
     try {
         var saved = await saveConfig();
@@ -2305,7 +2305,23 @@ async function saveAndRestart() {
         }
         _setConfigDirty(false);
 
-        banner.innerHTML = _restartProgressHtml(1, 5, '🔄 Stopping service…', 0);
+        // Mute local PA sinks (not MA pause) to avoid audio glitches on shutdown.
+        // This only silences THIS bridge's speakers — other players in a sync group keep playing.
+        // After restart, _startup_unmute_watcher unmutes each sink once audio stabilizes.
+        banner.innerHTML = _restartProgressHtml(1, 6, '🔇 Muting speakers…', 0);
+        var _allDeviceNames = (lastDevices || []).map(function(d) { return d.player_name; });
+        if (_allDeviceNames.length > 0) {
+            try {
+                await fetch(API_BASE + '/api/mute', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({mute: true, force_local: true, player_names: _allDeviceNames})
+                });
+                await new Promise(function(r) { setTimeout(r, 300); });
+            } catch (_) { /* Non-critical — continue with restart */ }
+        }
+
+        banner.innerHTML = _restartProgressHtml(2, 6, '🔄 Stopping service…', 0);
         try {
             await fetch(API_BASE + '/api/restart', { method: 'POST' });
         } catch (_) { /* Service dropped connection — expected */ }
@@ -2316,7 +2332,7 @@ async function saveAndRestart() {
         var serviceUp = false;
         var statusData = null;
         for (var attempt = 1; attempt <= 40; attempt++) {
-            banner.innerHTML = _restartProgressHtml(2, 5, '⏳ Starting service…', attempt);
+            banner.innerHTML = _restartProgressHtml(3, 6, '⏳ Starting service…', attempt);
             await new Promise(function(r) { setTimeout(r, 1000); });
             try {
                 var resp = await fetch(API_BASE + '/api/status');
@@ -2342,7 +2358,7 @@ async function saveAndRestart() {
             for (var w = 1; w <= 30; w++) {
                 var readyCount = Math.min(stats.bt, stats.pa, stats.ss);
                 var msg = '🔗 Connecting devices… ' + readyCount + '/' + stats.total;
-                banner.innerHTML = _restartProgressHtml(3, 5, msg, w);
+                banner.innerHTML = _restartProgressHtml(4, 6, msg, w);
                 await new Promise(function(r) { setTimeout(r, 1000); });
                 try {
                     var r2 = await fetch(API_BASE + '/api/status');
@@ -2360,7 +2376,7 @@ async function saveAndRestart() {
         // Wait for MA connection
         stats = _restartDeviceStats(statusData);
         if (!stats.ma && stats.total > 0) {
-            banner.innerHTML = _restartProgressHtml(4, 5, '🎵 Connecting to Music Assistant…', 0);
+            banner.innerHTML = _restartProgressHtml(5, 6, '🎵 Connecting to Music Assistant…', 0);
             for (var m = 1; m <= 15; m++) {
                 await new Promise(function(r) { setTimeout(r, 1000); });
                 try {
@@ -2371,7 +2387,7 @@ async function saveAndRestart() {
                         if (stats.ma) break;
                     }
                 } catch (_) {}
-                banner.innerHTML = _restartProgressHtml(4, 5, '🎵 Connecting to Music Assistant…', m);
+                banner.innerHTML = _restartProgressHtml(5, 6, '🎵 Connecting to Music Assistant…', m);
             }
         }
 
@@ -2379,8 +2395,9 @@ async function saveAndRestart() {
         stats = _restartDeviceStats(statusData);
         allReady = (stats.total === 0 || (stats.bt >= stats.total && stats.pa >= stats.total &&
                    stats.ss >= stats.total)) && stats.ma;
+
         banner.className = allReady ? 'restart-banner online' : 'restart-banner restarting';
-        banner.innerHTML = _restartProgressHtml(5, 5,
+        banner.innerHTML = _restartProgressHtml(6, 6,
             allReady ? '✅ Restart complete — all systems operational' : '⚠️ Restart complete — some connections pending',
             0).replace(/ <span style="opacity:0.5;font-size:12px">0s<\/span>/, '');
         setTimeout(function() { banner.style.display = 'none'; }, allReady ? 4000 : 10000);

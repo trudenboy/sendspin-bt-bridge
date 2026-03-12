@@ -35,6 +35,7 @@ __all__ = [
     "get_local_ip",
     "hash_password",
     "load_config",
+    "save_device_sink",
     "save_device_volume",
     "update_config",
 ]
@@ -120,6 +121,20 @@ def save_device_volume(mac: str | None, volume: int) -> None:
         logger.warning("Could not save volume for %s: %s", mac, e)
 
 
+def save_device_sink(mac: str | None, sink_name: str) -> None:
+    """Persist per-device PA sink name to config.json under LAST_SINKS[mac]."""
+    if not mac or not CONFIG_FILE.exists():
+        return
+
+    def _set_sink(cfg: dict) -> None:
+        cfg.setdefault("LAST_SINKS", {})[mac] = sink_name
+
+    try:
+        update_config(_set_sink)
+    except (OSError, json.JSONDecodeError, ValueError) as e:
+        logger.warning("Could not save sink for %s: %s", mac, e)
+
+
 def load_config() -> dict:
     """Load configuration from file, falling back to defaults."""
     result = DEFAULT_CONFIG.copy()
@@ -131,6 +146,7 @@ def load_config() -> dict:
         "BLUETOOTH_DEVICES",
         "TZ",
         "LAST_VOLUMES",
+        "LAST_SINKS",
         "BLUETOOTH_ADAPTERS",
         "PULSE_LATENCY_MSEC",
         "PREFER_SBC_CODEC",
