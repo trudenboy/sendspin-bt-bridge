@@ -2,7 +2,7 @@
 
 A history of the architectural and functional evolution of sendspin-bt-bridge — for readers familiar with Home Assistant, Music Assistant, and multiroom audio setups.
 
-**Period:** January 1 – March 12, 2026 · **Total commits:** ~850 · **Versions:** 1.0.0 → 2.25.1
+**Period:** January 1 – March 12, 2026 · **Total commits:** ~860 · **Versions:** 1.0.0 → 2.26.0
 
 ---
 
@@ -655,6 +655,16 @@ The addon config gained `tmpfs: true` (in-memory temp for better SD card longevi
 **Architecture improvements**: the monolithic 260-line `login()` handler was split into 4 per-flow functions (`_handle_ma_login`, `_handle_ha_via_ma_login`, `_handle_ha_direct_login`, `_handle_local_password_login`). Duplicated client lookup logic across BT endpoints was extracted into shared `get_client_or_error()` and `validate_mac()` helpers in `routes/_helpers.py`. Config writes gained atomic tempfile+rename. 27 broad `except Exception` clauses were narrowed to specific types across 6 modules.
 
 **Test coverage expanded**: 30 new tests covering client lookup (multi-device, injection attempts), MFA session lifecycle (variable cleanup, cross-user leak), and BT scan cooldown (429/409 codes). Total test count grew from 150 to 180.
+
+### TWS earbuds and UX improvements (v2.25.1 → v2.26.0)
+
+**SSP passkey auto-confirm** (v2.26.0): TWS earbuds like HUAWEI FreeClip require Simple Secure Pairing (SSP) confirmation — a "Confirm passkey XXXXXX?" prompt from `bluetoothctl` that must be answered with "yes". The `pair_device()` function was rewritten to read `bluetoothctl` stdout in real-time using `selectors`, detect passkey confirmation prompts, and auto-send "yes". Early exit on "Pairing successful" for faster completion.
+
+**D-Bus resilience for TWS** (v2.26.0): TWS earbuds going into their charging case leave stale BlueZ D-Bus objects that throw `DBusException` on property reads. Exception handling was widened in `_dbus_get_device_property()`, `_dbus_get_battery_level()`, `_dbus_call_device_method()`, and `is_device_connected()`. An auto-reconnect path was added: when the polling loop detects a device connected externally (e.g. earbuds taken out of case) but the player isn't running, it automatically configures audio and starts the player.
+
+**HA username in header** (v2.26.0): Ingress sessions (HA sidebar) previously showed no username — the Supervisor doesn't pass identity headers. Now `_check_auth` resolves the HA owner's display name via the Core API on first Ingress request and caches it in the session.
+
+**Update dialog re-check** (v2.26.0): the version badge in the header now opens the update dialog with a 🔄 Re-check button — useful after applying an update or when a newer version has been released since the last hourly check.
 
 ---
 

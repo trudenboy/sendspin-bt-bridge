@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.26.0] - 2026-03-12
+
+### Added
+- **HA username in header** — Ingress sessions now resolve and display the HA owner's display name via the Core API, cached per session
+- **Re-check button in update dialog** — clicking the version badge opens the update dialog with a 🔄 Re-check button to re-query GitHub for the latest version
+
+### Fixed
+- **SSP passkey auto-confirm** — `pair_device()` now reads `bluetoothctl` stdout in real-time and auto-sends `yes` on "Confirm passkey" / "Request confirmation" prompts, enabling pairing for TWS earbuds (e.g. HUAWEI FreeClip) that require SSP confirmation
+- **TWS earbuds D-Bus resilience** — widened exception handling in D-Bus property/method calls to catch `DBusException` from stale BlueZ objects (TWS in charging case); added auto-reconnect when earbuds reconnect externally but player isn't running
+
 ## [2.25.1] - 2026-03-12
 
 ### Fixed

@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.26.0] - 2026-03-12
+
+### Added
+- HA username displayed in header for Ingress sessions
+- Re-check button in update dialog to re-query latest version from GitHub
+
+### Fixed
+- SSP passkey auto-confirm for TWS earbuds pairing (e.g. HUAWEI FreeClip)
+- D-Bus exception handling widened for TWS earbuds + auto-reconnect on external reconnection
+
 ## [2.25.1] - 2026-03-12
 
 ### Fixed
