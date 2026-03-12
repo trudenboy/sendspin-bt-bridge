@@ -166,9 +166,11 @@ def api_config():
         else:
             config = DEFAULT_CONFIG.copy()
 
-        # Never expose secrets to the browser
+        # Never expose secrets to the browser — but indicate whether password is set
+        has_password = bool(config.get("AUTH_PASSWORD_HASH"))
         config.pop("AUTH_PASSWORD_HASH", None)
         config.pop("SECRET_KEY", None)
+        config["_password_set"] = has_password
 
         # Enrich BLUETOOTH_DEVICES with resolved listen_port / listen_host from running clients
         with _clients_lock:
@@ -270,6 +272,18 @@ def api_config():
         "_new_device_default_volume",
     }
     config = {k: v for k, v in config.items() if k in _ALLOWED_POST_KEYS}
+
+    # Require password when enabling auth (except HA addon — uses HA login)
+    if config.get("AUTH_ENABLED") and not os.environ.get("SUPERVISOR_TOKEN"):
+        has_hash = False
+        if CONFIG_FILE.exists():
+            try:
+                with open(CONFIG_FILE) as f:
+                    has_hash = bool(json.load(f).get("AUTH_PASSWORD_HASH"))
+            except Exception:
+                pass
+        if not has_hash:
+            return jsonify({"error": "Set a password before enabling authentication"}), 400
 
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     with config_lock:

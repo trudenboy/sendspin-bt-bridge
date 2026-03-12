@@ -1709,6 +1709,16 @@ async function saveConfig() {
     // Save all adapters (auto-detected + manual) so native HA Config tab shows them
     config.BLUETOOTH_ADAPTERS = btAdapters.filter(function(a) { return a.id; });
 
+    // Require password before enabling auth (HA addon uses HA login instead)
+    if (config.AUTH_ENABLED && !window._passwordSet) {
+        alert('Set a password before enabling authentication.');
+        var fields = document.getElementById('auth-password-fields');
+        if (fields) fields.style.display = '';
+        var pwInput = document.getElementById('new-password');
+        if (pwInput) pwInput.focus();
+        return false;
+    }
+
     try {
         var resp = await fetch(API_BASE + '/api/config', {
             method: 'POST',
@@ -1740,6 +1750,7 @@ async function setPassword() {
         var data = await resp.json().catch(function() { return {}; });
         if (resp.ok) {
             alert('Password set successfully.');
+            window._passwordSet = true;
             document.getElementById('new-password').value = '';
             document.getElementById('new-password-confirm').value = '';
         } else {
@@ -2192,6 +2203,7 @@ async function loadConfig() {
         if (authCheck) authCheck.checked = !!config.AUTH_ENABLED;
         var authPw = document.getElementById('auth-password-fields');
         if (authPw && authCheck) authPw.style.display = authCheck.checked ? '' : 'none';
+        window._passwordSet = !!config._password_set;
         _updateAuthMethodsHint();
         var volMaCheck = document.getElementById('volume-via-ma');
         if (volMaCheck) volMaCheck.checked = config.VOLUME_VIA_MA !== false;
