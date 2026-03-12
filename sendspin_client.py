@@ -272,7 +272,7 @@ class SendspinClient:
                 logger.error("Error updating status: %s", e)
                 await asyncio.sleep(5)
 
-    _ZOMBIE_TIMEOUT_S = 15  # seconds of playing=True without audio_streaming before restart
+    _ZOMBIE_TIMEOUT_S = 5  # seconds of playing=True without audio_streaming before restart
     _MAX_ZOMBIE_RESTARTS = 3  # stop retrying after this many consecutive zombie restarts
 
     def _check_zombie_playback(self) -> None:
