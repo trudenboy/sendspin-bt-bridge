@@ -738,9 +738,7 @@
         .filter-btn:hover { color: var(--primary-text-color); }
         .filter-btn.active { background: var(--primary-color); color: white; }
         .ts     { font-size: 11px; color: var(--secondary-text-color); margin-top: 3px; }
-        .sync-hover { display: none; }
-        .device-card:hover .sync-hover.has-delay,
-        .device-card:focus-within .sync-hover.has-delay { display: block; }
+        /* sync-hover rules removed — delay is always visible */
 
         /* Diagnostics section */
         .diag-section {
@@ -798,10 +796,11 @@
             min-width: 32px; height: 26px; padding: 0 6px; font-size: 13px;
         }
 
-        /* Shuffle/repeat — in the transport row, visible only on card hover when MA active */
-        .ma-hover-btn { display: none !important; }
-        .device-card:hover .ma-hover-btn.ma-ready,
-        .device-card:focus-within .ma-hover-btn.ma-ready { display: inline-flex !important; }
+        /* Shuffle/repeat — visible only when MA active */
+        .transport-btn[id^="dma-shuffle-"],
+        .transport-btn[id^="dma-repeat-"] { display: none !important; }
+        .transport-btn.ma-ready[id^="dma-shuffle-"],
+        .transport-btn.ma-ready[id^="dma-repeat-"] { display: inline-flex !important; }
 
         /* Album art + track row */
         .track-art-row { position: relative; display: flex; align-items: center; margin-top: 2px; }
@@ -914,9 +913,7 @@
         .conn-row-main .status-indicator { margin-right: 3px; }
 
         /* Volume column — sink name hidden, revealed on hover */
-        .volume-col .dsink-value { display: none; font-size: 11px; }
-        .device-card:hover .dsink-value,
-        .device-card:focus-within .dsink-value { display: block; }
+        .volume-col .dsink-value { display: none; }
 
         /* Toast notifications */
         .toast-container {
@@ -1079,7 +1076,6 @@
             /* Always show hover-only details on touch */
             .conn-text { display: inline !important; }
             .conn-col .status-label { display: block !important; }
-            .device-card .dsink-value { display: block; }
 
             /* BT device detail row — stack on mobile */
             .bt-detail-row { grid-template-columns: 1fr 1fr; }

@@ -302,9 +302,9 @@ function buildDeviceCard(i) {
                 'onclick="onDevicePause(' + i + ')" title="Pause/Unpause">&#9646;&#9646;</button>' +
               '<button type="button" class="card-icon-btn transport-btn" id="dma-next-' + i + '" ' +
                 'onclick="maQueueCmd(\'next\', undefined, ' + i + ')" title="Next" style="display:none;">&#9654;&#9654;</button>' +
-              '<button type="button" class="card-icon-btn transport-btn ma-hover-btn" id="dma-shuffle-' + i + '" ' +
+              '<button type="button" class="card-icon-btn transport-btn" id="dma-shuffle-' + i + '" ' +
                 'onclick="maQueueCmd(\'shuffle\', undefined, ' + i + ')" title="Shuffle">&#8644;</button>' +
-              '<button type="button" class="card-icon-btn transport-btn ma-hover-btn" id="dma-repeat-' + i + '" ' +
+              '<button type="button" class="card-icon-btn transport-btn" id="dma-repeat-' + i + '" ' +
                 'onclick="maCycleRepeat(' + i + ')" title="Repeat">&#8635;</button>' +
             '</div>' +
             '<div class="track-art-row">' +
@@ -319,7 +319,6 @@ function buildDeviceCard(i) {
           // Volume column
           '<div class="volume-col">' +
             '<div class="ts" id="daudiofmt-' + i + '"></div>' +
-            '<div class="dsink-value ts-sub" id="dsink-' + i + '"></div>' +
             '<div class="volume-row">' +
               '<input type="range" min="0" max="100" value="100" ' +
                 'class="volume-slider" id="vslider-' + i + '" ' +
@@ -334,7 +333,7 @@ function buildDeviceCard(i) {
           '<div>' +
             '<div class="status-value" id="dsync-' + i + '">&#8212;</div>' +
             '<div class="ts" id="dsync-detail-' + i + '"></div>' +
-            '<div class="ts sync-hover" id="ddelay-' + i + '"></div>' +
+            '<div class="ts" id="ddelay-' + i + '"></div>' +
           '</div>' +
         '</div>' +
         '<div class="device-card-actions">' +
@@ -629,10 +628,8 @@ function populateDeviceCard(i, dev) {
         if (dev.playing && delay !== undefined && delay !== null && delay !== 0) {
             delayEl.textContent = 'delay: ' + (delay > 0 ? '+' : '') + delay + 'ms';
             delayEl.style.color = Math.abs(delay) > 1000 ? '#f59e0b' : 'var(--secondary-text-color)';
-            delayEl.classList.add('has-delay');
         } else {
             delayEl.textContent = '';
-            delayEl.classList.remove('has-delay');
         }
     }
 
@@ -696,20 +693,6 @@ function populateDeviceCard(i, dev) {
             slider.title = hasSink ? '' : 'Audio sink not configured';
         }
         if (volEl) volEl.textContent = dev.volume + '%';
-    }
-
-    // Sink name — small hint under volume slider
-    var sinkEl = document.getElementById('dsink-' + i);
-    if (sinkEl) {
-        if (dev.sink_name) {
-            sinkEl.textContent = dev.sink_name;
-            sinkEl.style.color = '';
-        } else if (dev.bluetooth_mac && !hasSink) {
-            sinkEl.textContent = '\u26a0 No audio sink';
-            sinkEl.style.color = '#f59e0b';
-        } else {
-            sinkEl.textContent = '';
-        }
     }
 
     // Equalizer — animated green when streaming, frozen red when playing without audio
