@@ -269,6 +269,7 @@ def api_config():
         "VOLUME_VIA_MA",
         "MUTE_VIA_MA",
         "AUTO_UPDATE",
+        "CHECK_UPDATES",
         "_new_device_default_volume",
     }
     config = {k: v for k, v in config.items() if k in _ALLOWED_POST_KEYS}

@@ -57,6 +57,7 @@ DEFAULT_CONFIG = {
     "VOLUME_VIA_MA": True,
     "MUTE_VIA_MA": False,
     "AUTO_UPDATE": False,
+    "CHECK_UPDATES": True,
     "TRUSTED_PROXIES": [],
 }
 
@@ -134,6 +135,7 @@ def load_config() -> dict:
         "VOLUME_VIA_MA",
         "MUTE_VIA_MA",
         "AUTO_UPDATE",
+        "CHECK_UPDATES",
         "TRUSTED_PROXIES",
     }
 

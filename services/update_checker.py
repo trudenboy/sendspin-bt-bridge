@@ -55,6 +55,13 @@ async def run_update_checker(current_version: str) -> None:
 
     while True:
         try:
+            # Skip check if disabled in config
+            from config import load_config
+
+            if not load_config().get("CHECK_UPDATES", True):
+                await asyncio.sleep(CHECK_INTERVAL)
+                continue
+
             latest = await check_latest_version()
             if latest:
                 remote = _parse_version(latest["version"])
