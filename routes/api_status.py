@@ -16,7 +16,7 @@ import threading
 import time
 from datetime import datetime, timedelta, timezone
 
-from flask import Blueprint, Response, jsonify, request
+from flask import Blueprint, Response, jsonify
 
 import state
 from config import BUILD_DATE, VERSION, load_config
@@ -564,24 +564,8 @@ def api_diagnostics():
 
 
 # ---------------------------------------------------------------------------
-# /api/logs — recent log lines from in-memory ring buffer
+# (Logs endpoint lives in api_config.py — reads journalctl / supervisor / docker)
 # ---------------------------------------------------------------------------
-
-
-@status_bp.route("/api/logs")
-def api_logs():
-    """Return the last N log lines from the in-memory ring buffer."""
-    from sendspin_client import log_ring_buffer
-
-    if log_ring_buffer is None:
-        return jsonify({"lines": [], "note": "Log buffer not initialized"})
-
-    try:
-        n = min(int(request.args.get("lines", 100)), 200)
-    except (ValueError, TypeError):
-        n = 100
-
-    return jsonify({"lines": log_ring_buffer.get_lines(n)})
 
 
 # ---------------------------------------------------------------------------
@@ -728,11 +712,46 @@ def _sanitized_config() -> dict:
     return result
 
 
+def _collect_recent_logs(n: int = 100) -> list[str]:
+    """Read recent log lines from journalctl, HA Supervisor, or docker logs."""
+    try:
+        if os.path.exists("/etc/systemd/system/sendspin-client.service"):
+            r = subprocess.run(
+                ["journalctl", "-u", "sendspin-client", "-n", str(n), "--no-pager", "--output=short-iso"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            return r.stdout.splitlines() or r.stderr.splitlines()
+        if os.path.exists("/data/options.json"):
+            import urllib.request as _ur
+
+            token = os.environ.get("SUPERVISOR_TOKEN", "")
+            if token:
+                req = _ur.Request(
+                    "http://supervisor/addons/self/logs",
+                    headers={"Authorization": f"Bearer {token}", "Accept": "text/plain"},
+                )
+                with _ur.urlopen(req, timeout=10) as resp:
+                    text = resp.read().decode("utf-8", errors="replace")
+                return text.splitlines()[-n:]
+            return []
+        # Docker fallback
+        r = subprocess.run(
+            ["docker", "logs", "--tail", str(n), "sendspin-client"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        return (r.stdout + r.stderr).splitlines()
+    except Exception:
+        logger.debug("Could not collect logs for bug report", exc_info=True)
+        return []
+
+
 @status_bp.route("/api/bugreport")
 def api_bugreport():
     """Assemble a full bug report with masked MAC/IP addresses."""
-    from sendspin_client import log_ring_buffer
-
     try:
         # Collect all diagnostic data
         diag_resp = api_diagnostics()
@@ -742,9 +761,7 @@ def api_bugreport():
         subprocs = _collect_subprocess_info()
         config_info = _sanitized_config()
 
-        log_lines = []
-        if log_ring_buffer:
-            log_lines = log_ring_buffer.get_lines(100)
+        log_lines = _collect_recent_logs(100)
 
         # Detect runtime
         runtime = "unknown"
