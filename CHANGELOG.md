@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.28.2] - 2026-03-13
+
+### Fixed
+- **Released state persistence** — device "Release" state now persists across service restarts via `released` flag in config.json; previously was runtime-only
+- **Player name matching with bridge suffix** — `persist_device_enabled` and `persist_device_released` now correctly match runtime names like `"ENEBY Portable @ LXC"` against config entries `"ENEBY Portable"` using prefix matching
+
+### Changed
+- **Playback progress inline** — track duration (`1:23 / 4:56`) moved inline with the progress bar (same flex row, to the right)
+- **Volume slider aligned** — volume column reordered (audio format info first, slider below) so the slider visually aligns with the playback progress bar; slider height matched at 3px
+- **Sink name removed** — sink name display removed from the volume column
+- **Delay always visible** — `static_delay_ms` value in the Sync column is now always shown (was hover-only)
+- **Shuffle/repeat always visible** — shuffle and repeat buttons in the Playback column are now always visible when MA is active (were hover-only)
+
 ## [2.28.1] - 2026-03-13
 
 ### Changed

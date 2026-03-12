@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.28.2] - 2026-03-13
+
+### Fixed
+- Released state now persists across service restarts
+- Player name matching with bridge suffix for config persistence
+
+### Changed
+- Track duration inline with progress bar
+- Volume slider aligned with progress bar (reordered column, 3px height)
+- Sink name removed from volume column
+- Delay always visible in Sync column
+- Shuffle/repeat always visible when MA active
+
 ## [2.28.1] - 2026-03-13
 
 ### Changed
