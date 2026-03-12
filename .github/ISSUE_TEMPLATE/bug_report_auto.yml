@@ -63,7 +63,7 @@ body:
     attributes:
       label: Screenshots
 
-  - type: textarea
+  - type: input
     id: additional
     attributes:
       label: Additional Context
