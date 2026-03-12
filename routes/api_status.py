@@ -891,6 +891,7 @@ def api_bugreport():
         if ma_info.get("configured"):
             full.append("--- MUSIC ASSISTANT ---")
             full.append(f"  URL:        {ma_info.get('url', '?')}")
+            full.append(f"  Version:    {ma_info.get('version') or '?'}")
             full.append(f"  Connected:  {'Yes' if ma_info.get('connected') else 'No'}")
             groups = ma_info.get("syncgroups", [])
             for g in groups:
