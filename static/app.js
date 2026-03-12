@@ -364,6 +364,14 @@ function populateDeviceCard(i, dev) {
     if (releasedBadge) {
         var isReleased = dev.bt_management_enabled === false;
         releasedBadge.style.display = isReleased ? '' : 'none';
+        if (isReleased) {
+            var isAuto = dev.bt_released_by === 'auto';
+            releasedBadge.textContent = isAuto ? 'Auto-disabled' : 'Released';
+            releasedBadge.className = 'released-badge' + (isAuto ? ' released-badge-warn' : '');
+            releasedBadge.title = isAuto
+                ? 'Auto-disabled due to connection issues — click Reclaim to retry'
+                : 'BT management disabled — click Reclaim to resume';
+        }
     }
 
     // Battery badge (only shown when device reports battery level)
@@ -472,8 +480,11 @@ function populateDeviceCard(i, dev) {
     var btInd   = document.getElementById('dbt-ind-' + i);
     var btTxt   = document.getElementById('dbt-txt-' + i);
     var btMacEl = document.getElementById('dbt-mac-' + i);
-    if (dev.bt_management_enabled === false) {
-        btInd.className = 'status-indicator inactive';
+    if (dev.bt_management_enabled === false && dev.bt_released_by === 'auto') {
+        btInd.className = 'status-indicator warn';
+        btTxt.textContent = 'Auto-disabled';
+    } else if (dev.bt_management_enabled === false) {
+        btInd.className = 'status-indicator released';
         btTxt.textContent = 'Released';
     } else if (dev.bluetooth_connected) {
         btInd.className = 'status-indicator active';
@@ -3213,23 +3224,36 @@ async function downloadDiagnostics() {
 function updateHealthIndicator(devices) {
     var el = document.getElementById('health-indicator');
     if (!el || !devices || !devices.length) return;
-    var total = devices.length;
+    // Exclude manually released devices from health counts
+    var active = devices.filter(function(d) {
+        return d.bt_management_enabled !== false || d.bt_released_by === 'auto';
+    });
+    var released = devices.length - active.length;
+    var total = active.length;
     var playing = 0, btOk = 0, maOk = 0;
-    devices.forEach(function(d) {
+    active.forEach(function(d) {
         if (d.playing) playing++;
         if (d.bluetooth_connected) btOk++;
         if (d.connected) maOk++;
     });
     var parts = [];
     // BT status
-    var btClass = btOk === total ? 'ok' : btOk > 0 ? 'warn' : 'error';
-    parts.push('<span class="health-dot ' + btClass + '"></span>BT ' + btOk + '/' + total);
+    if (total > 0) {
+        var btClass = btOk === total ? 'ok' : btOk > 0 ? 'warn' : 'error';
+        parts.push('<span class="health-dot ' + btClass + '"></span>BT ' + btOk + '/' + total);
+    }
     // MA status
-    var maClass = maOk === total ? 'ok' : maOk > 0 ? 'warn' : 'error';
-    parts.push('<span class="health-dot ' + maClass + '"></span>MA ' + maOk + '/' + total);
+    if (total > 0) {
+        var maClass = maOk === total ? 'ok' : maOk > 0 ? 'warn' : 'error';
+        parts.push('<span class="health-dot ' + maClass + '"></span>MA ' + maOk + '/' + total);
+    }
     // Playback
     if (playing > 0) {
         parts.push('<span class="health-dot ok"></span>▶ ' + playing);
+    }
+    // Released count (grey)
+    if (released > 0) {
+        parts.push('<span class="health-dot released"></span>' + released + ' released');
     }
     el.innerHTML = parts.join('<span style="opacity:0.3;padding:0 4px;">·</span>');
 }

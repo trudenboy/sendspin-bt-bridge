@@ -672,6 +672,7 @@ class BluetoothManager:
             self.client._update_status(
                 {
                     "bt_management_enabled": False,
+                    "bt_released_by": "auto",
                     "reconnecting": False,
                     "last_error": f"Auto-disabled: {len(self._reconnect_timestamps)} reconnects in {int(self._CHURN_WINDOW)}s",
                     "last_error_at": datetime.now(tz=UTC).isoformat(),
@@ -706,7 +707,13 @@ class BluetoothManager:
         self.management_enabled = False
         if self.client:
             self.client.bt_management_enabled = False
-            self.client._update_status({"bt_management_enabled": False, "reconnecting": False})
+            self.client._update_status(
+                {
+                    "bt_management_enabled": False,
+                    "bt_released_by": "auto",
+                    "reconnecting": False,
+                }
+            )
         try:
             from services.bluetooth import persist_device_enabled
 

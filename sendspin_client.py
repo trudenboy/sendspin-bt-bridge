@@ -89,6 +89,7 @@ class DeviceStatus:
     reconnecting: bool = False
     reconnect_attempt: int = 0
     bt_management_enabled: bool = True
+    bt_released_by: str | None = None
     battery_level: int | None = None
     group_name: str | None = None
     group_id: str | None = None
@@ -699,7 +700,12 @@ class SendspinClient:
     def set_bt_management_enabled(self, enabled: bool) -> None:
         """Release (enabled=False) or reclaim (enabled=True) the BT adapter."""
         self.bt_management_enabled = enabled
-        self._update_status({"bt_management_enabled": enabled})
+        self._update_status(
+            {
+                "bt_management_enabled": enabled,
+                "bt_released_by": None if enabled else "user",
+            }
+        )
         if self.bt_manager:
             self.bt_manager.management_enabled = enabled
         if not enabled:

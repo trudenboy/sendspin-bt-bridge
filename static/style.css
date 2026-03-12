@@ -377,6 +377,8 @@
         }
         .status-indicator.active   { background: var(--success-color); box-shadow: 0 0 8px var(--success-color); }
         .status-indicator.inactive { background: var(--error-color); }
+        .status-indicator.released { background: #9ca3af; }
+        .status-indicator.warn     { background: #f59e0b; box-shadow: 0 0 6px #f59e0b; }
         .status-indicator.warning  { background: #f59e0b; }
         .status-indicator.reconnecting {
             background: #f59e0b;
@@ -696,6 +698,11 @@
             border: 1px solid var(--divider-color);
             vertical-align: middle; margin-left: 4px;
         }
+        .released-badge-warn {
+            background: rgba(245, 158, 11, 0.15);
+            color: #f59e0b;
+            border-color: rgba(245, 158, 11, 0.3);
+        }
 
         .battery-badge {
             font-size: 11px; opacity: 0.85; white-space: nowrap;
@@ -812,6 +819,7 @@
         .health-dot.ok    { background: #4ade80; }
         .health-dot.warn  { background: #fbbf24; }
         .health-dot.error { background: #f87171; }
+        .health-dot.released { background: #9ca3af; }
 
         /* Config section groups */
         .config-group { margin-bottom: 32px; }
