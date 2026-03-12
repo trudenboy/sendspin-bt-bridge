@@ -123,52 +123,133 @@
 
         /* Bug Report Modal */
         .bugreport-overlay {
-            position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+            position: fixed; inset: 0; background: rgba(0,0,0,0.45);
             display: flex; align-items: center; justify-content: center; z-index: 9999;
+            animation: bugreport-fade-in 0.15s ease;
         }
+        @keyframes bugreport-fade-in { from { opacity: 0; } to { opacity: 1; } }
         .bugreport-modal {
-            background: var(--app-card-bg, #fff); color: var(--app-text-color, #333);
-            border-radius: 12px; padding: 24px; width: 90vw; max-width: 560px;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.3); max-height: 85vh; display: flex; flex-direction: column;
+            background: var(--card-background-color, #fff); color: var(--primary-text-color, #333);
+            border-radius: var(--ha-card-border-radius, 12px);
+            width: 90vw; max-width: 520px;
+            box-shadow: var(--ha-card-box-shadow, 0 2px 8px rgba(0,0,0,0.2));
+            max-height: 85vh; display: flex; flex-direction: column;
+            overflow: hidden;
+            animation: bugreport-slide-up 0.2s ease;
         }
-        .bugreport-title { font-size: 18px; font-weight: 600; margin-bottom: 16px; }
-        .bugreport-field { margin-bottom: 12px; }
-        .bugreport-field label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 4px; }
+        @keyframes bugreport-slide-up {
+            from { opacity: 0; transform: translateY(12px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        .bugreport-header {
+            display: flex; align-items: center; gap: 10px;
+            padding: 14px 20px;
+            background: var(--primary-color, #03a9f4);
+            color: var(--app-header-text-color, #fff);
+        }
+        .bugreport-header-icon { width: 18px; height: 18px; flex-shrink: 0; }
+        .bugreport-header-title { font-size: 16px; font-weight: 600; flex: 1; }
+        .bugreport-close {
+            width: 28px; height: 28px; border-radius: 50%; border: none;
+            background: rgba(255,255,255,0.15); color: var(--app-header-text-color, #fff);
+            cursor: pointer; display: flex; align-items: center; justify-content: center;
+            font-size: 16px; line-height: 1; transition: background 0.15s;
+            flex-shrink: 0;
+        }
+        .bugreport-close:hover { background: rgba(255,255,255,0.3); }
+        .bugreport-body { padding: 20px; overflow-y: auto; flex: 1; }
+        .bugreport-field { margin-bottom: 14px; }
+        .bugreport-field label {
+            display: block; font-size: 12px; font-weight: 600;
+            color: var(--secondary-text-color, #666);
+            text-transform: uppercase; letter-spacing: 0.5px;
+            margin-bottom: 5px;
+        }
         .bugreport-field input,
         .bugreport-field textarea {
-            width: 100%; box-sizing: border-box; border: 1px solid var(--app-border-color, #ccc);
-            border-radius: 6px; padding: 8px 10px; font-size: 13px; font-family: inherit;
-            background: var(--app-input-bg, #fff); color: var(--app-text-color, #333);
+            width: 100%; box-sizing: border-box;
+            border: 1px solid var(--divider-color, rgba(0,0,0,.12));
+            border-radius: 8px; padding: 10px 12px; font-size: 14px; font-family: inherit;
+            background: var(--primary-background-color, #fafafa);
+            color: var(--primary-text-color, #333);
+            transition: border-color 0.15s, box-shadow 0.15s;
         }
-        .bugreport-field textarea { resize: vertical; min-height: 60px; }
-        .bugreport-preview {
-            flex: 1; overflow-y: auto; font-size: 11px; font-family: monospace;
-            background: var(--app-bg, #f5f5f5); border: 1px solid var(--app-border-color, #ddd);
-            border-radius: 6px; padding: 8px; margin-bottom: 12px; white-space: pre-wrap;
-            word-break: break-all; max-height: 200px; line-height: 1.4;
+        .bugreport-field input:focus,
+        .bugreport-field textarea:focus {
+            outline: none;
+            border-color: var(--primary-color, #03a9f4);
+            box-shadow: 0 0 0 3px rgba(3,169,244,0.15);
         }
+        .bugreport-field textarea { resize: vertical; min-height: 72px; }
+        .bugreport-field input.invalid,
+        .bugreport-field textarea.invalid {
+            border-color: var(--error-color, #db4437);
+            box-shadow: 0 0 0 3px rgba(219,68,55,0.1);
+        }
+        .bugreport-field .field-error {
+            font-size: 11px; color: var(--error-color, #db4437);
+            margin-top: 4px; display: none;
+        }
+        .bugreport-field input.invalid ~ .field-error,
+        .bugreport-field textarea.invalid ~ .field-error { display: block; }
         .bugreport-preview-toggle {
-            font-size: 12px; color: var(--app-text-muted, #666); cursor: pointer;
+            font-size: 12px; color: var(--secondary-text-color, #666); cursor: pointer;
             margin-bottom: 8px; user-select: none;
+            display: flex; align-items: center; gap: 6px;
         }
-        .bugreport-preview-toggle:hover { color: var(--app-text-color, #333); }
-        .bugreport-actions { display: flex; gap: 10px; justify-content: flex-end; flex-shrink: 0; }
+        .bugreport-preview-toggle:hover { color: var(--primary-text-color, #333); }
+        .bugreport-preview-arrow {
+            display: inline-block; font-size: 10px;
+            transition: transform 0.2s ease;
+        }
+        .bugreport-preview-arrow.expanded { transform: rotate(90deg); }
+        .bugreport-preview {
+            overflow-y: auto; font-size: 11px; font-family: monospace;
+            background: var(--code-background-color, #1e293b);
+            color: var(--code-text-color, #e2e8f0);
+            border-radius: 8px; padding: 10px 12px; margin-bottom: 14px;
+            white-space: pre-wrap; word-break: break-all;
+            max-height: 180px; line-height: 1.5;
+        }
+        .bugreport-hint {
+            display: flex; align-items: flex-start; gap: 8px;
+            font-size: 12px; color: var(--secondary-text-color, #666);
+            line-height: 1.5; margin-bottom: 4px;
+            padding: 10px 12px; border-radius: 8px;
+            background: var(--primary-background-color, #fafafa);
+            border: 1px solid var(--divider-color, rgba(0,0,0,.12));
+        }
+        .bugreport-hint-icon { flex-shrink: 0; width: 14px; height: 14px; margin-top: 1px; opacity: 0.6; }
+        .bugreport-footer {
+            display: flex; gap: 8px; justify-content: flex-end; align-items: center;
+            padding: 14px 20px;
+            border-top: 1px solid var(--divider-color, rgba(0,0,0,.12));
+            flex-shrink: 0;
+        }
         .bugreport-btn {
-            padding: 8px 16px; border-radius: 8px; font-size: 14px; font-weight: 500;
-            cursor: pointer; text-decoration: none; border: none; display: inline-block;
+            padding: 8px 18px; border-radius: 8px; font-size: 13px; font-weight: 500;
+            cursor: pointer; border: none; display: inline-flex; align-items: center; gap: 6px;
+            transition: background 0.15s, opacity 0.15s;
         }
         .bugreport-btn.secondary {
-            background: var(--app-border-color, #e0e0e0); color: var(--app-text-color, #333);
+            background: transparent; color: var(--secondary-text-color, #666);
         }
-        .bugreport-btn.secondary:hover { opacity: 0.8; }
-        .bugreport-btn.primary { background: #1a73e8; color: #fff; }
-        .bugreport-btn.primary:hover { background: #1557b0; }
-        .bugreport-btn.primary.btn-disabled { background: #9fc3f0; cursor: not-allowed; pointer-events: auto; }
-        .bugreport-btn.primary.btn-disabled:hover { background: #9fc3f0; }
-        .bugreport-spinner { display: inline-block; animation: spin 1s linear infinite; }
-        .bugreport-hint { font-size: 12px; color: #888; margin: 8px 0 0; line-height: 1.4; }
-        .bugreport-field input.invalid,
-        .bugreport-field textarea.invalid { border: 2px solid #e53935; }
+        .bugreport-btn.secondary:hover { background: var(--divider-color, rgba(0,0,0,.06)); }
+        .bugreport-btn.primary {
+            background: var(--primary-color, #03a9f4); color: #fff;
+        }
+        .bugreport-btn.primary:hover { background: var(--dark-primary-color, #0288d1); }
+        .bugreport-btn.primary.btn-disabled {
+            opacity: 0.45; cursor: not-allowed;
+        }
+        .bugreport-btn.primary.btn-disabled:hover { background: var(--primary-color, #03a9f4); }
+        .bugreport-btn-icon { width: 14px; height: 14px; flex-shrink: 0; }
+        .bugreport-spinner {
+            width: 14px; height: 14px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: #fff; border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
 
         .header-actions {
             display: flex; align-items: center; gap: 10px;
