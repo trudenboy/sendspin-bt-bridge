@@ -88,6 +88,11 @@ def bt_remove_device(mac: str, adapter_mac: str = "") -> None:
     threading.Thread(target=_run, daemon=True).start()
 
 
+def _match_player_name(config_name: str, runtime_name: str) -> bool:
+    """Match config player_name against runtime name (which may include ' @ bridge' suffix)."""
+    return runtime_name == config_name or runtime_name.startswith(config_name + " @ ")
+
+
 def persist_device_enabled(player_name: str, enabled: bool) -> None:
     """Persist the enabled flag to config.json and (in HA mode) to options.json."""
     if not _CONFIG_FILE.exists():
@@ -95,7 +100,7 @@ def persist_device_enabled(player_name: str, enabled: bool) -> None:
 
     def _set_enabled(cfg: dict) -> None:
         for dev in cfg.get("BLUETOOTH_DEVICES", []):
-            if dev.get("player_name") == player_name:
+            if _match_player_name(dev.get("player_name", ""), player_name):
                 dev["enabled"] = enabled
                 break
 
@@ -111,7 +116,7 @@ def persist_device_enabled(player_name: str, enabled: bool) -> None:
                 with open(_OPTIONS_FILE) as f:
                     opts = json.load(f)
                 for dev in opts.get("bluetooth_devices", []):
-                    if dev.get("player_name") == player_name:
+                    if _match_player_name(dev.get("player_name", ""), player_name):
                         dev["enabled"] = enabled
                         break
                 tmp = str(_OPTIONS_FILE) + ".tmp"
@@ -130,7 +135,7 @@ def persist_device_released(player_name: str, released: bool) -> None:
 
     def _set_released(cfg: dict) -> None:
         for dev in cfg.get("BLUETOOTH_DEVICES", []):
-            if dev.get("player_name") == player_name:
+            if _match_player_name(dev.get("player_name", ""), player_name):
                 dev["released"] = released
                 break
 
