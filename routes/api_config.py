@@ -411,63 +411,90 @@ def api_set_log_level():
     return jsonify({"success": True, "level": level})
 
 
+def _read_log_lines(runtime: str, lines: int) -> list[str]:
+    """Read service log lines for the given runtime."""
+    if runtime == "systemd":
+        result = subprocess.run(
+            [
+                "journalctl",
+                "-u",
+                "sendspin-client",
+                "-n",
+                str(lines),
+                "--no-pager",
+                "--output=short-iso",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        log_lines = result.stdout.splitlines()
+        if not log_lines and result.stderr:
+            log_lines = result.stderr.splitlines()
+    elif runtime == "ha_addon":
+        import urllib.request as _ur
+
+        token = os.environ.get("SUPERVISOR_TOKEN", "")
+        if token:
+            req = _ur.Request(
+                "http://supervisor/addons/self/logs",
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Accept": "text/plain",
+                },
+            )
+            with _ur.urlopen(req, timeout=10) as resp:
+                text = resp.read().decode("utf-8", errors="replace")
+            log_lines = text.splitlines()[-lines:]
+        else:
+            log_lines = ["(SUPERVISOR_TOKEN not available — check addon permissions)"]
+    else:
+        result = subprocess.run(
+            ["docker", "logs", "--tail", str(lines), "sendspin-client"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        log_lines = (result.stdout + result.stderr).splitlines()
+
+    return log_lines or ["(No logs available)"]
+
+
 @config_bp.route("/api/logs")
 def api_logs():
     """Return real service logs (journalctl, Supervisor, or docker logs)."""
     lines = min(request.args.get("lines", 150, type=int), 500)
     try:
         runtime = _detect_runtime()
-        if runtime == "systemd":
-            result = subprocess.run(
-                [
-                    "journalctl",
-                    "-u",
-                    "sendspin-client",
-                    "-n",
-                    str(lines),
-                    "--no-pager",
-                    "--output=short-iso",
-                ],
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
-            log_lines = result.stdout.splitlines()
-            if not log_lines and result.stderr:
-                log_lines = result.stderr.splitlines()
-        elif runtime == "ha_addon":
-            import urllib.request as _ur
-
-            token = os.environ.get("SUPERVISOR_TOKEN", "")
-            if token:
-                req = _ur.Request(
-                    "http://supervisor/addons/self/logs",
-                    headers={
-                        "Authorization": f"Bearer {token}",
-                        "Accept": "text/plain",
-                    },
-                )
-                with _ur.urlopen(req, timeout=10) as resp:
-                    text = resp.read().decode("utf-8", errors="replace")
-                log_lines = text.splitlines()[-lines:]
-            else:
-                log_lines = ["(SUPERVISOR_TOKEN not available — check addon permissions)"]
-        else:
-            result = subprocess.run(
-                ["docker", "logs", "--tail", str(lines), "sendspin-client"],
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
-            log_lines = (result.stdout + result.stderr).splitlines()
-
-        if not log_lines:
-            log_lines = ["(No logs available)"]
-
+        log_lines = _read_log_lines(runtime, lines)
         return jsonify({"logs": log_lines, "runtime": runtime})
     except Exception as e:
         logger.error("Error reading logs: %s", e)
         return jsonify({"logs": [f"Error reading logs: {e}"]}), 500
+
+
+@config_bp.route("/api/logs/download")
+def api_logs_download():
+    """Download full service logs as a text file."""
+    from datetime import datetime, timezone
+
+    from flask import Response
+
+    try:
+        lines = 500
+        runtime = _detect_runtime()
+        log_lines = _read_log_lines(runtime, lines)
+
+        text = "\n".join(log_lines)
+        ts = datetime.now(tz=timezone.utc).strftime("%Y%m%d-%H%M%S")
+        return Response(
+            text,
+            mimetype="text/plain",
+            headers={"Content-Disposition": f'attachment; filename="sendspin-logs-{ts}.txt"'},
+        )
+    except Exception as e:
+        logger.error("Error downloading logs: %s", e)
+        return Response(f"Error: {e}", mimetype="text/plain", status=500)
 
 
 @config_bp.route("/api/version")

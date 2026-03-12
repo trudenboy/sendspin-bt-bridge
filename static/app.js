@@ -906,6 +906,23 @@ async function refreshLogs() {
     }
 }
 
+async function downloadLogs() {
+    try {
+        var resp = await fetch(API_BASE + '/api/logs/download');
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        var blob = await resp.blob();
+        var cd = resp.headers.get('content-disposition') || '';
+        var fname = (cd.match(/filename="?([^"]+)"?/) || [])[1] || 'sendspin-logs.txt';
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = fname;
+        a.click();
+        URL.revokeObjectURL(a.href);
+    } catch (err) {
+        alert('Download failed: ' + err.message);
+    }
+}
+
 // ---- Group Controls ----
 
 var _groupSelected = {};   // index → true/false
