@@ -471,7 +471,7 @@
         .device-card-title {
             font-size: 15px; font-weight: 700; color: var(--primary-text-color);
             overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-            flex: 1; min-width: 0;
+            min-width: 0;
         }
         .identity-meta-row {
             display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
