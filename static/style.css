@@ -217,6 +217,13 @@
         .restart-banner.restarting { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
         .restart-banner.online     { background: #d1fae5; color: #065f46; border: 1px solid #6ee7b7; }
         .restart-banner.warning    { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+        .auth-warning-banner {
+            border-radius: 8px; padding: 10px 16px; margin-bottom: 16px;
+            font-size: 13px; font-weight: 500; text-align: center;
+            background: #fef3c7; color: #92400e; border: 1px solid #fcd34d;
+            display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap;
+        }
+        .auth-warning-banner a { color: #92400e; font-weight: 600; text-decoration: underline; }
 
         /* Status grid */
         .status-grid {

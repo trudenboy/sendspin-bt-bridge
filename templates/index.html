@@ -53,6 +53,15 @@
     <!-- Restart banner -->
     <div id="restart-banner" class="restart-banner"></div>
 
+    {% if not auth_enabled %}
+    <!-- Auth warning banner -->
+    <div class="auth-warning-banner">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;flex-shrink:0"><circle cx="8" cy="8" r="7"/><line x1="8" y1="4" x2="8" y2="9"/><line x1="8" y1="11.5" x2="8" y2="11.5" stroke-width="2"/></svg>
+        Web UI has no authentication — anyone on your network can access it.
+        <a href="#" onclick="document.querySelector('.config-section').open=true;document.getElementById('auth-enabled').scrollIntoView({behavior:'smooth',block:'center'});document.getElementById('auth-enabled').parentElement.style.outline='2px solid #dc2626';setTimeout(function(){document.getElementById('auth-enabled').parentElement.style.outline=''},3000);return false;">Enable in Configuration → Authentication</a>
+    </div>
+    {% endif %}
+
     <!-- Group Controls -->
     <div class="group-controls" id="group-controls" style="display:none;">
         <span class="group-controls-label">&#127922; Group</span>
