@@ -2,7 +2,7 @@
 
 A history of the architectural and functional evolution of sendspin-bt-bridge — for readers familiar with Home Assistant, Music Assistant, and multiroom audio setups.
 
-**Period:** January 1 – March 12, 2026 · **Total commits:** ~860 · **Versions:** 1.0.0 → 2.26.1
+**Period:** January 1 – March 12, 2026 · **Total commits:** ~860 · **Versions:** 1.0.0 → 2.26.2
 
 ---
 
@@ -662,7 +662,7 @@ The addon config gained `tmpfs: true` (in-memory temp for better SD card longevi
 
 **D-Bus resilience for TWS** (v2.26.0): TWS earbuds going into their charging case leave stale BlueZ D-Bus objects that throw `DBusException` on property reads. Exception handling was widened in `_dbus_get_device_property()`, `_dbus_get_battery_level()`, `_dbus_call_device_method()`, and `is_device_connected()`. An auto-reconnect path was added: when the polling loop detects a device connected externally (e.g. earbuds taken out of case) but the player isn't running, it automatically configures audio and starts the player.
 
-**HA username in header** (v2.26.0): Ingress sessions (HA sidebar) previously showed no username — the Supervisor doesn't pass identity headers. Now `_check_auth` resolves the HA owner's display name via the Core API on first Ingress request and caches it in the session.
+**HA username in header** (v2.26.0): Ingress sessions (HA sidebar) previously showed no username — the Supervisor doesn't pass identity headers. Now `_check_auth` resolves the HA owner's display name on first Ingress request and caches it in the session. The initial implementation (v2.26.0) tried `core/api/auth/current_user` via `SUPERVISOR_TOKEN`, but addon tokens get 401 on that endpoint — fixed in v2.26.2 to read `MA_USERNAME` from config.json (saved during the HA login flow).
 
 **Update dialog re-check** (v2.26.0): the version badge in the header now opens the update dialog with a 🔄 Re-check button — useful after applying an update or when a newer version has been released since the last hourly check.
 
