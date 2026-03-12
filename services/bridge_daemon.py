@@ -180,10 +180,11 @@ class BridgeDaemon(SendspinDaemon):
         if event == "stop":
             self._bridge_status["audio_streaming"] = False
             self._notify()
-        # NOTE: reanchoring flag is NOT cleared here because sendspin logs "re-anchoring"
-        # AFTER restarting the stream — so this callback fires before the log handler sets
-        # the flag. Auto-clear is handled by _reanchor_watcher in daemon_process.py.
-        logger.debug("[%s] stream event: %s", self._bridge_status.get("player_name", "?"), event)
+        elif event == "start" and self._bridge_status.get("audio_format"):
+            # Re-anchor or track change: format_change won't fire again
+            # if codec/rate/depth/channels are unchanged, but audio IS flowing.
+            self._bridge_status["audio_streaming"] = True
+            self._notify()
 
     # ── Server commands (volume / mute) ──────────────────────────────────────
 
