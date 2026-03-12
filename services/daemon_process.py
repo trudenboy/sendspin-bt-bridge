@@ -212,19 +212,28 @@ async def _startup_unmute_watcher(status: dict, sink_name: str, stop_event: asyn
     The sink is muted before BridgeDaemon starts to hide re-anchor clicks,
     format probing noise, and routing glitches. This watcher polls for
     audio_streaming=True, waits an additional stabilization delay, then unmutes.
-    Times out after 60s to avoid permanently muted sinks.
+    Times out after 60s — on timeout unmutes only if audio was streaming
+    (avoids unmuting idle players that would immediately get muted again).
     """
     _logger = logging.getLogger(__name__)
     from services.pulse import aset_sink_mute
 
+    streamed = False
     deadline = time.monotonic() + 60.0
     while not stop_event.is_set() and time.monotonic() < deadline:
         await asyncio.sleep(0.5)
         if status.get("audio_streaming"):
-            # Audio data is flowing — wait for sync to stabilize
+            streamed = True
             _logger.info("[%s] Audio streaming, waiting %.1fs for stabilization", player_name, _STARTUP_UNMUTE_DELAY_S)
             await asyncio.sleep(_STARTUP_UNMUTE_DELAY_S)
             break
+
+    if stop_event.is_set():
+        return  # daemon shutting down, don't unmute
+
+    if not streamed:
+        _logger.debug("[%s] Startup unmute timeout — no audio streamed, skipping unmute", player_name)
+        return
 
     try:
         if await aset_sink_mute(sink_name, False):
@@ -440,10 +449,10 @@ async def _run(params: dict) -> None:
     if _startup_muted and bluetooth_sink_name:
         unmute_task = asyncio.create_task(_startup_unmute_watcher(status, bluetooth_sink_name, stop_event, player_name))
 
-    # Wait until stop command or daemon exits
+    # Wait until stop command or daemon exits.
+    # unmute_task is NOT in all_tasks — it's fire-and-forget so its completion
+    # doesn't trigger FIRST_COMPLETED and kill the daemon.
     all_tasks = [cmd_task, daemon_task, watcher_task, asyncio.create_task(stop_event.wait())]
-    if unmute_task:
-        all_tasks.append(unmute_task)
     _done, pending = await asyncio.wait(
         all_tasks,
         return_when=asyncio.FIRST_COMPLETED,
