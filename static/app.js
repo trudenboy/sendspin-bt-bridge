@@ -2569,7 +2569,7 @@ function _openBugReport(e) {
 
     var hint = document.createElement('p');
     hint.className = 'bugreport-hint';
-    hint.textContent = 'A new GitHub issue will open with a brief summary. A detailed diagnostics file will be downloaded — please attach it to the issue.';
+    hint.textContent = 'A new GitHub issue will open with pre-filled diagnostics. A detailed report file will be downloaded — attach it to the issue. You must be logged into GitHub.';
     hint.style.display = 'none';
     modal.appendChild(hint);
 
@@ -2621,30 +2621,41 @@ function _openBugReport(e) {
                 // Download full report as .txt file
                 _downloadBugReport(fullBody, title);
 
-                // Map runtime to deployment option
+                var rep = reportData || {};
+                var env = rep.environment || {};
+                var diag = rep.diagnostics || {};
+                var runtime = rep.runtime || '';
+
+                // Map runtime to deployment dropdown option (must match template exactly)
                 var runtimeMap = {
                     ha_addon: 'Home Assistant Addon',
                     docker: 'Docker Compose',
                     systemd: 'Proxmox LXC'
                 };
-                var rep = reportData || {};
-                var env = (rep.diagnostics || {}).environment || rep.environment || {};
-                var diag = rep.diagnostics || {};
-                var ma = diag.ma_integration || {};
-                var runtime = rep.runtime || '';
                 var deployment = runtimeMap[runtime] || '';
 
                 // Detect audio system from environment
                 var audioServer = (env.audio_server || '').toLowerCase();
                 var audioSystem = audioServer.indexOf('pipewire') >= 0 ? 'PipeWire'
-                    : audioServer.indexOf('pulse') >= 0 ? 'PulseAudio' : 'Not sure';
-
-                // Build diagnostics summary for logs field
-                var logsSummary = reportShort.replace(/^## Bug Report\n*/, '');
+                    : audioServer.indexOf('pulse') >= 0 ? 'PulseAudio' : '';
 
                 // Count devices
                 var devices = diag.devices || [];
                 var devCount = devices.length <= 1 ? '1' : devices.length <= 3 ? '2-3' : '4+';
+
+                // BT adapter info
+                var adapters = diag.adapters || [];
+                var adapterLabel = adapters.map(function(a) {
+                    return (a.id || '') + ' ' + (a.mac || '');
+                }).join(', ').trim();
+
+                // Logs: last 20 log lines from report
+                var logLines = rep.logs || [];
+                var logsText = logLines.slice(-20).join('\n');
+
+                // Sanitized config JSON
+                var configText = '';
+                try { configText = JSON.stringify(rep.config || {}, null, 2); } catch(e) {}
 
                 // Build issue URL with template prefill
                 var params = [
@@ -2653,16 +2664,32 @@ function _openBugReport(e) {
                     'description=' + encodeURIComponent(desc),
                     'version=' + encodeURIComponent(rep.version || ''),
                     'host_os=' + encodeURIComponent(env.platform || ''),
-                    'logs=' + encodeURIComponent(logsSummary),
+                    'logs=' + encodeURIComponent(logsText),
                     'additional=' + encodeURIComponent('📎 Full diagnostic report attached as file below')
                 ];
                 if (deployment) params.push('deployment=' + encodeURIComponent(deployment));
                 if (audioSystem) params.push('audio_system=' + encodeURIComponent(audioSystem));
                 if (devCount) params.push('device_count=' + encodeURIComponent(devCount));
+                if (adapterLabel) params.push('bt_adapter=' + encodeURIComponent(adapterLabel));
+                if (configText) params.push('config=' + encodeURIComponent(configText));
 
                 var issueUrl = 'https://github.com/trudenboy/sendspin-bt-bridge/issues/new?' + params.join('&');
+
+                // GitHub URL limit ~8KB; trim logs/config if too long
+                if (issueUrl.length > 7500) {
+                    params = params.filter(function(p) { return !p.startsWith('config='); });
+                    issueUrl = 'https://github.com/trudenboy/sendspin-bt-bridge/issues/new?' + params.join('&');
+                }
+                if (issueUrl.length > 7500) {
+                    params = params.map(function(p) {
+                        if (p.startsWith('logs=')) return 'logs=' + encodeURIComponent(logLines.slice(-5).join('\n'));
+                        return p;
+                    });
+                    issueUrl = 'https://github.com/trudenboy/sendspin-bt-bridge/issues/new?' + params.join('&');
+                }
+
                 window.open(issueUrl, '_blank');
-                showToast('Full report downloaded — drag the file into the GitHub issue', 'info');
+                showToast('Report downloaded — attach the file to the GitHub issue', 'info');
                 overlay.remove();
             };
         })
