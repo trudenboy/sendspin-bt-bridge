@@ -181,9 +181,15 @@ def _check_auth():
     if request.headers.get("X-Ingress-Path"):
         peer = request.remote_addr or ""
         if peer in _TRUSTED_PROXIES:
-            if not session.get("ha_user"):
+            # Supervisor sends user identity headers (HA 2024.x+)
+            display_name = (
+                request.headers.get("X-Remote-User-Display-Name") or request.headers.get("X-Remote-User-Name") or ""
+            )
+            if display_name:
+                session["ha_user"] = display_name
+            elif not session.get("ha_user"):
                 session["ha_user"] = _resolve_ingress_user()
-                session["authenticated"] = True
+            session["authenticated"] = True
             return
 
     # Static assets and public API endpoints are always reachable
