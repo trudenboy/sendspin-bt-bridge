@@ -804,6 +804,10 @@ def api_bugreport():
         sink_inputs = diag.get("sink_inputs", [])
         alive_count = sum(1 for sp in subprocs if sp.get("alive"))
 
+        # Last 3 WARNING/ERROR lines for short report
+        warn_keywords = ("WARNING", "ERROR", "CRITICAL")
+        recent_errors = [ln for ln in masked.get("logs", []) if any(k in ln for k in warn_keywords)][-3:]
+
         short = [
             "## Bug Report",
             "",
@@ -820,9 +824,15 @@ def api_bugreport():
             f"**D-Bus:** {'✅' if diag.get('dbus_available') else '❌'}  |  "
             f"**bluetoothd:** {diag.get('bluetooth_daemon', '?')}  |  "
             f"**Subprocesses:** {alive_count}/{len(subprocs)} alive",
-            "",
-            "> 📎 **Full diagnostic report attached as file below**",
         ]
+        if recent_errors:
+            short.append("")
+            short.append("**Recent warnings/errors:**")
+            short.append("```")
+            short.extend(recent_errors)
+            short.append("```")
+        short.append("")
+        short.append("> 📎 **Full diagnostic report attached as file below**")
 
         markdown_short = "\n".join(short)
 
