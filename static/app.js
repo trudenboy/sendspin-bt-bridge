@@ -2236,63 +2236,47 @@ function _restartDeviceStats(statusData) {
     return { total: total, bt: bt, pa: pa, ss: ss, ma: !!statusData.ma_connected, perDevice: perDevice };
 }
 
-function _restartCompactLine(s, elapsed) {
-    var tick = '\u2713', wait = '\u2026';
-    var parts = [];
-    parts.push('BT ' + (s.bt >= s.total ? tick : s.bt + '/' + s.total));
-    parts.push('PA ' + (s.pa >= s.total ? tick : s.pa + '/' + s.total));
-    parts.push('SS ' + (s.ss >= s.total ? tick : s.ss + '/' + s.total));
-    parts.push('MA ' + (s.ma ? tick : wait));
-    return '\uD83D\uDD04 ' + parts.join(' \u00b7 ') +
-        ' <span style="opacity:0.5">' + elapsed + 's</span>';
-}
-
-function _restartDetailBlock(s) {
-    var tick = '\u2705', wait = '\u23F3';
-    var rows = '';
-    for (var i = 0; i < s.perDevice.length; i++) {
-        var d = s.perDevice[i];
-        rows += '<div style="padding:2px 0">' +
-            '<span style="font-weight:600">' + d.name + ':</span> ' +
-            (d.bt ? tick : wait) + ' BT  ' +
-            (d.pa ? tick : wait) + ' PA  ' +
-            (d.ss ? tick : wait) + ' SS' +
-            '</div>';
-    }
-    rows += '<div style="padding:2px 0">' +
-        '<span style="font-weight:600">MA:</span> ' +
-        (s.ma ? tick : wait) + '</div>';
-    return rows;
+function _restartProgressHtml(step, totalSteps, message, elapsed) {
+    var pct = Math.min(100, Math.round((step / totalSteps) * 100));
+    return '<div style="display:flex;align-items:center;gap:12px">' +
+        '<div style="flex:1">' +
+            '<div style="margin-bottom:6px">' + message +
+                ' <span style="opacity:0.5;font-size:12px">' + elapsed + 's</span>' +
+            '</div>' +
+            '<div style="background:rgba(0,0,0,0.1);border-radius:4px;height:6px;overflow:hidden">' +
+                '<div style="background:currentColor;opacity:0.6;height:100%;width:' + pct + '%;border-radius:4px;transition:width 0.5s"></div>' +
+            '</div>' +
+        '</div></div>';
 }
 
 async function saveAndRestart() {
     var banner = document.getElementById('restart-banner');
     banner.style.display = 'block';
     banner.className = 'restart-banner restarting';
-    banner.innerHTML = '\uD83D\uDCBE Saving configuration\u2026';
+    banner.innerHTML = _restartProgressHtml(0, 5, '💾 Saving configuration…', 0);
 
     try {
         var saved = await saveConfig();
         if (!saved) {
             banner.className = 'restart-banner warning';
-            banner.innerHTML = '\u2717 Failed to save configuration';
+            banner.innerHTML = '✗ Failed to save configuration';
             setTimeout(function() { banner.style.display = 'none'; }, 3000);
             return;
         }
         _setConfigDirty(false);
 
-        banner.innerHTML = '\uD83D\uDD04 Stopping service\u2026';
+        banner.innerHTML = _restartProgressHtml(1, 5, '🔄 Stopping service…', 0);
         try {
             await fetch(API_BASE + '/api/restart', { method: 'POST' });
         } catch (_) { /* Service dropped connection — expected */ }
 
         await new Promise(function(r) { setTimeout(r, 2000); });
-        banner.innerHTML = '\u23F3 Waiting for service to start\u2026';
 
+        // Wait for service to come back
         var serviceUp = false;
         var statusData = null;
         for (var attempt = 1; attempt <= 40; attempt++) {
-            banner.innerHTML = '\u23F3 Waiting for service\u2026 <span style="opacity:0.5">' + attempt + 's</span>';
+            banner.innerHTML = _restartProgressHtml(2, 5, '⏳ Starting service…', attempt);
             await new Promise(function(r) { setTimeout(r, 1000); });
             try {
                 var resp = await fetch(API_BASE + '/api/status');
@@ -2306,30 +2290,19 @@ async function saveAndRestart() {
 
         if (!serviceUp) {
             banner.className = 'restart-banner warning';
-            banner.innerHTML = '\u26a0\ufe0f Service did not respond within 40s \u2014 check logs';
+            banner.innerHTML = '⚠️ Service did not respond within 40s — check logs';
             return;
         }
 
-        // Device initialization phase — compact + expandable details
-        var detailsOpen = false;
+        // Wait for devices to initialize
         var stats = _restartDeviceStats(statusData);
-        var allReady = stats.bt >= stats.total && stats.pa >= stats.total &&
-                       stats.ss >= stats.total && stats.ma;
-
+        var allReady = stats.total === 0 || (stats.bt >= stats.total && stats.pa >= stats.total &&
+                       stats.ss >= stats.total);
         if (!allReady) {
             for (var w = 1; w <= 30; w++) {
-                var html = _restartCompactLine(stats, w);
-                if (detailsOpen) {
-                    html += '<div class="restart-details" style="margin-top:8px;text-align:left;font-size:13px">' +
-                            _restartDetailBlock(stats) + '</div>';
-                }
-                banner.innerHTML = html;
-                // Toggle details on banner click
-                banner.onclick = function() {
-                    detailsOpen = !detailsOpen;
-                };
-                banner.style.cursor = 'pointer';
-
+                var readyCount = Math.min(stats.bt, stats.pa, stats.ss);
+                var msg = '🔗 Connecting devices… ' + readyCount + '/' + stats.total;
+                banner.innerHTML = _restartProgressHtml(3, 5, msg, w);
                 await new Promise(function(r) { setTimeout(r, 1000); });
                 try {
                     var r2 = await fetch(API_BASE + '/api/status');
@@ -2337,34 +2310,45 @@ async function saveAndRestart() {
                         statusData = await r2.json();
                         stats = _restartDeviceStats(statusData);
                         allReady = stats.bt >= stats.total && stats.pa >= stats.total &&
-                                   stats.ss >= stats.total && stats.ma;
+                                   stats.ss >= stats.total;
                         if (allReady) break;
                     }
                 } catch (_) {}
             }
         }
 
-        // Final summary
+        // Wait for MA connection
         stats = _restartDeviceStats(statusData);
-        allReady = stats.bt >= stats.total && stats.pa >= stats.total &&
-                   stats.ss >= stats.total && stats.ma;
-        banner.className = 'restart-banner online';
-        var tick = '\u2713', cross = '\u2717';
-        var summary = [];
-        summary.push('BT ' + (stats.bt >= stats.total ? tick : stats.bt + '/' + stats.total));
-        summary.push('PA ' + (stats.pa >= stats.total ? tick : stats.pa + '/' + stats.total));
-        summary.push('SS ' + (stats.ss >= stats.total ? tick : stats.ss + '/' + stats.total));
-        summary.push('MA ' + (stats.ma ? tick : cross));
-        banner.innerHTML = (allReady ? '\u2705' : '\u26a0\ufe0f') + ' Restart complete ' +
-            '<span style="opacity:0.7;font-size:13px">(' + summary.join(' \u00b7 ') + ')</span>';
-        banner.onclick = null;
-        banner.style.cursor = '';
+        if (!stats.ma && stats.total > 0) {
+            banner.innerHTML = _restartProgressHtml(4, 5, '🎵 Connecting to Music Assistant…', 0);
+            for (var m = 1; m <= 15; m++) {
+                await new Promise(function(r) { setTimeout(r, 1000); });
+                try {
+                    var r3 = await fetch(API_BASE + '/api/status');
+                    if (r3.ok) {
+                        statusData = await r3.json();
+                        stats = _restartDeviceStats(statusData);
+                        if (stats.ma) break;
+                    }
+                } catch (_) {}
+                banner.innerHTML = _restartProgressHtml(4, 5, '🎵 Connecting to Music Assistant…', m);
+            }
+        }
+
+        // Final
+        stats = _restartDeviceStats(statusData);
+        allReady = (stats.total === 0 || (stats.bt >= stats.total && stats.pa >= stats.total &&
+                   stats.ss >= stats.total)) && stats.ma;
+        banner.className = allReady ? 'restart-banner online' : 'restart-banner restarting';
+        banner.innerHTML = _restartProgressHtml(5, 5,
+            allReady ? '✅ Restart complete — all systems operational' : '⚠️ Restart complete — some connections pending',
+            0).replace(/ <span style="opacity:0.5;font-size:12px">0s<\/span>/, '');
         setTimeout(function() { banner.style.display = 'none'; }, allReady ? 4000 : 10000);
         updateStatus();
 
     } catch (err) {
         banner.className = 'restart-banner warning';
-        banner.innerHTML = '\u26a0\ufe0f Error: ' + err.message;
+        banner.innerHTML = '⚠️ Error: ' + err.message;
     }
 }
 
