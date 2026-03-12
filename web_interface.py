@@ -11,6 +11,7 @@ routes/api.py and routes/views.py; shared helpers live in config.py and state.py
 import logging
 import os
 from datetime import timedelta
+from typing import Optional
 
 from flask import Flask, jsonify, redirect, request, send_from_directory, session, url_for
 from waitress import serve  # type: ignore[import-untyped]
@@ -136,6 +137,35 @@ def _set_cache_headers(response):
 # Public paths that never require authentication
 _PUBLIC_PATHS = {"/login", "/logout", "/api/health", "/api/preflight"}
 
+# Cache for HA owner display name (resolved once per process lifetime)
+_ingress_user_cache: Optional[str] = None
+
+
+def _resolve_ingress_user() -> str:
+    """Try to resolve the HA owner's display name via Supervisor API."""
+    global _ingress_user_cache
+    if _ingress_user_cache is not None:
+        return _ingress_user_cache
+    token = os.environ.get("SUPERVISOR_TOKEN", "")
+    if not token:
+        _ingress_user_cache = "HA User"
+        return _ingress_user_cache
+    try:
+        import json
+        from urllib.request import Request, urlopen
+
+        req = Request(
+            "http://supervisor/core/api/auth/current_user",
+            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+        )
+        resp = urlopen(req, timeout=5)
+        data = json.loads(resp.read())
+        name = data.get("name") or data.get("id") or "HA User"
+        _ingress_user_cache = name
+    except Exception:
+        _ingress_user_cache = "HA User"
+    return _ingress_user_cache
+
 
 @app.before_request
 def _check_auth():
@@ -149,6 +179,9 @@ def _check_auth():
     if request.headers.get("X-Ingress-Path"):
         peer = request.remote_addr or ""
         if peer in _TRUSTED_PROXIES:
+            if not session.get("ha_user"):
+                session["ha_user"] = _resolve_ingress_user()
+                session["authenticated"] = True
             return
 
     # Static assets and public API endpoints are always reachable
