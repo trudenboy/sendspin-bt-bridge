@@ -2,7 +2,7 @@
 
 A history of the architectural and functional evolution of sendspin-bt-bridge — for readers familiar with Home Assistant, Music Assistant, and multiroom audio setups.
 
-**Period:** January 1 – March 12, 2026 · **Total commits:** ~860 · **Versions:** 1.0.0 → 2.26.4
+**Period:** January 1 – March 12, 2026 · **Total commits:** ~860 · **Versions:** 1.0.0 → 2.26.5
 
 ---
 
@@ -679,6 +679,10 @@ The addon config gained `tmpfs: true` (in-memory temp for better SD card longevi
 **Zombie-playback detection rework** (v2.26.4): the zombie watchdog (red equalizer state → subprocess restart) previously triggered whenever `playing=True` and `audio_streaming=False` persisted for 15 s. This caused false restarts during re-anchor, group sync calibration, or track changes — PA buffers were still playing audio while the flag was momentarily `False`. Now the watchdog tracks `_has_streamed` per subprocess session: it only triggers when audio has *never* arrived in the current session, catching genuinely stuck subprocesses without disrupting normal playback gaps.
 
 **Legacy move-sink-input removal** (v2.26.1): `_ensure_sink_routing()` and the `_sink_routed` flag were removed from `BridgeDaemon`. This code was a leftover from the pre-`PULSE_SINK` architecture (Iteration 1, v2.1) where streams had to be reactively moved to the correct sink. With the subprocess-per-speaker design (each process has `PULSE_SINK` in env), PA routes new sink-inputs to the correct sink from the first sample. The move-sink-input call was not only unnecessary but harmful — it caused a PA glitch that triggered re-anchoring, creating a potential feedback loop (guarded by `_sink_routed`, but still adding latency). `amove_pid_sink_inputs()` remains in `services/pulse.py` as a diagnostic utility.
+
+**Post-start sink routing correction** (v2.26.5): despite `PULSE_SINK` being correctly set in the subprocess environment, PulseAudio can still route sink-inputs to the default sink. This happens because all subprocesses share the same `application.name` (`ALSA plug-in [python3.12]`), and PA's `module-stream-restore` remembers the last sink used for that application name — even with `restore_device=false`. The fix re-introduces `amove_pid_sink_inputs()` as a one-shot correction in `_startup_unmute_watcher`: after `audio_streaming=True`, the subprocess moves its own sink-inputs to the correct sink before unmuting. Unlike the removed `_ensure_sink_routing()` (which ran reactively on every format change inside BridgeDaemon), this runs once at startup in the watcher, after audio is confirmed flowing.
+
+**Equalizer indicator accuracy** (v2.26.5): `audio_streaming` was only set to `True` in `_handle_format_change()`, which fires when the first audio chunk arrives with codec/rate/depth/channels metadata. On re-anchor or track change with the same format, `_handle_format_change` is not called again — but `_on_stream_event("stop")` had already reset `audio_streaming=False`. Result: playing audio with a red (stale) equalizer indicator. Fixed by also setting `audio_streaming=True` in `_on_stream_event("start")` when `audio_format` is already configured.
 
 ---
 

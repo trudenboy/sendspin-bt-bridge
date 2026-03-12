@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.26.5] - 2026-03-12
+
+### Fixed
+- **PA sink routing correction** — after audio starts, each subprocess now verifies and corrects its sink-input routing via `move-sink-input`; fixes silent speakers when PulseAudio ignores `PULSE_SINK` and routes to the default sink instead (especially with multiple BT speakers)
+- **Equalizer indicator accuracy** — `audio_streaming` flag is now set on stream `start` event (not only on format change), so re-anchors and track changes with the same codec no longer leave the equalizer stuck red while audio is playing
+
 ## [2.26.4] - 2026-03-12
 
 ### Fixed
