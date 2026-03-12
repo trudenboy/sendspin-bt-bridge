@@ -139,6 +139,12 @@ def api_device_enabled():
         return jsonify({"success": False, "error": "Missing player_name or enabled"}), 400
     enabled = bool(enabled)
     _persist_device_enabled(player_name, enabled)
+    # When disabling, tear down the running client immediately so MA
+    # unregisters the player (disconnect → ClientRemovedEvent).
+    if not enabled:
+        client, _ = get_client_or_error(player_name)
+        if client:
+            threading.Thread(target=client.set_bt_management_enabled, args=(False,), daemon=True).start()
     # Sync to HA Supervisor
     try:
         with config_lock, open(CONFIG_FILE) as _f:
@@ -153,8 +159,8 @@ def api_device_enabled():
         {
             "success": True,
             "enabled": enabled,
-            "restart_required": True,
-            "message": f"Device {action}. Restart bridge to apply.",
+            "restart_required": not enabled,
+            "message": f"Device {action}." + (" Restart bridge to re-enable." if not enabled else ""),
         }
     )
 
