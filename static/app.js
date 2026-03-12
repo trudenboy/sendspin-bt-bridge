@@ -2634,50 +2634,43 @@ function _openBugReport(e) {
                 };
                 var deployment = runtimeMap[runtime] || '';
 
-                // Build environment summary (one item per line)
-                var envLines = [];
-                if (env.platform) envLines.push('OS: ' + env.platform);
-                if (env.kernel) envLines.push('Kernel: ' + env.kernel);
-                var audioServer = (env.audio_server || '');
-                if (audioServer) envLines.push('Audio: ' + audioServer);
+                // Build unified system_info (one key: value per line)
+                var info = [];
+                if (env.platform) info.push('OS:       ' + env.platform);
+                if (env.kernel) info.push('Kernel:   ' + env.kernel);
+                if (env.audio_server) info.push('Audio:    ' + env.audio_server);
                 var adapters = diag.adapters || [];
                 if (adapters.length) {
-                    envLines.push('BT: ' + adapters.map(function(a) {
+                    info.push('BT:       ' + adapters.map(function(a) {
                         return (a.id || '') + ' ' + (a.mac || '');
                     }).join(', ').trim());
                 }
-                if (env.python) envLines.push('Python: ' + env.python.split(' ')[0]);
-                if (env.bluez) envLines.push('BlueZ: ' + env.bluez);
-                var envString = envLines.join('\n');
+                if (env.python) info.push('Python:   ' + env.python.split(' ')[0]);
+                if (env.bluez) info.push('BlueZ:    ' + env.bluez);
 
-                // Version with build date
-                var versionStr = rep.version || '';
-                if (rep.build_date) versionStr += ' (' + rep.build_date + ')';
+                // Trim uptime to seconds
+                var uptime = (rep.uptime || '?').replace(/\.\d+$/, '');
+                info.push('Uptime:   ' + uptime);
+                info.push('RAM:      ' + (env.process_rss_mb || '?') + ' MB');
 
-                // Count devices
+                // Device status inline
                 var devices = diag.devices || [];
-                var devCount = String(devices.length || 1);
-
-                // Build runtime status summary
-                var statusLines = [];
-                statusLines.push('Uptime: ' + (rep.uptime || '?') +
-                    ' | RAM: ' + (env.process_rss_mb || '?') + ' MB' +
-                    ' | BT daemon: ' + (diag.bluetooth_daemon || '?') +
-                    ' | D-Bus: ' + (diag.dbus_available ? 'yes' : 'no'));
+                var devParts = [String(devices.length || 1)];
                 devices.forEach(function(d) {
-                    statusLines.push((d.name || d.mac) + ': BT=' +
+                    devParts.push('  ' + (d.name || d.mac) + ': ' +
                         (d.connected ? 'connected' : 'disconnected') +
                         ', sink=' + (d.sink || 'none'));
                 });
+                info.push('Devices:  ' + devParts.join('\n'));
+
+                // MA integration
                 var ma = diag.ma_integration || {};
                 if (ma.configured) {
-                    statusLines.push('MA: ' + (ma.connected ? 'connected' : 'disconnected') +
+                    info.push('MA:       ' + (ma.connected ? 'connected' : 'disconnected') +
                         (ma.version ? ' v' + ma.version : '') +
-                        ', groups=' + ((ma.syncgroups || []).length));
+                        ', ' + ((ma.syncgroups || []).length) + ' group(s)');
                 }
-                var sinks = diag.sinks || [];
-                statusLines.push('Sinks: ' + (sinks.length ? sinks.map(function(s) { return s.name; }).join(', ') : 'none'));
-                var statusStr = statusLines.join('\n');
+                var systemInfo = info.join('\n');
 
                 // Extract last 3 error/warning lines from logs
                 var logs = rep.logs || [];
@@ -2690,6 +2683,10 @@ function _openBugReport(e) {
                     return m ? m[0] : l;
                 }).join('\n');
 
+                // Version with build date
+                var versionStr = rep.version || '';
+                if (rep.build_date) versionStr += ' (' + rep.build_date + ')';
+
                 // Build issue URL with template prefill
                 var params = [
                     'template=bug_report_auto.yml',
@@ -2700,9 +2697,7 @@ function _openBugReport(e) {
                     'additional=' + encodeURIComponent('Submitted via web UI Report button')
                 ];
                 if (deployment) params.push('deployment=' + encodeURIComponent(deployment));
-                if (envString) params.push('environment=' + encodeURIComponent(envString));
-                if (devCount) params.push('device_count=' + encodeURIComponent(devCount));
-                if (statusStr) params.push('status=' + encodeURIComponent(statusStr));
+                if (systemInfo) params.push('system_info=' + encodeURIComponent(systemInfo));
                 if (recentErrors) params.push('recent_errors=' + encodeURIComponent(recentErrors));
 
                 var issueUrl = 'https://github.com/trudenboy/sendspin-bt-bridge/issues/new?' + params.join('&');

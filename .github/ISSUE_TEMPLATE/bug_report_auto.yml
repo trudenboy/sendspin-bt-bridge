@@ -39,22 +39,11 @@ body:
       label: Deployment Method
 
   - type: textarea
-    id: environment
+    id: system_info
     attributes:
-      label: Environment
-      description: "OS, audio, BT adapter, Python, BlueZ"
+      label: System Info
+      description: "Auto-filled environment and runtime snapshot"
       render: log
-
-  - type: input
-    id: device_count
-    attributes:
-      label: Number of Bluetooth Devices
-
-  - type: textarea
-    id: status
-    attributes:
-      label: Runtime Status
-      description: "Auto-filled: uptime, device states, MA integration"
 
   - type: textarea
     id: recent_errors
