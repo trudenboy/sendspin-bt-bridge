@@ -894,12 +894,20 @@ async def main():
     loop = asyncio.get_running_loop()
 
     async def _graceful_shutdown():
-        logger.info("Received shutdown signal — pausing players before exit...")
-        active = [c for c in clients if c.is_running()]
-        if active:
-            await asyncio.gather(*[c._send_subprocess_command({"cmd": "pause"}) for c in active])
-            logger.info("Sent pause to %s player(s) — waiting 500 ms...", len(active))
-            await asyncio.sleep(0.5)
+        logger.info("Received shutdown signal — muting sinks before exit...")
+        # Mute PA sinks directly so audio cuts cleanly regardless of
+        # how the restart was triggered (UI, CLI, systemd, auto-update).
+        from services.pulse import aset_sink_mute
+
+        muted = []
+        for c in clients:
+            sink = getattr(c, "bluetooth_sink_name", None)
+            if sink:
+                if await aset_sink_mute(sink, True):
+                    muted.append(sink)
+        if muted:
+            logger.info("Muted %d sink(s): %s", len(muted), ", ".join(muted))
+
         for c in clients:
             c.running = False
             await c.stop_sendspin()
