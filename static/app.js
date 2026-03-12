@@ -278,19 +278,17 @@ function buildDeviceCard(i) {
               '<div class="conn-row-main">' +
                 '<span class="conn-tag">BT</span>' +
                 '<span class="status-indicator" id="dbt-ind-' + i + '"></span>' +
-                '<span id="dbt-txt-' + i + '">-</span>' +
+                '<span class="conn-text" id="dbt-txt-' + i + '">-</span>' +
                 '<span class="conn-detail" id="dbt-adapter-' + i + '"></span>' +
               '</div>' +
-              '<div class="conn-hover-sub" id="dbt-mac-' + i + '"></div>' +
             '</div>' +
             '<div class="conn-row">' +
               '<div class="conn-row-main">' +
                 '<span class="conn-tag">MA</span>' +
                 '<span class="status-indicator" id="dsrv-ind-' + i + '"></span>' +
-                '<span id="dsrv-txt-' + i + '">-</span>' +
+                '<span class="conn-text" id="dsrv-txt-' + i + '">-</span>' +
                 '<span class="ma-api-badge" id="dma-api-' + i + '" style="display:none" title="MA API integration active">api</span>' +
               '</div>' +
-              '<div class="conn-hover-sub" id="dsrv-uri-' + i + '"></div>' +
             '</div>' +
           '</div>' +
           // Playback column (with inline track)
@@ -479,7 +477,6 @@ function populateDeviceCard(i, dev) {
     // Bluetooth
     var btInd   = document.getElementById('dbt-ind-' + i);
     var btTxt   = document.getElementById('dbt-txt-' + i);
-    var btMacEl = document.getElementById('dbt-mac-' + i);
     if (dev.bt_management_enabled === false && dev.bt_released_by === 'auto') {
         btInd.className = 'status-indicator warn';
         btTxt.textContent = 'Auto-disabled';
@@ -500,7 +497,7 @@ function populateDeviceCard(i, dev) {
         btInd.className = 'status-indicator inactive';
         btTxt.textContent = 'Not Available';
     }
-    if (btMacEl) btMacEl.textContent = dev.bluetooth_mac || '';
+    btInd.title = 'BT: ' + btTxt.textContent;
 
     // Server
     var srvInd = document.getElementById('dsrv-ind-' + i);
@@ -513,25 +510,8 @@ function populateDeviceCard(i, dev) {
         srvInd.className = 'status-indicator inactive';
         srvTxt.textContent = dev.error || 'Disconnected';
     }
+    srvInd.title = 'MA: ' + srvTxt.textContent;
     if (maApiBadge) maApiBadge.style.display = (dev.ma_now_playing && dev.ma_now_playing.connected) ? '' : 'none';
-    var srvUri = document.getElementById('dsrv-uri-' + i);
-    if (srvUri) {
-        var srvLabel = '';
-        var h = dev.server_host || '';
-        var p = dev.server_port || 9000;
-        if (dev.connected_server_url) {
-            var m = dev.connected_server_url.match(/^wss?:\/\/([^\/]+)/);
-            if (m) srvLabel = m[1];
-        }
-        if (!srvLabel) {
-            if (h && !['auto','discover',''].includes(h.toLowerCase())) {
-                srvLabel = h + ':' + p;
-            } else {
-                srvLabel = 'auto:' + p;
-            }
-        }
-        srvUri.textContent = srvLabel;
-    }
 
     // Playback
     var playInd   = document.getElementById('dplay-ind-' + i);
