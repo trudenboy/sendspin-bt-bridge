@@ -165,8 +165,8 @@
         .bugreport-header {
             display: flex; align-items: center; gap: 10px;
             padding: 14px 20px;
-            background: var(--primary-color, #03a9f4);
-            color: var(--app-header-text-color, #fff);
+            background: #f59e0b;
+            color: #fff;
         }
         .bugreport-header-icon { width: 18px; height: 18px; flex-shrink: 0; }
         .bugreport-header-title { font-size: 16px; font-weight: 600; flex: 1; }
@@ -198,8 +198,8 @@
         .bugreport-field input:focus,
         .bugreport-field textarea:focus {
             outline: none;
-            border-color: var(--primary-color, #03a9f4);
-            box-shadow: 0 0 0 3px rgba(3,169,244,0.15);
+            border-color: #f59e0b;
+            box-shadow: 0 0 0 3px rgba(245,158,11,0.15);
         }
         .bugreport-field textarea { resize: vertical; min-height: 72px; }
         .bugreport-field input.invalid,
@@ -257,13 +257,13 @@
         }
         .bugreport-btn.secondary:hover { background: var(--divider-color, rgba(0,0,0,.06)); }
         .bugreport-btn.primary {
-            background: var(--primary-color, #03a9f4); color: #fff;
+            background: #f59e0b; color: #fff;
         }
-        .bugreport-btn.primary:hover { background: var(--dark-primary-color, #0288d1); }
+        .bugreport-btn.primary:hover { background: #d97706; }
         .bugreport-btn.primary.btn-disabled {
             opacity: 0.45; cursor: not-allowed;
         }
-        .bugreport-btn.primary.btn-disabled:hover { background: var(--primary-color, #03a9f4); }
+        .bugreport-btn.primary.btn-disabled:hover { background: #f59e0b; }
         .bugreport-btn-icon { width: 14px; height: 14px; flex-shrink: 0; }
         .bugreport-spinner {
             width: 14px; height: 14px;
