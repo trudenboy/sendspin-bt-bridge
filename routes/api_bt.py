@@ -290,16 +290,16 @@ def _run_bluetoothctl_scan(adapter_macs: "list[str]") -> str:
     )
     try:
         if adapter_macs:
-            init_cmds: list[str] = []
+            init_cmds: list[str] = ["agent on", "default-agent"]
             for m in adapter_macs:
                 init_cmds.extend([f"select {m}", "power on", "scan on"])
         else:
-            init_cmds = ["power on", "agent on", "scan on"]
+            init_cmds = ["power on", "agent on", "default-agent", "scan on"]
         if proc.stdin is None:
             raise RuntimeError("bluetoothctl subprocess stdin unavailable")
         proc.stdin.write("\n".join(init_cmds) + "\n")
         proc.stdin.flush()
-        time.sleep(10)
+        time.sleep(15)
         proc.stdin.write("scan off\n" + "\n".join(post_scan_cmds) + "\n")
         proc.stdin.flush()
         time.sleep(1)
@@ -439,3 +439,124 @@ def _run_bt_scan(job_id: str) -> None:
     except Exception as e:
         logger.error("BT scan failed: %s", e)
         finish_scan_job(job_id, {"devices": [], "error": str(e)})
+
+
+# ---------------------------------------------------------------------------
+# Standalone pair (for new devices discovered via scan)
+# ---------------------------------------------------------------------------
+
+_PAIR_SCAN_DURATION = 12  # seconds to scan before pairing
+_PAIR_WAIT_DURATION = 15  # seconds to wait for pairing to complete
+
+
+@bt_bp.route("/api/bt/pair_new", methods=["POST"])
+def api_bt_pair_new():
+    """Pair a new BT device by MAC address (no existing client required).
+
+    Accepts ``{mac, adapter?}`` and returns a ``job_id``.
+    Poll ``/api/bt/pair_new/result/<job_id>`` for the outcome.
+    """
+    data = request.get_json() or {}
+    mac = (data.get("mac") or "").strip().upper()
+    adapter = (data.get("adapter") or "").strip()
+    err = validate_mac(mac)
+    if err:
+        return err
+    job_id = str(uuid.uuid4())
+    create_scan_job(job_id)
+    t = threading.Thread(
+        target=_run_standalone_pair,
+        args=(job_id, mac, adapter),
+        daemon=True,
+        name=f"bt-pair-{job_id[:8]}",
+    )
+    t.start()
+    return jsonify({"job_id": job_id})
+
+
+@bt_bp.route("/api/bt/pair_new/result/<job_id>", methods=["GET"])
+def api_bt_pair_new_result(job_id: str):
+    """Poll for standalone pair result."""
+    job = get_scan_job(job_id)
+    if job is None:
+        return jsonify({"error": "Unknown job_id"}), 404
+    return jsonify(job)
+
+
+def _run_standalone_pair(job_id: str, mac: str, adapter: str) -> None:
+    """Run pair + trust via bluetoothctl for a device not yet in config."""
+    try:
+        initial_cmds: list[str] = []
+        if adapter:
+            initial_cmds.append(f"select {adapter}")
+        initial_cmds.extend(["power on", "agent on", "default-agent", "scan on"])
+
+        pair_cmds = [f"pair {mac}", f"trust {mac}", "scan off"]
+
+        proc = subprocess.Popen(
+            ["bluetoothctl"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+        try:
+            if proc.stdin is None:
+                raise RuntimeError("bluetoothctl stdin unavailable")
+
+            proc.stdin.write("\n".join(initial_cmds) + "\n")
+            proc.stdin.flush()
+            time.sleep(_PAIR_SCAN_DURATION)
+
+            proc.stdin.write("\n".join(pair_cmds) + "\n")
+            proc.stdin.flush()
+
+            # Read stdout to auto-confirm SSP passkey
+            import selectors
+
+            collected: list[str] = []
+            deadline = time.monotonic() + _PAIR_WAIT_DURATION
+            sel = selectors.DefaultSelector()
+            sel.register(proc.stdout, selectors.EVENT_READ)  # type: ignore[arg-type]
+            try:
+                while time.monotonic() < deadline and proc.poll() is None:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        break
+                    events = sel.select(timeout=min(remaining, 0.5))
+                    if not events:
+                        continue
+                    line = proc.stdout.readline()  # type: ignore[union-attr]
+                    if not line:
+                        break
+                    collected.append(line)
+                    stripped = line.strip().lower()
+                    if "confirm passkey" in stripped or "request confirmation" in stripped:
+                        logger.info("SSP passkey prompt — auto-confirming: %s", line.strip())
+                        proc.stdin.write("yes\n")
+                        proc.stdin.flush()
+                    if "pairing successful" in stripped or "already paired" in stripped:
+                        time.sleep(1)
+                        break
+            finally:
+                sel.close()
+
+            try:
+                tail, _ = proc.communicate(timeout=3)
+                collected.append(tail)
+            except subprocess.TimeoutExpired:
+                pass
+
+            out = "".join(collected)
+            ok = any(s in out.lower() for s in ("pairing successful", "already paired", "paired: yes"))
+            logger.info("Standalone pair %s: %s (last 400 chars: %s)", mac, "OK" if ok else "FAIL", out[-400:])
+            finish_scan_job(job_id, {"success": ok, "mac": mac})
+        finally:
+            try:
+                proc.kill()
+                proc.wait(timeout=3)
+            except Exception:
+                pass
+    except Exception as e:
+        logger.error("Standalone pair error for %s: %s", mac, e)
+        finish_scan_job(job_id, {"success": False, "mac": mac, "error": str(e)})

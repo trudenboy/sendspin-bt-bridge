@@ -257,10 +257,11 @@ def _build_groups_summary(clients: list) -> list[dict]:
             ma_group = next((g for g in ma_groups if g["id"] == ma_sid), None)
             if ma_group:
                 local_ids = {m.get("player_id", "") for m in members if m.get("player_id")}
+                local_names = {(m.get("player_name") or "").lower() for m in members if m.get("player_name")}
                 external = [
                     {"name": m["name"], "available": m.get("available", True)}
                     for m in ma_group.get("members", [])
-                    if m.get("id", "") not in local_ids
+                    if m.get("id", "") not in local_ids and (m.get("name") or "").lower() not in local_names
                 ]
                 entry["external_members"] = external
                 entry["external_count"] = len(external)

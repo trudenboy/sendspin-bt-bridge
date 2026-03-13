@@ -1586,7 +1586,7 @@ async function startBtScan() {
     var listDiv = document.getElementById('scan-results-list');
 
     btn.disabled = true;
-    status.innerHTML = '<span class="scan-spinner"></span> Scanning\u2026 (~10s)';
+    status.innerHTML = '<span class="scan-spinner"></span> Scanning\u2026 (~15s)';
     box.style.display = 'none';
 
     try {
@@ -1610,22 +1610,41 @@ async function startBtScan() {
         if (devices === null) { throw new Error('Scan timed out'); }
 
         if (devices.length === 0) {
-            status.textContent = 'No devices found.';
+            status.innerHTML = '<strong>No devices found.</strong>' +
+                '<div style="margin-top:6px;font-size:12px;color:var(--text-secondary,#888);line-height:1.5">' +
+                '\u2022 Make sure your speaker is in <b>pairing mode</b> (usually hold the Bluetooth button for 3\u20135 s)<br>' +
+                '\u2022 Move the device closer to the Bluetooth adapter<br>' +
+                '\u2022 Some devices need to be <b>unpaired</b> from other sources (phone, laptop) first<br>' +
+                '\u2022 Try scanning again \u2014 some speakers advertise intermittently</div>';
         } else {
             status.textContent = 'Found ' + devices.length + ' device(s)';
             listDiv.innerHTML = devices.map(function(d, i) {
                 return '<div class="scan-result-item" data-scan-idx="' + i + '">' +
                     '<span class="scan-result-mac">' + escHtml(d.mac) + '</span>' +
                     '<span class="scan-result-name">' + escHtml(d.name) + '</span>' +
+                    '<button type="button" class="scan-pair-btn" data-pair-idx="' + i + '" style="padding:3px 10px;' +
+                        'background:#28a745;color:white;border:none;border-radius:4px;' +
+                        'cursor:pointer;font-size:12px;" title="Pair, trust, and add to config">Pair & Add</button>' +
                     '<button type="button" style="padding:3px 10px;' +
                         'background:var(--primary-color);color:white;border:none;border-radius:4px;' +
-                        'cursor:pointer;font-size:12px;">Add</button>' +
+                        'cursor:pointer;font-size:12px;" title="Add to config without pairing now">Add</button>' +
                     '</div>';
             }).join('');
+            // "Add" button — last button in each row
             listDiv.querySelectorAll('[data-scan-idx]').forEach(function(row) {
-                row.addEventListener('click', function() {
-                    var d = devices[parseInt(this.dataset.scanIdx)];
+                var addBtn = row.querySelectorAll('button')[1];
+                if (addBtn) addBtn.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    var d = devices[parseInt(row.dataset.scanIdx)];
                     addFromScan(d.mac, d.name, d.adapter);
+                });
+            });
+            // "Pair & Add" button
+            listDiv.querySelectorAll('.scan-pair-btn').forEach(function(btn) {
+                btn.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    var d = devices[parseInt(this.dataset.pairIdx)];
+                    pairAndAdd(d.mac, d.name, d.adapter, this);
                 });
             });
             box.style.display = 'block';
@@ -1634,6 +1653,50 @@ async function startBtScan() {
         status.textContent = 'Scan failed: ' + err.message;
     } finally {
         btn.disabled = false;
+    }
+}
+
+async function pairAndAdd(mac, name, adapter, btnEl) {
+    if (!confirm('Put "' + (name || mac) + '" into pairing mode, then click OK.\n\nThis will pair, trust, and add the device (~25 s).')) return;
+    btnEl.disabled = true;
+    btnEl.textContent = 'Pairing\u2026';
+    btnEl.style.opacity = '0.6';
+    try {
+        var resp = await fetch(API_BASE + '/api/bt/pair_new', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({mac: mac, adapter: adapter || autoAdapter()})
+        });
+        var data = await resp.json();
+        if (!data.job_id) throw new Error(data.error || 'No job_id');
+
+        // Poll for result
+        var result = null;
+        for (var i = 0; i < 30; i++) {
+            await new Promise(function(r) { setTimeout(r, 2000); });
+            var pr = await fetch(API_BASE + '/api/bt/pair_new/result/' + data.job_id);
+            var pd = await pr.json();
+            if (pd.status === 'done') { result = pd; break; }
+        }
+        if (!result) throw new Error('Pairing timed out');
+        if (result.error) throw new Error(result.error);
+        if (result.success) {
+            btnEl.textContent = '\u2713 Paired';
+            btnEl.style.background = '#28a745';
+            btnEl.style.opacity = '1';
+            addFromScan(mac, name, adapter);
+        } else {
+            btnEl.textContent = '\u2717 Failed';
+            btnEl.style.background = '#dc3545';
+            btnEl.style.opacity = '1';
+            setTimeout(function() { btnEl.textContent = 'Pair & Add'; btnEl.disabled = false; btnEl.style.background = '#28a745'; }, 3000);
+        }
+    } catch (err) {
+        btnEl.textContent = 'Error';
+        btnEl.style.background = '#dc3545';
+        btnEl.style.opacity = '1';
+        setTimeout(function() { btnEl.textContent = 'Pair & Add'; btnEl.disabled = false; btnEl.style.background = '#28a745'; }, 3000);
+        alert('Pair failed: ' + err.message);
     }
 }
 
