@@ -358,7 +358,8 @@
         /* Status grid — responsive card grid */
         .status-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+            max-width: 1400px;
             gap: 12px; margin-bottom: 20px;
         }
         .no-devices-hint {
