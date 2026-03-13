@@ -426,7 +426,7 @@
         }
         .card3-row-track {
             display: flex; align-items: center;
-            min-height: 18px; overflow: hidden;
+            min-height: 18px;
             position: relative;
         }
         .card3-row-track::after {
@@ -503,7 +503,7 @@
         /* Track name with marquee on card hover */
         .track-art-wrap {
             position: relative; flex: 1; min-width: 0;
-            display: flex; align-items: center; overflow: hidden;
+            display: flex; align-items: center;
         }
         .track-name {
             font-size: 12px; color: var(--secondary-text-color);
