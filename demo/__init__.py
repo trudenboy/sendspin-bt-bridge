@@ -287,18 +287,26 @@ def install() -> None:
     # ------------------------------------------------------------------
     import services.ma_client as _ma_client
 
-    async def _demo_discover_ma_groups(ma_url: str, ma_token: str, bridge_player_names: list[str]) -> tuple[dict, list]:
-        # Build name_map matching actual bridge player names to demo groups
-        name_map: dict[str, dict] = {}
-        for name in bridge_player_names:
-            # Strip hostname suffix added by main() (e.g. "Living Room Speaker @ host")
+    async def _demo_discover_ma_groups(
+        ma_url: str,
+        ma_token: str,
+        bridge_players: list[dict | str],
+    ) -> tuple[dict, list]:
+        # Build id_map matching actual bridge players to demo groups
+        id_map: dict[str, dict] = {}
+        for item in bridge_players:
+            if isinstance(item, str):
+                pid, name = "", item
+            else:
+                pid, name = item.get("player_id", ""), item.get("player_name", "")
             base = name.split(" @ ")[0].lower() if " @ " in name else name.lower()
             if base in DEMO_MA_NAME_MAP:
-                name_map[name.lower()] = DEMO_MA_NAME_MAP[base]
-        logger.info("[demo] MA group discovery: %d groups, %d mapped", len(DEMO_MA_ALL_GROUPS), len(name_map))
-        return name_map, list(DEMO_MA_ALL_GROUPS)
+                key = pid if pid else base
+                id_map[key] = DEMO_MA_NAME_MAP[base]
+        logger.info("[demo] MA group discovery: %d groups, %d mapped", len(DEMO_MA_ALL_GROUPS), len(id_map))
+        return id_map, list(DEMO_MA_ALL_GROUPS)
 
-    _ma_client.discover_ma_groups = _demo_discover_ma_groups
+    _ma_client.discover_ma_groups = _demo_discover_ma_groups  # type: ignore[assignment]
 
     # ------------------------------------------------------------------
     # 9. Patch MA monitor (start_monitor, send_queue_cmd)

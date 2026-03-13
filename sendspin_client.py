@@ -182,7 +182,11 @@ class SendspinClient:
 
         self._status_lock = threading.Lock()
         self.running = False
-        self.player_id: str = ""  # set in _start_sendspin_inner; used for solo MA queue lookup
+        # Compute player_id eagerly from BT MAC (stable UUID5)
+        _mac = bt_manager.mac_address if bt_manager else None
+        safe_id = "".join(c if c.isalnum() or c == "-" else "-" for c in player_name.lower()).strip("-")
+        self._safe_id = safe_id
+        self.player_id: str = _player_id_from_mac(_mac) if _mac else f"sendspin-{safe_id}"
         self.bt_management_enabled: bool = True
         self.bluetooth_sink_name: str | None = None  # Store Bluetooth sink name for volume sync
         self.connected_server_url: str = ""  # actual resolved ws:// URL (populated after connect)
@@ -357,10 +361,7 @@ class SendspinClient:
             # Reset per-session tracking for new subprocess
             self._has_streamed = False
 
-            safe_id = "".join(c if c.isalnum() or c == "-" else "-" for c in self.player_name.lower()).strip("-")
-            _mac = self.bt_manager.mac_address if self.bt_manager else None
-            client_id = _player_id_from_mac(_mac) if _mac else f"sendspin-{safe_id}"
-            self.player_id = str(client_id)  # persist for MA solo-queue lookup
+            client_id = self.player_id
 
             if self.static_delay_ms is not None:
                 static_delay_ms = self.static_delay_ms
@@ -391,7 +392,7 @@ class SendspinClient:
                     "bluetooth_sink_name": self.bluetooth_sink_name,
                     "volume": self.status.get("volume", 100),
                     "muted": bool(self.status.get("muted", False)),
-                    "settings_dir": f"/tmp/sendspin-{safe_id}",
+                    "settings_dir": f"/tmp/sendspin-{self._safe_id}",
                     "preferred_format": self.preferred_format,
                 }
             )
@@ -989,8 +990,8 @@ async def main():
         try:
             from services.ma_client import discover_ma_groups
 
-            player_names = [c.player_name for c in clients]
-            name_map, all_groups = await discover_ma_groups(ma_api_url, ma_api_token, player_names)
+            player_info = [{"player_id": c.player_id, "player_name": c.player_name} for c in clients]
+            name_map, all_groups = await discover_ma_groups(ma_api_url, ma_api_token, player_info)
             _state.set_ma_groups(name_map, all_groups)
             if name_map:
                 _state.set_ma_connected(True)

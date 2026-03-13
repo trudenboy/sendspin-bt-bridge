@@ -27,7 +27,7 @@ from state import (
 )
 from state import (
     get_adapter_name,
-    get_ma_group_for_player,
+    get_ma_group_for_player_id,
     get_ma_now_playing_for_group,
 )
 
@@ -54,21 +54,20 @@ _SSE_MAX_LIFETIME = 1800  # 30 minutes
 
 def _enrich_status_with_ma(status: dict, client) -> None:
     """Add MA syncgroup name and now-playing metadata to a client status dict."""
-    player_name = getattr(client, "player_name", None)
-    if not player_name:
+    player_id = getattr(client, "player_id", "")
+    if not player_id:
         return
-    ma_group = get_ma_group_for_player(player_name)
+    ma_group = get_ma_group_for_player_id(player_id)
     if ma_group and ma_group.get("name"):
         status["group_name"] = ma_group["name"]
-    # Per-device MA now-playing: prefer name-matched syncgroup, then Sendspin-reported
+    # Per-device MA now-playing: prefer id-matched syncgroup, then Sendspin-reported
     # group_id (which IS the MA syncgroup id), then solo player_id queue
     if ma_group:
         status["ma_now_playing"] = get_ma_now_playing_for_group(ma_group["id"])
     else:
         dev_group_id: str = status.get("group_id", "")
-        pid: str = getattr(client, "player_id", "")
         status["ma_now_playing"] = (
-            get_ma_now_playing_for_group(dev_group_id) or (get_ma_now_playing_for_group(pid) if pid else {}) or {}
+            get_ma_now_playing_for_group(dev_group_id) or get_ma_now_playing_for_group(player_id) or {}
         )
 
 
@@ -184,6 +183,7 @@ def _build_groups_summary(clients: list) -> list[dict]:
 
         member = {
             "player_name": getattr(client, "player_name", None),
+            "player_id": getattr(client, "player_id", ""),
             "volume": status.get("volume", 100),
             "playing": bool(status.get("playing")),
             "connected": bool(status.get("connected")),
@@ -212,15 +212,22 @@ def _build_groups_summary(clients: list) -> list[dict]:
             ma_syncgroup_id = None
             if entry["group_id"]:
                 for m in entry["members"]:
-                    pname = m.get("player_name")
-                    if not pname:
+                    pid = m.get("player_id", "")
+                    if not pid:
                         continue
-                    ma_info = state.get_ma_group_for_player(pname)
+                    ma_info = get_ma_group_for_player_id(pid)
                     if ma_info:
                         ma_syncgroup_id = ma_info["id"]
                         if not entry["group_name"] and ma_info.get("name"):
                             entry["group_name"] = ma_info["name"]
                         break
+                # Fallback: use group_id directly (it IS the MA syncgroup ID)
+                if not ma_syncgroup_id:
+                    ma_sg = state.get_ma_group_by_id(entry["group_id"])
+                    if ma_sg:
+                        ma_syncgroup_id = ma_sg["id"]
+                        if not entry["group_name"] and ma_sg.get("name"):
+                            entry["group_name"] = ma_sg["name"]
             if ma_syncgroup_id and ma_syncgroup_id in syncgroup_map:
                 # Merge into existing entry
                 target = syncgroup_map[ma_syncgroup_id]
@@ -249,11 +256,11 @@ def _build_groups_summary(clients: list) -> list[dict]:
         if ma_sid and ma_groups:
             ma_group = next((g for g in ma_groups if g["id"] == ma_sid), None)
             if ma_group:
-                local_names = {(m["player_name"] or "").lower() for m in members}
+                local_ids = {m.get("player_id", "") for m in members if m.get("player_id")}
                 external = [
                     {"name": m["name"], "available": m.get("available", True)}
                     for m in ma_group.get("members", [])
-                    if m.get("name", "").lower() not in local_names
+                    if m.get("id", "") not in local_ids
                 ]
                 entry["external_members"] = external
                 entry["external_count"] = len(external)
@@ -483,22 +490,17 @@ def api_diagnostics():
         ma_url, ma_token = state.get_ma_api_credentials()
         ma_groups = state.get_ma_groups()
 
-        # Build a name→client lookup for matching MA members to bridge devices
-        bridge_by_name = {getattr(c, "player_name", "").lower(): c for c in snapshot}
+        # Build a player_id→client lookup for matching MA members to bridge devices
+        bridge_by_id = {getattr(c, "player_id", ""): c for c in snapshot if getattr(c, "player_id", "")}
 
         enriched_groups = []
         for g in ma_groups:
             members_detail = []
             for m in g.get("members", []):
-                mname = (m.get("name") or m.get("id", "")).lower()
-                # Match to a local bridge client by name (case-insensitive substring)
-                bridge_client = None
-                for bname, bc in bridge_by_name.items():
-                    if bname and (bname in mname or mname in bname):
-                        bridge_client = bc
-                        break
+                mid = m.get("id", "")
+                bridge_client = bridge_by_id.get(mid)
                 member_info: dict = {
-                    "id": m.get("id", ""),
+                    "id": mid,
                     "name": m.get("name", m.get("id", "")),
                     "state": m.get("state"),
                     "volume": m.get("volume"),

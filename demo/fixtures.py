@@ -242,7 +242,7 @@ DEMO_MA_ALL_GROUPS = [
     },
 ]
 
-# name_map returned by discover_ma_groups (player_name.lower → group info)
+# name_map returned by discover_ma_groups (player_name.lower → group info; demo uses names as keys)
 DEMO_MA_NAME_MAP: dict[str, dict] = {
     "living room": {"id": "syncgroup_downstairs", "name": "Downstairs"},
     "kitchen": {"id": "syncgroup_downstairs", "name": "Downstairs"},

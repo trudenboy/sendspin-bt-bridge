@@ -4,6 +4,10 @@ from __future__ import annotations
 
 import logging
 import re
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 logger = logging.getLogger(__name__)
 
@@ -30,13 +34,19 @@ async def _fetch_all_players(ma_url: str, ma_token: str) -> list[dict]:
         return await client.send_command("players/all")
 
 
-async def discover_ma_groups(ma_url: str, ma_token: str, bridge_player_names: list[str]) -> tuple[dict, list[dict]]:
+async def discover_ma_groups(
+    ma_url: str,
+    ma_token: str,
+    bridge_players: Sequence[dict | str],
+) -> tuple[dict, list[dict]]:
     """Query MA API and return two things:
 
-    1. name_map: dict player_name_lower → {"id", "name"} for bridge players that belong to a syncgroup.
+    1. id_map: dict player_id → {"id", "name"} for bridge players that belong to a syncgroup.
     2. all_groups: list of all MA syncgroup dicts {"id", "name", "members": [{"id", "name"}]}
 
-    Both are derived from a single players/all call.
+    ``bridge_players`` accepts either a list of ``{"player_id", "player_name"}``
+    dicts (preferred) or plain name strings (legacy/demo fallback).
+    Matching uses player_id (exact, stable) with fuzzy name as fallback.
     """
     try:
         import music_assistant_client as _mac  # noqa: F401
@@ -50,11 +60,21 @@ async def discover_ma_groups(ma_url: str, ma_token: str, bridge_player_names: li
         logger.warning("MA API players/all failed: %s", exc)
         return {}, []
 
+    # Normalise legacy callers that pass plain strings
+    bp_list: list[dict] = []
+    for item in bridge_players:
+        if isinstance(item, str):
+            bp_list.append({"player_id": "", "player_name": item})
+        else:
+            bp_list.append(item)
+
     # Build MA player_id → display name map
     id_to_name: dict[str, str] = {p["player_id"]: (p.get("display_name") or p.get("name") or "") for p in players}
 
     all_groups: list[dict] = []
-    name_map: dict[str, dict] = {}
+    id_map: dict[str, dict] = {}
+
+    member_set_by_group: dict[str, set[str]] = {}  # syncgroup_id → set of member player_ids
 
     for p in players:
         if p.get("type") != "group" or p.get("provider") != "sync_group":
@@ -63,7 +83,6 @@ async def discover_ma_groups(ma_url: str, ma_token: str, bridge_player_names: li
         syncgroup_id = p["player_id"]
         syncgroup_name = p.get("display_name") or p.get("name") or syncgroup_id
         raw_members = p.get("group_members") or []
-        # Build rich member info from the full player list
         member_by_id = {pl["player_id"]: pl for pl in players}
         members = [
             {
@@ -75,29 +94,57 @@ async def discover_ma_groups(ma_url: str, ma_token: str, bridge_player_names: li
             }
             for mid in raw_members
         ]
-        member_names_lower = {id_to_name.get(mid, "").lower() for mid in raw_members}
+        member_ids = set(raw_members)
+        member_set_by_group[syncgroup_id] = member_ids
 
         all_groups.append({"id": syncgroup_id, "name": syncgroup_name, "members": members})
 
-        # Match bridge players → this syncgroup by name (case-insensitive, ignoring punctuation)
-        for bridge_name in bridge_player_names:
-            b = bridge_name.lower()
-            b_norm = _norm(bridge_name)
-            if any(b in mn or mn in b or _norm(mn) in b_norm or b_norm in _norm(mn) for mn in member_names_lower if mn):
-                name_map[b] = {"id": syncgroup_id, "name": syncgroup_name}
+        sg_info = {"id": syncgroup_id, "name": syncgroup_name}
+
+        # Primary: match by player_id (exact, stable)
+        for bp in bp_list:
+            pid = bp.get("player_id", "")
+            if pid and pid in member_ids and pid not in id_map:
+                id_map[pid] = sg_info
                 logger.debug(
-                    "Mapped bridge player '%s' → MA syncgroup '%s' (%s)",
-                    bridge_name,
+                    "Mapped bridge player_id '%s' (%s) → MA syncgroup '%s'",
+                    pid,
+                    bp.get("player_name", ""),
                     syncgroup_name,
-                    syncgroup_id,
                 )
+
+    # Fallback: fuzzy name matching for players not yet matched by ID
+    member_names_lower_by_group: dict[str, set[str]] = {}
+    for sg_id, mids in member_set_by_group.items():
+        member_names_lower_by_group[sg_id] = {id_to_name.get(mid, "").lower() for mid in mids}
+
+    for bp in bp_list:
+        pid = bp.get("player_id", "")
+        if pid and pid in id_map:
+            continue
+        bname = bp.get("player_name", "")
+        if not bname:
+            continue
+        b = bname.lower()
+        b_norm = _norm(bname)
+        for g in all_groups:
+            mn_set = member_names_lower_by_group.get(g["id"], set())
+            if any(b in mn or mn in b or _norm(mn) in b_norm or b_norm in _norm(mn) for mn in mn_set if mn):
+                key = pid if pid else b
+                id_map[key] = {"id": g["id"], "name": g["name"]}
+                logger.debug(
+                    "Mapped bridge player '%s' → MA syncgroup '%s' (name fallback)",
+                    bname,
+                    g["name"],
+                )
+                break
 
     logger.info(
         "MA API: found %d syncgroup(s), matched %d bridge player(s)",
         len(all_groups),
-        len(name_map),
+        len(id_map),
     )
-    return name_map, all_groups
+    return id_map, all_groups
 
 
 async def ma_group_play(ma_url: str, ma_token: str, syncgroup_id: str) -> bool:

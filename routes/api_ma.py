@@ -202,14 +202,14 @@ def _ma_http_login(ma_url: str, username: str, password: str) -> str:
 async def _rediscover_after_login(
     ma_url: str,
     ma_token: str,
-    player_names: list[str],
+    bridge_players: list[dict],
 ) -> None:
     """Background task: rediscover MA groups after successful login."""
     try:
         from services.ma_client import discover_ma_groups
 
-        name_map, all_groups = await discover_ma_groups(ma_url, ma_token, player_names)
-        state.set_ma_groups(name_map, all_groups)
+        id_map, all_groups = await discover_ma_groups(ma_url, ma_token, bridge_players)
+        state.set_ma_groups(id_map, all_groups)
         logger.info("MA groups rediscovered after login: %d groups", len(all_groups))
     except Exception:
         logger.debug("MA group rediscovery after login failed", exc_info=True)
@@ -233,8 +233,8 @@ def _save_ma_token_and_rediscover(ma_url: str, ma_token: str, username: str = ""
     if loop:
         try:
             with _clients_lock:
-                names = [c.player_name for c in _clients]
-            asyncio.run_coroutine_threadsafe(_rediscover_after_login(ma_url, ma_token, names), loop)
+                players = [{"player_id": c.player_id, "player_name": c.player_name} for c in _clients]
+            asyncio.run_coroutine_threadsafe(_rediscover_after_login(ma_url, ma_token, players), loop)
         except Exception:
             pass
 
@@ -1208,8 +1208,8 @@ def api_ma_rediscover():
 
         with _clients_lock:
             snapshot = list(_clients)
-        player_names = [c.player_name for c in snapshot]
-        fut = asyncio.run_coroutine_threadsafe(discover_ma_groups(ma_url, ma_token, player_names), loop)
+        player_info = [{"player_id": c.player_id, "player_name": c.player_name} for c in snapshot]
+        fut = asyncio.run_coroutine_threadsafe(discover_ma_groups(ma_url, ma_token, player_info), loop)
         name_map, all_groups = fut.result(timeout=15.0)
         state.set_ma_api_credentials(ma_url, ma_token)
         state.set_ma_groups(name_map, all_groups)

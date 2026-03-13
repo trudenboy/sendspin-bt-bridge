@@ -281,7 +281,7 @@ def get_scan_job(job_id: str) -> dict | None:
 
 
 # ---------------------------------------------------------------------------
-# MA syncgroup cache — player_name_lower → {"id": syncgroup_id, "name": group_name}
+# MA syncgroup cache — player_id → {"id": syncgroup_id, "name": group_name}
 # Populated at startup if MA_API_URL + MA_API_TOKEN are configured.
 # ---------------------------------------------------------------------------
 
@@ -293,7 +293,7 @@ _ma_api_token: str = ""
 
 
 def set_ma_groups(mapping: dict[str, dict], all_groups: list[dict] | None = None) -> None:
-    """Store the MA player_name → syncgroup mapping and full group list discovered from MA API."""
+    """Store the MA player_id → syncgroup mapping and full group list discovered from MA API."""
     with _ma_groups_lock:
         _ma_groups.clear()
         _ma_groups.update(mapping)
@@ -320,10 +320,24 @@ def get_ma_api_credentials() -> tuple[str, str]:
         return _ma_api_url, _ma_api_token
 
 
-def get_ma_group_for_player(player_name: str) -> dict | None:
-    """Return MA syncgroup info {id, name} for the given bridge player name, or None."""
+def get_ma_group_for_player_id(player_id: str) -> dict | None:
+    """Return MA syncgroup info {id, name} for the given bridge player_id, or None."""
+    if not player_id:
+        return None
     with _ma_groups_lock:
-        return _ma_groups.get(player_name.lower())
+        return _ma_groups.get(player_id)
+
+
+# Legacy alias kept for compatibility
+get_ma_group_for_player = get_ma_group_for_player_id
+
+
+def get_ma_group_by_id(syncgroup_id: str) -> dict | None:
+    """Return MA syncgroup dict from all_groups by its syncgroup player_id, or None."""
+    if not syncgroup_id:
+        return None
+    with _ma_groups_lock:
+        return next((g for g in _ma_all_groups if g["id"] == syncgroup_id), None)
 
 
 def get_ma_groups() -> list[dict]:
