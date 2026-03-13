@@ -33,6 +33,28 @@ var btManualAdapters = [];
 var lastDevices = [];
 var lastGroups = [];
 var _muteDebounce = {};  // player_name → timestamp of last user mute action
+var _btnLocks = {};      // btnId → expiry timestamp
+
+// Lock a button during an async operation; SSE polls skip disabled override while locked.
+function _lockBtn(btnId) {
+    var btn = document.getElementById(btnId);
+    if (!btn || _btnLocks[btnId]) return null;
+    _btnLocks[btnId] = Date.now() + 8000;  // 8 s safety ceiling
+    btn.disabled = true;
+    btn.style.opacity = '0.45';
+    return btn;
+}
+function _unlockBtn(btnId) {
+    delete _btnLocks[btnId];
+    var btn = document.getElementById(btnId);
+    if (btn) { btn.disabled = false; btn.style.opacity = ''; }
+}
+function _isLocked(btnId) {
+    var t = _btnLocks[btnId];
+    if (!t) return false;
+    if (Date.now() > t) { delete _btnLocks[btnId]; return false; }
+    return true;
+}
 
 // Return first slash-separated segment with "+N" suffix if list has more items.
 // E.g. "A/B/C" → "A +2". Single values pass through unchanged.
@@ -537,9 +559,9 @@ function populateDeviceCard(i, dev) {
         fmtEl.textContent = fmt;
     }
 
-    // Sync pause button state from poll (don't override if user just clicked)
+    // Sync pause button state from poll (don't override while locked)
     var pauseBtn = document.getElementById('dbtn-pause-' + i);
-    if (pauseBtn && !pauseBtn.classList.contains('pending')) {
+    if (pauseBtn && !_isLocked('dbtn-pause-' + i)) {
         if (dev.playing) {
             pauseBtn.innerHTML = '&#9208;';
             pauseBtn.classList.remove('paused');
@@ -689,7 +711,7 @@ function populateDeviceCard(i, dev) {
     // Mute button — attach handler once, update icon on every poll
     // Effective mute = logical mute OR PA sink muted by startup logic
     var muteBtn = document.getElementById('dmute-' + i);
-    if (muteBtn) {
+    if (muteBtn && !_isLocked('dmute-' + i)) {
         var effectiveMuted = !!dev.muted || !!dev.sink_muted;
         muteBtn.textContent = effectiveMuted ? '\uD83D\uDD07' : '\uD83D\uDD08';
         muteBtn.title = effectiveMuted
@@ -702,14 +724,16 @@ function populateDeviceCard(i, dev) {
             muteBtn._handlerSet = true;
             muteBtn.addEventListener('click', function() {
                 var dev = lastDevices && lastDevices[i]; if (!dev) return;
+                var muteBtnId = 'dmute-' + i;
+                if (_isLocked(muteBtnId)) return;
+                _lockBtn(muteBtnId);
                 var effMuted = !!dev.muted || !!dev.sink_muted;
                 var desired = !effMuted;
                 dev.muted = desired;
                 dev.sink_muted = false;
-                // Protect optimistic state from SSE overwrite for 2 seconds
                 var pn = dev.player_name || '__default__';
                 _muteDebounce[pn] = Date.now();
-                var btn = document.getElementById('dmute-' + i);
+                var btn = document.getElementById(muteBtnId);
                 if (btn) {
                     btn.textContent = desired ? '\uD83D\uDD07' : '\uD83D\uDD08';
                     btn.title = desired ? 'Unmute' : 'Mute';
@@ -730,7 +754,7 @@ function populateDeviceCard(i, dev) {
                         btn.classList.toggle('muted', !desired);
                     }
                     console.error('Mute failed:', e);
-                });
+                }).finally(function() { _unlockBtn(muteBtnId); });
             });
         }
     }
@@ -1010,9 +1034,12 @@ function onGroupVolumeInput(val) {
 function onGroupMute() {
     var names = _getSelectedNames();
     if (!names.length) return;
-    var btn = document.getElementById('group-mute-btn');
+    var btnId = 'group-mute-btn';
+    if (_isLocked(btnId)) return;
+    _lockBtn(btnId);
+    var btn = document.getElementById(btnId);
     var currentlyMuted = btn && btn.classList.contains('muted');
-    var muteVal = !currentlyMuted;   // Toggle: muted→unmute, not muted→mute
+    var muteVal = !currentlyMuted;
     fetch(API_BASE + '/api/mute', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
@@ -1022,11 +1049,14 @@ function onGroupMute() {
             btn.textContent = muteVal ? '🔇 Unmute All' : '🔈 Mute All';
             btn.className = 'btn-group-mute' + (muteVal ? ' muted' : '');
         }
-    });
+    }).finally(function() { _unlockBtn(btnId); });
 }
 
 function onPauseAll() {
-    var btn = document.getElementById('group-pause-btn');
+    var btnId = 'group-pause-btn';
+    if (_isLocked(btnId)) return;
+    _lockBtn(btnId);
+    var btn = document.getElementById(btnId);
     var isPaused = btn && btn.classList.contains('paused');
     var action = isPaused ? 'play' : 'pause';
     var names = _getSelectedNames();
@@ -1044,15 +1074,15 @@ function onPauseAll() {
         }
     };
 
+    var done = function() { _unlockBtn(btnId); };
+
     if (names.length === total) {
-        // All players — use bulk MPRIS pause
         fetch(API_BASE + '/api/pause_all', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({action: action})
-        }).then(function(r) { return r.json(); }).then(afterPause);
+        }).then(function(r) { return r.json(); }).then(afterPause).finally(done);
     } else {
-        // Filtered selection — call individual pause per player
         var calls = names.map(function(name) {
             return fetch(API_BASE + '/api/pause', {
                 method: 'POST',
@@ -1060,13 +1090,16 @@ function onPauseAll() {
                 body: JSON.stringify({action: action, player_name: name})
             });
         });
-        Promise.all(calls).then(afterPause);
+        Promise.all(calls).then(afterPause).finally(done);
     }
 }
 
 function onDevicePause(i) {
     var dev = lastDevices && lastDevices[i];
-    var btn = document.getElementById('dbtn-pause-' + i);
+    var btnId = 'dbtn-pause-' + i;
+    if (_isLocked(btnId)) return;
+    var btn = _lockBtn(btnId);
+
     var isPaused = btn && btn.classList.contains('paused');
     var action = isPaused ? 'play' : 'pause';
 
@@ -1095,12 +1128,17 @@ function onDevicePause(i) {
                 btn.title = 'Pause';
             }
         }
-    });
+    }).finally(function() { _unlockBtn(btnId); });
 }
 
 // ---- BT Actions (reconnect / pair) ----
 
 async function maQueueCmd(action, value, devIdx) {
+    var btnMap = {previous: 'dma-prev-', next: 'dma-next-', shuffle: 'dma-shuffle-', repeat: 'dma-repeat-'};
+    var btnId = devIdx != null && btnMap[action] ? btnMap[action] + devIdx : null;
+    if (btnId && _isLocked(btnId)) return;
+    if (btnId) _lockBtn(btnId);
+
     var body = {action: action};
     if (value !== undefined) body.value = value;
     if (devIdx != null && lastDevices && lastDevices[devIdx]) {
@@ -1115,6 +1153,7 @@ async function maQueueCmd(action, value, devIdx) {
             body: JSON.stringify(body)
         });
     } catch (err) { console.warn('MA queue cmd failed:', err); }
+    finally { if (btnId) _unlockBtn(btnId); }
 }
 
 function maCycleRepeat(devIdx) {
