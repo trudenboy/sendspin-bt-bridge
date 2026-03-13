@@ -7,6 +7,7 @@ and helpers for loading/persisting configuration.
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import hmac as _hmac
 import json
@@ -19,7 +20,7 @@ import threading
 import uuid as _uuid
 from pathlib import Path
 
-VERSION = "2.30.6"
+VERSION = "2.30.7"
 BUILD_DATE = "2026-03-13"
 
 __all__ = [
@@ -138,7 +139,7 @@ def save_device_sink(mac: str | None, sink_name: str) -> None:
 
 def load_config() -> dict:
     """Load configuration from file, falling back to defaults."""
-    result = DEFAULT_CONFIG.copy()
+    result = copy.deepcopy(DEFAULT_CONFIG)
 
     allowed_keys = {
         "SENDSPIN_SERVER",

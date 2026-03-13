@@ -39,6 +39,7 @@ def client():
         "routes.api",
         "routes.api_bt",
         "routes.api_config",
+        "routes.api_ma",
         "routes.api_status",
         "routes.auth",
         "routes.views",
@@ -51,6 +52,7 @@ def client():
     from routes.api import api_bp
     from routes.api_bt import bt_bp
     from routes.api_config import config_bp
+    from routes.api_ma import ma_bp
     from routes.api_status import status_bp
 
     app = Flask(__name__)
@@ -59,6 +61,7 @@ def client():
     app.register_blueprint(api_bp)
     app.register_blueprint(bt_bp)
     app.register_blueprint(config_bp)
+    app.register_blueprint(ma_bp)
     app.register_blueprint(status_bp)
 
     yield app.test_client()
@@ -209,3 +212,40 @@ def test_device_enabled_missing_fields(client):
         content_type="application/json",
     )
     assert resp.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+#  XSS protection - /api/ma/ha-auth-page
+# ---------------------------------------------------------------------------
+
+
+def test_ha_auth_page_escapes_xss_payload(client):
+    """XSS payload in ma_url must be safely quoted in the rendered page."""
+    resp = client.get("/api/ma/ha-auth-page?ma_url=';alert(1)//")
+    assert resp.status_code == 200
+    body = resp.data.decode()
+    # The payload must be inside a JSON-quoted string (double quotes),
+    # not raw inside single-quoted JS where it could break out.
+    assert '"\';alert(1)//"' in body
+    # The old vulnerable pattern must NOT appear.
+    assert "= '';alert(1)//';" not in body
+
+
+def test_ha_auth_page_rejects_javascript_scheme(client):
+    """javascript: scheme in ma_url must be rejected with 400."""
+    resp = client.get("/api/ma/ha-auth-page?ma_url=javascript:alert(1)")
+    assert resp.status_code == 400
+
+
+def test_ha_auth_page_accepts_http_url(client):
+    """Normal http URL should be accepted and present in the page."""
+    url = "http://192.168.1.100:8123"
+    resp = client.get(f"/api/ma/ha-auth-page?ma_url={url}")
+    assert resp.status_code == 200
+    assert url.encode() in resp.data
+
+
+def test_ha_auth_page_accepts_empty_url(client):
+    """Empty ma_url should be accepted."""
+    resp = client.get("/api/ma/ha-auth-page?ma_url=")
+    assert resp.status_code == 200

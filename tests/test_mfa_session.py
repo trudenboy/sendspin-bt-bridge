@@ -61,6 +61,17 @@ def client(app):
     return app.test_client()
 
 
+def _post_with_csrf(client, url, data):
+    """POST helper that injects a valid CSRF token from the session."""
+    with client.session_transaction() as sess:
+        if "csrf_token" not in sess:
+            import secrets
+
+            sess["csrf_token"] = secrets.token_hex(32)
+        data["csrf_token"] = sess["csrf_token"]
+    return client.post(url, data=data)
+
+
 # ---------------------------------------------------------------------------
 # 1. Session cleared after successful password auth
 # ---------------------------------------------------------------------------
@@ -79,7 +90,7 @@ def test_ha_login_user_cleared_after_password_auth(client, app):
         patch("routes.auth.check_password", return_value=True),
         patch("routes.auth._detect_auth_methods", return_value=["password"]),
     ):
-        client.post("/login", data={"method": "password", "password": "correct"})
+        _post_with_csrf(client, "/login", {"method": "password", "password": "correct"})
 
     with client.session_transaction() as sess:
         assert "_ha_login_user" not in sess
@@ -121,7 +132,7 @@ def test_ha_login_user_not_leaked_between_users(client, app):
         patch("routes.auth.check_password", return_value=True),
         patch("routes.auth._detect_auth_methods", return_value=["password"]),
     ):
-        client.post("/login", data={"method": "password", "password": "correct"})
+        _post_with_csrf(client, "/login", {"method": "password", "password": "correct"})
 
     with client.session_transaction() as sess:
         assert "_ha_login_user" not in sess
@@ -140,9 +151,10 @@ def test_ha_login_user_not_leaked_across_ma_login(client, app):
         patch("routes.auth._ma_validate_credentials", return_value=(True, "")),
         patch("routes.auth._detect_auth_methods", return_value=["ma", "password"]),
     ):
-        client.post(
+        _post_with_csrf(
+            client,
             "/login",
-            data={
+            {
                 "method": "ma",
                 "username": "user_b",
                 "password": "pass",
@@ -176,9 +188,10 @@ def test_ha_login_user_cleared_after_ha_direct_auth(client, app):
         patch("routes.auth._ha_flow_start", return_value=flow_start),
         patch("routes.auth._ha_flow_step", return_value=create_entry),
     ):
-        client.post(
+        _post_with_csrf(
+            client,
             "/login",
-            data={
+            {
                 "method": "ha",
                 "username": "ha_admin",
                 "password": "secret",
@@ -204,9 +217,10 @@ def test_ha_login_user_cleared_after_mfa_step(client, app):
         patch("routes.auth._detect_auth_methods", return_value=["ha"]),
         patch("routes.auth._ha_flow_step", return_value={"type": "create_entry"}),
     ):
-        client.post(
+        _post_with_csrf(
+            client,
             "/login",
-            data={
+            {
                 "method": "ha",
                 "step": "mfa",
                 "flow_id": flow_id,
@@ -237,9 +251,10 @@ def test_ha_login_user_set_during_mfa_prompt(client, app):
         patch("routes.auth._ha_flow_start", return_value=flow_start),
         patch("routes.auth._ha_flow_step", return_value=mfa_prompt),
     ):
-        client.post(
+        _post_with_csrf(
+            client,
             "/login",
-            data={
+            {
                 "method": "ha",
                 "username": "mfa_user",
                 "password": "secret",
@@ -266,9 +281,10 @@ def test_ha_via_ma_login_user_cleared_after_auth(client, app):
         patch("routes.auth._ha_remote_flow_start", return_value=flow_start),
         patch("routes.auth._ha_remote_flow_step", return_value=create_entry),
     ):
-        client.post(
+        _post_with_csrf(
+            client,
             "/login",
-            data={
+            {
                 "method": "ha_via_ma",
                 "username": "remote_ha_user",
                 "password": "pass",
@@ -298,9 +314,10 @@ def test_supervisor_fallback_clears_ha_login_user(client, app):
         patch("routes.auth._ha_flow_start", return_value=None),
         patch("routes.auth._supervisor_auth", return_value=True),
     ):
-        client.post(
+        _post_with_csrf(
+            client,
             "/login",
-            data={
+            {
                 "method": "ha",
                 "username": "admin",
                 "password": "pass",

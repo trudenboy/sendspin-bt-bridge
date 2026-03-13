@@ -237,3 +237,81 @@ def test_ma_validate_unreachable():
         ok, msg = _ma_validate_credentials("user", "pass")
     assert not ok
     assert "unreachable" in msg.lower()
+
+
+# ── CSRF protection ─────────────────────────────────────────────────────
+
+
+@pytest.fixture()
+def csrf_client():
+    """Flask test client with auth blueprint and proper template setup."""
+    import os
+
+    from routes.auth import auth_bp
+
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    app = Flask(
+        __name__,
+        template_folder=os.path.join(project_root, "templates"),
+        static_folder=os.path.join(project_root, "static"),
+    )
+    app.secret_key = "test-csrf"
+    app.register_blueprint(auth_bp)
+
+    @app.context_processor
+    def inject_version():
+        return {"VERSION": "test"}
+
+    @app.route("/static/v<version>/<path:filename>")
+    def vstatic(version, filename):
+        from flask import send_from_directory
+
+        return send_from_directory(app.static_folder, filename)
+
+    return app.test_client()
+
+
+def test_csrf_post_without_token(csrf_client):
+    """POST to /login without csrf_token → 403."""
+    # GET to establish session and generate token
+    csrf_client.get("/login")
+    # POST without csrf_token
+    resp = csrf_client.post("/login", data={"method": "password", "password": "test"})
+    assert resp.status_code == 403
+    assert b"Invalid session" in resp.data
+
+
+def test_csrf_post_with_wrong_token(csrf_client):
+    """POST to /login with wrong csrf_token → 403."""
+    csrf_client.get("/login")
+    resp = csrf_client.post(
+        "/login",
+        data={"method": "password", "password": "test", "csrf_token": "wrong-token"},
+    )
+    assert resp.status_code == 403
+    assert b"Invalid session" in resp.data
+
+
+def test_csrf_post_with_correct_token(csrf_client):
+    """POST to /login with correct csrf_token → normal flow (not 403)."""
+    # GET to establish session
+    csrf_client.get("/login")
+    # Extract csrf_token from session
+    with csrf_client.session_transaction() as sess:
+        token = sess.get("csrf_token")
+    assert token is not None
+    # POST with correct token — should proceed to password check (not 403)
+    resp = csrf_client.post(
+        "/login",
+        data={"method": "password", "password": "test", "csrf_token": token},
+    )
+    # Should get 200 (login page with error) not 403 (CSRF rejection)
+    assert resp.status_code == 200
+    assert b"Invalid session" not in resp.data
+
+
+def test_csrf_token_in_get_response(csrf_client):
+    """GET /login includes csrf_token hidden input in the form."""
+    resp = csrf_client.get("/login")
+    assert resp.status_code == 200
+    assert b'name="csrf_token"' in resp.data

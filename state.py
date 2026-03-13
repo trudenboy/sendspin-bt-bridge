@@ -276,9 +276,10 @@ def is_scan_running() -> bool:
 
 
 def get_scan_job(job_id: str) -> dict | None:
-    """Return the job dict or None if not found."""
+    """Return a shallow copy of the job dict or None if not found."""
     with _scan_jobs_lock:
-        return _scan_jobs.get(job_id)
+        job = _scan_jobs.get(job_id)
+        return dict(job) if job else None
 
 
 # ---------------------------------------------------------------------------

@@ -127,11 +127,25 @@ def vstatic(version, filename):
 
 @app.after_request
 def _set_cache_headers(response):
-    """Prevent HA Ingress proxy and browsers from caching HTML pages."""
+    """Prevent HA Ingress proxy and browsers from caching HTML pages.
+
+    Also sets security headers: CSP on HTML responses and X-Content-Type-Options
+    on all responses.  X-Frame-Options is intentionally omitted — CSP
+    frame-ancestors supersedes it, and HA Ingress needs to frame us.
+    """
     if response.content_type and "text/html" in response.content_type:
         response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
         response.headers["Pragma"] = "no-cache"
         response.headers["Expires"] = "0"
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data:; "
+            "connect-src 'self' ws: wss:; "
+            "frame-ancestors 'self'"
+        )
+    response.headers["X-Content-Type-Options"] = "nosniff"
     return response
 
 

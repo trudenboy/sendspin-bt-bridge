@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.30.7] - 2026-03-13
+
+### Added
+- **CSRF protection** — login form now includes a per-session CSRF token validated on every POST; timing-safe comparison via `hmac.compare_digest`
+- **CSP headers** — `Content-Security-Policy` and `X-Content-Type-Options: nosniff` added to all responses; restricts script/style/image/connect sources to `'self'`
+- **Adapter input validation** — `validate_adapter()` helper rejects command-injection payloads (newlines, shell metacharacters) before any `bluetoothctl` interaction
+- **Config upload size limit** — uploaded config files are capped at 1 MB (returns 413 if exceeded)
+- **pytest in CI** — test suite now runs automatically in GitHub Actions alongside lint checks
+
+### Fixed
+- **XSS in HA auth page** — `ma_url` query parameter is now escaped via `json.dumps()` and validated for safe URL schemes before injection into the inline JavaScript template
+- **MA monitor event loss** — `_drain_cmd_queue`, `_send_queue_cmd`, and `_refresh_stale_player_metadata` no longer silently discard interleaved WebSocket events; non-matching messages are logged at DEBUG level
+- **mDNS discovery thread safety** — replaced `asyncio.ensure_future()` with `run_coroutine_threadsafe()` in zeroconf callback (was called from wrong thread)
+- **Volume race condition** — `prev_volume` and `new_volume` reads are now atomic within the same `_status_lock` scope in `_read_subprocess_output`
+- **Scan job reference leak** — `get_scan_job()` now returns a shallow copy instead of a mutable reference to internal state
+- **MA monitor stop delay** — `MaMonitor.stop()` now closes the WebSocket connection to unblock pending `ws.recv()` calls
+- **Deprecated asyncio API** — replaced `asyncio.get_event_loop()` with `get_running_loop()` in MA monitor
+- **Error message leakage** — 18 API endpoints no longer expose internal exception details (`str(e)`) in error responses; errors are logged server-side via `logger.exception()`
+- **DEFAULT_CONFIG shared references** — `load_config()` now uses `copy.deepcopy()` to prevent mutation of default `BLUETOOTH_DEVICES` list across config instances
+- **Dead code cleanup** — removed 8 unused regex patterns from `routes/api.py` (duplicated from `api_bt.py`)
+
+### Changed
+- **Dependency pinning** — added upper bounds: `zeroconf<1.0`, `ruff<1.0`, `mypy<2.0`
+
 ## [2.30.6] - 2026-03-13
 
 ### Added

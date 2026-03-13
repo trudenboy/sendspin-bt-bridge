@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.30.7] - 2026-03-13
+
+### Added
+- CSRF protection on login form (per-session token, timing-safe validation)
+- Content-Security-Policy and X-Content-Type-Options headers on all responses
+- Adapter input validation against command injection in bluetoothctl calls
+- Config upload size limit (1 MB max)
+- Automated test execution in CI pipeline
+
+### Fixed
+- XSS via `ma_url` in HA auth page (escaped with `json.dumps`, scheme validated)
+- MA monitor silently discarding interleaved WebSocket events during command/response exchange
+- mDNS discovery `ensure_future` called from zeroconf thread instead of event loop thread
+- Volume race condition between lock-protected and unprotected reads
+- `get_scan_job()` returning mutable reference to internal state
+- MA monitor `stop()` not closing WebSocket (blocked on `recv`)
+- Deprecated `asyncio.get_event_loop()` replaced with `get_running_loop()`
+- 18 API endpoints exposing internal error details in responses
+- `DEFAULT_CONFIG` shallow copy causing shared mutable references
+- 8 unused regex patterns removed from routes
+
+### Changed
+- Dependency upper bounds: zeroconf<1.0, ruff<1.0, mypy<2.0
+
 ## [2.30.6] - 2026-03-13
 
 ### Added

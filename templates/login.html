@@ -125,6 +125,7 @@
         {% if mfa_step %}
         {# ── MFA step (HA login_flow — local or remote) ── #}
         <form method="post" autocomplete="on">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <input type="hidden" name="method" value="{{ mfa_method|default('ha') }}">
             <input type="hidden" name="step" value="mfa">
             <input type="hidden" name="flow_id" value="{{ flow_id }}">
@@ -172,6 +173,7 @@
         {# ── HA via MA login form (remote HA Core login_flow) ── #}
         {% if "ha_via_ma" in auth_methods %}
         <form method="post" autocomplete="on" class="login-method{% if auth_methods[0] == 'ha_via_ma' %} active{% endif %}" id="method-ha_via_ma">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <input type="hidden" name="method" value="ha_via_ma">
             <input type="hidden" name="step" value="credentials">
             <div class="form-group">
@@ -190,6 +192,7 @@
         {# ── MA login form ── #}
         {% if "ma" in auth_methods %}
         <form method="post" autocomplete="on" class="login-method{% if auth_methods[0] == 'ma' %} active{% endif %}" id="method-ma">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <input type="hidden" name="method" value="ma">
             <input type="hidden" name="step" value="credentials">
             <div class="form-group">
@@ -208,6 +211,7 @@
         {# ── HA login form ── #}
         {% if "ha" in auth_methods %}
         <form method="post" autocomplete="on" class="login-method{% if auth_methods[0] == 'ha' %} active{% endif %}" id="method-ha">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <input type="hidden" name="method" value="ha">
             <input type="hidden" name="step" value="credentials">
             <div class="form-group">
@@ -226,6 +230,7 @@
         {# ── Local password form ── #}
         {% if "password" in auth_methods %}
         <form method="post" autocomplete="on" class="login-method{% if auth_methods[0] == 'password' %} active{% endif %}" id="method-password">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <input type="hidden" name="method" value="password">
             <input type="hidden" name="step" value="credentials">
             <div class="form-group">

@@ -9,7 +9,6 @@ import asyncio
 import concurrent.futures
 import logging
 import os
-import re
 import signal
 import subprocess
 import threading
@@ -34,18 +33,6 @@ logger = logging.getLogger(__name__)
 
 api_bp = Blueprint("api", __name__)
 
-# ---------------------------------------------------------------------------
-# Pre-compiled regex patterns (avoid recompilation per request)
-# ---------------------------------------------------------------------------
-
-_MAC_RE = re.compile(r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")
-_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
-_DEV_PAT = re.compile(r"Device\s+([0-9A-Fa-f:]{17})\s+(.*)")
-_NEW_DEV_PAT = re.compile(r"\[NEW\]\s+Device\s+([0-9A-Fa-f:]{17})\s+(.*)")
-_CHG_NAME_PAT = re.compile(r"\[CHG\]\s+Device\s+([0-9A-Fa-f:]{17})\s+Name:\s+(.*)")
-_CHG_RSSI_PAT = re.compile(r"\[CHG\]\s+Device\s+([0-9A-Fa-f:]{17})\s+RSSI:")
-_SHOW_CTRL_PAT = re.compile(r"^Controller\s+([0-9A-Fa-f:]{17})")
-_SHOW_DEV_PAT = re.compile(r"^Device\s+([0-9A-Fa-f:]{17})")
 
 # ---------------------------------------------------------------------------
 # Volume persistence debounce — decouple immediate pactl call from slow disk write

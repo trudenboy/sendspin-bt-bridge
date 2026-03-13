@@ -189,8 +189,11 @@ def api_config_upload():
     if not f:
         return jsonify({"error": "No file uploaded"}), 400
 
+    _MAX_CONFIG_SIZE = 1_000_000  # 1 MB
     try:
-        raw = f.read()
+        raw = f.read(_MAX_CONFIG_SIZE + 1)
+        if len(raw) > _MAX_CONFIG_SIZE:
+            return jsonify({"error": "Config file too large (max 1 MB)"}), 413
         uploaded = json.loads(raw)
     except (json.JSONDecodeError, UnicodeDecodeError) as exc:
         return jsonify({"error": f"Invalid JSON: {exc}"}), 400
@@ -586,9 +589,9 @@ def api_logs():
         runtime = _detect_runtime()
         log_lines = _read_log_lines(runtime, lines)
         return jsonify({"logs": log_lines, "runtime": runtime})
-    except Exception as e:
-        logger.error("Error reading logs: %s", e)
-        return jsonify({"logs": [f"Error reading logs: {e}"]}), 500
+    except Exception:
+        logger.exception("Error reading logs")
+        return jsonify({"logs": ["Error reading logs"]}), 500
 
 
 @config_bp.route("/api/logs/download")
@@ -610,9 +613,9 @@ def api_logs_download():
             mimetype="text/plain",
             headers={"Content-Disposition": f'attachment; filename="sendspin-logs-{ts}.txt"'},
         )
-    except Exception as e:
-        logger.error("Error downloading logs: %s", e)
-        return Response(f"Error: {e}", mimetype="text/plain", status=500)
+    except Exception:
+        logger.exception("Error downloading logs")
+        return Response("Error downloading logs", mimetype="text/plain", status=500)
 
 
 @config_bp.route("/api/version")

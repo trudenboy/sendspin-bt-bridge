@@ -16,7 +16,7 @@ import uuid
 from flask import Blueprint, jsonify, request
 
 from config import CONFIG_FILE, config_lock, load_config
-from routes._helpers import get_client_or_error, validate_mac
+from routes._helpers import get_client_or_error, validate_adapter, validate_mac
 from services import persist_device_enabled as _persist_device_enabled
 from services.bluetooth import _AUDIO_UUIDS, list_bt_adapters
 from services.bluetooth import bt_remove_device as _bt_remove_device
@@ -188,8 +188,9 @@ def api_bt_adapters():
             )
             adapters.append({"id": f"hci{i}", "mac": mac, "name": alias, "powered": powered})
         return jsonify({"adapters": adapters})
-    except Exception as e:
-        return jsonify({"adapters": [], "error": str(e)})
+    except Exception:
+        logger.exception("Failed to list adapters")
+        return jsonify({"adapters": [], "error": "Failed to list adapters"}), 500
 
 
 @bt_bp.route("/api/bt/paired")
@@ -224,8 +225,9 @@ def api_bt_paired():
         bridge_macs = {d.get("mac", "").upper() for d in cfg.get("BLUETOOTH_DEVICES", []) if d.get("mac")}
         devices.sort(key=lambda d: (0 if d["mac"] in bridge_macs else 1, d["name"].lower()))
         return jsonify({"devices": devices})
-    except Exception as e:
-        return jsonify({"devices": [], "error": str(e)})
+    except Exception:
+        logger.exception("Failed to list paired devices")
+        return jsonify({"devices": [], "error": "Failed to list paired devices"}), 500
 
 
 @bt_bp.route("/api/bt/remove", methods=["POST"])
@@ -271,8 +273,9 @@ def api_bt_info():
         return jsonify({"success": False, "error": "Invalid MAC"}), 400
     try:
         return jsonify(_get_bt_device_info(mac))
-    except Exception as e:
-        return jsonify({"mac": mac, "error": str(e)}), 500
+    except Exception:
+        logger.exception("Failed to get device info for %s", mac)
+        return jsonify({"mac": mac, "error": "Failed to get device info"}), 500
 
 
 @bt_bp.route("/api/bt/disconnect", methods=["POST"])
@@ -292,15 +295,19 @@ def api_bt_disconnect():
         )
         ok = "successful" in r.stdout.lower()
         return jsonify({"ok": ok, "mac": mac})
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
+    except Exception:
+        logger.exception("Failed to disconnect device %s", mac)
+        return jsonify({"ok": False, "error": "Bluetooth disconnect failed"}), 500
 
 
 @bt_bp.route("/api/bt/adapter/power", methods=["POST"])
 def api_bt_adapter_power():
     """Toggle adapter power. Accepts ``{adapter, power: true|false}``."""
     data = request.get_json(silent=True) or {}
-    adapter = (data.get("adapter") or "").strip()
+    try:
+        adapter = validate_adapter(data.get("adapter"))
+    except ValueError:
+        return jsonify({"error": "Invalid adapter identifier"}), 400
     power = data.get("power", True)
     cmd = "power on" if power else "power off"
     cmds = f"select {adapter}\n{cmd}\n" if adapter else f"{cmd}\n"
@@ -319,8 +326,9 @@ def api_bt_adapter_power():
             or (("powered: yes" in clean) if power else ("powered: no" in clean))
         )
         return jsonify({"ok": ok, "power": power})
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
+    except Exception:
+        logger.exception("Failed to toggle adapter power")
+        return jsonify({"ok": False, "error": "Failed to toggle adapter power"}), 500
 
 
 @bt_bp.route("/api/bt/reset_reconnect", methods=["POST"])
@@ -331,7 +339,10 @@ def api_bt_reset_reconnect():
     """
     data = request.get_json(silent=True) or {}
     mac = (data.get("mac") or "").strip().upper()
-    adapter = (data.get("adapter") or "").strip()
+    try:
+        adapter = validate_adapter(data.get("adapter"))
+    except ValueError:
+        return jsonify({"success": False, "error": "Invalid adapter identifier"}), 400
     if not validate_mac(mac):
         return jsonify({"success": False, "error": "Invalid MAC"}), 400
     job_id = str(uuid.uuid4())
@@ -464,9 +475,9 @@ def _run_reset_reconnect(job_id: str, mac: str, adapter: str) -> None:
                 proc.wait(timeout=3)
             except Exception:
                 pass
-    except Exception as e:
-        logger.error("Reset & Reconnect error for %s: %s", mac, e)
-        finish_scan_job(job_id, {"success": False, "mac": mac, "error": str(e)})
+    except Exception:
+        logger.exception("Reset & Reconnect error for %s", mac)
+        finish_scan_job(job_id, {"success": False, "mac": mac, "error": "Reset & reconnect failed"})
 
 
 @bt_bp.route("/api/bt/scan", methods=["POST"])
@@ -667,9 +678,9 @@ def _run_bt_scan(job_id: str) -> None:
         finish_scan_job(job_id, {"devices": devices})
         global _last_scan_completed
         _last_scan_completed = time.monotonic()
-    except Exception as e:
-        logger.error("BT scan failed: %s", e)
-        finish_scan_job(job_id, {"devices": [], "error": str(e)})
+    except Exception:
+        logger.exception("BT scan failed")
+        finish_scan_job(job_id, {"devices": [], "error": "Bluetooth scan failed"})
 
 
 # ---------------------------------------------------------------------------
@@ -689,7 +700,10 @@ def api_bt_pair_new():
     """
     data = request.get_json() or {}
     mac = (data.get("mac") or "").strip().upper()
-    adapter = (data.get("adapter") or "").strip()
+    try:
+        adapter = validate_adapter(data.get("adapter"))
+    except ValueError:
+        return jsonify({"success": False, "error": "Invalid adapter identifier"}), 400
     if not validate_mac(mac):
         return jsonify({"success": False, "error": "Invalid MAC"}), 400
     job_id = str(uuid.uuid4())
@@ -787,6 +801,6 @@ def _run_standalone_pair(job_id: str, mac: str, adapter: str) -> None:
                 proc.wait(timeout=3)
             except Exception:
                 pass
-    except Exception as e:
-        logger.error("Standalone pair error for %s: %s", mac, e)
-        finish_scan_job(job_id, {"success": False, "mac": mac, "error": str(e)})
+    except Exception:
+        logger.exception("Standalone pair error for %s", mac)
+        finish_scan_job(job_id, {"success": False, "mac": mac, "error": "Pairing failed"})

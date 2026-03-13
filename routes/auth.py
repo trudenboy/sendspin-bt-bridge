@@ -18,10 +18,12 @@ In Docker/standalone mode, the AUTH_ENABLED flag controls auth enforcement.
 
 from __future__ import annotations
 
+import hmac
 import json
 import logging
 import os
 import re
+import secrets
 import threading
 import time
 import urllib.request as _ur
@@ -91,6 +93,22 @@ def _record_failure(ip: str) -> None:
 def _clear_failures(ip: str) -> None:
     with _failed_lock:
         _failed.pop(ip, None)
+
+
+def _generate_csrf_token() -> str:
+    """Generate or retrieve CSRF token for the current session."""
+    if "csrf_token" not in session:
+        session["csrf_token"] = secrets.token_hex(32)
+    return session["csrf_token"]
+
+
+def _validate_csrf_token() -> bool:
+    """Validate CSRF token from form data against session."""
+    form_token = request.form.get("csrf_token", "")
+    session_token = session.get("csrf_token", "")
+    if not session_token:
+        return False
+    return hmac.compare_digest(form_token, session_token)
 
 
 def _is_ha_addon() -> bool:
@@ -220,7 +238,8 @@ def _ma_validate_credentials(username: str, password: str) -> tuple[bool, str]:
         _ma_http_login(ma_url, username, password)
         return True, ""
     except RuntimeError as exc:
-        return False, str(exc) if "invalid" in str(exc).lower() else "Invalid credentials"
+        logger.warning("MA auth failed: %s", exc)
+        return False, "Invalid credentials"
     except (ConnectionError, OSError) as exc:
         logger.warning("MA auth failed (network): %s", exc)
         return False, "Music Assistant server is unreachable"
@@ -373,6 +392,7 @@ def _handle_ha_via_ma_login(
                 error="Session expired — please sign in again",
                 ha_mode=ha_mode,
                 auth_methods=auth_methods,
+                csrf_token=_generate_csrf_token(),
             )
         if not code:
             return None, render_template(
@@ -383,6 +403,7 @@ def _handle_ha_via_ma_login(
                 mfa_step=True,
                 flow_id=flow_id,
                 mfa_module_id=mfa_module_id,
+                csrf_token=_generate_csrf_token(),
             )
         result = _ha_remote_flow_step(ha_url, flow_id, {"code": code})
         if result and result.get("type") == "create_entry":
@@ -397,6 +418,7 @@ def _handle_ha_via_ma_login(
                 error="Session expired — please sign in again",
                 ha_mode=ha_mode,
                 auth_methods=auth_methods,
+                csrf_token=_generate_csrf_token(),
             )
         return None, render_template(
             "login.html",
@@ -406,6 +428,7 @@ def _handle_ha_via_ma_login(
             mfa_step=True,
             flow_id=flow_id,
             mfa_module_id=mfa_module_id,
+            csrf_token=_generate_csrf_token(),
         )
 
     # Step 1: submit username + password
@@ -439,6 +462,7 @@ def _handle_ha_via_ma_login(
             mfa_module_id=mfa_module_id,
             mfa_module_name=placeholders.get("mfa_module_name", "Authenticator app"),
             mfa_method="ha_via_ma",
+            csrf_token=_generate_csrf_token(),
         )
 
     _record_failure(client_ip)
@@ -466,6 +490,7 @@ def _handle_ha_direct_login(
                 error="Session expired — please sign in again",
                 ha_mode=ha_mode,
                 auth_methods=auth_methods,
+                csrf_token=_generate_csrf_token(),
             )
         if not code:
             return None, render_template(
@@ -476,6 +501,7 @@ def _handle_ha_direct_login(
                 mfa_step=True,
                 flow_id=flow_id,
                 mfa_module_id=mfa_module_id,
+                csrf_token=_generate_csrf_token(),
             )
         result = _ha_flow_step(flow_id, {"code": code})
         if result and result.get("type") == "create_entry":
@@ -490,6 +516,7 @@ def _handle_ha_direct_login(
                 error="Session expired — please sign in again",
                 ha_mode=ha_mode,
                 auth_methods=auth_methods,
+                csrf_token=_generate_csrf_token(),
             )
         return None, render_template(
             "login.html",
@@ -499,6 +526,7 @@ def _handle_ha_direct_login(
             mfa_step=True,
             flow_id=flow_id,
             mfa_module_id=mfa_module_id,
+            csrf_token=_generate_csrf_token(),
         )
 
     # Step 1: submit username + password
@@ -578,7 +606,19 @@ def login():
         session.pop("_ha_login_user", None)
 
     if request.method != "POST":
-        return render_template("login.html", error=None, ha_mode=ha_mode, auth_methods=auth_methods)
+        return render_template(
+            "login.html", error=None, ha_mode=ha_mode, auth_methods=auth_methods, csrf_token=_generate_csrf_token()
+        )
+
+    # CSRF validation before processing any credentials
+    if not _validate_csrf_token():
+        return render_template(
+            "login.html",
+            error="Invalid session. Please try again.",
+            ha_mode=ha_mode,
+            auth_methods=auth_methods,
+            csrf_token=_generate_csrf_token(),
+        ), 403
 
     client_ip = request.remote_addr or "unknown"
     if _check_rate_limit(client_ip):
@@ -587,6 +627,7 @@ def login():
             error="Too many failed attempts — try again in 5 minutes",
             ha_mode=ha_mode,
             auth_methods=auth_methods,
+            csrf_token=_generate_csrf_token(),
         ), 429
 
     method = request.form.get("method", "").strip()
@@ -611,6 +652,7 @@ def login():
         error=error,
         ha_mode=ha_mode,
         auth_methods=auth_methods,
+        csrf_token=_generate_csrf_token(),
     )
 
 

@@ -151,7 +151,7 @@ def get_client_status_for(client):
             "bluetooth_connected": False,
             "bluetooth_available": False,
             "playing": False,
-            "error": str(e),
+            "error": "Failed to retrieve status",
             "version": VERSION,
             "build_date": BUILD_DATE,
             "bluetooth_mac": None,
@@ -460,8 +460,9 @@ def api_diagnostics():
                     }
                 )
             diag["adapters"] = adapters
-        except Exception as e:
-            diag["adapters"] = [{"error": str(e)}]
+        except Exception:
+            logger.exception("Failed to enumerate adapters for diagnostics")
+            diag["adapters"] = [{"error": "Failed to enumerate adapters"}]
 
         try:
             diag["pulseaudio"] = get_server_name()
@@ -568,8 +569,9 @@ def api_diagnostics():
             if current:
                 sink_inputs.append(current)
             diag["sink_inputs"] = sink_inputs
-        except Exception as e:
-            diag["sink_inputs"] = [{"error": str(e)}]
+        except Exception:
+            logger.exception("Failed to list sink inputs for diagnostics")
+            diag["sink_inputs"] = [{"error": "Failed to list sink inputs"}]
 
         # PortAudio devices available inside the container
         try:
@@ -580,8 +582,9 @@ def api_diagnostics():
                 for d in query_devices()
                 if d.output_channels > 0
             ]
-        except Exception as e:
-            diag["portaudio_devices"] = [{"error": str(e)}]
+        except Exception:
+            logger.exception("Failed to list PortAudio devices for diagnostics")
+            diag["portaudio_devices"] = [{"error": "Failed to list PortAudio devices"}]
 
         diag["subprocesses"] = _collect_subprocess_info()
 
@@ -810,8 +813,9 @@ def _collect_bt_device_info() -> list[dict]:
                 k = key.strip().lower().replace(" ", "_")
                 if k in ("paired", "bonded", "trusted", "blocked", "connected", "class", "icon"):
                     entry[k] = val.strip()
-        except Exception as exc:
-            entry["error"] = str(exc)
+        except Exception:
+            logger.exception("Failed to get BT info for %s", mac)
+            entry["error"] = "Failed to retrieve device info"
         results.append(entry)
     return results
 

@@ -479,15 +479,21 @@ class SendspinClient:
             except (json.JSONDecodeError, ValueError):
                 continue
             if msg.get("type") == "status":
-                # Track volume changes for persistence
-                with self._status_lock:
-                    prev_volume = self.status.get("volume")
                 updates = {k: v for k, v in msg.items() if k in _ALLOWED_KEYS}
+                # Track volume changes for persistence (read both values atomically)
+                volume_changed = False
+                new_volume = None
                 if updates:
-                    self._update_status(updates)
-                new_volume = self.status.get("volume")
+                    with self._status_lock:
+                        prev_volume = self.status.get("volume")
+                        self.status.update(updates)
+                        new_volume = self.status.get("volume")
+                        volume_changed = (
+                            new_volume is not None and isinstance(new_volume, int) and new_volume != prev_volume
+                        )
+                    _state.notify_status_changed()
                 _mac = self.bt_manager.mac_address if self.bt_manager else None
-                if new_volume is not None and isinstance(new_volume, int) and new_volume != prev_volume and _mac:
+                if volume_changed and _mac and isinstance(new_volume, int):
                     save_device_volume(_mac, new_volume)
             elif msg.get("type") == "log":
                 log_fn = _LOG_METHODS.get(msg.get("level", "info"), logger.info)

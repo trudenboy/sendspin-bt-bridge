@@ -140,6 +140,7 @@ class MaMonitor:
         self._msg_id = itertools.count(1)
         self._cmd_queue: asyncio.Queue[tuple[str, dict, asyncio.Future]] = asyncio.Queue()
         self._ws = None  # current websocket, set while connected
+        self._loop: asyncio.AbstractEventLoop | None = None
 
     def _next_id(self) -> int:
         return next(self._msg_id)
@@ -165,7 +166,7 @@ class MaMonitor:
         """Send a command through the persistent WS. Returns response or raises."""
         if not self._running or self._ws is None:
             raise RuntimeError("Monitor not connected")
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         fut: asyncio.Future = loop.create_future()
         await self._cmd_queue.put((command, args, fut))
         return await asyncio.wait_for(fut, timeout=3.0)
@@ -180,13 +181,18 @@ class MaMonitor:
             try:
                 mid = self._next_id()
                 await _send(ws, mid, command, args)
-                # Match response by message_id to avoid consuming interleaved events
+                # Match response by message_id; forward interleaved events
                 for _ in range(10):
                     resp = await _recv(ws, timeout=5.0)
                     if str(resp.get("message_id")) == str(mid):
                         if not fut.done():
                             fut.set_result(resp)
                         break
+                    evt = resp.get("event")
+                    if evt:
+                        logger.debug("MA monitor: interleaved event '%s' during cmd drain", evt)
+                    else:
+                        logger.debug("MA monitor: non-matching msg (id=%s) during cmd drain", resp.get("message_id"))
                 else:
                     if not fut.done():
                         fut.set_exception(TimeoutError(f"No matching response for {command}"))
@@ -202,6 +208,11 @@ class MaMonitor:
             resp = await _recv(ws, timeout=5.0)
             if str(resp.get("message_id")) == str(mid):
                 return resp
+            evt = resp.get("event")
+            if evt:
+                logger.debug("MA monitor: interleaved event '%s' during queue cmd", evt)
+            else:
+                logger.debug("MA monitor: non-matching msg (id=%s) during queue cmd", resp.get("message_id"))
         return {}
 
     async def _refresh_stale_player_metadata(self, ws) -> None:
@@ -230,6 +241,11 @@ class MaMonitor:
             if str(resp.get("message_id")) == str(mid):
                 players = resp.get("result") or []
                 break
+            evt = resp.get("event")
+            if evt:
+                logger.debug("MA monitor: interleaved event '%s' during metadata refresh", evt)
+            else:
+                logger.debug("MA monitor: non-matching msg (id=%s) during metadata refresh", resp.get("message_id"))
 
         if not players:
             return
@@ -492,6 +508,7 @@ class MaMonitor:
     async def run(self) -> None:
         """Main entry point — reconnect loop with exponential backoff."""
         self._running = True
+        self._loop = asyncio.get_running_loop()
         delay = _RECONNECT_BASE
         _prev_token = self._token
         while self._running:
@@ -524,6 +541,14 @@ class MaMonitor:
 
     def stop(self) -> None:
         self._running = False
+        ws = self._ws
+        if ws:
+            loop = self._loop
+            if loop:
+                try:
+                    asyncio.run_coroutine_threadsafe(ws.close(), loop)
+                except Exception:
+                    pass
 
 
 # ---------------------------------------------------------------------------

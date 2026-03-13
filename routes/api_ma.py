@@ -9,6 +9,7 @@ import json
 import logging
 import os
 import re
+import urllib.parse as _up
 import urllib.request as _ur
 
 from flask import Blueprint, Response, jsonify, request
@@ -605,7 +606,7 @@ input.mfa-code{text-align:center;font-size:24px;letter-spacing:8px;
 
 <script>
 var API_BASE = window.location.origin;
-var MA_URL = '__MA_URL__';
+var MA_URL = __MA_URL__;
 var haState = {};
 
 function showStep(id) {
@@ -899,12 +900,14 @@ def api_ma_login():
             err_msg = str(exc)
             if "invalid" in err_msg.lower() or "password" in err_msg.lower():
                 return jsonify({"success": False, "error": "Invalid username or password"}), 401
-            return jsonify({"success": False, "error": f"Login failed: {err_msg}"}), 401
-        except ConnectionError as exc:
-            return jsonify({"success": False, "error": str(exc)}), 502
-        except Exception as exc:
+            logger.warning("MA direct login failed: %s", exc)
+            return jsonify({"success": False, "error": "Login failed"}), 401
+        except ConnectionError:
+            logger.exception("MA server unreachable during login")
+            return jsonify({"success": False, "error": "Music Assistant server is unreachable"}), 502
+        except Exception:
             logger.exception("MA direct login failed")
-            return jsonify({"success": False, "error": f"Login failed: {exc}"}), 500
+            return jsonify({"success": False, "error": "Login failed"}), 500
 
     if not token:
         return jsonify({"success": False, "error": "Login succeeded but no token received"}), 500
@@ -954,8 +957,12 @@ def api_ma_ha_auth_page():
     then posts the result back to ``window.opener`` via ``postMessage``.
     """
     ma_url = request.args.get("ma_url", "")
+    scheme = _up.urlparse(ma_url).scheme.lower() if ma_url else ""
+    if scheme and scheme not in ("http", "https"):
+        return Response("Invalid URL scheme", status=400)
+    safe_ma_url = json.dumps(ma_url)  # JS-safe; includes surrounding quotes
     return Response(
-        _HA_AUTH_PAGE_HTML.replace("__MA_URL__", ma_url),
+        _HA_AUTH_PAGE_HTML.replace("__MA_URL__", safe_ma_url),
         content_type="text/html; charset=utf-8",
     )
 

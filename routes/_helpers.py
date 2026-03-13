@@ -10,11 +10,28 @@ from state import clients as _clients
 from state import clients_lock as _clients_lock
 
 _MAC_RE = re.compile(r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")
+_ADAPTER_ID_RE = re.compile(r"^(hci\d+|[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5})$")
 
 
 def validate_mac(mac: str) -> bool:
     """Return True if mac is a valid XX:XX:XX:XX:XX:XX Bluetooth MAC address."""
     return bool(_MAC_RE.fullmatch(mac))
+
+
+def validate_adapter(adapter: str | None) -> str:
+    """Validate and return sanitized adapter identifier.
+
+    Returns empty string if adapter is None/empty.
+    Raises ValueError if adapter format is invalid.
+    """
+    if not adapter:
+        return ""
+    adapter = adapter.strip()
+    if not adapter:
+        return ""
+    if not _ADAPTER_ID_RE.fullmatch(adapter):
+        raise ValueError(f"Invalid adapter identifier: {adapter!r}")
+    return adapter
 
 
 def get_client_or_error(player_name: str | None):

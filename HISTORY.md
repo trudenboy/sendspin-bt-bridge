@@ -2,7 +2,7 @@
 
 A history of the architectural and functional evolution of sendspin-bt-bridge — for readers familiar with Home Assistant, Music Assistant, and multiroom audio setups.
 
-**Period:** January 1 – March 13, 2026 · **Total commits:** ~935 · **Versions:** 1.0.0 → 2.30.6
+**Period:** January 1 – March 13, 2026 · **Total commits:** ~935 · **Versions:** 1.0.0 → 2.30.7
 
 ---
 
@@ -759,6 +759,28 @@ This is distinct from BT Release/Reclaim (`set_bt_management_enabled`), which on
 **Version badge → release notes** (v2.30.6): the version badge in the header (e.g. `v2.30.6`) is now an `<a>` tag linking to the corresponding GitHub release page — a quick way to check what changed in the running version without navigating to GitHub manually.
 
 **Username → profile link** (v2.30.6): the username in the header is now clickable, linking to the user's profile page. In HA addon mode it links to the HA profile (`/profile`). In standalone mode the username moves from the header icons row to the status bar (alongside `BT 3/3 · MA 3/3`), and links to the MA profile when MA is connected, or to the HA profile when authenticated via HA. The auth method (`ma`, `ha`, `ha_via_ma`, `password`) is tracked in the Flask session and passed to the template as `data-auth-method`, which the JS status handler uses to compute the correct profile URL.
+
+### Security hardening and code review fixes (v2.30.7)
+
+**Comprehensive code review** (v2.30.7): a full code review of the entire codebase (~22K lines, 71 files) identified 66 potential issues. After verification against actual code, 53 were confirmed true — 13 were false positives or already mitigated. The confirmed findings were grouped into 15 implementation tasks covering security, concurrency, data integrity, and infrastructure.
+
+**XSS fix in HA auth page** (v2.30.7): the `api_ma_ha_auth_page` endpoint substituted the `ma_url` query parameter directly into an inline JavaScript template via string replacement — a classic reflected XSS. An attacker could craft a URL with `ma_url=';alert(document.cookie)//` to execute arbitrary JS in the auth popup context. Fixed by escaping through `json.dumps()` and adding URL scheme validation (only `http`/`https` or empty allowed; `javascript:` and other dangerous schemes are rejected with 400).
+
+**Command injection via adapter parameter** (v2.30.7): five endpoints in `api_bt.py` passed the `adapter` field from user input directly into `bluetoothctl` stdin commands without validation. Since `bluetoothctl` processes commands separated by newlines on stdin, a value like `hci0\nremove AA:BB:CC:DD:EE:FF` would inject extra commands. Fixed with a `validate_adapter()` helper in `_helpers.py` that enforces a strict regex (`^(hci\d+|MAC_FORMAT)$`) and rejects anything containing newlines, semicolons, or shell metacharacters.
+
+**CSRF protection** (v2.30.7): the login form (password, HA login flow, MFA — five `<form>` tags total in `login.html`) submitted POST requests without CSRF tokens. While JSON API endpoints have implicit protection (browsers won't send `Content-Type: application/json` cross-origin without CORS preflight), the HTML form was vulnerable to cross-site form submission. Added per-session CSRF token generation (`secrets.token_hex(32)`) stored in the Flask session, a hidden `<input>` in every form, and timing-safe validation via `hmac.compare_digest()` on POST. Invalid or missing tokens return 403.
+
+**Content Security Policy** (v2.30.7): no CSP header was set, meaning any XSS vulnerability could load external scripts, exfiltrate data, or modify the page arbitrarily. Added `Content-Security-Policy` restricting `default-src` to `'self'`, with `script-src` and `style-src` allowing `'unsafe-inline'` (necessary due to inline `onclick` handlers in `app.js`), `img-src` allowing `data:` URIs (for inline SVG icons), and `connect-src` allowing `ws:`/`wss:` (for SSE and WebSocket connections). Also added `X-Content-Type-Options: nosniff` on all responses to prevent MIME-type sniffing.
+
+**MA monitor event loss** (v2.30.7): three methods in `ma_monitor.py` — `_drain_cmd_queue`, `_send_queue_cmd`, and `_refresh_stale_player_metadata` — read WebSocket messages in a loop looking for a response matching a specific `message_id`. Non-matching messages (real-time events from MA: playback state changes, queue updates, player status) were silently discarded. In a busy MA instance this could lose seconds of real-time updates. Fixed by logging non-matching messages at DEBUG level instead of discarding silently. A more complete solution would buffer and re-process them as events, but that requires deeper protocol analysis.
+
+**mDNS discovery thread safety** (v2.30.7): the zeroconf `_on_service_state_change` callback used `asyncio.ensure_future()` to schedule async resolution work. This callback runs on zeroconf's internal thread, not the asyncio event loop thread — `ensure_future` requires a running loop in the current thread. Replaced with `asyncio.run_coroutine_threadsafe(coro, loop)` where `loop` is captured before zeroconf starts.
+
+**Concurrency fixes** (v2.30.7): two thread-safety issues fixed. In `sendspin_client.py`, `_read_subprocess_output` read `prev_volume` inside `_status_lock` but read `new_volume` outside it — between the two reads, another thread could change volume, making the comparison invalid. Both reads are now inside the same lock scope. In `state.py`, `get_scan_job()` returned a direct reference to the internal dict instead of a copy — callers could mutate internal state after the lock was released. Now returns `dict(job)`.
+
+**Error message sanitisation** (v2.30.7): 18 API endpoints across `api_bt.py`, `api_status.py`, `api_config.py`, and `auth.py` returned `str(e)` in error JSON responses, exposing internal file paths, subprocess command details, and Python tracebacks to API clients. Replaced with generic context-appropriate messages (e.g. "Failed to list adapters", "Bluetooth operation failed"); actual exceptions are logged server-side via `logger.exception()`.
+
+**Infrastructure** (v2.30.7): added `pytest` execution to the CI pipeline (previously only ruff and mypy ran — 178 tests existed but were never enforced in CI). Pinned dependency upper bounds (`zeroconf<1.0`, `ruff<1.0`, `mypy<2.0`) to prevent unexpected breakage from major version bumps. Fixed `asyncio.get_event_loop()` deprecation warning (Python 3.12+) with `get_running_loop()`. Fixed `DEFAULT_CONFIG` shallow copy that could cause shared mutable references across config instances. Removed 8 dead regex patterns from `routes/api.py` (copy-paste artifacts from `api_bt.py`). Added 1 MB size limit on config file uploads.
 
 ---
 
