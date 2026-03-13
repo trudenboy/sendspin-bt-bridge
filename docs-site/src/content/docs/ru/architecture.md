@@ -472,7 +472,7 @@ def api_status_stream():
 
 ## Веб-API
 
-37 API-эндпоинтов распределены по **5 модулям маршрутов** (Flask Blueprint), подключённым к Flask-приложению, созданному в `web_interface.py` и обслуживаемому **Waitress** на порту 8080.
+42 API-эндпоинтов распределены по **5 модулям маршрутов** (Flask Blueprint), подключённым к Flask-приложению, созданному в `web_interface.py` и обслуживаемому **Waitress** на порту 8080.
 
 ```mermaid
 graph TD
@@ -486,7 +486,7 @@ graph TD
         API_MOD --> CTRL[POST /api/restart<br/>POST /api/volume<br/>POST /api/mute<br/>POST /api/pause_all<br/>POST /api/group/pause<br/>POST /api/pause]
     end
 
-    subgraph "routes/api_bt.py — Bluetooth (7)"
+    subgraph "routes/api_bt.py — Bluetooth (9)"
         API_MOD --> BT[POST /api/bt/reconnect<br/>POST /api/bt/pair<br/>POST /api/bt/management<br/>GET /api/bt/adapters<br/>GET /api/bt/paired<br/>POST /api/bt/scan<br/>GET /api/bt/scan/result/id]
     end
 
@@ -494,11 +494,11 @@ graph TD
         API_MOD --> MAAPI[POST /api/ma/discover<br/>POST /api/ma/login<br/>GET /api/ma/ha-auth-page<br/>POST /api/ma/ha-silent-auth<br/>POST /api/ma/ha-login<br/>GET /api/ma/groups<br/>POST /api/ma/rediscover<br/>GET /api/ma/nowplaying<br/>POST /api/ma/queue/cmd<br/>GET /api/debug/ma]
     end
 
-    subgraph "routes/api_config.py — Конфигурация (6)"
+    subgraph "routes/api_config.py — Конфигурация (9)"
         API_MOD --> CFG[GET POST /api/config<br/>POST /api/set-password<br/>POST /api/settings/log_level<br/>GET /api/logs<br/>GET /api/version]
     end
 
-    subgraph "routes/api_status.py — Статус (6)"
+    subgraph "routes/api_status.py — Статус (8)"
         API_MOD --> STATUS[GET /api/status<br/>GET /api/groups<br/>GET /api/status/stream SSE<br/>GET /api/diagnostics<br/>GET /api/health<br/>GET /api/preflight]
     end
 

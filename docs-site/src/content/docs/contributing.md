@@ -39,10 +39,10 @@ services/
 
 routes/
   api.py              # Core playback & volume (6 routes)
-  api_bt.py           # Bluetooth management (7 routes)
+  api_bt.py           # Bluetooth management (9 routes)
   api_ma.py           # Music Assistant integration (10 routes)
-  api_config.py       # Configuration (5 routes)
-  api_status.py       # Status & diagnostics (6 routes)
+  api_config.py       # Configuration (9 routes)
+  api_status.py       # Status & diagnostics (8 routes)
   views.py            # HTML page renders
   auth.py             # Optional web UI password protection
 
@@ -61,7 +61,7 @@ Run `pytest` for automated unit tests:
 python3 -m pytest tests/ -v
 ```
 
-The test suite has **149 tests** across 15 test files covering config, volume routing, device status, state management, authentication, and Ingress middleware.
+The test suite has **187 tests** across 18 test files covering config, volume routing, device status, state management, authentication, Ingress middleware, BT services, daemon process, MA integration, and scan cooldown.
 
 ### Linting
 

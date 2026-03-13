@@ -50,7 +50,7 @@ description: REST API Sendspin Bluetooth Bridge
     "sync_delay_ms": -600,
     "static_delay_ms": -600,
     "listen_port": 8928,
-    "version": "2.22.2",
+    "version": "2.28.2",
     "build_date": "2026-03-11"
   }
 ]
@@ -77,7 +77,7 @@ data: [{"player_name": "Колонка в гостиной", "playing": false, .
 ### `GET /api/version`
 
 ```json
-{ "version": "2.22.2", "build_date": "2026-03-11" }
+{ "version": "2.28.2", "build_date": "2026-03-13" }
 ```
 
 ### `GET /api/health`

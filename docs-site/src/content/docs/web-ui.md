@@ -106,8 +106,6 @@ Each Bluetooth speaker has its own card. The card is divided into five columns.
 - **WebSocket URL** — the `ws://` address MA uses to connect (e.g. `ws://192.168.10.10:8928/sendspin`)
 - **Full BT adapter MAC** — next to the adapter name in the Connection column
 - **MA server address** — `host:port` or `auto:9000`
-- **Sink name** — the PulseAudio/PipeWire sink in the Volume column
-
 ### Connection Column
 
 Two rows showing Bluetooth and Music Assistant connectivity:
@@ -136,11 +134,11 @@ When the bridge is actively receiving now-playing data from the MA REST API, a s
 - **Status** — `▶ Playing` (green dot), `⏸ Stopped` (amber dot), `● No Sink` (red, device not connected)
 - **Transport controls** — visible when a sink is active:
   - `◀◀` prev track, `▮▮` / `▶` pause/play, `▶▶` next track — always shown when sink is active
-  - `⇄` shuffle, `↻` repeat — shown when MA API is connected; reflect the actual MA queue state and toggle it on click
+  - `⇄` shuffle, `↻` repeat — always visible when MA API is connected; reflect the actual MA queue state and toggle it on click
 - **Track / artist** — shown below the status; persists on pause (cleared only when MA sends empty values)
   - **Compilation albums**: if multiple slash-separated artists are present (e.g. `Frank Sinatra/Louis Armstrong/Elvis Presley`), the display shows `Frank Sinatra +2` — hover the element for the full text
   - **Album art tooltip**: hovering over the track name row shows a 120×120 album cover popup (from MA now-playing `image_url`). Only visible when MA API integration is active and delivering cover art.
-- **Progress** — current position / total duration (e.g. `3:22 / 4:39`)
+- **Progress** — progress bar with current position / total duration inline (e.g. `3:22 / 4:39`)
 
 ### Volume Column
 
@@ -148,7 +146,6 @@ When the bridge is actively receiving now-playing data from the MA REST API, a s
 - **Volume percentage** — shown next to the slider
 - **Mute button** — 🔈 (unmuted) / 🔇 (muted, red background)
 - **Audio format** — small text showing the negotiated codec and stream parameters (e.g. `44100Hz/16-bit/2ch`)
-- **Sink name** — revealed on hover (e.g. `bluez_sink.FC_58_FA_EB_08_6C.a2dp_sink`); a ⚠ yellow warning is shown if no sink is configured
 
 Individual volume sliders follow the same routing logic as the group slider: when `VOLUME_VIA_MA` is enabled and MA is connected, volume changes are proxied through the MA API. The UI waits for the actual value echoed back from MA before updating. When MA is offline or `VOLUME_VIA_MA` is disabled, changes go directly to PulseAudio.
 

@@ -498,7 +498,7 @@ The initial SSE response includes a **2 KB padding comment** (`<!-- ... -->`) to
 
 ## Web API
 
-37 API endpoints are split across **5 route modules** (Flask Blueprints), mounted on the Flask app created in `web_interface.py` and served by **Waitress** on port 8080.
+42 API endpoints are split across **5 route modules** (Flask Blueprints), mounted on the Flask app created in `web_interface.py` and served by **Waitress** on port 8080.
 
 ```mermaid
 graph TD
@@ -512,7 +512,7 @@ graph TD
         API_MOD --> CTRL[POST /api/restart<br/>POST /api/volume<br/>POST /api/mute<br/>POST /api/pause_all<br/>POST /api/group/pause<br/>POST /api/pause]
     end
 
-    subgraph "routes/api_bt.py — Bluetooth (7)"
+    subgraph "routes/api_bt.py — Bluetooth (9)"
         API_MOD --> BT[POST /api/bt/reconnect<br/>POST /api/bt/pair<br/>POST /api/bt/management<br/>GET /api/bt/adapters<br/>GET /api/bt/paired<br/>POST /api/bt/scan<br/>GET /api/bt/scan/result/id]
     end
 
@@ -520,11 +520,11 @@ graph TD
         API_MOD --> MAAPI[POST /api/ma/discover<br/>POST /api/ma/login<br/>GET /api/ma/ha-auth-page<br/>POST /api/ma/ha-silent-auth<br/>POST /api/ma/ha-login<br/>GET /api/ma/groups<br/>POST /api/ma/rediscover<br/>GET /api/ma/nowplaying<br/>POST /api/ma/queue/cmd<br/>GET /api/debug/ma]
     end
 
-    subgraph "routes/api_config.py — Configuration (6)"
+    subgraph "routes/api_config.py — Configuration (9)"
         API_MOD --> CFG[GET POST /api/config<br/>POST /api/set-password<br/>POST /api/settings/log_level<br/>GET /api/logs<br/>GET /api/version]
     end
 
-    subgraph "routes/api_status.py — Status (6)"
+    subgraph "routes/api_status.py — Status (8)"
         API_MOD --> STATUS[GET /api/status<br/>GET /api/groups<br/>GET /api/status/stream SSE<br/>GET /api/diagnostics<br/>GET /api/health<br/>GET /api/preflight]
     end
 
@@ -1007,7 +1007,7 @@ graph TD
     subgraph "Result"
         WEB[Web UI at :8080<br/>All features work]
         SSE[SSE updates<br/>Real-time status changes]
-        API[REST API<br/>28 endpoints respond]
+        API[REST API<br/>42 endpoints respond]
     end
 
     INSTALL --> SIM

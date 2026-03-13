@@ -84,7 +84,7 @@ Bluetooth-мост для [Music Assistant](https://www.music-assistant.io/) —
 ### 🚀 Развёртывание
 - **Четыре варианта** — аддон Home Assistant, Docker Compose, Proxmox LXC, OpenWrt LXC
 - **Несколько экземпляров bridge** — запуск нескольких мостов против одного сервера MA; каждый регистрирует свои плееры
-- **REST API на 37 эндпоинтов** — полный программный контроль (`/api/status`, `/api/volume`, `/api/bt/*`, `/api/ma/*`, …)
+- **REST API на 42 эндпоинтов** — полный программный контроль (`/api/status`, `/api/volume`, `/api/bt/*`, `/api/ma/*`, …)
 - **Динамический уровень логов** — смена `LOG_LEVEL` через API или веб-интерфейс без перезапуска
 
 <img width="1400" alt="Веб-панель мониторинга — полная страница, тёмная тема" src="https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/docs-site/public/screenshots/screenshot-dashboard-full.png" />
@@ -112,7 +112,7 @@ Bluetooth-мост для [Music Assistant](https://www.music-assistant.io/) —
 | **OpenWrt LXC** | Turris Omnia (ARMv7), Ubuntu 24.04 | CSR8510 A10 USB | AfterShokz |
 
 ПО: Python 3.12, BlueZ 5.72, PulseAudio 16.1, aiosendspin 4.3.2.
-Все три экземпляра работают на v2.22.2 с одним сервером Music Assistant и мультирум-синхронизацией.
+Все три экземпляра работают на v2.28.2 с одним сервером Music Assistant и мультирум-синхронизацией.
 
 📖 [Подробное описание тестового стенда →](https://trudenboy.github.io/sendspin-bt-bridge/ru/test-stand/)
 
@@ -564,10 +564,10 @@ python sendspin_client.py
 | `state.py` | Общее состояние рантайма — список клиентов, SSE-сигнализация, задачи сканирования, кэш MA |
 | `web_interface.py` | Точка входа Flask — регистрирует blueprints, запускает сервер Waitress |
 | `routes/api.py` | Основное воспроизведение и громкость (6 маршрутов) |
-| `routes/api_bt.py` | Управление Bluetooth (7 маршрутов) |
+| `routes/api_bt.py` | Управление Bluetooth (9 маршрутов) |
 | `routes/api_ma.py` | Интеграция с Music Assistant (10 маршрутов) |
-| `routes/api_config.py` | Конфигурация (5 маршрутов) |
-| `routes/api_status.py` | Статус и диагностика (6 маршрутов) |
+| `routes/api_config.py` | Конфигурация (9 маршрутов) |
+| `routes/api_status.py` | Статус и диагностика (8 маршрутов) |
 | `routes/views.py` | Рендеринг HTML-страниц |
 | `routes/auth.py` | Опциональная защита веб-интерфейса паролем |
 | `services/daemon_process.py` | Точка входа subprocess — каждая колонка работает здесь с собственным `PULSE_SINK` |

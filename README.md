@@ -86,7 +86,7 @@ A Bluetooth bridge for [Music Assistant](https://www.music-assistant.io/) — co
 ### 🚀 Deployment
 - **Four deployment options** — Home Assistant addon, Docker Compose, Proxmox LXC, OpenWrt LXC
 - **Multiple bridge instances** — run several bridges against the same MA server; each registers its own players
-- **37-endpoint REST API** — full programmatic control (`/api/status`, `/api/volume`, `/api/bt/*`, `/api/ma/*`, …)
+- **42-endpoint REST API** — full programmatic control (`/api/status`, `/api/volume`, `/api/bt/*`, `/api/ma/*`, …)
 - **Dynamic log level** — change `LOG_LEVEL` at runtime via API or web UI without restart
 
 <img width="1400" alt="Web dashboard — full page, dark mode, all sections expanded" src="https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/docs-site/public/screenshots/screenshot-dashboard-full.png" />
@@ -120,7 +120,7 @@ Two bridge instances connected to one MA server — an HA addon on HAOS (4 speak
 | **OpenWrt LXC** | Turris Omnia (ARMv7), Ubuntu 24.04 | CSR8510 A10 USB | AfterShokz |
 
 Software: Python 3.12, BlueZ 5.72, PulseAudio 16.1, aiosendspin 4.3.2.
-All three instances run v2.22.2 against a single Music Assistant server with multiroom sync.
+All three instances run v2.28.2 against a single Music Assistant server with multiroom sync.
 
 📖 [Full test stand details →](https://trudenboy.github.io/sendspin-bt-bridge/test-stand/)
 
@@ -588,10 +588,10 @@ python sendspin_client.py
 | `state.py` | Shared runtime state — client list, SSE signaling, scan jobs, MA group/now-playing cache |
 | `web_interface.py` | Flask app entry point — registers blueprints, starts Waitress server |
 | `routes/api.py` | Core playback & volume (6 routes) |
-| `routes/api_bt.py` | Bluetooth management (7 routes) |
+| `routes/api_bt.py` | Bluetooth management (9 routes) |
 | `routes/api_ma.py` | Music Assistant integration (10 routes) |
-| `routes/api_config.py` | Configuration (5 routes) |
-| `routes/api_status.py` | Status & diagnostics (6 routes) |
+| `routes/api_config.py` | Configuration (9 routes) |
+| `routes/api_status.py` | Status & diagnostics (8 routes) |
 | `routes/views.py` | HTML page renders |
 | `routes/auth.py` | Optional web UI password protection |
 | `services/daemon_process.py` | Subprocess entry point — each speaker runs here with its own `PULSE_SINK` |

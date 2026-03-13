@@ -50,8 +50,8 @@ Status of all players.
     "sync_delay_ms": -600,
     "static_delay_ms": -600,
     "listen_port": 8928,
-    "version": "2.22.2",
-    "build_date": "2026-03-11"
+    "version": "2.28.2",
+    "build_date": "2026-03-13"
   }
 ]
 ```
@@ -105,7 +105,7 @@ Returns all configured players grouped by MA syncgroup. Players sharing the same
 ### `GET /api/version`
 
 ```json
-{ "version": "2.22.2", "build_date": "2026-03-11" }
+{ "version": "2.28.2", "build_date": "2026-03-13" }
 ```
 
 ### `GET /api/health`
@@ -338,6 +338,22 @@ Toggle BT management (Release/Reclaim).
 
 **Body:** `{ "player_name": "Living Room", "enabled": false }`
 
+### `POST /api/device/enabled`
+
+Toggle global device enabled/disabled state. Requires a restart to take effect — disabled devices are fully skipped (no client, no BT manager, no port).
+
+**Body:** `{ "player_name": "Living Room", "enabled": false }`
+
+**Response:**
+```json
+{
+  "success": true,
+  "enabled": false,
+  "restart_required": true,
+  "message": "Device will be disabled after restart"
+}
+```
+
 ### `POST /api/bt/scan`
 
 Start a background BT scan (~10 s). Returns immediately with a job ID.
@@ -376,6 +392,18 @@ List of available BT adapters.
 
 List of currently paired devices (name + MAC).
 
+### `GET /api/bugreport`
+
+Generate a diagnostic bug report bundle. Returns a JSON object with system info, device status, recent logs, and BT/audio diagnostics — formatted for GitHub issue submission.
+
+### `GET /api/diagnostics/download`
+
+Download the full diagnostics as a JSON file attachment.
+
+### `GET /api/logs/download`
+
+Download recent logs as a text file attachment.
+
 ## System
 
 ### `GET /api/logs`
@@ -404,6 +432,20 @@ Change log level immediately and persist to `config.json`. Propagates to all run
 **Body:** `{ "level": "debug" }` — `"info"` or `"debug"`
 
 **Response:** `{ "success": true, "level": "DEBUG" }`
+
+### `POST /api/update/check`
+
+Check for available updates by querying the GitHub API. Returns version comparison.
+
+**Response:** `{ "update_available": true, "latest_version": "2.28.2", "current_version": "2.28.1" }`
+
+### `GET /api/update/info`
+
+Get cached update information without triggering a new check.
+
+### `POST /api/update/apply`
+
+Apply a pending update. In HA addon mode, triggers addon update via Supervisor API. In Docker/LXC mode, returns instructions.
 
 ## Configuration
 

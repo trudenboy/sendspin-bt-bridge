@@ -35,7 +35,7 @@ python sendspin_client.py
 
 ## Manual Test Checklist
 
-Run `pytest` for the automated test suite (149 tests across 15 files covering config, volume routing, device status, state management, auth, and ingress middleware).
+Run `pytest` for the automated test suite (187 tests across 18 files covering config, volume routing, device status, state management, auth, ingress middleware, BT services, daemon process, MA integration, and scan cooldown).
 
 ### Linting
 
