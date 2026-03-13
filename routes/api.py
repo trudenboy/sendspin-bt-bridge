@@ -443,7 +443,7 @@ def pause_all():
 
             # Try MA syncgroup play first (preserves group sync)
             if ma_url and ma_token:
-                ma_group = state.get_ma_group_for_player(client.player_name)
+                ma_group = state.get_ma_group_for_player(getattr(client, "player_id", ""))
                 if ma_group:
                     sid = ma_group["id"]
                     if sid not in seen_ma_syncgroups:
@@ -512,7 +512,7 @@ def api_group_pause():
     if action == "play":
         ma_url, ma_token = state.get_ma_api_credentials()
         if ma_url and ma_token:
-            ma_group = state.get_ma_group_for_player(target.player_name)
+            ma_group = state.get_ma_group_for_player(getattr(target, "player_id", ""))
             if ma_group:
                 try:
                     from services.ma_client import ma_group_play
