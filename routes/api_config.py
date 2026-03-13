@@ -268,6 +268,7 @@ def api_config():
         "MA_USERNAME",
         "VOLUME_VIA_MA",
         "MUTE_VIA_MA",
+        "SMOOTH_RESTART",
         "AUTO_UPDATE",
         "CHECK_UPDATES",
         "_new_device_default_volume",

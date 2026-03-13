@@ -274,6 +274,13 @@
                         <span class="form-hint" style="display:inline;margin:0;">— syncs mute state with MA UI</span>
                     </label>
                 </div>
+                <div class="form-group">
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                        <input type="checkbox" name="SMOOTH_RESTART" id="smooth-restart" style="width:auto;margin:0;">
+                        Smooth restart
+                        <span class="form-hint" style="display:inline;margin:0;">— mute before restart, show progress, wait for reconnect</span>
+                    </label>
+                </div>
             </div>
 
             {% if not ha_mode %}

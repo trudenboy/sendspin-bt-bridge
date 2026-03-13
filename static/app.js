@@ -306,7 +306,7 @@ function buildDeviceCard(i) {
             'oninput="onVolumeInput(' + i + ', this.value)">' +
           '<span class="vol-pct" id="dvol-' + i + '">100%</span>' +
           '<button type="button" class="mute-btn" id="dmute-' + i + '" ' +
-            'onclick="toggleMute(' + i + ')" title="Mute/Unmute">&#128264;</button>' +
+            'title="Mute/Unmute">&#128264;</button>' +
         '</div>' +
         // Row track: Artist — Track Name
         '<div class="card3-row-track">' +
@@ -478,7 +478,10 @@ function populateDeviceCard(i, dev) {
     var fmtEl = document.getElementById('daudiofmt-' + i);
 
     // Color indicator: red=no sink (BT not ready), green=playing+streaming,
-    // red=playing but no audio (stale), yellow=stopped
+    // red=playing but no audio (stale), yellow=stopped,
+    // orange pulsing=MA says playing but bridge not receiving audio yet
+    var maState = (dev.ma_now_playing || {}).state;
+    var maPlaying = maState === 'playing';
     if (!dev.has_sink && dev.bluetooth_mac) {
         if (playInd) playInd.className = 'status-dot red';
         if (playTxt) playTxt.textContent = 'No Sink';
@@ -488,6 +491,9 @@ function populateDeviceCard(i, dev) {
     } else if (dev.playing && !dev.audio_streaming) {
         if (playInd) playInd.className = 'status-dot red';
         if (playTxt) playTxt.textContent = '\u25b6 Stale';
+    } else if (maPlaying && dev.server_connected) {
+        if (playInd) playInd.className = 'status-dot orange pulse';
+        if (playTxt) playTxt.textContent = '\u25b6 Buffering';
     } else {
         if (playInd) playInd.className = 'status-dot orange';
         if (playTxt) playTxt.textContent = '\u23f8 Stopped';
@@ -1694,6 +1700,7 @@ async function saveConfig() {
     config.AUTH_ENABLED = !!(document.getElementById('auth-enabled') || {}).checked;
     config.VOLUME_VIA_MA = !!(document.getElementById('volume-via-ma') || {}).checked;
     config.MUTE_VIA_MA = !!(document.getElementById('mute-via-ma') || {}).checked;
+    config.SMOOTH_RESTART = !!(document.getElementById('smooth-restart') || {}).checked;
     config.AUTO_UPDATE = !!(document.getElementById('auto-update') || {}).checked;
     config.CHECK_UPDATES = !!(document.getElementById('check-updates') || {}).checked;
     // Log level lives outside the config form (in Logs section)
@@ -2216,6 +2223,8 @@ async function loadConfig() {
         if (volMaCheck) volMaCheck.checked = config.VOLUME_VIA_MA !== false;
         var muteMaCheck = document.getElementById('mute-via-ma');
         if (muteMaCheck) muteMaCheck.checked = !!config.MUTE_VIA_MA;
+        var smoothRestartCheck = document.getElementById('smooth-restart');
+        if (smoothRestartCheck) smoothRestartCheck.checked = !!config.SMOOTH_RESTART;
         var autoUpdateCheck = document.getElementById('auto-update');
         if (autoUpdateCheck) autoUpdateCheck.checked = !!config.AUTO_UPDATE;
         var checkUpdatesCheck = document.getElementById('check-updates');
@@ -2295,46 +2304,55 @@ function _restartProgressHtml(step, totalSteps, message, elapsed) {
 
 async function saveAndRestart() {
     var banner = document.getElementById('restart-banner');
+    var smooth = !!(document.getElementById('smooth-restart') || {}).checked;
+    var totalSteps = smooth ? 6 : 5;
+
     banner.className = 'restart-banner active';
-    banner.innerHTML = _restartProgressHtml(0, 6, 'Saving configuration…', 0);
+    banner.innerHTML = _restartProgressHtml(0, totalSteps, 'Saving configuration…', 0);
 
     try {
         var saved = await saveConfig();
         if (!saved || !saved.ok) {
-            banner.innerHTML = _restartProgressHtml(0, 6, '\u2717 ' + (saved && saved.error || 'Failed to save configuration'), 0);
+            banner.innerHTML = _restartProgressHtml(0, totalSteps, '\u2717 ' + (saved && saved.error || 'Failed to save configuration'), 0);
             setTimeout(function() { banner.className = 'restart-banner'; }, 3000);
             return;
         }
         _setConfigDirty(false);
 
-        // Mute local PA sinks (not MA pause) to avoid audio glitches on shutdown.
-        // This only silences THIS bridge's speakers — other players in a sync group keep playing.
-        // After restart, _startup_unmute_watcher unmutes each sink once audio stabilizes.
-        banner.innerHTML = _restartProgressHtml(1, 6, 'Muting speakers…', 0);
-        var _allDeviceNames = (lastDevices || []).map(function(d) { return d.player_name; });
-        if (_allDeviceNames.length > 0) {
-            try {
-                await fetch(API_BASE + '/api/mute', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({mute: true, force_local: true, player_names: _allDeviceNames})
-                });
-                await new Promise(function(r) { setTimeout(r, 300); });
-            } catch (_) { /* Non-critical — continue with restart */ }
+        var step = 1;
+
+        if (smooth) {
+            // Mute local PA sinks (not MA pause) to avoid audio glitches on shutdown.
+            // This only silences THIS bridge's speakers — other players in a sync group keep playing.
+            // After restart, _startup_unmute_watcher unmutes each sink once audio stabilizes.
+            banner.innerHTML = _restartProgressHtml(step, totalSteps, 'Muting speakers…', 0);
+            var _allDeviceNames = (lastDevices || []).map(function(d) { return d.player_name; });
+            if (_allDeviceNames.length > 0) {
+                try {
+                    await fetch(API_BASE + '/api/mute', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({mute: true, force_local: true, player_names: _allDeviceNames})
+                    });
+                    await new Promise(function(r) { setTimeout(r, 300); });
+                } catch (_) { /* Non-critical — continue with restart */ }
+            }
+            step++;
         }
 
-        banner.innerHTML = _restartProgressHtml(2, 6, 'Stopping service…', 0);
+        banner.innerHTML = _restartProgressHtml(step, totalSteps, 'Stopping service…', 0);
         try {
             await fetch(API_BASE + '/api/restart', { method: 'POST' });
         } catch (_) { /* Service dropped connection — expected */ }
 
         await new Promise(function(r) { setTimeout(r, 2000); });
+        step++;
 
         // Wait for service to come back
         var serviceUp = false;
         var statusData = null;
         for (var attempt = 1; attempt <= 40; attempt++) {
-            banner.innerHTML = _restartProgressHtml(3, 6, 'Starting service…', attempt);
+            banner.innerHTML = _restartProgressHtml(step, totalSteps, 'Starting service…', attempt);
             await new Promise(function(r) { setTimeout(r, 1000); });
             try {
                 var resp = await fetch(API_BASE + '/api/status');
@@ -2347,9 +2365,10 @@ async function saveAndRestart() {
         }
 
         if (!serviceUp) {
-            banner.innerHTML = _restartProgressHtml(3, 6, '\u26a0\ufe0f Service did not respond within 40s', 0);
+            banner.innerHTML = _restartProgressHtml(step, totalSteps, '\u26a0\ufe0f Service did not respond within 40s', 0);
             return;
         }
+        step++;
 
         // Wait for devices to initialize
         var stats = _restartDeviceStats(statusData);
@@ -2359,7 +2378,7 @@ async function saveAndRestart() {
             for (var w = 1; w <= 30; w++) {
                 var readyCount = Math.min(stats.bt, stats.pa, stats.ss);
                 var msg = 'Connecting devices… ' + readyCount + '/' + stats.total;
-                banner.innerHTML = _restartProgressHtml(4, 6, msg, w);
+                banner.innerHTML = _restartProgressHtml(step, totalSteps, msg, w);
                 await new Promise(function(r) { setTimeout(r, 1000); });
                 try {
                     var r2 = await fetch(API_BASE + '/api/status');
@@ -2373,11 +2392,12 @@ async function saveAndRestart() {
                 } catch (_) {}
             }
         }
+        step++;
 
         // Wait for MA connection
         stats = _restartDeviceStats(statusData);
         if (!stats.ma && stats.total > 0) {
-            banner.innerHTML = _restartProgressHtml(5, 6, 'Connecting to Music Assistant…', 0);
+            banner.innerHTML = _restartProgressHtml(step, totalSteps, 'Connecting to Music Assistant…', 0);
             for (var m = 1; m <= 15; m++) {
                 await new Promise(function(r) { setTimeout(r, 1000); });
                 try {
@@ -2388,7 +2408,7 @@ async function saveAndRestart() {
                         if (stats.ma) break;
                     }
                 } catch (_) {}
-                banner.innerHTML = _restartProgressHtml(5, 6, 'Connecting to Music Assistant…', m);
+                banner.innerHTML = _restartProgressHtml(step, totalSteps, 'Connecting to Music Assistant…', m);
             }
         }
 
@@ -2397,13 +2417,13 @@ async function saveAndRestart() {
         allReady = (stats.total === 0 || (stats.bt >= stats.total && stats.pa >= stats.total &&
                    stats.ss >= stats.total)) && stats.ma;
 
-        banner.innerHTML = _restartProgressHtml(6, 6,
+        banner.innerHTML = _restartProgressHtml(totalSteps, totalSteps,
             allReady ? 'Restart complete — all systems operational' : '\u26a0\ufe0f Restart complete — some connections pending', 0);
         setTimeout(function() { banner.className = 'restart-banner'; }, allReady ? 4000 : 10000);
         updateStatus();
 
     } catch (err) {
-        banner.innerHTML = _restartProgressHtml(0, 6, '\u26a0\ufe0f Error: ' + err.message, 0);
+        banner.innerHTML = _restartProgressHtml(0, totalSteps, '\u26a0\ufe0f Error: ' + err.message, 0);
     }
 }
 

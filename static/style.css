@@ -479,6 +479,8 @@
         .status-dot.red { background: var(--error-color); }
         .status-dot.orange {
             background: var(--warning-color);
+        }
+        .status-dot.orange.pulse {
             animation: dot-pulse 1.2s ease-in-out infinite;
         }
         .status-dot.grey { background: #9ca3af; }
