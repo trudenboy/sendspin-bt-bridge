@@ -11,8 +11,9 @@ import json
 import logging
 import os
 import subprocess
+from datetime import datetime, timezone
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, Response, jsonify, request
 
 import state
 from config import (
@@ -154,6 +155,106 @@ def _sync_ha_options(config: dict) -> None:
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
+
+
+@config_bp.route("/api/config/download")
+def api_config_download():
+    """Download the raw config.json file."""
+    if not CONFIG_FILE.exists():
+        return jsonify({"error": "No config file found"}), 404
+    with config_lock, open(CONFIG_FILE) as f:
+        config = json.load(f)
+    raw = json.dumps(config, indent=2)
+    bridge_name = config.get("BRIDGE_NAME", "").strip() or "Bridge"
+    bridge_name = bridge_name.replace(" ", "_")
+    ts = datetime.now(tz=timezone.utc).strftime("%Y%m%d_%H%M%S")
+    filename = f"{bridge_name}_SBB_Config_{ts}.json"
+    return Response(
+        raw,
+        mimetype="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+_PRESERVED_KEYS = ("AUTH_PASSWORD_HASH", "SECRET_KEY", "MA_ACCESS_TOKEN", "MA_REFRESH_TOKEN")
+
+
+@config_bp.route("/api/config/upload", methods=["POST"])
+def api_config_upload():
+    """Upload a config.json file to replace the current configuration.
+
+    Preserves security-sensitive keys from the existing config.
+    """
+    f = request.files.get("file")
+    if not f:
+        return jsonify({"error": "No file uploaded"}), 400
+
+    try:
+        raw = f.read()
+        uploaded = json.loads(raw)
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        return jsonify({"error": f"Invalid JSON: {exc}"}), 400
+
+    if not isinstance(uploaded, dict):
+        return jsonify({"error": "Config must be a JSON object"}), 400
+
+    # Basic validation — devices and adapters
+    bt_devices = uploaded.get("BLUETOOTH_DEVICES", [])
+    if not isinstance(bt_devices, list):
+        return jsonify({"error": "BLUETOOTH_DEVICES must be an array"}), 400
+    for dev in bt_devices:
+        if not isinstance(dev, dict):
+            return jsonify({"error": "Each device must be an object"}), 400
+        mac = str(dev.get("mac", ""))
+        if mac and not _MAC_RE.match(mac):
+            return jsonify({"error": f"Invalid MAC address: {mac}"}), 400
+
+    bt_adapters = uploaded.get("BLUETOOTH_ADAPTERS", [])
+    if not isinstance(bt_adapters, list):
+        return jsonify({"error": "BLUETOOTH_ADAPTERS must be an array"}), 400
+
+    sp = uploaded.get("SENDSPIN_PORT")
+    if sp is not None and sp != "":
+        try:
+            sp_int = int(sp)
+            if not (1 <= sp_int <= 65535):
+                raise ValueError
+        except (ValueError, TypeError):
+            return jsonify({"error": f"Invalid SENDSPIN_PORT: {sp}"}), 400
+
+    # Preserve sensitive keys from existing config
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    with config_lock:
+        existing = {}
+        if CONFIG_FILE.exists():
+            try:
+                with open(CONFIG_FILE) as ef:
+                    existing = json.load(ef)
+            except Exception:
+                pass
+
+        for key in _PRESERVED_KEYS:
+            if key in existing:
+                uploaded[key] = existing[key]
+
+        # Remove sensitive keys that leaked into the uploaded file
+        for key in _PRESERVED_KEYS:
+            if key not in existing:
+                uploaded.pop(key, None)
+
+        tmp = str(CONFIG_FILE) + ".tmp"
+        try:
+            with open(tmp, "w") as wf:
+                json.dump(uploaded, wf, indent=2)
+            os.replace(tmp, str(CONFIG_FILE))
+        except Exception:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+            raise
+
+    return jsonify({"success": True})
 
 
 @config_bp.route("/api/config", methods=["GET", "POST"])

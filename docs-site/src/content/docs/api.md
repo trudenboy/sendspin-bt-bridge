@@ -457,6 +457,26 @@ Current configuration from `config.json`.
 
 Save configuration. Body: JSON config object.
 
+### `GET /api/config/download`
+
+Download the current `config.json` as a file attachment. The response includes a `Content-Disposition` header with a timestamped filename (e.g. `config-2026-03-15T10-30-00.json`).
+
+### `POST /api/config/upload`
+
+Upload a `config.json` file. Accepts `multipart/form-data` with a `file` field containing the JSON config.
+
+The uploaded file is validated as valid JSON before saving. Sensitive keys (`AUTH_PASSWORD_HASH`, `SECRET_KEY`, `MA_API_TOKEN`) are preserved from the current config and not overwritten by the upload.
+
+**Response:**
+```json
+{ "success": true, "message": "Configuration uploaded successfully" }
+```
+
+**Error response (invalid JSON):**
+```json
+{ "success": false, "error": "Invalid JSON in uploaded file" }
+```
+
 ## Examples
 
 ```bash

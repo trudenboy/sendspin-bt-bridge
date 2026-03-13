@@ -148,6 +148,19 @@ Environment variables override `config.json` values:
 | `TZ` | Timezone |
 | `CONFIG_DIR` | Config directory path (default `/config`) |
 
+## Config Backup & Restore
+
+The web UI provides **⬇ Download** and **⬆ Upload** buttons in the Configuration panel for backing up and restoring `config.json`.
+
+- **Download** saves the current configuration as a timestamped JSON file (e.g. `config-2026-03-15T10-30-00.json`).
+- **Upload** accepts a previously downloaded config file. The file is validated as JSON before saving. Sensitive keys (`AUTH_PASSWORD_HASH`, `SECRET_KEY`, `MA_API_TOKEN`) are preserved from the running config and not overwritten by the upload.
+
+This is useful for migrating settings between installations or restoring after a fresh deploy. A restart is required after uploading for changes to take effect.
+
+<Aside type="tip">
+You can also download and upload via the API: `GET /api/config/download` and `POST /api/config/upload` (multipart/form-data, field: `file`).
+</Aside>
+
 ## Performance Optimization
 
 <Aside type="tip">

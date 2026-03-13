@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.30.5] - 2026-03-13
+
+### Added
+- **BT Info modal** — device info now opens in a styled modal dialog with Copy button instead of a plain `alert()`
+- **BT adapter reboot** — ↻ Reboot button on each adapter row (power off → 3s delay → power on)
+- **Scan cooldown countdown** — Scan button shows remaining seconds during cooldown period; server returns `retry_after` in 429 response
+- **Config download/upload** — ⬇ Download and ⬆ Upload buttons in the config section; download filename includes bridge name and timestamp (`{bridge}_SBB_Config_{datetime}.json`); upload validates JSON and preserves sensitive keys (passwords, tokens)
+- **BT device info in bugreport** — bug report now includes paired/trusted/connected status from `bluetoothctl info` for each configured device
+
+### Fixed
+- **Mute indicator stuck after startup** — `_startup_unmute_watcher` now emits a status update after unmuting the PA sink, so the UI correctly reflects the unmuted state
+- **Startup unmute timeout** — reduced from 60s to 15s for faster mute indicator update when no audio is playing
+- **Adapter power ANSI stripping** — `bluetoothctl` output is now cleaned of ANSI escape codes before checking for success indicators
+
+### Changed
+- **Paired devices button layout** — Add button first, then MAC/Name, then grouped action buttons (BT Info, Reset & Reconnect, ✕) with hover isolation
+- **Scan results button order** — Add before Add & Pair (renamed from Pair & Add)
+- **Toolbar button order** — Adapters: + Add Adapter before ↺ Refresh; Devices: + Add Device before 🔍 Scan
+- **Config save bar layout** — left group (Save, Save & Restart), right group (⬇ Download, ⬆ Upload)
+
 ## [2.30.0] - 2026-03-13
 
 ### Added

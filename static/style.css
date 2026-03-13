@@ -769,6 +769,8 @@
             cursor: pointer; border-radius: 4px; transition: background 0.15s;
         }
         .scan-result-item:hover { background: var(--primary-color-alpha, rgba(3,169,244,0.08)); }
+        .scan-result-item:has(.paired-actions:hover) { background: transparent; }
+        .paired-actions { display: flex; gap: 6px; flex-shrink: 0; }
         .scan-result-item:last-child { border-bottom: none; }
         .scan-result-mac { font-family: monospace; color: var(--secondary-text-color); font-size: 12px; width: 132px; flex-shrink: 0; }
         .scan-result-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -786,7 +788,7 @@
         }
         .adapter-row {
             display: grid;
-            grid-template-columns: 5rem 1fr 1.4fr 2.5rem 2rem;
+            grid-template-columns: 5rem 1fr 1.4fr 2.5rem auto;
             gap: 8px; align-items: center;
             padding: 7px 10px; border-bottom: 1px solid var(--divider-color); font-size: 13px;
             cursor: default; border-radius: 4px; transition: background 0.15s;
@@ -809,6 +811,15 @@
             width: 24px; height: 24px; cursor: pointer; font-size: 14px; line-height: 1;
         }
         .btn-remove-adapter:hover { background: rgba(219,68,55,.15); }
+        .adapter-power-btns { display: flex; gap: 2px; }
+        .adapter-power-btns .btn-bt-action {
+            padding: 3px 8px; font-size: 11px;
+            border: 1px solid var(--divider-color); border-radius: 3px;
+            background: var(--card-background-color); color: var(--secondary-text-color);
+            cursor: pointer; transition: all 0.15s;
+        }
+        .adapter-power-btns .btn-bt-action:hover { border-color: var(--primary-color); color: var(--primary-color); }
+        .adapter-power-btns .btn-bt-action:disabled { opacity: 0.5; cursor: wait; }
 
         /* Buttons */
         .btn {
@@ -1020,7 +1031,7 @@
             padding: 12px 0 0; margin-top: 0;
             border-top: 1px solid var(--divider-color);
         }
-        .config-static-save .btn:first-child { margin-right: auto; }
+        .config-btn-group { display: flex; gap: 8px; }
 
         /* BT device detail sub-row */
         .bt-detail-row {

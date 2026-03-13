@@ -165,6 +165,7 @@ Individual volume sliders follow the same routing logic as the group slider: whe
 
 | Button | Action |
 |---|---|
+| **ℹ BT Info** | Opens a modal with detailed Bluetooth device information (MAC, adapter, sink name, UUIDs). Includes a **Copy** button for easy pasting into bug reports |
 | **🔄 Reconnect** | Force Bluetooth disconnect + reconnect without re-pairing |
 | **🔗 Re-pair** | Full pairing sequence (~25 s); put the device in pairing mode first |
 | **🔓 Release** | Disable BT management for this device; bridge stops reconnecting |
@@ -211,7 +212,7 @@ A table of detected and manually added Bluetooth adapters:
 | **Name** | Editable friendly name |
 | **Status dot** | Green = adapter present and active |
 
-Use **↺ Refresh** to re-detect adapters. Use **+ Add** to manually add an adapter by MAC (useful if the adapter is not detected automatically).
+Use **↺ Refresh** to re-detect adapters. Use **+ Add** to manually add an adapter by MAC (useful if the adapter is not detected automatically). Use **↻ Reboot** to power-cycle a specific adapter (`hciconfig down/up`) without restarting the entire bridge.
 
 ### Bluetooth Devices
 
@@ -228,7 +229,7 @@ A row per configured speaker:
 | **Delay (ms)** | `static_delay_ms` — negative value compensates A2DP buffer latency (typical: `-500` to `-700`) |
 | **×** | Remove this device |
 
-**+ Add Device** appends a blank row. **🔍 Scan** runs a ~10 s background Bluetooth scan across all adapters and shows discovered devices. Click a result to populate a new row.
+**+ Add Device** appends a blank row. **🔍 Scan** runs a ~10 s background Bluetooth scan across all adapters and shows discovered devices. Click a result to populate a new row. After a scan completes, the Scan button shows a cooldown countdown before it can be pressed again.
 
 The **Already paired** box lists previously paired devices from bluetoothctl. Click **Add** to add one to the table without scanning.
 
@@ -258,6 +259,11 @@ The **🎵 Music Assistant** section in the Configuration panel:
 | **Advanced: manual JWT token** | Expandable `<details>` for Docker/LXC users — paste MA API URL and token manually. Create token in MA → Settings → Profile → Long-lived access tokens. |
 | **Route volume through MA** | When checked, volume changes go through MA API — keeps MA UI sliders in sync |
 | **Route mute through MA** | When checked, mute/unmute goes through MA API — keeps MA UI mute state in sync. When unchecked, mute is applied directly via PulseAudio |
+
+### Config Backup
+
+- **⬇ Download** — downloads the current `config.json` as an attachment with a timestamped filename (e.g. `config-2026-03-15T10-30-00.json`)
+- **⬆ Upload** — uploads a previously downloaded `config.json`. The file is validated as JSON before saving. Sensitive keys (`AUTH_PASSWORD_HASH`, `SECRET_KEY`, `MA_API_TOKEN`) are preserved from the current config and not overwritten by the upload.
 
 ### Save Actions
 

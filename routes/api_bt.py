@@ -239,34 +239,38 @@ def api_bt_remove():
     return jsonify({"ok": True, "mac": mac})
 
 
+def _get_bt_device_info(mac: str) -> dict:
+    """Run ``bluetoothctl info <mac>`` and return parsed dict."""
+    r = subprocess.run(
+        ["bluetoothctl"],
+        input=f"info {mac}\n",
+        capture_output=True,
+        text=True,
+        timeout=5,
+    )
+    lines = [_ANSI_RE.sub("", ln).strip() for ln in r.stdout.splitlines() if ln.strip()]
+    info: dict = {"mac": mac, "raw": lines}
+    for ln in lines:
+        if ":" not in ln:
+            continue
+        key, _, val = ln.partition(":")
+        key = key.strip()
+        val = val.strip()
+        k = key.lower().replace(" ", "_")
+        if k in ("name", "alias", "paired", "bonded", "trusted", "blocked", "connected", "class", "icon"):
+            info[k] = val
+    return info
+
+
 @bt_bp.route("/api/bt/info", methods=["POST"])
 def api_bt_info():
     """Return ``bluetoothctl info`` for a device."""
     data = request.get_json(silent=True) or {}
     mac = (data.get("mac") or "").strip().upper()
-    err = validate_mac(mac)
-    if err:
-        return err
+    if not validate_mac(mac):
+        return jsonify({"success": False, "error": "Invalid MAC"}), 400
     try:
-        r = subprocess.run(
-            ["bluetoothctl"],
-            input=f"info {mac}\n",
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        lines = [_ANSI_RE.sub("", ln).strip() for ln in r.stdout.splitlines() if ln.strip()]
-        info: dict = {"mac": mac, "raw": lines}
-        for ln in lines:
-            if ":" not in ln:
-                continue
-            key, _, val = ln.partition(":")
-            key = key.strip()
-            val = val.strip()
-            k = key.lower().replace(" ", "_")
-            if k in ("name", "alias", "paired", "bonded", "trusted", "blocked", "connected", "class", "icon"):
-                info[k] = val
-        return jsonify(info)
+        return jsonify(_get_bt_device_info(mac))
     except Exception as e:
         return jsonify({"mac": mac, "error": str(e)}), 500
 
@@ -276,9 +280,8 @@ def api_bt_disconnect():
     """Disconnect a BT device without removing it."""
     data = request.get_json(silent=True) or {}
     mac = (data.get("mac") or "").strip().upper()
-    err = validate_mac(mac)
-    if err:
-        return err
+    if not validate_mac(mac):
+        return jsonify({"success": False, "error": "Invalid MAC"}), 400
     try:
         r = subprocess.run(
             ["bluetoothctl"],
@@ -309,7 +312,12 @@ def api_bt_adapter_power():
             text=True,
             timeout=5,
         )
-        ok = "succeeded" in r.stdout.lower() or ("Changing power on" in r.stdout)
+        clean = _ANSI_RE.sub("", r.stdout).lower()
+        ok = (
+            "succeeded" in clean
+            or "changing power" in clean
+            or (("powered: yes" in clean) if power else ("powered: no" in clean))
+        )
         return jsonify({"ok": ok, "power": power})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
@@ -324,9 +332,8 @@ def api_bt_reset_reconnect():
     data = request.get_json(silent=True) or {}
     mac = (data.get("mac") or "").strip().upper()
     adapter = (data.get("adapter") or "").strip()
-    err = validate_mac(mac)
-    if err:
-        return err
+    if not validate_mac(mac):
+        return jsonify({"success": False, "error": "Invalid MAC"}), 400
     job_id = str(uuid.uuid4())
     create_scan_job(job_id)
     t = threading.Thread(
@@ -468,7 +475,8 @@ def api_bt_scan():
     if is_scan_running():
         return jsonify({"error": "A scan is already in progress"}), 409
     if time.monotonic() - _last_scan_completed < _SCAN_COOLDOWN:
-        return jsonify({"error": "Scan cooldown active, try again later"}), 429
+        remaining = int(_SCAN_COOLDOWN - (time.monotonic() - _last_scan_completed)) + 1
+        return jsonify({"error": "Scan cooldown active", "retry_after": remaining}), 429
     job_id = str(uuid.uuid4())
     create_scan_job(job_id)
     t = threading.Thread(target=_run_bt_scan, args=(job_id,), daemon=True, name=f"bt-scan-{job_id[:8]}")
@@ -682,9 +690,8 @@ def api_bt_pair_new():
     data = request.get_json() or {}
     mac = (data.get("mac") or "").strip().upper()
     adapter = (data.get("adapter") or "").strip()
-    err = validate_mac(mac)
-    if err:
-        return err
+    if not validate_mac(mac):
+        return jsonify({"success": False, "error": "Invalid MAC"}), 400
     job_id = str(uuid.uuid4())
     create_scan_job(job_id)
     t = threading.Thread(

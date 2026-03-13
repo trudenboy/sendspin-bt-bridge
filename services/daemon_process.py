@@ -206,7 +206,9 @@ async def _reanchor_watcher(status: dict, on_status_change, stop_event: asyncio.
 _STARTUP_UNMUTE_DELAY_S = 1.5
 
 
-async def _startup_unmute_watcher(status: dict, sink_name: str, stop_event: asyncio.Event, player_name: str) -> None:
+async def _startup_unmute_watcher(
+    status: dict, sink_name: str, stop_event: asyncio.Event, player_name: str, on_status_change=None
+) -> None:
     """Wait for audio to stabilize after startup, then unmute the PA sink.
 
     The sink is muted before BridgeDaemon starts to hide re-anchor clicks,
@@ -224,7 +226,7 @@ async def _startup_unmute_watcher(status: dict, sink_name: str, stop_event: asyn
     from services.pulse import amove_pid_sink_inputs, aset_sink_mute
 
     streamed = False
-    deadline = time.monotonic() + 60.0
+    deadline = time.monotonic() + 15.0
     while not stop_event.is_set() and time.monotonic() < deadline:
         await asyncio.sleep(0.5)
         if status.get("audio_streaming"):
@@ -251,6 +253,8 @@ async def _startup_unmute_watcher(status: dict, sink_name: str, stop_event: asyn
         if await aset_sink_mute(sink_name, False):
             _logger.info("[%s] Unmuted sink %s (startup complete)", player_name, sink_name)
             status["sink_muted"] = False
+            if on_status_change:
+                on_status_change()
         else:
             _logger.warning("[%s] Failed to unmute sink %s", player_name, sink_name)
     except Exception as exc:
@@ -463,7 +467,11 @@ async def _run(params: dict) -> None:
     watcher_task = asyncio.create_task(_reanchor_watcher(status, _on_status_change, stop_event))
     unmute_task = None
     if _startup_muted and bluetooth_sink_name:
-        unmute_task = asyncio.create_task(_startup_unmute_watcher(status, bluetooth_sink_name, stop_event, player_name))
+        unmute_task = asyncio.create_task(
+            _startup_unmute_watcher(
+                status, bluetooth_sink_name, stop_event, player_name, on_status_change=_on_status_change
+            )
+        )
 
     # Wait until stop command or daemon exits.
     # unmute_task is NOT in all_tasks — it's fire-and-forget so its completion

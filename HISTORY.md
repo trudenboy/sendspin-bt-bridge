@@ -2,7 +2,7 @@
 
 A history of the architectural and functional evolution of sendspin-bt-bridge — for readers familiar with Home Assistant, Music Assistant, and multiroom audio setups.
 
-**Period:** January 1 – March 13, 2026 · **Total commits:** ~920 · **Versions:** 1.0.0 → 2.30.0
+**Period:** January 1 – March 13, 2026 · **Total commits:** ~930 · **Versions:** 1.0.0 → 2.30.5
 
 ---
 
@@ -735,6 +735,24 @@ This is distinct from BT Release/Reclaim (`set_bt_management_enabled`), which on
 **Released → disabled persistence bug** (v2.29.0): on restart, the startup sync loop called `persist_device_enabled(name, bt_management_enabled)` for all clients. For "released" devices, `bt_management_enabled=False` was written as `enabled: false` to config.json, causing the device to be fully skipped on the next restart. Fixed: the sync loop now only writes `enabled=true` for non-released devices, preserving the distinction between "BT released" (loads but doesn't manage BT) and "globally disabled" (completely skipped).
 
 **Disable button** (v2.29.0): added `⛔ Disable` button to the device card actions row (after Release), calling `confirmDisableDevice()` with a confirmation dialog before toggling the device's enabled state via the existing `/api/device/enabled` endpoint.
+
+### Modals, config portability, and mute fix (v2.30.0 → v2.30.5)
+
+**BT Info modal** (v2.30.0): `showBtDeviceInfo()` previously called `bluetoothctl info <MAC>` and dumped the raw text output into a browser `alert()` — functional but ugly, unselectable, and inconsistent with the rest of the UI. Replaced with a styled modal dialog reusing the bugreport modal CSS classes (`.br-overlay`, `.br-modal`, accent header bar with ✕ close button). The raw output is rendered in a preformatted code block with a Copy button. The modal is keyboard-dismissible (Escape) and accessible.
+
+**BT adapter reboot** (v2.30.0): added a ↻ Reboot button next to each detected BT adapter in Configuration. The initial design was a pair of On/Off toggle buttons, but `BluetoothManager`'s reconnect loop automatically powers adapters back on after a power-off — making the Off button effectively useless. Settled on a single Reboot action (power off → 3 s delay → power on) with the button locked during the operation. This is the UI equivalent of `bluetoothctl power off && sleep 3 && bluetoothctl power on` — useful for recovering from stuck BT stacks without SSH access.
+
+**Scan cooldown countdown** (v2.30.1): the 30 s BT scan cooldown previously gave no feedback — the Scan button just returned a 429 with a generic message. Now the backend includes `retry_after` seconds in the 429 response body, and the frontend starts a visible countdown on the button label (`🔍 Scan (28s)` → `🔍 Scan (27s)` → ... → `🔍 Scan`). The countdown also kicks in on a rejected scan attempt so the user always sees how long to wait, even if they missed the original scan trigger.
+
+**Config download/upload** (v2.30.2): two new buttons in the Configuration section footer enable config portability. ⬇ Download saves the raw `config.json` with a timestamped filename (`{bridge_name}_SBB_Config_{YYYYMMDD_HHMMSS}.json`) — useful for backups before risky changes or for cloning a setup to another host. ⬆ Upload replaces the current config from a JSON file, but preserves security-sensitive keys (`AUTH_PASSWORD_HASH`, `SECRET_KEY`, `MA_ACCESS_TOKEN`, `MA_REFRESH_TOKEN`) from the running config — so uploading a backup from a different instance doesn't wipe credentials. The upload endpoint validates JSON structure, MAC address format, and port ranges before writing.
+
+**Mute indicator fix** (v2.30.3): after the smooth-restart work (v2.26.1), the `_startup_unmute_watcher` in `daemon_process.py` mutes the PA sink on subprocess startup (to hide re-anchor clicks), then unmutes after audio stabilises or after a timeout. Bug: after unmuting, the watcher set `status["sink_muted"] = False` but never called `_on_status_change()` to emit the updated status to the parent process via the JSON-line IPC. The parent kept the stale `sink_muted=True` from startup, so the web UI showed all players as muted indefinitely — the mute icon never cleared. Fixed by passing the `_on_status_change` callback to the watcher and calling it after unmute, which emits the corrected status to the parent and triggers an SSE push to the browser.
+
+**Startup unmute timeout reduced** (v2.30.3): the `_startup_unmute_watcher` timeout was reduced from 60 s to 15 s. The 60 s value was carried over from early development when BT audio setup was unreliable. In practice, idle players (not actively streaming) would sit in a muted state for a full minute after every restart before the watcher gave up and unmuted. 15 s is more than enough for audio to begin flowing if it's going to.
+
+**UI reorganisation** (v2.30.4): button ordering was inconsistent across sections — some had the primary action first, others had it last. Standardised: Adapters section: `+ Add Adapter` before `↺ Refresh`. Devices section: `+ Add Device` before `🔍 Scan`. Scan results: Add before Add & Pair (renamed from "Pair & Add" to match the actual operation order). Paired devices: Add button first, then action buttons (BT Info, Reset & Reconnect, ✕) grouped on the right with CSS `:has()` hover isolation so hovering one button doesn't highlight the whole row. Config footer: left group (Save, Save & Restart), right group (⬇ Download, ⬆ Upload).
+
+**BT device info in bug report** (v2.30.5): `_collect_bt_device_info()` now runs `bluetoothctl info <MAC>` for each configured device and appends the paired/trusted/connected/bonded/blocked status flags to the bug report diagnostic text. Previously, debugging BT issues from a bug report required asking the user to SSH in and run `bluetoothctl info` manually — the report now includes everything needed for remote triage.
 
 ---
 

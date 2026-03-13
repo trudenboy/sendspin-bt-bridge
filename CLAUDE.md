@@ -27,7 +27,7 @@ Unit tests: `pytest` (see `tests/`). 187 tests across 18 files. Manual testing v
 
 CI/CD builds multi-platform Docker images (`linux/amd64`, `linux/arm64`) to `ghcr.io/trudenboy/sendspin-bt-bridge` on `v*` tag push. Automatically syncs `ha-addon/config.yaml` version from `VERSION` in `config.py` before the build.
 
-## Architecture (v2.28.2)
+## Architecture (v2.30.5)
 
 **Subprocess isolation**: each Bluetooth speaker runs as a dedicated Python subprocess (`services/daemon_process.py`) with `PULSE_SINK=<bt_sink_name>` in env. This gives every speaker its own PulseAudio context → correct audio routing from the first sample, no `move-sink-input` needed.
 
@@ -58,11 +58,11 @@ IPC: subprocess→parent via JSON lines on stdout; parent→subprocess via JSON 
 - `CONFIG_FILE: Path` — single source of truth for config path (replaces old `_CONFIG_PATH` string)
 - `_config_lock` (threading.Lock shared across modules)
 - `load_config()`, `_player_id_from_mac()`, `save_device_volume()` (public; `_save_device_volume` alias retained for compatibility)
-- `VERSION = "2.28.2"`, `BUILD_DATE = "2026-03-13"`
+- `VERSION = "2.30.5"`, `BUILD_DATE = "2026-03-13"`
 
 **`services/` module:**
 - `bridge_daemon.py` — `BridgeDaemon` subclass. Runs inside each subprocess. Handles `on_status_change` callbacks, stream events. `_sink_routed` flag prevents re-anchor feedback loop after PA rescue-streams correction.
-- `daemon_process.py` — subprocess entry point. Reads JSON args from argv, sets up `BridgeDaemon`, emits status as JSON to stdout, reads commands from stdin.
+- `daemon_process.py` — subprocess entry point. Reads JSON args from argv, sets up `BridgeDaemon`, emits status as JSON to stdout, reads commands from stdin. `_startup_unmute_watcher` accepts `on_status_change` callback and calls it after unmuting (fixes stale mute indicators); startup unmute timeout is 15 s (was 60 s).
 - `bluetooth.py` — BT helpers: `bt_remove_device()`, `persist_device_enabled()`, `persist_device_released()` (sync to config.json + options.json), `is_audio_device()`, `_match_player_name()` — handles bridge name suffix matching for config persistence
 - `pulse.py` — PulseAudio async helpers: `afind_sink_for_mac()`, `amove_pid_sink_inputs()` (corrects streams after PA module-rescue-streams moves them on BT reconnect), `_PULSECTL_AVAILABLE` flag
 - `ma_discovery.py` — mDNS-based Music Assistant server discovery
@@ -72,10 +72,10 @@ IPC: subprocess→parent via JSON lines on stdout; parent→subprocess via JSON 
 
 **`routes/` module (Flask blueprints):**
 - `api.py` — core volume/mute/pause/restart endpoints (6 routes), `_schedule_volume_persist()` (1 s debounce)
-- `api_bt.py` — BT scan/pair/remove/reconnect/enable/disable/device/enabled/scan/result (9 routes)
+- `api_bt.py` — BT scan/pair/remove/reconnect/enable/disable/device/enabled/scan/result (9 routes). `_get_bt_device_info()` helper extracted from inline code. ANSI stripping in adapter power success detection.
 - `api_ma.py` — MA integration, OAuth sign-in, groups/nowplaying/queue control (10 routes)
-- `api_config.py` — configuration CRUD, adapter management, logs/download, update/check, update/info, update/apply (9 routes)
-- `api_status.py` — status/diagnostics/version/logs/diagnostics/download/bugreport (8 routes)
+- `api_config.py` — configuration CRUD, adapter management, logs/download, update/check, update/info, update/apply, config/download (raw config.json with timestamped filename), config/upload (upload config.json replacing current, preserves sensitive keys) (11 routes)
+- `api_status.py` — status/diagnostics/version/logs/diagnostics/download/bugreport (8 routes). `_collect_bt_device_info()` helper for bugreport BT device info.
 - `views.py` — HTML page renders
 - `auth.py` — optional web UI password protection (PBKDF2-SHA256); HA login_flow with 2FA/TOTP support; brute-force lockout (5 attempts / 5 min)
 
@@ -94,6 +94,8 @@ IPC: subprocess→parent via JSON lines on stdout; parent→subprocess via JSON 
 - Preserves runtime state from previous config (LAST_VOLUMES, AUTH_PASSWORD_HASH, SECRET_KEY)
 
 **Config persistence:** `/config/config.json` (mounted Docker volume at `/etc/docker/Sendspin`). Changes via the web UI require a container restart to take effect.
+
+**`static/app.js`** — frontend logic: `_showBtInfoModal()` (BT device info modal), `rebootAdapter()` (adapter power cycle), `_startScanCooldown()` (scan button cooldown timer), `uploadConfig()` (config file upload).
 
 **Docs site:** `docs-site/` — Astro Starlight, deployed to GitHub Pages at `https://trudenboy.github.io/sendspin-bt-bridge`
 

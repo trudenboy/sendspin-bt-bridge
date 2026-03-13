@@ -597,6 +597,8 @@ def api_diagnostics():
 # /api/bugreport — assembled bug report with masked sensitive data
 # ---------------------------------------------------------------------------
 
+_ANSI_RE_STATUS = re.compile(r"\x1b\[[0-9;]*m")
+
 _MAC_RE = re.compile(
     r"([0-9A-Fa-f]{2}):([0-9A-Fa-f]{2}):([0-9A-Fa-f]{2}):([0-9A-Fa-f]{2}):([0-9A-Fa-f]{2}):([0-9A-Fa-f]{2})"
 )
@@ -774,6 +776,43 @@ def _collect_recent_logs(n: int = 100) -> list[str]:
         return []
 
 
+def _collect_bt_device_info() -> list[dict]:
+    """Run ``bluetoothctl info`` for every configured BT device."""
+    results: list[dict] = []
+    try:
+        cfg = load_config()
+    except Exception:
+        return results
+    devices = cfg.get("BLUETOOTH_DEVICES", [])
+    if not isinstance(devices, list):
+        return results
+    for dev in devices:
+        mac = dev.get("mac", "") if isinstance(dev, dict) else ""
+        if not mac:
+            continue
+        entry: dict = {"mac": mac, "name": dev.get("name", "?")}
+        try:
+            r = subprocess.run(
+                ["bluetoothctl"],
+                input=f"info {mac}\n",
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            lines = [_ANSI_RE_STATUS.sub("", ln).strip() for ln in r.stdout.splitlines() if ln.strip()]
+            for ln in lines:
+                if ":" not in ln:
+                    continue
+                key, _, val = ln.partition(":")
+                k = key.strip().lower().replace(" ", "_")
+                if k in ("paired", "bonded", "trusted", "blocked", "connected", "class", "icon"):
+                    entry[k] = val.strip()
+        except Exception as exc:
+            entry["error"] = str(exc)
+        results.append(entry)
+    return results
+
+
 @status_bp.route("/api/bugreport")
 def api_bugreport():
     """Assemble a bug report: short summary for URL + full file for download."""
@@ -787,6 +826,7 @@ def api_bugreport():
         config_info = _sanitized_config()
 
         log_lines = _collect_recent_logs(100)
+        bt_device_info = _collect_bt_device_info()
 
         # Detect runtime
         runtime = "unknown"
@@ -808,6 +848,7 @@ def api_bugreport():
             "environment": env,
             "diagnostics": diag,
             "subprocesses": subprocs,
+            "bt_device_info": bt_device_info,
             "config": config_info,
             "logs": log_lines,
         }
@@ -966,6 +1007,19 @@ def _build_full_text_report(
         for a in adapters:
             dflt = " (default)" if a.get("default") else ""
             full.append(f"  {a.get('id', '?')}  {a.get('mac', '?')}{dflt}")
+        full.append("")
+
+    # BT device info (bluetoothctl info per device)
+    bt_devs = masked.get("bt_device_info", [])
+    if bt_devs:
+        full.append("--- BT DEVICE INFO (bluetoothctl) ---")
+        for bd in bt_devs:
+            full.append(f"  [{bd.get('name', '?')}]  MAC: {bd.get('mac', '?')}")
+            for fld in ("paired", "trusted", "connected", "bonded", "blocked", "class", "icon"):
+                if fld in bd:
+                    full.append(f"    {fld:<12s}: {bd[fld]}")
+            if bd.get("error"):
+                full.append(f"    error: {bd['error']}")
         full.append("")
 
     # PA sinks

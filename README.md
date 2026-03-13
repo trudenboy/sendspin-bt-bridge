@@ -60,6 +60,7 @@ A Bluetooth bridge for [Music Assistant](https://www.music-assistant.io/) — co
 - **Churn isolation** — auto-disables BT management for devices that reconnect too often (`BT_CHURN_THRESHOLD`)
 - **Zombie playback watchdog** — auto-restarts subprocess if playing but no audio data for 15 s
 - **Keepalive silence** — optional periodic silence bursts to prevent BT speaker auto-off (`keepalive_interval`)
+- **Adapter power management** — reboot a BT adapter from the web UI
 
 ### 🎵 Music Assistant Integration
 - **Passwordless auth in addon mode** — one-click "Sign in with Home Assistant" creates a long-lived MA token via Ingress JSONRPC — no credentials needed
@@ -77,6 +78,9 @@ A Bluetooth bridge for [Music Assistant](https://www.music-assistant.io/) — co
 - **Diagnostics panel** — adapters, sinks, D-Bus, per-device state at a glance
 - **Log viewer** — browse / filter logs by severity with auto-refresh
 - **Configuration editor** — server address, devices, adapters, timezone — all editable in the UI
+- **Config backup & restore** — download / upload config JSON from the web UI
+- **BT device info modal** — view device details with one-click copy
+- **Scan cooldown countdown** — visual timer showing when the next BT scan is available
 
 ### 🔐 Security
 - **Password protection** — optional PBKDF2-SHA256 password for standalone mode

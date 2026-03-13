@@ -416,6 +416,26 @@ CORS preflight эндпоинт. Возвращает `204 No Content` с соо
 
 **Body:** JSON объект с полями конфигурации (см. раздел [Настройка](/sendspin-bt-bridge/ru/configuration/)).
 
+### `GET /api/config/download`
+
+Скачать текущий `config.json` как файл-вложение. Ответ содержит заголовок `Content-Disposition` с именем файла, включающим метку времени (например, `config-2026-03-15T10-30-00.json`).
+
+### `POST /api/config/upload`
+
+Загрузить файл `config.json`. Принимает `multipart/form-data` с полем `file`, содержащим JSON-конфигурацию.
+
+Загруженный файл проверяется как валидный JSON перед сохранением. Конфиденциальные ключи (`AUTH_PASSWORD_HASH`, `SECRET_KEY`, `MA_API_TOKEN`) сохраняются из текущей конфигурации и не перезаписываются загруженным файлом.
+
+**Ответ:**
+```json
+{ "success": true, "message": "Configuration uploaded successfully" }
+```
+
+**Ответ при ошибке (невалидный JSON):**
+```json
+{ "success": false, "error": "Invalid JSON in uploaded file" }
+```
+
 ## Примеры использования
 
 ```bash

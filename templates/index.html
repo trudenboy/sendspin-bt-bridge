@@ -134,8 +134,8 @@
                         <div id="adapters-table"></div>
                     </div>
                     <div class="bt-toolbar">
+                        <button type="button" class="btn btn-sm" onclick="addManualAdapterRow('','','')">+ Add Adapter</button>
                         <button type="button" class="btn btn-sm btn-refresh" onclick="loadBtAdapters()">&#x21BA; Refresh</button>
-                        <button type="button" class="btn btn-sm" onclick="addManualAdapterRow('','','')">+ Add</button>
                     </div>
                 </div>
 
@@ -150,10 +150,10 @@
                         <div id="bt-devices-table"></div>
                     </div>
                     <div class="bt-toolbar">
+                        <button type="button" id="add-dev-btn" onclick="addBtDeviceRow()" class="btn btn-sm">+ Add Device</button>
                         <button type="button" onclick="startBtScan()" class="btn btn-sm btn-scan" id="scan-btn">
                             &#128269; Scan
                         </button>
-                        <button type="button" id="add-dev-btn" onclick="addBtDeviceRow()" class="btn btn-sm">+ Add Device</button>
                         <span id="scan-status" class="scan-badge"></span>
                     </div>
                     <div id="paired-box" class="paired-box" style="display:none;">
@@ -339,16 +339,29 @@
 
         <!-- Static save buttons -->
         <div class="config-static-save">
-            <button type="button" class="btn btn-sm" onclick="document.getElementById('config-form').dispatchEvent(new Event('submit',{cancelable:true}))">Save</button>
-            <button type="button" class="btn btn-sm btn-restart" onclick="saveAndRestart()">Save &amp; Restart</button>
+            <div class="config-btn-group">
+                <button type="button" class="btn btn-sm" onclick="document.getElementById('config-form').dispatchEvent(new Event('submit',{cancelable:true}))">Save</button>
+                <button type="button" class="btn btn-sm btn-restart" onclick="saveAndRestart()">Save &amp; Restart</button>
+            </div>
+            <div class="config-btn-group">
+                <button type="button" class="btn btn-sm btn-download" onclick="window.location.href='/api/config/download'">⬇ Download</button>
+                <button type="button" class="btn btn-sm btn-upload" onclick="document.getElementById('config-upload-input').click()">⬆ Upload</button>
+            </div>
         </div>
+        <input type="file" id="config-upload-input" accept=".json,application/json" style="display:none" onchange="uploadConfig(this)">
     </details>
 
     <!-- Sticky save bar (shown when config is dirty) -->
     <div class="config-save-bar" id="config-save-bar">
         <span class="dirty-label">⚠ Unsaved changes</span>
-        <button type="button" class="btn btn-sm" onclick="document.getElementById('config-form').dispatchEvent(new Event('submit',{cancelable:true}))">Save</button>
-        <button type="button" class="btn btn-sm btn-restart" onclick="saveAndRestart()">Save &amp; Restart</button>
+        <div class="config-btn-group">
+            <button type="button" class="btn btn-sm" onclick="document.getElementById('config-form').dispatchEvent(new Event('submit',{cancelable:true}))">Save</button>
+            <button type="button" class="btn btn-sm btn-restart" onclick="saveAndRestart()">Save &amp; Restart</button>
+        </div>
+        <div class="config-btn-group" style="margin-left:auto">
+            <button type="button" class="btn btn-sm btn-download" onclick="window.location.href='/api/config/download'">⬇ Download</button>
+            <button type="button" class="btn btn-sm btn-upload" onclick="document.getElementById('config-upload-input').click()">⬆ Upload</button>
+        </div>
     </div>
 
     <!-- Diagnostics (collapsible) -->

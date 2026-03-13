@@ -1305,7 +1305,10 @@ function renderAdaptersTable() {
                 '<span class="mono">' + escHtml(a.mac) + '</span>' +
                 '<span>' + escHtml(a.name || '') + '</span>' +
                 '<span class="dot ' + (a.powered ? 'green' : 'grey') + '" title="' + (a.powered ? 'Powered on' : 'Powered off') + '">\u25cf</span>' +
-                '<span></span>';
+                '<span class="adapter-power-btns">' +
+                  '<button type="button" class="btn-bt-action btn-adp-reboot" title="Reboot adapter" data-adapter="' + escHtmlAttr(a.mac) + '">\u21bb Reboot</button>' +
+                '</span>';
+            row.querySelector('.btn-adp-reboot').addEventListener('click', function() { rebootAdapter(a.mac); });
             el.appendChild(row);
         }
     });
@@ -1334,6 +1337,33 @@ function addManualAdapterRow(id, mac, name) {
     var el = document.getElementById('adapters-table');
     if (!el) return;
     el.appendChild(buildManualRow(id || '', mac || '', name || ''));
+}
+
+function rebootAdapter(adapterMac) {
+    var btn = document.querySelector('.btn-adp-reboot[data-adapter="' + adapterMac + '"]');
+    if (btn) { btn.disabled = true; btn.textContent = '\u21bb Rebooting\u2026'; }
+    fetch('/api/bt/adapter/power', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({adapter: adapterMac, power: false})
+    })
+    .then(function() {
+        return new Promise(function(resolve) { setTimeout(resolve, 3000); });
+    })
+    .then(function() {
+        return fetch('/api/bt/adapter/power', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({adapter: adapterMac, power: true})
+        });
+    })
+    .then(function(r) { return r.json(); })
+    .then(function() {
+        if (btn) { btn.disabled = false; btn.textContent = '\u21bb Reboot'; }
+    })
+    .catch(function() {
+        if (btn) { btn.disabled = false; btn.textContent = '\u21bb Reboot'; }
+    });
 }
 
 function syncManualAdapters() {
@@ -1558,6 +1588,13 @@ async function startBtScan() {
     try {
         var resp = await fetch(API_BASE + '/api/bt/scan', { method: 'POST' });
         var data = await resp.json();
+
+        if (resp.status === 429 && data.retry_after) {
+            _startScanCooldown(btn, data.retry_after);
+            status.textContent = '';
+            return;
+        }
+
         var jobId = data.job_id;
         if (!jobId) { throw new Error(data.error || 'No job_id returned'); }
 
@@ -1586,26 +1623,25 @@ async function startBtScan() {
             status.textContent = 'Found ' + devices.length + ' device(s)';
             listDiv.innerHTML = devices.map(function(d, i) {
                 return '<div class="scan-result-item" data-scan-idx="' + i + '">' +
-                    '<span class="scan-result-mac">' + escHtml(d.mac) + '</span>' +
-                    '<span class="scan-result-name">' + escHtml(d.name) + '</span>' +
-                    '<button type="button" class="scan-pair-btn" data-pair-idx="' + i + '" style="padding:3px 10px;' +
-                        'background:#28a745;color:white;border:none;border-radius:4px;' +
-                        'cursor:pointer;font-size:12px;" title="Pair, trust, and add to config">Pair & Add</button>' +
-                    '<button type="button" style="padding:3px 10px;' +
+                    '<button type="button" class="scan-add-btn" style="padding:3px 10px;' +
                         'background:var(--primary-color);color:white;border:none;border-radius:4px;' +
                         'cursor:pointer;font-size:12px;" title="Add to config without pairing now">Add</button>' +
+                    '<button type="button" class="scan-pair-btn" data-pair-idx="' + i + '" style="padding:3px 10px;' +
+                        'background:#28a745;color:white;border:none;border-radius:4px;' +
+                        'cursor:pointer;font-size:12px;" title="Pair, trust, and add to config">Add & Pair</button>' +
+                    '<span class="scan-result-mac">' + escHtml(d.mac) + '</span>' +
+                    '<span class="scan-result-name">' + escHtml(d.name) + '</span>' +
                     '</div>';
             }).join('');
-            // "Add" button — last button in each row
+            // "Add" button
             listDiv.querySelectorAll('[data-scan-idx]').forEach(function(row) {
-                var addBtn = row.querySelectorAll('button')[1];
-                if (addBtn) addBtn.addEventListener('click', function(e) {
+                row.querySelector('.scan-add-btn').addEventListener('click', function(e) {
                     e.stopPropagation();
                     var d = devices[parseInt(row.dataset.scanIdx)];
                     addFromScan(d.mac, d.name, d.adapter);
                 });
             });
-            // "Pair & Add" button
+            // "Add & Pair" button
             listDiv.querySelectorAll('.scan-pair-btn').forEach(function(btn) {
                 btn.addEventListener('click', function(e) {
                     e.stopPropagation();
@@ -1615,11 +1651,30 @@ async function startBtScan() {
             });
             box.style.display = 'block';
         }
+        _startScanCooldown(btn, 30);
     } catch (err) {
         status.textContent = 'Scan failed: ' + err.message;
-    } finally {
         btn.disabled = false;
     }
+}
+
+var _scanCooldownTimer = null;
+function _startScanCooldown(btn, seconds) {
+    if (_scanCooldownTimer) clearInterval(_scanCooldownTimer);
+    var remaining = seconds;
+    btn.disabled = true;
+    btn.innerHTML = '&#128269; Scan (' + remaining + 's)';
+    _scanCooldownTimer = setInterval(function() {
+        remaining--;
+        if (remaining <= 0) {
+            clearInterval(_scanCooldownTimer);
+            _scanCooldownTimer = null;
+            btn.disabled = false;
+            btn.innerHTML = '&#128269; Scan';
+        } else {
+            btn.innerHTML = '&#128269; Scan (' + remaining + 's)';
+        }
+    }, 1000);
 }
 
 async function pairAndAdd(mac, name, adapter, btnEl) {
@@ -1655,13 +1710,13 @@ async function pairAndAdd(mac, name, adapter, btnEl) {
             btnEl.textContent = '\u2717 Failed';
             btnEl.style.background = '#dc3545';
             btnEl.style.opacity = '1';
-            setTimeout(function() { btnEl.textContent = 'Pair & Add'; btnEl.disabled = false; btnEl.style.background = '#28a745'; }, 3000);
+            setTimeout(function() { btnEl.textContent = 'Add & Pair'; btnEl.disabled = false; btnEl.style.background = '#28a745'; }, 3000);
         }
     } catch (err) {
         btnEl.textContent = 'Error';
         btnEl.style.background = '#dc3545';
         btnEl.style.opacity = '1';
-        setTimeout(function() { btnEl.textContent = 'Pair & Add'; btnEl.disabled = false; btnEl.style.background = '#28a745'; }, 3000);
+        setTimeout(function() { btnEl.textContent = 'Add & Pair'; btnEl.disabled = false; btnEl.style.background = '#28a745'; }, 3000);
         alert('Pair failed: ' + err.message);
     }
 }
@@ -1761,10 +1816,66 @@ async function showBtDeviceInfo(mac) {
         if (info['class']) lines.push('Class: ' + info['class']);
         if (info.icon) lines.push('Icon: ' + info.icon);
         if (info.error) lines.push('\nError: ' + info.error);
-        alert(lines.join('\n') || 'No info available for ' + mac);
+        var text = lines.join('\n') || 'No info available for ' + mac;
+        _showBtInfoModal(info.name || mac, text);
     } catch (err) {
-        alert('Failed to get info: ' + err.message);
+        showToast('Failed to get info: ' + err.message, 'error');
     }
+}
+
+function _showBtInfoModal(title, text) {
+    var overlay = document.createElement('div');
+    overlay.className = 'bugreport-overlay';
+    overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
+
+    var modal = document.createElement('div');
+    modal.className = 'bugreport-modal';
+    modal.style.maxWidth = '440px';
+
+    var header = document.createElement('div');
+    header.className = 'bugreport-header';
+    header.innerHTML =
+        '<span class="bugreport-header-title">\u2139\uFE0F ' + escHtml(title) + '</span>';
+    var closeX = document.createElement('button');
+    closeX.className = 'bugreport-close';
+    closeX.innerHTML = '\u00d7';
+    closeX.title = 'Close';
+    closeX.onclick = function() { overlay.remove(); };
+    header.appendChild(closeX);
+    modal.appendChild(header);
+
+    var body = document.createElement('div');
+    body.className = 'bugreport-body';
+    var pre = document.createElement('pre');
+    pre.style.cssText = 'margin:0;white-space:pre-wrap;word-break:break-all;font-size:13px;line-height:1.5';
+    pre.textContent = text;
+    body.appendChild(pre);
+    modal.appendChild(body);
+
+    var footer = document.createElement('div');
+    footer.className = 'bugreport-footer';
+
+    var copyBtn = document.createElement('button');
+    copyBtn.className = 'bugreport-btn secondary';
+    copyBtn.textContent = '\uD83D\uDCCB Copy';
+    copyBtn.onclick = function() {
+        _copyToClipboard(text).then(function() {
+            showToast('Copied to clipboard', 'info');
+        }, function() {
+            showToast('Could not copy', 'error');
+        });
+    };
+    footer.appendChild(copyBtn);
+
+    var closeBtn = document.createElement('button');
+    closeBtn.className = 'bugreport-btn primary';
+    closeBtn.textContent = 'Close';
+    closeBtn.onclick = function() { overlay.remove(); };
+    footer.appendChild(closeBtn);
+
+    modal.appendChild(footer);
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
 }
 
 async function loadPairedDevices() {
@@ -1807,20 +1918,22 @@ async function loadPairedDevices() {
             // Replace raw RSSI-only strings with a friendlier label
             var displayName = /^RSSI:/i.test(d.name) ? 'Unknown device' : d.name;
             return '<div class="scan-result-item" data-paired-idx="' + idx + '">' +
-                '<span class="scan-result-mac">' + escHtml(d.mac) + '</span>' +
-                '<span class="scan-result-name">' + escHtml(displayName) + '</span>' +
-                '<button type="button" class="paired-reset-btn" style="padding:3px 10px;' +
-                    'background:#e67e22;color:white;border:none;border-radius:4px;' +
-                    'cursor:pointer;font-size:12px;" title="Remove, re-pair and connect from scratch">Reset & Reconnect</button>' +
-                '<button type="button" class="paired-info-btn" style="padding:3px 8px;' +
-                    'background:transparent;color:var(--primary-color);border:1px solid var(--primary-color);' +
-                    'border-radius:4px;cursor:pointer;font-size:12px;" title="Show BT device info">ℹ</button>' +
                 '<button type="button" class="paired-add-btn" style="padding:3px 10px;' +
                     'background:var(--primary-color);color:white;border:none;border-radius:4px;' +
                     'cursor:pointer;font-size:12px;">Add</button>' +
+                '<span class="scan-result-mac">' + escHtml(d.mac) + '</span>' +
+                '<span class="scan-result-name">' + escHtml(displayName) + '</span>' +
+                '<span class="paired-actions" onclick="event.stopPropagation()">' +
+                '<button type="button" class="paired-info-btn" style="padding:3px 8px;' +
+                    'background:transparent;color:var(--primary-color);border:1px solid var(--primary-color);' +
+                    'border-radius:4px;cursor:pointer;font-size:12px;" title="Show BT device info">BT Info</button>' +
+                '<button type="button" class="paired-reset-btn" style="padding:3px 10px;' +
+                    'background:#e67e22;color:white;border:none;border-radius:4px;' +
+                    'cursor:pointer;font-size:12px;" title="Remove, re-pair and connect from scratch">Reset & Reconnect</button>' +
                 '<button type="button" class="paired-remove-btn" style="padding:3px 8px;' +
                     'background:transparent;color:var(--secondary-text-color);border:1px solid var(--divider-color);' +
                     'border-radius:4px;cursor:pointer;font-size:12px;" title="Remove from BT stack">✕</button>' +
+                '</span>' +
                 '</div>';
         }).join('');
         listDiv.querySelectorAll('[data-paired-idx]').forEach(function(row) {
@@ -2458,6 +2571,27 @@ function _restartProgressHtml(step, totalSteps, message, elapsed) {
         '<span>' + message + '</span>' + elapsedHtml +
         '</div>' +
         '<div class="restart-progress-bar"><div class="restart-progress-fill" style="width:' + pct + '%"></div></div>';
+}
+
+async function uploadConfig(input) {
+    var file = input.files && input.files[0];
+    input.value = '';  // reset so same file can be re-selected
+    if (!file) return;
+    if (!confirm('Upload ' + file.name + ' and replace the current configuration?\nSensitive keys (passwords, tokens) will be preserved from the current config.\nA restart will be required to apply changes.')) return;
+    var form = new FormData();
+    form.append('file', file);
+    try {
+        var resp = await fetch(API_BASE + '/api/config/upload', {method: 'POST', body: form});
+        var data = await resp.json();
+        if (!resp.ok) {
+            alert('Upload failed: ' + (data.error || resp.statusText));
+            return;
+        }
+        alert('Config uploaded successfully. Restart to apply.');
+        location.reload();
+    } catch (e) {
+        alert('Upload error: ' + e.message);
+    }
 }
 
 async function saveAndRestart() {

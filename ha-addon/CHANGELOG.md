@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.30.5] - 2026-03-13
+
+### Added
+- BT Info modal with Copy button (replaces plain alert)
+- Adapter reboot button (↻ Reboot)
+- Scan cooldown countdown timer on Scan button
+- Config download/upload with timestamped filenames and secret preservation
+- BT device info (paired/trusted/connected) in bug reports
+
+### Fixed
+- Mute indicator stuck after startup unmute (status update not emitted)
+- Startup unmute timeout reduced from 60s to 15s
+- ANSI escape codes in adapter power command output
+
+### Changed
+- Reorganized button layouts in Adapters, Devices, scan results, and config sections
+- Paired devices actions grouped with hover isolation
+- Renamed "Pair & Add" to "Add & Pair"
+
 ## [2.30.0] - 2026-03-13
 
 ### Added
