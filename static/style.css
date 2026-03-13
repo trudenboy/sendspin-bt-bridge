@@ -68,8 +68,9 @@
         .header h1 { color: var(--app-header-text-color); font-size: 24px; margin-bottom: 0; }
         .header-version {
             font-size: 13px; color: var(--app-header-text-color); opacity: 0.9;
-            cursor: default;
+            text-decoration: none; cursor: pointer;
         }
+        .header-version:hover { opacity: 1; text-decoration: underline; }
         .update-badge-link {
             font-size: 12px; text-decoration: none;
             border-radius: 12px; padding: 2px 10px; white-space: nowrap;
