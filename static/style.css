@@ -636,29 +636,32 @@
         .device-card:hover .group-badge.hover-only,
         .device-card:focus-within .group-badge.hover-only { display: inline-block !important; }
 
-        /* Equalizer animation */ (MA-style) — shown when audio data is actually streaming */
+        /* Equalizer animation (MA-style) — shown when audio data is actually streaming */
         .eq-bars {
             display: none;
             align-items: flex-end;
             gap: 2px;
             height: 14px;
+            flex-shrink: 0;
         }
         .eq-bars.active { display: flex; }
         .eq-bars.stale { display: flex; }
         .eq-bars.stale .eq-bar {
             background: #e53935;
             animation: none;
-            height: 8px;
+            transform: scaleY(1);
             opacity: 0.7;
         }
-        .eq-bars.stale .eq-bar:nth-child(1) { height: 5px; }
-        .eq-bars.stale .eq-bar:nth-child(2) { height: 10px; }
-        .eq-bars.stale .eq-bar:nth-child(3) { height: 7px; }
-        .eq-bars.stale .eq-bar:nth-child(4) { height: 12px; }
+        .eq-bars.stale .eq-bar:nth-child(1) { transform: scaleY(0.36); }
+        .eq-bars.stale .eq-bar:nth-child(2) { transform: scaleY(0.71); }
+        .eq-bars.stale .eq-bar:nth-child(3) { transform: scaleY(0.50); }
+        .eq-bars.stale .eq-bar:nth-child(4) { transform: scaleY(0.86); }
         .eq-bar {
             width: 3px;
+            height: 14px;
             border-radius: 1px;
             background: var(--primary-color);
+            transform-origin: bottom;
             animation: eq-bounce 0.8s ease-in-out infinite alternate;
         }
         .eq-bar:nth-child(1) { animation-duration: 0.55s; animation-delay: 0s; }
@@ -666,8 +669,8 @@
         .eq-bar:nth-child(3) { animation-duration: 0.48s; animation-delay: 0.05s; }
         .eq-bar:nth-child(4) { animation-duration: 0.65s; animation-delay: 0.18s; }
         @keyframes eq-bounce {
-            0%   { height: 3px;  opacity: 0.6; }
-            100% { height: 14px; opacity: 1.0; }
+            0%   { transform: scaleY(0.21); opacity: 0.6; }
+            100% { transform: scaleY(1.0);  opacity: 1.0; }
         }
 
         /* Config section */
