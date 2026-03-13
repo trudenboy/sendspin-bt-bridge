@@ -1207,7 +1207,7 @@ async function btToggleManagement(i) {
     setTimeout(function() { if (status) status.textContent = ''; }, 4000);
 }
 
-// ---- Device enabled toggle (used by config checkbox) ----
+// ---- Device enabled toggle (used by dashboard Disable button) ----
 
 async function toggleDeviceEnabled(playerName, enabled) {
     try {
@@ -1369,7 +1369,7 @@ function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabl
     var kaVal = (keepaliveInterval !== undefined && keepaliveInterval !== null && keepaliveInterval !== '') ? parseInt(keepaliveInterval, 10) : 0;
     if (kaVal > 0 && kaVal < 30) kaVal = 30;
     row.innerHTML =
-        '<input type="checkbox" class="bt-enabled" title="Enable/disable device"' + (isEnabled ? ' checked' : '') + '>' +
+        '<input type="checkbox" class="bt-enabled" title="Device enabled state (toggle from dashboard card)" disabled' + (isEnabled ? ' checked' : '') + '>' +
         '<button type="button" class="bt-expand-btn" title="Show advanced fields">&#9654;</button>' +
         '<input type="text" placeholder="Player Name" class="bt-name" value="' +
             escHtmlAttr(name || '') + '">' +
@@ -1401,12 +1401,6 @@ function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabl
 
     row.querySelector('.btn-remove-dev').addEventListener('click', function() {
         wrap.remove();
-        _setConfigDirty(true);
-    });
-    row.querySelector('.bt-enabled').addEventListener('change', function() {
-        var pName = row.querySelector('.bt-name').value.trim();
-        var checked = this.checked;
-        if (pName) toggleDeviceEnabled(pName, checked);
         _setConfigDirty(true);
     });
     row.querySelector('.bt-mac').addEventListener('input', function() {
