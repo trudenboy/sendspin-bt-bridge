@@ -788,32 +788,35 @@ function escHtml(s) {
         .replace(/'/g, '&#39;');
 }
 
+function _isErrorLevel(line) {
+    if (!line || typeof line !== 'string') return false;
+    var u = line.toUpperCase();
+    return u.indexOf(' - ERROR - ') !== -1 || u.indexOf(' - CRITICAL - ') !== -1;
+}
+
 function getLogClass(line) {
     if (!line || typeof line !== 'string') return '';
     var u = line.toUpperCase();
-    if (u.indexOf('ERROR') !== -1 || u.indexOf('CRITICAL') !== -1) return 'log-error';
-    if (u.indexOf('WARNING') !== -1 || u.indexOf('WARN') !== -1)   return 'log-warning';
-    if (u.indexOf(' INFO ') !== -1  || u.indexOf(' INFO\t') !== -1) return 'log-info';
-    if (u.indexOf('DEBUG') !== -1) return 'log-debug';
+    if (u.indexOf(' - ERROR - ') !== -1 || u.indexOf(' - CRITICAL - ') !== -1) return 'log-error';
+    if (u.indexOf(' - WARNING - ') !== -1) return 'log-warning';
+    if (u.indexOf(' - INFO - ') !== -1)    return 'log-info';
+    if (u.indexOf(' - DEBUG - ') !== -1)   return 'log-debug';
     return '';
 }
 
 function renderLogs() {
     var filtered = allLogs;
     if (currentLogLevel === 'error') {
-        filtered = allLogs.filter(function(l) {
-            var u = l.toUpperCase();
-            return u.indexOf('ERROR') !== -1 || u.indexOf('CRITICAL') !== -1;
-        });
+        filtered = allLogs.filter(function(l) { return _isErrorLevel(l); });
     } else if (currentLogLevel === 'warning') {
         filtered = allLogs.filter(function(l) {
             var u = l.toUpperCase();
-            return u.indexOf('WARNING') !== -1 || u.indexOf('WARN') !== -1;
+            return u.indexOf(' - WARNING - ') !== -1 || _isErrorLevel(l);
         });
     } else if (currentLogLevel === 'info') {
         filtered = allLogs.filter(function(l) {
             var u = l.toUpperCase();
-            return u.indexOf(' INFO ') !== -1 || u.indexOf(' INFO\t') !== -1;
+            return u.indexOf(' - INFO - ') !== -1 || u.indexOf(' - WARNING - ') !== -1 || _isErrorLevel(l);
         });
     }
     var container = document.getElementById('logs');
@@ -825,10 +828,7 @@ function renderLogs() {
     var reportLink = document.getElementById('report-link');
     if (reportLink) {
         var tail = allLogs.slice(-20);
-        var hasErr = tail.some(function(l) {
-            var u = l.toUpperCase();
-            return u.indexOf('ERROR') !== -1 || u.indexOf('CRITICAL') !== -1;
-        });
+        var hasErr = tail.some(function(l) { return _isErrorLevel(l); });
         reportLink.classList.toggle('has-errors', hasErr);
         reportLink.title = hasErr ? 'Recent errors detected — click to report' : 'Submit a bug report';
     }
