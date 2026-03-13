@@ -74,6 +74,7 @@ class DeviceStatus:
     current_artist: str | None = None
     volume: int = 100
     muted: bool = False
+    sink_muted: bool = False
     audio_format: str | None = None
     reanchor_count: int = 0
     last_sync_error_ms: float | None = None
@@ -458,6 +459,7 @@ class SendspinClient:
                 "audio_streaming",
                 "volume",
                 "muted",
+                "sink_muted",
                 "reanchoring",
                 "reanchor_count",
                 "last_sync_error_ms",

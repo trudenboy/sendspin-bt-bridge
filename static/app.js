@@ -687,19 +687,25 @@ function populateDeviceCard(i, dev) {
     }
 
     // Mute button — attach handler once, update icon on every poll
+    // Effective mute = logical mute OR PA sink muted by startup logic
     var muteBtn = document.getElementById('dmute-' + i);
     if (muteBtn) {
-        muteBtn.textContent = dev.muted ? '\uD83D\uDD07' : '\uD83D\uDD08';
-        muteBtn.title = dev.muted ? 'Unmute' : (hasSink ? 'Mute' : 'Audio sink not configured');
-        muteBtn.classList.toggle('muted', !!dev.muted);
+        var effectiveMuted = !!dev.muted || !!dev.sink_muted;
+        muteBtn.textContent = effectiveMuted ? '\uD83D\uDD07' : '\uD83D\uDD08';
+        muteBtn.title = effectiveMuted
+            ? (dev.sink_muted && !dev.muted ? 'Unmute (PA sink muted)' : 'Unmute')
+            : (hasSink ? 'Mute' : 'Audio sink not configured');
+        muteBtn.classList.toggle('muted', effectiveMuted);
         muteBtn.disabled = !hasSink;
         muteBtn.style.opacity = hasSink ? '' : '0.35';
         if (!muteBtn._handlerSet) {
             muteBtn._handlerSet = true;
             muteBtn.addEventListener('click', function() {
                 var dev = lastDevices && lastDevices[i]; if (!dev) return;
-                var desired = !dev.muted;
+                var effMuted = !!dev.muted || !!dev.sink_muted;
+                var desired = !effMuted;
                 dev.muted = desired;
+                dev.sink_muted = false;
                 // Protect optimistic state from SSE overwrite for 2 seconds
                 var pn = dev.player_name || '__default__';
                 _muteDebounce[pn] = Date.now();

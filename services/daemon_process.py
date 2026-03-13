@@ -245,12 +245,12 @@ async def _startup_unmute_watcher(status: dict, sink_name: str, stop_event: asyn
         return  # daemon shutting down, don't unmute
 
     if not streamed:
-        _logger.debug("[%s] Startup unmute timeout — no audio streamed, skipping unmute", player_name)
-        return
+        _logger.info("[%s] Startup unmute timeout — no audio streamed, unmuting anyway", player_name)
 
     try:
         if await aset_sink_mute(sink_name, False):
             _logger.info("[%s] Unmuted sink %s (startup complete)", player_name, sink_name)
+            status["sink_muted"] = False
         else:
             _logger.warning("[%s] Failed to unmute sink %s", player_name, sink_name)
     except Exception as exc:
@@ -418,6 +418,7 @@ async def _run(params: dict) -> None:
         "last_reanchor_at": None,
         "last_sync_error_ms": None,
         "audio_streaming": False,
+        "sink_muted": False,
         "track_progress_ms": None,
         "track_duration_ms": None,
     }
@@ -451,7 +452,9 @@ async def _run(params: dict) -> None:
 
             if await aset_sink_mute(bluetooth_sink_name, True):
                 _startup_muted = True
+                status["sink_muted"] = True
                 logger.info("[%s] Muted sink %s during startup", player_name, bluetooth_sink_name)
+                _on_status_change()
         except Exception as exc:
             logger.debug("[%s] Could not mute sink on startup: %s", player_name, exc)
 
