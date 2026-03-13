@@ -819,6 +819,17 @@ function renderLogs() {
         return '<div class="log-line ' + getLogClass(line) + '">' + escHtml(line) + '</div>';
     }).join('');
     container.scrollTop = container.scrollHeight;
+    // Highlight Report link if recent logs contain errors
+    var reportLink = document.getElementById('report-link');
+    if (reportLink) {
+        var tail = allLogs.slice(-20);
+        var hasErr = tail.some(function(l) {
+            var u = l.toUpperCase();
+            return u.indexOf('ERROR') !== -1 || u.indexOf('CRITICAL') !== -1;
+        });
+        reportLink.classList.toggle('has-errors', hasErr);
+        reportLink.title = hasErr ? 'Recent errors detected — click to report' : 'Submit a bug report';
+    }
 }
 
 function setLogLevel(level) {

@@ -288,6 +288,8 @@
             padding: 3px 8px; border-radius: 4px;
         }
         .header-link:hover { color: #fff; background: rgba(255,255,255,0.1); }
+        .header-link.has-errors { color: #f59e0b; }
+        .header-link.has-errors svg { stroke: #f59e0b; }
         .header-row2 {
             display: flex; justify-content: space-between; align-items: center;
             margin-top: 6px; flex-wrap: wrap; gap: 4px 16px;
