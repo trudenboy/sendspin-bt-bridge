@@ -239,6 +239,229 @@ def api_bt_remove():
     return jsonify({"ok": True, "mac": mac})
 
 
+@bt_bp.route("/api/bt/info", methods=["POST"])
+def api_bt_info():
+    """Return ``bluetoothctl info`` for a device."""
+    data = request.get_json(silent=True) or {}
+    mac = (data.get("mac") or "").strip().upper()
+    err = validate_mac(mac)
+    if err:
+        return err
+    try:
+        r = subprocess.run(
+            ["bluetoothctl"],
+            input=f"info {mac}\n",
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        lines = [_ANSI_RE.sub("", ln).strip() for ln in r.stdout.splitlines() if ln.strip()]
+        info: dict = {"mac": mac, "raw": lines}
+        for ln in lines:
+            if ":" not in ln:
+                continue
+            key, _, val = ln.partition(":")
+            key = key.strip()
+            val = val.strip()
+            k = key.lower().replace(" ", "_")
+            if k in ("name", "alias", "paired", "bonded", "trusted", "blocked", "connected", "class", "icon"):
+                info[k] = val
+        return jsonify(info)
+    except Exception as e:
+        return jsonify({"mac": mac, "error": str(e)}), 500
+
+
+@bt_bp.route("/api/bt/disconnect", methods=["POST"])
+def api_bt_disconnect():
+    """Disconnect a BT device without removing it."""
+    data = request.get_json(silent=True) or {}
+    mac = (data.get("mac") or "").strip().upper()
+    err = validate_mac(mac)
+    if err:
+        return err
+    try:
+        r = subprocess.run(
+            ["bluetoothctl"],
+            input=f"disconnect {mac}\n",
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        ok = "successful" in r.stdout.lower()
+        return jsonify({"ok": ok, "mac": mac})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@bt_bp.route("/api/bt/adapter/power", methods=["POST"])
+def api_bt_adapter_power():
+    """Toggle adapter power. Accepts ``{adapter, power: true|false}``."""
+    data = request.get_json(silent=True) or {}
+    adapter = (data.get("adapter") or "").strip()
+    power = data.get("power", True)
+    cmd = "power on" if power else "power off"
+    cmds = f"select {adapter}\n{cmd}\n" if adapter else f"{cmd}\n"
+    try:
+        r = subprocess.run(
+            ["bluetoothctl"],
+            input=cmds,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        ok = "succeeded" in r.stdout.lower() or ("Changing power on" in r.stdout)
+        return jsonify({"ok": ok, "power": power})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@bt_bp.route("/api/bt/reset_reconnect", methods=["POST"])
+def api_bt_reset_reconnect():
+    """Remove a device and re-pair from scratch. Returns a job_id.
+
+    Sequence: remove → power cycle → scan → pair → trust → connect.
+    """
+    data = request.get_json(silent=True) or {}
+    mac = (data.get("mac") or "").strip().upper()
+    adapter = (data.get("adapter") or "").strip()
+    err = validate_mac(mac)
+    if err:
+        return err
+    job_id = str(uuid.uuid4())
+    create_scan_job(job_id)
+    t = threading.Thread(
+        target=_run_reset_reconnect,
+        args=(job_id, mac, adapter),
+        daemon=True,
+        name=f"bt-reset-{job_id[:8]}",
+    )
+    t.start()
+    return jsonify({"job_id": job_id})
+
+
+@bt_bp.route("/api/bt/reset_reconnect/result/<job_id>", methods=["GET"])
+def api_bt_reset_reconnect_result(job_id: str):
+    """Poll for reset & reconnect result."""
+    job = get_scan_job(job_id)
+    if job is None:
+        return jsonify({"error": "Unknown job_id"}), 404
+    return jsonify(job)
+
+
+def _run_reset_reconnect(job_id: str, mac: str, adapter: str) -> None:
+    """Remove device, then pair + trust + connect from scratch."""
+    try:
+        # Step 1: Remove existing pairing
+        logger.info("Reset & Reconnect %s: removing…", mac)
+        _bt_remove_device(mac)
+        time.sleep(1)
+
+        # Step 2: Power cycle adapter
+        power_cmds: list[str] = []
+        if adapter:
+            power_cmds.append(f"select {adapter}")
+        power_cmds.extend(["power off"])
+        subprocess.run(
+            ["bluetoothctl"],
+            input="\n".join(power_cmds) + "\n",
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        time.sleep(2)
+
+        # Step 3: Pair from scratch (power on + scan + pair + trust)
+        logger.info("Reset & Reconnect %s: pairing…", mac)
+        initial_cmds: list[str] = []
+        if adapter:
+            initial_cmds.append(f"select {adapter}")
+        initial_cmds.extend(["power on", "agent on", "default-agent", "scan on"])
+        pair_cmds = [f"pair {mac}", f"trust {mac}", "scan off"]
+        connect_cmds = [f"connect {mac}"]
+
+        proc = subprocess.Popen(
+            ["bluetoothctl"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+        try:
+            if proc.stdin is None:
+                raise RuntimeError("bluetoothctl stdin unavailable")
+
+            proc.stdin.write("\n".join(initial_cmds) + "\n")
+            proc.stdin.flush()
+            time.sleep(_PAIR_SCAN_DURATION)
+
+            proc.stdin.write("\n".join(pair_cmds) + "\n")
+            proc.stdin.flush()
+
+            import selectors
+
+            collected: list[str] = []
+            paired_ok = False
+            deadline = time.monotonic() + _PAIR_WAIT_DURATION
+            sel = selectors.DefaultSelector()
+            sel.register(proc.stdout, selectors.EVENT_READ)  # type: ignore[arg-type]
+            try:
+                while time.monotonic() < deadline and proc.poll() is None:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        break
+                    events = sel.select(timeout=min(remaining, 0.5))
+                    if not events:
+                        continue
+                    line = proc.stdout.readline()  # type: ignore[union-attr]
+                    if not line:
+                        break
+                    collected.append(line)
+                    stripped = line.strip().lower()
+                    if "confirm passkey" in stripped or "request confirmation" in stripped:
+                        logger.info("SSP passkey prompt — auto-confirming")
+                        proc.stdin.write("yes\n")
+                        proc.stdin.flush()
+                    if "pairing successful" in stripped or "already paired" in stripped:
+                        paired_ok = True
+                        time.sleep(1)
+                        break
+            finally:
+                sel.close()
+
+            # Step 4: Connect
+            if paired_ok or any("paired: yes" in c.lower() for c in collected):
+                proc.stdin.write("\n".join(connect_cmds) + "\n")
+                proc.stdin.flush()
+                time.sleep(5)
+
+            try:
+                tail, _ = proc.communicate(timeout=3)
+                collected.append(tail)
+            except subprocess.TimeoutExpired:
+                pass
+
+            out = "".join(collected)
+            ok = any(s in out.lower() for s in ("pairing successful", "already paired", "paired: yes"))
+            connected = "connection successful" in out.lower()
+            logger.info(
+                "Reset & Reconnect %s: paired=%s connected=%s (last 400: %s)",
+                mac,
+                ok,
+                connected,
+                out[-400:],
+            )
+            finish_scan_job(job_id, {"success": ok, "connected": connected, "mac": mac})
+        finally:
+            try:
+                proc.kill()
+                proc.wait(timeout=3)
+            except Exception:
+                pass
+    except Exception as e:
+        logger.error("Reset & Reconnect error for %s: %s", mac, e)
+        finish_scan_job(job_id, {"success": False, "mac": mac, "error": str(e)})
+
+
 @bt_bp.route("/api/bt/scan", methods=["POST"])
 def api_bt_scan():
     """Start an async BT device scan; returns a job_id immediately."""

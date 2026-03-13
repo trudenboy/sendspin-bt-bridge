@@ -349,8 +349,6 @@ function buildDeviceCard(i) {
         '<div class="device-card-actions">' +
           '<button type="button" class="btn-bt-action btn-bt-reconnect" id="dbtn-reconnect-' + i + '"' +
             ' onclick="btReconnect(' + i + ')">&#128260; Reconnect</button>' +
-          '<button type="button" class="btn-bt-action btn-bt-pair" id="dbtn-pair-' + i + '"' +
-            ' onclick="btPair(' + i + ')" title="Put the device into pairing mode first">&#128279; Re-pair</button>' +
           '<button type="button" class="btn-bt-action btn-bt-release" id="dbtn-release-' + i + '"' +
             ' onclick="btToggleManagement(' + i + ')">&#128274; Release</button>' +
           '<button type="button" class="btn-bt-action btn-bt-disable" id="dbtn-disable-' + i + '"' +
@@ -772,11 +770,9 @@ function populateDeviceCard(i, dev) {
             relBtn.className = 'btn-bt-action btn-bt-reclaim';
             relBtn.title = 'Resume BT management and auto-reconnect';
         }
-        // Disable Reconnect/Re-pair while released
+        // Disable Reconnect while released
         var reconnBtn = document.getElementById('dbtn-reconnect-' + i);
-        var pairBtn = document.getElementById('dbtn-pair-' + i);
         if (reconnBtn) reconnBtn.disabled = !mgmtEnabled;
-        if (pairBtn) pairBtn.disabled = !mgmtEnabled;
     }
 }
 
@@ -1193,34 +1189,6 @@ async function btReconnect(i) {
     }, 8000);
 }
 
-async function btPair(i) {
-    if (!confirm('Put the device into pairing mode first, then click OK.\nThis will interrupt playback for ~25 seconds.')) return;
-    var dev = lastDevices && lastDevices[i];
-    var playerName = dev ? dev.player_name : null;
-    var btn = document.getElementById('dbtn-pair-' + i);
-    var reconnBtn = document.getElementById('dbtn-reconnect-' + i);
-    var status = document.getElementById('dbt-action-status-' + i);
-    if (btn) btn.disabled = true;
-    if (reconnBtn) reconnBtn.disabled = true;
-    if (status) status.textContent = '&#8635; Pairing\u2026 (~25s, put device in pairing mode)';
-    try {
-        var resp = await fetch(API_BASE + '/api/bt/pair', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({player_name: playerName})
-        });
-        var d = await resp.json();
-        if (status) status.textContent = d.success ? '\u2713 ' + (d.message || 'Started') : '\u2717 ' + (d.error || 'Failed');
-    } catch (e) {
-        if (status) status.textContent = '\u2717 Error';
-    }
-    setTimeout(function() {
-        if (btn) btn.disabled = false;
-        if (reconnBtn) reconnBtn.disabled = false;
-        if (status) status.textContent = '';
-    }, 30000);
-}
-
 async function btToggleManagement(i) {
     var dev = lastDevices && lastDevices[i];
     if (!dev) return;
@@ -1244,11 +1212,9 @@ async function btToggleManagement(i) {
                 btn.textContent = newEnabled ? '\uD83D\uDD13 Release' : '\uD83D\uDD12 Reclaim';
                 btn.className = 'btn-bt-action ' + (newEnabled ? 'btn-bt-release' : 'btn-bt-reclaim');
             }
-            // Disable Reconnect/Re-pair while released
+            // Disable Reconnect while released
             var reconnBtn = document.getElementById('dbtn-reconnect-' + i);
-            var pairBtn = document.getElementById('dbtn-pair-' + i);
             if (reconnBtn) reconnBtn.disabled = newEnabled ? false : true;
-            if (pairBtn) pairBtn.disabled = newEnabled ? false : true;
         }
         if (status) status.textContent = d.success ? '\u2713 ' + d.message : '\u2717 ' + (d.error || 'Failed');
     } catch (e) {
@@ -1731,6 +1697,76 @@ async function removePairedDevice(mac, name, rowEl) {
     } catch (_) {}
 }
 
+async function resetAndReconnect(mac, name, btnEl) {
+    if (!confirm('Reset & Reconnect "' + (name || mac) + '"?\n\nThis will:\n1. Remove device from BT stack\n2. Power cycle adapter\n3. Re-pair + trust + connect (~30 s)\n\nPut the device in pairing mode, then click OK.')) return;
+    btnEl.disabled = true;
+    var origText = btnEl.textContent;
+    btnEl.textContent = 'Resetting\u2026';
+    btnEl.style.opacity = '0.6';
+    try {
+        var resp = await fetch(API_BASE + '/api/bt/reset_reconnect', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({mac: mac})
+        });
+        var data = await resp.json();
+        if (!data.job_id) throw new Error(data.error || 'No job_id');
+
+        btnEl.textContent = 'Pairing\u2026';
+
+        var result = null;
+        for (var i = 0; i < 40; i++) {
+            await new Promise(function(r) { setTimeout(r, 2000); });
+            var pr = await fetch(API_BASE + '/api/bt/reset_reconnect/result/' + data.job_id);
+            var pd = await pr.json();
+            if (pd.status === 'done') { result = pd; break; }
+        }
+        if (!result) throw new Error('Reset timed out');
+        if (result.success) {
+            btnEl.textContent = '\u2713 ' + (result.connected ? 'Connected' : 'Paired');
+            btnEl.style.background = '#28a745';
+            btnEl.style.opacity = '1';
+        } else {
+            btnEl.textContent = '\u2717 Failed';
+            btnEl.style.background = '#dc3545';
+            btnEl.style.opacity = '1';
+            setTimeout(function() { btnEl.textContent = origText; btnEl.disabled = false; btnEl.style.background = '#e67e22'; btnEl.style.opacity = '1'; }, 3000);
+        }
+    } catch (err) {
+        btnEl.textContent = 'Error';
+        btnEl.style.background = '#dc3545';
+        btnEl.style.opacity = '1';
+        setTimeout(function() { btnEl.textContent = origText; btnEl.disabled = false; btnEl.style.background = '#e67e22'; btnEl.style.opacity = '1'; }, 3000);
+        alert('Reset failed: ' + err.message);
+    }
+}
+
+async function showBtDeviceInfo(mac) {
+    try {
+        var resp = await fetch(API_BASE + '/api/bt/info', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({mac: mac})
+        });
+        var info = await resp.json();
+        var lines = [];
+        if (info.name) lines.push('Name: ' + info.name);
+        if (info.alias) lines.push('Alias: ' + info.alias);
+        lines.push('MAC: ' + mac);
+        if (info.paired) lines.push('Paired: ' + info.paired);
+        if (info.trusted) lines.push('Trusted: ' + info.trusted);
+        if (info.connected) lines.push('Connected: ' + info.connected);
+        if (info.bonded) lines.push('Bonded: ' + info.bonded);
+        if (info.blocked) lines.push('Blocked: ' + info.blocked);
+        if (info['class']) lines.push('Class: ' + info['class']);
+        if (info.icon) lines.push('Icon: ' + info.icon);
+        if (info.error) lines.push('\nError: ' + info.error);
+        alert(lines.join('\n') || 'No info available for ' + mac);
+    } catch (err) {
+        alert('Failed to get info: ' + err.message);
+    }
+}
+
 async function loadPairedDevices() {
     try {
         var showAll = document.getElementById('paired-show-all');
@@ -1773,6 +1809,12 @@ async function loadPairedDevices() {
             return '<div class="scan-result-item" data-paired-idx="' + idx + '">' +
                 '<span class="scan-result-mac">' + escHtml(d.mac) + '</span>' +
                 '<span class="scan-result-name">' + escHtml(displayName) + '</span>' +
+                '<button type="button" class="paired-reset-btn" style="padding:3px 10px;' +
+                    'background:#e67e22;color:white;border:none;border-radius:4px;' +
+                    'cursor:pointer;font-size:12px;" title="Remove, re-pair and connect from scratch">Reset & Reconnect</button>' +
+                '<button type="button" class="paired-info-btn" style="padding:3px 8px;' +
+                    'background:transparent;color:var(--primary-color);border:1px solid var(--primary-color);' +
+                    'border-radius:4px;cursor:pointer;font-size:12px;" title="Show BT device info">ℹ</button>' +
                 '<button type="button" class="paired-add-btn" style="padding:3px 10px;' +
                     'background:var(--primary-color);color:white;border:none;border-radius:4px;' +
                     'cursor:pointer;font-size:12px;">Add</button>' +
@@ -1790,6 +1832,14 @@ async function loadPairedDevices() {
             row.querySelector('.paired-remove-btn').addEventListener('click', function(e) {
                 e.stopPropagation();
                 removePairedDevice(d.mac, d.name, row);
+            });
+            row.querySelector('.paired-reset-btn').addEventListener('click', function(e) {
+                e.stopPropagation();
+                resetAndReconnect(d.mac, d.name, this);
+            });
+            row.querySelector('.paired-info-btn').addEventListener('click', function(e) {
+                e.stopPropagation();
+                showBtDeviceInfo(d.mac);
             });
         });
     } catch (_) {}
