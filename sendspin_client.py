@@ -889,11 +889,15 @@ async def main():
         _state.set_disabled_devices(disabled_list)
 
     # Sync enabled state to options.json so HA addon config page reflects current state
+    # NOTE: only sync truly enabled/disabled state, NOT the runtime "released" flag.
     try:
         from services.bluetooth import persist_device_enabled as _persist_enabled
 
         for _c in clients:
-            _persist_enabled(_c.player_name, _c.bt_management_enabled)
+            # bt_management_enabled=False means "released" at runtime, not "globally disabled".
+            # Only persist when the device is genuinely enabled (skip released devices).
+            if _c.bt_management_enabled:
+                _persist_enabled(_c.player_name, True)
     except Exception as _e:
         logger.debug("Could not sync enabled state to options.json: %s", _e)
 
