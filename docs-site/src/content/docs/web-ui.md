@@ -43,9 +43,13 @@ The dashboard shows all configured Bluetooth devices as cards. Cards are sorted 
 The blue header bar shows:
 
 - **Title** — "Sendspin Bluetooth Bridge" with links to Docs and GitHub
-- **Version + build date** — top right (e.g. `2.6.8 · 2026-03-04`), fetched live from `/api/version`
+- **Version badge** — clickable link to the corresponding GitHub release page (e.g. `v2.30.6`)
+- **Update badge** — shows available updates or "up to date"
+- **Report / Docs / GitHub** — quick links; Report opens the bug report dialog
+- **Sign out** — visible in standalone mode when authentication is enabled
+- **Username** — clickable link to the user's profile page. In HA addon mode, links to the HA profile. In standalone mode, appears in the status bar row and links to the MA profile (when connected) or HA profile (based on auth method)
 - **Hostname · IP · uptime** — the container/host identity and how long the service has been running
-- **Health summary** — `4/6 playing · 1 disconnected` with color dots for quick status
+- **Health summary** — `BT 3/3 · MA 3/3` with color coding for quick status
 
 ---
 

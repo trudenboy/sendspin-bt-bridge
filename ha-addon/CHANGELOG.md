@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.30.6] - 2026-03-13
+
+### Added
+- Version badge links to corresponding GitHub release page
+- Clickable username → MA or HA profile (standalone: in status bar row)
+
+### Fixed
+- Empty state block spans full grid width
+- Card hover isolated to individual cards (no row-wide expansion)
+- Album art popup no longer clipped by overflow:hidden
+
 ## [2.30.5] - 2026-03-13
 
 ### Added

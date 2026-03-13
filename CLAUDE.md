@@ -27,7 +27,7 @@ Unit tests: `pytest` (see `tests/`). 187 tests across 18 files. Manual testing v
 
 CI/CD builds multi-platform Docker images (`linux/amd64`, `linux/arm64`) to `ghcr.io/trudenboy/sendspin-bt-bridge` on `v*` tag push. Automatically syncs `ha-addon/config.yaml` version from `VERSION` in `config.py` before the build.
 
-## Architecture (v2.30.5)
+## Architecture (v2.30.6)
 
 **Subprocess isolation**: each Bluetooth speaker runs as a dedicated Python subprocess (`services/daemon_process.py`) with `PULSE_SINK=<bt_sink_name>` in env. This gives every speaker its own PulseAudio context → correct audio routing from the first sample, no `move-sink-input` needed.
 
@@ -58,7 +58,7 @@ IPC: subprocess→parent via JSON lines on stdout; parent→subprocess via JSON 
 - `CONFIG_FILE: Path` — single source of truth for config path (replaces old `_CONFIG_PATH` string)
 - `_config_lock` (threading.Lock shared across modules)
 - `load_config()`, `_player_id_from_mac()`, `save_device_volume()` (public; `_save_device_volume` alias retained for compatibility)
-- `VERSION = "2.30.5"`, `BUILD_DATE = "2026-03-13"`
+- `VERSION = "2.30.6"`, `BUILD_DATE = "2026-03-13"`
 
 **`services/` module:**
 - `bridge_daemon.py` — `BridgeDaemon` subclass. Runs inside each subprocess. Handles `on_status_change` callbacks, stream events. `_sink_routed` flag prevents re-anchor feedback loop after PA rescue-streams correction.

@@ -81,6 +81,8 @@ A Bluetooth bridge for [Music Assistant](https://www.music-assistant.io/) — co
 - **Config backup & restore** — download / upload config JSON from the web UI
 - **BT device info modal** — view device details with one-click copy
 - **Scan cooldown countdown** — visual timer showing when the next BT scan is available
+- **Version badge → release notes** — click the version to open the GitHub release page
+- **Profile link** — clickable username links to MA or HA profile based on auth method
 
 ### 🔐 Security
 - **Password protection** — optional PBKDF2-SHA256 password for standalone mode

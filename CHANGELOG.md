@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.30.6] - 2026-03-13
+
+### Added
+- **Version badge → release notes** — clicking the version badge in the header opens the corresponding GitHub release page
+- **Username → profile link** — clickable username in the header links to the user's MA profile (when MA is connected) or HA profile (based on auth method); in standalone mode the username is displayed in the status bar row
+
+### Fixed
+- **Empty state full-width** — "No Bluetooth devices configured" block now spans the full grid width instead of occupying a single column
+- **Card hover isolation** — hovering a device card no longer causes all cards in the same row to expand; each card has independent hover behavior
+- **Album art popup clipped** — album art popup on track name hover was hidden by `overflow: hidden` on parent containers; removed the clipping so the popup renders correctly
+
 ## [2.30.5] - 2026-03-13
 
 ### Added

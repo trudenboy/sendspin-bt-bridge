@@ -2,7 +2,7 @@
 
 A history of the architectural and functional evolution of sendspin-bt-bridge — for readers familiar with Home Assistant, Music Assistant, and multiroom audio setups.
 
-**Period:** January 1 – March 13, 2026 · **Total commits:** ~930 · **Versions:** 1.0.0 → 2.30.5
+**Period:** January 1 – March 13, 2026 · **Total commits:** ~935 · **Versions:** 1.0.0 → 2.30.6
 
 ---
 
@@ -736,7 +736,7 @@ This is distinct from BT Release/Reclaim (`set_bt_management_enabled`), which on
 
 **Disable button** (v2.29.0): added `⛔ Disable` button to the device card actions row (after Release), calling `confirmDisableDevice()` with a confirmation dialog before toggling the device's enabled state via the existing `/api/device/enabled` endpoint.
 
-### Modals, config portability, and mute fix (v2.30.0 → v2.30.5)
+### Modals, config portability, and mute fix (v2.30.0 → v2.30.6)
 
 **BT Info modal** (v2.30.0): `showBtDeviceInfo()` previously called `bluetoothctl info <MAC>` and dumped the raw text output into a browser `alert()` — functional but ugly, unselectable, and inconsistent with the rest of the UI. Replaced with a styled modal dialog reusing the bugreport modal CSS classes (`.br-overlay`, `.br-modal`, accent header bar with ✕ close button). The raw output is rendered in a preformatted code block with a Copy button. The modal is keyboard-dismissible (Escape) and accessible.
 
@@ -753,6 +753,12 @@ This is distinct from BT Release/Reclaim (`set_bt_management_enabled`), which on
 **UI reorganisation** (v2.30.4): button ordering was inconsistent across sections — some had the primary action first, others had it last. Standardised: Adapters section: `+ Add Adapter` before `↺ Refresh`. Devices section: `+ Add Device` before `🔍 Scan`. Scan results: Add before Add & Pair (renamed from "Pair & Add" to match the actual operation order). Paired devices: Add button first, then action buttons (BT Info, Reset & Reconnect, ✕) grouped on the right with CSS `:has()` hover isolation so hovering one button doesn't highlight the whole row. Config footer: left group (Save, Save & Restart), right group (⬇ Download, ⬆ Upload).
 
 **BT device info in bug report** (v2.30.5): `_collect_bt_device_info()` now runs `bluetoothctl info <MAC>` for each configured device and appends the paired/trusted/connected/bonded/blocked status flags to the bug report diagnostic text. Previously, debugging BT issues from a bug report required asking the user to SSH in and run `bluetoothctl info` manually — the report now includes everything needed for remote triage.
+
+**Dashboard layout fixes** (v2.30.6): three CSS issues addressed — the "No Bluetooth devices configured" empty-state block only occupied one grid column instead of spanning the full width (`grid-column: 1 / -1`); hovering any device card caused all cards in the same row to expand because CSS Grid's default `align-items: stretch` makes rows the height of the tallest card (fixed with `align-items: start`); and the album art popup on track name hover was clipped by `overflow: hidden` on parent containers.
+
+**Version badge → release notes** (v2.30.6): the version badge in the header (e.g. `v2.30.6`) is now an `<a>` tag linking to the corresponding GitHub release page — a quick way to check what changed in the running version without navigating to GitHub manually.
+
+**Username → profile link** (v2.30.6): the username in the header is now clickable, linking to the user's profile page. In HA addon mode it links to the HA profile (`/profile`). In standalone mode the username moves from the header icons row to the status bar (alongside `BT 3/3 · MA 3/3`), and links to the MA profile when MA is connected, or to the HA profile when authenticated via HA. The auth method (`ma`, `ha`, `ha_via_ma`, `password`) is tracked in the Flask session and passed to the template as `data-auth-method`, which the JS status handler uses to compute the correct profile URL.
 
 ---
 
