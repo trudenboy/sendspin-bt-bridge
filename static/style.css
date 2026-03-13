@@ -363,6 +363,7 @@
             gap: 12px; margin-bottom: 20px;
         }
         .no-devices-hint {
+            grid-column: 1 / -1;
             text-align: center; padding: 40px 20px;
             background: var(--card-background-color);
             border-radius: var(--ha-card-border-radius);
