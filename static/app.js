@@ -162,6 +162,22 @@ async function updateStatus() {
 
         _showUpdateBadge(status.update_available);
 
+        // Update user profile link: MA profile when connected, HA /profile otherwise
+        var userLink = document.getElementById('header-user-link');
+        if (userLink) {
+            var method = userLink.dataset.authMethod || '';
+            if (status.ma_connected && status.ma_web_url) {
+                userLink.href = status.ma_web_url + '/#/settings/profile';
+            } else if (method === 'ha' || method === 'ha_via_ma') {
+                if (status.ma_web_url) {
+                    var u = new URL(status.ma_web_url);
+                    userLink.href = u.protocol + '//' + u.hostname + ':8123/profile';
+                } else {
+                    userLink.href = '/profile';
+                }
+            }
+        }
+
         var devices = status.devices || (status.error ? [] : [status]);
         var grid = document.getElementById('status-grid');
 

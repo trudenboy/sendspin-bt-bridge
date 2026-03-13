@@ -22,4 +22,5 @@ def index():
         ha_mode=bool(os.environ.get("SUPERVISOR_TOKEN")),
         is_ha_addon=is_ha_addon,
         ha_user=session.get("ha_user", ""),
+        auth_method=session.get("auth_method", ""),
     )

@@ -603,6 +603,7 @@ def login():
         error, response = _handle_local_password_login(client_ip)
 
     if response is not None:
+        session["auth_method"] = method
         return response
 
     return render_template(

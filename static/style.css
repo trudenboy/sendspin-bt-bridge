@@ -277,13 +277,22 @@
             display: flex; align-items: center; gap: 10px;
         }
         .header-user {
-            font-size: 12px; color: rgba(255,255,255,0.7);
+            font-size: 12px; color: rgba(255,255,255,0.92);
+            text-decoration: none; cursor: pointer; font-weight: 500;
         }
+        .header-user:hover { color: #fff; text-decoration: underline; }
         .header-signout {
             font-size: 12px; color: rgba(255,255,255,0.8); text-decoration: none;
             border: 1px solid rgba(255,255,255,0.3); border-radius: 4px; padding: 3px 10px;
         }
         .header-signout:hover { background: rgba(255,255,255,0.1); }
+        .header-row2-right {
+            display: flex; align-items: center; gap: 12px;
+            min-width: 0;
+        }
+        .header-row2-right .header-user {
+            text-align: right; white-space: nowrap;
+        }
         .header-link {
             font-size: 12px; color: rgba(255,255,255,0.75); text-decoration: none;
             padding: 3px 8px; border-radius: 4px;
