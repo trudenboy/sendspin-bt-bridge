@@ -359,6 +359,7 @@
         .status-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+            align-items: start;
             max-width: 1400px;
             gap: 12px; margin-bottom: 20px;
         }
