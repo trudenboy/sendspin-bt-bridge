@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.29.0] - 2026-03-13
+
+### Added
+- **Disable button on device card** — `⛔ Disable` button in the card actions row for quick device disable/enable directly from the dashboard
+- **Report error highlighting** — Report link in the header turns yellow when the last 20 log entries contain ERROR or CRITICAL messages
+
+### Fixed
+- **Released → disabled persistence bug** — devices in "BT Released" state were incorrectly persisted as `enabled: false` on restart, causing them to be fully skipped on next boot; startup sync now only writes `enabled: true` for non-released devices
+- **Player-id group matching** — MA group badge now uses stable `player_id` (UUID) for matching instead of fuzzy player name comparison, fixing group display on hosts where the bridge suffix differs
+
+### Changed
+- **Device card redesign** — cards restructured from 5-column grid to a row-based layout: status dots with color classes (green/red/orange/grey), chip-style sync display, `±Nms` delay format, `⏸` pause symbol, shuffle/repeat always visible
+- **Bug report modal yellow accent** — bug report modal header and primary button changed from blue to amber (`#f59e0b`) for visual distinction from the green update modal
+
 ## [2.28.2] - 2026-03-13
 
 ### Fixed

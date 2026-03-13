@@ -2,7 +2,7 @@
 
 A history of the architectural and functional evolution of sendspin-bt-bridge — for readers familiar with Home Assistant, Music Assistant, and multiroom audio setups.
 
-**Period:** January 1 – March 13, 2026 · **Total commits:** ~890 · **Versions:** 1.0.0 → 2.28.2
+**Period:** January 1 – March 13, 2026 · **Total commits:** ~910 · **Versions:** 1.0.0 → 2.29.0
 
 ---
 
@@ -721,6 +721,20 @@ This is distinct from BT Release/Reclaim (`set_bt_management_enabled`), which on
 **Equalizer placement** (v2.28.1): eq-bars were pushed to the far right edge of the identity column because `device-card-title` had `flex:1`. Removed `flex:1` so the eq-bars sit immediately after the player name text, which is the natural reading order.
 
 **Column labels removed** (v2.28.1): the Playback, Volume, and Sync column headers were removed — their content (transport controls, volume slider, sync offset) is self-evident without labels. The Connection column label was already hidden via CSS in v2.28.0.
+
+### Card redesign and player-id refactor (v2.28.2 → v2.29.0)
+
+**Player-id group matching** (v2.29.0): MA group badges were matched by fuzzy player name comparison — `"ENEBY 30 @ Proxmox"` matched against `"ENEBY 30"` — which broke on hosts with different bridge suffixes or when MA reported the full qualified name. Refactored to use the stable `player_id` (UUID generated from MAC) for matching: `state.py` stores `player_id` per client, `api_ma.py` resolves groups by player_id instead of name substring. The player_id is deterministic (`_player_id_from_mac()` in `config.py`) and never changes for a given device.
+
+**Device card redesign** (v2.29.0): cards restructured from a 5-column CSS grid to a row-based layout. Status indicators changed from `status-indicator` divs with CSS classes to compact `status-dot` spans with color classes (`green`/`red`/`orange`/`grey`). Sync group display changed to chip format. Delay format changed to `±Nms`. Pause button changed to `⏸` symbol. Shuffle and repeat buttons made always-visible when MA is active (were hover-only).
+
+**Report error highlighting** (v2.29.0): the Report link in the header now turns yellow (`#f59e0b`) when the last 20 log entries contain ERROR or CRITICAL level messages. The `.has-errors` CSS class is toggled in `renderLogs()` on the `#report-link` element, matching the amber warning pattern.
+
+**Bug report modal yellow accent** (v2.29.0): the bug report modal header was changed from blue (`--primary-color`) to amber (`#f59e0b`), and the primary submit button from blue to amber with `#d97706` hover. This visually distinguishes it from the green update modal — yellow for "attention/warning" vs green for "positive action".
+
+**Released → disabled persistence bug** (v2.29.0): on restart, the startup sync loop called `persist_device_enabled(name, bt_management_enabled)` for all clients. For "released" devices, `bt_management_enabled=False` was written as `enabled: false` to config.json, causing the device to be fully skipped on the next restart. Fixed: the sync loop now only writes `enabled=true` for non-released devices, preserving the distinction between "BT released" (loads but doesn't manage BT) and "globally disabled" (completely skipped).
+
+**Disable button** (v2.29.0): added `⛔ Disable` button to the device card actions row (after Release), calling `confirmDisableDevice()` with a confirmation dialog before toggling the device's enabled state via the existing `/api/device/enabled` endpoint.
 
 ---
 
