@@ -287,7 +287,6 @@ function buildDeviceCard(i) {
               '<div class="eq-bar"></div><div class="eq-bar"></div>' +
             '</div>' +
             '<span class="released-badge" id="dreleased-badge-' + i + '" style="display:none;" title="BT management disabled — click Reclaim to resume">Released</span>' +
-            '<span class="battery-badge" id="dbattery-' + i + '" style="display:none"></span>' +
             '<span class="group-badge" id="dgroup-' + i + '" style="display:none"></span>' +
           '</div>' +
         '</div>' +
@@ -310,6 +309,7 @@ function buildDeviceCard(i) {
           '<span class="status-chip chip-sync" id="dsync-' + i + '">&#8212;</span>' +
           '<span class="status-chip chip-minor" id="dsync-detail-' + i + '"></span>' +
           '<span class="status-chip chip-minor" id="ddelay-' + i + '"></span>' +
+          '<span class="status-chip chip-minor battery-chip" id="dbattery-' + i + '" style="display:none"></span>' +
         '</div>' +
         // Row 2: Transport buttons + volume slider + mute
         '<div class="card3-row2">' +
