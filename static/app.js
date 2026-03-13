@@ -254,8 +254,9 @@ function buildDeviceCard(i) {
     card.className = 'device-card';
     card.id = 'device-card-' + i;
     card.innerHTML =
-        '<div class="device-card-identity">' +
-          '<div class="identity-title-row">' +
+        // Row 1: Name + EQ + badges
+        '<div class="card3-row1">' +
+          '<div class="card3-row1-left">' +
             '<input type="checkbox" class="device-select-cb" id="dsel-' + i + '" checked' +
               ' onchange="onDeviceSelect(' + i + ', this.checked)">' +
             '<div class="device-card-title" id="dname-' + i + '">Device ' + (i+1) + '</div>' +
@@ -263,79 +264,66 @@ function buildDeviceCard(i) {
               '<div class="eq-bar"></div><div class="eq-bar"></div>' +
               '<div class="eq-bar"></div><div class="eq-bar"></div>' +
             '</div>' +
-          '</div>' +
-          '<div class="identity-meta-row">' +
             '<span class="released-badge" id="dreleased-badge-' + i + '" style="display:none;" title="BT management disabled — click Reclaim to resume">Released</span>' +
             '<span class="battery-badge" id="dbattery-' + i + '" style="display:none"></span>' +
             '<span class="group-badge" id="dgroup-' + i + '" style="display:none"></span>' +
           '</div>' +
         '</div>' +
-        '<div class="device-rows">' +
-          // Connection column (BT + MA server merged)
-          '<div class="conn-col">' +
-            '<div class="status-label">Connection</div>' +
-            '<div class="conn-row">' +
-              '<div class="conn-row-main">' +
-                '<span class="conn-tag">BT</span>' +
-                '<span class="status-indicator" id="dbt-ind-' + i + '"></span>' +
-                '<span class="conn-text" id="dbt-txt-' + i + '">-</span>' +
-                '<span class="conn-detail" id="dbt-adapter-' + i + '"></span>' +
-              '</div>' +
-            '</div>' +
-            '<div class="conn-row">' +
-              '<div class="conn-row-main">' +
-                '<span class="conn-tag">MA</span>' +
-                '<span class="status-indicator" id="dsrv-ind-' + i + '"></span>' +
-                '<span class="conn-text" id="dsrv-txt-' + i + '">-</span>' +
-                '<span class="ma-api-badge" id="dma-api-' + i + '" style="display:none" title="MA API integration active">api</span>' +
-              '</div>' +
-            '</div>' +
-          '</div>' +
-          // Playback column (with inline track)
-          '<div class="playback-col">' +
-            '<div class="status-value" id="dma-secondary-' + i + '">' +
-              '<span class="status-indicator" id="dplay-ind-' + i + '"></span>' +
-              '<span id="dplay-' + i + '">-</span>' +
-              '<button type="button" class="card-icon-btn transport-btn" id="dma-prev-' + i + '" ' +
-                'onclick="maQueueCmd(\'previous\', undefined, ' + i + ')" title="Previous" style="display:none;">&#9664;&#9664;</button>' +
-              '<button type="button" class="card-icon-btn transport-btn" id="dbtn-pause-' + i + '" ' +
-                'onclick="onDevicePause(' + i + ')" title="Pause/Unpause">&#9646;&#9646;</button>' +
-              '<button type="button" class="card-icon-btn transport-btn" id="dma-next-' + i + '" ' +
-                'onclick="maQueueCmd(\'next\', undefined, ' + i + ')" title="Next" style="display:none;">&#9654;&#9654;</button>' +
-              '<button type="button" class="card-icon-btn transport-btn" id="dma-shuffle-' + i + '" ' +
-                'onclick="maQueueCmd(\'shuffle\', undefined, ' + i + ')" title="Shuffle">&#8644;</button>' +
-              '<button type="button" class="card-icon-btn transport-btn" id="dma-repeat-' + i + '" ' +
-                'onclick="maCycleRepeat(' + i + ')" title="Repeat">&#8635;</button>' +
-            '</div>' +
-            '<div class="track-art-row">' +
-              '<img id="dart-' + i + '" class="album-art" src="" alt="">' +
-              '<div id="dtrack-' + i + '" class="device-track-inline"></div>' +
-            '</div>' +
-            '<div class="track-progress-wrap" id="dprog-wrap-' + i + '" style="display:none;">' +
-              '<div class="track-progress-bar"><div class="track-progress-fill" id="dprog-fill-' + i + '"></div></div>' +
-              '<span class="track-progress-time" id="dprog-time-' + i + '"></span>' +
-            '</div>' +
-          '</div>' +
-          // Volume column
-          '<div class="volume-col">' +
-            '<div class="ts" id="daudiofmt-' + i + '"></div>' +
-            '<div class="volume-row">' +
-              '<input type="range" min="0" max="100" value="100" ' +
-                'class="volume-slider" id="vslider-' + i + '" ' +
-                'oninput="onVolumeInput(' + i + ', this.value)">' +
-              '<span class="volume-pct" id="dvol-' + i + '">100%</span>' +
-              '<button type="button" id="dmute-' + i + '" ' +
-                'class="card-icon-btn" ' +
-                'title="Mute/Unmute">&#128264;</button>' +
-            '</div>' +
-          '</div>' +
-          // Sync column
-          '<div>' +
-            '<div class="status-value" id="dsync-' + i + '">&#8212;</div>' +
-            '<div class="ts" id="dsync-detail-' + i + '"></div>' +
-            '<div class="ts" id="ddelay-' + i + '"></div>' +
+        // Row 1b: Status chips (BT · MA · play-state · sync · re-anchor · delay)
+        '<div class="card3-row1b">' +
+          '<span class="status-chip">' +
+            '<span class="chip-label">BT</span>' +
+            '<span class="status-dot" id="dbt-ind-' + i + '"></span>' +
+            '<span class="chip-detail" id="dbt-adapter-' + i + '"></span>' +
+          '</span>' +
+          '<span class="status-chip">' +
+            '<span class="chip-label">MA</span>' +
+            '<span class="status-dot" id="dsrv-ind-' + i + '"></span>' +
+            '<span class="chip-detail ma" id="dma-api-' + i + '" style="display:none">api</span>' +
+          '</span>' +
+          '<span class="play-state">' +
+            '<span class="status-dot" id="dplay-ind-' + i + '"></span>' +
+            '<span id="dplay-' + i + '">-</span>' +
+          '</span>' +
+          '<span class="status-chip chip-sync" id="dsync-' + i + '">&#8212;</span>' +
+          '<span class="status-chip chip-minor" id="dsync-detail-' + i + '"></span>' +
+          '<span class="status-chip chip-minor" id="ddelay-' + i + '"></span>' +
+        '</div>' +
+        // Row 2: Transport buttons + volume slider + mute
+        '<div class="card3-row2">' +
+          '<button type="button" class="transport-btn" id="dma-prev-' + i + '" ' +
+            'onclick="maQueueCmd(\'previous\', undefined, ' + i + ')" title="Previous" style="display:none;">&#9198;</button>' +
+          '<button type="button" class="transport-btn" id="dbtn-pause-' + i + '" ' +
+            'onclick="onDevicePause(' + i + ')" title="Pause/Unpause">&#9208;</button>' +
+          '<button type="button" class="transport-btn" id="dma-next-' + i + '" ' +
+            'onclick="maQueueCmd(\'next\', undefined, ' + i + ')" title="Next" style="display:none;">&#9197;</button>' +
+          '<button type="button" class="transport-btn" id="dma-shuffle-' + i + '" ' +
+            'onclick="maQueueCmd(\'shuffle\', undefined, ' + i + ')" title="Shuffle">&#8644;</button>' +
+          '<button type="button" class="transport-btn" id="dma-repeat-' + i + '" ' +
+            'onclick="maCycleRepeat(' + i + ')" title="Repeat">&#8635;</button>' +
+          '<input type="range" min="0" max="100" value="100" ' +
+            'class="vol-slider" id="vslider-' + i + '" ' +
+            'oninput="onVolumeInput(' + i + ', this.value)">' +
+          '<span class="vol-pct" id="dvol-' + i + '">100%</span>' +
+          '<button type="button" class="mute-btn" id="dmute-' + i + '" ' +
+            'onclick="toggleMute(' + i + ')" title="Mute/Unmute">&#128264;</button>' +
+        '</div>' +
+        // Row track: Artist — Track Name
+        '<div class="card3-row-track">' +
+          '<div class="track-art-wrap">' +
+            '<img class="album-art-popup" id="dart-' + i + '" src="" alt="">' +
+            '<span class="track-name" id="dtrack-' + i + '"></span>' +
           '</div>' +
         '</div>' +
+        // Row progress: bar + time (tooltip → audio format)
+        '<div class="card3-row-progress" id="dprog-wrap-' + i + '" style="display:none;">' +
+          '<div class="progress-bar"><div class="progress-fill" id="dprog-fill-' + i + '"></div></div>' +
+          '<span class="tooltip-wrap">' +
+            '<span class="progress-time" id="dprog-time-' + i + '"></span>' +
+            '<span class="tooltip-text" id="daudiofmt-' + i + '"></span>' +
+          '</span>' +
+        '</div>' +
+        // Actions (hover-revealed)
         '<div class="device-card-actions">' +
           '<button type="button" class="btn-bt-action btn-bt-reconnect" id="dbtn-reconnect-' + i + '"' +
             ' onclick="btReconnect(' + i + ')">&#128260; Reconnect</button>' +
@@ -460,41 +448,26 @@ function populateDeviceCard(i, dev) {
 
     // Bluetooth
     var btInd   = document.getElementById('dbt-ind-' + i);
-    var btTxt   = document.getElementById('dbt-txt-' + i);
     if (dev.bt_management_enabled === false && dev.bt_released_by === 'auto') {
-        btInd.className = 'status-indicator warn';
-        btTxt.textContent = 'Auto-disabled';
+        btInd.className = 'status-dot orange';
     } else if (dev.bt_management_enabled === false) {
-        btInd.className = 'status-indicator released';
-        btTxt.textContent = 'Released';
+        btInd.className = 'status-dot grey';
     } else if (dev.bluetooth_connected) {
-        btInd.className = 'status-indicator active';
-        btTxt.textContent = 'Connected';
+        btInd.className = 'status-dot green';
     } else if (dev.reconnecting) {
-        btInd.className = 'status-indicator reconnecting';
-        btTxt.textContent = 'Reconnecting\u2026' +
-            (dev.reconnect_attempt ? ' (' + dev.reconnect_attempt + ')' : '');
-    } else if (dev.bluetooth_available) {
-        btInd.className = 'status-indicator inactive';
-        btTxt.textContent = 'Disconnected';
+        btInd.className = 'status-dot orange';
     } else {
-        btInd.className = 'status-indicator inactive';
-        btTxt.textContent = 'Not Available';
+        btInd.className = 'status-dot red';
     }
-    btInd.title = 'BT: ' + btTxt.textContent;
 
     // Server
     var srvInd = document.getElementById('dsrv-ind-' + i);
-    var srvTxt = document.getElementById('dsrv-txt-' + i);
     var maApiBadge = document.getElementById('dma-api-' + i);
     if (dev.server_connected) {
-        srvInd.className = 'status-indicator active';
-        srvTxt.textContent = 'Connected';
+        srvInd.className = 'status-dot green';
     } else {
-        srvInd.className = 'status-indicator inactive';
-        srvTxt.textContent = dev.error || 'Disconnected';
+        srvInd.className = 'status-dot red';
     }
-    srvInd.title = 'MA: ' + srvTxt.textContent;
     if (maApiBadge) maApiBadge.style.display = (dev.ma_now_playing && dev.ma_now_playing.connected) ? '' : 'none';
 
     // Playback
@@ -505,16 +478,16 @@ function populateDeviceCard(i, dev) {
     // Color indicator: red=no sink (BT not ready), green=playing+streaming,
     // red=playing but no audio (stale), yellow=stopped
     if (!dev.has_sink && dev.bluetooth_mac) {
-        if (playInd) playInd.className = 'status-indicator inactive';
+        if (playInd) playInd.className = 'status-dot red';
         if (playTxt) playTxt.textContent = 'No Sink';
     } else if (dev.playing && dev.audio_streaming) {
-        if (playInd) playInd.className = 'status-indicator active';
-        if (playTxt) playTxt.textContent = '\u25b6 Playing';
+        if (playInd) playInd.className = 'status-dot green';
+        if (playTxt) playTxt.textContent = '\u25b6';
     } else if (dev.playing && !dev.audio_streaming) {
-        if (playInd) playInd.className = 'status-indicator inactive';
-        if (playTxt) playTxt.textContent = '\u25b6 No Audio';
+        if (playInd) playInd.className = 'status-dot red';
+        if (playTxt) playTxt.textContent = '\u25b6 Stale';
     } else {
-        if (playInd) playInd.className = 'status-indicator warning';
+        if (playInd) playInd.className = 'status-dot orange';
         if (playTxt) playTxt.textContent = '\u23f8 Stopped';
     }
 
@@ -560,7 +533,7 @@ function populateDeviceCard(i, dev) {
     var pauseBtn = document.getElementById('dbtn-pause-' + i);
     if (pauseBtn && !pauseBtn.classList.contains('pending')) {
         if (dev.playing) {
-            pauseBtn.innerHTML = '&#9646;&#9646;';
+            pauseBtn.innerHTML = '&#9208;';
             pauseBtn.classList.remove('paused');
             pauseBtn.title = 'Pause';
         } else {
@@ -621,13 +594,13 @@ function populateDeviceCard(i, dev) {
             maRepeatBtn.classList.toggle('active', rm !== 'off');
         }
     }
-    // Delay badge — hover-only in sync column
+    // Delay chip
     var delayEl = document.getElementById('ddelay-' + i);
     if (delayEl) {
         var delay = dev.static_delay_ms;
         if (dev.playing && delay !== undefined && delay !== null && delay !== 0) {
-            delayEl.textContent = 'delay: ' + (delay > 0 ? '+' : '') + delay + 'ms';
-            delayEl.style.color = Math.abs(delay) > 1000 ? '#f59e0b' : 'var(--secondary-text-color)';
+            delayEl.textContent = (delay > 0 ? '+' : '\u2212') + Math.abs(delay) + 'ms';
+            delayEl.style.color = Math.abs(delay) > 1000 ? '#f59e0b' : '';
         } else {
             delayEl.textContent = '';
         }
@@ -645,14 +618,13 @@ function populateDeviceCard(i, dev) {
         var currAt = dev.last_reanchor_at || '';
         if (!dev.playing) {
             syncEl.textContent = '\u2014';
+            syncEl.className = 'status-chip chip-sync';
             syncEl.style.color = '#9ca3af';
             if (syncDetail) syncDetail.textContent = '';
             delete reanchorShownAt[i];
             lastReanchorCount[i] = currCount;
             lastReanchorAt[i] = currAt;
         } else {
-            // Detect a new re-anchor event: count increased OR last_reanchor_at changed
-            // (count alone can reset to 0 on stream restart, causing missed detections)
             var countIncreased = lastReanchorCount[i] !== undefined && currCount > lastReanchorCount[i];
             var tsChanged = lastReanchorAt[i] !== undefined && currAt && currAt !== lastReanchorAt[i];
             if (countIncreased || tsChanged) {
@@ -664,17 +636,19 @@ function populateDeviceCard(i, dev) {
             var warningDuration = Math.max(Math.abs(dev.static_delay_ms || 0), 5000);
             var shownAt = reanchorShownAt[i];
             if (shownAt && (Date.now() - shownAt) < warningDuration) {
-                syncEl.innerHTML = '<span style="color:#f59e0b;">&#9888; Re-anchoring</span>';
+                syncEl.textContent = '\u26a0 Re-anchoring';
+                syncEl.className = 'status-chip chip-sync warn';
+                syncEl.style.color = '';
                 if (syncDetail) syncDetail.textContent = dev.last_sync_error_ms != null
-                    ? 'Error: ' + dev.last_sync_error_ms.toFixed(1) + ' ms' : '';
+                    ? '\u0394' + dev.last_sync_error_ms.toFixed(0) + 'ms' : '';
             } else {
                 delete reanchorShownAt[i];
-                syncEl.innerHTML = '<span style="color:#10b981;">&#10003; In sync</span>';
+                syncEl.textContent = '\u2713 In sync';
+                syncEl.className = 'status-chip chip-sync';
+                syncEl.style.color = '';
                 if (syncDetail) {
                     var rc = dev.reanchor_count || 0;
-                    syncDetail.innerHTML = rc
-                        ? '<span title="Number of re-synchronisations in this stream session">Re-anchors: ' + rc + '</span>'
-                        : '';
+                    syncDetail.textContent = rc ? '\u27f3' + rc : '';
                     syncDetail.style.color = rc > 100 ? 'var(--error-color)' : rc > 10 ? '#f59e0b' : '';
                 }
             }
