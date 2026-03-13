@@ -22,6 +22,7 @@ import state as _state
 logger = logging.getLogger(__name__)
 
 _POLL_INTERVAL = 15  # seconds between polling cycles when events unavailable
+_GROUPS_REFRESH_INTERVAL = 60  # seconds between syncgroup cache refreshes
 _RECONNECT_BASE = 2  # seconds — first reconnect delay
 _RECONNECT_MAX = 60  # seconds — max reconnect delay
 
@@ -277,6 +278,73 @@ class MaMonitor:
                 lambda t: logger.debug("MA send_reconnect error: %s", t.exception()) if t.exception() else None
             )
 
+    async def _refresh_groups_via_ws(self, ws) -> None:
+        """Fetch players/all via WS and rebuild the syncgroup cache in state."""
+        try:
+            mid = self._next_id()
+            await _send(ws, mid, "players/all", {})
+            for _ in range(30):
+                resp = await _recv(ws, timeout=10.0)
+                if str(resp.get("message_id")) == str(mid):
+                    players = resp.get("result") or []
+                    break
+            else:
+                return
+
+            id_to_name: dict[str, str] = {
+                p["player_id"]: (p.get("display_name") or p.get("name") or "") for p in players
+            }
+            all_groups: list[dict] = []
+            id_map: dict[str, dict] = {}
+
+            clients = _state.get_clients_snapshot()
+            bridge_info = [
+                {"player_id": getattr(c, "player_id", ""), "player_name": getattr(c, "player_name", "")}
+                for c in clients
+                if getattr(c, "player_id", "")
+            ]
+
+            member_set_by_group: dict[str, set[str]] = {}
+
+            for p in players:
+                if p.get("type") != "group" or p.get("provider") != "sync_group":
+                    continue
+                sg_id = p["player_id"]
+                sg_name = p.get("display_name") or p.get("name") or sg_id
+                raw_members = p.get("group_members") or []
+                member_ids = set(raw_members)
+                member_set_by_group[sg_id] = member_ids
+                members = [{"id": mid_m, "name": id_to_name.get(mid_m, mid_m)} for mid_m in raw_members]
+                all_groups.append({"id": sg_id, "name": sg_name, "members": members})
+                sg_info = {"id": sg_id, "name": sg_name}
+                for bp in bridge_info:
+                    pid = bp["player_id"]
+                    if pid in member_ids and pid not in id_map:
+                        id_map[pid] = sg_info
+
+            # Fallback: fuzzy name matching for unmatched bridge players
+            if bridge_info and all_groups:
+                member_names_by_group: dict[str, set[str]] = {}
+                for sg_id, mids in member_set_by_group.items():
+                    member_names_by_group[sg_id] = {id_to_name.get(mid_m, "").lower() for mid_m in mids}
+                for bp in bridge_info:
+                    pid = bp["player_id"]
+                    if pid in id_map:
+                        continue
+                    bname = bp["player_name"]
+                    if not bname:
+                        continue
+                    b = bname.lower()
+                    for g in all_groups:
+                        mn_set = member_names_by_group.get(g["id"], set())
+                        if any(b in mn or mn in b for mn in mn_set if mn):
+                            id_map[pid] = {"id": g["id"], "name": g["name"]}
+                            break
+
+            _state.set_ma_groups(id_map, all_groups)
+        except Exception as exc:
+            logger.debug("MA monitor groups refresh error: %s", exc)
+
     async def _connect_and_run(self) -> None:
         """Single connection session: auth, subscribe events, poll loop."""
         # Re-read credentials from state — they may have been updated by
@@ -360,16 +428,20 @@ class MaMonitor:
                 resp = await _recv(ws, timeout=10.0)
                 if str(resp.get("message_id")) == str(mid):
                     queues = resp.get("result") or []
+                    fresh: dict[str, dict] = {}
                     # Syncgroup players
                     syncgroup_queues = await _find_syncgroup_queues(queues)
                     for q in syncgroup_queues:
                         np = _build_now_playing(q)
-                        _state.set_ma_now_playing_for_group(np["syncgroup_id"], np)
+                        fresh[np["syncgroup_id"]] = np
                     # Solo (ungrouped) players — keyed by their own player_id
                     for player_id, q in _find_solo_player_queues(queues):
                         np = _build_now_playing(q)
                         np["syncgroup_id"] = player_id
-                        _state.set_ma_now_playing_for_group(player_id, np)
+                        fresh[player_id] = np
+                    # Atomically replace to clear stale entries
+                    if fresh:
+                        _state.replace_ma_now_playing(fresh)
                     return
         except Exception as exc:
             logger.debug("MA monitor poll error: %s", exc)
@@ -377,6 +449,7 @@ class MaMonitor:
     async def _event_loop(self, ws) -> None:
         """Process incoming MA events until connection drops."""
         _poll_deadline = time.monotonic() + _POLL_INTERVAL
+        _groups_deadline = time.monotonic() + _GROUPS_REFRESH_INTERVAL
         while self._running:
             try:
                 # Drain any pending commands before waiting for events
@@ -389,6 +462,10 @@ class MaMonitor:
                     # Periodic re-poll to keep elapsed_time fresh
                     await self._poll_queues(ws)
                     _poll_deadline = time.monotonic() + _POLL_INTERVAL
+                    # Periodic group refresh
+                    if time.monotonic() >= _groups_deadline:
+                        await self._refresh_groups_via_ws(ws)
+                        _groups_deadline = time.monotonic() + _GROUPS_REFRESH_INTERVAL
                     continue
 
                 data = json.loads(msg)
@@ -397,7 +474,10 @@ class MaMonitor:
                     await self._poll_queues(ws)
                     _poll_deadline = time.monotonic() + _POLL_INTERVAL
                 elif event == "player_updated":
-                    pass  # Volume sync handled by bridge_daemon via sendspin echo
+                    # Group membership may have changed — refresh groups
+                    if time.monotonic() >= _groups_deadline:
+                        await self._refresh_groups_via_ws(ws)
+                        _groups_deadline = time.monotonic() + _GROUPS_REFRESH_INTERVAL
             except Exception as exc:
                 logger.debug("MA monitor event error: %s", exc)
                 raise  # bubble up to reconnect loop

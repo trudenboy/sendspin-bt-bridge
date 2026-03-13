@@ -41,6 +41,7 @@ __all__ = [
     "is_scan_running",
     "load_adapter_name_cache",
     "notify_status_changed",
+    "replace_ma_now_playing",
     "set_clients",
     "set_disabled_devices",
     "set_ma_api_credentials",
@@ -393,6 +394,14 @@ def set_ma_now_playing_for_group(syncgroup_id: str, data: dict) -> None:
     """Update now-playing for a specific syncgroup. Triggers SSE notification."""
     with _ma_now_playing_lock:
         _ma_now_playing[syncgroup_id] = data
+    notify_status_changed()
+
+
+def replace_ma_now_playing(new_data: dict[str, dict]) -> None:
+    """Atomically replace all now-playing entries. Removes stale keys."""
+    with _ma_now_playing_lock:
+        _ma_now_playing.clear()
+        _ma_now_playing.update(new_data)
     notify_status_changed()
 
 
