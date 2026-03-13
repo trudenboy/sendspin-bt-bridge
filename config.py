@@ -19,7 +19,7 @@ import threading
 import uuid as _uuid
 from pathlib import Path
 
-VERSION = "2.29.0"
+VERSION = "2.30.0"
 BUILD_DATE = "2026-03-13"
 
 __all__ = [
@@ -59,7 +59,7 @@ DEFAULT_CONFIG = {
     "MA_USERNAME": "",
     "VOLUME_VIA_MA": True,
     "MUTE_VIA_MA": False,
-    "SMOOTH_RESTART": False,
+    "SMOOTH_RESTART": True,
     "AUTO_UPDATE": False,
     "CHECK_UPDATES": True,
     "TRUSTED_PROXIES": [],

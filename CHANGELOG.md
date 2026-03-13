@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.30.0] - 2026-03-13
+
+### Added
+- **Smooth restart** — optional mute-before-restart flow with a 6-step progress bar; enabled by default (`SMOOTH_RESTART` config key). Non-smooth mode still shows a 5-step progress bar (skips mute step)
+- **Buffering state indicator** — when MA reports the group is playing but the bridge isn't receiving audio yet, the card shows `▶ Buffering` with a pulsing orange dot instead of misleading `⏸ Stopped`
+- **3-column card layout** — device cards now arrange in up to 3 columns on wide screens
+
+### Fixed
+- **Mute button console error** — removed orphaned `onclick="toggleMute(i)"` attribute that threw `ReferenceError` (actual handler was already attached via `addEventListener`)
+- **Eq-bars always visible** — broken CSS comment caused equalizer bars to display permanently; now correctly hidden when not playing
+- **Eq-bars min-width** — equalizer animation no longer overflows narrow card layouts
+- **Log level detection** — error/critical highlighting in the report link now uses structured log format instead of fragile substring matching
+
 ## [2.29.0] - 2026-03-13
 
 ### Added

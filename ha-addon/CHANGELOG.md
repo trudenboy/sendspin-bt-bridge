@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.30.0] - 2026-03-13
+
+### Added
+- Smooth restart with progress bar (mute-before-restart, enabled by default)
+- Buffering state indicator when MA group is playing but bridge isn't streaming yet
+- 3-column card layout on wide screens
+
+### Fixed
+- Mute button console error (orphaned onclick handler)
+- Eq-bars always visible due to broken CSS comment
+- Log level detection uses structured format instead of substring matching
+
 ## [2.29.0] - 2026-03-13
 
 ### Added
