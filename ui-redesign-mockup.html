@@ -1,0 +1,1751 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sendspin BT Bridge — UI Redesign v2 (HA/MA aligned)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+/* ═══════════════════════════════════════════════════════
+   HOME ASSISTANT DESIGN TOKENS
+   Exact HA CSS custom properties for seamless Ingress integration
+   ═══════════════════════════════════════════════════════ */
+:root {
+  /* HA core palette */
+  --primary-color: #03a9f4;
+  --dark-primary-color: #0288d1;
+  --accent-color: #ff9800;
+  --error-color: #db4437;
+  --success-color: #43a047;
+  --warning-color: #ffa600;
+  --info-color: #039be5;
+
+  /* HA text */
+  --primary-text-color: #212121;
+  --secondary-text-color: #727272;
+  --disabled-text-color: #bdbdbd;
+
+  /* HA backgrounds */
+  --primary-background-color: #fafafa;
+  --secondary-background-color: #e5e5e5;
+  --card-background-color: #ffffff;
+
+  /* HA structural */
+  --divider-color: rgba(0, 0, 0, .12);
+  --ha-card-border-radius: 12px;
+  --ha-card-box-shadow: 0 2px 2px 0 rgba(0,0,0,.14),
+                         0 1px 5px 0 rgba(0,0,0,.12),
+                         0 3px 1px -2px rgba(0,0,0,.2);
+
+  /* HA header */
+  --app-header-background-color: var(--primary-color);
+  --app-header-text-color: #fff;
+
+  /* HA code */
+  --code-background-color: #1e293b;
+  --code-text-color: #e2e8f0;
+
+  /* Bridge-specific extensions (compatible with HA theming) */
+  --bridge-sidebar-width: 240px;
+  --bridge-player-bar-height: 64px;
+}
+
+/* Dark theme — HA standard dark palette */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --primary-background-color: #111111;
+    --secondary-background-color: #202020;
+    --card-background-color: #1c1c1c;
+    --primary-text-color: #e1e1e1;
+    --secondary-text-color: #9b9b9b;
+    --disabled-text-color: rgba(225,225,225,.5);
+    --divider-color: rgba(225, 225, 225, .12);
+    --ha-card-box-shadow: 0 2px 2px 0 rgba(0,0,0,.4),
+                           0 1px 5px 0 rgba(0,0,0,.3),
+                           0 3px 1px -2px rgba(0,0,0,.5);
+    --code-background-color: #0f172a;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════
+   RESET & BASE — Roboto (HA standard font)
+   ═══════════════════════════════════════════════════════ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI',
+               'Helvetica Neue', Arial, sans-serif;
+  background: var(--primary-background-color);
+  color: var(--primary-text-color);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+/* ═══════════════════════════════════════════════════════
+   PAGE LAYOUT
+   ═══════════════════════════════════════════════════════ */
+.page { padding: 16px; max-width: 1400px; margin: 0 auto; }
+
+/* ═══════════════════════════════════════════════════════
+   HEADER — HA-style app-header with primary color
+   Follows HA toolbar: colored top bar with white text
+   ═══════════════════════════════════════════════════════ */
+.app-header {
+  background: var(--app-header-background-color);
+  color: var(--app-header-text-color);
+  border-radius: var(--ha-card-border-radius);
+  padding: 12px 20px;
+  margin-bottom: 16px;
+  box-shadow: var(--ha-card-box-shadow);
+}
+
+.header-row1 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.header-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.header-logo {
+  width: 28px; height: 28px;
+  filter: brightness(10);
+}
+
+.header-title {
+  font-size: 18px;
+  font-weight: 500;
+  letter-spacing: -0.2px;
+}
+
+.header-version {
+  font-size: 11px;
+  background: rgba(255,255,255,.2);
+  padding: 2px 8px;
+  border-radius: 10px;
+  text-decoration: none;
+  color: inherit;
+  font-weight: 500;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.header-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  color: rgba(255,255,255,.85);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 500;
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: background 150ms;
+}
+
+.header-btn:hover {
+  background: rgba(255,255,255,.15);
+  color: #fff;
+}
+
+.header-btn svg { width: 16px; height: 16px; fill: currentColor; }
+
+/* System info bar — below header, inside the colored block */
+.header-row2 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255,255,255,.15);
+  font-size: 12px;
+  color: rgba(255,255,255,.7);
+}
+
+.header-row2-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.runtime-badge {
+  background: rgba(255,255,255,.2);
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-weight: 700;
+  font-size: 10px;
+  letter-spacing: .5px;
+}
+
+.health-pills {
+  display: flex;
+  gap: 8px;
+}
+
+.health-pill {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.health-pill .dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.dot-green { background: #4caf50; }
+.dot-yellow { background: var(--warning-color); }
+.dot-gray { background: rgba(255,255,255,.4); }
+
+.header-user {
+  color: rgba(255,255,255,.85);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.header-user-name {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: rgba(255,255,255,.85);
+  font-size: 13px;
+  font-weight: 500;
+  border-left: 1px solid rgba(255,255,255,.2);
+  padding-left: 12px;
+  margin-left: 4px;
+}
+
+.header-user-icon {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+
+.header-btn-signout {
+  padding: 6px 8px;
+  opacity: .7;
+  transition: opacity 150ms;
+}
+.header-btn-signout:hover { opacity: 1; }
+
+.health-icon {
+  width: 12px;
+  height: 12px;
+  fill: currentColor;
+  vertical-align: -1px;
+}
+
+/* ═══════════════════════════════════════════════════════
+   TOOLBAR — HA-card style, follows MA player bar patterns
+   ═══════════════════════════════════════════════════════ */
+.toolbar {
+  background: var(--card-background-color);
+  border-radius: var(--ha-card-border-radius);
+  box-shadow: var(--ha-card-box-shadow);
+  padding: 10px 16px;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.toolbar-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin-bottom: 16px;
+}
+
+.filter-bar {
+  background: var(--card-background-color);
+  border-radius: var(--ha-card-border-radius) var(--ha-card-border-radius) 0 0;
+  box-shadow: var(--ha-card-box-shadow);
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.action-bar {
+  background: var(--card-background-color);
+  border-radius: 0 0 var(--ha-card-border-radius) var(--ha-card-border-radius);
+  box-shadow: var(--ha-card-box-shadow);
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-top: 1px solid var(--divider-color);
+}
+
+.filter-bar select {
+  border: 1px solid var(--divider-color);
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-size: 13px;
+  background: var(--card-background-color);
+  color: var(--primary-text-color);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.list-footer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  font-size: 12px;
+  color: var(--secondary-text-color);
+  background: var(--primary-background-color);
+  border-top: 1px solid var(--divider-color);
+}
+
+.toolbar-section {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.toolbar-sep {
+  width: 1px;
+  height: 24px;
+  background: var(--divider-color);
+}
+
+.toolbar-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--secondary-text-color);
+  text-transform: uppercase;
+  letter-spacing: .5px;
+}
+
+.toolbar select {
+  border: 1px solid var(--divider-color);
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-size: 13px;
+  background: var(--card-background-color);
+  color: var(--primary-text-color);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.toolbar-count {
+  font-size: 12px;
+  color: var(--secondary-text-color);
+}
+
+/* Volume slider — MA style (thin, colored fill) */
+.vol-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 160px;
+  max-width: 320px;
+}
+
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: 1;
+  height: 28px;
+  border-radius: 3px;
+  background: transparent;
+  outline: none;
+  cursor: pointer;
+  margin: 0;
+  padding: 0;
+}
+
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--slider-fill, var(--divider-color));
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  background: var(--primary-color);
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0,0,0,.2);
+  transition: transform 100ms;
+  margin-top: -5px;
+}
+
+input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+}
+
+.chip-icon {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+}
+
+.filter-icon {
+  width: 18px;
+  height: 18px;
+  color: var(--secondary-text-color);
+  flex-shrink: 0;
+}
+
+.vol-pct {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--secondary-text-color);
+  min-width: 32px;
+  text-align: right;
+}
+
+/* Icon buttons — HA style (flat, round hover) */
+.icon-btn {
+  width: 36px; height: 36px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--secondary-text-color);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 150ms, color 150ms;
+}
+
+.icon-btn:hover {
+  background: rgba(0,0,0,.06);
+  color: var(--primary-text-color);
+}
+
+.icon-btn:disabled {
+  opacity: .35;
+  cursor: default;
+}
+
+.icon-btn:disabled:hover {
+  background: transparent;
+}
+
+.icon-btn svg { width: 20px; height: 20px; }
+
+/* Text buttons */
+.text-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 150ms;
+  border: 1px solid var(--divider-color);
+  background: var(--card-background-color);
+  color: var(--secondary-text-color);
+  font-family: inherit;
+}
+
+.text-btn:hover {
+  background: var(--primary-background-color);
+  color: var(--primary-text-color);
+}
+
+.text-btn svg { width: 16px; height: 16px; }
+
+/* ═══════════════════════════════════════════════════════
+   VIEW TOGGLE — grid vs list (critical for 10+ devices)
+   ═══════════════════════════════════════════════════════ */
+.view-toggle {
+  display: flex;
+  margin-left: auto;
+  border: 1px solid var(--divider-color);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.view-toggle-btn {
+  padding: 5px 10px;
+  border: none;
+  background: var(--card-background-color);
+  color: var(--secondary-text-color);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  transition: all 150ms;
+}
+
+.view-toggle-btn.active {
+  background: var(--primary-color);
+  color: #fff;
+}
+
+.view-toggle-btn svg { width: 16px; height: 16px; }
+
+/* ═══════════════════════════════════════════════════════
+   DEVICE CARDS — GRID VIEW (HA card + MA player card hybrid)
+   ═══════════════════════════════════════════════════════ */
+.devices-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.device-card {
+  background: var(--card-background-color);
+  border-radius: var(--ha-card-border-radius);
+  box-shadow: var(--ha-card-box-shadow);
+  padding: 16px;
+  transition: box-shadow 200ms;
+  position: relative;
+  overflow: hidden;
+}
+
+.device-card:hover {
+  box-shadow: 0 4px 8px rgba(0,0,0,.16), 0 2px 4px rgba(0,0,0,.12);
+}
+
+/* State indicator — left border like MA player status */
+.device-card.playing {
+  border-left: 3px solid var(--success-color);
+}
+
+.device-card.released {
+  opacity: .55;
+}
+
+.device-card.error-state {
+  border-left: 3px solid var(--error-color);
+}
+
+.device-card.reconnecting {
+  border-left: 3px solid var(--warning-color);
+}
+
+/* Card header — MA style: icon + name + badge */
+.card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.card-icon {
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  background: var(--secondary-background-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--secondary-text-color);
+  flex-shrink: 0;
+}
+
+.card-icon svg { width: 22px; height: 22px; }
+
+.card-icon.playing-icon {
+  background: rgba(67,160,71,.12);
+  color: var(--success-color);
+}
+
+.card-name-block { flex: 1; min-width: 0; }
+
+.card-name {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--primary-text-color);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.card-name .name-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.card-sub {
+  font-size: 12px;
+  color: var(--secondary-text-color);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.card-sub .track-artist { font-weight: 400; }
+
+.card-badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.badge-playing { background: rgba(67,160,71,.12); color: var(--success-color); }
+.badge-released { background: rgba(255,152,0,.12); color: #e65100; }
+.badge-error { background: rgba(219,68,55,.12); color: var(--error-color); }
+.badge-stopped { background: var(--secondary-background-color); color: var(--secondary-text-color); }
+.badge-group { background: rgba(3,169,244,.1); color: var(--primary-color); cursor: pointer; }
+
+/* Status chips row — compact, HA-aligned colors */
+.card-chips {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 500;
+  background: var(--secondary-background-color);
+  color: var(--secondary-text-color);
+}
+
+.chip .dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.chip-ok { background: rgba(67,160,71,.1); color: #2e7d32; }
+.chip-warn { background: rgba(255,166,0,.1); color: #e65100; }
+.chip-err { background: rgba(219,68,55,.1); color: #c62828; }
+
+/* Transport + volume — single row */
+.card-controls {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
+.card-controls .icon-btn {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+}
+
+.card-controls .icon-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.card-controls .vol-wrap {
+  flex: 1;
+  min-width: 50px;
+  max-width: none;
+  gap: 4px;
+  margin: 0 2px;
+}
+
+.card-controls .vol-pct {
+  font-size: 11px;
+  min-width: 26px;
+}
+
+/* Now Playing block — MA style with album art */
+.card-np {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  margin-top: 10px;
+  background: var(--primary-background-color);
+  border-radius: 8px;
+}
+
+.np-art {
+  width: 44px; height: 44px;
+  border-radius: 6px;
+  background: var(--secondary-background-color);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--disabled-text-color);
+  overflow: hidden;
+}
+
+.np-art svg { width: 24px; height: 24px; }
+
+.np-info { flex: 1; min-width: 0; }
+
+.np-track {
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.np-meta {
+  font-size: 11px;
+  color: var(--secondary-text-color);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.np-progress {
+  width: 100%;
+  height: 2px;
+  background: var(--divider-color);
+  border-radius: 1px;
+  margin-top: 6px;
+  overflow: hidden;
+}
+
+.np-progress-fill {
+  height: 100%;
+  background: var(--primary-color);
+  border-radius: 1px;
+}
+
+.np-time {
+  font-size: 11px;
+  color: var(--disabled-text-color);
+  white-space: nowrap;
+}
+
+/* Card hover actions — HA pattern */
+.card-actions-row {
+  display: flex;
+  gap: 4px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--divider-color);
+  opacity: 0;
+  max-height: 0;
+  overflow: hidden;
+  transition: all 200ms;
+}
+
+.device-card:hover .card-actions-row {
+  opacity: 1;
+  max-height: 40px;
+}
+
+.action-btn {
+  font-size: 12px;
+  font-weight: 500;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--primary-color);
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 150ms;
+}
+
+.action-btn:hover { background: rgba(3,169,244,.08); }
+
+.action-btn.danger { color: var(--error-color); }
+.action-btn.danger:hover { background: rgba(219,68,55,.08); }
+
+/* Released overlay */
+.released-cta {
+  text-align: center;
+  padding: 8px;
+}
+
+.btn-reclaim {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 20px;
+  background: var(--primary-color);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+  box-shadow: 0 1px 3px rgba(0,0,0,.15);
+  transition: background 150ms;
+}
+
+.btn-reclaim:hover { background: var(--dark-primary-color); }
+
+/* EQ bars — inline with player name */
+.eq-bars { display: inline-flex; align-items: flex-end; gap: 2px; height: 14px; flex-shrink: 0; }
+.eq-bar {
+  width: 3px;
+  background: var(--primary-color);
+  border-radius: 1px;
+  animation: eq 0.7s ease-in-out infinite alternate;
+}
+.eq-bar:nth-child(1) { height: 5px; animation-delay: 0s; }
+.eq-bar:nth-child(2) { height: 12px; animation-delay: .15s; }
+.eq-bar:nth-child(3) { height: 8px; animation-delay: .08s; }
+@keyframes eq { from { height: 3px; } to { height: 14px; } }
+
+/* ═══════════════════════════════════════════════════════
+   LIST VIEW — Compact table for 10+ devices
+   MA-style player list (icon, name, track, volume)
+   ═══════════════════════════════════════════════════════ */
+.devices-list {
+  background: var(--card-background-color);
+  border-radius: var(--ha-card-border-radius);
+  box-shadow: var(--ha-card-box-shadow);
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+
+.list-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--divider-color);
+  transition: background 150ms;
+  cursor: default;
+}
+
+.list-row:last-child { border-bottom: none; }
+
+.list-row:hover { background: rgba(0,0,0,.02); }
+
+.list-row.playing { background: rgba(67,160,71,.04); }
+
+.list-checkbox {
+  width: 18px; height: 18px;
+  accent-color: var(--primary-color);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.list-icon {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  background: var(--secondary-background-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--secondary-text-color);
+  flex-shrink: 0;
+  position: relative;
+}
+
+.list-icon svg { width: 20px; height: 20px; }
+
+.list-icon.playing-icon { background: rgba(67,160,71,.12); color: var(--success-color); }
+
+.list-state-dot {
+  position: absolute;
+  bottom: 0; right: 0;
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--card-background-color);
+}
+
+.list-info { flex: 1; min-width: 0; }
+
+.list-name {
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.list-track {
+  font-size: 12px;
+  color: var(--secondary-text-color);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.list-badges {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.list-volume {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 140px;
+  flex-shrink: 0;
+}
+
+.list-volume input[type="range"] { flex: 1; }
+.list-volume .vol-pct { min-width: 28px; font-size: 12px; }
+
+.list-actions {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+/* ═══════════════════════════════════════════════════════
+   COLLAPSIBLE SECTIONS — HA-card based
+   ═══════════════════════════════════════════════════════ */
+.ha-card {
+  background: var(--card-background-color);
+  border-radius: var(--ha-card-border-radius);
+  box-shadow: var(--ha-card-box-shadow);
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+
+.ha-card-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 20px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 150ms;
+}
+
+.ha-card-header:hover { background: rgba(0,0,0,.03); }
+
+.ha-card-header-icon {
+  width: 32px; height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.icon-config { background: rgba(3,169,244,.1); }
+.icon-diag { background: rgba(67,160,71,.1); }
+.icon-logs { background: rgba(255,152,0,.1); }
+
+.ha-card-title {
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.ha-card-chevron {
+  margin-left: auto;
+  color: var(--disabled-text-color);
+  transition: transform 200ms;
+  font-size: 12px;
+}
+
+.ha-card.open .ha-card-chevron { transform: rotate(90deg); }
+
+.ha-card-body { padding: 0 20px 20px; display: none; }
+.ha-card.open .ha-card-body { display: block; }
+
+/* Config tabs — HA panel style */
+.config-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--divider-color);
+  margin-bottom: 20px;
+}
+
+.config-tab {
+  padding: 10px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--secondary-text-color);
+  cursor: pointer;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: none;
+  font-family: inherit;
+  transition: all 150ms;
+}
+
+.config-tab:hover { color: var(--primary-text-color); }
+.config-tab.active { color: var(--primary-color); border-bottom-color: var(--primary-color); }
+
+/* Form — HA Material Design inputs */
+.form-group { margin-bottom: 16px; }
+
+.form-label {
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: 4px;
+  display: block;
+}
+
+.form-hint {
+  font-size: 11px;
+  color: var(--secondary-text-color);
+  margin-bottom: 6px;
+}
+
+.form-input {
+  width: 100%;
+  max-width: 400px;
+  padding: 10px 12px;
+  border: 1px solid var(--divider-color);
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: inherit;
+  color: var(--primary-text-color);
+  background: var(--card-background-color);
+  transition: border-color 150ms;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 1px var(--primary-color);
+}
+
+/* Toggle — HA switch style */
+.ha-toggle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+}
+
+.ha-switch {
+  width: 36px; height: 20px;
+  background: var(--disabled-text-color);
+  border-radius: 10px;
+  position: relative;
+  cursor: pointer;
+  transition: background 200ms;
+  flex-shrink: 0;
+}
+
+.ha-switch.on { background: var(--primary-color); }
+
+.ha-switch::after {
+  content: '';
+  width: 16px; height: 16px;
+  background: #fff;
+  border-radius: 50%;
+  position: absolute;
+  top: 2px; left: 2px;
+  transition: transform 200ms;
+  box-shadow: 0 1px 3px rgba(0,0,0,.2);
+}
+
+.ha-switch.on::after { transform: translateX(16px); }
+
+.toggle-text .toggle-title { font-size: 14px; font-weight: 500; }
+.toggle-text .toggle-desc { font-size: 12px; color: var(--secondary-text-color); }
+
+/* ═══════════════════════════════════════════════════════
+   STICKY SAVE BAR — Single, contextual
+   ═══════════════════════════════════════════════════════ */
+.save-bar {
+  position: sticky;
+  bottom: 0; left: 0; right: 0;
+  background: var(--card-background-color);
+  border-top: 1px solid var(--divider-color);
+  padding: 10px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  box-shadow: 0 -2px 8px rgba(0,0,0,.08);
+  z-index: 100;
+}
+
+.save-info {
+  font-size: 13px;
+  color: var(--warning-color);
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.save-info svg { width: 16px; height: 16px; }
+
+.btn-save {
+  padding: 8px 20px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  font-family: inherit;
+  transition: background 150ms;
+}
+
+.btn-save.primary {
+  background: var(--primary-color);
+  color: #fff;
+}
+
+.btn-save.primary:hover { background: var(--dark-primary-color); }
+
+.btn-save.secondary {
+  background: var(--secondary-background-color);
+  color: var(--primary-text-color);
+}
+
+.btn-save.secondary:hover { background: var(--divider-color); }
+
+/* ═══════════════════════════════════════════════════════
+   MOCKUP LABELS
+   ═══════════════════════════════════════════════════════ */
+.mockup-label {
+  text-align: center;
+  padding: 24px 0 8px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--primary-color);
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+}
+
+.mockup-title {
+  text-align: center;
+  padding: 20px 0 4px;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.mockup-subtitle {
+  text-align: center;
+  font-size: 12px;
+  color: var(--secondary-text-color);
+  padding-bottom: 16px;
+}
+
+.mockup-divider {
+  border: none;
+  border-top: 2px dashed var(--divider-color);
+  margin: 32px 0;
+}
+
+/* ═══════════════════════════════════════════════════════
+   RESPONSIVE — Mobile (≤640px)
+   ═══════════════════════════════════════════════════════ */
+@media (max-width: 640px) {
+  .page { padding: 10px; }
+  .header-title { font-size: 16px; }
+  .header-actions .btn-label { display: none; }
+  .header-row1 { flex-wrap: wrap; }
+  .devices-grid { grid-template-columns: 1fr; }
+  .toolbar { flex-direction: column; align-items: stretch; gap: 10px; }
+  .toolbar-sep { width: 100%; height: 1px; }
+  .filter-bar { flex-wrap: wrap; gap: 6px; }
+  .action-bar { flex-wrap: wrap; gap: 8px; }
+  .filter-bar select { font-size: 12px; padding: 4px 6px; }
+  .view-toggle { margin-left: auto; }
+  .vol-wrap { max-width: none; }
+  .card-actions-row { opacity: 1; max-height: 40px; }
+  .list-volume { width: 100px; }
+  .list-badges { display: none; }
+  .view-toggle { display: none; }
+}
+</style>
+</head>
+<body>
+
+<div class="page">
+
+<div class="mockup-title">Sendspin BT Bridge — UI Redesign v2</div>
+<div class="mockup-subtitle">Aligned with Home Assistant &amp; Music Assistant design guidelines</div>
+
+<!-- ═══════════════════════ HEADER ═══════════════════════ -->
+<div class="mockup-label">Header — HA app-header with --primary-color background</div>
+
+<div class="app-header">
+  <div class="header-row1">
+    <div class="header-brand">
+      <svg class="header-logo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+      <span class="header-title">Sendspin BT Bridge</span>
+      <a href="#" class="header-version">v2.30.7</a>
+    </div>
+    <div class="header-actions">
+      <a href="#" class="header-btn" title="Bug report">
+        <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+        <span class="btn-label">Report</span>
+      </a>
+      <a href="#" class="header-btn" title="Documentation">
+        <svg viewBox="0 0 24 24"><path d="M21 5c-1.11-.35-2.33-.5-3.5-.5-1.95 0-4.05.4-5.5 1.5-1.45-1.1-3.55-1.5-5.5-1.5S2.45 4.9 1 6v14.65c0 .25.25.5.5.5.1 0 .15-.05.25-.05C3.1 20.45 5.05 20 6.5 20c1.95 0 4.05.4 5.5 1.5 1.35-.85 3.8-1.5 5.5-1.5 1.65 0 3.35.3 4.75 1.05.1.05.15.05.25.05.25 0 .5-.25.5-.5V6c-.6-.45-1.25-.75-2-1zm0 13.5c-1.1-.35-2.3-.5-3.5-.5-1.7 0-4.15.65-5.5 1.5V8c1.35-.85 3.8-1.5 5.5-1.5 1.2 0 2.4.15 3.5.5v11.5z"/></svg>
+        <span class="btn-label">Docs</span>
+      </a>
+      <a href="#" class="header-btn" title="GitHub">
+        <svg viewBox="0 0 24 24"><path d="M12 .3a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2.2c-3.3.7-4-1.4-4-1.4-.6-1.4-1.3-1.8-1.3-1.8-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1.1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.7-1.6-2.7-.3-5.5-1.3-5.5-5.9 0-1.3.5-2.4 1.2-3.2-.1-.3-.5-1.5.1-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.7 1.7.3 2.9.1 3.2.8.8 1.2 1.9 1.2 3.2 0 4.6-2.8 5.6-5.5 5.9.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 .3"/></svg>
+        <span class="btn-label">GitHub</span>
+      </a>
+      <span class="header-user-name"><svg class="header-user-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>renso</span>
+      <button class="header-btn header-btn-signout" title="Sign out">
+        <svg viewBox="0 0 24 24"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/></svg>
+      </button>
+    </div>
+  </div>
+  <div class="header-row2">
+    <div class="header-row2-left">
+      <span class="runtime-badge">LXC</span>
+      <span>sendspin · 192.168.10.218 · up 4:25:57</span>
+    </div>
+    <div class="health-pills">
+      <span class="health-pill"><span class="dot dot-green"></span> <svg class="health-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M17.71 7.71L12 2h-1v7.59L6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 11 14.41V22h1l5.71-5.71-4.3-4.29 4.3-4.29zM13 5.83l1.88 1.88L13 9.59V5.83zm1.88 10.46L13 18.17v-3.76l1.88 1.88z"/></svg> 3/3</span>
+      <span class="health-pill"><span class="dot dot-green"></span> <svg class="health-icon" viewBox="0 0 240 240" fill="currentColor"><path d="M109.394 4.38C115.242-1.46 124.788-1.46 130.606 4.38L229.394 103.27C235.242 109.11 240 120.64 240 128.91V219.02L239.995 219.37C239.789 227.46 233.114 234 225 234H15C6.758 234 0 227.22 0 218.99V128.88C0 120.61 4.788 109.08 10.606 103.24L109.394 4.38ZM36 120C31.582 120 28 123.58 28 128V206H44V128C44 123.58 40.418 120 36 120ZM68 120C63.582 120 60 123.58 60 128V206H76V128C76 123.58 72.418 120 68 120ZM100 120C95.582 120 92 123.58 92 128V206H108V128C108 123.58 104.418 120 100 120ZM158.393 120.43C154.2 119.03 149.671 121.3 148.275 125.49L121.479 206H138.342L163.456 130.54C164.851 126.35 162.584 121.82 158.393 120.43ZM188.708 125.49C187.313 121.3 182.783 119.03 178.591 120.43C174.399 121.82 172.131 126.35 173.526 130.54L198.642 206H215.504L188.708 125.49Z"/></svg> 3/3</span>
+      <span class="health-pill"><span class="dot dot-green"></span> ▶ 4</span>
+      <span class="health-pill"><span class="dot dot-yellow"></span> 2 released</span>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ SCENARIO 1: 3 devices, Grid view ═══════════════════════ -->
+<div class="mockup-label">Scenario A · 3 devices — Grid view (current scale)</div>
+
+<div class="toolbar-stack">
+  <div class="filter-bar">
+    <svg class="filter-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M10 18h4v-2h-4v2zM3 6v2h18V6H3zm3 7h12v-2H6v2z"/></svg>
+    <select><option>All groups</option><option>🔗 Semdspin BT</option></select>
+    <select><option>All adapters</option><option>hci0</option><option>hci1</option></select>
+    <select><option>All statuses</option><option>▶ Playing</option><option>⏸ Idle</option><option>⟳ Reconnecting</option><option>Released</option><option>Error</option></select>
+    <div class="view-toggle" style="margin-left:auto">
+      <button class="view-toggle-btn active" title="Grid"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 3h8v8H3zm10 0h8v8h-8zM3 13h8v8H3zm10 0h8v8h-8z"/></svg></button>
+      <button class="view-toggle-btn" title="List"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/></svg></button>
+    </div>
+  </div>
+  <div class="action-bar">
+    <input type="checkbox" style="width:16px;height:16px;accent-color:var(--primary-color);cursor:pointer;">
+    <span class="toolbar-count">1 of 3</span>
+    <div class="toolbar-sep"></div>
+    <div class="vol-wrap">
+      <span class="toolbar-label">Vol</span>
+      <input type="range" value="69" min="0" max="100">
+      <span class="vol-pct">69%</span>
+    </div>
+    <div class="toolbar-sep"></div>
+    <button class="icon-btn" title="Mute All"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg></button>
+    <button class="icon-btn" title="Pause All"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg></button>
+    <button class="text-btn" title="Reconnect All">Reconnect</button>
+    <button class="text-btn" title="Release All">Release</button>
+  </div>
+</div>
+
+<div class="devices-grid">
+  <!-- Card: Playing -->
+  <div class="device-card playing">
+    <div class="card-head">
+      <div class="card-icon playing-icon">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17 2H7c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zM14 8h-4V4h4v4z"/></svg>
+      </div>
+      <div class="card-name-block">
+        <div class="card-name"><span class="name-text">Yandex mini 2 @ LXC</span> <div class="eq-bars"><div class="eq-bar"></div><div class="eq-bar"></div><div class="eq-bar"></div></div></div>
+      </div>
+      <span class="card-badge badge-group">Semdspin BT +2</span>
+    </div>
+    <div class="card-chips">
+      <span class="chip chip-ok"><span class="dot dot-green"></span> <svg class="chip-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M17.71 7.71L12 2h-1v7.59L6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 11 14.41V22h1l5.71-5.71-4.3-4.29 4.3-4.29zM13 5.83l1.88 1.88L13 9.59V5.83zm1.88 10.46L13 18.17v-3.76l1.88 1.88z"/></svg> hci0</span>
+      <span class="chip chip-ok"><span class="dot dot-green"></span> <svg class="chip-icon" viewBox="0 0 240 240" fill="currentColor"><path d="M109.394 4.38C115.242-1.46 124.788-1.46 130.606 4.38L229.394 103.27C235.242 109.11 240 120.64 240 128.91V219.02L239.995 219.37C239.789 227.46 233.114 234 225 234H15C6.758 234 0 227.22 0 218.99V128.88C0 120.61 4.788 109.08 10.606 103.24L109.394 4.38ZM36 120C31.582 120 28 123.58 28 128V206H44V128C44 123.58 40.418 120 36 120ZM68 120C63.582 120 60 123.58 60 128V206H76V128C76 123.58 72.418 120 68 120ZM100 120C95.582 120 92 123.58 92 128V206H108V128C108 123.58 104.418 120 100 120ZM158.393 120.43C154.2 119.03 149.671 121.3 148.275 125.49L121.479 206H138.342L163.456 130.54C164.851 126.35 162.584 121.82 158.393 120.43ZM188.708 125.49C187.313 121.3 182.783 119.03 178.591 120.43C174.399 121.82 172.131 126.35 173.526 130.54L198.642 206H215.504L188.708 125.49Z"/></svg> api</span>
+      <span class="chip chip-ok" title="In sync"><svg class="chip-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/></svg></span>
+      <span class="chip">−500ms</span>
+    </div>
+    <div class="card-controls">
+      <button class="icon-btn"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg></button>
+      <button class="icon-btn" style="color:var(--primary-color)"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg></button>
+      <button class="icon-btn"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg></button>
+      <button class="icon-btn"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg></button>
+      <button class="icon-btn"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg></button>
+      <div class="vol-wrap">
+        <input type="range" value="69" min="0" max="100">
+        <span class="vol-pct">69%</span>
+      </div>
+      <button class="icon-btn"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg></button>
+    </div>
+    <div class="card-np">
+      <div class="np-art"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg></div>
+      <div class="np-info">
+        <div class="np-track">Сел и поехал</div>
+        <div class="np-meta">Несчастный Случай · Последние деньки в раю</div>
+        <div class="np-progress"><div class="np-progress-fill" style="width:56%"></div></div>
+      </div>
+      <span class="np-time">3:28 / 6:14</span>
+    </div>
+    <div class="card-actions-row">
+      <button class="action-btn">Reconnect</button>
+      <button class="action-btn">Release</button>
+      <button class="action-btn danger">Disable</button>
+    </div>
+  </div>
+
+  <!-- Card: Released -->
+  <div class="device-card released">
+    <div class="card-head">
+      <div class="card-icon">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17 2H7c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zM14 8h-4V4h4v4z"/></svg>
+      </div>
+      <div class="card-name-block">
+        <div class="card-name">ENEBY Portable @ LXC</div>
+      </div>
+      <span class="card-badge badge-released">Released</span>
+    </div>
+    <div class="card-chips">
+      <span class="chip"><span class="dot dot-gray"></span> <svg class="chip-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M17.71 7.71L12 2h-1v7.59L6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 11 14.41V22h1l5.71-5.71-4.3-4.29 4.3-4.29zM13 5.83l1.88 1.88L13 9.59V5.83zm1.88 10.46L13 18.17v-3.76l1.88 1.88z"/></svg> hci0</span>
+      <span class="chip"><span class="dot" style="background:var(--error-color)"></span> Disconnected</span>
+    </div>
+    <div class="released-cta">
+      <button class="btn-reclaim">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>
+        Reclaim
+      </button>
+    </div>
+  </div>
+
+  <!-- Card: Error -->
+  <div class="device-card error-state">
+    <div class="card-head">
+      <div class="card-icon">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17 2H7c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zM14 8h-4V4h4v4z"/></svg>
+      </div>
+      <div class="card-name-block">
+        <div class="card-name">HUAWEI FreeClip @ LXC</div>
+      </div>
+      <span class="card-badge badge-error">Error</span>
+    </div>
+    <div class="card-chips">
+      <span class="chip"><span class="dot dot-gray"></span> <svg class="chip-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M17.71 7.71L12 2h-1v7.59L6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 11 14.41V22h1l5.71-5.71-4.3-4.29 4.3-4.29zM13 5.83l1.88 1.88L13 9.59V5.83zm1.88 10.46L13 18.17v-3.76l1.88 1.88z"/></svg> hci0</span>
+      <span class="chip chip-err"><span class="dot" style="background:var(--error-color)"></span> No Sink</span>
+    </div>
+    <div class="card-actions-row" style="opacity:1;max-height:40px;">
+      <button class="action-btn">Reconnect</button>
+      <button class="action-btn">Reclaim</button>
+      <button class="action-btn danger">Disable</button>
+    </div>
+  </div>
+</div>
+
+<hr class="mockup-divider">
+
+<!-- ═══════════════════════ SCENARIO 2: 12 devices, List view ═══════════════════════ -->
+<div class="mockup-label">Scenario B · 11 devices — List view (1 disabled hidden)</div>
+
+<div class="toolbar-stack">
+  <div class="filter-bar">
+    <svg class="filter-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M10 18h4v-2h-4v2zM3 6v2h18V6H3zm3 7h12v-2H6v2z"/></svg>
+    <select><option>All groups</option><option>🔗 Living Room</option><option>🔗 Kitchen</option><option>🔗 Whole House</option></select>
+    <select><option>All adapters</option><option>hci0</option><option>hci1</option></select>
+    <select><option>All statuses</option><option>▶ Playing</option><option>⏸ Idle</option><option>⟳ Reconnecting</option><option>Released</option><option>Error</option></select>
+    <div class="view-toggle" style="margin-left:auto">
+      <button class="view-toggle-btn" title="Grid"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 3h8v8H3zm10 0h8v8h-8zM3 13h8v8H3zm10 0h8v8h-8z"/></svg></button>
+      <button class="view-toggle-btn active" title="List"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/></svg></button>
+    </div>
+  </div>
+  <div class="action-bar">
+    <input type="checkbox" style="width:16px;height:16px;accent-color:var(--primary-color);cursor:pointer;" checked>
+    <span class="toolbar-count">4 of 11</span>
+    <div class="toolbar-sep"></div>
+    <div class="vol-wrap">
+      <span class="toolbar-label">Vol</span>
+      <input type="range" value="55" min="0" max="100">
+      <span class="vol-pct">55%</span>
+    </div>
+    <div class="toolbar-sep"></div>
+    <button class="icon-btn" title="Mute All"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg></button>
+    <button class="icon-btn" title="Pause All"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg></button>
+    <button class="text-btn" title="Reconnect All">Reconnect</button>
+    <button class="text-btn" title="Release All">Release</button>
+  </div>
+</div>
+
+<div class="devices-list">
+  <!-- Row 1: Playing -->
+  <div class="list-row playing">
+    <input type="checkbox" class="list-checkbox" checked>
+    <div class="list-icon playing-icon">
+      <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M17 2H7c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3z"/></svg>
+      <span class="list-state-dot dot-green"></span>
+    </div>
+    <div class="list-info">
+      <div class="list-name">ENEBY20 @ HAOS</div>
+      <div class="list-track">Несчастный Случай — Сел и поехал</div>
+    </div>
+    <div class="list-badges">
+      <span class="chip chip-ok" style="font-size:10px">▶ Playing</span>
+      <span class="chip" style="font-size:10px;background:rgba(3,169,244,.1);color:var(--primary-color)">Living Room</span>
+    </div>
+    <div class="list-volume">
+      <input type="range" value="72" min="0" max="100">
+      <span class="vol-pct">72%</span>
+    </div>
+    <div class="list-actions">
+      <button class="icon-btn" title="Pause"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg></button>
+      <button class="icon-btn" title="Mute"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/></svg></button>
+    </div>
+  </div>
+
+  <!-- Row 2: Playing -->
+  <div class="list-row playing">
+    <input type="checkbox" class="list-checkbox" checked>
+    <div class="list-icon playing-icon">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17 2H7c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3z"/></svg>
+      <span class="list-state-dot dot-green"></span>
+    </div>
+    <div class="list-info">
+      <div class="list-name">Yandex mini 2 @ LXC</div>
+      <div class="list-track">Несчастный Случай — Сел и поехал</div>
+    </div>
+    <div class="list-badges">
+      <span class="chip chip-ok" style="font-size:10px">▶ Playing</span>
+      <span class="chip" style="font-size:10px;background:rgba(3,169,244,.1);color:var(--primary-color)">Living Room</span>
+    </div>
+    <div class="list-volume">
+      <input type="range" value="69" min="0" max="100">
+      <span class="vol-pct">69%</span>
+    </div>
+    <div class="list-actions">
+      <button class="icon-btn" title="Pause"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg></button>
+      <button class="icon-btn" title="Mute"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/></svg></button>
+    </div>
+  </div>
+
+  <!-- Row 3: Playing -->
+  <div class="list-row playing">
+    <input type="checkbox" class="list-checkbox" checked>
+    <div class="list-icon playing-icon">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17 2H7c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3z"/></svg>
+      <span class="list-state-dot dot-green"></span>
+    </div>
+    <div class="list-info">
+      <div class="list-name">Lenco LS-500 @ HAOS</div>
+      <div class="list-track">Несчастный Случай — Сел и поехал</div>
+    </div>
+    <div class="list-badges">
+      <span class="chip chip-ok" style="font-size:10px">▶ Playing</span>
+      <span class="chip" style="font-size:10px;background:rgba(3,169,244,.1);color:var(--primary-color)">Living Room</span>
+    </div>
+    <div class="list-volume">
+      <input type="range" value="80" min="0" max="100">
+      <span class="vol-pct">80%</span>
+    </div>
+    <div class="list-actions">
+      <button class="icon-btn" title="Pause"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg></button>
+      <button class="icon-btn" title="Mute"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/></svg></button>
+    </div>
+  </div>
+
+  <!-- Row 4: Playing -->
+  <div class="list-row playing">
+    <input type="checkbox" class="list-checkbox" checked>
+    <div class="list-icon playing-icon">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17 2H7c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3z"/></svg>
+      <span class="list-state-dot dot-green"></span>
+    </div>
+    <div class="list-info">
+      <div class="list-name">WH-1000XM4 @ HAOS</div>
+      <div class="list-track">Chris Rea — Looking for the Summer</div>
+    </div>
+    <div class="list-badges">
+      <span class="chip chip-ok" style="font-size:10px">▶ Playing</span>
+      <span class="chip" style="font-size:10px;background:rgba(255,152,0,.1);color:#e65100">Kitchen</span>
+    </div>
+    <div class="list-volume">
+      <input type="range" value="45" min="0" max="100">
+      <span class="vol-pct">45%</span>
+    </div>
+    <div class="list-actions">
+      <button class="icon-btn" title="Pause"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg></button>
+      <button class="icon-btn" title="Mute"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/></svg></button>
+    </div>
+  </div>
+
+  <!-- Row 5: Idle -->
+  <div class="list-row">
+    <input type="checkbox" class="list-checkbox">
+    <div class="list-icon">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17 2H7c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3z"/></svg>
+      <span class="list-state-dot" style="background:var(--secondary-text-color)"></span>
+    </div>
+    <div class="list-info">
+      <div class="list-name">ENEBY Portable @ LXC</div>
+      <div class="list-track" style="color:var(--disabled-text-color)">Idle</div>
+    </div>
+    <div class="list-badges">
+      <span class="chip" style="font-size:10px">Idle</span>
+    </div>
+    <div class="list-volume">
+      <input type="range" value="42" min="0" max="100">
+      <span class="vol-pct">42%</span>
+    </div>
+    <div class="list-actions">
+      <button class="icon-btn" title="Play"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></button>
+      <button class="icon-btn" title="Mute"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/></svg></button>
+    </div>
+  </div>
+
+  <!-- Row 6: Idle -->
+  <div class="list-row">
+    <input type="checkbox" class="list-checkbox">
+    <div class="list-icon">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17 2H7c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3z"/></svg>
+      <span class="list-state-dot" style="background:var(--secondary-text-color)"></span>
+    </div>
+    <div class="list-info">
+      <div class="list-name">JBL Flip 6 @ HAOS</div>
+      <div class="list-track" style="color:var(--disabled-text-color)">Idle</div>
+    </div>
+    <div class="list-badges">
+      <span class="chip" style="font-size:10px">Idle</span>
+    </div>
+    <div class="list-volume">
+      <input type="range" value="60" min="0" max="100">
+      <span class="vol-pct">60%</span>
+    </div>
+    <div class="list-actions">
+      <button class="icon-btn" title="Play"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></button>
+      <button class="icon-btn" title="Mute"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/></svg></button>
+    </div>
+  </div>
+
+  <!-- Row 7: Reconnecting -->
+  <div class="list-row">
+    <input type="checkbox" class="list-checkbox">
+    <div class="list-icon">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17 2H7c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3z"/></svg>
+      <span class="list-state-dot dot-yellow"></span>
+    </div>
+    <div class="list-info">
+      <div class="list-name">Marshall Acton II @ HAOS</div>
+      <div class="list-track" style="color:var(--warning-color)">Reconnecting…</div>
+    </div>
+    <div class="list-badges">
+      <span class="chip chip-warn" style="font-size:10px">⟳ Reconnecting</span>
+    </div>
+    <div class="list-volume">
+      <input type="range" value="50" min="0" max="100" disabled>
+      <span class="vol-pct" style="color:var(--disabled-text-color)">50%</span>
+    </div>
+    <div class="list-actions">
+      <button class="icon-btn" disabled><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></button>
+      <button class="icon-btn" disabled><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/></svg></button>
+    </div>
+  </div>
+
+  <!-- Row 8: Released -->
+  <div class="list-row" style="opacity:.55">
+    <input type="checkbox" class="list-checkbox">
+    <div class="list-icon">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17 2H7c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3z"/></svg>
+      <span class="list-state-dot dot-gray"></span>
+    </div>
+    <div class="list-info">
+      <div class="list-name">HUAWEI FreeClip @ LXC</div>
+      <div class="list-track" style="color:var(--disabled-text-color)">Released</div>
+    </div>
+    <div class="list-badges">
+      <span class="chip" style="font-size:10px;background:rgba(255,152,0,.1);color:#e65100">Released</span>
+    </div>
+    <div class="list-volume">
+      <input type="range" value="60" min="0" max="100" disabled>
+      <span class="vol-pct" style="color:var(--disabled-text-color)">60%</span>
+    </div>
+    <div class="list-actions">
+      <button class="icon-btn" title="Reclaim" style="color:var(--primary-color)"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg></button>
+    </div>
+  </div>
+
+  <!-- Row 9: Released -->
+  <div class="list-row" style="opacity:.55">
+    <input type="checkbox" class="list-checkbox">
+    <div class="list-icon">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17 2H7c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3z"/></svg>
+      <span class="list-state-dot dot-gray"></span>
+    </div>
+    <div class="list-info">
+      <div class="list-name">RB Meta 01FQ @ LXC</div>
+      <div class="list-track" style="color:var(--disabled-text-color)">Released</div>
+    </div>
+    <div class="list-badges">
+      <span class="chip" style="font-size:10px;background:rgba(255,152,0,.1);color:#e65100">Released</span>
+    </div>
+    <div class="list-volume">
+      <input type="range" value="65" min="0" max="100" disabled>
+      <span class="vol-pct" style="color:var(--disabled-text-color)">65%</span>
+    </div>
+    <div class="list-actions">
+      <button class="icon-btn" title="Reclaim" style="color:var(--primary-color)"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg></button>
+    </div>
+  </div>
+
+  <!-- Row 10: Idle -->
+  <div class="list-row">
+    <input type="checkbox" class="list-checkbox">
+    <div class="list-icon">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17 2H7c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3z"/></svg>
+      <span class="list-state-dot" style="background:var(--secondary-text-color)"></span>
+    </div>
+    <div class="list-info">
+      <div class="list-name">Sonos One SL @ HAOS</div>
+      <div class="list-track" style="color:var(--disabled-text-color)">Idle</div>
+    </div>
+    <div class="list-badges">
+      <span class="chip" style="font-size:10px">Idle</span>
+    </div>
+    <div class="list-volume">
+      <input type="range" value="35" min="0" max="100">
+      <span class="vol-pct">35%</span>
+    </div>
+    <div class="list-actions">
+      <button class="icon-btn" title="Play"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></button>
+      <button class="icon-btn" title="Mute"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/></svg></button>
+    </div>
+  </div>
+
+  <!-- Row 11: Error -->
+  <div class="list-row">
+    <input type="checkbox" class="list-checkbox">
+    <div class="list-icon">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17 2H7c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3z"/></svg>
+      <span class="list-state-dot" style="background:var(--error-color)"></span>
+    </div>
+    <div class="list-info">
+      <div class="list-name">IKEA SYMFONISK @ HAOS</div>
+      <div class="list-track" style="color:var(--error-color)">No audio sink</div>
+    </div>
+    <div class="list-badges">
+      <span class="chip chip-err" style="font-size:10px">No Sink</span>
+    </div>
+    <div class="list-volume">
+      <input type="range" value="50" min="0" max="100" disabled>
+      <span class="vol-pct" style="color:var(--disabled-text-color)">50%</span>
+    </div>
+    <div class="list-actions">
+      <button class="icon-btn" title="Reconnect"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg></button>
+    </div>
+  </div>
+  <div class="list-footer">
+    <svg class="chip-icon" viewBox="0 0 24 24" fill="currentColor" style="color:var(--secondary-text-color)"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+    1 disabled device hidden · <a href="#config-section" style="color:var(--primary-color);text-decoration:none">Manage in Configuration</a>
+  </div>
+</div>
+
+<hr class="mockup-divider">
+
+<!-- ═══════════════════════ CONFIGURATION SECTION ═══════════════════════ -->
+<div class="mockup-label">Configuration — HA card with internal tabs</div>
+
+<div class="ha-card open" id="config-section">
+  <div class="ha-card-header" onclick="this.parentElement.classList.toggle('open')">
+    <div class="ha-card-header-icon icon-config">⚙️</div>
+    <span class="ha-card-title">Configuration</span>
+    <span class="ha-card-chevron">▶</span>
+  </div>
+  <div class="ha-card-body">
+    <div class="config-tabs">
+      <button class="config-tab active" onclick="document.querySelectorAll('.config-tab').forEach(t=>t.classList.remove('active'));this.classList.add('active')">General</button>
+      <button class="config-tab" onclick="document.querySelectorAll('.config-tab').forEach(t=>t.classList.remove('active'));this.classList.add('active')">Bluetooth</button>
+      <button class="config-tab" onclick="document.querySelectorAll('.config-tab').forEach(t=>t.classList.remove('active'));this.classList.add('active')">Music Assistant</button>
+      <button class="config-tab" onclick="document.querySelectorAll('.config-tab').forEach(t=>t.classList.remove('active'));this.classList.add('active')">Security</button>
+      <button class="config-tab" onclick="document.querySelectorAll('.config-tab').forEach(t=>t.classList.remove('active'));this.classList.add('active')">Updates</button>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Bridge name</label>
+      <div class="form-hint">Appended to player names in MA as "Player @ Name"</div>
+      <input type="text" class="form-input" value="LXC">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Timezone</label>
+      <input type="text" class="form-input" value="Europe/Moscow">
+    </div>
+    <div class="form-group">
+      <label class="form-label">PulseAudio latency (ms)</label>
+      <div class="form-hint">Higher values reduce dropouts on slow hardware (default 200)</div>
+      <input type="number" class="form-input" value="1000" style="max-width:200px">
+    </div>
+    <div style="border-top:1px solid var(--divider-color);margin-top:20px;padding-top:16px">
+      <div class="ha-toggle">
+        <div class="ha-switch on" onclick="this.classList.toggle('on')"></div>
+        <div class="toggle-text"><div class="toggle-title">Prefer SBC codec</div><div class="toggle-desc">Reduces CPU on slow hardware (PulseAudio 15+)</div></div>
+      </div>
+      <div class="ha-toggle">
+        <div class="ha-switch on" onclick="this.classList.toggle('on')"></div>
+        <div class="toggle-text"><div class="toggle-title">Route volume through MA</div><div class="toggle-desc">Keeps MA UI sliders in sync</div></div>
+      </div>
+      <div class="ha-toggle">
+        <div class="ha-switch" onclick="this.classList.toggle('on')"></div>
+        <div class="toggle-text"><div class="toggle-title">Route mute through MA</div><div class="toggle-desc">Syncs mute state with MA UI</div></div>
+      </div>
+      <div class="ha-toggle">
+        <div class="ha-switch on" onclick="this.classList.toggle('on')"></div>
+        <div class="toggle-text"><div class="toggle-title">Smooth restart</div><div class="toggle-desc">Mute before restart, show progress, wait for reconnect</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Diagnostics -->
+<div class="ha-card">
+  <div class="ha-card-header" onclick="this.parentElement.classList.toggle('open')">
+    <div class="ha-card-header-icon icon-diag">📊</div>
+    <span class="ha-card-title">Diagnostics</span>
+    <span class="ha-card-chevron">▶</span>
+  </div>
+</div>
+
+<!-- Logs -->
+<div class="ha-card">
+  <div class="ha-card-header" onclick="this.parentElement.classList.toggle('open')">
+    <div class="ha-card-header-icon icon-logs">📋</div>
+    <span class="ha-card-title">Logs</span>
+    <span class="ha-card-chevron">▶</span>
+  </div>
+</div>
+
+<!-- Bottom spacer -->
+<div style="height:64px"></div>
+</div>
+
+<!-- ═══════════════════════ STICKY SAVE BAR ═══════════════════════ -->
+<div class="save-bar">
+  <div class="save-info">
+    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>
+    Unsaved changes
+  </div>
+  <button class="btn-save secondary">Discard</button>
+  <button class="btn-save secondary">Save</button>
+  <button class="btn-save primary">Save &amp; Restart</button>
+</div>
+
+<script>
+// Color slider fills — MA style
+function updateSliderFill(el) {
+  const min = +el.min || 0, max = +el.max || 100, val = +el.value;
+  const pct = ((val - min) / (max - min)) * 100;
+  const primary = getComputedStyle(document.documentElement).getPropertyValue('--primary-color').trim() || '#03a9f4';
+  const track = getComputedStyle(document.documentElement).getPropertyValue('--divider-color').trim() || '#e0e0e0';
+  el.style.setProperty('--slider-fill', `linear-gradient(to right, ${primary} ${pct}%, ${track} ${pct}%)`);
+}
+document.querySelectorAll('input[type="range"]').forEach(el => {
+  updateSliderFill(el);
+  el.addEventListener('input', () => updateSliderFill(el));
+});
+</script>
+
+</body>
+</html>
