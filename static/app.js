@@ -331,6 +331,8 @@ function buildDeviceCard(i) {
             ' onclick="btPair(' + i + ')" title="Put the device into pairing mode first">&#128279; Re-pair</button>' +
           '<button type="button" class="btn-bt-action btn-bt-release" id="dbtn-release-' + i + '"' +
             ' onclick="btToggleManagement(' + i + ')">&#128274; Release</button>' +
+          '<button type="button" class="btn-bt-action btn-bt-disable" id="dbtn-disable-' + i + '"' +
+            ' onclick="confirmDisableDevice(' + i + ')">&#9940; Disable</button>' +
           '<span class="bt-action-status" id="dbt-action-status-' + i + '"></span>' +
         '</div>';
     return card;
@@ -1223,6 +1225,16 @@ async function toggleDeviceEnabled(playerName, enabled) {
     } catch (e) {
         showToast('Error: ' + e.message, 'error');
     }
+}
+
+function confirmDisableDevice(i) {
+    var dev = lastDevices && lastDevices[i];
+    if (!dev) return;
+    var name = dev.player_name || 'Device ' + (i + 1);
+    if (!confirm('Disable "' + name + '"?\n\nThe device will be skipped on next bridge restart.\nYou can re-enable it from the config page.')) return;
+    var btn = document.getElementById('dbtn-disable-' + i);
+    if (btn) btn.disabled = true;
+    toggleDeviceEnabled(name, false);
 }
 
 function toggleAutoRefresh() {

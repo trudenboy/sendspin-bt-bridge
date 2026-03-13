@@ -589,6 +589,8 @@
         }
         .btn-bt-reclaim { background: var(--success-color); }
         .btn-bt-reclaim:hover:not(:disabled) { background: #388e3c; }
+        .btn-bt-disable { background: #6b7280; }
+        .btn-bt-disable:hover:not(:disabled) { background: #4b5563; }
         .bt-action-status { font-size: 12px; color: var(--secondary-text-color); }
         /* Group controls */
         .group-controls {
