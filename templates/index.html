@@ -256,7 +256,7 @@
                                 <div id="bt-devices-table"></div>
                             </div>
                         </div>
-                        <div class="config-settings-card devices-secondary-card config-settings-card--muted">
+                        <div class="config-settings-card devices-secondary-card config-settings-card--muted" id="config-devices-discovery-card">
                             <div class="devices-card-header">
                                 <div class="devices-card-copy">
                                     <div class="config-card-title">Discovery &amp; import</div>
@@ -299,7 +299,7 @@
                         <p class="config-group-subtitle">Adapter inventory, reconnection policy, and codec preference for slower hardware.</p>
                     </div>
                     <div class="config-settings-grid">
-                        <div class="config-settings-card config-settings-card--span">
+                        <div class="config-settings-card config-settings-card--span" id="config-bluetooth-adapters-card">
                             <div class="config-card-header">
                                 <div class="config-card-title">Adapters</div>
                                 <p class="config-card-subtitle">Rename adapters, verify detection, and add manual adapter entries when needed.</p>
@@ -308,7 +308,7 @@
                                 <div id="adapters-table"></div>
                             </div>
                             <div class="bt-toolbar">
-                                <button type="button" class="btn btn-sm btn-secondary" onclick="addManualAdapterRow('','','')">+ Add adapter</button>
+                                <button type="button" class="btn btn-sm btn-secondary" id="add-adapter-btn" onclick="addManualAdapterRow('','','')">+ Add adapter</button>
                                 <button type="button" class="btn btn-sm btn-refresh" onclick="loadBtAdapters()">&#x21BA; Refresh</button>
                             </div>
                         </div>

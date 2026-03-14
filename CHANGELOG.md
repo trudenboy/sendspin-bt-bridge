@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.31.8] - 2026-03-14
+
+### Fixed
+- **Empty-state adapter shortcut** — fixed the redesigned dashboard CTA so `No Bluetooth adapter detected` now jumps to `Configuration → Bluetooth`, opens the adapters card, and prepares a manual adapter row instead of relying on the pre-redesign layout
+- **Empty-state scan shortcut** — fixed the `No Bluetooth devices configured` CTA so it now opens `Configuration → Devices → Discovery & import` and starts Bluetooth scanning from the correct redesigned section
+
 ## [2.31.7] - 2026-03-14
 
 ### Fixed

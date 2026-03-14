@@ -2,7 +2,15 @@
 
 A history of the architectural and functional evolution of sendspin-bt-bridge — for readers familiar with Home Assistant, Music Assistant, and multiroom audio setups.
 
-**Period:** January 1 – March 14, 2026 · **Total commits:** ~943 · **Versions:** 1.0.0 → 2.31.7
+**Period:** January 1 – March 14, 2026 · **Total commits:** ~946 · **Versions:** 1.0.0 → 2.31.8
+
+---
+
+## March 14, 2026 — Empty-state navigation hotfix (v2.31.8)
+
+The `2.31.8` release is a narrow UI follow-up shipped after the larger redesign work from `2.31.6` and the auth hotfix in `2.31.7`. It fixes the two dashboard empty-state actions that were still wired to assumptions from the pre-redesign layout.
+
+When no Bluetooth adapter is present, the empty-state CTA now opens `Configuration → Bluetooth`, lands on the adapters card, and prepares a manual adapter row so the user can act immediately. When adapters exist but no devices are configured yet, the scan CTA now opens `Configuration → Devices → Discovery & import` and launches the Bluetooth scan from the correct redesigned section. In short: the empty dashboard is once again an actionable starting point instead of a dead-end hint.
 
 ---
 

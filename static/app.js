@@ -183,6 +183,19 @@ function switchConfigTab(tabName) {
     });
 }
 
+function _openConfigPanel(tabName, targetId, block) {
+    var configSection = document.querySelector('.config-section');
+    if (configSection) configSection.open = true;
+    if (tabName) switchConfigTab(tabName);
+    var panel = tabName ? document.getElementById('config-panel-' + tabName) : null;
+    var target = targetId ? document.getElementById(targetId) : null;
+    var scrollTarget = target || panel;
+    if (scrollTarget) {
+        scrollTarget.scrollIntoView({behavior: 'smooth', block: block || (target ? 'center' : 'start')});
+    }
+    return {section: configSection, panel: panel, target: target || panel};
+}
+
 function initConfigTabs() {
     document.querySelectorAll('.config-tab').forEach(function(tab) {
         tab.addEventListener('click', function() {
@@ -429,11 +442,7 @@ function _highlightBtConfigWrap(wrap) {
 function openDeviceSettings(i) {
     var dev = lastDevices && lastDevices[i];
     if (!dev) return;
-    var configSection = document.querySelector('.config-section');
-    if (configSection) configSection.open = true;
-    switchConfigTab('devices');
-    var panel = document.getElementById('config-panel-devices');
-    if (panel) panel.scrollIntoView({behavior: 'smooth', block: 'start'});
+    _openConfigPanel('devices', 'config-panel-devices', 'start');
     setTimeout(function() {
         var target = _findBtConfigWrap(dev);
         if (!target) {
@@ -882,11 +891,7 @@ function openAdapterSettings(adapterId, adapterMac) {
         showToast('No Bluetooth adapter assigned for this device', 'error');
         return;
     }
-    var configSection = document.querySelector('.config-section');
-    if (configSection) configSection.open = true;
-    switchConfigTab('bluetooth');
-    var panel = document.getElementById('config-panel-bluetooth');
-    if (panel) panel.scrollIntoView({behavior: 'smooth', block: 'start'});
+    _openConfigPanel('bluetooth', 'config-bluetooth-adapters-card', 'start');
     setTimeout(function() {
         var target = _findAdapterConfigRow(adapterId, adapterMac);
         if (!target) {
@@ -2456,6 +2461,23 @@ function addManualAdapterRow(id, mac, name) {
     el.appendChild(buildManualRow(id || '', mac || '', name || ''));
 }
 
+function _ensureEmptyManualAdapterRow() {
+    var rows = document.querySelectorAll('#adapters-table .adapter-row.manual');
+    for (var i = 0; i < rows.length; i++) {
+        var row = rows[i];
+        var idInput = row.querySelector('.adp-id');
+        var macInput = row.querySelector('.adp-mac');
+        var nameInput = row.querySelector('.adp-name');
+        var hasValue = (idInput && idInput.value.trim()) ||
+            (macInput && macInput.value.trim()) ||
+            (nameInput && nameInput.value.trim());
+        if (!hasValue) return row;
+    }
+    addManualAdapterRow('', '', '');
+    rows = document.querySelectorAll('#adapters-table .adapter-row.manual');
+    return rows.length ? rows[rows.length - 1] : null;
+}
+
 function rebootAdapter(adapterMac) {
     var btn = document.querySelector('.btn-adp-reboot[data-adapter="' + adapterMac + '"]');
     if (btn) { btn.disabled = true; btn.textContent = '\u21bb Rebooting\u2026'; }
@@ -2721,7 +2743,7 @@ function _buildEmptyStateHTML() {
     if (!_hasDetectedAdapter()) {
         return '<div class="no-devices-icon">🔌</div>' +
             '<div class="no-devices-text">No Bluetooth adapter detected</div>' +
-            '<a href="#" class="no-devices-link" onclick="_goToAdapters(); return false;">🔍 Check adapter connection</a>';
+            '<a href="#" class="no-devices-link" onclick="_goToAdapters(); return false;">➕ Add adapter</a>';
     }
     return '<div class="no-devices-icon">📡</div>' +
         '<div class="no-devices-text">No Bluetooth devices configured</div>' +
@@ -2729,34 +2751,27 @@ function _buildEmptyStateHTML() {
 }
 
 function _goToAdapters() {
-    var details = document.querySelector('.config-section');
-    if (details) details.open = true;
-    var refreshBtn = document.querySelector('.btn-refresh[onclick*="loadBtAdapters"]');
-    if (refreshBtn) {
-        refreshBtn.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        setTimeout(function() {
-            loadBtAdapters().then(function() {
-                if (!_hasDetectedAdapter()) {
-                    showToast('No adapter found — check USB connection or add manually with "+ Add"', 'warn');
-                } else {
-                    showToast('Adapter detected! You can now add devices.', 'ok');
-                    _refreshEmptyState();
-                }
-            });
-        }, 400);
-    } else if (details) {
-        details.scrollIntoView({ behavior: 'smooth' });
-    }
+    _openConfigPanel('bluetooth', 'config-bluetooth-adapters-card', 'start');
+    setTimeout(function() {
+        var row = _ensureEmptyManualAdapterRow();
+        if (!row) return;
+        row.scrollIntoView({behavior: 'smooth', block: 'center'});
+        var firstInput = row.querySelector('.adp-id') || row.querySelector('.adp-mac') || row.querySelector('.adp-name');
+        if (firstInput) firstInput.focus({preventScroll: true});
+    }, 180);
 }
 
 function _goToDevicesAndScan() {
-    var details = document.querySelector('.config-section');
-    if (details) details.open = true;
-    var scanBtn = document.getElementById('scan-btn');
-    if (scanBtn) {
-        scanBtn.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        setTimeout(function() { scanBtn.click(); }, 400);
+    if (!_hasDetectedAdapter()) {
+        _goToAdapters();
+        return;
     }
+    _openConfigPanel('devices', 'config-devices-discovery-card', 'start');
+    setTimeout(function() {
+        var scanBtn = document.getElementById('scan-btn');
+        if (scanBtn) scanBtn.focus({preventScroll: true});
+        startBtScan();
+    }, 180);
 }
 
 function _refreshEmptyState() {
