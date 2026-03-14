@@ -291,86 +291,83 @@ function buildDeviceCard(i) {
     var card = document.createElement('div');
     card.className = 'device-card';
     card.id = 'device-card-' + i;
+    // Speaker icon SVG
+    var speakerSvg = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M17 2H7c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-5 2c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2zm0 16c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>';
+    // BT icon SVG
+    var btSvg = '<svg class="chip-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M17.71 7.71L12 2h-1v7.59L6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 11 14.41V22h1l5.71-5.71-4.3-4.29 4.3-4.29zM13 5.83l1.88 1.88L13 9.59V5.83zm1.88 10.46L13 18.17v-3.76l1.88 1.88z"/></svg>';
+    // MA logo SVG
+    var maSvg = '<svg class="chip-icon" viewBox="0 0 240 240" fill="currentColor"><path d="M109.394 4.38C115.242-1.46 124.788-1.46 130.606 4.38L229.394 103.27C235.242 109.11 240 120.64 240 128.91V219.02L239.995 219.37C239.789 227.46 233.114 234 225 234H15C6.758 234 0 227.22 0 218.99V128.88C0 120.61 4.788 109.08 10.606 103.24L109.394 4.38ZM36 120C31.582 120 28 123.58 28 128V206H44V128C44 123.58 40.418 120 36 120ZM68 120C63.582 120 60 123.58 60 128V206H76V128C76 123.58 72.418 120 68 120ZM100 120C95.582 120 92 123.58 92 128V206H108V128C108 123.58 104.418 120 100 120ZM158.393 120.43C154.2 119.03 149.671 121.3 148.275 125.49L121.479 206H138.342L163.456 130.54C164.851 126.35 162.584 121.82 158.393 120.43ZM188.708 125.49C187.313 121.3 182.783 119.03 178.591 120.43C174.399 121.82 172.131 126.35 173.526 130.54L198.642 206H215.504L188.708 125.49Z"/></svg>';
+    // Chain-link sync icon
+    var syncSvg = '<svg class="chip-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/></svg>';
     card.innerHTML =
-        // Row 1: Name + EQ + badges
-        '<div class="card3-row1">' +
-          '<div class="card3-row1-left">' +
-            '<input type="checkbox" class="device-select-cb" id="dsel-' + i + '" checked' +
-              ' onchange="onDeviceSelect(' + i + ', this.checked)">' +
-            '<div class="device-card-title" id="dname-' + i + '">Device ' + (i+1) + '</div>' +
-            '<div class="eq-bars" id="deq-' + i + '">' +
-              '<div class="eq-bar"></div><div class="eq-bar"></div>' +
-              '<div class="eq-bar"></div><div class="eq-bar"></div>' +
+        '<div class="card-head">' +
+          '<div class="card-icon" id="dcard-icon-' + i + '">' + speakerSvg + '</div>' +
+          '<div class="card-name-block">' +
+            '<div class="card-name">' +
+              '<span class="name-text" id="dname-' + i + '">Device ' + (i+1) + '</span>' +
+              '<div class="eq-bars" id="deq-' + i + '">' +
+                '<div class="eq-bar"></div><div class="eq-bar"></div><div class="eq-bar"></div>' +
+              '</div>' +
             '</div>' +
-            '<span class="released-badge" id="dreleased-badge-' + i + '" style="display:none;" title="BT management disabled — click Reclaim to resume">Released</span>' +
-            '<span class="group-badge" id="dgroup-' + i + '" style="display:none"></span>' +
           '</div>' +
+          '<input type="checkbox" class="device-select-cb" id="dsel-' + i + '" checked' +
+            ' onchange="onDeviceSelect(' + i + ', this.checked)">' +
+          '<span class="card-badge badge-released" id="dreleased-badge-' + i + '" style="display:none" title="BT management disabled — click Reclaim to resume">Released</span>' +
+          '<span class="card-badge badge-group" id="dgroup-' + i + '" style="display:none"></span>' +
         '</div>' +
-        // Row 1b: Status chips (BT · MA · play-state · sync · re-anchor · delay)
-        '<div class="card3-row1b">' +
-          '<span class="status-chip">' +
-            '<span class="chip-label">BT</span>' +
-            '<span class="status-dot" id="dbt-ind-' + i + '"></span>' +
-            '<span class="chip-detail" id="dbt-adapter-' + i + '"></span>' +
+        '<div class="card-chips">' +
+          '<span class="chip chip-ok" id="dchip-bt-' + i + '">' +
+            '<span class="dot" id="dbt-ind-' + i + '"></span> ' + btSvg + ' <span id="dbt-adapter-' + i + '"></span>' +
           '</span>' +
-          '<span class="status-chip">' +
-            '<span class="chip-label">MA</span>' +
-            '<span class="status-dot" id="dsrv-ind-' + i + '"></span>' +
-            '<span class="chip-detail ma" id="dma-api-' + i + '" style="display:none">api</span>' +
+          '<span class="chip chip-ok" id="dchip-ma-' + i + '">' +
+            '<span class="dot" id="dsrv-ind-' + i + '"></span> ' + maSvg + ' <span class="chip-detail" id="dma-api-' + i + '" style="display:none">api</span>' +
           '</span>' +
           '<span class="play-state">' +
             '<span class="status-dot" id="dplay-ind-' + i + '"></span>' +
             '<span id="dplay-' + i + '">-</span>' +
           '</span>' +
-          '<span class="status-chip chip-sync" id="dsync-' + i + '">&#8212;</span>' +
-          '<span class="status-chip chip-minor" id="dsync-detail-' + i + '"></span>' +
-          '<span class="status-chip chip-minor" id="ddelay-' + i + '"></span>' +
-          '<span class="status-chip chip-minor battery-chip" id="dbattery-' + i + '" style="display:none"></span>' +
+          '<span class="chip chip-ok" id="dsync-' + i + '" title="In sync">' + syncSvg + '</span>' +
+          '<span class="chip" id="dsync-detail-' + i + '"></span>' +
+          '<span class="chip" id="ddelay-' + i + '"></span>' +
+          '<span class="chip battery-chip" id="dbattery-' + i + '" style="display:none"></span>' +
         '</div>' +
-        // Row 2: Transport buttons + volume slider + mute
-        '<div class="card3-row2">' +
-          '<button type="button" class="transport-btn" id="dma-prev-' + i + '" ' +
-            'onclick="maQueueCmd(\'previous\', undefined, ' + i + ')" title="Previous" style="display:none;">&#9198;</button>' +
-          '<button type="button" class="transport-btn" id="dbtn-pause-' + i + '" ' +
-            'onclick="onDevicePause(' + i + ')" title="Pause/Unpause">&#9208;</button>' +
-          '<button type="button" class="transport-btn" id="dma-next-' + i + '" ' +
-            'onclick="maQueueCmd(\'next\', undefined, ' + i + ')" title="Next" style="display:none;">&#9197;</button>' +
-          '<button type="button" class="transport-btn" id="dma-shuffle-' + i + '" ' +
-            'onclick="maQueueCmd(\'shuffle\', undefined, ' + i + ')" title="Shuffle">&#8644;</button>' +
-          '<button type="button" class="transport-btn" id="dma-repeat-' + i + '" ' +
-            'onclick="maCycleRepeat(' + i + ')" title="Repeat">&#8635;</button>' +
-          '<input type="range" min="0" max="100" value="100" ' +
-            'class="vol-slider" id="vslider-' + i + '" ' +
-            'oninput="onVolumeInput(' + i + ', this.value)">' +
-          '<span class="vol-pct" id="dvol-' + i + '">100%</span>' +
-          '<button type="button" class="mute-btn" id="dmute-' + i + '" ' +
-            'title="Mute/Unmute">&#128264;</button>' +
-        '</div>' +
-        // Row track: Artist — Track Name
-        '<div class="card3-row-track">' +
-          '<div class="track-art-wrap">' +
-            '<img class="album-art-popup" id="dart-' + i + '" src="" alt="">' +
-            '<span class="track-name" id="dtrack-' + i + '"></span>' +
+        '<div class="card-controls">' +
+          '<button type="button" class="icon-btn" id="dma-prev-' + i + '" onclick="maQueueCmd(\'previous\', undefined, ' + i + ')" title="Previous" style="display:none"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg></button>' +
+          '<button type="button" class="icon-btn" id="dbtn-pause-' + i + '" onclick="onDevicePause(' + i + ')" title="Pause"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg></button>' +
+          '<button type="button" class="icon-btn" id="dma-next-' + i + '" onclick="maQueueCmd(\'next\', undefined, ' + i + ')" title="Next" style="display:none"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg></button>' +
+          '<button type="button" class="icon-btn" id="dma-shuffle-' + i + '" onclick="maQueueCmd(\'shuffle\', undefined, ' + i + ')" title="Shuffle"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg></button>' +
+          '<button type="button" class="icon-btn" id="dma-repeat-' + i + '" onclick="maCycleRepeat(' + i + ')" title="Repeat"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg></button>' +
+          '<div class="vol-wrap">' +
+            '<input type="range" min="0" max="100" value="100" id="vslider-' + i + '" oninput="onVolumeInput(' + i + ', this.value)">' +
+            '<span class="vol-pct" id="dvol-' + i + '">100%</span>' +
           '</div>' +
+          '<button type="button" class="icon-btn" id="dmute-' + i + '" title="Mute/Unmute"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg></button>' +
         '</div>' +
-        // Row progress: bar + time (tooltip → audio format)
-        '<div class="card3-row-progress" id="dprog-wrap-' + i + '" style="display:none;">' +
-          '<div class="progress-bar"><div class="progress-fill" id="dprog-fill-' + i + '"></div></div>' +
-          '<span class="tooltip-wrap">' +
-            '<span class="progress-time" id="dprog-time-' + i + '"></span>' +
+        '<div class="card-np" id="dnp-' + i + '" style="display:none">' +
+          '<div class="np-art"><img class="album-art-popup" id="dart-' + i + '" src="" alt="" style="width:36px;height:36px;border-radius:4px;display:none"><svg viewBox="0 0 24 24" fill="currentColor" id="dart-placeholder-' + i + '"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg></div>' +
+          '<div class="np-info">' +
+            '<span class="np-track" id="dtrack-' + i + '"></span>' +
+            '<span class="np-meta" id="dtrack-meta-' + i + '"></span>' +
+            '<div class="np-progress" id="dprog-wrap-' + i + '"><div class="np-progress-fill" id="dprog-fill-' + i + '"></div></div>' +
+          '</div>' +
+          '<span class="np-time">' +
+            '<span id="dprog-time-' + i + '"></span>' +
             '<span class="tooltip-text" id="daudiofmt-' + i + '"></span>' +
           '</span>' +
         '</div>' +
-        // Actions (hover-revealed)
-        '<div class="device-card-actions">' +
-          '<button type="button" class="btn-bt-action btn-bt-reconnect" id="dbtn-reconnect-' + i + '"' +
-            ' onclick="btReconnect(' + i + ')">&#128260; Reconnect</button>' +
-          '<button type="button" class="btn-bt-action btn-bt-release" id="dbtn-release-' + i + '"' +
-            ' onclick="btToggleManagement(' + i + ')">&#128274; Release</button>' +
-          '<button type="button" class="btn-bt-action btn-bt-disable" id="dbtn-disable-' + i + '"' +
-            ' onclick="confirmDisableDevice(' + i + ')">&#9940; Disable</button>' +
+        '<div class="card-actions-row">' +
+          '<button type="button" class="action-btn" id="dbtn-reconnect-' + i + '" onclick="btReconnect(' + i + ')">Reconnect</button>' +
+          '<button type="button" class="action-btn" id="dbtn-release-' + i + '" onclick="btToggleManagement(' + i + ')">Release</button>' +
+          '<button type="button" class="action-btn" id="dbtn-disable-' + i + '" onclick="confirmDisableDevice(' + i + ')">Disable</button>' +
           '<span class="bt-action-status" id="dbt-action-status-' + i + '"></span>' +
         '</div>';
+    // Mute button click handler
+    var muteBtn = card.querySelector('#dmute-' + i);
+    if (muteBtn) {
+        muteBtn.onclick = function() {
+            onMuteClick(i);
+        };
+    }
     return card;
 }
 
@@ -387,7 +384,7 @@ function populateDeviceCard(i, dev) {
         if (isReleased) {
             var isAuto = dev.bt_released_by === 'auto';
             releasedBadge.textContent = isAuto ? 'Auto-disabled' : 'Released';
-            releasedBadge.className = 'released-badge' + (isAuto ? ' released-badge-warn' : '');
+            releasedBadge.className = 'card-badge badge-released' + (isAuto ? ' badge-warn' : '');
             releasedBadge.title = isAuto
                 ? 'Auto-disabled due to connection issues — click Reclaim to retry'
                 : 'BT management disabled — click Reclaim to resume';
@@ -430,6 +427,12 @@ function populateDeviceCard(i, dev) {
                 selCb.checked = true;
             }
         }
+    }
+
+    // Update card icon state
+    var cardIcon = document.getElementById('dcard-icon-' + i);
+    if (cardIcon) {
+        cardIcon.className = 'card-icon' + (dev.playing ? ' playing-icon' : '');
     }
 
     var groupBadge = document.getElementById('dgroup-' + i);
@@ -487,24 +490,24 @@ function populateDeviceCard(i, dev) {
     // Bluetooth
     var btInd   = document.getElementById('dbt-ind-' + i);
     if (dev.bt_management_enabled === false && dev.bt_released_by === 'auto') {
-        btInd.className = 'status-dot orange';
+        btInd.className = 'dot dot-yellow';
     } else if (dev.bt_management_enabled === false) {
-        btInd.className = 'status-dot grey';
+        btInd.className = 'dot dot-gray';
     } else if (dev.bluetooth_connected) {
-        btInd.className = 'status-dot green';
+        btInd.className = 'dot dot-green';
     } else if (dev.reconnecting) {
-        btInd.className = 'status-dot orange';
+        btInd.className = 'dot dot-yellow';
     } else {
-        btInd.className = 'status-dot red';
+        btInd.className = 'dot dot-red';
     }
 
     // Server
     var srvInd = document.getElementById('dsrv-ind-' + i);
     var maApiBadge = document.getElementById('dma-api-' + i);
     if (dev.server_connected) {
-        srvInd.className = 'status-dot green';
+        srvInd.className = 'dot dot-green';
     } else {
-        srvInd.className = 'status-dot red';
+        srvInd.className = 'dot dot-red';
     }
     if (maApiBadge) maApiBadge.style.display = (dev.ma_now_playing && dev.ma_now_playing.connected) ? '' : 'none';
 
@@ -577,13 +580,13 @@ function populateDeviceCard(i, dev) {
     var pauseBtn = document.getElementById('dbtn-pause-' + i);
     if (pauseBtn && !_isLocked('dbtn-pause-' + i)) {
         if (dev.playing) {
-            pauseBtn.innerHTML = '&#9208;';
+            pauseBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>';
             pauseBtn.classList.remove('paused');
             pauseBtn.title = 'Pause';
         } else {
-            pauseBtn.innerHTML = '&#9654;';
+            pauseBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
             pauseBtn.classList.add('paused');
-            pauseBtn.title = 'Unpause';
+            pauseBtn.title = 'Play';
         }
         var groupSize = dev.group_id
             ? (lastDevices || []).filter(function(d) { return d.group_id === dev.group_id; }).length
@@ -614,9 +617,31 @@ function populateDeviceCard(i, dev) {
             trackEl.textContent = '';
             trackEl.title = '';
         }
-    }
-    // Album art
-    if (artEl) {
+
+        // Show/hide now-playing section
+        var npSection = document.getElementById('dnp-' + i);
+        if (npSection) {
+            var hasTrack = !!(showTrack || showArtist);
+            npSection.style.display = hasTrack ? '' : 'none';
+        }
+        // Update track meta (artist · album)
+        var metaEl = document.getElementById('dtrack-meta-' + i);
+        if (metaEl) {
+            var metaParts = [];
+            if (showArtist) metaParts.push(showArtist);
+            var albumName = deviceMaActive ? (ma.album || '') : '';
+            if (albumName) metaParts.push(albumName);
+            metaEl.textContent = metaParts.join(' \u00b7 ');
+        }
+        // Album art placeholder vs image
+        var artPlaceholder = document.getElementById('dart-placeholder-' + i);
+        if (artEl) {
+            var imgUrl = deviceMaActive ? (ma.image_url || '') : '';
+            if (artEl.src !== imgUrl) artEl.src = imgUrl;
+            artEl.style.display = imgUrl ? '' : 'none';
+            if (artPlaceholder) artPlaceholder.style.display = imgUrl ? 'none' : '';
+        }
+    } else if (artEl) {
         var imgUrl = deviceMaActive ? (ma.image_url || '') : '';
         if (artEl.src !== imgUrl) artEl.src = imgUrl;
     }
@@ -662,7 +687,7 @@ function populateDeviceCard(i, dev) {
         var currAt = dev.last_reanchor_at || '';
         if (!dev.playing) {
             syncEl.textContent = '\u2014';
-            syncEl.className = 'status-chip chip-sync';
+            syncEl.className = 'chip chip-ok';
             syncEl.style.color = '#9ca3af';
             if (syncDetail) syncDetail.textContent = '';
             delete reanchorShownAt[i];
@@ -681,14 +706,14 @@ function populateDeviceCard(i, dev) {
             var shownAt = reanchorShownAt[i];
             if (shownAt && (Date.now() - shownAt) < warningDuration) {
                 syncEl.textContent = '\u26a0 Re-anchoring';
-                syncEl.className = 'status-chip chip-sync warn';
+                syncEl.className = 'chip chip-ok warn';
                 syncEl.style.color = '';
                 if (syncDetail) syncDetail.textContent = dev.last_sync_error_ms != null
                     ? '\u0394' + dev.last_sync_error_ms.toFixed(0) + 'ms' : '';
             } else {
                 delete reanchorShownAt[i];
                 syncEl.textContent = '\u2713 In sync';
-                syncEl.className = 'status-chip chip-sync';
+                syncEl.className = 'chip chip-ok';
                 syncEl.style.color = '';
                 if (syncDetail) {
                     var rc = dev.reanchor_count || 0;
@@ -722,68 +747,36 @@ function populateDeviceCard(i, dev) {
         eqEl.classList.toggle('stale', isStale);
     }
 
-    // Mute button — attach handler once, update icon on every poll
-    // Effective mute = logical mute OR PA sink muted by startup logic
+    // Mute button — update icon on every poll
     var muteBtn = document.getElementById('dmute-' + i);
     if (muteBtn && !_isLocked('dmute-' + i)) {
         var effectiveMuted = !!dev.muted || !!dev.sink_muted;
-        muteBtn.textContent = effectiveMuted ? '\uD83D\uDD07' : '\uD83D\uDD08';
+        muteBtn.innerHTML = effectiveMuted
+            ? '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>'
+            : '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>';
         muteBtn.title = effectiveMuted
             ? (dev.sink_muted && !dev.muted ? 'Unmute (PA sink muted)' : 'Unmute')
             : (hasSink ? 'Mute' : 'Audio sink not configured');
         muteBtn.classList.toggle('muted', effectiveMuted);
         muteBtn.disabled = !hasSink;
         muteBtn.style.opacity = hasSink ? '' : '0.35';
-        if (!muteBtn._handlerSet) {
-            muteBtn._handlerSet = true;
-            muteBtn.addEventListener('click', function() {
-                var dev = lastDevices && lastDevices[i]; if (!dev) return;
-                var muteBtnId = 'dmute-' + i;
-                if (_isLocked(muteBtnId)) return;
-                _lockBtn(muteBtnId);
-                var effMuted = !!dev.muted || !!dev.sink_muted;
-                var desired = !effMuted;
-                dev.muted = desired;
-                dev.sink_muted = false;
-                var pn = dev.player_name || '__default__';
-                _muteDebounce[pn] = Date.now();
-                var btn = document.getElementById(muteBtnId);
-                if (btn) {
-                    btn.textContent = desired ? '\uD83D\uDD07' : '\uD83D\uDD08';
-                    btn.title = desired ? 'Unmute' : 'Mute';
-                    btn.classList.toggle('muted', desired);
-                }
-                fetch(API_BASE + '/api/mute', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ player_name: dev.player_name || null, mute: desired }),
-                }).then(function(r) { return r.json(); }).then(function(d) {
-                    if (d.success && lastDevices[i]) lastDevices[i].muted = d.muted;
-                }).catch(function(e) {
-                    delete _muteDebounce[pn];
-                    if (lastDevices[i]) lastDevices[i].muted = !desired;
-                    if (btn) {
-                        btn.textContent = !desired ? '\uD83D\uDD07' : '\uD83D\uDD08';
-                        btn.title = !desired ? 'Unmute' : 'Mute';
-                        btn.classList.toggle('muted', !desired);
-                    }
-                    console.error('Mute failed:', e);
-                }).finally(function() { _unlockBtn(muteBtnId); });
-            });
-        }
     }
+
+    // Volume slider fill
+    var vslider = document.getElementById('vslider-' + i);
+    if (vslider) updateSliderFill(vslider);
 
     // Release/Reclaim button state
     var relBtn = document.getElementById('dbtn-release-' + i);
     if (relBtn) {
         var mgmtEnabled = dev.bt_management_enabled !== false;
         if (mgmtEnabled) {
-            relBtn.textContent = '🔓 Release';
-            relBtn.className = 'btn-bt-action btn-bt-release';
+            relBtn.textContent = 'Release';
+            relBtn.className = 'action-btn';
             relBtn.title = 'Stop BT management for this device (it will stop auto-reconnecting)';
         } else {
-            relBtn.textContent = '🔒 Reclaim';
-            relBtn.className = 'btn-bt-action btn-bt-reclaim';
+            relBtn.textContent = 'Reclaim';
+            relBtn.className = 'action-btn';
             relBtn.title = 'Resume BT management and auto-reconnect';
         }
         // Disable Reconnect while released
@@ -798,9 +791,11 @@ function onVolumeInput(i, val) {
     var volEl = document.getElementById('dvol-' + i);
     if (volEl) volEl.textContent = val + '%';
 
+    var slider = document.getElementById('vslider-' + i);
+    if (slider) updateSliderFill(slider);
+
     // Mark pending so status poll doesn't overwrite while user drags
     volPending[i] = true;
-    var slider = document.getElementById('vslider-' + i);
     if (slider && !slider.disabled) { slider.style.opacity = '0.55'; }
     clearTimeout(volTimers[i]);
     volTimers[i] = setTimeout(function() {
@@ -823,6 +818,46 @@ async function sendVolume(deviceIndex, vol) {
         var slider = document.getElementById('vslider-' + deviceIndex);
         if (slider && !slider.disabled) { slider.style.opacity = ''; }
     }
+}
+
+// ---- Mute click handler (used by new card layout) ----
+function onMuteClick(i) {
+    var dev = lastDevices && lastDevices[i]; if (!dev) return;
+    var muteBtnId = 'dmute-' + i;
+    if (_isLocked(muteBtnId)) return;
+    _lockBtn(muteBtnId);
+    var effMuted = !!dev.muted || !!dev.sink_muted;
+    var desired = !effMuted;
+    dev.muted = desired;
+    dev.sink_muted = false;
+    var pn = dev.player_name || '__default__';
+    _muteDebounce[pn] = Date.now();
+    var btn = document.getElementById(muteBtnId);
+    if (btn) {
+        btn.innerHTML = desired
+            ? '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>'
+            : '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>';
+        btn.title = desired ? 'Unmute' : 'Mute';
+        btn.classList.toggle('muted', desired);
+    }
+    fetch(API_BASE + '/api/mute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ player_name: dev.player_name || null, mute: desired }),
+    }).then(function(r) { return r.json(); }).then(function(d) {
+        if (d.success && lastDevices[i]) lastDevices[i].muted = d.muted;
+    }).catch(function(e) {
+        delete _muteDebounce[pn];
+        if (lastDevices[i]) lastDevices[i].muted = !desired;
+        if (btn) {
+            btn.innerHTML = !desired
+                ? '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>'
+                : '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>';
+            btn.title = !desired ? 'Unmute' : 'Mute';
+            btn.classList.toggle('muted', !desired);
+        }
+        console.error('Mute failed:', e);
+    }).finally(function() { _unlockBtn(muteBtnId); });
 }
 
 // ---- Logs ----
@@ -1058,8 +1093,11 @@ function onGroupMute() {
         body: JSON.stringify({mute: muteVal, player_names: names})
     }).then(function(r) { return r.json(); }).then(function() {
         if (btn) {
-            btn.textContent = muteVal ? '🔇 Unmute All' : '🔈 Mute All';
-            btn.className = 'btn-group-mute' + (muteVal ? ' muted' : '');
+            btn.innerHTML = muteVal
+                ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>'
+                : '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>';
+            btn.title = muteVal ? 'Unmute All' : 'Mute All';
+            btn.className = 'icon-btn' + (muteVal ? ' muted' : '');
         }
     }).finally(function() { _unlockBtn(btnId); });
 }
@@ -1077,11 +1115,13 @@ function onPauseAll() {
     var afterPause = function() {
         if (btn) {
             if (action === 'pause') {
-                btn.textContent = '\u25b6 Unpause All';
+                btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
                 btn.classList.add('paused');
+                btn.title = 'Play All';
             } else {
-                btn.textContent = '\u23f8\u23f8 Pause All';
+                btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>';
                 btn.classList.remove('paused');
+                btn.title = 'Pause All';
             }
         }
     };
@@ -1103,6 +1143,64 @@ function onPauseAll() {
             });
         });
         Promise.all(calls).then(afterPause).finally(done);
+    }
+}
+
+// ---- Adapter/Status filter and view mode ----
+function onAdapterFilterChange(val) {
+    filterDeviceCards();
+}
+function onStatusFilterChange(val) {
+    filterDeviceCards();
+}
+function filterDeviceCards() {
+    var adapterVal = document.getElementById('adapter-filter-sel') ? document.getElementById('adapter-filter-sel').value : '';
+    var statusVal = document.getElementById('status-filter-sel') ? document.getElementById('status-filter-sel').value : '';
+    var cards = document.querySelectorAll('.device-card');
+    cards.forEach(function(card, idx) {
+        var dev = lastDevices[idx];
+        if (!dev) return;
+        var show = true;
+        if (adapterVal && dev.bluetooth_adapter_hci !== adapterVal) show = false;
+        if (statusVal) {
+            if (statusVal === 'playing' && !dev.playing) show = false;
+            else if (statusVal === 'idle' && (dev.playing || !dev.bluetooth_connected || dev.bt_management_enabled === false)) show = false;
+            else if (statusVal === 'reconnecting' && !dev.reconnecting) show = false;
+            else if (statusVal === 'released' && dev.bt_management_enabled !== false) show = false;
+            else if (statusVal === 'error' && dev.has_sink) show = false;
+        }
+        card.style.display = show ? '' : 'none';
+    });
+}
+
+function setViewMode(mode) {
+    var gridBtn = document.getElementById('view-grid-btn');
+    var listBtn = document.getElementById('view-list-btn');
+    var grid = document.getElementById('status-grid');
+    if (mode === 'list') {
+        if (gridBtn) gridBtn.classList.remove('active');
+        if (listBtn) listBtn.classList.add('active');
+        if (grid) grid.style.gridTemplateColumns = '1fr';
+    } else {
+        if (gridBtn) gridBtn.classList.add('active');
+        if (listBtn) listBtn.classList.remove('active');
+        if (grid) grid.style.gridTemplateColumns = '';
+    }
+}
+
+function onGroupAction(action) {
+    if (action === 'reconnect') {
+        lastDevices.forEach(function(dev, idx) {
+            if (_groupSelected[idx] !== false && dev.bluetooth_connected === false && dev.bt_management_enabled !== false) {
+                btReconnect(idx);
+            }
+        });
+    } else if (action === 'release') {
+        lastDevices.forEach(function(dev, idx) {
+            if (_groupSelected[idx] !== false && dev.bt_management_enabled !== false) {
+                btToggleManagement(idx);
+            }
+        });
     }
 }
 
@@ -1225,8 +1323,8 @@ async function btToggleManagement(i) {
             lastDevices[i].bt_management_enabled = newEnabled;
             // Update button immediately — don't wait for SSE
             if (btn) {
-                btn.textContent = newEnabled ? '\uD83D\uDD13 Release' : '\uD83D\uDD12 Reclaim';
-                btn.className = 'btn-bt-action ' + (newEnabled ? 'btn-bt-release' : 'btn-bt-reclaim');
+                btn.textContent = newEnabled ? 'Release' : 'Reclaim';
+                btn.className = 'action-btn';
             }
             // Disable Reconnect while released
             var reconnBtn = document.getElementById('dbtn-reconnect-' + i);
@@ -3577,7 +3675,6 @@ async function downloadDiagnostics() {
 function updateHealthIndicator(devices) {
     var el = document.getElementById('health-indicator');
     if (!el || !devices || !devices.length) return;
-    // Exclude manually released devices from health counts
     var active = devices.filter(function(d) {
         return d.bt_management_enabled !== false || d.bt_released_by === 'auto';
     });
@@ -3589,22 +3686,20 @@ function updateHealthIndicator(devices) {
         if (d.bluetooth_connected) btOk++;
         if (d.connected) maOk++;
     });
+    var btSvg = '<svg class="health-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M17.71 7.71L12 2h-1v7.59L6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 11 14.41V22h1l5.71-5.71-4.3-4.29 4.3-4.29zM13 5.83l1.88 1.88L13 9.59V5.83zm1.88 10.46L13 18.17v-3.76l1.88 1.88z"/></svg>';
+    var maSvg = '<svg class="health-icon" viewBox="0 0 240 240" fill="currentColor"><path d="M109.394 4.38C115.242-1.46 124.788-1.46 130.606 4.38L229.394 103.27C235.242 109.11 240 120.64 240 128.91V219.02L239.995 219.37C239.789 227.46 233.114 234 225 234H15C6.758 234 0 227.22 0 218.99V128.88C0 120.61 4.788 109.08 10.606 103.24L109.394 4.38ZM36 120C31.582 120 28 123.58 28 128V206H44V128C44 123.58 40.418 120 36 120ZM68 120C63.582 120 60 123.58 60 128V206H76V128C76 123.58 72.418 120 68 120ZM100 120C95.582 120 92 123.58 92 128V206H108V128C108 123.58 104.418 120 100 120ZM158.393 120.43C154.2 119.03 149.671 121.3 148.275 125.49L121.479 206H138.342L163.456 130.54C164.851 126.35 162.584 121.82 158.393 120.43ZM188.708 125.49C187.313 121.3 182.783 119.03 178.591 120.43C174.399 121.82 172.131 126.35 173.526 130.54L198.642 206H215.504L188.708 125.49Z"/></svg>';
     var parts = [];
-    // BT status
     if (total > 0) {
         var btClass = btOk === total ? 'ok' : btOk > 0 ? 'warn' : 'error';
-        parts.push('<span class="health-dot ' + btClass + '"></span>BT ' + btOk + '/' + total);
+        parts.push('<span class="health-dot ' + btClass + '"></span>' + btSvg + ' ' + btOk + '/' + total);
     }
-    // MA status
     if (total > 0) {
         var maClass = maOk === total ? 'ok' : maOk > 0 ? 'warn' : 'error';
-        parts.push('<span class="health-dot ' + maClass + '"></span>MA ' + maOk + '/' + total);
+        parts.push('<span class="health-dot ' + maClass + '"></span>' + maSvg + ' ' + maOk + '/' + total);
     }
-    // Playback
     if (playing > 0) {
         parts.push('<span class="health-dot ok"></span>▶ ' + playing);
     }
-    // Released count (grey)
     if (released > 0) {
         parts.push('<span class="health-dot released"></span>' + released + ' released');
     }
@@ -3622,6 +3717,15 @@ document.addEventListener('keydown', function(e) {
         document.getElementById('config-form').dispatchEvent(new Event('submit', {cancelable: true}));
     }
 });
+
+// ---- Slider fill coloring (MA-style colored track) ----
+function updateSliderFill(el) {
+    var min = +el.min || 0, max = +el.max || 100, val = +el.value;
+    var pct = ((val - min) / (max - min)) * 100;
+    var primary = getComputedStyle(document.documentElement).getPropertyValue('--primary-color').trim() || '#03a9f4';
+    var track = getComputedStyle(document.documentElement).getPropertyValue('--divider-color').trim() || 'rgba(0,0,0,.12)';
+    el.style.setProperty('--slider-fill', 'linear-gradient(to right, ' + primary + ' ' + pct + '%, ' + track + ' ' + pct + '%)');
+}
 
 // ---- Init ----
 loadConfig();   // calls loadBtAdapters() internally after restoring btManualAdapters

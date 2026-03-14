@@ -300,6 +300,37 @@
         .header-link:hover { color: #fff; background: rgba(255,255,255,0.1); }
         .header-link.has-errors { color: #f59e0b; }
         .header-link.has-errors svg { stroke: #f59e0b; }
+
+        /* Header user name & sign-out (redesign) */
+        .header-user-name {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            color: rgba(255,255,255,.85);
+            font-size: 13px;
+            font-weight: 500;
+            border-left: 1px solid rgba(255,255,255,.2);
+            padding-left: 12px;
+            margin-left: 4px;
+        }
+        .header-user-icon {
+            width: 16px;
+            height: 16px;
+            fill: currentColor;
+        }
+        .header-btn-signout {
+            padding: 6px 8px;
+            opacity: .7;
+            transition: opacity 150ms;
+        }
+        .header-btn-signout:hover { opacity: 1; }
+        .health-icon {
+            width: 12px;
+            height: 12px;
+            fill: currentColor;
+            vertical-align: -1px;
+        }
+
         .header-row2 {
             display: flex; justify-content: space-between; align-items: center;
             margin-top: 6px; flex-wrap: wrap; gap: 4px 16px;
@@ -394,7 +425,7 @@
             background: var(--card-background-color);
             border-radius: var(--ha-card-border-radius); padding: 14px 16px;
             box-shadow: var(--ha-card-box-shadow);
-            display: flex; flex-direction: column; gap: 6px;
+            display: flex; flex-direction: column; gap: 8px;
             border-left: 3px solid transparent;
             transition: opacity 0.2s, box-shadow 0.2s, border-color 0.2s;
         }
@@ -407,6 +438,12 @@
         .device-card.inactive {
             opacity: 0.6;
             box-shadow: 0 1px 2px 0 rgba(0,0,0,.08), 0 1px 3px 0 rgba(0,0,0,.06);
+        }
+        .device-card.released {
+            opacity: 0.6;
+        }
+        .device-card.error {
+            border-left-color: var(--error-color);
         }
         .device-card-actions {
             display: flex; align-items: center; gap: 4px; flex-wrap: nowrap;
@@ -650,6 +687,357 @@
         .group-badge.hover-only { display: none !important; }
         .device-card:hover .group-badge.hover-only,
         .device-card:focus-within .group-badge.hover-only { display: inline-block !important; }
+
+        /* ── Toolbar — HA-card style (redesign) ── */
+        .toolbar-stack {
+            display: flex;
+            flex-direction: column;
+            gap: 0;
+            margin-bottom: 16px;
+        }
+        .filter-bar {
+            background: var(--card-background-color);
+            border-radius: var(--ha-card-border-radius) var(--ha-card-border-radius) 0 0;
+            box-shadow: var(--ha-card-box-shadow);
+            padding: 8px 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .filter-icon {
+            width: 18px;
+            height: 18px;
+            color: var(--secondary-text-color);
+            flex-shrink: 0;
+        }
+        .filter-bar select {
+            border: 1px solid var(--divider-color);
+            border-radius: 6px;
+            padding: 5px 10px;
+            font-size: 13px;
+            background: var(--card-background-color);
+            color: var(--primary-text-color);
+            cursor: pointer;
+            font-family: inherit;
+        }
+        .action-bar {
+            background: var(--card-background-color);
+            border-radius: 0 0 var(--ha-card-border-radius) var(--ha-card-border-radius);
+            box-shadow: var(--ha-card-box-shadow);
+            padding: 8px 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            border-top: 1px solid var(--divider-color);
+        }
+        .toolbar-count {
+            font-size: 13px;
+            color: var(--secondary-text-color);
+        }
+        .toolbar-sep {
+            width: 1px;
+            height: 20px;
+            background: var(--divider-color);
+        }
+        .toolbar-label {
+            font-size: 11px;
+            font-weight: 500;
+            color: var(--secondary-text-color);
+            text-transform: uppercase;
+            letter-spacing: .5px;
+        }
+        .view-toggle {
+            display: flex;
+            margin-left: auto;
+            border: 1px solid var(--divider-color);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .view-toggle-btn {
+            padding: 5px 10px;
+            border: none;
+            background: var(--card-background-color);
+            color: var(--secondary-text-color);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            transition: all 150ms;
+        }
+        .view-toggle-btn.active {
+            background: var(--primary-color);
+            color: #fff;
+        }
+        .view-toggle-btn svg { width: 16px; height: 16px; }
+        .text-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            padding: 4px 10px;
+            border-radius: 6px;
+            border: 1px solid var(--divider-color);
+            background: var(--secondary-background-color);
+            color: var(--secondary-text-color);
+            cursor: pointer;
+            font-family: inherit;
+            transition: background 150ms;
+        }
+        .text-btn:hover {
+            background: var(--primary-background-color);
+            color: var(--primary-text-color);
+        }
+        .text-btn svg { width: 14px; height: 14px; }
+
+        /* ── Devices grid (redesign) ── */
+        .devices-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        /* ── Card header (redesign) ── */
+        .card-head {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .card-icon {
+            width: 40px; height: 40px;
+            border-radius: 50%;
+            background: var(--secondary-background-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+        .card-icon svg { width: 20px; height: 20px; fill: var(--secondary-text-color); }
+        .card-icon.playing-icon {
+            background: rgba(3,169,244,.15);
+        }
+        .card-icon.playing-icon svg { fill: var(--primary-color); }
+        .card-name-block { flex: 1; min-width: 0; }
+        .card-name {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .name-text {
+            font-size: 14px;
+            font-weight: 500;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            flex-shrink: 1;
+            min-width: 0;
+        }
+        .card-badge {
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 10px;
+            cursor: pointer;
+            flex-shrink: 0;
+            font-weight: 500;
+        }
+        .badge-group { background: rgba(3,169,244,.1); color: var(--primary-color); }
+        .badge-released { background: rgba(255,166,0,.15); color: var(--warning-color); font-weight: 600; }
+        .badge-error { background: rgba(219,68,55,.15); color: var(--error-color); font-weight: 600; }
+
+        /* ── Card chips (redesign) ── */
+        .card-chips {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+        .chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 10px;
+            background: var(--secondary-background-color);
+            color: var(--secondary-text-color);
+        }
+        .chip .dot {
+            width: 6px; height: 6px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        .chip-ok .dot { background: var(--success-color); }
+        .chip-icon {
+            width: 12px;
+            height: 12px;
+            flex-shrink: 0;
+        }
+
+        /* ── Card controls (redesign) ── */
+        .card-controls {
+            display: flex;
+            align-items: center;
+            gap: 0;
+        }
+        .icon-btn {
+            min-width: 28px; min-height: 28px;
+            border: none;
+            background: none;
+            cursor: pointer;
+            border-radius: 4px;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--secondary-text-color);
+            transition: color 150ms;
+        }
+        .icon-btn:hover {
+            color: var(--primary-text-color);
+            background: rgba(0,0,0,.05);
+        }
+        .icon-btn svg { width: 16px; height: 16px; fill: currentColor; }
+        .vol-wrap {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            margin: 0 6px;
+        }
+        .vol-pct {
+            font-size: 11px;
+            color: var(--secondary-text-color);
+            min-width: 26px;
+            text-align: right;
+        }
+
+        /* ── Volume slider — MA style (redesign) ── */
+        input[type="range"] {
+            -webkit-appearance: none;
+            appearance: none;
+            flex: 1;
+            height: 28px;
+            background: transparent;
+            cursor: pointer;
+            margin: 0;
+            padding: 0;
+        }
+        input[type="range"]::-webkit-slider-runnable-track {
+            height: 6px;
+            border-radius: 3px;
+            background: var(--slider-fill, var(--divider-color));
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 16px; height: 16px;
+            border-radius: 50%;
+            background: var(--primary-color);
+            cursor: pointer;
+            box-shadow: 0 1px 3px rgba(0,0,0,.2);
+            transition: transform 100ms;
+            margin-top: -5px;
+        }
+        input[type="range"]::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+        }
+
+        /* ── Now Playing (redesign) ── */
+        .card-np {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 8px;
+            background: rgba(0,0,0,.03);
+            border-radius: 8px;
+            margin-top: 2px;
+        }
+        .np-art {
+            width: 36px; height: 36px;
+            flex-shrink: 0;
+            border-radius: 4px;
+            background: var(--secondary-background-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+        .np-art svg { width: 18px; height: 18px; fill: var(--secondary-text-color); }
+        .np-info {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+        .np-track {
+            font-size: 13px;
+            font-weight: 500;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .np-meta {
+            font-size: 11px;
+            color: var(--secondary-text-color);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .np-progress {
+            height: 2px;
+            background: var(--divider-color);
+            border-radius: 1px;
+            margin-top: 2px;
+            overflow: hidden;
+        }
+        .np-progress-fill {
+            height: 100%;
+            background: var(--primary-color);
+            border-radius: 1px;
+            transition: width 0.3s;
+        }
+        .np-time {
+            font-size: 11px;
+            color: var(--secondary-text-color);
+            white-space: nowrap;
+        }
+
+        /* ── Card actions row (redesign) ── */
+        .card-actions-row {
+            display: flex;
+            gap: 6px;
+            padding-top: 6px;
+            border-top: 1px solid var(--divider-color);
+            margin-top: 2px;
+        }
+        .action-btn {
+            font-size: 12px;
+            padding: 4px 10px;
+            border-radius: 6px;
+            border: 1px solid var(--divider-color);
+            background: none;
+            cursor: pointer;
+            color: var(--secondary-text-color);
+            font-family: inherit;
+            transition: background 150ms, color 150ms;
+        }
+        .action-btn:hover {
+            background: var(--secondary-background-color);
+            color: var(--primary-text-color);
+        }
+
+        /* ── Hidden disabled devices footer ── */
+        .hidden-devices-footer {
+            text-align: center;
+            font-size: 12px;
+            color: var(--secondary-text-color);
+            padding: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+        .hidden-devices-footer svg { width: 14px; height: 14px; fill: currentColor; }
+        .hidden-devices-footer a { color: var(--primary-color); }
 
         /* Equalizer animation (MA-style) — shown when audio data is actually streaming */
         .eq-bars {
@@ -1141,4 +1529,11 @@
             /* Toast — full-width on mobile */
             .toast-container { left: 12px; right: 12px; bottom: 16px; }
             .toast { max-width: none; }
+
+            /* Redesign responsive rules */
+            .devices-grid { grid-template-columns: 1fr; }
+            .filter-bar { flex-wrap: wrap; gap: 6px; }
+            .action-bar { flex-wrap: wrap; gap: 8px; }
+            .filter-bar select { font-size: 12px; padding: 4px 6px; }
+            .view-toggle { display: none; }
         }

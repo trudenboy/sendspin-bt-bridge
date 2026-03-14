@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.31.0] - 2026-03-14
+
+### Changed
+- **UI redesign** — complete visual overhaul of device cards, header, and toolbar aligned with Home Assistant / Music Assistant design guidelines
+- **Device cards** — new card layout with speaker icon, SVG chip indicators (BT rune, MA house logo, chain-link sync), single-row transport controls + volume slider, now-playing section with album art
+- **Header** — user icon + username before sign-out (exit-door SVG icon), BT/MA SVG icons in health indicator pills
+- **Toolbar** — split into Filter Bar (group/adapter/status filters + grid/list view toggle) and Action Bar (select-all, group volume, mute/pause/reconnect/release)
+- **Icons** — replaced all Unicode/emoji icons with consistent MDI-style SVG icons throughout the interface
+- **Volume slider** — MA-style colored track fill via CSS custom property `--slider-fill`
+
+### Added
+- **View toggle** — switch between grid and list layout for device cards
+- **Adapter filter** — filter devices by BT adapter (hci0, hci1, etc.)
+- **Status filter** — filter devices by status (playing, idle, reconnecting, released, error)
+- **Group actions** — bulk Reconnect / Release buttons in action bar
+
 ## [2.30.8] - 2026-03-13
 
 ### Fixed

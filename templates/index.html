@@ -39,24 +39,29 @@
                    class="header-link"><svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" style="vertical-align:-2px"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg> GitHub</a>
                 {% if auth_enabled %}
                 {% if ha_mode and ha_user %}
-                <a class="header-user" id="header-user-link" href="/profile" target="_blank" rel="noopener"
-                   data-auth-method="ha">{{ ha_user }}</a>
+                <span class="header-user-name">
+                    <svg class="header-user-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+                    <a id="header-user-link" href="/profile" target="_blank" rel="noopener" data-auth-method="ha" style="color:inherit;text-decoration:none">{{ ha_user }}</a>
+                </span>
+                <button class="header-btn-signout" title="Sign out" onclick="window.location.href='{{ url_for('auth.logout') }}'">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/></svg>
+                </button>
                 {% elif not ha_mode %}
-                <a href="{{ url_for('auth.logout') }}" class="header-signout">Sign out</a>
+                <span class="header-user-name">
+                    <svg class="header-user-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+                    admin
+                </span>
+                <a href="{{ url_for('auth.logout') }}" class="header-btn-signout" title="Sign out">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/></svg>
+                </a>
                 {% endif %}
                 {% endif %}
             </div>
         </div>
-        <!-- Row 2: System info + health + user -->
+        <!-- Row 2: System info + health -->
         <div class="header-row2">
             <div id="system-info" class="header-sysinfo"></div>
-            <div class="header-row2-right">
-                <div id="health-indicator" class="health-indicator"></div>
-                {% if auth_enabled and not ha_mode and ha_user %}
-                <a class="header-user" id="header-user-link" href="#" target="_blank" rel="noopener"
-                   data-auth-method="{{ auth_method }}">{{ ha_user }}</a>
-                {% endif %}
-            </div>
+            <div id="health-indicator" class="health-indicator"></div>
         </div>
         <!-- Restart progress (appears inside header) -->
         <div id="restart-banner" class="restart-banner"></div>
@@ -71,27 +76,53 @@
     </div>
     {% endif %}
 
-    <!-- Group Controls -->
-    <div class="group-controls" id="group-controls" style="display:none;">
-        <span class="group-controls-label">&#127922; Group</span>
-        <select id="group-filter-sel" class="group-filter-sel" onchange="onGroupFilterChange(this.value)" title="Filter by MA sync group">
-            <option value="">All groups</option>
-        </select>
-        <span class="group-select-info" id="group-select-info">All players</span>
-        <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:#6b7280;cursor:pointer;">
-            <input type="checkbox" id="group-select-all" checked onchange="onGroupSelectAll(this)">
-            All
-        </label>
-        <div class="group-vol-row">
-            <span style="font-size:11px;color:#9ca3af;font-weight:600;text-transform:uppercase;">Vol</span>
-            <input type="range" min="0" max="100" value="50" class="group-vol-slider" id="group-vol-slider"
-                oninput="onGroupVolumeInput(this.value)">
-            <span class="group-vol-pct" id="group-vol-pct">50%</span>
+    <!-- Toolbar: Filter + Actions -->
+    <div class="toolbar-stack" id="group-controls" style="display:none;">
+        <div class="filter-bar">
+            <svg class="filter-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M10 18h4v-2h-4v2zM3 6v2h18V6H3zm3 7h12v-2H6v2z"/></svg>
+            <select id="group-filter-sel" onchange="onGroupFilterChange(this.value)" title="Filter by MA sync group">
+                <option value="">All groups</option>
+            </select>
+            <select id="adapter-filter-sel" onchange="onAdapterFilterChange(this.value)" title="Filter by BT adapter">
+                <option value="">All adapters</option>
+            </select>
+            <select id="status-filter-sel" onchange="onStatusFilterChange(this.value)" title="Filter by device status">
+                <option value="">All statuses</option>
+                <option value="playing">▶ Playing</option>
+                <option value="idle">⏸ Idle</option>
+                <option value="reconnecting">⟳ Reconnecting</option>
+                <option value="released">Released</option>
+                <option value="error">Error</option>
+            </select>
+            <div class="view-toggle" style="margin-left:auto">
+                <button type="button" class="view-toggle-btn active" id="view-grid-btn" onclick="setViewMode('grid')" title="Grid view">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M3 3h8v8H3V3zm0 10h8v8H3v-8zm10-10h8v8h-8V3zm0 10h8v8h-8v-8z"/></svg>
+                </button>
+                <button type="button" class="view-toggle-btn" id="view-list-btn" onclick="setViewMode('list')" title="List view">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/></svg>
+                </button>
+            </div>
         </div>
-        <button type="button" class="btn-group-mute" id="group-mute-btn"
-            onclick="onGroupMute()">&#128264; Mute All</button>
-        <button type="button" class="btn-group-mute" id="group-pause-btn"
-            onclick="onPauseAll()">&#9646;&#9646; Pause All</button>
+        <div class="action-bar">
+            <input type="checkbox" id="group-select-all" checked onchange="onGroupSelectAll(this)">
+            <span class="toolbar-count" id="group-select-info">All players</span>
+            <div class="toolbar-sep"></div>
+            <div class="vol-wrap">
+                <span class="toolbar-label">Vol</span>
+                <input type="range" min="0" max="100" value="50" id="group-vol-slider"
+                    oninput="onGroupVolumeInput(this.value)">
+                <span class="vol-pct" id="group-vol-pct">50%</span>
+            </div>
+            <div class="toolbar-sep"></div>
+            <button type="button" class="icon-btn" id="group-mute-btn" onclick="onGroupMute()" title="Mute All">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>
+            </button>
+            <button type="button" class="icon-btn" id="group-pause-btn" onclick="onPauseAll()" title="Pause All">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+            </button>
+            <button type="button" class="text-btn" onclick="onGroupAction('reconnect')">Reconnect</button>
+            <button type="button" class="text-btn" onclick="onGroupAction('release')">Release</button>
+        </div>
     </div>
 
     <!-- Status grid: device cards (populated by JS) -->

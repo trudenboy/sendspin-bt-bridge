@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.31.0] - 2026-03-14
+
+### Changed
+- Complete UI redesign: device cards, header, toolbar — aligned with HA/MA design system
+- New card layout with SVG icons (BT, MA, sync), single-row controls, now-playing section
+- Header: user icon + username, sign-out icon, SVG health indicator pills
+- Toolbar split into Filter Bar + Action Bar with grid/list view toggle
+- All Unicode/emoji icons replaced with MDI-style SVGs
+
+### Added
+- Grid/List view toggle for device cards
+- Adapter and status filters in toolbar
+- Bulk Reconnect / Release group actions
+
 ## [2.30.8] - 2026-03-13
 
 ### Fixed
