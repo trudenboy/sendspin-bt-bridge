@@ -20,7 +20,6 @@ from config import (
     BUILD_DATE,
     CONFIG_DIR,
     CONFIG_FILE,
-    DEFAULT_CONFIG,
     VERSION,
     config_lock,
     load_config,
@@ -264,11 +263,7 @@ def api_config_upload():
 def api_config():
     """Read or write the service configuration."""
     if request.method == "GET":
-        if CONFIG_FILE.exists():
-            with config_lock, open(CONFIG_FILE) as f:
-                config = json.load(f)
-        else:
-            config = DEFAULT_CONFIG.copy()
+        config = load_config()
 
         # Never expose secrets to the browser — but indicate whether password is set
         has_password = bool(config.get("AUTH_PASSWORD_HASH"))
@@ -301,6 +296,21 @@ def api_config():
         val = config.get(str_key)
         if val is not None and not isinstance(val, str):
             return jsonify({"error": f"{str_key} must be a string"}), 400
+
+    for bool_key in (
+        "PREFER_SBC_CODEC",
+        "AUTH_ENABLED",
+        "BRUTE_FORCE_PROTECTION",
+        "MA_WEBSOCKET_MONITOR",
+        "VOLUME_VIA_MA",
+        "MUTE_VIA_MA",
+        "SMOOTH_RESTART",
+        "AUTO_UPDATE",
+        "CHECK_UPDATES",
+    ):
+        val = config.get(bool_key)
+        if val is not None and not isinstance(val, bool):
+            return jsonify({"error": f"{bool_key} must be true or false"}), 400
 
     # Validate BLUETOOTH_DEVICES entries
     bt_devices = config.get("BLUETOOTH_DEVICES", [])
@@ -352,6 +362,22 @@ def api_config():
         except (ValueError, TypeError):
             return jsonify({"error": f"Invalid SENDSPIN_PORT: {config.get('SENDSPIN_PORT')}"}), 400
 
+    for int_key, min_val, max_val in (
+        ("SESSION_TIMEOUT_HOURS", 1, 168),
+        ("BRUTE_FORCE_MAX_ATTEMPTS", 1, 50),
+        ("BRUTE_FORCE_WINDOW_MINUTES", 1, 1440),
+        ("BRUTE_FORCE_LOCKOUT_MINUTES", 1, 1440),
+    ):
+        raw = config.get(int_key)
+        if raw is None or raw == "":
+            continue
+        try:
+            value = int(raw)
+            if not (min_val <= value <= max_val):
+                raise ValueError
+        except (ValueError, TypeError):
+            return jsonify({"error": f"Invalid {int_key}: {raw}"}), 400
+
     # Strip unknown top-level keys (whitelist)
     _ALLOWED_POST_KEYS = {
         "SENDSPIN_SERVER",
@@ -365,11 +391,17 @@ def api_config():
         "BT_CHECK_INTERVAL",
         "BT_MAX_RECONNECT_FAILS",
         "AUTH_ENABLED",
+        "SESSION_TIMEOUT_HOURS",
+        "BRUTE_FORCE_PROTECTION",
+        "BRUTE_FORCE_MAX_ATTEMPTS",
+        "BRUTE_FORCE_WINDOW_MINUTES",
+        "BRUTE_FORCE_LOCKOUT_MINUTES",
         "LAST_VOLUMES",
         "LOG_LEVEL",
         "MA_API_URL",
         "MA_API_TOKEN",
         "MA_USERNAME",
+        "MA_WEBSOCKET_MONITOR",
         "VOLUME_VIA_MA",
         "MUTE_VIA_MA",
         "SMOOTH_RESTART",

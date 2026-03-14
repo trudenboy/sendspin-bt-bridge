@@ -4,10 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sendspin Bluetooth Bridge</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('vstatic', version=VERSION, filename='style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('vstatic', version=asset_version('style.css'), filename='style.css') }}">
     <link rel="icon" type="image/svg+xml" href="{{ url_for('vstatic', version=VERSION, filename='favicon.svg') }}">
     <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('vstatic', version=VERSION, filename='favicon.png') }}">
 </head>
@@ -19,22 +16,26 @@
         <!-- Row 1: Title + version + update badge + auth -->
         <div class="header-row1">
             <div class="header-title">
-                <h1><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:-3px"><path d="M14.88 16.29 13 14.41V17.59L14.88 16.29ZM13 6.41V9.59L14.88 8.29 13 6.41ZM17.71 7.71 12 2H11V9.59L6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 11 14.41V22H12L17.71 16.29 13.41 12 17.71 7.71ZM15.29 16.29 13 18.17V14.41L15.29 16.29ZM13 9.59V5.83L15.29 7.71 13 9.59Z"/></svg> Sendspin Bluetooth Bridge</h1>
-                <a class="header-version" id="version-display" title="{{ BUILD_DATE }}"
-                   href="https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v{{ VERSION }}"
-                   target="_blank" rel="noopener">v{{ VERSION }}</a>
-                <span id="update-badge">
-                    <a id="update-link" href="#" class="update-badge-link" title="Check for updates"
-                       onclick="return _onUpdateBadgeClick(event)">
-                        <span id="update-icon">⟳</span> <span id="update-version">check</span>
-                    </a>
-                </span>
+                <div class="header-brand">
+                    <h1><svg class="header-logo" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M14.88 16.29 13 14.41V17.59L14.88 16.29ZM13 6.41V9.59L14.88 8.29 13 6.41ZM17.71 7.71 12 2H11V9.59L6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 11 14.41V22H12L17.71 16.29 13.41 12 17.71 7.71ZM15.29 16.29 13 18.17V14.41L15.29 16.29ZM13 9.59V5.83L15.29 7.71 13 9.59Z"/></svg><span>Sendspin Bluetooth Bridge</span></h1>
+                    <div class="header-meta">
+                        <a class="header-version" id="version-display" title="{{ BUILD_DATE }}"
+                           href="https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v{{ VERSION }}"
+                           target="_blank" rel="noopener">v{{ VERSION }}</a>
+                        <span id="update-badge">
+                            <a id="update-link" href="#" class="update-badge-link" title="Check for updates"
+                               onclick="return _onUpdateBadgeClick(event)">
+                                <span id="update-icon">⟳</span> <span id="update-version">check</span>
+                            </a>
+                        </span>
+                    </div>
+                </div>
             </div>
             <div class="header-actions">
                 <a href="#" class="header-link" id="report-link" title="Submit a bug report"
-                   onclick="return _openBugReport(event)"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><circle cx="8" cy="8" r="7"/><line x1="8" y1="4" x2="8" y2="9"/><line x1="8" y1="11.5" x2="8" y2="11.5" stroke-width="2"/></svg> Report</a>
+                   onclick="return _openBugReport(event)"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"></path></svg> Report</a>
                 <a href="https://trudenboy.github.io/sendspin-bt-bridge/" target="_blank" rel="noopener"
-                   class="header-link"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M2 3h12v11H2z"/><path d="M5 1v3M11 1v3M2 7h12"/></svg> Docs</a>
+                   class="header-link"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M21 5c-1.11-.35-2.33-.5-3.5-.5-1.95 0-4.05.4-5.5 1.5-1.45-1.1-3.55-1.5-5.5-1.5S2.45 4.9 1 6v14.65c0 .25.25.5.5.5.1 0 .15-.05.25-.05C3.1 20.45 5.05 20 6.5 20c1.95 0 4.05.4 5.5 1.5 1.35-.85 3.8-1.5 5.5-1.5 1.65 0 3.35.3 4.75 1.05.1.05.15.05.25.05.25 0 .5-.25.5-.5V6c-.6-.45-1.25-.75-2-1zm0 13.5c-1.1-.35-2.3-.5-3.5-.5-1.7 0-4.15.65-5.5 1.5V8c1.35-.85 3.8-1.5 5.5-1.5 1.2 0 2.4.15 3.5.5v11.5z"></path></svg> Docs</a>
                 <a href="https://github.com/trudenboy/sendspin-bt-bridge" target="_blank" rel="noopener"
                    class="header-link"><svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" style="vertical-align:-2px"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg> GitHub</a>
                 {% if auth_enabled %}
@@ -72,7 +73,7 @@
     <div class="auth-warning-banner">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;flex-shrink:0"><circle cx="8" cy="8" r="7"/><line x1="8" y1="4" x2="8" y2="9"/><line x1="8" y1="11.5" x2="8" y2="11.5" stroke-width="2"/></svg>
         Web UI has no authentication — anyone on your network can access it.
-        <a href="#" onclick="document.querySelector('.config-section').open=true;document.getElementById('auth-enabled').scrollIntoView({behavior:'smooth',block:'center'});document.getElementById('auth-enabled').parentElement.style.outline='2px solid #dc2626';setTimeout(function(){document.getElementById('auth-enabled').parentElement.style.outline=''},3000);return false;">Enable in Configuration → Authentication</a>
+        <a href="#" onclick="document.querySelector('.config-section').open=true;switchConfigTab('security');document.getElementById('auth-enabled').scrollIntoView({behavior:'smooth',block:'center'});document.getElementById('auth-enabled').closest('.config-setting-row').style.outline='2px solid #dc2626';setTimeout(function(){document.getElementById('auth-enabled').closest('.config-setting-row').style.outline=''},3000);return false;">Enable in Configuration → Authentication</a>
     </div>
     {% endif %}
 
@@ -120,8 +121,8 @@
             <button type="button" class="icon-btn" id="group-pause-btn" onclick="onPauseAll()" title="Pause All">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
             </button>
-            <button type="button" class="text-btn" onclick="onGroupAction('reconnect')">Reconnect</button>
-            <button type="button" class="text-btn" onclick="onGroupAction('release')">Release</button>
+            <button type="button" class="text-btn" onclick="onGroupAction('reconnect')">Reconnect all</button>
+            <button type="button" class="text-btn" onclick="onGroupAction('release')">Release all</button>
         </div>
     </div>
 
@@ -132,276 +133,486 @@
     <details class="config-section">
         <summary>&#9881;&#65039; Configuration</summary>
         <form id="config-form">
-
-            <!-- ── General ── -->
-            <div class="config-group">
-                <h4 class="config-group-title"><span class="cg-icon">🏷️</span> General</h4>
-                <div class="form-group">
-                    <label>Bridge name
-                        <span class="form-hint">Appended to player names in MA as "Player @ Name"</span>
-                    </label>
-                    <input type="text" name="BRIDGE_NAME" placeholder="e.g. Living Room">
-                </div>
-
-                <div class="form-group">
-                    <label>Timezone</label>
-                    <div style="display:flex;gap:10px;align-items:center;">
-                        <input type="text" name="TZ" id="tz-input" placeholder="Australia/Melbourne" style="flex:1;"
-                            list="tz-list" autocomplete="off" oninput="updateTzPreview()">
-                        <datalist id="tz-list"></datalist>
-                        <span id="tz-preview" class="tz-preview"></span>
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <label>PulseAudio latency (ms)
-                        <span class="form-hint">Higher values reduce dropouts on slow hardware (default 200)</span>
-                    </label>
-                    <input type="number" name="PULSE_LATENCY_MSEC" placeholder="200" min="50" max="2000">
-                </div>
-
+            <div class="config-tabs" role="tablist" aria-label="Configuration sections">
+                <button type="button" class="config-tab active" data-config-tab="general">General</button>
+                <button type="button" class="config-tab" data-config-tab="devices">Devices</button>
+                <button type="button" class="config-tab" data-config-tab="bluetooth">Bluetooth</button>
+                <button type="button" class="config-tab" data-config-tab="ma">Music Assistant</button>
+                <button type="button" class="config-tab" data-config-tab="security">Security</button>
             </div>
 
-            <!-- ── Bluetooth ── -->
-            <div class="config-group">
-                <h4 class="config-group-title"><span class="cg-icon">📡</span> Bluetooth</h4>
-
-                <!-- Bluetooth Adapters panel -->
-                <div class="form-group">
-                    <label>Adapters</label>
-                    <div class="adapters-box">
-                        <div id="adapters-table"></div>
+            <section class="config-tab-panel active" id="config-panel-general" data-config-panel="general">
+                <div class="config-group">
+                    <div class="config-group-heading">
+                        <h4 class="config-group-title"><span class="cg-icon">🏷️</span> General</h4>
+                        <p class="config-group-subtitle">Core bridge identity, restart defaults, update policy, and runtime-only controls.</p>
                     </div>
-                    <div class="bt-toolbar">
-                        <button type="button" class="btn btn-sm" onclick="addManualAdapterRow('','','')">+ Add Adapter</button>
-                        <button type="button" class="btn btn-sm btn-refresh" onclick="loadBtAdapters()">&#x21BA; Refresh</button>
+                    <div class="config-settings-grid">
+                        <div class="config-settings-card">
+                            <div class="config-card-header">
+                                <div class="config-card-title">Core settings</div>
+                                <p class="config-card-subtitle">Persistent values stored in <code>config.json</code> and reused after restart.</p>
+                            </div>
+                            <div class="config-form-grid">
+                                <div class="form-group">
+                                    <label>Bridge name
+                                        <span class="form-hint">Appended to player names in MA as "Player @ Name"</span>
+                                    </label>
+                                    <input type="text" name="BRIDGE_NAME" placeholder="e.g. Living Room">
+                                </div>
+
+                                <div class="form-group">
+                                    <label>Timezone
+                                        <span id="tz-preview" class="tz-preview"></span>
+                                    </label>
+                                    <div class="form-inline config-inline-row">
+                                        <input type="text" class="config-inline-fill" name="TZ" id="tz-input" placeholder="Australia/Melbourne"
+                                            list="tz-list" autocomplete="off" oninput="updateTzPreview()">
+                                        <datalist id="tz-list"></datalist>
+                                    </div>
+                                </div>
+
+                                <div class="form-group">
+                                    <label>PulseAudio latency (ms)
+                                        <span class="form-hint">Higher values reduce dropouts on slow hardware (default 200)</span>
+                                    </label>
+                                    <input type="number" name="PULSE_LATENCY_MSEC" placeholder="200" min="50" max="2000">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="config-settings-card">
+                            <div class="config-card-header">
+                                <div class="config-card-title">Behavior</div>
+                                <p class="config-card-subtitle">Default restart and update behavior for this bridge instance.</p>
+                            </div>
+                            <label class="config-setting-row">
+                                <span class="config-setting-copy">
+                                    <strong>Smooth restart</strong>
+                                    <span class="form-hint">Mute before restart, show progress, and wait for reconnect.</span>
+                                </span>
+                                <span class="config-setting-control">
+                                    <span class="config-switch">
+                                        <input type="checkbox" name="SMOOTH_RESTART" id="smooth-restart">
+                                        <span class="config-switch-track"></span>
+                                    </span>
+                                </span>
+                            </label>
+
+                            {% if not ha_mode %}
+                            <label class="config-setting-row">
+                                <span class="config-setting-copy">
+                                    <strong>Check for updates</strong>
+                                    <span class="form-hint">Poll GitHub for new versions every hour.</span>
+                                </span>
+                                <span class="config-setting-control">
+                                    <span class="config-switch">
+                                        <input type="checkbox" name="CHECK_UPDATES" id="check-updates" checked>
+                                        <span class="config-switch-track"></span>
+                                    </span>
+                                </span>
+                            </label>
+
+                            <label class="config-setting-row">
+                                <span class="config-setting-copy">
+                                    <strong>Auto-update</strong>
+                                    <span class="form-hint">Automatically apply updates when available (LXC only).</span>
+                                </span>
+                                <span class="config-setting-control">
+                                    <span class="config-switch">
+                                        <input type="checkbox" name="AUTO_UPDATE" id="auto-update">
+                                        <span class="config-switch-track"></span>
+                                    </span>
+                                </span>
+                            </label>
+                            {% endif %}
+                        </div>
                     </div>
                 </div>
+            </section>
 
-                <!-- BT devices table -->
-                <div class="form-group">
-                    <label>Devices</label>
-                    <div class="bt-table-wrap">
-                        <div class="bt-header">
-                            <span></span><span></span><span>Player Name</span><span>MAC Address</span>
-                            <span>Adapter</span><span>Delay (ms)</span><span></span>
+            <section class="config-tab-panel" id="config-panel-devices" data-config-panel="devices">
+                <div class="config-group config-group--flush">
+                    <div class="config-group-heading">
+                        <h4 class="config-group-title"><span class="cg-icon">🔊</span> Devices</h4>
+                        <p class="config-group-subtitle">Keep the speaker fleet table primary, with discovery and import treated as a secondary workflow.</p>
+                    </div>
+                    <div class="devices-stack">
+                        <div class="config-settings-card devices-primary-card">
+                            <div class="devices-card-header">
+                                <div class="devices-card-copy">
+                                    <div class="config-card-title">Device fleet</div>
+                                    <p class="devices-card-subtitle">Main routing table for daily speaker management. Advanced options remain available per row.</p>
+                                </div>
+                                <div class="devices-card-actions">
+                                    <button type="button" id="add-dev-btn" onclick="addBtDeviceRow()" class="btn btn-sm">+ Add device</button>
+                                </div>
+                            </div>
+                            <div class="bt-table-wrap">
+                                <div class="bt-header">
+                                    <span>Enabled</span><span>Player name</span><span>MAC</span>
+                                    <span>Adapter</span><span>Port</span><span>Delay</span><span>Live</span><span>Remove</span>
+                                </div>
+                                <div id="bt-devices-table"></div>
+                            </div>
                         </div>
-                        <div id="bt-devices-table"></div>
+                        <div class="config-settings-card devices-secondary-card config-settings-card--muted">
+                            <div class="devices-card-header">
+                                <div class="devices-card-copy">
+                                    <div class="config-card-title">Discovery &amp; import</div>
+                                    <p class="devices-card-subtitle">Scan nearby speakers or add devices from the paired list without pushing this secondary flow into the main fleet table.</p>
+                                </div>
+                                <div class="devices-card-actions">
+                                    <button type="button" onclick="startBtScan()" class="btn btn-sm btn-scan" id="scan-btn">
+                                        &#128269; Scan
+                                    </button>
+                                    <span id="scan-status" class="scan-badge"></span>
+                                </div>
+                            </div>
+                            <div id="paired-box" class="paired-box" hidden>
+                                <div class="paired-box-title" role="button" tabindex="0" onclick="togglePairedList(this)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();togglePairedList(this);}">
+                                    <span class="paired-arrow">▼</span>
+                                    <span class="paired-box-copy">Already paired &#8212; click to add:</span>
+                                    <label class="paired-show-all" onclick="event.stopPropagation()">
+                                        <span>Show all</span>
+                                        <span class="config-switch compact">
+                                            <input type="checkbox" id="paired-show-all" onchange="loadPairedDevices()">
+                                            <span class="config-switch-track"></span>
+                                        </span>
+                                    </label>
+                                </div>
+                                <div id="paired-list"></div>
+                            </div>
+                            <div id="scan-results-box" class="scan-results-box" hidden>
+                                <div class="scan-results-title">Discovered devices &#8212; click to add:</div>
+                                <div id="scan-results-list"></div>
+                            </div>
+                        </div>
                     </div>
-                    <div class="bt-toolbar">
-                        <button type="button" id="add-dev-btn" onclick="addBtDeviceRow()" class="btn btn-sm">+ Add Device</button>
-                        <button type="button" onclick="startBtScan()" class="btn btn-sm btn-scan" id="scan-btn">
-                            &#128269; Scan
-                        </button>
-                        <span id="scan-status" class="scan-badge"></span>
+                </div>
+            </section>
+
+            <section class="config-tab-panel" id="config-panel-bluetooth" data-config-panel="bluetooth">
+                <div class="config-group">
+                    <div class="config-group-heading">
+                        <h4 class="config-group-title"><span class="cg-icon">📡</span> Bluetooth</h4>
+                        <p class="config-group-subtitle">Adapter inventory, reconnection policy, and codec preference for slower hardware.</p>
                     </div>
-                    <div id="paired-box" class="paired-box" style="display:none;">
-                        <div class="paired-box-title" style="display:flex;align-items:center;gap:8px;cursor:pointer;" onclick="var l=document.getElementById('paired-list');l.style.display=l.style.display==='none'?'':'none';this.querySelector('.paired-arrow').textContent=l.style.display==='none'?'▶':'▼'">
-                            <span class="paired-arrow" style="font-size:10px;flex-shrink:0;">▼</span>
-                            <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Already paired &#8212; click to add:</span>
-                            <label onclick="event.stopPropagation()" style="flex-shrink:0;font-size:12px;color:var(--secondary-text-color);cursor:pointer;white-space:nowrap;margin-right:40px;">
-                                Show all <input type="checkbox" id="paired-show-all" onchange="loadPairedDevices()">
+                    <div class="config-settings-grid">
+                        <div class="config-settings-card config-settings-card--span">
+                            <div class="config-card-header">
+                                <div class="config-card-title">Adapters</div>
+                                <p class="config-card-subtitle">Rename adapters, verify detection, and add manual adapter entries when needed.</p>
+                            </div>
+                            <div class="adapters-box">
+                                <div id="adapters-table"></div>
+                            </div>
+                            <div class="bt-toolbar">
+                                <button type="button" class="btn btn-sm btn-secondary" onclick="addManualAdapterRow('','','')">+ Add adapter</button>
+                                <button type="button" class="btn btn-sm btn-refresh" onclick="loadBtAdapters()">&#x21BA; Refresh</button>
+                            </div>
+                        </div>
+
+                        <div class="config-settings-card">
+                            <div class="config-card-header">
+                                <div class="config-card-title">Connection recovery</div>
+                                <p class="config-card-subtitle">Controls how aggressively the bridge rechecks and auto-disables unstable devices.</p>
+                            </div>
+                            <div class="config-form-grid config-form-grid--single">
+                                <div class="form-group">
+                                    <label>BT check interval (s)
+                                        <span class="form-hint">How often to probe each device connection (default 10)</span>
+                                    </label>
+                                    <input type="number" name="BT_CHECK_INTERVAL" placeholder="10" min="5" max="300">
+                                </div>
+
+                                <div class="form-group config-form-group-compact">
+                                    <label>Auto-disable threshold
+                                        <span class="form-hint">Disable a device after N failed reconnects (0 = never)</span>
+                                    </label>
+                                    <input type="number" name="BT_MAX_RECONNECT_FAILS" placeholder="0" min="0" max="100">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="config-settings-card">
+                            <div class="config-card-header">
+                                <div class="config-card-title">Audio policy</div>
+                                <p class="config-card-subtitle">Prefer lower CPU usage when running on constrained hardware.</p>
+                            </div>
+                            <label class="config-setting-row config-setting-row--compact">
+                                <span class="config-setting-copy">
+                                    <strong>Prefer SBC codec</strong>
+                                    <span class="form-hint">Reduces CPU load on slower hardware (PulseAudio 15+).</span>
+                                </span>
+                                <span class="config-setting-control">
+                                    <span class="config-switch">
+                                        <input type="checkbox" name="PREFER_SBC_CODEC" id="prefer-sbc-codec">
+                                        <span class="config-switch-track"></span>
+                                    </span>
+                                </span>
                             </label>
                         </div>
-                        <div id="paired-list"></div>
-                    </div>
-                    <div id="scan-results-box" class="scan-results-box">
-                        <div class="scan-results-title">Discovered devices &#8212; click to add:</div>
-                        <div id="scan-results-list"></div>
                     </div>
                 </div>
+            </section>
 
-                <div class="form-group">
-                    <label>BT check interval (s)
-                        <span class="form-hint">How often to probe each device connection (default 10)</span>
-                    </label>
-                    <input type="number" name="BT_CHECK_INTERVAL" placeholder="10" min="5" max="300">
-                </div>
-
-                <div class="form-group">
-                    <label>Auto-disable threshold
-                        <span class="form-hint">Disable device after N failed reconnects (0 = never)</span>
-                    </label>
-                    <input type="number" name="BT_MAX_RECONNECT_FAILS" placeholder="0" min="0" max="100">
-                </div>
-
-                <div class="form-group">
-                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-                        <input type="checkbox" name="PREFER_SBC_CODEC" id="prefer-sbc-codec" style="width:auto;margin:0;">
-                        Prefer SBC codec
-                        <span class="form-hint" style="display:inline;margin:0;">— reduces CPU on slow hardware (PulseAudio 15+)</span>
-                    </label>
-                </div>
-            </div>
-
-            <!-- ── Music Assistant ── -->
-            <div class="config-group" id="config-group-ma">
-                <h4 class="config-group-title"><span class="cg-icon">🎵</span> Music Assistant</h4>
-
-                <!-- MA quick-connect panel -->
-                <div id="ma-connect-panel" style="background:var(--card-bg);border:1px solid var(--divider-color);border-radius:8px;padding:14px;margin-bottom:14px;">
-                    <div id="ma-status-bar" style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
-                        <span id="ma-status-icon">⚪</span>
-                        <span id="ma-status-text" style="font-size:13px;color:var(--secondary-text-color);">Not connected</span>
-                        <a href="#" id="ma-reconfigure" style="display:none;font-size:12px;margin-left:auto;color:var(--primary-color,#0a84ff);"
-                           onclick="event.preventDefault();toggleMaForm(true)">Reconfigure</a>
+            <section class="config-tab-panel" id="config-panel-ma" data-config-panel="ma">
+                <div class="config-group config-group--flush" id="config-group-ma">
+                    <div class="config-group-heading">
+                        <h4 class="config-group-title"><span class="cg-icon">🎵</span> Music Assistant</h4>
+                        <p class="config-group-subtitle">Connection, token, and live sync settings for the Music Assistant integration.</p>
                     </div>
 
-                    <div id="ma-conn-form">
-                    <!-- Discover + URL row -->
-                    <div style="display:flex;gap:8px;margin-bottom:8px;">
-                        <input type="text" id="ma-login-url" placeholder="http://homeassistant.local:8095" style="flex:1;">
-                        <button type="button" class="btn btn-sm" onclick="maDiscover()" id="ma-discover-btn">🔍 Discover</button>
-                    </div>
+                    <div class="config-card-stack">
+                        <div id="ma-connect-panel" class="config-settings-card">
+                            <div class="config-card-header config-card-header--split">
+                                <div>
+                                    <div class="config-card-title">Connection status</div>
+                                    <p class="config-card-subtitle">Current Music Assistant auth state for this bridge, with quick access to reconfigure login.</p>
+                                </div>
+                                <a href="#" id="ma-reconfigure" class="config-inline-link" hidden
+                                   onclick="event.preventDefault();toggleMaForm(true)">Reconfigure</a>
+                            </div>
 
-                    <!-- Username / Password row (standalone MA only) -->
-                    <div id="ma-login-creds" style="display:flex;gap:8px;margin-bottom:8px;">
-                        <input type="text" id="ma-login-user" placeholder="MA username" autocomplete="username" style="flex:1;">
-                        <input type="password" id="ma-login-pass" placeholder="MA password" autocomplete="current-password" style="flex:1;">
-                    </div>
+                            <div id="ma-status-bar" class="panel-status panel-status--neutral">
+                                <span id="ma-status-icon" class="panel-status-icon">⚪</span>
+                                <span id="ma-status-text" class="panel-status-text">Not connected</span>
+                            </div>
+                        </div>
 
-                    <!-- HA addon: single OAuth button (hidden by default, shown when addon detected) -->
-                    <div id="ma-addon-hint" style="display:none;margin-bottom:8px;">
-                        <button type="button" class="btn btn-sm" onclick="maHaConnect()" id="ma-ha-login-btn"
-                                style="width:100%;padding:10px;font-size:14px;background:var(--primary-color,#0a84ff);color:#fff;border:none;border-radius:8px;cursor:pointer;">
-                            🔑 Get token automatically
-                        </button>
-                        <span id="ma-ha-login-msg" style="display:block;font-size:12px;margin-top:6px;text-align:center;"></span>
-                    </div>
+                        <div class="config-settings-card">
+                            <div class="config-card-header">
+                                <div class="config-card-title">Sign in &amp; token</div>
+                                <p class="config-card-subtitle">Discover a server, request a token, or paste one manually.</p>
+                            </div>
 
-                    <div style="display:flex;align-items:center;gap:8px;">
-                        <button type="button" class="btn btn-sm" onclick="maLogin()" id="ma-login-btn" style="min-width:100px;">🔑 Get token</button>
-                        <span id="ma-login-msg" style="font-size:12px;"></span>
-                    </div>
-                    </div><!-- /ma-conn-form -->
+                            <div id="ma-conn-form" class="ma-auth-stack">
+                                <div class="form-inline-actions config-inline-row">
+                                    <input type="text" id="ma-login-url" class="config-inline-fill" placeholder="http://homeassistant.local:8095">
+                                    <button type="button" class="btn btn-sm btn-secondary" onclick="maDiscover()" id="ma-discover-btn">🔍 Discover</button>
+                                </div>
 
-                    <input type="hidden" name="MA_API_URL">
-                    <!-- MA API token (shown after successful auth, under reconfigure) -->
-                    <div id="ma-api-fields" style="display:none;margin-top:10px;border-top:1px solid var(--divider-color);padding-top:10px;">
-                        <div class="form-group" style="margin-bottom:0;">
-                            <label style="font-size:12px;color:var(--secondary-text-color);">Music Assistant API token
-                                <span class="form-hint">Paste manually or use the button above</span>
+                                <div id="ma-login-creds" class="form-inline-actions config-inline-row">
+                                    <input type="text" id="ma-login-user" class="config-inline-fill" placeholder="MA username" autocomplete="username">
+                                    <input type="password" id="ma-login-pass" class="config-inline-fill" placeholder="MA password" autocomplete="current-password">
+                                </div>
+
+                                <div id="ma-addon-hint" class="ma-addon-hint" hidden>
+                                    <button type="button" class="btn btn-sm btn-block" onclick="maHaConnect()" id="ma-ha-login-btn">
+                                        🔑 Get token automatically
+                                    </button>
+                                    <span id="ma-ha-login-msg" class="inline-status config-status-message config-status-message--center"></span>
+                                </div>
+
+                                <div class="form-inline-actions config-inline-row">
+                                    <button type="button" class="btn btn-sm btn-secondary" onclick="maLogin()" id="ma-login-btn">🔑 Get token</button>
+                                    <span id="ma-login-msg" class="inline-status config-status-message"></span>
+                                </div>
+                            </div>
+
+                            <input type="hidden" name="MA_API_URL">
+                            <div id="ma-api-fields" class="config-subsection" hidden>
+                                <div class="form-group config-form-group-compact">
+                                    <label>Music Assistant API token
+                                        <span class="form-hint">Paste manually or use one of the token flows above.</span>
+                                    </label>
+                                    <input type="password" name="MA_API_TOKEN" autocomplete="new-password" placeholder="eyJ...">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="config-settings-card">
+                            <div class="config-card-header">
+                                <div class="config-card-title">Bridge integration</div>
+                                <p class="config-card-subtitle">Connection endpoint and bridge-side sync behavior.</p>
+                            </div>
+                            <div class="config-form-grid">
+                                <div class="form-group">
+                                    <label>MA server
+                                        <span class="form-hint">IP/hostname, or <code>auto</code> for mDNS discovery</span>
+                                    </label>
+                                    <input type="text" name="SENDSPIN_SERVER" placeholder="auto" required>
+                                </div>
+
+                                <div class="form-group">
+                                    <label>MA WebSocket port
+                                        <span class="form-hint">Default is <code>9000</code>. Change only if your Music Assistant endpoint uses a different port.</span>
+                                    </label>
+                                    <input type="number" name="SENDSPIN_PORT" placeholder="9000" min="1024" max="65535">
+                                </div>
+                            </div>
+
+                            <label class="config-setting-row">
+                                <span class="config-setting-copy">
+                                    <strong>WebSocket monitor</strong>
+                                    <span class="form-hint">Live now-playing and queue sync.</span>
+                                </span>
+                                <span class="config-setting-control">
+                                    <span class="config-switch">
+                                        <input type="checkbox" name="MA_WEBSOCKET_MONITOR" id="ma-websocket-monitor" checked>
+                                        <span class="config-switch-track"></span>
+                                    </span>
+                                </span>
                             </label>
-                            <input type="password" name="MA_API_TOKEN" autocomplete="new-password" placeholder="eyJ..." style="font-size:13px;">
+
+                            <label class="config-setting-row">
+                                <span class="config-setting-copy">
+                                    <strong>Route volume through MA</strong>
+                                    <span class="form-hint">Keeps Music Assistant UI sliders in sync.</span>
+                                </span>
+                                <span class="config-setting-control">
+                                    <span class="config-switch">
+                                        <input type="checkbox" name="VOLUME_VIA_MA" id="volume-via-ma" checked>
+                                        <span class="config-switch-track"></span>
+                                    </span>
+                                </span>
+                            </label>
+
+                            <label class="config-setting-row config-setting-row--compact">
+                                <span class="config-setting-copy">
+                                    <strong>Route mute through MA</strong>
+                                    <span class="form-hint">Syncs mute state with the Music Assistant UI.</span>
+                                </span>
+                                <span class="config-setting-control">
+                                    <span class="config-switch">
+                                        <input type="checkbox" name="MUTE_VIA_MA" id="mute-via-ma">
+                                        <span class="config-switch-track"></span>
+                                    </span>
+                                </span>
+                            </label>
                         </div>
                     </div>
                 </div>
+            </section>
 
-                <div class="form-group">
-                    <label>MA server
-                        <span class="form-hint">IP/hostname, or <code>auto</code> for mDNS discovery</span>
-                    </label>
-                    <input type="text" name="SENDSPIN_SERVER" placeholder="auto" required>
-                </div>
+            <section class="config-tab-panel" id="config-panel-security" data-config-panel="security">
+                {% if not ha_mode %}
+                <div class="config-group config-group--flush">
+                    <div class="config-group-heading">
+                        <h4 class="config-group-title"><span class="cg-icon">🔒</span> Security</h4>
+                        <p class="config-group-subtitle">Protect the web UI with local authentication while still allowing Music Assistant sign-in when configured.</p>
+                    </div>
+                    <div class="config-settings-grid">
+                        <div class="config-settings-card">
+                            <div class="config-card-header">
+                                <div class="config-card-title">Access control</div>
+                                <p class="config-card-subtitle">Local sign-in, session lifetime, and lockout policy for this web interface.</p>
+                            </div>
+                            <label class="config-setting-row">
+                                <span class="config-setting-copy">
+                                    <strong>Enable web UI authentication</strong>
+                                    <span class="form-hint">Protect access to this page with local sign-in.</span>
+                                </span>
+                                <span class="config-setting-control">
+                                    <span class="config-switch">
+                                        <input type="checkbox" name="AUTH_ENABLED" id="auth-enabled">
+                                        <span class="config-switch-track"></span>
+                                    </span>
+                                </span>
+                            </label>
+                            <label class="config-setting-row">
+                                <span class="config-setting-copy">
+                                    <strong>Session timeout</strong>
+                                    <span class="form-hint">How long users stay signed in before the browser must authenticate again.</span>
+                                </span>
+                                <span class="config-setting-control config-setting-control--field">
+                                    <span class="config-inline-field">
+                                        <input type="number" name="SESSION_TIMEOUT_HOURS" id="session-timeout-hours" min="1" max="168" step="1">
+                                        <span class="config-inline-unit">hours</span>
+                                    </span>
+                                </span>
+                            </label>
+                            <label class="config-setting-row config-setting-row--compact">
+                                <span class="config-setting-copy">
+                                    <strong>Brute-force protection</strong>
+                                    <span class="form-hint">Temporary lockout after repeated failed sign-in attempts.</span>
+                                </span>
+                                <span class="config-setting-control">
+                                    <span class="config-switch">
+                                        <input type="checkbox" name="BRUTE_FORCE_PROTECTION" id="brute-force-protection" checked>
+                                        <span class="config-switch-track"></span>
+                                    </span>
+                                </span>
+                            </label>
+                            <div class="config-subsection security-policy-fields" id="security-policy-fields">
+                                <div class="config-form-grid security-policy-grid">
+                                    <div class="form-group config-form-group-compact">
+                                        <label>Max attempts</label>
+                                        <input type="number" name="BRUTE_FORCE_MAX_ATTEMPTS" id="brute-force-max-attempts" min="1" max="50" step="1">
+                                    </div>
+                                    <div class="form-group config-form-group-compact">
+                                        <label>Window (min)</label>
+                                        <input type="number" name="BRUTE_FORCE_WINDOW_MINUTES" id="brute-force-window-minutes" min="1" max="1440" step="1">
+                                    </div>
+                                    <div class="form-group config-form-group-compact">
+                                        <label>Lockout (min)</label>
+                                        <input type="number" name="BRUTE_FORCE_LOCKOUT_MINUTES" id="brute-force-lockout-minutes" min="1" max="1440" step="1">
+                                    </div>
+                                </div>
+                            </div>
+                            <div id="auth-methods-hint" class="config-inline-note" hidden>
+                                <span class="form-hint" id="auth-methods-text"></span>
+                            </div>
+                        </div>
 
-                <div class="form-group">
-                    <label>MA WebSocket port</label>
-                    <input type="number" name="SENDSPIN_PORT" placeholder="9000" min="1024" max="65535">
-                </div>
-
-                <div class="form-group">
-                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-                        <input type="checkbox" name="VOLUME_VIA_MA" id="volume-via-ma" style="width:auto;margin:0;" checked>
-                        Route volume through MA
-                        <span class="form-hint" style="display:inline;margin:0;">— keeps MA UI sliders in sync</span>
-                    </label>
-                </div>
-                <div class="form-group">
-                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-                        <input type="checkbox" name="MUTE_VIA_MA" id="mute-via-ma" style="width:auto;margin:0;">
-                        Route mute through MA
-                        <span class="form-hint" style="display:inline;margin:0;">— syncs mute state with MA UI</span>
-                    </label>
-                </div>
-                <div class="form-group">
-                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-                        <input type="checkbox" name="SMOOTH_RESTART" id="smooth-restart" style="width:auto;margin:0;">
-                        Smooth restart
-                        <span class="form-hint" style="display:inline;margin:0;">— mute before restart, show progress, wait for reconnect</span>
-                    </label>
-                </div>
-            </div>
-
-            {% if not ha_mode %}
-            <!-- ── Updates (standalone only) ── -->
-            <div class="config-group" style="margin-top:20px;margin-bottom:0;">
-                <h4 class="config-group-title"><span class="cg-icon">⬆️</span> Updates</h4>
-                <div class="form-group">
-                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-                        <input type="checkbox" name="CHECK_UPDATES" id="check-updates" style="width:auto;margin:0;" checked>
-                        Check for updates
-                        <span class="form-hint" style="display:inline;margin:0;">— check GitHub for new versions every hour</span>
-                    </label>
-                </div>
-                <div class="form-group">
-                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-                        <input type="checkbox" name="AUTO_UPDATE" id="auto-update" style="width:auto;margin:0;">
-                        Auto-update
-                        <span class="form-hint" style="display:inline;margin:0;">— automatically apply updates when available (LXC only)</span>
-                    </label>
-                </div>
-            </div>
-            {% endif %}
-
-            {% if not ha_mode %}
-            <!-- ── Authentication (standalone only) ── -->
-            <div class="config-group" style="margin-top:20px;margin-bottom:0;">
-                <h4 class="config-group-title"><span class="cg-icon">🔒</span> Authentication</h4>
-                <div class="form-group">
-                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-                        <input type="checkbox" name="AUTH_ENABLED" id="auth-enabled" style="width:auto;margin:0;">
-                        Enable web UI authentication
-                        <span class="form-hint" style="display:inline;margin:0;">— protect access to this page</span>
-                    </label>
-                </div>
-                <div id="auth-methods-hint" style="display:none;margin:-4px 0 8px 0;">
-                    <span class="form-hint" id="auth-methods-text"></span>
-                </div>
-                <div id="auth-password-fields" style="display:none;">
-                <div class="form-group">
-                    <label>Set / change password
-                        <span class="form-hint">Optional if Music Assistant is connected (MA credentials can be used to sign in)</span>
-                    </label>
-                    <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                        <input type="password" id="new-password" autocomplete="new-password"
-                               placeholder="New password" style="flex:1;min-width:180px;">
-                        <input type="password" id="new-password-confirm" autocomplete="new-password"
-                               placeholder="Confirm password" style="flex:1;min-width:180px;">
-                        <button type="button" onclick="setPassword()" class="btn btn-sm">Set Password</button>
+                        <div id="auth-password-fields" class="config-settings-card" hidden>
+                            <div class="config-card-header">
+                                <div class="config-card-title">Local password</div>
+                                <p class="config-card-subtitle">Optional if Music Assistant is connected, because MA credentials can also be used to sign in.</p>
+                            </div>
+                            <div class="form-group config-form-group-compact">
+                                <label>Set / change password</label>
+                                <div class="form-inline-actions config-inline-row">
+                                    <input type="password" id="new-password" class="config-inline-fill" autocomplete="new-password"
+                                           placeholder="New password">
+                                    <input type="password" id="new-password-confirm" class="config-inline-fill" autocomplete="new-password"
+                                           placeholder="Confirm password">
+                                    <button type="button" onclick="setPassword()" class="btn btn-sm btn-secondary">Set password</button>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
-                </div><!-- /auth-password-fields -->
-            </div>
-            {% endif %}
-
+                {% else %}
+                <div class="config-group config-group--flush">
+                    <div class="config-group-heading">
+                        <h4 class="config-group-title"><span class="cg-icon">🔒</span> Security</h4>
+                        <p class="config-group-subtitle">Home Assistant owns access control for this deployment, so bridge-level auth settings stay read-only.</p>
+                    </div>
+                    <div class="config-settings-card">
+                        <div class="config-card-header">
+                            <div class="config-card-title">Managed by Home Assistant</div>
+                            <p class="config-card-subtitle">Use your HA account and profile settings for access control.</p>
+                        </div>
+                        <div class="config-empty-state">
+                            Home Assistant manages authentication for this deployment. Use your HA account and profile settings for access control.
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+            </section>
         </form>
 
-        <!-- Static save buttons -->
-        <div class="config-static-save">
-            <div class="config-btn-group">
-                <button type="button" class="btn btn-sm" onclick="document.getElementById('config-form').dispatchEvent(new Event('submit',{cancelable:true}))">Save</button>
-                <button type="button" class="btn btn-sm btn-restart" onclick="saveAndRestart()">Save &amp; Restart</button>
+        <div class="config-footer" id="config-footer">
+            <div class="config-footer-meta">
+                <span class="config-dirty-label" id="config-dirty-label">⚠ Unsaved changes</span>
+                <span class="config-footer-hint">Save writes the updated configuration now. Cancel restores the last saved values. Use restart when you want runtime-sensitive changes applied immediately.</span>
             </div>
-            <div class="config-btn-group">
-                <button type="button" class="btn btn-sm btn-download" onclick="window.location.href='/api/config/download'">⬇ Download</button>
-                <button type="button" class="btn btn-sm btn-upload" onclick="document.getElementById('config-upload-input').click()">⬆ Upload</button>
+            <div class="config-footer-actions">
+                <div class="config-btn-group">
+                    <button type="button" class="btn btn-sm btn-restart config-action-btn" onclick="saveAndRestart()">Save &amp; Restart</button>
+                    <button type="button" class="btn btn-sm btn-secondary config-action-btn" onclick="document.getElementById('config-form').dispatchEvent(new Event('submit',{cancelable:true}))">Save</button>
+                    <button type="button" class="btn btn-sm btn-ghost config-action-btn" id="config-cancel-btn" onclick="cancelConfigChanges()" disabled>Cancel</button>
+                </div>
+                <div class="config-btn-group config-btn-group--utility">
+                    <button type="button" class="btn btn-sm btn-ghost config-action-btn btn-download" onclick="window.location.href='/api/config/download'">⬇ Download</button>
+                    <button type="button" class="btn btn-sm btn-ghost config-action-btn btn-upload" onclick="document.getElementById('config-upload-input').click()">⬆ Upload</button>
+                </div>
             </div>
         </div>
-        <input type="file" id="config-upload-input" accept=".json,application/json" style="display:none" onchange="uploadConfig(this)">
+        <input type="file" id="config-upload-input" class="config-hidden-input" accept=".json,application/json" onchange="uploadConfig(this)">
     </details>
-
-    <!-- Sticky save bar (shown when config is dirty) -->
-    <div class="config-save-bar" id="config-save-bar">
-        <span class="dirty-label">⚠ Unsaved changes</span>
-        <div class="config-btn-group">
-            <button type="button" class="btn btn-sm" onclick="document.getElementById('config-form').dispatchEvent(new Event('submit',{cancelable:true}))">Save</button>
-            <button type="button" class="btn btn-sm btn-restart" onclick="saveAndRestart()">Save &amp; Restart</button>
-        </div>
-        <div class="config-btn-group" style="margin-left:auto">
-            <button type="button" class="btn btn-sm btn-download" onclick="window.location.href='/api/config/download'">⬇ Download</button>
-            <button type="button" class="btn btn-sm btn-upload" onclick="document.getElementById('config-upload-input').click()">⬆ Upload</button>
-        </div>
-    </div>
 
     <!-- Diagnostics (collapsible) -->
     <details class="diag-section" id="diag-details" ontoggle="onDiagToggle(this)">
@@ -413,29 +624,38 @@
     <details class="logs-section">
         <summary>&#128203; Logs</summary>
         <div class="logs-toolbar">
-            <button onclick="refreshLogs()" class="btn btn-refresh">Refresh Logs</button>
-            <button onclick="downloadLogs()" class="btn" style="font-size:12px;">⬇ Download</button>
-            <button onclick="toggleAutoRefresh()" class="btn" id="auto-refresh-btn">Auto-Refresh: Off</button>
-            <div class="log-filter">
-                <button onclick="setLogLevel('all')"     id="filter-all"     class="filter-btn active">All</button>
-                <button onclick="setLogLevel('error')"   id="filter-error"   class="filter-btn">Error</button>
-                <button onclick="setLogLevel('warning')" id="filter-warning" class="filter-btn">Warning</button>
-                <button onclick="setLogLevel('info')"    id="filter-info"    class="filter-btn">Info</button>
-            </div>
-            <div style="display:flex;align-items:center;gap:6px;margin-left:auto;">
-                <select id="log-level-select" style="width:auto;padding:4px 8px;font-size:13px;">
-                    <option value="INFO">INFO</option>
-                    <option value="DEBUG">DEBUG</option>
+            <div class="logs-toolbar-left">
+                <button onclick="refreshLogs()" class="btn btn-sm btn-refresh">Refresh</button>
+                <select id="logs-filter-select" class="logs-filter-select" onchange="setLogLevel(this.value)" aria-label="Filter log levels">
+                    <option value="all">All</option>
+                    <option value="error">Errors</option>
+                    <option value="warning">Warnings</option>
+                    <option value="info">Info+</option>
+                    <option value="debug">Debug</option>
                 </select>
-                <button type="button" class="btn btn-sm" onclick="applyLogLevel()">Apply</button>
-                <span id="log-level-msg" style="font-size:12px;color:var(--secondary-text-color);"></span>
+                <label class="logs-auto-refresh">
+                    <input type="checkbox" id="auto-refresh-toggle" onchange="toggleAutoRefresh(this.checked)">
+                    Auto-refresh
+                </label>
+            </div>
+            <div class="logs-toolbar-right">
+                <div class="logs-runtime-controls">
+                    <span class="logs-runtime-label">Backend log level</span>
+                    <select id="log-level-select" class="logs-filter-select" aria-label="Backend log level">
+                        <option value="INFO">INFO</option>
+                        <option value="DEBUG">DEBUG</option>
+                    </select>
+                    <button type="button" class="btn btn-sm btn-secondary" onclick="applyLogLevel()">Apply</button>
+                    <span id="log-level-msg" class="inline-status logs-inline-status"></span>
+                </div>
+                <button onclick="downloadLogs()" class="btn btn-sm">⬇ Download</button>
             </div>
         </div>
-        <div class="logs-container" id="logs"></div>
+        <div class="logs-container log-viewer" id="logs"></div>
     </details>
 
 </div>
 
-<script src="{{ url_for('vstatic', version=VERSION, filename='app.js') }}"></script>
+<script src="{{ url_for('vstatic', version=asset_version('app.js'), filename='app.js') }}"></script>
 </body>
 </html>

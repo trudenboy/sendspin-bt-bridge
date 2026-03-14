@@ -58,8 +58,59 @@ _failed: dict[str, tuple[int, float]] = {}  # ip → (count, first_failure_ts)
 _failed_lock = threading.Lock()
 
 
+def _coerce_int_setting(value, default: int, min_value: int, max_value: int) -> int:
+    try:
+        coerced = int(value)
+    except (TypeError, ValueError):
+        return default
+    return min(max_value, max(min_value, coerced))
+
+
+def _get_lockout_settings() -> tuple[bool, int, int, int]:
+    config = load_config()
+    enabled = bool(config.get("BRUTE_FORCE_PROTECTION", True))
+    max_attempts = _coerce_int_setting(
+        config.get("BRUTE_FORCE_MAX_ATTEMPTS", _LOCKOUT_MAX_ATTEMPTS),
+        _LOCKOUT_MAX_ATTEMPTS,
+        1,
+        50,
+    )
+    window_secs = (
+        _coerce_int_setting(
+            config.get("BRUTE_FORCE_WINDOW_MINUTES", max(1, _LOCKOUT_WINDOW_SECS // 60)),
+            max(1, _LOCKOUT_WINDOW_SECS // 60),
+            1,
+            1440,
+        )
+        * 60
+    )
+    duration_secs = (
+        _coerce_int_setting(
+            config.get("BRUTE_FORCE_LOCKOUT_MINUTES", max(1, _LOCKOUT_DURATION_SECS // 60)),
+            max(1, _LOCKOUT_DURATION_SECS // 60),
+            1,
+            1440,
+        )
+        * 60
+    )
+    return enabled, max_attempts, window_secs, duration_secs
+
+
+def _format_duration(seconds: int) -> str:
+    if seconds % 3600 == 0:
+        hours = seconds // 3600
+        return f"{hours} hour" if hours == 1 else f"{hours} hours"
+    if seconds % 60 == 0:
+        minutes = seconds // 60
+        return f"{minutes} minute" if minutes == 1 else f"{minutes} minutes"
+    return f"{seconds} seconds"
+
+
 def _check_rate_limit(ip: str) -> bool:
     """Return True if the IP is currently locked out."""
+    enabled, max_attempts, _, duration_secs = _get_lockout_settings()
+    if not enabled:
+        return False
     now = time.monotonic()
     with _failed_lock:
         entry = _failed.get(ip)
@@ -67,19 +118,22 @@ def _check_rate_limit(ip: str) -> bool:
             return False
         count, first_ts = entry
         # Reset window if enough time has passed since first failure
-        if now - first_ts > _LOCKOUT_DURATION_SECS:
+        if now - first_ts > duration_secs:
             del _failed[ip]
             return False
-        return count >= _LOCKOUT_MAX_ATTEMPTS
+        return count >= max_attempts
 
 
 def _record_failure(ip: str) -> None:
+    enabled, _, window_secs, _ = _get_lockout_settings()
+    if not enabled:
+        return
     now = time.monotonic()
     with _failed_lock:
         entry = _failed.get(ip)
         if entry:
             count, first_ts = entry
-            if now - first_ts > _LOCKOUT_WINDOW_SECS:
+            if now - first_ts > window_secs:
                 _failed[ip] = (1, now)
             else:
                 _failed[ip] = (count + 1, first_ts)
@@ -622,9 +676,10 @@ def login():
 
     client_ip = request.remote_addr or "unknown"
     if _check_rate_limit(client_ip):
+        _, _, _, duration_secs = _get_lockout_settings()
         return render_template(
             "login.html",
-            error="Too many failed attempts — try again in 5 minutes",
+            error=f"Too many failed attempts — try again in {_format_duration(duration_secs)}",
             ha_mode=ha_mode,
             auth_methods=auth_methods,
             csrf_token=_generate_csrf_token(),

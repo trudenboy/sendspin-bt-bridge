@@ -81,6 +81,28 @@ def test_window_reset(monkeypatch):
     assert _check_rate_limit("10.0.0.6") is False
 
 
+def test_bruteforce_disabled_never_locks():
+    with patch("routes.auth.load_config", return_value={"BRUTE_FORCE_PROTECTION": False}):
+        for _ in range(10):
+            _record_failure("10.0.0.7")
+        assert _check_rate_limit("10.0.0.7") is False
+
+
+def test_custom_max_attempts_applied():
+    cfg = {
+        "BRUTE_FORCE_PROTECTION": True,
+        "BRUTE_FORCE_MAX_ATTEMPTS": 3,
+        "BRUTE_FORCE_WINDOW_MINUTES": 1,
+        "BRUTE_FORCE_LOCKOUT_MINUTES": 5,
+    }
+    with patch("routes.auth.load_config", return_value=cfg):
+        _record_failure("10.0.0.8")
+        _record_failure("10.0.0.8")
+        assert _check_rate_limit("10.0.0.8") is False
+        _record_failure("10.0.0.8")
+        assert _check_rate_limit("10.0.0.8") is True
+
+
 # ── _safe_next_url ───────────────────────────────────────────────────────
 
 _app = Flask(__name__)

@@ -2,7 +2,21 @@
 
 A history of the architectural and functional evolution of sendspin-bt-bridge — for readers familiar with Home Assistant, Music Assistant, and multiroom audio setups.
 
-**Period:** January 1 – March 14, 2026 · **Total commits:** ~942 · **Versions:** 1.0.0 → 2.31.0
+**Period:** January 1 – March 14, 2026 · **Total commits:** ~942 · **Versions:** 1.0.0 → 2.31.6
+
+---
+
+## March 14, 2026 — UI system consolidation (v2.31.6)
+
+The `2.31.6` release completes the first full polish pass after the major `2.31.0` redesign. The work focused less on introducing new primitives and more on making the new UI internally consistent: the Configuration section was rebuilt as a card-based settings surface, dashboard badges were normalized into a shared chip system, and list/card views were brought back into functional and visual parity.
+
+Three themes define this release:
+
+- **Configuration maturity** — `Cancel` now restores the last saved state, security/runtime controls were expanded (session timeout, brute-force protection, MA WebSocket monitor), and the information hierarchy across General / Security / Bluetooth / Devices / Music Assistant was tightened.
+- **Device-management ergonomics** — adapter badges link directly into `Configuration → Bluetooth`, custom adapter names are editable, MA sync-group badges deep-link to the correct Music Assistant settings view, and view-mode behavior now defaults to list mode on larger fleets while remembering the user's choice.
+- **Badge/runtime cleanup** — delay is visible in both list and card views, list rows expose the same key runtime context as cards, empty placeholder badges were removed, overlapping/misaligned chips were fixed, and list sorting now includes adapters while reusing the same adapter/status chip language as cards.
+
+This release is best understood as the “consistency” release for the redesign: fewer conceptual changes than `2.31.0`, but a much stronger match between mockup, runtime behavior, and the final shipped UI.
 
 ---
 

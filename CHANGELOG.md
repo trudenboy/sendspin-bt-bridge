@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.31.6] - 2026-03-14
+
+### Added
+- **Configuration controls** — added `Cancel` to discard unsaved changes, plus new security/runtime settings for session timeout, brute-force protection, and the Music Assistant WebSocket monitor
+- **Device management shortcuts** — adapter badges now jump straight to `Configuration → Bluetooth`, custom adapter names are editable, and Music Assistant sync-group badges open the matching MA settings page in a new tab
+- **Runtime visibility** — surfaced per-device delay in both card and list views and expanded the list view to expose the same key runtime badge family as the card view
+
+### Changed
+- **Configuration UI** — refactored the settings area into a consistent card-based layout with unified headers, helper text, section actions, and a cleaner devices / Bluetooth / MA hierarchy
+- **Dashboard polish** — aligned header, cards, list rows, badges, icons, hover actions, and transport/media blocks with the redesign mockup and a shared badge system
+- **List view behavior** — default to list view when more than 6 devices are present, remember the user's view choice, add sorting by adapter, and reuse the same adapter/status badge styling as card view
+
+### Fixed
+- **Badge consistency** — resolved list/card group badge drift, row-level badge misalignment, duplicated status indicators, and empty placeholder dash badges when sync/runtime data is unavailable
+- **Interaction regressions** — fixed card hover squeeze, muted-state color feedback, MA links opening in the same tab, settings gear placement/visibility, and list-row media/action separation
+- **List layout** — reduced duplicate routing text, removed redundant `sink ready` noise, narrowed the list volume slider, and kept delay/status/adapter/group badges visually aligned without overlap
+
 ## [2.31.0] - 2026-03-14
 
 ### Changed

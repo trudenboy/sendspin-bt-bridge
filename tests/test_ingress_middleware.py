@@ -5,9 +5,11 @@ features (datetime.UTC).  We stub those modules so the middleware class
 can be imported on any Python version the test runner uses.
 """
 
+import importlib
 import json
 import sys
 import types
+from datetime import timedelta
 
 import pytest
 
@@ -154,3 +156,15 @@ def test_ipv6_trusted():
     mw(env, lambda *a: None)
 
     assert captured["SCRIPT_NAME"] == "/ingress/xyz"
+
+
+def test_session_timeout_loaded_from_config(tmp_path, monkeypatch):
+    import config
+    import web_interface
+
+    monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.json")
+    (tmp_path / "config.json").write_text(json.dumps({"SESSION_TIMEOUT_HOURS": 12}))
+
+    reloaded = importlib.reload(web_interface)
+    assert reloaded.app.config["PERMANENT_SESSION_LIFETIME"] == timedelta(hours=12)

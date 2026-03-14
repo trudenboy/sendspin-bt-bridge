@@ -20,7 +20,7 @@ import threading
 import uuid as _uuid
 from pathlib import Path
 
-VERSION = "2.31.0"
+VERSION = "2.31.6"
 BUILD_DATE = "2026-03-14"
 
 __all__ = [
@@ -52,12 +52,18 @@ DEFAULT_CONFIG = {
     "BT_CHECK_INTERVAL": 10,
     "BT_MAX_RECONNECT_FAILS": 0,
     "AUTH_ENABLED": False,
+    "SESSION_TIMEOUT_HOURS": 24,
+    "BRUTE_FORCE_PROTECTION": True,
+    "BRUTE_FORCE_MAX_ATTEMPTS": 5,
+    "BRUTE_FORCE_WINDOW_MINUTES": 1,
+    "BRUTE_FORCE_LOCKOUT_MINUTES": 5,
     "AUTH_PASSWORD_HASH": "",
     "SECRET_KEY": "",
     "LOG_LEVEL": "INFO",
     "MA_API_URL": "",
     "MA_API_TOKEN": "",
     "MA_USERNAME": "",
+    "MA_WEBSOCKET_MONITOR": True,
     "VOLUME_VIA_MA": True,
     "MUTE_VIA_MA": False,
     "SMOOTH_RESTART": True,
@@ -155,6 +161,11 @@ def load_config() -> dict:
         "BT_CHECK_INTERVAL",
         "BT_MAX_RECONNECT_FAILS",
         "AUTH_ENABLED",
+        "SESSION_TIMEOUT_HOURS",
+        "BRUTE_FORCE_PROTECTION",
+        "BRUTE_FORCE_MAX_ATTEMPTS",
+        "BRUTE_FORCE_WINDOW_MINUTES",
+        "BRUTE_FORCE_LOCKOUT_MINUTES",
         "AUTH_PASSWORD_HASH",
         "SECRET_KEY",
         "LOG_LEVEL",
@@ -162,6 +173,7 @@ def load_config() -> dict:
         "MA_API_TOKEN",
         "MA_AUTH_PROVIDER",
         "MA_USERNAME",
+        "MA_WEBSOCKET_MONITOR",
         "VOLUME_VIA_MA",
         "MUTE_VIA_MA",
         "SMOOTH_RESTART",

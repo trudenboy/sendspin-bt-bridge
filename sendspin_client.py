@@ -1012,7 +1012,7 @@ async def main():
 
     # Start MA monitor if credentials configured
     ma_monitor_task = None
-    if ma_api_url and ma_api_token:
+    if ma_api_url and ma_api_token and config.get("MA_WEBSOCKET_MONITOR", True):
         from services.ma_monitor import start_monitor
 
         monitor = start_monitor(ma_api_url, ma_api_token)

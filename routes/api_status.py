@@ -60,6 +60,12 @@ def _enrich_status_with_ma(status: dict, client) -> None:
     ma_group = get_ma_group_for_player_id(player_id)
     if ma_group and ma_group.get("name"):
         status["group_name"] = ma_group["name"]
+    if ma_group and ma_group.get("id"):
+        status["ma_syncgroup_id"] = ma_group["id"]
+    elif status.get("group_id"):
+        ma_group_by_id = state.get_ma_group_by_id(status["group_id"])
+        if ma_group_by_id and ma_group_by_id.get("id"):
+            status["ma_syncgroup_id"] = ma_group_by_id["id"]
     # Per-device MA now-playing: prefer id-matched syncgroup, then Sendspin-reported
     # group_id (which IS the MA syncgroup id), then solo player_id queue
     if ma_group:
@@ -348,6 +354,10 @@ def api_status_stream():
                     data = state.get_bridge_system_info()
                     data["devices"] = []
                     data["groups"] = []
+                    data["ma_connected"] = state.is_ma_connected()
+                    ma_url, _ = state.get_ma_api_credentials()
+                    if ma_url:
+                        data["ma_web_url"] = ma_url
                     return data
                 if len(snapshot) == 1:
                     data = get_client_status_for(snapshot[0])
@@ -355,6 +365,10 @@ def api_status_stream():
                     first = get_client_status_for(snapshot[0])
                     data = {**first, "devices": [get_client_status_for(c) for c in snapshot]}
                 data["groups"] = _build_groups_summary(snapshot)
+                data["ma_connected"] = state.is_ma_connected()
+                ma_url, _ = state.get_ma_api_credentials()
+                if ma_url:
+                    data["ma_web_url"] = ma_url
                 _upd = state.get_update_available()
                 if _upd:
                     data["update_available"] = _upd

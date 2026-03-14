@@ -13,6 +13,7 @@ from __future__ import annotations
 import logging
 import os
 from datetime import timedelta
+from pathlib import Path
 
 from flask import Flask, jsonify, redirect, request, send_from_directory, session, url_for
 from waitress import serve  # type: ignore[import-untyped]
@@ -36,12 +37,23 @@ if _startup_log_level not in ("INFO", "DEBUG"):
     _startup_log_level = "INFO"
 logging.getLogger().setLevel(getattr(logging, _startup_log_level))
 
+
+def _coerce_session_timeout_hours(raw_value) -> int:
+    try:
+        value = int(raw_value)
+    except (TypeError, ValueError):
+        return 24
+    return min(168, max(1, value))
+
+
 # Harden session cookies: SameSite=Lax prevents cross-site request forgery
 # (all POST endpoints also use request.get_json() which rejects form-encoded
 # bodies, providing defence-in-depth).  HttpOnly prevents JS cookie access.
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 app.config["SESSION_COOKIE_HTTPONLY"] = True
-app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=24)
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(
+    hours=_coerce_session_timeout_hours(_startup_config.get("SESSION_TIMEOUT_HOURS", 24))
+)
 
 # Cache AUTH_ENABLED at startup so _check_auth() never reads config.json
 # on every request.  Like all other settings, a change takes effect after
@@ -108,8 +120,16 @@ app.register_blueprint(auth_bp)
 
 @app.context_processor
 def inject_version():
-    """Make VERSION available in all templates for cache-busting."""
-    return {"VERSION": VERSION}
+    """Make asset versions available in all templates for cache-busting."""
+
+    def asset_version(filename: str) -> str:
+        try:
+            mtime = int(Path(app.static_folder, filename).stat().st_mtime)
+        except OSError:
+            mtime = 0
+        return f"{VERSION}-{mtime}"
+
+    return {"VERSION": VERSION, "asset_version": asset_version}
 
 
 @app.route("/static/v<version>/<path:filename>")
@@ -186,7 +206,7 @@ def _resolve_ingress_user() -> str:
 @app.before_request
 def _check_auth():
     """Enforce authentication when AUTH_ENABLED is True."""
-    session.permanent = True  # use PERMANENT_SESSION_LIFETIME (24h)
+    session.permanent = True  # use configured PERMANENT_SESSION_LIFETIME
     if not _auth_enabled:
         return  # auth disabled — allow all
 

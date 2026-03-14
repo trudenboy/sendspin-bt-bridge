@@ -6,6 +6,8 @@ import cleanly on Python 3.9.  No module-level sys.modules manipulation needed.
 """
 
 import json
+import threading
+from types import SimpleNamespace
 
 import pytest
 
@@ -136,6 +138,72 @@ def test_set_password_too_short(client):
     assert "8 characters" in resp.get_json().get("error", "")
 
 
+def test_api_config_get_includes_security_and_monitor_defaults(client):
+    """GET /api/config returns merged defaults for new security and MA monitor settings."""
+    resp = client.get("/api/config")
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["SESSION_TIMEOUT_HOURS"] == 24
+    assert data["BRUTE_FORCE_PROTECTION"] is True
+    assert data["BRUTE_FORCE_MAX_ATTEMPTS"] == 5
+    assert data["BRUTE_FORCE_WINDOW_MINUTES"] == 1
+    assert data["BRUTE_FORCE_LOCKOUT_MINUTES"] == 5
+    assert data["MA_WEBSOCKET_MONITOR"] is True
+
+
+def test_api_config_post_accepts_security_and_monitor_settings(client, tmp_path, monkeypatch):
+    """POST /api/config persists new security and MA monitor settings."""
+    import routes.api_config as api_config_mod
+
+    monkeypatch.setattr(api_config_mod, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(api_config_mod, "CONFIG_FILE", tmp_path / "config.json")
+    payload = {
+        "SENDSPIN_SERVER": "auto",
+        "SENDSPIN_PORT": 9000,
+        "BRIDGE_NAME": "",
+        "BLUETOOTH_DEVICES": [],
+        "BLUETOOTH_ADAPTERS": [
+            {"id": "hci0", "mac": "AA:BB:CC:DD:EE:FF", "name": "Living room"},
+            {"id": "hci1", "mac": "11:22:33:44:55:66"},
+        ],
+        "TZ": "UTC",
+        "PULSE_LATENCY_MSEC": 200,
+        "PREFER_SBC_CODEC": False,
+        "BT_CHECK_INTERVAL": 10,
+        "BT_MAX_RECONNECT_FAILS": 0,
+        "AUTH_ENABLED": False,
+        "SESSION_TIMEOUT_HOURS": 12,
+        "BRUTE_FORCE_PROTECTION": True,
+        "BRUTE_FORCE_MAX_ATTEMPTS": 4,
+        "BRUTE_FORCE_WINDOW_MINUTES": 2,
+        "BRUTE_FORCE_LOCKOUT_MINUTES": 10,
+        "LOG_LEVEL": "INFO",
+        "MA_API_URL": "",
+        "MA_API_TOKEN": "",
+        "MA_USERNAME": "",
+        "MA_WEBSOCKET_MONITOR": False,
+        "VOLUME_VIA_MA": True,
+        "MUTE_VIA_MA": False,
+        "SMOOTH_RESTART": True,
+        "AUTO_UPDATE": False,
+        "CHECK_UPDATES": True,
+    }
+    resp = client.post(
+        "/api/config",
+        data=json.dumps(payload),
+        content_type="application/json",
+    )
+    assert resp.status_code == 200
+    saved = json.loads((tmp_path / "config.json").read_text())
+    assert saved["SESSION_TIMEOUT_HOURS"] == 12
+    assert saved["BRUTE_FORCE_PROTECTION"] is True
+    assert saved["BRUTE_FORCE_MAX_ATTEMPTS"] == 4
+    assert saved["BRUTE_FORCE_WINDOW_MINUTES"] == 2
+    assert saved["BRUTE_FORCE_LOCKOUT_MINUTES"] == 10
+    assert saved["MA_WEBSOCKET_MONITOR"] is False
+    assert saved["BLUETOOTH_ADAPTERS"][0]["name"] == "Living room"
+
+
 def test_error_response_no_leak(client):
     """Error responses must not expose Python tracebacks or file paths."""
     # Trigger a volume error with an impossible scenario — no clients available
@@ -173,6 +241,51 @@ def test_status_includes_disabled_devices(client):
     assert data["disabled_devices"][0]["player_name"] == "Off Speaker"
     # cleanup
     state.set_disabled_devices([])
+
+
+def test_status_includes_ma_syncgroup_id(client, monkeypatch):
+    """GET /api/status exposes the MA syncgroup player_id for grouped devices."""
+    import routes.api_status as api_status
+    import state
+
+    fake_client = SimpleNamespace(
+        status={
+            "server_connected": True,
+            "bluetooth_connected": True,
+            "bluetooth_available": True,
+            "playing": False,
+            "group_id": "8e0f23da-3db6-4cc2-902b-cc61241ecf02",
+            "group_name": None,
+        },
+        _status_lock=threading.Lock(),
+        player_name="Yandex mini 2 @ LXC",
+        player_id="sendspin-yandex-mini-2---lxc",
+        listen_port=8932,
+        server_host=None,
+        server_port=None,
+        static_delay_ms=-500.0,
+        connected_server_url="",
+        bt_manager=None,
+        bluetooth_sink_name="bluez_sink.2C_D2_6B_B8_EC_5B.a2dp_sink",
+        bt_management_enabled=True,
+        is_running=lambda: True,
+    )
+
+    monkeypatch.setattr(api_status, "_clients", [fake_client])
+    state.set_ma_groups(
+        {"sendspin-yandex-mini-2---lxc": {"id": "syncgroup_5zr8ss8g", "name": "Semdspin BT"}},
+        [{"id": "syncgroup_5zr8ss8g", "name": "Semdspin BT", "members": []}],
+    )
+    state.set_ma_api_credentials("http://192.168.10.10:8095", "token")
+    try:
+        resp = client.get("/api/status")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["group_name"] == "Semdspin BT"
+        assert data["ma_syncgroup_id"] == "syncgroup_5zr8ss8g"
+    finally:
+        state.set_ma_groups({}, [])
+        state.set_ma_api_credentials("", "")
 
 
 def test_device_enabled_toggle(client, tmp_path):
