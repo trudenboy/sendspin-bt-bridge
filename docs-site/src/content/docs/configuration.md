@@ -1,91 +1,178 @@
 ---
 title: Configuration
-description: Complete configuration reference for Sendspin Bluetooth Bridge
+description: Current configuration reference for the redesigned Sendspin Bluetooth Bridge setup flows
 ---
 
+Sendspin Bluetooth Bridge stores persistent settings in `config.json` inside the `/config` directory. You can manage those values through the web UI, through the Home Assistant addon options, or by editing the file directly.
 
-Configuration is stored in `config.json` in the `/config` directory (mounted as a Docker volume). Edit via the web interface or directly (requires restart).
+## Configuration surfaces
 
-## Home Assistant Addon
+There are two main ways to manage settings:
 
-When running as a Home Assistant addon, all settings are available through the built-in **Configuration** tab in the HA UI — no file editing required.
+| Surface | Best for | Notes |
+|---|---|---|
+| **Web UI** | Day-to-day management of devices, adapters, auth, and runtime behavior | Works for Docker, LXC, and addon installs |
+| **HA addon Configuration tab** | Supervisor-managed addon options | Useful when you prefer HA-native YAML-style editing |
+
+## Web UI configuration
+
+![General tab of the redesigned Configuration section](/sendspin-bt-bridge/screenshots/screenshot-config.png)
+
+The redesigned configuration area is organized into five tabs instead of one long form.
+
+| Tab | What lives there |
+|---|---|
+| **General** | Bridge name, timezone, latency, smooth restart, update policy |
+| **Devices** | Speaker fleet table, scanning, paired-device import |
+| **Bluetooth** | Adapter naming, reconnect policy, codec preference |
+| **Music Assistant** | Token flows, MA endpoint, monitor, volume/mute routing |
+| **Security** | Local auth, session timeout, brute-force protection |
+
+### General tab
+
+The **General** tab contains settings that apply to the whole bridge instance:
+
+- **Bridge name** — appended to player names as `Player @ Name`.
+- **Timezone** — with a live preview of the current local time.
+- **PulseAudio latency (ms)** — higher values trade latency for stability on slower hardware.
+- **Smooth restart** — mutes before restart and shows restart progress.
+- **Check for updates / Auto-update** — available outside HA addon mode.
+
+### Devices tab
+
+![Devices tab with fleet table and discovery workflow](/sendspin-bt-bridge/screenshots/screenshot-config-devices.png)
+
+The **Devices** tab is split into two responsibilities:
+
+- **Device fleet** — the main table for daily edits.
+- **Discovery & import** — scanning nearby speakers or importing already paired devices.
+
+Each device row can store:
+
+| Field | Purpose |
+|---|---|
+| **Enabled** | Skip a device on startup without deleting it |
+| **Player name** | Display name in Music Assistant |
+| **MAC** | Speaker Bluetooth address |
+| **Adapter** | Specific adapter binding, if needed |
+| **Port** | Optional custom sendspin listener port |
+| **Delay** | `static_delay_ms` latency compensation |
+| **Live** | Runtime badge such as Playing, Connected, Released, or Not seen |
+
+Advanced row details expose:
+
+- **Preferred format** such as `flac:44100:16:2`.
+- **Listen host** override.
+- **Keepalive interval** for speakers that go to sleep aggressively.
+
+### Bluetooth tab
+
+![Bluetooth tab with adapter inventory and recovery policy](/sendspin-bt-bridge/screenshots/screenshot-config-adapters.png)
+
+The **Bluetooth** tab combines inventory and policy:
+
+- Rename adapters for clearer dashboard labels.
+- Add manual adapter entries when auto-detect is incomplete.
+- Refresh detection without leaving the page.
+- Set **BT check interval** for reconnect probing.
+- Set **Auto-disable threshold** for unstable devices.
+- Toggle **Prefer SBC codec** to reduce CPU load.
+
+### Music Assistant tab
+
+![Music Assistant tab with token actions and bridge integration settings](/sendspin-bt-bridge/screenshots/screenshot-advanced-settings.png)
+
+The **Music Assistant** tab includes both connection state and auth helpers:
+
+- **Connection status** summary.
+- **Discover** nearby MA servers.
+- **Get token** with MA credentials.
+- **Get token automatically** in addon mode.
+- Manual **MA API token** field.
+- **MA server** and **MA WebSocket port** for the sendspin endpoint.
+- **WebSocket monitor**, **Route volume through MA**, and **Route mute through MA** toggles.
+
+### Security tab
+
+In standalone deployments, the **Security** tab controls local access to the web UI:
+
+- **Enable web UI authentication**.
+- **Session timeout** in hours.
+- **Brute-force protection** toggle.
+- **Max attempts**, **Window**, and **Lockout** policy fields.
+- **Set password** flow for the local password hash.
+
+In Home Assistant addon mode, Home Assistant handles access control instead, so the standalone security controls are hidden.
+
+### Footer actions
+
+The footer is shared across tabs:
+
+- **Save** writes `config.json` now.
+- **Save & Restart** saves and restarts immediately.
+- **Cancel** restores the last saved values in the form.
+- **Download** exports the current config as a timestamped JSON file.
+- **Upload** imports a previously exported config and preserves sensitive keys on the server.
+
+## Home Assistant addon options
+
+![HA addon configuration panel with core options](/sendspin-bt-bridge/screenshots/screenshot-ha-addon-config.png)
+
+When running as a Home Assistant addon, the Supervisor exposes a native **Configuration** tab in HA.
 
 Go to **Settings → Add-ons → Sendspin Bluetooth Bridge → Configuration**.
 
-![HA addon configuration panel — Options section with Music Assistant server, port, timezone and other fields](/sendspin-bt-bridge/screenshots/screenshot-ha-addon-config.png)
+Core addon options include:
 
-### Options
-
-| Field | Description |
+| Option | Purpose |
 |---|---|
-| **Music Assistant server** | Hostname or IP of the MA server. Use `auto` for automatic mDNS discovery (recommended). |
-| **Sendspin port** | WebSocket port of the MA Sendspin provider. Default `9000` matches the MA default. |
-| **bridge_name** | Optional label appended to every player name in MA (displayed as `Player @ Name`). Leave empty to disable. |
-| **bridge_name_suffix** | Toggle — when enabled, appends `@ {bridge_name}` to each individual player name. |
-| **Timezone** | IANA timezone (e.g. `Europe/Moscow`). Leave empty to inherit the HA system timezone. |
-| **PulseAudio latency (ms)** | Audio buffer latency hint. Increase to `400–600` if you hear dropouts on slow hardware. Default `200`. |
-| **Prefer SBC codec** | Toggle — forces SBC codec after each BT connect. Reduces CPU load; useful with multiple speakers on slow hardware. |
-| **bt_check_interval** | Reconnect polling interval in seconds (used when D-Bus events are unavailable). Default `10`. |
-| **bt_max_reconnect_fails** | Stop retrying reconnects after N consecutive failures. `0` = retry forever. |
-| **auth_enabled** | Toggle — enables password protection for the web UI. |
-| **ma_api_url** | Music Assistant REST API URL (e.g. `http://192.168.1.10:8095`). Auto-detected in addon mode. |
-| **ma_api_token** | MA API token. **Auto-created** via "Sign in with Home Assistant" in the web UI — no manual setup needed in addon mode. For Docker/LXC create manually in MA → Settings → API Tokens. |
-| **volume_via_ma** | Toggle — route volume through MA API (keeps MA UI in sync). Disable to use direct PulseAudio only. Default: on. |
-| **mute_via_ma** | Toggle — route mute through MA API (keeps MA UI mute state in sync). Default: off — mute is applied directly via PulseAudio for instant response. |
-| **log_level** | Log verbosity (`info` or `debug`). Can also be changed at runtime via the web UI without a restart. |
+| **sendspin_server** | Hostname/IP of the Music Assistant server, or `auto` for mDNS |
+| **sendspin_port** | Sendspin WebSocket port, usually `9000` |
+| **bridge_name** | Optional instance label appended to players |
+| **tz** | IANA timezone |
+| **pulse_latency_msec** | Audio buffer latency hint |
+| **prefer_sbc_codec** | Lower-CPU codec preference |
+| **bt_check_interval** | Reconnect polling interval |
+| **bt_max_reconnect_fails** | Auto-disable threshold |
+| **auth_enabled** | Enables the bridge auth flow when supported |
+| **ma_api_url / ma_api_token** | Music Assistant REST integration |
+| **volume_via_ma / mute_via_ma** | Route controls through MA to keep UI state aligned |
+| **log_level** | Base logging verbosity |
 
-### Bluetooth Devices and Adapters
+![HA addon device and adapter lists plus device edit dialog](/sendspin-bt-bridge/screenshots/screenshot-ha-addon-config-bottom.png)
 
-![HA addon config — Bluetooth devices list and adapters list with edit and delete buttons](/sendspin-bt-bridge/screenshots/screenshot-ha-addon-config-bottom.png)
+![Home Assistant addon device edit dialog](/sendspin-bt-bridge/screenshots/screenshot-ha-addon-device-edit.png)
 
-The **Bluetooth devices** section lists all configured speakers. Click **Edit** (✏) to open the device settings dialog, or **Add** to add a new device.
+The addon form also exposes the full **Bluetooth devices** and **Bluetooth adapters** structures.
 
-![Device edit dialog showing mac, player_name, adapter, static_delay_ms, listen_host, listen_port, enabled and preferred_format fields](/sendspin-bt-bridge/screenshots/screenshot-ha-addon-device-edit.png)
+## `config.json` reference
 
-| Field | Description |
-|---|---|
-| **mac** | Bluetooth MAC address of the speaker (`AA:BB:CC:DD:EE:FF`) |
-| **player_name** | Display name shown in Music Assistant |
-| **adapter** | Bluetooth adapter to use (`hci0`, `hci1`, or adapter MAC). Leave empty for the default adapter. |
-| **static_delay_ms** | A2DP latency compensation in ms. Negative value delays this player to stay in sync with the group (typical: `-500` to `-700`). |
-| **listen_host** | IP address this player's WebSocket server advertises to MA. Leave empty for auto-detection. |
-| **listen_port** | WebSocket port for this player (default starts at `8928`, increments per device). |
-| **enabled** | Toggle — disable to skip this device on startup without removing it. |
-| **preferred_format** | Preferred audio format, e.g. `flac:44100:16:2`. Prevents PulseAudio resampling when MA sends FLAC. |
+### Core keys
 
-The **Bluetooth adapters** section allows labelling each adapter (`hci0`, `hci1`) with a friendly name shown in the web UI.
+| Key | Type | Description |
+|---|---|---|
+| `SENDSPIN_SERVER` | string | Music Assistant host or `auto` |
+| `SENDSPIN_PORT` | integer | Sendspin WebSocket port |
+| `BRIDGE_NAME` | string | Optional label appended to player names |
+| `TZ` | string | IANA timezone |
+| `PULSE_LATENCY_MSEC` | integer | Audio buffer latency hint |
+| `BT_CHECK_INTERVAL` | integer | Probe interval for Bluetooth recovery |
+| `BT_MAX_RECONNECT_FAILS` | integer | Auto-disable threshold |
+| `PREFER_SBC_CODEC` | boolean | Lower-CPU codec preference |
+| `AUTH_ENABLED` | boolean | Enable local web auth |
+| `SESSION_TIMEOUT_HOURS` | integer | Browser session lifetime |
+| `BRUTE_FORCE_PROTECTION` | boolean | Enable temporary lockout after failed sign-ins |
+| `BRUTE_FORCE_MAX_ATTEMPTS` | integer | Maximum failed attempts within the window |
+| `BRUTE_FORCE_WINDOW_MINUTES` | integer | Rolling window for failed attempts |
+| `BRUTE_FORCE_LOCKOUT_MINUTES` | integer | Lockout duration |
+| `MA_API_URL` | string | Music Assistant REST URL |
+| `MA_API_TOKEN` | string | Music Assistant API token |
+| `MA_WEBSOCKET_MONITOR` | boolean | Live queue/now-playing monitor |
+| `VOLUME_VIA_MA` | boolean | Route volume changes through MA |
+| `MUTE_VIA_MA` | boolean | Route mute changes through MA |
+| `LOG_LEVEL` | string | Base log verbosity |
 
-<Aside type="caution">
-After editing options, click **Save** at the bottom of the Options section. The addon restarts automatically to apply the changes.
-</Aside>
-
----
-
-## Core Parameters
-
-| Parameter | Type | Default | Description |
-|---|---|---|---|
-| `SENDSPIN_SERVER` | string | `"auto"` | MA server address. `auto` = mDNS discovery |
-| `SENDSPIN_PORT` | integer | `9000` | MA WebSocket port (`ws://server:port/sendspin`) |
-| `BRIDGE_NAME` | string | `""` | Suffix appended to every player name in MA (empty = off) |
-| `BRIDGE_NAME_SUFFIX` | boolean | `false` | Append `@ {BRIDGE_NAME}` to each individual player name in MA |
-| `TZ` | string | `""` | Container timezone (empty = inherits `TZ` env var, fallback UTC) |
-| `PULSE_LATENCY_MSEC` | integer | `200` | PulseAudio latency in ms. Increase if audio stutters on slow hardware |
-| `PREFER_SBC_CODEC` | boolean | `false` | Force SBC codec after each BT connect. Reduces CPU load |
-| `BT_CHECK_INTERVAL` | integer | `10` | BT polling interval in seconds when D-Bus is unavailable |
-| `BT_MAX_RECONNECT_FAILS` | integer | `0` | Auto-disable BT management after N consecutive failures. `0` = retry forever |
-| `AUTH_ENABLED` | boolean | `false` | Enable password protection for the web UI |
-| `MA_API_URL` | string | `""` | Music Assistant REST API base URL (e.g. `http://192.168.1.10:8095`). Auto-detected in addon mode |
-| `MA_API_TOKEN` | string | `""` | MA API token. Auto-created via "Sign in with Home Assistant" in addon mode; for Docker/LXC create manually in MA → Settings → API Tokens |
-| `VOLUME_VIA_MA` | boolean | `true` | Route volume changes through the MA API when MA is connected. Keeps the MA UI in sync with the bridge. Set to `false` to always use direct PulseAudio (`pactl`) |
-| `MUTE_VIA_MA` | boolean | `false` | Route mute/unmute through the MA API. When `false`, mute is applied directly via PulseAudio for instant response. Enable to keep mute state synced with the MA UI |
-| `LOG_LEVEL` | string | `"INFO"` | Log verbosity (`INFO` or `DEBUG`). Also changeable at runtime via `POST /api/settings/log_level` without a restart |
-| `BT_CHURN_THRESHOLD` | integer | `0` | Number of reconnections within the churn window that trigger auto-disable of BT management. `0` = disabled |
-| `BT_CHURN_WINDOW` | integer | `300` | Sliding window in seconds for churn counting |
-
-## Bluetooth Devices
-
-The device list is set in `BLUETOOTH_DEVICES`. Each device becomes a separate player in MA.
+### Bluetooth devices
 
 ```json
 {
@@ -97,76 +184,54 @@ The device list is set in `BLUETOOTH_DEVICES`. Each device becomes a separate pl
       "static_delay_ms": -500,
       "listen_host": "0.0.0.0",
       "listen_port": 8928,
+      "preferred_format": "flac:44100:16:2",
+      "keepalive_interval": 60,
       "enabled": true
     }
   ]
 }
 ```
 
-### Device Fields
+| Field | Description |
+|---|---|
+| `mac` | Speaker Bluetooth MAC |
+| `player_name` | Display name in Music Assistant |
+| `adapter` | Adapter ID or MAC |
+| `static_delay_ms` | Fixed sync compensation |
+| `listen_host` | Advertised host for this device listener |
+| `listen_port` | Custom sendspin listener port |
+| `preferred_format` | Preferred output format |
+| `keepalive_interval` | Silence keepalive interval in seconds |
+| `enabled` | Skip on startup when `false` |
 
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `mac` | string | ✓ | Bluetooth speaker MAC address (`AA:BB:CC:DD:EE:FF`) |
-| `player_name` | string | ✓ | Display name in MA |
-| `adapter` | string | — | Adapter ID (`hci0`, `hci1`) or adapter MAC. Empty = default adapter |
-| `static_delay_ms` | integer | — | A2DP latency compensation in ms. Negative = delay this player |
-| `preferred_format` | string | — | Preferred audio format, e.g. `flac:44100:16:2`. Prevents PulseAudio resampling |
-| `listen_host` | string | — | IP for sendspin WebSocket listener (default `0.0.0.0`) |
-| `listen_port` | integer | — | sendspin WebSocket port (default `9000 + index`) |
-| `enabled` | boolean | — | `false` = device is disabled and skipped on startup |
-| `keepalive_silence` | boolean | — | Send periodic silence packets to keep the A2DP connection alive. Legacy flag; use `keepalive_interval` instead |
-| `keepalive_interval` | integer | — | Seconds between keepalive silence bursts (minimum 30). Set to any value ≥ 30 to enable; `0` or absent = disabled |
-
-## Bluetooth Adapters
-
-Optional list of adapters for explicit labelling. The `name` field is shown in the BT column of the web UI.
+### Bluetooth adapters
 
 ```json
 {
   "BLUETOOTH_ADAPTERS": [
-    { "id": "hci0", "mac": "C0:FB:F9:62:D6:9D", "name": "Living room dongle" }
+    {
+      "id": "hci0",
+      "mac": "C0:FB:F9:62:D6:9D",
+      "name": "Living room dongle"
+    }
   ]
 }
 ```
 
-| Field | Type | Description |
-|---|---|---|
-| `id` | string | Kernel interface name (`hciN`) |
-| `mac` | string | Adapter MAC address |
-| `name` | string | Human-readable label shown in the web UI |
+| Field | Description |
+|---|---|
+| `id` | Adapter interface name such as `hci0` |
+| `mac` | Adapter MAC address |
+| `name` | Friendly label shown in the UI |
 
-## Environment Variables
+## Environment variables
 
-Environment variables override `config.json` values:
+Environment variables still work for bootstrap and automation. If `config.json` exists, its values take precedence.
 
 | Variable | Description |
 |---|---|
-| `SENDSPIN_SERVER` | MA server address |
-| `SENDSPIN_PORT` | WebSocket port |
+| `SENDSPIN_SERVER` | Music Assistant host |
+| `SENDSPIN_PORT` | Sendspin WebSocket port |
 | `WEB_PORT` | Web UI port (default `8080`) |
 | `TZ` | Timezone |
-| `CONFIG_DIR` | Config directory path (default `/config`) |
-
-## Config Backup & Restore
-
-The web UI provides **⬇ Download** and **⬆ Upload** buttons in the Configuration panel for backing up and restoring `config.json`.
-
-- **Download** saves the current configuration as a timestamped JSON file (e.g. `config-2026-03-15T10-30-00.json`).
-- **Upload** accepts a previously downloaded config file. The file is validated as JSON before saving. Sensitive keys (`AUTH_PASSWORD_HASH`, `SECRET_KEY`, `MA_API_TOKEN`) are preserved from the running config and not overwritten by the upload.
-
-This is useful for migrating settings between installations or restoring after a fresh deploy. A restart is required after uploading for changes to take effect.
-
-<Aside type="tip">
-You can also download and upload via the API: `GET /api/config/download` and `POST /api/config/upload` (multipart/form-data, field: `file`).
-</Aside>
-
-## Performance Optimization
-
-<Aside type="tip">
-**Reduce CPU load on slow hardware (Raspberry Pi):**
-
-Enable `PREFER_SBC_CODEC: true` — SBC requires minimal decoding and reduces load ~30% per player.
-
-Alternatively, set `preferred_format` to `pcm:44100:16:2` for a device. PCM is raw uncompressed audio — no FLAC decoding at all, at the cost of slightly higher network bandwidth. Only two codecs are supported in `preferred_format`: `flac` and `pcm`.
-</Aside>
+| `CONFIG_DIR` | Config directory path |

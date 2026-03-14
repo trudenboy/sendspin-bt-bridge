@@ -1,93 +1,173 @@
 ---
 title: Настройка
-description: Полный справочник параметров конфигурации Sendspin Bluetooth Bridge
+description: Актуальный справочник по конфигурации Sendspin Bluetooth Bridge после редизайна интерфейса
 ---
 
+Sendspin Bluetooth Bridge хранит постоянные настройки в `config.json` внутри директории `/config`. Управлять этими значениями можно через веб-интерфейс, через вкладку настройки аддона Home Assistant или напрямую через файл.
 
-Конфигурация хранится в файле `config.json` в директории `/config` (монтируется как Docker volume). Редактировать можно через веб-интерфейс или напрямую через файл (требует перезапуска).
+## Поверхности конфигурации
 
-## Аддон Home Assistant
+Есть два основных способа управлять настройками:
 
-При установке как аддон Home Assistant все настройки доступны через встроенную вкладку **Configuration** в интерфейсе HA — без редактирования файлов.
+| Поверхность | Для чего подходит | Что важно |
+|---|---|---|
+| **Веб-интерфейс** | Ежедневное управление устройствами, адаптерами, auth и runtime-поведением | Работает для Docker, LXC и аддона |
+| **Configuration таб аддона HA** | Supervisor-managed параметры аддона | Удобен для HA-native редактирования |
+
+## Конфигурация через веб-интерфейс
+
+![Общий вид обновлённого раздела Configuration](/sendspin-bt-bridge/screenshots/screenshot-config.png)
+
+Новый раздел конфигурации разбит на пять вкладок вместо одной длинной формы.
+
+| Вкладка | Что в ней находится |
+|---|---|
+| **General** | Имя bridge, timezone, latency, smooth restart, update policy |
+| **Devices** | Таблица колонок, сканирование, импорт paired-устройств |
+| **Bluetooth** | Имена адаптеров, reconnect policy, codec preference |
+| **Music Assistant** | Token flows, endpoint MA, monitor, routing toggles |
+| **Security** | Local auth, session timeout, защита от перебора |
+
+### Вкладка General
+
+**General** содержит настройки всего экземпляра bridge:
+
+- **Bridge name** — добавляется к именам плееров как `Player @ Name`.
+- **Timezone** — с live preview текущего времени.
+- **PulseAudio latency (ms)** — больше значение = выше устойчивость на слабом железе.
+- **Smooth restart** — mute перед перезапуском и показ прогресса.
+- **Check for updates / Auto-update** — доступны вне режима HA addon.
+
+### Вкладка Devices
+
+![Вкладка Devices с таблицей fleet и discovery workflow](/sendspin-bt-bridge/screenshots/screenshot-config-devices.png)
+
+**Devices** разделена на две роли:
+
+- **Device fleet** — основная таблица повседневных изменений.
+- **Discovery & import** — поиск nearby speakers и импорт уже спаренных устройств.
+
+Каждая строка устройства хранит:
+
+| Поле | Для чего нужно |
+|---|---|
+| **Enabled** | Временно исключить устройство из старта |
+| **Player name** | Имя в Music Assistant |
+| **MAC** | Bluetooth-адрес колонки |
+| **Adapter** | Привязка к конкретному контроллеру |
+| **Port** | Опциональный custom sendspin port |
+| **Delay** | `static_delay_ms` компенсация задержки |
+| **Live** | Runtime badge вроде Playing, Connected, Released или Not seen |
+
+В advanced-части строки доступны **preferred format**, **listen host** и **keepalive interval**.
+
+### Вкладка Bluetooth
+
+![Вкладка Bluetooth с inventory адаптеров и recovery policy](/sendspin-bt-bridge/screenshots/screenshot-config-adapters.png)
+
+**Bluetooth** объединяет inventory и политику восстановления:
+
+- Понятные имена адаптеров для dashboard.
+- Ручные записи адаптеров, если автоопределение неполное.
+- Refresh detection.
+- Настройку **BT check interval**.
+- Настройку **Auto-disable threshold**.
+- Переключатель **Prefer SBC codec**.
+
+### Вкладка Music Assistant
+
+![Вкладка Music Assistant с token actions и bridge integration settings](/sendspin-bt-bridge/screenshots/screenshot-advanced-settings.png)
+
+**Music Assistant** объединяет состояние соединения и auth helper'ы:
+
+- summary **Connection status**,
+- кнопки **Discover** и **Get token**,
+- **Get token automatically** в режиме аддона,
+- ручное поле **MA API token**,
+- поля **MA server** и **MA WebSocket port**,
+- переключатели **WebSocket monitor**, **Route volume through MA**, **Route mute through MA**.
+
+### Вкладка Security
+
+В standalone-режиме вкладка **Security** управляет локальным доступом к веб-интерфейсу:
+
+- **Enable web UI authentication**,
+- **Session timeout**,
+- **Brute-force protection**,
+- поля **Max attempts**, **Window** и **Lockout**,
+- flow **Set password**.
+
+В режиме Home Assistant addon этими правилами управляет сам HA, поэтому standalone-контролы скрываются.
+
+### Действия в footer
+
+Нижняя панель общая для всех вкладок:
+
+- **Save** записывает `config.json`.
+- **Save & Restart** сохраняет и сразу перезапускает сервис.
+- **Cancel** восстанавливает последние сохранённые значения формы.
+- **Download** экспортирует конфиг в JSON-файл с timestamp.
+- **Upload** импортирует ранее сохранённый config и сохраняет чувствительные ключи на стороне сервера.
+
+## Параметры аддона Home Assistant
+
+![Панель Configuration аддона HA с core options](/sendspin-bt-bridge/screenshots/screenshot-ha-addon-config.png)
+
+В режиме аддона Home Assistant Supervisor показывает собственную вкладку **Configuration**.
 
 Откройте **Настройки → Аддоны → Sendspin Bluetooth Bridge → Configuration**.
 
-![Панель настройки аддона HA — раздел Options с полями Music Assistant server, port, timezone и другими параметрами](/sendspin-bt-bridge/screenshots/screenshot-ha-addon-config.png)
+Основные поля аддона:
 
-### Параметры (Options)
-
-| Поле | Описание |
+| Параметр | Назначение |
 |---|---|
-| **Music Assistant server** | Хост или IP сервера MA. Используйте `auto` для автоматического обнаружения через mDNS (рекомендуется). |
-| **Sendspin port** | WebSocket порт провайдера Sendspin в MA. По умолчанию `9000` совпадает со стандартным портом MA. |
-| **bridge_name** | Необязательный суффикс к имени каждого плеера в MA (отображается как `Плеер @ Название`). Оставьте пустым, чтобы отключить. |
-| **bridge_name_suffix** | Переключатель — при включении добавляет `@ {bridge_name}` к каждому имени плеера. |
-| **Timezone** | Временная зона IANA (например, `Europe/Moscow`). Оставьте пустым, чтобы унаследовать системную временную зону HA. |
-| **PulseAudio latency (ms)** | Подсказка задержки аудиобуфера. Увеличьте до `400–600` при заикании звука на медленном железе. По умолчанию `200`. |
-| **Prefer SBC codec** | Переключатель — принудительно использует SBC кодек после каждого BT-подключения. Снижает нагрузку CPU; полезно при нескольких колонках на медленном железе. |
-| **bt_check_interval** | Интервал polling-проверки переподключения в секундах (когда D-Bus события недоступны). По умолчанию `10`. |
-| **bt_max_reconnect_fails** | Прекратить попытки переподключения после N неудач подряд. `0` = повторять бесконечно. |
-| **auth_enabled** | Переключатель — включает парольную защиту веб-интерфейса. |
-| **ma_api_url** | URL REST API Music Assistant (например `http://192.168.1.10:8095`). Определяется автоматически в режиме аддона. |
-| **ma_api_token** | Токен MA API. **В режиме аддона** — нажмите «Sign in with Home Assistant» в веб-интерфейсе для автоматического создания. Для Docker/LXC — создайте токен в MA → Settings → API Tokens. |
-| **volume_via_ma** | Переключатель — маршрутизировать громкость через MA API (синхронизирует ползунки громкости UI MA). Отключите для использования только прямого PulseAudio. По умолчанию: включено. |
-| **mute_via_ma** | Переключатель — маршрутизировать mute/unmute через MA API. Отключите для мгновенного mute через PulseAudio. По умолчанию: выключено. |
-| **log_level** | Уровень логирования (`info` или `debug`). Также можно изменить в реальном времени через веб-интерфейс без перезапуска. |
+| **sendspin_server** | Хост/IP Music Assistant или `auto` для mDNS |
+| **sendspin_port** | Порт Sendspin WebSocket, обычно `9000` |
+| **bridge_name** | Необязательная метка экземпляра bridge |
+| **tz** | Часовой пояс IANA |
+| **pulse_latency_msec** | Подсказка размера аудиобуфера |
+| **prefer_sbc_codec** | Предпочтение более лёгкого кодека |
+| **bt_check_interval** | Интервал polling-проверки |
+| **bt_max_reconnect_fails** | Порог auto-disable |
+| **auth_enabled** | Включение auth flow bridge |
+| **ma_api_url / ma_api_token** | REST-интеграция с Music Assistant |
+| **volume_via_ma / mute_via_ma** | Маршрутизация управления через MA |
+| **log_level** | Базовый уровень логирования |
 
-### Bluetooth-устройства и адаптеры
+![Списки устройств и адаптеров аддона HA вместе с диалогом редактирования устройства](/sendspin-bt-bridge/screenshots/screenshot-ha-addon-config-bottom.png)
 
-![Настройка аддона HA — список Bluetooth устройств и адаптеров с кнопками редактирования и удаления](/sendspin-bt-bridge/screenshots/screenshot-ha-addon-config-bottom.png)
+![Диалог редактирования устройства в конфигурации аддона HA](/sendspin-bt-bridge/screenshots/screenshot-ha-addon-device-edit.png)
 
-В разделе **Bluetooth devices** перечислены все настроенные колонки. Нажмите **Edit** (✏) для открытия диалога настройки устройства, или **Add** для добавления нового.
+Через addon form доступны и полные структуры **Bluetooth devices** и **Bluetooth adapters**.
 
-![Диалог редактирования устройства: поля mac, player_name, adapter, static_delay_ms, listen_host, listen_port, enabled и preferred_format](/sendspin-bt-bridge/screenshots/screenshot-ha-addon-device-edit.png)
+## Справочник по `config.json`
 
-| Поле | Описание |
-|---|---|
-| **mac** | Bluetooth MAC-адрес колонки (`AA:BB:CC:DD:EE:FF`) |
-| **player_name** | Отображаемое имя в Music Assistant |
-| **adapter** | Bluetooth-адаптер (`hci0`, `hci1` или MAC адаптера). Оставьте пустым для адаптера по умолчанию. |
-| **static_delay_ms** | Компенсация задержки A2DP в мс. Отрицательное значение задерживает плеер для синхронизации с группой (обычно от `-500` до `-700`). |
-| **listen_host** | IP-адрес, который WebSocket-сервер этого плеера анонсирует в MA. Оставьте пустым для автоопределения. |
-| **listen_port** | WebSocket-порт этого плеера (по умолчанию начинается с `8928`, увеличивается на 1 для каждого устройства). |
-| **enabled** | Переключатель — отключить, чтобы пропустить устройство при запуске без удаления из конфигурации. |
-| **keepalive_silence** | Отправлять периодические пакеты тишины для поддержания A2DP-соединения. Устаревший флаг — используйте `keepalive_interval`. |
-| **keepalive_interval** | Интервал в секундах между пакетами keepalive (минимум 30). Значение ≥ 30 включает функцию; `0` или отсутствие — отключено. |
-| **preferred_format** | Предпочтительный аудиоформат, например `flac:44100:16:2`. Устраняет ресэмплинг PulseAudio когда MA отправляет FLAC. |
+### Основные ключи
 
-В разделе **Bluetooth adapters** можно задать понятное имя каждому адаптеру (`hci0`, `hci1`) — оно отображается в колонке BT веб-интерфейса.
+| Ключ | Тип | Описание |
+|---|---|---|
+| `SENDSPIN_SERVER` | string | Хост Music Assistant или `auto` |
+| `SENDSPIN_PORT` | integer | Порт Sendspin WebSocket |
+| `BRIDGE_NAME` | string | Необязательная метка экземпляра |
+| `TZ` | string | Часовой пояс IANA |
+| `PULSE_LATENCY_MSEC` | integer | Подсказка аудиобуфера |
+| `BT_CHECK_INTERVAL` | integer | Интервал проверки Bluetooth |
+| `BT_MAX_RECONNECT_FAILS` | integer | Порог auto-disable |
+| `PREFER_SBC_CODEC` | boolean | Предпочтение кодека с меньшей нагрузкой |
+| `AUTH_ENABLED` | boolean | Включить локальную auth-защиту |
+| `SESSION_TIMEOUT_HOURS` | integer | Срок жизни browser-сессии |
+| `BRUTE_FORCE_PROTECTION` | boolean | Включить временную блокировку после неудачных входов |
+| `BRUTE_FORCE_MAX_ATTEMPTS` | integer | Максимум попыток в окне |
+| `BRUTE_FORCE_WINDOW_MINUTES` | integer | Rolling window для неудачных входов |
+| `BRUTE_FORCE_LOCKOUT_MINUTES` | integer | Длительность блокировки |
+| `MA_API_URL` | string | URL REST API Music Assistant |
+| `MA_API_TOKEN` | string | Токен Music Assistant API |
+| `MA_WEBSOCKET_MONITOR` | boolean | Live monitor now-playing и очереди |
+| `VOLUME_VIA_MA` | boolean | Пропускать volume через MA |
+| `MUTE_VIA_MA` | boolean | Пропускать mute через MA |
+| `LOG_LEVEL` | string | Базовый уровень логирования |
 
-<Aside type="caution">
-После редактирования параметров нажмите **Save** в нижней части раздела Options. Аддон перезапустится автоматически для применения изменений.
-</Aside>
-
----
-
-## Основные параметры
-
-| Параметр | Тип | По умолчанию | Описание |
-|---|---|---|---|
-| `SENDSPIN_SERVER` | string | `"auto"` | Адрес MA сервера. `auto` — обнаружение через mDNS |
-| `SENDSPIN_PORT` | integer | `9000` | WebSocket порт MA (`ws://server:port/sendspin`) |
-| `BRIDGE_NAME` | string | `""` | Суффикс к имени каждого плеера в MA (пустая строка — выключено) |
-| `BRIDGE_NAME_SUFFIX` | boolean | `false` | Добавлять `@ {BRIDGE_NAME}` к каждому индивидуальному имени плеера в MA |
-| `TZ` | string | `""` | Временная зона (пустая строка — берётся из переменной окружения `TZ`, иначе UTC) |
-| `PULSE_LATENCY_MSEC` | integer | `200` | Задержка PulseAudio в мс. Увеличьте при заикании звука на медленном железе |
-| `PREFER_SBC_CODEC` | boolean | `false` | Принудительно использовать SBC кодек после каждого подключения. Снижает нагрузку CPU |
-| `BT_CHECK_INTERVAL` | integer | `10` | Интервал polling-проверки BT в секундах когда D-Bus недоступен |
-| `BT_MAX_RECONNECT_FAILS` | integer | `0` | Авто-отключить BT управление после N неудач подряд. `0` = повторять бесконечно |
-| `AUTH_ENABLED` | boolean | `false` | Включить парольную защиту веб-интерфейса |
-| `MA_API_URL` | string | `""` | URL REST API Music Assistant (например `http://192.168.1.10:8095`). Определяется автоматически в режиме аддона |
-| `MA_API_TOKEN` | string | `""` | Токен MA API. Создаётся автоматически через «Sign in with Home Assistant» в режиме аддона; для Docker/LXC — создайте вручную в MA → Settings → API Tokens |
-| `VOLUME_VIA_MA` | boolean | `true` | Маршрутизация изменений громкости через MA API при подключённом MA. Синхронизирует ползунки громкости интерфейса MA с мостом. `false` — использовать только PulseAudio (`pactl`) |
-| `MUTE_VIA_MA` | boolean | `false` | Маршрутизация mute/unmute через MA API. При `false` mute применяется напрямую через PulseAudio для мгновенного отклика. Включите для синхронизации состояния mute с интерфейсом MA |
-| `LOG_LEVEL` | string | `"INFO"` | Уровень логирования (`INFO` или `DEBUG`). Также можно изменить в реальном времени через `POST /api/settings/log_level` без перезапуска |
-| `BT_CHURN_THRESHOLD` | integer | `0` | Количество переподключений в пределах окна, при котором BT управление автоматически отключается. `0` = выключено |
-| `BT_CHURN_WINDOW` | integer | `300` | Скользящее окно в секундах для подсчёта переподключений |
-
-## Bluetooth-устройства
-
-Список устройств задаётся в поле `BLUETOOTH_DEVICES`. Каждое устройство — отдельный плеер в MA.
+### Bluetooth-устройства
 
 ```json
 {
@@ -99,30 +179,27 @@ description: Полный справочник параметров конфиг
       "static_delay_ms": -500,
       "listen_host": "0.0.0.0",
       "listen_port": 8928,
+      "preferred_format": "flac:44100:16:2",
+      "keepalive_interval": 60,
       "enabled": true
     }
   ]
 }
 ```
 
-### Поля устройства
+| Поле | Описание |
+|---|---|
+| `mac` | Bluetooth MAC колонки |
+| `player_name` | Имя в Music Assistant |
+| `adapter` | ID или MAC адаптера |
+| `static_delay_ms` | Фиксированная компенсация задержки |
+| `listen_host` | Advertised host для listener этого устройства |
+| `listen_port` | Пользовательский порт listener'а |
+| `preferred_format` | Предпочтительный аудиоформат |
+| `keepalive_interval` | Интервал keepalive-тишины в секундах |
+| `enabled` | При `false` устройство пропускается на старте |
 
-| Поле | Тип | Обязательное | Описание |
-|---|---|---|---|
-| `mac` | string | ✓ | MAC-адрес Bluetooth-колонки (формат `AA:BB:CC:DD:EE:FF`) |
-| `player_name` | string | ✓ | Отображаемое имя плеера в MA |
-| `adapter` | string | — | ID адаптера (`hci0`, `hci1`) или MAC адаптера. Пустая строка — адаптер по умолчанию |
-| `static_delay_ms` | integer | — | Компенсация A2DP задержки в мс. Отрицательное значение = задержать плеер |
-| `preferred_format` | string | — | Предпочитаемый аудиоформат, например `flac:44100:16:2`. Устраняет ресэмплинг PulseAudio |
-| `listen_host` | string | — | IP для прослушивания sendspin WebSocket (по умолчанию `0.0.0.0`) |
-| `listen_port` | integer | — | Порт sendspin WebSocket (по умолчанию `9000 + индекс`) |
-| `enabled` | boolean | — | `false` — устройство отключено и пропускается при запуске |
-| `keepalive_silence` | boolean | — | Отправлять пакеты тишины для поддержания соединения. Устаревший флаг — используйте `keepalive_interval` |
-| `keepalive_interval` | integer | — | Интервал keepalive в секундах (минимум 30). Значение > 0 включает функцию |
-
-## Bluetooth-адаптеры
-
-Опциональный список адаптеров для явной привязки. Поле `name` отображается в колонке BT веб-интерфейса.
+### Bluetooth-адаптеры
 
 ```json
 {
@@ -130,55 +207,26 @@ description: Полный справочник параметров конфиг
     {
       "id": "hci0",
       "mac": "C0:FB:F9:62:D6:9D",
-      "name": "Гостиная"
+      "name": "Адаптер в гостиной"
     }
   ]
 }
 ```
 
-| Поле | Тип | Описание |
-|---|---|---|
-| `id` | string | Имя интерфейса ядра (`hciN`) |
-| `mac` | string | MAC-адрес адаптера |
-| `name` | string | Читаемое название, отображаемое в веб-интерфейсе |
+| Поле | Описание |
+|---|---|
+| `id` | Имя интерфейса, например `hci0` |
+| `mac` | MAC-адрес адаптера |
+| `name` | Понятная метка в UI |
 
 ## Переменные окружения
 
-Переменные окружения Docker/HA переопределяют значения из `config.json`:
+Переменные окружения по-прежнему удобны для bootstrap и automation. Если есть `config.json`, его значения имеют приоритет.
 
 | Переменная | Описание |
 |---|---|
-| `SENDSPIN_SERVER` | Адрес MA сервера |
-| `SENDSPIN_PORT` | WebSocket порт |
+| `SENDSPIN_SERVER` | Хост Music Assistant |
+| `SENDSPIN_PORT` | Порт Sendspin WebSocket |
 | `WEB_PORT` | Порт веб-интерфейса (по умолчанию `8080`) |
-| `TZ` | Временная зона |
-| `CONFIG_DIR` | Путь к директории конфигурации (по умолчанию `/config`) |
-
-## Резервное копирование и восстановление конфигурации
-
-Веб-интерфейс предоставляет кнопки **⬇ Download** и **⬆ Upload** в панели конфигурации для резервного копирования и восстановления `config.json`.
-
-- **Download** сохраняет текущую конфигурацию в JSON-файл с меткой времени (например, `config-2026-03-15T10-30-00.json`).
-- **Upload** принимает ранее скачанный файл конфигурации. Файл проверяется как валидный JSON перед сохранением. Конфиденциальные ключи (`AUTH_PASSWORD_HASH`, `SECRET_KEY`, `MA_API_TOKEN`) сохраняются из текущей конфигурации и не перезаписываются загруженным файлом.
-
-Это полезно для переноса настроек между установками или восстановления после чистого развёртывания. После загрузки требуется перезапуск для применения изменений.
-
-<Aside type="tip">
-Также можно скачать и загрузить через API: `GET /api/config/download` и `POST /api/config/upload` (multipart/form-data, поле: `file`).
-</Aside>
-
-## Оптимизация производительности
-
-<Aside type="tip">
-**Снижение нагрузки CPU на слабом железе (Raspberry Pi):**
-
-Включите `PREFER_SBC_CODEC: true` — SBC требует минимального декодирования и снижает нагрузку ~30% на плеер.
-
-Альтернативно: укажите `preferred_format: pcm:44100:16:2` для устройства. PCM — сырой несжатый аудиопоток, декодирование FLAC не нужно вообще, ценой чуть большего сетевого трафика. В поле `preferred_format` поддерживаются только два кодека: `flac` и `pcm`.
-</Aside>
-
-<Aside type="note">
-**Синхронизация группового воспроизведения:**
-
-При использовании нескольких колонок одновременно задержки A2DP могут различаться. Используйте `static_delay_ms` для выравнивания: измерьте задержку каждой колонки и установите отрицательное значение для более быстрых устройств.
-</Aside>
+| `TZ` | Часовой пояс |
+| `CONFIG_DIR` | Путь к директории конфига |

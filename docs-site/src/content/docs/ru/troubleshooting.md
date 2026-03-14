@@ -1,194 +1,121 @@
 ---
 title: Устранение неполадок
-description: Решение типичных проблем Sendspin Bluetooth Bridge
+description: Решение частых проблем Sendspin Bluetooth Bridge с учётом текущего UI и deployment model
 ---
 
+## После переподключения звук идёт только на одну колонку
 
-## Аудио играет только через одну колонку
+После Bluetooth reconnect PulseAudio может увести активные потоки на sink по умолчанию. Bridge умеет исправлять это автоматически на следующем старте воспроизведения, но если проблема повторяется:
 
-При отключении и повторном подключении Bluetooth-колонки PulseAudio (`module-rescue-streams`) автоматически переводит все активные аудиопотоки на синк по умолчанию. При переподключении потоки сами не возвращаются.
-
-**Самовосстановление**: мост исправляет это автоматически. При следующем старте воспроизведения после переподключения он обнаруживает неверно маршрутизированные потоки и перемещает их обратно. В логах можно увидеть сообщение `Corrected 1 sink-input(s) to bluez_sink.XX_XX...`.
-
-Если проблема повторяется:
-1. Проверьте логи: `docker logs sendspin-client | grep -i "sink\|routing\|corrected"`
-2. Убедитесь, что BT-синк корректно определяется: `docker exec sendspin-client pactl list sinks short`
-3. Попробуйте перезапустить контейнер после переподключения колонки
+1. Проверьте логи на сообщения про sink routing.
+2. Убедитесь, что нужный Bluetooth sink действительно существует.
+3. Перезапустите воспроизведение после полного завершения reconnect.
 
 ## Music Assistant не видит плеер
 
-**Проверьте:**
+Проверьте:
 
-1. Провайдер Sendspin включён в MA: Settings → Providers
-2. `SENDSPIN_SERVER` указан верно (или `auto` работает — проверьте mDNS)
-3. Плеер запускается без ошибок: `docker logs sendspin-client | grep ERROR`
-4. Порт не занят другим процессом: `ss -tlnp | grep 892`
-
-**При `auto`:** mDNS требует `network_mode: host`. Убедитесь, что он задан.
+1. В MA включён провайдер Sendspin.
+2. `SENDSPIN_SERVER` указывает на правильный хост, либо разрешено `auto` discovery.
+3. В логах bridge нет ошибок bind/startup.
+4. Используемый sendspin port не занят другим процессом.
 
 ## Bluetooth не подключается
 
-**Проверьте:**
+1. Устройство действительно спарено на уровне хоста.
+2. D-Bus доступен bridge.
+3. Адаптер включён.
+4. Попробуйте **Re-pair** из dashboard.
 
-1. Устройство спарено: `bluetoothctl devices` должен показывать ваш MAC
-2. D-Bus доступен: `/var/run/dbus` смонтирован в контейнер
-3. Адаптер включён: `bluetoothctl show` → `Powered: yes`
+Если используется несколько адаптеров, отдельно проверьте, что в строке устройства указан правильный adapter ID или MAC.
 
-**Переспарьте устройство** через кнопку **🔗 Re-pair** в веб-интерфейсе.
+## "No sink" или тишина при воспроизведении
 
-```bash
-# Диагностика внутри контейнера
-docker exec -it sendspin-client bluetoothctl show
-docker exec -it sendspin-client bluetoothctl devices
-```
+**No sink** означает, что Bluetooth подключён, но аудио-sink ещё не привязался.
 
-## Нет звука (No Sink)
-
-Статус **No Sink** означает, что BT подключён, но PulseAudio/PipeWire синк не найден.
-
-**Причины и решения:**
-
-| Причина | Решение |
+| Причина | Что попробовать |
 |---|---|
-| PulseAudio не запущен | `docker exec sendspin-client pactl info` |
-| Синк ещё не инициализирован | Подождите 5–10 сек после подключения BT |
-| Неверный UID аудио-сокета | Установите `AUDIO_UID` равным UID пользователя хоста (`id -u`) |
-| A2DP профиль не загружен | `pactl list cards` — проверьте профиль `a2dp-sink` |
+| Аудиосервер не работает | Проверить `pactl info` |
+| Sink ещё не успел подняться | Подождать несколько секунд после BT connect |
+| Неправильное соответствие user/socket | Проверить exposure аудио-сокета |
+| Неверный профиль | Убедиться, что есть профиль A2DP sink |
 
-## Звук прерывается (заикается)
+На медленных системах помогает увеличение **PulseAudio latency (ms)** и включение **Prefer SBC codec**.
 
-**Решения:**
+## Scan ничего не находит
 
-1. Увеличьте `PULSE_LATENCY_MSEC` (попробуйте 400–600)
-2. Включите `PREFER_SBC_CODEC: true` — SBC требует меньше CPU
-3. В MA установите Audio Quality → PCM 44.1kHz/16-bit (устраняет FLAC декодирование)
-4. Проверьте нагрузку CPU: `docker stats sendspin-client`
+Если **Scan** не возвращает результатов:
 
-## Веб-интерфейс не открывается через HA
+1. Переведите колонку в pairing mode до запуска сканирования.
+2. Дождитесь завершения полного фонового сканирования.
+3. Посмотрите текст ошибки прямо в discovery card.
+4. Повторяйте попытку только после окончания cooldown.
+5. Используйте **Already paired**, если хост уже знает устройство.
 
-**Проверьте:**
+## Empty state ведёт не туда
 
-- Версия аддона ≥ 1.4.1 (исправлен HA Ingress)
-- Аддон запущен: вкладка **Info** → статус **Running**
-- Консоль браузера: нет ли ошибок загрузки CSS/JS
+После редизайна empty-state действия должны работать так:
 
-## Конфигурация не сохраняется
+- **Scan for devices** → **Configuration → Devices → Discovery & import**.
+- **Add adapter** → **Configuration → Bluetooth** с пустой строкой адаптера.
 
-Docker: убедитесь, что volume `/etc/docker/Sendspin:/config` смонтирован и директория доступна на запись:
-
-```bash
-ls -la /etc/docker/Sendspin/
-```
-
-## Проблемы в LXC (Proxmox)
-
-**bluetoothctl не находит адаптеры:**
-- Убедитесь, что USB Bluetooth-адаптер проброшен в контейнер (`lxc.cgroup2.devices.allow`)
-- Перезапустите bluetoothd: `systemctl restart bluetooth`
-
-**PulseAudio не видит BT-синк:**
-- Проверьте, что `pulseaudio-module-bluetooth` установлен
-- Перезапустите PulseAudio: `pulseaudio -k && pulseaudio --start`
-
-**Адаптер не отвечает по имени `hciN`:**
-- Используйте MAC-адрес адаптера в поле `adapter` вместо `hci0` — в LXC имена интерфейсов нестабильны
-
-## BT-сканирование не возвращает результат
-
-Если интерфейс сканирования показывает job_id и продолжает опрашивать без результата, или отображает ошибку:
-
-1. Сканирование длится ~10 сек в фоне — дождитесь завершения перед повторной попыткой
-2. Если в диалоге сканирования показан текст ошибки — в нём содержится причина (например, `bluetoothctl timed out`)
-3. Проверьте доступность bluetoothctl: `docker exec -it sendspin-client bluetoothctl list`
-4. Попробуйте перезапустить контейнер — зависшая D-Bus сессия может блокировать сканирование
-
-## Кнопка паузы устройства не работает
-
-Кнопка паузы конкретного устройства сопоставляет плеер по `player_name` через D-Bus. Если нажатие не имеет эффекта:
-
-1. Убедитесь, что `player_name` в `config.json` точно совпадает с именем, отображаемым в веб-интерфейсе (с учётом регистра)
-2. Проверьте, что процесс sendspin запущен: `docker exec sendspin-client ps aux | grep sendspin`
-3. Проверьте логи на ошибки D-Bus: `docker logs sendspin-client | grep -i "dbus\|pause"`
+Если этого не происходит, проверьте, что веб-интерфейс обновлён до актуального релиза.
 
 ## Проблемы аутентификации
 
-### «Authentication service unavailable»
+### Ошибка на MFA / TOTP шаге
 
-При использовании входа через HA via MA мост запрашивает `login_flow` у Home Assistant. Если ответ содержит неожиданный формат `flow_id`, аутентификация завершится ошибкой.
+Когда Home Assistant требует MFA, login page переключается на отдельный шаг с кодом. Если flow ломается:
 
-1. Убедитесь, что MA подключён: в шапке должен быть зелёный бейдж «MA: Connected»
-2. Проверьте доступность HA из контейнера моста: `docker exec sendspin-client curl -s http://homeassistant:8123/api/ | head`
-3. Перезапустите мост — токен MA мог истечь
+1. Начните со свежей страницы входа, а не со старой закладки на MFA-step.
+2. Убедитесь, что этот же пользователь может войти в Home Assistant вне bridge.
+3. Проверьте, не слишком ли маленький `Session timeout` и не была ли страница слишком долго простаивающей между вводом пароля и TOTP.
 
-### Блокировка при подборе пароля
+### Сработала блокировка локального входа
 
-После **5 неудачных попыток входа** IP блокируется на **5 минут**. Это относится ко всем методам аутентификации (MA, HA, пароль).
+По умолчанию **5 неудачных попыток за 1 минуту** дают **5 минут** блокировки. Эти значения меняются в **Configuration → Security**.
 
-Подождите 5 минут или перезапустите контейнер для сброса счётчика блокировки.
+### Веб-интерфейс без auth
 
-### Токен MA не получен
+Если сверху виден жёлтый warning-banner, локальная auth-защита отключена. Используйте ссылку в баннере для быстрого перехода в **Configuration → Security**.
 
-Если `MA_API_URL` задан, но `MA_API_TOKEN` пуст:
-1. Используйте кнопки «Sign in with Home Assistant» или «Sign in with Music Assistant» в разделе Configuration
-2. Проверьте логи на сообщения `MA auth`: `docker logs sendspin-client | grep -i "ma auth\|token"`
-3. Убедитесь, что URL сервера MA доступен из контейнера моста
+## Mute или volume не совпадают с Music Assistant
 
-## Мьют не синхронизируется
+Проверьте вкладку **Music Assistant**:
 
-Если отключение звука в веб-интерфейсе не отражается в Music Assistant (или наоборот):
+- **Route volume through MA** синхронизирует bridge с ползунками MA.
+- **Route mute through MA** синхронизирует состояние mute с MA.
 
-1. Проверьте настройку `MUTE_VIA_MA` в Configuration → Music Assistant Integration
-2. Когда `MUTE_VIA_MA` **выключен** (по умолчанию): мьют идёт напрямую в PulseAudio — мгновенно, но не отображается в MA
-3. Когда `MUTE_VIA_MA` **включён**: мьют маршрутизируется через MA API — синхронизирован с MA, но может быть небольшая задержка
-4. Проверьте подключение к MA: в шапке должно быть «MA: Connected»
+Если эти тумблеры выключены, bridge использует direct PulseAudio control для более быстрого локального отклика, но MA может показывать другое состояние.
 
-## Фазы перезапуска
+## Save vs Save & Restart vs Cancel
 
-При нажатии **Save & Restart** мост выполняет поэтапный перезапуск, показывая прогресс для каждого устройства:
+Если изменение конфигурации ведёт себя непредсказуемо:
 
-| Фаза | Метка | Что происходит |
-|---|---|---|
-| 1 | BT | Переподключение Bluetooth |
-| 2 | PA | Обнаружение PulseAudio-синка |
-| 3 | SS | Запуск subprocess Sendspin |
-| 4 | MA | Синхронизация с Music Assistant |
+- Используйте **Save** для простого сохранения.
+- Используйте **Save & Restart**, если runtime-компоненты должны переподключиться или переинициализироваться.
+- Используйте **Cancel**, чтобы выбросить несохранённые изменения и восстановить последние сохранённые значения формы.
 
-Если фаза зависла, проверьте логи на ошибки, связанные с соответствующей подсистемой.
+Прогресс перезапуска отображается в шапке и показывает шаги сохранения, остановки, reconnect и восстановления связи с Music Assistant.
 
-## Сбор логов для отчёта об ошибке
+## Diagnostics и bug reports
 
-```bash
-# Docker
-docker logs sendspin-client > bridge.log 2>&1
+Раздел **Diagnostics** стоит открыть, если нужно быстро понять:
 
-# HA Addon
-# Settings → Add-ons → Sendspin Bluetooth Bridge → Logs
+- видит ли bridge адаптеры,
+- правильно ли назначены sinks,
+- жив ли Music Assistant,
+- что происходит с каждым устройством,
+- в каком состоянии subprocess и runtime окружение.
 
-# LXC / systemd
-journalctl -u sendspin-client --no-pager > bridge.log
-```
+Кнопки **Download diagnostics** и **Submit bug report** помогают собрать актуальные данные перед созданием GitHub issue.
 
-Приложите лог к [отчёту об ошибке](https://github.com/trudenboy/sendspin-bt-bridge/issues) вместе с:
-- Методом деплоя (Docker/HA/LXC)
-- Аудиосистемой (PipeWire/PulseAudio)
-- Версией из `/api/version`
+## В Home Assistant Supervisor нет интернета или не работают update checks на HAOS в Proxmox
 
-## Нет звука на armv7l (ARM 32-бит)
+В текущем HAOS-on-Proxmox окружении причина оказалась связана с **MTU/path behavior**, а не с настройкой TLS версии Supervisor. Установка MTU **1400** на сетевом интерфейсе VM восстановила Supervisor internet checks.
 
-**Симптом:** Bluetooth подключён, веб-интерфейс показывает «playing», но полная тишина. В логах ошибки `Audio worker is not running`.
+Если Supervisor пишет, что интернета нет, хотя в остальном сеть выглядит рабочей, сначала проверьте MTU VM/сети, а не TLS-параметры.
 
-**Причина:** PyAV 12.3.0 (единственная версия, компилирующаяся на armv7l) не имеет атрибута `AudioLayout.nb_channels`, который использует FLAC-декодер sendspin. Поток audio worker падает на первом FLAC-фрейме.
+## Нет звука на armv7l
 
-**Решение:** Обновитесь до v2.16.0+ — monkey-patch в `services/daemon_process.py` автоматически адаптирует FLAC-декодер для PyAV <13. Запустите скрипт обновления:
-
-```bash
-# Внутри LXC-контейнера
-bash <(wget -qO- https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/lxc/upgrade.sh)
-systemctl restart sendspin-client
-```
-
-**Проверка:** В логах не должно быть строк `Audio worker is not running` или `daemon stderr`:
-
-```bash
-journalctl -u sendspin-client --since "30 sec ago" | grep -E "Audio worker|daemon stderr"
-```
+Если Bluetooth подключается, UI показывает playback, но звука нет, обновитесь до релиза с PyAV compatibility patch. Старые сборки PyAV на armv7l не имеют layout-атрибута, который ожидает FLAC decoder.

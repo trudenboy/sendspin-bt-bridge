@@ -77,17 +77,21 @@ A Bluetooth bridge for [Music Assistant](https://www.music-assistant.io/) — co
 - **Group filter** — dropdown to show only devices from a specific MA syncgroup
 - **Diagnostics panel** — adapters, sinks, D-Bus, per-device state at a glance
 - **Log viewer** — browse / filter logs by severity with auto-refresh
-- **Configuration editor** — server address, devices, adapters, timezone — all editable in the UI
+- **Grid/list fleet views** — auto-switch to list view when more than 6 devices are visible, while remembering your manual choice
+- **Redesigned Configuration tabs** — General, Devices, Bluetooth, Music Assistant, and Security split the setup flow into task-focused cards
+- **Deep links into settings** — device/adapter gear buttons and empty-state CTAs jump to the exact configuration card and highlight the right row
 - **Config backup & restore** — download / upload config JSON from the web UI
 - **BT device info modal** — view device details with one-click copy
 - **Scan cooldown countdown** — visual timer showing when the next BT scan is available
+- **Update badge & modal** — check availability, read release notes, and trigger runtime-specific update actions
 - **Version badge → release notes** — click the version to open the GitHub release page
 - **Profile link** — clickable username links to MA or HA profile based on auth method
 
 ### 🔐 Security
 - **Password protection** — optional PBKDF2-SHA256 password for standalone mode
 - **HA 2FA login** — full HA login_flow with TOTP / MFA when running as addon
-- **Brute-force lockout** — 5 failed attempts → 5-minute IP lockout
+- **Session timeout** — configurable browser session lifetime for standalone auth
+- **Brute-force lockout** — 5 failed attempts → 5-minute IP lockout by default, with configurable window and duration
 
 ### 🚀 Deployment
 - **Four deployment options** — Home Assistant addon, Docker Compose, Proxmox LXC, OpenWrt LXC
@@ -126,7 +130,7 @@ Two bridge instances connected to one MA server — an HA addon on HAOS (4 speak
 | **OpenWrt LXC** | Turris Omnia (ARMv7), Ubuntu 24.04 | CSR8510 A10 USB | AfterShokz |
 
 Software: Python 3.12, BlueZ 5.72, PulseAudio 16.1, aiosendspin 4.3.2.
-All three instances run v2.28.2 against a single Music Assistant server with multiroom sync.
+The current test stand tracks the v2.31.x release line against a single Music Assistant server with multiroom sync.
 
 📖 [Full test stand details →](https://trudenboy.github.io/sendspin-bt-bridge/test-stand/)
 
@@ -421,14 +425,13 @@ Environment variables are overridden by values in `/config/config.json` if the f
 
 The web UI at `http://your-host:8080` (or via HA Ingress) provides:
 
-- **HA-aligned design**: CSS custom properties matching HA design tokens; automatic dark/light theme via `prefers-color-scheme`; live theme sync when opened inside HA Ingress
-- **Per-device cards**: Connection status, playback state, audio format (codec/rate/depth), sync status, volume slider, mute toggle
-- **Reconnect / Re-pair buttons**: Trigger manual reconnect or full re-pair without restarting
-- **Group controls**: Set volume or mute across all devices at once
-- **BT scan**: Scan for nearby audio devices and add them to config directly from the UI
-- **BT adapter panel**: View detected adapters, set adapter per device
-- **Configuration page**: Edit server address, add/remove Bluetooth devices, IANA timezone autocomplete
-- **System info**: IP address, hostname, uptime, audio sink status, per-player WebSocket URL
+- **Realtime fleet dashboard**: device cards or a sortable list view with live Bluetooth, playback, routing, sync, and MA status
+- **Remembered grid/list layout**: list view becomes the default when more than 6 devices are visible, and your manual choice is stored in the browser
+- **Task-focused Configuration tabs**: General, Devices, Bluetooth, Music Assistant, and Security keep editing flows short and predictable
+- **Device and adapter deep links**: settings gears and empty-state actions jump to the exact configuration card and highlight the relevant row
+- **Discovery workflows**: scan nearby devices, import already paired hardware, and respect the scan cooldown directly in the UI
+- **Diagnostics and Logs**: health summary, routing details, per-device runtime data, downloadable diagnostics, log filters, and runtime log-level switching
+- **Update and bug-report flows**: version badge, update modal, diagnostics download, and GitHub bug-report helpers
 
 ---
 

@@ -1,155 +1,121 @@
 ---
 title: Troubleshooting
-description: Solving common issues with Sendspin Bluetooth Bridge
+description: Solving common Sendspin Bluetooth Bridge problems in the current UI and deployment model
 ---
 
-## Audio plays from one speaker only
+## Audio plays from one speaker only after reconnect
 
-When a Bluetooth speaker disconnects and reconnects, PulseAudio's `module-rescue-streams` automatically moves all active audio streams to the default sink. On reconnect those streams don't return automatically.
+When a Bluetooth speaker disconnects and reconnects, PulseAudio may move active streams to the default sink. The bridge corrects this automatically on the next playback start, but if the issue repeats:
 
-**Self-healing**: the bridge corrects this automatically. On the next playback start after a reconnect, it detects any misrouted streams and moves them back to the correct speaker. You may see a brief log message like `Corrected 1 sink-input(s) to bluez_sink.XX_XX...`.
+1. Check logs for sink routing messages.
+2. Verify the expected Bluetooth sink exists.
+3. Restart playback after the reconnect has fully settled.
 
-If it keeps happening consistently:
-1. Check logs: `docker logs sendspin-client | grep -i "sink\|routing\|corrected"`
-2. Verify the BT sink is properly detected: `docker exec sendspin-client pactl list sinks short`
-3. Try restarting the container after the speaker reconnects
+## Music Assistant does not see the player
 
-## Music Assistant doesn't see the player
+Check these first:
 
-1. Sendspin provider is enabled in MA: Settings → Providers
-2. `SENDSPIN_SERVER` is correct (or `auto` mDNS works — requires `network_mode: host`)
-3. Check for errors: `docker logs sendspin-client | grep ERROR`
+1. The Sendspin provider is enabled in Music Assistant.
+2. `SENDSPIN_SERVER` points to the correct host, or `auto` discovery is allowed.
+3. The bridge logs do not show startup or bind errors.
+4. The per-device sendspin port is not already in use.
 
-## Bluetooth won't connect
+## Bluetooth does not connect
 
-1. Device is paired: `bluetoothctl devices` should show your MAC
-2. D-Bus is accessible: `/var/run/dbus` is mounted in the container
-3. Adapter is powered: `bluetoothctl show` → `Powered: yes`
+1. Confirm the speaker is paired at the host level.
+2. Confirm D-Bus is available to the bridge.
+3. Confirm the adapter is powered.
+4. Try **Re-pair** from the dashboard action menu.
 
-Re-pair via the **🔗 Re-pair** button in the web UI.
+If you use multiple adapters, double-check that the device row is bound to the correct adapter ID or MAC.
 
-```bash
-docker exec -it sendspin-client bluetoothctl show
-docker exec -it sendspin-client bluetoothctl devices
-```
+## "No sink" or silent playback
 
-## No audio (No Sink)
+**No sink** means Bluetooth is connected but the audio sink was not attached yet.
 
-**No Sink** means BT is connected but no PulseAudio/PipeWire sink was found.
-
-| Cause | Fix |
+| Cause | What to try |
 |---|---|
-| PulseAudio not running | `docker exec sendspin-client pactl info` |
-| Sink not yet initialized | Wait 5–10 s after BT connects |
-| Wrong audio socket UID | Set `AUDIO_UID` to your user's UID (`id -u`) |
-| A2DP profile not loaded | `pactl list cards` — check for `a2dp-sink` profile |
+| Audio server not running | Check `pactl info` |
+| Sink not ready yet | Wait a few seconds after BT connect |
+| Wrong user/socket mapping | Verify audio socket exposure |
+| Wrong profile | Check for an A2DP sink profile |
 
-## Audio stutters
+On slower systems, raise **PulseAudio latency (ms)** and consider **Prefer SBC codec**.
 
-1. Increase `PULSE_LATENCY_MSEC` (try 400–600)
-2. Enable `PREFER_SBC_CODEC: true`
-3. In MA set Audio Quality → PCM 44.1kHz/16-bit (eliminates FLAC decoding)
-4. Check CPU: `docker stats sendspin-client`
+## Scan finds nothing
 
-## Web UI doesn't open via HA
+If **Scan** returns no results:
 
-- Addon version must be ≥ 1.4.1 (HA Ingress fix)
-- Check browser console for CSS/JS 404 errors
+1. Put the speaker into pairing mode before starting the scan.
+2. Wait for the full background scan to finish.
+3. Check the on-screen error text in the discovery card.
+4. Retry only after the cooldown expires.
+5. Use the **Already paired** list if the host already knows the speaker.
 
-## BT scan returns no result
+## Empty state goes to the wrong place
 
-If the scan UI shows a job ID and keeps polling without results, or shows an error, check:
+The redesigned empty states should now jump directly to the correct configuration surface:
 
-1. The scan runs for ~10 s in the background — wait for it to complete before retrying
-2. If the error text is shown in the scan dialog, it contains the reason (e.g. `bluetoothctl timed out`)
-3. Verify bluetoothctl is accessible: `docker exec -it sendspin-client bluetoothctl list`
-4. Try restarting the container — a stale D-Bus session can block scanning
+- **Scan for devices** → **Configuration → Devices → Discovery & import**.
+- **Add adapter** → **Configuration → Bluetooth** with a blank adapter row ready.
 
-## Pause button for a device does not work
+If this does not happen, verify the web UI is updated to the latest release.
 
-The per-device pause button matches the player by `player_name` via D-Bus. If it has no effect:
+## Authentication problems
 
-1. Confirm the `player_name` in `config.json` exactly matches the name shown in the web UI (case-sensitive)
-2. Check that the sendspin process is running: `docker exec sendspin-client ps aux | grep sendspin`
-3. Check logs for D-Bus errors: `docker logs sendspin-client | grep -i "dbus\|pause"`
+### MFA / TOTP step fails
 
-## Authentication issues
+When Home Assistant requires MFA, the login page switches to a dedicated verification step. If the flow fails:
 
-### "Authentication service unavailable"
+1. Start from a fresh login page rather than an old bookmarked MFA step.
+2. Confirm the Home Assistant user can still complete login outside the bridge.
+3. Check whether the bridge session timeout is very short or the browser sat idle too long between password and TOTP entry.
 
-When using HA login via MA, the bridge requests a `login_flow` from Home Assistant. If the response contains an unexpected `flow_id` format, authentication will fail.
+### Local lockout triggered
 
-1. Ensure MA is connected: check the green "MA: Connected" badge in the header
-2. Verify HA is reachable from the bridge: `docker exec sendspin-client curl -s http://homeassistant:8123/api/ | head`
-3. Restart the bridge — the MA token may have expired
+By default, **5 failed attempts within 1 minute** triggers a **5 minute** lockout. These values are adjustable in **Configuration → Security**.
 
-### Brute-force lockout
+### Web UI has no auth
 
-After **5 failed login attempts**, the IP is locked out for **5 minutes**. This applies to all auth methods (MA, HA, Password).
+If you see the yellow warning banner, local auth is disabled. Use its shortcut to jump straight to **Configuration → Security** and enable protection.
 
-Wait 5 minutes, or restart the container to clear the lockout counter.
+## Mute or volume state does not match Music Assistant
 
-### MA token not obtained
+Check the **Music Assistant** configuration tab:
 
-If `MA_API_URL` is set but `MA_API_TOKEN` is empty:
-1. Use the "Sign in with Home Assistant" or "Sign in with Music Assistant" buttons in the Configuration section
-2. Check logs for `MA auth` messages: `docker logs sendspin-client | grep -i "ma auth\|token"`
-3. Verify the MA server URL is reachable from the bridge
+- **Route volume through MA** keeps MA sliders aligned with bridge changes.
+- **Route mute through MA** keeps mute state aligned with MA.
 
-## Mute not syncing
+If these toggles are off, the bridge uses direct PulseAudio control for faster local response but MA may not immediately reflect the same state.
 
-If muting in the web UI doesn't reflect in Music Assistant (or vice versa):
+## Save vs Save & Restart vs Cancel
 
-1. Check `MUTE_VIA_MA` setting in Configuration → Music Assistant Integration
-2. When `MUTE_VIA_MA` is **disabled** (default): mute goes directly to PulseAudio — instant but not visible in MA
-3. When `MUTE_VIA_MA` is **enabled**: mute is routed through MA API — synced with MA but may have slight delay
-4. Verify MA connection: the header should show "MA: Connected"
+If configuration changes seem inconsistent:
 
-## Restart phases explained
+- Use **Save** for changes that only need to persist.
+- Use **Save & Restart** when runtime components need to reconnect or reinitialize.
+- Use **Cancel** to discard unsaved edits and restore the last stored values in the form.
 
-When you click **Save & Restart**, the bridge performs a phased restart showing progress for each device:
+The header restart banner shows progress through save, stop, reconnect, and Music Assistant recovery phases.
 
-| Phase | Label | What happens |
-|---|---|---|
-| 1 | BT | Bluetooth reconnection |
-| 2 | PA | PulseAudio sink discovery |
-| 3 | SS | Sendspin subprocess start |
-| 4 | MA | Music Assistant sync |
+## Diagnostics and bug reports
 
-If a phase is stuck, check logs for errors related to that subsystem.
+Use **Diagnostics** when you need a quick answer about:
 
-## Collecting logs for a bug report
+- adapter detection,
+- sink routing,
+- Music Assistant health,
+- per-device runtime state,
+- subprocess and platform details.
 
-```bash
-# Docker
-docker logs sendspin-client > bridge.log 2>&1
+Use **Download diagnostics** or **Submit bug report** before opening a GitHub issue so you have current data attached.
 
-# LXC / systemd
-journalctl -u sendspin-client --no-pager > bridge.log
-```
+## Home Assistant Supervisor shows no internet or update checks fail on HAOS in Proxmox
 
-Include in your [bug report](https://github.com/trudenboy/sendspin-bt-bridge/issues):
-- Deployment method (Docker/HA/LXC)
-- Log output
-- Host OS, audio system (PipeWire/PulseAudio), Bluetooth adapter model
-- Version from `/api/version`
+In the current HAOS-on-Proxmox setup, the issue was traced to **MTU/path behavior**, not a Supervisor TLS-version setting. A VM NIC MTU of **1400** restored connectivity for the Supervisor internet checks.
 
-## No sound on armv7l (ARM 32-bit)
+If you see the Home Assistant Supervisor reporting no internet while the host otherwise looks healthy, inspect the VM/network MTU before chasing TLS settings.
 
-**Symptom:** Bluetooth connected, web UI shows "playing", but complete silence. Logs show `Audio worker is not running` errors.
+## No sound on armv7l
 
-**Cause:** PyAV 12.3.0 (the only version that compiles on armv7l) lacks the `AudioLayout.nb_channels` attribute that the sendspin FLAC decoder uses. The audio worker thread crashes on the first FLAC frame.
-
-**Fix:** Update to v2.16.0+ — a monkey-patch in `services/daemon_process.py` automatically adapts the FLAC decoder for PyAV <13. Run the upgrade script:
-
-```bash
-# Inside the LXC container
-bash <(wget -qO- https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/lxc/upgrade.sh)
-systemctl restart sendspin-client
-```
-
-**Verify:** Check logs — there should be zero `Audio worker is not running` or `daemon stderr` lines:
-
-```bash
-journalctl -u sendspin-client --since "30 sec ago" | grep -E "Audio worker|daemon stderr"
-```
+If Bluetooth connects and the UI shows playback but there is still silence on armv7l, update to a release that includes the PyAV compatibility patch. Older PyAV builds on armv7l are missing the layout attribute expected by the FLAC decoder.
