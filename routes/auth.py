@@ -624,6 +624,7 @@ def _handle_ha_direct_login(
             flow_id=flow_id,
             mfa_module_id=mfa_module_id,
             mfa_module_name=placeholders.get("mfa_module_name", "Authenticator app"),
+            csrf_token=_generate_csrf_token(),
         )
 
     _record_failure(client_ip)

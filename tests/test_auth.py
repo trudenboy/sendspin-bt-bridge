@@ -337,3 +337,68 @@ def test_csrf_token_in_get_response(csrf_client):
     resp = csrf_client.get("/login")
     assert resp.status_code == 200
     assert b'name="csrf_token"' in resp.data
+
+
+def test_ha_direct_mfa_step_preserves_csrf_and_completes_login(csrf_client):
+    """HA direct MFA flow should render a usable CSRF token for the TOTP step."""
+    flow_id = "123e4567-e89b-12d3-a456-426614174000"
+    with (
+        patch.dict("os.environ", {"SUPERVISOR_TOKEN": "abc"}, clear=False),
+        patch("routes.auth._ha_flow_start", return_value={"flow_id": flow_id}),
+        patch(
+            "routes.auth._ha_flow_step",
+            side_effect=[
+                {
+                    "type": "form",
+                    "step_id": "mfa",
+                    "description_placeholders": {
+                        "mfa_module_id": "totp",
+                        "mfa_module_name": "Authenticator app",
+                    },
+                },
+                {"type": "create_entry"},
+            ],
+        ),
+    ):
+        csrf_client.get("/login")
+        with csrf_client.session_transaction() as sess:
+            login_token = sess.get("csrf_token")
+        assert login_token is not None
+
+        resp = csrf_client.post(
+            "/login",
+            data={
+                "method": "ha",
+                "step": "credentials",
+                "username": "user@example.com",
+                "password": "secret",
+                "csrf_token": login_token,
+            },
+        )
+        assert resp.status_code == 200
+
+        with csrf_client.session_transaction() as sess:
+            mfa_token = sess.get("csrf_token")
+            assert sess.get("_ha_login_user") == "user@example.com"
+
+        assert mfa_token is not None
+        assert f'value="{mfa_token}"'.encode() in resp.data
+        assert b'name="flow_id" value="123e4567-e89b-12d3-a456-426614174000"' in resp.data
+
+        resp = csrf_client.post(
+            "/login?next=/",
+            data={
+                "method": "ha",
+                "step": "mfa",
+                "flow_id": flow_id,
+                "mfa_module_id": "totp",
+                "code": "123456",
+                "csrf_token": mfa_token,
+            },
+        )
+        assert resp.status_code == 302
+        assert resp.headers["Location"] == "/"
+
+        with csrf_client.session_transaction() as sess:
+            assert sess.get("authenticated") is True
+            assert sess.get("ha_user") == "user@example.com"

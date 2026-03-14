@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.31.7] - 2026-03-14
+
+### Fixed
+- **HA login with MFA/TOTP** — fixed the direct Home Assistant login flow so the second-step authenticator form now preserves a valid CSRF token; entering the TOTP code no longer fails with `Invalid session. Please try again.`
+- **Regression coverage** — added an auth test that exercises the full `credentials -> MFA -> success` flow to prevent the TOTP step from regressing again
+
 ## [2.31.6] - 2026-03-14
 
 ### Added

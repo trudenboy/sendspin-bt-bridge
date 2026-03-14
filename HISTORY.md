@@ -2,7 +2,15 @@
 
 A history of the architectural and functional evolution of sendspin-bt-bridge — for readers familiar with Home Assistant, Music Assistant, and multiroom audio setups.
 
-**Period:** January 1 – March 14, 2026 · **Total commits:** ~942 · **Versions:** 1.0.0 → 2.31.6
+**Period:** January 1 – March 14, 2026 · **Total commits:** ~943 · **Versions:** 1.0.0 → 2.31.7
+
+---
+
+## March 14, 2026 — MFA/TOTP login hotfix (v2.31.7)
+
+The `2.31.7` release is a focused auth hotfix shipped immediately after `2.31.6`. It fixes a regression in the direct Home Assistant login flow: when a user entered their TOTP code on the second MFA step, the bridge rendered that form without a valid CSRF token, so the verification POST was rejected as an invalid session.
+
+This release restores the intended HA login-flow behavior by preserving the CSRF token across the MFA step and adds a regression test that walks the full `username/password -> MFA -> successful sign-in` path. In practice, that means Home Assistant users can again complete sign-in normally when TOTP is enabled.
 
 ---
 
