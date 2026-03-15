@@ -1,0 +1,156 @@
+{
+  "clones": {
+    "2026-03-01T00:00:00Z": {
+      "count": 153,
+      "uniques": 83
+    },
+    "2026-03-02T00:00:00Z": {
+      "count": 260,
+      "uniques": 127
+    },
+    "2026-03-03T00:00:00Z": {
+      "count": 516,
+      "uniques": 215
+    },
+    "2026-03-04T00:00:00Z": {
+      "count": 309,
+      "uniques": 122
+    },
+    "2026-03-05T00:00:00Z": {
+      "count": 559,
+      "uniques": 218
+    },
+    "2026-03-06T00:00:00Z": {
+      "count": 270,
+      "uniques": 137
+    },
+    "2026-03-07T00:00:00Z": {
+      "count": 156,
+      "uniques": 77
+    },
+    "2026-03-08T00:00:00Z": {
+      "count": 173,
+      "uniques": 77
+    },
+    "2026-03-09T00:00:00Z": {
+      "count": 203,
+      "uniques": 68
+    },
+    "2026-03-10T00:00:00Z": {
+      "count": 464,
+      "uniques": 147
+    },
+    "2026-03-11T00:00:00Z": {
+      "count": 491,
+      "uniques": 152
+    },
+    "2026-03-12T00:00:00Z": {
+      "count": 348,
+      "uniques": 86
+    },
+    "2026-03-13T00:00:00Z": {
+      "count": 155,
+      "uniques": 47
+    },
+    "2026-03-14T00:00:00Z": {
+      "count": 70,
+      "uniques": 29
+    }
+  },
+  "views": {
+    "2026-03-01T00:00:00Z": {
+      "count": 0,
+      "uniques": 0
+    },
+    "2026-03-02T00:00:00Z": {
+      "count": 32,
+      "uniques": 6
+    },
+    "2026-03-03T00:00:00Z": {
+      "count": 18,
+      "uniques": 5
+    },
+    "2026-03-04T00:00:00Z": {
+      "count": 8,
+      "uniques": 1
+    },
+    "2026-03-05T00:00:00Z": {
+      "count": 5,
+      "uniques": 4
+    },
+    "2026-03-06T00:00:00Z": {
+      "count": 5,
+      "uniques": 2
+    },
+    "2026-03-07T00:00:00Z": {
+      "count": 17,
+      "uniques": 5
+    },
+    "2026-03-08T00:00:00Z": {
+      "count": 26,
+      "uniques": 10
+    },
+    "2026-03-09T00:00:00Z": {
+      "count": 21,
+      "uniques": 14
+    },
+    "2026-03-10T00:00:00Z": {
+      "count": 30,
+      "uniques": 14
+    },
+    "2026-03-11T00:00:00Z": {
+      "count": 32,
+      "uniques": 12
+    },
+    "2026-03-12T00:00:00Z": {
+      "count": 52,
+      "uniques": 21
+    },
+    "2026-03-13T00:00:00Z": {
+      "count": 35,
+      "uniques": 16
+    },
+    "2026-03-14T00:00:00Z": {
+      "count": 18,
+      "uniques": 12
+    }
+  },
+  "referrers": [
+    {
+      "referrer": "github.com",
+      "count": 89,
+      "uniques": 29
+    },
+    {
+      "referrer": "community.home-assistant.io",
+      "count": 38,
+      "uniques": 25
+    },
+    {
+      "referrer": "trudenboy.github.io",
+      "count": 3,
+      "uniques": 2
+    },
+    {
+      "referrer": "Google",
+      "count": 2,
+      "uniques": 2
+    },
+    {
+      "referrer": "DuckDuckGo",
+      "count": 2,
+      "uniques": 1
+    },
+    {
+      "referrer": "Bing",
+      "count": 1,
+      "uniques": 1
+    },
+    {
+      "referrer": "com.slack",
+      "count": 1,
+      "uniques": 1
+    }
+  ],
+  "last_updated": "2026-03-15T08:50:17.244Z"
+}
