@@ -11,36 +11,67 @@ permissions:
 jobs:
   archive:
     runs-on: ubuntu-latest
+    env:
+      TRAFFIC_METRICS_TOKEN: ${{ secrets.TRAFFIC_METRICS_TOKEN }}
     steps:
-      - name: Checkout traffic-data branch
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          ref: traffic-data
-          fetch-depth: 1
-        continue-on-error: true
+          fetch-depth: 0
 
-      - name: Initialize branch if needed
+      - name: Check traffic token
+        id: traffic-token
         run: |
-          if [ ! -d .git ]; then
-            git init
-            git remote add origin "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git"
-            git checkout -b traffic-data
+          if [ -z "${TRAFFIC_METRICS_TOKEN}" ]; then
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Skipping traffic archive because secret TRAFFIC_METRICS_TOKEN is not configured. Use a fine-grained PAT with Administration: read and Contents: write for this repository."
+          else
+            echo "available=true" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Switch to traffic-data branch
+        if: steps.traffic-token.outputs.available == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          if git ls-remote --exit-code --heads origin traffic-data >/dev/null 2>&1; then
+            git fetch origin traffic-data
+            git switch --track -C traffic-data origin/traffic-data
+          else
+            git switch --orphan traffic-data
+            git rm -rf . >/dev/null 2>&1 || true
+          fi
+
           mkdir -p traffic/clones traffic/views traffic/referrers
 
       - name: Fetch traffic data
+        if: steps.traffic-token.outputs.available == 'true'
         uses: actions/github-script@v7
         with:
+          github-token: ${{ env.TRAFFIC_METRICS_TOKEN }}
           script: |
             const fs = require('fs');
             const date = new Date().toISOString().split('T')[0];
             const [owner, repo] = process.env.GITHUB_REPOSITORY.split('/');
 
-            const [clones, views, referrers] = await Promise.all([
-              github.rest.repos.getClones({ owner, repo, per: 'day' }),
-              github.rest.repos.getViews({ owner, repo, per: 'day' }),
-              github.rest.repos.getTopReferrers({ owner, repo }),
-            ]);
+            let clones;
+            let views;
+            let referrers;
+            try {
+              [clones, views, referrers] = await Promise.all([
+                github.rest.repos.getClones({ owner, repo, per: 'day' }),
+                github.rest.repos.getViews({ owner, repo, per: 'day' }),
+                github.rest.repos.getTopReferrers({ owner, repo }),
+              ]);
+            } catch (error) {
+              if (error && error.status === 403) {
+                throw new Error(
+                  'GitHub Traffic API returned 403. TRAFFIC_METRICS_TOKEN must grant repository Administration: read access.'
+                );
+              }
+              throw error;
+            }
 
             fs.writeFileSync(
               `traffic/clones/${date}.json`,
@@ -86,13 +117,12 @@ jobs:
             console.log(`Referrers: ${referrers.data.length} sources`);
 
       - name: Commit and push
+        if: steps.traffic-token.outputs.available == 'true'
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add traffic/
           if git diff --staged --quiet; then
             echo "No changes to commit"
           else
             git commit -m "📊 Traffic data $(date -I)"
-            git push origin traffic-data
+            git push origin HEAD:traffic-data
           fi
