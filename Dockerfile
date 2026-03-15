@@ -1,6 +1,8 @@
 FROM python:3.12-slim AS builder
 
 ENV DEBIAN_FRONTEND=noninteractive
+ARG TARGETARCH
+ARG TARGETVARIANT
 
 # Build-time system dependencies (needed to compile dbus-python, portaudio bindings,
 # and PyAV on architectures without pre-built wheels)
@@ -27,7 +29,22 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt /tmp/
-RUN pip install --no-cache-dir --prefix=/install -r /tmp/requirements.txt
+RUN if [ "${TARGETARCH}${TARGETVARIANT}" = "armv7" ]; then \
+        grep -v '^sendspin' /tmp/requirements.txt > /tmp/requirements-armv7.txt && \
+        pip install --no-cache-dir --prefix=/install \
+            -r /tmp/requirements-armv7.txt \
+            "aiosendspin~=4.3" \
+            "aiosendspin-mpris~=2.1.1" \
+            "av==12.3.0" \
+            "numpy>=1.24.0" \
+            "qrcode>=8.0" \
+            "readchar>=4.0.0" \
+            "rich>=13.0.0" \
+            "sounddevice>=0.4.6" && \
+        pip install --no-cache-dir --prefix=/install --no-deps "sendspin>=5.3.0,<6.0.0"; \
+    else \
+        pip install --no-cache-dir --prefix=/install -r /tmp/requirements.txt; \
+    fi
 
 # ──────────────────────────────────────────────────────────────────────────────
 FROM python:3.12-slim
