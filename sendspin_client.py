@@ -135,6 +135,35 @@ class DeviceStatus:
         return {f.name: getattr(self, f.name) for f in fields(self) if f.name != "_field_names"}
 
 
+def _normalize_device_mac(mac: object) -> str:
+    """Return a canonical MAC string for config/runtime comparisons."""
+    return mac.strip().upper() if isinstance(mac, str) else ""
+
+
+def _filter_duplicate_bluetooth_devices(devices: list[dict]) -> list[dict]:
+    """Keep the first occurrence of each configured MAC and log duplicates loudly."""
+    unique_devices: list[dict] = []
+    first_player_by_mac: dict[str, str] = {}
+
+    for device in devices:
+        normalized = dict(device)
+        mac = _normalize_device_mac(normalized.get("mac"))
+        if mac:
+            normalized["mac"] = mac
+            if mac in first_player_by_mac:
+                logger.error(
+                    "Duplicate Bluetooth MAC %s for player '%s' — skipping duplicate; first occurrence belongs to '%s'",
+                    mac,
+                    normalized.get("player_name") or mac,
+                    first_player_by_mac[mac],
+                )
+                continue
+            first_player_by_mac[mac] = normalized.get("player_name") or mac
+        unique_devices.append(normalized)
+
+    return unique_devices
+
+
 class SendspinClient:
     """Per-device orchestrator for a single Bluetooth speaker.
 
@@ -199,7 +228,7 @@ class SendspinClient:
         self._start_sendspin_lock: asyncio.Lock | None = None  # set in run(), guards concurrent starts
         self._playing_since: float | None = None  # monotonic time when playing became True
         self._zombie_restart_count: int = 0  # consecutive zombie restarts (reset on real stream)
-        self._has_streamed: bool = False  # True after first audio_streaming=True in this subprocess
+        self._has_streamed: bool = False  # True after audio_streaming=True in the current play session
 
     def _update_status(self, updates: dict) -> None:
         """Thread-safe update of self.status; notifies SSE listeners."""
@@ -208,10 +237,12 @@ class SendspinClient:
             if "playing" in updates:
                 if updates["playing"] and not self.status.get("playing"):
                     self._playing_since = time.monotonic()
+                    self._has_streamed = False
                 elif not updates["playing"]:
                     self._playing_since = None
+                    self._has_streamed = False
                     self._zombie_restart_count = 0
-            # Mark that real audio has arrived in this subprocess session
+            # Mark that real audio has arrived in the current play session
             if updates.get("audio_streaming"):
                 self._has_streamed = True
                 self._zombie_restart_count = 0
@@ -286,8 +317,9 @@ class SendspinClient:
     def _check_zombie_playback(self) -> None:
         """Detect zombie state (playing=True, streaming=False) and schedule restart.
 
-        Only triggers when audio has NEVER arrived in this subprocess session.
-        If audio was streaming before (re-anchor, group resync, track change),
+        Only triggers when audio has NEVER arrived in the current play session.
+        If audio was streaming before within the same ongoing play session
+        (re-anchor, group resync, track change),
         PA buffers keep playing — this is normal, not a zombie.
         """
         need_restart = False
@@ -303,7 +335,7 @@ class SendspinClient:
             zombie_count = self._zombie_restart_count
             has_streamed = self._has_streamed
 
-            # Skip if audio has already streamed in this session —
+            # Skip if audio has already streamed in this play session —
             # brief gaps (re-anchor, track change) are normal.
             if has_streamed:
                 return
@@ -359,7 +391,7 @@ class SendspinClient:
             # Stop any existing subprocess first
             await self.stop_sendspin()
 
-            # Reset per-session tracking for new subprocess
+            # Reset play-session tracking for new subprocess
             self._has_streamed = False
 
             client_id = self.player_id
@@ -486,12 +518,12 @@ class SendspinClient:
                 if updates:
                     with self._status_lock:
                         prev_volume = self.status.get("volume")
-                        self.status.update(updates)
+                    self._update_status(updates)
+                    with self._status_lock:
                         new_volume = self.status.get("volume")
-                        volume_changed = (
-                            new_volume is not None and isinstance(new_volume, int) and new_volume != prev_volume
-                        )
-                    _state.notify_status_changed()
+                    volume_changed = (
+                        new_volume is not None and isinstance(new_volume, int) and new_volume != prev_volume
+                    )
                 _mac = self.bt_manager.mac_address if self.bt_manager else None
                 if volume_changed and _mac and isinstance(new_volume, int):
                     save_device_volume(_mac, new_volume)
@@ -793,7 +825,7 @@ async def main():
     if bt_churn_threshold > 0:
         logger.info("BT churn isolation: enabled (threshold=%d in %.0fs)", bt_churn_threshold, bt_churn_window)
 
-    bt_devices = config.get("BLUETOOTH_DEVICES", [])
+    bt_devices = _filter_duplicate_bluetooth_devices(config.get("BLUETOOTH_DEVICES", []))
 
     logger.info("Starting %s player instance(s)", len(bt_devices))
     if not bt_devices:

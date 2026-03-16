@@ -47,10 +47,13 @@ def test_load_handles_corrupted_json(tmp_path):
     from config import DEFAULT_CONFIG, load_config
 
     assert load_config() == DEFAULT_CONFIG
+    backups = sorted(tmp_path.glob("config.json.corrupt-*"))
+    assert len(backups) == 1
+    assert backups[0].read_text() == "{bad"
 
 
 def test_save_device_volume(tmp_path):
-    _write_config(tmp_path, {})
+    _write_config(tmp_path, {"BLUETOOTH_DEVICES": [{"mac": "AA:BB:CC:DD:EE:FF"}]})
     from config import save_device_volume
 
     save_device_volume("AA:BB:CC:DD:EE:FF", 75)
@@ -60,12 +63,29 @@ def test_save_device_volume(tmp_path):
 
 def test_save_volume_zero(tmp_path):
     """Regression: volume=0 must not be treated as falsy."""
-    _write_config(tmp_path, {})
+    _write_config(tmp_path, {"BLUETOOTH_DEVICES": [{"mac": "AA:BB:CC:DD:EE:FF"}]})
     from config import save_device_volume
 
     save_device_volume("AA:BB:CC:DD:EE:FF", 0)
     with open(tmp_path / "config.json") as f:
         assert json.load(f)["LAST_VOLUMES"]["AA:BB:CC:DD:EE:FF"] == 0
+
+
+def test_save_device_volume_skips_unknown_device(tmp_path):
+    _write_config(
+        tmp_path,
+        {
+            "BLUETOOTH_DEVICES": [{"mac": "11:22:33:44:55:66"}],
+            "LAST_VOLUMES": {"AA:BB:CC:DD:EE:FF": 40},
+        },
+    )
+    from config import save_device_volume
+
+    save_device_volume("AA:BB:CC:DD:EE:FF", 75)
+
+    with open(tmp_path / "config.json") as f:
+        saved = json.load(f)
+    assert saved["LAST_VOLUMES"] == {}
 
 
 def test_player_id_deterministic_and_case_insensitive():
@@ -94,6 +114,31 @@ def test_load_volume_via_ma(tmp_path):
     from config import load_config
 
     assert load_config()["VOLUME_VIA_MA"] is False
+
+
+def test_load_config_normalizes_types_and_prunes_orphan_volumes(tmp_path):
+    _write_config(
+        tmp_path,
+        {
+            "SENDSPIN_PORT": "9001",
+            "BT_CHECK_INTERVAL": "15",
+            "PREFER_SBC_CODEC": "true",
+            "BLUETOOTH_DEVICES": [{"mac": "aa:bb:cc:dd:ee:ff"}],
+            "LAST_VOLUMES": {
+                "AA:BB:CC:DD:EE:FF": 55,
+                "11:22:33:44:55:66": 80,
+            },
+        },
+    )
+    from config import load_config
+
+    loaded = load_config()
+
+    assert loaded["SENDSPIN_PORT"] == 9001
+    assert loaded["BT_CHECK_INTERVAL"] == 15
+    assert loaded["PREFER_SBC_CODEC"] is True
+    assert loaded["BLUETOOTH_DEVICES"][0]["mac"] == "AA:BB:CC:DD:EE:FF"
+    assert loaded["LAST_VOLUMES"] == {"AA:BB:CC:DD:EE:FF": 55}
 
 
 def test_update_config(tmp_path):

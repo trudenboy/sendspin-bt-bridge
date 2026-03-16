@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.31.10] - 2026-03-16
+
+### Changed
+- **Config/runtime consistency** — config loading now normalizes key runtime fields, canonicalizes device MACs, and prunes orphaned `LAST_VOLUMES` state so persisted values stay aligned with the current Bluetooth device list
+- **Diagnostics/documentation** — the web UI and README now explain degraded-state behavior for duplicate MACs, unresolved adapters, and corrupt config recovery
+
+### Fixed
+- **Adapter safety** — unresolved adapter lookup no longer guesses `hci0`; affected devices now skip D-Bus monitoring and fall back to bluetoothctl polling instead of targeting the wrong controller
+- **Duplicate device startup** — repeated Bluetooth MAC entries are filtered before runtime startup so one speaker cannot launch two competing bridge clients
+- **Zombie playback recovery** — zombie watchdog tracking now resets per playback session, restoring restart-based recovery after a previous successful stream
+- **Corrupt config + stale volume state** — corrupt `config.json` files are backed up as `config.json.corrupt-*`, and delayed volume persistence no longer writes values for removed devices
+
+### Added
+- **Regression coverage** — added focused tests for unresolved adapter fallback, duplicate MAC filtering, zombie watchdog session resets, corrupt config backup handling, and config/volume normalization edge cases
+
 ## [2.31.9] - 2026-03-16
 
 ### Changed

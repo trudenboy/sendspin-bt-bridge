@@ -81,12 +81,14 @@ def _force_sbc_codec(pa_mac: str) -> None:
         logger.debug("SBC codec force skipped: %s", e)
 
 
-def _dbus_get_device_property(device_path: str, property_name: str, adapter_hci: str = "hci0"):
+def _dbus_get_device_property(device_path: str | None, property_name: str, adapter_hci: str = "hci0"):
     """Read a single BlueZ Device1 property synchronously via dbus-python.
 
     Falls back to None on any error (D-Bus unavailable, device not registered, etc.).
     This is ~10× faster than spawning a bluetoothctl subprocess.
     """
+    if not device_path:
+        return None
     try:
         import dbus as _dbus
 
@@ -98,8 +100,10 @@ def _dbus_get_device_property(device_path: str, property_name: str, adapter_hci:
         return None
 
 
-def _dbus_get_battery_level(device_path: str) -> int | None:
+def _dbus_get_battery_level(device_path: str | None) -> int | None:
     """Read battery percentage via org.bluez.Battery1, or None if unsupported."""
+    if not device_path:
+        return None
     try:
         import dbus as _dbus
 
@@ -111,11 +115,13 @@ def _dbus_get_battery_level(device_path: str) -> int | None:
         return None
 
 
-def _dbus_call_device_method(device_path: str, method_name: str) -> bool:
+def _dbus_call_device_method(device_path: str | None, method_name: str) -> bool:
     """Call a BlueZ Device1 method synchronously via dbus-python.
 
     Returns True on success, False on error.
     """
+    if not device_path:
+        return False
     try:
         import dbus as _dbus
 
@@ -191,8 +197,18 @@ class BluetoothManager:
         self.adapter_hci_name = self._resolve_adapter_hci_name()
         # D-Bus device path: /org/bluez/<adapter>/dev_XX_XX_XX_XX_XX_XX
         _mac_dbus = self.mac_address.upper().replace(":", "_")
-        _hci = self.adapter_hci_name or "hci0"
-        self._dbus_device_path: str = f"/org/bluez/{_hci}/dev_{_mac_dbus}"
+        self._dbus_device_path: str | None = None
+        if self.adapter_hci_name:
+            self._dbus_device_path = f"/org/bluez/{self.adapter_hci_name}/dev_{_mac_dbus}"
+        else:
+            logger.warning(
+                "[%s] Could not resolve Bluetooth adapter to hciN for MAC %s (configured adapter=%s, effective adapter=%s); "
+                "D-Bus monitoring is disabled and bluetoothctl polling fallback will be used",
+                self.device_name,
+                self.mac_address,
+                self.adapter or "default",
+                self.effective_adapter_mac or "unknown",
+            )
         self.battery_level: int | None = None
 
     def shutdown(self) -> None:
@@ -848,6 +864,8 @@ class BluetoothManager:
         Raises RuntimeError after 3 consecutive connection failures so
         monitor_and_reconnect() can fall back to bluetoothctl polling.
         """
+        if not self._dbus_device_path:
+            raise RuntimeError("D-Bus device path unavailable because adapter resolution failed")
         loop = asyncio.get_running_loop()
         connect_failures = 0
         _MAX_CONNECT_FAILURES = 3

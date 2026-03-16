@@ -2,7 +2,22 @@
 
 A history of the architectural and functional evolution of sendspin-bt-bridge — for readers familiar with Home Assistant, Music Assistant, and multiroom audio setups.
 
-**Period:** January 1 – March 16, 2026 · **Total commits:** ~953 · **Versions:** 1.0.0 → 2.31.9
+**Period:** January 1 – March 16, 2026 · **Total commits:** ~955 · **Versions:** 1.0.0 → 2.31.10
+
+---
+
+## March 16, 2026 — Fail-safe runtime recovery and config hygiene (v2.31.10)
+
+The `2.31.10` release is the next stabilization step after `2.31.9`: same broad theme of “make the bridge safer at the edges,” but this time focused more directly on lifecycle correctness for real fleets — adapter targeting, duplicate device declarations, zombie playback recovery, and the long-term hygiene of persisted config state.
+
+Four practical themes define this release:
+
+- **Fail-safe adapter handling** — the bridge no longer guesses `hci0` when adapter resolution fails. That sounds small, but on multi-adapter systems it is the difference between “degraded but understandable” and “quietly talking to the wrong controller.” The new behavior disables D-Bus monitoring for that device and relies on the existing bluetoothctl polling fallback instead of manufacturing a wrong path.
+- **Safer startup identity** — duplicate Bluetooth MAC entries are now filtered before runtime objects are created. This protects the bridge from an easy configuration mistake that could otherwise launch two competing clients against one speaker, with all the usual side effects: conflicting reconnects, ambiguous sink ownership, and confusing UI state.
+- **Playback-session aware watchdogs** — zombie playback recovery now tracks the current play session instead of permanently considering a subprocess “safe” after its first successful stream. In practical terms, a speaker that successfully played once can still be auto-recovered later if it re-enters a “playing but silent” state.
+- **Config hygiene over time** — corrupt `config.json` files now leave behind a recovery copy (`config.json.corrupt-*`) before defaults are used, and stale `LAST_VOLUMES` state is pruned so removed devices do not keep dragging obsolete persistence forward.
+
+This is also a strengthening release for correctness rather than scope. Regression tests were added for unresolved adapter fallback, duplicate MAC filtering, zombie watchdog session resets, corrupt config backup handling, and config/volume normalization paths. `2.31.10` is therefore best read as a release about making the bridge fail more honestly, recover more predictably, and age more cleanly under real operator workflows.
 
 ---
 

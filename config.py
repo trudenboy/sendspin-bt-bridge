@@ -14,13 +14,15 @@ import json
 import logging
 import os
 import secrets as _secrets
+import shutil
 import socket as _socket
 import tempfile
 import threading
+import time
 import uuid as _uuid
 from pathlib import Path
 
-VERSION = "2.31.9"
+VERSION = "2.31.10"
 BUILD_DATE = "2026-03-16"
 
 __all__ = [
@@ -46,7 +48,10 @@ DEFAULT_CONFIG = {
     "SENDSPIN_PORT": 9000,
     "BRIDGE_NAME": "",
     "BLUETOOTH_DEVICES": [],
+    "BLUETOOTH_ADAPTERS": [],
     "TZ": "Australia/Melbourne",
+    "LAST_VOLUMES": {},
+    "LAST_SINKS": {},
     "PULSE_LATENCY_MSEC": 200,
     "PREFER_SBC_CODEC": False,
     "BT_CHECK_INTERVAL": 10,
@@ -77,6 +82,131 @@ logger = logging.getLogger(__name__)
 CONFIG_DIR = Path(os.getenv("CONFIG_DIR", "/config"))
 CONFIG_FILE = CONFIG_DIR / "config.json"
 config_lock = threading.Lock()  # serializes all config.json read-modify-write ops
+
+
+def _backup_corrupt_config() -> Path | None:
+    """Create a best-effort backup of a corrupt config file for later recovery."""
+    if not CONFIG_FILE.exists():
+        return None
+
+    backup_path = CONFIG_DIR / f"{CONFIG_FILE.name}.corrupt-{int(time.time())}"
+    try:
+        shutil.copy2(CONFIG_FILE, backup_path)
+        return backup_path
+    except OSError as exc:
+        logger.error("Could not back up corrupt config %s: %s", CONFIG_FILE, exc)
+        return None
+
+
+def _normalize_int_setting(
+    config: dict, key: str, *, min_value: int | None = None, max_value: int | None = None
+) -> None:
+    raw = config.get(key, DEFAULT_CONFIG[key])
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        logger.warning("Invalid %s value %r in config; using default %r", key, raw, DEFAULT_CONFIG[key])
+        config[key] = DEFAULT_CONFIG[key]
+        return
+    if (min_value is not None and value < min_value) or (max_value is not None and value > max_value):
+        logger.warning("Out-of-range %s value %r in config; using default %r", key, raw, DEFAULT_CONFIG[key])
+        config[key] = DEFAULT_CONFIG[key]
+        return
+    config[key] = value
+
+
+def _normalize_bool_setting(config: dict, key: str) -> None:
+    raw = config.get(key, DEFAULT_CONFIG[key])
+    if isinstance(raw, bool):
+        return
+    if isinstance(raw, str):
+        lowered = raw.strip().lower()
+        if lowered in {"1", "true", "yes", "on"}:
+            config[key] = True
+            return
+        if lowered in {"0", "false", "no", "off"}:
+            config[key] = False
+            return
+    logger.warning("Invalid %s value %r in config; using default %r", key, raw, DEFAULT_CONFIG[key])
+    config[key] = DEFAULT_CONFIG[key]
+
+
+def _normalize_bluetooth_devices(config: dict) -> list[dict]:
+    devices = config.get("BLUETOOTH_DEVICES", DEFAULT_CONFIG["BLUETOOTH_DEVICES"])
+    if not isinstance(devices, list):
+        logger.warning("Invalid BLUETOOTH_DEVICES value %r in config; using default []", devices)
+        return []
+
+    normalized_devices: list[dict] = []
+    for device in devices:
+        if not isinstance(device, dict):
+            logger.warning("Ignoring invalid Bluetooth device entry %r", device)
+            continue
+        normalized = dict(device)
+        mac = normalized.get("mac")
+        if isinstance(mac, str):
+            normalized["mac"] = mac.strip().upper()
+        normalized_devices.append(normalized)
+    return normalized_devices
+
+
+def _prune_last_volumes(config: dict) -> None:
+    last_volumes = config.get("LAST_VOLUMES", DEFAULT_CONFIG["LAST_VOLUMES"])
+    if not isinstance(last_volumes, dict):
+        logger.warning("Invalid LAST_VOLUMES value %r in config; using default {}", last_volumes)
+        config["LAST_VOLUMES"] = {}
+        return
+
+    configured_macs = {
+        device.get("mac")
+        for device in config.get("BLUETOOTH_DEVICES", [])
+        if isinstance(device, dict) and isinstance(device.get("mac"), str) and device.get("mac")
+    }
+    sanitized: dict[str, int] = {}
+    for mac, volume in last_volumes.items():
+        if mac not in configured_macs:
+            continue
+        if not isinstance(volume, int) or not 0 <= volume <= 100:
+            logger.warning("Ignoring invalid saved volume %r for %s", volume, mac)
+            continue
+        sanitized[mac] = volume
+    config["LAST_VOLUMES"] = sanitized
+
+
+def _normalize_loaded_config(config: dict) -> None:
+    config["BLUETOOTH_DEVICES"] = _normalize_bluetooth_devices(config)
+    _prune_last_volumes(config)
+
+    for key, min_value, max_value in (
+        ("SENDSPIN_PORT", 1, 65535),
+        ("PULSE_LATENCY_MSEC", 1, 5000),
+        ("BT_CHECK_INTERVAL", 1, 3600),
+        ("BT_MAX_RECONNECT_FAILS", 0, 1000),
+        ("SESSION_TIMEOUT_HOURS", 1, 168),
+        ("BRUTE_FORCE_MAX_ATTEMPTS", 1, 50),
+        ("BRUTE_FORCE_WINDOW_MINUTES", 1, 1440),
+        ("BRUTE_FORCE_LOCKOUT_MINUTES", 1, 1440),
+    ):
+        _normalize_int_setting(config, key, min_value=min_value, max_value=max_value)
+
+    for key in (
+        "PREFER_SBC_CODEC",
+        "AUTH_ENABLED",
+        "BRUTE_FORCE_PROTECTION",
+        "MA_WEBSOCKET_MONITOR",
+        "VOLUME_VIA_MA",
+        "MUTE_VIA_MA",
+        "SMOOTH_RESTART",
+        "AUTO_UPDATE",
+        "CHECK_UPDATES",
+    ):
+        _normalize_bool_setting(config, key)
+
+    for key in ("BLUETOOTH_ADAPTERS", "TRUSTED_PROXIES"):
+        value = config.get(key, DEFAULT_CONFIG.get(key, []))
+        if not isinstance(value, list):
+            logger.warning("Invalid %s value %r in config; using default []", key, value)
+            config[key] = []
 
 
 def update_config(mutator) -> None:
@@ -121,7 +251,18 @@ def save_device_volume(mac: str | None, volume: int) -> None:
         return
 
     def _set_vol(cfg: dict) -> None:
-        cfg.setdefault("LAST_VOLUMES", {})[mac] = volume
+        devices = cfg.get("BLUETOOTH_DEVICES", [])
+        known_macs = {
+            device.get("mac", "").strip().upper()
+            for device in devices
+            if isinstance(device, dict) and isinstance(device.get("mac"), str)
+        }
+        normalized_mac = mac.strip().upper()
+        if normalized_mac not in known_macs:
+            cfg.setdefault("LAST_VOLUMES", {}).pop(normalized_mac, None)
+            logger.warning("Skipping saved volume for unknown Bluetooth device %s", normalized_mac)
+            return
+        cfg.setdefault("LAST_VOLUMES", {})[normalized_mac] = volume
 
     try:
         update_config(_set_vol)
@@ -209,7 +350,19 @@ def load_config() -> dict:
                 _needs_migration = True
 
             logger.info("Loaded config from %s", CONFIG_FILE)
-        except (OSError, json.JSONDecodeError, ValueError) as e:
+        except json.JSONDecodeError as e:
+            backup_path = _backup_corrupt_config()
+            if backup_path is not None:
+                logger.error(
+                    "Config file %s is corrupted (%s); backup saved to %s; using defaults",
+                    CONFIG_FILE,
+                    e,
+                    backup_path,
+                )
+            else:
+                logger.error("Config file %s is corrupted (%s); using defaults", CONFIG_FILE, e)
+            _needs_migration = False
+        except (OSError, ValueError) as e:
             logger.warning("Error loading config: %s, using defaults", e)
             _needs_migration = False
 
@@ -229,6 +382,7 @@ def load_config() -> dict:
     else:
         logger.info("Config file not found at %s, using defaults", CONFIG_FILE)
 
+    _normalize_loaded_config(result)
     return result
 
 

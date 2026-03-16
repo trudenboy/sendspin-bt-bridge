@@ -405,6 +405,8 @@ The `adapter` field is optional — omit it if you only have one Bluetooth adapt
 
 Most configuration changes are written to `config.json` immediately, but Bluetooth topology changes (devices/adapters), MA connection settings, listen ports, and latency values still require a service restart to take effect. Runtime toggles such as `LOG_LEVEL` and password/auth updates apply immediately.
 
+If the bridge cannot resolve an adapter to a real `hciN`, it now refuses to guess and falls back to bluetoothctl polling instead of silently targeting `hci0`. Duplicate Bluetooth MACs are also ignored after the first occurrence, and a corrupt `config.json` is backed up as `config.json.corrupt-*` before defaults are used.
+
 ### Environment Variables
 
 | Variable | Default | Description |

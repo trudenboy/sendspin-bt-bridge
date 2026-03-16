@@ -124,6 +124,28 @@ def test_device_name_fallback():
     assert mgr.device_name == "11:22:33:44:55:66"
 
 
+def test_unresolved_adapter_disables_dbus_path():
+    """When adapter resolution fails, D-Bus path should remain unavailable."""
+    from bluetooth_manager import BluetoothManager
+
+    with (
+        patch.object(BluetoothManager, "_detect_default_adapter_mac", return_value=""),
+        patch("subprocess.check_output", return_value=""),
+    ):
+        mgr = BluetoothManager(mac_address="AA:BB:CC:DD:EE:FF", device_name="TestSpeaker")
+
+    assert mgr.adapter_hci_name == ""
+    assert mgr._dbus_device_path is None
+
+
+@pytest.mark.asyncio
+async def test_monitor_dbus_raises_when_device_path_unavailable(bt_manager):
+    bt_manager._dbus_device_path = None
+
+    with pytest.raises(RuntimeError, match="adapter resolution failed"):
+        await bt_manager._monitor_dbus(None, None)
+
+
 def test_record_reconnect_prunes_old_entries(bt_manager):
     """Only reconnects inside the churn window should be retained."""
     bt_manager._CHURN_WINDOW = 10

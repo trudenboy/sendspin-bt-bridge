@@ -136,6 +136,22 @@ def _build_config_get_response():
     return jsonify(config)
 
 
+def _normalize_device_mac(raw_mac) -> str:
+    """Return a canonical MAC string for config payload validation."""
+    return str(raw_mac or "").strip().upper()
+
+
+def _sanitize_last_volumes(last_volumes, valid_macs: set[str]) -> dict[str, int]:
+    """Keep saved per-device volumes only for currently configured devices."""
+    if not isinstance(last_volumes, dict):
+        return {}
+    return {
+        mac: volume
+        for mac, volume in last_volumes.items()
+        if mac in valid_macs and isinstance(volume, int) and 0 <= volume <= 100
+    }
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -371,7 +387,9 @@ def api_config():
     for dev in bt_devices:
         if not isinstance(dev, dict):
             return _error_response("Each device must be an object")
-        mac = str(dev.get("mac", ""))
+        mac = _normalize_device_mac(dev.get("mac"))
+        if mac:
+            dev["mac"] = mac
         if mac and not _MAC_RE.match(mac):
             return _error_response(f"Invalid MAC address: {mac}")
         try:
@@ -526,11 +544,14 @@ def api_config():
                 _bt_remove_device(mac, adapter_mac)
 
         default_vol = config.pop("_new_device_default_volume", None)
+        last_volumes = config.setdefault("LAST_VOLUMES", existing.get("LAST_VOLUMES", {}))
+        if not isinstance(last_volumes, dict):
+            last_volumes = {}
         if default_vol is not None:
-            last_volumes = config.setdefault("LAST_VOLUMES", existing.get("LAST_VOLUMES", {}))
             for mac in new_devices:
                 if mac and mac not in last_volumes:
                     last_volumes[mac] = default_vol
+        config["LAST_VOLUMES"] = _sanitize_last_volumes(last_volumes, set(new_devices))
 
         tmp = str(CONFIG_FILE) + ".tmp"
         try:

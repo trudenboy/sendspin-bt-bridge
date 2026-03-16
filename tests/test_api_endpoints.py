@@ -260,6 +260,62 @@ def test_api_config_post_normalizes_numeric_strings(client, tmp_path, monkeypatc
     assert saved["BLUETOOTH_DEVICES"][0]["keepalive_interval"] == 60
 
 
+def test_api_config_post_prunes_last_volumes_for_removed_devices(client, tmp_path, monkeypatch):
+    import routes.api_config as api_config_mod
+
+    monkeypatch.setattr(api_config_mod, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(api_config_mod, "CONFIG_FILE", tmp_path / "config.json")
+    (tmp_path / "config.json").write_text(
+        json.dumps(
+            {
+                "BLUETOOTH_DEVICES": [
+                    {"mac": "AA:BB:CC:DD:EE:FF", "player_name": "Kitchen"},
+                    {"mac": "11:22:33:44:55:66", "player_name": "Office"},
+                ],
+                "LAST_VOLUMES": {
+                    "AA:BB:CC:DD:EE:FF": 60,
+                    "11:22:33:44:55:66": 40,
+                },
+            }
+        )
+    )
+    payload = {
+        "SENDSPIN_SERVER": "auto",
+        "SENDSPIN_PORT": 9001,
+        "BRIDGE_NAME": "Bridge",
+        "BLUETOOTH_DEVICES": [{"mac": "aa:bb:cc:dd:ee:ff", "player_name": "Kitchen"}],
+        "BLUETOOTH_ADAPTERS": [],
+        "TZ": "UTC",
+        "PULSE_LATENCY_MSEC": 250,
+        "PREFER_SBC_CODEC": False,
+        "BT_CHECK_INTERVAL": 15,
+        "BT_MAX_RECONNECT_FAILS": 3,
+        "AUTH_ENABLED": False,
+        "SESSION_TIMEOUT_HOURS": 12,
+        "BRUTE_FORCE_PROTECTION": True,
+        "BRUTE_FORCE_MAX_ATTEMPTS": 4,
+        "BRUTE_FORCE_WINDOW_MINUTES": 2,
+        "BRUTE_FORCE_LOCKOUT_MINUTES": 10,
+        "LOG_LEVEL": "INFO",
+        "MA_API_URL": "",
+        "MA_API_TOKEN": "",
+        "MA_USERNAME": "",
+        "MA_WEBSOCKET_MONITOR": False,
+        "VOLUME_VIA_MA": True,
+        "MUTE_VIA_MA": False,
+        "SMOOTH_RESTART": True,
+        "AUTO_UPDATE": False,
+        "CHECK_UPDATES": True,
+    }
+
+    resp = client.post("/api/config", data=json.dumps(payload), content_type="application/json")
+
+    assert resp.status_code == 200
+    saved = json.loads((tmp_path / "config.json").read_text())
+    assert saved["BLUETOOTH_DEVICES"][0]["mac"] == "AA:BB:CC:DD:EE:FF"
+    assert saved["LAST_VOLUMES"] == {"AA:BB:CC:DD:EE:FF": 60}
+
+
 def test_api_config_download_redacts_sensitive_tokens(client, tmp_path, monkeypatch):
     """GET /api/config/download must not leak secrets in the exported JSON."""
     import routes.api_config as api_config_mod
