@@ -2,7 +2,22 @@
 
 A history of the architectural and functional evolution of sendspin-bt-bridge — for readers familiar with Home Assistant, Music Assistant, and multiroom audio setups.
 
-**Period:** January 1 – March 14, 2026 · **Total commits:** ~946 · **Versions:** 1.0.0 → 2.31.8
+**Period:** January 1 – March 16, 2026 · **Total commits:** ~953 · **Versions:** 1.0.0 → 2.31.9
+
+---
+
+## March 16, 2026 — Runtime hardening and release-safety pass (v2.31.9)
+
+The `2.31.9` release is a classic stabilization follow-up: no new flagship feature, but a concentrated pass over the places where a mature bridge most often fails in practice — diagnostics against messy host output, config export safety, shutdown races, and Bluetooth reconnect bookkeeping. It is the release that makes the already-expanded UI/configuration surface safer to operate and easier to trust.
+
+Four threads define this release:
+
+- **Defensive diagnostics** — parsers that read `pactl`, `bluetoothctl`, and `/proc/meminfo` no longer assume perfectly shaped output. Instead of letting one truncated line crash a diagnostics/preflight path, the bridge now degrades gracefully and keeps the endpoint usable.
+- **Safer config handling** — downloading `config.json` from the web UI now produces a share-safe export with password hashes, secret keys, and MA tokens removed. At the same time, the config-save path normalizes known numeric fields before writing them back, reducing long-term drift between UI input types and on-disk types.
+- **Cleaner runtime edges** — subprocess command delivery now snapshots the daemon handle before use, and graceful shutdown works from a stable client snapshot instead of iterating a live shared list. These are small code changes with outsized impact on “hard to reproduce” restart/shutdown bugs.
+- **Reconnect-churn reliability** — Bluetooth reconnect timestamps are now synchronized behind a lock, so churn pruning and threshold checks operate on one coherent window instead of racing with each other.
+
+This is also a test-strengthening release. Focused regression tests were added for defensive diagnostics parsing, config export redaction, numeric normalization, subprocess TOCTOU handling, and Bluetooth churn isolation. In other words, `2.31.9` is less about expanding scope and more about making the bridge's operational edges production-friendlier.
 
 ---
 

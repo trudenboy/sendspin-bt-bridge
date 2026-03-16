@@ -5,6 +5,8 @@ Routes for reading/writing config, password management, log level,
 service logs, and version info.
 """
 
+from __future__ import annotations
+
 import asyncio
 import functools
 import json
@@ -67,6 +69,71 @@ def get_volume_via_ma() -> bool:
 def get_mute_via_ma() -> bool:
     """Return the cached MUTE_VIA_MA flag for use by other modules."""
     return _mute_via_ma
+
+
+_DOWNLOAD_REDACTED_KEYS = (
+    "AUTH_PASSWORD_HASH",
+    "SECRET_KEY",
+    "MA_API_TOKEN",
+    "MA_ACCESS_TOKEN",
+    "MA_REFRESH_TOKEN",
+)
+
+
+def _sanitize_download_config(config: dict) -> dict:
+    """Return a copy of config safe for export/download sharing."""
+    sanitized = dict(config)
+    for key in _DOWNLOAD_REDACTED_KEYS:
+        sanitized.pop(key, None)
+    return sanitized
+
+
+def _error_response(message: str, status: int = 400):
+    """Return a consistent JSON error payload."""
+    return jsonify({"error": message}), status
+
+
+def _parse_optional_int(
+    raw, field_name: str, *, min_value: int | None = None, max_value: int | None = None
+) -> int | None:
+    """Parse an optional integer field and validate inclusive bounds."""
+    if raw is None or raw == "":
+        return None
+    try:
+        value = int(raw)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Invalid {field_name}: {raw}") from exc
+    if min_value is not None and value < min_value:
+        raise ValueError(f"Invalid {field_name}: {raw}")
+    if max_value is not None and value > max_value:
+        raise ValueError(f"Invalid {field_name}: {raw}")
+    return value
+
+
+def _build_config_get_response():
+    """Return the current config payload for the web UI."""
+    config = load_config()
+
+    # Never expose secrets to the browser — but indicate whether password is set
+    has_password = bool(config.get("AUTH_PASSWORD_HASH"))
+    config.pop("AUTH_PASSWORD_HASH", None)
+    config.pop("SECRET_KEY", None)
+    config["_password_set"] = has_password
+
+    # Enrich BLUETOOTH_DEVICES with resolved listen_port / listen_host from running clients
+    with _clients_lock:
+        snapshot = list(_clients)
+    client_map = {getattr(c, "player_name", None): c for c in snapshot}
+    mac_map = {getattr(getattr(c, "bt_manager", None), "mac_address", None): c for c in snapshot}
+    for dev in config.get("BLUETOOTH_DEVICES", []):
+        client = client_map.get(dev.get("player_name")) or mac_map.get(dev.get("mac"))
+        if client:
+            if "listen_port" not in dev or not dev["listen_port"]:
+                dev["listen_port"] = getattr(client, "listen_port", None)
+            if "listen_host" not in dev or not dev["listen_host"]:
+                dev["listen_host"] = getattr(client, "listen_host", None) or client.status.get("ip_address")
+
+    return jsonify(config)
 
 
 # ---------------------------------------------------------------------------
@@ -158,12 +225,12 @@ def _sync_ha_options(config: dict) -> None:
 
 @config_bp.route("/api/config/download")
 def api_config_download():
-    """Download the raw config.json file."""
+    """Download a share-safe config export with sensitive tokens removed."""
     if not CONFIG_FILE.exists():
-        return jsonify({"error": "No config file found"}), 404
+        return _error_response("No config file found", 404)
     with config_lock, open(CONFIG_FILE) as f:
         config = json.load(f)
-    raw = json.dumps(config, indent=2)
+    raw = json.dumps(_sanitize_download_config(config), indent=2)
     bridge_name = config.get("BRIDGE_NAME", "").strip() or "Bridge"
     bridge_name = bridge_name.replace(" ", "_")
     ts = datetime.now(tz=timezone.utc).strftime("%Y%m%d_%H%M%S")
@@ -175,7 +242,13 @@ def api_config_download():
     )
 
 
-_PRESERVED_KEYS = ("AUTH_PASSWORD_HASH", "SECRET_KEY", "MA_ACCESS_TOKEN", "MA_REFRESH_TOKEN")
+_PRESERVED_KEYS = (
+    "AUTH_PASSWORD_HASH",
+    "SECRET_KEY",
+    "MA_API_TOKEN",
+    "MA_ACCESS_TOKEN",
+    "MA_REFRESH_TOKEN",
+)
 
 
 @config_bp.route("/api/config/upload", methods=["POST"])
@@ -186,34 +259,34 @@ def api_config_upload():
     """
     f = request.files.get("file")
     if not f:
-        return jsonify({"error": "No file uploaded"}), 400
+        return _error_response("No file uploaded")
 
     _MAX_CONFIG_SIZE = 1_000_000  # 1 MB
     try:
         raw = f.read(_MAX_CONFIG_SIZE + 1)
         if len(raw) > _MAX_CONFIG_SIZE:
-            return jsonify({"error": "Config file too large (max 1 MB)"}), 413
+            return _error_response("Config file too large (max 1 MB)", 413)
         uploaded = json.loads(raw)
     except (json.JSONDecodeError, UnicodeDecodeError) as exc:
-        return jsonify({"error": f"Invalid JSON: {exc}"}), 400
+        return _error_response(f"Invalid JSON: {exc}")
 
     if not isinstance(uploaded, dict):
-        return jsonify({"error": "Config must be a JSON object"}), 400
+        return _error_response("Config must be a JSON object")
 
     # Basic validation — devices and adapters
     bt_devices = uploaded.get("BLUETOOTH_DEVICES", [])
     if not isinstance(bt_devices, list):
-        return jsonify({"error": "BLUETOOTH_DEVICES must be an array"}), 400
+        return _error_response("BLUETOOTH_DEVICES must be an array")
     for dev in bt_devices:
         if not isinstance(dev, dict):
-            return jsonify({"error": "Each device must be an object"}), 400
+            return _error_response("Each device must be an object")
         mac = str(dev.get("mac", ""))
         if mac and not _MAC_RE.match(mac):
-            return jsonify({"error": f"Invalid MAC address: {mac}"}), 400
+            return _error_response(f"Invalid MAC address: {mac}")
 
     bt_adapters = uploaded.get("BLUETOOTH_ADAPTERS", [])
     if not isinstance(bt_adapters, list):
-        return jsonify({"error": "BLUETOOTH_ADAPTERS must be an array"}), 400
+        return _error_response("BLUETOOTH_ADAPTERS must be an array")
 
     sp = uploaded.get("SENDSPIN_PORT")
     if sp is not None and sp != "":
@@ -222,7 +295,7 @@ def api_config_upload():
             if not (1 <= sp_int <= 65535):
                 raise ValueError
         except (ValueError, TypeError):
-            return jsonify({"error": f"Invalid SENDSPIN_PORT: {sp}"}), 400
+            return _error_response(f"Invalid SENDSPIN_PORT: {sp}")
 
     # Preserve sensitive keys from existing config
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
@@ -263,39 +336,18 @@ def api_config_upload():
 def api_config():
     """Read or write the service configuration."""
     if request.method == "GET":
-        config = load_config()
-
-        # Never expose secrets to the browser — but indicate whether password is set
-        has_password = bool(config.get("AUTH_PASSWORD_HASH"))
-        config.pop("AUTH_PASSWORD_HASH", None)
-        config.pop("SECRET_KEY", None)
-        config["_password_set"] = has_password
-
-        # Enrich BLUETOOTH_DEVICES with resolved listen_port / listen_host from running clients
-        with _clients_lock:
-            snapshot = list(_clients)
-        client_map = {getattr(c, "player_name", None): c for c in snapshot}
-        mac_map = {getattr(getattr(c, "bt_manager", None), "mac_address", None): c for c in snapshot}
-        for dev in config.get("BLUETOOTH_DEVICES", []):
-            client = client_map.get(dev.get("player_name")) or mac_map.get(dev.get("mac"))
-            if client:
-                if "listen_port" not in dev or not dev["listen_port"]:
-                    dev["listen_port"] = getattr(client, "listen_port", None)
-                if "listen_host" not in dev or not dev["listen_host"]:
-                    dev["listen_host"] = getattr(client, "listen_host", None) or client.status.get("ip_address")
-
-        return jsonify(config)
+        return _build_config_get_response()
 
     # POST
     config = request.get_json()
     if not isinstance(config, dict):
-        return jsonify({"error": "Invalid JSON body"}), 400
+        return _error_response("Invalid JSON body")
 
     # Validate top-level string fields
     for str_key in ("SENDSPIN_SERVER", "BRIDGE_NAME", "TZ", "LOG_LEVEL"):
         val = config.get(str_key)
         if val is not None and not isinstance(val, str):
-            return jsonify({"error": f"{str_key} must be a string"}), 400
+            return _error_response(f"{str_key} must be a string")
 
     for bool_key in (
         "PREFER_SBC_CODEC",
@@ -310,73 +362,75 @@ def api_config():
     ):
         val = config.get(bool_key)
         if val is not None and not isinstance(val, bool):
-            return jsonify({"error": f"{bool_key} must be true or false"}), 400
+            return _error_response(f"{bool_key} must be true or false")
 
     # Validate BLUETOOTH_DEVICES entries
     bt_devices = config.get("BLUETOOTH_DEVICES", [])
     if not isinstance(bt_devices, list):
-        return jsonify({"error": "BLUETOOTH_DEVICES must be an array"}), 400
+        return _error_response("BLUETOOTH_DEVICES must be an array")
     for dev in bt_devices:
         if not isinstance(dev, dict):
-            return jsonify({"error": "Each device must be an object"}), 400
+            return _error_response("Each device must be an object")
         mac = str(dev.get("mac", ""))
         if mac and not _MAC_RE.match(mac):
-            return jsonify({"error": f"Invalid MAC address: {mac}"}), 400
-        lp = dev.get("listen_port")
-        if lp is not None:
-            try:
-                lp = int(lp)
-                if not (1024 <= lp <= 65535):
-                    raise ValueError
-            except (ValueError, TypeError):
-                return jsonify({"error": f"Invalid listen_port: {dev.get('listen_port')}"}), 400
-        ki = dev.get("keepalive_interval")
-        if ki is not None:
-            try:
-                ki = int(ki)
-                if ki != 0 and not (30 <= ki <= 3600):
-                    raise ValueError
-            except (ValueError, TypeError):
-                return jsonify(
-                    {"error": f"Invalid keepalive_interval: {dev.get('keepalive_interval')} (must be 0 or 30-3600)"}
-                ), 400
+            return _error_response(f"Invalid MAC address: {mac}")
+        try:
+            listen_port = _parse_optional_int(dev.get("listen_port"), "listen_port", min_value=1024, max_value=65535)
+            if listen_port is not None:
+                dev["listen_port"] = listen_port
+            keepalive_interval = _parse_optional_int(
+                dev.get("keepalive_interval"), "keepalive_interval", min_value=0, max_value=3600
+            )
+            if keepalive_interval is not None:
+                if keepalive_interval != 0 and keepalive_interval < 30:
+                    raise ValueError(
+                        f"Invalid keepalive_interval: {dev.get('keepalive_interval')} (must be 0 or 30-3600)"
+                    )
+                dev["keepalive_interval"] = keepalive_interval
+        except ValueError as exc:
+            return _error_response(str(exc))
 
     # Validate BLUETOOTH_ADAPTERS entries
     bt_adapters = config.get("BLUETOOTH_ADAPTERS", [])
     if not isinstance(bt_adapters, list):
-        return jsonify({"error": "BLUETOOTH_ADAPTERS must be an array"}), 400
+        return _error_response("BLUETOOTH_ADAPTERS must be an array")
     for adp in bt_adapters:
         if not isinstance(adp, dict):
-            return jsonify({"error": "Each adapter must be an object"}), 400
+            return _error_response("Each adapter must be an object")
         amac = str(adp.get("mac", ""))
         if amac and not _MAC_RE.match(amac):
-            return jsonify({"error": f"Invalid adapter MAC address: {amac}"}), 400
+            return _error_response(f"Invalid adapter MAC address: {amac}")
 
-    # Validate top-level port (empty string treated as unset)
-    sp = config.get("SENDSPIN_PORT")
-    if sp is not None and sp != "":
-        try:
-            sp = int(sp)
-            if not (1 <= sp <= 65535):
-                raise ValueError
-        except (ValueError, TypeError):
-            return jsonify({"error": f"Invalid SENDSPIN_PORT: {config.get('SENDSPIN_PORT')}"}), 400
-
-    for int_key, min_val, max_val in (
-        ("SESSION_TIMEOUT_HOURS", 1, 168),
-        ("BRUTE_FORCE_MAX_ATTEMPTS", 1, 50),
-        ("BRUTE_FORCE_WINDOW_MINUTES", 1, 1440),
-        ("BRUTE_FORCE_LOCKOUT_MINUTES", 1, 1440),
-    ):
-        raw = config.get(int_key)
-        if raw is None or raw == "":
-            continue
-        try:
-            value = int(raw)
-            if not (min_val <= value <= max_val):
-                raise ValueError
-        except (ValueError, TypeError):
-            return jsonify({"error": f"Invalid {int_key}: {raw}"}), 400
+    try:
+        sendspin_port = _parse_optional_int(config.get("SENDSPIN_PORT"), "SENDSPIN_PORT", min_value=1, max_value=65535)
+        if sendspin_port is not None:
+            config["SENDSPIN_PORT"] = sendspin_port
+        pulse_latency = _parse_optional_int(
+            config.get("PULSE_LATENCY_MSEC"), "PULSE_LATENCY_MSEC", min_value=1, max_value=5000
+        )
+        if pulse_latency is not None:
+            config["PULSE_LATENCY_MSEC"] = pulse_latency
+        bt_check_interval = _parse_optional_int(
+            config.get("BT_CHECK_INTERVAL"), "BT_CHECK_INTERVAL", min_value=1, max_value=3600
+        )
+        if bt_check_interval is not None:
+            config["BT_CHECK_INTERVAL"] = bt_check_interval
+        bt_max_reconnect_fails = _parse_optional_int(
+            config.get("BT_MAX_RECONNECT_FAILS"), "BT_MAX_RECONNECT_FAILS", min_value=0, max_value=1000
+        )
+        if bt_max_reconnect_fails is not None:
+            config["BT_MAX_RECONNECT_FAILS"] = bt_max_reconnect_fails
+        for int_key, min_val, max_val in (
+            ("SESSION_TIMEOUT_HOURS", 1, 168),
+            ("BRUTE_FORCE_MAX_ATTEMPTS", 1, 50),
+            ("BRUTE_FORCE_WINDOW_MINUTES", 1, 1440),
+            ("BRUTE_FORCE_LOCKOUT_MINUTES", 1, 1440),
+        ):
+            value = _parse_optional_int(config.get(int_key), int_key, min_value=min_val, max_value=max_val)
+            if value is not None:
+                config[int_key] = value
+    except ValueError as exc:
+        return _error_response(str(exc))
 
     # Strip unknown top-level keys (whitelist)
     _ALLOWED_POST_KEYS = {
@@ -421,7 +475,7 @@ def api_config():
             except Exception:
                 pass
         if not has_hash:
-            return jsonify({"error": "Set a password before enabling authentication"}), 400
+            return _error_response("Set a password before enabling authentication")
 
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     with config_lock:

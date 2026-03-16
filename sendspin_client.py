@@ -511,10 +511,12 @@ class SendspinClient:
 
     async def _send_subprocess_command(self, cmd: dict) -> None:
         """Write a JSON command to the daemon subprocess stdin."""
-        if self._daemon_proc and self._daemon_proc.stdin and self._daemon_proc.returncode is None:
+        proc = self._daemon_proc
+        stdin = proc.stdin if proc else None
+        if proc and stdin and proc.returncode is None:
             try:
-                self._daemon_proc.stdin.write((json.dumps(cmd) + "\n").encode())
-                await self._daemon_proc.stdin.drain()
+                stdin.write((json.dumps(cmd) + "\n").encode())
+                await stdin.drain()
             except Exception as exc:
                 logger.debug("Could not send subprocess command: %s", exc)
 
@@ -951,8 +953,9 @@ async def main():
         # how the restart was triggered (UI, CLI, systemd, auto-update).
         from services.pulse import aset_sink_mute
 
+        shutdown_clients = _state.get_clients_snapshot()
         muted = []
-        for c in clients:
+        for c in shutdown_clients:
             sink = getattr(c, "bluetooth_sink_name", None)
             if sink:
                 if await aset_sink_mute(sink, True):
@@ -960,7 +963,7 @@ async def main():
         if muted:
             logger.info("Muted %d sink(s): %s", len(muted), ", ".join(muted))
 
-        for c in clients:
+        for c in shutdown_clients:
             c.running = False
             await c.stop_sendspin()
 

@@ -5,7 +5,7 @@ pulsectl_asyncio) and only imports ``dbus`` inside function bodies.  No
 module-level sys.modules stubbing is needed for Python 3.9 compatibility.
 """
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -122,3 +122,33 @@ def test_device_name_fallback():
         mgr = BluetoothManager(mac_address="11:22:33:44:55:66")
 
     assert mgr.device_name == "11:22:33:44:55:66"
+
+
+def test_record_reconnect_prunes_old_entries(bt_manager):
+    """Only reconnects inside the churn window should be retained."""
+    bt_manager._CHURN_WINDOW = 10
+    with patch("bluetooth_manager.time.monotonic", side_effect=[100.0, 111.0]):
+        bt_manager._record_reconnect()
+        bt_manager._record_reconnect()
+
+    assert bt_manager._reconnect_timestamps == [111.0]
+
+
+def test_check_reconnect_churn_disables_management(bt_manager):
+    """Churn threshold should auto-disable management and update client status."""
+    bt_manager._CHURN_THRESHOLD = 2
+    bt_manager._CHURN_WINDOW = 30
+    bt_manager._reconnect_timestamps = [90.0, 99.0]
+    bt_manager.client = MagicMock()
+    bt_manager.client.bt_management_enabled = True
+
+    with (
+        patch("bluetooth_manager.time.monotonic", return_value=100.0),
+        patch("services.bluetooth.persist_device_enabled") as persist_enabled,
+    ):
+        assert bt_manager._check_reconnect_churn() is True
+
+    assert bt_manager.management_enabled is False
+    assert bt_manager.client.bt_management_enabled is False
+    bt_manager.client._update_status.assert_called_once()
+    persist_enabled.assert_called_once_with("TestSpeaker", False)

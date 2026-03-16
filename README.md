@@ -403,6 +403,8 @@ Each device in `BLUETOOTH_DEVICES` spawns an independent Sendspin player and Blu
 
 The `adapter` field is optional — omit it if you only have one Bluetooth adapter. Set it to `hci0`, `hci1`, etc. when you have multiple adapters and want to pin a speaker to a specific one.
 
+Most configuration changes are written to `config.json` immediately, but Bluetooth topology changes (devices/adapters), MA connection settings, listen ports, and latency values still require a service restart to take effect. Runtime toggles such as `LOG_LEVEL` and password/auth updates apply immediately.
+
 ### Environment Variables
 
 | Variable | Default | Description |

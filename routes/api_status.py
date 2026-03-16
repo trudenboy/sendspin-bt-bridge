@@ -5,6 +5,8 @@ Routes for device status, groups, SSE stream, diagnostics, health,
 bug reports, and preflight checks.
 """
 
+from __future__ import annotations
+
 import json
 import logging
 import os
@@ -75,6 +77,43 @@ def _enrich_status_with_ma(status: dict, client) -> None:
         status["ma_now_playing"] = (
             get_ma_now_playing_for_group(dev_group_id) or get_ma_now_playing_for_group(player_id) or {}
         )
+
+
+def _parse_sink_input_id(line: str) -> str | None:
+    """Return the sink input ID from a ``pactl list sink-inputs`` header line."""
+    _prefix, sep, tail = line.partition("#")
+    if not sep:
+        return None
+    sink_input_id = tail.strip()
+    return sink_input_id or None
+
+
+def _parse_audio_server_name(line: str) -> str | None:
+    """Extract the audio server name from ``pactl info`` output."""
+    _prefix, sep, tail = line.partition(":")
+    if not sep:
+        return None
+    value = tail.strip()
+    return value or None
+
+
+def _parse_bluetoothctl_adapter(stdout: str) -> str | None:
+    """Extract the adapter identifier from ``bluetoothctl list`` output."""
+    parts = stdout.split()
+    if len(parts) < 2:
+        return None
+    return parts[1]
+
+
+def _parse_memtotal_mb(line: str) -> int | None:
+    """Extract ``MemTotal`` from /proc/meminfo and convert it to MiB."""
+    parts = line.split()
+    if len(parts) < 2:
+        return None
+    try:
+        return int(parts[1]) // 1024
+    except (TypeError, ValueError):
+        return None
 
 
 def get_client_status_for(client):
@@ -574,7 +613,8 @@ def api_diagnostics():
                 if line.startswith("Sink Input #"):
                     if current:
                         sink_inputs.append(current)
-                    current = {"id": line.split("#")[1]}
+                    sink_input_id = _parse_sink_input_id(line)
+                    current = {"id": sink_input_id} if sink_input_id else {}
                 elif ":" in line:
                     key, _, val = line.partition(":")
                     key = key.strip().lower().replace(" ", "_")
@@ -683,8 +723,10 @@ def _collect_environment() -> dict:
             r = subprocess.run(["pactl", "info"], capture_output=True, text=True, timeout=3)
             for line in r.stdout.splitlines():
                 if "Server Name" in line:
-                    env["audio_server"] = line.split(":", 1)[1].strip()
-                    break
+                    audio_server = _parse_audio_server_name(line)
+                    if audio_server:
+                        env["audio_server"] = audio_server
+                        break
         except Exception:
             env["audio_server"] = "unknown"
 
@@ -1175,7 +1217,7 @@ def api_preflight():
         )
         if "Controller" in result.stdout:
             bt_info["controller"] = True
-            bt_info["adapter"] = result.stdout.split()[1] if result.stdout.split() else None
+            bt_info["adapter"] = _parse_bluetoothctl_adapter(result.stdout)
         paired = subprocess.run(
             ["bluetoothctl", "devices", "Paired"],
             capture_output=True,
@@ -1195,7 +1237,9 @@ def api_preflight():
         with open("/proc/meminfo") as f:
             for line in f:
                 if line.startswith("MemTotal:"):
-                    mem_mb = int(line.split()[1]) // 1024
+                    parsed_mem = _parse_memtotal_mb(line)
+                    if parsed_mem is not None:
+                        mem_mb = parsed_mem
                     break
     except Exception:
         pass

@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.31.9] - 2026-03-16
+
+### Changed
+- Config save flow now normalizes known numeric fields before persisting them
+- Web UI/README now call out which settings still require `Save & Restart`
+
+### Fixed
+- Diagnostics/preflight parsing no longer assumes perfect `pactl`, `bluetoothctl`, or `/proc/meminfo` output
+- Config download now strips password hashes, bridge secrets, and MA tokens from exported JSON files
+- Sendspin daemon command/shutdown flow now uses safer snapshots around subprocess handles and client lists
+- Bluetooth churn tracking is synchronized so reconnect auto-disable decisions use a consistent timestamp window
+
+### Added
+- Regression tests for config export redaction, numeric config normalization, diagnostics parsing, and churn/subprocess edge cases
+
 ## [2.31.8] - 2026-03-14
 
 ### Fixed

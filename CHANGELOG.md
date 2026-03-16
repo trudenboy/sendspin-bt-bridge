@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.31.9] - 2026-03-16
+
+### Changed
+- **Config API hardening** — normalized known numeric config fields on save, added reusable config-response helpers, and split the `/api/config` GET response assembly into a dedicated helper to keep the route logic smaller and safer
+- **Configuration UX** — clarified in the web UI and README which settings apply immediately and which still require `Save & Restart`
+
+### Fixed
+- **Diagnostics parsing** — made `pactl`, `bluetoothctl`, and `/proc/meminfo` parsing defensive so malformed or truncated external command output no longer risks `IndexError` during diagnostics/preflight collection
+- **Config export secrecy** — `/api/config/download` now produces a share-safe export with password hashes, app secrets, and MA tokens removed instead of returning the raw secret-bearing file
+- **Subprocess shutdown race** — `SendspinClient` now snapshots the daemon process/stdin handle before sending commands and uses a thread-safe client snapshot during graceful shutdown
+- **Bluetooth churn tracking** — reconnect timestamps are now guarded by a lock so churn-window pruning and threshold checks cannot observe partially updated state
+
+### Added
+- **Regression coverage** — added focused tests for defensive diagnostics parsing, config export redaction, numeric config normalization, subprocess command TOCTOU handling, and Bluetooth churn isolation
+
 ## [2.31.8] - 2026-03-14
 
 ### Fixed

@@ -176,6 +176,9 @@ class BluetoothManager:
         self._running: bool = True  # False = shutdown; monitor loops exit
         self._connect_lock = threading.Lock()  # prevents concurrent connect_device() calls
         self._reconnect_timestamps: list[float] = []  # monotonic timestamps of recent reconnects
+        # Guard churn tracking because reconnect decisions can be touched from
+        # multiple execution contexts (polling loop, D-Bus reconnect path).
+        self._reconnect_lock = threading.Lock()
         self._CHURN_WINDOW = churn_window  # seconds; 0 threshold = disabled
         self._CHURN_THRESHOLD = churn_threshold  # 0 = disabled
 
@@ -642,10 +645,12 @@ class BluetoothManager:
     def _record_reconnect(self) -> None:
         """Record a BT reconnect event for churn detection."""
         now = time.monotonic()
-        self._reconnect_timestamps.append(now)
-        # Prune old entries
-        cutoff = now - self._CHURN_WINDOW
-        self._reconnect_timestamps = [t for t in self._reconnect_timestamps if t > cutoff]
+        with self._reconnect_lock:
+            self._reconnect_timestamps.append(now)
+            # Prune old entries while still under the same lock so callers
+            # never observe a partially updated churn window.
+            cutoff = now - self._CHURN_WINDOW
+            self._reconnect_timestamps = [t for t in self._reconnect_timestamps if t > cutoff]
 
     def _check_reconnect_churn(self) -> bool:
         """Auto-disable device if too many reconnects in the time window.
@@ -655,15 +660,17 @@ class BluetoothManager:
         if self._CHURN_THRESHOLD <= 0:
             return False
         now = time.monotonic()
-        cutoff = now - self._CHURN_WINDOW
-        self._reconnect_timestamps = [t for t in self._reconnect_timestamps if t > cutoff]
-        if len(self._reconnect_timestamps) < self._CHURN_THRESHOLD:
-            return False
+        with self._reconnect_lock:
+            cutoff = now - self._CHURN_WINDOW
+            self._reconnect_timestamps = [t for t in self._reconnect_timestamps if t > cutoff]
+            reconnect_count = len(self._reconnect_timestamps)
+            if reconnect_count < self._CHURN_THRESHOLD:
+                return False
 
         logger.warning(
             "[%s] BT churn detected: %d reconnects in %.0fs — auto-disabling to protect group",
             self.device_name,
-            len(self._reconnect_timestamps),
+            reconnect_count,
             self._CHURN_WINDOW,
         )
         self.management_enabled = False
@@ -674,7 +681,7 @@ class BluetoothManager:
                     "bt_management_enabled": False,
                     "bt_released_by": "auto",
                     "reconnecting": False,
-                    "last_error": f"Auto-disabled: {len(self._reconnect_timestamps)} reconnects in {int(self._CHURN_WINDOW)}s",
+                    "last_error": f"Auto-disabled: {reconnect_count} reconnects in {int(self._CHURN_WINDOW)}s",
                     "last_error_at": datetime.now(tz=UTC).isoformat(),
                 }
             )

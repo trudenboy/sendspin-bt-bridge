@@ -204,6 +204,93 @@ def test_api_config_post_accepts_security_and_monitor_settings(client, tmp_path,
     assert saved["BLUETOOTH_ADAPTERS"][0]["name"] == "Living room"
 
 
+def test_api_config_post_normalizes_numeric_strings(client, tmp_path, monkeypatch):
+    """POST /api/config should coerce known numeric fields to ints before saving."""
+    import routes.api_config as api_config_mod
+
+    monkeypatch.setattr(api_config_mod, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(api_config_mod, "CONFIG_FILE", tmp_path / "config.json")
+    payload = {
+        "SENDSPIN_SERVER": "auto",
+        "SENDSPIN_PORT": "9001",
+        "BRIDGE_NAME": "Bridge",
+        "BLUETOOTH_DEVICES": [
+            {
+                "mac": "AA:BB:CC:DD:EE:FF",
+                "player_name": "Kitchen",
+                "listen_port": "8930",
+                "keepalive_interval": "60",
+            }
+        ],
+        "BLUETOOTH_ADAPTERS": [],
+        "TZ": "UTC",
+        "PULSE_LATENCY_MSEC": "250",
+        "PREFER_SBC_CODEC": False,
+        "BT_CHECK_INTERVAL": "15",
+        "BT_MAX_RECONNECT_FAILS": "3",
+        "AUTH_ENABLED": False,
+        "SESSION_TIMEOUT_HOURS": "12",
+        "BRUTE_FORCE_PROTECTION": True,
+        "BRUTE_FORCE_MAX_ATTEMPTS": "4",
+        "BRUTE_FORCE_WINDOW_MINUTES": "2",
+        "BRUTE_FORCE_LOCKOUT_MINUTES": "10",
+        "LOG_LEVEL": "INFO",
+        "MA_API_URL": "",
+        "MA_API_TOKEN": "",
+        "MA_USERNAME": "",
+        "MA_WEBSOCKET_MONITOR": False,
+        "VOLUME_VIA_MA": True,
+        "MUTE_VIA_MA": False,
+        "SMOOTH_RESTART": True,
+        "AUTO_UPDATE": False,
+        "CHECK_UPDATES": True,
+    }
+
+    resp = client.post("/api/config", data=json.dumps(payload), content_type="application/json")
+
+    assert resp.status_code == 200
+    saved = json.loads((tmp_path / "config.json").read_text())
+    assert saved["SENDSPIN_PORT"] == 9001
+    assert saved["PULSE_LATENCY_MSEC"] == 250
+    assert saved["BT_CHECK_INTERVAL"] == 15
+    assert saved["BT_MAX_RECONNECT_FAILS"] == 3
+    assert saved["SESSION_TIMEOUT_HOURS"] == 12
+    assert saved["BRUTE_FORCE_MAX_ATTEMPTS"] == 4
+    assert saved["BLUETOOTH_DEVICES"][0]["listen_port"] == 8930
+    assert saved["BLUETOOTH_DEVICES"][0]["keepalive_interval"] == 60
+
+
+def test_api_config_download_redacts_sensitive_tokens(client, tmp_path, monkeypatch):
+    """GET /api/config/download must not leak secrets in the exported JSON."""
+    import routes.api_config as api_config_mod
+
+    monkeypatch.setattr(api_config_mod, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(api_config_mod, "CONFIG_FILE", tmp_path / "config.json")
+    cfg = {
+        "BRIDGE_NAME": "Kitchen",
+        "MA_API_URL": "http://ma:8095",
+        "MA_API_TOKEN": "super-secret-token",
+        "MA_ACCESS_TOKEN": "oauth-access",
+        "MA_REFRESH_TOKEN": "oauth-refresh",
+        "AUTH_PASSWORD_HASH": "hashed-password",
+        "SECRET_KEY": "very-secret",
+    }
+    (tmp_path / "config.json").write_text(json.dumps(cfg))
+
+    resp = client.get("/api/config/download")
+    assert resp.status_code == 200
+    exported = json.loads(resp.get_data(as_text=True))
+    assert exported["MA_API_URL"] == "http://ma:8095"
+    for key in (
+        "MA_API_TOKEN",
+        "MA_ACCESS_TOKEN",
+        "MA_REFRESH_TOKEN",
+        "AUTH_PASSWORD_HASH",
+        "SECRET_KEY",
+    ):
+        assert key not in exported
+
+
 def test_error_response_no_leak(client):
     """Error responses must not expose Python tracebacks or file paths."""
     # Trigger a volume error with an impossible scenario — no clients available
@@ -286,6 +373,29 @@ def test_status_includes_ma_syncgroup_id(client, monkeypatch):
     finally:
         state.set_ma_groups({}, [])
         state.set_ma_api_credentials("", "")
+
+
+def test_api_status_parse_helpers_are_defensive():
+    """Diagnostics parsers must return None instead of raising on malformed input."""
+    from routes.api_status import (
+        _parse_audio_server_name,
+        _parse_bluetoothctl_adapter,
+        _parse_memtotal_mb,
+        _parse_sink_input_id,
+    )
+
+    assert _parse_sink_input_id("Sink Input #42") == "42"
+    assert _parse_sink_input_id("Sink Input") is None
+
+    assert _parse_audio_server_name("Server Name: PulseAudio") == "PulseAudio"
+    assert _parse_audio_server_name("Server Name") is None
+
+    assert _parse_bluetoothctl_adapter("Controller AA:BB:CC:DD:EE:FF adapter") == "AA:BB:CC:DD:EE:FF"
+    assert _parse_bluetoothctl_adapter("Controller") is None
+
+    assert _parse_memtotal_mb("MemTotal: 2048000 kB") == 2000
+    assert _parse_memtotal_mb("MemTotal:") is None
+    assert _parse_memtotal_mb("MemTotal: nope kB") is None
 
 
 def test_device_enabled_toggle(client, tmp_path):

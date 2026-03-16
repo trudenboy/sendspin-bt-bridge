@@ -20,8 +20,8 @@ import threading
 import uuid as _uuid
 from pathlib import Path
 
-VERSION = "2.31.8"
-BUILD_DATE = "2026-03-14"
+VERSION = "2.31.9"
+BUILD_DATE = "2026-03-16"
 
 __all__ = [
     "BUILD_DATE",
