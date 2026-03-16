@@ -2246,8 +2246,8 @@ body {
             min-width: 0;
         }
         .np-art.list-detail-art {
-            width: 80px;
-            height: 80px;
+            width: 96px;
+            height: 96px;
             border-radius: 12px;
             flex-shrink: 0;
         }
@@ -2282,7 +2282,7 @@ body {
             display: flex;
             flex-direction: column;
             align-items: flex-start;
-            gap: 8px;
+            gap: 5px;
             text-align: left;
         }
         .list-player-transport {
@@ -2357,13 +2357,16 @@ body {
             max-width: 100%;
             display: grid;
             grid-template-columns: minmax(0, var(--playback-side-width)) var(--playback-center-width) minmax(0, var(--playback-side-width));
-            align-items: center;
+            grid-template-rows: auto auto;
+            align-items: start;
             gap: var(--playback-lane-gap);
+            row-gap: 4px;
             margin: 0;
             justify-content: flex-start;
         }
         .list-player-media-lane.is-solo {
             grid-template-columns: var(--playback-center-width);
+            grid-template-rows: auto auto;
             justify-content: flex-start;
         }
         .list-detail-current-copy {
@@ -2381,19 +2384,33 @@ body {
             width: auto;
             max-width: 216px;
         }
+        .list-now-playing-row {
+            min-height: var(--badge-min-height);
+            display: flex;
+            align-items: center;
+        }
         .list-now-playing-badge {
             align-self: flex-start;
-            margin-bottom: 2px;
-            padding: 3px 8px;
+            padding: var(--badge-padding-y) var(--badge-padding-x);
+            min-height: var(--badge-min-height);
+            display: inline-flex;
+            align-items: center;
             gap: 0;
-            font-size: 10px;
+            font-size: var(--badge-font-size);
+            font-weight: var(--badge-font-weight);
+            line-height: var(--badge-line-height);
             letter-spacing: 0.01em;
+        }
+        .list-now-playing-badge.is-placeholder {
+            visibility: hidden;
+            pointer-events: none;
         }
         .list-track-title-row {
             width: 100%;
             min-width: 0;
             display: flex;
             align-items: center;
+            margin-top: 1px;
         }
         .list-track-title-group {
             display: inline-flex;
@@ -2415,18 +2432,34 @@ body {
             font-size: 11px;
         }
         .list-detail-progress-wrap {
+            grid-column: 2;
+            grid-row: 2;
             width: var(--playback-center-width);
             display: flex;
             flex-direction: column;
             align-items: stretch;
-            gap: 4px;
-            margin-left: calc(var(--playback-side-width) + var(--playback-lane-gap));
+            gap: 3px;
+            margin-left: 0;
         }
         .list-detail-progress-wrap .np-progress {
             margin: 0;
+            order: 1;
         }
-        .list-detail-playback-rail.is-solo .list-detail-progress-wrap {
-            margin-left: 0;
+        .list-player-transport {
+            grid-column: 2;
+            grid-row: 1;
+        }
+        .list-player-media-lane:not(.is-solo) .list-player-transport {
+            margin-top: 28px;
+        }
+        .list-player-media-lane.is-solo .list-player-transport,
+        .list-player-media-lane.is-solo .list-detail-progress-wrap {
+            grid-column: 1;
+        }
+        .list-queue-neighbor.is-prev,
+        .list-queue-neighbor.is-next {
+            grid-row: 1 / span 2;
+            align-self: start;
         }
         .list-queue-neighbor {
             position: relative;
@@ -2450,11 +2483,22 @@ body {
             opacity: 0.52;
         }
         .list-queue-neighbor-label {
-            font-size: 9.5px;
+            min-height: var(--badge-min-height);
+            display: flex;
+            align-items: center;
+            margin-top: 6px;
+            font-size: var(--badge-font-size);
+            line-height: var(--badge-line-height);
             font-weight: 700;
             letter-spacing: 0.07em;
             text-transform: uppercase;
             color: var(--secondary-text-color);
+        }
+        .list-queue-neighbor.is-prev .list-queue-neighbor-label {
+            justify-content: flex-end;
+        }
+        .list-queue-neighbor.is-next .list-queue-neighbor-label {
+            justify-content: flex-start;
         }
         .list-queue-neighbor-title,
         .list-queue-neighbor-artist,
@@ -2479,6 +2523,7 @@ body {
             line-height: 1.28;
             color: var(--primary-text-color);
             -webkit-line-clamp: 1;
+            margin-top: 4px;
         }
         .list-queue-neighbor-artist,
         .list-queue-neighbor-album {
@@ -2530,10 +2575,12 @@ body {
             text-overflow: ellipsis;
         }
         .list-detail-time {
+            order: 2;
             font-size: 11px;
             color: var(--secondary-text-color);
             white-space: nowrap;
             text-align: center;
+            margin-top: 1px;
         }
         .list-route-summary {
             max-width: 100%;

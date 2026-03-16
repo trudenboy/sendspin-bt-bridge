@@ -1672,9 +1672,10 @@ function _renderNowPlayingTextHtml(mediaState, options) {
         '</div>';
 }
 
-function _renderNowPlayingInfoBadgeHtml(className) {
-    return '<span class="' + _joinClassNames([className, 'chip', 'meta-badge', 'meta-badge-status', 'is-info']) +
-        '" title="Current track information">' +
+function _renderNowPlayingInfoBadgeHtml(className, options) {
+    var opts = options || {};
+    return '<span class="' + _joinClassNames([className, 'chip', 'meta-badge', 'meta-badge-status', 'is-info', opts.placeholder ? 'is-placeholder' : '']) +
+        '"' + (opts.placeholder ? ' aria-hidden="true"' : ' title="Current track information"') + '>' +
         '<span class="meta-badge-label">Now playing</span>' +
     '</span>';
 }
@@ -1932,9 +1933,11 @@ function buildListView(entries, hiddenCount) {
         '</div>';
         var detailCurrentCopy = _renderNowPlayingTextHtml(mediaState, {
             containerClass: 'list-detail-current-copy is-rail',
-            preTitleHtml: (dev.playing && trackLabel !== 'Nothing playing')
-                ? _renderNowPlayingInfoBadgeHtml('list-now-playing-badge')
-                : '',
+            preTitleHtml: '<div class="list-now-playing-row">' +
+                ((dev.playing && trackLabel !== 'Nothing playing')
+                    ? _renderNowPlayingInfoBadgeHtml('list-now-playing-badge')
+                    : _renderNowPlayingInfoBadgeHtml('list-now-playing-badge', { placeholder: true })) +
+                '</div>',
             titleRowClass: 'list-track-title-row',
             titleGroupClass: 'list-track-title-group',
             titleClass: 'list-track-title',
@@ -1944,20 +1947,20 @@ function buildListView(entries, hiddenCount) {
             showAlbumLine: true,
             albumClass: 'list-detail-album-title',
         });
+        var detailProgressHtml = '<div class="list-detail-progress-wrap" id="dlprog-wrap-' + i + '"' + (progress.visible ? '' : ' style="display:none"') + '>' +
+            '<div class="list-detail-time" id="dlprog-time-' + i + '">' + escHtml(progress.text) + '</div>' +
+            '<div class="np-progress"><div class="np-progress-fill" id="dlprog-fill-' + i + '" style="width:' + progress.pct + '%"></div></div>' +
+        '</div>';
         var detailMediaLane = hasQueueNeighbors
             ? '<div class="list-player-media-lane">' +
                 _getListQueueNeighborHtml(dev, 'prev') +
                 detailTransport +
                 _getListQueueNeighborHtml(dev, 'next') +
+                detailProgressHtml +
               '</div>'
-            : '<div class="list-player-media-lane is-solo">' + detailTransport + '</div>';
-        var detailProgressHtml = '<div class="list-detail-progress-wrap" id="dlprog-wrap-' + i + '"' + (progress.visible ? '' : ' style="display:none"') + '>' +
-            '<div class="np-progress"><div class="np-progress-fill" id="dlprog-fill-' + i + '" style="width:' + progress.pct + '%"></div></div>' +
-            '<div class="list-detail-time" id="dlprog-time-' + i + '">' + escHtml(progress.text) + '</div>' +
-        '</div>';
+            : '<div class="list-player-media-lane is-solo">' + detailTransport + detailProgressHtml + '</div>';
         var detailPlaybackRail = '<div class="list-detail-playback-rail' + (hasQueueNeighbors ? '' : ' is-solo') + '">' +
             detailMediaLane +
-            detailProgressHtml +
         '</div>';
         var quickActions = '<div class="list-actions" onclick="event.stopPropagation()">' +
             '<button type="button" class="icon-btn list-inline-btn' + (dev.playing ? '' : ' paused') + '" id="' + rowPauseBtnId + '" onclick="event.stopPropagation();onDevicePause(' + i + ', \'' + rowPauseBtnId + '\')" title="' + escHtmlAttr(pauseTitle) + '"' + (canTransport ? '' : ' disabled') + '>' + _playPauseIconHtml(dev.playing) + '</button>' +
