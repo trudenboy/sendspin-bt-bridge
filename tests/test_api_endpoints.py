@@ -528,3 +528,64 @@ def test_ha_auth_page_accepts_empty_url(client):
     """Empty ma_url should be accepted."""
     resp = client.get("/api/ma/ha-auth-page?ma_url=")
     assert resp.status_code == 200
+
+
+def test_ma_artwork_proxy_fetches_same_origin_ma_artwork(client):
+    import state
+
+    class _FakeHeaders:
+        def get(self, key, default=None):
+            if key.lower() == "content-type":
+                return "image/jpeg"
+            return default
+
+    class _FakeResponse:
+        headers = _FakeHeaders()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self):
+            return b"jpeg-bytes"
+
+    state.set_ma_api_credentials("http://ma:8095", "token123")
+    try:
+        with pytest.MonkeyPatch.context() as mp:
+            import routes.api_ma as api_ma_mod
+
+            opened = {}
+
+            def _fake_urlopen(req, timeout=0):
+                opened["url"] = req.full_url
+                opened["auth"] = req.headers.get("Authorization")
+                opened["accept"] = req.headers.get("Accept")
+                opened["timeout"] = timeout
+                return _FakeResponse()
+
+            mp.setattr(api_ma_mod._ur, "urlopen", _fake_urlopen)
+            resp = client.get("/api/ma/artwork?url=%2Fapi%2Fimage%2F123")
+
+        assert resp.status_code == 200
+        assert resp.data == b"jpeg-bytes"
+        assert resp.headers["Content-Type"].startswith("image/jpeg")
+        assert opened["url"] == "http://ma:8095/api/image/123"
+        assert opened["auth"] == "Bearer token123"
+        assert opened["accept"] == "image/*"
+        assert opened["timeout"] == 15
+    finally:
+        state.set_ma_api_credentials("", "")
+
+
+def test_ma_artwork_proxy_rejects_external_origin(client):
+    import state
+
+    state.set_ma_api_credentials("http://ma:8095", "token123")
+    try:
+        resp = client.get("/api/ma/artwork?url=http%3A%2F%2Fevil.example%2Fimage.jpg")
+        assert resp.status_code == 400
+        assert "configured MA origin" in resp.get_data(as_text=True)
+    finally:
+        state.set_ma_api_credentials("", "")

@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.31.11] - 2026-03-16
+
+### Fixed
+- Music Assistant album art now loads through a bridge-hosted same-origin proxy route, so covers render again in the dashboard without weakening the frontend URL safety checks
+- Artwork proxying resolves relative MA image paths against the configured MA base URL, forwards the MA bearer token when needed, and rejects foreign origins instead of turning the bridge into an open fetch proxy
+
+### Added
+- Regression tests for now-playing artwork URL wrapping and the `/api/ma/artwork` proxy happy-path / origin-rejection behavior
+
 ## [2.31.10] - 2026-03-16
 
 ### Changed

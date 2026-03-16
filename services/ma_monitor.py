@@ -16,6 +16,7 @@ import itertools
 import json
 import logging
 import time
+import urllib.parse as _up
 
 import state as _state
 
@@ -29,6 +30,16 @@ _RECONNECT_MAX = 60  # seconds — max reconnect delay
 
 class _AuthFailed(Exception):
     """Raised when MA WebSocket authentication fails."""
+
+
+def _build_artwork_proxy_url(image_url: str) -> str:
+    """Wrap raw MA artwork URLs in a same-origin bridge proxy path."""
+    if not image_url or not isinstance(image_url, str):
+        return ""
+    trimmed = image_url.strip()
+    if not trimmed:
+        return ""
+    return f"/api/ma/artwork?url={_up.quote(trimmed, safe='')}"
 
 
 def _build_now_playing(queue: dict) -> dict:
@@ -58,7 +69,7 @@ def _build_now_playing(queue: dict) -> dict:
         "track": mi.get("name") or ci.get("name", ""),
         "artist": artist,
         "album": album,
-        "image_url": image_url,
+        "image_url": _build_artwork_proxy_url(image_url),
         "elapsed": queue.get("elapsed_time", 0),
         "elapsed_updated_at": queue.get("elapsed_time_last_updated", time.time()),
         "duration": mi.get("duration") or 0,

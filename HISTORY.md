@@ -2,7 +2,21 @@
 
 A history of the architectural and functional evolution of sendspin-bt-bridge — for readers familiar with Home Assistant, Music Assistant, and multiroom audio setups.
 
-**Period:** January 1 – March 16, 2026 · **Total commits:** ~955 · **Versions:** 1.0.0 → 2.31.10
+**Period:** January 1 – March 16, 2026 · **Total commits:** ~956 · **Versions:** 1.0.0 → 2.31.11
+
+---
+
+## March 16, 2026 — Safe Music Assistant album-art recovery (v2.31.11)
+
+The `2.31.11` release is a narrow but high-value follow-up to `2.31.10`. It fixes a visible regression in the redesigned dashboard: Music Assistant was already providing artwork metadata, but the web UI correctly refused to render most cover URLs because they pointed at a different origin or arrived as raw relative MA paths. In other words, the bug sat exactly at the boundary between “frontend safety” and “backend contract quality.”
+
+This release fixes that boundary instead of weakening it:
+
+- **Same-origin artwork delivery** — album covers now flow through a bridge-owned `/api/ma/artwork` endpoint, so the browser receives a URL from the same origin as the dashboard itself and the existing frontend safety guard can remain intact.
+- **Correct MA URL resolution** — raw artwork paths from Music Assistant are wrapped before they reach the UI. Relative paths are resolved against the configured MA base URL, while absolute paths are allowed only if they still point back to that same MA origin.
+- **Token-aware proxying without becoming an open proxy** — when Music Assistant requires authentication, the bridge forwards the stored MA bearer token for the artwork fetch. At the same time, foreign hosts are explicitly rejected so the new route cannot be abused as a generic fetch tunnel.
+
+This is also a deliberately test-backed hotfix. Regression coverage was added for artwork URL wrapping in now-playing metadata and for the new proxy route's successful and rejected request paths. `2.31.11` is therefore best understood as a small release that restores a user-facing feature while preserving the stricter security posture introduced by the redesign.
 
 ---
 

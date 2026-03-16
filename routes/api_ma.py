@@ -9,6 +9,7 @@ import json
 import logging
 import os
 import re
+import urllib.error as _ue
 import urllib.parse as _up
 import urllib.request as _ur
 
@@ -71,6 +72,26 @@ def _ws_connect(url: str, **kwargs):
         return ws_connect(url, proxy=None, **kwargs)
     except TypeError:
         return ws_connect(url, **kwargs)
+
+
+def _resolve_ma_artwork_url(raw_url: str) -> str:
+    """Resolve a raw MA artwork path/URL against the configured MA base URL."""
+    ma_url, _token = state.get_ma_api_credentials()
+    if not ma_url:
+        raise ValueError("MA API URL is not configured")
+
+    base = ma_url.rstrip("/") + "/"
+    resolved = _up.urljoin(base, raw_url)
+    parsed = _up.urlparse(resolved)
+    base_parsed = _up.urlparse(ma_url)
+    if parsed.scheme.lower() not in ("http", "https"):
+        raise ValueError("Unsupported artwork URL scheme")
+    if (parsed.scheme.lower(), parsed.netloc.lower()) != (
+        base_parsed.scheme.lower(),
+        base_parsed.netloc.lower(),
+    ):
+        raise ValueError("Artwork URL must match the configured MA origin")
+    return resolved
 
 
 def _validate_ma_token(ma_url: str, token: str) -> bool:
@@ -1245,6 +1266,36 @@ def api_ma_nowplaying():
     if not state.is_ma_connected():
         return jsonify({"connected": False})
     return jsonify(state.get_ma_now_playing())
+
+
+@ma_bp.route("/api/ma/artwork", methods=["GET"])
+def api_ma_artwork():
+    """Proxy MA artwork through the bridge so the UI can use same-origin image URLs."""
+    raw_url = (request.args.get("url") or "").strip()
+    if not raw_url:
+        return Response("Missing artwork URL", status=400)
+
+    try:
+        artwork_url = _resolve_ma_artwork_url(raw_url)
+    except ValueError as exc:
+        return Response(str(exc), status=400)
+
+    _ma_url, ma_token = state.get_ma_api_credentials()
+    req = _ur.Request(artwork_url, headers={"Accept": "image/*"})
+    if ma_token:
+        req.add_header("Authorization", f"Bearer {ma_token}")
+
+    try:
+        with _ur.urlopen(req, timeout=15) as resp:
+            body = resp.read()
+            content_type = resp.headers.get("Content-Type", "application/octet-stream")
+            return Response(body, content_type=content_type, headers={"Cache-Control": "private, max-age=60"})
+    except _ue.HTTPError as exc:
+        logger.warning("MA artwork proxy HTTP %s for %s", exc.code, artwork_url)
+        return Response("Artwork unavailable", status=exc.code)
+    except Exception:
+        logger.exception("MA artwork proxy failed for %s", artwork_url)
+        return Response("Artwork unavailable", status=502)
 
 
 @ma_bp.route("/api/ma/queue/cmd", methods=["POST"])
