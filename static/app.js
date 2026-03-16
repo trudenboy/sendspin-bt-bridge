@@ -1646,6 +1646,7 @@ function _renderNowPlayingTextHtml(mediaState, options) {
     var titleTag = opts.titleTag || 'div';
     var metaTag = opts.metaTag || 'div';
     var preTitleHtml = opts.preTitleHtml || '';
+    var postMetaHtml = opts.postMetaHtml || '';
     var titleHtml = '<' + titleTag + ' class="' + escHtmlAttr(opts.titleClass || '') + '"' +
         (opts.titleId ? ' id="' + escHtmlAttr(opts.titleId) + '"' : '') + '>' +
         escHtml((mediaState || {}).titleText || 'Nothing playing') +
@@ -1666,7 +1667,9 @@ function _renderNowPlayingTextHtml(mediaState, options) {
     var albumHtml = opts.showAlbumLine && (mediaState || {}).album
         ? '<div class="' + escHtmlAttr(opts.albumClass || '') + '">' + escHtml(mediaState.album) + '</div>'
         : '';
-    return '<div class="' + escHtmlAttr(opts.containerClass || '') + '">' + preTitleHtml + titleHtml + metaHtml + albumHtml + '</div>';
+    return '<div class="' + escHtmlAttr(opts.containerClass || '') + '">' +
+        preTitleHtml + titleHtml + metaHtml + postMetaHtml + albumHtml +
+        '</div>';
 }
 
 function _renderNowPlayingInfoBadgeHtml(className) {
@@ -2248,12 +2251,12 @@ function buildDeviceCard(i) {
               metaTag: 'span',
               metaClass: 'np-meta',
               metaId: 'dtrack-meta-' + i,
+              postMetaHtml: '<div class="np-time">' +
+                '<div class="np-progress" id="dprog-wrap-' + i + '"><div class="np-progress-fill" id="dprog-fill-' + i + '"></div></div>' +
+                '<span id="dprog-time-' + i + '"></span>' +
+                '<span class="tooltip-text" id="daudiofmt-' + i + '"></span>' +
+              '</div>',
           }) +
-          '<span class="np-time">' +
-            '<div class="np-progress" id="dprog-wrap-' + i + '"><div class="np-progress-fill" id="dprog-fill-' + i + '"></div></div>' +
-            '<span id="dprog-time-' + i + '"></span>' +
-            '<span class="tooltip-text" id="daudiofmt-' + i + '"></span>' +
-          '</span>' +
         '</div>' +
         '<div class="card-actions-row">' +
           '<span class="bt-action-status" id="dbt-action-status-' + i + '"></span>' +

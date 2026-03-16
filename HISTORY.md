@@ -2,7 +2,22 @@
 
 A history of the architectural and functional evolution of sendspin-bt-bridge — for readers familiar with Home Assistant, Music Assistant, and multiroom audio setups.
 
-**Period:** January 1 – March 16, 2026 · **Total commits:** ~963 · **Versions:** 1.0.0 → 2.32.5
+**Period:** January 1 – March 16, 2026 · **Total commits:** ~965 · **Versions:** 1.0.0 → 2.32.6
+
+---
+
+## March 16, 2026 — Playback UI polish across cards, lists, and bulk actions (v2.32.6)
+
+The `2.32.6` release is a small dashboard follow-up, but it finishes several interaction details that were left uneven after the larger playback redesigns. The theme here is consistency: the card mini-player, the expanded list row, and the dashboard-wide action bar should all read like parts of the same Music Assistant-inspired surface rather than separate iterations that merely coexist on the same page.
+
+Four threads define the release:
+
+- **Cleaner card playback flow** — the card progress indicator now sits below the track metadata instead of fighting for horizontal space beside it. That gives long track/artist strings more room to breathe and makes the elapsed-time stack read in the same top-to-bottom order as the rest of the mini-player.
+- **Richer expanded-list context** — expanded list rows now add a text-only `Now playing` badge above the active title, enlarge the artwork to use the available space better, and slow the equalizer animation into a more Music Assistant-like rhythm. Together those changes make the live state feel clearer without adding extra chrome.
+- **Bulk-action visual parity** — `Reconnect all` and `Release all` in the dashboard toolbar now use the same action-button language as the per-device `Reconnect` / `Release` controls. That removes another small but noticeable inconsistency in how safe/reversible Bluetooth actions are presented.
+- **Live deployment hardening** — the UI polish was verified on the Proxmox target itself, including a cache-busting follow-up that confirmed the updated runtime was correct once stale HTML was flushed.
+
+This is not a headline architectural release, but it is the kind of polish that keeps the dashboard feeling trustworthy. Playback hierarchy is easier to read, status affordances are more explicit, and the same action patterns now repeat more consistently across the whole UI.
 
 ---
 

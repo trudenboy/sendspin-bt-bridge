@@ -1439,9 +1439,14 @@ body {
             transition: width 0.3s;
         }
         .np-time {
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+            gap: 4px;
             font-size: 11px;
             color: var(--secondary-text-color);
             white-space: nowrap;
+            width: 100%;
         }
 
         /* ── Card actions row (redesign) ── */

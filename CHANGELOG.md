@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.32.6] - 2026-03-16
+
+### Changed
+- Card view now places playback progress below the current-track metadata instead of beside it, giving track details more room and aligning the information stack more closely with Music Assistant
+- Expanded list rows now add a text-only `Now playing` badge, larger artwork, and a slower Music Assistant-style equalizer for clearer live playback context
+- Dashboard bulk `Reconnect all` / `Release all` actions now use the same action-button styling as the per-device reconnect/release controls
+
 ## [2.32.5] - 2026-03-16
 
 ### Changed
