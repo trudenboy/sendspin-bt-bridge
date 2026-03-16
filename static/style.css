@@ -2226,11 +2226,11 @@ body {
             background: var(--card-background-color);
         }
         .list-detail-art-rail {
-            width: 304px;
-            max-width: 100%;
+            width: fit-content;
+            max-width: min(100%, 284px);
             flex-shrink: 0;
-            display: flex;
-            flex-direction: row;
+            display: grid;
+            grid-template-columns: auto fit-content(216px);
             align-items: center;
             gap: 8px;
             min-width: 0;
@@ -2366,8 +2366,10 @@ body {
             text-align: left;
         }
         .list-detail-current-copy.is-rail {
-            flex: 1;
+            flex: 0 1 auto;
             min-width: 0;
+            width: auto;
+            max-width: 216px;
         }
         .list-track-title-row {
             width: 100%;
@@ -2437,7 +2439,8 @@ body {
             color: var(--secondary-text-color);
         }
         .list-queue-neighbor-title,
-        .list-queue-neighbor-meta {
+        .list-queue-neighbor-artist,
+        .list-queue-neighbor-album {
             width: 100%;
             overflow: hidden;
             display: -webkit-box;
@@ -2459,7 +2462,8 @@ body {
             color: var(--primary-text-color);
             -webkit-line-clamp: 1;
         }
-        .list-queue-neighbor-meta {
+        .list-queue-neighbor-artist,
+        .list-queue-neighbor-album {
             font-size: 10px;
             line-height: 1.25;
             color: var(--secondary-text-color);

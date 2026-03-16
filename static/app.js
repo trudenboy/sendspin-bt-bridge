@@ -1820,7 +1820,8 @@ function _getListQueueNeighborMeta(dev, direction) {
         empty: !track,
         label: direction === 'prev' ? 'Previous' : 'Next',
         track: track || fallbackTrack,
-        meta: [artist, album].filter(Boolean).join(' · '),
+        artist: artist,
+        album: album,
         modifierClass: direction === 'prev' ? 'is-prev' : 'is-next',
     };
 }
@@ -1831,7 +1832,8 @@ function _getListQueueNeighborHtml(dev, direction) {
     return '<div class="list-queue-neighbor ' + meta.modifierClass + (meta.empty ? ' is-empty' : '') + '">' +
         '<div class="list-queue-neighbor-label">' + escHtml(meta.label) + '</div>' +
         '<div class="list-queue-neighbor-title">' + escHtml(meta.track) + '</div>' +
-        (meta.meta ? '<div class="list-queue-neighbor-meta">' + escHtml(meta.meta) + '</div>' : '') +
+        (meta.artist ? '<div class="list-queue-neighbor-artist">' + escHtml(meta.artist) + '</div>' : '') +
+        (meta.album ? '<div class="list-queue-neighbor-album">' + escHtml(meta.album) + '</div>' : '') +
     '</div>';
 }
 

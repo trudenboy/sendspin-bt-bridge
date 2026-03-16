@@ -2,7 +2,21 @@
 
 A history of the architectural and functional evolution of sendspin-bt-bridge — for readers familiar with Home Assistant, Music Assistant, and multiroom audio setups.
 
-**Period:** January 1 – March 16, 2026 · **Total commits:** ~957 · **Versions:** 1.0.0 → 2.32.2
+**Period:** January 1 – March 16, 2026 · **Total commits:** ~963 · **Versions:** 1.0.0 → 2.32.5
+
+---
+
+## March 16, 2026 — Truthful playback controls and a tighter list mini-player (v2.32.5)
+
+The `2.32.5` release is a UI follow-up to `2.32.2`, but the real theme is not cosmetics alone. It is about making the dashboard's playback controls tell the truth about current runtime state while continuing the list-view move toward a more compact Music Assistant-style mini-player. In practice, that means less dead horizontal space, clearer queue context, and fewer cases where the UI looks actionable even though the underlying Sendspin / MA / sink path cannot actually perform the requested action.
+
+Three threads define the release:
+
+- **Stateful transport controls** — shuffle/repeat now update optimistically in the UI, repeat exposes separate `off` / `all` / `one` states, and transport/queue/mute/volume actions are disabled unless the required Sendspin, Music Assistant, or sink dependency is really available. Matching handler guards close the stale-click race window instead of relying on button styling alone.
+- **Tighter expanded-list playback geometry** — artwork and current-track metadata now sit in one compact left block, while previous/current/next playback context and progress live in a second left-aligned block. The expanded row therefore reads more like a deliberate mini-player and less like two unrelated chunks with extra reserved whitespace between them.
+- **Richer queue context at a glance** — previous and next queue items now render track, artist, and album on separate lines rather than collapsing secondary metadata into one combined string. That small presentation change makes long queue neighbors much easier to parse during live playback.
+
+This is a small release, but it improves operator confidence in exactly the places that matter for a dashboard: controls look available only when they truly are, repeat communicates its actual mode, and the expanded list player exposes more context with less visual waste.
 
 ---
 

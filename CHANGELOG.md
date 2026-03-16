@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.32.5] - 2026-03-16
+
+### Changed
+- Expanded list playback now uses a tighter two-block layout: artwork + current-track metadata stay compact on the left, while queue neighbors, transport controls, and progress align in a dedicated playback rail
+- Previous/next queue previews in expanded list rows now render track, artist, and album on separate lines for easier scanning
+
+### Fixed
+- Shuffle/repeat controls now update immediately in the UI, and repeat exposes distinct `off` / `all` / `one` visual states instead of collapsing active modes together
+- Transport, queue, mute, and volume controls are now disabled consistently when Sendspin, Music Assistant, or the audio sink state does not support the action, with matching frontend guards against stale clicks
+
 ## [2.32.2] - 2026-03-16
 
 ### Changed
