@@ -121,8 +121,25 @@
             <button type="button" class="icon-btn" id="group-pause-btn" onclick="onPauseAll()" title="Pause All">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
             </button>
-            <button type="button" class="text-btn" onclick="onGroupAction('reconnect')">Reconnect all</button>
-            <button type="button" class="text-btn" onclick="onGroupAction('release')">Release all</button>
+            <button type="button" class="action-btn accent" onclick="onGroupAction('reconnect')">
+                <span class="action-btn-content">
+                    <svg class="action-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M21 12a9 9 0 0 1-15.36 6.36"></path>
+                        <path d="M3 12A9 9 0 0 1 18.36 5.64"></path>
+                        <path d="M3 16v-4h4"></path>
+                        <path d="M21 8v4h-4"></path>
+                    </svg>
+                    <span class="action-btn-label">Reconnect all</span>
+                </span>
+            </button>
+            <button type="button" class="action-btn warn" onclick="onGroupAction('release')">
+                <span class="action-btn-content">
+                    <svg class="action-btn-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                        <path d="M14.88 16.29 13 14.41V17.59L14.88 16.29ZM13 6.41V9.59L14.88 8.29 13 6.41ZM17.71 7.71 12 2H11V9.59L6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 11 14.41V22H12L17.71 16.29 13.41 12 17.71 7.71ZM15.29 16.29 13 18.17V14.41L15.29 16.29ZM13 9.59V5.83L15.29 7.71 13 9.59Z"></path>
+                    </svg>
+                    <span class="action-btn-label">Release all</span>
+                </span>
+            </button>
         </div>
     </div>
 

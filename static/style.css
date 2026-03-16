@@ -1966,6 +1966,11 @@ body {
             border-color: rgba(255, 166, 0, 0.24);
             background: rgba(255, 166, 0, 0.10);
         }
+        .meta-badge.meta-badge-status.is-info {
+            color: #0277bd;
+            border-color: rgba(3, 169, 244, 0.22);
+            background: rgba(3, 169, 244, 0.10);
+        }
         .meta-badge.meta-badge-status.is-error {
             color: #d14336;
             border-color: rgba(219, 68, 55, 0.18);
@@ -2227,7 +2232,7 @@ body {
         }
         .list-detail-art-rail {
             width: fit-content;
-            max-width: min(100%, 284px);
+            max-width: min(100%, 304px);
             flex-shrink: 0;
             display: grid;
             grid-template-columns: auto fit-content(216px);
@@ -2236,9 +2241,9 @@ body {
             min-width: 0;
         }
         .np-art.list-detail-art {
-            width: 60px;
-            height: 60px;
-            border-radius: 10px;
+            width: 80px;
+            height: 80px;
+            border-radius: 12px;
             flex-shrink: 0;
         }
         .list-detail-art-image {
@@ -2370,6 +2375,14 @@ body {
             min-width: 0;
             width: auto;
             max-width: 216px;
+        }
+        .list-now-playing-badge {
+            align-self: flex-start;
+            margin-bottom: 2px;
+            padding: 3px 8px;
+            gap: 0;
+            font-size: 10px;
+            letter-spacing: 0.01em;
         }
         .list-track-title-row {
             width: 100%;
@@ -2547,9 +2560,10 @@ body {
         .eq-bars {
             display: none;
             align-items: flex-end;
-            gap: 2px;
+            gap: 1.5px;
             height: 14px;
             flex-shrink: 0;
+            color: var(--primary-color);
         }
         .eq-bars.active { display: flex; }
         .eq-bars.stale { display: flex; }
@@ -2566,19 +2580,20 @@ body {
         .eq-bar {
             width: 3px;
             height: 14px;
-            border-radius: 1px;
-            background: var(--primary-color);
+            border-radius: 999px;
+            background: currentColor;
             transform-origin: bottom;
-            animation: eq-bounce 0.8s ease-in-out infinite alternate;
+            animation: eq-ma-bar-1 1.28s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
+            will-change: transform, opacity;
         }
-        .eq-bar:nth-child(1) { animation-duration: 0.55s; animation-delay: 0s; }
-        .eq-bar:nth-child(2) { animation-duration: 0.72s; animation-delay: 0.1s; }
-        .eq-bar:nth-child(3) { animation-duration: 0.48s; animation-delay: 0.05s; }
-        .eq-bar:nth-child(4) { animation-duration: 0.65s; animation-delay: 0.18s; }
+        .eq-bar:nth-child(1) { animation-name: eq-ma-bar-1; animation-duration: 1.28s; animation-delay: -0.42s; }
+        .eq-bar:nth-child(2) { animation-name: eq-ma-bar-2; animation-duration: 1.46s; animation-delay: -0.7s; }
+        .eq-bar:nth-child(3) { animation-name: eq-ma-bar-3; animation-duration: 1.22s; animation-delay: -0.56s; }
+        .eq-bar:nth-child(4) { animation-name: eq-ma-bar-4; animation-duration: 1.38s; animation-delay: -0.82s; }
         .eq-bars.list-name-eq {
             align-self: center;
             height: 11px;
-            gap: 1.5px;
+            gap: 1.25px;
         }
         .eq-bars.list-name-eq .eq-bar {
             width: 2px;
@@ -2593,9 +2608,33 @@ body {
             width: 2px;
             height: 12px;
         }
-        @keyframes eq-bounce {
-            0%   { transform: scaleY(0.21); opacity: 0.6; }
-            100% { transform: scaleY(1.0);  opacity: 1.0; }
+        @keyframes eq-ma-bar-1 {
+            0%, 100% { transform: scaleY(0.24); opacity: 0.42; }
+            18% { transform: scaleY(0.86); opacity: 0.94; }
+            44% { transform: scaleY(0.38); opacity: 0.6; }
+            67% { transform: scaleY(1); opacity: 1; }
+            84% { transform: scaleY(0.56); opacity: 0.74; }
+        }
+        @keyframes eq-ma-bar-2 {
+            0%, 100% { transform: scaleY(0.68); opacity: 0.78; }
+            20% { transform: scaleY(0.26); opacity: 0.46; }
+            40% { transform: scaleY(1); opacity: 1; }
+            62% { transform: scaleY(0.42); opacity: 0.62; }
+            82% { transform: scaleY(0.9); opacity: 0.96; }
+        }
+        @keyframes eq-ma-bar-3 {
+            0%, 100% { transform: scaleY(0.32); opacity: 0.48; }
+            16% { transform: scaleY(0.94); opacity: 0.98; }
+            38% { transform: scaleY(0.54); opacity: 0.72; }
+            60% { transform: scaleY(0.22); opacity: 0.42; }
+            82% { transform: scaleY(0.82); opacity: 0.92; }
+        }
+        @keyframes eq-ma-bar-4 {
+            0%, 100% { transform: scaleY(0.88); opacity: 0.96; }
+            22% { transform: scaleY(0.34); opacity: 0.5; }
+            46% { transform: scaleY(0.72); opacity: 0.86; }
+            68% { transform: scaleY(0.18); opacity: 0.38; }
+            86% { transform: scaleY(0.98); opacity: 1; }
         }
 
         /* Config section */

@@ -1645,6 +1645,7 @@ function _renderNowPlayingTextHtml(mediaState, options) {
     var opts = options || {};
     var titleTag = opts.titleTag || 'div';
     var metaTag = opts.metaTag || 'div';
+    var preTitleHtml = opts.preTitleHtml || '';
     var titleHtml = '<' + titleTag + ' class="' + escHtmlAttr(opts.titleClass || '') + '"' +
         (opts.titleId ? ' id="' + escHtmlAttr(opts.titleId) + '"' : '') + '>' +
         escHtml((mediaState || {}).titleText || 'Nothing playing') +
@@ -1665,7 +1666,14 @@ function _renderNowPlayingTextHtml(mediaState, options) {
     var albumHtml = opts.showAlbumLine && (mediaState || {}).album
         ? '<div class="' + escHtmlAttr(opts.albumClass || '') + '">' + escHtml(mediaState.album) + '</div>'
         : '';
-    return '<div class="' + escHtmlAttr(opts.containerClass || '') + '">' + titleHtml + metaHtml + albumHtml + '</div>';
+    return '<div class="' + escHtmlAttr(opts.containerClass || '') + '">' + preTitleHtml + titleHtml + metaHtml + albumHtml + '</div>';
+}
+
+function _renderNowPlayingInfoBadgeHtml(className) {
+    return '<span class="' + _joinClassNames([className, 'chip', 'meta-badge', 'meta-badge-status', 'is-info']) +
+        '" title="Current track information">' +
+        '<span class="meta-badge-label">Now playing</span>' +
+    '</span>';
 }
 
 function _getDeviceTransportState(dev, mediaState) {
@@ -1921,6 +1929,9 @@ function buildListView(entries, hiddenCount) {
         '</div>';
         var detailCurrentCopy = _renderNowPlayingTextHtml(mediaState, {
             containerClass: 'list-detail-current-copy is-rail',
+            preTitleHtml: (dev.playing && trackLabel !== 'Nothing playing')
+                ? _renderNowPlayingInfoBadgeHtml('list-now-playing-badge')
+                : '',
             titleRowClass: 'list-track-title-row',
             titleGroupClass: 'list-track-title-group',
             titleClass: 'list-track-title',
