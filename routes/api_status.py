@@ -538,6 +538,7 @@ def api_diagnostics():
                     "mac": bt_mgr.mac_address if bt_mgr else None,
                     "connected": client.status.get("bluetooth_connected", False),
                     "enabled": getattr(client, "bt_management_enabled", True),
+                    "playing": client.status.get("playing", False),
                     "sink": getattr(client, "bluetooth_sink_name", None),
                     "last_error": client.status.get("last_error"),
                 }
@@ -615,11 +616,19 @@ def api_diagnostics():
                         sink_inputs.append(current)
                     sink_input_id = _parse_sink_input_id(line)
                     current = {"id": sink_input_id} if sink_input_id else {}
-                elif ":" in line:
-                    key, _, val = line.partition(":")
-                    key = key.strip().lower().replace(" ", "_")
-                    if key in ("sink", "state") or "application" in key or "media" in key:
-                        current[key] = val.strip()
+                elif ":" in line or "=" in line:
+                    separator = ":" if ":" in line else "="
+                    key, _, val = line.partition(separator)
+                    key = key.strip().lower().replace(" ", "_").replace(".", "_")
+                    if key in (
+                        "sink",
+                        "state",
+                        "application_name",
+                        "application_process_binary",
+                        "media_name",
+                        "media_title",
+                    ):
+                        current[key] = val.strip().strip('"')
             if current:
                 sink_inputs.append(current)
             diag["sink_inputs"] = sink_inputs

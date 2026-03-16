@@ -6,6 +6,7 @@ import cleanly on Python 3.9.  No module-level sys.modules manipulation needed.
 """
 
 import json
+import sys
 import threading
 from types import SimpleNamespace
 
@@ -454,6 +455,75 @@ def test_api_status_parse_helpers_are_defensive():
     assert _parse_memtotal_mb("MemTotal: nope kB") is None
 
 
+def test_api_diagnostics_includes_playing_and_sink_input_metadata(client, monkeypatch):
+    """GET /api/diagnostics should expose playing state and parsed sink-input metadata."""
+    import routes.api_status as api_status
+    import state
+
+    fake_client = SimpleNamespace(
+        player_name="Kitchen",
+        status={
+            "bluetooth_connected": True,
+            "playing": True,
+            "last_error": "Route degraded",
+            "server_connected": True,
+        },
+        bt_management_enabled=True,
+        bluetooth_sink_name="bluez_sink.AA_BB_CC_DD_EE_FF.a2dp_sink",
+        bt_manager=SimpleNamespace(mac_address="AA:BB:CC:DD:EE:FF"),
+        player_id="sendspin-kitchen",
+    )
+
+    def fake_run(cmd, capture_output=True, text=True, timeout=5):
+        if cmd == ["bluetoothctl", "list"]:
+            return SimpleNamespace(
+                returncode=0,
+                stdout="Controller AA:BB:CC:DD:EE:FF Test [default]\n",
+                stderr="",
+            )
+        if cmd == ["pactl", "list", "sink-inputs"]:
+            return SimpleNamespace(
+                returncode=0,
+                stdout=(
+                    "Sink Input #42\n"
+                    "Sink: 1\n"
+                    "State: RUNNING\n"
+                    "application.name = Sendspin Bridge\n"
+                    "media.name = Quiet Woods\n"
+                ),
+                stderr="",
+            )
+        pytest.fail(f"Unexpected subprocess call: {cmd}")
+
+    monkeypatch.setattr(api_status, "_clients", [fake_client], raising=False)
+    monkeypatch.setattr(api_status, "get_server_name", lambda: "pulseaudio 16.1")
+    monkeypatch.setattr(
+        api_status,
+        "list_sinks",
+        lambda: [{"name": "bluez_sink.AA_BB_CC_DD_EE_FF.a2dp_sink"}],
+    )
+    monkeypatch.setattr(api_status, "_collect_environment", lambda: {"audio_server": "pulseaudio 16.1"})
+    monkeypatch.setattr(api_status, "_collect_subprocess_info", lambda: [])
+    monkeypatch.setattr(api_status.subprocess, "run", fake_run)
+
+    state.set_ma_api_credentials("", "")
+    state.set_ma_groups({}, [])
+    try:
+        resp = client.get("/api/diagnostics")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["devices"][0]["playing"] is True
+        assert data["devices"][0]["last_error"] == "Route degraded"
+        assert data["sink_inputs"][0]["id"] == "42"
+        assert data["sink_inputs"][0]["state"] == "RUNNING"
+        assert data["sink_inputs"][0]["application_name"] == "Sendspin Bridge"
+        assert data["sink_inputs"][0]["media_name"] == "Quiet Woods"
+    finally:
+        sys.modules.pop("sendspin.audio", None)
+        state.set_ma_groups({}, [])
+        state.set_ma_api_credentials("", "")
+
+
 def test_device_enabled_toggle(client, tmp_path):
     """POST /api/device/enabled returns success with restart_required."""
     import services.bluetooth as _bt_mod
@@ -532,6 +602,7 @@ def test_ha_auth_page_accepts_empty_url(client):
 
 def test_ma_artwork_proxy_fetches_same_origin_ma_artwork(client):
     import state
+    from services.ma_artwork import sign_artwork_url
 
     class _FakeHeaders:
         def get(self, key, default=None):
@@ -557,6 +628,8 @@ def test_ma_artwork_proxy_fetches_same_origin_ma_artwork(client):
             import routes.api_ma as api_ma_mod
 
             opened = {}
+            raw_url = "/api/image/123"
+            signature = sign_artwork_url(raw_url)
 
             def _fake_urlopen(req, timeout=0):
                 opened["url"] = req.full_url
@@ -566,7 +639,7 @@ def test_ma_artwork_proxy_fetches_same_origin_ma_artwork(client):
                 return _FakeResponse()
 
             mp.setattr(api_ma_mod._ur, "urlopen", _fake_urlopen)
-            resp = client.get("/api/ma/artwork?url=%2Fapi%2Fimage%2F123")
+            resp = client.get(f"/api/ma/artwork?url=%2Fapi%2Fimage%2F123&sig={signature}")
 
         assert resp.status_code == 200
         assert resp.data == b"jpeg-bytes"
@@ -579,13 +652,97 @@ def test_ma_artwork_proxy_fetches_same_origin_ma_artwork(client):
         state.set_ma_api_credentials("", "")
 
 
-def test_ma_artwork_proxy_rejects_external_origin(client):
+def test_ma_artwork_proxy_rejects_unsupported_scheme(client):
+    import state
+    from services.ma_artwork import sign_artwork_url
+
+    state.set_ma_api_credentials("http://ma:8095", "token123")
+    try:
+        raw_url = "ftp://evil.example/image.jpg"
+        resp = client.get(f"/api/ma/artwork?url=ftp%3A%2F%2Fevil.example%2Fimage.jpg&sig={sign_artwork_url(raw_url)}")
+        assert resp.status_code == 400
+        assert "Unsupported artwork URL scheme" in resp.get_data(as_text=True)
+    finally:
+        state.set_ma_api_credentials("", "")
+
+
+def test_ma_artwork_proxy_rejects_unsigned_external_provider_artwork(client):
     import state
 
     state.set_ma_api_credentials("http://ma:8095", "token123")
     try:
-        resp = client.get("/api/ma/artwork?url=http%3A%2F%2Fevil.example%2Fimage.jpg")
+        resp = client.get(
+            "/api/ma/artwork?url="
+            "https%3A%2F%2Favatars.yandex.net%2Fget-music-content%2F49876%2Fab027f9c.a.37173-2%2F1000x1000"
+        )
         assert resp.status_code == 400
-        assert "configured MA origin" in resp.get_data(as_text=True)
+        assert "Invalid artwork signature" in resp.get_data(as_text=True)
+    finally:
+        state.set_ma_api_credentials("", "")
+
+
+def test_ma_artwork_proxy_fetches_signed_external_provider_artwork_without_ma_token(client):
+    import state
+    from services.ma_artwork import sign_artwork_url
+
+    class _FakeHeaders:
+        def get(self, key, default=None):
+            if key.lower() == "content-type":
+                return "image/png"
+            return default
+
+    class _FakeResponse:
+        headers = _FakeHeaders()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self):
+            return b"png-bytes"
+
+    raw_url = "https://avatars.yandex.net/get-music-content/49876/ab027f9c.a.37173-2/1000x1000"
+    state.set_ma_api_credentials("http://ma:8095", "token123")
+    try:
+        with pytest.MonkeyPatch.context() as mp:
+            import routes.api_ma as api_ma_mod
+
+            opened = {}
+
+            def _fake_urlopen(req, timeout=0):
+                opened["url"] = req.full_url
+                opened["auth"] = req.headers.get("Authorization")
+                opened["accept"] = req.headers.get("Accept")
+                opened["timeout"] = timeout
+                return _FakeResponse()
+
+            mp.setattr(api_ma_mod._ur, "urlopen", _fake_urlopen)
+            resp = client.get(
+                "/api/ma/artwork?url="
+                "https%3A%2F%2Favatars.yandex.net%2Fget-music-content%2F49876%2Fab027f9c.a.37173-2%2F1000x1000"
+                f"&sig={sign_artwork_url(raw_url)}"
+            )
+
+        assert resp.status_code == 200
+        assert resp.data == b"png-bytes"
+        assert resp.headers["Content-Type"].startswith("image/png")
+        assert opened["url"] == raw_url
+        assert opened["auth"] is None
+        assert opened["accept"] == "image/*"
+        assert opened["timeout"] == 15
+    finally:
+        state.set_ma_api_credentials("", "")
+
+
+def test_ma_artwork_proxy_rejects_invalid_signature(client):
+    import state
+
+    state.set_ma_api_credentials("http://ma:8095", "token123")
+    try:
+        resp = client.get("/api/ma/artwork?url=%2Fapi%2Fimage%2F123&sig=bad")
+        assert resp.status_code == 400
+        assert "Invalid artwork signature" in resp.get_data(as_text=True)
     finally:
         state.set_ma_api_credentials("", "")

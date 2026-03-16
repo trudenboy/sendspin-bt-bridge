@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.32.0] - 2026-03-16
+
+### Changed
+- Dashboard playback UI now keeps card and list views closer to Music Assistant with shared playback helpers, tighter metadata/equalizer layout, hover-only card actions, slimmer volume sliders, and numeric volume labels without `%`
+- Expanded list rows now surface current-track context directly beside artwork and surround playback controls with queue-neighbor previews plus shuffle/repeat controls
+
+### Fixed
+- Missing MA previous/next queue items are now backfilled via `player_queues/items`, eliminating false `Queue start` / `Queue end` placeholders when real neighbors exist
+- Card and list playback progress now initialize cleanly and ignore stale MA elapsed snapshots for the same track, removing full-width flashes and backward jumps in elapsed/progress displays
+- Diagnostics now expose per-device playing state together with parsed PulseAudio sink-input metadata for easier live troubleshooting
+
+### Added
+- Regression coverage for MA queue-neighbor hydration, artwork proxy validation, and diagnostics sink-input parsing
+
 ## [2.31.11] - 2026-03-16
 
 ### Fixed

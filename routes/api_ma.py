@@ -21,6 +21,7 @@ from config import (
     update_config,
 )
 from routes.api_config import _detect_runtime
+from services.ma_artwork import has_valid_artwork_signature
 from state import clients as _clients
 from state import (
     clients_lock as _clients_lock,
@@ -74,24 +75,29 @@ def _ws_connect(url: str, **kwargs):
         return ws_connect(url, **kwargs)
 
 
-def _resolve_ma_artwork_url(raw_url: str) -> str:
-    """Resolve a raw MA artwork path/URL against the configured MA base URL."""
+def _resolve_ma_artwork_url(raw_url: str) -> tuple[str, bool]:
+    """Resolve a raw artwork path/URL and report whether it targets the MA origin."""
     ma_url, _token = state.get_ma_api_credentials()
     if not ma_url:
         raise ValueError("MA API URL is not configured")
 
-    base = ma_url.rstrip("/") + "/"
-    resolved = _up.urljoin(base, raw_url)
-    parsed = _up.urlparse(resolved)
+    trimmed = raw_url.strip()
+    parsed_raw = _up.urlparse(trimmed)
     base_parsed = _up.urlparse(ma_url)
-    if parsed.scheme.lower() not in ("http", "https"):
+    if parsed_raw.scheme and parsed_raw.scheme.lower() not in ("http", "https"):
         raise ValueError("Unsupported artwork URL scheme")
-    if (parsed.scheme.lower(), parsed.netloc.lower()) != (
+
+    if not parsed_raw.scheme:
+        base = ma_url.rstrip("/") + "/"
+        return _up.urljoin(base, trimmed), True
+
+    resolved = trimmed
+    parsed = _up.urlparse(resolved)
+    is_ma_origin = (parsed.scheme.lower(), parsed.netloc.lower()) == (
         base_parsed.scheme.lower(),
         base_parsed.netloc.lower(),
-    ):
-        raise ValueError("Artwork URL must match the configured MA origin")
-    return resolved
+    )
+    return resolved, is_ma_origin
 
 
 def _validate_ma_token(ma_url: str, token: str) -> bool:
@@ -1261,7 +1267,7 @@ def api_ma_nowplaying():
     Returns {"connected": false} when MA integration is not active.
     Fields when connected: state, track, artist, album, image_url,
     elapsed, elapsed_updated_at, duration, shuffle, repeat,
-    queue_index, queue_total, syncgroup_id.
+    queue_index, queue_total, syncgroup_id, and optional prev_/next_ track metadata.
     """
     if not state.is_ma_connected():
         return jsonify({"connected": False})
@@ -1272,17 +1278,20 @@ def api_ma_nowplaying():
 def api_ma_artwork():
     """Proxy MA artwork through the bridge so the UI can use same-origin image URLs."""
     raw_url = (request.args.get("url") or "").strip()
+    signature = (request.args.get("sig") or "").strip()
     if not raw_url:
         return Response("Missing artwork URL", status=400)
+    if not has_valid_artwork_signature(raw_url, signature):
+        return Response("Invalid artwork signature", status=400)
 
     try:
-        artwork_url = _resolve_ma_artwork_url(raw_url)
+        artwork_url, is_ma_origin = _resolve_ma_artwork_url(raw_url)
     except ValueError as exc:
         return Response(str(exc), status=400)
 
     _ma_url, ma_token = state.get_ma_api_credentials()
     req = _ur.Request(artwork_url, headers={"Accept": "image/*"})
-    if ma_token:
+    if is_ma_origin and ma_token:
         req.add_header("Authorization", f"Bearer {ma_token}")
 
     try:

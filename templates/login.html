@@ -30,10 +30,19 @@
             margin-bottom: 28px;
         }
         .login-header h1 {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
             color: var(--primary-color);
             font-size: 20px;
             font-weight: 700;
             margin-bottom: 6px;
+        }
+        .login-logo-icon {
+            width: 20px;
+            height: 20px;
+            flex-shrink: 0;
         }
         .login-header p {
             color: var(--secondary-text-color);
@@ -110,7 +119,7 @@
 <div class="login-wrap">
     <div class="login-card">
         <div class="login-header">
-            <h1>&#127925; Sendspin Bluetooth Bridge</h1>
+            <h1><svg class="login-logo-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M14.88 16.29 13 14.41V17.59L14.88 16.29ZM13 6.41V9.59L14.88 8.29 13 6.41ZM17.71 7.71 12 2H11V9.59L6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 11 14.41V22H12L17.71 16.29 13.41 12 17.71 7.71ZM15.29 16.29 13 18.17V14.41L15.29 16.29ZM13 9.59V5.83L15.29 7.71 13 9.59Z"/></svg><span>Sendspin Bluetooth Bridge</span></h1>
             {% if mfa_step %}
             <p>Enter the code from your authenticator app</p>
             {% else %}

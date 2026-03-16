@@ -16,9 +16,13 @@ import itertools
 import json
 import logging
 import time
-import urllib.parse as _up
+from typing import TYPE_CHECKING
 
 import state as _state
+from services.ma_artwork import build_artwork_proxy_url
+
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
 
 logger = logging.getLogger(__name__)
 
@@ -32,14 +36,74 @@ class _AuthFailed(Exception):
     """Raised when MA WebSocket authentication fails."""
 
 
-def _build_artwork_proxy_url(image_url: str) -> str:
-    """Wrap raw MA artwork URLs in a same-origin bridge proxy path."""
-    if not image_url or not isinstance(image_url, str):
-        return ""
-    trimmed = image_url.strip()
-    if not trimmed:
-        return ""
-    return f"/api/ma/artwork?url={_up.quote(trimmed, safe='')}"
+def _build_queue_item_summary(item: dict) -> dict[str, str]:
+    """Return compact track metadata for a queue item."""
+    if not isinstance(item, dict):
+        return {}
+    media_item = item.get("media_item") or {}
+    artists = media_item.get("artists") or []
+    artist = artists[0].get("name", "") if artists else ""
+    album_obj = media_item.get("album") or {}
+    album = album_obj.get("name", "") if isinstance(album_obj, dict) else ""
+    track = media_item.get("name") or item.get("name", "")
+    if not track:
+        return {}
+    return {
+        "track": track,
+        "artist": artist,
+        "album": album,
+    }
+
+
+def _build_queue_neighbors(queue: dict) -> tuple[dict[str, str], dict[str, str]]:
+    """Return previous/next queue item summaries when available."""
+    previous_item = queue.get("previous_item") or {}
+    next_item = queue.get("next_item") or {}
+    items = queue.get("items")
+    if isinstance(items, list):
+        current_index = queue.get("current_index", 0)
+        if not previous_item and isinstance(current_index, int) and current_index > 0:
+            previous_item = items[current_index - 1] if current_index - 1 < len(items) else {}
+        if not next_item and isinstance(current_index, int) and current_index + 1 < len(items):
+            next_item = items[current_index + 1]
+    return _build_queue_item_summary(previous_item), _build_queue_item_summary(next_item)
+
+
+def _set_queue_neighbor(result: dict, prefix: str, item: dict[str, str]) -> None:
+    """Store queue-neighbor summary on the now-playing payload."""
+    if not item:
+        return
+    result[f"{prefix}_track"] = item["track"]
+    result[f"{prefix}_artist"] = item["artist"]
+    result[f"{prefix}_album"] = item["album"]
+
+
+async def _hydrate_missing_queue_neighbors(
+    fetch_items: Callable[[str, int, int], Awaitable[list[dict]]],
+    queue: dict,
+    result: dict,
+) -> None:
+    """Fetch missing previous/next queue items when player_queues/all omits them."""
+    queue_id = queue.get("queue_id", "")
+    current_index = queue.get("current_index")
+    queue_total = result.get("queue_total")
+    if not queue_id or not isinstance(current_index, int):
+        return
+
+    if not result.get("prev_track") and current_index > 0:
+        prev_items = await fetch_items(queue_id, 1, current_index - 1)
+        if prev_items:
+            _set_queue_neighbor(result, "prev", _build_queue_item_summary(prev_items[0]))
+
+    if (
+        not result.get("next_track")
+        and isinstance(queue_total, int)
+        and queue_total > 0
+        and current_index + 1 < queue_total
+    ):
+        next_items = await fetch_items(queue_id, 1, current_index + 1)
+        if next_items:
+            _set_queue_neighbor(result, "next", _build_queue_item_summary(next_items[0]))
 
 
 def _build_now_playing(queue: dict) -> dict:
@@ -63,22 +127,28 @@ def _build_now_playing(queue: dict) -> dict:
                 image_url = pm["thumbnail_url"]
                 break
 
+    previous_item, next_item = _build_queue_neighbors(queue)
+    queue_items = queue.get("items")
+    queue_total = len(queue_items) if isinstance(queue_items, list) else queue.get("items", 0)
+
     result = {
         "connected": True,
         "state": queue.get("state", "idle"),
         "track": mi.get("name") or ci.get("name", ""),
         "artist": artist,
         "album": album,
-        "image_url": _build_artwork_proxy_url(image_url),
+        "image_url": build_artwork_proxy_url(image_url),
         "elapsed": queue.get("elapsed_time", 0),
         "elapsed_updated_at": queue.get("elapsed_time_last_updated", time.time()),
         "duration": mi.get("duration") or 0,
         "shuffle": queue.get("shuffle_enabled", False),
         "repeat": queue.get("repeat_mode", "off"),
         "queue_index": queue.get("current_index", 0),
-        "queue_total": queue.get("items", 0),
+        "queue_total": queue_total,
         "syncgroup_id": queue.get("queue_id", ""),
     }
+    _set_queue_neighbor(result, "prev", previous_item)
+    _set_queue_neighbor(result, "next", next_item)
     # Enrich with syncgroup name from state
     syncgroup_id = result["syncgroup_id"]
     if syncgroup_id:
@@ -212,6 +282,10 @@ class MaMonitor:
                     fut.set_exception(e)
 
     async def _send_queue_cmd(self, ws, command: str, args: dict) -> dict:
+        return await self._request_command(ws, command, args)
+
+    async def _request_command(self, ws, command: str, args: dict) -> dict:
+        """Send a WS command and return the matching response payload."""
         mid = self._next_id()
         await _send(ws, mid, command, args)
         # Read messages until we get the one with our message_id
@@ -225,6 +299,18 @@ class MaMonitor:
             else:
                 logger.debug("MA monitor: non-matching msg (id=%s) during queue cmd", resp.get("message_id"))
         return {}
+
+    async def _fetch_queue_items(self, ws, queue_id: str, limit: int = 1, offset: int = 0) -> list[dict]:
+        """Fetch a slice of queue items for a queue via MA WebSocket API."""
+        if not queue_id or limit < 1 or offset < 0:
+            return []
+        resp = await self._request_command(
+            ws,
+            "player_queues/items",
+            {"queue_id": queue_id, "limit": limit, "offset": offset},
+        )
+        result = resp.get("result")
+        return result if isinstance(result, list) else []
 
     async def _refresh_stale_player_metadata(self, ws) -> None:
         """Compare bridge player device_info in MA with current version/hostname.
@@ -456,14 +542,20 @@ class MaMonitor:
                 if str(resp.get("message_id")) == str(mid):
                     queues = resp.get("result") or []
                     fresh: dict[str, dict] = {}
+
+                    async def fetch_items(queue_id: str, limit: int = 1, offset: int = 0) -> list[dict]:
+                        return await self._fetch_queue_items(ws, queue_id, limit=limit, offset=offset)
+
                     # Syncgroup players
                     syncgroup_queues = await _find_syncgroup_queues(queues)
                     for q in syncgroup_queues:
                         np = _build_now_playing(q)
+                        await _hydrate_missing_queue_neighbors(fetch_items, q, np)
                         fresh[np["syncgroup_id"]] = np
                     # Solo (ungrouped) players — keyed by their own player_id
                     for player_id, q in _find_solo_player_queues(queues):
                         np = _build_now_playing(q)
+                        await _hydrate_missing_queue_neighbors(fetch_items, q, np)
                         np["syncgroup_id"] = player_id
                         fresh[player_id] = np
                     # Atomically replace to clear stale entries

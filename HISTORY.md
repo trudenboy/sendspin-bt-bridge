@@ -2,7 +2,22 @@
 
 A history of the architectural and functional evolution of sendspin-bt-bridge — for readers familiar with Home Assistant, Music Assistant, and multiroom audio setups.
 
-**Period:** January 1 – March 16, 2026 · **Total commits:** ~956 · **Versions:** 1.0.0 → 2.31.11
+**Period:** January 1 – March 16, 2026 · **Total commits:** ~957 · **Versions:** 1.0.0 → 2.32.0
+
+---
+
+## March 16, 2026 — MA-style playback parity and progress stability (v2.32.0)
+
+The `2.32.0` release turns the redesign work from “visually closer to Music Assistant” into “behaviorally closer too.” The main theme is parity: card and list views now share more of the same playback semantics instead of acting like two independent dashboards that merely look related. That shows up in the obvious UI polish — tighter track/equalizer grouping, cleaner card headers, hover-only secondary card actions, slimmer sliders, numeric volume labels — but the more important part is that queue and progress behavior is now being normalized across both views.
+
+Four threads define this release:
+
+- **Card/list playback convergence** — the expanded list row now behaves much more like an MA mini-player, with artwork-adjacent current-track metadata, queue-neighbor previews, and transport/shuffle/repeat controls arranged around the active track context. The card view was polished in parallel: selection checkbox moved to the far-left edge, secondary actions now reveal on hover instead of permanently consuming space, and the compact equalizer treatment is reused consistently across views.
+- **Queue-context correctness** — MA queue metadata is no longer trusted blindly when `player_queues/all` omits neighboring items. The bridge now hydrates missing previous/next entries via `player_queues/items`, which removes the false `Queue start` / `Queue end` placeholders that previously appeared even when real neighboring tracks existed.
+- **Progress stability instead of progress theatrics** — playback progress now initializes deterministically and merges stale MA elapsed snapshots instead of regressing to them. In practice, that removes both classes of UI bug seen during this cycle: the bar flashing full-width on first render and the elapsed-time/progress display jumping backwards when a slower MA payload arrives after local interpolation has already advanced.
+- **Richer runtime inspection** — diagnostics now expose whether a device is actively playing and parse additional PulseAudio sink-input metadata (`application_*`, `media_*`). That is not a headline feature, but it makes live routing/debugging much more actionable when operators need to understand what is actually feeding a sink.
+
+This is also a release about reuse as a maintenance strategy. Shared helpers now drive more of the equalizer/progress/queue behavior across card and list surfaces, which matters because the payoff is not just less code duplication — it is less UI drift and fewer “fixed here, still broken there” regressions in later polish passes.
 
 ---
 

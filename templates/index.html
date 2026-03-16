@@ -25,7 +25,7 @@
                         <span id="update-badge">
                             <a id="update-link" href="#" class="update-badge-link" title="Check for updates"
                                onclick="return _onUpdateBadgeClick(event)">
-                                <span id="update-icon">⟳</span> <span id="update-version">check</span>
+                                <span id="update-icon" class="ui-icon-slot" data-ui-icon="refresh" aria-hidden="true"></span><span id="update-version">check</span>
                             </a>
                         </span>
                     </div>
@@ -33,7 +33,7 @@
             </div>
             <div class="header-actions">
                 <a href="#" class="header-link" id="report-link" title="Submit a bug report"
-                   onclick="return _openBugReport(event)"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"></path></svg> Report</a>
+                   onclick="return _openBugReport(event)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5 3.5 19h17L12 3.5Z"></path><path d="M12 9v4.75"></path><circle cx="12" cy="17.1" r="1" fill="currentColor" stroke="none"></circle></svg> Report</a>
                 <a href="https://trudenboy.github.io/sendspin-bt-bridge/" target="_blank" rel="noopener"
                    class="header-link"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M21 5c-1.11-.35-2.33-.5-3.5-.5-1.95 0-4.05.4-5.5 1.5-1.45-1.1-3.55-1.5-5.5-1.5S2.45 4.9 1 6v14.65c0 .25.25.5.5.5.1 0 .15-.05.25-.05C3.1 20.45 5.05 20 6.5 20c1.95 0 4.05.4 5.5 1.5 1.35-.85 3.8-1.5 5.5-1.5 1.65 0 3.35.3 4.75 1.05.1.05.15.05.25.05.25 0 .5-.25.5-.5V6c-.6-.45-1.25-.75-2-1zm0 13.5c-1.1-.35-2.3-.5-3.5-.5-1.7 0-4.15.65-5.5 1.5V8c1.35-.85 3.8-1.5 5.5-1.5 1.2 0 2.4.15 3.5.5v11.5z"></path></svg> Docs</a>
                 <a href="https://github.com/trudenboy/sendspin-bt-bridge" target="_blank" rel="noopener"
@@ -41,19 +41,19 @@
                 {% if auth_enabled %}
                 {% if ha_mode and ha_user %}
                 <span class="header-user-name">
-                    <svg class="header-user-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+                    <span class="header-user-icon ui-icon-slot" data-ui-icon="user" aria-hidden="true"></span>
                     <a id="header-user-link" href="/profile" target="_blank" rel="noopener" data-auth-method="ha" style="color:inherit;text-decoration:none">{{ ha_user }}</a>
                 </span>
                 <button class="header-btn-signout" title="Sign out" onclick="window.location.href='{{ url_for('auth.logout') }}'">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/></svg>
+                    <span class="header-btn-signout-icon ui-icon-slot" data-ui-icon="signout" aria-hidden="true"></span>
                 </button>
                 {% elif not ha_mode %}
                 <span class="header-user-name">
-                    <svg class="header-user-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+                    <span class="header-user-icon ui-icon-slot" data-ui-icon="user" aria-hidden="true"></span>
                     admin
                 </span>
                 <a href="{{ url_for('auth.logout') }}" class="header-btn-signout" title="Sign out">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/></svg>
+                    <span class="header-btn-signout-icon ui-icon-slot" data-ui-icon="signout" aria-hidden="true"></span>
                 </a>
                 {% endif %}
                 {% endif %}
@@ -110,9 +110,9 @@
             <div class="toolbar-sep"></div>
             <div class="vol-wrap">
                 <span class="toolbar-label">Vol</span>
-                <input type="range" min="0" max="100" value="50" id="group-vol-slider"
+                <input type="range" min="0" max="100" value="50" id="group-vol-slider" aria-label="Group volume" title="Group volume"
                     oninput="onGroupVolumeInput(this.value)">
-                <span class="vol-pct" id="group-vol-pct">50%</span>
+                <span class="vol-pct" id="group-vol-pct">50</span>
             </div>
             <div class="toolbar-sep"></div>
             <button type="button" class="icon-btn" id="group-mute-btn" onclick="onGroupMute()" title="Mute All">
@@ -131,7 +131,7 @@
 
     <!-- Configuration -->
     <details class="config-section">
-        <summary>&#9881;&#65039; Configuration</summary>
+        <summary><span class="summary-title-icon ui-icon-slot" data-ui-icon="settings" aria-hidden="true"></span><span>Configuration</span></summary>
         <form id="config-form">
             <div class="config-tabs" role="tablist" aria-label="Configuration sections">
                 <button type="button" class="config-tab active" data-config-tab="general">General</button>
@@ -144,7 +144,7 @@
             <section class="config-tab-panel active" id="config-panel-general" data-config-panel="general">
                 <div class="config-group">
                     <div class="config-group-heading">
-                        <h4 class="config-group-title"><span class="cg-icon">🏷️</span> General</h4>
+                        <h4 class="config-group-title"><span class="cg-icon ui-icon-slot" data-ui-icon="tag" aria-hidden="true"></span> General</h4>
                         <p class="config-group-subtitle">Core bridge identity, restart defaults, update policy, and runtime-only controls.</p>
                     </div>
                     <div class="config-settings-grid">
@@ -234,7 +234,7 @@
             <section class="config-tab-panel" id="config-panel-devices" data-config-panel="devices">
                 <div class="config-group config-group--flush">
                     <div class="config-group-heading">
-                        <h4 class="config-group-title"><span class="cg-icon">🔊</span> Devices</h4>
+                        <h4 class="config-group-title"><span class="cg-icon ui-icon-slot" data-ui-icon="speaker" aria-hidden="true"></span> Devices</h4>
                         <p class="config-group-subtitle">Keep the speaker fleet table primary, with discovery and import treated as a secondary workflow.</p>
                     </div>
                     <div class="devices-stack">
@@ -264,14 +264,14 @@
                                 </div>
                                 <div class="devices-card-actions">
                                     <button type="button" onclick="startBtScan()" class="btn btn-sm btn-scan" id="scan-btn">
-                                        &#128269; Scan
+                                        <span class="btn-icon-slot ui-icon-slot" data-ui-icon="search" aria-hidden="true"></span><span>Scan</span>
                                     </button>
                                     <span id="scan-status" class="scan-badge"></span>
                                 </div>
                             </div>
                             <div id="paired-box" class="paired-box" hidden>
                                 <div class="paired-box-title" role="button" tabindex="0" onclick="togglePairedList(this)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();togglePairedList(this);}">
-                                    <span class="paired-arrow">▼</span>
+                                    <span class="paired-arrow expanded" aria-hidden="true"></span>
                                     <span class="paired-box-copy">Already paired &#8212; click to add:</span>
                                     <label class="paired-show-all" onclick="event.stopPropagation()">
                                         <span>Show all</span>
@@ -295,7 +295,7 @@
             <section class="config-tab-panel" id="config-panel-bluetooth" data-config-panel="bluetooth">
                 <div class="config-group">
                     <div class="config-group-heading">
-                        <h4 class="config-group-title"><span class="cg-icon">📡</span> Bluetooth</h4>
+                        <h4 class="config-group-title"><span class="cg-icon ui-icon-slot" data-ui-icon="bt" aria-hidden="true"></span> Bluetooth</h4>
                         <p class="config-group-subtitle">Adapter inventory, reconnection policy, and codec preference for slower hardware.</p>
                     </div>
                     <div class="config-settings-grid">
@@ -309,7 +309,7 @@
                             </div>
                             <div class="bt-toolbar">
                                 <button type="button" class="btn btn-sm btn-secondary" id="add-adapter-btn" onclick="addManualAdapterRow('','','')">+ Add adapter</button>
-                                <button type="button" class="btn btn-sm btn-refresh" onclick="loadBtAdapters()">&#x21BA; Refresh</button>
+                                <button type="button" class="btn btn-sm btn-refresh" onclick="loadBtAdapters()"><span class="btn-icon-slot ui-icon-slot" data-ui-icon="refresh" aria-hidden="true"></span><span>Refresh</span></button>
                             </div>
                         </div>
 
@@ -360,7 +360,7 @@
             <section class="config-tab-panel" id="config-panel-ma" data-config-panel="ma">
                 <div class="config-group config-group--flush" id="config-group-ma">
                     <div class="config-group-heading">
-                        <h4 class="config-group-title"><span class="cg-icon">🎵</span> Music Assistant</h4>
+                        <h4 class="config-group-title"><span class="cg-icon ui-icon-slot" data-ui-icon="ma" aria-hidden="true"></span> Music Assistant</h4>
                         <p class="config-group-subtitle">Connection, token, and live sync settings for the Music Assistant integration.</p>
                     </div>
 
@@ -376,7 +376,7 @@
                             </div>
 
                             <div id="ma-status-bar" class="panel-status panel-status--neutral">
-                                <span id="ma-status-icon" class="panel-status-icon">⚪</span>
+                                <span id="ma-status-icon" class="panel-status-icon ui-icon-slot" data-ui-icon="status-neutral" aria-hidden="true"></span>
                                 <span id="ma-status-text" class="panel-status-text">Not connected</span>
                             </div>
                         </div>
@@ -390,7 +390,7 @@
                             <div id="ma-conn-form" class="ma-auth-stack">
                                 <div class="form-inline-actions config-inline-row">
                                     <input type="text" id="ma-login-url" class="config-inline-fill" placeholder="http://homeassistant.local:8095">
-                                    <button type="button" class="btn btn-sm btn-secondary" onclick="maDiscover()" id="ma-discover-btn">🔍 Discover</button>
+                                    <button type="button" class="btn btn-sm btn-secondary" onclick="maDiscover()" id="ma-discover-btn"><span class="btn-icon-slot ui-icon-slot" data-ui-icon="search" aria-hidden="true"></span><span>Discover</span></button>
                                 </div>
 
                                 <div id="ma-login-creds" class="form-inline-actions config-inline-row">
@@ -400,13 +400,13 @@
 
                                 <div id="ma-addon-hint" class="ma-addon-hint" hidden>
                                     <button type="button" class="btn btn-sm btn-block" onclick="maHaConnect()" id="ma-ha-login-btn">
-                                        🔑 Get token automatically
+                                        <span class="btn-icon-slot ui-icon-slot" data-ui-icon="key" aria-hidden="true"></span><span>Get token automatically</span>
                                     </button>
                                     <span id="ma-ha-login-msg" class="inline-status config-status-message config-status-message--center"></span>
                                 </div>
 
                                 <div class="form-inline-actions config-inline-row">
-                                    <button type="button" class="btn btn-sm btn-secondary" onclick="maLogin()" id="ma-login-btn">🔑 Get token</button>
+                                    <button type="button" class="btn btn-sm btn-secondary" onclick="maLogin()" id="ma-login-btn"><span class="btn-icon-slot ui-icon-slot" data-ui-icon="key" aria-hidden="true"></span><span>Get token</span></button>
                                     <span id="ma-login-msg" class="inline-status config-status-message"></span>
                                 </div>
                             </div>
@@ -490,7 +490,7 @@
                 {% if not ha_mode %}
                 <div class="config-group config-group--flush">
                     <div class="config-group-heading">
-                        <h4 class="config-group-title"><span class="cg-icon">🔒</span> Security</h4>
+                        <h4 class="config-group-title"><span class="cg-icon ui-icon-slot" data-ui-icon="lock" aria-hidden="true"></span> Security</h4>
                         <p class="config-group-subtitle">Protect the web UI with local authentication while still allowing Music Assistant sign-in when configured.</p>
                     </div>
                     <div class="config-settings-grid">
@@ -577,7 +577,7 @@
                 {% else %}
                 <div class="config-group config-group--flush">
                     <div class="config-group-heading">
-                        <h4 class="config-group-title"><span class="cg-icon">🔒</span> Security</h4>
+                        <h4 class="config-group-title"><span class="cg-icon ui-icon-slot" data-ui-icon="lock" aria-hidden="true"></span> Security</h4>
                         <p class="config-group-subtitle">Home Assistant owns access control for this deployment, so bridge-level auth settings stay read-only.</p>
                     </div>
                     <div class="config-settings-card">
@@ -596,7 +596,7 @@
 
         <div class="config-footer" id="config-footer">
             <div class="config-footer-meta">
-                <span class="config-dirty-label" id="config-dirty-label">⚠ Unsaved changes</span>
+                <span class="config-dirty-label" id="config-dirty-label"><span class="btn-icon-slot ui-icon-slot" data-ui-icon="warning" aria-hidden="true"></span><span>Unsaved changes</span></span>
                 <span class="config-footer-hint">Save writes the updated configuration now. Cancel restores the last saved values. Use Save &amp; Restart for runtime-sensitive changes such as Bluetooth devices/adapters, MA server/token, listen ports, or latency. Duplicate MAC entries are skipped after the first match, unresolved adapters fall back to bluetoothctl polling, and runtime toggles like log level and auth password updates apply immediately.</span>
             </div>
             <div class="config-footer-actions">
@@ -606,8 +606,8 @@
                     <button type="button" class="btn btn-sm btn-ghost config-action-btn" id="config-cancel-btn" onclick="cancelConfigChanges()" disabled>Cancel</button>
                 </div>
                 <div class="config-btn-group config-btn-group--utility">
-                    <button type="button" class="btn btn-sm btn-ghost config-action-btn btn-download" onclick="window.location.href='/api/config/download'">⬇ Download</button>
-                    <button type="button" class="btn btn-sm btn-ghost config-action-btn btn-upload" onclick="document.getElementById('config-upload-input').click()">⬆ Upload</button>
+                    <button type="button" class="btn btn-sm btn-ghost config-action-btn btn-download" onclick="window.location.href='/api/config/download'"><span class="btn-icon-slot ui-icon-slot" data-ui-icon="download" aria-hidden="true"></span><span>Download</span></button>
+                    <button type="button" class="btn btn-sm btn-ghost config-action-btn btn-upload" onclick="document.getElementById('config-upload-input').click()"><span class="btn-icon-slot ui-icon-slot" data-ui-icon="upload" aria-hidden="true"></span><span>Upload</span></button>
                 </div>
             </div>
         </div>
@@ -616,16 +616,16 @@
 
     <!-- Diagnostics (collapsible) -->
     <details class="diag-section" id="diag-details" ontoggle="onDiagToggle(this)">
-        <summary>Diagnostics</summary>
+        <summary><span class="summary-title-icon ui-icon-slot" data-ui-icon="info" aria-hidden="true"></span><span>Diagnostics</span></summary>
         <div id="diag-content"></div>
     </details>
 
     <!-- Logs -->
     <details class="logs-section">
-        <summary>&#128203; Logs</summary>
+        <summary><span class="summary-title-icon ui-icon-slot" data-ui-icon="notes" aria-hidden="true"></span><span>Logs</span></summary>
         <div class="logs-toolbar">
             <div class="logs-toolbar-left">
-                <button onclick="refreshLogs()" class="btn btn-sm btn-refresh">Refresh</button>
+                <button onclick="refreshLogs()" class="btn btn-sm btn-refresh"><span class="btn-icon-slot ui-icon-slot" data-ui-icon="refresh" aria-hidden="true"></span><span>Refresh</span></button>
                 <select id="logs-filter-select" class="logs-filter-select" onchange="setLogLevel(this.value)" aria-label="Filter log levels">
                     <option value="all">All</option>
                     <option value="error">Errors</option>
@@ -648,7 +648,7 @@
                     <button type="button" class="btn btn-sm btn-secondary" onclick="applyLogLevel()">Apply</button>
                     <span id="log-level-msg" class="inline-status logs-inline-status"></span>
                 </div>
-                <button onclick="downloadLogs()" class="btn btn-sm">⬇ Download</button>
+                <button onclick="downloadLogs()" class="btn btn-sm"><span class="btn-icon-slot ui-icon-slot" data-ui-icon="download" aria-hidden="true"></span><span>Download</span></button>
             </div>
         </div>
         <div class="logs-container log-viewer" id="logs"></div>
