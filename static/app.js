@@ -186,6 +186,73 @@ function _buildMergedMaProgressSnapshot(idx, ma, now) {
     return incoming;
 }
 
+function _getDevicePlaybackProgressState(dev, idx, nowMs) {
+    var now = nowMs != null ? nowMs : Date.now();
+    var ma = dev.ma_now_playing || {};
+    var deviceMaActive = !!(ma.connected && deviceHasSink(dev));
+    var maHasProg = deviceMaActive && ma.state === 'playing' && ma.duration > 0 && ma.elapsed != null;
+    if (maHasProg) {
+        var maSnapshot = idx != null
+            ? _buildMergedMaProgressSnapshot(idx, ma, now)
+            : {
+                elapsed: Math.max(0, Math.min(Number(ma.elapsed) || 0, Number(ma.duration) || 0)),
+                duration: Math.max(0, Number(ma.duration) || 0),
+                t: now,
+                key: _getMaProgressTrackKey(ma),
+            };
+        var maElapsedSec = _getMaSnapshotElapsedNow(maSnapshot, now);
+        if (idx != null) {
+            _maProgSnapshots[idx] = maSnapshot;
+            delete _progSnapshots[idx];
+        }
+        return {
+            visible: true,
+            pct: Math.min(100, (maElapsedSec / maSnapshot.duration) * 100),
+            text: fmtSec(maElapsedSec) + ' / ' + fmtSec(maSnapshot.duration),
+        };
+    }
+
+    if (idx != null) delete _maProgSnapshots[idx];
+
+    var nativeHasProg = dev.playing && dev.track_duration_ms > 0 && dev.track_progress_ms != null;
+    if (nativeHasProg) {
+        var nativeDuration = Math.max(0, Number(dev.track_duration_ms) || 0);
+        var nativeProgress = Math.max(0, Math.min(Number(dev.track_progress_ms) || 0, nativeDuration));
+        if (idx != null) {
+            _progSnapshots[idx] = {pos: nativeProgress, dur: nativeDuration, t: now};
+        }
+        return {
+            visible: true,
+            pct: Math.min(100, (nativeProgress / nativeDuration) * 100),
+            text: fmtMs(nativeProgress) + ' / ' + fmtMs(nativeDuration),
+        };
+    }
+
+    if (idx != null) delete _progSnapshots[idx];
+    return {visible: false, pct: 0, text: ''};
+}
+
+function _applyPlaybackProgressDom(wrapEl, fillEl, timeEl, progress) {
+    if (wrapEl) wrapEl.style.display = progress.visible ? '' : 'none';
+    if (fillEl) fillEl.style.width = progress.visible ? (progress.pct + '%') : '0%';
+    if (timeEl) timeEl.textContent = progress.text || '';
+}
+
+function _applyPlaybackProgressForIndex(idx, progress) {
+    _applyPlaybackProgressDom(
+        document.getElementById('dprog-wrap-' + idx),
+        document.getElementById('dprog-fill-' + idx),
+        document.getElementById('dprog-time-' + idx),
+        progress
+    );
+    _applyPlaybackProgressDom(
+        document.getElementById('dlprog-wrap-' + idx),
+        document.getElementById('dlprog-fill-' + idx),
+        document.getElementById('dlprog-time-' + idx),
+        progress
+    );
+}
+
 function formatSince(isoString) {
     if (!isoString) return '';
     try {
@@ -566,8 +633,6 @@ function getDeviceReleaseMeta(dev) {
         toneClass: _deviceStatusToneClass(isAuto ? 'warning' : 'neutral'),
         stateMeta: stateMeta,
         indicatorKind: 'release',
-        cardClassName: 'card-badge badge-released meta-badge meta-badge-status' + (isAuto ? ' is-warning' : ' is-neutral'),
-        listClassName: 'chip list-inline-badge list-release-chip meta-badge meta-badge-status' + (isAuto ? ' is-warning' : ' is-neutral'),
     };
 }
 
@@ -687,6 +752,8 @@ function _closeArtworkPreviews(exceptEl) {
         if (exceptEl && el === exceptEl) return;
         el.classList.remove('preview-open');
         el.setAttribute('aria-expanded', 'false');
+        var layerEl = el.closest('.device-card, .list-row');
+        if (layerEl) layerEl.classList.remove('preview-open');
     });
 }
 
@@ -702,6 +769,8 @@ function toggleArtworkPreview(event, el) {
     _closeArtworkPreviews(el);
     el.classList.toggle('preview-open', shouldOpen);
     el.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
+    var layerEl = el.closest('.device-card, .list-row');
+    if (layerEl) layerEl.classList.toggle('preview-open', shouldOpen);
 }
 
 function onArtworkPreviewKeydown(event, el) {
@@ -739,6 +808,8 @@ function _setAlbumArtState(artEl, placeholderEl, imgUrl, previewEl) {
         if (containerEl) {
             containerEl.classList.remove('has-artwork-preview', 'preview-open');
             containerEl.setAttribute('aria-expanded', 'false');
+            var layerEl = containerEl.closest('.device-card, .list-row');
+            if (layerEl) layerEl.classList.remove('preview-open');
         }
         if (placeholderEl) placeholderEl.style.display = '';
         return;
@@ -759,6 +830,8 @@ function _setAlbumArtState(artEl, placeholderEl, imgUrl, previewEl) {
         if (containerEl) {
             containerEl.classList.remove('has-artwork-preview', 'preview-open');
             containerEl.setAttribute('aria-expanded', 'false');
+            var layerEl = containerEl.closest('.device-card, .list-row');
+            if (layerEl) layerEl.classList.remove('preview-open');
         }
         if (placeholderEl) placeholderEl.style.display = '';
     };
@@ -770,6 +843,8 @@ function _setAlbumArtState(artEl, placeholderEl, imgUrl, previewEl) {
         if (containerEl) {
             containerEl.classList.remove('has-artwork-preview', 'preview-open');
             containerEl.setAttribute('aria-expanded', 'false');
+            var layerEl = containerEl.closest('.device-card, .list-row');
+            if (layerEl) layerEl.classList.remove('preview-open');
         }
     } else if (artEl.complete && artEl.naturalWidth > 0) {
         artEl.style.display = '';
@@ -1031,15 +1106,112 @@ function _getBatteryBadgeMeta(level) {
     };
 }
 
+function _joinClassNames(parts) {
+    return (parts || []).filter(Boolean).join(' ');
+}
+
+function _getStatusBadgeMeta(dev) {
+    if (dev) return getDeviceDisplayStatusMeta(dev);
+    return {
+        key: 'idle',
+        label: '-',
+        summary: 'Device status',
+        badgeToneClass: _deviceStatusToneClass('neutral'),
+        pulse: false,
+    };
+}
+
+function _getStatusBadgeRenderData(dev, className, labelClassName) {
+    var meta = _getStatusBadgeMeta(dev);
+    return {
+        meta: meta,
+        className: _joinClassNames([className, 'meta-badge', 'meta-badge-status', meta.badgeToneClass]),
+        title: meta.summary ? 'Device status — ' + meta.summary : 'Device status',
+        innerHtml: _renderBadgeIndicatorHtml('status', meta) +
+            '<span class="' + escHtmlAttr(labelClassName || 'meta-badge-label') + '">' + escHtml(meta.label) + '</span>',
+    };
+}
+
+function _renderDeviceStatusBadgeHtml(dev, className, labelClassName, id) {
+    var renderData = _getStatusBadgeRenderData(dev, className, labelClassName);
+    return '<span class="' + renderData.className + '"' +
+        (id ? ' id="' + id + '"' : '') +
+        ' title="' + escHtmlAttr(renderData.title) + '">' +
+        renderData.innerHtml +
+    '</span>';
+}
+
+function _getReleaseBadgeRenderData(releaseMeta, className) {
+    if (!releaseMeta || !releaseMeta.visible) return null;
+    return {
+        className: _joinClassNames([className, 'meta-badge', 'meta-badge-status', releaseMeta.toneClass]),
+        title: releaseMeta.title,
+        innerHtml: _getReleaseBadgeInnerHtml(releaseMeta),
+    };
+}
+
+function _renderReleaseBadgeHtml(releaseMeta, className, id) {
+    var renderData = _getReleaseBadgeRenderData(releaseMeta, className);
+    if (!renderData) return '';
+    return '<span class="' + renderData.className + '"' +
+        (id ? ' id="' + id + '"' : '') +
+        ' title="' + escHtmlAttr(renderData.title) + '">' +
+        renderData.innerHtml +
+    '</span>';
+}
+
+function _getGroupBadgeRenderData(dev, i, className) {
+    var meta = _getGroupBadgeMeta(dev);
+    var stateMeta = _getGroupBadgeStateMeta(dev, meta);
+    return {
+        meta: meta,
+        className: _joinClassNames([
+            className,
+            'meta-badge',
+            'meta-badge-link',
+            'group-badge-unified',
+            stateMeta.toneClass,
+            meta.clickable ? 'meta-badge-interactive group-link-badge' : '',
+            meta.isEmpty ? 'empty' : ''
+        ]),
+        title: meta.title,
+        innerHtml: _renderBadgeIndicatorHtml('chain', stateMeta) +
+            '<span class="group-badge-label meta-badge-label">' + escHtml(meta.displayLabel) + '</span>',
+        disabled: !meta.clickable,
+        ariaLabel: meta.clickable ? 'Open Music Assistant group settings for ' + meta.label : '',
+        onclick: meta.clickable ? 'event.stopPropagation();openDeviceGroupSettings(' + i + ')' : '',
+    };
+}
+
+function _getAdapterBadgeRenderData(dev, i, className) {
+    var info = _getAdapterDisplayInfo(dev);
+    var stateMeta = _getBtBadgeStateMeta(dev, info);
+    return {
+        info: info,
+        stateMeta: stateMeta,
+        className: _joinClassNames([
+            className,
+            'meta-badge',
+            'meta-badge-link',
+            'adapter-link-badge',
+            stateMeta.toneClass,
+            info.empty ? 'empty' : 'meta-badge-interactive'
+        ]),
+        title: info.empty
+            ? (stateMeta.summary || info.title)
+            : (stateMeta.summary ? stateMeta.summary + ' · ' : '') + 'Open Bluetooth adapter settings · ' + info.title,
+        innerHtml: _renderBadgeIndicatorHtml('bt', stateMeta) +
+            '<span class="adapter-badge-label meta-badge-label">' + escHtml(info.label) + '</span>',
+        disabled: info.empty,
+        onclick: info.empty ? '' : 'event.stopPropagation();openDeviceAdapterSettings(' + i + ')',
+    };
+}
+
 function _getListCollapsedBadgesHtml(dev, i) {
     var badges = [];
     var releaseMeta = getDeviceReleaseMeta(dev);
     if (releaseMeta.visible) {
-        badges.push(
-            '<span class="' + releaseMeta.listClassName + '" title="' + escHtmlAttr(releaseMeta.title) + '">' +
-                _getReleaseBadgeInnerHtml(releaseMeta) +
-            '</span>'
-        );
+        badges.push(_renderReleaseBadgeHtml(releaseMeta, 'chip list-inline-badge'));
     }
     var serviceState = _getServiceBadgeStateMeta(dev);
     var maConnected = !!((dev.ma_now_playing || {}).connected);
@@ -1205,19 +1377,13 @@ function _getGroupBadgeMeta(dev) {
 }
 
 function _groupBadgeHtml(dev, i, className) {
-    var meta = _getGroupBadgeMeta(dev);
-    var stateMeta = _getGroupBadgeStateMeta(dev, meta);
-    var classes = className + ' meta-badge meta-badge-link group-badge-unified ' + stateMeta.toneClass +
-        (meta.clickable ? ' meta-badge-interactive' : '') +
-        (meta.isEmpty ? ' empty' : '');
-    var contentHtml = _renderBadgeIndicatorHtml('chain', stateMeta) +
-        '<span class="group-badge-label meta-badge-label">' + escHtml(meta.displayLabel) + '</span>';
-    if (!meta.clickable) {
-        return '<span class="' + classes + '" title="' + escHtmlAttr(meta.title) + '">' + contentHtml + '</span>';
+    var renderData = _getGroupBadgeRenderData(dev, i, className);
+    if (!renderData.meta.clickable) {
+        return '<span class="' + renderData.className + '" title="' + escHtmlAttr(renderData.title) + '">' + renderData.innerHtml + '</span>';
     }
-    return '<button type="button" class="' + classes + ' group-link-badge" title="' +
-        escHtmlAttr(meta.title) + '" onclick="event.stopPropagation();openDeviceGroupSettings(' + i + ')">' +
-        contentHtml +
+    return '<button type="button" class="' + renderData.className + '" title="' +
+        escHtmlAttr(renderData.title) + '" aria-label="' + escHtmlAttr(renderData.ariaLabel) + '" onclick="' + renderData.onclick + '">' +
+        renderData.innerHtml +
     '</button>';
 }
 
@@ -1255,38 +1421,20 @@ function _getAdapterDisplayInfo(dev) {
 }
 
 function _adapterBadgeHtml(dev, i, className) {
-    var info = _getAdapterDisplayInfo(dev);
-    var stateMeta = _getBtBadgeStateMeta(dev, info);
-    var labelHtml = '<span class="adapter-badge-label meta-badge-label">' + escHtml(info.label) + '</span>';
-    var classes = className + ' meta-badge meta-badge-link adapter-link-badge ' + stateMeta.toneClass +
-        (info.empty ? ' empty' : ' meta-badge-interactive');
-    if (info.empty) {
-        return '<span class="' + classes + '" title="' + escHtmlAttr(stateMeta.summary || info.title) + '">' +
-            _renderBadgeIndicatorHtml('bt', stateMeta) + labelHtml +
+    var renderData = _getAdapterBadgeRenderData(dev, i, className);
+    if (renderData.info.empty) {
+        return '<span class="' + renderData.className + '" title="' + escHtmlAttr(renderData.title) + '">' +
+            renderData.innerHtml +
         '</span>';
     }
-    return '<button type="button" class="' + classes + '" title="' + escHtmlAttr((stateMeta.summary ? stateMeta.summary + ' · ' : '') + 'Open Bluetooth adapter settings · ' + info.title) + '"' +
-        ' onclick="event.stopPropagation();openDeviceAdapterSettings(' + i + ')">' +
-        _renderBadgeIndicatorHtml('bt', stateMeta) + labelHtml +
+    return '<button type="button" class="' + renderData.className + '" title="' + escHtmlAttr(renderData.title) + '"' +
+        ' onclick="' + renderData.onclick + '">' +
+        renderData.innerHtml +
     '</button>';
 }
 
-function _getListStatusBadgeMeta(dev) {
-    var playMeta = getDeviceDisplayStatusMeta(dev);
-    return {
-        key: playMeta.key,
-        text: playMeta.label,
-        pulse: playMeta.pulse,
-        toneClass: playMeta.badgeToneClass,
-    };
-}
-
 function _getListStatusBadgeHtml(dev) {
-    var meta = _getListStatusBadgeMeta(dev);
-    return '<span class="chip meta-badge meta-badge-status list-status-badge ' + meta.toneClass + '" title="Device status">' +
-        _renderBadgeIndicatorHtml('status', meta) +
-        '<span class="list-status-badge-text meta-badge-label">' + escHtml(meta.text) + '</span>' +
-    '</span>';
+    return _renderDeviceStatusBadgeHtml(dev, 'chip');
 }
 
 function _findAdapterConfigRow(adapterId, adapterMac) {
@@ -1448,6 +1596,151 @@ function _getEqualizerHtml(dev, extraClass, id) {
     '</div>';
 }
 
+function _getDeviceNowPlayingState(dev, i) {
+    var safeDev = dev || {};
+    var ma = safeDev.ma_now_playing || {};
+    var deviceMaActive = !!(ma.connected && deviceHasSink(safeDev));
+    var artist = _firstOfSlash((deviceMaActive ? (ma.artist || '') : '') || safeDev.current_artist || '');
+    var track = _firstOfSlash((deviceMaActive ? (ma.track || '') : '') || safeDev.current_track || '');
+    var album = _firstOfSlash(deviceMaActive ? (ma.album || '') : '');
+    return {
+        ma: ma,
+        deviceMaActive: deviceMaActive,
+        track: track,
+        artist: artist,
+        album: album,
+        artUrl: deviceMaActive ? (ma.image_url || '') : '',
+        hasTrack: !!(track || artist),
+        titleText: track || 'Nothing playing',
+        metaText: [artist, album].filter(Boolean).join(' · '),
+        progress: _getDevicePlaybackProgressState(safeDev, i),
+    };
+}
+
+function _renderNowPlayingArtworkHtml(i, mediaState, options) {
+    var opts = options || {};
+    var artUrl = _getSafeArtworkUrl((mediaState || {}).artUrl || '');
+    var classes = _joinClassNames(['np-art', opts.containerClass, artUrl ? 'has-artwork-preview' : '']);
+    var attrs = (artUrl || opts.persistent)
+        ? ' role="button" tabindex="0" aria-expanded="false" onclick="toggleArtworkPreview(event, this)" onkeydown="onArtworkPreviewKeydown(event, this)"'
+        : '';
+    var imageClass = opts.imageClass || 'np-art-image';
+    var previewClass = opts.previewClass || 'artwork-preview-popover';
+    if (opts.persistent) {
+        return '<div class="' + classes + '"' + attrs + '>' +
+            '<img class="' + imageClass + '" id="' + escHtmlAttr(opts.imageId) + '" src="' + escHtmlAttr(artUrl) + '" alt=""' + (artUrl ? '' : ' style="display:none"') + '>' +
+            '<img class="' + previewClass + '" id="' + escHtmlAttr(opts.previewId) + '" src="' + escHtmlAttr(artUrl) + '" alt="">' +
+            '<svg viewBox="0 0 24 24" fill="currentColor" id="' + escHtmlAttr(opts.placeholderId) + '"' + (artUrl ? ' style="display:none"' : '') + '><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>' +
+        '</div>';
+    }
+    if (artUrl) {
+        return '<div class="' + classes + '"' + attrs + '>' +
+            _renderArtworkThumbHtml(artUrl, imageClass, previewClass) +
+        '</div>';
+    }
+    return '<div class="' + classes + '"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg></div>';
+}
+
+function _renderNowPlayingTextHtml(mediaState, options) {
+    var opts = options || {};
+    var titleTag = opts.titleTag || 'div';
+    var metaTag = opts.metaTag || 'div';
+    var titleHtml = '<' + titleTag + ' class="' + escHtmlAttr(opts.titleClass || '') + '"' +
+        (opts.titleId ? ' id="' + escHtmlAttr(opts.titleId) + '"' : '') + '>' +
+        escHtml((mediaState || {}).titleText || 'Nothing playing') +
+    '</' + titleTag + '>';
+    if (opts.titleEqHtml || opts.titleGroupClass) {
+        titleHtml = '<div class="' + escHtmlAttr(opts.titleGroupClass || '') + '">' + titleHtml + (opts.titleEqHtml || '') + '</div>';
+    }
+    if (opts.titleRowClass) {
+        titleHtml = '<div class="' + escHtmlAttr(opts.titleRowClass) + '">' + titleHtml + '</div>';
+    }
+    var metaText = opts.metaText !== undefined ? opts.metaText : ((mediaState || {}).metaText || '');
+    var metaHtml = (metaText || opts.metaId)
+        ? '<' + metaTag + ' class="' + escHtmlAttr(opts.metaClass || '') + '"' +
+            (opts.metaId ? ' id="' + escHtmlAttr(opts.metaId) + '"' : '') + '>' +
+            escHtml(metaText) +
+          '</' + metaTag + '>'
+        : '';
+    var albumHtml = opts.showAlbumLine && (mediaState || {}).album
+        ? '<div class="' + escHtmlAttr(opts.albumClass || '') + '">' + escHtml(mediaState.album) + '</div>'
+        : '';
+    return '<div class="' + escHtmlAttr(opts.containerClass || '') + '">' + titleHtml + metaHtml + albumHtml + '</div>';
+}
+
+function _getDeviceTransportState(dev, mediaState) {
+    var safeDev = dev || {};
+    var media = mediaState || _getDeviceNowPlayingState(safeDev, null);
+    return {
+        canTransport: !!(safeDev.group_id || deviceHasSink(safeDev)),
+        hasQueueControls: !!media.deviceMaActive,
+        isPlaying: !!safeDev.playing,
+        shuffle: !!(media.ma || {}).shuffle,
+        repeat: (media.ma || {}).repeat || 'off',
+    };
+}
+
+function _renderTransportButtonHtml(button) {
+    return '<button type="button" class="' + button.className + '" id="' + button.id + '" onclick="' + button.onclick + '" title="' +
+        escHtmlAttr(button.title) + '"' + (button.disabled ? ' disabled' : '') + (button.hidden ? ' style="display:none"' : '') + '>' +
+        button.iconHtml +
+    '</button>';
+}
+
+function _renderPlaybackTransportButtonsHtml(i, transportState, options) {
+    var opts = options || {};
+    var state = transportState || _getDeviceTransportState({}, null);
+    var baseClass = opts.buttonBaseClass || 'icon-btn';
+    var primaryClass = opts.primaryButtonClass || baseClass;
+    var modeClass = opts.modeButtonClass || baseClass;
+    var showPrevNext = state.hasQueueControls || opts.renderPrevNextWhenInactive;
+    var showModeButtons = state.hasQueueControls || opts.renderModeButtonsWhenInactive;
+    var buttons = [];
+    var pushModeButton = function(kind, title, iconHtml, isActive) {
+        if (!showModeButtons) return;
+        buttons.push(_renderTransportButtonHtml({
+            className: _joinClassNames([modeClass, state.hasQueueControls ? 'ma-ready' : '', isActive ? 'active' : '']),
+            id: 'dma-' + kind + '-' + i,
+            onclick: kind === 'repeat' ? 'maCycleRepeat(' + i + ')' : 'maQueueCmd(\'' + kind + '\', undefined, ' + i + ')',
+            title: title,
+            iconHtml: iconHtml,
+            disabled: !state.hasQueueControls && !!opts.disableWhenInactive,
+            hidden: !state.hasQueueControls && !!opts.hideModeButtonsWhenInactive,
+        }));
+    };
+    var pushPrevNextButton = function(kind, title, iconHtml) {
+        if (!showPrevNext) return;
+        buttons.push(_renderTransportButtonHtml({
+            className: baseClass,
+            id: 'dma-' + kind + '-' + i,
+            onclick: 'maQueueCmd(\'' + (kind === 'prev' ? 'previous' : 'next') + '\', undefined, ' + i + ')',
+            title: title,
+            iconHtml: iconHtml,
+            disabled: !state.hasQueueControls && !!opts.disableWhenInactive,
+            hidden: !state.hasQueueControls,
+        }));
+    };
+    if (opts.modeFirst) {
+        pushModeButton('shuffle', 'Shuffle', '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg>', state.hasQueueControls && state.shuffle);
+    }
+    pushPrevNextButton('prev', opts.prevTitle || 'Previous', '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>');
+    buttons.push(_renderTransportButtonHtml({
+        className: _joinClassNames([primaryClass, state.isPlaying ? '' : 'paused']),
+        id: 'dbtn-pause-' + i,
+        onclick: 'onDevicePause(' + i + ')',
+        title: state.isPlaying ? (opts.pauseTitlePlaying || 'Pause') : (opts.pauseTitlePaused || 'Play'),
+        iconHtml: _playPauseIconHtml(state.isPlaying),
+        disabled: !state.canTransport,
+        hidden: false,
+    }));
+    pushPrevNextButton('next', opts.nextTitle || 'Next', '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>');
+    pushModeButton('repeat', state.hasQueueControls ? 'Repeat: ' + state.repeat + ' (click to cycle)' : 'Repeat', '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg>', state.hasQueueControls && state.repeat !== 'off');
+    if (!opts.modeFirst) {
+        pushModeButton('shuffle', 'Shuffle', '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg>', state.hasQueueControls && state.shuffle);
+    }
+    return buttons.join('');
+}
+
 function _getListTrackLabel(dev) {
     return _firstOfSlash(dev.current_track || (dev.ma_now_playing || {}).track || '');
 }
@@ -1479,36 +1772,8 @@ function _getListRowSummary(dev) {
 }
 
 function _getListPlaybackProgress(dev) {
-    var ma = dev.ma_now_playing || {};
-    var deviceMaActive = !!(ma.connected && deviceHasSink(dev));
-    if (deviceMaActive && ma.duration > 0 && ma.elapsed != null) {
-        var idx = arguments.length > 1 ? arguments[1] : null;
-        var nowMs = Date.now();
-        var maSnapshot = idx != null
-            ? _buildMergedMaProgressSnapshot(idx, ma, nowMs)
-            : {
-                elapsed: Math.max(0, Math.min(Number(ma.elapsed) || 0, Number(ma.duration) || 0)),
-                duration: Math.max(0, Number(ma.duration) || 0),
-                t: nowMs,
-                key: _getMaProgressTrackKey(ma),
-            };
-        var elapsedSec = _getMaSnapshotElapsedNow(maSnapshot, nowMs);
-        if (idx != null) _maProgSnapshots[idx] = maSnapshot;
-        return {
-            visible: true,
-            pct: Math.min(100, (elapsedSec / maSnapshot.duration) * 100),
-            text: fmtSec(elapsedSec) + ' / ' + fmtSec(maSnapshot.duration),
-        };
-    }
-    if (dev.track_duration_ms > 0 && dev.track_progress_ms != null) {
-        var progressMs = Math.max(0, Math.min(dev.track_progress_ms, dev.track_duration_ms));
-        return {
-            visible: true,
-            pct: Math.min(100, (progressMs / dev.track_duration_ms) * 100),
-            text: fmtMs(progressMs) + ' / ' + fmtMs(dev.track_duration_ms),
-        };
-    }
-    return {visible: false, pct: 0, text: ''};
+    var idx = arguments.length > 1 ? arguments[1] : null;
+    return _getDevicePlaybackProgressState(dev, idx);
 }
 
 function _getListQueueNeighborMeta(dev, direction) {
@@ -1561,16 +1826,12 @@ function _getListRoutingSummary(dev) {
     return sinkState === 'sink ready' ? '' : sinkState;
 }
 
-function _getListArtworkHtml(dev) {
-    var ma = dev.ma_now_playing || {};
-    var artUrl = _getSafeArtworkUrl(ma.connected && deviceHasSink(dev) ? (ma.image_url || '') : '');
-    if (artUrl) {
-        return '<div class="np-art list-detail-art has-artwork-preview" role="button" tabindex="0" aria-expanded="false"' +
-            ' onclick="toggleArtworkPreview(event, this)" onkeydown="onArtworkPreviewKeydown(event, this)">' +
-            _renderArtworkThumbHtml(artUrl, 'list-detail-art-image', 'artwork-preview-popover') +
-            '</div>';
-    }
-    return '<div class="np-art list-detail-art"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg></div>';
+function _getListArtworkHtml(mediaState) {
+    return _renderNowPlayingArtworkHtml(null, mediaState, {
+        containerClass: 'list-detail-art',
+        imageClass: 'list-detail-art-image',
+        previewClass: 'artwork-preview-popover',
+    });
 }
 
 function buildListView(entries, hiddenCount) {
@@ -1594,21 +1855,18 @@ function buildListView(entries, hiddenCount) {
         var key = listRowKey(dev);
         var expanded = expandedListRowKey === key;
         var rowSummary = _getListRowSummary(dev);
-        var trackLabel = _getListTrackLabel(dev) || 'Nothing playing';
-        var trackMeta = _getListTrackMeta(dev) || rowSummary;
-        var trackArtist = _getListTrackArtist(dev);
-        var trackAlbum = _getListTrackAlbum(dev);
+        var mediaState = _getDeviceNowPlayingState(dev, i);
+        var trackLabel = mediaState.titleText;
         var collapsedBadges = _getListCollapsedBadgesHtml(dev, i);
-        var progress = _getListPlaybackProgress(dev, i);
-        var hasMediaContext = !!(deviceHasSink(dev) && (trackLabel !== 'Nothing playing' || trackMeta !== rowSummary || progress.visible));
+        var progress = mediaState.progress;
+        var hasMediaContext = !!(deviceHasSink(dev) && (trackLabel !== 'Nothing playing' || mediaState.metaText !== rowSummary || progress.visible));
         var statusMeta = getDeviceDisplayStatusMeta(dev);
         var effectiveMuted = !!dev.muted || !!dev.sink_muted;
         var mgmtEnabled = dev.bt_management_enabled !== false;
-        var canTransport = !!(dev.group_id || deviceHasSink(dev));
+        var transportState = _getDeviceTransportState(dev, mediaState);
+        var canTransport = transportState.canTransport;
         var canMute = deviceHasSink(dev);
-        var hasQueueControls = !!((dev.ma_now_playing || {}).connected && deviceHasSink(dev));
-        var hasQueueNeighbors = !!(dev.ma_now_playing || {}).connected;
-        var currentTrackMeta = trackArtist || (trackMeta !== trackLabel ? trackMeta : '');
+        var hasQueueNeighbors = !!(mediaState.ma || {}).connected;
         var trackTitleEq = dev.playing && trackLabel !== 'Nothing playing'
             ? _getEqualizerHtml(dev, 'list-track-eq')
             : '';
@@ -1619,19 +1877,14 @@ function buildListView(entries, hiddenCount) {
         var rowMuteBtnId = 'drow-mute-' + i;
         var releaseActionClass = mgmtEnabled ? 'warn' : 'success';
         var detailTransport = '<div class="list-player-transport" onclick="event.stopPropagation()">' +
-            (hasQueueControls
-                ? '<button type="button" class="icon-btn list-player-transport-btn is-mode" id="dma-shuffle-' + i + '" onclick="maQueueCmd(\'shuffle\', undefined, ' + i + ')" title="Shuffle"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg></button>'
-                : '') +
-            (hasQueueControls
-                ? '<button type="button" class="icon-btn list-player-transport-btn" id="dma-prev-' + i + '" onclick="maQueueCmd(\'previous\', undefined, ' + i + ')" title="Previous track"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg></button>'
-                : '') +
-            '<button type="button" class="icon-btn list-player-transport-btn is-primary' + (dev.playing ? '' : ' paused') + '" id="dbtn-pause-' + i + '" onclick="onDevicePause(' + i + ')" title="' + (dev.playing ? 'Pause' : 'Play') + '"' + (canTransport ? '' : ' disabled') + '>' + _playPauseIconHtml(dev.playing) + '</button>' +
-            (hasQueueControls
-                ? '<button type="button" class="icon-btn list-player-transport-btn" id="dma-next-' + i + '" onclick="maQueueCmd(\'next\', undefined, ' + i + ')" title="Next track"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg></button>'
-                : '') +
-            (hasQueueControls
-                ? '<button type="button" class="icon-btn list-player-transport-btn is-mode" id="dma-repeat-' + i + '" onclick="maCycleRepeat(' + i + ')" title="Repeat"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg></button>'
-                : '') +
+            _renderPlaybackTransportButtonsHtml(i, transportState, {
+                buttonBaseClass: 'icon-btn list-player-transport-btn',
+                primaryButtonClass: 'icon-btn list-player-transport-btn is-primary',
+                modeButtonClass: 'icon-btn list-player-transport-btn is-mode',
+                modeFirst: true,
+                prevTitle: 'Previous track',
+                nextTitle: 'Next track',
+            }) +
         '</div>';
         var detailActions = '<div class="list-detail-actions" onclick="event.stopPropagation()">' +
             '<button type="button" class="list-action-btn accent" id="dbtn-reconnect-' + i + '" onclick="btReconnect(' + i + ')"' + (mgmtEnabled ? '' : ' disabled') + '>' + _actionButtonInnerHtml('reconnect', 'Reconnect') + '</button>' +
@@ -1642,16 +1895,17 @@ function buildListView(entries, hiddenCount) {
         var detailFooter = '<div class="list-detail-footer">' +
             (routeSummary ? '<div class="list-route-summary">' + escHtml(routeSummary) + '</div>' : '<div class="list-route-summary-spacer"></div>') +
         '</div>';
-        var detailCurrentCopy = '<div class="list-detail-current-copy is-rail">' +
-            '<div class="list-track-title-row">' +
-                '<div class="list-track-title-group">' +
-                    '<div class="list-track-title">' + escHtml(trackLabel) + '</div>' +
-                    trackTitleEq +
-                '</div>' +
-            '</div>' +
-            (currentTrackMeta ? '<div class="list-track-meta">' + escHtml(currentTrackMeta) + '</div>' : '') +
-            (trackAlbum ? '<div class="list-detail-album-title">' + escHtml(trackAlbum) + '</div>' : '') +
-        '</div>';
+        var detailCurrentCopy = _renderNowPlayingTextHtml(mediaState, {
+            containerClass: 'list-detail-current-copy is-rail',
+            titleRowClass: 'list-track-title-row',
+            titleGroupClass: 'list-track-title-group',
+            titleClass: 'list-track-title',
+            titleEqHtml: trackTitleEq,
+            metaClass: 'list-track-meta',
+            metaText: mediaState.artist || '',
+            showAlbumLine: true,
+            albumClass: 'list-detail-album-title',
+        });
         var detailMediaLane = hasQueueNeighbors
             ? '<div class="list-player-media-lane">' +
                 _getListQueueNeighborHtml(dev, 'prev') +
@@ -1692,9 +1946,9 @@ function buildListView(entries, hiddenCount) {
                         nameMetaRow +
                     '</span>' +
                 '</div>' +
-                '<div class="list-status-cell">' + _getListStatusBadgeHtml(dev) + '</div>' +
+                '<div class="list-status-cell">' + _renderDeviceStatusBadgeHtml(dev, 'chip') + '</div>' +
                 '<div class="list-adapter-cell">' + _adapterBadgeHtml(dev, i, 'chip') + '</div>' +
-                '<div class="list-group-cell">' + _groupBadgeHtml(dev, i, 'list-group-chip') + '</div>' +
+                '<div class="list-group-cell">' + _groupBadgeHtml(dev, i, 'chip') + '</div>' +
                 '<div class="list-vol-wrap" onclick="event.stopPropagation()">' +
                     '<input type="range" min="0" max="100" value="' + (dev.volume || 0) + '" id="vslider-' + i + '" oninput="onVolumeInput(' + i + ', this.value)">' +
                     '<span class="vol-pct" id="dvol-' + i + '">' + (dev.volume || 0) + '</span>' +
@@ -1706,17 +1960,15 @@ function buildListView(entries, hiddenCount) {
                     '<div class="list-detail-body">' +
                         '<div class="list-detail-player-main">' +
                             '<div class="list-detail-art-rail">' +
-                                _getListArtworkHtml(dev) +
+                                _getListArtworkHtml(mediaState) +
                                 detailCurrentCopy +
                             '</div>' +
                             '<div class="list-detail-player-center">' +
                                 detailMediaLane +
-                                ((progress.visible || progress.text)
-                                    ? '<div class="list-detail-progress-wrap">' +
-                                        (progress.visible ? '<div class="np-progress"><div class="np-progress-fill" style="width:' + progress.pct + '%"></div></div>' : '') +
-                                        (progress.text ? '<div class="list-detail-time">' + escHtml(progress.text) + '</div>' : '') +
-                                    '</div>'
-                                    : '') +
+                                '<div class="list-detail-progress-wrap" id="dlprog-wrap-' + i + '"' + (progress.visible ? '' : ' style="display:none"') + '>' +
+                                    '<div class="np-progress"><div class="np-progress-fill" id="dlprog-fill-' + i + '" style="width:' + progress.pct + '%"></div></div>' +
+                                    '<div class="list-detail-time" id="dlprog-time-' + i + '">' + escHtml(progress.text) + '</div>' +
+                                '</div>' +
                             '</div>' +
                         '</div>' +
                         detailActions +
@@ -1871,22 +2123,23 @@ setInterval(function() {
     Object.keys(_maProgSnapshots).forEach(function(idx) {
         var snap = _maProgSnapshots[idx];
         if (!snap) return;
-        var elapsedSec = Math.min(snap.elapsed + (now - snap.t) / 1000, snap.duration);
-        var pct = Math.min(100, (elapsedSec / snap.duration) * 100);
-        var fill = document.getElementById('dprog-fill-' + idx);
-        var timeEl = document.getElementById('dprog-time-' + idx);
-        if (fill) fill.style.width = pct + '%';
-        if (timeEl) timeEl.textContent = fmtSec(elapsedSec) + ' / ' + fmtSec(snap.duration);
+        var elapsedSec = _getMaSnapshotElapsedNow(snap, now);
+        _applyPlaybackProgressForIndex(idx, {
+            visible: true,
+            pct: Math.min(100, (elapsedSec / snap.duration) * 100),
+            text: fmtSec(elapsedSec) + ' / ' + fmtSec(snap.duration),
+        });
     });
     // Sendspin-native per-device progress (ms)
     Object.keys(_progSnapshots).forEach(function(idx) {
         var snap = _progSnapshots[idx];
         if (!snap) return;
         var pos = Math.min(snap.pos + (now - snap.t), snap.dur);
-        var fill = document.getElementById('dprog-fill-' + idx);
-        var time = document.getElementById('dprog-time-' + idx);
-        if (fill) fill.style.width = Math.min(100, (pos / snap.dur) * 100) + '%';
-        if (time) time.textContent = fmtMs(pos) + ' / ' + fmtMs(snap.dur);
+        _applyPlaybackProgressForIndex(idx, {
+            visible: true,
+            pct: Math.min(100, (pos / snap.dur) * 100),
+            text: fmtMs(pos) + ' / ' + fmtMs(snap.dur),
+        });
     });
 }, 1000);
 
@@ -1895,6 +2148,8 @@ function buildDeviceCard(i) {
     card.className = 'device-card';
     card.id = 'device-card-' + i;
     var speakerSvg = _uiIconSvg('speaker');
+    var placeholderMedia = _getDeviceNowPlayingState({}, i);
+    var placeholderTransport = _getDeviceTransportState({}, placeholderMedia);
     card.innerHTML =
         '<div class="card-head">' +
           '<input type="checkbox" class="device-select-cb" id="dsel-' + i + '" checked' +
@@ -1906,24 +2161,16 @@ function buildDeviceCard(i) {
               _getEqualizerHtml({}, 'list-name-eq card-name-eq', 'deq-' + i) +
             '</div>' +
           '</div>' +
-          '<span class="card-badge badge-released meta-badge meta-badge-status is-neutral" id="dreleased-badge-' + i + '" style="display:none" title="BT management disabled — click Reclaim to resume">' +
-            _renderBadgeIndicatorHtml('release', _buildBadgeStateMeta('neutral', false, 'Bluetooth management released')) +
-            '<span class="meta-badge-label">Released</span>' +
-          '</span>' +
-          '<button type="button" class="card-badge meta-badge meta-badge-link group-badge group-badge-unified meta-badge-interactive" id="dgroup-' + i + '" style="display:none"></button>' +
+          '<span class="card-badge meta-badge meta-badge-status is-neutral" id="dreleased-badge-' + i + '" style="display:none"></span>' +
+          '<button type="button" class="card-badge group-badge meta-badge meta-badge-link group-badge-unified meta-badge-interactive" id="dgroup-' + i + '" style="display:none"></button>' +
         '</div>' +
         '<div class="card-chips">' +
-          '<button type="button" class="chip meta-badge meta-badge-link meta-badge-interactive adapter-link-badge is-neutral" id="dchip-bt-' + i + '" title="Open Bluetooth adapter settings">' +
-            '<span class="meta-badge-indicator" id="dbt-ind-' + i + '">' + _bluetoothIconSvg('meta-badge-indicator-icon') + '</span><span id="dbt-adapter-' + i + '"></span>' +
-          '</button>' +
+          '<button type="button" class="chip meta-badge meta-badge-link meta-badge-interactive adapter-link-badge is-neutral" id="dchip-bt-' + i + '" title="Open Bluetooth adapter settings"></button>' +
           '<span class="chip meta-badge meta-badge-service service-chip-badge ma-service-badge is-neutral" id="dchip-ma-' + i + '">' +
             '<span class="meta-badge-indicator" id="dsrv-ind-' + i + '">' + _maIconSvg('meta-badge-indicator-icon') + '</span>' +
             ' <span class="ma-chip-tag" id="dma-api-' + i + '" style="display:none">API</span>' +
           '</span>' +
-          '<span class="chip meta-badge meta-badge-status card-status-badge is-warning" id="dplay-chip-' + i + '" title="Device status">' +
-            '<span class="meta-badge-indicator status-symbol-indicator" id="dplay-ind-' + i + '"><span class="status-symbol-indicator-text">⏸</span></span>' +
-            '<span id="dplay-' + i + '">-</span>' +
-          '</span>' +
+          _renderDeviceStatusBadgeHtml(null, 'chip', 'meta-badge-label', 'dplay-chip-' + i) +
           '<span class="chip meta-badge meta-badge-status sync-chip is-success" id="dsync-' + i + '" title="Synchronization healthy">' +
             '<span class="meta-badge-indicator" id="dsync-ind-' + i + '">' + _checkIconSvg('meta-badge-indicator-icon') + '</span><span class="meta-badge-label" id="dsync-text-' + i + '">Sync</span>' +
           '</span>' +
@@ -1931,11 +2178,14 @@ function buildDeviceCard(i) {
           '<span class="chip meta-badge meta-badge-status battery-chip" id="dbattery-' + i + '" style="display:none"></span>' +
         '</div>' +
         '<div class="card-controls">' +
-          '<button type="button" class="icon-btn" id="dma-prev-' + i + '" onclick="maQueueCmd(\'previous\', undefined, ' + i + ')" title="Previous" style="display:none"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg></button>' +
-          '<button type="button" class="icon-btn" id="dbtn-pause-' + i + '" onclick="onDevicePause(' + i + ')" title="Pause"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg></button>' +
-          '<button type="button" class="icon-btn" id="dma-next-' + i + '" onclick="maQueueCmd(\'next\', undefined, ' + i + ')" title="Next" style="display:none"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg></button>' +
-          '<button type="button" class="icon-btn" id="dma-shuffle-' + i + '" onclick="maQueueCmd(\'shuffle\', undefined, ' + i + ')" title="Shuffle"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg></button>' +
-          '<button type="button" class="icon-btn" id="dma-repeat-' + i + '" onclick="maCycleRepeat(' + i + ')" title="Repeat"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg></button>' +
+          _renderPlaybackTransportButtonsHtml(i, placeholderTransport, {
+              buttonBaseClass: 'icon-btn',
+              primaryButtonClass: 'icon-btn',
+              modeButtonClass: 'icon-btn',
+              renderPrevNextWhenInactive: true,
+              renderModeButtonsWhenInactive: true,
+              modeFirst: false,
+          }) +
           '<div class="vol-wrap">' +
             '<input type="range" min="0" max="100" value="100" id="vslider-' + i + '" oninput="onVolumeInput(' + i + ', this.value)">' +
             '<span class="vol-pct" id="dvol-' + i + '">100</span>' +
@@ -1943,13 +2193,23 @@ function buildDeviceCard(i) {
           '<button type="button" class="icon-btn" id="dmute-' + i + '" title="Mute/Unmute"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg></button>' +
         '</div>' +
         '<div class="card-np" id="dnp-' + i + '" style="display:none">' +
-          '<div class="np-art" role="button" tabindex="0" aria-expanded="false" onclick="toggleArtworkPreview(event, this)" onkeydown="onArtworkPreviewKeydown(event, this)"><img class="np-art-image" id="dart-' + i + '" src="" alt="" style="display:none"><img class="artwork-preview-popover" id="dart-preview-' + i + '" src="" alt=""><svg viewBox="0 0 24 24" fill="currentColor" id="dart-placeholder-' + i + '"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg></div>' +
-          '<div class="np-info">' +
-            '<span class="np-track" id="dtrack-' + i + '"></span>' +
-            '<span class="np-meta" id="dtrack-meta-' + i + '"></span>' +
-            '<div class="np-progress" id="dprog-wrap-' + i + '"><div class="np-progress-fill" id="dprog-fill-' + i + '"></div></div>' +
-          '</div>' +
+          _renderNowPlayingArtworkHtml(i, placeholderMedia, {
+              persistent: true,
+              imageId: 'dart-' + i,
+              previewId: 'dart-preview-' + i,
+              placeholderId: 'dart-placeholder-' + i,
+          }) +
+          _renderNowPlayingTextHtml(placeholderMedia, {
+              containerClass: 'np-info',
+              titleTag: 'span',
+              titleClass: 'np-track',
+              titleId: 'dtrack-' + i,
+              metaTag: 'span',
+              metaClass: 'np-meta',
+              metaId: 'dtrack-meta-' + i,
+          }) +
           '<span class="np-time">' +
+            '<div class="np-progress" id="dprog-wrap-' + i + '"><div class="np-progress-fill" id="dprog-fill-' + i + '"></div></div>' +
             '<span id="dprog-time-' + i + '"></span>' +
             '<span class="tooltip-text" id="daudiofmt-' + i + '"></span>' +
           '</span>' +
@@ -1963,7 +2223,6 @@ function buildDeviceCard(i) {
             '<button type="button" class="icon-btn device-settings-btn card-corner-settings-btn" onclick="openDeviceSettings(' + i + ')" title="Device settings">' + _settingsIconHtml() + '</button>' +
           '</div>' +
         '</div>';
-    // Mute button click handler
     var muteBtn = card.querySelector('#dmute-' + i);
     if (muteBtn) {
         muteBtn.onclick = function() {
@@ -1977,21 +2236,22 @@ function populateDeviceCard(i, dev) {
     var name = dev.player_name || ('Device ' + (i + 1));
     var statusMeta = getDeviceDisplayStatusMeta(dev);
     var releaseMeta = getDeviceReleaseMeta(dev);
+    var mediaState = _getDeviceNowPlayingState(dev, i);
+    var transportState = _getDeviceTransportState(dev, mediaState);
     var nameEl = document.getElementById('dname-' + i);
     if (nameEl) nameEl.textContent = name;
 
-    // Released badge next to name
     var releasedBadge = document.getElementById('dreleased-badge-' + i);
     if (releasedBadge) {
-        releasedBadge.style.display = releaseMeta.visible ? '' : 'none';
-        if (releaseMeta.visible) {
-            releasedBadge.innerHTML = _getReleaseBadgeInnerHtml(releaseMeta);
-            releasedBadge.className = releaseMeta.cardClassName;
-            releasedBadge.title = releaseMeta.title;
+        var releaseRenderData = _getReleaseBadgeRenderData(releaseMeta, 'card-badge');
+        releasedBadge.style.display = releaseRenderData ? '' : 'none';
+        if (releaseRenderData) {
+            releasedBadge.innerHTML = releaseRenderData.innerHtml;
+            releasedBadge.className = releaseRenderData.className;
+            releasedBadge.title = releaseRenderData.title;
         }
     }
 
-    // Battery badge (only shown when device reports battery level)
     var batteryEl = document.getElementById('dbattery-' + i);
     if (batteryEl) {
         var batteryMeta = _getBatteryBadgeMeta(dev.battery_level);
@@ -2008,7 +2268,6 @@ function populateDeviceCard(i, dev) {
         }
     }
 
-    // Card activity classes
     var card = document.getElementById('device-card-' + i);
     if (card) {
         var isActive = dev.bluetooth_connected || dev.playing;
@@ -2027,7 +2286,6 @@ function populateDeviceCard(i, dev) {
         }
     }
 
-    // Update card icon state
     var cardIcon = document.getElementById('dcard-icon-' + i);
     if (cardIcon) {
         cardIcon.className = 'card-icon ' + statusMeta.iconToneClass;
@@ -2035,54 +2293,36 @@ function populateDeviceCard(i, dev) {
 
     var groupBadge = document.getElementById('dgroup-' + i);
     if (groupBadge) {
-        var meta = _getGroupBadgeMeta(dev);
-        var groupStateMeta = _getGroupBadgeStateMeta(dev, meta);
-        groupBadge.className = 'card-badge meta-badge meta-badge-link group-badge group-badge-unified ' + groupStateMeta.toneClass +
-            (meta.clickable ? ' meta-badge-interactive group-link-badge' : '') +
-            (meta.isEmpty ? ' empty' : '');
-        groupBadge.innerHTML = _renderBadgeIndicatorHtml('chain', groupStateMeta) +
-            '<span class="group-badge-label meta-badge-label">' + escHtml(meta.displayLabel) + '</span>';
-        groupBadge.title = meta.title;
-        groupBadge.disabled = !meta.clickable;
-        groupBadge.onclick = meta.clickable ? function() { openDeviceGroupSettings(i); } : null;
-        if (meta.clickable) {
-            groupBadge.setAttribute('aria-label', 'Open Music Assistant group settings for ' + meta.label);
+        var groupRenderData = _getGroupBadgeRenderData(dev, i, 'card-badge group-badge');
+        var groupMeta = groupRenderData.meta;
+        groupBadge.className = groupRenderData.className;
+        groupBadge.innerHTML = groupRenderData.innerHtml;
+        groupBadge.title = groupRenderData.title;
+        groupBadge.disabled = groupRenderData.disabled;
+        groupBadge.onclick = groupMeta.clickable ? function() { openDeviceGroupSettings(i); } : null;
+        if (groupRenderData.ariaLabel) {
+            groupBadge.setAttribute('aria-label', groupRenderData.ariaLabel);
         } else {
             groupBadge.removeAttribute('aria-label');
         }
-
-        // Solo = no other bridge device shares this group_id and no external members
         var groupPeers = dev.group_id
             ? (lastDevices || []).filter(function(d) { return d !== dev && d.group_id === dev.group_id; }).length
             : 0;
-        var isSolo = !groupPeers && !meta.externalCount;
+        var isSolo = !groupPeers && !groupMeta.externalCount;
         groupBadge.classList.toggle('hover-only', isSolo);
-        groupBadge.style.display = meta.isEmpty ? 'none' : '';
+        groupBadge.style.display = groupMeta.isEmpty ? 'none' : '';
     }
 
-    var btAdapterEl = document.getElementById('dbt-adapter-' + i);
     var btChipEl = document.getElementById('dchip-bt-' + i);
-    if (btAdapterEl) {
-        var adapterInfo = _getAdapterDisplayInfo(dev);
-        var btStateMeta = _getBtBadgeStateMeta(dev, adapterInfo);
-        btAdapterEl.textContent = adapterInfo.label;
-        if (btChipEl) {
-            btChipEl.className = 'chip meta-badge meta-badge-link adapter-link-badge ' + btStateMeta.toneClass +
-                (adapterInfo.empty ? ' empty' : ' meta-badge-interactive');
-            btChipEl.disabled = adapterInfo.empty;
-            btChipEl.title = adapterInfo.empty
-                ? (btStateMeta.summary || 'No Bluetooth adapter assigned')
-                : (btStateMeta.summary ? btStateMeta.summary + ' · ' : '') + 'Open Bluetooth adapter settings · ' + adapterInfo.title;
-            btChipEl.onclick = adapterInfo.empty ? null : function() { openDeviceAdapterSettings(i); };
-            var btInd = document.getElementById('dbt-ind-' + i);
-            if (btInd) {
-                btInd.className = _getBadgeIndicatorClassName(btStateMeta, '', 'bt');
-                btInd.innerHTML = _getBadgeIndicatorInnerHtml('bt', btStateMeta);
-            }
-        }
+    if (btChipEl) {
+        var adapterRenderData = _getAdapterBadgeRenderData(dev, i, 'chip');
+        btChipEl.className = adapterRenderData.className;
+        btChipEl.innerHTML = adapterRenderData.innerHtml;
+        btChipEl.disabled = adapterRenderData.disabled;
+        btChipEl.title = adapterRenderData.title;
+        btChipEl.onclick = adapterRenderData.disabled ? null : function() { openDeviceAdapterSettings(i); };
     }
 
-    // Server
     var srvInd = document.getElementById('dsrv-ind-' + i);
     var maChip = document.getElementById('dchip-ma-' + i);
     var maApiBadge = document.getElementById('dma-api-' + i);
@@ -2094,61 +2334,29 @@ function populateDeviceCard(i, dev) {
     }
     if (maApiBadge) maApiBadge.style.display = (dev.ma_now_playing && dev.ma_now_playing.connected) ? '' : 'none';
 
-    // Playback
-    var playChip  = document.getElementById('dplay-chip-' + i);
-    var playInd   = document.getElementById('dplay-ind-' + i);
-    var playTxt   = document.getElementById('dplay-' + i);
+    var playChip = document.getElementById('dplay-chip-' + i);
     var fmtEl = document.getElementById('daudiofmt-' + i);
-    if (playChip) playChip.className = 'chip meta-badge meta-badge-status card-status-badge ' + statusMeta.badgeToneClass;
-    if (playInd) {
-        playInd.className = _getBadgeIndicatorClassName(statusMeta, '', 'status');
-        playInd.innerHTML = _getBadgeIndicatorInnerHtml('status', statusMeta);
-    }
-    if (playTxt) {
-        playTxt.textContent = statusMeta.label;
+    if (playChip) {
+        var statusRenderData = _getStatusBadgeRenderData(dev, 'chip', 'meta-badge-label');
+        playChip.className = statusRenderData.className;
+        playChip.innerHTML = statusRenderData.innerHtml;
+        playChip.title = statusRenderData.title;
     }
 
-    // Track progress bar (per-device MA data takes priority over Sendspin)
     var progWrap = document.getElementById('dprog-wrap-' + i);
-    var progFill = document.getElementById('dprog-fill-' + i);
-    var progTime = document.getElementById('dprog-time-' + i);
-    var ma = dev.ma_now_playing || {};
-    var maActive = !!(ma.connected);
-    var deviceMaActive = maActive && deviceHasSink(dev);
-    var maHasProg = deviceMaActive && ma.state === 'playing' && ma.duration > 0 && ma.elapsed != null;
-    if (maHasProg) {
-        var nowMs = Date.now();
-        var maSnapshot = _buildMergedMaProgressSnapshot(i, ma, nowMs);
-        var maElapsedSec = _getMaSnapshotElapsedNow(maSnapshot, nowMs);
-        var maPct = Math.min(100, (maElapsedSec / maSnapshot.duration) * 100);
-        _maProgSnapshots[i] = maSnapshot;
-        if (progWrap) progWrap.style.display = '';
-        if (progFill) progFill.style.width = maPct + '%';
-        if (progTime) progTime.textContent = fmtSec(maElapsedSec) + ' / ' + fmtSec(maSnapshot.duration);
-        delete _progSnapshots[i];
-    } else {
-        delete _maProgSnapshots[i];
-        var hasProg = dev.playing && dev.track_duration_ms > 0 && dev.track_progress_ms != null;
-        if (progWrap) progWrap.style.display = hasProg ? '' : 'none';
-        if (hasProg) {
-            _progSnapshots[i] = {pos: dev.track_progress_ms, dur: dev.track_duration_ms, t: Date.now()};
-            if (progFill) progFill.style.width = Math.min(100, (dev.track_progress_ms / dev.track_duration_ms) * 100) + '%';
-            if (progTime) progTime.textContent = fmtMs(dev.track_progress_ms) + ' / ' + fmtMs(dev.track_duration_ms);
-        } else {
-            delete _progSnapshots[i];
-            if (progFill) progFill.style.width = '0%';
-            if (progTime) progTime.textContent = '';
-        }
-    }
+    _applyPlaybackProgressDom(
+        progWrap,
+        document.getElementById('dprog-fill-' + i),
+        document.getElementById('dprog-time-' + i),
+        mediaState.progress
+    );
 
-    // Audio format (strip codec prefix)
     if (fmtEl) {
         var fmt = dev.audio_format || '';
         if (fmt) { var sp = fmt.indexOf(' '); fmt = sp !== -1 ? fmt.slice(sp + 1) : ''; }
         fmtEl.textContent = fmt;
     }
 
-    // Sync pause button state from poll (don't override while locked)
     var pauseBtn = document.getElementById('dbtn-pause-' + i);
     if (pauseBtn && !_isLocked('dbtn-pause-' + i)) {
         if (dev.playing) {
@@ -2160,86 +2368,61 @@ function populateDeviceCard(i, dev) {
             pauseBtn.classList.add('paused');
             pauseBtn.title = 'Play';
         }
-        var groupSize = dev.group_id
-            ? (lastDevices || []).filter(function(d) { return d.group_id === dev.group_id; }).length
-            : 0;
         pauseBtn.style.display = (!deviceHasSink(dev) && dev.bluetooth_mac) ? 'none' : '';
     }
 
     var trackEl = document.getElementById('dtrack-' + i);
-    var artEl   = document.getElementById('dart-' + i);
+    var artEl = document.getElementById('dart-' + i);
     if (trackEl) {
-        var maArtist = deviceMaActive ? (ma.artist || '') : '';
-        var maTrack  = deviceMaActive ? (ma.track  || '') : '';
-        var showArtist = maArtist || dev.current_artist;
-        var showTrack  = maTrack  || dev.current_track;
-        // Persist track on pause — clear only when both fields are empty
-        if (showArtist || showTrack) {
-            var fullText = showArtist && showTrack
-                ? showArtist + ' \u2014 ' + showTrack
-                : (showArtist || showTrack || '');
-            trackEl.textContent = _firstOfSlash(showArtist) && _firstOfSlash(showTrack)
-                ? _firstOfSlash(showArtist) + ' \u2014 ' + _firstOfSlash(showTrack)
-                : _firstOfSlash(showArtist || showTrack || '');
-            var tipAlbum = deviceMaActive && ma.album ? ' \u00b7 ' + ma.album : '';
-            trackEl.title = fullText + tipAlbum;
+        if (mediaState.hasTrack) {
+            trackEl.textContent = mediaState.artist && mediaState.track
+                ? mediaState.artist + ' — ' + mediaState.track
+                : (mediaState.artist || mediaState.track || '');
+            trackEl.title = mediaState.metaText
+                ? trackEl.textContent + ' · ' + mediaState.metaText
+                : trackEl.textContent;
             trackEl.style.color = dev.playing
                 ? 'var(--primary-text-color)' : 'var(--secondary-text-color)';
         } else {
             trackEl.textContent = '';
             trackEl.title = '';
         }
-
-        // Show/hide now-playing section
         var npSection = document.getElementById('dnp-' + i);
         if (npSection) {
-            var hasTrack = !!(showTrack || showArtist);
-            npSection.style.display = hasTrack ? '' : 'none';
+            npSection.style.display = mediaState.hasTrack ? '' : 'none';
         }
-        // Update track meta (artist · album)
         var metaEl = document.getElementById('dtrack-meta-' + i);
-        if (metaEl) {
-            var metaParts = [];
-            if (showArtist) metaParts.push(showArtist);
-            var albumName = deviceMaActive ? (ma.album || '') : '';
-            if (albumName) metaParts.push(albumName);
-            metaEl.textContent = metaParts.join(' \u00b7 ');
-        }
-        // Album art placeholder vs image
+        if (metaEl) metaEl.textContent = mediaState.metaText;
         var artPlaceholder = document.getElementById('dart-placeholder-' + i);
         var artPreviewEl = document.getElementById('dart-preview-' + i);
         if (artEl) {
             _setAlbumArtState(
                 artEl,
                 artPlaceholder,
-                deviceMaActive ? (ma.image_url || '') : '',
+                mediaState.artUrl,
                 artPreviewEl
             );
         }
     }
 
-    // MA transport buttons (prev/next flanking pause) + hover secondary controls
-    var prevBtn      = document.getElementById('dma-prev-' + i);
-    var nextBtn      = document.getElementById('dma-next-' + i);
+    var prevBtn = document.getElementById('dma-prev-' + i);
+    var nextBtn = document.getElementById('dma-next-' + i);
     var maShuffleBtn = document.getElementById('dma-shuffle-' + i);
-    var maRepeatBtn  = document.getElementById('dma-repeat-' + i);
-    if (prevBtn) prevBtn.style.display = deviceMaActive ? '' : 'none';
-    if (nextBtn) nextBtn.style.display = deviceMaActive ? '' : 'none';
-    if (maShuffleBtn) maShuffleBtn.classList.toggle('ma-ready', deviceMaActive);
-    if (maRepeatBtn) maRepeatBtn.classList.toggle('ma-ready', deviceMaActive);
-    if (deviceMaActive) {
-        if (maShuffleBtn) maShuffleBtn.classList.toggle('active', !!ma.shuffle);
-        if (maRepeatBtn) {
-            var rm = ma.repeat || 'off';
-            maRepeatBtn.title = 'Repeat: ' + rm + ' (click to cycle)';
-            maRepeatBtn.classList.toggle('active', rm !== 'off');
-        }
+    var maRepeatBtn = document.getElementById('dma-repeat-' + i);
+    if (prevBtn) prevBtn.style.display = transportState.hasQueueControls ? '' : 'none';
+    if (nextBtn) nextBtn.style.display = transportState.hasQueueControls ? '' : 'none';
+    if (maShuffleBtn) {
+        maShuffleBtn.classList.toggle('ma-ready', transportState.hasQueueControls);
+        maShuffleBtn.classList.toggle('active', transportState.hasQueueControls && transportState.shuffle);
     }
-    // Sync
-    // NOTE: dev.reanchoring is NOT used for display — the backend flag can get stuck True
-    // because sendspin logs "re-anchoring" AFTER the stream-restart callback fires, so the
-    // bridge_daemon's on_stream_event("start") guard runs before the flag is ever set.
-    // Instead we track reanchor_count changes: when count increases a timed warning fires.
+    if (maRepeatBtn) {
+        maRepeatBtn.classList.toggle('ma-ready', transportState.hasQueueControls);
+        maRepeatBtn.classList.toggle('active', transportState.hasQueueControls && transportState.repeat !== 'off');
+        maRepeatBtn.title = transportState.hasQueueControls
+            ? 'Repeat: ' + transportState.repeat + ' (click to cycle)'
+            : 'Repeat';
+    }
+
     var syncEl = document.getElementById('dsync-' + i);
     var syncInd = document.getElementById('dsync-ind-' + i);
     var syncTxt = document.getElementById('dsync-text-' + i);
@@ -2262,11 +2445,10 @@ function populateDeviceCard(i, dev) {
         }
     }
 
-    // Volume — only update if user isn't actively adjusting this slider
     var hasSink = deviceHasSink(dev);
     if (dev.volume !== undefined && !volPending[i]) {
         var slider = document.getElementById('vslider-' + i);
-        var volEl  = document.getElementById('dvol-' + i);
+        var volEl = document.getElementById('dvol-' + i);
         if (slider) {
             slider.value = dev.volume;
             slider.disabled = !hasSink;
@@ -2276,14 +2458,12 @@ function populateDeviceCard(i, dev) {
         if (volEl) volEl.textContent = String(dev.volume);
     }
 
-    // Equalizer — animated green when streaming, frozen red when playing without audio
     var eqEl = document.getElementById('deq-' + i);
     if (eqEl) {
         var eqExtra = eqEl.getAttribute('data-eq-extra') || '';
         eqEl.className = 'eq-bars' + _getEqualizerStateClass(dev) + (eqExtra ? ' ' + eqExtra : '');
     }
 
-    // Mute button — update icon on every poll
     var muteBtn = document.getElementById('dmute-' + i);
     if (muteBtn && !_isLocked('dmute-' + i)) {
         var effectiveMuted = !!dev.muted || !!dev.sink_muted;
@@ -2298,16 +2478,13 @@ function populateDeviceCard(i, dev) {
         muteBtn.style.opacity = hasSink ? '' : '0.35';
     }
 
-    // Volume slider fill
     var vslider = document.getElementById('vslider-' + i);
     if (vslider) updateSliderFill(vslider);
 
-    // Release/Reclaim button state
     var relBtn = document.getElementById('dbtn-release-' + i);
     if (relBtn) {
         var mgmtEnabled = dev.bt_management_enabled !== false;
         _setReleaseActionButtonState(relBtn, mgmtEnabled);
-        // Disable Reconnect while released
         var reconnBtn = document.getElementById('dbtn-reconnect-' + i);
         if (reconnBtn) reconnBtn.disabled = !mgmtEnabled;
     }
@@ -5250,20 +5427,24 @@ function _applyUpdate(ver, releaseUrl) {
     if (link) link.classList.add('checking');
     if (verEl) verEl.textContent = 'updating…';
     _setUiIconSlot(iconEl, 'refresh');
-    fetch(API_BASE + '/api/update/apply', {method: 'POST'})
+    fetch(API_BASE + '/api/update/apply', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({version: ver})
+    })
         .then(function(r) { return r.json(); })
         .then(function(data) {
             if (data.success) {
-                showToast('Update applied! Restarting…', 'info');
-                setTimeout(function() { location.reload(); }, 5000);
+                showToast(data.already_running ? 'Update already in progress…' : 'Update started! Restarting…', 'info');
+                setTimeout(function() { location.reload(); }, 8000);
             } else {
                 showToast('Update failed: ' + (data.error || 'unknown error'), 'error');
                 _showUpdateBadge({version: ver, url: releaseUrl});
             }
         })
         .catch(function() {
-            showToast('Service restarting…', 'info');
-            setTimeout(function() { location.reload(); }, 5000);
+            showToast('Update started…', 'info');
+            setTimeout(function() { location.reload(); }, 8000);
         });
 }
 

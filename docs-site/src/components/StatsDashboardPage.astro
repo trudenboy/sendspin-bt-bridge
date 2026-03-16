@@ -1,0 +1,890 @@
+---
+interface DashboardStrings {
+  locale: string;
+  eyebrow: string;
+  intro: string;
+  lastUpdated: string;
+  source: string;
+  sourceValue: string;
+  branch: string;
+  loading: string;
+  loadingMessage: string;
+  errorPrefix: string;
+  overviewTitle: string;
+  chartsTitle: string;
+  chartsDescription: string;
+  viewsChart: string;
+  clonesChart: string;
+  emptyChart: string;
+  referrersTitle: string;
+  referrersDescription: string;
+  pathsTitle: string;
+  pathsDescription: string;
+  releasesTitle: string;
+  releasesDescription: string;
+  emptyTable: string;
+  tableRank: string;
+  tableName: string;
+  tableViews: string;
+  tableUniques: string;
+  tablePath: string;
+  tableDownloads: string;
+  tablePublished: string;
+  releaseDraft: string;
+  releasePre: string;
+  footerNote: string;
+  cards: {
+    views: string;
+    clones: string;
+    stars: string;
+    forks: string;
+    subscribers: string;
+    releaseDownloads: string;
+    latestRelease: string;
+    openIssues: string;
+  };
+  subtotals: {
+    uniques14d: string;
+    dailyBars: string;
+    currentSnapshot: string;
+    publishedLabel: string;
+    releaseCountLabel: string;
+    issuesLabel: string;
+    awaitingArchive: string;
+  };
+}
+
+interface Props {
+  lang: string;
+  title: string;
+  description: string;
+  backHref: string;
+  backLabel: string;
+  altHref: string;
+  altLabel: string;
+  strings: DashboardStrings;
+}
+
+const {
+  lang,
+  title,
+  description,
+  backHref,
+  backLabel,
+  altHref,
+  altLabel,
+  strings,
+} = Astro.props;
+
+const repoHref = 'https://github.com/trudenboy/sendspin-bt-bridge';
+const branchHref = `${repoHref}/tree/traffic-data/traffic`;
+const summaryUrl = `${repoHref.replace('https://github.com', 'https://raw.githubusercontent.com')}/traffic-data/traffic/summary.json`;
+---
+
+<!doctype html>
+<html lang={lang}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title} · Sendspin BT Bridge</title>
+    <meta name="description" content={description} />
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0b1120;
+        --panel: rgba(15, 23, 42, 0.86);
+        --panel-strong: rgba(15, 23, 42, 0.96);
+        --border: rgba(148, 163, 184, 0.22);
+        --text: #e5eefb;
+        --muted: #93a4bf;
+        --accent: #38bdf8;
+        --accent-soft: rgba(56, 189, 248, 0.16);
+        --success: #34d399;
+        --warning: #fbbf24;
+        --danger: #fb7185;
+        --shadow: 0 18px 50px rgba(2, 6, 23, 0.42);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(circle at top, rgba(56, 189, 248, 0.13), transparent 36%),
+          linear-gradient(180deg, #020617 0%, var(--bg) 100%);
+        min-height: 100vh;
+      }
+
+      a {
+        color: inherit;
+      }
+
+      .page {
+        width: min(1180px, calc(100% - 2rem));
+        margin: 0 auto;
+        padding: 1.25rem 0 2rem;
+      }
+
+      .topbar,
+      .hero,
+      .panel,
+      .metric-card {
+        border: 1px solid var(--border);
+        border-radius: 22px;
+        background: var(--panel);
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(16px);
+      }
+
+      .topbar {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 1rem 1.1rem;
+        margin-bottom: 1rem;
+      }
+
+      .brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.65rem;
+        text-decoration: none;
+        font-weight: 700;
+        font-size: 1.05rem;
+      }
+
+      .brand-mark {
+        width: 0.8rem;
+        height: 0.8rem;
+        border-radius: 999px;
+        background: linear-gradient(135deg, #38bdf8 0%, #34d399 100%);
+        box-shadow: 0 0 0 6px rgba(56, 189, 248, 0.12);
+      }
+
+      .tagline {
+        margin: 0.45rem 0 0;
+        color: var(--muted);
+        max-width: 46rem;
+      }
+
+      .top-links {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 0.65rem;
+      }
+
+      .top-links a {
+        text-decoration: none;
+        padding: 0.65rem 0.85rem;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        color: var(--muted);
+        background: rgba(15, 23, 42, 0.45);
+      }
+
+      .top-links a:hover {
+        color: var(--text);
+        border-color: rgba(56, 189, 248, 0.45);
+        background: rgba(56, 189, 248, 0.08);
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
+        gap: 1rem;
+        padding: 1.2rem;
+        margin-bottom: 1rem;
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        margin: 0 0 0.6rem;
+        color: #7dd3fc;
+        font-size: 0.8rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .eyebrow::before {
+        content: "";
+        width: 0.55rem;
+        height: 0.55rem;
+        border-radius: 999px;
+        background: var(--success);
+        box-shadow: 0 0 12px rgba(52, 211, 153, 0.9);
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+
+      h1 {
+        font-size: clamp(2rem, 3vw, 2.8rem);
+        line-height: 1.05;
+        margin-bottom: 0.75rem;
+      }
+
+      .hero-copy p:last-child {
+        color: var(--muted);
+        line-height: 1.65;
+        max-width: 52rem;
+      }
+
+      .status-card {
+        background: var(--panel-strong);
+        border-radius: 18px;
+        border: 1px solid var(--border);
+        padding: 1rem;
+        display: grid;
+        gap: 0.85rem;
+        align-content: start;
+      }
+
+      .status-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+      }
+
+      .status-row span {
+        color: var(--muted);
+      }
+
+      .status-message {
+        margin: 0 0 1rem;
+        padding: 0.9rem 1rem;
+        border-radius: 16px;
+        border: 1px solid var(--border);
+        background: rgba(15, 23, 42, 0.62);
+        color: var(--muted);
+      }
+
+      .status-message.error {
+        color: #ffd5db;
+        border-color: rgba(251, 113, 133, 0.32);
+        background: rgba(127, 29, 29, 0.24);
+      }
+
+      .overview-section {
+        margin-bottom: 1rem;
+      }
+
+      .section-title,
+      .section-copy {
+        margin-bottom: 0.75rem;
+      }
+
+      .section-copy {
+        color: var(--muted);
+      }
+
+      .overview-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 0.85rem;
+      }
+
+      .metric-card {
+        padding: 1rem;
+      }
+
+      .metric-label {
+        display: block;
+        color: var(--muted);
+        margin-bottom: 0.45rem;
+        font-size: 0.9rem;
+      }
+
+      .metric-value {
+        font-size: clamp(1.5rem, 2.2vw, 2rem);
+        font-weight: 700;
+        line-height: 1.1;
+      }
+
+      .metric-subtitle {
+        margin-top: 0.5rem;
+        color: var(--muted);
+        font-size: 0.92rem;
+      }
+
+      .panel-grid {
+        display: grid;
+        gap: 1rem;
+      }
+
+      .panel {
+        padding: 1rem;
+      }
+
+      .chart-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 1rem;
+        margin-top: 1rem;
+      }
+
+      .chart-card {
+        border-radius: 18px;
+        border: 1px solid var(--border);
+        background: rgba(15, 23, 42, 0.55);
+        padding: 0.95rem;
+      }
+
+      .chart-header {
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        align-items: baseline;
+        margin-bottom: 0.75rem;
+      }
+
+      .chart-header span {
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+
+      .bar-list {
+        display: grid;
+        gap: 0.55rem;
+      }
+
+      .bar-row {
+        display: grid;
+        grid-template-columns: 64px minmax(0, 1fr) 56px;
+        gap: 0.65rem;
+        align-items: center;
+      }
+
+      .bar-label,
+      .bar-value {
+        color: var(--muted);
+        font-size: 0.85rem;
+      }
+
+      .bar-track {
+        position: relative;
+        width: 100%;
+        height: 0.8rem;
+        border-radius: 999px;
+        overflow: hidden;
+        background: rgba(148, 163, 184, 0.12);
+      }
+
+      .bar-fill {
+        position: absolute;
+        inset: 0 auto 0 0;
+        border-radius: inherit;
+        background: linear-gradient(90deg, rgba(56, 189, 248, 0.65), rgba(52, 211, 153, 0.95));
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 1rem;
+      }
+
+      th,
+      td {
+        text-align: left;
+        padding: 0.8rem 0.7rem;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+        vertical-align: top;
+      }
+
+      th {
+        color: var(--muted);
+        font-size: 0.82rem;
+        font-weight: 600;
+      }
+
+      td small {
+        display: block;
+        color: var(--muted);
+        margin-top: 0.18rem;
+      }
+
+      .mono {
+        font-family:
+          ui-monospace, SFMono-Regular, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+          "Courier New", monospace;
+        font-size: 0.92em;
+      }
+
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        border-radius: 999px;
+        padding: 0.22rem 0.55rem;
+        font-size: 0.75rem;
+        border: 1px solid var(--border);
+        color: var(--muted);
+        background: rgba(148, 163, 184, 0.08);
+      }
+
+      .chip.pre {
+        color: #fde68a;
+        border-color: rgba(251, 191, 36, 0.24);
+        background: rgba(146, 64, 14, 0.18);
+      }
+
+      .table-empty {
+        color: var(--muted);
+        padding: 1rem 0 0;
+      }
+
+      .footer-note {
+        margin-top: 1rem;
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+
+      @media (max-width: 900px) {
+        .hero {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 720px) {
+        .page {
+          width: min(100% - 1rem, 1180px);
+        }
+
+        .topbar {
+          flex-direction: column;
+        }
+
+        .top-links {
+          justify-content: flex-start;
+        }
+
+        .bar-row {
+          grid-template-columns: 54px minmax(0, 1fr) 48px;
+        }
+
+        th:nth-child(3),
+        td:nth-child(3) {
+          display: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <header class="topbar">
+        <div>
+          <a class="brand" href={backHref}>
+            <span class="brand-mark"></span>
+            <span>Sendspin BT Bridge</span>
+          </a>
+          <p class="tagline">{description}</p>
+        </div>
+        <nav class="top-links">
+          <a href={backHref}>{backLabel}</a>
+          <a href={altHref}>{altLabel}</a>
+          <a href={repoHref}>GitHub</a>
+          <a href={branchHref}>traffic-data</a>
+        </nav>
+      </header>
+
+      <main>
+        <section class="hero">
+          <div class="hero-copy">
+            <p class="eyebrow">{strings.eyebrow}</p>
+            <h1>{title}</h1>
+            <p>{strings.intro}</p>
+          </div>
+
+          <aside class="status-card">
+            <div class="status-row">
+              <span>{strings.lastUpdated}</span>
+              <strong id="last-updated">{strings.loading}</strong>
+            </div>
+            <div class="status-row">
+              <span>{strings.source}</span>
+              <strong>{strings.sourceValue}</strong>
+            </div>
+            <div class="status-row">
+              <span>{strings.branch}</span>
+              <strong>traffic-data</strong>
+            </div>
+          </aside>
+        </section>
+
+        <p id="status-message" class="status-message">{strings.loadingMessage}</p>
+
+        <section class="overview-section">
+          <h2 class="section-title">{strings.overviewTitle}</h2>
+          <div id="overview-cards" class="overview-grid"></div>
+        </section>
+
+        <div class="panel-grid">
+          <section class="panel">
+            <h2 class="section-title">{strings.chartsTitle}</h2>
+            <p class="section-copy">{strings.chartsDescription}</p>
+            <div class="chart-grid">
+              <div class="chart-card">
+                <div class="chart-header">
+                  <h3>{strings.viewsChart}</h3>
+                  <span id="views-chart-total">—</span>
+                </div>
+                <div id="views-chart" class="bar-list"></div>
+              </div>
+              <div class="chart-card">
+                <div class="chart-header">
+                  <h3>{strings.clonesChart}</h3>
+                  <span id="clones-chart-total">—</span>
+                </div>
+                <div id="clones-chart" class="bar-list"></div>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel">
+            <h2 class="section-title">{strings.referrersTitle}</h2>
+            <p class="section-copy">{strings.referrersDescription}</p>
+            <div id="referrers-empty" class="table-empty" hidden>{strings.emptyTable}</div>
+            <table id="referrers-table" hidden>
+              <thead>
+                <tr>
+                  <th>{strings.tableRank}</th>
+                  <th>{strings.tableName}</th>
+                  <th>{strings.tableViews}</th>
+                  <th>{strings.tableUniques}</th>
+                </tr>
+              </thead>
+              <tbody id="referrers-body"></tbody>
+            </table>
+          </section>
+
+          <section class="panel">
+            <h2 class="section-title">{strings.pathsTitle}</h2>
+            <p class="section-copy">{strings.pathsDescription}</p>
+            <div id="paths-empty" class="table-empty" hidden>{strings.emptyTable}</div>
+            <table id="paths-table" hidden>
+              <thead>
+                <tr>
+                  <th>{strings.tableRank}</th>
+                  <th>{strings.tablePath}</th>
+                  <th>{strings.tableViews}</th>
+                  <th>{strings.tableUniques}</th>
+                </tr>
+              </thead>
+              <tbody id="paths-body"></tbody>
+            </table>
+          </section>
+
+          <section class="panel">
+            <h2 class="section-title">{strings.releasesTitle}</h2>
+            <p class="section-copy">{strings.releasesDescription}</p>
+            <div id="releases-empty" class="table-empty" hidden>{strings.emptyTable}</div>
+            <table id="releases-table" hidden>
+              <thead>
+                <tr>
+                  <th>{strings.tableName}</th>
+                  <th>{strings.tableDownloads}</th>
+                  <th>{strings.tablePublished}</th>
+                </tr>
+              </thead>
+              <tbody id="releases-body"></tbody>
+            </table>
+          </section>
+        </div>
+
+        <p class="footer-note">{strings.footerNote}</p>
+      </main>
+    </div>
+
+    <script
+      is:inline
+      define:vars={{
+        strings,
+        summaryUrl,
+      }}
+    >
+      const statusMessage = document.getElementById('status-message');
+      const lastUpdatedEl = document.getElementById('last-updated');
+      const overviewCards = document.getElementById('overview-cards');
+      const viewsChart = document.getElementById('views-chart');
+      const viewsChartTotal = document.getElementById('views-chart-total');
+      const clonesChart = document.getElementById('clones-chart');
+      const clonesChartTotal = document.getElementById('clones-chart-total');
+      const referrersTable = document.getElementById('referrers-table');
+      const referrersBody = document.getElementById('referrers-body');
+      const referrersEmpty = document.getElementById('referrers-empty');
+      const pathsTable = document.getElementById('paths-table');
+      const pathsBody = document.getElementById('paths-body');
+      const pathsEmpty = document.getElementById('paths-empty');
+      const releasesTable = document.getElementById('releases-table');
+      const releasesBody = document.getElementById('releases-body');
+      const releasesEmpty = document.getElementById('releases-empty');
+
+      const numberFormatter = new Intl.NumberFormat(strings.locale);
+      const dateTimeFormatter = new Intl.DateTimeFormat(strings.locale, {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      });
+      const dayFormatter = new Intl.DateTimeFormat(strings.locale, {
+        month: 'short',
+        day: 'numeric',
+      });
+
+      function escapeHtml(value) {
+        return String(value ?? '')
+          .replaceAll('&', '&amp;')
+          .replaceAll('<', '&lt;')
+          .replaceAll('>', '&gt;')
+          .replaceAll('"', '&quot;')
+          .replaceAll("'", '&#39;');
+      }
+
+      function formatNumber(value) {
+        return numberFormatter.format(Number(value || 0));
+      }
+
+      function historyEntries(history) {
+        return Object.entries(history || {})
+          .map(([timestamp, values]) => ({
+            timestamp,
+            date: new Date(timestamp),
+            count: Number(values?.count || 0),
+            uniques: Number(values?.uniques || 0),
+          }))
+          .sort((a, b) => a.date - b.date);
+      }
+
+      function sumCounts(entries) {
+        return entries.reduce((sum, entry) => sum + entry.count, 0);
+      }
+
+      function metricValue(value, fallback = '—') {
+        return value == null ? fallback : formatNumber(value);
+      }
+
+      function renderMetricCards(summary) {
+        const viewsEntries = historyEntries(summary.views);
+        const clonesEntries = historyEntries(summary.clones);
+        const viewsCount = summary.views_window?.count ?? sumCounts(viewsEntries);
+        const clonesCount = summary.clones_window?.count ?? sumCounts(clonesEntries);
+        const cards = [
+          {
+            label: strings.cards.views,
+            value: metricValue(viewsCount),
+            subtitle:
+              summary.views_window?.uniques != null
+                ? `${formatNumber(summary.views_window.uniques)} ${strings.subtotals.uniques14d}`
+                : strings.subtotals.awaitingArchive,
+          },
+          {
+            label: strings.cards.clones,
+            value: metricValue(clonesCount),
+            subtitle:
+              summary.clones_window?.uniques != null
+                ? `${formatNumber(summary.clones_window.uniques)} ${strings.subtotals.uniques14d}`
+                : strings.subtotals.awaitingArchive,
+          },
+          {
+            label: strings.cards.stars,
+            value: metricValue(summary.repo?.stargazers_count),
+            subtitle: summary.repo ? strings.subtotals.currentSnapshot : strings.subtotals.awaitingArchive,
+          },
+          {
+            label: strings.cards.forks,
+            value: metricValue(summary.repo?.forks_count),
+            subtitle: summary.repo ? strings.subtotals.currentSnapshot : strings.subtotals.awaitingArchive,
+          },
+          {
+            label: strings.cards.subscribers,
+            value: metricValue(summary.repo?.subscribers_count),
+            subtitle: summary.repo ? strings.subtotals.currentSnapshot : strings.subtotals.awaitingArchive,
+          },
+          {
+            label: strings.cards.releaseDownloads,
+            value: metricValue(summary.releases?.total_downloads),
+            subtitle:
+              summary.releases?.release_count != null
+                ? `${formatNumber(summary.releases.release_count)} ${strings.subtotals.releaseCountLabel}`
+                : strings.subtotals.awaitingArchive,
+          },
+          {
+            label: strings.cards.latestRelease,
+            value: summary.releases?.latest_release_tag ?? '—',
+            subtitle: summary.releases?.latest_release_published_at
+              ? `${strings.subtotals.publishedLabel} ${dateTimeFormatter.format(new Date(summary.releases.latest_release_published_at))}`
+              : strings.subtotals.awaitingArchive,
+          },
+          {
+            label: strings.cards.openIssues,
+            value: metricValue(summary.repo?.open_issues_count),
+            subtitle: summary.repo ? strings.subtotals.issuesLabel : strings.subtotals.awaitingArchive,
+          },
+        ];
+
+        overviewCards.innerHTML = cards
+          .map(
+            (card) => `
+              <article class="metric-card">
+                <span class="metric-label">${escapeHtml(card.label)}</span>
+                <div class="metric-value">${escapeHtml(card.value)}</div>
+                <p class="metric-subtitle">${escapeHtml(card.subtitle)}</p>
+              </article>
+            `
+          )
+          .join('');
+      }
+
+      function renderBars(container, totalEl, entries, total) {
+        if (!entries.length) {
+          container.innerHTML = `<div class="table-empty">${escapeHtml(strings.emptyChart)}</div>`;
+          totalEl.textContent = strings.emptyChart;
+          return;
+        }
+
+        const max = Math.max(...entries.map((entry) => entry.count), 1);
+        totalEl.textContent = `${formatNumber(total)} ${strings.subtotals.dailyBars}`;
+        container.innerHTML = entries
+          .slice(-14)
+          .map((entry) => {
+            const width = Math.max((entry.count / max) * 100, entry.count > 0 ? 6 : 0);
+            return `
+              <div class="bar-row">
+                <span class="bar-label">${escapeHtml(dayFormatter.format(entry.date))}</span>
+                <div class="bar-track">
+                  <div class="bar-fill" style="width:${width}%"></div>
+                </div>
+                <span class="bar-value">${escapeHtml(formatNumber(entry.count))}</span>
+              </div>
+            `;
+          })
+          .join('');
+      }
+
+      function renderRows({ items, emptyEl, tableEl, bodyEl, renderRow }) {
+        if (!items.length) {
+          emptyEl.hidden = false;
+          tableEl.hidden = true;
+          bodyEl.innerHTML = '';
+          return;
+        }
+        emptyEl.hidden = true;
+        tableEl.hidden = false;
+        bodyEl.innerHTML = items.map(renderRow).join('');
+      }
+
+      function renderTables(summary) {
+        const referrers = (summary.referrers || []).slice(0, 10);
+        renderRows({
+          items: referrers,
+          emptyEl: referrersEmpty,
+          tableEl: referrersTable,
+          bodyEl: referrersBody,
+          renderRow: (item, index) => `
+            <tr>
+              <td>${index + 1}</td>
+              <td>${escapeHtml(item.referrer)}</td>
+              <td>${escapeHtml(formatNumber(item.count))}</td>
+              <td>${escapeHtml(formatNumber(item.uniques))}</td>
+            </tr>
+          `,
+        });
+
+        const paths = (summary.paths || []).slice(0, 10);
+        renderRows({
+          items: paths,
+          emptyEl: pathsEmpty,
+          tableEl: pathsTable,
+          bodyEl: pathsBody,
+          renderRow: (item, index) => `
+            <tr>
+              <td>${index + 1}</td>
+              <td class="mono">${escapeHtml(item.path)}<small>${escapeHtml(item.title || '')}</small></td>
+              <td>${escapeHtml(formatNumber(item.count))}</td>
+              <td>${escapeHtml(formatNumber(item.uniques))}</td>
+            </tr>
+          `,
+        });
+
+        const releases = Object.entries(summary.releases?.by_tag || {})
+          .map(([tag, values]) => ({ tag, ...values }))
+          .sort((a, b) => (b.asset_downloads || 0) - (a.asset_downloads || 0))
+          .slice(0, 12);
+
+        renderRows({
+          items: releases,
+          emptyEl: releasesEmpty,
+          tableEl: releasesTable,
+          bodyEl: releasesBody,
+          renderRow: (item) => {
+            const badges = [];
+            if (item.prerelease) badges.push(`<span class="chip pre">${escapeHtml(strings.releasePre)}</span>`);
+            const published = item.published_at
+              ? dateTimeFormatter.format(new Date(item.published_at))
+              : '—';
+            const tagMarkup = item.html_url
+              ? `<a href="${escapeHtml(item.html_url)}">${escapeHtml(item.tag)}</a>`
+              : escapeHtml(item.tag);
+            return `
+              <tr>
+                <td>
+                  <strong>${tagMarkup}</strong>
+                  <small>${escapeHtml(item.name || item.tag)}</small>
+                  ${badges.join(' ')}
+                </td>
+                <td>${escapeHtml(formatNumber(item.asset_downloads))}</td>
+                <td>${escapeHtml(published)}</td>
+              </tr>
+            `;
+          },
+        });
+      }
+
+      function render(summary) {
+        const lastUpdated = summary.last_updated ? new Date(summary.last_updated) : null;
+        lastUpdatedEl.textContent = lastUpdated ? dateTimeFormatter.format(lastUpdated) : '—';
+        statusMessage.textContent = summary.last_updated
+          ? `${strings.sourceValue} · ${dateTimeFormatter.format(new Date(summary.last_updated))}`
+          : strings.sourceValue;
+        statusMessage.classList.remove('error');
+
+        renderMetricCards(summary);
+        const viewsEntries = historyEntries(summary.views);
+        const clonesEntries = historyEntries(summary.clones);
+        renderBars(viewsChart, viewsChartTotal, viewsEntries, summary.views_window?.count ?? sumCounts(viewsEntries));
+        renderBars(clonesChart, clonesChartTotal, clonesEntries, summary.clones_window?.count ?? sumCounts(clonesEntries));
+        renderTables(summary);
+      }
+
+      async function loadSummary() {
+        try {
+          const response = await fetch(`${summaryUrl}?ts=${Date.now()}`, {
+            cache: 'no-store',
+          });
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+          }
+          const summary = await response.json();
+          render(summary);
+        } catch (error) {
+          statusMessage.textContent = `${strings.errorPrefix} ${error instanceof Error ? error.message : String(error)}`;
+          statusMessage.classList.add('error');
+          lastUpdatedEl.textContent = '—';
+        }
+      }
+
+      loadSummary();
+    </script>
+  </body>
+</html>

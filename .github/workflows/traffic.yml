@@ -43,7 +43,7 @@ jobs:
             git rm -rf . >/dev/null 2>&1 || true
           fi
 
-          mkdir -p traffic/clones traffic/views traffic/referrers
+          mkdir -p traffic/clones traffic/views traffic/referrers traffic/paths traffic/releases traffic/repo
 
       - name: Fetch traffic data
         if: steps.traffic-token.outputs.available == 'true'
@@ -55,14 +55,76 @@ jobs:
             const date = new Date().toISOString().split('T')[0];
             const [owner, repo] = process.env.GITHUB_REPOSITORY.split('/');
 
+            function writeJson(path, data) {
+              fs.writeFileSync(path, JSON.stringify(data, null, 2) + '\n');
+            }
+
+            function buildRepoSnapshot(repoData) {
+              return {
+                full_name: repoData.full_name,
+                default_branch: repoData.default_branch,
+                open_issues_count: repoData.open_issues_count,
+                stargazers_count: repoData.stargazers_count,
+                subscribers_count: repoData.subscribers_count,
+                watchers_count: repoData.watchers_count,
+                forks_count: repoData.forks_count,
+                network_count: repoData.network_count,
+                size_kb: repoData.size,
+                pushed_at: repoData.pushed_at,
+                updated_at: repoData.updated_at,
+              };
+            }
+
+            function buildReleaseSnapshot(releases) {
+              const releaseItems = releases
+                .filter((release) => !release.draft)
+                .map((release) => {
+                  const assets = (release.assets || []).map((asset) => ({
+                    name: asset.name,
+                    download_count: asset.download_count ?? 0,
+                    size: asset.size,
+                    content_type: asset.content_type,
+                    created_at: asset.created_at,
+                    updated_at: asset.updated_at,
+                  }));
+                  const asset_downloads = assets.reduce(
+                    (sum, asset) => sum + asset.download_count,
+                    0
+                  );
+                  return {
+                    tag_name: release.tag_name,
+                    name: release.name || release.tag_name,
+                    prerelease: Boolean(release.prerelease),
+                    published_at: release.published_at,
+                    created_at: release.created_at,
+                    html_url: release.html_url,
+                    asset_downloads,
+                    assets,
+                  };
+                });
+
+              return {
+                total_downloads: releaseItems.reduce(
+                  (sum, release) => sum + release.asset_downloads,
+                  0
+                ),
+                release_count: releaseItems.length,
+                latest_release_tag: releaseItems[0]?.tag_name || null,
+                latest_release_published_at: releaseItems[0]?.published_at || null,
+                releases: releaseItems,
+              };
+            }
+
             let clones;
             let views;
             let referrers;
+            let paths;
             try {
-              [clones, views, referrers] = await Promise.all([
+              [clones, views, referrers, paths] = await Promise.all([
                 github.rest.repos.getClones({ owner, repo, per: 'day' }),
                 github.rest.repos.getViews({ owner, repo, per: 'day' }),
                 github.rest.repos.getTopReferrers({ owner, repo }),
+                github.request('GET /repos/{owner}/{repo}/traffic/popular/paths', { owner, repo }),
               ]);
             } catch (error) {
               if (error && error.status === 403) {
@@ -73,18 +135,20 @@ jobs:
               throw error;
             }
 
-            fs.writeFileSync(
-              `traffic/clones/${date}.json`,
-              JSON.stringify(clones.data, null, 2) + '\n'
-            );
-            fs.writeFileSync(
-              `traffic/views/${date}.json`,
-              JSON.stringify(views.data, null, 2) + '\n'
-            );
-            fs.writeFileSync(
-              `traffic/referrers/${date}.json`,
-              JSON.stringify(referrers.data, null, 2) + '\n'
-            );
+            const [repoResponse, releases] = await Promise.all([
+              github.rest.repos.get({ owner, repo }),
+              github.paginate(github.rest.repos.listReleases, { owner, repo, per_page: 100 }),
+            ]);
+
+            const repoSnapshot = buildRepoSnapshot(repoResponse.data);
+            const releaseSnapshot = buildReleaseSnapshot(releases);
+
+            writeJson(`traffic/clones/${date}.json`, clones.data);
+            writeJson(`traffic/views/${date}.json`, views.data);
+            writeJson(`traffic/referrers/${date}.json`, referrers.data);
+            writeJson(`traffic/paths/${date}.json`, paths.data);
+            writeJson(`traffic/releases/${date}.json`, releaseSnapshot);
+            writeJson(`traffic/repo/${date}.json`, repoSnapshot);
 
             // Update cumulative summary
             let summary = {};
@@ -98,23 +162,68 @@ jobs:
             for (const entry of clones.data.clones || []) {
               summary.clones[entry.timestamp] = { count: entry.count, uniques: entry.uniques };
             }
+            summary.clones_window = {
+              count: clones.data.count ?? 0,
+              uniques: clones.data.uniques ?? 0,
+            };
 
             // Merge daily view data (deduplicate by timestamp)
             if (!summary.views) summary.views = {};
             for (const entry of views.data.views || []) {
               summary.views[entry.timestamp] = { count: entry.count, uniques: entry.uniques };
             }
+            summary.views_window = {
+              count: views.data.count ?? 0,
+              uniques: views.data.uniques ?? 0,
+            };
 
             // Update latest referrers snapshot
             summary.referrers = referrers.data;
+            summary.paths = paths.data;
+            summary.repo = repoSnapshot;
+            if (!summary.repo_history) summary.repo_history = {};
+            summary.repo_history[date] = repoSnapshot;
+
+            summary.releases = {
+              total_downloads: releaseSnapshot.total_downloads,
+              release_count: releaseSnapshot.release_count,
+              latest_release_tag: releaseSnapshot.latest_release_tag,
+              latest_release_published_at: releaseSnapshot.latest_release_published_at,
+              by_tag: Object.fromEntries(
+                releaseSnapshot.releases.map((release) => [
+                  release.tag_name,
+                  {
+                    name: release.name,
+                    prerelease: release.prerelease,
+                    published_at: release.published_at,
+                    html_url: release.html_url,
+                    asset_downloads: release.asset_downloads,
+                    assets: release.assets,
+                  },
+                ])
+              ),
+            };
+            if (!summary.release_history) summary.release_history = {};
+            summary.release_history[date] = {
+              total_downloads: releaseSnapshot.total_downloads,
+              release_count: releaseSnapshot.release_count,
+              latest_release_tag: releaseSnapshot.latest_release_tag,
+            };
             summary.last_updated = new Date().toISOString();
 
-            fs.writeFileSync(summaryPath, JSON.stringify(summary, null, 2) + '\n');
+            writeJson(summaryPath, summary);
 
             console.log(`Archived traffic data for ${date}`);
             console.log(`Clones: ${clones.data.count} total, ${clones.data.uniques} unique`);
             console.log(`Views: ${views.data.count} total, ${views.data.uniques} unique`);
             console.log(`Referrers: ${referrers.data.length} sources`);
+            console.log(`Popular paths: ${paths.data.length} items`);
+            console.log(
+              `Releases: ${releaseSnapshot.release_count} total, ${releaseSnapshot.total_downloads} asset downloads`
+            );
+            console.log(
+              `Repo snapshot: ${repoSnapshot.stargazers_count} stars, ${repoSnapshot.forks_count} forks, ${repoSnapshot.subscribers_count} subscribers`
+            );
 
       - name: Commit and push
         if: steps.traffic-token.outputs.available == 'true'

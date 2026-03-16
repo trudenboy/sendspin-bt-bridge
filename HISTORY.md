@@ -2,7 +2,23 @@
 
 A history of the architectural and functional evolution of sendspin-bt-bridge — for readers familiar with Home Assistant, Music Assistant, and multiroom audio setups.
 
-**Period:** January 1 – March 16, 2026 · **Total commits:** ~957 · **Versions:** 1.0.0 → 2.32.0
+**Period:** January 1 – March 16, 2026 · **Total commits:** ~957 · **Versions:** 1.0.0 → 2.32.2
+
+---
+
+## March 16, 2026 — Fail-safe LXC updates and recovery rails (v2.32.2)
+
+The `2.32.2` release is first and foremost an operational hardening release. It was triggered by a real native-LXC failure mode: an auto-update brought in Python code that referenced new modules, but the local updater still downloaded a stale hand-maintained file list and left the service in a restart loop. This release closes that gap at the updater architecture level instead of treating the missing-file incident as a one-off.
+
+Five themes define the release:
+
+- **Public visibility into repository health** — the GitHub traffic archiver now records richer repository and release statistics, and the docs site publishes that archive as a simple stats dashboard. That turns internal release/traffic bookkeeping into something operators and contributors can inspect without digging through workflow artifacts.
+- **Release snapshots instead of file drift** — native `lxc/install.sh` and `lxc/upgrade.sh` now download a GitHub archive snapshot and sync the runtime tree recursively. That removes the brittle “remember to append every new file to two shell loops” maintenance pattern that caused the Turris outage.
+- **Detached updates that survive restart** — one-click updates and background auto-updates are now launched through `systemd-run --no-block`, outside the `sendspin-client` service cgroup. That matters because restart, smoke-check, and rollback logic can now complete even while the main service is being restarted underneath them.
+- **Transactional upgrade behavior** — the LXC updater now stages the new tree, validates imports before swap, restarts the service, performs local health checks, and rolls back automatically if the upgraded runtime does not come back cleanly. In other words, the update path now has a recovery story instead of just a replacement story.
+- **Small but practical follow-ups around the release edge** — the armv7 Docker build path now matches the current `aiosendspin`/`av` dependency contract again, and the enlarged album-art preview no longer disappears under toolbar/group-action chrome in either dashboard view.
+
+This is the kind of release that operators mostly notice by *not* having to notice it later: fewer updater assumptions, less script drift, and a much safer path for unattended native-LXC refreshes.
 
 ---
 

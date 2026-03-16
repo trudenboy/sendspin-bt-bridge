@@ -1,0 +1,73 @@
+---
+import StatsDashboardPage from '../../../components/StatsDashboardPage.astro';
+
+const rawBase = import.meta.env.BASE_URL;
+const base = rawBase.endsWith('/') ? rawBase : `${rawBase}/`;
+---
+
+<StatsDashboardPage
+  lang="ru"
+  title="Статистика проекта"
+  description="Простой GitHub Pages dashboard для пассивной статистики репозитория, архивируемой в ветке traffic-data."
+  backHref={`${base}ru/`}
+  backLabel="Назад в документацию"
+  altHref={`${base}stats/`}
+  altLabel="English"
+  strings={{
+    locale: 'ru-RU',
+    eyebrow: 'Пассивная GitHub-статистика',
+    intro:
+      'Этот dashboard читает архивный summary из ветки `traffic-data` и показывает лёгкий публичный срез по traffic-метрикам, скачиваниям релизов и текущему состоянию репозитория.',
+    lastUpdated: 'Последнее обновление',
+    source: 'Источник',
+    sourceValue: 'GitHub Traffic + Releases API',
+    branch: 'Ветка архива',
+    loading: 'Загрузка…',
+    loadingMessage: 'Загружаю архивную summary-статистику…',
+    errorPrefix: 'Не удалось загрузить архивную статистику:',
+    overviewTitle: 'Обзор',
+    chartsTitle: 'Трафик за последние 14 дней',
+    chartsDescription:
+      'GitHub хранит traffic-метрики в скользящем 14-дневном окне. Ниже показаны заархивированные дневные значения по просмотрам и клонам.',
+    viewsChart: 'Просмотры',
+    clonesChart: 'Клоны',
+    emptyChart: 'Данных пока нет',
+    referrersTitle: 'Основные referrers',
+    referrersDescription: 'Последний снимок источников переходов, сохранённый workflow.',
+    pathsTitle: 'Популярные пути',
+    pathsDescription: 'Самые посещаемые пути репозитория из последнего снимка GitHub Traffic.',
+    releasesTitle: 'Скачивания релизов',
+    releasesDescription: 'Assets релизов, отсортированные по суммарному числу скачиваний.',
+    emptyTable: 'Архивных данных пока нет.',
+    tableRank: '#',
+    tableName: 'Название',
+    tableViews: 'Просмотры',
+    tableUniques: 'Уникальные',
+    tablePath: 'Путь',
+    tableDownloads: 'Скачивания',
+    tablePublished: 'Опубликован',
+    releaseDraft: 'Черновик',
+    releasePre: 'Пре-релиз',
+    footerNote:
+      'Вся статистика на этой странице собирается только со стороны GitHub. Ни один экземпляр Sendspin bridge не отправляет проекту телеметрию использования.',
+    cards: {
+      views: 'Просмотры (14д)',
+      clones: 'Клоны (14д)',
+      stars: 'Звёзды',
+      forks: 'Форки',
+      subscribers: 'Подписчики',
+      releaseDownloads: 'Скачивания релизов',
+      latestRelease: 'Последний релиз',
+      openIssues: 'Открытые issues',
+    },
+    subtotals: {
+      uniques14d: 'уникальных в том же 14-дневном окне',
+      dailyBars: 'всего в окне',
+      currentSnapshot: 'текущий снимок репозитория',
+      publishedLabel: 'опубликован',
+      releaseCountLabel: 'релизов в архиве',
+      issuesLabel: 'текущее значение GitHub',
+      awaitingArchive: 'ожидает следующего прогона архива',
+    },
+  }}
+/>

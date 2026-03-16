@@ -1,0 +1,73 @@
+---
+import StatsDashboardPage from '../../components/StatsDashboardPage.astro';
+
+const rawBase = import.meta.env.BASE_URL;
+const base = rawBase.endsWith('/') ? rawBase : `${rawBase}/`;
+---
+
+<StatsDashboardPage
+  lang="en"
+  title="Project Stats"
+  description="Simple GitHub Pages dashboard for passive repository usage metrics archived on the traffic-data branch."
+  backHref={base}
+  backLabel="Back to docs"
+  altHref={`${base}ru/stats/`}
+  altLabel="Русский"
+  strings={{
+    locale: 'en',
+    eyebrow: 'Passive GitHub-side telemetry',
+    intro:
+      'This dashboard reads the archived summary from the `traffic-data` branch and turns it into a lightweight public snapshot of repository traffic, release downloads, and current repository health.',
+    lastUpdated: 'Last updated',
+    source: 'Source',
+    sourceValue: 'GitHub traffic + releases APIs',
+    branch: 'Archive branch',
+    loading: 'Loading…',
+    loadingMessage: 'Loading archived traffic summary…',
+    errorPrefix: 'Could not load archived statistics:',
+    overviewTitle: 'Overview',
+    chartsTitle: '14-day traffic trend',
+    chartsDescription:
+      'GitHub keeps traffic metrics in a rolling 14-day window. The bars below show the archived daily counts for views and clones.',
+    viewsChart: 'Views',
+    clonesChart: 'Clones',
+    emptyChart: 'No data yet',
+    referrersTitle: 'Top referrers',
+    referrersDescription: 'Latest referrer snapshot captured by the workflow.',
+    pathsTitle: 'Top content paths',
+    pathsDescription: 'Most visited repository paths from the latest GitHub Traffic snapshot.',
+    releasesTitle: 'Release downloads',
+    releasesDescription: 'Release assets ranked by cumulative download count.',
+    emptyTable: 'No archived data yet.',
+    tableRank: '#',
+    tableName: 'Name',
+    tableViews: 'Views',
+    tableUniques: 'Uniques',
+    tablePath: 'Path',
+    tableDownloads: 'Downloads',
+    tablePublished: 'Published',
+    releaseDraft: 'Draft',
+    releasePre: 'Pre-release',
+    footerNote:
+      'Everything here is GitHub-only telemetry. No Sendspin bridge instance sends usage data back to the project.',
+    cards: {
+      views: 'Views (14d)',
+      clones: 'Clones (14d)',
+      stars: 'Stars',
+      forks: 'Forks',
+      subscribers: 'Subscribers',
+      releaseDownloads: 'Release downloads',
+      latestRelease: 'Latest release',
+      openIssues: 'Open issues',
+    },
+    subtotals: {
+      uniques14d: 'uniques in the same 14-day window',
+      dailyBars: 'total in window',
+      currentSnapshot: 'current repository snapshot',
+      publishedLabel: 'published',
+      releaseCountLabel: 'releases tracked',
+      issuesLabel: 'current GitHub count',
+      awaitingArchive: 'waiting for the next archive run',
+    },
+  }}
+/>

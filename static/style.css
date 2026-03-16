@@ -593,6 +593,8 @@ body {
             align-items: start;
             max-width: 1400px;
             gap: 10px; margin-bottom: 20px;
+            position: relative;
+            z-index: 2;
         }
         .no-devices-hint {
             grid-column: 1 / -1;
@@ -627,9 +629,16 @@ body {
             display: flex; flex-direction: column; gap: 6px;
             border-left: 3px solid transparent;
             transition: opacity 0.2s, box-shadow 0.2s, border-color 0.2s;
+            position: relative;
+            z-index: 0;
         }
         .device-card:hover {
             box-shadow: 0 4px 12px rgba(0,0,0,.35), 0 2px 4px rgba(0,0,0,.2);
+            z-index: 4;
+        }
+        .device-card:focus-within,
+        .device-card.preview-open {
+            z-index: 5;
         }
         .device-card.playing,
         .device-card.is-success {
@@ -746,33 +755,6 @@ body {
         .play-state-label {
             font-size: 11px; color: var(--secondary-text-color);
         }
-        .card-status-badge {
-            min-width: 0;
-            color: var(--secondary-text-color);
-            border: 1px solid var(--tone-neutral-border);
-            background: var(--tone-neutral-bg);
-        }
-        .card-status-badge.is-success {
-            color: #2e7d32;
-            border-color: var(--tone-success-border);
-            background: var(--tone-success-bg);
-        }
-        .card-status-badge.is-warning {
-            color: #c77700;
-            border-color: var(--tone-warning-border);
-            background: var(--tone-warning-bg);
-        }
-        .card-status-badge.is-error {
-            color: #d14336;
-            border-color: var(--tone-error-border);
-            background: var(--tone-error-bg);
-        }
-        .card-status-badge.is-neutral {
-            color: #6b7280;
-            border-color: var(--tone-neutral-border);
-            background: var(--tone-neutral-bg);
-        }
-
         /* Track name with marquee on card hover */
         .track-art-wrap {
             position: relative; flex: 1; min-width: 0;
@@ -974,6 +956,8 @@ body {
             flex-direction: column;
             gap: 0;
             margin-bottom: 16px;
+            position: relative;
+            z-index: 1;
         }
         .filter-bar {
             background: var(--card-background-color);
@@ -1134,24 +1118,6 @@ body {
             flex-shrink: 0;
             letter-spacing: 0.01em;
         }
-        .badge-group { background: rgba(3,169,244,.1); color: var(--primary-color); }
-        .badge-released {
-            background: var(--tone-neutral-bg);
-            color: #6b7280;
-            border: 1px solid var(--tone-neutral-border);
-            font-weight: 600;
-        }
-        .badge-released.badge-warn {
-            background: var(--tone-warning-bg);
-            color: var(--warning-color);
-            border-color: var(--tone-warning-border);
-        }
-        .badge-error {
-            background: var(--tone-error-bg);
-            color: var(--error-color);
-            border: 1px solid var(--tone-error-border);
-            font-weight: 600;
-        }
         .adapter-link-badge {
             display: inline-flex;
             align-items: center;
@@ -1269,17 +1235,6 @@ body {
             width: 6px; height: 6px;
             border-radius: 50%;
             flex-shrink: 0;
-        }
-        .chip-ok .dot { background: var(--success-color); }
-        .list-release-chip {
-            border: 1px solid rgba(107, 114, 128, 0.16);
-            background: rgba(107, 114, 128, 0.10);
-            color: #6b7280;
-        }
-        .list-release-chip.is-warning {
-            border-color: rgba(255, 166, 0, 0.24);
-            background: rgba(255, 166, 0, 0.10);
-            color: #c77700;
         }
         .chip-icon {
             width: 12px;
@@ -1593,7 +1548,7 @@ body {
         .list-view-shell {
             border: 1px solid var(--divider-color);
             border-radius: 12px;
-            overflow: hidden;
+            overflow: visible;
             background: var(--card-background-color);
         }
         .list-header,
@@ -1672,9 +1627,17 @@ body {
         }
         .list-row {
             border-bottom: 1px solid var(--divider-color);
+            position: relative;
+            z-index: 0;
         }
         .list-row:last-child {
             border-bottom: none;
+        }
+        .list-row:hover,
+        .list-row:focus-within,
+        .list-row.expanded,
+        .list-row.preview-open {
+            z-index: 4;
         }
         .list-row-main {
             padding: 8px 16px;
@@ -1857,85 +1820,13 @@ body {
             margin-top: 0;
             margin-bottom: 0;
         }
-        .list-status-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            min-height: var(--badge-min-height);
-            padding: var(--badge-padding-y) var(--badge-padding-x);
-            border-radius: var(--badge-radius);
-            border: 1px solid rgba(107, 114, 128, 0.14);
-            background: rgba(107, 114, 128, 0.08);
-            min-width: 0;
-            font-size: var(--badge-font-size);
-            font-weight: var(--badge-font-weight);
-            line-height: var(--badge-line-height);
-            color: var(--secondary-text-color);
-        }
-        .list-status-badge.is-success {
-            color: #2e7d32;
-            border-color: rgba(67, 160, 71, 0.18);
-            background: rgba(67, 160, 71, 0.14);
-        }
-        .list-status-badge.is-warning {
-            color: #c77700;
-            border-color: rgba(255, 166, 0, 0.24);
-            background: rgba(255, 166, 0, 0.10);
-        }
-        .list-status-badge.is-error {
-            color: #d14336;
-            border-color: rgba(219, 68, 55, 0.18);
-            background: rgba(219, 68, 55, 0.10);
-        }
-        .list-status-badge.is-neutral {
-            color: #6b7280;
-            border-color: rgba(107, 114, 128, 0.16);
-            background: rgba(107, 114, 128, 0.10);
-        }
-        .list-status-badge-text {
-            min-width: 0;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-        .list-adapter-chip,
-        .list-group-chip {
-            display: inline-flex;
-            align-items: center;
-            min-width: 0;
-            max-width: 100%;
-            min-height: var(--badge-min-height);
-            padding: var(--badge-padding-y) var(--badge-padding-x);
-            border-radius: var(--badge-radius);
-            border: 1px solid rgba(3, 169, 244, 0.15);
-            background: rgba(3, 169, 244, 0.08);
-            color: var(--primary-text-color);
-            font-size: var(--badge-font-size);
-            font-weight: var(--badge-font-weight);
-            line-height: var(--badge-line-height);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-        .list-adapter-chip,
-        .list-group-chip.group-link-badge {
+        button.meta-badge {
             appearance: none;
-            cursor: pointer;
-            transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
-        }
-        button.list-group-chip.group-link-badge {
+            -webkit-appearance: none;
             font-family: inherit;
-            font-size: var(--badge-font-size);
-            font-weight: var(--badge-font-weight);
-            line-height: var(--badge-line-height);
         }
-        .list-group-chip.group-badge-unified {
-            gap: 6px;
-        }
-        .list-adapter-chip.empty,
-        .list-group-chip.empty {
-            background: rgba(107, 114, 128, 0.08);
-            border-color: rgba(107, 114, 128, 0.14);
-            color: var(--secondary-text-color);
+        button.meta-badge:disabled {
+            opacity: 1;
         }
         .meta-badge {
             --meta-badge-state-color: currentColor;
@@ -2131,8 +2022,6 @@ body {
         .group-badge-unified,
         .adapter-link-badge,
         .service-chip-badge,
-        .card-status-badge,
-        .list-status-badge,
         .sync-chip,
         .sync-detail-chip,
         .list-sync-chip,
@@ -3989,7 +3878,6 @@ body {
                 background: rgba(255,255,255,.08);
                 border-color: rgba(255,255,255,.12);
             }
-            .chip-ok { background: rgba(67,160,71,.15); }
             .filter-bar,
             .action-bar,
             .config-panel-card,
@@ -4022,9 +3910,6 @@ body {
         }
         html.theme-dark .config-tabs {
             box-shadow: inset 0 -2px 0 rgba(255,255,255,.14);
-        }
-        html.theme-dark .chip-ok {
-            background: rgba(67,160,71,.15);
         }
         html.theme-dark .card-np,
         html.theme-dark .list-row-detail {

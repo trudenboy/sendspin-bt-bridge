@@ -31,6 +31,7 @@ from services import (
     bt_remove_device as _bt_remove_device,
 )
 from services.bluetooth import _MAC_RE
+from services.update_checker import _start_upgrade_job
 from state import (
     _adapter_cache_lock,
     load_adapter_name_cache,
@@ -821,7 +822,7 @@ def api_update_info():
 
 @config_bp.route("/api/update/apply", methods=["POST"])
 def api_update_apply():
-    """Run upgrade.sh (LXC/systemd only). Returns progress lines."""
+    """Start upgrade.sh in a transient systemd unit (LXC/systemd only)."""
     runtime = _detect_runtime()
     if runtime != "systemd":
         methods = {
@@ -830,31 +831,19 @@ def api_update_apply():
         }
         return jsonify({"success": False, "error": methods.get(runtime, "Unsupported runtime")}), 400
 
-    upgrade_script = "/opt/sendspin-client/lxc/upgrade.sh"
-    if not os.path.isfile(upgrade_script):
-        # Try relative path (dev mode)
-        base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        upgrade_script = os.path.join(base, "lxc", "upgrade.sh")
-    if not os.path.isfile(upgrade_script):
-        return jsonify({"success": False, "error": "upgrade.sh not found"}), 404
-
     try:
-        result = subprocess.run(
-            ["bash", upgrade_script],
-            capture_output=True,
-            text=True,
-            timeout=120,
-        )
-        return jsonify(
-            {
-                "success": result.returncode == 0,
-                "returncode": result.returncode,
-                "stdout": result.stdout[-4000:] if result.stdout else "",
-                "stderr": result.stderr[-2000:] if result.stderr else "",
-            }
-        )
-    except subprocess.TimeoutExpired:
-        return jsonify({"success": False, "error": "Upgrade timed out (120s)"}), 504
+        payload = request.get_json(silent=True) or {}
+        requested_ref = payload.get("tag") or payload.get("version")
+        result = _start_upgrade_job(requested_ref)
+        if result.get("success"):
+            if result.get("already_running"):
+                result["message"] = "Upgrade already in progress."
+            else:
+                result["message"] = "Upgrade started."
+            return jsonify(result)
+        if result.get("error") == "upgrade.sh not found":
+            return jsonify(result), 404
+        return jsonify(result), 500
     except Exception:
         logger.exception("Upgrade failed")
         return jsonify({"success": False, "error": "Internal error"}), 500

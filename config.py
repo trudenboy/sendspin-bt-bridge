@@ -22,7 +22,7 @@ import time
 import uuid as _uuid
 from pathlib import Path
 
-VERSION = "2.32.0"
+VERSION = "2.32.2"
 BUILD_DATE = "2026-03-16"
 
 __all__ = [

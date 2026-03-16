@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.32.2] - 2026-03-16
+
+### Changed
+- LXC install and upgrade scripts now pull a GitHub archive snapshot and sync the runtime tree recursively instead of relying on hard-coded file download lists that can drift from the repo layout
+- One-click update and background auto-update on native LXC/systemd installs now launch `upgrade.sh` through `systemd-run --no-block` and pass the detected release ref, so upgrades are pinned to the intended tag instead of defaulting silently to `main`
+- GitHub traffic archival now captures richer repository/release statistics, and the docs site now exposes that archived data on a simple public stats dashboard in English and Russian
+
+### Fixed
+- LXC upgrades now stage the new application tree, validate imports before swap, restart the service, run local smoke checks, and automatically roll back if the upgraded service fails to come back cleanly
+- Existing native LXC update scripts now include the runtime modules that previously caused post-update crashes such as missing `services.ma_artwork` / `services.ma_discovery`
+- The enlarged album-art preview now consistently renders above filter/group-action chrome in both card and list views, including the previously clipped list layout
+- The armv7 Docker build path now installs an `av` version compatible with the current `aiosendspin` dependency set, fixing the GitHub Actions armv7 image build
+
+### Added
+- Regression coverage for detached upgrade launch, release-tag forwarding, and guardrails that ensure the LXC scripts keep using archive-based recursive sync logic
+- A lightweight GitHub Pages stats dashboard for archived traffic, release downloads, referrers, popular paths, and current repository snapshot metrics
+
 ## [2.32.0] - 2026-03-16
 
 ### Changed

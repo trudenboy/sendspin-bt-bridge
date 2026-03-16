@@ -27,7 +27,40 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-BASE="https://raw.githubusercontent.com/${GITHUB_REPO}/${GITHUB_BRANCH}"
+REF_KIND="heads"
+if [[ "${GITHUB_BRANCH}" == v* ]]; then
+  REF_KIND="tags"
+fi
+ARCHIVE_URL="https://github.com/${GITHUB_REPO}/archive/refs/${REF_KIND}/${GITHUB_BRANCH}.tar.gz"
+SCRIPT_TMP_DIR=""
+
+cleanup() {
+  if [[ -n "${SCRIPT_TMP_DIR}" && -d "${SCRIPT_TMP_DIR}" ]]; then
+    rm -rf "${SCRIPT_TMP_DIR}"
+  fi
+}
+trap cleanup EXIT
+
+download_repo_snapshot() {
+  local extract_dir="$1"
+  wget -qO- "${ARCHIVE_URL}" | tar -xzf - -C "${extract_dir}"
+  find "${extract_dir}" -mindepth 1 -maxdepth 1 -type d | head -n 1
+}
+
+sync_app_tree() {
+  local src_root="$1"
+  local dest_root="$2"
+
+  mkdir -p "${dest_root}"
+  find "${src_root}" -maxdepth 1 -type f \( -name '*.py' -o -name 'requirements.txt' \) -exec cp -a {} "${dest_root}/" \;
+
+  for dir in services routes demo templates static lxc; do
+    rm -rf "${dest_root}/${dir}"
+    cp -a "${src_root}/${dir}" "${dest_root}/${dir}"
+  done
+
+  chmod +x "${dest_root}/sendspin_client.py"
+}
 
 # ─── Pre-flight ───────────────────────────────────────────────────────────────
 [[ $EUID -eq 0 ]] || die "Must be run as root"
@@ -35,6 +68,10 @@ BASE="https://raw.githubusercontent.com/${GITHUB_REPO}/${GITHUB_BRANCH}"
 msg "Sendspin Client LXC Installer"
 msg "Repo: ${GITHUB_REPO}  Branch: ${GITHUB_BRANCH}"
 echo ""
+
+SCRIPT_TMP_DIR=$(mktemp -d)
+SNAPSHOT_ROOT=$(download_repo_snapshot "${SCRIPT_TMP_DIR}")
+[[ -n "${SNAPSHOT_ROOT}" && -d "${SNAPSHOT_ROOT}" ]] || die "Failed to download repository snapshot"
 
 # ─── 1. System packages ───────────────────────────────────────────────────────
 msg "Installing system packages..."
@@ -53,44 +90,7 @@ ok "System packages installed"
 # ─── 2. App directory and files from GitHub ───────────────────────────────────
 msg "Downloading application files from GitHub..."
 mkdir -p /opt/sendspin-client
-
-# Root Python files
-for file in sendspin_client.py web_interface.py config.py state.py bluetooth_manager.py; do
-  wget -q "${BASE}/${file}" -O "/opt/sendspin-client/${file}"
-done
-
-# services/ module
-mkdir -p /opt/sendspin-client/services
-for file in __init__.py bluetooth.py ma_client.py bridge_daemon.py daemon_process.py ma_monitor.py pulse.py update_checker.py; do
-  wget -q "${BASE}/services/${file}" -O "/opt/sendspin-client/services/${file}"
-done
-
-# routes/ module
-mkdir -p /opt/sendspin-client/routes
-for file in __init__.py _helpers.py api.py api_bt.py api_config.py api_ma.py api_status.py views.py auth.py; do
-  wget -q "${BASE}/routes/${file}" -O "/opt/sendspin-client/routes/${file}"
-done
-
-# demo/ module
-mkdir -p /opt/sendspin-client/demo
-for file in __init__.py bt_manager.py fixtures.py simulator.py; do
-  wget -q "${BASE}/demo/${file}" -O "/opt/sendspin-client/demo/${file}"
-done
-
-# HTML templates
-mkdir -p /opt/sendspin-client/templates
-for file in index.html login.html; do
-  wget -q "${BASE}/templates/${file}" -O "/opt/sendspin-client/templates/${file}"
-done
-
-# Static assets
-mkdir -p /opt/sendspin-client/static
-for file in app.js style.css favicon.svg favicon.png bridge-logo.svg bridge-logo-full.png bridge-logo-header.png; do
-  wget -q "${BASE}/static/${file}" -O "/opt/sendspin-client/static/${file}"
-done
-
-wget -q "${BASE}/requirements.txt" -O /opt/sendspin-client/requirements.txt
-chmod +x /opt/sendspin-client/sendspin_client.py
+sync_app_tree "${SNAPSHOT_ROOT}" /opt/sendspin-client
 ok "Application files downloaded"
 
 # ─── 3. Python dependencies ───────────────────────────────────────────────────
@@ -178,11 +178,11 @@ msg "Writing PulseAudio system configuration..."
 mkdir -p /etc/pulse/client.conf.d
 
 # CPU-optimal daemon.conf — trivial resampler, s16le, 48kHz to match MA output
-wget -q "${BASE}/lxc/pulse-daemon.conf" -O /etc/pulse/daemon.conf
+cp "${SNAPSHOT_ROOT}/lxc/pulse-daemon.conf" /etc/pulse/daemon.conf
 ok "PulseAudio daemon.conf written (trivial resampler + 48kHz + s16le)"
 
 # System-mode PA config with Bluetooth modules
-wget -q "${BASE}/lxc/pulse-system.pa" -O /etc/pulse/system.pa
+cp "${SNAPSHOT_ROOT}/lxc/pulse-system.pa" /etc/pulse/system.pa
 ok "PulseAudio system.pa written (bluetooth-discover + null fallback)"
 
 cat > /etc/pulse/client.conf.d/00-no-autospawn.conf <<'EOF'
@@ -233,8 +233,8 @@ ok "Environment variables set"
 # ─── 10. Systemd units ────────────────────────────────────────────────────────
 msg "Installing systemd service units..."
 
-wget -q "${BASE}/lxc/pulseaudio-system.service" -O /etc/systemd/system/pulseaudio-system.service
-wget -q "${BASE}/lxc/sendspin-client.service"   -O /etc/systemd/system/sendspin-client.service
+cp "${SNAPSHOT_ROOT}/lxc/pulseaudio-system.service" /etc/systemd/system/pulseaudio-system.service
+cp "${SNAPSHOT_ROOT}/lxc/sendspin-client.service" /etc/systemd/system/sendspin-client.service
 
 ok "Systemd units installed"
 

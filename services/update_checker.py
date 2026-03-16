@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import subprocess
 from typing import Any
 
@@ -111,8 +112,6 @@ async def run_update_checker(current_version: str) -> None:
 
 def _should_auto_update() -> bool:
     """Check if auto-update is enabled and runtime supports it."""
-    import os
-
     from config import load_config
 
     cfg = load_config()
@@ -124,39 +123,106 @@ def _should_auto_update() -> bool:
     return True
 
 
-async def _auto_apply_update(new_version: str) -> None:
-    """Run upgrade.sh automatically in background."""
-    import os
+def _normalize_update_ref(target_ref: str | None) -> str | None:
+    """Normalize UI/API version input to the tag/branch format expected by upgrade.sh."""
+    if target_ref is None:
+        return None
+    normalized = str(target_ref).strip()
+    if not normalized:
+        return None
+    if normalized.startswith("v") or normalized.startswith("release/"):
+        return normalized
+    if normalized[0].isdigit():
+        return f"v{normalized}"
+    return normalized
 
+
+def _resolve_upgrade_script() -> str | None:
+    """Resolve upgrade.sh location for installed and dev environments."""
     upgrade_script = "/opt/sendspin-client/lxc/upgrade.sh"
-    if not os.path.isfile(upgrade_script):
-        base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        upgrade_script = os.path.join(base, "lxc", "upgrade.sh")
-    if not os.path.isfile(upgrade_script):
-        logger.warning("Auto-update: upgrade.sh not found, skipping")
-        return
+    if os.path.isfile(upgrade_script):
+        return upgrade_script
+    base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    candidate = os.path.join(base, "lxc", "upgrade.sh")
+    if os.path.isfile(candidate):
+        return candidate
+    return None
 
-    logger.info("Auto-update: applying v%s via %s", new_version, upgrade_script)
+
+def _start_upgrade_job(target_ref: str | None = None) -> dict[str, Any]:
+    """Launch upgrade.sh in a transient unit so restart/rollback survives service restart."""
+    upgrade_script = _resolve_upgrade_script()
+    if not upgrade_script:
+        return {"success": False, "error": "upgrade.sh not found"}
+    workdir = os.path.dirname(os.path.dirname(upgrade_script))
+
+    unit_name = "sendspin-upgrade"
+    active = subprocess.run(
+        ["systemctl", "show", f"{unit_name}.service", "--property=ActiveState", "--value"],
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    if active.returncode == 0 and active.stdout.strip() in {"activating", "active"}:
+        return {
+            "success": True,
+            "started": False,
+            "already_running": True,
+            "unit": f"{unit_name}.service",
+        }
+
+    subprocess.run(
+        ["systemctl", "reset-failed", f"{unit_name}.service"],
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+
+    command = [
+        "systemd-run",
+        f"--unit={unit_name}",
+        "--service-type=oneshot",
+        "--collect",
+        "--no-block",
+        f"--property=WorkingDirectory={workdir}",
+        "--property=StandardOutput=journal",
+        "--property=StandardError=journal",
+        "bash",
+        upgrade_script,
+    ]
+    normalized_ref = _normalize_update_ref(target_ref)
+    if normalized_ref:
+        command.extend(["--branch", normalized_ref])
+
+    result = subprocess.run(command, capture_output=True, text=True, timeout=15)
+    if result.returncode != 0:
+        error = (result.stderr or result.stdout or "systemd-run failed").strip()
+        return {"success": False, "error": error[-500:]}
+    return {
+        "success": True,
+        "started": True,
+        "already_running": False,
+        "unit": f"{unit_name}.service",
+        "target_ref": normalized_ref,
+    }
+
+
+async def _auto_apply_update(new_version: str) -> None:
+    """Queue upgrade.sh in a transient unit, pinned to the detected release tag."""
+    logger.info("Auto-update: queueing v%s", new_version)
     loop = asyncio.get_running_loop()
     try:
-        result = await loop.run_in_executor(
-            None,
-            lambda: subprocess.run(
-                ["bash", upgrade_script],
-                capture_output=True,
-                text=True,
-                timeout=120,
-            ),
-        )
-        if result.returncode == 0:
-            logger.info("Auto-update: successfully upgraded to v%s", new_version)
+        result = await loop.run_in_executor(None, lambda: _start_upgrade_job(new_version))
+        if result.get("success"):
+            if result.get("already_running"):
+                logger.info("Auto-update: upgrade already in progress (%s)", result.get("unit"))
+            else:
+                logger.info(
+                    "Auto-update: started %s for %s",
+                    result.get("unit"),
+                    result.get("target_ref") or f"v{new_version}",
+                )
         else:
-            logger.error(
-                "Auto-update: upgrade.sh failed (rc=%d): %s",
-                result.returncode,
-                result.stderr[-500:] if result.stderr else "",
-            )
-    except subprocess.TimeoutExpired:
-        logger.error("Auto-update: upgrade.sh timed out (120s)")
+            logger.error("Auto-update: failed to start upgrade: %s", result.get("error", "unknown error"))
     except Exception:
         logger.exception("Auto-update: unexpected error")
