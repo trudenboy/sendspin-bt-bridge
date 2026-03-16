@@ -1707,8 +1707,14 @@ function _renderPlaybackTransportButtonsHtml(i, transportState, options) {
     var pushModeButton = function(kind, title, iconHtml, isActive) {
         if (!showModeButtons) return;
         var resolvedTitle = state.hasQueueControls ? title : (state.queueUnavailableTitle || title);
+        var modeStateClass = '';
+        if (kind === 'repeat' && state.hasQueueControls) {
+            modeStateClass = state.repeat === 'one'
+                ? 'repeat-one'
+                : (state.repeat === 'all' ? 'repeat-all' : '');
+        }
         buttons.push(_renderTransportButtonHtml({
-            className: _joinClassNames([modeClass, state.hasQueueControls ? 'ma-ready' : '', isActive ? 'active' : '']),
+            className: _joinClassNames([modeClass, state.hasQueueControls ? 'ma-ready' : '', isActive ? 'active' : '', modeStateClass]),
             id: 'dma-' + kind + '-' + i,
             onclick: kind === 'repeat' ? 'maCycleRepeat(' + i + ')' : 'maQueueCmd(\'' + kind + '\', undefined, ' + i + ')',
             title: resolvedTitle,
@@ -2449,6 +2455,8 @@ function populateDeviceCard(i, dev) {
     if (maRepeatBtn) {
         maRepeatBtn.classList.toggle('ma-ready', transportState.hasQueueControls);
         maRepeatBtn.classList.toggle('active', transportState.hasQueueControls && transportState.repeat !== 'off');
+        maRepeatBtn.classList.toggle('repeat-all', transportState.hasQueueControls && transportState.repeat === 'all');
+        maRepeatBtn.classList.toggle('repeat-one', transportState.hasQueueControls && transportState.repeat === 'one');
         maRepeatBtn.title = transportState.hasQueueControls
             ? 'Repeat: ' + transportState.repeat + ' (click to cycle)'
             : transportState.queueUnavailableTitle;

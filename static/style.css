@@ -2303,6 +2303,28 @@ body {
             border-color: rgba(44, 110, 203, 0.34);
             color: var(--primary-color);
         }
+        .list-player-transport-btn.repeat-one,
+        .transport-btn.repeat-one {
+            position: relative;
+        }
+        .list-player-transport-btn.repeat-one::after,
+        .transport-btn.repeat-one::after {
+            content: '1';
+            position: absolute;
+            right: -2px;
+            bottom: -2px;
+            min-width: 12px;
+            height: 12px;
+            padding: 0 3px;
+            border-radius: 999px;
+            background: var(--primary-color);
+            color: #fff;
+            font-size: 9px;
+            font-weight: 700;
+            line-height: 12px;
+            text-align: center;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.24);
+        }
         .list-player-transport-btn.is-primary svg {
             width: 18px;
             height: 18px;
