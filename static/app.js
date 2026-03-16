@@ -1671,12 +1671,20 @@ function _renderNowPlayingTextHtml(mediaState, options) {
 function _getDeviceTransportState(dev, mediaState) {
     var safeDev = dev || {};
     var media = mediaState || _getDeviceNowPlayingState(safeDev, null);
+    var ma = media.ma || {};
+    var hasSink = deviceHasSink(safeDev);
+    var hasSendspin = !!safeDev.server_connected;
+    var hasMaApi = !!ma.connected;
     return {
-        canTransport: !!(safeDev.group_id || deviceHasSink(safeDev)),
-        hasQueueControls: !!media.deviceMaActive,
+        hasSink: hasSink,
+        canTransport: hasSendspin,
+        hasQueueControls: !!(hasSendspin && hasMaApi),
         isPlaying: !!safeDev.playing,
-        shuffle: !!(media.ma || {}).shuffle,
-        repeat: (media.ma || {}).repeat || 'off',
+        shuffle: !!ma.shuffle,
+        repeat: ma.repeat || 'off',
+        transportUnavailableTitle: hasSendspin ? '' : 'Sendspin not connected',
+        queueUnavailableTitle: !hasSendspin ? 'Sendspin not connected' : 'Music Assistant API not connected',
+        muteUnavailableTitle: hasSink ? '' : 'Audio sink not configured',
     };
 }
 
@@ -1698,11 +1706,12 @@ function _renderPlaybackTransportButtonsHtml(i, transportState, options) {
     var buttons = [];
     var pushModeButton = function(kind, title, iconHtml, isActive) {
         if (!showModeButtons) return;
+        var resolvedTitle = state.hasQueueControls ? title : (state.queueUnavailableTitle || title);
         buttons.push(_renderTransportButtonHtml({
             className: _joinClassNames([modeClass, state.hasQueueControls ? 'ma-ready' : '', isActive ? 'active' : '']),
             id: 'dma-' + kind + '-' + i,
             onclick: kind === 'repeat' ? 'maCycleRepeat(' + i + ')' : 'maQueueCmd(\'' + kind + '\', undefined, ' + i + ')',
-            title: title,
+            title: resolvedTitle,
             iconHtml: iconHtml,
             disabled: !state.hasQueueControls && !!opts.disableWhenInactive,
             hidden: !state.hasQueueControls && !!opts.hideModeButtonsWhenInactive,
@@ -1710,11 +1719,12 @@ function _renderPlaybackTransportButtonsHtml(i, transportState, options) {
     };
     var pushPrevNextButton = function(kind, title, iconHtml) {
         if (!showPrevNext) return;
+        var resolvedTitle = state.hasQueueControls ? title : (state.queueUnavailableTitle || title);
         buttons.push(_renderTransportButtonHtml({
             className: baseClass,
             id: 'dma-' + kind + '-' + i,
             onclick: 'maQueueCmd(\'' + (kind === 'prev' ? 'previous' : 'next') + '\', undefined, ' + i + ')',
-            title: title,
+            title: resolvedTitle,
             iconHtml: iconHtml,
             disabled: !state.hasQueueControls && !!opts.disableWhenInactive,
             hidden: !state.hasQueueControls,
@@ -1728,7 +1738,9 @@ function _renderPlaybackTransportButtonsHtml(i, transportState, options) {
         className: _joinClassNames([primaryClass, state.isPlaying ? '' : 'paused']),
         id: 'dbtn-pause-' + i,
         onclick: 'onDevicePause(' + i + ')',
-        title: state.isPlaying ? (opts.pauseTitlePlaying || 'Pause') : (opts.pauseTitlePaused || 'Play'),
+        title: state.canTransport
+            ? (state.isPlaying ? (opts.pauseTitlePlaying || 'Pause') : (opts.pauseTitlePaused || 'Play'))
+            : (state.transportUnavailableTitle || (state.isPlaying ? (opts.pauseTitlePlaying || 'Pause') : (opts.pauseTitlePaused || 'Play'))),
         iconHtml: _playPauseIconHtml(state.isPlaying),
         disabled: !state.canTransport,
         hidden: false,
@@ -1865,8 +1877,12 @@ function buildListView(entries, hiddenCount) {
         var mgmtEnabled = dev.bt_management_enabled !== false;
         var transportState = _getDeviceTransportState(dev, mediaState);
         var canTransport = transportState.canTransport;
-        var canMute = deviceHasSink(dev);
+        var canMute = transportState.hasSink;
         var hasQueueNeighbors = !!(mediaState.ma || {}).connected;
+        var pauseTitle = canTransport ? (dev.playing ? 'Pause' : 'Play') : transportState.transportUnavailableTitle;
+        var muteTitle = canMute
+            ? (effectiveMuted ? 'Unmute' : 'Mute')
+            : transportState.muteUnavailableTitle;
         var trackTitleEq = dev.playing && trackLabel !== 'Nothing playing'
             ? _getEqualizerHtml(dev, 'list-track-eq')
             : '';
@@ -1914,8 +1930,8 @@ function buildListView(entries, hiddenCount) {
               '</div>'
             : '<div class="list-player-media-lane is-solo">' + detailTransport + '</div>';
         var quickActions = '<div class="list-actions" onclick="event.stopPropagation()">' +
-            '<button type="button" class="icon-btn list-inline-btn' + (dev.playing ? '' : ' paused') + '" id="' + rowPauseBtnId + '" onclick="event.stopPropagation();onDevicePause(' + i + ', \'' + rowPauseBtnId + '\')" title="' + (dev.playing ? 'Pause' : 'Play') + '"' + (canTransport ? '' : ' disabled') + '>' + _playPauseIconHtml(dev.playing) + '</button>' +
-            '<button type="button" class="icon-btn list-inline-btn' + (effectiveMuted ? ' muted' : '') + '" id="' + rowMuteBtnId + '" onclick="event.stopPropagation();onMuteClick(' + i + ', \'' + rowMuteBtnId + '\')" title="' + (effectiveMuted ? 'Unmute' : 'Mute') + '"' + (canMute ? '' : ' disabled') + '>' + _muteIconHtml(effectiveMuted) + '</button>' +
+            '<button type="button" class="icon-btn list-inline-btn' + (dev.playing ? '' : ' paused') + '" id="' + rowPauseBtnId + '" onclick="event.stopPropagation();onDevicePause(' + i + ', \'' + rowPauseBtnId + '\')" title="' + escHtmlAttr(pauseTitle) + '"' + (canTransport ? '' : ' disabled') + '>' + _playPauseIconHtml(dev.playing) + '</button>' +
+            '<button type="button" class="icon-btn list-inline-btn' + (effectiveMuted ? ' muted' : '') + '" id="' + rowMuteBtnId + '" onclick="event.stopPropagation();onMuteClick(' + i + ', \'' + rowMuteBtnId + '\')" title="' + escHtmlAttr(muteTitle) + '"' + (canMute ? '' : ' disabled') + '>' + _muteIconHtml(effectiveMuted) + '</button>' +
             '<button type="button" class="icon-btn list-inline-btn list-settings-btn" onclick="event.stopPropagation();openDeviceSettings(' + i + ')" title="Device settings">' + _settingsIconHtml() + '</button>' +
             '<span class="list-row-affordance' + (expanded ? ' expanded' : '') + '" aria-hidden="true">' +
                 '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>' +
@@ -2100,6 +2116,7 @@ function renderStatusPayload(status) {
         }
     });
 
+    _updateAdapterFilter();
     renderDevicesView();
     refreshBtDeviceRowsRuntime();
     _updateGroupPanel();
@@ -2184,6 +2201,7 @@ function buildDeviceCard(i) {
               modeButtonClass: 'icon-btn',
               renderPrevNextWhenInactive: true,
               renderModeButtonsWhenInactive: true,
+              disableWhenInactive: true,
               modeFirst: false,
           }) +
           '<div class="vol-wrap">' +
@@ -2362,13 +2380,15 @@ function populateDeviceCard(i, dev) {
         if (dev.playing) {
             pauseBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>';
             pauseBtn.classList.remove('paused');
-            pauseBtn.title = 'Pause';
+            pauseBtn.title = transportState.canTransport ? 'Pause' : transportState.transportUnavailableTitle;
         } else {
             pauseBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
             pauseBtn.classList.add('paused');
-            pauseBtn.title = 'Play';
+            pauseBtn.title = transportState.canTransport ? 'Play' : transportState.transportUnavailableTitle;
         }
-        pauseBtn.style.display = (!deviceHasSink(dev) && dev.bluetooth_mac) ? 'none' : '';
+        pauseBtn.disabled = !transportState.canTransport;
+        pauseBtn.style.display = '';
+        pauseBtn.style.opacity = transportState.canTransport ? '' : '0.35';
     }
 
     var trackEl = document.getElementById('dtrack-' + i);
@@ -2409,18 +2429,31 @@ function populateDeviceCard(i, dev) {
     var nextBtn = document.getElementById('dma-next-' + i);
     var maShuffleBtn = document.getElementById('dma-shuffle-' + i);
     var maRepeatBtn = document.getElementById('dma-repeat-' + i);
-    if (prevBtn) prevBtn.style.display = transportState.hasQueueControls ? '' : 'none';
-    if (nextBtn) nextBtn.style.display = transportState.hasQueueControls ? '' : 'none';
+    if (prevBtn) {
+        prevBtn.style.display = transportState.hasQueueControls ? '' : 'none';
+        prevBtn.disabled = !transportState.hasQueueControls;
+        prevBtn.title = transportState.hasQueueControls ? 'Previous track' : transportState.queueUnavailableTitle;
+    }
+    if (nextBtn) {
+        nextBtn.style.display = transportState.hasQueueControls ? '' : 'none';
+        nextBtn.disabled = !transportState.hasQueueControls;
+        nextBtn.title = transportState.hasQueueControls ? 'Next track' : transportState.queueUnavailableTitle;
+    }
     if (maShuffleBtn) {
         maShuffleBtn.classList.toggle('ma-ready', transportState.hasQueueControls);
         maShuffleBtn.classList.toggle('active', transportState.hasQueueControls && transportState.shuffle);
+        maShuffleBtn.disabled = !transportState.hasQueueControls;
+        maShuffleBtn.title = transportState.hasQueueControls ? 'Shuffle' : transportState.queueUnavailableTitle;
+        maShuffleBtn.style.opacity = transportState.hasQueueControls ? '' : '0.35';
     }
     if (maRepeatBtn) {
         maRepeatBtn.classList.toggle('ma-ready', transportState.hasQueueControls);
         maRepeatBtn.classList.toggle('active', transportState.hasQueueControls && transportState.repeat !== 'off');
         maRepeatBtn.title = transportState.hasQueueControls
             ? 'Repeat: ' + transportState.repeat + ' (click to cycle)'
-            : 'Repeat';
+            : transportState.queueUnavailableTitle;
+        maRepeatBtn.disabled = !transportState.hasQueueControls;
+        maRepeatBtn.style.opacity = transportState.hasQueueControls ? '' : '0.35';
     }
 
     var syncEl = document.getElementById('dsync-' + i);
@@ -2451,7 +2484,7 @@ function populateDeviceCard(i, dev) {
         var volEl = document.getElementById('dvol-' + i);
         if (slider) {
             slider.value = dev.volume;
-            slider.disabled = !hasSink;
+            slider.disabled = !transportState.hasSink;
             slider.style.opacity = hasSink ? '' : '0.35';
             slider.title = hasSink ? '' : 'Audio sink not configured';
         }
@@ -2470,11 +2503,13 @@ function populateDeviceCard(i, dev) {
         muteBtn.innerHTML = effectiveMuted
             ? '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>'
             : '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>';
-        muteBtn.title = effectiveMuted
-            ? (dev.sink_muted && !dev.muted ? 'Unmute (PA sink muted)' : 'Unmute')
-            : (hasSink ? 'Mute' : 'Audio sink not configured');
+        muteBtn.title = hasSink
+            ? (effectiveMuted
+                ? (dev.sink_muted && !dev.muted ? 'Unmute (PA sink muted)' : 'Unmute')
+                : 'Mute')
+            : transportState.muteUnavailableTitle;
         muteBtn.classList.toggle('muted', effectiveMuted);
-        muteBtn.disabled = !hasSink;
+        muteBtn.disabled = !transportState.hasSink;
         muteBtn.style.opacity = hasSink ? '' : '0.35';
     }
 
@@ -2493,11 +2528,12 @@ function populateDeviceCard(i, dev) {
 // ---- Volume slider ----
 
 function onVolumeInput(i, val) {
+    var slider = document.getElementById('vslider-' + i);
+    if (!slider || slider.disabled) return;
     var volEl = document.getElementById('dvol-' + i);
     if (volEl) volEl.textContent = String(val);
 
-    var slider = document.getElementById('vslider-' + i);
-    if (slider) updateSliderFill(slider);
+    updateSliderFill(slider);
 
     // Mark pending so status poll doesn't overwrite while user drags
     volPending[i] = true;
@@ -2511,6 +2547,7 @@ function onVolumeInput(i, val) {
 async function sendVolume(deviceIndex, vol) {
     var dev = lastDevices[deviceIndex] || {};
     try {
+        if (!deviceHasSink(dev)) return;
         await fetch(API_BASE + '/api/volume', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -2528,6 +2565,7 @@ async function sendVolume(deviceIndex, vol) {
 // ---- Mute click handler (used by new card layout) ----
 function onMuteClick(i, btnId) {
     var dev = lastDevices && lastDevices[i]; if (!dev) return;
+    if (!deviceHasSink(dev)) return;
     var muteBtnId = btnId || 'dmute-' + i;
     if (_isLocked(muteBtnId)) return;
     _lockBtn(muteBtnId);
@@ -2700,6 +2738,40 @@ function _getSelectedNames() {
     return names;
 }
 
+function _updateAdapterFilter() {
+    var sel = document.getElementById('adapter-filter-sel');
+    if (!sel || !lastDevices) return;
+    var adapters = [];
+    lastDevices.forEach(function(dev) {
+        var info = _getAdapterDisplayInfo(dev);
+        if (!info.id) return;
+        if (!adapters.some(function(entry) { return entry.id === info.id; })) {
+            adapters.push({
+                id: info.id,
+                label: info.label || info.id,
+                title: info.title || info.label || info.id
+            });
+        }
+    });
+    var cur = sel.value;
+    sel.innerHTML = '<option value="">All adapters</option>';
+    adapters.sort(function(a, b) {
+        return String(a.label || a.id).localeCompare(String(b.label || b.id), undefined, {numeric: true, sensitivity: 'base'});
+    }).forEach(function(adapter) {
+        var opt = document.createElement('option');
+        opt.value = adapter.id;
+        opt.textContent = '\u{1F50C} ' + adapter.label;
+        opt.title = adapter.title;
+        sel.appendChild(opt);
+    });
+    sel.style.display = adapters.length ? '' : 'none';
+    if (cur && adapters.some(function(adapter) { return adapter.id === cur; })) {
+        sel.value = cur;
+    } else if (cur) {
+        sel.value = '';
+    }
+}
+
 function _updateGroupFilter() {
     var sel = document.getElementById('group-filter-sel');
     if (!sel || !lastDevices) return;
@@ -2749,6 +2821,7 @@ function _updateGroupPanel() {
         return;
     }
     document.getElementById('group-controls').style.display = 'flex';
+    _updateAdapterFilter();
     _updateGroupFilter();
     var sel = _getSelectedNames().length;
     var info = document.getElementById('group-select-info');
@@ -2935,6 +3008,8 @@ function onGroupAction(action) {
 
 function onDevicePause(i, btnId) {
     var dev = lastDevices && lastDevices[i];
+    var transportState = _getDeviceTransportState(dev);
+    if (!transportState.canTransport) return;
     var pauseBtnId = btnId || 'dbtn-pause-' + i;
     if (_isLocked(pauseBtnId)) return;
     var btn = _lockBtn(pauseBtnId);
@@ -2975,23 +3050,47 @@ function onDevicePause(i, btnId) {
 async function maQueueCmd(action, value, devIdx) {
     var btnMap = {previous: 'dma-prev-', next: 'dma-next-', shuffle: 'dma-shuffle-', repeat: 'dma-repeat-'};
     var btnId = devIdx != null && btnMap[action] ? btnMap[action] + devIdx : null;
+    var dev = devIdx != null && lastDevices && lastDevices[devIdx] ? lastDevices[devIdx] : null;
+    var transportState = _getDeviceTransportState(dev);
+    if (!transportState.hasQueueControls) return;
     if (btnId && _isLocked(btnId)) return;
     if (btnId) _lockBtn(btnId);
 
+    var ma = dev && dev.ma_now_playing ? dev.ma_now_playing : {};
+    var previousMaState = dev ? JSON.parse(JSON.stringify(ma || {})) : null;
     var body = {action: action};
     if (value !== undefined) body.value = value;
-    if (devIdx != null && lastDevices && lastDevices[devIdx]) {
-        var ma = lastDevices[devIdx].ma_now_playing || {};
+    if (dev) {
         if (ma.syncgroup_id) body.syncgroup_id = ma.syncgroup_id;
         if (action === 'shuffle' && value === undefined) body.value = !ma.shuffle;
     }
+
+    if (dev && dev.ma_now_playing && (action === 'shuffle' || action === 'repeat')) {
+        if (action === 'shuffle') {
+            dev.ma_now_playing.shuffle = !!body.value;
+        } else if (action === 'repeat') {
+            dev.ma_now_playing.repeat = String(body.value || 'off');
+        }
+        renderDevicesView();
+    }
+
     try {
-        await fetch(API_BASE + '/api/ma/queue/cmd', {
+        var resp = await fetch(API_BASE + '/api/ma/queue/cmd', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(body)
         });
-    } catch (err) { console.warn('MA queue cmd failed:', err); }
+        var data = await resp.json();
+        if (!resp.ok || !data.success) {
+            throw new Error((data && data.error) || ('HTTP ' + resp.status));
+        }
+    } catch (err) {
+        if (dev && previousMaState && (action === 'shuffle' || action === 'repeat')) {
+            dev.ma_now_playing = previousMaState;
+            renderDevicesView();
+        }
+        console.warn('MA queue cmd failed:', err);
+    }
     finally { if (btnId) _unlockBtn(btnId); }
 }
 
@@ -3800,11 +3899,11 @@ function _showBtInfoModal(title, text) {
     overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
 
     var modal = document.createElement('div');
-    modal.className = 'bugreport-modal';
+    modal.className = 'bugreport-modal bt-info-modal';
     modal.style.maxWidth = '440px';
 
     var header = document.createElement('div');
-    header.className = 'bugreport-header';
+    header.className = 'bugreport-header bt-info-header';
     header.innerHTML =
         '<span class="bugreport-header-title">\u2139\uFE0F ' + escHtml(title) + '</span>';
     var closeX = document.createElement('button');
@@ -3839,7 +3938,7 @@ function _showBtInfoModal(title, text) {
     footer.appendChild(copyBtn);
 
     var closeBtn = document.createElement('button');
-    closeBtn.className = 'bugreport-btn primary';
+    closeBtn.className = 'bugreport-btn primary bt-info-btn-primary';
     closeBtn.textContent = 'Close';
     closeBtn.onclick = function() { overlay.remove(); };
     footer.appendChild(closeBtn);
@@ -5323,15 +5422,13 @@ function _showUpdateDialog(ver, releaseUrl) {
             if (info.body) {
                 var bodyEl = document.createElement('div');
                 bodyEl.className = 'update-modal-body';
-                bodyEl.style.whiteSpace = 'pre-line';
                 var plain = info.body
                     .replace(/^## .+\n+/, '')
                     .replace(/^### .+$/gm, '')
                     .replace(/\*\*(.+?)\*\*/g, '$1')
                     .replace(/^- /gm, '\u2022 ')
                     .replace(/\n{3,}/g, '\n\n')
-                    .trim()
-                    .substring(0, 500);
+                    .trim();
                 bodyEl.textContent = plain;
                 modal.appendChild(bodyEl);
             }

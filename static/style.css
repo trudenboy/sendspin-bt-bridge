@@ -181,7 +181,8 @@ body {
         }
         .update-modal {
             background: var(--card-background-color, #fff); color: var(--primary-text-color, #333);
-            border-radius: 12px; min-width: 340px; max-width: 440px;
+            border-radius: 12px; min-width: 340px; width: min(560px, calc(100vw - 24px)); max-width: 560px;
+            max-height: 85vh; display: flex; flex-direction: column;
             box-shadow: 0 8px 32px rgba(0,0,0,0.3);
             overflow: hidden;
             animation: brSlideUp 0.2s ease-out;
@@ -206,7 +207,7 @@ body {
         .update-modal-version-new { font-weight: 700; color: var(--success-color, #4caf50); }
         .update-modal-body {
             padding: 14px 18px; font-size: 13px; color: var(--secondary-text-color, #666);
-            line-height: 1.6; max-height: 180px; overflow-y: auto;
+            line-height: 1.6; white-space: pre-line; overflow-y: auto; flex: 1; min-height: 0;
             background: var(--secondary-background-color, #f5f5f5);
             border-bottom: 1px solid var(--divider-color, #e0e0e0);
         }
@@ -253,6 +254,9 @@ body {
             padding: 14px 20px;
             background: #f59e0b;
             color: #fff;
+        }
+        .bt-info-header {
+            background: var(--info-color, #03a9f4);
         }
         .bugreport-header-icon { width: 18px; height: 18px; flex-shrink: 0; }
         .bugreport-header-title { font-size: 16px; font-weight: 600; flex: 1; }
@@ -354,6 +358,12 @@ body {
             background: #f59e0b; color: #fff;
         }
         .bugreport-btn.primary:hover { background: #d97706; }
+        .bt-info-btn-primary {
+            background: var(--info-color, #03a9f4);
+        }
+        .bt-info-btn-primary:hover {
+            background: #0288d1;
+        }
         .bugreport-btn.primary.btn-disabled {
             opacity: 0.45; cursor: not-allowed;
         }
