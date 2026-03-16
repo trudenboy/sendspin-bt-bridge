@@ -2216,7 +2216,7 @@ body {
         }
         .list-detail-player-main {
             display: flex;
-            align-items: center;
+            align-items: flex-start;
             gap: 10px;
             min-width: 0;
             width: 100%;
@@ -2227,11 +2227,13 @@ body {
         }
         .list-detail-art-rail {
             width: 304px;
+            max-width: 100%;
             flex-shrink: 0;
             display: flex;
             flex-direction: row;
             align-items: center;
             gap: 8px;
+            min-width: 0;
         }
         .np-art.list-detail-art {
             width: 60px;
@@ -2258,10 +2260,20 @@ body {
             min-width: 0;
             flex: 1;
             display: flex;
+            align-items: flex-start;
+            justify-content: flex-start;
+        }
+        .list-detail-playback-rail {
+            --playback-side-width: 220px;
+            --playback-center-width: 184px;
+            --playback-lane-gap: 8px;
+            min-width: 0;
+            max-width: 100%;
+            display: flex;
             flex-direction: column;
-            align-items: center;
+            align-items: flex-start;
             gap: 8px;
-            text-align: center;
+            text-align: left;
         }
         .list-player-transport {
             display: flex;
@@ -2269,6 +2281,7 @@ body {
             justify-content: center;
             gap: 6px;
             flex-shrink: 0;
+            width: var(--playback-center-width);
         }
         .list-player-transport-btn {
             width: 32px;
@@ -2330,17 +2343,18 @@ body {
             height: 18px;
         }
         .list-player-media-lane {
-            width: fit-content;
+            width: auto;
             max-width: 100%;
             display: grid;
-            grid-template-columns: auto auto auto;
+            grid-template-columns: minmax(0, var(--playback-side-width)) var(--playback-center-width) minmax(0, var(--playback-side-width));
             align-items: center;
-            gap: 8px;
-            margin: 0 auto;
+            gap: var(--playback-lane-gap);
+            margin: 0;
+            justify-content: flex-start;
         }
         .list-player-media-lane.is-solo {
-            grid-template-columns: auto;
-            justify-content: center;
+            grid-template-columns: var(--playback-center-width);
+            justify-content: flex-start;
         }
         .list-detail-current-copy {
             min-width: 0;
@@ -2381,19 +2395,24 @@ body {
             font-size: 11px;
         }
         .list-detail-progress-wrap {
-            width: min(100%, 360px);
+            width: var(--playback-center-width);
             display: flex;
             flex-direction: column;
             align-items: stretch;
             gap: 4px;
+            margin-left: calc(var(--playback-side-width) + var(--playback-lane-gap));
         }
         .list-detail-progress-wrap .np-progress {
             margin: 0;
         }
+        .list-detail-playback-rail.is-solo .list-detail-progress-wrap {
+            margin-left: 0;
+        }
         .list-queue-neighbor {
             position: relative;
             min-width: 0;
-            max-width: 228px;
+            width: 100%;
+            max-width: var(--playback-side-width);
             display: flex;
             flex-direction: column;
             gap: 2px;
@@ -4070,6 +4089,11 @@ body {
                 align-items: flex-start;
                 text-align: left;
             }
+            .list-detail-playback-rail {
+                width: 100%;
+                --playback-side-width: 100%;
+                --playback-center-width: min(100%, 240px);
+            }
             .list-track-title,
             .list-track-meta,
             .list-detail-time {
@@ -4077,6 +4101,7 @@ body {
             }
             .list-detail-progress-wrap {
                 width: 100%;
+                margin-left: 0;
             }
             .list-player-media-lane {
                 width: 100%;
@@ -4196,7 +4221,7 @@ body {
             }
             .list-player-transport {
                 width: 100%;
-                justify-content: center;
+                justify-content: flex-start;
                 flex-wrap: wrap;
                 gap: 5px;
             }

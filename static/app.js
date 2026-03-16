@@ -1935,6 +1935,14 @@ function buildListView(entries, hiddenCount) {
                 _getListQueueNeighborHtml(dev, 'next') +
               '</div>'
             : '<div class="list-player-media-lane is-solo">' + detailTransport + '</div>';
+        var detailProgressHtml = '<div class="list-detail-progress-wrap" id="dlprog-wrap-' + i + '"' + (progress.visible ? '' : ' style="display:none"') + '>' +
+            '<div class="np-progress"><div class="np-progress-fill" id="dlprog-fill-' + i + '" style="width:' + progress.pct + '%"></div></div>' +
+            '<div class="list-detail-time" id="dlprog-time-' + i + '">' + escHtml(progress.text) + '</div>' +
+        '</div>';
+        var detailPlaybackRail = '<div class="list-detail-playback-rail' + (hasQueueNeighbors ? '' : ' is-solo') + '">' +
+            detailMediaLane +
+            detailProgressHtml +
+        '</div>';
         var quickActions = '<div class="list-actions" onclick="event.stopPropagation()">' +
             '<button type="button" class="icon-btn list-inline-btn' + (dev.playing ? '' : ' paused') + '" id="' + rowPauseBtnId + '" onclick="event.stopPropagation();onDevicePause(' + i + ', \'' + rowPauseBtnId + '\')" title="' + escHtmlAttr(pauseTitle) + '"' + (canTransport ? '' : ' disabled') + '>' + _playPauseIconHtml(dev.playing) + '</button>' +
             '<button type="button" class="icon-btn list-inline-btn' + (effectiveMuted ? ' muted' : '') + '" id="' + rowMuteBtnId + '" onclick="event.stopPropagation();onMuteClick(' + i + ', \'' + rowMuteBtnId + '\')" title="' + escHtmlAttr(muteTitle) + '"' + (canMute ? '' : ' disabled') + '>' + _muteIconHtml(effectiveMuted) + '</button>' +
@@ -1986,11 +1994,7 @@ function buildListView(entries, hiddenCount) {
                                 detailCurrentCopy +
                             '</div>' +
                             '<div class="list-detail-player-center">' +
-                                detailMediaLane +
-                                '<div class="list-detail-progress-wrap" id="dlprog-wrap-' + i + '"' + (progress.visible ? '' : ' style="display:none"') + '>' +
-                                    '<div class="np-progress"><div class="np-progress-fill" id="dlprog-fill-' + i + '" style="width:' + progress.pct + '%"></div></div>' +
-                                    '<div class="list-detail-time" id="dlprog-time-' + i + '">' + escHtml(progress.text) + '</div>' +
-                                '</div>' +
+                                detailPlaybackRail +
                             '</div>' +
                         '</div>' +
                         detailActions +
