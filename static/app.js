@@ -2985,14 +2985,24 @@ async function maQueueCmd(action, value, devIdx) {
         if (ma.syncgroup_id) body.syncgroup_id = ma.syncgroup_id;
         if (action === 'shuffle' && value === undefined) body.value = !ma.shuffle;
     }
+    var controller = new AbortController();
+    // 7 s: shorter than the 8 s button-lock safety ceiling so the button is
+    // always visually unlocked before _btnLocks expires on its own.
+    var abortTimer = setTimeout(function() { controller.abort(); }, 7000);
     try {
-        await fetch(API_BASE + '/api/ma/queue/cmd', {
+        var resp = await fetch(API_BASE + '/api/ma/queue/cmd', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(body)
+            body: JSON.stringify(body),
+            signal: controller.signal
         });
-    } catch (err) { console.warn('MA queue cmd failed:', err); }
-    finally { if (btnId) _unlockBtn(btnId); }
+        if (!resp.ok) console.warn('MA queue cmd', action, 'failed:', resp.status);
+    } catch (err) {
+        if (err.name !== 'AbortError') console.warn('MA queue cmd failed:', err);
+    } finally {
+        clearTimeout(abortTimer);
+        if (btnId) _unlockBtn(btnId);
+    }
 }
 
 function maCycleRepeat(devIdx) {

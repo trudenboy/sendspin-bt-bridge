@@ -1335,7 +1335,8 @@ def api_ma_queue_cmd():
         from services.ma_monitor import send_queue_cmd
 
         fut = asyncio.run_coroutine_threadsafe(send_queue_cmd(action, value, syncgroup_id), loop)
-        ok = fut.result(timeout=10.0)
+        # 15 s: monitor path (3 s) + WS fallback (3 × 2.5 s recv + connect overhead)
+        ok = fut.result(timeout=15.0)
         return jsonify({"success": ok})
     except Exception:
         logger.exception("MA queue command '%s' failed", action)

@@ -727,11 +727,14 @@ async def send_queue_cmd(action: str, value=None, syncgroup_id: str | None = Non
         normalized = await _normalize_ma_url(ma_url)
         ws_url = normalized.replace("http://", "ws://").replace("https://", "wss://") + "/ws"
         async with websockets.connect(ws_url, **_ws_kw) as ws:
-            await _recv(ws, timeout=5.0)  # server info
+            await _recv(ws, timeout=2.5)  # server info
             await _send(ws, 1, "auth", {"token": ma_token})
-            await _recv(ws, timeout=5.0)  # auth
+            await _recv(ws, timeout=2.5)  # auth
             await _send(ws, 2, command, args)
-            await _recv(ws, timeout=5.0)  # ack
+            resp = await _recv(ws, timeout=2.5)  # ack
+            if resp.get("error"):
+                logger.warning("MA queue cmd %s rejected by MA: %s", action, resp["error"])
+                return False
         logger.info("MA queue cmd: %s value=%s → %s", action, value, queue_id)
         return True
     except Exception as exc:
@@ -775,11 +778,14 @@ async def send_player_cmd(command: str, args: dict) -> bool:
         normalized = await _normalize_ma_url(ma_url)
         ws_url = normalized.replace("http://", "ws://").replace("https://", "wss://") + "/ws"
         async with websockets.connect(ws_url, **_ws_kw) as ws:
-            await _recv(ws, timeout=5.0)  # server info
+            await _recv(ws, timeout=2.5)  # server info
             await _send(ws, 1, "auth", {"token": ma_token})
-            await _recv(ws, timeout=5.0)  # auth result
+            await _recv(ws, timeout=2.5)  # auth result
             await _send(ws, 2, command, args)
-            await _recv(ws, timeout=5.0)  # ack
+            resp = await _recv(ws, timeout=2.5)  # ack
+            if resp.get("error"):
+                logger.warning("MA player cmd %s rejected by MA: %s", command, resp["error"])
+                return False
         logger.info("MA player cmd: %s args=%s", command, args)
         return True
     except Exception as exc:
