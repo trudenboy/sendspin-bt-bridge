@@ -4,6 +4,8 @@ Music Assistant API Blueprint for sendspin-bt-bridge.
 All /api/ma/* and /api/debug/ma routes and the helper functions they depend on.
 """
 
+from __future__ import annotations
+
 import asyncio
 import json
 import logging
@@ -12,6 +14,7 @@ import re
 import urllib.error as _ue
 import urllib.parse as _up
 import urllib.request as _ur
+import uuid
 
 from flask import Blueprint, Response, jsonify, request
 
@@ -57,6 +60,31 @@ def _ma_host_from_sendspin_clients():
         if resolved and ":" in resolved:
             return resolved.rsplit(":", 1)[0]
     return None
+
+
+def _resolve_target_syncgroup_id(syncgroup_id: str | None) -> str | None:
+    """Resolve a target MA queue id from the request or the cached MA groups."""
+    if syncgroup_id:
+        return syncgroup_id
+    groups = state.get_ma_groups()
+    if not groups:
+        return None
+    first_group = groups[0] if isinstance(groups[0], dict) else {}
+    return first_group.get("id")
+
+
+def _build_ma_prediction_patch(action: str, value) -> dict:
+    """Build a small predicted state patch for fast UI feedback."""
+    if action == "shuffle":
+        return {"shuffle": bool(value)}
+    if action == "repeat":
+        return {"repeat": str(value or "off")}
+    if action == "seek":
+        try:
+            return {"elapsed": int(value)}
+        except (TypeError, ValueError):
+            return {}
+    return {}
 
 
 _MA_TOKEN_NAME = "Sendspin BT Bridge"
@@ -1317,29 +1345,78 @@ def api_ma_queue_cmd():
     - seek: value=<seconds int>
     """
     if not state.is_ma_connected():
-        return jsonify({"success": False, "error": "MA not connected"}), 503
+        return jsonify({"success": False, "error": "MA not connected", "error_code": "ma_unavailable"}), 503
 
     data = request.get_json(silent=True) or {}
     action = data.get("action", "")
     value = data.get("value")
-    syncgroup_id = data.get("syncgroup_id")
+    syncgroup_id = _resolve_target_syncgroup_id(data.get("syncgroup_id"))
 
     if action not in ("next", "previous", "shuffle", "repeat", "seek"):
-        return jsonify({"success": False, "error": f"Unknown action: {action}"}), 400
+        return jsonify({"success": False, "error": f"Unknown action: {action}", "error_code": "unknown_action"}), 400
+
+    if not syncgroup_id:
+        return jsonify({"success": False, "error": "No MA queue available", "error_code": "queue_unavailable"}), 503
 
     loop = state.get_main_loop()
     if not loop:
-        return jsonify({"success": False, "error": "Event loop not available"}), 503
+        return jsonify({"success": False, "error": "Event loop not available", "error_code": "loop_unavailable"}), 503
 
+    op_id = uuid.uuid4().hex
     try:
-        from services.ma_monitor import send_queue_cmd
+        from services.ma_monitor import get_monitor, send_queue_cmd
+
+        monitor = get_monitor()
+        if monitor is None or not monitor.is_connected():
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "error": "MA monitor unavailable",
+                        "error_code": "monitor_unavailable",
+                        "syncgroup_id": syncgroup_id,
+                    }
+                ),
+                503,
+            )
 
         fut = asyncio.run_coroutine_threadsafe(send_queue_cmd(action, value, syncgroup_id), loop)
         ok = fut.result(timeout=10.0)
-        return jsonify({"success": ok})
-    except Exception:
+        if not ok:
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "error": "MA command was not accepted",
+                        "error_code": "command_rejected",
+                        "op_id": op_id,
+                        "syncgroup_id": syncgroup_id,
+                    }
+                ),
+                503,
+            )
+        predicted = state.apply_ma_now_playing_prediction(
+            syncgroup_id,
+            _build_ma_prediction_patch(action, value),
+            op_id=op_id,
+            action=action,
+            value=value,
+        )
+        return jsonify(
+            {
+                "success": True,
+                "op_id": op_id,
+                "syncgroup_id": syncgroup_id,
+                "pending": True,
+                "ma_now_playing": predicted,
+            }
+        )
+    except Exception as exc:
+        state.fail_ma_pending_op(syncgroup_id, op_id, str(exc))
         logger.exception("MA queue command '%s' failed", action)
-        return jsonify({"success": False, "error": "Internal error"}), 500
+        return jsonify(
+            {"success": False, "error": "Internal error", "error_code": "internal_error", "op_id": op_id}
+        ), 500
 
 
 @ma_bp.route("/api/debug/ma")

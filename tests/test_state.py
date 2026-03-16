@@ -13,6 +13,7 @@ def test_get_status_version_initial():
 
 
 def test_wait_times_out():
+    time.sleep(0.15)
     version = state.get_status_version()
     changed, current = state.wait_for_status_change(version, timeout=0.1)
     assert changed is False
@@ -104,3 +105,104 @@ def test_set_disabled_devices_replaces():
     result = state.get_disabled_devices()
     assert len(result) == 1
     assert result[0]["player_name"] == "B"
+
+
+# ---------------------------------------------------------------------------
+# Music Assistant now-playing state
+# ---------------------------------------------------------------------------
+
+
+def test_set_ma_now_playing_for_group_adds_sync_metadata():
+    state.clear_ma_now_playing()
+
+    state.set_ma_now_playing_for_group("syncgroup_1", {"track": "Song", "connected": True})
+
+    result = state.get_ma_now_playing_for_group("syncgroup_1")
+    meta = result["_sync_meta"]
+
+    assert result["track"] == "Song"
+    assert result["connected"] is True
+    assert meta["pending"] is False
+    assert meta["pending_ops"] == []
+    assert meta["stale"] is False
+    assert meta["last_confirmed_at"] is not None
+    assert meta["source"] == "direct"
+
+
+def test_apply_ma_now_playing_prediction_marks_entry_pending_until_confirmed():
+    state.clear_ma_now_playing()
+    state.set_ma_now_playing_for_group(
+        "syncgroup_1",
+        {"syncgroup_id": "syncgroup_1", "shuffle_enabled": False, "connected": True},
+    )
+
+    predicted = state.apply_ma_now_playing_prediction(
+        "syncgroup_1",
+        {"shuffle_enabled": True},
+        op_id="op-1",
+        action="shuffle",
+        value=True,
+    )
+
+    predicted_meta = predicted["_sync_meta"]
+    assert predicted["shuffle_enabled"] is True
+    assert predicted_meta["pending"] is True
+    assert predicted_meta["pending_ops"][0]["op_id"] == "op-1"
+    assert predicted_meta["source"] == "predicted"
+
+    state.replace_ma_now_playing(
+        {
+            "syncgroup_1": {
+                "syncgroup_id": "syncgroup_1",
+                "shuffle_enabled": True,
+                "connected": True,
+            }
+        }
+    )
+    confirmed = state.get_ma_now_playing_for_group("syncgroup_1")
+    confirmed_meta = confirmed["_sync_meta"]
+
+    assert confirmed["shuffle_enabled"] is True
+    assert confirmed_meta["pending"] is False
+    assert confirmed_meta["pending_ops"] == []
+    assert confirmed_meta["stale"] is False
+    assert confirmed_meta["source"] == "monitor"
+    assert confirmed_meta["last_command_at"] is not None
+
+
+def test_fail_ma_pending_op_clears_pending_and_sets_error():
+    state.clear_ma_now_playing()
+    state.set_ma_now_playing_for_group("syncgroup_1", {"syncgroup_id": "syncgroup_1", "repeat_mode": "off"})
+    state.apply_ma_now_playing_prediction(
+        "syncgroup_1",
+        {"repeat_mode": "all"},
+        op_id="op-repeat",
+        action="repeat",
+        value="all",
+    )
+
+    failed = state.fail_ma_pending_op("syncgroup_1", "op-repeat", "timeout")
+    meta = failed["_sync_meta"]
+
+    assert failed["repeat_mode"] == "all"
+    assert meta["pending"] is False
+    assert meta["pending_ops"] == []
+    assert meta["last_error"] == "timeout"
+
+
+def test_mark_ma_now_playing_stale_preserves_last_snapshot():
+    state.clear_ma_now_playing()
+    state.set_ma_now_playing_for_group(
+        "syncgroup_1", {"syncgroup_id": "syncgroup_1", "track": "Song", "connected": True}
+    )
+
+    state.mark_ma_now_playing_stale("monitor disconnected")
+
+    result = state.get_ma_now_playing_for_group("syncgroup_1")
+    meta = result["_sync_meta"]
+
+    assert result["track"] == "Song"
+    assert result["connected"] is False
+    assert meta["stale"] is True
+    assert meta["last_error"] == "monitor disconnected"
+    assert meta["source"] == "disconnect"

@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [2.32.6] - 2026-03-16
 
+## [2.32.7] - 2026-03-16
+
+### Changed
+- Music Assistant queue commands now return structured backend-driven responses with `op_id`, `syncgroup_id`, pending-state metadata, and predicted `ma_now_playing` snapshots instead of relying on frontend-only optimistic mutations
+- MA queue commands now use the persistent monitor connection as the authoritative hot path; interleaved `player_queue_updated` / `player_updated` events are deferred and flushed after command acknowledgements instead of being silently dropped
+- armv7 Docker publishing now treats GitHub Actions cache-export failures as non-fatal so a successfully pushed image does not turn the release workflow red during the post-build cache step
+
+### Fixed
+- MA now-playing state is no longer cleared on short monitor disconnects; the backend keeps the last confirmed snapshot, marks it stale/disconnected, and preserves pending/error metadata for the UI
+- Queue-control responsiveness and reconciliation are more deterministic because the UI now consumes backend-predicted MA state instead of mutating `dev.ma_now_playing` locally and waiting for a later poll to catch up
+
+### Added
+- Regression coverage for MA pending-state transitions, structured `/api/ma/queue/cmd` responses, monitor-unavailable fast-fail behavior, and deferred processing of interleaved MA queue events
+
+## [2.32.6] - 2026-03-16
+
 ### Changed
 - Card view now places playback progress below the current-track metadata instead of beside it, giving track details more room and aligning the information stack more closely with Music Assistant
 - Expanded list rows now add a text-only `Now playing` badge, larger artwork, and a slower Music Assistant-style equalizer for clearer live playback context

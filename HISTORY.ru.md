@@ -2,7 +2,22 @@
 
 История архитектурной и функциональной эволюции sendspin-bt-bridge — для тех, кто разбирается в Home Assistant, Music Assistant и организации мультирум-аудио.
 
-**Период:** 1 января — 16 марта 2026 г. · **Всего коммитов:** ~965 · **Версии:** 1.0.0 → 2.32.6
+**Период:** 1 января — 16 марта 2026 г. · **Всего коммитов:** ~965 · **Версии:** 1.0.0 → 2.32.7
+
+---
+
+## 16 марта 2026 — Backend-authoritative синхронизация MA-контролов и hardening armv7 CI (v2.32.7)
+
+Релиз `2.32.7` переводит последнюю работу над Music Assistant-контролами из режима «UI выглядит быстрее» в режим «backend действительно стал надёжнее как источник истины». Главная тема здесь — authority: shuffle / repeat / queue-действия больше не должны зависеть от ad-hoc мутаций во фронтенде или от fresh per-request WebSocket, который конкурирует с долгоживущим monitor-подключением. Вместо этого bridge теперь считает backend-кэш и persistent MA monitor единственным источником истины и уже оттуда отдаёт в dashboard typed predicted-state.
+
+В релизе выделяются четыре темы:
+
+- **Pending-state под управлением backend** — `/api/ma/queue/cmd` теперь возвращает структурированный результат с `op_id`, `syncgroup_id`, pending-метаданными и backend-generated predicted snapshot. Благодаря этому UI может реагировать сразу, не изобретая собственную приватную версию `ma_now_playing`.
+- **Monitor-first command flow** — queue-команды MA теперь идут через persistent monitor connection как через основной hot path. Interleaved события `player_queue_updated` / `player_updated` больше не теряются молча во время ожидания ack, а откладываются и reconcile-ятся сразу после подтверждения команды.
+- **Сохранение состояния на reconnect** — короткие disconnect MA monitor больше не стирают видимое playback-состояние. Bridge сохраняет последний confirmed snapshot, помечает его stale/disconnected и удерживает command/error metadata, чтобы dashboard оставался понятным во время переподключения.
+- **Честный armv7 release pipeline** — отдельный armv7 Docker workflow больше не краснеет из-за GitHub Actions cache export, если сам образ уже был успешно собран и запушен. Cache-export теперь best-effort, а не ложный release gate.
+
+Это релиз, у которого главный эффект — уменьшение двусмысленности: меньше split-brain между frontend и backend, меньше гонок между command ack и MA events, меньше потери видимого состояния при reconnect и меньше ложных CI-падений там, где image build на самом деле уже успешен.
 
 ---
 

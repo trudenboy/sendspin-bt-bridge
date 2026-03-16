@@ -3088,21 +3088,11 @@ async function maQueueCmd(action, value, devIdx) {
     if (btnId) _lockBtn(btnId);
 
     var ma = dev && dev.ma_now_playing ? dev.ma_now_playing : {};
-    var previousMaState = dev ? JSON.parse(JSON.stringify(ma || {})) : null;
     var body = {action: action};
     if (value !== undefined) body.value = value;
     if (dev) {
         if (ma.syncgroup_id) body.syncgroup_id = ma.syncgroup_id;
         if (action === 'shuffle' && value === undefined) body.value = !ma.shuffle;
-    }
-
-    if (dev && dev.ma_now_playing && (action === 'shuffle' || action === 'repeat')) {
-        if (action === 'shuffle') {
-            dev.ma_now_playing.shuffle = !!body.value;
-        } else if (action === 'repeat') {
-            dev.ma_now_playing.repeat = String(body.value || 'off');
-        }
-        renderDevicesView();
     }
 
     try {
@@ -3115,11 +3105,11 @@ async function maQueueCmd(action, value, devIdx) {
         if (!resp.ok || !data.success) {
             throw new Error((data && data.error) || ('HTTP ' + resp.status));
         }
-    } catch (err) {
-        if (dev && previousMaState && (action === 'shuffle' || action === 'repeat')) {
-            dev.ma_now_playing = previousMaState;
+        if (dev && data && data.ma_now_playing) {
+            dev.ma_now_playing = data.ma_now_playing;
             renderDevicesView();
         }
+    } catch (err) {
         console.warn('MA queue cmd failed:', err);
     }
     finally { if (btnId) _unlockBtn(btnId); }

@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.32.7] - 2026-03-16
+
+### Changed
+- Music Assistant queue controls now use backend-predicted state with structured command responses instead of relying on frontend-only optimistic mutations
+- The persistent MA monitor is now the authoritative queue-command path, and interleaved queue/player events are replayed after command acknowledgement instead of being dropped
+- armv7 Docker publishing now ignores post-build GitHub Actions cache-export failures so successful image pushes do not produce false-red release jobs
+
+### Fixed
+- MA now-playing snapshots are preserved across short monitor reconnects and marked stale/disconnected instead of being cleared from the dashboard
+- Shuffle/repeat/queue-control feedback now reconciles more reliably because the UI renders backend-derived pending state rather than mutating local device copies
+
+### Added
+- Regression tests for MA pending-state reconciliation, monitor-unavailable failure handling, and deferred MA event flushing during command round-trips
+
 ## [2.32.6] - 2026-03-16
 
 ### Changed

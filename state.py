@@ -8,6 +8,7 @@ web_interface.py (reads for API responses) and sendspin_client.py (writes via se
 from __future__ import annotations
 
 import asyncio  # noqa: TC003 — used at runtime for event loop storage
+import copy
 import json
 import logging
 import os
@@ -20,11 +21,13 @@ from typing import Any
 from config import CONFIG_FILE as _config_file
 
 __all__ = [
+    "apply_ma_now_playing_prediction",
     "bridge_start_time",
     "clear_ma_now_playing",
     "clients",
     "clients_lock",
     "create_scan_job",
+    "fail_ma_pending_op",
     "finish_scan_job",
     "get_adapter_name",
     "get_bridge_system_info",
@@ -40,6 +43,7 @@ __all__ = [
     "is_ma_connected",
     "is_scan_running",
     "load_adapter_name_cache",
+    "mark_ma_now_playing_stale",
     "notify_status_changed",
     "replace_ma_now_playing",
     "set_clients",
@@ -357,6 +361,49 @@ _ma_connected_lock = threading.Lock()
 _ma_server_version: str = ""
 _ma_now_playing: dict[str, dict] = {}  # keyed by syncgroup_id
 _ma_now_playing_lock = threading.Lock()
+_MA_SYNC_META_KEY = "_sync_meta"
+
+
+def _copy_ma_snapshot(data: dict | None) -> dict:
+    return copy.deepcopy(data or {})
+
+
+def _ensure_ma_sync_meta(data: dict | None) -> dict:
+    snapshot = data if isinstance(data, dict) else {}
+    meta = snapshot.get(_MA_SYNC_META_KEY)
+    if not isinstance(meta, dict):
+        meta = {}
+    pending_ops = meta.get("pending_ops")
+    if not isinstance(pending_ops, list):
+        pending_ops = []
+    normalized = {
+        "pending": bool(meta.get("pending", bool(pending_ops))),
+        "pending_ops": pending_ops,
+        "stale": bool(meta.get("stale", False)),
+        "last_event_at": meta.get("last_event_at"),
+        "last_confirmed_at": meta.get("last_confirmed_at"),
+        "last_command_at": meta.get("last_command_at"),
+        "last_error": meta.get("last_error"),
+        "source": meta.get("source", "unknown"),
+    }
+    snapshot[_MA_SYNC_META_KEY] = normalized
+    return normalized
+
+
+def _with_ma_sync_meta(snapshot: dict, *, previous: dict | None = None, source: str = "unknown") -> dict:
+    result = _copy_ma_snapshot(snapshot)
+    previous_meta = _ensure_ma_sync_meta(_copy_ma_snapshot(previous or {}))
+    meta = _ensure_ma_sync_meta(result)
+    meta["source"] = source
+    if meta.get("last_command_at") is None:
+        meta["last_command_at"] = previous_meta.get("last_command_at")
+    if meta.get("last_error") is None:
+        meta["last_error"] = previous_meta.get("last_error")
+    return result
+
+
+def _compose_pending_flag(meta: dict) -> None:
+    meta["pending"] = bool(meta.get("pending_ops"))
 
 
 def is_ma_connected() -> bool:
@@ -388,21 +435,46 @@ def set_ma_server_version(version: str) -> None:
 def get_ma_now_playing_for_group(syncgroup_id: str) -> dict:
     """Return now-playing dict for a specific MA syncgroup_id."""
     with _ma_now_playing_lock:
-        return dict(_ma_now_playing.get(syncgroup_id, {}))
+        return _copy_ma_snapshot(_ma_now_playing.get(syncgroup_id, {}))
 
 
 def set_ma_now_playing_for_group(syncgroup_id: str, data: dict) -> None:
     """Update now-playing for a specific syncgroup. Triggers SSE notification."""
+    now = _time.time()
     with _ma_now_playing_lock:
-        _ma_now_playing[syncgroup_id] = data
+        previous = _ma_now_playing.get(syncgroup_id, {})
+        snapshot = _with_ma_sync_meta(data, previous=previous, source="direct")
+        snapshot["connected"] = bool(snapshot.get("connected", True))
+        meta = _ensure_ma_sync_meta(snapshot)
+        meta["pending_ops"] = []
+        meta["stale"] = False
+        meta["last_event_at"] = now
+        meta["last_confirmed_at"] = now
+        meta["last_error"] = None
+        _compose_pending_flag(meta)
+        _ma_now_playing[syncgroup_id] = snapshot
     notify_status_changed()
 
 
 def replace_ma_now_playing(new_data: dict[str, dict]) -> None:
     """Atomically replace all now-playing entries. Removes stale keys."""
+    now = _time.time()
     with _ma_now_playing_lock:
+        fresh: dict[str, dict] = {}
+        for syncgroup_id, data in new_data.items():
+            previous = _ma_now_playing.get(syncgroup_id, {})
+            snapshot = _with_ma_sync_meta(data, previous=previous, source="monitor")
+            snapshot["connected"] = bool(snapshot.get("connected", True))
+            meta = _ensure_ma_sync_meta(snapshot)
+            meta["pending_ops"] = []
+            meta["stale"] = False
+            meta["last_event_at"] = now
+            meta["last_confirmed_at"] = now
+            meta["last_error"] = None
+            _compose_pending_flag(meta)
+            fresh[syncgroup_id] = snapshot
         _ma_now_playing.clear()
-        _ma_now_playing.update(new_data)
+        _ma_now_playing.update(fresh)
     notify_status_changed()
 
 
@@ -417,15 +489,79 @@ def get_ma_now_playing() -> dict:
     """Legacy: return first group's now-playing or empty dict."""
     with _ma_now_playing_lock:
         if _ma_now_playing:
-            return dict(next(iter(_ma_now_playing.values())))
+            return _copy_ma_snapshot(next(iter(_ma_now_playing.values())))
         return {}
 
 
 def set_ma_now_playing(data: dict) -> None:
     """Legacy: update now-playing for the first/only group. Triggers SSE notification."""
     syncgroup_id = data.get("syncgroup_id", "__default__")
+    set_ma_now_playing_for_group(syncgroup_id, data)
+
+
+def apply_ma_now_playing_prediction(syncgroup_id: str, patch: dict, *, op_id: str, action: str, value=None) -> dict:
+    """Apply a predicted MA patch and mark it pending in the shared cache."""
+    now = _time.time()
     with _ma_now_playing_lock:
-        _ma_now_playing[syncgroup_id] = data
+        previous = _ma_now_playing.get(syncgroup_id, {"syncgroup_id": syncgroup_id})
+        snapshot = _with_ma_sync_meta(previous, previous=previous, source="predicted")
+        snapshot.update(_copy_ma_snapshot(patch))
+        snapshot["syncgroup_id"] = snapshot.get("syncgroup_id") or syncgroup_id
+        snapshot["connected"] = bool(snapshot.get("connected", True))
+        meta = _ensure_ma_sync_meta(snapshot)
+        meta["last_command_at"] = now
+        meta["last_error"] = None
+        meta["stale"] = False
+        pending_ops = [op for op in meta["pending_ops"] if op.get("op_id") != op_id]
+        pending_ops.append(
+            {
+                "op_id": op_id,
+                "action": action,
+                "value": value,
+                "created_at": now,
+            }
+        )
+        meta["pending_ops"] = pending_ops
+        _compose_pending_flag(meta)
+        _ma_now_playing[syncgroup_id] = snapshot
+        result = _copy_ma_snapshot(snapshot)
+    notify_status_changed()
+    return result
+
+
+def fail_ma_pending_op(syncgroup_id: str, op_id: str, error: str) -> dict:
+    """Fail a pending MA operation while preserving the last known snapshot."""
+    now = _time.time()
+    with _ma_now_playing_lock:
+        snapshot = _copy_ma_snapshot(_ma_now_playing.get(syncgroup_id, {}))
+        if not snapshot:
+            return {}
+        meta = _ensure_ma_sync_meta(snapshot)
+        meta["pending_ops"] = [op for op in meta["pending_ops"] if op.get("op_id") != op_id]
+        meta["last_error"] = error
+        meta["last_event_at"] = now
+        _compose_pending_flag(meta)
+        _ma_now_playing[syncgroup_id] = snapshot
+        result = _copy_ma_snapshot(snapshot)
+    notify_status_changed()
+    return result
+
+
+def mark_ma_now_playing_stale(error: str | None = None) -> None:
+    """Preserve last confirmed MA state while marking all entries stale."""
+    now = _time.time()
+    with _ma_now_playing_lock:
+        for syncgroup_id, data in list(_ma_now_playing.items()):
+            snapshot = _copy_ma_snapshot(data)
+            snapshot["connected"] = False
+            meta = _ensure_ma_sync_meta(snapshot)
+            meta["stale"] = True
+            meta["source"] = "disconnect"
+            meta["last_event_at"] = now
+            if error:
+                meta["last_error"] = error
+            _compose_pending_flag(meta)
+            _ma_now_playing[syncgroup_id] = snapshot
     notify_status_changed()
 
 

@@ -2,7 +2,22 @@
 
 A history of the architectural and functional evolution of sendspin-bt-bridge — for readers familiar with Home Assistant, Music Assistant, and multiroom audio setups.
 
-**Period:** January 1 – March 16, 2026 · **Total commits:** ~965 · **Versions:** 1.0.0 → 2.32.6
+**Period:** January 1 – March 16, 2026 · **Total commits:** ~965 · **Versions:** 1.0.0 → 2.32.7
+
+---
+
+## March 16, 2026 — Backend-authoritative MA control sync and armv7 CI release hardening (v2.32.7)
+
+The `2.32.7` release turns the latest Music Assistant control work from “UI feels faster” into “backend state is actually more trustworthy.” The main theme is authority: shuffle/repeat/queue actions should not depend on ad-hoc frontend mutations or on a fresh per-request WebSocket that races the long-lived monitor. Instead, the bridge now treats the backend cache and the persistent MA monitor as the source of truth and pushes a predicted-but-typed state model outward to the dashboard.
+
+Four threads define the release:
+
+- **Backend-owned pending state** — `/api/ma/queue/cmd` now returns structured command results with `op_id`, `syncgroup_id`, pending metadata, and a backend-generated predicted snapshot. That means the UI can respond immediately without inventing its own private version of `ma_now_playing`.
+- **Monitor-first command flow** — MA queue commands now go through the persistent monitor connection as the authoritative hot path. Interleaved `player_queue_updated` / `player_updated` events are no longer silently swallowed while waiting for command acknowledgements; they are deferred and reconciled right after the ack lands.
+- **Reconnect state retention** — short MA monitor disconnects no longer erase visible playback state. The bridge keeps the last confirmed snapshot, marks it stale/disconnected, and preserves command/error metadata so the dashboard remains intelligible while reconnect is in progress.
+- **Release-pipeline honesty for armv7** — the dedicated armv7 Docker workflow no longer fails the whole release if GitHub Actions cache export breaks after the image has already been built and pushed. Cache export is now treated as best-effort instead of a false-red release gate.
+
+This is the kind of release where the most important effect is reduced ambiguity: fewer split-brain control states between frontend and backend, fewer races between command ack and MA events, less visible state loss during reconnects, and less noise from CI failures that are not actually image-build failures.
 
 ---
 

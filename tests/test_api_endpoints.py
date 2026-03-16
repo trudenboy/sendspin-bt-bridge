@@ -746,3 +746,102 @@ def test_ma_artwork_proxy_rejects_invalid_signature(client):
         assert "Invalid artwork signature" in resp.get_data(as_text=True)
     finally:
         state.set_ma_api_credentials("", "")
+
+
+def test_ma_queue_cmd_returns_structured_predicted_state(client, monkeypatch):
+    import routes.api_ma as api_ma
+    import services.ma_monitor as ma_monitor
+    import state
+
+    class _FakeMonitor:
+        def is_connected(self):
+            return True
+
+    class _DoneFuture:
+        def result(self, timeout=None):
+            return True
+
+    async def _fake_send_queue_cmd(action, value, syncgroup_id):
+        return True
+
+    def _fake_run_coroutine_threadsafe(coro, loop):
+        coro.close()
+        return _DoneFuture()
+
+    state.set_ma_connected(True)
+    state.set_ma_groups({}, [{"id": "syncgroup_1", "name": "Kitchen", "members": []}])
+    state.set_ma_now_playing_for_group(
+        "syncgroup_1",
+        {"syncgroup_id": "syncgroup_1", "shuffle": False, "connected": True},
+    )
+    try:
+        monkeypatch.setattr(state, "get_main_loop", lambda: object())
+        monkeypatch.setattr(ma_monitor, "send_queue_cmd", _fake_send_queue_cmd)
+        monkeypatch.setattr(ma_monitor, "get_monitor", lambda: _FakeMonitor())
+        monkeypatch.setattr(api_ma.asyncio, "run_coroutine_threadsafe", _fake_run_coroutine_threadsafe)
+
+        resp = client.post(
+            "/api/ma/queue/cmd",
+            data=json.dumps({"action": "shuffle", "value": True, "syncgroup_id": "syncgroup_1"}),
+            content_type="application/json",
+        )
+
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["success"] is True
+        assert data["pending"] is True
+        assert data["syncgroup_id"] == "syncgroup_1"
+        assert data["ma_now_playing"]["shuffle"] is True
+        assert data["ma_now_playing"]["_sync_meta"]["pending"] is True
+        assert data["ma_now_playing"]["_sync_meta"]["pending_ops"][0]["action"] == "shuffle"
+        assert data["op_id"]
+    finally:
+        state.clear_ma_now_playing()
+        state.set_ma_groups({}, [])
+        state.set_ma_connected(False)
+
+
+def test_ma_queue_cmd_returns_503_when_monitor_unavailable(client, monkeypatch):
+    import services.ma_monitor as ma_monitor
+    import state
+
+    class _FakeMonitor:
+        def is_connected(self):
+            return False
+
+    state.set_ma_connected(True)
+    state.set_ma_groups({}, [{"id": "syncgroup_1", "name": "Kitchen", "members": []}])
+    try:
+        monkeypatch.setattr(state, "get_main_loop", lambda: object())
+        monkeypatch.setattr(ma_monitor, "get_monitor", lambda: _FakeMonitor())
+        resp = client.post(
+            "/api/ma/queue/cmd",
+            data=json.dumps({"action": "next", "syncgroup_id": "syncgroup_1"}),
+            content_type="application/json",
+        )
+        assert resp.status_code == 503
+        data = resp.get_json()
+        assert data["success"] is False
+        assert data["error_code"] == "monitor_unavailable"
+    finally:
+        state.set_ma_groups({}, [])
+        state.set_ma_connected(False)
+
+
+def test_ma_queue_cmd_returns_503_when_queue_unavailable(client):
+    import state
+
+    state.set_ma_connected(True)
+    state.set_ma_groups({}, [])
+    try:
+        resp = client.post(
+            "/api/ma/queue/cmd",
+            data=json.dumps({"action": "next"}),
+            content_type="application/json",
+        )
+        assert resp.status_code == 503
+        data = resp.get_json()
+        assert data["success"] is False
+        assert data["error_code"] == "queue_unavailable"
+    finally:
+        state.set_ma_connected(False)

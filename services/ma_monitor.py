@@ -222,9 +222,33 @@ class MaMonitor:
         self._cmd_queue: asyncio.Queue[tuple[str, dict, asyncio.Future]] = asyncio.Queue()
         self._ws = None  # current websocket, set while connected
         self._loop: asyncio.AbstractEventLoop | None = None
+        self._pending_queue_refresh = False
+        self._pending_groups_refresh = False
 
     def _next_id(self) -> int:
         return next(self._msg_id)
+
+    def is_connected(self) -> bool:
+        """Return True when the persistent MA monitor WS is available."""
+        return self._running and self._ws is not None
+
+    def _defer_incoming_event(self, event: str) -> None:
+        """Remember interleaved MA events so they can be processed after command ack."""
+        if event == "player_queue_updated":
+            self._pending_queue_refresh = True
+        elif event == "player_updated":
+            self._pending_groups_refresh = True
+
+    async def _flush_deferred_updates(self, ws) -> None:
+        """Process interleaved events after the current command round-trip finishes."""
+        if self._pending_queue_refresh:
+            self._pending_queue_refresh = False
+            logger.debug("MA monitor: flushing deferred queue refresh")
+            await self._poll_queues(ws)
+        if self._pending_groups_refresh:
+            self._pending_groups_refresh = False
+            logger.debug("MA monitor: flushing deferred groups refresh")
+            await self._refresh_groups_via_ws(ws)
 
     @staticmethod
     def _detect_ha_addon(server_info: dict) -> None:
@@ -272,11 +296,13 @@ class MaMonitor:
                     evt = resp.get("event")
                     if evt:
                         logger.debug("MA monitor: interleaved event '%s' during cmd drain", evt)
+                        self._defer_incoming_event(evt)
                     else:
                         logger.debug("MA monitor: non-matching msg (id=%s) during cmd drain", resp.get("message_id"))
                 else:
                     if not fut.done():
                         fut.set_exception(TimeoutError(f"No matching response for {command}"))
+                await self._flush_deferred_updates(ws)
             except Exception as e:
                 if not fut.done():
                     fut.set_exception(e)
@@ -292,12 +318,15 @@ class MaMonitor:
         for _ in range(10):
             resp = await _recv(ws, timeout=5.0)
             if str(resp.get("message_id")) == str(mid):
+                await self._flush_deferred_updates(ws)
                 return resp
             evt = resp.get("event")
             if evt:
                 logger.debug("MA monitor: interleaved event '%s' during queue cmd", evt)
+                self._defer_incoming_event(evt)
             else:
                 logger.debug("MA monitor: non-matching msg (id=%s) during queue cmd", resp.get("message_id"))
+        await self._flush_deferred_updates(ws)
         return {}
 
     async def _fetch_queue_items(self, ws, queue_id: str, limit: int = 1, offset: int = 0) -> list[dict]:
@@ -590,13 +619,13 @@ class MaMonitor:
                 data = json.loads(msg)
                 event = data.get("event")
                 if event in ("player_queue_updated",):
-                    await self._poll_queues(ws)
+                    self._defer_incoming_event(event)
+                    await self._flush_deferred_updates(ws)
                     _poll_deadline = time.monotonic() + _POLL_INTERVAL
                 elif event == "player_updated":
-                    # Group membership may have changed — refresh groups
-                    if time.monotonic() >= _groups_deadline:
-                        await self._refresh_groups_via_ws(ws)
-                        _groups_deadline = time.monotonic() + _GROUPS_REFRESH_INTERVAL
+                    self._defer_incoming_event(event)
+                    await self._flush_deferred_updates(ws)
+                    _groups_deadline = time.monotonic() + _GROUPS_REFRESH_INTERVAL
             except Exception as exc:
                 logger.debug("MA monitor event error: %s", exc)
                 raise  # bubble up to reconnect loop
@@ -615,10 +644,12 @@ class MaMonitor:
         delay = _RECONNECT_BASE
         _prev_token = self._token
         while self._running:
+            disconnect_error = "connection lost"
             try:
                 await self._connect_and_run()
                 delay = _RECONNECT_BASE  # reset on successful connection
             except Exception as exc:
+                disconnect_error = str(exc)
                 logger.warning("MA monitor disconnected: %s — reconnecting in %ds", exc, delay)
             self._ws = None
             # Cancel any pending command futures
@@ -630,7 +661,7 @@ class MaMonitor:
                 except asyncio.QueueEmpty:
                     break
             _state.set_ma_connected(False)
-            _state.clear_ma_now_playing()
+            _state.mark_ma_now_playing_stale(disconnect_error)
             if not self._running:
                 break
             await asyncio.sleep(delay)
@@ -672,7 +703,7 @@ def start_monitor(ma_url: str, ma_token: str) -> MaMonitor:
 
 
 async def send_queue_cmd(action: str, value=None, syncgroup_id: str | None = None) -> bool:
-    """Send a queue command to MA, preferring the monitor's persistent WS.
+    """Send a queue command through the persistent MA monitor only.
 
     Supported actions: next, previous, shuffle, repeat, seek.
     syncgroup_id: target specific group; falls back to first known group.
@@ -702,41 +733,23 @@ async def send_queue_cmd(action: str, value=None, syncgroup_id: str | None = Non
     args: dict
     command, args = _QUEUE_ACTIONS[action]  # type: ignore[assignment]
 
-    # Try the persistent monitor connection first
     mon = _monitor_instance
-    if mon and mon._ws is not None:
-        try:
-            resp = await mon.execute_cmd(command, args)
-            if resp.get("error") is None:
-                logger.info("MA queue cmd (monitor): %s value=%s → %s", action, value, queue_id)
-                return True
-        except Exception as exc:
-            logger.debug("MA queue cmd via monitor failed, falling back: %s", exc)
-
-    # Fallback: fresh WS connection
-    from services.ma_client import _normalize_ma_url
-
-    ma_url, ma_token = _state.get_ma_api_credentials()
-    if not ma_url or not ma_token:
+    if mon is None or not mon.is_connected():
+        logger.info("MA queue cmd skipped: monitor unavailable for %s → %s", action, queue_id)
         return False
 
     try:
-        import websockets
-
-        _ws_kw: dict = {"proxy": None} if int(websockets.__version__.split(".")[0]) >= 15 else {}
-        normalized = await _normalize_ma_url(ma_url)
-        ws_url = normalized.replace("http://", "ws://").replace("https://", "wss://") + "/ws"
-        async with websockets.connect(ws_url, **_ws_kw) as ws:
-            await _recv(ws, timeout=5.0)  # server info
-            await _send(ws, 1, "auth", {"token": ma_token})
-            await _recv(ws, timeout=5.0)  # auth
-            await _send(ws, 2, command, args)
-            await _recv(ws, timeout=5.0)  # ack
-        logger.info("MA queue cmd: %s value=%s → %s", action, value, queue_id)
-        return True
+        started = time.monotonic()
+        resp = await mon.execute_cmd(command, args)
+        latency_ms = int((time.monotonic() - started) * 1000)
+        if resp.get("error") is None:
+            logger.info("MA queue cmd (monitor): %s value=%s → %s ack=%dms", action, value, queue_id, latency_ms)
+            return True
+        logger.warning("MA queue cmd rejected: %s value=%s → %s resp=%s", action, value, queue_id, resp)
     except Exception as exc:
-        logger.warning("MA queue cmd %s failed: %s", action, exc)
+        logger.warning("MA queue cmd %s failed via monitor: %s", action, exc)
         return False
+    return False
 
 
 async def send_player_cmd(command: str, args: dict) -> bool:
