@@ -38,6 +38,8 @@ _ACTIONABLE_WARNING_MARKERS = (
     "invalid",
 )
 
+_NON_ISSUE_WARNING_MARKERS = ("failed to connect (not connected after",)
+
 _ISSUE_LEVEL_RANK = {
     "warning": 1,
     "error": 2,
@@ -71,6 +73,8 @@ def is_actionable_warning_log_line(line: str) -> bool:
     if extract_log_level(line) != "WARNING":
         return False
     lower = (line or "").lower()
+    if any(marker in lower for marker in _NON_ISSUE_WARNING_MARKERS):
+        return False
     return any(marker in lower for marker in _ACTIONABLE_WARNING_MARKERS)
 
 
