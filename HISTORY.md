@@ -2,7 +2,21 @@
 
 A history of the architectural and functional evolution of sendspin-bt-bridge — for readers familiar with Home Assistant, Music Assistant, and multiroom audio setups.
 
-**Period:** January 1 – March 17, 2026 · **Total commits:** ~970 · **Versions:** 1.0.0 → 2.32.10
+**Period:** January 1 – March 17, 2026 · **Total commits:** ~971 · **Versions:** 1.0.0 → 2.32.11
+
+---
+
+## March 17, 2026 — CI packaging follow-up and default list-first dashboard (v2.32.11)
+
+The `2.32.11` release is a compact follow-up to `2.32.10`, but it closes a very practical gap between “the code is ready” and “the release machinery is actually trustworthy.” After the previous release was pushed, GitHub Actions exposed a few environmental assumptions that were true locally but not on the hosted runners. This release tightens those assumptions so the pipeline behaves the same way in CI as it does in real deployment environments.
+
+Three adjustments define the release:
+
+- **The dashboard now opens in the layout that works best as a default operational view** — new sessions start in `list view`, which is denser, easier to scan, and better aligned with the current dashboard’s monitoring role. At the same time, this does not override user intent: any previously saved choice in `localStorage` still wins.
+- **Release preparation is now explicit about native D-Bus build requirements** — the Docker publish workflow’s version-resolution path now installs the D-Bus development packages required by `dbus-python` before reading the packaged `sendspin` version. That removes a class of CI-only failures where the release pipeline broke before the actual image build had even started.
+- **Compatibility smoke tests are now provisioned like the code they exercise** — the lint/test workflow installs the PortAudio runtime library before running the `sendspin` compatibility check, and the Dockerfile’s conditional dependency branch now uses a hadolint-compliant `elif` structure. Together these fixes turn the new release gates from “correct in principle” into “reliable in automation.”
+
+This is not a feature-heavy release. It is a release about making the defaults and the delivery pipeline more honest: the UI starts in the most practical overview mode, and the CI system now has the native pieces it actually needs to validate what we ship.
 
 ---
 

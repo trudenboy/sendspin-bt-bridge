@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.32.11] - 2026-03-17
+
+### Changed
+- The dashboard now defaults to `list view` for new sessions, while still preserving any saved view choice from the browser
+
+### Fixed
+- GitHub Actions release preparation now installs the D-Bus system packages needed to resolve the packaged `sendspin` version without `dbus-python` build failures
+- The CI compatibility smoke-test job now installs the PortAudio runtime library so validation no longer fails on runners that do not preload audio libraries
+- The Docker build dependency branch now uses hadolint-compliant conditional flow for release-specific `sendspin` installs
+
 ## [2.32.10] - 2026-03-17
 
 ### Changed

@@ -335,13 +335,15 @@ def install() -> None:
 
     _ma_monitor.start_monitor = _demo_start_monitor  # type: ignore[assignment]
 
-    async def _demo_send_queue_cmd(action: str, value: Any = None, syncgroup_id: str | None = None) -> bool:
+    async def _demo_send_queue_cmd(
+        action: str, value: Any = None, syncgroup_id: str | None = None
+    ) -> dict[str, object]:
         """Handle queue commands locally — update now-playing state."""
         from demo.fixtures import DEMO_TRACKS
 
         sg_id = syncgroup_id or next(iter(DEMO_MA_NOW_PLAYING), None)
         if not sg_id:
-            return False
+            return {"accepted": False, "queue_id": "", "error": "no queue available"}
 
         np = _st.get_ma_now_playing_for_group(sg_id) or {}
 
@@ -383,7 +385,7 @@ def install() -> None:
         np["elapsed_updated_at"] = _time.time()
         _st.set_ma_now_playing_for_group(sg_id, np)
         logger.debug("[demo] queue cmd: %s value=%s → %s", action, value, sg_id)
-        return True
+        return {"accepted": True, "queue_id": sg_id, "syncgroup_id": sg_id}
 
     _ma_monitor.send_queue_cmd = _demo_send_queue_cmd
 

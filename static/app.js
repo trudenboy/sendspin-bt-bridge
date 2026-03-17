@@ -75,7 +75,7 @@ var lastGroups = [];
 var lastMaWebUrl = '';
 var VIEW_MODE_STORAGE_KEY = 'sendspin-ui:view-mode';
 var userPreferredViewMode = _loadSavedViewMode();
-var currentViewMode = userPreferredViewMode || 'grid';
+var currentViewMode = userPreferredViewMode || 'list';
 var listSortState = {column: 'status', direction: 'desc'};
 var expandedListRowKey = null;
 var _muteDebounce = {};  // player_name → timestamp of last user mute action
@@ -934,7 +934,7 @@ function _persistViewMode(mode) {
 }
 
 function _getAutomaticViewMode(deviceCount) {
-    return deviceCount > 6 ? 'list' : 'grid';
+    return 'list';
 }
 
 function _resolveViewMode(deviceCount) {
