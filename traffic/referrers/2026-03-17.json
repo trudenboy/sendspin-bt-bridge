@@ -1,0 +1,37 @@
+[
+  {
+    "referrer": "github.com",
+    "count": 114,
+    "uniques": 31
+  },
+  {
+    "referrer": "community.home-assistant.io",
+    "count": 40,
+    "uniques": 26
+  },
+  {
+    "referrer": "trudenboy.github.io",
+    "count": 3,
+    "uniques": 2
+  },
+  {
+    "referrer": "Google",
+    "count": 2,
+    "uniques": 2
+  },
+  {
+    "referrer": "DuckDuckGo",
+    "count": 2,
+    "uniques": 1
+  },
+  {
+    "referrer": "Bing",
+    "count": 1,
+    "uniques": 1
+  },
+  {
+    "referrer": "com.slack",
+    "count": 1,
+    "uniques": 1
+  }
+]
