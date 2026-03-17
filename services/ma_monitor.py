@@ -751,13 +751,15 @@ async def send_queue_cmd(action: str, value=None, syncgroup_id: str | None = Non
     """
     groups = _state.get_ma_groups()
     if not groups:
-        return False
+        return {"accepted": False, "queue_id": "", "error": "no queue available"}
 
     if syncgroup_id:
         queue_id = syncgroup_id
     else:
         queue_id = groups[0]["id"]  # fallback: first syncgroup
 
+    command: str
+    args: dict[str, object]
     if action == "next":
         command, args = "player_queues/next", {"queue_id": queue_id}
     elif action == "previous":

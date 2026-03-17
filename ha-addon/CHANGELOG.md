@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.32.8] - 2026-03-17
+
+### Changed
+- MA queue commands now distinguish between the bridge's local state key and the actual MA queue target, so solo players route to their own universal-player queue instead of a stale syncgroup
+- Queue buttons now become temporarily disabled during apply without the extra pending highlight in either card or list view
+
+### Fixed
+- Stale open tabs no longer keep sending solo-player queue commands into the wrong MA target after a live deploy
+- The Proxmox runtime now uses the same pending-state API contract across `routes/api_ma.py` and `state.py`, preventing MA queue commands from failing after partial hotfix deployment
+- Repeat no longer fails because the queue-command dispatcher eagerly evaluates the seek-only integer payload
+
+### Added
+- Regression tests for solo-player queue resolution, stale-page fallback, and repeat command routing
+
 ## [2.32.7] - 2026-03-16
 
 ### Changed

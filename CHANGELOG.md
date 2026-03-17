@@ -5,7 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.32.6] - 2026-03-16
+## [2.32.8] - 2026-03-17
+
+### Changed
+- Music Assistant queue routing now separates the dashboard/cache state key from the real MA target queue ID, so grouped players keep using syncgroup queues while solo universal-player bridges target their own `up...` queue correctly
+- Queue-control apply state now disables transport buttons temporarily without the extra pending highlight, keeping both card and list views calmer while a command is in flight
+
+### Fixed
+- Solo-player transport controls on live deployments now work again even when the page still holds stale MA syncgroup metadata; the backend can fall back to the active local player queue instead of sending commands into the wrong MA target
+- Proxmox hotfix rollouts no longer leave MA queue commands broken because the `routes/api_ma.py` and `state.py` pending-state contract is aligned again for `accepted_at` / `ack_latency_ms`
+- Repeat no longer trips the queue-command path by eagerly evaluating seek-specific integer conversion while building the MA action payload
+
+### Added
+- Regression coverage for solo-player queue resolution, stale syncgroup fallback, non-seek repeat routing, and the updated backend queue-command response flow
 
 ## [2.32.7] - 2026-03-16
 

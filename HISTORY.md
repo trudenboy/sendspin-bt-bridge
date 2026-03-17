@@ -2,7 +2,21 @@
 
 A history of the architectural and functional evolution of sendspin-bt-bridge — for readers familiar with Home Assistant, Music Assistant, and multiroom audio setups.
 
-**Period:** January 1 – March 16, 2026 · **Total commits:** ~965 · **Versions:** 1.0.0 → 2.32.7
+**Period:** January 1 – March 17, 2026 · **Total commits:** ~969 · **Versions:** 1.0.0 → 2.32.8
+
+---
+
+## March 17, 2026 — Solo-player MA transport recovery and calmer apply-state UX (v2.32.8)
+
+The `2.32.8` release is a follow-up hotfix to the recent Music Assistant transport work, but it fixes a very real operational problem rather than polishing around the edges. The bridge was already fast enough at the MA monitor layer — queue commands were being acknowledged in a few milliseconds — yet transport controls on a live Proxmox deployment could still appear broken. The root issue was identity drift: the dashboard, the bridge cache, and Music Assistant were not always talking about the same queue object.
+
+Three threads define the release:
+
+- **Solo-player queue targeting instead of stale identity reuse** — the bridge now distinguishes between the local state key used for dashboard cache updates and the actual MA queue/player ID that should receive the command. That matters for solo universal-player bridges, where the UI-facing bridge player ID and the MA queue ID are not the same thing.
+- **Stale-tab resilience on live deployments** — if an already-open dashboard page keeps sending outdated MA target metadata after a hotfix rollout, the backend can now recover by inferring the correct active solo player queue instead of blindly trusting the stale syncgroup hint. In practice, that means transport controls recover faster in the real world, not just after a hard browser refresh.
+- **Quieter apply-state behavior** — queue buttons still lock while a command is pending, but the temporary “apply” state no longer adds extra visual highlighting. The controls now simply become inactive until the command settles, which makes both card and list playback surfaces feel calmer and less noisy during normal use.
+
+This is the kind of release that looks small in a diff but large in effect: the MA monitor path was already fast, yet the operator experience still felt broken because commands were landing on the wrong target or because stale runtime metadata outlived a hotfix. `2.32.8` closes that gap by making queue routing more explicit, more backend-authoritative, and more tolerant of real live-deploy conditions.
 
 ---
 
