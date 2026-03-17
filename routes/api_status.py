@@ -699,7 +699,7 @@ def _mask_obj(obj: object) -> object:
         return _mask_text(obj)
     if isinstance(obj, dict):
         return {k: _mask_obj(v) for k, v in obj.items()}
-    if isinstance(obj, (list, tuple)):  # noqa: UP038 - keep runtime-compatible isinstance syntax
+    if isinstance(obj, (list, tuple)):
         return [_mask_obj(item) for item in obj]
     return obj
 

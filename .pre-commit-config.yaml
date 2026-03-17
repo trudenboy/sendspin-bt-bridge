@@ -13,6 +13,7 @@ repos:
       - id: ruff
         args:
           - --fix
+          - --extend-ignore=UP038
       - id: ruff-format
 
   - repo: local
