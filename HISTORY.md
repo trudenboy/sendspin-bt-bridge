@@ -2,7 +2,20 @@
 
 A history of the architectural and functional evolution of sendspin-bt-bridge — for readers familiar with Home Assistant, Music Assistant, and multiroom audio setups.
 
-**Period:** January 1 – March 17, 2026 · **Total commits:** ~971 · **Versions:** 1.0.0 → 2.32.11
+**Period:** January 1 – March 17, 2026 · **Total commits:** ~974 · **Versions:** 1.0.0 → 2.32.12
+
+---
+
+## March 17, 2026 — CI convergence and release-image runtime completion (v2.32.12)
+
+The `2.32.12` release is a narrow but important follow-up to `2.32.11`. The previous release intentionally tightened CI and release validation, but the first live runs exposed two remaining gaps: one in linting consistency between local hooks and GitHub Actions, and one in the actual dependency payload of release images built against a pinned `sendspin` version. This release closes both gaps so the validation pipeline is not only stricter, but also internally consistent.
+
+Two things define the release:
+
+- **Linting now agrees on what the codebase should accept** — the repository no longer depends on a source-level `noqa` that means different things to different Ruff entrypoints. Instead, the local `pre-commit` hook explicitly relaxes `UP038`, which preserves runtime-safe `isinstance(..., (list, tuple))` syntax for local Python 3.9 environments while keeping CI’s own `ruff check` clean and unsurprising.
+- **Release images now contain the runtime they claim to validate** — the non-`armv7` Docker release path no longer installs pinned `sendspin` with `--no-deps`. That means smoke-tested images now actually include `aiosendspin`, `av`, and the rest of the package graph that `sendspin` needs at runtime, instead of passing the build and then failing only when the built container is exercised.
+
+This is exactly the kind of release that should be small: it does not add a new feature, it removes the remaining mismatch between local expectations, CI validation, and the contents of the published runtime image.
 
 ---
 
