@@ -22,7 +22,9 @@ from flask import Blueprint, Response, jsonify
 
 import state
 from config import BUILD_DATE, VERSION, load_config
+from services.log_analysis import summarize_issue_logs
 from services.pulse import get_server_name, list_sinks
+from services.sendspin_compat import get_runtime_dependency_versions
 from state import clients as _clients
 from state import (
     clients_lock as _clients_lock,
@@ -697,7 +699,7 @@ def _mask_obj(obj: object) -> object:
         return _mask_text(obj)
     if isinstance(obj, dict):
         return {k: _mask_obj(v) for k, v in obj.items()}
-    if isinstance(obj, list | tuple):
+    if isinstance(obj, (list, tuple)):  # noqa: UP038 - keep runtime-compatible isinstance syntax
         return [_mask_obj(item) for item in obj]
     return obj
 
@@ -750,6 +752,8 @@ def _collect_environment() -> dict:
         env["process_rss_mb"] = round(rss_kb / 1024, 1)
     except Exception:
         pass
+
+    env.update(get_runtime_dependency_versions())
 
     return env
 
@@ -911,6 +915,8 @@ def api_bugreport():
 
         uptime_str = str(datetime.now(tz=UTC) - state.bridge_start_time)
 
+        issue_summary = summarize_issue_logs(log_lines, max_lines=3)
+
         # Build structured report
         report = {
             "version": VERSION,
@@ -922,6 +928,7 @@ def api_bugreport():
             "subprocesses": subprocs,
             "bt_device_info": bt_device_info,
             "config": config_info,
+            "recent_issue_logs": issue_summary["issue_lines"],
             "logs": log_lines,
         }
 
@@ -942,9 +949,7 @@ def api_bugreport():
         sink_inputs = diag.get("sink_inputs", [])
         alive_count = sum(1 for sp in subprocs if sp.get("alive"))
 
-        # Last 3 WARNING/ERROR lines for short report
-        warn_keywords = ("WARNING", "ERROR", "CRITICAL")
-        recent_errors = [ln for ln in masked.get("logs", []) if any(k in ln for k in warn_keywords)][-3:]
+        recent_issue_logs = masked.get("recent_issue_logs", [])
 
         ma_ver = ma_info.get("version") or "?"
         ma_label = f"connected (v{ma_ver})" if ma_info.get("connected") and ma_ver != "?" else ma_status
@@ -957,6 +962,9 @@ def api_bugreport():
             f"**Platform:** {env.get('platform', '?')}  |  **Arch:** {env.get('arch', '?')}",
             f"**BlueZ:** {env.get('bluez', '?')}  |  **Audio:** {env.get('audio_server', '?')}",
             f"**Python:** {env.get('python', '?').split()[0]}  |  **RSS:** {env.get('process_rss_mb', '?')} MB",
+            f"**Deps:** sendspin {env.get('sendspin', '?')}  |  "
+            f"aiosendspin {env.get('aiosendspin', '?')}  |  "
+            f"av {env.get('av', '?')}",
             "",
             f"**BT:** {bt_conn}/{bt_total} connected  |  "
             f"**MA:** {ma_label}  |  "
@@ -966,11 +974,11 @@ def api_bugreport():
             f"**bluetoothd:** {diag.get('bluetooth_daemon', '?')}  |  "
             f"**Subprocesses:** {alive_count}/{len(subprocs)} alive",
         ]
-        if recent_errors:
+        if recent_issue_logs:
             short.append("")
-            short.append("**Recent warnings/errors:**")
+            short.append("**Recent issue logs:**")
             short.append("```")
-            short.extend(recent_errors)
+            short.extend(recent_issue_logs)
             short.append("```")
         short.append("")
         short.append("> 📎 **Full diagnostic report attached as file below**")
@@ -1124,6 +1132,15 @@ def _build_full_text_report(
         full.append(json.dumps(config, indent=2, default=str))
         full.append("")
 
+    issue_logs = masked.get("recent_issue_logs", [])
+    if issue_logs:
+        full.append(sep)
+        full.append("  RECENT ISSUE LOGS")
+        full.append(sep)
+        for line in issue_logs:
+            full.append(str(line))
+        full.append("")
+
     # Logs
     logs = masked.get("logs", [])
     if logs:
@@ -1156,6 +1173,8 @@ def api_diagnostics_download():
         elif os.path.exists("/etc/systemd/system/sendspin-client.service"):
             runtime = "systemd"
 
+        issue_summary = summarize_issue_logs(log_lines, max_lines=3)
+
         report = {
             "version": VERSION,
             "build_date": BUILD_DATE,
@@ -1165,6 +1184,7 @@ def api_diagnostics_download():
             "diagnostics": diag,
             "subprocesses": diag.get("subprocesses", []),
             "config": config_info,
+            "recent_issue_logs": issue_summary["issue_lines"],
             "logs": log_lines,
         }
 

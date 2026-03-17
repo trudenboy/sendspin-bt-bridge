@@ -22,7 +22,6 @@ The subprocess exits with code 0 on clean stop, non-zero on error.
 from __future__ import annotations
 
 import asyncio
-import inspect
 import json
 import logging
 import os
@@ -30,6 +29,8 @@ import re
 import sys
 import time
 from pathlib import Path
+
+from services.sendspin_compat import filter_supported_call_kwargs
 
 # ---------------------------------------------------------------------------
 # PyAV compatibility: older PyAV (<13) has no AudioLayout.nb_channels.
@@ -160,11 +161,7 @@ _last_status_json: str = ""
 
 def _filter_supported_daemon_args_kwargs(daemon_args_cls, kwargs: dict[str, object]) -> dict[str, object]:
     """Keep only kwargs supported by the installed sendspin DaemonArgs signature."""
-    try:
-        supported = inspect.signature(daemon_args_cls).parameters
-    except (TypeError, ValueError):
-        return dict(kwargs)
-    return {key: value for key, value in kwargs.items() if key in supported}
+    return filter_supported_call_kwargs(daemon_args_cls, kwargs)
 
 
 def _str_default(obj) -> str:

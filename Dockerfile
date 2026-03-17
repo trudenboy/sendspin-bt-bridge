@@ -3,6 +3,7 @@ FROM python:3.12-slim AS builder
 ENV DEBIAN_FRONTEND=noninteractive
 ARG TARGETARCH
 ARG TARGETVARIANT
+ARG SENDSPIN_VERSION=""
 
 # Build-time system dependencies (needed to compile dbus-python, portaudio bindings,
 # and PyAV on architectures without pre-built wheels)
@@ -43,9 +44,19 @@ RUN if [ "${TARGETARCH}${TARGETVARIANT}" = "armv7" ]; then \
             "readchar>=4.0.0" \
             "rich>=13.0.0" \
             "sounddevice>=0.4.6" && \
-        pip install --no-cache-dir --prefix=/install --no-deps "sendspin>=5.3.0,<6.0.0"; \
+        if [ -n "${SENDSPIN_VERSION}" ]; then \
+            pip install --no-cache-dir --prefix=/install --no-deps "sendspin==${SENDSPIN_VERSION}"; \
+        else \
+            pip install --no-cache-dir --prefix=/install --no-deps "sendspin>=5.3.0,<6.0.0"; \
+        fi; \
     else \
-        pip install --no-cache-dir --prefix=/install -r /tmp/requirements.txt; \
+        if [ -n "${SENDSPIN_VERSION}" ]; then \
+            grep -v '^sendspin' /tmp/requirements.txt > /tmp/requirements-release.txt && \
+            pip install --no-cache-dir --prefix=/install -r /tmp/requirements-release.txt && \
+            pip install --no-cache-dir --prefix=/install --no-deps "sendspin==${SENDSPIN_VERSION}"; \
+        else \
+            pip install --no-cache-dir --prefix=/install -r /tmp/requirements.txt; \
+        fi; \
     fi
 
 # ──────────────────────────────────────────────────────────────────────────────

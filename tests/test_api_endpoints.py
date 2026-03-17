@@ -139,6 +139,103 @@ def test_set_password_too_short(client):
     assert "8 characters" in resp.get_json().get("error", "")
 
 
+def test_api_logs_returns_recent_issue_metadata(client, monkeypatch):
+    import routes.api_config as api_config_mod
+
+    monkeypatch.setattr(api_config_mod, "_detect_runtime", lambda: "systemd")
+    monkeypatch.setattr(
+        api_config_mod,
+        "_read_log_lines",
+        lambda runtime, lines: [
+            "2026-03-17 18:00:00,000 - root - INFO - startup complete",
+            "2026-03-17 18:00:01,000 - root - WARNING - daemon stderr: ALSA setup failed",
+            "2026-03-17 18:00:02,000 - root - ERROR - daemon crashed",
+        ],
+    )
+
+    resp = client.get("/api/logs?lines=50")
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["has_recent_issues"] is True
+    assert data["recent_issue_count"] == 2
+    assert data["recent_issue_level"] == "error"
+
+
+def test_api_bugreport_uses_issue_worthy_logs_in_summary(client, monkeypatch):
+    import routes.api_status as api_status_mod
+
+    monkeypatch.setattr(
+        api_status_mod,
+        "api_diagnostics",
+        lambda: SimpleNamespace(
+            get_json=lambda: {
+                "devices": [],
+                "ma_integration": {},
+                "sinks": [],
+                "sink_inputs": [],
+                "dbus_available": True,
+                "bluetooth_daemon": "active",
+                "subprocesses": [],
+            }
+        ),
+    )
+    monkeypatch.setattr(
+        api_status_mod,
+        "_collect_environment",
+        lambda: {
+            "python": "3.12.0 test",
+            "platform": "Linux-test",
+            "arch": "x86_64",
+            "bluez": "5.72",
+            "audio_server": "PulseAudio",
+            "process_rss_mb": 42,
+        },
+    )
+    monkeypatch.setattr(api_status_mod, "_collect_subprocess_info", lambda: [])
+    monkeypatch.setattr(api_status_mod, "_sanitized_config", lambda: {})
+    monkeypatch.setattr(api_status_mod, "_collect_bt_device_info", lambda: [])
+    monkeypatch.setattr(
+        api_status_mod,
+        "_collect_recent_logs",
+        lambda n=100: [
+            "2026-03-17 18:00:00,000 - root - WARNING - reconnecting to bluetooth speaker",
+            "2026-03-17 18:00:01,000 - root - WARNING - daemon stderr: ALSA setup failed",
+            "2026-03-17 18:00:02,000 - root - ERROR - daemon crashed",
+        ],
+    )
+
+    resp = client.get("/api/bugreport")
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert "Recent issue logs" in data["markdown_short"]
+    assert "ALSA setup failed" in data["markdown_short"]
+    assert "daemon crashed" in data["markdown_short"]
+    assert "reconnecting to bluetooth speaker" not in data["markdown_short"]
+    assert data["report"]["recent_issue_logs"] == [
+        "2026-03-17 18:00:01,000 - root - WARNING - daemon stderr: ALSA setup failed",
+        "2026-03-17 18:00:02,000 - root - ERROR - daemon crashed",
+    ]
+
+
+def test_api_version_includes_runtime_dependency_versions(client, monkeypatch):
+    import routes.api_config as api_config_mod
+
+    monkeypatch.setattr(
+        api_config_mod,
+        "get_runtime_dependency_versions",
+        lambda: {"sendspin": "5.3.1", "aiosendspin": "4.3.0", "av": "15.0.0"},
+    )
+
+    resp = client.get("/api/version")
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["dependencies"]["sendspin"] == "5.3.1"
+    assert data["dependencies"]["aiosendspin"] == "4.3.0"
+
+
 def test_api_config_get_includes_security_and_monitor_defaults(client):
     """GET /api/config returns merged defaults for new security and MA monitor settings."""
     resp = client.get("/api/config")

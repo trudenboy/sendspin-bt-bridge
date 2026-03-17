@@ -2,7 +2,22 @@
 
 A history of the architectural and functional evolution of sendspin-bt-bridge — for readers familiar with Home Assistant, Music Assistant, and multiroom audio setups.
 
-**Period:** January 1 – March 17, 2026 · **Total commits:** ~970 · **Versions:** 1.0.0 → 2.32.9
+**Period:** January 1 – March 17, 2026 · **Total commits:** ~970 · **Versions:** 1.0.0 → 2.32.10
+
+---
+
+## March 17, 2026 — Release discipline, operational visibility, and playback UX follow-ups (v2.32.10)
+
+The `2.32.10` release ties together several threads that all reduce ambiguity in day-to-day operation. Some of the changes are under-the-hood release hardening, some are diagnostics improvements, and some are small but very visible dashboard fixes — but they all move in the same direction: make the bridge behave more predictably both for operators and for end users.
+
+Four themes define the release:
+
+- **Release creation is now an explicit operation rather than an accidental side effect of tagging** — GitHub releases are now handled by a dedicated manual workflow. It defaults to the latest tag, still allows choosing a specific tag, generates cumulative release notes from the previous published release, and updates `ha-addon/config.yaml` only when the release itself is created. Tag pushes no longer silently rewrite add-on metadata.
+- **Dependency compatibility is visible and gated earlier** — the bridge now records resolved runtime dependency versions in startup logs, diagnostics, bugreports, and `/api/version`, while CI and Docker release paths include a real compatibility smoke-check against the installed `sendspin` runtime. This makes upstream drift easier to catch before publication and much easier to diagnose after deployment.
+- **Issue severity is now closer to operational reality** — crash-like subprocess `stderr` is no longer flattened into an ordinary warning. The runtime logger, bugreport summary, diagnostics output, and `Report an Issue` affordance now share the same understanding of which log lines actually represent actionable failures.
+- **Playback UI got another round of trust-building polish** — the dashboard filter bar now remains visible even for a single player, card-view `shuffle` / `repeat` buttons finally show their active state clearly, and `repeat one` now uses an integrated icon rather than an overlaid badge. These are small details, but they matter because transport controls need to communicate state instantly and unambiguously.
+
+This is not a “one big feature” release. It is a release about removing quiet sources of confusion: confusion in release ownership, confusion in packaged dependency state, confusion in log severity, and confusion in transport UI feedback. That kind of cleanup tends to age very well.
 
 ---
 

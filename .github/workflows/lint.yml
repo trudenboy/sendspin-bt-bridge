@@ -75,5 +75,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev libglib2.0-dev
       - name: Install dependencies
         run: pip install -r requirements.txt -r dev-requirements.txt
+      - name: Run sendspin compatibility smoke test
+        run: python scripts/check_sendspin_compat.py
       - name: Run tests
         run: python -m pytest tests/ -v --tb=short

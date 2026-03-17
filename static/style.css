@@ -978,6 +978,9 @@ body {
             align-items: center;
             gap: 8px;
         }
+        .toolbar-stack--filters-only .filter-bar {
+            border-radius: var(--ha-card-border-radius);
+        }
         .filter-icon {
             width: 18px;
             height: 18px;
@@ -1306,6 +1309,13 @@ body {
             background: rgba(219,68,55,.18);
         }
         .icon-btn svg { width: 16px; height: 16px; fill: currentColor; }
+        .card-controls .icon-btn.ma-ready.active {
+            color: var(--primary-color);
+            background: rgba(3, 169, 244, 0.12);
+        }
+        .card-controls .icon-btn.ma-ready.active:hover {
+            background: rgba(3, 169, 244, 0.18);
+        }
         .vol-wrap {
             flex: 1;
             display: flex;
@@ -2332,28 +2342,6 @@ body {
             cursor: not-allowed;
             pointer-events: none;
             box-shadow: none;
-        }
-        .list-player-transport-btn.repeat-one,
-        .transport-btn.repeat-one {
-            position: relative;
-        }
-        .list-player-transport-btn.repeat-one::after,
-        .transport-btn.repeat-one::after {
-            content: '1';
-            position: absolute;
-            right: -2px;
-            bottom: -2px;
-            min-width: 12px;
-            height: 12px;
-            padding: 0 3px;
-            border-radius: 999px;
-            background: var(--primary-color);
-            color: #fff;
-            font-size: 9px;
-            font-weight: 700;
-            line-height: 12px;
-            text-align: center;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.24);
         }
         .list-player-transport-btn.is-primary svg {
             width: 18px;

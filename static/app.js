@@ -66,6 +66,7 @@ window.addEventListener('message', function(e) {
 var autoRefreshLogs = false;
 var autoRefreshInterval = null;
 var allLogs = [];
+var recentLogIssueState = { hasMeta: false, hasIssues: false, level: '', count: 0 };
 var currentLogLevel = 'all';
 var btAdapters = [];
 var btManualAdapters = [];
@@ -1781,6 +1782,16 @@ function _renderTransportButtonHtml(button) {
     '</button>';
 }
 
+function _repeatIconHtml(mode) {
+    if (mode === 'one') {
+        return '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">' +
+            '<path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/>' +
+            '<path d="M12.2 9.25h-1.35l-1 1.05v1.15l1-1.05h.35v4.35h1.3V9.25z"/>' +
+        '</svg>';
+    }
+    return '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg>';
+}
+
 function _renderPlaybackTransportButtonsHtml(i, transportState, options) {
     var opts = options || {};
     var state = transportState || _getDeviceTransportState({}, null);
@@ -1838,7 +1849,7 @@ function _renderPlaybackTransportButtonsHtml(i, transportState, options) {
         hidden: false,
     }));
     pushPrevNextButton('next', opts.nextTitle || 'Next', '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>');
-    pushModeButton('repeat', state.repeatTitle, '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg>', state.hasQueueControls && state.repeat !== 'off');
+    pushModeButton('repeat', state.repeatTitle, _repeatIconHtml(state.repeat), state.hasQueueControls && state.repeat !== 'off');
     if (!opts.modeFirst) {
         pushModeButton('shuffle', state.shuffleTitle, '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg>', state.hasQueueControls && state.shuffle);
     }
@@ -2554,6 +2565,7 @@ function populateDeviceCard(i, dev) {
         maRepeatBtn.classList.toggle('active', transportState.hasQueueControls && transportState.repeat !== 'off');
         maRepeatBtn.classList.toggle('repeat-all', transportState.hasQueueControls && transportState.repeat === 'all');
         maRepeatBtn.classList.toggle('repeat-one', transportState.hasQueueControls && transportState.repeat === 'one');
+        maRepeatBtn.innerHTML = _repeatIconHtml(transportState.repeat);
         maRepeatBtn.title = transportState.repeatTitle;
         maRepeatBtn.disabled = !transportState.hasQueueControls || !!transportState.queueActionPending;
         maRepeatBtn.style.opacity = transportState.hasQueueControls ? '' : '0.35';
@@ -2719,6 +2731,12 @@ function _isErrorLevel(line) {
     return u.indexOf(' - ERROR - ') !== -1 || u.indexOf(' - CRITICAL - ') !== -1;
 }
 
+function _getRecentLogIssueTitle(issueState) {
+    if (!issueState || !issueState.hasIssues) return 'Submit a bug report';
+    if (issueState.level === 'warning') return 'Recent actionable warnings detected — click to report';
+    return 'Recent errors detected — click to report';
+}
+
 function getLogClass(line) {
     if (!line || typeof line !== 'string') return '';
     var u = line.toUpperCase();
@@ -2782,9 +2800,12 @@ function renderLogs() {
     var reportLink = document.getElementById('report-link');
     if (reportLink) {
         var tail = allLogs.slice(-20);
-        var hasErr = tail.some(function(l) { return _isErrorLevel(l); });
-        reportLink.classList.toggle('has-errors', hasErr);
-        reportLink.title = hasErr ? 'Recent errors detected — click to report' : 'Submit a bug report';
+        var fallbackHasErr = tail.some(function(l) { return _isErrorLevel(l); });
+        var hasIssue = recentLogIssueState.hasMeta ? recentLogIssueState.hasIssues : fallbackHasErr;
+        reportLink.classList.toggle('has-errors', hasIssue);
+        reportLink.title = recentLogIssueState.hasMeta
+            ? _getRecentLogIssueTitle(recentLogIssueState)
+            : (fallbackHasErr ? 'Recent errors detected — click to report' : 'Submit a bug report');
     }
 }
 
@@ -2803,6 +2824,12 @@ async function refreshLogs() {
         var resp = await fetch(API_BASE + '/api/logs?lines=150');
         var data = await resp.json();
         allLogs = data.logs || [];
+        recentLogIssueState = {
+            hasMeta: data.has_recent_issues != null,
+            hasIssues: !!data.has_recent_issues,
+            level: data.recent_issue_level || '',
+            count: Number(data.recent_issue_count) || 0
+        };
         renderLogs();
     } catch (err) {
         console.error('Error refreshing logs:', err);
@@ -2919,11 +2946,16 @@ function onGroupFilterChange(val) {
 
 function _updateGroupPanel() {
     var total = lastDevices ? lastDevices.length : 0;
-    if (total < 2) {
-        document.getElementById('group-controls').style.display = 'none';
+    var controls = document.getElementById('group-controls');
+    var actionBar = document.getElementById('group-action-bar');
+    if (!controls) return;
+    if (total < 1) {
+        controls.style.display = 'none';
         return;
     }
-    document.getElementById('group-controls').style.display = 'flex';
+    controls.style.display = 'flex';
+    controls.classList.toggle('toolbar-stack--filters-only', total < 2);
+    if (actionBar) actionBar.style.display = total < 2 ? 'none' : 'flex';
     _updateAdapterFilter();
     _updateGroupFilter();
     var sel = _getSelectedNames().length;
@@ -5338,11 +5370,8 @@ function _openBugReport(e) {
                 }
                 var systemInfo = info.join('\n');
 
-                var logs = rep.logs || [];
-                var errorLines = logs.filter(function(l) {
-                    return l.indexOf('ERROR') !== -1 || l.indexOf('WARNING') !== -1;
-                });
-                var recentErrors = errorLines.slice(-3).map(function(l) {
+                var issueLines = rep.recent_issue_logs || [];
+                var recentErrors = issueLines.slice(-3).map(function(l) {
                     var m = l.match(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d+ - .+/);
                     return m ? m[0] : l;
                 }).join('\n');

@@ -31,6 +31,8 @@ from config import (
     load_config,
     save_device_volume,
 )
+from services.log_analysis import classify_subprocess_stderr_level
+from services.sendspin_compat import format_dependency_versions, get_runtime_dependency_versions
 from services.update_checker import run_update_checker
 
 UTC = timezone.utc
@@ -532,14 +534,34 @@ class SendspinClient:
                 log_fn("[%s/proc] %s", self.player_name, msg.get("msg", ""))
 
     async def _read_subprocess_stderr(self) -> None:
-        """Forward daemon subprocess stderr lines to logger as warnings."""
+        """Forward daemon subprocess stderr lines with severity matching their content."""
         if self._daemon_proc is None or self._daemon_proc.stderr is None:
             return
         while self._daemon_proc and self._daemon_proc.stderr:
             line = await self._daemon_proc.stderr.readline()
             if not line:
                 break
-            logger.warning("[%s] daemon stderr: %s", self.player_name, line.decode().rstrip())
+            self._handle_subprocess_stderr_line(line.decode(errors="replace").rstrip())
+
+    def _handle_subprocess_stderr_line(self, line: str) -> None:
+        """Classify a daemon stderr line and mirror crash-like output into status."""
+        text = line.rstrip()
+        if not text:
+            return
+        level = classify_subprocess_stderr_level(text)
+        if level in ("error", "critical"):
+            self._update_status(
+                {
+                    "last_error": text[:500],
+                    "last_error_at": datetime.now(tz=UTC).isoformat(),
+                }
+            )
+        log_fn = {
+            "warning": logger.warning,
+            "error": logger.error,
+            "critical": logger.critical,
+        }.get(level, logger.warning)
+        log_fn("[%s] daemon stderr: %s", self.player_name, text)
 
     async def _send_subprocess_command(self, cmd: dict) -> None:
         """Write a JSON command to the daemon subprocess stdin."""
@@ -813,6 +835,7 @@ async def main():
     logging.getLogger().setLevel(getattr(logging, log_level))
     os.environ["LOG_LEVEL"] = log_level
     logger.info("Log level: %s", log_level)
+    logger.info("Runtime deps: %s", format_dependency_versions(get_runtime_dependency_versions()))
 
     prefer_sbc = bool(config.get("PREFER_SBC_CODEC", False))
     if prefer_sbc:

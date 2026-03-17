@@ -9,6 +9,7 @@ from unittest.mock import patch
 import pytest
 
 from sendspin_client import SendspinClient, _filter_duplicate_bluetooth_devices
+from services.log_analysis import classify_subprocess_stderr_level
 
 
 class _RaceyStdin:
@@ -94,3 +95,36 @@ def test_zombie_watchdog_triggers_after_second_play_without_audio():
 
     assert len(scheduled) == 1
     scheduled[0].close()
+
+
+def test_classify_subprocess_stderr_level_promotes_traceback_and_fatal_lines():
+    assert classify_subprocess_stderr_level("Traceback (most recent call last):") == "error"
+    assert classify_subprocess_stderr_level("TypeError: unexpected keyword argument") == "error"
+    assert classify_subprocess_stderr_level("fatal: daemon crashed") == "critical"
+
+
+def test_handle_subprocess_stderr_line_sets_last_error_for_crash_output():
+    client = SendspinClient("Test Player", "localhost", 9000)
+
+    with (
+        patch("sendspin_client._state.notify_status_changed"),
+        patch("sendspin_client.logger.error") as log_error,
+    ):
+        client._handle_subprocess_stderr_line("TypeError: unexpected keyword argument 'use_hardware_volume'")
+
+    assert client.status.last_error == "TypeError: unexpected keyword argument 'use_hardware_volume'"
+    assert client.status.last_error_at is not None
+    log_error.assert_called_once()
+
+
+def test_handle_subprocess_stderr_line_keeps_benign_stderr_as_warning():
+    client = SendspinClient("Test Player", "localhost", 9000)
+
+    with (
+        patch("sendspin_client._state.notify_status_changed"),
+        patch("sendspin_client.logger.warning") as log_warning,
+    ):
+        client._handle_subprocess_stderr_line("ALSA lib pcm.c:2666: Unknown PCM default")
+
+    assert client.status.last_error is None
+    log_warning.assert_called_once()

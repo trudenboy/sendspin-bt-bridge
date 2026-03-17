@@ -1,0 +1,195 @@
+name: Create GitHub Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (leave blank to use the latest tag)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Resolve target tag
+        id: resolve
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          git fetch --force --tags
+          TAG="${INPUT_TAG}"
+          if [ -z "${TAG}" ]; then
+            TAG="$(git tag --sort=-version:refname | head -n 1)"
+          fi
+          if [ -z "${TAG}" ]; then
+            echo "No tags found in the repository" >&2
+            exit 1
+          fi
+          git rev-parse "${TAG}^{tag}" >/dev/null 2>&1 || git rev-parse "${TAG}^{commit}" >/dev/null 2>&1
+          VERSION="${TAG#v}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Release target"
+            echo ""
+            echo "- Tag: \`${TAG}\`"
+            echo "- Version: \`${VERSION}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Sync ha-addon version on main
+        id: sync_addon
+        env:
+          VERSION: ${{ steps.resolve.outputs.version }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path("ha-addon/config.yaml")
+          text = path.read_text()
+          updated = re.sub(r'^version: ".*"$', f'version: "{__import__("os").environ["VERSION"]}"', text, count=1, flags=re.MULTILINE)
+          if updated == text:
+              raise SystemExit(0)
+          path.write_text(updated)
+          PY
+          if git diff --quiet -- ha-addon/config.yaml; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "- ha-addon/config.yaml already matched the release version" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add ha-addon/config.yaml
+          git commit -m "chore: sync ha-addon version to ${VERSION}"
+          git push origin HEAD:main
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          echo "- Updated \`ha-addon/config.yaml\` on \`main\` to \`${VERSION}\`" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Generate release notes
+        id: previous_release
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const {owner, repo} = context.repo;
+            const targetTag = '${{ steps.resolve.outputs.tag }}';
+
+            function parseTag(tag) {
+              const normalized = String(tag || '').replace(/^v/, '');
+              if (!/^\d+\.\d+\.\d+$/.test(normalized)) {
+                return null;
+              }
+              return normalized.split('.').map((part) => Number(part));
+            }
+
+            function compareTags(a, b) {
+              const pa = parseTag(a);
+              const pb = parseTag(b);
+              if (!pa || !pb) {
+                return String(a).localeCompare(String(b));
+              }
+              for (let i = 0; i < Math.max(pa.length, pb.length); i += 1) {
+                const av = pa[i] || 0;
+                const bv = pb[i] || 0;
+                if (av !== bv) {
+                  return av - bv;
+                }
+              }
+              return 0;
+            }
+
+            const releases = await github.paginate(github.rest.repos.listReleases, {
+              owner,
+              repo,
+              per_page: 100,
+            });
+
+            const publishedTags = releases
+              .filter((release) => !release.draft && !release.prerelease)
+              .map((release) => release.tag_name)
+              .filter((tag) => tag && tag !== targetTag)
+              .sort(compareTags);
+
+            const previousTag = publishedTags.filter((tag) => compareTags(tag, targetTag) < 0).pop() || '';
+            core.setOutput('tag', previousTag);
+            await core.summary
+              .addRaw(previousTag
+                ? `Previous published release tag for notes: ${previousTag}`
+                : 'No previous published release found; generating notes without a lower bound')
+              .write();
+
+      - name: Generate release notes
+        id: notes
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const {owner, repo} = context.repo;
+            const tag = '${{ steps.resolve.outputs.tag }}';
+            const previousTag = '${{ steps.previous_release.outputs.tag }}';
+            const params = {
+              owner,
+              repo,
+              tag_name: tag,
+            };
+            if (previousTag) {
+              params.previous_tag_name = previousTag;
+            }
+            const response = await github.rest.repos.generateReleaseNotes(params);
+            core.setOutput('body', response.data.body);
+
+      - name: Create or update GitHub release
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const {owner, repo} = context.repo;
+            const tag = '${{ steps.resolve.outputs.tag }}';
+            const body = ${{ toJSON(steps.notes.outputs.body) }};
+            let existing = null;
+            try {
+              const response = await github.rest.repos.getReleaseByTag({ owner, repo, tag });
+              existing = response.data;
+            } catch (error) {
+              if (error.status !== 404) {
+                throw error;
+              }
+            }
+
+            if (existing) {
+              await github.rest.repos.updateRelease({
+                owner,
+                repo,
+                release_id: existing.id,
+                tag_name: tag,
+                name: tag,
+                body,
+                draft: false,
+                prerelease: false,
+                make_latest: 'true',
+              });
+              await core.summary.addRaw(`Updated existing release for ${tag}`).write();
+              return;
+            }
+
+            await github.rest.repos.createRelease({
+              owner,
+              repo,
+              tag_name: tag,
+              name: tag,
+              body,
+              draft: false,
+              prerelease: false,
+              generate_release_notes: false,
+              make_latest: 'true',
+            });
+            await core.summary.addRaw(`Created release for ${tag}`).write();

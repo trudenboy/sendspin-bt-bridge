@@ -31,6 +31,8 @@ from services import (
     bt_remove_device as _bt_remove_device,
 )
 from services.bluetooth import _MAC_RE
+from services.log_analysis import summarize_issue_logs
+from services.sendspin_compat import get_runtime_dependency_versions
 from services.update_checker import _start_upgrade_job
 from state import (
     _adapter_cache_lock,
@@ -696,7 +698,16 @@ def api_logs():
     try:
         runtime = _detect_runtime()
         log_lines = _read_log_lines(runtime, lines)
-        return jsonify({"logs": log_lines, "runtime": runtime})
+        issue_summary = summarize_issue_logs(log_lines, tail_lines=20)
+        return jsonify(
+            {
+                "logs": log_lines,
+                "runtime": runtime,
+                "has_recent_issues": issue_summary["has_issues"],
+                "recent_issue_count": issue_summary["issue_count"],
+                "recent_issue_level": issue_summary["highest_level"],
+            }
+        )
     except Exception:
         logger.exception("Error reading logs")
         return jsonify({"logs": ["Error reading logs"]}), 500
@@ -730,6 +741,7 @@ def api_logs_download():
 def api_version():
     """Return git version information."""
     cwd = os.path.dirname(os.path.abspath(__file__))
+    dependencies = get_runtime_dependency_versions()
     try:
         git_sha = subprocess.run(
             ["git", "rev-parse", "--short", "HEAD"],
@@ -757,10 +769,11 @@ def api_version():
                 "version": git_desc or VERSION,
                 "git_sha": git_sha or "unknown",
                 "built_at": (git_date.split(" ")[0] if git_date else BUILD_DATE),
+                "dependencies": dependencies,
             }
         )
     except Exception:
-        return jsonify({"version": VERSION, "git_sha": "unknown", "built_at": BUILD_DATE})
+        return jsonify({"version": VERSION, "git_sha": "unknown", "built_at": BUILD_DATE, "dependencies": dependencies})
 
 
 # ---------------------------------------------------------------------------

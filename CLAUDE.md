@@ -25,7 +25,7 @@ docker exec -it sendspin-client bluetoothctl
 
 Unit tests: `pytest` (see `tests/`). 187 tests across 18 files. Manual testing via `docker logs` and the web UI at `http://localhost:8080`.
 
-CI/CD builds multi-platform Docker images (`linux/amd64`, `linux/arm64`) to `ghcr.io/trudenboy/sendspin-bt-bridge` on `v*` tag push. Automatically syncs `ha-addon/config.yaml` version from `VERSION` in `config.py` before the build.
+CI/CD builds multi-platform Docker images (`linux/amd64`, `linux/arm64`) to `ghcr.io/trudenboy/sendspin-bt-bridge` on `v*` tag push. GitHub releases are created by the separate manual `Create GitHub Release` workflow, which defaults to the latest tag and syncs `ha-addon/config.yaml` on release instead of on tag push.
 
 ## Architecture (v2.30.7)
 

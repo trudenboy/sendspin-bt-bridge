@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.32.10] - 2026-03-17
+
+### Changed
+- GitHub releases now use a dedicated manual workflow that defaults to the latest tag, supports selecting a specific tag, syncs `ha-addon/config.yaml` only during release, and generates cumulative release notes from the previous published release
+- The dashboard filter toolbar now remains visible with a single player, while bulk selection controls stay hidden until multiple players are available
+- Card-view `repeat one` now uses an inline icon variant instead of a badge layered on top of the repeat button
+
+### Fixed
+- Crash-like subprocess `stderr` is now surfaced as an actual issue severity in diagnostics, bugreports, and the `Report an Issue` indicator instead of being treated as an ordinary warning
+- Card-view `shuffle` / `repeat` controls now visibly update when toggled, including in-place icon updates for `repeat`
+
+### Added
+- Runtime dependency fingerprints in diagnostics, bugreports, `/api/version`, and startup logs so packaged dependency sets are visible immediately
+- Real `sendspin` compatibility smoke checks and release-pipeline gates that validate the packaged runtime before image publication
+
 ## [2.32.9] - 2026-03-17
 
 ### Fixed
