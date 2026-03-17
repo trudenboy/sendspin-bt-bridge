@@ -62,15 +62,94 @@ def _ma_host_from_sendspin_clients():
     return None
 
 
-def _resolve_target_syncgroup_id(syncgroup_id: str | None) -> str | None:
-    """Resolve a target MA queue id from the request or the cached MA groups."""
-    if syncgroup_id:
-        return syncgroup_id
+def _resolve_target_queue(
+    syncgroup_id: str | None,
+    player_id: str | None = None,
+    group_id: str | None = None,
+) -> tuple[str | None, str | None]:
+    """Resolve (state_key, target_queue_id) from request context.
+
+    ``state_key`` is the key used in our shared now-playing cache/UI snapshots.
+    ``target_queue_id`` is the actual MA queue/player identifier that queue
+    commands must target.
+    """
+    raw_syncgroup_id = str(syncgroup_id or "").strip()
+    raw_player_id = str(player_id or "").strip()
+    raw_group_id = str(group_id or "").strip()
+    solo_queue_id = ("up" + raw_player_id.replace("-", "")) if raw_player_id else ""
+
+    if not raw_player_id:
+        for candidate in (raw_syncgroup_id, raw_group_id):
+            if candidate.startswith(("up", "media_player.", "ma_")):
+                return candidate, candidate
+
+        active_clients = []
+        for client in state.get_clients_snapshot():
+            pid = str(getattr(client, "player_id", "") or "").strip()
+            if not pid:
+                continue
+            status = getattr(client, "status", {}) or {}
+            is_running = False
+            try:
+                is_running = bool(client.is_running())
+            except Exception:
+                is_running = False
+            if not (is_running or status.get("server_connected")):
+                continue
+            active_clients.append((pid, status))
+
+        if len(active_clients) == 1:
+            inferred_player_id, _status = active_clients[0]
+            inferred_solo_queue_id = "up" + inferred_player_id.replace("-", "")
+            for candidate in (raw_syncgroup_id, raw_group_id):
+                if candidate.startswith("syncgroup_"):
+                    ma_group = state.get_ma_group_by_id(candidate)
+                    members = {str(m.get("id", "")) for m in (ma_group or {}).get("members", [])}
+                    if inferred_solo_queue_id in members:
+                        return candidate, candidate
+            return inferred_player_id, inferred_solo_queue_id
+
+    if raw_player_id:
+        ma_group = state.get_ma_group_for_player_id(raw_player_id)
+        if ma_group and ma_group.get("id"):
+            resolved = ma_group["id"]
+            return resolved, resolved
+
+        for candidate in (raw_syncgroup_id, raw_group_id):
+            if not candidate:
+                continue
+            if candidate.startswith(("up", "media_player.", "ma_")):
+                return raw_player_id, candidate
+            if candidate.startswith("syncgroup_"):
+                ma_group = state.get_ma_group_by_id(candidate)
+                members = {str(m.get("id", "")) for m in (ma_group or {}).get("members", [])}
+                if solo_queue_id and solo_queue_id in members:
+                    return candidate, candidate
+
+        if solo_queue_id:
+            return raw_player_id, solo_queue_id
+
+    for candidate in (raw_syncgroup_id, raw_group_id):
+        if not candidate:
+            continue
+        ma_group = state.get_ma_group_by_id(candidate)
+        if ma_group and ma_group.get("id"):
+            resolved = ma_group["id"]
+            return resolved, resolved
+        if candidate.startswith("syncgroup_"):
+            return candidate, candidate
+        if candidate.startswith(("up", "media_player.", "ma_")):
+            return (raw_player_id or candidate), candidate
+
+    if player_id:
+        return raw_player_id, raw_player_id
+
     groups = state.get_ma_groups()
     if not groups:
-        return None
+        return None, None
     first_group = groups[0] if isinstance(groups[0], dict) else {}
-    return first_group.get("id")
+    first_id = first_group.get("id")
+    return first_id, first_id
 
 
 def _build_ma_prediction_patch(action: str, value) -> dict:
@@ -1350,12 +1429,16 @@ def api_ma_queue_cmd():
     data = request.get_json(silent=True) or {}
     action = data.get("action", "")
     value = data.get("value")
-    syncgroup_id = _resolve_target_syncgroup_id(data.get("syncgroup_id"))
+    state_key, target_queue_id = _resolve_target_queue(
+        data.get("syncgroup_id"),
+        data.get("player_id"),
+        data.get("group_id"),
+    )
 
     if action not in ("next", "previous", "shuffle", "repeat", "seek"):
         return jsonify({"success": False, "error": f"Unknown action: {action}", "error_code": "unknown_action"}), 400
 
-    if not syncgroup_id:
+    if not state_key or not target_queue_id:
         return jsonify({"success": False, "error": "No MA queue available", "error_code": "queue_unavailable"}), 503
 
     loop = state.get_main_loop()
@@ -1364,7 +1447,7 @@ def api_ma_queue_cmd():
 
     op_id = uuid.uuid4().hex
     try:
-        from services.ma_monitor import get_monitor, send_queue_cmd
+        from services.ma_monitor import get_monitor, request_queue_refresh, send_queue_cmd
 
         monitor = get_monitor()
         if monitor is None or not monitor.is_connected():
@@ -1374,45 +1457,59 @@ def api_ma_queue_cmd():
                         "success": False,
                         "error": "MA monitor unavailable",
                         "error_code": "monitor_unavailable",
-                        "syncgroup_id": syncgroup_id,
+                        "syncgroup_id": state_key,
+                        "queue_id": target_queue_id,
                     }
                 ),
                 503,
             )
 
-        fut = asyncio.run_coroutine_threadsafe(send_queue_cmd(action, value, syncgroup_id), loop)
-        ok = fut.result(timeout=10.0)
-        if not ok:
+        fut = asyncio.run_coroutine_threadsafe(send_queue_cmd(action, value, target_queue_id), loop)
+        result = fut.result(timeout=5.0)
+        if not result.get("accepted"):
             return (
                 jsonify(
                     {
                         "success": False,
-                        "error": "MA command was not accepted",
+                        "error": result.get("error") or "MA command was not accepted",
                         "error_code": "command_rejected",
                         "op_id": op_id,
-                        "syncgroup_id": syncgroup_id,
+                        "syncgroup_id": state_key,
+                        "queue_id": target_queue_id,
                     }
                 ),
                 503,
             )
         predicted = state.apply_ma_now_playing_prediction(
-            syncgroup_id,
+            state_key,
             _build_ma_prediction_patch(action, value),
             op_id=op_id,
             action=action,
             value=value,
+            accepted_at=result.get("accepted_at"),
+            ack_latency_ms=result.get("ack_latency_ms"),
         )
+        try:
+            refresh_fut = asyncio.run_coroutine_threadsafe(request_queue_refresh(target_queue_id), loop)
+            refresh_fut.result(timeout=1.0)
+        except Exception:
+            logger.debug("MA fast refresh request failed for %s", target_queue_id, exc_info=True)
         return jsonify(
             {
                 "success": True,
                 "op_id": op_id,
-                "syncgroup_id": syncgroup_id,
+                "syncgroup_id": state_key,
+                "queue_id": target_queue_id,
+                "accepted": True,
+                "accepted_at": result.get("accepted_at"),
+                "ack_latency_ms": result.get("ack_latency_ms"),
+                "confirmed": False,
                 "pending": True,
                 "ma_now_playing": predicted,
             }
         )
     except Exception as exc:
-        state.fail_ma_pending_op(syncgroup_id, op_id, str(exc))
+        state.fail_ma_pending_op(state_key or target_queue_id or "", op_id, str(exc))
         logger.exception("MA queue command '%s' failed", action)
         return jsonify(
             {"success": False, "error": "Internal error", "error_code": "internal_error", "op_id": op_id}

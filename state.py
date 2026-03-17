@@ -381,8 +381,10 @@ def _ensure_ma_sync_meta(data: dict | None) -> dict:
         "pending_ops": pending_ops,
         "stale": bool(meta.get("stale", False)),
         "last_event_at": meta.get("last_event_at"),
+        "last_accepted_at": meta.get("last_accepted_at"),
         "last_confirmed_at": meta.get("last_confirmed_at"),
         "last_command_at": meta.get("last_command_at"),
+        "last_ack_latency_ms": meta.get("last_ack_latency_ms"),
         "last_error": meta.get("last_error"),
         "source": meta.get("source", "unknown"),
     }
@@ -397,6 +399,10 @@ def _with_ma_sync_meta(snapshot: dict, *, previous: dict | None = None, source: 
     meta["source"] = source
     if meta.get("last_command_at") is None:
         meta["last_command_at"] = previous_meta.get("last_command_at")
+    if meta.get("last_accepted_at") is None:
+        meta["last_accepted_at"] = previous_meta.get("last_accepted_at")
+    if meta.get("last_ack_latency_ms") is None:
+        meta["last_ack_latency_ms"] = previous_meta.get("last_ack_latency_ms")
     if meta.get("last_error") is None:
         meta["last_error"] = previous_meta.get("last_error")
     return result
@@ -450,6 +456,8 @@ def set_ma_now_playing_for_group(syncgroup_id: str, data: dict) -> None:
         meta["stale"] = False
         meta["last_event_at"] = now
         meta["last_confirmed_at"] = now
+        meta["last_accepted_at"] = None
+        meta["last_ack_latency_ms"] = None
         meta["last_error"] = None
         _compose_pending_flag(meta)
         _ma_now_playing[syncgroup_id] = snapshot
@@ -470,6 +478,8 @@ def replace_ma_now_playing(new_data: dict[str, dict]) -> None:
             meta["stale"] = False
             meta["last_event_at"] = now
             meta["last_confirmed_at"] = now
+            meta["last_accepted_at"] = None
+            meta["last_ack_latency_ms"] = None
             meta["last_error"] = None
             _compose_pending_flag(meta)
             fresh[syncgroup_id] = snapshot
@@ -499,7 +509,16 @@ def set_ma_now_playing(data: dict) -> None:
     set_ma_now_playing_for_group(syncgroup_id, data)
 
 
-def apply_ma_now_playing_prediction(syncgroup_id: str, patch: dict, *, op_id: str, action: str, value=None) -> dict:
+def apply_ma_now_playing_prediction(
+    syncgroup_id: str,
+    patch: dict,
+    *,
+    op_id: str,
+    action: str,
+    value=None,
+    accepted_at: float | None = None,
+    ack_latency_ms: int | None = None,
+) -> dict:
     """Apply a predicted MA patch and mark it pending in the shared cache."""
     now = _time.time()
     with _ma_now_playing_lock:
@@ -510,6 +529,8 @@ def apply_ma_now_playing_prediction(syncgroup_id: str, patch: dict, *, op_id: st
         snapshot["connected"] = bool(snapshot.get("connected", True))
         meta = _ensure_ma_sync_meta(snapshot)
         meta["last_command_at"] = now
+        meta["last_accepted_at"] = accepted_at or now
+        meta["last_ack_latency_ms"] = ack_latency_ms
         meta["last_error"] = None
         meta["stale"] = False
         pending_ops = [op for op in meta["pending_ops"] if op.get("op_id") != op_id]
@@ -540,6 +561,7 @@ def fail_ma_pending_op(syncgroup_id: str, op_id: str, error: str) -> dict:
         meta["pending_ops"] = [op for op in meta["pending_ops"] if op.get("op_id") != op_id]
         meta["last_error"] = error
         meta["last_event_at"] = now
+        meta["last_ack_latency_ms"] = None
         _compose_pending_flag(meta)
         _ma_now_playing[syncgroup_id] = snapshot
         result = _copy_ma_snapshot(snapshot)

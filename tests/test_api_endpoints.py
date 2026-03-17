@@ -759,9 +759,22 @@ def test_ma_queue_cmd_returns_structured_predicted_state(client, monkeypatch):
 
     class _DoneFuture:
         def result(self, timeout=None):
-            return True
+            return {
+                "accepted": True,
+                "queue_id": "syncgroup_1",
+                "ack_latency_ms": 42,
+                "accepted_at": 123.45,
+            }
 
     async def _fake_send_queue_cmd(action, value, syncgroup_id):
+        return {
+            "accepted": True,
+            "queue_id": syncgroup_id,
+            "ack_latency_ms": 42,
+            "accepted_at": 123.45,
+        }
+
+    async def _fake_request_queue_refresh(syncgroup_id):
         return True
 
     def _fake_run_coroutine_threadsafe(coro, loop):
@@ -777,6 +790,7 @@ def test_ma_queue_cmd_returns_structured_predicted_state(client, monkeypatch):
     try:
         monkeypatch.setattr(state, "get_main_loop", lambda: object())
         monkeypatch.setattr(ma_monitor, "send_queue_cmd", _fake_send_queue_cmd)
+        monkeypatch.setattr(ma_monitor, "request_queue_refresh", _fake_request_queue_refresh)
         monkeypatch.setattr(ma_monitor, "get_monitor", lambda: _FakeMonitor())
         monkeypatch.setattr(api_ma.asyncio, "run_coroutine_threadsafe", _fake_run_coroutine_threadsafe)
 
@@ -789,16 +803,198 @@ def test_ma_queue_cmd_returns_structured_predicted_state(client, monkeypatch):
         assert resp.status_code == 200
         data = resp.get_json()
         assert data["success"] is True
+        assert data["accepted"] is True
+        assert data["accepted_at"] == 123.45
+        assert data["ack_latency_ms"] == 42
+        assert data["confirmed"] is False
         assert data["pending"] is True
         assert data["syncgroup_id"] == "syncgroup_1"
         assert data["ma_now_playing"]["shuffle"] is True
         assert data["ma_now_playing"]["_sync_meta"]["pending"] is True
+        assert data["ma_now_playing"]["_sync_meta"]["last_accepted_at"] == 123.45
         assert data["ma_now_playing"]["_sync_meta"]["pending_ops"][0]["action"] == "shuffle"
         assert data["op_id"]
     finally:
         state.clear_ma_now_playing()
         state.set_ma_groups({}, [])
         state.set_ma_connected(False)
+
+
+def test_ma_queue_cmd_prefers_player_queue_over_stale_group_id(client, monkeypatch):
+    import routes.api_ma as api_ma
+    import services.ma_monitor as ma_monitor
+    import state
+
+    class _FakeMonitor:
+        def is_connected(self):
+            return True
+
+    captured = {}
+
+    async def _fake_send_queue_cmd(action, value, syncgroup_id):
+        captured["action"] = action
+        captured["value"] = value
+        captured["syncgroup_id"] = syncgroup_id
+        return {
+            "accepted": True,
+            "queue_id": syncgroup_id,
+            "ack_latency_ms": 7,
+            "accepted_at": 456.78,
+        }
+
+    async def _fake_request_queue_refresh(syncgroup_id):
+        captured["refresh_syncgroup_id"] = syncgroup_id
+        return True
+
+    class _DoneFuture:
+        def __init__(self, result):
+            self._result = result
+
+        def result(self, timeout=None):
+            return self._result
+
+    def _fake_run_coroutine_threadsafe(coro, loop):
+        import asyncio
+
+        temp_loop = asyncio.new_event_loop()
+        try:
+            return _DoneFuture(temp_loop.run_until_complete(coro))
+        finally:
+            temp_loop.close()
+
+    state.set_ma_connected(True)
+    state.set_ma_groups({}, [{"id": "4fd07f70-5da7-4bbb-8d0a-d6fb1478e798", "name": "Living Room", "members": []}])
+    state.set_ma_now_playing_for_group(
+        "4fd07f70-5da7-4bbb-8d0a-d6fb1478e798",
+        {"syncgroup_id": "4fd07f70-5da7-4bbb-8d0a-d6fb1478e798", "shuffle": False, "connected": True},
+    )
+    try:
+        monkeypatch.setattr(state, "get_main_loop", lambda: object())
+        monkeypatch.setattr(ma_monitor, "send_queue_cmd", _fake_send_queue_cmd)
+        monkeypatch.setattr(ma_monitor, "request_queue_refresh", _fake_request_queue_refresh)
+        monkeypatch.setattr(ma_monitor, "get_monitor", lambda: _FakeMonitor())
+        monkeypatch.setattr(api_ma.asyncio, "run_coroutine_threadsafe", _fake_run_coroutine_threadsafe)
+
+        resp = client.post(
+            "/api/ma/queue/cmd",
+            data=json.dumps(
+                {
+                    "action": "repeat",
+                    "value": "all",
+                    "syncgroup_id": "sendspin-yandex-mini-2---lxc",
+                    "group_id": "4fd07f70-5da7-4bbb-8d0a-d6fb1478e798",
+                    "player_id": "sendspin-yandex-mini-2---lxc",
+                }
+            ),
+            content_type="application/json",
+        )
+
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert captured["syncgroup_id"] == "upsendspinyandexmini2lxc"
+        assert captured["refresh_syncgroup_id"] == "upsendspinyandexmini2lxc"
+        assert data["syncgroup_id"] == "sendspin-yandex-mini-2---lxc"
+        assert data["queue_id"] == "upsendspinyandexmini2lxc"
+    finally:
+        state.clear_ma_now_playing()
+        state.set_ma_groups({}, [])
+        state.set_ma_connected(False)
+
+
+def test_resolve_target_queue_uses_universal_player_queue_for_solo_sendspin_player():
+    import routes.api_ma as api_ma
+    import state
+
+    state.set_ma_groups({}, [])
+    try:
+        state_key, queue_id = api_ma._resolve_target_queue(
+            "4fd07f70-5da7-4bbb-8d0a-d6fb1478e798",
+            "sendspin-yandex-mini-2---lxc",
+            "4fd07f70-5da7-4bbb-8d0a-d6fb1478e798",
+        )
+    finally:
+        state.set_ma_groups({}, [])
+
+    assert state_key == "sendspin-yandex-mini-2---lxc"
+    assert queue_id == "upsendspinyandexmini2lxc"
+
+
+def test_resolve_target_queue_uses_ma_group_mapping_for_grouped_player():
+    import routes.api_ma as api_ma
+    import state
+
+    state.set_ma_groups(
+        {"sendspin-yandex-mini-2---lxc": {"id": "syncgroup_5zr8ss8g", "name": "Semdspin BT"}},
+        [{"id": "syncgroup_5zr8ss8g", "name": "Semdspin BT", "members": []}],
+    )
+    try:
+        state_key, queue_id = api_ma._resolve_target_queue(
+            None,
+            "sendspin-yandex-mini-2---lxc",
+            None,
+        )
+    finally:
+        state.set_ma_groups({}, [])
+
+    assert state_key == "syncgroup_5zr8ss8g"
+    assert queue_id == "syncgroup_5zr8ss8g"
+
+
+def test_resolve_target_queue_ignores_stale_syncgroup_id_for_solo_player():
+    import routes.api_ma as api_ma
+    import state
+
+    state.set_ma_groups(
+        {},
+        [
+            {
+                "id": "syncgroup_5zr8ss8g",
+                "name": "Semdspin BT",
+                "members": [{"id": "upsendspinlencols500haos", "name": "Lenco LS-500 @ HAOS"}],
+            }
+        ],
+    )
+    try:
+        state_key, queue_id = api_ma._resolve_target_queue(
+            "syncgroup_5zr8ss8g",
+            "sendspin-yandex-mini-2---lxc",
+            None,
+        )
+    finally:
+        state.set_ma_groups({}, [])
+
+    assert state_key == "sendspin-yandex-mini-2---lxc"
+    assert queue_id == "upsendspinyandexmini2lxc"
+
+
+def test_resolve_target_queue_infers_single_active_player_for_stale_page(monkeypatch):
+    import routes.api_ma as api_ma
+    import state
+
+    fake_client = SimpleNamespace(
+        player_id="sendspin-yandex-mini-2---lxc",
+        status={"server_connected": True},
+        is_running=lambda: True,
+    )
+
+    state.set_ma_groups(
+        {},
+        [
+            {
+                "id": "syncgroup_5zr8ss8g",
+                "name": "Semdspin BT",
+                "members": [{"id": "upsendspinlencols500haos", "name": "Lenco LS-500 @ HAOS"}],
+            }
+        ],
+    )
+    monkeypatch.setattr(state, "get_clients_snapshot", lambda: [fake_client])
+    try:
+        state_key, queue_id = api_ma._resolve_target_queue("syncgroup_5zr8ss8g", None, None)
+    finally:
+        state.set_ma_groups({}, [])
+
+    assert state_key == "sendspin-yandex-mini-2---lxc"
+    assert queue_id == "upsendspinyandexmini2lxc"
 
 
 def test_ma_queue_cmd_returns_503_when_monitor_unavailable(client, monkeypatch):

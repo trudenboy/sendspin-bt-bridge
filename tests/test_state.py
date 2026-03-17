@@ -148,6 +148,7 @@ def test_apply_ma_now_playing_prediction_marks_entry_pending_until_confirmed():
     assert predicted["shuffle_enabled"] is True
     assert predicted_meta["pending"] is True
     assert predicted_meta["pending_ops"][0]["op_id"] == "op-1"
+    assert predicted_meta["last_accepted_at"] is not None
     assert predicted_meta["source"] == "predicted"
 
     state.replace_ma_now_playing(
@@ -166,6 +167,7 @@ def test_apply_ma_now_playing_prediction_marks_entry_pending_until_confirmed():
     assert confirmed_meta["pending"] is False
     assert confirmed_meta["pending_ops"] == []
     assert confirmed_meta["stale"] is False
+    assert confirmed_meta["last_accepted_at"] is None
     assert confirmed_meta["source"] == "monitor"
     assert confirmed_meta["last_command_at"] is not None
 

@@ -2326,6 +2326,13 @@ body {
             border-color: rgba(44, 110, 203, 0.34);
             color: var(--primary-color);
         }
+        .list-player-transport-btn:disabled,
+        .transport-btn:disabled {
+            opacity: 0.46;
+            cursor: not-allowed;
+            pointer-events: none;
+            box-shadow: none;
+        }
         .list-player-transport-btn.repeat-one,
         .transport-btn.repeat-one {
             position: relative;
@@ -3572,7 +3579,6 @@ body {
             background: rgba(3, 169, 244, 0.12);
             border-color: var(--primary-color); color: var(--primary-color);
         }
-
         /* Shuffle/repeat — visible only when MA active */
         .transport-btn[id^="dma-shuffle-"],
         .transport-btn[id^="dma-repeat-"] { display: none !important; }

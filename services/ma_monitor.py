@@ -224,6 +224,7 @@ class MaMonitor:
         self._loop: asyncio.AbstractEventLoop | None = None
         self._pending_queue_refresh = False
         self._pending_groups_refresh = False
+        self._wake_event = asyncio.Event()
 
     def _next_id(self) -> int:
         return next(self._msg_id)
@@ -274,7 +275,18 @@ class MaMonitor:
         loop = asyncio.get_running_loop()
         fut: asyncio.Future = loop.create_future()
         await self._cmd_queue.put((command, args, fut))
+        self._wake_event.set()
         return await asyncio.wait_for(fut, timeout=3.0)
+
+    async def request_queue_refresh(self, syncgroup_id: str | None = None) -> bool:
+        """Wake the monitor and refresh queue state as soon as possible."""
+        if not self._running or self._ws is None:
+            return False
+        if syncgroup_id:
+            logger.debug("MA monitor: fast queue refresh requested for %s", syncgroup_id)
+        self._pending_queue_refresh = True
+        self._wake_event.set()
+        return True
 
     async def _drain_cmd_queue(self, ws) -> None:
         """Process any pending commands from the command queue."""
@@ -302,10 +314,14 @@ class MaMonitor:
                 else:
                     if not fut.done():
                         fut.set_exception(TimeoutError(f"No matching response for {command}"))
-                await self._flush_deferred_updates(ws)
             except Exception as e:
                 if not fut.done():
                     fut.set_exception(e)
+
+    async def _process_local_work(self, ws) -> None:
+        """Handle queued commands and deferred refreshes immediately."""
+        await self._drain_cmd_queue(ws)
+        await self._flush_deferred_updates(ws)
 
     async def _send_queue_cmd(self, ws, command: str, args: dict) -> dict:
         return await self._request_command(ws, command, args)
@@ -600,25 +616,44 @@ class MaMonitor:
         _groups_deadline = time.monotonic() + _GROUPS_REFRESH_INTERVAL
         while self._running:
             try:
-                # Drain any pending commands before waiting for events
-                await self._drain_cmd_queue(ws)
+                await self._process_local_work(ws)
 
-                timeout = max(0.5, _poll_deadline - time.monotonic())
-                try:
-                    msg = await asyncio.wait_for(ws.recv(), timeout=timeout)
-                except TimeoutError:
-                    # Periodic re-poll to keep elapsed_time fresh
-                    await self._poll_queues(ws)
-                    _poll_deadline = time.monotonic() + _POLL_INTERVAL
-                    # Periodic group refresh
-                    if time.monotonic() >= _groups_deadline:
+                now = time.monotonic()
+                next_deadline = min(_poll_deadline, _groups_deadline)
+                timeout = max(0.5, next_deadline - now)
+
+                recv_task = asyncio.create_task(ws.recv())
+                wake_task = asyncio.create_task(self._wake_event.wait())
+                timer_task = asyncio.create_task(asyncio.sleep(timeout))
+                done, pending = await asyncio.wait(
+                    {recv_task, wake_task, timer_task},
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+
+                for task in pending:
+                    task.cancel()
+                if pending:
+                    await asyncio.gather(*pending, return_exceptions=True)
+
+                if wake_task in done:
+                    self._wake_event.clear()
+                    await self._process_local_work(ws)
+                    continue
+
+                if timer_task in done:
+                    now = time.monotonic()
+                    if now >= _poll_deadline:
+                        await self._poll_queues(ws)
+                        _poll_deadline = time.monotonic() + _POLL_INTERVAL
+                    if now >= _groups_deadline:
                         await self._refresh_groups_via_ws(ws)
                         _groups_deadline = time.monotonic() + _GROUPS_REFRESH_INTERVAL
                     continue
 
+                msg = recv_task.result()
                 data = json.loads(msg)
                 event = data.get("event")
-                if event in ("player_queue_updated",):
+                if event == "player_queue_updated":
                     self._defer_incoming_event(event)
                     await self._flush_deferred_updates(ws)
                     _poll_deadline = time.monotonic() + _POLL_INTERVAL
@@ -633,9 +668,14 @@ class MaMonitor:
     async def _polling_loop(self, ws) -> None:
         """Fallback: poll every POLL_INTERVAL seconds."""
         while self._running:
-            await self._drain_cmd_queue(ws)
-            await asyncio.sleep(_POLL_INTERVAL)
-            await self._poll_queues(ws)
+            await self._process_local_work(ws)
+            try:
+                await asyncio.wait_for(self._wake_event.wait(), timeout=_POLL_INTERVAL)
+                self._wake_event.clear()
+                await self._process_local_work(ws)
+                continue
+            except TimeoutError:
+                await self._poll_queues(ws)
 
     async def run(self) -> None:
         """Main entry point — reconnect loop with exponential backoff."""
@@ -702,12 +742,12 @@ def start_monitor(ma_url: str, ma_token: str) -> MaMonitor:
     return _monitor_instance
 
 
-async def send_queue_cmd(action: str, value=None, syncgroup_id: str | None = None) -> bool:
+async def send_queue_cmd(action: str, value=None, syncgroup_id: str | None = None) -> dict:
     """Send a queue command through the persistent MA monitor only.
 
     Supported actions: next, previous, shuffle, repeat, seek.
     syncgroup_id: target specific group; falls back to first known group.
-    Returns True on success.
+    Returns metadata describing MA acknowledgement on success.
     """
     groups = _state.get_ma_groups()
     if not groups:
@@ -718,38 +758,51 @@ async def send_queue_cmd(action: str, value=None, syncgroup_id: str | None = Non
     else:
         queue_id = groups[0]["id"]  # fallback: first syncgroup
 
-    # Build the command + args
-    _QUEUE_ACTIONS: dict[str, tuple[str, dict]] = {
-        "next": ("player_queues/next", {"queue_id": queue_id}),
-        "previous": ("player_queues/previous", {"queue_id": queue_id}),
-        "shuffle": ("player_queues/shuffle", {"queue_id": queue_id, "shuffle_enabled": bool(value)}),
-        "repeat": ("player_queues/repeat", {"queue_id": queue_id, "repeat_mode": str(value)}),
-        "seek": ("player_queues/seek", {"queue_id": queue_id, "position": int(value) if value is not None else 0}),
-    }
-    if action not in _QUEUE_ACTIONS:
+    if action == "next":
+        command, args = "player_queues/next", {"queue_id": queue_id}
+    elif action == "previous":
+        command, args = "player_queues/previous", {"queue_id": queue_id}
+    elif action == "shuffle":
+        command, args = "player_queues/shuffle", {"queue_id": queue_id, "shuffle_enabled": bool(value)}
+    elif action == "repeat":
+        command, args = "player_queues/repeat", {"queue_id": queue_id, "repeat_mode": str(value)}
+    elif action == "seek":
+        command, args = "player_queues/seek", {"queue_id": queue_id, "position": int(value) if value is not None else 0}
+    else:
         logger.warning("Unknown MA queue action: %s", action)
-        return False
-    command: str
-    args: dict
-    command, args = _QUEUE_ACTIONS[action]  # type: ignore[assignment]
+        return {"accepted": False, "queue_id": queue_id, "error": "unknown action"}
 
     mon = _monitor_instance
     if mon is None or not mon.is_connected():
         logger.info("MA queue cmd skipped: monitor unavailable for %s → %s", action, queue_id)
-        return False
+        return {"accepted": False, "queue_id": queue_id, "error": "monitor unavailable"}
 
     try:
         started = time.monotonic()
         resp = await mon.execute_cmd(command, args)
+        accepted_at = time.time()
         latency_ms = int((time.monotonic() - started) * 1000)
         if resp.get("error") is None:
             logger.info("MA queue cmd (monitor): %s value=%s → %s ack=%dms", action, value, queue_id, latency_ms)
-            return True
+            return {
+                "accepted": True,
+                "queue_id": queue_id,
+                "ack_latency_ms": latency_ms,
+                "accepted_at": accepted_at,
+            }
         logger.warning("MA queue cmd rejected: %s value=%s → %s resp=%s", action, value, queue_id, resp)
     except Exception as exc:
         logger.warning("MA queue cmd %s failed via monitor: %s", action, exc)
+        return {"accepted": False, "queue_id": queue_id, "error": str(exc)}
+    return {"accepted": False, "queue_id": queue_id, "error": "command rejected"}
+
+
+async def request_queue_refresh(syncgroup_id: str | None = None) -> bool:
+    """Ask the persistent MA monitor to refresh queue state immediately."""
+    mon = _monitor_instance
+    if mon is None or not mon.is_connected():
         return False
-    return False
+    return await mon.request_queue_refresh(syncgroup_id)
 
 
 async def send_player_cmd(command: str, args: dict) -> bool:

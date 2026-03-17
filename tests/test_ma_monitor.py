@@ -6,6 +6,8 @@ from urllib.parse import parse_qs, urlparse
 
 import pytest
 
+import services.ma_monitor as ma_monitor
+import state
 from services.ma_monitor import MaMonitor, _build_now_playing, _hydrate_missing_queue_neighbors
 
 
@@ -159,3 +161,66 @@ async def test_request_command_flushes_interleaved_queue_event(monkeypatch):
     assert response["result"]["ok"] is True
     assert sent[0]["command"] == "player_queues/next"
     assert poll_calls == ["poll"]
+
+
+@pytest.mark.asyncio
+async def test_request_queue_refresh_sets_pending_flag_and_wake_event():
+    monitor = MaMonitor("http://ma:8095", "token")
+    monitor._running = True
+    monitor._ws = object()
+
+    ok = await monitor.request_queue_refresh("syncgroup_1")
+
+    assert ok is True
+    assert monitor._pending_queue_refresh is True
+    assert monitor._wake_event.is_set() is True
+
+
+@pytest.mark.asyncio
+async def test_send_queue_cmd_returns_ack_metadata(monkeypatch):
+    monitor = MaMonitor("http://ma:8095", "token")
+    monitor._running = True
+    monitor._ws = object()
+
+    async def _fake_execute_cmd(command: str, args: dict) -> dict:
+        assert command == "player_queues/next"
+        assert args == {"queue_id": "syncgroup_1"}
+        return {"result": {"ok": True}}
+
+    monkeypatch.setattr(monitor, "execute_cmd", _fake_execute_cmd)
+    monkeypatch.setattr(ma_monitor, "_monitor_instance", monitor)
+    state.set_ma_groups({}, [{"id": "syncgroup_1", "name": "Kitchen", "members": []}])
+    try:
+        result = await ma_monitor.send_queue_cmd("next", None, "syncgroup_1")
+    finally:
+        ma_monitor._monitor_instance = None
+        state.set_ma_groups({}, [])
+
+    assert result["accepted"] is True
+    assert result["queue_id"] == "syncgroup_1"
+    assert isinstance(result["ack_latency_ms"], int)
+    assert result["accepted_at"] is not None
+
+
+@pytest.mark.asyncio
+async def test_send_queue_cmd_repeat_does_not_evaluate_seek_payload(monkeypatch):
+    monitor = MaMonitor("http://ma:8095", "token")
+    monitor._running = True
+    monitor._ws = object()
+
+    async def _fake_execute_cmd(command: str, args: dict) -> dict:
+        assert command == "player_queues/repeat"
+        assert args == {"queue_id": "syncgroup_1", "repeat_mode": "all"}
+        return {"result": {"ok": True}}
+
+    monkeypatch.setattr(monitor, "execute_cmd", _fake_execute_cmd)
+    monkeypatch.setattr(ma_monitor, "_monitor_instance", monitor)
+    state.set_ma_groups({}, [{"id": "syncgroup_1", "name": "Kitchen", "members": []}])
+    try:
+        result = await ma_monitor.send_queue_cmd("repeat", "all", "syncgroup_1")
+    finally:
+        ma_monitor._monitor_instance = None
+        state.set_ma_groups({}, [])
+
+    assert result["accepted"] is True
+    assert result["queue_id"] == "syncgroup_1"

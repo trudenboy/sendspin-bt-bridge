@@ -642,9 +642,46 @@ function _getReleaseBadgeInnerHtml(releaseMeta) {
         '<span class="meta-badge-label">' + escHtml(releaseMeta.label) + '</span>';
 }
 
+function _getMaSyncMeta(snapshot) {
+    return (snapshot && snapshot._sync_meta) || {};
+}
+
+function _getPendingMaSummary(meta) {
+    var pendingOps = Array.isArray(meta.pending_ops) ? meta.pending_ops : [];
+    var op = pendingOps.length ? pendingOps[0] : {};
+    var action = op.action || 'command';
+    if (action === 'next') return 'Skipping to the next track';
+    if (action === 'previous') return 'Returning to the previous track';
+    if (action === 'shuffle') return 'Updating shuffle mode';
+    if (action === 'repeat') return 'Updating repeat mode';
+    if (action === 'seek') return 'Seeking to the new position';
+    return 'Waiting for Music Assistant confirmation';
+}
+
+function _hasPendingMaAction(meta, action) {
+    var pendingOps = Array.isArray(meta.pending_ops) ? meta.pending_ops : [];
+    return pendingOps.some(function(op) { return op && op.action === action; });
+}
+
+function _isQueueTransportActionPending(meta) {
+    var pendingOps = Array.isArray(meta.pending_ops) ? meta.pending_ops : [];
+    return pendingOps.some(function(op) {
+        var action = op && op.action;
+        return action === 'next' || action === 'previous' || action === 'shuffle' || action === 'repeat' || action === 'seek';
+    });
+}
+
+function _buildQueueActionTitle(baseTitle, pending, queueReadyTitle, pendingSummary) {
+    if (queueReadyTitle) return queueReadyTitle;
+    if (pending) return baseTitle + ' — ' + (pendingSummary || 'Waiting for Music Assistant confirmation');
+    return baseTitle;
+}
+
 function getUnifiedDeviceStatusMeta(dev) {
     var safeDev = dev || {};
-    var maState = (safeDev.ma_now_playing || {}).state;
+    var ma = safeDev.ma_now_playing || {};
+    var maMeta = _getMaSyncMeta(ma);
+    var maState = ma.state;
     var maPlaying = maState === 'playing';
     var tone = 'neutral';
     var key = 'ready';
@@ -668,6 +705,12 @@ function getUnifiedDeviceStatusMeta(dev) {
         label = 'No sink';
         tone = 'error';
         summary = 'Connected, waiting for audio sink';
+    } else if (maMeta.pending && safeDev.server_connected && deviceHasSink(safeDev)) {
+        key = 'ma-pending';
+        label = 'Applying';
+        tone = 'warning';
+        summary = _getPendingMaSummary(maMeta);
+        pulse = true;
     } else if (safeDev.playing && safeDev.audio_streaming) {
         key = 'playing';
         label = 'Playing';
@@ -1684,9 +1727,15 @@ function _getDeviceTransportState(dev, mediaState) {
     var safeDev = dev || {};
     var media = mediaState || _getDeviceNowPlayingState(safeDev, null);
     var ma = media.ma || {};
+    var maMeta = _getMaSyncMeta(ma);
     var hasSink = deviceHasSink(safeDev);
     var hasSendspin = !!safeDev.server_connected;
     var hasMaApi = !!ma.connected;
+    var queueUnavailableTitle = !hasSendspin ? 'Sendspin not connected' : 'Music Assistant API not connected';
+    var pendingSummary = _getPendingMaSummary(maMeta);
+    var queueActionPending = _isQueueTransportActionPending(maMeta);
+    var shufflePending = _hasPendingMaAction(maMeta, 'shuffle');
+    var repeatPending = _hasPendingMaAction(maMeta, 'repeat');
     return {
         hasSink: hasSink,
         canTransport: hasSendspin,
@@ -1695,9 +1744,34 @@ function _getDeviceTransportState(dev, mediaState) {
         shuffle: !!ma.shuffle,
         repeat: ma.repeat || 'off',
         transportUnavailableTitle: hasSendspin ? '' : 'Sendspin not connected',
-        queueUnavailableTitle: !hasSendspin ? 'Sendspin not connected' : 'Music Assistant API not connected',
+        queueUnavailableTitle: queueUnavailableTitle,
         muteUnavailableTitle: hasSink ? '' : 'Audio sink not configured',
+        pendingSummary: pendingSummary,
+        queueActionPending: queueActionPending,
+        shufflePending: shufflePending,
+        repeatPending: repeatPending,
+        shuffleTitle: _buildQueueActionTitle(
+            ma.shuffle ? 'Shuffle on — click to disable' : 'Shuffle off — click to enable',
+            queueActionPending,
+            !!(hasSendspin && hasMaApi) ? '' : queueUnavailableTitle,
+            pendingSummary
+        ),
+        repeatTitle: _buildQueueActionTitle(
+            'Repeat: ' + (ma.repeat || 'off') + ' — click to cycle',
+            queueActionPending,
+            !!(hasSendspin && hasMaApi) ? '' : queueUnavailableTitle,
+            pendingSummary
+        ),
     };
+}
+
+function _getMaQueueTargetId(dev) {
+    if (!dev) return '';
+    if (dev.ma_syncgroup_id) return String(dev.ma_syncgroup_id);
+    if (dev.group_id) return String(dev.group_id);
+    var ma = dev.ma_now_playing || {};
+    if (ma.syncgroup_id) return String(ma.syncgroup_id);
+    return '';
 }
 
 function _renderTransportButtonHtml(button) {
@@ -1731,7 +1805,7 @@ function _renderPlaybackTransportButtonsHtml(i, transportState, options) {
             onclick: kind === 'repeat' ? 'maCycleRepeat(' + i + ')' : 'maQueueCmd(\'' + kind + '\', undefined, ' + i + ')',
             title: resolvedTitle,
             iconHtml: iconHtml,
-            disabled: !state.hasQueueControls && !!opts.disableWhenInactive,
+            disabled: (!state.hasQueueControls && !!opts.disableWhenInactive) || (!!state.hasQueueControls && !!state.queueActionPending),
             hidden: !state.hasQueueControls && !!opts.hideModeButtonsWhenInactive,
         }));
     };
@@ -1742,14 +1816,14 @@ function _renderPlaybackTransportButtonsHtml(i, transportState, options) {
             className: baseClass,
             id: 'dma-' + kind + '-' + i,
             onclick: 'maQueueCmd(\'' + (kind === 'prev' ? 'previous' : 'next') + '\', undefined, ' + i + ')',
-            title: resolvedTitle,
+            title: _buildQueueActionTitle(resolvedTitle, state.queueActionPending, !state.hasQueueControls ? state.queueUnavailableTitle : '', state.pendingSummary),
             iconHtml: iconHtml,
-            disabled: !state.hasQueueControls && !!opts.disableWhenInactive,
+            disabled: (!state.hasQueueControls && !!opts.disableWhenInactive) || (!!state.hasQueueControls && !!state.queueActionPending),
             hidden: !state.hasQueueControls,
         }));
     };
     if (opts.modeFirst) {
-        pushModeButton('shuffle', 'Shuffle', '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg>', state.hasQueueControls && state.shuffle);
+        pushModeButton('shuffle', state.shuffleTitle, '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg>', state.hasQueueControls && state.shuffle);
     }
     pushPrevNextButton('prev', opts.prevTitle || 'Previous', '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>');
     buttons.push(_renderTransportButtonHtml({
@@ -1764,9 +1838,9 @@ function _renderPlaybackTransportButtonsHtml(i, transportState, options) {
         hidden: false,
     }));
     pushPrevNextButton('next', opts.nextTitle || 'Next', '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>');
-    pushModeButton('repeat', state.hasQueueControls ? 'Repeat: ' + state.repeat + ' (click to cycle)' : 'Repeat', '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg>', state.hasQueueControls && state.repeat !== 'off');
+    pushModeButton('repeat', state.repeatTitle, '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg>', state.hasQueueControls && state.repeat !== 'off');
     if (!opts.modeFirst) {
-        pushModeButton('shuffle', 'Shuffle', '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg>', state.hasQueueControls && state.shuffle);
+        pushModeButton('shuffle', state.shuffleTitle, '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg>', state.hasQueueControls && state.shuffle);
     }
     return buttons.join('');
 }
@@ -2460,19 +2534,19 @@ function populateDeviceCard(i, dev) {
     var maRepeatBtn = document.getElementById('dma-repeat-' + i);
     if (prevBtn) {
         prevBtn.style.display = transportState.hasQueueControls ? '' : 'none';
-        prevBtn.disabled = !transportState.hasQueueControls;
-        prevBtn.title = transportState.hasQueueControls ? 'Previous track' : transportState.queueUnavailableTitle;
+        prevBtn.disabled = !transportState.hasQueueControls || !!transportState.queueActionPending;
+        prevBtn.title = _buildQueueActionTitle('Previous track', transportState.queueActionPending, !transportState.hasQueueControls ? transportState.queueUnavailableTitle : '', transportState.pendingSummary);
     }
     if (nextBtn) {
         nextBtn.style.display = transportState.hasQueueControls ? '' : 'none';
-        nextBtn.disabled = !transportState.hasQueueControls;
-        nextBtn.title = transportState.hasQueueControls ? 'Next track' : transportState.queueUnavailableTitle;
+        nextBtn.disabled = !transportState.hasQueueControls || !!transportState.queueActionPending;
+        nextBtn.title = _buildQueueActionTitle('Next track', transportState.queueActionPending, !transportState.hasQueueControls ? transportState.queueUnavailableTitle : '', transportState.pendingSummary);
     }
     if (maShuffleBtn) {
         maShuffleBtn.classList.toggle('ma-ready', transportState.hasQueueControls);
         maShuffleBtn.classList.toggle('active', transportState.hasQueueControls && transportState.shuffle);
-        maShuffleBtn.disabled = !transportState.hasQueueControls;
-        maShuffleBtn.title = transportState.hasQueueControls ? 'Shuffle' : transportState.queueUnavailableTitle;
+        maShuffleBtn.disabled = !transportState.hasQueueControls || !!transportState.queueActionPending;
+        maShuffleBtn.title = transportState.shuffleTitle;
         maShuffleBtn.style.opacity = transportState.hasQueueControls ? '' : '0.35';
     }
     if (maRepeatBtn) {
@@ -2480,10 +2554,8 @@ function populateDeviceCard(i, dev) {
         maRepeatBtn.classList.toggle('active', transportState.hasQueueControls && transportState.repeat !== 'off');
         maRepeatBtn.classList.toggle('repeat-all', transportState.hasQueueControls && transportState.repeat === 'all');
         maRepeatBtn.classList.toggle('repeat-one', transportState.hasQueueControls && transportState.repeat === 'one');
-        maRepeatBtn.title = transportState.hasQueueControls
-            ? 'Repeat: ' + transportState.repeat + ' (click to cycle)'
-            : transportState.queueUnavailableTitle;
-        maRepeatBtn.disabled = !transportState.hasQueueControls;
+        maRepeatBtn.title = transportState.repeatTitle;
+        maRepeatBtn.disabled = !transportState.hasQueueControls || !!transportState.queueActionPending;
         maRepeatBtn.style.opacity = transportState.hasQueueControls ? '' : '0.35';
     }
 
@@ -3091,7 +3163,10 @@ async function maQueueCmd(action, value, devIdx) {
     var body = {action: action};
     if (value !== undefined) body.value = value;
     if (dev) {
-        if (ma.syncgroup_id) body.syncgroup_id = ma.syncgroup_id;
+        var targetId = _getMaQueueTargetId(dev);
+        if (targetId) body.syncgroup_id = targetId;
+        if (dev.player_id) body.player_id = dev.player_id;
+        if (dev.group_id) body.group_id = dev.group_id;
         if (action === 'shuffle' && value === undefined) body.value = !ma.shuffle;
     }
 
@@ -3111,6 +3186,7 @@ async function maQueueCmd(action, value, devIdx) {
         }
     } catch (err) {
         console.warn('MA queue cmd failed:', err);
+        showToast('Music Assistant command failed: ' + (err && err.message ? err.message : 'Unknown error'), 'error');
     }
     finally { if (btnId) _unlockBtn(btnId); }
 }
