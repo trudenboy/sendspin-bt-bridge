@@ -22,6 +22,7 @@ The subprocess exits with code 0 on clean stop, non-zero on error.
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 import logging
 import os
@@ -155,6 +156,15 @@ def _setup_logging() -> None:
 # ---------------------------------------------------------------------------
 
 _last_status_json: str = ""
+
+
+def _filter_supported_daemon_args_kwargs(daemon_args_cls, kwargs: dict[str, object]) -> dict[str, object]:
+    """Keep only kwargs supported by the installed sendspin DaemonArgs signature."""
+    try:
+        supported = inspect.signature(daemon_args_cls).parameters
+    except (TypeError, ValueError):
+        return dict(kwargs)
+    return {key: value for key, value in kwargs.items() if key in supported}
 
 
 def _str_default(obj) -> str:
@@ -389,17 +399,25 @@ async def _run(params: dict) -> None:
         except Exception as e:
             logger.warning("[%s] Invalid preferred_format %r: %s", player_name, preferred_format_str, e)
 
+    daemon_kwargs = _filter_supported_daemon_args_kwargs(
+        DaemonArgs,
+        {
+            "audio_device": audio_device,
+            "client_id": client_id,
+            "client_name": player_name,
+            "settings": settings,
+            "url": server_url,
+            "static_delay_ms": static_delay_ms,
+            "listen_port": listen_port,
+            "use_mpris": False,
+            "use_hardware_volume": False,
+            "preferred_format": preferred_fmt,
+        },
+    )
+    if "use_hardware_volume" not in daemon_kwargs:
+        logger.info("[%s] Installed sendspin DaemonArgs has no use_hardware_volume; skipping compat kwarg", player_name)
     args = DaemonArgs(
-        audio_device=audio_device,
-        client_id=client_id,
-        client_name=player_name,
-        settings=settings,
-        url=server_url,
-        static_delay_ms=static_delay_ms,
-        listen_port=listen_port,
-        use_mpris=False,
-        use_hardware_volume=False,
-        preferred_format=preferred_fmt,
+        **daemon_kwargs,
     )
 
     status: dict = {

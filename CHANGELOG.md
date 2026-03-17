@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.32.9] - 2026-03-17
+
+### Fixed
+- Home Assistant add-on startup no longer crashes on environments where the installed `sendspin` package removed the `use_hardware_volume` argument from `DaemonArgs`
+- The daemon subprocess now filters its startup kwargs against the installed `DaemonArgs` signature, so the bridge remains compatible across `sendspin` builds instead of failing before any player comes up
+
+### Added
+- Regression coverage for daemon-argument compatibility filtering so unsupported kwargs are dropped while still preserving supported ones
+
 ## [2.32.8] - 2026-03-17
 
 ### Changed

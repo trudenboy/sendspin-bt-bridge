@@ -49,6 +49,7 @@ for _mod in _STUB_MODULES:
 from services.daemon_process import (  # noqa: E402
     _VALID_LOG_LEVELS,
     _emit_status,
+    _filter_supported_daemon_args_kwargs,
     _read_commands,
 )
 
@@ -150,6 +151,46 @@ def test_client_id_path_fallback_on_escape():
     if not resolved.startswith("/tmp/"):
         settings_dir = f"/tmp/sendspin-{safe_id}"
     assert settings_dir.startswith("/tmp/")
+
+
+def test_filter_supported_daemon_args_kwargs_drops_unknown_fields():
+    class FakeDaemonArgs:
+        def __init__(self, audio_device, client_id, use_mpris=False):
+            pass
+
+    filtered = _filter_supported_daemon_args_kwargs(
+        FakeDaemonArgs,
+        {
+            "audio_device": "default",
+            "client_id": "player-1",
+            "use_mpris": False,
+            "use_hardware_volume": False,
+        },
+    )
+
+    assert filtered == {
+        "audio_device": "default",
+        "client_id": "player-1",
+        "use_mpris": False,
+    }
+
+
+def test_filter_supported_daemon_args_kwargs_preserves_supported_fields():
+    class FakeDaemonArgs:
+        def __init__(self, audio_device, client_id, use_mpris=False, use_hardware_volume=False):
+            pass
+
+    filtered = _filter_supported_daemon_args_kwargs(
+        FakeDaemonArgs,
+        {
+            "audio_device": "default",
+            "client_id": "player-1",
+            "use_mpris": False,
+            "use_hardware_volume": False,
+        },
+    )
+
+    assert filtered["use_hardware_volume"] is False
 
 
 # ── _emit_status dedup ──────────────────────────────────────────────────

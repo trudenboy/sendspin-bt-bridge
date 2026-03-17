@@ -2,7 +2,21 @@
 
 A history of the architectural and functional evolution of sendspin-bt-bridge — for readers familiar with Home Assistant, Music Assistant, and multiroom audio setups.
 
-**Period:** January 1 – March 17, 2026 · **Total commits:** ~969 · **Versions:** 1.0.0 → 2.32.8
+**Period:** January 1 – March 17, 2026 · **Total commits:** ~970 · **Versions:** 1.0.0 → 2.32.9
+
+---
+
+## March 17, 2026 — HA add-on startup compatibility hotfix for `DaemonArgs` drift (v2.32.9)
+
+The `2.32.9` release is a narrow but important follow-up hotfix to `2.32.8`. The bridge itself did not regress in its Music Assistant routing logic, but the Home Assistant add-on could fail before it even brought up any player subprocesses. The root cause was a packaging boundary problem: our daemon launcher still assumed that `sendspin.daemon.daemon.DaemonArgs` accepted `use_hardware_volume`, while the installed `sendspin` version in at least some HA add-on environments no longer exposed that keyword.
+
+Three things matter in this release:
+
+- **Startup compatibility over strict kwarg assumptions** — the daemon subprocess now builds its `DaemonArgs` payload defensively, filtering the startup kwargs against the signature actually provided by the installed `sendspin` package. If an older or newer `sendspin` build omits a field like `use_hardware_volume`, the bridge skips that kwarg instead of crashing during startup.
+- **HA add-on recovery from immediate boot failure** — this is specifically a boot-path fix. It restores the add-on’s ability to start after the `2.32.8` update in environments where the packaged `sendspin` API surface drifted away from the bridge’s expectations.
+- **Regression coverage for compatibility filtering** — the release adds tests around the kwarg-filtering behavior so that future Sendspin API drift is more likely to surface as a targeted test failure than as a production startup crash.
+
+This is the kind of release that exists to reintroduce boring reliability: no UI changes, no new transport semantics, just a tighter compatibility boundary between the bridge and the packaged daemon API it depends on.
 
 ---
 
