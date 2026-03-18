@@ -1,0 +1,2220 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [2.40.5-rc.1] - 2026-03-18
+
+### Fixed
+- Solo-player Music Assistant transport controls now keep working on live Proxmox/LXC deployments even when MA syncgroup discovery is empty, because queue commands now respect an explicit solo queue ID instead of requiring `ma_groups` to be populated first
+
+### Changed
+- Header version badges and discovered-update badges now highlight prerelease channels directly in the UI: RC builds use yellow styling and beta builds use red styling
+
+## [2.40.4] - 2026-03-18
+
+### Added
+- Release pipelines now smoke-test the packaged runtime inside built images before publication, catching missing runtime modules and HA translation regressions before they reach the Home Assistant add-on store
+
+### Changed
+- Home Assistant channel publishing is now designed around this repository itself, with the stable addon kept in `ha-addon/` and prerelease addon directories synced as `ha-addon-rc/` / `ha-addon-beta/` when those tags exist, while the stable slug stays unchanged
+- Add-on docs and update guidance now clearly separate the installed addon track from the in-app `update_channel` preference
+
+### Fixed
+- Music Assistant controls no longer fail with `no queue available` for solo Sendspin players on MA `2.7.11` stable because queue commands now target the modern solo-player queue IDs exposed by newer MA builds
+
+## [2.40.3] - 2026-03-18
+
+### Fixed
+- Add-on images now copy all top-level Python modules from the repository root instead of a hand-maintained file list, fixing the `bridge_orchestrator` startup failure that remained after `2.40.2`
+- HA startup diagnostics now report the persistent `/data/config.json` path correctly during addon boot instead of warning about a missing `/config/config.json`
+
+## [2.40.2] - 2026-03-18
+
+### Fixed
+- Add-on startup no longer fails during `/data/options.json` translation after the `2.40.1` update; the translator now resolves shared config helpers correctly when Home Assistant launches it as a direct script from `/app/scripts`
+
+## [2.40.1] - 2026-03-18
+
+### Added
+- Add-on options now expose an `update_channel` selector with `stable`, `rc`, and `beta` values, and the option is translated and propagated into the runtime config used by the bridge
+
+### Changed
+- Add-on update/help surfaces now understand channel-specific update intent so the standalone bridge API can warn when `rc` or `beta` is selected and explain the Home Assistant channel limitations more accurately
+- Release/publish automation is now split into stable, rc, and beta lanes so add-on-adjacent images and prerelease metadata follow the same distribution model as the standalone bridge
+
+## [2.40.0] - 2026-03-18
+
+### Added
+- Repository `ROADMAP.md` and execution-backlog documentation now track the delivered `2.33.x`-`2.40.x` architecture waves alongside the addon release
+- Status/read-model snapshots now expose per-device `health_summary`, `recent_events`, startup progress, and runtime/mock metadata across the web UI support surfaces
+- Structured config validation for config upload, config save, and dry-run validation so operators can catch malformed payloads before persisting changes
+- A dedicated onboarding diagnostics assistant with actionable guidance for Bluetooth availability, sink readiness, Music Assistant auth state, and latency calibration
+
+### Changed
+- Bridge startup and shutdown are now coordinated through the extracted `BridgeOrchestrator`, which incrementally absorbed runtime bootstrap, device initialization, Music Assistant bootstrap, task assembly, and lifecycle sequencing without changing addon-facing behavior
+- Bridge runtime internals are now split across explicit lifecycle, MA integration, subprocess IPC, subprocess command, subprocess stop, playback-health, and event-builder services without breaking the existing addon UX
+- Diagnostics, bugreport exports, and runtime status surfaces now expose richer contract/version metadata, device event history, onboarding guidance, structured daemon error reporting, and cleaner signal/noise handling for routine Bluetooth reconnect churn
+
+### Fixed
+- Enabled/released Bluetooth device persistence now writes consistently through the active config path, preventing edge-case drift between runtime toggles and saved addon configuration
+
+## [2.32.12] - 2026-03-17
+
+### Fixed
+- GitHub Actions lint runs no longer fail on a stale `noqa` mismatch between local `pre-commit` Ruff settings and the repository CI `ruff check` configuration
+- Release Docker images built with an explicit `SENDSPIN_VERSION` now include the runtime dependencies required by `sendspin`, so built-image smoke tests no longer fail on missing `aiosendspin` or `av`
+
+### Changed
+- Local `pre-commit` Ruff now ignores `UP038` at the hook level instead of relying on source-level suppression, keeping local Python 3.9 development compatible with the repository CI lint path
+
+## [2.32.11] - 2026-03-17
+
+### Changed
+- The dashboard now defaults to `list view` for new sessions, while still preserving any saved view choice from the browser
+
+### Fixed
+- GitHub Actions release preparation now installs the D-Bus system packages needed to resolve the packaged `sendspin` version without `dbus-python` build failures
+- The CI compatibility smoke-test job now installs the PortAudio runtime library so validation no longer fails on runners that do not preload audio libraries
+- The Docker build dependency branch now uses hadolint-compliant conditional flow for release-specific `sendspin` installs
+
+## [2.32.10] - 2026-03-17
+
+### Changed
+- GitHub releases now use a dedicated manual workflow that defaults to the latest tag, supports selecting a specific tag, syncs `ha-addon/config.yaml` only during release, and generates cumulative release notes from the previous published release
+- The dashboard filter toolbar now remains visible with a single player, while bulk selection controls stay hidden until multiple players are available
+- Card-view `repeat one` now uses an inline icon variant instead of a badge layered on top of the repeat button
+
+### Fixed
+- Crash-like subprocess `stderr` is now surfaced as an actual issue severity in diagnostics, bugreports, and the `Report an Issue` indicator instead of being treated as an ordinary warning
+- Card-view `shuffle` / `repeat` controls now visibly update when toggled, including in-place icon updates for `repeat`
+
+### Added
+- Runtime dependency fingerprints in diagnostics, bugreports, `/api/version`, and startup logs so packaged dependency sets are visible immediately
+- Real `sendspin` compatibility smoke checks and release-pipeline gates that validate the packaged runtime before image publication
+
+## [2.32.9] - 2026-03-17
+
+### Fixed
+- The Home Assistant add-on no longer crashes on startup when the installed `sendspin` package does not support the `use_hardware_volume` argument in `DaemonArgs`
+- The daemon subprocess now keeps only startup kwargs supported by the installed `sendspin` build, preventing immediate boot failure after the `2.32.8` update
+
+### Added
+- Regression tests for compatibility filtering of daemon startup arguments
+
+## [2.32.8] - 2026-03-17
+
+### Changed
+- MA queue commands now distinguish between the bridge's local state key and the actual MA queue target, so solo players route to their own universal-player queue instead of a stale syncgroup
+- Queue buttons now become temporarily disabled during apply without the extra pending highlight in either card or list view
+
+### Fixed
+- Stale open tabs no longer keep sending solo-player queue commands into the wrong MA target after a live deploy
+- The Proxmox runtime now uses the same pending-state API contract across `routes/api_ma.py` and `state.py`, preventing MA queue commands from failing after partial hotfix deployment
+- Repeat no longer fails because the queue-command dispatcher eagerly evaluates the seek-only integer payload
+
+### Added
+- Regression tests for solo-player queue resolution, stale-page fallback, and repeat command routing
+
+## [2.32.7] - 2026-03-16
+
+### Changed
+- Music Assistant queue controls now use backend-predicted state with structured command responses instead of relying on frontend-only optimistic mutations
+- The persistent MA monitor is now the authoritative queue-command path, and interleaved queue/player events are replayed after command acknowledgement instead of being dropped
+- armv7 Docker publishing now ignores post-build GitHub Actions cache-export failures so successful image pushes do not produce false-red release jobs
+
+### Fixed
+- MA now-playing snapshots are preserved across short monitor reconnects and marked stale/disconnected instead of being cleared from the dashboard
+- Shuffle/repeat/queue-control feedback now reconciles more reliably because the UI renders backend-derived pending state rather than mutating local device copies
+
+### Added
+- Regression tests for MA pending-state reconciliation, monitor-unavailable failure handling, and deferred MA event flushing during command round-trips
+
+## [2.32.6] - 2026-03-16
+
+### Changed
+- Card view now stacks playback progress beneath the current-track metadata instead of placing it beside the text block
+- Expanded list rows now show a text-only `Now playing` badge, larger artwork, and a slower Music Assistant-style equalizer
+- Dashboard `Reconnect all` / `Release all` actions now match the per-device reconnect/release button styling
+
+## [2.32.5] - 2026-03-16
+
+### Changed
+- Expanded list playback now uses a tighter two-block layout: artwork + current-track metadata stay compact on the left, while queue neighbors, transport controls, and progress align in a dedicated playback rail
+- Previous/next queue previews in expanded list rows now render track, artist, and album on separate lines for easier scanning
+
+### Fixed
+- Shuffle/repeat controls now update immediately in the UI, and repeat exposes distinct `off` / `all` / `one` visual states instead of collapsing active modes together
+- Transport, queue, mute, and volume controls are now disabled consistently when Sendspin, Music Assistant, or the audio sink state does not support the action, with matching frontend guards against stale clicks
+
+## [2.32.2] - 2026-03-16
+
+### Changed
+- Native LXC updater scripts now fetch a GitHub release snapshot recursively instead of depending on manual per-file download lists
+- LXC one-click update / auto-update now runs through a detached `systemd-run` job pinned to the detected release tag
+- Repository traffic archival now records richer stats and powers a simple public GitHub Pages dashboard
+
+### Fixed
+- Native LXC upgrades now validate, smoke-test, and roll back automatically on failure instead of leaving the service in a restart loop
+- Missing runtime modules in the old LXC updater path no longer break the service after update
+- Album-art preview layering is fixed in both card and list dashboard views
+- The armv7 Docker image build no longer fails on the `av` / `aiosendspin` dependency conflict
+
+### Added
+- Regression tests covering the new LXC update launch path and recursive snapshot sync guardrails
+- A lightweight public stats dashboard for archived GitHub traffic and release download metrics
+
+## [2.32.0] - 2026-03-16
+
+### Changed
+- Dashboard playback UI now keeps card and list views closer to Music Assistant with shared playback helpers, tighter metadata/equalizer layout, hover-only card actions, slimmer volume sliders, and numeric volume labels without `%`
+- Expanded list rows now surface current-track context directly beside artwork and surround playback controls with queue-neighbor previews plus shuffle/repeat controls
+
+### Fixed
+- Missing MA previous/next queue items are now backfilled via `player_queues/items`, eliminating false `Queue start` / `Queue end` placeholders when real neighbors exist
+- Card and list playback progress now initialize cleanly and ignore stale MA elapsed snapshots for the same track, removing full-width flashes and backward jumps in elapsed/progress displays
+- Diagnostics now expose per-device playing state together with parsed PulseAudio sink-input metadata for easier live troubleshooting
+
+### Added
+- Regression coverage for MA queue-neighbor hydration, artwork proxy validation, and diagnostics sink-input parsing
+
+## [2.31.11] - 2026-03-16
+
+### Fixed
+- **Album art in dashboard** — Music Assistant cover images now load through a safe bridge-hosted proxy route, so artwork renders again without relaxing the web UI's same-origin protection
+- **Artwork URL handling** — relative MA image paths are resolved against the configured MA server, authenticated requests keep the MA bearer token, and foreign origins are rejected instead of being proxied
+
+### Added
+- **Regression coverage** — added focused tests for artwork URL wrapping and the `/api/ma/artwork` proxy success/rejection paths
+
+## [2.31.10] - 2026-03-16
+
+### Changed
+- **Config/runtime consistency** — config loading now normalizes key runtime fields, canonicalizes device MACs, and prunes orphaned `LAST_VOLUMES` state so persisted values stay aligned with the current Bluetooth device list
+- **Diagnostics/documentation** — the web UI and README now explain degraded-state behavior for duplicate MACs, unresolved adapters, and corrupt config recovery
+
+### Fixed
+- **Adapter safety** — unresolved adapter lookup no longer guesses `hci0`; affected devices now skip D-Bus monitoring and fall back to bluetoothctl polling instead of targeting the wrong controller
+- **Duplicate device startup** — repeated Bluetooth MAC entries are filtered before runtime startup so one speaker cannot launch two competing bridge clients
+- **Zombie playback recovery** — zombie watchdog tracking now resets per playback session, restoring restart-based recovery after a previous successful stream
+- **Corrupt config + stale volume state** — corrupt `config.json` files are backed up as `config.json.corrupt-*`, and delayed volume persistence no longer writes values for removed devices
+
+### Added
+- **Regression coverage** — added focused tests for unresolved adapter fallback, duplicate MAC filtering, zombie watchdog session resets, corrupt config backup handling, and config/volume normalization edge cases
+
+## [2.31.9] - 2026-03-16
+
+### Changed
+- Config save flow now normalizes known numeric fields before persisting them
+- Web UI/README now call out which settings still require `Save & Restart`
+
+### Fixed
+- Diagnostics/preflight parsing no longer assumes perfect `pactl`, `bluetoothctl`, or `/proc/meminfo` output
+- Config download now strips password hashes, bridge secrets, and MA tokens from exported JSON files
+- Sendspin daemon command/shutdown flow now uses safer snapshots around subprocess handles and client lists
+- Bluetooth churn tracking is synchronized so reconnect auto-disable decisions use a consistent timestamp window
+
+### Added
+- Regression tests for config export redaction, numeric config normalization, diagnostics parsing, and churn/subprocess edge cases
+
+## [2.31.8] - 2026-03-14
+
+### Fixed
+- Empty-state adapter shortcut now opens `Configuration → Bluetooth` and prepares a manual adapter row
+- Empty-state scan shortcut now opens `Configuration → Devices → Discovery & import` and starts Bluetooth scanning from the correct redesigned section
+
+## [2.31.7] - 2026-03-14
+
+### Fixed
+- **HA login with MFA/TOTP** — fixed the direct Home Assistant login flow so the second-step authenticator form now preserves a valid CSRF token; entering the TOTP code no longer fails with `Invalid session. Please try again.`
+- **Regression coverage** — added an auth test that exercises the full `credentials -> MFA -> success` flow to prevent the TOTP step from regressing again
+
+## [2.31.6] - 2026-03-14
+
+### Added
+- **Configuration controls** — added `Cancel` to discard unsaved changes, plus new security/runtime settings for session timeout, brute-force protection, and the Music Assistant WebSocket monitor
+- **Device management shortcuts** — adapter badges now jump straight to `Configuration → Bluetooth`, custom adapter names are editable, and Music Assistant sync-group badges open the matching MA settings page in a new tab
+- **Runtime visibility** — surfaced per-device delay in both card and list views and expanded the list view to expose the same key runtime badge family as the card view
+
+### Changed
+- **Configuration UI** — refactored the settings area into a consistent card-based layout with unified headers, helper text, section actions, and a cleaner devices / Bluetooth / MA hierarchy
+- **Dashboard polish** — aligned header, cards, list rows, badges, icons, hover actions, and transport/media blocks with the redesign mockup and a shared badge system
+- **List view behavior** — default to list view when more than 6 devices are present, remember the user's view choice, add sorting by adapter, and reuse the same adapter/status badge styling as card view
+
+### Fixed
+- **Badge consistency** — resolved list/card group badge drift, row-level badge misalignment, duplicated status indicators, and empty placeholder dash badges when sync/runtime data is unavailable
+- **Interaction regressions** — fixed card hover squeeze, muted-state color feedback, MA links opening in the same tab, settings gear placement/visibility, and list-row media/action separation
+- **List layout** — reduced duplicate routing text, removed redundant `sink ready` noise, narrowed the list volume slider, and kept delay/status/adapter/group badges visually aligned without overlap
+
+## [2.31.0] - 2026-03-14
+
+### Changed
+- Complete UI redesign: device cards, header, toolbar — aligned with HA/MA design system
+- New card layout with SVG icons (BT, MA, sync), single-row controls, now-playing section
+- Header: user icon + username, sign-out icon, SVG health indicator pills
+- Toolbar split into Filter Bar + Action Bar with grid/list view toggle
+- All Unicode/emoji icons replaced with MDI-style SVGs
+
+### Added
+- Grid/List view toggle for device cards
+- Adapter and status filters in toolbar
+- Bulk Reconnect / Release group actions
+
+## [2.30.8] - 2026-03-13
+
+### Fixed
+- Added `libdbus-1-dev` to pytest CI job for `dbus-python` build
+
+## [2.30.7] - 2026-03-13
+
+### Added
+- CSRF protection on login form (per-session token, timing-safe validation)
+- Content-Security-Policy and X-Content-Type-Options headers on all responses
+- Adapter input validation against command injection in bluetoothctl calls
+- Config upload size limit (1 MB max)
+- Automated test execution in CI pipeline
+
+### Fixed
+- XSS via `ma_url` in HA auth page (escaped with `json.dumps`, scheme validated)
+- MA monitor silently discarding interleaved WebSocket events during command/response exchange
+- mDNS discovery `ensure_future` called from zeroconf thread instead of event loop thread
+- Volume race condition between lock-protected and unprotected reads
+- `get_scan_job()` returning mutable reference to internal state
+- MA monitor `stop()` not closing WebSocket (blocked on `recv`)
+- Deprecated `asyncio.get_event_loop()` replaced with `get_running_loop()`
+- 18 API endpoints exposing internal error details in responses
+- `DEFAULT_CONFIG` shallow copy causing shared mutable references
+- 8 unused regex patterns removed from routes
+
+### Changed
+- Dependency upper bounds: zeroconf<1.0, ruff<1.0, mypy<2.0
+
+## [2.30.6] - 2026-03-13
+
+### Added
+- Version badge links to corresponding GitHub release page
+- Clickable username → MA or HA profile (standalone: in status bar row)
+
+### Fixed
+- Empty state block spans full grid width
+- Card hover isolated to individual cards (no row-wide expansion)
+- Album art popup no longer clipped by overflow:hidden
+
+## [2.30.5] - 2026-03-13
+
+### Added
+- BT Info modal with Copy button (replaces plain alert)
+- Adapter reboot button (↻ Reboot)
+- Scan cooldown countdown timer on Scan button
+- Config download/upload with timestamped filenames and secret preservation
+- BT device info (paired/trusted/connected) in bug reports
+
+### Fixed
+- Mute indicator stuck after startup unmute (status update not emitted)
+- Startup unmute timeout reduced from 60s to 15s
+- ANSI escape codes in adapter power command output
+
+### Changed
+- Reorganized button layouts in Adapters, Devices, scan results, and config sections
+- Paired devices actions grouped with hover isolation
+- Renamed "Pair & Add" to "Add & Pair"
+
+## [2.30.0] - 2026-03-13
+
+### Added
+- Smooth restart with progress bar (mute-before-restart, enabled by default)
+- Buffering state indicator when MA group is playing but bridge isn't streaming yet
+- 3-column card layout on wide screens
+
+### Fixed
+- Mute button console error (orphaned onclick handler)
+- Eq-bars always visible due to broken CSS comment
+- Log level detection uses structured format instead of substring matching
+
+## [2.29.0] - 2026-03-13
+
+### Added
+- Disable button on device card for quick enable/disable from dashboard
+- Report link highlights yellow when recent logs contain errors
+
+### Fixed
+- Released devices no longer get persisted as globally disabled on restart
+- Group badge uses stable player_id (UUID) instead of fuzzy name matching
+
+### Changed
+- Device cards redesigned — row-based layout, status dots, chip-style sync, always-visible shuffle/repeat
+- Bug report modal uses yellow accent color
+
+## [2.28.2] - 2026-03-13
+
+### Fixed
+- Released state now persists across service restarts
+- Player name matching with bridge suffix for config persistence
+
+### Changed
+- Track duration inline with progress bar
+- Volume slider aligned with progress bar (reordered column, 3px height)
+- Sink name removed from volume column
+- Delay always visible in Sync column
+- Shuffle/repeat always visible when MA active
+
+## [2.28.1] - 2026-03-13
+
+### Changed
+- Update modal redesigned — themed accent header, SVG icons, version comparison, Escape key, animations
+- Adapter name (`hci0`) styled as neutral badge in connection column
+- Eq-bars placed immediately after player name
+- Playback, Volume, Sync column labels removed
+
+## [2.28.0] - 2026-03-13
+
+### Fixed
+- BT remove endpoint crash — `validate_mac()` returned bool instead of Flask response (500 on LXC)
+- HA addon username — reads Ingress `X-Remote-User-Display-Name` header instead of "HA User"
+
+### Changed
+- Bug report modal redesigned — themed accent header, SVG icons, CSS spinner, inline validation, Escape key, animations
+- Connection column compacted — dots-only with tooltips, MAC/URI hovers removed, column shrunk to 85px
+- Identity column optimized — two-row layout with ellipsis truncation, badges in meta row, MAC/URL removed
+
+## [2.27.1] - 2026-03-12
+
+### Added
+- Remove button (✕) to unpair devices directly from the Already Paired list
+
+### Changed
+- Restart indicator redesigned — integrated into header, CSS icons instead of emoji, dark-mode compatible
+
+## [2.27.0] - 2026-03-12
+
+### Added
+- Two-tier device enabled/disabled — global toggle fully removes device from BT, PA, and MA stacks; config checkbox in Devices section
+- Smart health indicators — manually released devices shown as grey (neutral); auto-disabled shown as amber warning
+
+### Fixed
+- Disabling a device now stops its daemon subprocess and removes the MA player
+
+## [2.26.5] - 2026-03-12
+
+### Fixed
+- Sink routing correction after audio starts — fixes silent speakers when PA ignores PULSE_SINK with multiple BT devices
+- Equalizer indicator no longer stuck red after re-anchor or track change
+
+## [2.26.4] - 2026-03-12
+
+### Fixed
+- Server-side graceful shutdown now mutes PA sinks directly instead of pausing MA players — works for all restart triggers, not just the web UI
+- Zombie-playback detection no longer causes false restarts when audio is actually playing (re-anchor, group sync, track changes)
+
+## [2.26.3] - 2026-03-12
+
+### Fixed
+- Daemon no longer crashes after 60 s when no audio is playing (unmute watcher task lifecycle fix)
+
+## [2.26.2] - 2026-03-12
+
+### Fixed
+- Ingress sessions now show actual username instead of "HA User"
+
+## [2.26.1] - 2026-03-12
+
+### Improved
+- Smooth restart — sinks muted before restart, auto-unmuted after audio stabilises; eliminates audible glitches
+- Sink name cache — cached sink tried first on restart, skipping 3 s A2DP delay
+
+### Removed
+- Legacy move-sink-input routing removed (PULSE_SINK subprocess architecture handles routing natively)
+
+## [2.26.0] - 2026-03-12
+
+### Added
+- HA username displayed in header for Ingress sessions
+- Re-check button in update dialog to re-query latest version from GitHub
+
+### Fixed
+- SSP passkey auto-confirm for TWS earbuds pairing (e.g. HUAWEI FreeClip)
+- D-Bus exception handling widened for TWS earbuds + auto-reconnect on external reconnection
+
+## [2.25.1] - 2026-03-12
+
+### Fixed
+- LXC install/upgrade scripts synced with current codebase — missing routes, services, static, and demo files
+
+## [2.25.0] - 2026-03-12
+
+### Security
+- Session variable leak fixed — MFA key cleared after every auth path
+- MAC address validation — strict regex before passing to bluetoothctl
+- Fallback patterns removed — proper 400 errors instead of silent first-device fallback
+
+### Improved
+- Login handler split into 4 per-flow functions for maintainability
+- Client lookup helper eliminates duplicated device lookup logic
+- Exception handling narrowed — specific types replace broad `except Exception`
+- Atomic config writes with tempfile + rename
+- BT scan cooldown (30s, HTTP 429)
+- Named constants replace magic numbers in bluetooth_manager
+- IP detection deduplicated via `get_local_ip()`
+- Type annotations and module-level imports cleanup
+
+### Tests
+- 30 new tests: client lookup, MAC validation, MFA session lifecycle, scan cooldown
+
+## [2.24.4] - 2026-03-12
+
+### Fixed
+- AUTO_UPDATE setting now persisted correctly
+- Enabling authentication requires setting a password first (skipped in HA addon mode)
+
+## [2.24.3] - 2026-03-12
+
+### Added
+- Dual issue templates: manual (with dropdowns) and auto-fill (from Report button)
+- Auto-fill now includes runtime status, environment details, and recent log errors
+- Bluetooth SVG icon in header
+
+### Changed
+- Merged Environment, Runtime Status, Device Count into single System Info field
+- Fixed issue template prefill field mapping; added GitHub auth hint
+
+## [2.24.0] - 2026-03-12
+
+### Added
+- Bug report button with auto-diagnostics collection and GitHub issue integration
+- Auth warning banner when web UI authentication is disabled
+- Enriched diagnostics section with version, environment, subprocess info
+- Diagnostics and log file download buttons
+- MA server version in bug reports
+
+### Changed
+- Restart banner redesigned with action steps and progress bar
+- Header links now use monochrome SVG icons
+- Bug report uses plain text format with form validation
+
+## [2.23.12] - 2026-03-12
+
+### Added
+- Auto-update toggle for LXC installations (off by default)
+
+## [2.23.11] - 2026-03-12
+
+### Added
+- Update modal dialog with release notes preview and platform-aware actions
+- One-click update apply for LXC/systemd; HA addon redirects to addon page
+
+### Changed
+- Release notes cleaned from markdown in modal display
+
+## [2.23.10] - 2026-03-12
+
+### Added
+- Runtime type badge in header (LXC / Docker / HA Addon)
+- Interactive update check button with spinner animation
+- BT/MA health indicators with color-coded dots
+
+### Changed
+- Compact 2-row header layout; Docs/GitHub in actions area
+- Brighter version and system info text
+
+## [2.23.9] - 2026-03-12
+
+### Changed
+- Auth always enforced in addon mode — only HA Core login_flow offered (with 2FA/MFA)
+- Show logged-in HA username next to Sign out link
+- Added `tmpfs`, `backup_exclude`, `auth_api`, `panel_admin` to addon config
+- Removed `auth_enabled` option from addon (managed automatically)
+
+### Fixed
+- AppArmor enforce mode — blanket `file,` + `signal,` rules (matching Music Assistant addon)
+
+## [2.23.0] - 2026-03-11
+
+### Added
+- Demo Mode — full UI demo with emulated BT devices and MA playback (`DEMO_MODE=true`)
+- Universal version update checker with green badge in UI header
+- Update API endpoints for checking and applying updates
+- Platform-aware update instructions (HA addon: directs to Supervisor)
+
+### Fixed
+- LXC upgrade.sh — added missing route modules and new files
+
+## [2.22.3] - 2026-03-11
+
+### Fixed
+- Auto-detect MA auth provider — standalone bridges auto-set `MA_AUTH_PROVIDER=ha` when MA is an HA addon
+- mDNS discovery now includes `homeassistant_addon` flag
+
+### Changed
+- Config section dividers softened (2px semi-transparent instead of 3px bright blue)
+- Config section headings reduced to 16px for clearer hierarchy
+- Paired devices list auto-collapses when >5 items
+
+## [2.22.2] - 2026-03-11
+
+### Added
+- Music Assistant as web UI auth provider (direct MA login or HA-via-MA flow)
+- Separate MUTE_VIA_MA setting (independent from VOLUME_VIA_MA)
+- Phased restart progress with per-subsystem status (BT · PA · SS · MA), click to expand per-device details
+
+### Fixed
+- HA login flow_id format — accept plain 32-char hex IDs from HA Core
+- Mute via MA now also syncs PulseAudio sink state
+- SSE mute state race condition (2 s debounce for optimistic UI)
+- Config footer excessive padding
+
+### Changed
+- Log Level selector moved from Configuration to Logs toolbar
+- Mute: optimistic UI update with reduced timeouts (5→2 s, 10→3 s)
+
+## [2.22.0] - 2026-03-11
+
+### Added
+- MA beta 2.8+ authentication — direct HTTP fallback for both stable and beta login formats
+- Context-aware empty state CTA (adapter vs device detection)
+- Static Save button in config footer
+
+### Fixed
+- Token persistence after MA login (form no longer overwrites new token on save)
+- "Unsaved changes" indicator after all MA login paths
+- Phantom player card with zero configured devices
+- Config dirty state on device add/remove
+
+### Changed
+- MA auth panel redesigned: token field under Reconfigure, duplicate URL removed
+- Buttons renamed to "Get token" / "Get token automatically"
+
+## [2.20.5] - 2026-03-11
+
+### Fixed
+- "Show all" checkbox overflow in paired-devices section
+
+### Changed
+- Documentation refresh: screenshots, version refs, API split reflected
+
+## [2.20.4] - 2026-03-11
+
+### Fixed
+- JWT token section folding marker (consistent ▶ with rotation)
+- MA API token hint path corrected to "Settings → Profile → Long-lived access tokens"
+
+## [2.20.3] - 2026-03-11
+
+### Changed
+- Split monolithic API into 5 focused route modules (api, api_bt, api_ma, api_config, api_status)
+- Thread-safe client list access and message ID counter
+- Shared MAC address validation helper
+- Improved class docstrings and type hints
+
+### Fixed
+- Dead `/api/bt/reconnect` endpoint (missing route decorator)
+- `postMessage('*')` security in HA OAuth popup (now uses `window.location.origin`)
+
+## [2.20.2] - 2026-03-10
+
+### Fixed
+- Auto-detect MA HA addon mode from server info (not just bridge flag)
+- Fallback to HA OAuth login when builtin login returns 401
+- Reconfigure form probes MA `/info` for addon mode detection
+
+## [2.20.1] - 2026-03-10
+
+### Changed
+- Delay (ms) shown in main device row instead of Format; Format moved to detail sub-row
+- Adapters panel restyled with bordered card and hover highlight
+- Adapters Refresh/+Add buttons moved to toolbar below table
+- Static Save & Restart button at bottom of Configuration form
+
+## [2.20.0] - 2026-03-10
+
+### Changed
+- Configuration UX polish: dissolved Advanced settings, MA form auto-collapse when connected, auth fields auto-hide, BT device expand chevron moved to left, devices collapsed by default, clickable scan/paired rows with hover highlight, Scan button before +Add Device
+
+### Fixed
+- False dirty-state indicator on page load
+- Duplicate save buttons removed (sticky bar only)
+
+## [2.19.0] - 2026-03-10
+
+### Changed
+- Configuration UI overhaul: clear section groupings, promoted MA Integration, save buttons at bottom, sticky save bar, simplified BT device table with expandable detail rows
+
+## [2.18.3] - 2026-03-10
+
+### Fixed
+- MA Ingress JSONRPC response parsing: handle raw string token format
+
+## [2.18.2] - 2026-03-10
+
+### Fixed
+- MA Ingress connectivity: discover MA addon hostname via Supervisor API instead of `localhost:8094`
+- Added `hassio_api` and `homeassistant_api` addon permissions
+
+## [2.18.1] - 2026-03-10
+
+### Fixed
+- websockets compatibility: fixed `proxy` kwarg error on older versions in HAOS addon
+
+## [2.18.0] - 2026-03-10
+
+### Added
+- Passwordless MA auth in addon mode via Ingress JSONRPC (no credentials popup)
+
+### Removed
+- Removed broken `_ha_authorize_with_token()` (HA returns 405)
+
+## [2.17.12] - 2026-03-10
+
+### Fixed
+- MA auth in Ingress: silent auth falls back to popup when HA rejects programmatic authorize
+
+## [2.17.11] - 2026-03-10
+
+### Fixed
+- Addon MA discovery uses localhost:8095 (host-network addons can't resolve homeassistant.local)
+
+## [2.17.10] - 2026-03-10
+
+### Changed
+- Simplified MA discovery in addon mode: tries homeassistant.local:8095 first
+- Addon mode detected from bridge runtime, not MA server response
+- MA auth is now semi-automatic: user clicks "Sign in with HA" button explicitly
+
+## [2.17.9] - 2026-03-10
+
+### Fixed
+- MA server discovery now uses resolved sendspin connection address in auto-discovery mode
+- Fixed zeroconf callback crash with newer library versions
+
+## [2.17.8] - 2026-03-10
+
+### Fixed
+- Clearing MA API token via web UI config now correctly saves empty value
+
+## [2.17.7] - 2026-03-10
+
+### Fixed
+- OAuth flow now obtains long-lived MA API token (10-year) instead of short-lived session JWT
+- Fixed token corruption when MA callback URL contains Vue Router hash fragment
+- Silent auth skips OAuth when existing token is still valid for the same MA instance
+
+## [2.17.6] - 2026-03-10
+
+### Fixed
+- MA monitor now picks up new token after silent auth or manual HA login without restart
+- Reconnect backoff resets immediately when new MA token is detected
+
+## [2.17.5] - 2026-03-10
+
+### Fixed
+- MA addon mode UI now correctly shown when token is already saved
+
+## [2.17.4] - 2026-03-10
+
+### Added
+- **Silent MA authentication** — in Ingress mode, MA token is obtained automatically from the active HA session; no login required
+- **Auto-discover** — MA server is discovered automatically on page load
+
+## [2.17.3] - 2026-03-10
+
+### Added
+- **Sign in with Home Assistant** — popup OAuth flow for HA addon mode; authenticate with HA credentials (including 2FA) to get MA token automatically
+
+## [2.17.2] - 2026-03-10
+
+### Fixed
+- **MA Discover instant** — reuses already-known MA server URL (from config, sendspin connection, or state) before falling back to mDNS; no more 5 s wait
+
+## [2.17.1] - 2026-03-10
+
+### Fixed
+- **MA discovery not working** — wrong mDNS service type (`_music-assistant._tcp` → `_mass._tcp`); Discover button now finds MA servers correctly
+- **Login form confusion** — clarified that MA credentials are needed (not Home Assistant login); added hint to MA → Settings → Users
+
+## [2.17.0] - 2026-03-10
+
+### Added
+- **MA auto-discovery** — Discover button finds Music Assistant servers on local network via mDNS
+- **MA auto-login** — enter username/password to auto-create API token (no manual JWT copy needed)
+- New "Music Assistant Integration" panel in web UI with connection status indicator
+- Manual JWT token entry preserved as collapsible fallback
+
+### Changed
+- Improved MA auth failure message — guides user to web UI for reconfiguration
+
+## [2.16.3] - 2026-03-10
+
+### Added
+- HA addon logo (`logo.png`) for store listing
+- One-liner RPi installer (`scripts/rpi-install.sh`) — Docker install, compose download, BT pairing, container start
+- Hadolint Dockerfile linting in CI
+
+## [2.16.2] - 2026-03-10
+
+### Added
+- Pre-flight diagnostic script (`scripts/rpi-check.sh`) — checks Docker, Bluetooth, audio, UID, RAM, architecture before first run
+- `/api/preflight` endpoint — auth-free JSON status for setup verification
+- Raspberry Pi installation guide (en/ru) with model-specific instructions
+- Startup diagnostics table in `docker logs` — platform, audio, BT, D-Bus, config status at a glance
+
+### Fixed
+- Docker docs: removed stale `SYS_ADMIN` capability, added missing `PULSE_SERVER`/`XDG_RUNTIME_DIR`/`AUDIO_UID` env vars, added pre-pairing step
+
+## [2.16.1] - 2026-03-09
+
+### Fixed
+- PyAV armv7l compatibility — fixed silent playback on 32-bit ARM systems (PyAV 12.x lacks `AudioLayout.nb_channels`)
+
+## [2.16.0] - 2026-03-09
+
+### Security
+- SSRF prevention in HA auth flow — `flow_id` validated as UUID before use in HA Core URLs
+- SSE connection limit — max 4 concurrent connections, 30-minute lifetime
+- Volume clamping — all entry points enforce 0–100 range
+- MAC address validation — regex check before `bluetoothctl` calls
+- `/api/status` now requires auth; replaced with `/api/health` for healthcheck
+- Error responses no longer leak internal details (`str(e)` → generic message)
+- `set_log_level` validated against allowlist
+- `client_id` path traversal prevention
+
+### Fixed
+- SSE not notified on player stop
+- `_clients` race condition — all endpoints snapshot client list under lock
+- Zombie counter race — increment moved inside `_status_lock`
+- Config read without lock in `main()`
+- `request.get_json()` crash on non-JSON requests
+- `0`-as-falsy bug in HA config translation (`pulse_latency_msec=0` kept as 0)
+- `datetime.UTC` → `timezone.utc` for Python 3.9+ compatibility
+
+### Changed
+- BT executor pool: 2 → 4 threads for concurrent multi-device reconnections
+- Config writes use `fsync()` before atomic rename (power-failure safety)
+- D-Bus monitor checks `_running` flag for clean shutdown
+- `SYS_ADMIN` capability removed from `docker-compose.yml`
+- Dependency bounds tightened: `waitress<3.0.0`, `websockets<14.0`
+- MA API credentials protected by dedicated mutex
+
+### Added
+- `/api/health` — lightweight auth-free healthcheck
+- 65 new tests (42 → 107 total)
+
+## [2.15.8] - 2026-03-09
+
+### Fixed
+- websockets proxy compatibility — proxy=None is now version-gated (websockets 15+ only)
+
+## [2.15.7] - 2026-03-09
+
+### Changed
+- Updated websockets to v15 — added `proxy=None` to all WS connections to prevent unexpected proxy usage
+- LXC: added `gcc` and `python3-dev` for sendspin C extension compilation
+- LXC: bumped sendspin version from `>=5.1.3` to `>=5.3.0`
+
+## [2.15.6] - 2026-03-09
+
+### Fixed
+- Auto-unmute Bluetooth sink on connect — PulseAudio may mute sinks silently on BT reconnect; bridge now ensures sink is unmuted before volume restore
+
+### Changed
+- Switched to official PyPI sendspin package (5.3.2) — upstream includes re-anchor fix and other improvements
+- Removed `git` from Docker builder stage (no longer needed)
+
+## [2.15.5] - 2026-03-09
+
+### Fixed
+- Disabled custom AppArmor profile — still blocked Python module imports on HAOS. Temporarily using Docker default profile until a tested one is ready
+
+## [2.15.4] - 2026-03-09
+
+### Fixed
+- AppArmor profile was blocking Python startup — `libpython3.12.so.1.0` not covered by the restricted path rules. Addon now starts correctly on HAOS
+
+## [2.15.3] - 2026-03-09
+
+### Fixed
+- Re-anchor loop on stream start — sendspin-cli 5.1.4 preserves cooldown timer, preventing rapid audio restarts on Bluetooth speakers
+
+### Changed
+- armv7 builds split into a separate CI workflow (amd64/arm64 publish faster)
+
+## [2.15.2] - 2026-03-09
+
+### Fixed
+- ARM64 (aarch64) and armv7 Docker builds — HA Green, Raspberry Pi 3/4/5, and other ARM devices can now install the addon
+- Parallel CI builds — each architecture builds in its own runner for faster releases
+
+## [2.15.1] - 2026-03-09
+
+### Fixed
+- Fixed mypy type error: added `str | None` annotation to `bluetooth_sink_name`
+- Code formatting fix (ruff)
+
+## [2.15.0] - 2026-03-09
+
+### Added
+- Group player list in Diagnostics — full per-member details: state, volume, availability, now-playing info
+- Bridge players in diagnostics show BT connection, server status, playing state, audio sink, MAC address
+- Enabled/Disabled status for devices and group members in Diagnostics
+- 35 new unit tests (53 total)
+
+### Fixed
+- TOCTOU race in zombie playback detection (concurrent status read)
+- MA WebSocket command/response mismatch (match by message_id)
+
+### Changed
+- Timezone-aware UTC timestamps throughout
+- SSE state encapsulation via public accessors
+- Configurable `TRUSTED_PROXIES` in config.json
+- Shared `list_bt_adapters()` helper (DRY)
+- Removed unused dependencies (flask-cors, psutil, python-dotenv)
+
+## [2.14.1] - 2026-03-08
+
+### Fixed
+- Fixed JSON serialization crash on SSE status stream (`frozenset is not JSON serializable`)
+
+### Added
+- Player status icons in group tooltip: ▶ playing, ✓ idle, ⚡ BT disconnected, ✕ offline, ⊘ unavailable
+
+## [2.14.0] - 2026-03-08
+
+### Fixed
+- `VOLUME_VIA_MA` setting silently lost on config reload
+
+### Added
+- MA WebSocket connection reuse for player/queue commands (lower latency)
+- Atomic `update_config()` helper (DRY config writes)
+
+### Changed
+- Cached `VOLUME_VIA_MA` flag at module level (no disk I/O per volume change)
+- Replaced deprecated `asyncio.ensure_future` with `create_task`
+- MA auth failure now triggers proper exponential backoff
+- Split BT scan into smaller testable helpers
+
+## [2.13.3] - 2026-03-08
+
+### Added
+- Battery level indicator with SVG icon and color coding (green >25%, yellow ≤25%, red ≤15%) for BT devices supporting `org.bluez.Battery1`
+
+## [2.13.2] - 2026-03-08
+
+### Fixed
+- Local devices shown as external in group tooltip on multi-device bridges — merged group entries sharing same MA syncgroup
+- JS group badge lookup now matches by player_name membership
+
+## [2.13.1] - 2026-03-08
+
+### Fixed
+- Cross-bridge group badge not rendering — fixed syncgroup ID resolution and groups missing from polling response
+- Waitress 3.x SSE crash — removed hop-by-hop `Connection` header from SSE response
+- Devices not rendering — fixed JS variable name mismatch (`data.groups` → `status.groups`)
+
+### Added
+- Auto-populate BRIDGE_NAME from hostname on first startup
+- Cross-bridge sync group visibility: `🔗 GroupName +N` badge with hover tooltip
+
+### Removed
+- `BRIDGE_NAME_SUFFIX` option (replaced by auto-populated BRIDGE_NAME)
+
+## [2.12.6] - 2026-03-08
+
+### Fixed
+- SSE through HA Ingress — initial padding flushes proxy buffers for real-time streaming
+- SSE auto-reconnect with exponential backoff instead of permanent polling fallback
+
+## [2.12.5] - 2026-03-08
+
+### Fixed
+- HA Ingress cache bypass — static assets use path-based versioning instead of query-string (fixes stale JS/CSS through HA proxy)
+
+## [2.12.4] - 2026-03-08
+
+### Fixed
+- HA Ingress HTML caching — prevents proxy and browsers from serving stale HTML pages
+
+## [2.12.3] - 2026-03-07
+
+### Fixed
+- Static asset cache-busting — forces browser to reload CSS/JS on upgrade (fixes stale UI via HA Ingress)
+
+## [2.12.2] - 2026-03-07
+
+### Changed
+- Lazy player registration — daemon starts only after Bluetooth connects (no phantom players in MA)
+
+## [2.12.1] - 2026-03-07
+
+### Removed
+- MPRIS module (`mpris.py`): dead code — MA discovers players via sendspin WebSocket, not D-Bus MPRIS
+- D-Bus session bus startup from entrypoint (was only needed for MPRIS)
+- `aiosendspin-mpris` dependency from LXC install scripts
+
+### Changed
+- Documentation synchronized with v2.12.0 codebase
+- Auto-reconnect: instant D-Bus detection, 10s polling only as fallback
+
+## [2.12.0] - 2026-03-07
+
+### Added
+- Zombie playback watchdog: auto-restarts subprocess after 15s of playing with no audio data, up to 3 retries
+- BT churn isolation (opt-in): auto-disables BT management for devices that reconnect too often; configurable via `BT_CHURN_THRESHOLD` and `BT_CHURN_WINDOW`
+- Stale equalizer indicator: frozen red bars when MA reports playing but no audio is streaming; playback shows "▶ No Audio"
+
+### Fixed
+- Clear playing/streaming status when subprocess is stopped, preventing stale indicators
+
+## [2.11.0] - 2026-03-07
+
+### Added
+- OpenWrt LXC deployment support
+- SSE: send current status immediately on connect, reduce heartbeat from 30s to 15s
+
+## [2.10.16] - 2026-03-06
+
+### Fixed
+- LXC installer: download all app modules instead of only 2 files
+- LXC PulseAudio: fix deprecated config for PA 17+ (Ubuntu 24.04)
+- Config save: empty string values for numeric fields no longer crash
+- Config save: `VOLUME_VIA_MA` added to POST whitelist
+
+## [2.10.15] - 2026-03-06
+
+### Fixed
+- Group volume now sends `group_volume` once per unique sync group, not just the first.
+
+## [2.10.14] - 2026-03-06
+
+### Fixed
+- Group volume now applies to devices not in a MA sync group via local pactl fallback.
+
+## [2.10.13] - 2026-03-06
+
+### Fixed
+- Volume/mute status not updating on MA path — bridge_daemon now notifies parent after server volume echo.
+
+## [2.10.12] - 2026-03-06
+
+### Changed
+- Single-writer volume: bridge_daemon is the sole pactl writer, eliminating all feedback loops.
+
+### Added
+- `VOLUME_VIA_MA` toggle in Settings to disable MA volume proxy (use direct pactl only).
+
+### Fixed
+- Group volume bounce and volume jump on track change.
+
+## [2.10.11] - 2026-03-06
+
+### Fixed
+- Volume no longer bounces/jumps when adjusting individual speakers or on track change.
+
+## [2.10.10] - 2026-03-06
+
+### Fixed
+- MA volume/mute via API now updates local status and subprocess immediately.
+- Progress timer no longer runs past track end when playback is stopped.
+
+## [2.10.9] - 2026-03-06
+
+### Added
+- Hybrid volume control: routes through MA API when connected (delta group volume), falls back to direct pactl.
+- 6 new unit tests for volume routing.
+
+### Fixed
+- Volume subprocess desync, group slider lock, MA metadata stale on restart.
+
+## [2.10.8] - 2026-03-06
+
+### Improved
+- **Observability**: silent exception handlers now log at DEBUG level for easier troubleshooting.
+- **Thread safety**: timeouts and callbacks on all async fire-and-forget tasks.
+- **Tests**: added 9 unit tests for core config functions.
+
+## [2.10.7] - 2026-03-06
+
+### Fixed
+- **MA→BT volume sync**: was completely broken — wrong attribute lookup prevented volume changes from Music Assistant from reaching Bluetooth speakers.
+- **Volume restore at 0%**: volume=0 was incorrectly treated as "no saved volume".
+- **Pause button (solo players)**: `/api/pause` endpoint was returning 404 due to missing route decorator.
+- **Thread safety**: daemon subprocess stop and config reads are now properly synchronized.
+
+### Removed
+- Dead code and legacy backward-compat aliases.
+- Redundant shell-based volume restore in entrypoint (Python handles this).
+
+## [2.10.6] - 2026-03-06
+
+### Fixed
+- Device sorting: group members now always appear adjacent.
+
+## [2.10.5] - 2026-03-05
+
+### Fixed
+- Code style cleanup (ruff SIM109).
+
+## [2.10.4] - 2026-03-05
+
+### Fixed
+- **MA integration for solo players (e.g. WH-1000XM4)**: correctly matches MA's internal queue ID format `"up<uuid_no_hyphens>"`. Solo players now receive now-playing data and transport controls from MA API.
+- Fixed websockets connection in debug endpoint.
+
+## [2.10.3] - 2026-03-05
+
+### Added
+- `/api/debug/ma` endpoint for diagnosing MA integration (cache, groups, live queue IDs).
+
+## [2.10.2] - 2026-03-05
+
+### Fixed
+- MA name matching now ignores punctuation — `wh1000` correctly matches `WH-1000XM4`.
+
+## [2.10.1] - 2026-03-05
+
+### Added
+- MA API badge next to the MA connection indicator when API integration is active.
+
+### Fixed
+- Mute state no longer resets after muteall/unmute-one sequence.
+- MA data now works for devices whose name didn't match in `discover_ma_groups` (uses Sendspin-reported `group_id` as fallback).
+- Group badge hover-only logic fixed for solo players (WH-1000XM4 etc.).
+- Transport buttons (◀◀ ▮▮ ▶▶ ⇄ ↻) now render at uniform size.
+
+
+### Added
+- Solo (ungrouped) players now show MA track info, progress and transport controls from their own MA queue.
+
+### Changed
+- Shuffle/Repeat moved into transport row (hover-only, same style as ◀◀ ▮▮ ▶▶).
+- Group badge hidden by default for solo players (appears on hover).
+- Delay indicator in Sync column is now hover-only.
+
+### Fixed
+- Mute state no longer resets to unmuted after Bluetooth reconnect or re-anchor.
+
+## [2.9.9] - 2026-03-05
+
+### Changed
+- MA track/progress/controls scoped per syncgroup — each device shows only its own MA group data.
+- Shuffle ⇄ and Repeat ↻ moved into the main transport row, hover-only, matching ◀◀ ▮▮ ▶▶ style.
+- Volume column widened so sink names don't wrap.
+
+### Fixed
+- Disconnected/Released devices no longer show progress or track info from another group.
+
+## [2.9.8] - 2026-03-05
+
+### Changed
+- Connection column: BT MAC and MA host:port now appear below their rows on hover; column narrowed to give playback column more space.
+- Transport controls (◀◀ ▮▮ ▶▶) fit in the wider playback column — no overflow.
+
+### Fixed
+- Album art tooltip now appears correctly on hover (was blocked by inline style and overflow:hidden).
+- MA transport/secondary controls no longer shown on Released (no-sink) devices.
+
+## [2.9.7] - 2026-03-06
+
+### Added
+- Album art tooltip on track name hover (120×120, from MA now-playing).
+- MA syncgroup name shown in device cards and group filter instead of raw UUID.
+
+### Changed
+- Unified progress bar: MA data takes priority; separate MA bar removed.
+- Transport controls: ◀◀ ▮▮/▶ ▶▶ in one consistent row; shuffle/repeat on card hover.
+
+
+
+### Fixed
+- **Web UI broken**: JavaScript syntax error in `renderDiagnostics()` prevented the entire UI from loading.
+- **MA monitor disabled**: `websockets` package added to `requirements.txt` — MA real-time monitor now starts correctly.
+
+
+
+### Added
+- Persistent MA WebSocket monitor with real-time `player_queue_updated` / `player_updated` event subscriptions.
+- `GET /api/ma/nowplaying` and `POST /api/ma/queue/cmd` endpoints.
+- SSE events now include `nowplaying` MA metadata.
+- UI: ⏮ ⏭ 🔀 🔁 playback controls, MA track/artist display, and live progress bar in the Playback column (visible only when MA is connected).
+- Automatic player metadata refresh: on each MA monitor connect, stale `device_info` (version/hostname) is refreshed in MA by triggering a reconnect of idle devices.
+- Diagnostics: MA API connection status (green/red) and syncgroup list visible in the Diagnostics panel.
+
+### Fixed
+- **Critical**: `MA_API_URL` and `MA_API_TOKEN` were silently ignored by `load_config()` (missing from `allowed_keys`). MA group discovery never ran even with correct credentials.
+- `POST /api/pause_all` (play/unpause): grouped players now resume via the MA group play API instead of individual Sendspin session-group commands, preventing MA from breaking group sync.
+
+## [2.9.3] - 2026-03-05
+
+### Fixed
+- HA addon mode: `MA_API_URL` and `MA_API_TOKEN` saved via the web UI are now preserved across addon restarts (were silently overwritten by the HA options translator on each start).
+
+## [2.9.2] - 2026-03-05
+
+### Fixed
+- MA API URL: `http://` scheme is now auto-prepended if missing (e.g. `localhost:8095` → `http://localhost:8095`).
+- New `POST /api/ma/rediscover` endpoint: re-run MA syncgroup discovery without restarting the addon.
+
+## [2.9.1] - 2026-03-05
+
+### Fixed
+- MA API URL auto-detection now uses `localhost:8095` (reliable in addon network).
+- `ma_api_token` (HA Supervisor token) is not used for MA auth — log now clearly instructs to create token in MA → Settings → API Tokens.
+- Saving config with empty `MA_API_TOKEN` no longer clears an existing token.
+
+### Added
+- `MA_API_URL` and `MA_API_TOKEN` now visible in bridge web UI Advanced settings.
+
+## [2.9.0] - 2026-03-05
+
+### Added
+- New optional options `ma_api_url` and `ma_api_token`: connect to the Music Assistant WebSocket API to enable correct group resume and group name display.
+- `GET /api/ma/groups` endpoint: returns all MA syncgroup players with member details.
+- Group resume now uses the persistent MA syncgroup player via MA API (when configured), restoring all members in sync — identical to pressing resume in the MA UI.
+
+## [2.8.2] - 2026-03-05
+
+### Fixed
+- Per-device pause button incorrectly called `/api/pause` instead of `/api/group/pause` when MA restructured groups after a pause (groupSize became 1). Now always uses `/api/group/pause` when `group_id` is set.
+
+## [2.8.1] - 2026-03-05
+
+### Fixed
+- `/api/pause` endpoint was returning 404 — per-device pause button broken for solo players
+
+## [2.8.0] - 2026-03-05
+
+### Added
+- **Group API**: new `GET /api/groups` endpoint showing all MA player groups with members, average volume and playback state
+- **Group pause/resume**: new `POST /api/group/pause` to pause or resume a specific MA sync group without affecting other groups
+- **Group volume control**: `POST /api/volume` now accepts a `group_id` to set volume for all members of a group at once
+- **Groups in SSE stream**: every status push now includes an aggregated `groups` summary
+
+### Fixed
+- Group filter dropdown in the web UI had no effect (JS variable bug)
+- Per-device pause button was sending pause to all groups instead of only the selected device's group
+
+## [2.7.17] - 2026-03-05
+
+### Fixed
+- Group resume now goes via MPRIS Play so MA restores group sync after pause
+
+## [2.7.16] - 2026-03-05
+
+### Fixed
+- Individual pause button now correctly pauses/resumes the whole sync group
+
+## [2.7.15] - 2026-03-05
+
+### Fixed
+- Volume changes now applied to all devices simultaneously (was serial, causing lag)
+
+### Improved
+- Default web server threads bumped from 4 → 8
+
+## [2.7.14] - 2026-03-05
+
+### Fixed
+- **KA s column header** aligned with keepalive input (was shifted to delete column)
+- **"Show all" label** no longer overflows paired devices box
+- **Paired devices sorting**: bridge devices listed first, then others
+
+### Improved
+- Restored thread-local event loop reuse in PulseAudio wrappers (performance)
+
+## [2.7.13] - 2026-03-05
+
+### Fixed
+- **Deadlock**: `load_adapter_name_cache()` acquired `_adapter_cache_lock` which was already held by caller — root cause of web UI hanging since v2.7.10
+
+## [2.7.12] - 2026-03-05
+
+### Fixed
+- **Web UI unresponsive**: reverted thread-local event loop reuse in PA wrappers (caused Waitress thread starvation)
+
+## [2.7.11] - 2026-03-05
+
+### Improved
+- Reuse thread-local event loop in PulseAudio sync wrappers (performance)
+- Dedicated thread pool for long-running BT operations (prevents pool starvation)
+- Shallow `DeviceStatus.copy()` (all fields immutable, deep copy unnecessary)
+- Concurrent BT scans rejected with HTTP 409
+
+### Refactored
+- Extracted inner D-Bus monitor loop into separate method, cleaner control flow
+
+## [2.7.10] - 2026-03-05
+
+### Fixed
+- Fixed socket file descriptor leak in IP address detection
+- Thread-safe config access: locks on `options.json` writes, `load_config()`, adapter cache, and all config reads
+- Config API rejects non-string values for server, bridge name, timezone, and log level fields
+- Use sysfs for `hciN`↔MAC adapter resolution with `bluetoothctl` fallback
+- `set_volume` now targets all clients by default, not just the first
+- Fixed status serialization order and removed O(N) serialize loop
+- Removed debug comment and raw payload repr from group update log
+
+### Improved
+- Deduplicated PulseAudio sink-input helper
+- Thread-safe runtime detection caching (`lru_cache`)
+- Code cleanup: removed redundant import, moved imports to module top
+
+### Refactored
+- Decoupled `BluetoothManager` from `SendspinClient` via callback
+- Replaced adapter cache bool with `threading.Event`
+- Lazy `%s` log formatting throughout
+- Added `__all__` to public modules
+- Cached `check_bluetooth_available()`
+
+## [2.7.9] - 2026-03-05
+
+### Fixed
+- Fixed MFA step HTTP 400 — only send `code` to HA, not `mfa_module_id`
+
+## [2.7.8] - 2026-03-05
+
+### Fixed
+- **HA auth**: fixed HTTP 400 error — `client_id` now sent with every login_flow step
+
+## [2.7.7] - 2026-03-05
+
+### Fixed
+- Improved error logging in HA login_flow steps
+
+## [2.7.6] - 2026-03-05
+
+### Added
+- **2FA authentication**: login now uses the HA Core `/auth/login_flow` API, enabling full two-factor authentication (TOTP). A second form step appears when 2FA is configured on your HA account.
+
+### Improved
+- **Configuration — Keepalive**: replaced checkbox with an inline number field. Set to `0` to disable (default); minimum non-zero value is 30 s; maximum 3600 s.
+
+## [2.7.5] - 2026-03-05
+
+### Fixed
+- **Web UI**: fixed JS syntax error that prevented device cards from rendering
+
+## [2.7.4] - 2026-03-05
+
+### Added
+- **Log level control**: debug logging can now be enabled via the `log_level` addon option (`info`/`debug`) or toggled at runtime from the **Advanced settings** panel without a container restart.
+
+## [2.7.3] - 2026-03-05
+
+### Fixed
+- **Web UI — Group badge**: shows last UUID segment when MA doesn't provide a human-readable group name; full UUID in tooltip
+
+## [2.7.2] - 2026-03-05
+
+### Improved
+- **Web UI — UX overhaul**: 20 usability improvements based on a full UX audit
+  - "Released" badge on device card header; group badge hides raw UUID hashes
+  - Config dirty-state indicator dot + browser warning on unsaved changes
+  - Advanced settings button shows count of non-default fields
+  - Group volume slider initialises from average of active devices
+  - BT scan shows animated spinner; Re-pair shows a confirmation dialog
+  - Error toasts stay visible for 6 s; sync "Re-anchors" has explanatory tooltip
+  - Mute button uses CSS class (dark theme fix); auto-refresh button uses CSS class
+  - Keyboard shortcuts hint moved to header; Docs/GitHub links out of `<h1>`
+  - Progress time font-size 10 px → 12 px; BT table horizontal scroll shadow
+  - Keepalive controls fixed (no more orphaned row in config); mobile action buttons wrap in a row
+
+## [2.7.1] - 2026-03-05
+
+### Fixed
+- **Release/Reclaim button**: button text and state now update immediately in the UI on success — no more waiting for the next SSE tick
+- **Released device status**: devices in "Released" state now show "Released" in the BT status indicator instead of "BT Reconnecting…"
+- **BT reconnect backoff**: exponential delay between failed reconnect attempts (capped at 5 min) reduces audio interference with other A2DP speakers on the same adapter
+
+## [2.7.0] - 2026-03-05
+
+### Added
+- **Keepalive silence stream**: per-device option to periodically send a short silence burst to the BT sink, preventing speakers from auto-disconnecting during silence. Configurable interval (10–300 s, default 30 s) — available in the addon UI
+
+### Improved
+- **Graceful shutdown**: all players are now paused via reliable IPC before the addon stops — no more abrupt cutoffs
+- **Group-aware pause on BT disconnect**: solo players receive a pause before the daemon stops; grouped players are unaffected so other group members continue playing
+- **SSE efficiency**: status notifications batched in 100 ms windows — reduces UI update overhead when many devices change state simultaneously
+- **BT reconnect scalability**: thread pool sized to device count; D-Bus connection reused across reconnect cycles
+
+### Fixed
+- **Race condition**: `group_id` status read is now thread-safe under `_status_lock`
+
+
+
+### Improved
+- Web UI: player names now use primary text color (black/white) instead of accent blue
+- Docs: web-ui.md rewritten with full feature coverage and screenshots; usage examples added to home page
+
+## [2.6.9] - 2026-03-04
+
+### Fixed
+- Concurrent reconnect race: duplicate `configure_bluetooth_audio()` and double daemon spawns on BT reconnect eliminated via threading/asyncio locks
+- Duplicate `start_sendspin()` calls dropped when daemon is already starting
+
+### Improved
+- Web UI: EQ bars moved beside player name, triggered by playing state
+- Web UI: devices sorted by MA sync group within activity level; ungrouped last
+- Web UI: slash-separated compilation names truncated to "Artist +N" with full tooltip; long names no longer overflow cards
+
+## [2.6.8] - 2026-03-04
+
+### Fixed
+- Pause All: sends one command per MA group, not per client — fixes duplicate signals to grouped players
+
+### Improved
+- Web UI: hover-only details (BT MAC, server URI, sink name, WS URL) always visible on touch; icon buttons enlarged to ≥36px; toast full-width on narrow screens
+
+## [2.6.7] - 2026-03-04
+
+### Fixed
+- Pause button now works — sends pause/play command to MA via aiosendspin controller; works for solo and group playback
+- Track progress bar interpolates client-side between server updates
+
+### Improved
+- Web UI: sink name moved to bottom of Volume column, shown on card hover
+
+## [2.6.6] - 2026-03-04
+
+### Improved
+- Web UI: track progress bar with `m:ss / m:ss` display in Playback column
+- Web UI: BT MAC address and MA server URI hidden by default, revealed on card hover
+- Web UI: re-anchor count in Sync column colored amber (>10) or red (>100)
+
+## [2.6.5] - 2026-03-04
+
+### Improved
+- Web UI: action buttons (Reconnect / Re-pair / Release) hidden by default, revealed on hover
+- Web UI: device cards sorted by activity — Playing first, then BT connected, then disconnected
+- Web UI: EQ bars moved inline into the volume row
+- Web UI: audio format shown in Volume column; adapter shown as `hciN` only
+
+## [2.6.3] - 2026-03-04
+
+### Fixed
+- Sync column no longer gets stuck showing "Re-anchoring" — backend watcher auto-clears state 5 s after last re-anchor log; detection robust to stream restarts that reset the count
+- Re-anchor display state resets correctly when device list order changes after a config edit
+
+### Improved
+- Web UI: Bluetooth + Server columns merged into Connection; track persists on pause
+- Web UI: Inactive cards dimmed; playing cards show green accent border
+- Web UI: Relative timestamps (HH:MM instead of full date)
+- Web UI: Toast notifications replace browser alert()
+- Web UI: Advanced settings collapsed by default (Latency, BT interval, Auto-disable, SBC codec)
+- Web UI: Global health indicator in header (N/M playing, disconnected count)
+- Web UI: Keyboard shortcuts — R refresh · P pause all · S save config
+
+## [2.6.2] - 2026-03-04
+
+### Fixed
+- **Sync delay badge**: `delay: Xms` badge is now gray for offline/non-playing devices, orange only when playing — was showing misleading orange on disconnected devices.
+- **Re-anchor transition banner**: After re-anchoring completes, the warning now stays visible at least 3 s before switching to "✓ In sync" — previously the window was shorter than the SSE update interval so the transition was invisible.
+
+## [2.6.1] - 2026-03-04
+
+### Performance
+- **Async BT scan**: `POST /api/bt/scan` returns `{job_id}` instantly; poll `GET /api/bt/scan/result/<id>` — no longer blocks web UI for 11–17 s.
+- `bluetoothctl info` calls run in parallel (8 workers) during scan.
+- BT reconnect poll log messages demoted to DEBUG — reduces log noise by ~720 lines/h per device.
+
+### Security / Stability
+- **Thread-safe device status**: Added lock around all status mutations shared between asyncio loop, D-Bus callback thread, and Flask WSGI threads.
+- **Adapter cache TOCTOU**: Double-checked locking prevents concurrent WSGI threads from racing on adapter name cache load.
+
+### Fixed
+- **Per-device pause button**: Was using Flask process PID instead of daemon subprocess PID — button now correctly pauses/resumes individual devices.
+- **asyncio deprecation**: `get_event_loop()` → `get_running_loop()` — no DeprecationWarning in Python 3.12, no RuntimeError in Python 3.14.
+- **Daemon stderr captured**: Crashes and library errors written to stderr are now logged as warnings instead of silently discarded.
+- **Healthcheck**: Container no longer reported unhealthy when BT speaker is disconnected (normal idle state).
+
+### Improved
+- HA config translation extracted from `entrypoint.sh` into `scripts/translate_ha_config.py` (type-checked, linted).
+- `SENDSPIN_PORT` now saved as integer (not string) in generated config.
+- Volume persistence logic deduplicated; config path unified to single source of truth.
+- `DeviceStatus` typed as dataclass — key typos caught at dev time.
+- `assert` statements replaced with explicit `RuntimeError` — survives Python `-O` flag.
+- Late import in views blueprint replaced with `app.config["AUTH_ENABLED"]`.
+
+## [2.6.0] - 2026-03-05
+
+### Performance
+- Real-time status via Server-Sent Events (eliminates polling).
+- Daemon crash detection: 20 s → ≤4 s.
+- Exponential backoff (1→30 s) on daemon crash-loop.
+- Status emission deduplication in daemon subprocess.
+- Volume config write debounced (instant pactl, delayed disk write).
+
+### Improved
+- Sink name shown under volume slider; ⚠ warning when BT connected but no sink.
+- Volume slider fades during in-flight requests.
+- BT reconnecting state shows pulsing orange indicator.
+- Subprocess status keys whitelisted to prevent unbounded memory growth.
+
+
+
+### Security
+- Session cookie hardening (SameSite=Lax, HttpOnly).
+- Brute-force protection on /login: IP lockout after 5 failures / 60s window.
+- Adapter MAC validation added to `/api/config` POST.
+
+### Fixed
+- Thread-safety: client list access under concurrent Waitress threads.
+- Volume endpoint input validation: returns 400 on invalid value.
+- BT scan capped at 50 results to prevent DoS in dense environments.
+- Event loop resource leak in `services/pulse.py`.
+- `bash -c` removed from `_resolve_adapter_select` (direct subprocess).
+- `BRIDGE_NAME_SUFFIX` now applied in player name construction.
+
+## [2.5.6] - 2026-03-04
+
+### Added
+- **Group filter for volume/pause**: Filter Group Controls by MA sync group.
+- **Timed re-anchor warning**: Sync column shows warning for `abs(delay_ms)` then reverts to count.
+
+### Fixed
+- **Format column missing in config table**: `preferred_format` grid column and header added.
+
+## [2.5.5] - 2026-03-04
+
+### Added
+- **`preferred_format` per-device config**: Set the preferred audio format to eliminate
+  PulseAudio resampling. Default `flac:44100:16:2` matches SBC A2DP native rate.
+
+## [2.5.4] - 2026-03-04
+
+### Fixed
+- **Sync status empty in device card**: re-anchor count and reanchoring flag were not
+  tracked in subprocess mode. Now intercepted from log messages in real time.
+
+## [2.5.3] - 2026-03-03
+
+### Fixed
+- **Track title and artist not shown in device cards**: METADATA role was not registered
+  with the server — only PLAYER role was used. Server requires METADATA role to send track info.
+
+## [2.5.2] - 2026-03-03
+
+### Fixed
+- **Re-anchoring loop at playback start**: `move-sink-input` was firing on every
+  stream re-anchor, causing a feedback loop. Now runs once per stream session only.
+
+## [2.5.1] - 2026-03-03
+
+### Fixed
+- **PulseAudio module-rescue-streams**: when a BT sink disappears, PA moves streams
+  to the default sink. Added PID-based `move-sink-input` correction on every
+  Stream STARTED event to restore correct routing without race conditions.
+
+## [2.5.0] - 2026-03-03
+
+### Changed
+- **Subprocess isolation for sink routing**: each speaker now runs in its own subprocess
+  with `PULSE_SINK` set in the environment, guaranteeing every audio stream is routed
+  to the correct Bluetooth speaker from the first sample — no delays, no move-sink-input.
+
+## [2.4.0] - 2026-03-03
+
+### Changed
+- **Proactive sink routing**: replaced reactive `pactl move-sink-input` with `PULSE_SINK`
+  set immediately before the PortAudio stream opens. Audio reaches the correct BT speaker
+  from the very first sample with zero polling or delay.
+
+## [2.3.6] - 2026-03-03
+
+### Fixed
+- **Stale routing tasks on rapid stop/play**: tasks from previous play cycles
+  are now cancelled on new stream start, preventing sink-input ID conflicts
+  and routing failures under rapid stop/play clicks.
+
+## [2.3.5] - 2026-03-03
+
+### Improved
+- **Sink routing latency**: parallel routing — all devices route concurrently
+  instead of sequentially. Audio now reaches the correct speaker almost
+  instantly on repeated play (zero sleep fast path for known sink-input IDs).
+
+## [2.3.4] - 2026-03-03
+
+### Fixed
+- **Sink routing on repeated play (root cause fix)**: routing is now triggered from
+  `_on_stream_event("start")`, which fires on every stream activation. Previously it
+  relied on `_handle_format_change`, which only fires when the codec/sample-rate changes —
+  causing all streams to pile up on the default PipeWire sink on repeated group play.
+- Prefer re-claiming own previous sink-input ID to prevent stream stealing between daemons.
+
+## [2.3.3] - 2026-03-03
+
+### Fixed
+- **Sink routing on repeated play**: all streams went to the same speaker after the first
+  stop/start cycle. Each new group play now correctly routes each stream to its own BT sink.
+
+## [2.3.2] - 2026-03-03
+
+### Fixed
+- D-Bus monitor callback: `dbus-fast` requires exactly 3 params — fixed via closure factory
+- Log spam eliminated (`reply_notify` error every 10s for all devices)
+
+### Added
+- GitHub link in web UI header
+- Sidebar navigation on docs homepage
+
+## [2.3.1] - 2026-03-03
+
+### Security
+- Open redirect fixed: login `?next=` validated to local paths only
+
+### Fixed
+- `asyncio.shield()` misuse in `stop_sendspin()` — always timed out; removed
+- `_GLib` never imported — MPRIS identity now works when GLib available
+- `_routed_sink_input_id` initialized in `BridgeDaemon.__init__`
+- Missing HTTP status codes on error responses (503, 500)
+- ha-addon `config.yaml` version reverted — CI auto-syncs on tag push
+
+### Removed
+- Dead code: `_detect_server_url_from_proc()`, `self.process`, `read_mpris_metadata_for()`
+
+### Changed
+- Regex compiled once at module level (10 patterns in `routes/api.py`)
+- Flask 404/500 error handlers with JSON for API routes
+- Docs link added to web UI header
+
+## [2.3.0] - 2026-03-03
+
+### Security
+- Auth bypass: X-Ingress-Path trusted only from localhost (prevents LAN spoofing)
+- Wildcard CORS removed (same-origin only)
+- Timing-safe password comparison via `hmac.compare_digest()`
+- Config POST: MAC validation, port range check, key whitelist
+
+### Fixed
+- PID 1 signals: `init: true` for proper SIGTERM forwarding
+- Routing retry: 3 attempts with backoff on `move-sink-input` failure
+- Stale claimed sink-inputs pruned before routing
+- dbus.mainloop.glib NameError in MPRIS Identity registration
+- BT scan process leak on timeout
+- Config .tmp cleanup on write failure
+- Shell variable quoting in entrypoint.sh
+
+### Changed
+- Removed unused thread-safe status methods (dead code)
+- Silent exceptions now logged at DEBUG level
+- Healthcheck uses WEB_PORT env var
+
+## [2.2.3] - 2026-03-03
+
+### Fixed
+- Sink-input dedup: `_claimed_sink_inputs` set + asyncio.Lock prevents two daemons
+  from routing the same sink-input
+
+## [2.2.2] - 2026-03-03
+
+### Changed
+- Audio routing: replaced null-sink/loopback with `pactl move-sink-input`
+  (PipeWire-compatible). Removed ~80 lines of incompatible module-loading code.
+
+## [2.2.0] - 2026-03-03
+
+### Added
+- Multi-speaker null-sink routing attempt (failed on PipeWire — superseded by v2.2.2)
+
+## [2.1.8] - 2026-03-03
+
+### Fixed
+- Group audio routing: event-driven stream claim replaces fixed 6 s sleep.
+  Each daemon's PA stream is explicitly moved to the correct BT sink as soon
+  as it appears. Correct for any number of devices; lock released faster.
+
+## [2.1.7] - 2026-03-03
+
+### Fixed
+- Group audio routing: PULSE_SINK hold increased to 6 s to ensure correct BT sink assignment
+  when Music Assistant connects ~4 s after daemon start
+
+## [2.1.5] - 2026-03-03
+
+### Fixed
+- Enabled toggle in bridge UI now syncs to `options.json` so HA config page stays in sync
+- Startup sync: device enabled state written to `options.json` on boot (fixes "disabled" display for active devices)
+- `entrypoint.sh`: `options.json` is now authoritative for `enabled`; absent field defaults to `true`
+
+## [2.1.4] - 2026-03-03
+
+### Added
+- DeviceInfo: `product_name = "Sendspin BT Bridge v2.1.4"`, `manufacturer = hostname`
+- Server column always shows host:port; real URL captured from WebSocket on connect
+- Group badge shows last UUID segment of group_id (e.g. `855be80925d3`); moved above MAC
+
+## [2.1.3] - 2026-03-03
+
+### Fixed
+- **Group audio routing**: each daemon sets `PULSE_SINK` to its BT sink before starting.
+  A class-level `asyncio.Lock` serialises startup to prevent PULSE_SINK race conditions
+  between concurrent daemon instances (each holds the lock for 3 s while PA stream opens).
+
+## [2.1.2] - 2026-03-03
+
+### Fixed
+- Crash `Cannot run the event loop while another loop is running` on daemon restart after BT connect
+- `resolve_audio_device_for_sink` is now `async` — uses `await aget_sink_description()` directly
+
+## [2.1.1] - 2026-03-03
+
+### Fixed
+- Corrected `pulsectl-asyncio` version constraint from `>=0.8.0,<1.0.0` to `>=1.0.0,<2.0.0`
+
+## [2.1.0] - 2026-03-03
+
+### Added
+- `pulsectl-asyncio>=1.0.0,<2.0.0` dependency; new `services/pulse.py` module.
+
+### Changed
+- **PulseAudio: migrate from subprocess `pactl` to `pulsectl_asyncio` library.**
+  All PA operations (sink discovery, volume, mute, diagnostics) use native API.
+  Fixes audio device resolution for group playback. Graceful fallback to `pactl` if unavailable.
+
+## [2.0.6] - 2026-03-03
+
+### Fixed
+- Audio device resolution now uses PA sink description (friendly name) via `pactl list sinks`
+  to correctly match each BT speaker in sounddevice, fixing group playback routing.
+
+## [2.0.5] - 2026-03-03
+
+### Fixed
+- Group badge now shows "🔗 In group" when MA sends `group_id` but no `group_name`
+  (MA omits `group_name` in `group/update` messages).
+
+## [2.0.4] - 2026-03-03
+
+### Fixed
+- Group playback: each BT device now routes audio to its own speaker. Daemon was
+  starting before BT connected (no sink known) → all players used the default device.
+  Daemon now restarts after initial BT connect with the correct audio sink.
+- `update_status` name collision between sync helper and async monitoring loop; renamed
+  async loop to `_status_monitor_loop`.
+
+## [2.0.3] - 2026-03-03
+
+### Fixed
+- Track metadata (title/artist) never populated — `_on_metadata_update` receives
+  `ServerStatePayload` but was accessing `payload.title` directly instead of
+  `payload.metadata.title`. Fixed field access path.
+
+## [2.0.2] - 2026-03-02
+
+### Fixed
+- `AttributeError` in metadata callback when receiving `ServerStatePayload` (no `title` attr).
+- `_monitor_dbus` infinite retry loop in restricted D-Bus environments (HA container policy);
+  now falls back to bluetoothctl polling after 3 consecutive `add match request` failures.
+
+## [2.0.1] - 2026-03-02
+
+### Fixed
+- `ImportError: cannot import name 'BluetoothManager'` on container startup — missing
+  `class BluetoothManager:` declaration was dropped during D-Bus refactor edit.
+
+## [2.0.0] - 2026-03-02
+
+### Changed
+- **D-Bus Bluetooth monitor** — instant disconnect detection via `dbus-fast`
+  `PropertiesChanged` signals instead of periodic polling. Falls back to bluetoothctl polling
+  if D-Bus unavailable (e.g. restricted container environment).
+- `is_device_connected()` / `is_device_paired()` / `disconnect_device()` now use
+  BlueZ D-Bus API directly (~10× faster); bluetoothctl retained as fallback.
+- **In-process sendspin daemon** — `BridgeDaemon(SendspinDaemon)` subclass replaces
+  subprocess + stdout-parsing. All events (play/stop, volume, format, group, metadata)
+  delivered via typed callbacks. Removed ~230 lines of parsing code.
+- Track metadata delivered instantly via `add_metadata_listener` (eliminates 10 s MPRIS poll lag).
+- BT reconnect calls `start_sendspin()` / `stop_sendspin()` instead of process management.
+
+### Added
+- `dbus-fast>=2.22.0,<3.0.0` dependency for async D-Bus signal support.
+- MA player grouping — device card shows "🔗 group" badge; `group_name` and `group_id`
+  tracked in player status.
+
+## [1.6.5] - 2026-03-02
+
+### Fixed
+- **Bluetooth "Since:" not shown in device card** — `bluetooth_connected_at`
+  was never set on initial connect; fixed by routing through change-detection
+
+## [1.6.4] - 2026-03-02
+
+### Fixed
+- **BT check interval and auto-disable not persisted** — `bt_check_interval` and
+  `bt_max_reconnect_fails` added to addon schema and now survive restarts
+
+## [1.6.3] - 2026-03-02
+
+### Fixed
+- **HA Configuration page: device enabled state not synchronized** — Release/Reclaim
+  now immediately syncs `enabled` to HA Supervisor options
+- **Configuration page: device enabled state lost on save** — `enabled: false` is
+  preserved in the device row and no longer reset on config save
+
+## [1.6.2] - 2026-03-02
+
+### Fixed
+- **Configuration page: device enabled state not preserved** — saving configuration
+  no longer resets disabled devices to enabled when the status poll hasn't run yet
+
+## [1.6.1] - 2026-03-02
+
+### Fixed
+- **Performance: config reads on every request** — `AUTH_ENABLED` cached at startup,
+  no longer re-read from disk on every HTTP request
+
+### Changed
+- **Mobile UI optimization** — responsive layout at ≤640px with 2-column device cards,
+  horizontal scrolling tables, and correctly themed icon buttons
+
+## [1.6.0] - 2026-03-02
+
+### Added
+- Optional web UI authentication (`AUTH_ENABLED`); disabled by default
+- Set-password form in Configuration panel (PBKDF2-SHA256, no plaintext)
+- HA Ingress bypass — auth skipped when accessed via HA Ingress
+- HA Supervisor auth integration — validates against HA user database when `AUTH_ENABLED=true`
+- Sign out button in page header when auth is active
+
+### Fixed
+- BT_CHECK_INTERVAL and BT_MAX_RECONNECT_FAILS not loaded from saved config
+- Password hash and secret key preserved across config saves
+
+## [1.5.1] - 2026-03-02
+
+### Added
+- BT_CHECK_INTERVAL: configurable BT probe interval (default 10s)
+- BT_MAX_RECONNECT_FAILS: auto-disable device after N consecutive failed reconnects (0 = never)
+
+### Fixed
+- Configuration section collapsed by default
+- Removed Sendspin provider tip disclaimer
+
+
+
+### Changed
+- Code quality sprint: VERSION/config consolidation, removed `netifaces`, halved bluetoothctl
+  subprocess calls, improved HEALTHCHECK, multi-stage Dockerfile, adapter name cache
+- Modular architecture: `state.py`, `services/bluetooth.py`, `routes/api.py`, `routes/views.py`;
+  `web_interface.py` reduced from ~1 045 to 57 lines
+
+
+
+### Fixed
+- HA ingress CSS/JS: replaced `before_request` with WSGI middleware — static files now load correctly
+- Missing ▶ on Diagnostics collapsible section (broken CSS `::before` rule)
+- Collapsible arrow animation for Configuration and Diagnostics sections
+
+## [1.4.1] - 2026-03-02
+
+### Fixed
+- Home Assistant ingress: static files (CSS/JS) now load correctly via HA addon panel (`X-Ingress-Path` → Flask `SCRIPT_NAME`)
+- Broken emoji on Release/Reclaim buttons (`\U0001F513` → literal 🔓/🔒 in `app.js`)
+- Broken triangle in collapsible sections (`'\\25B6'` → `'\25B6'` in `style.css`)
+
+## [1.4.0] - 2026-03-02
+
+### Changed
+- Modular refactoring: `config.py`, `mpris.py`, `bluetooth_manager.py` extracted from `sendspin_client.py`
+- HTML/CSS/JS moved to `templates/` and `static/`; `web_interface.py` reduced from 2891 to 1107 lines
+- Unified `_config_lock` shared across all modules via `config.py`
+
+## [1.3.33] - 2026-03-02
+
+### Fixed
+- Shell injection in `pair_device()` — replaced `bash -c` f-string with stdin pipe + MAC validation
+- Silent task crashes — broken `add_done_callback` lambdas replaced with named callbacks
+- NameError in `main()` — per-device volume pre-fill now works correctly on startup
+- Dropped config keys (`LAST_VOLUMES`, `BLUETOOTH_ADAPTERS`, `BRIDGE_NAME_SUFFIX`) on reload
+- Premature `server_connected=True` set immediately after process start
+- 100% volume blast before saved-volume restore on BT connect
+- Blocking `process.wait()` calls in async context wrapped in `run_in_executor()`
+- `_pause_all_via_mpris` blocking event loop — converted to sync, called via executor
+
+### Security
+- Removed `privileged: true` from Docker compose — `cap_add` is sufficient
+- Removed hardcoded developer MAC address from `docker-compose.yml`
+
+### Changed
+- Config file writes are now atomic and serialised with `threading.Lock` + `os.replace()`
+- Thread-safe status dict via `update_status()` / `get_status()` with `threading.Lock`
+- Docker audio paths use `${AUDIO_UID:-1000}` instead of hardcoded UID 1000
+- All `bash -c` BT API wrappers replaced with direct stdin pipe calls
+- `dbus-python` pinned to `>=1.3.2,<2.0.0`
+
+## [1.3.32] - 2026-03-02
+
+### Fixed
+- **Server column shows `host:port`** — URI in device card Server column now taken from
+  config settings (`server_host:server_port`) instead of the full `ws://…/sendspin`
+  string detected from `/proc/net/tcp`; for `auto`-discovery mode the host is extracted
+  from the resolved URL
+
+## [1.3.31] - 2026-03-02
+
+### Fixed
+- **`--audio-device` crash on PipeWire** — `start_sendspin_process()` now uses the sink
+  name confirmed by `configure_bluetooth_audio()` instead of always hardcoding
+  `bluez_sink.{MAC}.a2dp_sink`; on PipeWire systems the actual sink is `bluez_output.*`
+  so the hardcoded name caused an immediate "Specified audio device not found" crash and
+  immediate process restart loop; when no sink has been confirmed yet `--audio-device` is
+  omitted entirely and `PULSE_SINK` alone is used (pre-v1.3.29 fallback behaviour)
+
+## [1.3.30] - 2026-03-02
+
+### Fixed
+- **Stale playback state** — `update_status()` now polls MPRIS `PlaybackStatus`
+  unconditionally (not only when `playing=True`); `PlaybackStatus` overrides log-based
+  state detection when D-Bus responds, so pausing in MA is reflected in the bridge UI
+  within ≤10 s without relying on fragile log parsing
+- **Stale track metadata** — track/artist are kept on pause instead of cleared; last
+  known values remain visible while paused; `_read_mpris_metadata_for()` extended to
+  return `(artist, track, playback_status)` instead of `(artist, track)`
+
+## [1.3.29] - 2026-03-02
+
+### Fixed
+- **sendspin 5.x compatibility** — `requirements.txt` now pins `sendspin>=5.1.3,<6`;
+  `--audio-device bluez_sink.{MAC}.a2dp_sink` passed explicitly alongside `PULSE_SINK`
+  for reliable sink routing under sendspin 5.x; `--hardware-volume false` prevents
+  sendspin's native volume control from conflicting with bridge volume sync
+- **Per-instance config isolation** — deprecated `--settings-dir` replaced with
+  per-instance `HOME=/tmp/sendspin-{id}` to isolate `~/.config/sendspin/` across
+  daemon instances
+
+## [1.3.28] - 2026-03-02
+
+### Fixed
+- **PULSE_LATENCY_MSEC and PREFER_SBC_CODEC reset on restart** — `entrypoint.sh` was
+  regenerating `/data/config.json` from `options.json` without mapping
+  `pulse_latency_msec` and `prefer_sbc_codec`, causing both settings to always revert
+  to defaults (200 ms / false) on every container restart
+
+## [1.3.27] - 2026-03-02
+
+### Added
+- **Prefer SBC codec** — new `PREFER_SBC_CODEC` config option; when enabled, forces
+  the A2DP codec to SBC immediately after each Bluetooth connect via
+  `pactl send-message … bluez5/set_codec a2dp_sink SBC` (requires PulseAudio 15+);
+  SBC is the simplest mandatory codec and reduces PA encoder CPU load; exposed in
+  the web UI config form and HA addon native Config tab
+- **LXC CPU-optimal PulseAudio config** — `lxc/pulse-daemon.conf` installed to
+  `/etc/pulse/daemon.conf` by `install.sh`; sets `resample-method=trivial`,
+  `default-sample-rate=48000` (matches MA output, zero resampling), `default-sample-format=s16le`
+
+## [1.3.26] - 2026-03-02
+
+### Added
+- **PULSE_LATENCY_MSEC setting** — configurable PulseAudio buffer latency (default 200 ms);
+  increase to 400–600 ms to reduce audio dropouts on slow/overloaded hardware; exposed in
+  the web UI config form and HA addon native Config tab
+
+### Fixed
+- **MPRIS track per player** — `_read_mpris_metadata_for()` now queries
+  `org.mpris.MediaPlayer2.Sendspin.instance{PID}` directly instead of returning
+  metadata from the first MPRIS service found; each player now shows its own track
+
+### Changed
+- **Sendspin process priority** — launched with `nice -5` so audio threads are scheduled
+  ahead of lower-priority background tasks when the system is under load
+
+## [1.3.25] - 2026-03-02
+
+### Fixed
+- **BT scan covers all adapters** — scans hci0 and hci1 simultaneously; devices
+  only visible on a secondary adapter are no longer missed
+- **Adapter auto-selected on Add** — correct adapter pre-filled when adding a
+  device from scan results
+- **Device name in scan results** — Classic BT devices in pairing mode now show
+  their name (resolved via `bluetoothctl info` after scan)
+- **Audio filter** — devices with a name but no UUID (pairing mode, unpaired)
+  are included; only excluded when non-audio UUIDs are present
+- **Already Paired filter** — shows named devices only by default; "Show all"
+  checkbox reveals unnamed (MAC-only) entries
+
+## [1.3.24] - 2026-03-01
+
+### Changed
+- **Bridge name field** — removed misleading `auto` hint from config form
+
+### Removed
+- **BRIDGE_NAME_SUFFIX** — dead config field removed
+
+### Fixed
+- **Server URI display** — uses `/proc/net/tcp` instead of missing `ss` tool
+- **Sub-text style** — unified via `.ts-sub` class, no hardcoded colors
+
+## [1.3.23] - 2026-03-01
+
+### Added
+- **BT adapter shown as hciN MAC** — adapter column now displays `hci0 C0:FB:F9:62:D6:9D` format
+- **Playback color indicator** — green/yellow/red dot in Playback column
+- **Per-device Pause/Unpause button** — ⏸⏸ button in each device's Playback row
+- **Pause All ↔ Unpause All toggle** — Pause All button is now stateful
+
+### Fixed
+- **Unmute All reliability** — fixed race condition where clicking quickly would mute again
+
+## [1.3.22] - 2026-03-01
+
+### Added
+- **Pause All button** — new button in the control bar pauses all active Sendspin players via
+  MPRIS D-Bus (companion to "Mute All")
+- **Actual Bluetooth adapter shown** — device cards now display the real controller MAC even
+  when the device uses the default adapter (auto-detected via `bluetoothctl show`)
+- **Real server URL** — Server column shows the actual resolved `ws://ip:port/sendspin` instead
+  of blank when server is set to `auto`; captured from sendspin output or via `ss` socket lookup
+- **Playback "Since:" timestamp** — a "Since: date/time" line appears below Stopped/Playing
+  state showing when the current state began
+
+### Changed
+- **Audio format display** — removed "Transport: " label prefix; format shows stream details
+  only (e.g. `48000Hz/24-bit/2ch` instead of `Transport: flac 48000Hz/24-bit/2ch`)
+
+## [1.3.21] - 2026-03-01
+
+### Fixed
+- **Bridge name now works** — setting `bridge_name` appends `@ {name}` to every player name
+  visible in MA without needing `bridge_name_suffix`; removed non-functional
+  `SENDSPIN_BRIDGE_*` env vars that the sendspin binary silently ignored
+- **Volume persists across addon updates** — config now stored in `/data` (HA Supervisor
+  persistent volume) instead of ephemeral container filesystem; `LAST_VOLUMES` and device
+  `enabled` flags survive container image recreations (addon updates)
+
+## [1.3.20] - 2026-03-01
+
+### Added
+- **Graceful pause on shutdown** — on SIGTERM/SIGINT, the bridge now sends an MPRIS `Pause`
+  command to every active sendspin player before terminating, so Music Assistant pauses
+  the queue cleanly instead of losing the player unexpectedly; waits 500 ms after pausing
+  to allow the command to propagate before disconnecting
+
+## [1.3.19] - 2026-03-01
+
+### Added
+- **Bridge name identification** — new `bridge_name` option identifies this bridge instance in MA
+  device info (Model field shows `BT Bridge @ {name}`); set to `auto` for hostname
+- **Optional player name suffix** — `bridge_name_suffix` bool (default off) appends `@ {name}`
+  to every player's display name in the MA player list
+- **MPRIS Identity service** — registers `org.mpris.MediaPlayer2.SendspinBridge.*` on the
+  session bus with Identity = effective player name
+
+## [1.3.18] - 2026-03-01
+
+### Changed
+- **Device card uses CSS Grid** — action row with buttons and track info is pixel-aligned to the status columns via subgrid
+- **Delay badge in Sync column** — delay shown in amber next to sync status instead of in the device name area
+- **Bluetooth column shows adapter name/MAC** — adapter identity visible at a glance below the connection timestamp
+- **Server column shows WebSocket URI** — full `ws://host:port/sendspin` address displayed in purple
+- **Now-playing in action row** — track and artist shown on the same line as buttons, aligned under Playback column; single line, full text
+
+## [1.3.17] - 2026-03-01
+
+### Fixed
+- **MPRIS service name** — fixed D-Bus service identity so media-key clients reliably find the player interface
+
+## [1.3.16] - 2026-03-01
+
+### Added
+- **MPRIS metadata support** — track title and artist exposed via D-Bus `org.mpris.MediaPlayer2.Player` for integration with media-key applets and home automation
+
+## [1.3.15] - 2026-03-01
+
+### Added
+- **Bidirectional config sync** — `listen_host`, `listen_port`, `enabled`, and adapter `name` fields now survive container restarts via Supervisor options round-trip
+- **SENDSPIN_PORT in Ingress config form** — port field added and pre-populated from saved config
+
+## [1.3.14] - 2026-03-01
+
+### Fixed
+- **Release/reclaim state lost on restart** — released device now stays released after container restart
+- **Volume slider shows 100% after restart** — UI now shows the saved volume immediately on startup
+
+## [1.3.13] - 2026-03-01
+
+### Added
+- **Auto-detect Bluetooth adapters on startup** — discovers adapters via `bluetoothctl list` at container start; no need to manually configure adapter IDs
+- **Native Config tab shows adapters after first Save** — Ingress UI now writes auto-detected adapters back to Supervisor options on save
+
+## [1.3.12] - 2026-03-01
+
+### Fixed
+- **Timezone auto-detect** — HA Supervisor injects the correct `TZ` env var into the addon container; use it as fallback instead of calling `/host/info` (which returns 403)
+
+## [1.3.11] - 2026-03-01
+
+### Fixed
+- **TZ and Bluetooth adapters not applied at runtime** — the GHCR image entrypoint (`entrypoint.sh`) was missing TZ auto-detection and `BLUETOOTH_ADAPTERS` support; now auto-detects timezone from Supervisor `/host/info` when `tz` is empty
+
+## [1.3.10] - 2026-03-01
+
+### Fixed
+- **Config generation conflict** — `entrypoint.sh` was overwriting the config generated by `run.sh`, stripping `BLUETOOTH_ADAPTERS` and reverting timezone to the raw (empty) options value; fixed via `HA_ADDON_CONFIG_DONE` flag
+
+## [1.3.9] - 2026-03-01
+
+### Added
+- **Timezone in native Config tab** — new `tz` option; leave empty to auto-detect from Home Assistant system timezone via Supervisor `/host/info` API
+- **Bluetooth adapters in native Config tab** — new `bluetooth_adapters` option (`[{id, mac?}]`); populates adapter dropdowns in the Ingress web UI without opening it first
+- **Timezone auto-detection** — if `tz` is empty at startup, timezone is fetched from the Supervisor host info; falls back to `UTC`
+- **Config sync** — saving via Ingress UI now persists `tz` and `bluetooth_adapters` to Supervisor options
+
+## [1.3.8] - 2026-03-01
+
+### Fixed
+- **HA addon: config persistence** — saving via the web UI now syncs settings to Supervisor options (`POST /addons/self/options`) so that `run.sh` does not overwrite them on the next container start
+- **HA addon: Save & Restart** — restart is now performed via Supervisor API (`POST /addons/self/restart`) instead of `SIGTERM` to PID 1, which was stopping the addon without restarting it
+- **HA addon: logs endpoint** — added `Accept: text/plain` header required by Supervisor 2.7+ `advanced_logs_handler` (previously caused HTTP 500)
+
+## [1.3.7] - 2026-03-01
+
+### Changed
+- **Web UI redesigned** to match Home Assistant / Music Assistant visual language
+  - CSS custom properties (`:root` design tokens) replace all hardcoded colors
+  - `@media (prefers-color-scheme: dark)` dark theme with HA dark palette
+  - Header styled as HA app-toolbar (`--app-header-background-color`)
+  - Primary color changed from purple (`#667eea`) to HA blue (`#03a9f4`)
+  - Status/action colors mapped to `--success-color`, `--error-color`, `--warning-color`
+  - Cards use `--ha-card-border-radius` (12px) and `--ha-card-box-shadow`
+  - Buttons: `border-radius: 4px`, uppercase, HA letter-spacing and font-weight
+  - Font changed to Roboto (Google Fonts) with `-apple-system` fallback
+  - HA Ingress `setTheme` postMessage listener — live theme injection when opened in HA sidebar
+
+## [1.3.6] - 2026-02-28
+
+### Fixed
+- HA addon runtime detection: `_detect_runtime()` now checks `/data/options.json` before falling through to `docker`, preventing `api_logs()` from trying to run `docker logs` inside the addon container
+- Logs endpoint in HA addon mode now fetches from Supervisor API (`GET /addons/self/logs`) using `SUPERVISOR_TOKEN`
+
+## [1.3.5] - 2026-02-28
+
+### Fixed
+- All `fetch()` calls in the web UI now use `API_BASE` prefix — fixes JSON parse errors when accessed via HA Ingress (where the page URL contains a token path segment and bare `/api/...` resolved against HA Core instead of the addon)
+
+## [1.3.4] - 2026-02-28
+
+### Fixed
+- `pipefail` crash in `entrypoint.sh`: `bluetoothctl show | head -10` caused `bluetoothctl` to receive SIGPIPE and exit non-zero under `set -euo pipefail`; suppressed with `|| true`
+
+## [1.3.3] - 2026-02-28
+
+### Fixed
+- `entrypoint.sh` now detects HA addon mode via `/data/options.json` and translates it to `/config/config.json` before startup, matching the Docker Compose flow
+
+## [1.2.3] - 2026-02-28
+
+### Changed
+- New device default `static_delay_ms` changed from `-500` to `0`
+- New devices added via the web UI now have their initial volume set to the current group volume slider value, restored on first service start
+
+## [1.2.2] - 2026-02-28
+
+### Fixed
+- Adapter change in config no longer causes "device not paired" reconnect loop on restart — `POST /api/config` now runs `bluetoothctl remove` for devices whose `adapter` field changed or that were deleted, cleaning up stale pairings from the old adapter before the service restarts
+
+## [1.2.1] - 2026-02-28
+
+### Fixed
+- Shell injection risk in `_run_bluetoothctl` — replaced string-formatted bash command with stdin pipe
+- XSS vulnerability in web UI — HTML attribute positions now use `escHtmlAttr()` instead of `escHtml()`
+- `monitor_output` task not cancelled when sendspin process restarts, causing duplicate log readers
+- Signal handler used `asyncio.create_task` which could leave orphaned tasks on shutdown
+- Per-player audio format cache was a module-level global, causing wrong format shown for second device in multi-device setups
+- Removed dead code: `ClientHolder` class and `get_client_instance()` function
+- LXC: `module-bluetooth-policy auto_switch=never` added to `pulse-system.pa` — fixes A2DP connection failure for devices that advertise HFP/HSP profiles (e.g. ENEBY Portable); SCO sockets required by HFP are unavailable in LXC kernel namespaces, causing `br-connection-unknown` disconnect before PulseAudio could create the A2DP sink
+
+## [1.2.0] - 2026-02-28
+
+### Added
+- **Multi-device support** — bridge multiple Bluetooth speakers simultaneously, each appearing as a separate player in Music Assistant; configure via `BLUETOOTH_DEVICES` array in `config.json`
+- **Home Assistant addon** (`ha-addon/`) — native HA addon with Ingress support; web UI appears directly in the HA sidebar
+- **Proxmox LXC deployment** (`lxc/`) — fully headless deployment without Docker:
+  - `lxc/proxmox-create.sh` — one-command LXC container creation on Proxmox host with Bluetooth D-Bus passthrough and system-mode PulseAudio
+  - `lxc/install.sh` — in-container installer for dependencies and systemd units
+  - `btctl` wrapper for Bluetooth control via host D-Bus socket
+- **Multi-adapter support** — `adapter` field in device config pins a speaker to a specific Bluetooth controller (`hci0`, `hci1`, …)
+- **Per-device latency compensation** — `static_delay_ms` field compensates for A2DP + PulseAudio buffer latency (default `-500ms`)
+- **Per-device listen port/host** — `listen_port` and `listen_host` fields control per-player Sendspin daemon binding
+- **Volume persistence per device** — volume saved per MAC address under `LAST_VOLUMES` in `config.json`, restored on reconnect
+- **Group volume/mute controls** — control all players simultaneously from the web UI
+- **Reconnect and Re-pair buttons** — per-device controls in the status dashboard
+- **Bluetooth scan filtering** — scan results filtered to audio-capable devices only (by BT device class / A2DP UUID)
+- **BT adapter management panel** — auto-detect adapters with manual override support
+- **`/api/diagnostics` endpoint** — structured health info: adapters, sinks, D-Bus availability, per-device status
+- **Audio format display** — codec, sample rate, and bit depth shown in device status cards (e.g. `flac 48000Hz/24-bit/2ch`)
+- **Sync status tracking** — re-anchor count and last sync error shown in device cards
+- **Timezone autocomplete** — IANA timezone list in configuration UI
+- **Per-player WebSocket URL** — displayed in device cards for debugging
+
+### Changed
+- `BLUETOOTH_MAC` env var superseded by `BLUETOOTH_DEVICES` array (backward compatible — single MAC still supported)
+- `SENDSPIN_NAME` used as player name prefix
+- Device info reported to Music Assistant set to `Sendspin / Bluetooth Bridge`
+- `PULSE_SINK` set per-process for isolated audio routing per device
+- Audio route configured without changing system default sink (per-process via `PULSE_SINK`)
+- Removed Player Name Prefix field from configuration UI
+
+### Fixed
+- Bluetooth disconnect detection reliability improvements
+- `bluetooth_sink_name` not set when sendspin process restarts after unexpected death
+- Volume/mute controls disabled when audio sink not yet configured
+- Bluetooth `AF_BLUETOOTH` kernel namespace limitation in LXC resolved via host D-Bus bridge
+- Playing status detection updated for actual sendspin log output format
+- BT scan: stdin kept open so bluetoothctl has time to discover devices
+- Volume sync: parse `Server set player volume` log format from Music Assistant
+- `LAST_VOLUMES` preserved when saving configuration via web UI
+
+## [1.1.0] - 2026-01-27 (origin: loryanstrant/Sendspin-client)
+
+### Fixed
+- Bluetooth connection status monitoring reliability
+- Bluetooth disconnect detection with real-time status polling
+
+## [1.0.0] - 2026-01-01 (origin: loryanstrant/Sendspin-client)
+
+### Added
+- Initial release: Dockerized Sendspin client with Bluetooth speaker management
+- Flask web UI served by Waitress on port 8080
+- Auto-reconnect to Bluetooth device every 10 seconds
+- PipeWire and PulseAudio sink detection and routing
+- Volume sync from Music Assistant to Bluetooth speaker via `pactl`
+- mDNS auto-discovery for Music Assistant server (`SENDSPIN_SERVER=auto`)
+- Config persistence via `/config/config.json`
+
+[1.3.32]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.31...v1.3.32
+[1.3.31]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.30...v1.3.31
+[1.3.30]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.29...v1.3.30
+[1.3.29]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.28...v1.3.29
+[1.3.28]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.27...v1.3.28
+[1.3.27]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.26...v1.3.27
+[1.3.26]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.25...v1.3.26
+[1.3.25]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.24...v1.3.25
+[1.3.24]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.23...v1.3.24
+[1.3.23]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.22...v1.3.23
+[1.3.22]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.21...v1.3.22
+[1.3.21]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.20...v1.3.21
+[1.3.20]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.19...v1.3.20
+[1.3.19]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.18...v1.3.19
+[1.3.18]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.17...v1.3.18
+[1.3.17]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.16...v1.3.17
+[1.3.16]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.15...v1.3.16
+[1.3.15]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.14...v1.3.15
+[1.3.14]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.13...v1.3.14
+[1.3.13]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.12...v1.3.13
+[1.3.12]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.11...v1.3.12
+[1.3.11]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.10...v1.3.11
+[1.3.10]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.9...v1.3.10
+[1.3.9]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.8...v1.3.9
+[1.3.8]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.7...v1.3.8
+[1.3.7]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.6...v1.3.7
+[1.3.6]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.5...v1.3.6
+[1.3.5]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.4...v1.3.5
+[1.3.4]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.3...v1.3.4
+[1.3.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.2.3...v1.3.3
+[1.2.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.2.2...v1.2.3
+[1.2.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.2.1...v1.2.2
+[1.2.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.2.0...v1.2.1
+[1.2.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.1.0...v1.2.0
+[1.1.0]: https://github.com/loryanstrant/Sendspin-client/compare/v1.0.0...v1.1.0
+[1.0.0]: https://github.com/loryanstrant/Sendspin-client/releases/tag/v1.0.0

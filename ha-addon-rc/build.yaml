@@ -1,0 +1,4 @@
+build_from:
+  aarch64: ghcr.io/trudenboy/sendspin-bt-bridge:rc
+  amd64: ghcr.io/trudenboy/sendspin-bt-bridge:rc
+  armv7: ghcr.io/trudenboy/sendspin-bt-bridge:rc
