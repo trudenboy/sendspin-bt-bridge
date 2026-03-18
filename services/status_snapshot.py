@@ -85,6 +85,23 @@ class DeviceHealthSummary:
 
 
 @dataclass
+class StartupProgressSnapshot:
+    status: str
+    phase: str
+    current_step: int
+    total_steps: int
+    percent: int
+    message: str
+    details: dict[str, Any] = field(default_factory=dict)
+    started_at: str | None = None
+    updated_at: str | None = None
+    completed_at: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
 class GroupSnapshot:
     group_id: str | None
     group_name: str | None
@@ -115,6 +132,7 @@ class BridgeSnapshot:
     system_info: dict[str, Any] = field(default_factory=dict)
     ma_web_url: str | None = None
     update_available: dict[str, Any] | None = None
+    startup_progress: StartupProgressSnapshot | None = None
     error: str | None = None
 
     def to_status_payload(self) -> dict[str, Any]:
@@ -132,6 +150,8 @@ class BridgeSnapshot:
         payload["groups"] = [group.to_dict() for group in self.groups]
         payload["ma_connected"] = self.ma_connected
         payload["disabled_devices"] = list(self.disabled_devices)
+        if self.startup_progress:
+            payload["startup_progress"] = self.startup_progress.to_dict()
         if self.ma_web_url:
             payload["ma_web_url"] = self.ma_web_url
         if self.update_available:
@@ -254,6 +274,23 @@ def _build_health_summary(device: DeviceSnapshot) -> DeviceHealthSummary:
         severity="info",
         summary="Connected and ready" if device.connected else "Idle",
         last_event_at=device.recent_events[0]["at"] if device.recent_events else None,
+    )
+
+
+def build_startup_progress_snapshot() -> StartupProgressSnapshot:
+    """Build a typed startup progress snapshot from bridge state."""
+    progress = state.get_startup_progress()
+    return StartupProgressSnapshot(
+        status=str(progress.get("status") or "idle"),
+        phase=str(progress.get("phase") or "idle"),
+        current_step=int(progress.get("current_step") or 0),
+        total_steps=int(progress.get("total_steps") or 0),
+        percent=int(progress.get("percent") or 0),
+        message=str(progress.get("message") or ""),
+        details=dict(progress.get("details") or {}),
+        started_at=progress.get("started_at"),
+        updated_at=progress.get("updated_at"),
+        completed_at=progress.get("completed_at"),
     )
 
 
@@ -475,6 +512,7 @@ def build_bridge_snapshot(clients: list[Any]) -> BridgeSnapshot:
             disabled_devices=state.get_disabled_devices(),
             system_info=state.get_bridge_system_info(),
             update_available=update_available,
+            startup_progress=build_startup_progress_snapshot(),
             error="No clients",
         )
 
@@ -486,4 +524,5 @@ def build_bridge_snapshot(clients: list[Any]) -> BridgeSnapshot:
         ma_web_url=ma_url or None,
         disabled_devices=state.get_disabled_devices(),
         update_available=update_available,
+        startup_progress=build_startup_progress_snapshot(),
     )

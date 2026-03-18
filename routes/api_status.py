@@ -25,7 +25,12 @@ from config import BUILD_DATE, VERSION, load_config
 from services.log_analysis import summarize_issue_logs
 from services.pulse import get_server_name, list_sinks
 from services.sendspin_compat import get_runtime_dependency_versions
-from services.status_snapshot import build_bridge_snapshot, build_device_snapshot, build_group_snapshots
+from services.status_snapshot import (
+    build_bridge_snapshot,
+    build_device_snapshot,
+    build_group_snapshots,
+    build_startup_progress_snapshot,
+)
 from state import clients as _clients
 from state import (
     clients_lock as _clients_lock,
@@ -181,6 +186,12 @@ def api_groups():
     return jsonify(_build_groups_summary(snapshot))
 
 
+@status_bp.route("/api/startup-progress")
+def api_startup_progress():
+    """Return bridge startup progress for operators and the UI."""
+    return jsonify(build_startup_progress_snapshot().to_dict())
+
+
 @status_bp.route("/api/status/stream")
 def api_status_stream():
     """Server-Sent Events endpoint — pushes status when it changes.
@@ -272,6 +283,7 @@ def api_diagnostics():
             "runtime": runtime,
             "uptime": uptime_str,
             "environment": _collect_environment(),
+            "startup_progress": build_startup_progress_snapshot().to_dict(),
         }
 
         try:

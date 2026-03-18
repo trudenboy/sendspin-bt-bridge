@@ -107,6 +107,44 @@ def test_set_disabled_devices_replaces():
     assert result[0]["player_name"] == "B"
 
 
+def test_startup_progress_lifecycle():
+    progress = state.reset_startup_progress(4, message="Booting")
+    assert progress["status"] == "running"
+    assert progress["total_steps"] == 4
+    assert progress["percent"] == 0
+
+    progress = state.update_startup_progress(
+        "devices",
+        "Preparing devices",
+        current_step=2,
+        details={"active_clients": 3},
+    )
+    assert progress["phase"] == "devices"
+    assert progress["current_step"] == 2
+    assert progress["percent"] == 50
+    assert progress["details"]["active_clients"] == 3
+
+    progress = state.complete_startup_progress("Ready", details={"active_clients": 3})
+    assert progress["status"] == "ready"
+    assert progress["phase"] == "ready"
+    assert progress["current_step"] == 4
+    assert progress["percent"] == 100
+    assert progress["completed_at"] is not None
+
+
+def test_fail_startup_progress_marks_error():
+    state.reset_startup_progress(3)
+    state.update_startup_progress("web", "Starting web", current_step=2)
+
+    progress = state.fail_startup_progress("Web startup failed", details={"port": 8080})
+
+    assert progress["status"] == "error"
+    assert progress["phase"] == "web"
+    assert progress["message"] == "Web startup failed"
+    assert progress["details"]["port"] == 8080
+    assert progress["completed_at"] is not None
+
+
 # ---------------------------------------------------------------------------
 # Music Assistant now-playing state
 # ---------------------------------------------------------------------------

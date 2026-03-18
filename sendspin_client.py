@@ -906,9 +906,17 @@ class SendspinClient:
 
 async def main():
     """Main entry point"""
+    startup_steps = 6
 
     # Demo mode — replace all hardware layers with mocks (BT, PulseAudio, D-Bus)
     demo_mode = os.getenv("DEMO_MODE", "").lower() in ("1", "true", "yes")
+    _state.reset_startup_progress(startup_steps, message="Startup initiated")
+    _state.update_startup_progress(
+        "config",
+        "Loading configuration",
+        current_step=1,
+        details={"demo_mode": demo_mode},
+    )
     if demo_mode:
         from demo import install
 
@@ -952,6 +960,16 @@ async def main():
         logger.info("BT churn isolation: enabled (threshold=%d in %.0fs)", bt_churn_threshold, bt_churn_window)
 
     bt_devices = _filter_duplicate_bluetooth_devices(config.get("BLUETOOTH_DEVICES", []))
+    _state.update_startup_progress(
+        "runtime",
+        "Runtime configuration prepared",
+        current_step=2,
+        details={
+            "configured_devices": len(bt_devices),
+            "log_level": log_level,
+            "pulse_latency_msec": pulse_latency_msec,
+        },
+    )
 
     logger.info("Starting %s player instance(s)", len(bt_devices))
     if not bt_devices:
@@ -1055,6 +1073,16 @@ async def main():
     # Register disabled devices in state for UI display
     if disabled_list:
         _state.set_disabled_devices(disabled_list)
+    _state.update_startup_progress(
+        "devices",
+        "Device registry prepared",
+        current_step=3,
+        details={
+            "configured_devices": len(bt_devices),
+            "active_clients": len(clients),
+            "disabled_devices": len(disabled_list),
+        },
+    )
 
     # Sync enabled state to options.json so HA addon config page reflects current state
     # NOTE: only sync truly enabled/disabled state, NOT the runtime "released" flag.
@@ -1133,6 +1161,12 @@ async def main():
 
     # Expose the running loop so Flask/WSGI threads can schedule coroutines
     _state.set_main_loop(asyncio.get_running_loop())
+    _state.update_startup_progress(
+        "web",
+        "Web interface and event loop ready",
+        current_step=4,
+        details={"web_thread": web_thread.name},
+    )
 
     # Discover MA syncgroups via MA API.
     # In HA addon mode (SUPERVISOR_TOKEN present): auto-detect URL and try supervisor token.
@@ -1178,6 +1212,15 @@ async def main():
 
         monitor = start_monitor(ma_api_url, ma_api_token)
         ma_monitor_task = asyncio.create_task(monitor.run())
+    _state.update_startup_progress(
+        "integrations",
+        "Music Assistant integrations initialized",
+        current_step=5,
+        details={
+            "ma_configured": bool(ma_api_url and ma_api_token),
+            "ma_monitor_enabled": bool(ma_monitor_task),
+        },
+    )
 
     # Run all clients in parallel
     client_tasks = [asyncio.create_task(c.run()) for c in clients]
@@ -1191,6 +1234,14 @@ async def main():
 
     # Background update checker (all deployment types)
     tasks.append(asyncio.create_task(run_update_checker(VERSION)))
+    _state.complete_startup_progress(
+        "Startup complete",
+        details={
+            "active_clients": len(clients),
+            "ma_monitor_enabled": bool(ma_monitor_task),
+            "demo_mode": demo_mode,
+        },
+    )
 
     await asyncio.gather(*tasks)
 

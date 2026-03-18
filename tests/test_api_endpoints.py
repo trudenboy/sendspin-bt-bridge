@@ -572,6 +572,29 @@ def test_status_includes_health_summary_and_recent_events(client, monkeypatch):
         state.clear_device_events("sendspin-kitchen")
 
 
+def test_status_and_startup_progress_endpoint_include_startup_progress(client):
+    """Startup progress is exposed both directly and via the main status payload."""
+    import state
+
+    state.reset_startup_progress(4, message="Booting")
+    state.update_startup_progress("web", "Starting web interface", current_step=3, details={"active_clients": 2})
+    try:
+        resp = client.get("/api/startup-progress")
+        assert resp.status_code == 200
+        progress = resp.get_json()
+        assert progress["phase"] == "web"
+        assert progress["percent"] == 75
+        assert progress["details"]["active_clients"] == 2
+
+        status_resp = client.get("/api/status")
+        assert status_resp.status_code == 200
+        status_data = status_resp.get_json()
+        assert status_data["startup_progress"]["phase"] == "web"
+        assert status_data["startup_progress"]["percent"] == 75
+    finally:
+        state.reset_startup_progress()
+
+
 def test_api_status_parse_helpers_are_defensive():
     """Diagnostics parsers must return None instead of raising on malformed input."""
     from routes.api_status import (

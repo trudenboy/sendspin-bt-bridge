@@ -150,6 +150,8 @@ def test_build_bridge_snapshot_no_clients_preserves_bridge_metadata():
     state.set_disabled_devices([{"player_name": "Disabled", "enabled": False}])
     state.set_ma_api_credentials("http://ma.local:8095", "token")
     state.set_update_available({"version": "2.33.0"})
+    state.reset_startup_progress(3, message="Booting")
+    state.update_startup_progress("devices", "Preparing devices", current_step=2)
     try:
         snapshot = build_bridge_snapshot([])
         payload = snapshot.to_status_payload()
@@ -160,9 +162,12 @@ def test_build_bridge_snapshot_no_clients_preserves_bridge_metadata():
         assert payload["ma_web_url"] == "http://ma.local:8095"
         assert payload["disabled_devices"][0]["player_name"] == "Disabled"
         assert payload["update_available"]["version"] == "2.33.0"
+        assert payload["startup_progress"]["phase"] == "devices"
+        assert payload["startup_progress"]["percent"] == 67
         assert payload["version"]
         assert payload["runtime"]
     finally:
         state.set_disabled_devices([])
         state.set_ma_api_credentials("", "")
         state.set_update_available(None)
+        state.reset_startup_progress()

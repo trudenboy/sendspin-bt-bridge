@@ -28,8 +28,10 @@ __all__ = [
     "clear_ma_now_playing",
     "clients",
     "clients_lock",
+    "complete_startup_progress",
     "create_scan_job",
     "fail_ma_pending_op",
+    "fail_startup_progress",
     "finish_scan_job",
     "get_adapter_name",
     "get_bridge_system_info",
@@ -43,6 +45,7 @@ __all__ = [
     "get_ma_server_version",
     "get_main_loop",
     "get_scan_job",
+    "get_startup_progress",
     "is_ma_connected",
     "is_scan_running",
     "load_adapter_name_cache",
@@ -50,6 +53,7 @@ __all__ = [
     "notify_status_changed",
     "record_device_event",
     "replace_ma_now_playing",
+    "reset_startup_progress",
     "set_clients",
     "set_disabled_devices",
     "set_ma_api_credentials",
@@ -59,6 +63,7 @@ __all__ = [
     "set_ma_now_playing_for_group",
     "set_ma_server_version",
     "set_main_loop",
+    "update_startup_progress",
 ]
 
 # ---------------------------------------------------------------------------
@@ -92,6 +97,128 @@ def get_bridge_system_info() -> dict:
         "uptime": str(timedelta(seconds=int(uptime.total_seconds()))),
         "runtime": _detect_runtime_type(),
     }
+
+
+def _new_startup_progress() -> dict[str, Any]:
+    return {
+        "status": "idle",
+        "phase": "idle",
+        "current_step": 0,
+        "total_steps": 0,
+        "message": "",
+        "details": {},
+        "started_at": None,
+        "updated_at": None,
+        "completed_at": None,
+    }
+
+
+_startup_progress: dict[str, Any] = _new_startup_progress()
+_startup_progress_lock = threading.Lock()
+
+
+def _copy_startup_progress(snapshot: dict[str, Any]) -> dict[str, Any]:
+    data = copy.deepcopy(snapshot)
+    total = int(data.get("total_steps") or 0)
+    current = int(data.get("current_step") or 0)
+    data["percent"] = 0 if total <= 0 else min(100, round(current * 100 / total))
+    return data
+
+
+def get_startup_progress() -> dict[str, Any]:
+    """Return the current bridge startup progress snapshot."""
+    with _startup_progress_lock:
+        return _copy_startup_progress(_startup_progress)
+
+
+def reset_startup_progress(total_steps: int = 0, *, message: str = "Startup initiated") -> dict[str, Any]:
+    """Reset startup progress for a new bridge boot sequence."""
+    global _startup_progress
+    now = datetime.now(tz=timezone.utc).isoformat()
+    normalized_total_steps = max(0, int(total_steps or 0))
+    with _startup_progress_lock:
+        _startup_progress = _new_startup_progress()
+        _startup_progress.update(
+            {
+                "status": "running" if normalized_total_steps > 0 else "idle",
+                "message": message,
+                "total_steps": normalized_total_steps,
+                "started_at": now,
+                "updated_at": now,
+            }
+        )
+        result = _copy_startup_progress(_startup_progress)
+    notify_status_changed()
+    return result
+
+
+def update_startup_progress(
+    phase: str,
+    message: str,
+    *,
+    current_step: int | None = None,
+    total_steps: int | None = None,
+    status: str = "running",
+    details: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Update the current startup progress snapshot and notify SSE listeners."""
+    now = datetime.now(tz=timezone.utc).isoformat()
+    with _startup_progress_lock:
+        _startup_progress["phase"] = phase
+        _startup_progress["message"] = message
+        _startup_progress["status"] = status
+        _startup_progress["updated_at"] = now
+        if current_step is not None:
+            _startup_progress["current_step"] = max(0, int(current_step))
+        if total_steps is not None:
+            _startup_progress["total_steps"] = max(0, int(total_steps))
+        if details is not None:
+            _startup_progress["details"] = copy.deepcopy(details)
+        result = _copy_startup_progress(_startup_progress)
+    notify_status_changed()
+    return result
+
+
+def complete_startup_progress(
+    message: str = "Startup complete",
+    *,
+    details: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Mark startup progress as ready."""
+    now = datetime.now(tz=timezone.utc).isoformat()
+    with _startup_progress_lock:
+        total_steps = int(_startup_progress.get("total_steps") or _startup_progress.get("current_step") or 0)
+        _startup_progress.update(
+            {
+                "status": "ready",
+                "phase": "ready",
+                "message": message,
+                "current_step": total_steps,
+                "total_steps": total_steps,
+                "completed_at": now,
+                "updated_at": now,
+            }
+        )
+        if details is not None:
+            _startup_progress["details"] = copy.deepcopy(details)
+        result = _copy_startup_progress(_startup_progress)
+    notify_status_changed()
+    return result
+
+
+def fail_startup_progress(message: str, *, details: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Mark startup progress as failed while preserving current phase/step data."""
+    now = datetime.now(tz=timezone.utc).isoformat()
+    with _startup_progress_lock:
+        _startup_progress["status"] = "error"
+        _startup_progress["message"] = message
+        _startup_progress["updated_at"] = now
+        _startup_progress["completed_at"] = now
+        if details is not None:
+            _startup_progress["details"] = copy.deepcopy(details)
+        result = _copy_startup_progress(_startup_progress)
+    notify_status_changed()
+    return result
 
 
 # ---------------------------------------------------------------------------
