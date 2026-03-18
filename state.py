@@ -20,6 +20,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from config import CONFIG_FILE as _config_file
+from services.internal_events import InternalEvent, InternalEventPublisher
 
 __all__ = [
     "apply_ma_now_playing_prediction",
@@ -52,6 +53,8 @@ __all__ = [
     "load_adapter_name_cache",
     "mark_ma_now_playing_stale",
     "notify_status_changed",
+    "publish_device_event",
+    "publish_internal_event",
     "record_device_event",
     "replace_ma_now_playing",
     "reset_startup_progress",
@@ -383,6 +386,98 @@ def get_disabled_devices() -> list[dict]:
 _device_events: dict[str, deque[dict[str, Any]]] = {}
 _device_events_lock = threading.Lock()
 _DEVICE_EVENT_LIMIT = 25
+_internal_event_publisher = InternalEventPublisher()
+
+
+def _store_device_event(
+    device_id: str,
+    event_type: str,
+    *,
+    level: str = "info",
+    message: str | None = None,
+    details: dict[str, Any] | None = None,
+    at: str | None = None,
+) -> dict[str, Any] | None:
+    """Append a structured event directly to the per-device ring buffer."""
+    if not device_id or not event_type:
+        return None
+
+    event = {
+        "event_type": event_type,
+        "level": level,
+        "message": message or "",
+        "details": dict(details or {}),
+        "at": at or datetime.now(tz=timezone.utc).isoformat(),
+    }
+    with _device_events_lock:
+        bucket = _device_events.setdefault(device_id, deque(maxlen=_DEVICE_EVENT_LIMIT))
+        bucket.append(event)
+    return dict(event)
+
+
+def _persist_internal_device_event(event: InternalEvent) -> None:
+    """Default subscriber: persist published device events into the ring buffer."""
+    if event.category != "device_event":
+        return
+    payload = dict(event.payload)
+    _store_device_event(
+        event.subject_id,
+        str(payload.get("event_type") or ""),
+        level=str(payload.get("level") or "info"),
+        message=str(payload.get("message") or ""),
+        details=payload.get("details") if isinstance(payload.get("details"), dict) else None,
+        at=event.at,
+    )
+
+
+_internal_event_publisher.subscribe(_persist_internal_device_event)
+
+
+def publish_internal_event(
+    *,
+    event_type: str,
+    category: str,
+    subject_id: str,
+    payload: dict[str, Any] | None = None,
+) -> InternalEvent | None:
+    """Publish a structured internal runtime event to all subscribers."""
+    return _internal_event_publisher.publish(
+        event_type=event_type,
+        category=category,
+        subject_id=subject_id,
+        payload=payload,
+    )
+
+
+def publish_device_event(
+    device_id: str,
+    event_type: str,
+    *,
+    level: str = "info",
+    message: str | None = None,
+    details: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    """Publish a per-device operational event through the internal event bus."""
+    event = publish_internal_event(
+        event_type="device.event.recorded",
+        category="device_event",
+        subject_id=device_id,
+        payload={
+            "event_type": event_type,
+            "level": level,
+            "message": message or "",
+            "details": dict(details or {}),
+        },
+    )
+    if event is None:
+        return None
+    return {
+        "event_type": event_type,
+        "level": level,
+        "message": message or "",
+        "details": dict(details or {}),
+        "at": event.at,
+    }
 
 
 def record_device_event(
@@ -394,20 +489,13 @@ def record_device_event(
     details: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     """Append a structured event to the per-device ring buffer."""
-    if not device_id or not event_type:
-        return None
-
-    event = {
-        "event_type": event_type,
-        "level": level,
-        "message": message or "",
-        "details": dict(details or {}),
-        "at": datetime.now(tz=timezone.utc).isoformat(),
-    }
-    with _device_events_lock:
-        bucket = _device_events.setdefault(device_id, deque(maxlen=_DEVICE_EVENT_LIMIT))
-        bucket.append(event)
-    return dict(event)
+    return _store_device_event(
+        device_id,
+        event_type,
+        level=level,
+        message=message,
+        details=details,
+    )
 
 
 def get_device_events(device_id: str, limit: int | None = None) -> list[dict[str, Any]]:

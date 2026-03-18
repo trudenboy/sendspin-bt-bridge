@@ -349,7 +349,7 @@ class SendspinClient:
             self.status.update(updates)
             recorded_events = self._build_status_events(previous, self.status.copy(), updates)
         for event in recorded_events:
-            _state.record_device_event(
+            _state.publish_device_event(
                 self._event_device_id(),
                 str(event["event_type"]),
                 level=str(event["level"]),
