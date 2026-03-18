@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - New `services.playback_health` helpers so zombie-playback watchdog state and restart thresholds are owned by a focused monitor instead of living directly on `SendspinClient`
 - New `services.subprocess_stderr` helpers so daemon `stderr` classification and crash-like status publication can evolve independently from `SendspinClient`
 - New `services.subprocess_ipc` helpers so daemon stdout parsing, protocol-version warning policy, and log/status message dispatch can evolve independently from `SendspinClient`
+- New `services.subprocess_command` helpers so daemon stdin command serialization and protocol-version envelopes can evolve independently from `SendspinClient`
 
 ### Changed
 - Parent↔subprocess IPC is now versioned end-to-end: daemon status/log envelopes, parent command envelopes, and daemon startup params all include `protocol_version` while remaining backward-compatible with legacy messages that omit it
@@ -34,6 +35,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added focused subprocess-stderr tests and client delegation coverage to lock down the new daemon logging seam before deeper process-lifecycle extractions
 - `SendspinClient` now delegates daemon stdout/IPC parsing, protocol warning policy, and log/status message dispatch to `SubprocessIpcService`, while retaining local volume-persist handling around status updates
 - Added focused subprocess-IPC tests and client delegation coverage to lock down the new daemon stdout seam before deeper process-lifecycle extractions
+- `SendspinClient` now delegates daemon stdin command writing to `SubprocessCommandService`, while keeping `_send_subprocess_command()` as a thin compatibility proxy for routes, Bluetooth hooks, and tests
+- Added focused subprocess-command tests and client delegation coverage to lock down the new daemon stdin seam before larger lifecycle extractions
 
 ## [2.32.12] - 2026-03-17
 

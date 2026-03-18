@@ -49,6 +49,27 @@ async def test_send_subprocess_command_uses_snapshot_when_proc_changes():
 
 
 @pytest.mark.asyncio
+async def test_send_subprocess_command_delegates_to_command_service():
+    client = SendspinClient("Test Player", "localhost", 9000)
+    proc = object()
+    client._daemon_proc = proc
+
+    class _FakeService:
+        def __init__(self):
+            self.calls = []
+
+        async def send(self, current_proc, cmd):
+            self.calls.append((current_proc, cmd))
+
+    fake_service = _FakeService()
+    client._command_service = fake_service
+
+    await client._send_subprocess_command({"cmd": "pause"})
+
+    assert fake_service.calls == [(proc, {"cmd": "pause"})]
+
+
+@pytest.mark.asyncio
 async def test_read_subprocess_output_accepts_protocol_versioned_status_once():
     client = SendspinClient("Test Player", "localhost", 9000)
 

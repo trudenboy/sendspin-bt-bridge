@@ -33,6 +33,7 @@ from services.ipc_protocol import (
     with_protocol_version,
 )
 from services.playback_health import PlaybackHealthMonitor
+from services.subprocess_command import SubprocessCommandService
 from services.subprocess_ipc import SubprocessIpcService
 from services.subprocess_stderr import SubprocessStderrService
 
@@ -288,6 +289,7 @@ class SendspinClient:
             logger_=logger,
             allowed_keys=_IPC_ALLOWED_KEYS,
         )
+        self._command_service = SubprocessCommandService(logger_=logger)
         self._stderr_service = SubprocessStderrService(
             player_name=player_name,
             update_status=self._update_status,
@@ -672,14 +674,7 @@ class SendspinClient:
 
     async def _send_subprocess_command(self, cmd: dict) -> None:
         """Write a JSON command to the daemon subprocess stdin."""
-        proc = self._daemon_proc
-        stdin = proc.stdin if proc else None
-        if proc and stdin and proc.returncode is None:
-            try:
-                stdin.write((json.dumps(with_protocol_version(cmd)) + "\n").encode())
-                await stdin.drain()
-            except Exception as exc:
-                logger.debug("Could not send subprocess command: %s", exc)
+        await self._command_service.send(self._daemon_proc, cmd)
 
     async def send_reconnect(self) -> None:
         """Trigger the sendspin subprocess to reconnect to MA server.
