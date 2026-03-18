@@ -1,6 +1,7 @@
 import re
 from pathlib import Path
 
+import scripts.generate_ha_addon_variants as addon_variants
 from scripts.generate_ha_addon_variants import (
     HaAddonVariant,
     generate_multi_addon_repo_files,
@@ -140,3 +141,19 @@ def test_sync_multi_addon_repo_removes_absent_prerelease_directories(tmp_path):
 
     assert (tmp_path / "ha-addon" / "config.yaml").exists()
     assert not (tmp_path / "ha-addon-rc").exists()
+
+
+def test_write_multi_addon_repo_skips_copying_binary_assets_over_themselves(tmp_path, monkeypatch):
+    source_root = tmp_path / "source"
+    output_root = source_root
+    source_addon = source_root / "ha-addon"
+    source_addon.mkdir(parents=True)
+    for filename in addon_variants._BINARY_VARIANT_FILES:
+        (source_addon / filename).write_bytes(filename.encode())
+
+    monkeypatch.setattr(addon_variants, "_HA_ADDON_DIR", source_addon)
+
+    write_multi_addon_repo(output_root, stable_version=_current_stable_version())
+
+    for filename in addon_variants._BINARY_VARIANT_FILES:
+        assert (source_addon / filename).read_bytes() == filename.encode()

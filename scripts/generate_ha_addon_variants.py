@@ -275,7 +275,11 @@ def write_multi_addon_repo(
     )
     for addon_dir in [variant.addon_dir for variant in variants]:
         for filename in _BINARY_VARIANT_FILES:
-            shutil.copy2(_HA_ADDON_DIR / filename, output_root / addon_dir / filename)
+            source = _HA_ADDON_DIR / filename
+            target = output_root / addon_dir / filename
+            if source.resolve() == target.resolve():
+                continue
+            shutil.copy2(source, target)
 
 
 def sync_multi_addon_repo(
