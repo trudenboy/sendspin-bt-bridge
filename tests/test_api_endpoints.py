@@ -394,6 +394,12 @@ def test_api_bugreport_uses_issue_worthy_logs_in_summary(client, monkeypatch):
                 "dbus_available": True,
                 "bluetooth_daemon": "active",
                 "subprocesses": [],
+                "onboarding_assistant": {
+                    "checks": [
+                        {"key": "ma_auth", "status": "warning", "summary": "Music Assistant is not configured."}
+                    ],
+                    "next_steps": ["Configure MA_API_URL before using MA sync features."],
+                },
             }
         ),
     )
@@ -430,6 +436,8 @@ def test_api_bugreport_uses_issue_worthy_logs_in_summary(client, monkeypatch):
     assert "ALSA setup failed" in data["markdown_short"]
     assert "daemon crashed" in data["markdown_short"]
     assert "reconnecting to bluetooth speaker" not in data["markdown_short"]
+    assert "ONBOARDING ASSISTANT" in data["text_full"]
+    assert "Configure MA_API_URL before using MA sync features." in data["text_full"]
     assert data["report"]["recent_issue_logs"] == [
         "2026-03-17 18:00:01,000 - root - WARNING - daemon stderr: ALSA setup failed",
         "2026-03-17 18:00:02,000 - root - ERROR - daemon crashed",
@@ -1210,6 +1218,14 @@ def test_api_diagnostics_includes_playing_and_sink_input_metadata(client, monkey
     )
     monkeypatch.setattr(api_status, "_collect_environment", lambda: {"audio_server": "pulseaudio 16.1"})
     monkeypatch.setattr(api_status, "_collect_subprocess_info", lambda: [])
+    monkeypatch.setattr(
+        api_status,
+        "_build_onboarding_assistant_payload",
+        lambda preflight=None: {
+            "checks": [{"key": "sink_verification", "status": "ok", "summary": "All sinks look good."}],
+            "next_steps": [],
+        },
+    )
     monkeypatch.setattr(api_status.subprocess, "run", fake_run)
 
     state.set_ma_api_credentials("", "")
@@ -1226,6 +1242,7 @@ def test_api_diagnostics_includes_playing_and_sink_input_metadata(client, monkey
         assert data["sink_inputs"][0]["state"] == "RUNNING"
         assert data["sink_inputs"][0]["application_name"] == "Sendspin Bridge"
         assert data["sink_inputs"][0]["media_name"] == "Quiet Woods"
+        assert data["onboarding_assistant"]["checks"][0]["key"] == "sink_verification"
     finally:
         sys.modules.pop("sendspin.audio", None)
         state.set_ma_groups({}, [])

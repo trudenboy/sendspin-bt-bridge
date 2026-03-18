@@ -54,6 +54,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `POST /api/config` now also delegates baseline schema validation to the shared config-validation service, persists `CONFIG_SCHEMA_VERSION`, and returns structured validation warnings/errors consistently with the upload path before continuing route-specific coercion and save logic
 - New dry-run `POST /api/config/validate` surface now exposes explicit config validation results, warnings, and normalized preview payloads without persisting changes, giving the upcoming 2.39.x operator/UI work a stable reporting contract
 - New `GET /api/onboarding/assistant` endpoint now exposes actionable operator guidance for Bluetooth availability, audio availability, sink verification, Music Assistant auth state, and latency calibration using a dedicated service layer, while `/api/preflight` now reuses a shared collector instead of duplicating the same runtime checks inline
+- `/api/diagnostics`, `/api/bugreport`, and diagnostics text exports now include the onboarding assistant payload so setup guidance travels with the richer support/bugreport surfaces instead of being isolated to a standalone endpoint
 
 ## [2.32.12] - 2026-03-17
 

@@ -187,6 +187,24 @@ def _collect_preflight_status() -> dict:
     }
 
 
+def _build_onboarding_assistant_payload(preflight: dict | None = None) -> dict:
+    """Build the operator-facing onboarding assistant payload."""
+    if preflight is None:
+        preflight = _collect_preflight_status()
+    config = load_config()
+    registry = get_device_registry_snapshot()
+    devices = [build_device_snapshot(client) for client in registry.active_clients]
+    runtime_mode = build_mock_runtime_snapshot().mode
+    assistant = build_onboarding_assistant_snapshot(
+        config=config,
+        preflight=preflight,
+        devices=devices,
+        ma_connected=state.is_ma_connected(),
+        runtime_mode=runtime_mode,
+    )
+    return assistant.to_dict()
+
+
 def get_client_status_for(client):
     """Get status dict for a specific client."""
     try:
@@ -532,6 +550,7 @@ def api_diagnostics():
             diag["portaudio_devices"] = [{"error": "Failed to list PortAudio devices"}]
 
         diag["subprocesses"] = _collect_subprocess_info()
+        diag["onboarding_assistant"] = _build_onboarding_assistant_payload()
 
         return jsonify(diag)
     except Exception:
@@ -902,6 +921,7 @@ def _build_full_text_report(
     subprocs = masked.get("subprocesses", [])
     ma_info = diag.get("ma_integration", {})
     sinks = diag.get("sinks", [])
+    assistant = diag.get("onboarding_assistant", {})
 
     # Environment
     if env:
@@ -957,6 +977,18 @@ def _build_full_text_report(
                 avail = "OK" if m.get("available") else "FAIL"
                 vol = f" vol={m.get('volume')}" if m.get("volume") is not None else ""
                 full.append(f"    {m.get('name', '?')}: {m.get('state', '?')} [{avail}]{vol}")
+        full.append("")
+
+    if assistant:
+        full.append("--- ONBOARDING ASSISTANT ---")
+        for check in assistant.get("checks", []):
+            status = str(check.get("status", "?")).upper()
+            full.append(f"  [{status}] {check.get('key', '?')}: {check.get('summary', '')}")
+        next_steps = assistant.get("next_steps", [])
+        if next_steps:
+            full.append("  Next steps:")
+            for step in next_steps:
+                full.append(f"    - {step}")
         full.append("")
 
     # Adapters
@@ -1090,19 +1122,7 @@ def api_health():
 @status_bp.route("/api/onboarding/assistant")
 def api_onboarding_assistant():
     """Return actionable setup guidance derived from current runtime health."""
-    preflight = _collect_preflight_status()
-    config = load_config()
-    registry = get_device_registry_snapshot()
-    devices = [build_device_snapshot(client) for client in registry.active_clients]
-    runtime_mode = build_mock_runtime_snapshot().mode
-    assistant = build_onboarding_assistant_snapshot(
-        config=config,
-        preflight=preflight,
-        devices=devices,
-        ma_connected=state.is_ma_connected(),
-        runtime_mode=runtime_mode,
-    )
-    return jsonify(assistant.to_dict())
+    return jsonify(_build_onboarding_assistant_payload())
 
 
 @status_bp.route("/api/preflight")
