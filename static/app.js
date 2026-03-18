@@ -783,7 +783,7 @@ function _getSafeArtworkUrl(imgUrl) {
     if (!trimmed) return '';
     if (trimmed.indexOf('data:') === 0) return trimmed;
     try {
-        var parsed = new URL(trimmed, window.location.origin);
+        var parsed = new URL(trimmed, window.location.href);
         if (parsed.origin === window.location.origin) return parsed.href;
     } catch (_) {
         return '';

@@ -34,7 +34,7 @@ def test_build_now_playing_wraps_relative_artwork_in_proxy_url():
     parsed = urlparse(result["image_url"])
     query = parse_qs(parsed.query)
 
-    assert parsed.path == "/api/ma/artwork"
+    assert parsed.path == "api/ma/artwork"
     assert query["url"] == ["/api/image/123"]
     assert len(query["sig"][0]) == 64
 
@@ -55,7 +55,7 @@ def test_build_now_playing_wraps_absolute_artwork_in_proxy_url():
     parsed = urlparse(result["image_url"])
     query = parse_qs(parsed.query)
 
-    assert parsed.path == "/api/ma/artwork"
+    assert parsed.path == "api/ma/artwork"
     assert query["url"] == ["http://ma:8095/api/image/abc"]
     assert len(query["sig"][0]) == 64
 

@@ -49,4 +49,4 @@ def build_artwork_proxy_url(image_url: str) -> str:
         return ""
     quoted_url = _up.quote(trimmed, safe="")
     signature = sign_artwork_url(trimmed)
-    return f"/api/ma/artwork?url={quoted_url}&sig={signature}"
+    return f"api/ma/artwork?url={quoted_url}&sig={signature}"
