@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.40.4] - 2026-03-18
+
+### Added
+- Release pipelines now smoke-test the packaged runtime inside built images before publication, catching missing runtime modules and HA translation regressions before they reach the Home Assistant add-on store
+
+### Changed
+- Home Assistant channel publishing is now designed around this repository itself, with the stable addon kept in `ha-addon/` and prerelease addon directories synced as `ha-addon-rc/` / `ha-addon-beta/` when those tags exist, while the stable slug stays unchanged
+- Add-on docs and update guidance now clearly separate the installed addon track from the in-app `update_channel` preference
+
+### Fixed
+- Music Assistant controls no longer fail with `no queue available` for solo Sendspin players on MA `2.7.11` stable because queue commands now target the modern solo-player queue IDs exposed by newer MA builds
+
 ## [2.40.3] - 2026-03-18
 
 ### Fixed

@@ -172,6 +172,81 @@ def test_api_update_info_reports_beta_channel_warning(config_client, monkeypatch
     assert ":beta" in data["instructions"]
 
 
+def test_api_update_info_reports_matching_ha_addon_delivery_channel(config_client, monkeypatch):
+    import routes.api_config as api_config
+    import state
+
+    monkeypatch.setattr(api_config, "load_config", lambda: {"UPDATE_CHANNEL": "rc", "AUTO_UPDATE": False})
+    monkeypatch.setattr(api_config, "_detect_runtime", lambda: "ha_addon")
+    monkeypatch.setattr(
+        api_config,
+        "_get_ha_addon_delivery_details",
+        lambda: {
+            "channel": "rc",
+            "slug": "85b1ecde_sendspin_bt_bridge_rc",
+            "name": "Sendspin Bluetooth Bridge (RC)",
+        },
+    )
+    state.set_update_available(None)
+
+    resp = config_client.get("/api/update/info")
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["delivery_channel"] == "rc"
+    assert data["delivery_slug"] == "85b1ecde_sendspin_bt_bridge_rc"
+    assert data["channel_switch_required"] is False
+    assert "Sendspin Bluetooth Bridge (RC)" in data["instructions"]
+
+
+def test_api_update_info_flags_when_selected_channel_differs_from_installed_ha_variant(config_client, monkeypatch):
+    import routes.api_config as api_config
+    import state
+
+    monkeypatch.setattr(api_config, "load_config", lambda: {"UPDATE_CHANNEL": "beta", "AUTO_UPDATE": False})
+    monkeypatch.setattr(api_config, "_detect_runtime", lambda: "ha_addon")
+    monkeypatch.setattr(
+        api_config,
+        "_get_ha_addon_delivery_details",
+        lambda: {
+            "channel": "stable",
+            "slug": "85b1ecde_sendspin_bt_bridge",
+            "name": "Sendspin Bluetooth Bridge",
+        },
+    )
+    state.set_update_available(None)
+
+    resp = config_client.get("/api/update/info")
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["delivery_channel"] == "stable"
+    assert data["channel_switch_required"] is True
+    assert "Selected update channel is `beta`" in data["instructions"]
+    assert "installed Home Assistant addon track is `stable`" in data["instructions"]
+
+
+def test_api_update_apply_in_ha_addon_returns_matching_variant_guidance(config_client, monkeypatch):
+    import routes.api_config as api_config
+
+    monkeypatch.setattr(api_config, "load_config", lambda: {"UPDATE_CHANNEL": "beta"})
+    monkeypatch.setattr(api_config, "_detect_runtime", lambda: "ha_addon")
+    monkeypatch.setattr(
+        api_config,
+        "_get_ha_addon_delivery_details",
+        lambda: {
+            "channel": "stable",
+            "slug": "85b1ecde_sendspin_bt_bridge",
+            "name": "Sendspin Bluetooth Bridge",
+        },
+    )
+
+    resp = config_client.post("/api/update/apply")
+
+    assert resp.status_code == 400
+    assert "Selected update channel is `beta`" in resp.get_json()["error"]
+
+
 def test_lxc_scripts_sync_repo_snapshot_recursively():
     repo_root = Path(__file__).resolve().parent.parent
 

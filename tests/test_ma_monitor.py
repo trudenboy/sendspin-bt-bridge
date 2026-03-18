@@ -175,14 +175,40 @@ def test_find_solo_player_queues_uses_registry_snapshot(monkeypatch):
     try:
         result = _find_solo_player_queues(
             [
-                {"queue_id": "upsendspinkitchen", "active": True},
+                {"queue_id": "sendspin-kitchen", "active": True},
                 {"queue_id": "syncgroup_1", "active": True},
             ]
         )
     finally:
         state.set_ma_groups({}, [])
 
-    assert result == [("sendspin-kitchen", {"queue_id": "upsendspinkitchen", "active": True})]
+    assert result == [("sendspin-kitchen", {"queue_id": "sendspin-kitchen", "active": True})]
+
+
+def test_find_solo_player_queues_keeps_legacy_uuid_queue_matching(monkeypatch):
+    state.set_ma_groups({}, [])
+    monkeypatch.setattr(
+        ma_monitor,
+        "get_device_registry_snapshot",
+        lambda: DeviceRegistrySnapshot(
+            active_clients=[SimpleNamespace(player_id="d3002d0d-db47-51e2-b3a2-00f79b7fc683")]
+        ),
+    )
+    try:
+        result = _find_solo_player_queues(
+            [
+                {"queue_id": "upd3002d0ddb4751e2b3a200f79b7fc683", "active": True},
+            ]
+        )
+    finally:
+        state.set_ma_groups({}, [])
+
+    assert result == [
+        (
+            "d3002d0d-db47-51e2-b3a2-00f79b7fc683",
+            {"queue_id": "upd3002d0ddb4751e2b3a200f79b7fc683", "active": True},
+        )
+    ]
 
 
 @pytest.mark.asyncio

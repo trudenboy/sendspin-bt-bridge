@@ -27,6 +27,7 @@ from config import (
 from routes.api_config import _detect_runtime
 from services.device_registry import get_device_registry_snapshot
 from services.ma_artwork import has_valid_artwork_signature
+from services.ma_monitor import solo_queue_candidates
 
 logger = logging.getLogger(__name__)
 
@@ -97,7 +98,8 @@ def _resolve_target_queue(
     raw_syncgroup_id = str(syncgroup_id or "").strip()
     raw_player_id = str(player_id or "").strip()
     raw_group_id = str(group_id or "").strip()
-    solo_queue_id = ("up" + raw_player_id.replace("-", "")) if raw_player_id else ""
+    solo_queue_ids = solo_queue_candidates(raw_player_id)
+    solo_queue_id = solo_queue_ids[0] if solo_queue_ids else ""
 
     if not raw_player_id:
         for candidate in (raw_syncgroup_id, raw_group_id):
@@ -121,12 +123,13 @@ def _resolve_target_queue(
 
         if len(active_clients) == 1:
             inferred_player_id, _status = active_clients[0]
-            inferred_solo_queue_id = "up" + inferred_player_id.replace("-", "")
+            inferred_solo_queue_ids = solo_queue_candidates(inferred_player_id)
+            inferred_solo_queue_id = inferred_solo_queue_ids[0] if inferred_solo_queue_ids else ""
             for candidate in (raw_syncgroup_id, raw_group_id):
                 if candidate.startswith("syncgroup_"):
                     ma_group = state.get_ma_group_by_id(candidate)
                     members = {str(m.get("id", "")) for m in (ma_group or {}).get("members", [])}
-                    if inferred_solo_queue_id in members:
+                    if any(queue_id in members for queue_id in inferred_solo_queue_ids):
                         return candidate, candidate
             return inferred_player_id, inferred_solo_queue_id
 
@@ -144,7 +147,7 @@ def _resolve_target_queue(
             if candidate.startswith("syncgroup_"):
                 ma_group = state.get_ma_group_by_id(candidate)
                 members = {str(m.get("id", "")) for m in (ma_group or {}).get("members", [])}
-                if solo_queue_id and solo_queue_id in members:
+                if any(queue_id in members for queue_id in solo_queue_ids):
                     return candidate, candidate
 
         if solo_queue_id:

@@ -22,7 +22,7 @@ import time
 import uuid as _uuid
 from pathlib import Path
 
-VERSION = "2.40.3"
+VERSION = "2.40.4"
 BUILD_DATE = "2026-03-18"
 CONFIG_SCHEMA_VERSION = 1
 UPDATE_CHANNELS = ("stable", "rc", "beta")

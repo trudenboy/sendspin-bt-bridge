@@ -54,6 +54,19 @@ simultaneously.
 4. **Start the addon.** Check the Log tab for connection status.
 5. The speaker now appears as a player in Music Assistant—stream away!
 
+## Update channels in Home Assistant
+
+The Home Assistant addon has two related but different channel concepts:
+
+- **Installed addon track** — the actual addon variant you installed from the Home Assistant store (`stable`, `RC`, or `Beta` when those variants are published).
+- **`update_channel` setting** — the in-app preference used for prerelease checks and warning text.
+
+Important:
+
+- changing `update_channel` does **not** switch the installed addon track by itself
+- the checked-in addon manifest in this repository represents the **stable** variant
+- when RC or Beta addon variants are available, switching tracks means installing the matching addon variant from the Home Assistant store first
+
 ## Configuration
 
 ### General options
@@ -70,7 +83,7 @@ simultaneously.
 | `bt_max_reconnect_fails` | int | `0` | Maximum consecutive reconnect attempts before giving up. `0` means unlimited (keep retrying forever). |
 | `auth_enabled` | bool | `false` | Enable password protection for the web UI. Set the password through the web interface after enabling. |
 | `log_level` | list | `info` | Logging verbosity: `info` or `debug`. Use `debug` when troubleshooting. |
-| `update_channel` | list | `stable` | Release track for update checks and prerelease notifications. `stable` is recommended. `rc` and `beta` are not stable and may contain unfinished changes or regressions. |
+| `update_channel` | list | `stable` | Release track preference for update checks and prerelease notifications. `stable` is recommended. `rc` and `beta` are not stable and may contain unfinished changes or regressions. Changing this value alone does not switch the installed HA addon track. |
 
 ### Music Assistant API options
 

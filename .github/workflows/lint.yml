@@ -79,3 +79,12 @@ jobs:
         run: python scripts/check_sendspin_compat.py
       - name: Run tests
         run: python -m pytest tests/ -v --tb=short
+
+  container-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build local container image
+        run: docker build -t sendspin-container-smoke .
+      - name: Run packaged runtime smoke test
+        run: docker run --rm --entrypoint python3 sendspin-container-smoke /app/scripts/check_container_runtime.py

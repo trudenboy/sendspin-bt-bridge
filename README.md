@@ -202,6 +202,12 @@ The addon exposes the web UI via **HA Ingress** (no port forwarding needed) and 
 
 The addon requests `audio: true` in its manifest so HA Supervisor injects `PULSE_SERVER` automatically. No manual socket configuration is needed.
 
+### Addon update channels
+
+- The repository URL above installs the **stable** Home Assistant addon track.
+- The `update_channel` setting inside the app controls prerelease checks and helper text, but it does **not** switch the installed HA addon by itself.
+- When RC or Beta addon variants are available in the Home Assistant store, switching tracks means installing the matching addon variant first and then updating that addon from the store.
+
 ---
 
 ## Option B — Docker Compose

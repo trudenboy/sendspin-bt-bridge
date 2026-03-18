@@ -68,41 +68,55 @@ jobs:
             echo "- Prerelease: \`${PRERELEASE}\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Sync ha-addon version on main for stable only
-        id: sync_addon
-        if: steps.resolve.outputs.channel == 'stable'
+      - name: Sync HA addon directories on main
+        id: sync_addon_repo
         env:
+          CHANNEL: ${{ steps.resolve.outputs.channel }}
           VERSION: ${{ steps.resolve.outputs.version }}
         run: |
           set -euo pipefail
           git checkout main
-          python - <<'PY'
-          from pathlib import Path
-          import os
-          import re
-          path = Path("ha-addon/config.yaml")
-          text = path.read_text()
-          updated = re.sub(r'^version: ".*"$', f'version: "{os.environ["VERSION"]}"', text, count=1, flags=re.MULTILINE)
-          if updated != text:
-              path.write_text(updated)
-          PY
-          if git diff --quiet -- ha-addon/config.yaml; then
+          git fetch --force --tags
+
+          stable_tag="$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-version:refname | head -n 1 || true)"
+          rc_tag="$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*-rc.[0-9]*' --sort=-version:refname | head -n 1 || true)"
+          beta_tag="$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*-beta.[0-9]*' --sort=-version:refname | head -n 1 || true)"
+
+          case "${CHANNEL}" in
+            stable) stable_tag="v${VERSION}" ;;
+            rc) rc_tag="v${VERSION}" ;;
+            beta) beta_tag="v${VERSION}" ;;
+          esac
+
+          cmd=(python scripts/generate_ha_addon_variants.py sync-current-repo --output-dir .)
+          if [ -n "${stable_tag}" ]; then
+            cmd+=(--stable-version "${stable_tag#v}")
+          fi
+          if [ -n "${rc_tag}" ]; then
+            cmd+=(--rc-version "${rc_tag#v}")
+          fi
+          if [ -n "${beta_tag}" ]; then
+            cmd+=(--beta-version "${beta_tag#v}")
+          fi
+          "${cmd[@]}"
+
+          if [ -z "$(git status --short)" ]; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
-            echo "- ha-addon/config.yaml already matched the stable release version" >> "$GITHUB_STEP_SUMMARY"
+            echo "- HA addon directories on \`main\` already matched the latest stable/rc/beta tags" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
+
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add ha-addon/config.yaml
-          git commit -m "chore: sync ha-addon version to ${VERSION}"
+          git add -A .
+          git commit -m "chore: sync HA addon directories for ${VERSION}"
           git push origin HEAD:main
           echo "changed=true" >> "$GITHUB_OUTPUT"
-          echo "- Updated \`ha-addon/config.yaml\` on \`main\` to \`${VERSION}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Updated \`ha-addon\` / \`ha-addon-rc\` / \`ha-addon-beta\` on \`main\` from the latest known channel tags" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Skip addon sync for prereleases
-        if: steps.resolve.outputs.channel != 'stable'
+      - name: Summarize current-repo HA publishing
         run: |
-          echo "- Prerelease tag detected; skipped ha-addon/config.yaml sync on main" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Home Assistant addon channels are published from this repository itself using \`ha-addon\`, \`ha-addon-rc\`, and \`ha-addon-beta\` directories." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Resolve previous comparable release
         id: previous_release

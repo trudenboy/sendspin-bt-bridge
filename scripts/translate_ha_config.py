@@ -37,8 +37,8 @@ DEFAULT_UPDATE_CHANNEL, normalize_update_channel = _load_config_helpers()
 
 logger = logging.getLogger(__name__)
 
-OPTIONS_FILE = "/data/options.json"
-CONFIG_FILE = "/data/config.json"
+OPTIONS_FILE = os.getenv("SENDSPIN_HA_OPTIONS_FILE", "/data/options.json")
+CONFIG_FILE = os.getenv("SENDSPIN_HA_CONFIG_FILE", "/data/config.json")
 
 
 def _mac_to_hci(mac: str) -> str:

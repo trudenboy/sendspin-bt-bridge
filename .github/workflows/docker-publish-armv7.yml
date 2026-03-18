@@ -59,6 +59,12 @@ jobs:
           cache-to: type=gha,mode=max,scope=linux/arm/v7,ignore-error=true
           outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
 
+      - name: Smoke test built image
+        run: |
+          image="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}"
+          docker pull --platform linux/arm/v7 "${image}"
+          docker run --rm --platform linux/arm/v7 --entrypoint python3 "${image}" scripts/check_container_runtime.py
+
       - name: Export digest
         run: |
           digest="${{ steps.build.outputs.digest }}"

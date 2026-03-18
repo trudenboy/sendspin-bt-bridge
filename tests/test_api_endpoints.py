@@ -29,6 +29,28 @@ def _isolated_config(tmp_path, monkeypatch):
     (tmp_path / "config.json").write_text(json.dumps({}))
 
 
+def _cancel_api_volume_timers() -> None:
+    api_mod = sys.modules.get("routes.api")
+    if api_mod is None:
+        return
+    timers = getattr(api_mod, "_volume_timers", None)
+    lock = getattr(api_mod, "_volume_timers_lock", None)
+    if timers is None or lock is None:
+        return
+    with lock:
+        pending = list(timers.values())
+        timers.clear()
+    for timer in pending:
+        timer.cancel()
+
+
+@pytest.fixture(autouse=True)
+def _clear_volume_persist_timers():
+    _cancel_api_volume_timers()
+    yield
+    _cancel_api_volume_timers()
+
+
 @pytest.fixture()
 def client():
     """Return a Flask test client with the api blueprint registered."""
@@ -1724,17 +1746,17 @@ def test_ma_queue_cmd_prefers_player_queue_over_stale_group_id(client, monkeypat
 
         assert resp.status_code == 200
         data = resp.get_json()
-        assert captured["syncgroup_id"] == "upsendspinyandexmini2lxc"
-        assert captured["refresh_syncgroup_id"] == "upsendspinyandexmini2lxc"
+        assert captured["syncgroup_id"] == "sendspin-yandex-mini-2---lxc"
+        assert captured["refresh_syncgroup_id"] == "sendspin-yandex-mini-2---lxc"
         assert data["syncgroup_id"] == "sendspin-yandex-mini-2---lxc"
-        assert data["queue_id"] == "upsendspinyandexmini2lxc"
+        assert data["queue_id"] == "sendspin-yandex-mini-2---lxc"
     finally:
         state.clear_ma_now_playing()
         state.set_ma_groups({}, [])
         state.set_ma_connected(False)
 
 
-def test_resolve_target_queue_uses_universal_player_queue_for_solo_sendspin_player():
+def test_resolve_target_queue_uses_player_id_queue_for_solo_sendspin_player():
     import routes.api_ma as api_ma
     import state
 
@@ -1749,7 +1771,7 @@ def test_resolve_target_queue_uses_universal_player_queue_for_solo_sendspin_play
         state.set_ma_groups({}, [])
 
     assert state_key == "sendspin-yandex-mini-2---lxc"
-    assert queue_id == "upsendspinyandexmini2lxc"
+    assert queue_id == "sendspin-yandex-mini-2---lxc"
 
 
 def test_resolve_target_queue_uses_ma_group_mapping_for_grouped_player():
@@ -1797,7 +1819,7 @@ def test_resolve_target_queue_ignores_stale_syncgroup_id_for_solo_player():
         state.set_ma_groups({}, [])
 
     assert state_key == "sendspin-yandex-mini-2---lxc"
-    assert queue_id == "upsendspinyandexmini2lxc"
+    assert queue_id == "sendspin-yandex-mini-2---lxc"
 
 
 def test_resolve_target_queue_infers_single_active_player_for_stale_page(monkeypatch):
@@ -1827,7 +1849,25 @@ def test_resolve_target_queue_infers_single_active_player_for_stale_page(monkeyp
         state.set_ma_groups({}, [])
 
     assert state_key == "sendspin-yandex-mini-2---lxc"
-    assert queue_id == "upsendspinyandexmini2lxc"
+    assert queue_id == "sendspin-yandex-mini-2---lxc"
+
+
+def test_resolve_target_queue_keeps_legacy_universal_queue_for_uuid_player_id():
+    import routes.api_ma as api_ma
+    import state
+
+    state.set_ma_groups({}, [])
+    try:
+        state_key, queue_id = api_ma._resolve_target_queue(
+            None,
+            "d3002d0d-db47-51e2-b3a2-00f79b7fc683",
+            None,
+        )
+    finally:
+        state.set_ma_groups({}, [])
+
+    assert state_key == "d3002d0d-db47-51e2-b3a2-00f79b7fc683"
+    assert queue_id == "upd3002d0ddb4751e2b3a200f79b7fc683"
 
 
 def test_ma_queue_cmd_returns_503_when_monitor_unavailable(client, monkeypatch):

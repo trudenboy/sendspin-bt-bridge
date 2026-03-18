@@ -38,6 +38,22 @@ def _active_bridge_clients() -> list:
     return get_device_registry_snapshot().active_clients
 
 
+def solo_queue_candidates(player_id: str | None) -> list[str]:
+    """Return ordered MA solo queue IDs compatible with current and legacy players."""
+    raw_player_id = str(player_id or "").strip()
+    if not raw_player_id:
+        return []
+
+    if raw_player_id.startswith(("media_player.", "ma_", "syncgroup_")):
+        return [raw_player_id]
+
+    legacy_queue_id = "up" + raw_player_id.replace("-", "")
+    if raw_player_id.startswith("sendspin-"):
+        return [raw_player_id, legacy_queue_id]
+
+    return [legacy_queue_id, raw_player_id]
+
+
 class _AuthFailed(Exception):
     """Raised when MA WebSocket authentication fails."""
 
@@ -192,11 +208,10 @@ def _find_solo_player_queues(queues: list[dict]) -> list[tuple[str, dict]]:
         pid = getattr(client, "player_id", "")
         if not pid or pid in group_ids:
             continue  # already handled as syncgroup member
-        # MA uses "up" + uuid_no_hyphens as queue_id for individual players
-        pid_ma = "up" + pid.replace("-", "")
+        queue_candidates = set(solo_queue_candidates(pid))
         for q in queues:
             qid = q.get("queue_id", "")
-            if qid in (pid, pid_ma):
+            if qid in queue_candidates:
                 result.append((pid, q))
                 break
     return result

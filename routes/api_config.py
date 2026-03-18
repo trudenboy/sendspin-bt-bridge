@@ -82,6 +82,7 @@ _DOWNLOAD_REDACTED_KEYS = (
     "MA_ACCESS_TOKEN",
     "MA_REFRESH_TOKEN",
 )
+_HA_ADDON_BASE_SLUG = "sendspin_bt_bridge"
 
 
 def _sanitize_download_config(config: dict) -> dict:
@@ -201,6 +202,75 @@ def _detect_runtime() -> str:
         return "ha_addon"
     else:
         return "docker"
+
+
+def _detect_ha_addon_delivery_channel_from_slug(slug: str) -> str | None:
+    normalized = str(slug or "").strip().lower()
+    if not normalized:
+        return None
+    if normalized.endswith(f"{_HA_ADDON_BASE_SLUG}_beta"):
+        return "beta"
+    if normalized.endswith(f"{_HA_ADDON_BASE_SLUG}_rc"):
+        return "rc"
+    if normalized.endswith(_HA_ADDON_BASE_SLUG):
+        return "stable"
+    return None
+
+
+def _get_ha_addon_delivery_details() -> dict[str, str] | None:
+    if _detect_runtime() != "ha_addon":
+        return None
+    token = os.environ.get("SUPERVISOR_TOKEN", "").strip()
+    if not token:
+        return None
+
+    try:
+        import urllib.request as _ur
+
+        req = _ur.Request(
+            "http://supervisor/addons/self/info",
+            headers={"Authorization": f"Bearer {token}"},
+            method="GET",
+        )
+        with _ur.urlopen(req, timeout=10) as resp:
+            payload = json.loads(resp.read().decode() or "{}")
+    except (OSError, ValueError) as exc:
+        logger.warning("Failed to query HA addon self info: %s", exc)
+        return None
+
+    if not isinstance(payload, dict):
+        return None
+    data = payload.get("data")
+    if not isinstance(data, dict):
+        return None
+
+    slug = str(data.get("slug") or "")
+    return {
+        "slug": slug,
+        "name": str(data.get("name") or ""),
+        "channel": _detect_ha_addon_delivery_channel_from_slug(slug) or "",
+    }
+
+
+def _ha_addon_update_instructions(channel: str, delivery: dict[str, str] | None) -> str:
+    delivery_channel = (delivery or {}).get("channel", "")
+    addon_name = (delivery or {}).get("name") or "Sendspin Bluetooth Bridge"
+    if delivery_channel:
+        if channel != delivery_channel:
+            return (
+                f"Selected update channel is `{channel}`, but the installed Home Assistant addon track is "
+                f"`{delivery_channel}` ({addon_name}). To actually switch tracks, install the matching addon "
+                "variant from the Home Assistant store; saving the setting only changes prerelease preference "
+                "inside the app."
+            )
+        return f"Update via Home Assistant → Add-ons → {addon_name} → Update."
+
+    if channel == "stable":
+        return "Update via Home Assistant → Add-ons → Sendspin Bluetooth Bridge → Update."
+    return (
+        "Install the matching prerelease addon variant from the Home Assistant store. Saving `update_channel` "
+        "alone does not switch the installed addon track."
+    )
 
 
 def _sync_ha_options(config: dict) -> None:
@@ -879,6 +949,7 @@ def api_update_info():
     runtime = _detect_runtime()
     cfg = load_config()
     channel = normalize_update_channel(cfg.get("UPDATE_CHANNEL"))
+    delivery = _get_ha_addon_delivery_details() if runtime == "ha_addon" else None
     result: dict = {
         "update_available": info is not None,
         "runtime": runtime,
@@ -886,6 +957,11 @@ def api_update_info():
         "channel": channel,
         "channel_warning": _update_channel_warning(channel),
     }
+    if delivery:
+        result["delivery_channel"] = delivery.get("channel") or None
+        result["delivery_slug"] = delivery.get("slug") or None
+        result["delivery_name"] = delivery.get("name") or None
+        result["channel_switch_required"] = bool(delivery.get("channel")) and delivery.get("channel") != channel
     if info:
         result.update(info)
     if runtime == "systemd":
@@ -893,14 +969,7 @@ def api_update_info():
         result["instructions"] = "Click 'Update Now' to install the latest selected channel build automatically."
     elif runtime == "ha_addon":
         result["update_method"] = "ha_store"
-        if channel == "stable":
-            result["instructions"] = "Update via Home Assistant → Add-ons → Sendspin BT Bridge → Update."
-        else:
-            result["instructions"] = (
-                "Save the selected prerelease channel in addon settings, then install the matching prerelease "
-                "build from the addon repository when it is published. Home Assistant does not switch channels "
-                "automatically from the web UI."
-            )
+        result["instructions"] = _ha_addon_update_instructions(channel, delivery)
     else:
         result["update_method"] = "manual"
         result["instructions"] = _docker_update_instructions(channel)
@@ -916,12 +985,7 @@ def api_update_apply():
     )
     if runtime != "systemd":
         methods = {
-            "ha_addon": (
-                "Use the selected update channel in addon settings, then install the matching build from the addon repository. "
-                "Home Assistant does not switch addon channels automatically from this endpoint."
-                if channel != "stable"
-                else "Update via Home Assistant → Add-ons → Sendspin BT Bridge → Update."
-            ),
+            "ha_addon": _ha_addon_update_instructions(channel, _get_ha_addon_delivery_details()),
             "docker": _docker_update_instructions(channel),
         }
         return jsonify({"success": False, "error": methods.get(runtime, "Unsupported runtime")}), 400

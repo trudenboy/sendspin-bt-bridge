@@ -26,6 +26,7 @@ jobs:
       sendspin_version: ${{ steps.resolve_sendspin.outputs.version }}
       metadata_tags: ${{ steps.publish_context.outputs.metadata_tags }}
       release_channel: ${{ steps.publish_context.outputs.channel }}
+      release_version: ${{ steps.publish_context.outputs.version }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -69,6 +70,7 @@ jobs:
           fi
 
           channel="stable"
+          version=""
           metadata_tags=""
 
           if [[ "${target_ref}" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
@@ -104,6 +106,7 @@ jobs:
           fi
 
           echo "channel=${channel}" >> "$GITHUB_OUTPUT"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
           {
             echo "metadata_tags<<EOF"
             printf '%s\n' "${metadata_tags}"
@@ -174,7 +177,8 @@ jobs:
         run: |
           image="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}"
           docker pull "${image}"
-          docker run --rm --entrypoint python "${image}" scripts/check_sendspin_compat.py
+          docker run --rm --entrypoint python3 "${image}" scripts/check_sendspin_compat.py
+          docker run --rm --entrypoint python3 "${image}" scripts/check_container_runtime.py
 
       - name: Export digest
         run: |
