@@ -5,10 +5,15 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import signal
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable, Coroutine
 
 import state as _state
 from config import ensure_bridge_name, load_config
@@ -101,3 +106,70 @@ class BridgeOrchestrator:
             details={"web_thread": web_thread_name} if web_thread_name else {},
         )
         return pool_size
+
+    def start_web_server(
+        self,
+        clients: list[Any],
+        *,
+        web_main: Callable[[], None] | None = None,
+        thread_name: str = "WebServer",
+    ) -> threading.Thread:
+        """Publish clients to shared state and start the web server thread."""
+        web_main_fn = web_main
+        if web_main_fn is None:
+            from web_interface import main as imported_web_main
+
+            web_main_fn = imported_web_main
+
+        def _run_web_server() -> None:
+            _state.set_clients(clients)
+            web_main_fn()
+
+        web_thread = threading.Thread(target=_run_web_server, daemon=True, name=thread_name)
+        web_thread.start()
+        logger.info("Web interface starting in background...")
+        return web_thread
+
+    async def graceful_shutdown(
+        self,
+        *,
+        clients: list[Any] | None = None,
+        mute_sink: Callable[[str, bool], Awaitable[bool]] | None = None,
+    ) -> None:
+        """Mute active sinks and stop all clients in a controlled order."""
+        logger.info("Received shutdown signal — muting sinks before exit...")
+        mute_sink_fn = mute_sink
+        if mute_sink_fn is None:
+            from services.pulse import aset_sink_mute as imported_mute_sink
+
+            mute_sink_fn = imported_mute_sink
+
+        shutdown_clients = list(clients) if clients is not None else _state.get_clients_snapshot()
+        muted: list[str] = []
+        for client in shutdown_clients:
+            sink = getattr(client, "bluetooth_sink_name", None)
+            if sink and await mute_sink_fn(sink, True):
+                muted.append(sink)
+        if muted:
+            logger.info("Muted %d sink(s): %s", len(muted), ", ".join(muted))
+
+        for client in shutdown_clients:
+            client.running = False
+            await client.stop_sendspin()
+
+    def install_signal_handlers(
+        self,
+        loop: asyncio.AbstractEventLoop,
+        *,
+        shutdown_factory: Callable[[], Coroutine[Any, Any, None]] | None = None,
+    ) -> None:
+        """Register SIGTERM/SIGINT handlers that schedule graceful shutdown."""
+        shutdown_factory_fn = shutdown_factory
+        if shutdown_factory_fn is None:
+            shutdown_factory_fn = self.graceful_shutdown
+
+        def _signal_handler() -> None:
+            loop.create_task(shutdown_factory_fn())
+
+        for sig in (signal.SIGTERM, signal.SIGINT):
+            loop.add_signal_handler(sig, _signal_handler)

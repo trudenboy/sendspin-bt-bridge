@@ -11,7 +11,6 @@ import json
 import logging
 import os
 import random
-import signal
 import socket
 import sys
 import threading
@@ -1077,46 +1076,11 @@ async def main():
             )
         used_ports.add(_c.listen_port)
 
-    # Start web interface in background thread
-    def run_web_server():
-        from state import set_clients
-        from web_interface import main as web_main
-
-        set_clients(clients)
-        web_main()
-
-    web_thread = threading.Thread(target=run_web_server, daemon=True, name="WebServer")
-    web_thread.start()
-    logger.info("Web interface starting in background...")
+    web_thread = orchestrator.start_web_server(clients)
 
     # Handle shutdown signals
     loop = asyncio.get_running_loop()
-
-    async def _graceful_shutdown():
-        logger.info("Received shutdown signal — muting sinks before exit...")
-        # Mute PA sinks directly so audio cuts cleanly regardless of
-        # how the restart was triggered (UI, CLI, systemd, auto-update).
-        from services.pulse import aset_sink_mute
-
-        shutdown_clients = _state.get_clients_snapshot()
-        muted = []
-        for c in shutdown_clients:
-            sink = getattr(c, "bluetooth_sink_name", None)
-            if sink:
-                if await aset_sink_mute(sink, True):
-                    muted.append(sink)
-        if muted:
-            logger.info("Muted %d sink(s): %s", len(muted), ", ".join(muted))
-
-        for c in shutdown_clients:
-            c.running = False
-            await c.stop_sendspin()
-
-    def signal_handler():
-        loop.create_task(_graceful_shutdown())
-
-    for sig in (signal.SIGTERM, signal.SIGINT):
-        loop.add_signal_handler(sig, signal_handler)
+    orchestrator.install_signal_handlers(loop)
 
     await orchestrator.configure_executor(len(clients), web_thread_name=web_thread.name)
 
