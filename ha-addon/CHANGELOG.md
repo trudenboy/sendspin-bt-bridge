@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- Add-on options now expose an `update_channel` selector with `stable`, `rc`, and `beta` values, and the option is translated and propagated into the runtime config used by the bridge
+
+### Changed
+- Add-on update/help surfaces now understand channel-specific update intent so the standalone bridge API can warn when `rc` or `beta` is selected and explain the Home Assistant channel limitations more accurately
+- Release/publish automation is now split into stable, rc, and beta lanes so add-on-adjacent images and prerelease metadata follow the same distribution model as the standalone bridge
+
 ## [2.40.0] - 2026-03-18
 
 ### Added

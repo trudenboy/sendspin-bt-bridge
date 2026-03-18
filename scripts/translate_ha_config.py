@@ -18,6 +18,8 @@ import re
 import subprocess
 import sys
 
+from config import DEFAULT_UPDATE_CHANNEL, normalize_update_channel
+
 logger = logging.getLogger(__name__)
 
 OPTIONS_FILE = "/data/options.json"
@@ -118,6 +120,7 @@ def main() -> None:
         "MA_API_URL": opts.get("ma_api_url") or "",
         "MA_API_TOKEN": opts.get("ma_api_token") or "",
         "VOLUME_VIA_MA": bool(opts.get("volume_via_ma", True)),
+        "UPDATE_CHANNEL": normalize_update_channel(opts.get("update_channel", DEFAULT_UPDATE_CHANNEL)),
     }
 
     # Normalize: devices without explicit 'enabled' field default to True
@@ -138,6 +141,8 @@ def main() -> None:
         for key in ("MA_API_URL", "MA_API_TOKEN"):
             if not config.get(key) and existing.get(key):
                 config[key] = existing[key]
+        if opts.get("update_channel") in (None, "") and existing.get("UPDATE_CHANNEL"):
+            config["UPDATE_CHANNEL"] = normalize_update_channel(existing.get("UPDATE_CHANNEL"))
         # Preserve per-device web UI settings (e.g. keepalive) not present in options.json
         existing_devs = {
             d["mac"]: d for d in existing.get("BLUETOOTH_DEVICES", []) if isinstance(d, dict) and d.get("mac")

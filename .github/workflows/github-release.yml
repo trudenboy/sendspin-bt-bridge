@@ -15,13 +15,12 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout main
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          ref: main
           fetch-depth: 0
 
-      - name: Resolve target tag
+      - name: Resolve target tag and channel
         id: resolve
         env:
           INPUT_TAG: ${{ inputs.tag }}
@@ -37,36 +36,59 @@ jobs:
             exit 1
           fi
           git rev-parse "${TAG}^{tag}" >/dev/null 2>&1 || git rev-parse "${TAG}^{commit}" >/dev/null 2>&1
+
+          CHANNEL="stable"
+          PRERELEASE="false"
+          MAKE_LATEST="true"
+          if [[ "${TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$ ]]; then
+            CHANNEL="rc"
+            PRERELEASE="true"
+            MAKE_LATEST="false"
+          elif [[ "${TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+$ ]]; then
+            CHANNEL="beta"
+            PRERELEASE="true"
+            MAKE_LATEST="false"
+          elif [[ ! "${TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Unsupported tag format: ${TAG}" >&2
+            exit 1
+          fi
+
           VERSION="${TAG#v}"
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "channel=${CHANNEL}" >> "$GITHUB_OUTPUT"
+          echo "prerelease=${PRERELEASE}" >> "$GITHUB_OUTPUT"
+          echo "make_latest=${MAKE_LATEST}" >> "$GITHUB_OUTPUT"
           {
             echo "### Release target"
             echo ""
             echo "- Tag: \`${TAG}\`"
             echo "- Version: \`${VERSION}\`"
+            echo "- Channel: \`${CHANNEL}\`"
+            echo "- Prerelease: \`${PRERELEASE}\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Sync ha-addon version on main
+      - name: Sync ha-addon version on main for stable only
         id: sync_addon
+        if: steps.resolve.outputs.channel == 'stable'
         env:
           VERSION: ${{ steps.resolve.outputs.version }}
         run: |
           set -euo pipefail
+          git checkout main
           python - <<'PY'
           from pathlib import Path
+          import os
           import re
-
           path = Path("ha-addon/config.yaml")
           text = path.read_text()
-          updated = re.sub(r'^version: ".*"$', f'version: "{__import__("os").environ["VERSION"]}"', text, count=1, flags=re.MULTILINE)
-          if updated == text:
-              raise SystemExit(0)
-          path.write_text(updated)
+          updated = re.sub(r'^version: ".*"$', f'version: "{os.environ["VERSION"]}"', text, count=1, flags=re.MULTILINE)
+          if updated != text:
+              path.write_text(updated)
           PY
           if git diff --quiet -- ha-addon/config.yaml; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
-            echo "- ha-addon/config.yaml already matched the release version" >> "$GITHUB_STEP_SUMMARY"
+            echo "- ha-addon/config.yaml already matched the stable release version" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
           git config user.name "github-actions[bot]"
@@ -77,36 +99,43 @@ jobs:
           echo "changed=true" >> "$GITHUB_OUTPUT"
           echo "- Updated \`ha-addon/config.yaml\` on \`main\` to \`${VERSION}\`" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Generate release notes
+      - name: Skip addon sync for prereleases
+        if: steps.resolve.outputs.channel != 'stable'
+        run: |
+          echo "- Prerelease tag detected; skipped ha-addon/config.yaml sync on main" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Resolve previous comparable release
         id: previous_release
         uses: actions/github-script@v7
         with:
           script: |
             const {owner, repo} = context.repo;
             const targetTag = '${{ steps.resolve.outputs.tag }}';
+            const targetChannel = '${{ steps.resolve.outputs.channel }}';
 
             function parseTag(tag) {
               const normalized = String(tag || '').replace(/^v/, '');
-              if (!/^\d+\.\d+\.\d+$/.test(normalized)) {
-                return null;
-              }
-              return normalized.split('.').map((part) => Number(part));
+              const match = normalized.match(/^(\d+)\.(\d+)\.(\d+)(?:-(rc|beta)\.(\d+))?$/);
+              if (!match) return null;
+              return {
+                major: Number(match[1]),
+                minor: Number(match[2]),
+                patch: Number(match[3]),
+                channel: match[4] || 'stable',
+                serial: Number(match[5] || 0),
+              };
             }
 
             function compareTags(a, b) {
               const pa = parseTag(a);
               const pb = parseTag(b);
-              if (!pa || !pb) {
-                return String(a).localeCompare(String(b));
+              if (!pa || !pb) return String(a).localeCompare(String(b));
+              for (const key of ['major', 'minor', 'patch']) {
+                if (pa[key] !== pb[key]) return pa[key] - pb[key];
               }
-              for (let i = 0; i < Math.max(pa.length, pb.length); i += 1) {
-                const av = pa[i] || 0;
-                const bv = pb[i] || 0;
-                if (av !== bv) {
-                  return av - bv;
-                }
-              }
-              return 0;
+              const rank = { beta: 0, rc: 1, stable: 2 };
+              if (rank[pa.channel] !== rank[pb.channel]) return rank[pa.channel] - rank[pb.channel];
+              return pa.serial - pb.serial;
             }
 
             const releases = await github.paginate(github.rest.repos.listReleases, {
@@ -115,18 +144,23 @@ jobs:
               per_page: 100,
             });
 
-            const publishedTags = releases
-              .filter((release) => !release.draft && !release.prerelease)
+            const comparableTags = releases
+              .filter((release) => !release.draft)
+              .filter((release) => {
+                const parsed = parseTag(release.tag_name);
+                if (!parsed || release.tag_name === targetTag) return false;
+                if (targetChannel === 'stable') return !release.prerelease && parsed.channel === 'stable';
+                return parsed.channel === targetChannel;
+              })
               .map((release) => release.tag_name)
-              .filter((tag) => tag && tag !== targetTag)
               .sort(compareTags);
 
-            const previousTag = publishedTags.filter((tag) => compareTags(tag, targetTag) < 0).pop() || '';
+            const previousTag = comparableTags.filter((tag) => compareTags(tag, targetTag) < 0).pop() || '';
             core.setOutput('tag', previousTag);
             await core.summary
               .addRaw(previousTag
-                ? `Previous published release tag for notes: ${previousTag}`
-                : 'No previous published release found; generating notes without a lower bound')
+                ? `Previous comparable ${targetChannel} release tag for notes: ${previousTag}`
+                : `No previous comparable ${targetChannel} release found; generating notes without a lower bound`)
               .write();
 
       - name: Generate release notes
@@ -137,14 +171,8 @@ jobs:
             const {owner, repo} = context.repo;
             const tag = '${{ steps.resolve.outputs.tag }}';
             const previousTag = '${{ steps.previous_release.outputs.tag }}';
-            const params = {
-              owner,
-              repo,
-              tag_name: tag,
-            };
-            if (previousTag) {
-              params.previous_tag_name = previousTag;
-            }
+            const params = { owner, repo, tag_name: tag };
+            if (previousTag) params.previous_tag_name = previousTag;
             const response = await github.rest.repos.generateReleaseNotes(params);
             core.setOutput('body', response.data.body);
 
@@ -155,41 +183,39 @@ jobs:
             const {owner, repo} = context.repo;
             const tag = '${{ steps.resolve.outputs.tag }}';
             const body = ${{ toJSON(steps.notes.outputs.body) }};
+            const prerelease = '${{ steps.resolve.outputs.prerelease }}' === 'true';
+            const makeLatest = '${{ steps.resolve.outputs.make_latest }}';
+
             let existing = null;
             try {
               const response = await github.rest.repos.getReleaseByTag({ owner, repo, tag });
               existing = response.data;
             } catch (error) {
-              if (error.status !== 404) {
-                throw error;
-              }
+              if (error.status !== 404) throw error;
             }
 
-            if (existing) {
-              await github.rest.repos.updateRelease({
-                owner,
-                repo,
-                release_id: existing.id,
-                tag_name: tag,
-                name: tag,
-                body,
-                draft: false,
-                prerelease: false,
-                make_latest: 'true',
-              });
-              await core.summary.addRaw(`Updated existing release for ${tag}`).write();
-              return;
-            }
-
-            await github.rest.repos.createRelease({
+            const basePayload = {
               owner,
               repo,
               tag_name: tag,
               name: tag,
               body,
               draft: false,
-              prerelease: false,
+              prerelease,
+              make_latest: makeLatest,
+            };
+
+            if (existing) {
+              await github.rest.repos.updateRelease({
+                ...basePayload,
+                release_id: existing.id,
+              });
+              await core.summary.addRaw(`Updated existing release for ${tag}`).write();
+              return;
+            }
+
+            await github.rest.repos.createRelease({
+              ...basePayload,
               generate_release_notes: false,
-              make_latest: 'true',
             });
             await core.summary.addRaw(`Created release for ${tag}`).write();

@@ -5,23 +5,68 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
 import subprocess
 from typing import Any
+
+from config import DEFAULT_UPDATE_CHANNEL, load_config, normalize_update_channel
 
 logger = logging.getLogger(__name__)
 
 GITHUB_REPO = "trudenboy/sendspin-bt-bridge"
 CHECK_INTERVAL = 3600  # 1 hour
-_RELEASES_URL = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
+_RELEASES_URL = f"https://api.github.com/repos/{GITHUB_REPO}/releases?per_page=100"
+_SEMVER_RE = re.compile(
+    r"^v?(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)(?:-(?P<channel>rc|beta)\.(?P<serial>\d+))?$"
+)
+_CHANNEL_IMAGE_TAGS = {
+    "stable": "stable",
+    "rc": "rc",
+    "beta": "beta",
+}
 
 
-def _parse_version(v: str) -> tuple[int, ...]:
-    """Parse 'v2.22.3' or '2.22.3' into a comparable tuple."""
-    return tuple(int(x) for x in v.lstrip("v").split(".") if x.isdigit())
+def _parse_version(v: str) -> tuple[int, int, int, int, int]:
+    """Parse stable and prerelease semver tags into a comparable tuple."""
+    match = _SEMVER_RE.match(str(v or "").strip())
+    if not match:
+        raise ValueError(f"Unsupported version: {v}")
+    prerelease_channel = match.group("channel")
+    stability_rank = {"beta": 0, "rc": 1, None: 2}[prerelease_channel]
+    prerelease_serial = int(match.group("serial") or 0)
+    return (
+        int(match.group("major")),
+        int(match.group("minor")),
+        int(match.group("patch")),
+        stability_rank,
+        prerelease_serial,
+    )
 
 
-async def check_latest_version() -> dict[str, Any] | None:
-    """Fetch latest release from GitHub API. Returns dict or None on error."""
+def _classify_release_channel(tag: str) -> str | None:
+    match = _SEMVER_RE.match(str(tag or "").strip())
+    if not match:
+        return None
+    prerelease_channel = match.group("channel")
+    if prerelease_channel in {"rc", "beta"}:
+        return prerelease_channel
+    return "stable"
+
+
+def _is_newer_version(remote_version: str, current_version: str) -> bool:
+    """Return True when remote_version is newer than current_version."""
+    try:
+        return _parse_version(remote_version) > _parse_version(current_version)
+    except ValueError:
+        logger.debug("Could not compare versions %r and %r", remote_version, current_version)
+        return False
+
+
+def _release_sort_key(release: dict[str, Any]) -> tuple[int, int, int, int, int]:
+    return _parse_version(str(release.get("tag_name", "")))
+
+
+async def _fetch_releases() -> list[dict[str, Any]] | None:
     import json as _json
     import urllib.request
 
@@ -39,7 +84,6 @@ async def check_latest_version() -> dict[str, Any] | None:
 
         resp_text, headers = await loop.run_in_executor(None, _fetch)
 
-        # Respect GitHub rate limits
         remaining = headers.get("x-ratelimit-remaining")
         if remaining is not None and int(remaining) <= 1:
             reset_at = int(headers.get("x-ratelimit-reset", "0"))
@@ -50,14 +94,10 @@ async def check_latest_version() -> dict[str, Any] | None:
             await asyncio.sleep(wait)
 
         data = _json.loads(resp_text)
-        tag = data.get("tag_name", "")
-        return {
-            "version": tag.lstrip("v"),
-            "tag": tag,
-            "url": data.get("html_url", ""),
-            "published_at": data.get("published_at", ""),
-            "body": (data.get("body") or "")[:2000],
-        }
+        if isinstance(data, list):
+            return [release for release in data if isinstance(release, dict)]
+        logger.debug("Version check failed: unexpected releases payload %r", type(data).__name__)
+        return None
     except urllib.request.HTTPError as exc:
         if exc.code == 403:
             logger.warning("GitHub API rate-limited (HTTP 403), will retry next cycle")
@@ -69,41 +109,91 @@ async def check_latest_version() -> dict[str, Any] | None:
         return None
 
 
+def _select_latest_release(releases: list[dict[str, Any]], channel: str) -> dict[str, Any] | None:
+    normalized_channel = normalize_update_channel(channel)
+    eligible: list[dict[str, Any]] = []
+    for release in releases:
+        if release.get("draft"):
+            continue
+        tag = str(release.get("tag_name", "")).strip()
+        release_channel = _classify_release_channel(tag)
+        if release_channel != normalized_channel:
+            continue
+        if normalized_channel != "stable" and not release.get("prerelease", False):
+            continue
+        try:
+            _parse_version(tag)
+        except ValueError:
+            continue
+        eligible.append(release)
+
+    if not eligible:
+        return None
+    return max(eligible, key=_release_sort_key)
+
+
+def _release_to_payload(release: dict[str, Any], channel: str) -> dict[str, Any]:
+    tag = str(release.get("tag_name", "")).strip()
+    return {
+        "version": tag.lstrip("v"),
+        "tag": tag,
+        "url": release.get("html_url", ""),
+        "published_at": release.get("published_at", ""),
+        "body": (release.get("body") or "")[:2000],
+        "channel": channel,
+        "target_ref": tag,
+        "prerelease": bool(release.get("prerelease", False)),
+    }
+
+
+async def check_latest_version(channel: str | None = None) -> dict[str, Any] | None:
+    """Fetch the newest published release for the requested update channel."""
+    effective_channel = normalize_update_channel(channel or load_config().get("UPDATE_CHANNEL"))
+    releases = await _fetch_releases()
+    if not releases:
+        return None
+    release = _select_latest_release(releases, effective_channel)
+    if not release:
+        return None
+    return _release_to_payload(release, effective_channel)
+
+
 async def run_update_checker(current_version: str) -> None:
     """Long-running task: check for updates every CHECK_INTERVAL seconds."""
     import state
 
-    current = _parse_version(current_version)
-    # Initial delay — let the app fully start before first check
     await asyncio.sleep(30)
 
     while True:
         try:
-            # Skip check if disabled in config
-            from config import load_config
-
-            if not load_config().get("CHECK_UPDATES", True):
+            cfg = load_config()
+            if not cfg.get("CHECK_UPDATES", True):
                 await asyncio.sleep(CHECK_INTERVAL)
                 continue
 
-            latest = await check_latest_version()
-            if latest:
-                remote = _parse_version(latest["version"])
-                if remote > current:
-                    latest["current_version"] = current_version
-                    state.set_update_available(latest)
-                    logger.info(
-                        "Update available: %s → %s (%s)",
+            channel = normalize_update_channel(cfg.get("UPDATE_CHANNEL"))
+            latest = await check_latest_version(channel)
+            if latest and _is_newer_version(latest["tag"], current_version):
+                latest["current_version"] = current_version
+                state.set_update_available(latest)
+                logger.info(
+                    "Update available on %s channel: %s → %s (%s)",
+                    channel,
+                    current_version,
+                    latest["version"],
+                    latest["url"],
+                )
+                if _should_auto_update():
+                    await _auto_apply_update(latest)
+            else:
+                state.set_update_available(None)
+                if latest:
+                    logger.debug(
+                        "Version %s is current for %s channel (latest: %s)",
                         current_version,
+                        channel,
                         latest["version"],
-                        latest["url"],
                     )
-                    # Auto-apply if enabled and on LXC/systemd
-                    if _should_auto_update():
-                        await _auto_apply_update(latest["version"])
-                else:
-                    state.set_update_available(None)
-                    logger.debug("Version %s is current (latest: %s)", current_version, latest["version"])
         except Exception:
             logger.debug("Update check iteration failed", exc_info=True)
 
@@ -112,12 +202,9 @@ async def run_update_checker(current_version: str) -> None:
 
 def _should_auto_update() -> bool:
     """Check if auto-update is enabled and runtime supports it."""
-    from config import load_config
-
     cfg = load_config()
     if not cfg.get("AUTO_UPDATE", False):
         return False
-    # Only auto-update on LXC/systemd (not Docker or HA addon)
     if os.environ.get("SUPERVISOR_TOKEN") or os.path.isfile("/.dockerenv"):
         return False
     return True
@@ -135,6 +222,11 @@ def _normalize_update_ref(target_ref: str | None) -> str | None:
     if normalized[0].isdigit():
         return f"v{normalized}"
     return normalized
+
+
+def channel_image_tag(channel: str | None) -> str:
+    """Return the container tag published for an update channel."""
+    return _CHANNEL_IMAGE_TAGS[normalize_update_channel(channel or DEFAULT_UPDATE_CHANNEL)]
 
 
 def _resolve_upgrade_script() -> str | None:
@@ -207,12 +299,13 @@ def _start_upgrade_job(target_ref: str | None = None) -> dict[str, Any]:
     }
 
 
-async def _auto_apply_update(new_version: str) -> None:
-    """Queue upgrade.sh in a transient unit, pinned to the detected release tag."""
-    logger.info("Auto-update: queueing v%s", new_version)
+async def _auto_apply_update(latest: dict[str, Any]) -> None:
+    """Queue upgrade.sh in a transient unit, pinned to the detected channel ref."""
+    target_ref = latest.get("target_ref") or latest.get("tag") or latest.get("version")
+    logger.info("Auto-update: queueing %s channel ref %s", latest.get("channel", "stable"), target_ref)
     loop = asyncio.get_running_loop()
     try:
-        result = await loop.run_in_executor(None, lambda: _start_upgrade_job(new_version))
+        result = await loop.run_in_executor(None, lambda: _start_upgrade_job(target_ref))
         if result.get("success"):
             if result.get("already_running"):
                 logger.info("Auto-update: upgrade already in progress (%s)", result.get("unit"))
@@ -220,7 +313,7 @@ async def _auto_apply_update(new_version: str) -> None:
                 logger.info(
                     "Auto-update: started %s for %s",
                     result.get("unit"),
-                    result.get("target_ref") or f"v{new_version}",
+                    result.get("target_ref") or target_ref,
                 )
         else:
             logger.error("Auto-update: failed to start upgrade: %s", result.get("error", "unknown error"))

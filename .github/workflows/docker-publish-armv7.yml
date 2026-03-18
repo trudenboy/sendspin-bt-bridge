@@ -3,13 +3,15 @@ name: Build and Push Docker Image (armv7)
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
+    branches:
+      - beta
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Tag to build (e.g. v1.3.0)'
+        description: "Tag to build (e.g. v2.41.0 or v2.41.0-rc.1)"
         required: false
-        default: ''
+        default: ""
 
 env:
   REGISTRY: ghcr.io
@@ -64,27 +66,65 @@ jobs:
           echo "ARMv7 digest: ${digest}"
         id: digest
 
-      - name: Compute dispatch version
-        if: github.event_name == 'workflow_dispatch' && inputs.tag != ''
-        run: echo "DISPATCH_VERSION=${INPUT_TAG#v}" >> $GITHUB_ENV
+      - name: Resolve publish context
+        id: publish_context
         env:
           INPUT_TAG: ${{ inputs.tag }}
+          REF_NAME: ${{ github.ref_name }}
+          GIT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          target_ref="${INPUT_TAG:-}"
+          if [ -z "${target_ref}" ]; then
+            target_ref="${REF_NAME}"
+          fi
+
+          metadata_tags=""
+          if [[ "${target_ref}" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+            version="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.${BASH_REMATCH[3]}"
+            printf -v metadata_tags '%s\n%s\n%s\n%s\n%s' \
+              "type=raw,value=${version}" \
+              "type=raw,value=${BASH_REMATCH[1]}.${BASH_REMATCH[2]}" \
+              "type=raw,value=${BASH_REMATCH[1]}" \
+              "type=raw,value=latest" \
+              "type=raw,value=stable"
+          elif [[ "${target_ref}" =~ ^v([0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+)$ ]]; then
+            version="${BASH_REMATCH[1]}"
+            printf -v metadata_tags '%s\n%s' \
+              "type=raw,value=${version}" \
+              "type=raw,value=rc"
+          elif [[ "${target_ref}" =~ ^v([0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+)$ ]]; then
+            version="${BASH_REMATCH[1]}"
+            printf -v metadata_tags '%s\n%s' \
+              "type=raw,value=${version}" \
+              "type=raw,value=beta"
+          elif [[ "${target_ref}" == "beta" ]]; then
+            short_sha="${GIT_SHA::7}"
+            printf -v metadata_tags '%s\n%s' \
+              "type=raw,value=beta" \
+              "type=raw,value=beta-${short_sha}"
+          else
+            printf -v metadata_tags '%s\n%s' \
+              "type=raw,value=latest" \
+              "type=raw,value=stable"
+          fi
+
+          {
+            echo "metadata_tags<<EOF"
+            printf '%s\n' "${metadata_tags}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Extract metadata for tags
         id: tags
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
-            type=raw,value=latest
-            type=raw,value=${{ env.DISPATCH_VERSION }},enable=${{ github.event_name == 'workflow_dispatch' && inputs.tag != '' }}
+          tags: ${{ steps.publish_context.outputs.metadata_tags }}
 
       - name: Append armv7 to manifest
         run: |
-          # Get existing manifest digests (amd64 + arm64 from main workflow)
           IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
           TAG=$(jq -cr '.tags[0]' <<< "$DOCKER_METADATA_OUTPUT_JSON" | sed "s|${IMAGE}:||")
 
@@ -104,12 +144,10 @@ jobs:
             sleep 30
           done
 
-          # Collect existing digests from the manifest
           EXISTING=$(docker buildx imagetools inspect "${IMAGE}:${TAG}" --format '{{range .Manifest.Manifests}}{{.Digest}} {{end}}')
           echo "Existing digests: ${EXISTING}"
           echo "ARMv7 digest: ${{ steps.build.outputs.digest }}"
 
-          # Re-create manifest with all architectures
           DIGEST_ARGS=""
           for d in ${EXISTING}; do
             DIGEST_ARGS="${DIGEST_ARGS} ${IMAGE}@${d}"

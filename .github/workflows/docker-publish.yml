@@ -3,13 +3,15 @@ name: Build and Push Docker Image
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
+    branches:
+      - beta
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Tag to build (e.g. v1.3.0)'
+        description: "Tag to build (e.g. v2.41.0 or v2.41.0-rc.1)"
         required: false
-        default: ''
+        default: ""
 
 env:
   REGISTRY: ghcr.io
@@ -22,6 +24,8 @@ jobs:
       contents: read
     outputs:
       sendspin_version: ${{ steps.resolve_sendspin.outputs.version }}
+      metadata_tags: ${{ steps.publish_context.outputs.metadata_tags }}
+      release_channel: ${{ steps.publish_context.outputs.channel }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -49,6 +53,73 @@ jobs:
           )
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "Resolved sendspin version: ${VERSION}"
+
+      - name: Resolve publish context
+        id: publish_context
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          REF_NAME: ${{ github.ref_name }}
+          GIT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          target_ref="${INPUT_TAG:-}"
+          if [ -z "${target_ref}" ]; then
+            target_ref="${REF_NAME}"
+          fi
+
+          channel="stable"
+          metadata_tags=""
+
+          if [[ "${target_ref}" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+            version="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.${BASH_REMATCH[3]}"
+            printf -v metadata_tags '%s\n%s\n%s\n%s\n%s' \
+              "type=raw,value=${version}" \
+              "type=raw,value=${BASH_REMATCH[1]}.${BASH_REMATCH[2]}" \
+              "type=raw,value=${BASH_REMATCH[1]}" \
+              "type=raw,value=latest" \
+              "type=raw,value=stable"
+          elif [[ "${target_ref}" =~ ^v([0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+)$ ]]; then
+            channel="rc"
+            version="${BASH_REMATCH[1]}"
+            printf -v metadata_tags '%s\n%s' \
+              "type=raw,value=${version}" \
+              "type=raw,value=rc"
+          elif [[ "${target_ref}" =~ ^v([0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+)$ ]]; then
+            channel="beta"
+            version="${BASH_REMATCH[1]}"
+            printf -v metadata_tags '%s\n%s' \
+              "type=raw,value=${version}" \
+              "type=raw,value=beta"
+          elif [[ "${target_ref}" == "beta" ]]; then
+            channel="beta"
+            short_sha="${GIT_SHA::7}"
+            printf -v metadata_tags '%s\n%s' \
+              "type=raw,value=beta" \
+              "type=raw,value=beta-${short_sha}"
+          else
+            printf -v metadata_tags '%s\n%s' \
+              "type=raw,value=latest" \
+              "type=raw,value=stable"
+          fi
+
+          echo "channel=${channel}" >> "$GITHUB_OUTPUT"
+          {
+            echo "metadata_tags<<EOF"
+            printf '%s\n' "${metadata_tags}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### Publish context"
+            echo ""
+            echo "- Ref: \`${target_ref}\`"
+            echo "- Channel: \`${channel}\`"
+            echo "- Tags:"
+            while IFS= read -r line; do
+              [ -n "${line}" ] && echo "  - \`${line#type=raw,value=}\`"
+            done <<< "${metadata_tags}"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   build:
     needs: prepare
@@ -120,7 +191,7 @@ jobs:
           retention-days: 1
 
   merge:
-    needs: build
+    needs: [prepare, build]
     runs-on: ubuntu-latest
     permissions:
       packages: write
@@ -142,23 +213,12 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Compute dispatch version
-        if: github.event_name == 'workflow_dispatch' && inputs.tag != ''
-        run: echo "DISPATCH_VERSION=${INPUT_TAG#v}" >> $GITHUB_ENV
-        env:
-          INPUT_TAG: ${{ inputs.tag }}
-
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
-            type=raw,value=latest
-            type=raw,value=${{ env.DISPATCH_VERSION }},enable=${{ github.event_name == 'workflow_dispatch' && inputs.tag != '' }}
+          tags: ${{ needs.prepare.outputs.metadata_tags }}
 
       - name: Create manifest list and push
         working-directory: /tmp/digests

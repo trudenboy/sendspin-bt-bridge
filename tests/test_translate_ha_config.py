@@ -42,6 +42,7 @@ def _minimal_options(**overrides) -> dict:
         "tz": "UTC",
         "log_level": "info",
         "volume_via_ma": True,
+        "update_channel": "stable",
     }
     opts.update(overrides)
     return opts
@@ -218,6 +219,30 @@ def test_basic_translation(tmp_path):
     assert cfg["BLUETOOTH_DEVICES"][0]["mac"] == "AA:BB:CC:DD:EE:FF"
     assert cfg["BLUETOOTH_DEVICES"][1]["name"] == "Bedroom"
     assert cfg["TZ"] == "Europe/London"
+    assert cfg["UPDATE_CHANNEL"] == "stable"
+
+
+def test_translation_normalizes_update_channel(tmp_path):
+    _write_json(
+        tmp_path / "options.json",
+        _minimal_options(
+            update_channel="RC",
+            log_level="debug",
+            volume_via_ma=False,
+            prefer_sbc_codec=True,
+            pulse_latency_msec=100,
+            bt_check_interval=30,
+            bt_max_reconnect_fails=5,
+            ma_api_url="http://ma:8095",
+            ma_api_token="tok123",
+        ),
+    )
+
+    with patch("scripts.translate_ha_config._detect_adapters", return_value=[]):
+        main()
+
+    cfg = _read_json(tmp_path / "config.json")
+    assert cfg["UPDATE_CHANNEL"] == "rc"
     assert "AUTH_ENABLED" not in cfg  # managed by web_interface in addon mode
     assert cfg["LOG_LEVEL"] == "DEBUG"
     assert cfg["VOLUME_VIA_MA"] is False

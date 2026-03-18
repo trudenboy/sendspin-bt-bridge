@@ -61,6 +61,12 @@ configuration:
       Logging level for the bridge. Use "info" for normal operation or
       "debug" for detailed troubleshooting output. Debug mode produces
       significantly more log data.
+  update_channel:
+    name: "Update channel"
+    description: >-
+      Select which release track this installation should follow. "Stable"
+      is the default and recommended option. "RC" and "Beta" expose
+      prerelease builds and may contain unfinished features or regressions.
   ma_api_url:
     name: "Music Assistant API URL"
     description: >-

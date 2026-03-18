@@ -117,7 +117,11 @@ def test_config_upload_returns_structured_validation_errors(client):
     assert data["errors"][0]["field"] == "BLUETOOTH_DEVICES[1].mac"
 
 
-def test_config_upload_returns_validation_warnings_on_success(client):
+def test_config_upload_returns_validation_warnings_on_success(client, tmp_path, monkeypatch):
+    import routes.api_config as api_config_mod
+
+    monkeypatch.setattr(api_config_mod, "CONFIG_FILE", tmp_path / "config.json")
+
     resp = client.post(
         "/api/config/upload",
         data={
@@ -482,7 +486,6 @@ def test_api_config_get_enriches_devices_from_registry_snapshot(client, tmp_path
     import routes.api_config as api_config_mod
     from services.device_registry import DeviceRegistrySnapshot
 
-    monkeypatch.setattr(api_config_mod, "CONFIG_DIR", tmp_path)
     monkeypatch.setattr(api_config_mod, "CONFIG_FILE", tmp_path / "config.json")
     (tmp_path / "config.json").write_text(
         json.dumps(
@@ -521,7 +524,6 @@ def test_api_config_post_accepts_security_and_monitor_settings(client, tmp_path,
     """POST /api/config persists new security and MA monitor settings."""
     import routes.api_config as api_config_mod
 
-    monkeypatch.setattr(api_config_mod, "CONFIG_DIR", tmp_path)
     monkeypatch.setattr(api_config_mod, "CONFIG_FILE", tmp_path / "config.json")
     payload = {
         "SENDSPIN_SERVER": "auto",
@@ -551,6 +553,7 @@ def test_api_config_post_accepts_security_and_monitor_settings(client, tmp_path,
         "VOLUME_VIA_MA": True,
         "MUTE_VIA_MA": False,
         "SMOOTH_RESTART": True,
+        "UPDATE_CHANNEL": "beta",
         "AUTO_UPDATE": False,
         "CHECK_UPDATES": True,
     }
@@ -567,6 +570,7 @@ def test_api_config_post_accepts_security_and_monitor_settings(client, tmp_path,
     assert saved["BRUTE_FORCE_WINDOW_MINUTES"] == 2
     assert saved["BRUTE_FORCE_LOCKOUT_MINUTES"] == 10
     assert saved["MA_WEBSOCKET_MONITOR"] is False
+    assert saved["UPDATE_CHANNEL"] == "beta"
     assert saved["BLUETOOTH_ADAPTERS"][0]["name"] == "Living room"
 
 
@@ -574,7 +578,6 @@ def test_api_config_post_normalizes_numeric_strings(client, tmp_path, monkeypatc
     """POST /api/config should coerce known numeric fields to ints before saving."""
     import routes.api_config as api_config_mod
 
-    monkeypatch.setattr(api_config_mod, "CONFIG_DIR", tmp_path)
     monkeypatch.setattr(api_config_mod, "CONFIG_FILE", tmp_path / "config.json")
     payload = {
         "SENDSPIN_SERVER": "auto",
@@ -647,7 +650,6 @@ def test_api_config_post_uses_registry_snapshot_for_adapter_removal(client, tmp_
     import routes.api_config as api_config_mod
     from services.device_registry import DeviceRegistrySnapshot
 
-    monkeypatch.setattr(api_config_mod, "CONFIG_DIR", tmp_path)
     monkeypatch.setattr(api_config_mod, "CONFIG_FILE", tmp_path / "config.json")
     (tmp_path / "config.json").write_text(
         json.dumps(
@@ -712,7 +714,6 @@ def test_api_config_post_uses_registry_snapshot_for_adapter_removal(client, tmp_
 def test_api_config_post_prunes_last_volumes_for_removed_devices(client, tmp_path, monkeypatch):
     import routes.api_config as api_config_mod
 
-    monkeypatch.setattr(api_config_mod, "CONFIG_DIR", tmp_path)
     monkeypatch.setattr(api_config_mod, "CONFIG_FILE", tmp_path / "config.json")
     (tmp_path / "config.json").write_text(
         json.dumps(
@@ -768,7 +769,6 @@ def test_api_config_post_prunes_last_volumes_for_removed_devices(client, tmp_pat
 def test_api_config_post_returns_validation_warnings(client, tmp_path, monkeypatch):
     import routes.api_config as api_config_mod
 
-    monkeypatch.setattr(api_config_mod, "CONFIG_DIR", tmp_path)
     monkeypatch.setattr(api_config_mod, "CONFIG_FILE", tmp_path / "config.json")
     (tmp_path / "config.json").write_text(json.dumps({}))
     payload = {
@@ -862,7 +862,6 @@ def test_api_config_download_redacts_sensitive_tokens(client, tmp_path, monkeypa
     """GET /api/config/download must not leak secrets in the exported JSON."""
     import routes.api_config as api_config_mod
 
-    monkeypatch.setattr(api_config_mod, "CONFIG_DIR", tmp_path)
     monkeypatch.setattr(api_config_mod, "CONFIG_FILE", tmp_path / "config.json")
     cfg = {
         "BRIDGE_NAME": "Kitchen",
@@ -1258,6 +1257,7 @@ def test_device_enabled_toggle(client, tmp_path, monkeypatch):
     cfg = {"BLUETOOTH_DEVICES": [{"mac": "AA:BB:CC:DD:EE:FF", "player_name": "Test", "enabled": True}]}
     (tmp_path / "config.json").write_text(json.dumps(cfg))
     monkeypatch.setattr(api_bt_mod, "CONFIG_FILE", tmp_path / "config.json")
+    monkeypatch.setattr(api_bt_mod, "get_client_or_error", lambda player_name: (None, None))
     _orig = _bt_mod._CONFIG_FILE
     _bt_mod._CONFIG_FILE = tmp_path / "config.json"
     try:

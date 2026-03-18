@@ -20,12 +20,13 @@ from flask import Blueprint, Response, jsonify, request
 import state
 from config import (
     BUILD_DATE,
-    CONFIG_DIR,
     CONFIG_FILE,
     CONFIG_SCHEMA_VERSION,
+    DEFAULT_UPDATE_CHANNEL,
     VERSION,
     config_lock,
     load_config,
+    normalize_update_channel,
     update_config,
 )
 from services import (
@@ -37,7 +38,7 @@ from services.device_registry import get_device_registry_snapshot
 from services.ipc_protocol import IPC_PROTOCOL_VERSION
 from services.log_analysis import summarize_issue_logs
 from services.sendspin_compat import get_runtime_dependency_versions
-from services.update_checker import _start_upgrade_job
+from services.update_checker import _is_newer_version, _start_upgrade_job, channel_image_tag, check_latest_version
 from state import (
     _adapter_cache_lock,
     load_adapter_name_cache,
@@ -167,6 +168,23 @@ def _sanitize_last_volumes(last_volumes, valid_macs: set[str]) -> dict[str, int]
     }
 
 
+def _update_channel_warning(channel: str) -> str | None:
+    if channel == "beta":
+        return "Beta channel tracks preview builds from the beta branch and may contain unfinished or unstable changes."
+    if channel == "rc":
+        return "RC channel tracks release candidates from main before stable publication and may still contain regressions."
+    return None
+
+
+def _docker_update_instructions(channel: str) -> str:
+    image_tag = channel_image_tag(channel)
+    return (
+        "Pull the matching container tag manually, e.g. "
+        f"`docker pull ghcr.io/trudenboy/sendspin-bt-bridge:{image_tag}` "
+        "and redeploy your container or compose stack."
+    )
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -230,6 +248,7 @@ def _sync_ha_options(config: dict) -> None:
                 "bt_check_interval": int(config.get("BT_CHECK_INTERVAL") or 10),
                 "bt_max_reconnect_fails": int(config.get("BT_MAX_RECONNECT_FAILS") or 0),
                 "auth_enabled": bool(config.get("AUTH_ENABLED", False)),
+                "update_channel": normalize_update_channel(config.get("UPDATE_CHANNEL")),
                 "bluetooth_devices": sup_devices,
                 "bluetooth_adapters": sup_adapters,
             }
@@ -311,7 +330,7 @@ def api_config_upload():
     uploaded = validation.normalized_config
 
     # Preserve sensitive keys from existing config
-    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
     with config_lock:
         existing = {}
         if CONFIG_FILE.exists():
@@ -391,10 +410,11 @@ def api_config():
     config = validation.normalized_config
 
     # Validate top-level string fields
-    for str_key in ("SENDSPIN_SERVER", "BRIDGE_NAME", "TZ", "LOG_LEVEL"):
+    for str_key in ("SENDSPIN_SERVER", "BRIDGE_NAME", "TZ", "LOG_LEVEL", "UPDATE_CHANNEL"):
         val = config.get(str_key)
         if val is not None and not isinstance(val, str):
             return _error_response(f"{str_key} must be a string")
+    config["UPDATE_CHANNEL"] = normalize_update_channel(config.get("UPDATE_CHANNEL", DEFAULT_UPDATE_CHANNEL))
 
     for bool_key in (
         "PREFER_SBC_CODEC",
@@ -508,6 +528,7 @@ def api_config():
         "VOLUME_VIA_MA",
         "MUTE_VIA_MA",
         "SMOOTH_RESTART",
+        "UPDATE_CHANNEL",
         "AUTO_UPDATE",
         "CHECK_UPDATES",
         "_new_device_default_volume",
@@ -527,7 +548,7 @@ def api_config():
         if not has_hash:
             return _error_response("Set a password before enabling authentication")
 
-    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
     with config_lock:
         existing = {}
         if CONFIG_FILE.exists():
@@ -826,21 +847,26 @@ def api_update_check():
     if not loop:
         return jsonify({"success": False, "error": "Event loop not available"}), 503
     try:
-        from services.update_checker import _parse_version, check_latest_version
-
-        fut = asyncio.run_coroutine_threadsafe(check_latest_version(), loop)
+        payload = request.get_json(silent=True) or {}
+        requested_channel = payload.get("channel") or request.args.get("channel")
+        channel = normalize_update_channel(requested_channel or load_config().get("UPDATE_CHANNEL"))
+        fut = asyncio.run_coroutine_threadsafe(check_latest_version(channel), loop)
         latest = fut.result(timeout=20)
         if not latest:
             return jsonify({"success": False, "error": "Could not reach GitHub API"}), 502
-
-        current = _parse_version(VERSION)
-        remote = _parse_version(latest["version"])
-        if remote > current:
+        if _is_newer_version(latest["tag"], VERSION):
             latest["current_version"] = VERSION
             state.set_update_available(latest)
             return jsonify({"success": True, "update_available": True, **latest})
         state.set_update_available(None)
-        return jsonify({"success": True, "update_available": False, "latest": latest["version"]})
+        return jsonify(
+            {
+                "success": True,
+                "update_available": False,
+                "latest": latest["version"],
+                "channel": channel,
+            }
+        )
     except Exception:
         logger.exception("Update check failed")
         return jsonify({"success": False, "error": "Internal error"}), 500
@@ -852,22 +878,32 @@ def api_update_info():
     info = state.get_update_available()
     runtime = _detect_runtime()
     cfg = load_config()
+    channel = normalize_update_channel(cfg.get("UPDATE_CHANNEL"))
     result: dict = {
         "update_available": info is not None,
         "runtime": runtime,
         "auto_update": cfg.get("AUTO_UPDATE", False),
+        "channel": channel,
+        "channel_warning": _update_channel_warning(channel),
     }
     if info:
         result.update(info)
     if runtime == "systemd":
         result["update_method"] = "one_click"
-        result["instructions"] = "Click 'Update Now' to upgrade automatically."
+        result["instructions"] = "Click 'Update Now' to install the latest selected channel build automatically."
     elif runtime == "ha_addon":
         result["update_method"] = "ha_store"
-        result["instructions"] = "Update via Home Assistant → Add-ons → Sendspin BT Bridge → Update."
+        if channel == "stable":
+            result["instructions"] = "Update via Home Assistant → Add-ons → Sendspin BT Bridge → Update."
+        else:
+            result["instructions"] = (
+                "Save the selected prerelease channel in addon settings, then install the matching prerelease "
+                "build from the addon repository when it is published. Home Assistant does not switch channels "
+                "automatically from the web UI."
+            )
     else:
         result["update_method"] = "manual"
-        result["instructions"] = "Run: docker compose pull && docker compose up -d"
+        result["instructions"] = _docker_update_instructions(channel)
     return jsonify(result)
 
 
@@ -875,10 +911,18 @@ def api_update_info():
 def api_update_apply():
     """Start upgrade.sh in a transient systemd unit (LXC/systemd only)."""
     runtime = _detect_runtime()
+    channel = normalize_update_channel(
+        (request.get_json(silent=True) or {}).get("channel") or load_config().get("UPDATE_CHANNEL")
+    )
     if runtime != "systemd":
         methods = {
-            "ha_addon": "Update via Home Assistant → Add-ons → Sendspin BT Bridge → Update.",
-            "docker": "Run: docker compose pull && docker compose up -d",
+            "ha_addon": (
+                "Use the selected update channel in addon settings, then install the matching build from the addon repository. "
+                "Home Assistant does not switch addon channels automatically from this endpoint."
+                if channel != "stable"
+                else "Update via Home Assistant → Add-ons → Sendspin BT Bridge → Update."
+            ),
+            "docker": _docker_update_instructions(channel),
         }
         return jsonify({"success": False, "error": methods.get(runtime, "Unsupported runtime")}), 400
 

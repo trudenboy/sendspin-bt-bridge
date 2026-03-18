@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Config, API, and update surfaces now support an explicit `UPDATE_CHANNEL` setting with `stable`, `rc`, and `beta` options so standalone installs and Home Assistant add-on configs can choose their preferred release lane without changing the main runtime contract
+- The standalone web UI now exposes an update-channel selector with confirmation/warning copy for `rc` and `beta`, making prerelease opt-in explicit before operators leave the stable lane
+- Home Assistant add-on options, translations, docs, and config translation now carry the same `update_channel` setting through to the runtime config
+
+### Changed
+- `services/update_checker.py` now resolves releases from the GitHub releases list by channel-aware semver matching (`stable`, `rc`, `beta`) instead of relying on the stable-only `releases/latest` endpoint
+- `/api/update/check`, `/api/update/info`, and `/api/update/apply` now return channel-specific release metadata, warnings, and runtime-specific upgrade instructions for Docker, systemd/LXC, and Home Assistant environments
+- Docker publish and GitHub release workflows now split stable, rc, and beta distribution lanes: stable continues from `vX.Y.Z`, rc comes from `vX.Y.Z-rc.N` tags on `main`, and beta comes from the `beta` branch or `vX.Y.Z-beta.N` prerelease tags
+
 ## [2.40.0] - 2026-03-18
 
 ### Added

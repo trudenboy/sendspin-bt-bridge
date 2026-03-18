@@ -70,6 +70,7 @@ simultaneously.
 | `bt_max_reconnect_fails` | int | `0` | Maximum consecutive reconnect attempts before giving up. `0` means unlimited (keep retrying forever). |
 | `auth_enabled` | bool | `false` | Enable password protection for the web UI. Set the password through the web interface after enabling. |
 | `log_level` | list | `info` | Logging verbosity: `info` or `debug`. Use `debug` when troubleshooting. |
+| `update_channel` | list | `stable` | Release track for update checks and prerelease notifications. `stable` is recommended. `rc` and `beta` are not stable and may contain unfinished changes or regressions. |
 
 ### Music Assistant API options
 

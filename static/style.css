@@ -3812,6 +3812,16 @@ body {
         .config-inline-note {
             margin-top: 10px;
         }
+        .config-channel-warning {
+            margin-top: 12px;
+            padding: 11px 13px;
+            border-radius: 12px;
+            border: 1px solid var(--tone-warning-border);
+            background: var(--tone-warning-bg);
+            color: var(--primary-text-color);
+            font-size: 12px;
+            line-height: 1.5;
+        }
         .config-inline-link {
             font-size: 13px;
             font-weight: 600;

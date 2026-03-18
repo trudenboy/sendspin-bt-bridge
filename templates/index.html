@@ -230,6 +230,21 @@
                                 </span>
                             </label>
 
+                            <label class="config-setting-row" for="update-channel">
+                                <span class="config-setting-copy">
+                                    <strong>Update channel</strong>
+                                    <span class="form-hint">Stable is recommended. RC and beta may contain unfinished or unstable changes.</span>
+                                </span>
+                                <span class="config-setting-control config-setting-control--field">
+                                    <select name="UPDATE_CHANNEL" id="update-channel">
+                                        <option value="stable">Stable</option>
+                                        <option value="rc">RC</option>
+                                        <option value="beta">Beta</option>
+                                    </select>
+                                </span>
+                            </label>
+                            <div class="config-channel-warning" id="update-channel-warning" hidden></div>
+
                             <label class="config-setting-row">
                                 <span class="config-setting-copy">
                                     <strong>Auto-update</strong>

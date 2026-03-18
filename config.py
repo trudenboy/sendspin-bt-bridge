@@ -25,6 +25,8 @@ from pathlib import Path
 VERSION = "2.40.0"
 BUILD_DATE = "2026-03-18"
 CONFIG_SCHEMA_VERSION = 1
+UPDATE_CHANNELS = ("stable", "rc", "beta")
+DEFAULT_UPDATE_CHANNEL = "stable"
 
 __all__ = [
     "BUILD_DATE",
@@ -32,6 +34,8 @@ __all__ = [
     "CONFIG_FILE",
     "CONFIG_SCHEMA_VERSION",
     "DEFAULT_CONFIG",
+    "DEFAULT_UPDATE_CHANNEL",
+    "UPDATE_CHANNELS",
     "VERSION",
     "check_password",
     "config_lock",
@@ -40,6 +44,7 @@ __all__ = [
     "get_local_ip",
     "hash_password",
     "load_config",
+    "normalize_update_channel",
     "save_device_sink",
     "save_device_volume",
     "update_config",
@@ -77,6 +82,7 @@ DEFAULT_CONFIG = {
     "VOLUME_VIA_MA": True,
     "MUTE_VIA_MA": False,
     "SMOOTH_RESTART": True,
+    "UPDATE_CHANNEL": DEFAULT_UPDATE_CHANNEL,
     "AUTO_UPDATE": False,
     "CHECK_UPDATES": True,
     "TRUSTED_PROXIES": [],
@@ -153,6 +159,27 @@ def _normalize_float_setting(
     config[key] = value
 
 
+def normalize_update_channel(raw_channel: object) -> str:
+    """Return a supported update channel name."""
+    if not isinstance(raw_channel, str):
+        return DEFAULT_UPDATE_CHANNEL
+    normalized = raw_channel.strip().lower()
+    if normalized in UPDATE_CHANNELS:
+        return normalized
+    return DEFAULT_UPDATE_CHANNEL
+
+
+def _normalize_choice_setting(config: dict, key: str, *, allowed_values: tuple[str, ...], default: str) -> None:
+    raw = config.get(key, default)
+    if isinstance(raw, str):
+        normalized = raw.strip().lower()
+        if normalized in allowed_values:
+            config[key] = normalized
+            return
+    logger.warning("Invalid %s value %r in config; using default %r", key, raw, default)
+    config[key] = default
+
+
 def _normalize_bluetooth_devices(config: dict) -> list[dict]:
     devices = config.get("BLUETOOTH_DEVICES", DEFAULT_CONFIG["BLUETOOTH_DEVICES"])
     if not isinstance(devices, list):
@@ -213,6 +240,12 @@ def _normalize_loaded_config(config: dict) -> None:
         _normalize_int_setting(config, key, min_value=min_value, max_value=max_value)
 
     _normalize_float_setting(config, "BT_CHURN_WINDOW", min_value=1.0, max_value=86400.0)
+    _normalize_choice_setting(
+        config,
+        "UPDATE_CHANNEL",
+        allowed_values=UPDATE_CHANNELS,
+        default=DEFAULT_UPDATE_CHANNEL,
+    )
 
     for key in (
         "PREFER_SBC_CODEC",
@@ -346,6 +379,7 @@ def load_config() -> dict:
         "VOLUME_VIA_MA",
         "MUTE_VIA_MA",
         "SMOOTH_RESTART",
+        "UPDATE_CHANNEL",
         "AUTO_UPDATE",
         "CHECK_UPDATES",
         "TRUSTED_PROXIES",

@@ -46,6 +46,7 @@ options:
   bt_check_interval: 10
   bt_max_reconnect_fails: 0
   log_level: "info"
+  update_channel: "stable"
   ma_api_url: ""
   ma_api_token: ""
   volume_via_ma: true
@@ -62,6 +63,7 @@ schema:
   bt_check_interval: int?
   bt_max_reconnect_fails: int?
   log_level: "list(info|debug)?"
+  update_channel: "list(stable|rc|beta)?"
   ma_api_url: str?
   ma_api_token: str?
   volume_via_ma: bool?

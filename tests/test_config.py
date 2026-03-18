@@ -146,6 +146,24 @@ def test_load_config_normalizes_types_and_prunes_orphan_volumes(tmp_path):
     assert loaded["LAST_VOLUMES"] == {"AA:BB:CC:DD:EE:FF": 55}
 
 
+def test_load_config_normalizes_update_channel(tmp_path):
+    _write_config(tmp_path, {"UPDATE_CHANNEL": "RC"})
+    from config import load_config
+
+    loaded = load_config()
+
+    assert loaded["UPDATE_CHANNEL"] == "rc"
+
+
+def test_load_config_falls_back_to_stable_for_invalid_update_channel(tmp_path):
+    _write_config(tmp_path, {"UPDATE_CHANNEL": "nightly"})
+    from config import DEFAULT_UPDATE_CHANNEL, load_config
+
+    loaded = load_config()
+
+    assert loaded["UPDATE_CHANNEL"] == DEFAULT_UPDATE_CHANNEL
+
+
 def test_load_config_persists_current_schema_version_for_legacy_file(tmp_path):
     _write_config(tmp_path, {"SENDSPIN_SERVER": "10.0.0.1"})
     from config import CONFIG_SCHEMA_VERSION, load_config

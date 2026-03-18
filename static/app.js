@@ -4180,6 +4180,48 @@ function _bluetoothIconSvg(className) {
         '</svg>';
 }
 
+var _lastConfirmedUpdateChannel = 'stable';
+
+function _updateChannelWarningText(channel) {
+    if (channel === 'beta') {
+        return 'Beta channel tracks preview builds from the beta branch. Expect unfinished features, regressions, and more frequent changes.';
+    }
+    if (channel === 'rc') {
+        return 'RC channel tracks release candidates from main before stable publication. Use it only if you are ready to validate prerelease builds.';
+    }
+    return '';
+}
+
+function _syncUpdateChannelState() {
+    var select = document.getElementById('update-channel');
+    var warningEl = document.getElementById('update-channel-warning');
+    if (!select || !warningEl) return;
+    var channel = (select.value || 'stable').toLowerCase();
+    var warningText = _updateChannelWarningText(channel);
+    warningEl.hidden = !warningText;
+    warningEl.textContent = warningText;
+}
+
+function _onUpdateChannelChange() {
+    var select = document.getElementById('update-channel');
+    if (!select) return;
+    var nextChannel = (select.value || 'stable').toLowerCase();
+    if ((nextChannel === 'rc' || nextChannel === 'beta') && nextChannel !== _lastConfirmedUpdateChannel) {
+        var confirmed = window.confirm(
+            nextChannel === 'beta'
+                ? 'Beta channel is not stable and may contain unfinished features or regressions. Switch to beta?'
+                : 'RC channel is not stable yet and may still contain regressions. Switch to release candidates?'
+        );
+        if (!confirmed) {
+            select.value = _lastConfirmedUpdateChannel;
+            _syncUpdateChannelState();
+            return;
+        }
+    }
+    _lastConfirmedUpdateChannel = nextChannel;
+    _syncUpdateChannelState();
+}
+
 async function saveConfig() {
     var formData = new FormData(document.getElementById('config-form'));
     var config = Object.fromEntries(formData);
@@ -4195,6 +4237,7 @@ async function saveConfig() {
     config.VOLUME_VIA_MA = !!(document.getElementById('volume-via-ma') || {}).checked;
     config.MUTE_VIA_MA = !!(document.getElementById('mute-via-ma') || {}).checked;
     config.SMOOTH_RESTART = !!(document.getElementById('smooth-restart') || {}).checked;
+    config.UPDATE_CHANNEL = (((document.getElementById('update-channel') || {}).value) || 'stable').toLowerCase();
     config.AUTO_UPDATE = !!(document.getElementById('auto-update') || {}).checked;
     config.CHECK_UPDATES = !!(document.getElementById('check-updates') || {}).checked;
     // Log level lives outside the config form (in Logs section)
@@ -4704,6 +4747,14 @@ function _syncSecurityPolicyState() {
     _syncSecurityPolicyState();
 })();
 
+(function() {
+    var updateChannelSelect = document.getElementById('update-channel');
+    if (!updateChannelSelect) return;
+    updateChannelSelect.addEventListener('change', _onUpdateChannelChange);
+    _lastConfirmedUpdateChannel = (updateChannelSelect.value || 'stable').toLowerCase();
+    _syncUpdateChannelState();
+})();
+
 function _updateAuthMethodsHint() {
     var hint = document.getElementById('auth-methods-hint');
     var text = document.getElementById('auth-methods-text');
@@ -4804,10 +4855,16 @@ async function loadConfig() {
         if (muteMaCheck) muteMaCheck.checked = !!config.MUTE_VIA_MA;
         var smoothRestartCheck = document.getElementById('smooth-restart');
         if (smoothRestartCheck) smoothRestartCheck.checked = !!config.SMOOTH_RESTART;
+        var updateChannelSelect = document.getElementById('update-channel');
+        if (updateChannelSelect) {
+            updateChannelSelect.value = (config.UPDATE_CHANNEL || 'stable').toLowerCase();
+            _lastConfirmedUpdateChannel = updateChannelSelect.value;
+        }
         var autoUpdateCheck = document.getElementById('auto-update');
         if (autoUpdateCheck) autoUpdateCheck.checked = !!config.AUTO_UPDATE;
         var checkUpdatesCheck = document.getElementById('check-updates');
         if (checkUpdatesCheck) checkUpdatesCheck.checked = config.CHECK_UPDATES !== false;
+        _syncUpdateChannelState();
         var logLevelSel = document.getElementById('log-level-select');
         if (logLevelSel && config.LOG_LEVEL) logLevelSel.value = config.LOG_LEVEL.toUpperCase();
         _restoreConfigTransientInputs(config);
@@ -5121,16 +5178,18 @@ function _showUpdateBadge(upd) {
     if (!badge || !link) return;
     link.classList.remove('checking');
     if (upd && upd.version) {
-        if (ver) ver.textContent = 'v' + upd.version;
+        var channel = upd.channel || 'stable';
+        if (ver) ver.textContent = 'v' + upd.version + (channel !== 'stable' ? ' · ' + channel.toUpperCase() : '');
         _setUiIconSlot(icon, 'upload');
         link.href = upd.url || '#';
         link.target = '_blank';
         link.rel = 'noopener';
-        link.title = 'Update available — click to apply';
+        link.title = 'Update available on ' + channel.toUpperCase() + ' channel — click to apply';
         link.classList.remove('no-update');
         link.classList.add('has-update');
         link.dataset.updateVersion = upd.version;
         link.dataset.updateUrl = upd.url || '';
+        link.dataset.updateChannel = channel;
     } else {
         if (ver) ver.textContent = 'up to date';
         _setUiIconSlot(icon, 'refresh');
@@ -5142,6 +5201,7 @@ function _showUpdateBadge(upd) {
         link.classList.add('no-update');
         delete link.dataset.updateVersion;
         delete link.dataset.updateUrl;
+        delete link.dataset.updateChannel;
     }
 }
 
@@ -5480,7 +5540,8 @@ function _onUpdateBadgeClick(e) {
         e.preventDefault();
         var ver = link.dataset.updateVersion || '?';
         var url = link.dataset.updateUrl || '';
-        _showUpdateDialog(ver, url);
+        var channel = link.dataset.updateChannel || 'stable';
+        _showUpdateDialog(ver, url, channel);
         return false;
     }
 
@@ -5493,11 +5554,11 @@ function _onUpdateBadgeClick(e) {
         .then(function(r) { return r.json(); })
         .then(function(data) {
             if (data.update_available) {
-                _showUpdateBadge({version: data.version, url: data.url});
-                showToast('Update v' + data.version + ' available', 'info');
+                _showUpdateBadge({version: data.version, url: data.url, channel: data.channel});
+                showToast('Update v' + data.version + ' available on ' + (data.channel || 'stable').toUpperCase(), 'info');
             } else {
                 _showUpdateBadge(null);
-                showToast('Already on the latest version', 'info');
+                showToast('Already on the latest ' + (data.channel || 'stable').toUpperCase() + ' version', 'info');
             }
         })
         .catch(function() {
@@ -5513,12 +5574,13 @@ var _UPD_ICON_REFRESH = '<svg viewBox="0 0 16 16" fill="none" stroke="currentCol
 var _UPD_ICON_NOTES = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="1" width="12" height="14" rx="1.5"/><line x1="5" y1="5" x2="11" y2="5"/><line x1="5" y1="8" x2="11" y2="8"/><line x1="5" y1="11" x2="9" y2="11"/></svg>';
 var _UPD_ICON_HA = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 7.5 8 3l5.5 4.5"/><path d="M4.5 7v6.5h7V7"/><path d="M6.8 13.5V9.8h2.4v3.7"/></svg>';
 
-function _showUpdateDialog(ver, releaseUrl) {
+function _showUpdateDialog(ver, releaseUrl, releaseChannel) {
     // Fetch update info to determine runtime/method
     fetch(API_BASE + '/api/update/info')
         .then(function(r) { return r.json(); })
         .then(function(info) {
             var method = info.update_method || 'manual';
+            var channel = info.channel || releaseChannel || 'stable';
             var curVerEl = document.getElementById('version-display');
             var curVer = curVerEl ? curVerEl.textContent : '';
 
@@ -5541,8 +5603,15 @@ function _showUpdateDialog(ver, releaseUrl) {
             verRow.className = 'update-modal-version';
             verRow.innerHTML = '<span>' + curVer + '</span>' +
                 '<span class="update-modal-version-arrow">\u2192</span>' +
-                '<span class="update-modal-version-new">v' + ver + '</span>';
+                '<span class="update-modal-version-new">v' + ver + (channel !== 'stable' ? ' · ' + channel.toUpperCase() : '') + '</span>';
             modal.appendChild(verRow);
+
+            if (info.channel_warning) {
+                var warningEl = document.createElement('div');
+                warningEl.className = 'config-channel-warning';
+                warningEl.textContent = info.channel_warning;
+                modal.appendChild(warningEl);
+            }
 
             // Release notes body
             if (info.body) {
@@ -5577,11 +5646,11 @@ function _showUpdateDialog(ver, releaseUrl) {
                     .then(function(r) { return r.json(); })
                     .then(function(data) {
                         if (data.update_available) {
-                            _showUpdateBadge({version: data.version, url: data.url});
-                            showToast('Update v' + data.version + ' available', 'info');
+                            _showUpdateBadge({version: data.version, url: data.url, channel: data.channel});
+                            showToast('Update v' + data.version + ' available on ' + (data.channel || 'stable').toUpperCase(), 'info');
                         } else {
                             _showUpdateBadge(null);
-                            showToast('Already on the latest version', 'info');
+                            showToast('Already on the latest ' + (data.channel || 'stable').toUpperCase() + ' version', 'info');
                         }
                     })
                     .catch(function() {
@@ -5608,7 +5677,7 @@ function _showUpdateDialog(ver, releaseUrl) {
                 applyBtn.innerHTML = _UPD_ICON_ARROW + ' Update Now';
                 applyBtn.onclick = function() {
                     overlay.remove();
-                    _applyUpdate(ver, releaseUrl);
+                    _applyUpdate(ver, releaseUrl, channel);
                 };
                 footer.appendChild(applyBtn);
             } else if (method === 'ha_store') {
@@ -5625,7 +5694,7 @@ function _showUpdateDialog(ver, releaseUrl) {
                 instrBtn.innerHTML = _UPD_ICON_NOTES + ' Instructions';
                 instrBtn.onclick = function() {
                     overlay.remove();
-                    showToast('Run: docker compose pull && docker compose up -d', 'info');
+                    showToast(info.instructions || 'Follow the selected update channel instructions.', 'info');
                 };
                 footer.appendChild(instrBtn);
             }
@@ -5643,7 +5712,7 @@ function _showUpdateDialog(ver, releaseUrl) {
         });
 }
 
-function _applyUpdate(ver, releaseUrl) {
+function _applyUpdate(ver, releaseUrl, channel) {
     var link = document.getElementById('update-link');
     var verEl = document.getElementById('update-version');
     var iconEl = document.getElementById('update-icon');
@@ -5653,7 +5722,7 @@ function _applyUpdate(ver, releaseUrl) {
     fetch(API_BASE + '/api/update/apply', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({version: ver})
+        body: JSON.stringify({version: ver, channel: channel || (link && link.dataset.updateChannel) || 'stable'})
     })
         .then(function(r) { return r.json(); })
         .then(function(data) {
@@ -5662,7 +5731,7 @@ function _applyUpdate(ver, releaseUrl) {
                 setTimeout(function() { location.reload(); }, 8000);
             } else {
                 showToast('Update failed: ' + (data.error || 'unknown error'), 'error');
-                _showUpdateBadge({version: ver, url: releaseUrl});
+                _showUpdateBadge({version: ver, url: releaseUrl, channel: channel || (link && link.dataset.updateChannel) || 'stable'});
             }
         })
         .catch(function() {

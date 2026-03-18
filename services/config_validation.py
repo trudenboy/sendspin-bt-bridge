@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from config import CONFIG_SCHEMA_VERSION
+from config import CONFIG_SCHEMA_VERSION, DEFAULT_UPDATE_CHANNEL, UPDATE_CHANNELS, normalize_update_channel
 from services.bluetooth import _MAC_RE
 
 
@@ -50,6 +50,31 @@ def validate_uploaded_config(uploaded: dict[str, Any]) -> ConfigValidationResult
                     message=f"Invalid CONFIG_SCHEMA_VERSION: {schema_version}",
                 )
             )
+
+    update_channel = normalized.get("UPDATE_CHANNEL")
+    if update_channel in (None, ""):
+        normalized["UPDATE_CHANNEL"] = DEFAULT_UPDATE_CHANNEL
+    elif not isinstance(update_channel, str):
+        result.errors.append(
+            ConfigValidationIssue(
+                field="UPDATE_CHANNEL",
+                message=f"Invalid UPDATE_CHANNEL: {update_channel}",
+            )
+        )
+    else:
+        normalized_channel = normalize_update_channel(update_channel)
+        if normalized_channel not in UPDATE_CHANNELS or normalized_channel != update_channel.strip().lower():
+            if update_channel.strip().lower() not in UPDATE_CHANNELS:
+                result.errors.append(
+                    ConfigValidationIssue(
+                        field="UPDATE_CHANNEL",
+                        message=f"Invalid UPDATE_CHANNEL: {update_channel}",
+                    )
+                )
+            else:
+                normalized["UPDATE_CHANNEL"] = normalized_channel
+        else:
+            normalized["UPDATE_CHANNEL"] = normalized_channel
 
     bt_devices = normalized.get("BLUETOOTH_DEVICES", [])
     if not isinstance(bt_devices, list):
