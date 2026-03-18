@@ -9,12 +9,12 @@ import logging
 import os
 import re
 import subprocess
+import tempfile
 import threading
 from pathlib import Path
 
 from config import CONFIG_FILE as _CONFIG_FILE
 from config import config_lock as _config_lock
-from config import update_config as _update_config
 
 logger = logging.getLogger(__name__)
 _OPTIONS_FILE = Path("/data/options.json")
@@ -93,6 +93,36 @@ def _match_player_name(config_name: str, runtime_name: str) -> bool:
     return runtime_name == config_name or runtime_name.startswith(config_name + " @ ")
 
 
+def _update_bound_config_file(mutator) -> None:
+    """Atomically mutate the config file bound into this module."""
+    with _config_lock:
+        existing: dict = {}
+        if _CONFIG_FILE.exists():
+            with open(_CONFIG_FILE) as f:
+                existing = json.load(f)
+        mutator(existing)
+        _CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        tmp_f = tempfile.NamedTemporaryFile(  # noqa: SIM115
+            dir=str(_CONFIG_FILE.parent),
+            delete=False,
+            mode="w",
+            suffix=".tmp",
+        )
+        try:
+            json.dump(existing, tmp_f, indent=2)
+            tmp_f.flush()
+            os.fsync(tmp_f.fileno())
+            tmp_f.close()
+            os.replace(tmp_f.name, str(_CONFIG_FILE))
+        except BaseException:
+            tmp_f.close()
+            try:
+                os.unlink(tmp_f.name)
+            except OSError:
+                pass
+            raise
+
+
 def persist_device_enabled(player_name: str, enabled: bool) -> None:
     """Persist the enabled flag to config.json and (in HA mode) to options.json."""
     if not _CONFIG_FILE.exists():
@@ -105,7 +135,7 @@ def persist_device_enabled(player_name: str, enabled: bool) -> None:
                 break
 
     try:
-        _update_config(_set_enabled)
+        _update_bound_config_file(_set_enabled)
     except Exception as e:
         logger.warning("Could not persist enabled flag for '%s': %s", player_name, e)
 
@@ -140,7 +170,7 @@ def persist_device_released(player_name: str, released: bool) -> None:
                 break
 
     try:
-        _update_config(_set_released)
+        _update_bound_config_file(_set_released)
     except Exception as e:
         logger.warning("Could not persist released flag for '%s': %s", player_name, e)
 

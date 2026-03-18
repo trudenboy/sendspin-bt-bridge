@@ -1249,13 +1249,15 @@ def test_api_diagnostics_includes_playing_and_sink_input_metadata(client, monkey
         state.set_ma_api_credentials("", "")
 
 
-def test_device_enabled_toggle(client, tmp_path):
+def test_device_enabled_toggle(client, tmp_path, monkeypatch):
     """POST /api/device/enabled returns success with restart_required."""
+    import routes.api_bt as api_bt_mod
     import services.bluetooth as _bt_mod
 
     # Seed config with a device and patch _CONFIG_FILE for persist
     cfg = {"BLUETOOTH_DEVICES": [{"mac": "AA:BB:CC:DD:EE:FF", "player_name": "Test", "enabled": True}]}
     (tmp_path / "config.json").write_text(json.dumps(cfg))
+    monkeypatch.setattr(api_bt_mod, "CONFIG_FILE", tmp_path / "config.json")
     _orig = _bt_mod._CONFIG_FILE
     _bt_mod._CONFIG_FILE = tmp_path / "config.json"
     try:

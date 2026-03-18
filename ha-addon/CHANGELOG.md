@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.40.0] - 2026-03-18
+
+### Added
+- Structured config validation for config upload, config save, and dry-run validation so operators can catch malformed payloads before persisting changes
+- A dedicated onboarding diagnostics assistant with actionable guidance for Bluetooth availability, sink readiness, Music Assistant auth state, and latency calibration
+
+### Changed
+- Bridge runtime internals are now split across explicit lifecycle, MA integration, subprocess IPC, subprocess command, subprocess stop, playback-health, and event-builder services without breaking the existing addon UX
+- Diagnostics, bugreport exports, and runtime status surfaces now expose richer contract/version metadata, device event history, onboarding guidance, and structured daemon error reporting
+
 ## [2.32.12] - 2026-03-17
 
 ### Fixed
