@@ -1086,14 +1086,12 @@ async def main():
     ma_bootstrap = await orchestrator.initialize_ma_integration(config, clients, server_host=server_host)
     ma_monitor_task = ma_bootstrap.ma_monitor_task
 
-    tasks = orchestrator.assemble_runtime_tasks(
+    await orchestrator.run_runtime(
         clients,
         ma_monitor_task=ma_monitor_task,
         demo_mode=demo_mode,
         version=VERSION,
     )
-
-    await asyncio.gather(*tasks)
 
 
 if __name__ == "__main__":

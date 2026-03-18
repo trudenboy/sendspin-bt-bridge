@@ -276,3 +276,26 @@ class BridgeOrchestrator:
             },
         )
         return tasks
+
+    async def run_runtime(
+        self,
+        clients: list[Any],
+        *,
+        ma_monitor_task: asyncio.Task[None] | None,
+        demo_mode: bool,
+        version: str,
+        run_simulator_fn: Callable[[list[Any]], Coroutine[Any, Any, None]] | None = None,
+        run_update_checker_fn: Callable[[str], Coroutine[Any, Any, None]] | None = None,
+        gather_fn: Callable[..., Awaitable[Any]] | None = None,
+    ) -> Any:
+        """Assemble and await the long-running bridge runtime tasks."""
+        tasks = self.assemble_runtime_tasks(
+            clients,
+            ma_monitor_task=ma_monitor_task,
+            demo_mode=demo_mode,
+            version=version,
+            run_simulator_fn=run_simulator_fn,
+            run_update_checker_fn=run_update_checker_fn,
+        )
+        runtime_gather = gather_fn or asyncio.gather
+        return await runtime_gather(*tasks)

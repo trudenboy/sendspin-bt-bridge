@@ -308,3 +308,39 @@ async def test_assemble_runtime_tasks_includes_existing_ma_monitor_task():
     for task in tasks:
         with pytest.raises(asyncio.CancelledError):
             await task
+
+
+@pytest.mark.asyncio
+async def test_run_runtime_delegates_to_gather_with_assembled_tasks():
+    orchestrator = BridgeOrchestrator()
+    gathered: list[asyncio.Task[object]] = []
+    update_checker_started = asyncio.Event()
+
+    class FakeClient:
+        async def run(self) -> None:
+            await asyncio.sleep(3600)
+
+    async def fake_update_checker(_version: str) -> None:
+        update_checker_started.set()
+        await asyncio.sleep(3600)
+
+    async def fake_gather(*tasks):
+        gathered.extend(tasks)
+        await asyncio.sleep(0)
+        for task in tasks:
+            task.cancel()
+        return await asyncio.gather(*tasks, return_exceptions=True)
+
+    await orchestrator.run_runtime(
+        [FakeClient()],
+        ma_monitor_task=None,
+        demo_mode=False,
+        version="2.32.12",
+        run_update_checker_fn=fake_update_checker,
+        gather_fn=fake_gather,
+    )
+
+    await asyncio.wait_for(update_checker_started.wait(), timeout=0.2)
+    assert len(gathered) == 2
+    progress = state.get_startup_progress()
+    assert progress["status"] == "ready"
