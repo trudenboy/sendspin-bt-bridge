@@ -5167,7 +5167,23 @@ async function loadVersionInfo() {
         if (data.git_sha && data.git_sha !== 'unknown') title += ' · ' + data.git_sha;
         el.textContent = 'v' + ver;
         if (title) el.title = title;
+        _applyReleaseChannelBadge(el, _releaseChannelFromVersion(ver));
     } catch (_) { /* Keep static Jinja2-rendered values */ }
+}
+
+function _releaseChannelFromVersion(version) {
+    var normalized = String(version || '').toLowerCase();
+    if (normalized.indexOf('-beta') !== -1) return 'beta';
+    if (normalized.indexOf('-rc') !== -1) return 'rc';
+    return 'stable';
+}
+
+function _applyReleaseChannelBadge(el, channel) {
+    if (!el) return;
+    el.classList.remove('channel-rc', 'channel-beta');
+    if (channel === 'rc' || channel === 'beta') {
+        el.classList.add('channel-' + channel);
+    }
 }
 
 function _showUpdateBadge(upd) {
@@ -5178,7 +5194,7 @@ function _showUpdateBadge(upd) {
     if (!badge || !link) return;
     link.classList.remove('checking');
     if (upd && upd.version) {
-        var channel = upd.channel || 'stable';
+        var channel = upd.channel || _releaseChannelFromVersion(upd.version);
         if (ver) ver.textContent = 'v' + upd.version + (channel !== 'stable' ? ' · ' + channel.toUpperCase() : '');
         _setUiIconSlot(icon, 'upload');
         link.href = upd.url || '#';
@@ -5187,6 +5203,7 @@ function _showUpdateBadge(upd) {
         link.title = 'Update available on ' + channel.toUpperCase() + ' channel — click to apply';
         link.classList.remove('no-update');
         link.classList.add('has-update');
+        _applyReleaseChannelBadge(link, channel);
         link.dataset.updateVersion = upd.version;
         link.dataset.updateUrl = upd.url || '';
         link.dataset.updateChannel = channel;
@@ -5199,6 +5216,7 @@ function _showUpdateBadge(upd) {
         link.title = 'Check for updates';
         link.classList.remove('has-update');
         link.classList.add('no-update');
+        _applyReleaseChannelBadge(link, 'stable');
         delete link.dataset.updateVersion;
         delete link.dataset.updateUrl;
         delete link.dataset.updateChannel;

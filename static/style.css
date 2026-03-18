@@ -131,6 +131,18 @@ body {
             white-space: nowrap;
         }
         .header-version:hover { background: rgba(255,255,255,.28); }
+        .header-version.channel-rc {
+            background: rgba(255, 214, 10, 0.22);
+            border: 1px solid rgba(255, 214, 10, 0.45);
+            color: #fff4b3;
+        }
+        .header-version.channel-rc:hover { background: rgba(255, 214, 10, 0.3); }
+        .header-version.channel-beta {
+            background: rgba(239, 68, 68, 0.22);
+            border: 1px solid rgba(239, 68, 68, 0.45);
+            color: #ffd6d6;
+        }
+        .header-version.channel-beta:hover { background: rgba(239, 68, 68, 0.3); }
         .update-badge-link {
             display: inline-flex;
             align-items: center;
@@ -150,6 +162,18 @@ body {
             background: rgba(34,197,94,0.2); border: 1px solid rgba(34,197,94,0.45);
         }
         .update-badge-link.has-update:hover { background: rgba(34,197,94,0.3); }
+        .update-badge-link.has-update.channel-rc {
+            color: #fff4b3;
+            background: rgba(255, 214, 10, 0.22);
+            border: 1px solid rgba(255, 214, 10, 0.45);
+        }
+        .update-badge-link.has-update.channel-rc:hover { background: rgba(255, 214, 10, 0.3); }
+        .update-badge-link.has-update.channel-beta {
+            color: #ffd6d6;
+            background: rgba(239, 68, 68, 0.22);
+            border: 1px solid rgba(239, 68, 68, 0.45);
+        }
+        .update-badge-link.has-update.channel-beta:hover { background: rgba(239, 68, 68, 0.3); }
         .update-badge-link.no-update {
             color: rgba(255,255,255,0.9);
             background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.18);
