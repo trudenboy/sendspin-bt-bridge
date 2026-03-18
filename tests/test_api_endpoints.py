@@ -142,6 +142,39 @@ def test_config_upload_returns_validation_warnings_on_success(client):
     assert data["validation"]["warnings"][0]["field"] == "CONFIG_SCHEMA_VERSION"
 
 
+def test_config_validate_returns_normalized_preview(client):
+    resp = client.post(
+        "/api/config/validate",
+        data=json.dumps(
+            {
+                "SENDSPIN_PORT": "9000",
+                "BLUETOOTH_DEVICES": [{"mac": "aa:bb:cc:dd:ee:ff"}],
+            }
+        ),
+        content_type="application/json",
+    )
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["valid"] is True
+    assert data["warnings"][0]["field"] == "CONFIG_SCHEMA_VERSION"
+    assert data["normalized_config"]["SENDSPIN_PORT"] == 9000
+    assert data["normalized_config"]["BLUETOOTH_DEVICES"][0]["mac"] == "AA:BB:CC:DD:EE:FF"
+
+
+def test_config_validate_returns_errors_for_invalid_payload(client):
+    resp = client.post(
+        "/api/config/validate",
+        data=json.dumps({"BLUETOOTH_DEVICES": [{"mac": "not-a-mac"}]}),
+        content_type="application/json",
+    )
+
+    assert resp.status_code == 400
+    data = resp.get_json()
+    assert data["valid"] is False
+    assert data["errors"][0]["field"] == "BLUETOOTH_DEVICES[0].mac"
+
+
 def test_set_volume_empty_body(client):
     """POST /api/volume with an empty JSON object must not return 500."""
     resp = client.post(

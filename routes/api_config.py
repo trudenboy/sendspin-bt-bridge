@@ -348,6 +348,30 @@ def api_config_upload():
     return jsonify(payload)
 
 
+@config_bp.route("/api/config/validate", methods=["POST"])
+def api_config_validate():
+    """Validate a config payload without persisting it."""
+    config = request.get_json()
+    if not isinstance(config, dict):
+        return _error_response("Invalid JSON body")
+
+    validation = validate_uploaded_config(config)
+    errors = [{"field": issue.field, "message": issue.message} for issue in validation.errors]
+    warnings = [{"field": issue.field, "message": issue.message} for issue in validation.warnings]
+    status = 200 if validation.is_valid else 400
+    return (
+        jsonify(
+            {
+                "valid": validation.is_valid,
+                "errors": errors,
+                "warnings": warnings,
+                "normalized_config": validation.normalized_config,
+            }
+        ),
+        status,
+    )
+
+
 @config_bp.route("/api/config", methods=["GET", "POST"])
 def api_config():
     """Read or write the service configuration."""
