@@ -161,6 +161,19 @@ def _filter_duplicate_bluetooth_devices(devices: list[dict]) -> list[dict]:
     return unique_devices
 
 
+def _load_saved_device_volume(mac: str) -> int | None:
+    """Read LAST_VOLUMES from config so the UI has a volume before BT reconnects."""
+    try:
+        with config_lock, open(CONFIG_FILE) as config_file:
+            saved_config = json.load(config_file)
+        saved_volume = saved_config.get("LAST_VOLUMES", {}).get(mac)
+        if isinstance(saved_volume, int) and 0 <= saved_volume <= 100:
+            return saved_volume
+    except Exception as exc:
+        logger.debug("pre-fill saved volume failed: %s", exc)
+    return None
+
+
 class SendspinClient:
     """Per-device orchestrator for a single Bluetooth speaker.
 
@@ -922,158 +935,30 @@ async def main():
     if bt_churn_threshold > 0:
         logger.info("BT churn isolation: enabled (threshold=%d in %.0fs)", bt_churn_threshold, bt_churn_window)
 
-    bt_devices = _filter_duplicate_bluetooth_devices(config.get("BLUETOOTH_DEVICES", []))
-    _state.update_startup_progress(
-        "runtime",
-        "Runtime configuration prepared",
-        current_step=2,
-        details={
-            "configured_devices": len(bt_devices),
-            "log_level": log_level,
-            "pulse_latency_msec": pulse_latency_msec,
-        },
-    )
-
-    logger.info("Starting %s player instance(s)", len(bt_devices))
-    if not bt_devices:
-        logger.warning("No Bluetooth devices configured — bridge will run without players")
-    if server_host and server_host.lower() not in ["auto", "discover", ""]:
-        logger.info("Server: %s:%s", server_host, server_port)
-    else:
-        logger.info("Server: Auto-discovery enabled (mDNS)")
-
-    _default_player_name = os.getenv("SENDSPIN_NAME") or f"Sendspin-{socket.gethostname()}"
-
-    base_listen_port = 8928
-    clients: list[SendspinClient] = []
-    disabled_list: list[dict] = []
-    for i, device in enumerate(bt_devices):
-        mac = device.get("mac", "")
-        adapter = device.get("adapter", "")
-        player_name = device.get("player_name") or _default_player_name
-        if effective_bridge:
-            player_name = f"{player_name} @ {effective_bridge}"
-
-        # Global enabled check — skip entirely when disabled
-        if not device.get("enabled", True):
-            disabled_list.append(
-                {
-                    "player_name": player_name,
-                    "mac": mac,
-                    "adapter": adapter,
-                    "enabled": False,
-                }
-            )
-            logger.info("  Player '%s': globally disabled — skipping", player_name)
-            continue
-
-        listen_port = int(device.get("listen_port") or base_listen_port + i)
-        listen_host = device.get("listen_host")
-        static_delay_ms = device.get("static_delay_ms")
-        if static_delay_ms is not None:
-            static_delay_ms = float(static_delay_ms)
-        preferred_format = device.get("preferred_format", "flac:44100:16:2")
-        keepalive_interval = int(device.get("keepalive_interval") or 0)
-        keepalive_enabled = keepalive_interval > 0
-        keepalive_interval = max(30, keepalive_interval) if keepalive_enabled else 30
-
-        client = SendspinClient(
-            player_name,
-            server_host,
-            server_port,
-            None,
-            listen_port=listen_port,
-            static_delay_ms=static_delay_ms,
-            listen_host=listen_host,
-            effective_bridge=effective_bridge,
-            preferred_format=preferred_format or None,
-            keepalive_enabled=keepalive_enabled,
-            keepalive_interval=keepalive_interval,
-        )
-        if mac:
-
-            def _on_sink_found(sink_name: str, restored_volume=None, _c=client) -> None:
-                _c.bluetooth_sink_name = sink_name
-                logger.info("Stored Bluetooth sink for volume sync: %s", sink_name)
-                if restored_volume is not None:
-                    _c._update_status({"volume": restored_volume})
-
-            bt_mgr = BluetoothManager(
-                mac,
-                adapter=adapter,
-                device_name=player_name,
-                client=client,
-                prefer_sbc=prefer_sbc,
-                check_interval=bt_check_interval,
-                max_reconnect_fails=bt_max_reconnect_fails,
-                on_sink_found=_on_sink_found,
-                churn_threshold=bt_churn_threshold,
-                churn_window=bt_churn_window,
-            )
-            bt_available = bt_mgr.check_bluetooth_available()
-            if not bt_available:
-                logger.warning("BT adapter '%s' not available for %s", adapter or "default", player_name)
-            client.bt_manager = bt_mgr
-            client._update_status({"bluetooth_available": bt_available})
-            # Pre-fill volume from saved LAST_VOLUMES so UI shows correct value before BT connects
-            try:
-                with config_lock, open(CONFIG_FILE) as _f:
-                    _saved = json.load(_f)
-                _saved_vol = _saved.get("LAST_VOLUMES", {}).get(mac)
-                if _saved_vol is not None and isinstance(_saved_vol, int) and 0 <= _saved_vol <= 100:
-                    client._update_status({"volume": _saved_vol})
-            except Exception as exc:
-                logger.debug("pre-fill saved volume failed: %s", exc)
-        clients.append(client)
-        # Restore released state from config
-        if device.get("released", False):
-            client.set_bt_management_enabled(False)
-            logger.info("  Player '%s': restored released state", player_name)
-        logger.info("  Player: '%s', BT: %s, Adapter: %s", player_name, mac or "none", adapter or "default")
-
-    logger.info("Client instance(s) registered")
-
-    # Register disabled devices in state for UI display
-    if disabled_list:
-        _state.set_disabled_devices(disabled_list)
-    _state.update_startup_progress(
-        "devices",
-        "Device registry prepared",
-        current_step=3,
-        details={
-            "configured_devices": len(bt_devices),
-            "active_clients": len(clients),
-            "disabled_devices": len(disabled_list),
-        },
-    )
-
-    # Sync enabled state to options.json so HA addon config page reflects current state
-    # NOTE: only sync truly enabled/disabled state, NOT the runtime "released" flag.
     try:
         from services.bluetooth import persist_device_enabled as _persist_enabled
+    except Exception:
+        _persist_enabled = None
 
-        for _c in clients:
-            # bt_management_enabled=False means "released" at runtime, not "globally disabled".
-            # Only persist when the device is genuinely enabled (skip released devices).
-            if _c.bt_management_enabled:
-                _persist_enabled(_c.player_name, True)
-    except Exception as _e:
-        logger.debug("Could not sync enabled state to options.json: %s", _e)
-
-    # Warn about listen_port collisions (all containers share host network)
-    used_ports: set = set()
-    for _c in clients:
-        if _c.listen_port in used_ports:
-            logger.warning(
-                "[%s] listen_port %s already used by another client — sendspin daemon will fail to bind. Set unique 'listen_port' per device.",
-                _c.player_name,
-                _c.listen_port,
-            )
-        elif _c.listen_port == 8928 and len(clients) > 1:
-            logger.warning(
-                "[%s] Using default listen_port 8928 with multiple devices — set explicit ports.", _c.player_name
-            )
-        used_ports.add(_c.listen_port)
+    device_bootstrap = orchestrator.initialize_devices(
+        config.get("BLUETOOTH_DEVICES", []),
+        server_host=server_host,
+        server_port=server_port,
+        effective_bridge=effective_bridge,
+        prefer_sbc=prefer_sbc,
+        bt_check_interval=bt_check_interval,
+        bt_max_reconnect_fails=bt_max_reconnect_fails,
+        bt_churn_threshold=bt_churn_threshold,
+        bt_churn_window=bt_churn_window,
+        log_level=log_level,
+        pulse_latency_msec=pulse_latency_msec,
+        client_factory=SendspinClient,
+        bt_manager_factory=BluetoothManager,
+        filter_devices_fn=_filter_duplicate_bluetooth_devices,
+        load_saved_volume_fn=_load_saved_device_volume,
+        persist_enabled_fn=_persist_enabled,
+    )
+    clients = device_bootstrap.clients
 
     web_thread = orchestrator.start_web_server(clients)
 

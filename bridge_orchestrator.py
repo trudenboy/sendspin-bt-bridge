@@ -6,6 +6,7 @@ import asyncio
 import logging
 import os
 import signal
+import socket
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -39,6 +40,13 @@ class MaBootstrap:
     ma_api_url: str
     ma_api_token: str
     ma_monitor_task: asyncio.Task[None] | None
+
+
+@dataclass
+class DeviceBootstrap:
+    bt_devices: list[dict[str, Any]]
+    clients: list[Any]
+    disabled_devices: list[dict[str, Any]]
 
 
 class BridgeOrchestrator:
@@ -241,6 +249,171 @@ class BridgeOrchestrator:
             ma_api_token=ma_api_token,
             ma_monitor_task=ma_monitor_task,
         )
+
+    def initialize_devices(
+        self,
+        device_configs: list[dict[str, Any]],
+        *,
+        server_host: str,
+        server_port: int,
+        effective_bridge: str,
+        prefer_sbc: bool,
+        bt_check_interval: int,
+        bt_max_reconnect_fails: int,
+        bt_churn_threshold: int,
+        bt_churn_window: float,
+        log_level: str,
+        pulse_latency_msec: int,
+        client_factory: Callable[..., Any],
+        bt_manager_factory: Callable[..., Any],
+        filter_devices_fn: Callable[[list[dict[str, Any]]], list[dict[str, Any]]] | None = None,
+        load_saved_volume_fn: Callable[[str], int | None] | None = None,
+        persist_enabled_fn: Callable[[str, bool], None] | None = None,
+        base_listen_port: int = 8928,
+        default_player_name: str | None = None,
+    ) -> DeviceBootstrap:
+        """Build device clients, register disabled devices, and publish startup progress."""
+        bt_devices = filter_devices_fn(device_configs) if filter_devices_fn is not None else list(device_configs)
+        _state.update_startup_progress(
+            "runtime",
+            "Runtime configuration prepared",
+            current_step=2,
+            details={
+                "configured_devices": len(bt_devices),
+                "log_level": log_level,
+                "pulse_latency_msec": pulse_latency_msec,
+            },
+        )
+
+        logger.info("Starting %s player instance(s)", len(bt_devices))
+        if not bt_devices:
+            logger.warning("No Bluetooth devices configured — bridge will run without players")
+        if server_host and server_host.lower() not in ["auto", "discover", ""]:
+            logger.info("Server: %s:%s", server_host, server_port)
+        else:
+            logger.info("Server: Auto-discovery enabled (mDNS)")
+
+        resolved_default_name = default_player_name or os.getenv("SENDSPIN_NAME") or f"Sendspin-{socket.gethostname()}"
+        clients: list[Any] = []
+        disabled_list: list[dict[str, Any]] = []
+
+        for index, device in enumerate(bt_devices):
+            mac = str(device.get("mac") or "")
+            adapter = str(device.get("adapter") or "")
+            player_name = str(device.get("player_name") or resolved_default_name)
+            if effective_bridge:
+                player_name = f"{player_name} @ {effective_bridge}"
+
+            if not device.get("enabled", True):
+                disabled_list.append(
+                    {
+                        "player_name": player_name,
+                        "mac": mac,
+                        "adapter": adapter,
+                        "enabled": False,
+                    }
+                )
+                logger.info("  Player '%s': globally disabled — skipping", player_name)
+                continue
+
+            listen_port = int(device.get("listen_port") or base_listen_port + index)
+            listen_host = device.get("listen_host")
+            static_delay_ms = device.get("static_delay_ms")
+            if static_delay_ms is not None:
+                static_delay_ms = float(static_delay_ms)
+            preferred_format = device.get("preferred_format", "flac:44100:16:2")
+            keepalive_interval = int(device.get("keepalive_interval") or 0)
+            keepalive_enabled = keepalive_interval > 0
+            keepalive_interval = max(30, keepalive_interval) if keepalive_enabled else 30
+
+            client = client_factory(
+                player_name,
+                server_host,
+                server_port,
+                None,
+                listen_port=listen_port,
+                static_delay_ms=static_delay_ms,
+                listen_host=listen_host,
+                effective_bridge=effective_bridge,
+                preferred_format=preferred_format or None,
+                keepalive_enabled=keepalive_enabled,
+                keepalive_interval=keepalive_interval,
+            )
+            if mac:
+
+                def _on_sink_found(sink_name: str, restored_volume: int | None = None, _client=client) -> None:
+                    _client.bluetooth_sink_name = sink_name
+                    logger.info("Stored Bluetooth sink for volume sync: %s", sink_name)
+                    if restored_volume is not None:
+                        _client._update_status({"volume": restored_volume})
+
+                bt_mgr = bt_manager_factory(
+                    mac,
+                    adapter=adapter,
+                    device_name=player_name,
+                    client=client,
+                    prefer_sbc=prefer_sbc,
+                    check_interval=bt_check_interval,
+                    max_reconnect_fails=bt_max_reconnect_fails,
+                    on_sink_found=_on_sink_found,
+                    churn_threshold=bt_churn_threshold,
+                    churn_window=bt_churn_window,
+                )
+                bt_available = bool(bt_mgr.check_bluetooth_available())
+                if not bt_available:
+                    logger.warning("BT adapter '%s' not available for %s", adapter or "default", player_name)
+                client.bt_manager = bt_mgr
+                client._update_status({"bluetooth_available": bt_available})
+                if load_saved_volume_fn is not None:
+                    saved_volume = load_saved_volume_fn(mac)
+                    if saved_volume is not None and 0 <= saved_volume <= 100:
+                        client._update_status({"volume": saved_volume})
+
+            clients.append(client)
+            if device.get("released", False):
+                client.set_bt_management_enabled(False)
+                logger.info("  Player '%s': restored released state", player_name)
+            logger.info("  Player: '%s', BT: %s, Adapter: %s", player_name, mac or "none", adapter or "default")
+
+        logger.info("Client instance(s) registered")
+        _state.set_disabled_devices(disabled_list)
+        _state.update_startup_progress(
+            "devices",
+            "Device registry prepared",
+            current_step=3,
+            details={
+                "configured_devices": len(bt_devices),
+                "active_clients": len(clients),
+                "disabled_devices": len(disabled_list),
+            },
+        )
+
+        if persist_enabled_fn is not None:
+            try:
+                for client in clients:
+                    if getattr(client, "bt_management_enabled", True):
+                        persist_enabled_fn(str(client.player_name), True)
+            except Exception as exc:
+                logger.debug("Could not sync enabled state to options.json: %s", exc)
+
+        used_ports: set[int] = set()
+        for client in clients:
+            listen_port = int(client.listen_port)
+            if listen_port in used_ports:
+                logger.warning(
+                    "[%s] listen_port %s already used by another client — sendspin daemon will fail to bind. Set unique 'listen_port' per device.",
+                    client.player_name,
+                    listen_port,
+                )
+            elif listen_port == base_listen_port and len(clients) > 1:
+                logger.warning(
+                    "[%s] Using default listen_port %s with multiple devices — set explicit ports.",
+                    client.player_name,
+                    base_listen_port,
+                )
+            used_ports.add(listen_port)
+
+        return DeviceBootstrap(bt_devices=bt_devices, clients=clients, disabled_devices=disabled_list)
 
     def assemble_runtime_tasks(
         self,

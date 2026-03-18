@@ -31,6 +31,7 @@ def _isolated_config(tmp_path, monkeypatch):
     state.reset_startup_progress()
     state.set_runtime_mode_info(None)
     state.set_clients([])
+    state.set_disabled_devices([])
     state.set_ma_api_credentials("", "")
     state.set_ma_groups({}, [])
     state.set_ma_connected(False)
@@ -344,3 +345,173 @@ async def test_run_runtime_delegates_to_gather_with_assembled_tasks():
     assert len(gathered) == 2
     progress = state.get_startup_progress()
     assert progress["status"] == "ready"
+
+
+def test_initialize_devices_builds_clients_and_registers_disabled_devices():
+    orchestrator = BridgeOrchestrator()
+    persisted: list[tuple[str, bool]] = []
+
+    class FakeClient:
+        def __init__(
+            self,
+            player_name,
+            server_host,
+            server_port,
+            _bt_manager,
+            *,
+            listen_port,
+            static_delay_ms,
+            listen_host,
+            effective_bridge,
+            preferred_format,
+            keepalive_enabled,
+            keepalive_interval,
+        ):
+            self.player_name = player_name
+            self.server_host = server_host
+            self.server_port = server_port
+            self.listen_port = listen_port
+            self.listen_host = listen_host
+            self.static_delay_ms = static_delay_ms
+            self._effective_bridge = effective_bridge
+            self.preferred_format = preferred_format
+            self.keepalive_enabled = keepalive_enabled
+            self.keepalive_interval = keepalive_interval
+            self.bt_manager = None
+            self.bt_management_enabled = True
+            self.bluetooth_sink_name = None
+            self.status = {"volume": 100, "bluetooth_available": None}
+
+        def _update_status(self, updates):
+            self.status.update(updates)
+
+        def set_bt_management_enabled(self, enabled):
+            self.bt_management_enabled = enabled
+
+    class FakeBtManager:
+        def __init__(self, mac_address, **kwargs):
+            self.mac_address = mac_address
+            self.kwargs = kwargs
+            self.on_sink_found = kwargs["on_sink_found"]
+            self.management_enabled = True
+
+        def check_bluetooth_available(self):
+            return True
+
+    bootstrap = orchestrator.initialize_devices(
+        [
+            {
+                "player_name": "Kitchen",
+                "mac": "AA:BB:CC:DD:EE:01",
+                "adapter": "hci0",
+                "keepalive_interval": 45,
+                "released": True,
+            },
+            {
+                "player_name": "Bedroom",
+                "mac": "AA:BB:CC:DD:EE:02",
+                "adapter": "hci1",
+                "enabled": False,
+            },
+        ],
+        server_host="music-assistant.local",
+        server_port=9000,
+        effective_bridge="Bridge",
+        prefer_sbc=True,
+        bt_check_interval=15,
+        bt_max_reconnect_fails=5,
+        bt_churn_threshold=3,
+        bt_churn_window=120.0,
+        log_level="DEBUG",
+        pulse_latency_msec=250,
+        client_factory=FakeClient,
+        bt_manager_factory=FakeBtManager,
+        filter_devices_fn=lambda devices: devices,
+        load_saved_volume_fn=lambda mac: 33 if mac.endswith("01") else None,
+        persist_enabled_fn=lambda player_name, enabled: persisted.append((player_name, enabled)),
+    )
+
+    assert len(bootstrap.bt_devices) == 2
+    assert len(bootstrap.clients) == 1
+    client = bootstrap.clients[0]
+    assert client.player_name == "Kitchen @ Bridge"
+    assert client.status["volume"] == 33
+    assert client.status["bluetooth_available"] is True
+    assert client.keepalive_enabled is True
+    assert client.keepalive_interval == 45
+    assert client.bt_management_enabled is False
+    assert state.get_disabled_devices() == [
+        {
+            "player_name": "Bedroom @ Bridge",
+            "mac": "AA:BB:CC:DD:EE:02",
+            "adapter": "hci1",
+            "enabled": False,
+        }
+    ]
+    progress = state.get_startup_progress()
+    assert progress["phase"] == "devices"
+    assert progress["details"]["configured_devices"] == 2
+    assert progress["details"]["active_clients"] == 1
+    assert progress["details"]["disabled_devices"] == 1
+    assert persisted == []
+
+    client.bt_manager.on_sink_found("bluez_output.demo", 44)
+    assert client.bluetooth_sink_name == "bluez_output.demo"
+    assert client.status["volume"] == 44
+
+
+def test_initialize_devices_warns_on_port_collisions_and_persists_enabled(caplog):
+    orchestrator = BridgeOrchestrator()
+    persisted: list[tuple[str, bool]] = []
+
+    class FakeClient:
+        def __init__(self, player_name, *_args, listen_port, **_kwargs):
+            self.player_name = player_name
+            self.listen_port = listen_port
+            self.bt_manager = None
+            self.bt_management_enabled = True
+            self.bluetooth_sink_name = None
+            self.status = {}
+
+        def _update_status(self, updates):
+            self.status.update(updates)
+
+        def set_bt_management_enabled(self, enabled):
+            self.bt_management_enabled = enabled
+
+    class FakeBtManager:
+        def __init__(self, mac_address, **kwargs):
+            self.mac_address = mac_address
+            self.kwargs = kwargs
+
+        def check_bluetooth_available(self):
+            return False
+
+    with caplog.at_level("WARNING"):
+        bootstrap = orchestrator.initialize_devices(
+            [
+                {"player_name": "One", "mac": "AA:BB:CC:DD:EE:01", "listen_port": 8928},
+                {"player_name": "Two", "mac": "AA:BB:CC:DD:EE:02", "listen_port": 8928},
+            ],
+            server_host="music-assistant.local",
+            server_port=9000,
+            effective_bridge="",
+            prefer_sbc=False,
+            bt_check_interval=10,
+            bt_max_reconnect_fails=0,
+            bt_churn_threshold=0,
+            bt_churn_window=300.0,
+            log_level="INFO",
+            pulse_latency_msec=200,
+            client_factory=FakeClient,
+            bt_manager_factory=FakeBtManager,
+            filter_devices_fn=lambda devices: devices,
+            persist_enabled_fn=lambda player_name, enabled: persisted.append((player_name, enabled)),
+        )
+
+    assert len(bootstrap.clients) == 2
+    assert persisted == [("One", True), ("Two", True)]
+    assert "Using default listen_port 8928 with multiple devices" in caplog.text
+    assert "listen_port 8928 already used by another client" in caplog.text
+    assert "BT adapter 'default' not available for One" in caplog.text
+    assert "BT adapter 'default' not available for Two" in caplog.text
