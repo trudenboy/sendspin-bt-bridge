@@ -8,7 +8,14 @@ import pytest
 
 import services.ma_monitor as ma_monitor
 import state
-from services.ma_monitor import MaMonitor, _build_now_playing, _hydrate_missing_queue_neighbors
+from services.device_registry import DeviceRegistrySnapshot
+from services.ma_monitor import (
+    MaMonitor,
+    _build_now_playing,
+    _find_solo_player_queues,
+    _find_syncgroup_queues,
+    _hydrate_missing_queue_neighbors,
+)
 
 
 def test_build_now_playing_wraps_relative_artwork_in_proxy_url():
@@ -129,6 +136,53 @@ async def test_hydrate_missing_queue_neighbors_fetches_previous_item_from_queue_
     assert result["prev_track"] == "Previous Song"
     assert result["prev_artist"] == "Prev Artist"
     assert result["prev_album"] == "Prev Album"
+
+
+@pytest.mark.asyncio
+async def test_find_syncgroup_queues_uses_registry_snapshot(monkeypatch):
+    state.set_ma_groups({}, [{"id": "syncgroup_1", "name": "Kitchen", "members": []}])
+    monkeypatch.setattr(
+        ma_monitor,
+        "get_device_registry_snapshot",
+        lambda: DeviceRegistrySnapshot(active_clients=[SimpleNamespace(status={"group_id": "runtime_group_1"})]),
+    )
+    try:
+        result = await _find_syncgroup_queues(
+            [
+                {"queue_id": "syncgroup_1", "active": False},
+                {"queue_id": "runtime_group_1", "active": True},
+                {"queue_id": "other", "active": True},
+            ]
+        )
+    finally:
+        state.set_ma_groups({}, [])
+
+    assert result == [{"queue_id": "runtime_group_1", "active": True}]
+
+
+def test_find_solo_player_queues_uses_registry_snapshot(monkeypatch):
+    state.set_ma_groups({}, [{"id": "syncgroup_1", "name": "Kitchen", "members": []}])
+    monkeypatch.setattr(
+        ma_monitor,
+        "get_device_registry_snapshot",
+        lambda: DeviceRegistrySnapshot(
+            active_clients=[
+                SimpleNamespace(player_id="sendspin-kitchen"),
+                SimpleNamespace(player_id="syncgroup_1"),
+            ]
+        ),
+    )
+    try:
+        result = _find_solo_player_queues(
+            [
+                {"queue_id": "upsendspinkitchen", "active": True},
+                {"queue_id": "syncgroup_1", "active": True},
+            ]
+        )
+    finally:
+        state.set_ma_groups({}, [])
+
+    assert result == [("sendspin-kitchen", {"queue_id": "upsendspinkitchen", "active": True})]
 
 
 @pytest.mark.asyncio

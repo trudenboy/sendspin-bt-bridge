@@ -19,6 +19,7 @@ import time
 from typing import TYPE_CHECKING
 
 import state as _state
+from services.device_registry import get_device_registry_snapshot
 from services.ma_artwork import build_artwork_proxy_url
 
 if TYPE_CHECKING:
@@ -30,6 +31,11 @@ _POLL_INTERVAL = 15  # seconds between polling cycles when events unavailable
 _GROUPS_REFRESH_INTERVAL = 60  # seconds between syncgroup cache refreshes
 _RECONNECT_BASE = 2  # seconds — first reconnect delay
 _RECONNECT_MAX = 60  # seconds — max reconnect delay
+
+
+def _active_bridge_clients() -> list:
+    """Return the current active bridge clients from the registry snapshot."""
+    return get_device_registry_snapshot().active_clients
 
 
 class _AuthFailed(Exception):
@@ -167,7 +173,7 @@ async def _find_syncgroup_queues(queues: list[dict]) -> list[dict]:
     groups = _state.get_ma_groups()
     group_ids = {g["id"] for g in groups}
     # Also include any group_id reported by Sendspin-connected bridge devices
-    for client in _state.get_clients_snapshot():
+    for client in _active_bridge_clients():
         gid = client.status.get("group_id") if hasattr(client, "status") else None
         if gid:
             group_ids.add(gid)
@@ -182,7 +188,7 @@ def _find_solo_player_queues(queues: list[dict]) -> list[tuple[str, dict]]:
     groups = _state.get_ma_groups()
     group_ids = {g["id"] for g in groups}
     result = []
-    for client in _state.get_clients_snapshot():
+    for client in _active_bridge_clients():
         pid = getattr(client, "player_id", "")
         if not pid or pid in group_ids:
             continue  # already handled as syncgroup member
@@ -393,7 +399,7 @@ class MaMonitor:
             return
 
         # Build bridge player lookup by name (lowercase)
-        bridge_clients = {getattr(c, "player_name", "").lower(): c for c in _state.get_clients_snapshot()}
+        bridge_clients = {getattr(c, "player_name", "").lower(): c for c in _active_bridge_clients()}
 
         for p in players:
             pname = (p.get("display_name") or p.get("name") or "").lower()
@@ -455,7 +461,7 @@ class MaMonitor:
             all_groups: list[dict] = []
             id_map: dict[str, dict] = {}
 
-            clients = _state.get_clients_snapshot()
+            clients = _active_bridge_clients()
             bridge_info = [
                 {"player_id": getattr(c, "player_id", ""), "player_name": getattr(c, "player_name", "")}
                 for c in clients
