@@ -1,8 +1,8 @@
 ---
 title: Sendspin Bluetooth Bridge
-description: Turn any Bluetooth speaker into a Music Assistant player — multiroom audio without new hardware
+description: Turn Bluetooth speakers and headphones into Music Assistant players — Home Assistant addon, Docker, Raspberry Pi, and LXC deployments
 hero:
-  tagline: Turn your Bluetooth speakers into Music Assistant players — no new hardware, no cloud
+  tagline: Turn Bluetooth speakers into Music Assistant players — local, headless, and multiroom-ready
   image:
     file: ../../assets/logo.svg
   actions:
@@ -10,97 +10,64 @@ hero:
       link: /sendspin-bt-bridge/installation/ha-addon/
       icon: right-arrow
       variant: primary
-    - text: Configuration
-      link: /sendspin-bt-bridge/configuration/
-      icon: setting
+    - text: Compare deployments
+      link: '#deployment-options'
+      icon: list-format
     - text: GitHub
       link: https://github.com/trudenboy/sendspin-bt-bridge
       icon: github
       variant: minimal
 ---
 
+import { Aside } from '@astrojs/starlight/components';
 
 ![Sendspin Bluetooth Bridge infographic — features, architecture and deployment options](/sendspin-bt-bridge/screenshots/sbb_infographic_en.png)
 
 ## What is it?
 
-You probably already have Bluetooth speakers — a portable speaker in the kitchen, wireless headphones, a soundbar in the bedroom. **Sendspin Bluetooth Bridge** lets you use all of them in [Music Assistant](https://www.music-assistant.io/) without buying any new hardware.
+**Sendspin Bluetooth Bridge** turns Bluetooth speakers and headphones into native [Music Assistant](https://www.music-assistant.io/) players by bridging them to the MA [Sendspin](https://www.music-assistant.io/player-support/sendspin/) protocol.
 
-Once installed, each Bluetooth speaker appears as a regular player in Music Assistant — just like a Sonos or Chromecast device. You can play music on one speaker, sync several rooms at once, or control everything from your phone or Home Assistant dashboard.
+Each configured Bluetooth device shows up as its own player in Music Assistant. You can keep playback local, group rooms together, manage Bluetooth from the web UI, and run the bridge on Home Assistant, Docker, Raspberry Pi, Proxmox VE, or OpenWrt.
 
-It runs entirely on your local network: no cloud accounts, no subscriptions, no internet connection required for playback.
+![Web dashboard showing multiple Bluetooth speakers with real-time playback status, volume controls and sync state](/sendspin-bt-bridge/screenshots/screenshot-dashboard-full.png)
 
-![Web dashboard showing 6 Bluetooth speakers with real-time playback status, volume controls and sync state](/sendspin-bt-bridge/screenshots/screenshot-dashboard-full.png)
-
-## What you need
-
-- A Raspberry Pi, a PC running Home Assistant, or any Linux machine on your home network
-- A Bluetooth adapter (most Raspberry Pi models have one built in)
-- One or more Bluetooth speakers
-
-## Features
+## Why the current release line matters
 
 <CardGrid>
-  <Card title="Any Bluetooth speaker" icon="laptop">
-    Works with any A2DP speaker — portable, desktop, soundbar, wireless headphones. No brand restrictions.
+  <Card title="One subprocess per speaker" icon="seti:play-list">
+    The bridge uses a multi-process runtime: the main app handles Bluetooth, API, and UI, while each speaker runs in its own Sendspin daemon subprocess with dedicated audio routing.
   </Card>
-  <Card title="Multiple speakers at once" icon="list-format">
-    Connect several speakers simultaneously. Each appears as its own player in Music Assistant — play different tracks in different rooms, or group them for synchronized audio.
+  <Card title="Flexible port planning" icon="seti:terminal">
+    Top-level <code>WEB_PORT</code> and <code>BASE_LISTEN_PORT</code> overrides make it easier to run multiple bridge instances or parallel HA addon tracks on one host.
   </Card>
-  <Card title="Stays connected" icon="refresh">
-    Detects disconnections instantly via D-Bus (falls back to 10 s polling when D-Bus is unavailable) and reconnects automatically — no manual intervention needed.
+  <Card title="Per-device listener overrides" icon="setting">
+    Advanced setups can pin a player to its own <code>listen_port</code> and override the advertised host with <code>listen_host</code> when needed.
   </Card>
-  <Card title="Synchronized multiroom" icon="seti:clock">
-    Speakers can be grouped in Music Assistant for simultaneous playback. Latency compensation (`static_delay_ms`) keeps them in sync even across different A2DP buffer sizes.
+  <Card title="HA addon tracks" icon="seti:flag">
+    Stable, RC, and beta addons use separate ingress and player-port defaults so they are easier to distinguish and safer to test side by side.
   </Card>
-  <Card title="Web interface" icon="laptop">
-    Live dashboard shows every speaker's status, track, volume and sync state. Adjust volume, mute or pause all speakers from one page — works on phone and desktop.
+  <Card title="Reconnect + diagnostics" icon="refresh">
+    D-Bus disconnect detection, fallback polling, runtime diagnostics, and SSE status updates keep headless deployments manageable.
   </Card>
-  <Card title="Home Assistant integration" icon="setting">
-    Available as a native HA addon. Speakers become media players in HA — use them in automations, dashboards, voice assistants, and scenes.
+  <Card title="Web UI + API" icon="laptop">
+    Use the dashboard for pairing, diagnostics, logs, update checks, config backup/restore, and Music Assistant integration — or automate it through the REST API.
   </Card>
 </CardGrid>
 
-## Usage examples
-
-### Multiroom audio
-
-Group two or more Bluetooth speakers in Music Assistant and play the same track in every room simultaneously. The bridge compensates for Bluetooth latency so the audio stays in sync — you won't hear an echo when walking between rooms.
-
-**Example setup:** kitchen portable speaker + bedroom headphones + living room soundbar, all playing the same playlist, controlled from the Music Assistant app on your phone.
-
-### Home Assistant automations
-
-Because each Bluetooth speaker is a media player entity in Home Assistant, you can use them in any automation:
-
-```yaml
-# Play a morning briefing on the kitchen speaker at 7:30
-automation:
-  trigger:
-    platform: time
-    at: "07:30:00"
-  action:
-    service: media_player.play_media
-    target:
-      entity_id: media_player.kitchen_speaker
-    data:
-      media_content_id: "https://feeds.example.com/news.mp3"
-      media_content_type: music
-```
-
-Other ideas:
-- **Doorbell alert** — play a chime on all speakers when the doorbell rings
-- **Good night routine** — fade volume to zero and pause all speakers at bedtime
-- **Room presence** — start music on a speaker when you enter a room (with a motion sensor)
-- **Weather announcement** — read out a TTS weather report every morning
-
-### Headless Home Assistant machine
-
-If your Home Assistant runs on a Raspberry Pi with a built-in Bluetooth adapter, you can use that adapter directly — no extra hardware. The bridge runs as an addon alongside HA and exposes your Bluetooth speakers to Music Assistant immediately.
-
-<Aside type="tip">
-  If you want to connect speakers in multiple rooms and your Raspberry Pi only reaches some of them, you can run the bridge on a second Raspberry Pi (or a Proxmox LXC container) elsewhere in the house and point it at the same Music Assistant server.
+<Aside type="caution">
+  You can run multiple bridge instances against the same Music Assistant server, including multiple HA addon tracks on one HAOS host. Do <strong>not</strong> configure the same Bluetooth speaker in more than one running bridge/addon at the same time.
 </Aside>
+
+## Deployment options
+
+| | Home Assistant Addon | Docker / Raspberry Pi | Proxmox / OpenWrt LXC |
+|---|---|---|---|
+| Install | Addon Store | `docker compose up -d` | Host bootstrap script |
+| Web UI | HA Ingress (`8080` / `8081` / `8082`) + optional direct `WEB_PORT` listener | Direct `WEB_PORT` listener (default `8080`) | Direct `WEB_PORT` listener (default `8080`) |
+| Player ports | Channel default `BASE_LISTEN_PORT` (`8928+`, `9028+`, `9128+`) | `BASE_LISTEN_PORT` (default `8928+`) | `BASE_LISTEN_PORT` (default `8928+`) |
+| Bluetooth stack | Host `bluetoothd` via Supervisor/runtime mounts | Host `bluetoothd` via D-Bus | Host `bluetoothd` via D-Bus bridge |
+| Audio | HA audio bridge | Host PulseAudio / PipeWire | PulseAudio inside the container |
+| Best for | HAOS / Supervised users | General Linux hosts and Raspberry Pi | Proxmox VE, routers, appliances |
 
 ## Multi-bridge deployment
 
@@ -108,25 +75,17 @@ Run multiple bridge instances against the same Music Assistant server to cover e
 
 [![Deployment diagram: multiroom floorplan with zones and adapters](/sendspin-bt-bridge/diagrams/multiroom-diagram.png)](/sendspin-bt-bridge/diagrams/multiroom-diagram/)
 
-
-## Deployment options
-
-| | Home Assistant Addon | Docker Compose | Proxmox LXC |
-|---|---|---|---|
-| Install | HA Addon Store | `docker compose up` | One-line script |
-| Bluetooth | Host bluetoothd via D-Bus | Host bluetoothd via D-Bus | Own bluetoothd |
-| Audio | HA Supervisor bridge | Host PulseAudio/PipeWire | Own PulseAudio |
-| Config | HA panel + web UI | Web UI at :8080 | Web UI at :8080 |
+## Start here
 
 <CardGrid>
-  <LinkCard title="Install: Home Assistant Addon" href="/sendspin-bt-bridge/installation/ha-addon/" />
-  <LinkCard title="Install: Docker Compose" href="/sendspin-bt-bridge/installation/docker/" />
-  <LinkCard title="Install: Proxmox LXC" href="/sendspin-bt-bridge/installation/lxc/" />
-  <LinkCard title="Configuration" href="/sendspin-bt-bridge/configuration/" />
-  <LinkCard title="Journey log" href="/sendspin-bt-bridge/journey-log/" description="Release milestones, rollout notes, and project logbook entries" />
-  <LinkCard title="Architecture" href="/sendspin-bt-bridge/architecture/" description="Process model, IPC, audio routing, BT state machine, auth" />
-  <LinkCard title="Project History" href="https://github.com/trudenboy/sendspin-bt-bridge/blob/main/HISTORY.md" description="Architectural evolution, milestones, v1 → v2 migration" />
-  <LinkCard title="API Reference" href="/sendspin-bt-bridge/api/" />
+  <LinkCard title="Install in Home Assistant" href="/sendspin-bt-bridge/installation/ha-addon/" description="Stable, RC, and beta addon tracks; ingress and direct-listener behavior explained" />
+  <LinkCard title="Install with Docker" href="/sendspin-bt-bridge/installation/docker/" description="Generic Linux host install with WEB_PORT and BASE_LISTEN_PORT overrides" />
+  <LinkCard title="Install on Raspberry Pi" href="/sendspin-bt-bridge/installation/raspberry-pi/" description="Pi-specific Docker guide, pre-flight checks, and one-liner installer" />
+  <LinkCard title="Install in Proxmox / OpenWrt LXC" href="/sendspin-bt-bridge/installation/lxc/" description="Native LXC deployment using the host Bluetooth stack over D-Bus" />
+  <LinkCard title="Configuration" href="/sendspin-bt-bridge/configuration/" description="Bridge settings, device fields, adapters, auth, and update behavior" />
+  <LinkCard title="Architecture" href="/sendspin-bt-bridge/architecture/" description="Process model, IPC, audio routing, Bluetooth lifecycle, and HA ingress behavior" />
+  <LinkCard title="API Reference" href="/sendspin-bt-bridge/api/" description="REST endpoints for status, diagnostics, Bluetooth, Music Assistant, and updates" />
+  <LinkCard title="Release history" href="https://github.com/trudenboy/sendspin-bt-bridge/blob/main/CHANGELOG.md" description="Current release notes, including the v2.40.5 port and HA-track changes" />
 </CardGrid>
 
 ## Community

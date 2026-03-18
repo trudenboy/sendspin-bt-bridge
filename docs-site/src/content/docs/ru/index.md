@@ -1,8 +1,8 @@
 ---
 title: Sendspin Bluetooth Bridge
-description: Превратите любую Bluetooth-колонку в плеер Music Assistant — мультирум без покупки нового оборудования
+description: Превратите Bluetooth-колонки и наушники в плееры Music Assistant — аддон Home Assistant, Docker, Raspberry Pi и LXC
 hero:
-  tagline: Превратите Bluetooth-колонки в плееры Music Assistant — без нового железа и без облака
+  tagline: Превратите Bluetooth-колонки в плееры Music Assistant — локально, headless и с поддержкой мультирума
   image:
     file: ../../../assets/logo.svg
   actions:
@@ -10,122 +10,86 @@ hero:
       link: /sendspin-bt-bridge/installation/ha-addon/
       icon: right-arrow
       variant: primary
-    - text: Настройка
-      link: /sendspin-bt-bridge/configuration/
-      icon: setting
+    - text: Сравнить развёртывания
+      link: '#варианты-развёртывания'
+      icon: list-format
     - text: GitHub
       link: https://github.com/trudenboy/sendspin-bt-bridge
       icon: github
       variant: minimal
 ---
 
+import { Aside } from '@astrojs/starlight/components';
 
 ![Инфографика Sendspin Bluetooth Bridge — возможности, архитектура и варианты развёртывания](/sendspin-bt-bridge/screenshots/sbb_infographic_ru.png)
 
 ## Что это такое
 
-У вас наверняка уже есть Bluetooth-колонки — портативная на кухне, беспроводные наушники, звуковая панель в спальне. **Sendspin Bluetooth Bridge** позволяет использовать их все в [Music Assistant](https://www.music-assistant.io/) без покупки нового оборудования.
+**Sendspin Bluetooth Bridge** превращает Bluetooth-колонки и наушники в нативные плееры [Music Assistant](https://www.music-assistant.io/), подключая их к протоколу [Sendspin](https://www.music-assistant.io/player-support/sendspin/) в MA.
 
-После установки каждая Bluetooth-колонка появляется в Music Assistant как обычный плеер — точно так же, как Sonos или Chromecast. Можно играть музыку на одной колонке, синхронизировать несколько комнат одновременно или управлять всем с телефона или панели Home Assistant.
+Каждое настроенное Bluetooth-устройство появляется в Music Assistant как отдельный плеер. Можно оставить всё внутри локальной сети, объединять комнаты в группы, управлять Bluetooth через веб-интерфейс и запускать мост в Home Assistant, Docker, на Raspberry Pi, Proxmox VE или OpenWrt.
 
-Всё работает только в вашей локальной сети: никаких облачных аккаунтов, подписок и интернета для воспроизведения не нужно.
+![Веб-панель управления с несколькими Bluetooth-колонками и живыми статусами воспроизведения](/sendspin-bt-bridge/screenshots/screenshot-dashboard-full.png)
 
-![Веб-панель управления с 6 Bluetooth-колонками: статус воспроизведения, громкость и состояние синхронизации в реальном времени](/sendspin-bt-bridge/screenshots/screenshot-dashboard-full.png)
-
-## Что нужно
-
-- Raspberry Pi, компьютер с Home Assistant или любая Linux-машина в домашней сети
-- Bluetooth-адаптер (большинство моделей Raspberry Pi имеют встроенный)
-- Одна или несколько Bluetooth-колонок
-
-## Возможности
+## Что важно в текущей релизной линии
 
 <CardGrid>
-  <Card title="Любая Bluetooth-колонка" icon="laptop">
-    Работает с любой A2DP-колонкой — портативной, настольной, звуковой панелью, беспроводными наушниками. Без привязки к бренду.
+  <Card title="Один subprocess на колонку" icon="seti:play-list">
+    Bridge использует многопроцессный рантайм: главный процесс ведёт Bluetooth, API и UI, а каждая колонка работает в собственном Sendspin-daemon subprocess с отдельной аудио-маршрутизацией.
   </Card>
-  <Card title="Несколько колонок одновременно" icon="list-format">
-    Подключите несколько колонок сразу. Каждая появляется как отдельный плеер в Music Assistant — играйте разные треки в разных комнатах или объедините их для синхронного звука.
+  <Card title="Гибкое планирование портов" icon="seti:terminal">
+    Глобальные override-параметры <code>WEB_PORT</code> и <code>BASE_LISTEN_PORT</code> упрощают запуск нескольких bridge-инстансов или параллельных треков аддона HA на одном хосте.
   </Card>
-  <Card title="Всегда на связи" icon="refresh">
-    Обнаруживает отключения мгновенно через D-Bus (резервный опрос каждые 10 с при отсутствии D-Bus) и переподключается автоматически — без вашего участия.
+  <Card title="Переопределения на уровне устройства" icon="setting">
+    Для сложных сетевых схем можно закрепить плеер за собственным <code>listen_port</code> и задать рекламируемый адрес через <code>listen_host</code>.
   </Card>
-  <Card title="Синхронный мультирум" icon="seti:clock">
-    Колонки можно объединить в группу в Music Assistant для одновременного воспроизведения. Компенсация задержки (`static_delay_ms`) удерживает их в синхроне даже при разных размерах буфера A2DP.
+  <Card title="Треки аддона HA" icon="seti:flag">
+    Stable, RC и beta аддоны используют разные ingress-порты и диапазоны player-port, поэтому их проще различать и безопаснее тестировать параллельно.
   </Card>
-  <Card title="Веб-интерфейс" icon="laptop">
-    Живая панель управления показывает статус каждой колонки, трек, громкость и состояние синхронизации. Регулируйте громкость, выключайте звук или ставьте на паузу всё сразу — с телефона или компьютера.
+  <Card title="Переподключение и диагностика" icon="refresh">
+    D-Bus-детекция отключений, резервный polling, runtime diagnostics и SSE-обновления упрощают headless-развёртывания.
   </Card>
-  <Card title="Интеграция с Home Assistant" icon="setting">
-    Устанавливается как нативный аддон HA. Колонки становятся медиаплеерами в HA — используйте их в автоматизациях, на панелях управления, с голосовым помощником и в сценах.
+  <Card title="Веб-интерфейс и API" icon="laptop">
+    Через панель можно выполнять pairing, смотреть диагностику и логи, проверять обновления, делать backup/restore конфига и связывать bridge с Music Assistant; всё это доступно и через REST API.
   </Card>
 </CardGrid>
 
-## Примеры использования
-
-### Мультирум
-
-Объедините две или больше Bluetooth-колонок в Music Assistant и воспроизводите один трек во всех комнатах одновременно. Мост компенсирует задержку Bluetooth, и звук остаётся синхронным — вы не услышите эхо, переходя из комнаты в комнату.
-
-**Пример:** портативная колонка на кухне + наушники в спальне + звуковая панель в гостиной — всё играет один плейлист, управление с телефона через Music Assistant.
-
-### Автоматизации в Home Assistant
-
-Поскольку каждая Bluetooth-колонка становится объектом `media_player` в Home Assistant, её можно использовать в любой автоматизации:
-
-```yaml
-# Включить утреннюю сводку на кухонной колонке в 7:30
-automation:
-  trigger:
-    platform: time
-    at: "07:30:00"
-  action:
-    service: media_player.play_media
-    target:
-      entity_id: media_player.kitchen_speaker
-    data:
-      media_content_id: "https://feeds.example.com/news.mp3"
-      media_content_type: music
-```
-
-Другие идеи:
-- **Звонок в дверь** — воспроизвести мелодию на всех колонках, когда кто-то нажимает на звонок
-- **Режим «спокойной ночи»** — плавно убавить громкость и поставить все колонки на паузу перед сном
-- **Присутствие в комнате** — включить музыку на колонке при входе в комнату (с датчиком движения)
-- **Голосовое объявление** — зачитать прогноз погоды через TTS каждое утро
-
-### Headless Home Assistant
-
-Если Home Assistant работает на Raspberry Pi со встроенным Bluetooth-адаптером, можно использовать его напрямую — дополнительного железа не нужно. Мост запускается как аддон рядом с HA и сразу открывает Bluetooth-колонки для Music Assistant.
-
-<Aside type="tip">
-  Если вы хотите охватить колонки в нескольких комнатах, а Raspberry Pi не добивает до всех, запустите мост на втором Raspberry Pi (или в контейнере Proxmox LXC) в другом конце дома — он подключится к тому же серверу Music Assistant.
+<Aside type="caution">
+  Можно запускать несколько bridge-инстансов против одного сервера Music Assistant, включая несколько треков аддона HA на одном HAOS-хосте. Но <strong>не</strong> назначайте одну и ту же Bluetooth-колонку в несколько работающих bridge/addon одновременно.
 </Aside>
-
-## Развёртывание нескольких бриджей
-
-Запустите несколько экземпляров моста на одном сервере Music Assistant, чтобы охватить все комнаты — каждый бридж обслуживает колонки в своей зоне Bluetooth-досягаемости.
-
-![Диаграмма развёртывания: два бриджа с двумя BT-адаптерами каждый, четыре колонки в четырёх комнатах, все подключены к одному серверу Music Assistant](/sendspin-bt-bridge/diagrams/deployment-multiroom.svg)
-
-[Открыть диаграмму multiroom (Mermaid)](/sendspin-bt-bridge/diagrams/multiroom-diagram/)
 
 ## Варианты развёртывания
 
-| | Home Assistant Addon | Docker Compose | Proxmox LXC | OpenWrt LXC |
-|---|---|---|---|---|
-| Установка | Магазин аддонов HA | `docker compose up` | Однострочный скрипт | Однострочный скрипт |
-| Bluetooth | bluetoothd хоста через D-Bus | bluetoothd хоста через D-Bus | Собственный bluetoothd | bluetoothd хоста через D-Bus |
-| Аудио | HA Supervisor bridge | PulseAudio/PipeWire хоста | Собственный PulseAudio | Собственный PulseAudio |
-| Настройка | Панель HA + веб UI | Веб UI на :8080 | Веб UI на :8080 | Веб UI на :8080 |
+| | Home Assistant Addon | Docker / Raspberry Pi | Proxmox / OpenWrt LXC |
+|---|---|---|---|
+| Установка | Магазин аддонов | `docker compose up -d` | Скрипт на хосте |
+| Веб-интерфейс | HA Ingress (`8080` / `8081` / `8082`) + опциональный прямой `WEB_PORT` listener | Прямой `WEB_PORT` listener (по умолчанию `8080`) | Прямой `WEB_PORT` listener (по умолчанию `8080`) |
+| Порты плееров | Channel default `BASE_LISTEN_PORT` (`8928+`, `9028+`, `9128+`) | `BASE_LISTEN_PORT` (по умолчанию `8928+`) | `BASE_LISTEN_PORT` (по умолчанию `8928+`) |
+| Bluetooth stack | `bluetoothd` хоста через Supervisor/runtime mounts | `bluetoothd` хоста через D-Bus | `bluetoothd` хоста через D-Bus bridge |
+| Аудио | Аудиомост HA | PulseAudio / PipeWire хоста | PulseAudio внутри контейнера |
+| Для кого | Пользователи HAOS / Supervised | Обычные Linux-хосты и Raspberry Pi | Proxmox VE, роутеры, appliance-сценарии |
+
+## Развёртывание нескольких bridge
+
+Запустите несколько bridge-инстансов против одного сервера Music Assistant, чтобы покрыть все комнаты — каждый bridge обслуживает колонки в своей Bluetooth-зоне.
+
+[![Схема развёртывания: план этажа с зонами и адаптерами](/sendspin-bt-bridge/diagrams/multiroom-diagram.png)](/sendspin-bt-bridge/diagrams/multiroom-diagram/)
+
+## С чего начать
 
 <CardGrid>
-  <LinkCard title="Установка: Home Assistant Addon" href="/sendspin-bt-bridge/installation/ha-addon/" />
-  <LinkCard title="Установка: Docker Compose" href="/sendspin-bt-bridge/installation/docker/" />
-  <LinkCard title="Установка: Proxmox LXC" href="/sendspin-bt-bridge/installation/lxc/" />
-  <LinkCard title="Настройка" href="/sendspin-bt-bridge/configuration/" />
-  <LinkCard title="Бортжурнал" href="/sendspin-bt-bridge/ru/journey-log/" description="Релизные вехи, заметки о внедрении и проектный журнал" />
-  <LinkCard title="Архитектура" href="/sendspin-bt-bridge/architecture/" description="Процессная модель, IPC, маршрутизация звука, автомат BT, аутентификация" />
-  <LinkCard title="История проекта" href="https://github.com/trudenboy/sendspin-bt-bridge/blob/main/HISTORY.ru.md" description="Архитектурная эволюция, вехи, миграция v1 → v2" />
-  <LinkCard title="API Reference" href="/sendspin-bt-bridge/api/" />
+  <LinkCard title="Установить в Home Assistant" href="/sendspin-bt-bridge/installation/ha-addon/" description="Stable, RC и beta tracks, поведение ingress и direct listener" />
+  <LinkCard title="Установить через Docker" href="/sendspin-bt-bridge/installation/docker/" description="Универсальная установка на Linux-хост с override-параметрами WEB_PORT и BASE_LISTEN_PORT" />
+  <LinkCard title="Установить на Raspberry Pi" href="/sendspin-bt-bridge/installation/raspberry-pi/" description="Docker-гайд для Pi, pre-flight check и one-liner installer" />
+  <LinkCard title="Установить в Proxmox / OpenWrt LXC" href="/sendspin-bt-bridge/installation/lxc/" description="Нативное LXC-развёртывание с использованием Bluetooth-стека хоста через D-Bus" />
+  <LinkCard title="Конфигурация" href="/sendspin-bt-bridge/configuration/" description="Настройки bridge, поля устройств, адаптеры, auth и логика обновлений" />
+  <LinkCard title="Архитектура" href="/sendspin-bt-bridge/architecture/" description="Модель процессов, IPC, маршрутизация аудио, lifecycle Bluetooth и HA ingress" />
+  <LinkCard title="API Reference" href="/sendspin-bt-bridge/api/" description="REST-эндпоинты для статуса, диагностики, Bluetooth, Music Assistant и обновлений" />
+  <LinkCard title="История релизов" href="https://github.com/trudenboy/sendspin-bt-bridge/blob/main/CHANGELOG.md" description="Актуальные release notes, включая изменения v2.40.5 по портам и HA-track" />
 </CardGrid>
+
+## Сообщество
+
+- [Обсуждение в сообществе MA](https://github.com/orgs/music-assistant/discussions/5061)
+- [Тема на HA Community](https://community.home-assistant.io/t/sendspin-bluetooth-bridge-turn-any-bt-speaker-into-an-ma-player-and-ha/993762)
+- [Канал в Discord](https://discord.com/channels/330944238910963714/1479933490991599836)

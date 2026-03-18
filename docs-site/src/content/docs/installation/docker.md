@@ -1,6 +1,6 @@
 ---
 title: Installation — Docker Compose
-description: Running Sendspin Bluetooth Bridge with Docker Compose
+description: Run Sendspin Bluetooth Bridge with Docker Compose, including WEB_PORT and BASE_LISTEN_PORT overrides
 ---
 
 import { Aside, Steps } from '@astrojs/starlight/components';
@@ -10,29 +10,19 @@ import { Aside, Steps } from '@astrojs/starlight/components';
 - Docker Engine and Docker Compose
 - Bluetooth adapter on the host
 - PulseAudio or PipeWire on the host
-- Music Assistant Server on your network
+- Music Assistant on your network
 
-The Docker image supports `linux/amd64`, `linux/arm64`, and `linux/arm/v7` architectures.
+The published image supports `linux/amd64`, `linux/arm64`, and `linux/arm/v7`.
 
 <Aside type="tip">
-  Using a **Raspberry Pi**? See the dedicated [Raspberry Pi guide](/installation/raspberry-pi/) for model-specific instructions, a pre-flight check script, and a **one-liner installer**.
+  Installing on a Raspberry Pi? Use the dedicated [Raspberry Pi guide](/installation/raspberry-pi/) for model-specific advice and the one-liner installer.
 </Aside>
 
-## Pre-flight Check
-
-Before starting, verify your host is ready:
-
-```bash
-curl -sSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/scripts/rpi-check.sh | bash
-```
-
-This checks Docker, Bluetooth, audio system, UID, and outputs recommended `.env` values. Works on any Linux host, not just Raspberry Pi.
-
-## Quick Start
+## Quick start
 
 <Steps>
 
-1. **Pair your Bluetooth speaker on the host first**
+1. **Pair the speaker on the host first**
 
    ```bash
    bluetoothctl
@@ -43,16 +33,17 @@ This checks Docker, Bluetooth, audio system, UID, and outputs recommended `.env`
    exit
    ```
 
-2. **Create `.env`** with your settings:
+2. **Create `.env`**
 
    ```env
-   # Configure Bluetooth devices via web UI at http://localhost:8080
    AUDIO_UID=1000
-   TZ=America/New_York
+   TZ=Europe/London
+   WEB_PORT=8080
+   BASE_LISTEN_PORT=8928
    ```
 
    <Aside type="caution">
-     Check your UID with `id -u`. If it's not 1000, set `AUDIO_UID` accordingly — otherwise audio won't work.
+     Check `id -u`. If your audio user is not UID `1000`, set `AUDIO_UID` accordingly.
    </Aside>
 
 3. **Create `docker-compose.yml`**
@@ -72,7 +63,8 @@ This checks Docker, Bluetooth, audio system, UID, and outputs recommended `.env`
        environment:
          - SENDSPIN_SERVER=auto
          - TZ=${TZ:-UTC}
-         - WEB_PORT=8080
+         - WEB_PORT=${WEB_PORT:-8080}
+         - BASE_LISTEN_PORT=${BASE_LISTEN_PORT:-8928}
          - CONFIG_DIR=/config
          - PULSE_SERVER=unix:/run/user/${AUDIO_UID:-1000}/pulse/native
          - XDG_RUNTIME_DIR=/run/user/${AUDIO_UID:-1000}
@@ -86,71 +78,71 @@ This checks Docker, Bluetooth, audio system, UID, and outputs recommended `.env`
 4. **Start the container**
 
    ```bash
+   mkdir -p /etc/docker/Sendspin
    docker compose up -d
    ```
 
-5. **Verify startup**
+5. **Open the web UI**
 
-   ```bash
-   docker logs sendspin-client
-   ```
-
-   Check the diagnostics table for any ✗ marks.
-
-6. **Open the web interface**
-
-   ```
-   http://localhost:8080
+   ```text
+   http://<host-ip>:<WEB_PORT>
    ```
 
 </Steps>
 
-## Network requirements
+## Port planning
 
-The container uses `network_mode: host`, required for:
-- MA server discovery via mDNS (`auto`)
-- Bluetooth D-Bus access
+- **`WEB_PORT`** controls the direct web UI/API listener in Docker mode.
+- **`BASE_LISTEN_PORT`** is the default Sendspin listener base for devices that do not define `listen_port` explicitly.
+- Each device without a manual port uses `BASE_LISTEN_PORT + device_index`.
+- Advanced setups can assign a per-device `listen_port` and `listen_host` in the web UI or `/config/config.json` after the first start.
 
-## Capabilities
+Example device block in `/config/config.json`:
+
+```json
+{
+  "mac": "11:22:33:44:55:66",
+  "player_name": "Kitchen Speaker",
+  "listen_port": 8935,
+  "listen_host": "192.168.1.50"
+}
+```
+
+`listen_host` only changes the advertised host/IP shown for the player; it does not change the bind address inside the container.
+
+## Multiple bridge containers on one host
+
+If you run more than one bridge container on the same machine:
+
+- give each container a unique `WEB_PORT`
+- give each container a unique `BASE_LISTEN_PORT`
+- do **not** configure the same Bluetooth speaker in two running containers
+
+## Network and capabilities
+
+`network_mode: host` is required for:
+
+- mDNS discovery when `SENDSPIN_SERVER=auto`
+- access to the host Bluetooth stack through D-Bus
+
+Required capabilities:
 
 | Capability | Purpose |
 |---|---|
-| `NET_ADMIN` | Network interface management (BT) |
-| `NET_RAW` | Raw socket access for BT |
+| `NET_ADMIN` | Bluetooth adapter control |
+| `NET_RAW` | Raw Bluetooth/HCI socket access |
 
 <Aside type="caution">
-  `privileged: true` is **not required** and not recommended. The listed `cap_add` are sufficient.
+  `privileged: true` is not required for the standard Docker deployment shown above.
 </Aside>
 
-## Volumes
-
-| Volume | Description |
-|---|---|
-| `/var/run/dbus` | D-Bus socket for bluetoothctl |
-| `/run/user/UID/pulse` | PulseAudio socket |
-| `/run/user/UID/pipewire-0` | PipeWire socket |
-| `/etc/docker/Sendspin` | Config directory (config.json) |
-
-## Environment Variables
-
-| Variable | Default | Description |
-|---|---|---|
-| `SENDSPIN_SERVER` | `auto` | MA server address; `auto` uses mDNS |
-| `AUDIO_UID` | `1000` | Host user UID for audio socket paths |
-| `TZ` | `UTC` | Container timezone |
-| `WEB_PORT` | `8080` | Web interface port |
-| `PULSE_SERVER` | — | PulseAudio server socket path |
-
-## View logs
+## Verify the container
 
 ```bash
 docker logs -f sendspin-client
+curl -s http://localhost:${WEB_PORT:-8080}/api/preflight | python3 -m json.tool
 ```
 
-## Verify setup via API
+## Applying configuration changes
 
-After the container starts, check the preflight endpoint:
-
-```bash
-curl -s http://localhost:8080/api/preflight | python3 -m json.tool
-```
+Changes to devices, adapters, `WEB_PORT`, `BASE_LISTEN_PORT`, and Music Assistant connection settings require a container restart.

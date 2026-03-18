@@ -1,240 +1,116 @@
 ---
 title: Installation — Raspberry Pi
-description: Running Sendspin Bluetooth Bridge on Raspberry Pi with Docker
+description: Run Sendspin Bluetooth Bridge on Raspberry Pi with Docker, including current port-planning options
 ---
 
-import { Aside, Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+import { Aside, Steps } from '@astrojs/starlight/components';
 
-## Supported Models
+## Supported models
 
 | Model | Architecture | Docker platform | Status |
-|-------|-------------|----------------|--------|
+|---|---|---|---|
 | **Raspberry Pi 5** | aarch64 | `linux/arm64` | ✅ Recommended |
-| **Raspberry Pi 4** (2/4/8 GB) | aarch64 | `linux/arm64` | ✅ Recommended |
-| **Raspberry Pi 3 Model B+** | armv7l | `linux/arm/v7` | ⚠️ 1–2 speakers max |
-| **Raspberry Pi Zero 2 W** | aarch64 | `linux/arm64` | ⚠️ Limited RAM (512 MB) |
+| **Raspberry Pi 4** | aarch64 | `linux/arm64` | ✅ Recommended |
+| **Raspberry Pi 3 B+** | armv7l | `linux/arm/v7` | ⚠️ Best for 1–2 speakers |
+| **Raspberry Pi Zero 2 W** | aarch64 | `linux/arm64` | ⚠️ Limited RAM |
 
 <Aside type="tip">
-  Use **64-bit Raspberry Pi OS** (aarch64) when possible — it provides better performance and full compatibility.
-  32-bit OS (armv7) works but may have resource constraints with multiple speakers.
+  Use 64-bit Raspberry Pi OS when possible. It gives the best experience for multiple Bluetooth speakers.
 </Aside>
 
-## Quick Start (One-liner Installer)
+## Quick start
 
-The fastest way to get started — a single command that handles everything:
+The one-liner installer is the fastest path:
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/scripts/rpi-install.sh | bash
 ```
 
-The installer will:
-- Check your system (architecture, RAM, Docker, Bluetooth, audio)
-- Install Docker if not present
-- Download `docker-compose.yml`
-- Generate `.env` with detected settings
-- Offer to pair a Bluetooth speaker interactively
-- Pull the image and start the container
+It checks the host, installs Docker if needed, writes a working Compose setup, and can help with Bluetooth pairing.
 
-<Aside type="tip">
-  For CI/automation, use non-interactive mode:
-  ```bash
-  NONINTERACTIVE=1 curl -sSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/scripts/rpi-install.sh | bash
-  ```
-  It will auto-detect settings and skip interactive prompts.
-</Aside>
+After installation, the web UI is available on `http://<raspberry-pi-ip>:8080` unless you changed `WEB_PORT`.
 
-After the installer finishes, the web UI is available at `http://<raspberry-pi-ip>:8080`.
-
-## Manual Installation
-
-If you prefer step-by-step control, follow the instructions below.
-
-### Prerequisites
+## Manual installation
 
 <Steps>
 
-1. **Raspberry Pi OS** (Bookworm or later) installed and updated
+1. **Prepare the host**
 
-2. **Docker Engine** installed:
+   - install a current Raspberry Pi OS
+   - install Docker
+   - pair the Bluetooth speaker on the host with `bluetoothctl`
 
-   ```bash
-   curl -fsSL https://get.docker.com | sh
-   sudo usermod -aG docker $USER
-   # Log out and back in for group change to take effect
-   ```
-
-3. **Bluetooth adapter** — built-in or USB (CSR8510, TP-Link UB500, etc.)
-
-4. **Audio system** — PipeWire (default on Bookworm) or PulseAudio:
+2. **Run the pre-flight check**
 
    ```bash
-   # Check which audio system is running
-   pactl info | grep "Server Name"
-   # Expected: "PulseAudio (on PipeWire ...)" or "pulseaudio"
+   curl -sSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/scripts/rpi-check.sh | bash
    ```
 
-5. **Speaker paired on the host** (not inside Docker):
+3. **Create a project directory**
 
    ```bash
-   bluetoothctl
-   scan on
-   # Wait for your speaker to appear, then:
-   pair AA:BB:CC:DD:EE:FF
-   trust AA:BB:CC:DD:EE:FF
-   connect AA:BB:CC:DD:EE:FF
-   exit
+   mkdir -p ~/sendspin-bt-bridge && cd ~/sendspin-bt-bridge
    ```
 
-</Steps>
-
-### Pre-flight Check
-
-Run the diagnostic script **before** starting the container:
-
-```bash
-curl -sSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/scripts/rpi-check.sh | bash
-```
-
-This checks Docker, Bluetooth, audio, UID, and memory — and outputs recommended `.env` values.
-
-<details>
-<summary>Example output</summary>
-
-```
-═══════════════════════════════════════════════════════
-  Sendspin Bluetooth Bridge — Pre-flight Check
-═══════════════════════════════════════════════════════
-
-1. Platform
-  ✅ Architecture: aarch64 (arm64) — fully supported
-  ℹ  Hardware: Raspberry Pi 4 Model B Rev 1.4
-
-2. Memory
-  ✅ RAM: 3794 MB — sufficient for multiple speakers
-
-3. Docker
-  ✅ Docker installed: Docker version 27.5.1
-  ✅ Docker daemon is running
-  ✅ Docker Compose available
-
-4. Bluetooth
-  ✅ bluetoothd service is running
-  ✅ BT controller found: Controller 00:1A:7D:DA:71:13
-  ✅ Paired devices: 1
-  ℹ    AA:BB:CC:DD:EE:FF — JBL Flip 6
-
-5. Audio System
-  ✅ PulseAudio API available (via PipeWire)
-  ✅ PulseAudio socket found: /run/user/1000/pulse/native
-
-6. User & UID
-  ✅ Current user: pi (UID: 1000)
-  ✅ UID is 1000 (default, no .env override needed)
-
-7. D-Bus
-  ✅ D-Bus system socket found
-
-═══════════════════════════════════════════════════════
-  Summary: 10 passed, 0 warnings, 0 failed
-═══════════════════════════════════════════════════════
-
-Recommended .env file:
-
-  AUDIO_UID=1000
-  TZ=Europe/London
-```
-
-</details>
-
-### Setup
-
-<Steps>
-
-1. **Create a project directory**
-
-   ```bash
-   mkdir ~/sendspin-bt-bridge && cd ~/sendspin-bt-bridge
-   ```
-
-2. **Save the `.env` file** from the pre-flight check output:
+4. **Create `.env`**
 
    ```env
-   # Configure Bluetooth devices via web UI at http://localhost:8080
    AUDIO_UID=1000
    TZ=Europe/London
+   WEB_PORT=8080
+   BASE_LISTEN_PORT=8928
    ```
 
-3. **Download `docker-compose.yml`**
+5. **Download the current Compose file**
 
    ```bash
    curl -sSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/docker-compose.yml -o docker-compose.yml
-   ```
-
-   Or create it manually:
-
-   ```yaml
-   services:
-     sendspin-client:
-       image: ghcr.io/trudenboy/sendspin-bt-bridge:latest
-       container_name: sendspin-client
-       restart: unless-stopped
-       network_mode: host
-       volumes:
-         - /var/run/dbus:/var/run/dbus
-         - /run/user/${AUDIO_UID:-1000}/pulse:/run/user/${AUDIO_UID:-1000}/pulse
-         - /run/user/${AUDIO_UID:-1000}/pipewire-0:/run/user/${AUDIO_UID:-1000}/pipewire-0
-         - ./config:/config
-       environment:
-         - SENDSPIN_SERVER=auto
-         - TZ=${TZ:-UTC}
-         - WEB_PORT=8080
-         - CONFIG_DIR=/config
-         - PULSE_SERVER=unix:/run/user/${AUDIO_UID:-1000}/pulse/native
-         - XDG_RUNTIME_DIR=/run/user/${AUDIO_UID:-1000}
-       devices:
-         - /dev/bus/usb:/dev/bus/usb
-       cap_add:
-         - NET_ADMIN
-         - NET_RAW
-   ```
-
-4. **Start the container**
-
-   ```bash
+   mkdir -p config
    docker compose up -d
    ```
 
-5. **Check startup diagnostics**
+6. **Open the web UI**
 
-   ```bash
-   docker logs sendspin-client
-   ```
-
-   You should see the diagnostics table showing all checks passed:
-   ```
-   ╔══════════════════════════════════════════════════════╗
-   ║  Sendspin Bridge v2.16.3 Diagnostics
-   ╠══════════════════════════════════════════════════════╣
-   ║  Platform:    aarch64 (arm64)
-   ║  Audio:       ✓ PulseAudio (...)
-   ║  Bluetooth:   ✓ 00:1A:7D:DA:71:13
-   ║  D-Bus:       ✓ host socket mounted
-   ╚══════════════════════════════════════════════════════╝
-   ```
-
-   You can also check the preflight endpoint via the API:
-
-   ```bash
-   curl -s http://localhost:8080/api/preflight | python3 -m json.tool
-   ```
-
-6. **Open the web interface**
-
-   ```
-   http://<raspberry-pi-ip>:8080
+   ```text
+   http://<raspberry-pi-ip>:<WEB_PORT>
    ```
 
 </Steps>
+
+## Port planning on Raspberry Pi
+
+- **`WEB_PORT`** changes the direct web UI/API listener on the Pi.
+- **`BASE_LISTEN_PORT`** changes the default Sendspin port block for speakers.
+- Devices without an explicit `listen_port` use `BASE_LISTEN_PORT + device_index`.
+- You can override a single device with `listen_port` and `listen_host` in the web UI or `/config/config.json`.
+
+Example advanced device entry:
+
+```json
+{
+  "mac": "AA:BB:CC:DD:EE:FF",
+  "player_name": "Kitchen Speaker",
+  "listen_port": 8935,
+  "listen_host": "192.168.1.50"
+}
+```
+
+`listen_host` changes only the advertised host/IP for the player. It does not change the bind address inside the container.
+
+## Running more than one bridge on a Pi or LAN segment
+
+If you run multiple bridge containers or combine a Raspberry Pi bridge with another bridge on the same host/network namespace:
+
+- give each bridge its own `WEB_PORT`
+- give each bridge its own `BASE_LISTEN_PORT`
+- do **not** assign the same Bluetooth speaker to two running bridges
+
+## Verify the runtime
+
+```bash
+docker logs -f sendspin-client
+curl -s http://localhost:${WEB_PORT:-8080}/api/preflight | python3 -m json.tool
+```
 
 ## Updating
 
@@ -244,49 +120,8 @@ docker compose pull
 docker compose up -d
 ```
 
-## Troubleshooting
+## Notes
 
-### No sound (silence)
-
-1. Check that the speaker is connected: `bluetoothctl info AA:BB:CC:DD:EE:FF | grep Connected`
-2. Check audio sink: `pactl list short sinks | grep bluez`
-3. Check mute: `pactl get-sink-mute <sink_index>`
-4. Check container logs: `docker logs sendspin-client | grep -E "Audio worker|daemon stderr"`
-
-### UID mismatch
-
-If your user UID is not 1000 (check with `id -u`), set `AUDIO_UID` in `.env`:
-
-```env
-AUDIO_UID=1001  # Your actual UID
-```
-
-### PipeWire vs PulseAudio
-
-Raspberry Pi OS Bookworm uses PipeWire by default with PulseAudio compatibility. The bridge works with both. To check:
-
-```bash
-# Which system is running?
-pactl info | grep "Server Name"
-
-# PipeWire output: "PulseAudio (on PipeWire 1.x.x)"
-# PulseAudio output: "pulseaudio"
-```
-
-### Resource limits
-
-| Model | RAM | Recommended speakers |
-|-------|-----|---------------------|
-| RPi 5 (4/8 GB) | 4–8 GB | 3–4+ |
-| RPi 4 (2 GB) | 2 GB | 2–3 |
-| RPi 4 (1 GB) | 1 GB | 1–2 |
-| RPi 3 (1 GB) | 1 GB | 1 |
-| RPi Zero 2 W | 512 MB | 1 |
-
-### `network_mode: host` explained
-
-The container uses `network_mode: host` because it needs:
-- **mDNS** for auto-discovering Music Assistant server on the local network
-- **D-Bus** access to the host's `bluetoothd` daemon for Bluetooth control
-
-This means the container shares the host's network stack — the web UI is accessible at `http://<pi-ip>:8080` directly.
+- `network_mode: host` is required for Bluetooth control and Music Assistant auto-discovery.
+- Raspberry Pi OS Bookworm uses PipeWire with PulseAudio compatibility by default; the bridge works with both PipeWire and PulseAudio.
+- Changes to devices, adapters, `WEB_PORT`, `BASE_LISTEN_PORT`, and Music Assistant connection settings require a container restart.

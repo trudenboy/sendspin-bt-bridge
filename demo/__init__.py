@@ -1,21 +1,21 @@
-"""Demo mode — run the full web UI with simulated Bluetooth devices.
+"""Demo mode — run the web UI against a canonical six-player demo stand.
 
 Usage:
     DEMO_MODE=true python sendspin_client.py
 
-All hardware-dependent layers (BlueZ, D-Bus, PulseAudio) are replaced
-with intelligent mocks.  The web UI and all API endpoints work normally
-with fake devices that respond to user actions.
+All hardware-dependent layers (BlueZ, D-Bus, PulseAudio, Music Assistant,
+and per-device subprocesses) are replaced with deterministic mocks so the
+local demo is repeatable enough for documentation screenshots.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
-import random
 import subprocess as _real_subprocess
 import sys
 import time
+from copy import deepcopy
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -36,8 +36,8 @@ def install() -> None:
     import state as _st
     from demo.bt_manager import DemoBluetoothManager
     from demo.fixtures import (
-        DEMO_ADAPTER_INFO,
-        DEMO_ADAPTER_MAC,
+        DEMO_ADAPTER_NAMES,
+        DEMO_ADAPTERS,
         DEMO_DEVICE_STATUS,
         DEMO_DEVICES,
         DEMO_MA_ALL_GROUPS,
@@ -48,7 +48,14 @@ def install() -> None:
         DEMO_MA_URL,
         DEMO_PAIRED_DEVICES,
         DEMO_SCAN_RESULTS,
+        DEMO_TRACKS,
+        DEMO_UPDATE_INFO,
+        _ma_now_playing_entry,
+        demo_player_id_for_name,
+        get_demo_adapter,
     )
+
+    _adapter_names_by_mac = {str(adapter["mac"]).upper(): str(adapter["name"]) for adapter in DEMO_ADAPTERS}
 
     _st.set_runtime_mode_info(
         {
@@ -60,14 +67,20 @@ def install() -> None:
             "disclaimer": "Demo mode simulates Bluetooth, PulseAudio, Music Assistant, and subprocess runtime layers.",
             "details": {
                 "bridge_name": "DEMO",
-                "adapter_name": DEMO_ADAPTER_INFO["name"],
-                "adapter_mac": DEMO_ADAPTER_MAC,
+                "adapter_count": len(DEMO_ADAPTERS),
+                "adapter_names": list(DEMO_ADAPTER_NAMES),
             },
             "mocked_layers": [
                 {
                     "layer": "BluetoothManager",
                     "summary": "Bluetooth transport is simulated with DemoBluetoothManager.",
-                    "details": {"adapter_mac": DEMO_ADAPTER_MAC, "scan_results": len(DEMO_SCAN_RESULTS)},
+                    "details": {
+                        "adapters": [
+                            {"id": adapter["id"], "mac": adapter["mac"], "name": adapter["name"]}
+                            for adapter in DEMO_ADAPTERS
+                        ],
+                        "scan_results": len(DEMO_SCAN_RESULTS),
+                    },
                 },
                 {
                     "layer": "PulseAudio",
@@ -87,6 +100,12 @@ def install() -> None:
             ],
         }
     )
+    _st.set_ma_api_credentials(DEMO_MA_URL, DEMO_MA_TOKEN)
+    _st.set_ma_server_version(str(DEMO_MA_SERVER_INFO["version"]))
+    _st.set_ma_groups(deepcopy(DEMO_MA_NAME_MAP), deepcopy(DEMO_MA_ALL_GROUPS))
+    _st.set_ma_connected(True)
+    _st.replace_ma_now_playing({queue_id: deepcopy(data) for queue_id, data in DEMO_MA_NOW_PLAYING.items()})
+    _st.set_update_available(deepcopy(DEMO_UPDATE_INFO))
 
     bluetooth_manager.BluetoothManager = DemoBluetoothManager  # type: ignore[misc,assignment]
     # Also patch the already-imported name in __main__ (sendspin_client.py)
@@ -102,7 +121,7 @@ def install() -> None:
     import services.bluetooth as _sbt
 
     _audio_macs = {d["mac"] for d in DEMO_SCAN_RESULTS}
-    _sbt.list_bt_adapters = lambda timeout=5: [DEMO_ADAPTER_MAC]
+    _sbt.list_bt_adapters = lambda timeout=5: [str(adapter["mac"]) for adapter in DEMO_ADAPTERS]
     _sbt.is_audio_device = lambda mac: mac.upper() in _audio_macs
     _sbt.bt_remove_device = lambda mac, adapter_mac="": None
 
@@ -110,6 +129,10 @@ def install() -> None:
     # 3. Patch services.pulse (sync wrappers used by routes/api.py)
     # ------------------------------------------------------------------
     import services.pulse as _sp
+
+    def _demo_status_for(mac: str) -> dict[str, Any]:
+        status = DEMO_DEVICE_STATUS.get(mac)
+        return status if isinstance(status, dict) else {}
 
     _sp.list_sinks = lambda: [
         {
@@ -119,8 +142,14 @@ def install() -> None:
         for d in DEMO_DEVICES
     ]
     # Stateful sink volume/mute so API reads back correct values
-    _demo_sink_vol: dict[str, int] = {}
-    _demo_sink_mute: dict[str, bool] = {}
+    _demo_sink_vol: dict[str, int] = {
+        f"bluez_output.{str(d['mac']).replace(':', '_')}.1": int(_demo_status_for(str(d["mac"])).get("volume", 100))
+        for d in DEMO_DEVICES
+    }
+    _demo_sink_mute: dict[str, bool] = {
+        f"bluez_output.{str(d['mac']).replace(':', '_')}.1": bool(_demo_status_for(str(d["mac"])).get("muted", False))
+        for d in DEMO_DEVICES
+    }
 
     def _sp_set_volume(sink_name: str, volume_pct: int) -> bool:
         _demo_sink_vol[sink_name] = volume_pct
@@ -162,24 +191,27 @@ def install() -> None:
         mac = self.bt_manager.mac_address if self.bt_manager else None
         initial = DEMO_DEVICE_STATUS.get(mac or "", {})
 
-        safe_id = "".join(c if c.isalnum() or c == "-" else "-" for c in self.player_name.lower()).strip("-")
-        self.player_id = f"sendspin-demo-{safe_id}"
+        self.player_id = demo_player_id_for_name(self.player_name)
         # Sentinel so is_running() returns True (checks returncode is None)
         self._daemon_proc = type("_FakeProc", (), {"returncode": None})()
         self._daemon_task = None
         self._stderr_task = None
 
-        # Set fake sink name so has_sink=True in the API
-        if mac:
+        bt_connected = bool(initial.get("bluetooth_connected", False))
+        server_connected = bool(initial.get("server_connected", bt_connected))
+        runtime_connected = bool(initial.get("connected", server_connected))
+
+        self.bluetooth_sink_name = None
+        if mac and bt_connected:
             self.bluetooth_sink_name = f"bluez_output.{mac.replace(':', '_')}.1"
 
-        is_playing = initial.get("playing", False)
+        is_playing = bool(initial.get("playing", False))
         self._update_status(
             {
-                "server_connected": True,
-                "connected": True,
+                "server_connected": server_connected,
+                "connected": runtime_connected,
                 "playing": is_playing,
-                "audio_streaming": is_playing,
+                "audio_streaming": is_playing and server_connected,
                 "volume": initial.get("volume", 100),
                 "muted": initial.get("muted", False),
                 "audio_format": initial.get("audio_format"),
@@ -188,7 +220,7 @@ def install() -> None:
                 "track_duration_ms": initial.get("track_duration_ms"),
                 "track_progress_ms": initial.get("track_progress_ms"),
                 "battery_level": initial.get("battery_level"),
-                "bluetooth_connected": initial.get("bluetooth_connected", False),
+                "bluetooth_connected": bt_connected,
                 "bluetooth_available": True,
                 "group_id": initial.get("group_id"),
                 "group_name": initial.get("group_name"),
@@ -249,13 +281,11 @@ def install() -> None:
     def _demo_run_bt_scan(job_id: str) -> None:
         from state import finish_scan_job
 
-        time.sleep(random.uniform(3.0, 5.0))
-        devices = list(DEMO_SCAN_RESULTS)
-        random.shuffle(devices)
-        finish_scan_job(job_id, {"devices": devices})
+        time.sleep(3.0)
+        finish_scan_job(job_id, {"devices": list(DEMO_SCAN_RESULTS)})
 
     _abt._run_bt_scan = _demo_run_bt_scan
-    _abt.list_bt_adapters = lambda timeout=5: [DEMO_ADAPTER_MAC]
+    _abt.list_bt_adapters = lambda timeout=5: [str(adapter["mac"]) for adapter in DEMO_ADAPTERS]
 
     # Replace subprocess module reference in api_bt so that handlers
     # calling subprocess.run(["bluetoothctl"], ...) get fake output.
@@ -271,7 +301,7 @@ def install() -> None:
                 if "devices" in input_text:
                     return self._paired_output()
                 if "show" in input_text:
-                    return self._adapter_output()
+                    return self._adapter_output(input_text)
             return _real_subprocess.run(args, *a, **kw)
 
         @staticmethod
@@ -280,10 +310,25 @@ def install() -> None:
             return _real_subprocess.CompletedProcess(["bluetoothctl"], 0, stdout="\n".join(lines), stderr="")
 
         @staticmethod
-        def _adapter_output() -> _real_subprocess.CompletedProcess:  # type: ignore[type-arg]
-            mac = DEMO_ADAPTER_INFO["address"]
-            name = DEMO_ADAPTER_INFO["name"]
-            stdout = f"Controller {mac} {name}\n\tPowered: yes\n\tAlias: {name}\n"
+        def _adapter_output(input_text: str) -> _real_subprocess.CompletedProcess:  # type: ignore[type-arg]
+            selected = ""
+            for line in str(input_text).splitlines():
+                if line.startswith("select "):
+                    selected = line.split(" ", 1)[1].strip()
+                    break
+            adapter_info = get_demo_adapter(selected)
+            mac = str(adapter_info["mac"])
+            name = str(adapter_info["name"])
+            powered = "yes" if adapter_info.get("powered", True) else "no"
+            pairable = "yes" if adapter_info.get("pairable", True) else "no"
+            discoverable = "yes" if adapter_info.get("discoverable", False) else "no"
+            stdout = (
+                f"Controller {mac} {name}\n"
+                f"\tPowered: {powered}\n"
+                f"\tAlias: {name}\n"
+                f"\tDiscoverable: {discoverable}\n"
+                f"\tPairable: {pairable}\n"
+            )
             return _real_subprocess.CompletedProcess(["bluetoothctl"], 0, stdout=stdout, stderr="")
 
     _abt.subprocess = _DemoSubprocess()  # type: ignore[assignment]
@@ -291,7 +336,7 @@ def install() -> None:
     # ------------------------------------------------------------------
     # 6. Patch state module
     # ------------------------------------------------------------------
-    _st.get_adapter_name = lambda mac: "Demo Adapter"  # type: ignore[assignment]
+    _st.get_adapter_name = lambda mac: _adapter_names_by_mac.get(str(mac).upper())  # type: ignore[assignment]
 
     # ------------------------------------------------------------------
     # 7. Inject demo devices + MA credentials into config
@@ -305,19 +350,24 @@ def install() -> None:
 
     def _demo_load_config() -> dict:
         result = _original_load()
-        if not result.get("BLUETOOTH_DEVICES"):
-            result["BLUETOOTH_DEVICES"] = list(DEMO_DEVICES)
+        result["BLUETOOTH_DEVICES"] = deepcopy(DEMO_DEVICES)
+        result["BLUETOOTH_ADAPTERS"] = deepcopy(DEMO_ADAPTERS)
+        result["AUTH_ENABLED"] = False
+        result["CHECK_UPDATES"] = True
+        result["UPDATE_CHANNEL"] = "stable"
+        result["AUTO_UPDATE"] = False
         if not result.get("BRIDGE_NAME"):
             result["BRIDGE_NAME"] = "DEMO"
-        # Always inject MA credentials in demo mode
-        if not result.get("MA_API_URL"):
-            result["MA_API_URL"] = DEMO_MA_URL
-        if not result.get("MA_API_TOKEN"):
-            result["MA_API_TOKEN"] = DEMO_MA_TOKEN
+        # Always inject canonical MA credentials in demo mode.
+        result["MA_API_URL"] = DEMO_MA_URL
+        result["MA_API_TOKEN"] = DEMO_MA_TOKEN
         return result
 
     _config_mod.load_config = _demo_load_config
     _sc_mod.load_config = _demo_load_config  # type: ignore[attr-defined]
+    import routes.api_config as _api_config_mod
+
+    _api_config_mod.load_config = _demo_load_config
 
     # ------------------------------------------------------------------
     # 8. Patch MA client (discover_ma_groups)
@@ -350,6 +400,38 @@ def install() -> None:
     # ------------------------------------------------------------------
     import services.ma_monitor as _ma_monitor
 
+    def _seconds_value_to_ms(value: object, default: int | None) -> int | None:
+        if value is None:
+            return default
+        if isinstance(value, (int, float)):
+            return int(float(value) * 1000)
+        if isinstance(value, str):
+            try:
+                return int(float(value) * 1000)
+            except ValueError:
+                return default
+        return default
+
+    def _sync_queue_state_to_clients(queue_id: str, now_playing: dict[str, object]) -> None:
+        """Mirror demo queue changes back onto runtime device status fields."""
+        with _st.clients_lock:
+            peers = list(_st.clients)
+        track_duration_ms = _seconds_value_to_ms(now_playing.get("duration"), None)
+        track_progress_ms = _seconds_value_to_ms(now_playing.get("elapsed"), 0) or 0
+        for peer in peers:
+            if peer.status.get("group_id") == queue_id or getattr(peer, "player_id", None) == queue_id:
+                peer._update_status(
+                    {
+                        "current_track": now_playing.get("track"),
+                        "current_artist": now_playing.get("artist"),
+                        "track_duration_ms": track_duration_ms,
+                        "track_progress_ms": track_progress_ms,
+                        "playing": now_playing.get("state") == "playing",
+                        "audio_streaming": now_playing.get("state") == "playing"
+                        and peer.status.get("server_connected"),
+                    }
+                )
+
     class _DemoMaMonitor:
         """Fake MA monitor that sets state as connected and populates now-playing."""
 
@@ -362,6 +444,7 @@ def install() -> None:
                 data = dict(np_data)
                 data["elapsed_updated_at"] = _time.time()
                 _st.set_ma_now_playing_for_group(sg_id, data)
+            _st.set_ma_server_version(str(DEMO_MA_SERVER_INFO["version"]))
             logger.info("[demo] MA monitor connected (simulated)")
             # Keep alive
             while True:
@@ -376,39 +459,44 @@ def install() -> None:
         action: str, value: Any = None, syncgroup_id: str | None = None
     ) -> dict[str, object]:
         """Handle queue commands locally — update now-playing state."""
-        from demo.fixtures import DEMO_TRACKS
-
         sg_id = syncgroup_id or next(iter(DEMO_MA_NOW_PLAYING), None)
         if not sg_id:
             return {"accepted": False, "queue_id": "", "error": "no queue available"}
 
         np = _st.get_ma_now_playing_for_group(sg_id) or {}
+        queue_name = str(np.get("syncgroup_name") or sg_id)
+        current_index = int(np.get("queue_index", 0) or 0)
+        connected = bool(np.get("connected", True))
+        shuffle = bool(np.get("shuffle", False))
+        repeat = str(np.get("repeat", "off") or "off")
 
         if action == "next":
-            idx = (np.get("queue_index", 0) + 1) % len(DEMO_TRACKS)
-            title, artist, dur = DEMO_TRACKS[idx]
+            idx = (current_index + 1) % len(DEMO_TRACKS)
             np.update(
-                {
-                    "track": title,
-                    "artist": artist,
-                    "duration": dur / 1000,
-                    "elapsed": 0,
-                    "queue_index": idx,
-                    "state": "playing",
-                }
+                _ma_now_playing_entry(
+                    sg_id,
+                    queue_name,
+                    idx,
+                    state="playing",
+                    connected=connected,
+                    elapsed_seconds=0,
+                    shuffle=shuffle,
+                    repeat=repeat,
+                )
             )
         elif action == "previous":
-            idx = max(0, np.get("queue_index", 0) - 1)
-            title, artist, dur = DEMO_TRACKS[idx]
+            idx = max(0, current_index - 1)
             np.update(
-                {
-                    "track": title,
-                    "artist": artist,
-                    "duration": dur / 1000,
-                    "elapsed": 0,
-                    "queue_index": idx,
-                    "state": "playing",
-                }
+                _ma_now_playing_entry(
+                    sg_id,
+                    queue_name,
+                    idx,
+                    state="playing",
+                    connected=connected,
+                    elapsed_seconds=0,
+                    shuffle=shuffle,
+                    repeat=repeat,
+                )
             )
         elif action == "shuffle":
             np["shuffle"] = bool(value)
@@ -421,6 +509,7 @@ def install() -> None:
 
         np["elapsed_updated_at"] = _time.time()
         _st.set_ma_now_playing_for_group(sg_id, np)
+        _sync_queue_state_to_clients(sg_id, np)
         logger.debug("[demo] queue cmd: %s value=%s → %s", action, value, sg_id)
         return {"accepted": True, "queue_id": sg_id, "syncgroup_id": sg_id}
 
@@ -444,6 +533,7 @@ def install() -> None:
     # 10. Patch MA discovery (validate_ma_url, discover_ma_servers)
     # ------------------------------------------------------------------
     import services.ma_discovery as _ma_disc
+    import services.update_checker as _update_checker
 
     async def _demo_validate_ma_url(url: str) -> dict | None:
         return dict(DEMO_MA_SERVER_INFO)
@@ -455,5 +545,13 @@ def install() -> None:
     _ma_disc.validate_ma_url = _demo_validate_ma_url
     if hasattr(_ma_disc, "discover_ma_servers"):
         _ma_disc.discover_ma_servers = _demo_discover_ma_servers
+
+    async def _demo_check_latest_version(channel: str | None = None) -> dict[str, object]:
+        payload = dict(DEMO_UPDATE_INFO)
+        payload["channel"] = channel or str(DEMO_UPDATE_INFO.get("channel", "stable"))
+        return payload
+
+    _update_checker.check_latest_version = _demo_check_latest_version
+    _api_config_mod.check_latest_version = _demo_check_latest_version
 
     logger.info("🎭 Demo mode installed — all hardware interactions are simulated")

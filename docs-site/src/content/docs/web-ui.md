@@ -3,7 +3,7 @@ title: Web UI
 description: Current guide to the Sendspin Bluetooth Bridge dashboard, list view, configuration tabs, diagnostics, logs, and update flows
 ---
 
-The web interface is available on port **8080** for Docker/LXC installs and through **HA Ingress** for the Home Assistant addon. The page updates in real time over Server-Sent Events, so most status changes appear without a refresh.
+The web interface is available through a direct browser port controlled by **`WEB_PORT`** (default **8080** for standalone installs) and through **HA Ingress** for the Home Assistant addon. In addon mode, `WEB_PORT` can open an extra direct listener, but Ingress keeps using the fixed addon channel port. The page updates in real time over Server-Sent Events, so most status changes appear without a refresh.
 
 ## Sign-in flow
 
@@ -13,11 +13,11 @@ When authentication is enabled, the bridge shows a dedicated sign-in screen befo
 
 | Method | When it appears | Notes |
 |---|---|---|
-| **Home Assistant** | Addon mode or HA-backed login flow | Supports TOTP / MFA when Home Assistant requires it |
-| **Music Assistant** | MA credentials login is available | Useful for standalone installs already linked to MA |
-| **Password** | Local bridge password is configured | Standalone-only local auth |
+| **Home Assistant** | Always in HA addon mode, or in standalone when the bridge is connected to an HA-backed Music Assistant instance | Uses the HA `login_flow`, including TOTP / MFA |
+| **Music Assistant** | Standalone installs already connected to MA with a built-in MA token flow | Validates MA credentials against the connected MA server |
+| **Password** | Standalone auth is enabled and a local password hash exists | PBKDF2-SHA256 local password flow |
 
-If Home Assistant requires MFA, the page switches to a **6-digit verification step**. In standalone mode, the **Security** tab controls the session timeout and brute-force policy for these logins.
+If Home Assistant requires MFA, the page switches to a **6-digit verification step**. In standalone mode, the **Security** tab controls the session timeout and brute-force policy for these logins. Login forms are CSRF-protected, and standalone sessions use `SameSite=Lax` plus `HttpOnly` cookies.
 
 <Aside type="tip">
 After **5 failed attempts** the default lockout is **5 minutes**, but all lockout values are configurable in **Configuration → Security**.
@@ -108,7 +108,7 @@ The redesigned **Configuration** section is now organized into five tabs:
 
 | Tab | Purpose |
 |---|---|
-| **General** | Bridge identity, timezone, latency, restart behavior, update policy |
+| **General** | Bridge identity, timezone, latency, direct web port, base listener port, restart behavior, update policy |
 | **Devices** | Speaker fleet table plus discovery/import workflows |
 | **Bluetooth** | Adapter inventory, reconnect policy, codec preference |
 | **Music Assistant** | Connection status, token flows, monitor and routing toggles |
@@ -119,7 +119,8 @@ The footer actions behave differently on purpose:
 - **Save** writes the config without forcing a restart.
 - **Save & Restart** applies restart-sensitive changes immediately and shows progress in the header.
 - **Cancel** restores the last saved values in the form.
-- **Download / Upload** export or import `config.json` while preserving sensitive keys server-side.
+- **Download** exports a share-safe `config.json` with sensitive values removed.
+- **Upload** imports a config file while preserving the current password hash, secret key, and stored MA token on the server.
 
 Unsaved edits enable **Cancel**, mark the configuration area as dirty, and trigger a browser warning if you try to leave the page mid-edit.
 
@@ -131,9 +132,9 @@ The **Devices** tab keeps everyday speaker management separate from discovery:
 
 - **Device fleet** is the primary table for enabled state, player name, MAC, adapter, port, delay, live badge, and removal.
 - **Discovery & import** is a secondary card for scanning nearby speakers or pulling from the already-paired list.
-- Device rows support advanced per-speaker settings like preferred audio format, listen host, and keepalive interval.
+- Device rows support advanced per-speaker settings like preferred audio format, `listen_host`, and `keepalive_interval`.
 
-Clicking a device gear from the dashboard scrolls here, highlights the right row, and focuses the relevant field.
+If `listen_port` is left blank, the runtime uses **`BASE_LISTEN_PORT + device index`**. Positive `keepalive_interval` values enable silence keepalive, anything below 30 seconds is raised to 30, and there is no separate current-web-UI toggle for the old `keepalive_silence` flag. Clicking a device gear from the dashboard scrolls here, highlights the right row, and focuses the relevant field.
 
 ### Bluetooth tab
 
@@ -156,7 +157,10 @@ Adapter deep links from the dashboard or empty state land directly in this tab a
 The **Music Assistant** tab combines connection state with authentication helpers:
 
 - **Connection status** card for the current MA session.
-- **Discover / Get token / Get token automatically** flows.
+- **Discover** finds or confirms the MA URL.
+- **Get token** signs in with MA credentials, saves a long-lived `MA_API_TOKEN`, and does not store the password.
+- If direct MA login returns an auth failure against an HA-backed MA instance, the UI can continue through the **Home Assistant OAuth / MFA** flow.
+- **Get token automatically** is shown for HA-backed MA targets. Under HA Ingress it first tries silent auth with the browser's HA token, then falls back to the popup flow if silent auth fails.
 - Manual token paste field when you prefer explicit credentials.
 - **WebSocket monitor**, **Route volume through MA**, and **Route mute through MA** toggles.
 
@@ -182,7 +186,7 @@ Standalone installs expose a dedicated **Security** tab for local access control
 
 When auth is disabled, the page shows a yellow warning banner with a shortcut that jumps straight to **Configuration → Security** and highlights the auth toggle.
 
-In **HA addon mode**, Home Assistant owns access control, so the local Security tab is replaced by the addon auth model and direct HA login / TOTP flow.
+In **HA addon mode**, Home Assistant owns access control and auth is always enforced, so the local Security tab is replaced by the addon auth model and direct HA login / TOTP flow. Use **Save & Restart** after changing auth, session, or port settings because those behaviors are applied at startup.
 
 ## Diagnostics
 

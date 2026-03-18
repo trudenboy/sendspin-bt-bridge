@@ -1,193 +1,156 @@
-"""Background state simulator for demo mode.
+"""Deterministic background simulator for the demo screenshot stand.
 
-Periodically changes device states to make the demo feel alive:
-- Toggles play/idle on random devices
-- Simulates disconnect/reconnect cycles
-- Advances track progress while playing
-- Drains battery for connected devices
-- Cycles through fake tracks
-- Updates MA now-playing state in sync with device state
+The simulator keeps the canonical six-player layout stable across runs while
+still making the UI feel alive:
+- advances track progress for the devices that start in a playing state
+- rolls over to the next demo track when playback reaches the end
+- keeps MA now-playing data in sync for both sync groups and solo players
+- slowly drains battery on connected devices without changing role/state
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
-import random
 import time
-from datetime import datetime, timezone
 
-from demo.fixtures import DEMO_MA_NOW_PLAYING, DEMO_TRACKS
+from demo.fixtures import DEMO_MA_NOW_PLAYING, DEMO_TRACKS, _ma_now_playing_entry
 
 logger = logging.getLogger(__name__)
 
-UTC = timezone.utc
-
 
 async def run_simulator(clients: list) -> None:
-    """Long-running async task that mutates client statuses for realism."""
+    """Long-running async task that mutates client statuses predictably."""
     if not clients:
         return
 
-    _track_index: dict[str, int] = {}  # player_name → current track index
+    def _find_track_index(track: str | None, artist: str | None) -> int:
+        for idx, item in enumerate(DEMO_TRACKS):
+            if item["title"] == track and item["artist"] == artist:
+                return idx
+        return 0
+
+    def _queue_key_for_client(client) -> str | None:
+        group_id = client.status.get("group_id")
+        if group_id:
+            return str(group_id)
+        player_id = getattr(client, "player_id", "")
+        return player_id or None
+
+    _track_index: dict[str, int] = {
+        client.player_name: _find_track_index(
+            client.status.get("current_track"),
+            client.status.get("current_artist"),
+        )
+        for client in clients
+    }
 
     def _sync_ma_now_playing() -> None:
-        """Sync MA now-playing state per syncgroup from its member devices."""
+        """Sync MA now-playing state for sync groups and solo demo queues."""
         import state as _st
 
         if not _st.is_ma_connected():
             return
 
-        # Build a map: group_id → list of clients in that group
-        groups: dict[str, list] = {}
-        for c in clients:
-            gid = c.status.get("group_id")
-            if gid:
-                groups.setdefault(gid, []).append(c)
+        queue_members: dict[str, list] = {}
+        for client in clients:
+            queue_key = _queue_key_for_client(client)
+            if queue_key:
+                queue_members.setdefault(queue_key, []).append(client)
 
-        for sg_id in DEMO_MA_NOW_PLAYING:
-            np = _st.get_ma_now_playing_for_group(sg_id) or {}
-            members = groups.get(sg_id, [])
-            playing_member = next((c for c in members if c.status.get("playing")), None)
+        for queue_id, template in DEMO_MA_NOW_PLAYING.items():
+            np = dict(_st.get_ma_now_playing_for_group(queue_id) or template)
+            members = queue_members.get(queue_id, [])
+            playing_member = next((client for client in members if client.status.get("playing")), None)
+            representative = playing_member or next(
+                (
+                    client
+                    for client in members
+                    if client.status.get("bluetooth_connected") or client.status.get("server_connected")
+                ),
+                None,
+            )
 
-            if playing_member:
-                prog_ms = playing_member.status.get("track_progress_ms", 0) or 0
-                dur_ms = playing_member.status.get("track_duration_ms", 180_000) or 180_000
-                np.update(
-                    {
-                        "connected": True,
-                        "state": "playing",
-                        "track": playing_member.status.get("current_track", ""),
-                        "artist": playing_member.status.get("current_artist", ""),
-                        "album": "Demo Album",
-                        "elapsed": prog_ms / 1000,
-                        "elapsed_updated_at": time.time(),
-                        "duration": dur_ms / 1000,
-                        "queue_index": _track_index.get(playing_member.player_name, 0),
-                        "queue_total": len(DEMO_TRACKS),
-                    }
+            if representative is None:
+                np.update({"connected": False, "state": "paused", "elapsed_updated_at": time.time()})
+                _st.set_ma_now_playing_for_group(queue_id, np)
+                continue
+
+            track_idx = _track_index.get(
+                representative.player_name,
+                _find_track_index(
+                    representative.status.get("current_track"),
+                    representative.status.get("current_artist"),
+                ),
+            )
+            progress_ms = representative.status.get("track_progress_ms") or int(float(np.get("elapsed", 0)) * 1000)
+            np.update(
+                _ma_now_playing_entry(
+                    queue_id,
+                    str(np.get("syncgroup_name") or template.get("syncgroup_name") or queue_id),
+                    track_idx,
+                    state="playing" if representative.status.get("playing") else "paused",
+                    connected=bool(
+                        representative.status.get("bluetooth_connected")
+                        or representative.status.get("server_connected")
+                    ),
+                    elapsed_seconds=int(progress_ms / 1000),
+                    shuffle=bool(np.get("shuffle", template.get("shuffle", False))),
+                    repeat=str(np.get("repeat", template.get("repeat", "off"))),
                 )
-            else:
-                np["state"] = "paused"
-                np["elapsed_updated_at"] = time.time()
-
-            _st.set_ma_now_playing_for_group(sg_id, np)
+            )
+            np["elapsed_updated_at"] = time.time()
+            _st.set_ma_now_playing_for_group(queue_id, np)
 
     async def _advance_tracks() -> None:
-        """Increment track progress for playing devices, switch tracks when done."""
-        for c in clients:
-            if not c.status.get("playing"):
+        """Increment track progress for playing devices and rotate tracks deterministically."""
+        for client in clients:
+            if not client.status.get("playing"):
                 continue
-            progress = c.status.get("track_progress_ms") or 0
-            duration = c.status.get("track_duration_ms") or 180_000
-            progress += 5000  # 5 seconds per tick
+
+            progress = client.status.get("track_progress_ms") or 0
+            track_idx = _track_index.get(
+                client.player_name,
+                _find_track_index(client.status.get("current_track"), client.status.get("current_artist")),
+            )
+            track = DEMO_TRACKS[track_idx]
+            duration = int(track["duration_ms"])
+            progress += 5000
 
             if progress >= duration:
-                # Next track
-                idx = _track_index.get(c.player_name, 0)
-                idx = (idx + 1) % len(DEMO_TRACKS)
-                _track_index[c.player_name] = idx
-                title, artist, dur = DEMO_TRACKS[idx]
-                c._update_status(
+                track_idx = (track_idx + 1) % len(DEMO_TRACKS)
+                _track_index[client.player_name] = track_idx
+                next_track = DEMO_TRACKS[track_idx]
+                client._update_status(
                     {
-                        "current_track": title,
-                        "current_artist": artist,
-                        "track_duration_ms": dur,
+                        "current_track": next_track["title"],
+                        "current_artist": next_track["artist"],
+                        "track_duration_ms": next_track["duration_ms"],
                         "track_progress_ms": 0,
                     }
                 )
             else:
-                c._update_status({"track_progress_ms": progress})
+                client._update_status({"track_progress_ms": progress})
 
         _sync_ma_now_playing()
 
     async def _drain_battery() -> None:
         """Decrease battery by 1% for connected devices."""
-        for c in clients:
-            if not c.status.get("bluetooth_connected"):
+        for client in clients:
+            if not client.status.get("bluetooth_connected"):
                 continue
-            level = c.status.get("battery_level")
+            level = client.status.get("battery_level")
             if level is not None and level > 5:
-                c._update_status({"battery_level": level - 1})
+                client._update_status({"battery_level": level - 1})
 
-    async def _random_play_toggle() -> None:
-        """Randomly toggle play/idle on one connected device."""
-        connected = [c for c in clients if c.status.get("server_connected")]
-        if not connected:
-            return
-        target = random.choice(connected)
-        is_playing = target.status.get("playing", False)
-        if is_playing:
-            target._update_status({"playing": False, "audio_streaming": False})
-            logger.debug("[demo-sim] %s → idle", target.player_name)
-        else:
-            idx = _track_index.get(target.player_name, random.randint(0, len(DEMO_TRACKS) - 1))
-            _track_index[target.player_name] = idx
-            title, artist, dur = DEMO_TRACKS[idx]
-            target._update_status(
-                {
-                    "playing": True,
-                    "audio_streaming": True,
-                    "current_track": title,
-                    "current_artist": artist,
-                    "track_duration_ms": dur,
-                    "track_progress_ms": 0,
-                    "audio_format": "FLAC 44100Hz 16bit 2ch",
-                }
-            )
-            logger.debug("[demo-sim] %s → playing '%s'", target.player_name, title)
-        _sync_ma_now_playing()
-
-    async def _random_disconnect_cycle() -> None:
-        """Simulate a disconnect→reconnect on one device."""
-        connected = [c for c in clients if c.status.get("bluetooth_connected")]
-        if not connected:
-            return
-        target = random.choice(connected)
-        logger.debug("[demo-sim] %s → simulating disconnect", target.player_name)
-        target._update_status(
-            {
-                "bluetooth_connected": False,
-                "server_connected": False,
-                "playing": False,
-                "audio_streaming": False,
-                "battery_level": None,
-                "reconnecting": True,
-            }
-        )
-        await asyncio.sleep(random.uniform(3.0, 6.0))
-        target._update_status(
-            {
-                "bluetooth_connected": True,
-                "server_connected": True,
-                "reconnecting": False,
-                "bluetooth_connected_at": datetime.now(tz=UTC).isoformat(),
-                "battery_level": random.randint(20, 95),
-            }
-        )
-        logger.debug("[demo-sim] %s → reconnected", target.player_name)
-
-    logger.info("[demo-sim] Background simulator started for %d device(s)", len(clients))
+    logger.info("[demo-sim] Canonical simulator started for %d device(s)", len(clients))
     tick = 0
     try:
         while True:
             await asyncio.sleep(5)
             tick += 1
-
-            # Every 5s: advance track progress
             await _advance_tracks()
-
-            # Every ~45s: random play/idle toggle
-            if tick % 9 == 0:
-                await _random_play_toggle()
-
-            # Every ~5 min: battery drain
             if tick % 60 == 0:
                 await _drain_battery()
-
-            # Every ~3 min: disconnect/reconnect cycle
-            if tick % 36 == 0 and tick > 36:
-                await _random_disconnect_cycle()
-
     except asyncio.CancelledError:
         logger.info("[demo-sim] Simulator stopped")

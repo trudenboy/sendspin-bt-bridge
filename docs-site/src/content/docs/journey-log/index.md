@@ -5,12 +5,13 @@ description: Project logbook with release milestones, architecture notes, and ro
 
 `Journey log` is the project logbook for Sendspin Bluetooth Bridge.
 
-This section is where we capture the milestones behind the docs:
+This section captures the narrative behind `CHANGELOG.md` entries:
 
-- stable and prerelease rollout notes
+- stable / RC / beta rollout notes
+- release-engineering changes such as GitHub Releases, add-on packaging, and channel publishing
 - architecture and deployment pivots
 - important fixes discovered in real Home Assistant, Docker, and LXC installs
-- short summaries of what changed and why it mattered
+- short summaries of what changed, why it mattered, and how it rolled out
 
 If you want the latest status first, start with the newest entry below.
 
@@ -20,6 +21,6 @@ If you want the latest status first, start with the newest entry below.
 
 ## What belongs here
 
-Use the Journey log for project narrative and release context.
+Use the Journey log when a release changes how the project ships, is operated, or is explained.
 
-Use the main docs for evergreen reference material such as installation, configuration, API behavior, and architecture.
+Keep evergreen setup/config/API/architecture reference material in the main docs, and keep concise user-facing release bullets in `CHANGELOG.md`.

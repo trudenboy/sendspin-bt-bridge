@@ -5,7 +5,7 @@ description: Detailed technical architecture of sendspin-bt-bridge — processes
 
 ## Overview
 
-`sendspin-bt-bridge` is a **multi-process Python bridge** that connects Music Assistant's Sendspin audio protocol to Bluetooth speakers. Each configured speaker runs in its own **isolated subprocess** with a dedicated PulseAudio context, ensuring correct audio routing without cross-device interference.
+`sendspin-bt-bridge` is a **multi-process Python bridge** that connects Music Assistant's Sendspin audio protocol to Bluetooth speakers. Each configured speaker runs in its own **isolated subprocess** with a dedicated PulseAudio context, while the main runtime coordinates lifecycle, web/API surfaces, Bluetooth recovery, and Music Assistant integration. Current releases also include HA-aware channel detection plus top-level and per-device port planning (`WEB_PORT`, `BASE_LISTEN_PORT`, `listen_port`).
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -47,15 +47,25 @@ graph TD
 
         subgraph "Main Process — sendspin_client.py"
             MP[main&#40;&#41;<br/>asyncio event loop]
-            MP --> SC[SendspinClient × N]
-            MP --> BM[BluetoothManager × N]
-            MP --> WS[Waitress HTTP server<br/>daemon thread]
-            MP --> MM[MaMonitor<br/>asyncio task]
+            MP --> BO[BridgeOrchestrator]
+            BO --> CFG[config.py<br/>load_config · port/channel defaults]
+            BO --> LS[BridgeLifecycleState<br/>startup/runtime publication]
+            BO --> MIS[BridgeMaIntegrationService<br/>MA URL/token/groups]
+            BO --> SC[SendspinClient × N]
+            BO --> BM[BluetoothManager × N]
+            BO --> WS[Waitress HTTP server<br/>daemon thread]
+            BO --> MM[MaMonitor<br/>asyncio task]
+            BO --> UC[update_checker<br/>asyncio task]
 
-            SC -->|asyncio subprocess| DP
-            SC <-->|JSON stdin/stdout| DP
+            SC -->|delegates| SUBSVC[SubprocessCommand / IPC / Stderr / Stop services]
+            SUBSVC <-->|JSON stdin/stdout| DP
+            SC --> PH[PlaybackHealthMonitor]
+            SC --> SEB[StatusEventBuilder]
             SC --- ST[state.py<br/>shared runtime state]
             BM --- ST
+            LS --- ST
+            MM --> ST
+            UC --> ST
 
             WS --> FLASK[Flask app<br/>web_interface.py]
             FLASK --> BP_API[routes/api.py<br/>Blueprint]
@@ -65,9 +75,6 @@ graph TD
             FLASK --> BP_STS[routes/api_status.py<br/>Blueprint]
             FLASK --> BP_VIEW[routes/views.py<br/>Blueprint]
             FLASK --> BP_AUTH[routes/auth.py<br/>Blueprint]
-            BP_API --> ST
-
-            MM --> ST
         end
 
         subgraph "Subprocess per Device"
@@ -80,8 +87,9 @@ graph TD
 
         subgraph "services/"
             SVC_BT[bluetooth.py<br/>BT helpers]
-            SVC_PA[pulse.py<br/>pulsectl_asyncio]
+            SVC_PA[pulse.py<br/>PulseAudio helpers]
             SVC_MAC[ma_client.py<br/>MA REST API]
+            SVC_IPC[ipc_protocol.py<br/>protocol_version envelope]
         end
 
         BM --> SVC_BT
@@ -89,13 +97,7 @@ graph TD
         BD --> SVC_PA
         MM --> SVC_MAC
         BP_API --> SVC_MAC
-
-        subgraph "config.py"
-            CFG[load_config&#40;&#41;<br/>save_device_volume&#40;&#41;<br/>config.json]
-        end
-
-        SC --> CFG
-        BP_API --> CFG
+        SUBSVC --> SVC_IPC
     end
 
     BT_HW[Bluetooth Hardware<br/>hci0 / hci1 / …]
@@ -113,28 +115,46 @@ graph TD
 
 ### Main Process
 
-The main process (`sendspin_client.py` `main()`) runs a single **asyncio event loop** on the main thread and a **Waitress HTTP server** on a daemon thread. All async operations (BT monitoring, subprocess I/O, MA WebSocket) share the same event loop.
+The runtime entrypoint (`sendspin_client.py` `main()`) stays intentionally thin. Bridge-wide sequencing now lives in `BridgeOrchestrator`, which loads config, resolves channel-aware defaults, publishes lifecycle state, boots the web server, initializes optional MA integration, and assembles the long-running runtime tasks.
 
 ```mermaid
 sequenceDiagram
     participant SH as entrypoint.sh
     participant MP as main()
+    participant BO as BridgeOrchestrator
+    participant LS as BridgeLifecycleState
     participant BM as BluetoothManager
     participant SC as SendspinClient
     participant WS as Waitress thread
     participant MM as MaMonitor
+    participant UC as UpdateChecker
 
     SH->>SH: D-Bus setup · audio detect · HA config translate
     SH->>MP: exec python3 sendspin_client.py
-    MP->>MP: load_config()
+    MP->>BO: initialize_runtime()
+    BO->>LS: begin_startup()
+    BO->>BO: load_config() · resolve channel/web/listen defaults
     loop for each device
-        MP->>BM: BluetoothManager(mac, adapter, …)
-        MP->>SC: SendspinClient(player_name, …, bt_manager=BM)
+        BO->>BM: BluetoothManager(mac, adapter, …)
+        BO->>SC: SendspinClient(player_name, …, bt_manager=BM)
     end
-    MP->>WS: threading.Thread(target=waitress.serve)
-    MP->>MM: asyncio.create_task(MaMonitor.run()) if MA_API_URL
-    MP->>MP: asyncio.gather(SC.run()×N, BM.monitor_and_reconnect()×N)
+    BO->>WS: start_web_server()
+    BO->>BO: configure_executor()
+    BO->>MM: initialize_ma_integration() if configured
+    BO->>UC: asyncio.create_task(run_update_checker(VERSION))
+    MP->>MP: asyncio.gather(SC.run()×N, BM.monitor_and_reconnect()×N, MM?, UC)
+    BO->>LS: complete_startup()
 ```
+
+### Bridge-wide orchestration and service seams
+
+A few explicit service seams now keep the runtime easier to evolve without changing the device contract:
+
+- `BridgeOrchestrator` owns bridge-wide bootstrap, signal handling, task assembly, and channel-aware defaults.
+- `BridgeLifecycleState` publishes startup/runtime progress into `state.py` for `/api/startup-progress`, diagnostics, and the UI.
+- `BridgeMaIntegrationService` resolves MA API credentials, preloads sync groups, and decides whether the `MaMonitor` task should run.
+- `SendspinClient` keeps per-speaker lifecycle ownership but delegates focused subprocess concerns to `SubprocessCommandService`, `SubprocessIpcService`, `SubprocessStderrService`, and `SubprocessStopService`.
+- `PlaybackHealthMonitor` and `StatusEventBuilder` keep watchdog/error/event derivation logic out of the transport code path.
 
 ### Per-Device Subprocess
 
@@ -165,35 +185,43 @@ sequenceDiagram
 
 ## IPC Protocol (stdin / stdout)
 
-All inter-process communication between the main process and each daemon subprocess uses **newline-delimited JSON**.
+All inter-process communication between the main process and each daemon subprocess uses **newline-delimited JSON envelopes** defined by `services.ipc_protocol`.
+
+The current contract stamps envelopes with `protocol_version: 1`, but the parent and child remain backward-compatible with legacy messages that omit the field.
 
 ### Subprocess → Parent (stdout)
 
 | `type` | Fields | When |
 |---|---|---|
-| `status` | Full `DeviceStatus` dict (all fields) | On any state change (de-duplicated) |
-| `log` | `level`, `name`, `msg` | Every log record |
+| `status` | Full `DeviceStatus` dict + `protocol_version` | On any state change (de-duplicated) |
+| `log` | `level`, `name`, `msg`, `protocol_version` | Every forwarded log record |
+| `error` | `message`, `details?`, `protocol_version` | Fatal daemon/bootstrap failures that deserve structured surfacing |
 
 ```json
-{"type": "status", "playing": true, "volume": 75, "current_track": "Mooncalf", …}
-{"type": "log", "level": "info", "name": "__main__", "msg": "[ENEBY20] Stream started"}
+{"type": "status", "protocol_version": 1, "playing": true, "volume": 75, "current_track": "Mooncalf"}
+{"type": "log", "protocol_version": 1, "level": "info", "name": "__main__", "msg": "[ENEBY20] Stream started"}
+{"type": "error", "protocol_version": 1, "message": "Unsupported sink", "details": {"sink": "bluez_sink..."}}
 ```
+
+`SubprocessIpcService` parses these envelopes, applies protocol-version warnings, and routes status/log/error payloads back into `SendspinClient` state.
 
 ### Parent → Subprocess (stdin)
 
 | `cmd` | Extra fields | Effect |
 |---|---|---|
-| `set_volume` | `value: int` | Sets PA sink volume + notifies MA |
-| `set_mute` | `muted: bool` | Toggles mute |
-| `stop` | — | Clean shutdown |
-| `pause` / `play` | — | Sends `MediaCommand` to MA |
-| `reconnect` | — | Disconnects from MA (triggers reconnect) |
-| `set_log_level` | `level: str` | Changes root logger level immediately |
+| `set_volume` | `value: int`, `protocol_version` | Sets PA sink volume + notifies MA |
+| `set_mute` | `muted: bool`, `protocol_version` | Toggles mute |
+| `stop` | `protocol_version` | Clean shutdown |
+| `pause` / `play` | `protocol_version` | Sends `MediaCommand` to MA |
+| `reconnect` | `protocol_version` | Disconnects from MA (triggers reconnect) |
+| `set_log_level` | `level: str`, `protocol_version` | Changes root logger level immediately |
 
 ```json
-{"cmd": "set_volume", "value": 60}
-{"cmd": "stop"}
+{"cmd": "set_volume", "value": 60, "protocol_version": 1}
+{"cmd": "stop", "protocol_version": 1}
 ```
+
+`SubprocessCommandService` serializes command envelopes, while `SubprocessStopService` coordinates graceful stop / terminate fallback during restart or shutdown.
 
 ---
 
@@ -498,38 +526,34 @@ The initial SSE response includes a **2 KB padding comment** (`<!-- ... -->`) to
 
 ## Web API
 
-42 API endpoints are split across **5 route modules** (Flask Blueprints), mounted on the Flask app created in `web_interface.py` and served by **Waitress** on port 8080.
+The Flask app created in `web_interface.py` is served by **Waitress** and split across **5 API blueprints plus views/auth routes**. The route surfaces are grouped by ownership instead of by UI screen so orchestration, Bluetooth, Music Assistant, config, and status concerns can evolve independently.
 
 ```mermaid
 graph TD
     CLIENT[Browser / Home Assistant] -->|HTTP| WAITRESS[Waitress :8080]
     WAITRESS --> FLASK[Flask app]
-    FLASK --> AUTH[routes/auth.py<br/>optional password]
-    AUTH --> VIEW[routes/views.py<br/>HTML pages]
-    AUTH --> API_MOD[5 API Blueprints]
+    FLASK --> AUTH[routes/auth.py<br/>login / logout]
+    AUTH --> VIEW[routes/views.py<br/>HTML shell]
+    AUTH --> API_MOD[5 API blueprints]
 
     subgraph "routes/api.py — Playback Control (6)"
-        API_MOD --> CTRL[POST /api/restart<br/>POST /api/volume<br/>POST /api/mute<br/>POST /api/pause_all<br/>POST /api/group/pause<br/>POST /api/pause]
+        API_MOD --> CTRL[restart · volume · mute · pause_all · group_pause · pause/play]
     end
 
-    subgraph "routes/api_bt.py — Bluetooth (9)"
-        API_MOD --> BT[POST /api/bt/reconnect<br/>POST /api/bt/pair<br/>POST /api/bt/management<br/>GET /api/bt/adapters<br/>GET /api/bt/paired<br/>POST /api/bt/scan<br/>GET /api/bt/scan/result/id]
+    subgraph "routes/api_bt.py — Bluetooth (16)"
+        API_MOD --> BT[reconnect · pair · pair_new jobs · management · enabled · adapters · paired · remove · info · disconnect · adapter power · reset reconnect · scan jobs]
     end
 
-    subgraph "routes/api_ma.py — MA Integration (10)"
-        API_MOD --> MAAPI[POST /api/ma/discover<br/>POST /api/ma/login<br/>GET /api/ma/ha-auth-page<br/>POST /api/ma/ha-silent-auth<br/>POST /api/ma/ha-login<br/>GET /api/ma/groups<br/>POST /api/ma/rediscover<br/>GET /api/ma/nowplaying<br/>POST /api/ma/queue/cmd<br/>GET /api/debug/ma]
+    subgraph "routes/api_ma.py — MA Integration (11)"
+        API_MOD --> MAAPI[discover · login · HA auth flows · groups · rediscover · nowplaying · artwork · queue cmd · debug]
     end
 
-    subgraph "routes/api_config.py — Configuration (9)"
-        API_MOD --> CFG[GET POST /api/config<br/>POST /api/set-password<br/>POST /api/settings/log_level<br/>GET /api/logs<br/>GET /api/version]
+    subgraph "routes/api_config.py — Configuration & Updates (12)"
+        API_MOD --> CFG[config get/post · download/upload/validate · set-password · log level · logs/download · version · update check/info/apply]
     end
 
-    subgraph "routes/api_status.py — Status (8)"
-        API_MOD --> STATUS[GET /api/status<br/>GET /api/groups<br/>GET /api/status/stream SSE<br/>GET /api/diagnostics<br/>GET /api/health<br/>GET /api/preflight]
-    end
-
-    subgraph "routes/views.py — HTML (2)"
-        API_MOD --> VIEWS[GET /<br/>GET /login]
+    subgraph "routes/api_status.py — Status & Diagnostics (11)"
+        API_MOD --> STATUS[status · groups · startup-progress · runtime-info · SSE stream · diagnostics · bugreport · diagnostics download · health · onboarding assistant · preflight]
     end
 ```
 
@@ -565,21 +589,25 @@ graph TD
     subgraph "config.py"
         LOAD[load_config&#40;&#41;<br/>reads config.json]
         SAVE[save_device_volume&#40;&#41;<br/>debounced 1s write]
+        UPDATE[update_config&#40;&#41;<br/>validated merge]
+        PORTS[detect_ha_addon_channel&#40;&#41;<br/>resolve_web_port / resolve_base_listen_port]
         LOCK[config_lock<br/>threading.Lock]
     end
 
     subgraph "config.json fields"
-        GLOBAL[Global:<br/>SENDSPIN_SERVER · SENDSPIN_PORT<br/>PULSE_LATENCY_MSEC · BT_CHECK_INTERVAL<br/>BT_MAX_RECONNECT_FAILS · PREFER_SBC_CODEC<br/>MA_API_URL · MA_API_TOKEN<br/>LOG_LEVEL · AUTH_PASSWORD_HASH<br/>BRIDGE_NAME · TIMEZONE]
-        DEVICES[Bluetooth Devices:<br/>name · mac · adapter · listen_host<br/>listen_port · static_delay_ms<br/>preferred_format · keepalive_interval<br/>bt_management_enabled · LAST_VOLUME]
-        ADAPTERS[Bluetooth Adapters:<br/>hci_name · mac · display_name]
+        GLOBAL[Global:<br/>SENDSPIN_SERVER · SENDSPIN_PORT · WEB_PORT · BASE_LISTEN_PORT<br/>PULSE_LATENCY_MSEC · BT_CHECK_INTERVAL · BT_MAX_RECONNECT_FAILS<br/>UPDATE_CHANNEL · CHECK_UPDATES · AUTO_UPDATE<br/>MA_API_URL · MA_API_TOKEN · MA_WEBSOCKET_MONITOR<br/>LOG_LEVEL · AUTH_PASSWORD_HASH · SECRET_KEY · CONFIG_SCHEMA_VERSION]
+        DEVICES[Bluetooth Devices:<br/>player_name · mac · adapter · listen_host · listen_port<br/>static_delay_ms · preferred_format · keepalive_silence<br/>keepalive_interval · enabled · LAST_VOLUME]
+        ADAPTERS[Bluetooth Adapters:<br/>id · mac · name]
     end
 
     JSON["/config/config.json"] --> LOAD
     LOAD --> GLOBAL
     LOAD --> DEVICES
     LOAD --> ADAPTERS
-    BP_API[POST /api/config] -->|validate + write| JSON
+    BP_CFG[POST /api/config<br/>POST /api/config/validate] --> UPDATE
+    UPDATE -->|thread-safe| JSON
     SAVE -->|thread-safe| JSON
+    PORTS --> LOAD
 
     subgraph "HA Addon Path"
         HA_OPT["/data/options.json<br/>written by HA Supervisor"]
@@ -589,6 +617,20 @@ graph TD
         HA_JSON --> LOAD
     end
 ```
+
+### Channel-aware defaults and add-on semantics
+
+In Home Assistant add-on mode, `detect_ha_addon_channel()` infers the **installed addon track** from the container hostname suffix (`-rc`, `-beta`) and then resolves per-track defaults:
+
+| Track | Default ingress port | Default player port base |
+|---|---|---|
+| `stable` | `8080` | `8928` |
+| `rc` | `8081` | `9028` |
+| `beta` | `8082` | `9128` |
+
+`UPDATE_CHANNEL` is separate: it only controls prerelease lookup / warning surfaces for the update checker. Changing `UPDATE_CHANNEL` does **not** switch the installed HA add-on variant.
+
+When `WEB_PORT` is explicitly set in add-on mode and differs from the track default, `resolve_additional_web_port()` opens a second direct host-network listener while HA ingress continues to use the fixed per-track port.
 
 ### Config Load → Device Spawn
 
@@ -955,33 +997,35 @@ sequenceDiagram
 
 ## Update Checker Flow
 
-Background version polling and platform-aware update mechanism (v2.23.0+).
+Background version polling now uses **channel-aware release resolution** instead of the stable-only `releases/latest` endpoint.
 
 ```mermaid
 flowchart TD
     START([main&#40;&#41; startup]) --> DELAY[Wait 30s<br/>let app initialize]
-    DELAY --> CHECK[Fetch GitHub Releases API<br/>api.github.com/repos/.../releases/latest]
+    DELAY --> LOADCFG[load_config&#40;&#41; · normalize UPDATE_CHANNEL]
+    LOADCFG --> FETCH[Fetch GitHub Releases list<br/>api.github.com/repos/.../releases?per_page=100]
+    FETCH --> FILTER[Ignore drafts · keep tags for chosen channel]
+    FILTER --> PICK[Pick highest semver<br/>stable / rc / beta lane]
+    PICK --> CMP{remote > current?}
 
-    CHECK --> PARSE{Parse tag_name<br/>compare with VERSION}
-    PARSE -->|remote > current| FOUND[Store update info in state.py<br/>version, url, release notes]
-    PARSE -->|current ≥ remote| CLEAR[Clear update_available = None]
+    CMP -->|Yes| FOUND[Store update info in state.py<br/>version · url · body · channel]
+    CMP -->|No| CLEAR[Clear update_available]
 
-    FOUND --> BADGE[UI: green badge appears<br/>⬆ vX.Y.Z available]
+    FOUND --> BADGE[UI: channel-aware update badge]
     CLEAR --> SLEEP
-
     BADGE --> SLEEP[Sleep 3600s]
-    SLEEP --> CHECK
+    SLEEP --> LOADCFG
 
     subgraph "User-triggered"
-        BADGE --> CLICK[User clicks badge]
+        BADGE --> CLICK[User opens update modal]
         CLICK --> MODAL{GET /api/update/info<br/>detect runtime}
-        MODAL -->|systemd / LXC| LXC_BTN["'Update Now' button<br/>POST /api/update/apply<br/>→ runs upgrade.sh"]
-        MODAL -->|docker| DOCKER_CMD["Show command:<br/>docker compose pull &&<br/>docker compose up -d"]
-        MODAL -->|ha_addon| HA_MSG["Directs to:<br/>HA → Add-ons → Update"]
+        MODAL -->|systemd / LXC| LXC_BTN["POST /api/update/apply<br/>queues upgrade.sh via systemd-run"]
+        MODAL -->|docker| DOCKER_CMD["Show channel-aware image guidance<br/>pull stable / rc / beta tag"]
+        MODAL -->|ha_addon| HA_MSG["Direct to HA Add-ons UI<br/>installed track updates there"]
     end
 ```
 
----
+For Home Assistant, the installed add-on track still determines what the Supervisor updates. The in-app `UPDATE_CHANNEL` preference only changes which GitHub release lane is highlighted in bridge UI/API surfaces.
 
 ## Demo Mode Architecture
 

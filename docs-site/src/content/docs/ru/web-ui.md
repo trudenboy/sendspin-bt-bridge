@@ -1,9 +1,9 @@
 ---
 title: Веб-интерфейс
-description: Актуальное руководство по панели Sendspin Bluetooth Bridge — dashboard, list view, конфигурация, диагностика, логи и обновления
+description: Актуальное руководство по панели Sendspin Bluetooth Bridge — dashboard, режим списка, конфигурация, диагностика, логи и обновления
 ---
 
-Веб-интерфейс доступен на порту **8080** для Docker/LXC и через **HA Ingress** для аддона Home Assistant. Страница обновляется в реальном времени через Server-Sent Events, поэтому ручное обновление почти никогда не нужно.
+Веб-интерфейс доступен через прямой browser-порт, задаваемый **`WEB_PORT`** (по умолчанию **8080** в standalone-режиме), и через **HA Ingress** для аддона Home Assistant. В addon-режиме `WEB_PORT` может открыть дополнительный прямой listener, но Ingress продолжит использовать фиксированный порт канала. Страница обновляется в реальном времени через Server-Sent Events, поэтому ручное обновление почти никогда не нужно.
 
 ## Вход в систему
 
@@ -13,11 +13,11 @@ description: Актуальное руководство по панели Sends
 
 | Метод | Когда появляется | Что важно |
 |---|---|---|
-| **Home Assistant** | Режим аддона или HA-backed login flow | Поддерживает TOTP / MFA |
-| **Music Assistant** | Доступен вход по данным MA | Удобно для standalone-инсталляций |
-| **Password** | Настроен локальный пароль моста | Локальная защита standalone-режима |
+| **Home Assistant** | Всегда в режиме аддона, а в standalone — когда bridge подключён к HA-backed экземпляру Music Assistant | Использует HA `login_flow`, включая TOTP / MFA |
+| **Music Assistant** | В standalone-режиме, если bridge уже подключён к MA через встроенный token-flow | Проверяет MA credentials на подключённом MA сервере |
+| **Password** | Включена standalone-auth и уже существует локальный password hash | Локальный поток PBKDF2-SHA256 |
 
-Если Home Assistant требует MFA, страница переключается на отдельный шаг с **6-значным кодом**. В standalone-режиме параметры сессии и защиты от перебора задаются в **Configuration → Security**.
+Если Home Assistant требует MFA, страница переключается на отдельный шаг с **6-значным кодом**. В standalone-режиме параметры сессии и защиты от перебора задаются в **Configuration → Security**. Login-формы защищены CSRF, а standalone-сессии используют cookie с `SameSite=Lax` и `HttpOnly`.
 
 <Aside type="tip">
 По умолчанию после **5 неудачных попыток** действует блокировка на **5 минут**, но эти значения можно изменить в **Configuration → Security**.
@@ -64,23 +64,23 @@ description: Актуальное руководство по панели Sends
 - **Фильтр по адаптеру**.
 - **Фильтр по статусу**.
 - **Групповые действия** — volume, mute, pause, reconnect, release для выбранных устройств.
-- **Переключатель Grid/List**.
+- **Переключатель режима сетки/списка**.
 
-### Grid vs list
+### Сетка и список
 
 Новый интерфейс сам выбирает лучший режим по количеству устройств:
 
-- **До 6 устройств** → по умолчанию **grid**.
-- **Больше 6 устройств** → по умолчанию **list**.
+- **До 6 устройств** → по умолчанию **режим сетки**.
+- **Больше 6 устройств** → по умолчанию **режим списка**.
 - **Ручной выбор запоминается** в браузере и применяется при следующем открытии.
 
-В **list view** можно разворачивать строки для transport controls, routing details и device actions. Одновременно развёрнута только одна строка.
+В **режиме списка** можно разворачивать строки для transport controls, routing details и device actions. Одновременно развёрнута только одна строка.
 
 ## Карточки и строки устройств
 
 ![Карточка устройства во время воспроизведения с бейджами, треком, прогрессом и transport controls](/sendspin-bt-bridge/screenshots/screenshot-device-card-playing.png)
 
-В grid и list режимах устройство показывает один и тот же core-набор данных:
+В режимах сетки и списка устройство показывает один и тот же core-набор данных:
 
 - **Имя плеера** и анимацию воспроизведения.
 - **Статус Bluetooth и Music Assistant**.
@@ -108,7 +108,7 @@ description: Актуальное руководство по панели Sends
 
 | Вкладка | Для чего нужна |
 |---|---|
-| **General** | Имя bridge, timezone, latency, smooth restart, update policy |
+| **General** | Имя bridge, timezone, latency, прямой web-порт, base listener port, smooth restart, update policy |
 | **Devices** | Таблица колонок и сценарии discovery/import |
 | **Bluetooth** | Адаптеры, reconnect policy, codec preference |
 | **Music Assistant** | Connection status, token flows, monitor и routing toggles |
@@ -119,7 +119,8 @@ description: Актуальное руководство по панели Sends
 - **Save** сохраняет конфиг без принудительного перезапуска.
 - **Save & Restart** сразу применяет restart-sensitive изменения и показывает прогресс в шапке.
 - **Cancel** возвращает последние сохранённые значения формы.
-- **Download / Upload** экспортируют и импортируют `config.json`.
+- **Download** экспортирует share-safe `config.json` без чувствительных значений.
+- **Upload** импортирует config-файл, сохраняя текущие password hash, secret key и MA token на сервере.
 
 Несохранённые изменения включают **Cancel**, помечают раздел как dirty и вызывают browser warning при попытке уйти со страницы.
 
@@ -131,9 +132,9 @@ description: Актуальное руководство по панели Sends
 
 - **Device fleet** — основная таблица с enabled, именем, MAC, адаптером, портом, delay и live badge.
 - **Discovery & import** — отдельная карточка для поиска nearby speakers и импорта already paired устройств.
-- В строках доступны advanced-поля: preferred format, listen host, keepalive interval.
+- В строках доступны advanced-поля: preferred format, `listen_host` и `keepalive_interval`.
 
-Клик по шестерёнке устройства на dashboard прокручивает страницу сюда, подсвечивает нужную строку и ставит фокус на соответствующее поле.
+Если `listen_port` не задан, runtime использует **`BASE_LISTEN_PORT + индекс устройства`**. Положительные значения `keepalive_interval` включают keepalive-тишину, всё меньше 30 секунд поднимается до 30, а отдельного current-web-UI-переключателя для старого флага `keepalive_silence` больше нет. Клик по шестерёнке устройства на dashboard прокручивает страницу сюда, подсвечивает нужную строку и ставит фокус на соответствующее поле.
 
 ### Вкладка Bluetooth
 
@@ -156,7 +157,10 @@ description: Актуальное руководство по панели Sends
 **Music Assistant** объединяет статус подключения и инструменты авторизации:
 
 - Карточка **Connection status**.
-- Кнопки **Discover / Get token / Get token automatically**.
+- **Discover** находит или подтверждает URL MA.
+- **Get token** входит через MA credentials, сохраняет long-lived `MA_API_TOKEN` и не сохраняет пароль.
+- Если прямой MA login получает auth-ошибку на HA-backed экземпляре MA, UI может продолжить через **Home Assistant OAuth / MFA**.
+- **Get token automatically** показывается для HA-backed MA. Под HA Ingress сначала пробуется silent auth через browser HA token, а при неудаче используется popup-flow.
 - Ручное поле **MA API token**.
 - Переключатели **WebSocket monitor**, **Route volume through MA**, **Route mute through MA**.
 
@@ -180,7 +184,7 @@ Empty-state действия были приведены в соответств
 
 Когда auth отключён, интерфейс показывает жёлтый warning-banner со ссылкой прямо в **Configuration → Security**.
 
-В **режиме HA addon** локальная вкладка безопасности скрыта, потому что доступом управляет сам Home Assistant.
+В **режиме HA addon** доступ всегда контролирует сам Home Assistant, поэтому локальная вкладка безопасности скрыта и auth всегда включена. После изменений auth, session или портов используйте **Save & Restart**, потому что эти параметры применяются на старте.
 
 ## Diagnostics
 

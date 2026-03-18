@@ -1,6 +1,6 @@
 ---
 title: Установка — Docker Compose
-description: Запуск Sendspin Bluetooth Bridge в Docker Compose
+description: Запуск Sendspin Bluetooth Bridge через Docker Compose с поддержкой override-параметров WEB_PORT и BASE_LISTEN_PORT
 ---
 
 import { Aside, Steps } from '@astrojs/starlight/components';
@@ -10,29 +10,19 @@ import { Aside, Steps } from '@astrojs/starlight/components';
 - Docker Engine и Docker Compose
 - Bluetooth-адаптер на хосте
 - PulseAudio или PipeWire на хосте
-- Music Assistant Server в вашей сети
+- Music Assistant в вашей сети
 
-Docker-образ поддерживает архитектуры `linux/amd64`, `linux/arm64` и `linux/arm/v7`.
+Публикуемый образ поддерживает `linux/amd64`, `linux/arm64` и `linux/arm/v7`.
 
 <Aside type="tip">
-  Используете **Raspberry Pi**? Смотрите отдельное [руководство по Raspberry Pi](/ru/installation/raspberry-pi/) с инструкциями для конкретных моделей, скриптом предварительной проверки и **установщиком одной командой**.
+  Устанавливаете на Raspberry Pi? Используйте отдельное [руководство по Raspberry Pi](/ru/installation/raspberry-pi/) с рекомендациями по моделям и one-liner installer.
 </Aside>
-
-## Предварительная проверка
-
-Перед запуском убедитесь, что хост готов:
-
-```bash
-curl -sSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/scripts/rpi-check.sh | bash
-```
-
-Скрипт проверяет Docker, Bluetooth, аудиосистему, UID и выводит рекомендуемые значения `.env`. Работает на любом Linux-хосте, не только на Raspberry Pi.
 
 ## Быстрый старт
 
 <Steps>
 
-1. **Сначала сопрягите Bluetooth-колонку на хосте**
+1. **Сначала сопрягите колонку на хосте**
 
    ```bash
    bluetoothctl
@@ -43,16 +33,17 @@ curl -sSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/sc
    exit
    ```
 
-2. **Создайте `.env`** с вашими настройками:
+2. **Создайте `.env`**
 
    ```env
-   # Настройте Bluetooth-устройства через веб-интерфейс: http://localhost:8080
    AUDIO_UID=1000
    TZ=Europe/Moscow
+   WEB_PORT=8080
+   BASE_LISTEN_PORT=8928
    ```
 
    <Aside type="caution">
-     Проверьте UID командой `id -u`. Если он не 1000, укажите `AUDIO_UID` соответственно — иначе аудио не будет работать.
+     Проверьте `id -u`. Если аудио-пользователь имеет UID не `1000`, укажите правильное значение в `AUDIO_UID`.
    </Aside>
 
 3. **Создайте `docker-compose.yml`**
@@ -72,7 +63,8 @@ curl -sSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/sc
        environment:
          - SENDSPIN_SERVER=auto
          - TZ=${TZ:-UTC}
-         - WEB_PORT=8080
+         - WEB_PORT=${WEB_PORT:-8080}
+         - BASE_LISTEN_PORT=${BASE_LISTEN_PORT:-8928}
          - CONFIG_DIR=/config
          - PULSE_SERVER=unix:/run/user/${AUDIO_UID:-1000}/pulse/native
          - XDG_RUNTIME_DIR=/run/user/${AUDIO_UID:-1000}
@@ -86,75 +78,71 @@ curl -sSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/sc
 4. **Запустите контейнер**
 
    ```bash
+   mkdir -p /etc/docker/Sendspin
    docker compose up -d
    ```
 
-5. **Проверьте запуск**
+5. **Откройте веб-интерфейс**
 
-   ```bash
-   docker logs sendspin-client
-   ```
-
-   Проверьте таблицу диагностики — не должно быть отметок ✗.
-
-6. **Откройте веб-интерфейс**
-
-   ```
-   http://localhost:8080
+   ```text
+   http://<ip-хоста>:<WEB_PORT>
    ```
 
 </Steps>
 
-## Требования к сети
+## Планирование портов
 
-Контейнер использует `network_mode: host`, что необходимо для:
-- Обнаружения MA сервера через mDNS (`auto`)
-- Bluetooth D-Bus доступа
+- **`WEB_PORT`** управляет прямым listener'ом веб-интерфейса/API в Docker-режиме.
+- **`BASE_LISTEN_PORT`** задаёт базовый Sendspin-порт для устройств без явного `listen_port`.
+- Каждое устройство без ручного порта получает `BASE_LISTEN_PORT + индекс_устройства`.
+- В сложных схемах можно задать `listen_port` и `listen_host` на уровне устройства через веб-интерфейс или `/config/config.json` после первого запуска.
 
-## Capabilities
+Пример блока устройства в `/config/config.json`:
 
-| Capability | Зачем |
+```json
+{
+  "mac": "11:22:33:44:55:66",
+  "player_name": "Колонка на кухне",
+  "listen_port": 8935,
+  "listen_host": "192.168.1.50"
+}
+```
+
+`listen_host` меняет только рекламируемый host/IP для плеера и не влияет на bind-адрес внутри контейнера.
+
+## Несколько bridge-контейнеров на одном хосте
+
+Если вы запускаете несколько bridge-контейнеров на одной машине:
+
+- задайте каждому контейнеру уникальный `WEB_PORT`
+- задайте каждому контейнеру уникальный `BASE_LISTEN_PORT`
+- **не** настраивайте одну и ту же Bluetooth-колонку в двух работающих контейнерах
+
+## Сеть и capabilities
+
+`network_mode: host` обязателен для:
+
+- mDNS-обнаружения при `SENDSPIN_SERVER=auto`
+- доступа к Bluetooth-стеку хоста через D-Bus
+
+Необходимые capabilities:
+
+| Capability | Назначение |
 |---|---|
-| `NET_ADMIN` | Управление сетевыми интерфейсами (BT) |
-| `NET_RAW` | Raw socket доступ для BT |
+| `NET_ADMIN` | Управление Bluetooth-адаптером |
+| `NET_RAW` | Raw Bluetooth/HCI socket access |
 
 <Aside type="caution">
-  `privileged: true` **не требуется** и не рекомендуется. Достаточно перечисленных `cap_add`.
+  Для стандартного Docker-развёртывания выше `privileged: true` не требуется.
 </Aside>
 
-## Volumes
-
-| Volume | Описание |
-|---|---|
-| `/var/run/dbus` | D-Bus сокет для bluetoothctl |
-| `/run/user/UID/pulse` | PulseAudio сокет |
-| `/run/user/UID/pipewire-0` | PipeWire сокет |
-| `/etc/docker/Sendspin` | Директория конфигурации (config.json) |
-
-## Переменные окружения
-
-| Переменная | По умолчанию | Описание |
-|---|---|---|
-| `SENDSPIN_SERVER` | `auto` | Адрес MA сервера; `auto` использует mDNS |
-| `AUDIO_UID` | `1000` | UID пользователя хоста для путей аудио-сокетов |
-| `TZ` | `UTC` | Часовой пояс контейнера |
-| `WEB_PORT` | `8080` | Порт веб-интерфейса |
-| `PULSE_SERVER` | — | Путь к PulseAudio сокету |
-
-## Просмотр логов
+## Проверка контейнера
 
 ```bash
 docker logs -f sendspin-client
+curl -s http://localhost:${WEB_PORT:-8080}/api/preflight | python3 -m json.tool
 ```
 
-## Проверка через API
+## Применение изменений конфигурации
 
-После запуска контейнера проверьте эндпоинт preflight:
-
-```bash
-curl -s http://localhost:8080/api/preflight | python3 -m json.tool
-```
-
-## Несколько устройств
-
-Для управления несколькими колонками настройте их через веб-интерфейс на `http://localhost:8080` → раздел **Bluetooth Devices**. Каждое устройство создаёт отдельный плеер в MA.
+Изменения устройств, адаптеров, `WEB_PORT`, `BASE_LISTEN_PORT` и настроек подключения к Music Assistant требуют перезапуска контейнера.

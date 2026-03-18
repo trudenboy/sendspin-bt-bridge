@@ -1,28 +1,22 @@
 ---
 title: Installation — LXC (Proxmox & OpenWrt)
-description: Installing Sendspin Bluetooth Bridge in an LXC container on Proxmox VE or OpenWrt
+description: Install Sendspin Bluetooth Bridge in an LXC container on Proxmox VE or OpenWrt using the host Bluetooth stack
 ---
 
+import { Aside, Steps } from '@astrojs/starlight/components';
 
-## Why LXC over Docker?
+## Why LXC?
 
-Unlike Docker, an LXC container has its **own bluetoothd and PulseAudio** (Proxmox) or uses the host's bluetoothd via D-Bus (OpenWrt), providing more stable Bluetooth operation: pairing persists across reboots, no conflicts with the host's bluetoothd.
+LXC is the native non-Docker option for appliance-style hosts such as Proxmox VE and OpenWrt. The bridge runs inside the container, while the **host Bluetooth stack is exposed over D-Bus** and PulseAudio runs inside the container.
 
-## Supported Platforms
-
-| Platform | Script | Status |
-|----------|--------|--------|
-| **Proxmox VE** 7/8 | [`proxmox-create.sh`](https://github.com/trudenboy/sendspin-bt-bridge/blob/main/lxc/proxmox-create.sh) | ✅ Stable |
-| **OpenWrt** 23.x+ / TurrisOS 9.x | [`openwrt/create.sh`](https://github.com/trudenboy/sendspin-bt-bridge/blob/main/lxc/openwrt/create.sh) | ✅ Stable |
+| Platform | Bluetooth | Audio | Install path |
+|---|---|---|---|
+| **Proxmox VE** | Host `bluetoothd` via D-Bus bridge | PulseAudio inside the container | `proxmox-create.sh` |
+| **OpenWrt / TurrisOS** | Host `bluetoothd` via D-Bus bridge | PulseAudio inside the container | `openwrt/create.sh` |
 
 ## Proxmox VE
 
-### Requirements
-
-- Proxmox VE 7.x or 8.x
-- USB Bluetooth adapter (recommended: one adapter per speaker)
-
-### Quick Install
+### Quick install
 
 On the Proxmox host:
 
@@ -30,40 +24,27 @@ On the Proxmox host:
 bash <(curl -fsSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/lxc/proxmox-create.sh)
 ```
 
-The script interactively prompts for container ID, hostname, RAM, disk, network, and USB Bluetooth passthrough.
-
-### Manual Install
+### Manual path
 
 <Steps>
 
-1. Create a new **privileged** LXC container (**Ubuntu 24.04**, 512 MB RAM, 4 GB disk)
-2. Start the container and open a shell (`pct enter <CTID>`)
-3. Run the installer:
+1. Create a **privileged Ubuntu 24.04** LXC container.
+2. Run the in-container installer:
+
    ```bash
    bash <(curl -fsSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/lxc/install.sh)
    ```
-4. Append to `/etc/pve/lxc/<CTID>.conf` on the **Proxmox host**:
-   ```
-   lxc.apparmor.profile: unconfined
-   lxc.cgroup2.devices.allow: c 166:* rwm
-   lxc.cgroup2.devices.allow: c 13:* rwm
-   lxc.cgroup2.devices.allow: c 10:232 rwm
-   lxc.mount.entry: /run/dbus bt-dbus none bind,create=dir 0 0
-   lxc.cgroup2.devices.allow: c 189:* rwm
-   ```
-5. Restart the container: `pct restart <CTID>`
+
+3. Append the required D-Bus / device rules to `/etc/pve/lxc/<CTID>.conf` on the Proxmox host.
+4. Restart the container.
 
 </Steps>
 
+The detailed Proxmox walkthrough remains in [`lxc/README.md`](https://github.com/trudenboy/sendspin-bt-bridge/blob/main/lxc/README.md).
+
 ## OpenWrt / TurrisOS
 
-### Requirements
-
-- OpenWrt 23.x+ or TurrisOS 9.x
-- ≥1 GB RAM, ≥2 GB free storage
-- USB Bluetooth adapter
-
-### Quick Install
+### Quick install
 
 On the OpenWrt host:
 
@@ -71,28 +52,53 @@ On the OpenWrt host:
 wget -qO- https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/lxc/openwrt/create.sh | sh
 ```
 
-The script installs LXC and Bluetooth packages via `opkg`, creates an Ubuntu 24.04 container, configures D-Bus bridge and cgroup rules, and installs a procd init.d script for autostart.
-
-For full manual install steps and known issues, see [lxc/openwrt/README.md](https://github.com/trudenboy/sendspin-bt-bridge/blob/main/lxc/openwrt/README.md).
+The full OpenWrt-specific guide remains in [`lxc/openwrt/README.md`](https://github.com/trudenboy/sendspin-bt-bridge/blob/main/lxc/openwrt/README.md).
 
 ## Pairing a speaker
 
-If the speaker hasn't been paired yet:
-
-1. Put the speaker in pairing mode
-2. Click **🔍 Scan** in the web UI and wait ~10 seconds
-3. Click **Re-pair** next to the found device
-
-Or via `bluetoothctl` inside the container:
+Pair from inside the container with `btctl` (a wrapper that talks to the host Bluetooth daemon through the D-Bus bridge):
 
 ```bash
-bluetoothctl
-# power on
-# scan on
-# pair AA:BB:CC:DD:EE:FF
-# trust AA:BB:CC:DD:EE:FF
-# connect AA:BB:CC:DD:EE:FF
+btctl
+power on
+scan on
+pair AA:BB:CC:DD:EE:FF
+trust AA:BB:CC:DD:EE:FF
+connect AA:BB:CC:DD:EE:FF
+exit
 ```
+
+## Port planning in LXC deployments
+
+After the first boot, configure ports in `/config/config.json` (or in the web UI, then restart the service):
+
+```json
+{
+  "WEB_PORT": 8080,
+  "BASE_LISTEN_PORT": 8928,
+  "BLUETOOTH_DEVICES": [
+    {
+      "mac": "AA:BB:CC:DD:EE:FF",
+      "player_name": "Living Room Speaker",
+      "listen_port": 8935,
+      "listen_host": "192.168.1.50"
+    }
+  ]
+}
+```
+
+- **`WEB_PORT`** controls the direct web UI/API listener for the container.
+- **`BASE_LISTEN_PORT`** sets the default Sendspin listener block for devices without explicit `listen_port`.
+- **`listen_port`** overrides the player port for one device.
+- **`listen_host`** changes the advertised host/IP for the player; it does not change the bind address.
+
+## Multiple LXC bridges on one host
+
+If you run multiple bridge containers on one Proxmox or OpenWrt host:
+
+- give each container a unique `WEB_PORT`
+- give each container a unique `BASE_LISTEN_PORT`
+- keep each Bluetooth speaker assigned to only one running bridge
 
 ## Service management
 
@@ -109,5 +115,5 @@ bash <(curl -fsSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge
 ```
 
 <Aside type="tip">
-  For multiple speakers, consider creating a separate LXC container per USB Bluetooth adapter. This isolates bluetoothd and PulseAudio, eliminating codec conflicts.
+  In LXC mode the container intentionally uses the host Bluetooth daemon over D-Bus. Do not try to enable a separate `bluetoothd` inside the container.
 </Aside>

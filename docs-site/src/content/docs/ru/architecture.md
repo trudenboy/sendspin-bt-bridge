@@ -5,7 +5,7 @@ description: Подробная техническая архитектура se
 
 ## Обзор
 
-`sendspin-bt-bridge` — это **многопроцессный Python-бридж**, который соединяет аудиопротокол Sendspin Music Assistant с Bluetooth-колонками. Каждая настроенная колонка работает в собственном **изолированном подпроцессе** с выделенным контекстом PulseAudio, что обеспечивает корректную маршрутизацию аудио без взаимных помех между устройствами.
+`sendspin-bt-bridge` — это **многопроцессный Python-бридж**, который соединяет аудиопротокол Sendspin Music Assistant с Bluetooth-колонками. Основной процесс теперь загружается через `BridgeOrchestrator`, который отвечает за bridge-wide runtime setup (загрузка конфига, channel-aware дефолты, публикацию lifecycle-state, bootstrap MA, запуск веб-сервера и сборку долгоживущих задач). Каждая настроенная колонка по-прежнему работает в собственном **изолированном подпроцессе** с выделенным контекстом PulseAudio, что обеспечивает корректную маршрутизацию аудио без взаимных помех между устройствами.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -47,15 +47,25 @@ graph TD
 
         subgraph "Main Process — sendspin_client.py"
             MP[main&#40;&#41;<br/>asyncio event loop]
-            MP --> SC[SendspinClient × N]
-            MP --> BM[BluetoothManager × N]
-            MP --> WS[Waitress HTTP server<br/>daemon thread]
-            MP --> MM[MaMonitor<br/>asyncio task]
+            MP --> BO[BridgeOrchestrator]
+            BO --> CFG[config.py<br/>load_config · port/channel defaults]
+            BO --> LS[BridgeLifecycleState<br/>startup/runtime publication]
+            BO --> MIS[BridgeMaIntegrationService<br/>MA URL/token/groups]
+            BO --> SC[SendspinClient × N]
+            BO --> BM[BluetoothManager × N]
+            BO --> WS[Waitress HTTP server<br/>daemon thread]
+            BO --> MM[MaMonitor<br/>asyncio task]
+            BO --> UC[update_checker<br/>asyncio task]
 
-            SC -->|asyncio subprocess| DP
-            SC <-->|JSON stdin/stdout| DP
+            SC -->|delegates| SUBSVC[SubprocessCommand / IPC / Stderr / Stop services]
+            SUBSVC <-->|JSON stdin/stdout| DP
+            SC --> PH[PlaybackHealthMonitor]
+            SC --> SEB[StatusEventBuilder]
             SC --- ST[state.py<br/>shared runtime state]
             BM --- ST
+            LS --- ST
+            MM --> ST
+            UC --> ST
 
             WS --> FLASK[Flask app<br/>web_interface.py]
             FLASK --> BP_API[routes/api.py<br/>Blueprint]
@@ -65,9 +75,6 @@ graph TD
             FLASK --> BP_STS[routes/api_status.py<br/>Blueprint]
             FLASK --> BP_VIEW[routes/views.py<br/>Blueprint]
             FLASK --> BP_AUTH[routes/auth.py<br/>Blueprint]
-            BP_API --> ST
-
-            MM --> ST
         end
 
         subgraph "Subprocess per Device"
@@ -80,8 +87,9 @@ graph TD
 
         subgraph "services/"
             SVC_BT[bluetooth.py<br/>BT helpers]
-            SVC_PA[pulse.py<br/>pulsectl_asyncio]
+            SVC_PA[pulse.py<br/>PulseAudio helpers]
             SVC_MAC[ma_client.py<br/>MA REST API]
+            SVC_IPC[ipc_protocol.py<br/>protocol_version envelope]
         end
 
         BM --> SVC_BT
@@ -89,17 +97,12 @@ graph TD
         BD --> SVC_PA
         MM --> SVC_MAC
         BP_API --> SVC_MAC
-
-        subgraph "config.py"
-            CFG[load_config&#40;&#41;<br/>save_device_volume&#40;&#41;<br/>config.json]
-        end
-
-        SC --> CFG
-        BP_API --> CFG
+        SUBSVC --> SVC_IPC
     end
 
     BT_HW[Bluetooth Hardware<br/>hci0 / hci1 / …]
     PA_HW[PulseAudio / PipeWire]
+
     BM <-->|bluetoothctl + D-Bus| BT_HW
     PA --> PA_HW
     BT_HW <-->|A2DP| SPK[Bluetooth Speaker]
@@ -112,28 +115,46 @@ graph TD
 
 ### Основной процесс
 
-Основной процесс (`sendspin_client.py` `main()`) запускает один **asyncio event loop** в основном потоке и **HTTP-сервер Waitress** в потоке-демоне. Все асинхронные операции (мониторинг BT, I/O подпроцессов, WebSocket MA) совместно используют один event loop.
+Точка входа runtime (`sendspin_client.py` `main()`) теперь остаётся намеренно тонкой. Основная последовательность запуска вынесена в `BridgeOrchestrator`: он загружает конфиг, рассчитывает channel-aware дефолты, публикует lifecycle-state, поднимает веб-сервер, инициализирует опциональную интеграцию с MA и собирает долгоживущие runtime-задачи.
 
 ```mermaid
 sequenceDiagram
     participant SH as entrypoint.sh
     participant MP as main()
+    participant BO as BridgeOrchestrator
+    participant LS as BridgeLifecycleState
     participant BM as BluetoothManager
     participant SC as SendspinClient
     participant WS as Waitress thread
     participant MM as MaMonitor
+    participant UC as UpdateChecker
 
     SH->>SH: D-Bus setup · audio detect · HA config translate
     SH->>MP: exec python3 sendspin_client.py
-    MP->>MP: load_config()
+    MP->>BO: initialize_runtime()
+    BO->>LS: begin_startup()
+    BO->>BO: load_config() · resolve channel/web/listen defaults
     loop for each device
-        MP->>BM: BluetoothManager(mac, adapter, …)
-        MP->>SC: SendspinClient(player_name, …, bt_manager=BM)
+        BO->>BM: BluetoothManager(mac, adapter, …)
+        BO->>SC: SendspinClient(player_name, …, bt_manager=BM)
     end
-    MP->>WS: threading.Thread(target=waitress.serve)
-    MP->>MM: asyncio.create_task(MaMonitor.run()) if MA_API_URL
-    MP->>MP: asyncio.gather(SC.run()×N, BM.monitor_and_reconnect()×N)
+    BO->>WS: start_web_server()
+    BO->>BO: configure_executor()
+    BO->>MM: initialize_ma_integration() if configured
+    BO->>UC: asyncio.create_task(run_update_checker(VERSION))
+    MP->>MP: asyncio.gather(SC.run()×N, BM.monitor_and_reconnect()×N, MM?, UC)
+    BO->>LS: complete_startup()
 ```
+
+### Bridge-wide orchestration и service seams
+
+Несколько явных сервисных швов теперь позволяют развивать runtime без изменения device-контракта:
+
+- `BridgeOrchestrator` владеет bootstrap-ом моста, signal handling, сборкой задач и channel-aware дефолтами.
+- `BridgeLifecycleState` публикует startup/runtime progress в `state.py` для `/api/startup-progress`, diagnostics и UI.
+- `BridgeMaIntegrationService` разрешает MA API credentials, предзагружает sync groups и решает, нужно ли запускать `MaMonitor`.
+- `SendspinClient` сохраняет ownership жизненного цикла отдельной колонки, но делегирует сфокусированные subprocess-задачи в `SubprocessCommandService`, `SubprocessIpcService`, `SubprocessStderrService` и `SubprocessStopService`.
+- `PlaybackHealthMonitor` и `StatusEventBuilder` держат watchdog/error/event-логику вне транспортного пути.
 
 ### Подпроцесс для каждого устройства
 
@@ -164,35 +185,43 @@ sequenceDiagram
 
 ## IPC-протокол (stdin / stdout)
 
-Всё межпроцессное взаимодействие между основным процессом и каждым подпроцессом-демоном осуществляется через **JSON, разделённый символом новой строки**.
+Всё межпроцессное взаимодействие между основным процессом и каждым подпроцессом-демоном использует **JSON-конверты, разделённые переводом строки**, описанные в `services.ipc_protocol`.
+
+Текущий контракт помечает сообщения полем `protocol_version: 1`, но родитель и подпроцесс остаются обратно совместимыми с legacy-сообщениями без этого поля.
 
 ### Подпроцесс → Родитель (stdout)
 
 | `type` | Поля | Когда |
 |---|---|---|
-| `status` | Полный словарь `DeviceStatus` (все поля) | При любом изменении состояния (с дедупликацией) |
-| `log` | `level`, `name`, `msg` | Каждая запись лога |
+| `status` | Полный словарь `DeviceStatus` + `protocol_version` | При любом изменении состояния (с дедупликацией) |
+| `log` | `level`, `name`, `msg`, `protocol_version` | Каждая проксируемая запись лога |
+| `error` | `message`, `details?`, `protocol_version` | Фатальные daemon/bootstrap ошибки, которые нужно поднять как структурированный сигнал |
 
 ```json
-{"type": "status", "playing": true, "volume": 75, "current_track": "Mooncalf", …}
-{"type": "log", "level": "info", "name": "__main__", "msg": "[ENEBY20] Stream started"}
+{"type": "status", "protocol_version": 1, "playing": true, "volume": 75, "current_track": "Mooncalf"}
+{"type": "log", "protocol_version": 1, "level": "info", "name": "__main__", "msg": "[ENEBY20] Stream started"}
+{"type": "error", "protocol_version": 1, "message": "Unsupported sink", "details": {"sink": "bluez_sink..."}}
 ```
+
+`SubprocessIpcService` разбирает эти конверты, применяет policy для версии протокола и возвращает status/log/error payloads обратно в состояние `SendspinClient`.
 
 ### Родитель → Подпроцесс (stdin)
 
 | `cmd` | Дополнительные поля | Эффект |
 |---|---|---|
-| `set_volume` | `value: int` | Устанавливает громкость PA-синка + уведомляет MA |
-| `set_mute` | `muted: bool` | Переключает mute |
-| `stop` | — | Чистое завершение |
-| `pause` / `play` | — | Отправляет `MediaCommand` в MA |
-| `reconnect` | — | Отключается от MA (вызывает повторное подключение) |
-| `set_log_level` | `level: str` | Немедленно изменяет уровень корневого логгера |
+| `set_volume` | `value: int`, `protocol_version` | Устанавливает громкость PA-синка + уведомляет MA |
+| `set_mute` | `muted: bool`, `protocol_version` | Переключает mute |
+| `stop` | `protocol_version` | Чистое завершение |
+| `pause` / `play` | `protocol_version` | Отправляет `MediaCommand` в MA |
+| `reconnect` | `protocol_version` | Отключается от MA (вызывает переподключение) |
+| `set_log_level` | `level: str`, `protocol_version` | Немедленно меняет уровень корневого логгера |
 
 ```json
-{"cmd": "set_volume", "value": 60}
-{"cmd": "stop"}
+{"cmd": "set_volume", "value": 60, "protocol_version": 1}
+{"cmd": "stop", "protocol_version": 1}
 ```
+
+`SubprocessCommandService` сериализует command-конверты, а `SubprocessStopService` координирует graceful stop / terminate fallback при рестарте и shutdown.
 
 ---
 
@@ -417,6 +446,31 @@ POST /api/ma/queue/cmd
 → POST {MA_API_URL}/api/players/cmd/play?player_id={syncgroup_id}
 ```
 
+### Авторизация в MA без пароля (режим аддона)
+
+В режиме HA add-on бридж автоматически создаёт MA API-токен через Ingress JSONRPC MA — ручная настройка токена не требуется.
+
+```mermaid
+sequenceDiagram
+    participant UI as Браузер (Ingress)
+    participant API as Bridge /api/ma/ha-silent-auth
+    participant HA as HA WebSocket
+    participant SUP as Supervisor API
+    participant MA as MA Ingress :8094
+
+    UI->>API: POST {ha_token, ma_url}
+    API->>HA: ws://homeassistant:8123/api/websocket
+    API->>HA: auth/current_user
+    HA-->>API: {id, name, is_admin}
+    API->>SUP: GET /addons/{slug}/info
+    SUP-->>API: {hostname, ingress_port}
+    API->>MA: POST /api (JSONRPC auth/token/create)
+    Note over API,MA: X-Remote-User-ID, X-Remote-User-Name headers
+    MA-->>API: long-lived JWT (10-year)
+    API->>API: save token to config.json
+    API-->>UI: {success: true, username: "..."}
+```
+
 ---
 
 ## Управление состоянием
@@ -472,38 +526,34 @@ def api_status_stream():
 
 ## Веб-API
 
-42 API-эндпоинтов распределены по **5 модулям маршрутов** (Flask Blueprint), подключённым к Flask-приложению, созданному в `web_interface.py` и обслуживаемому **Waitress** на порту 8080.
+Flask-приложение, создаваемое в `web_interface.py`, обслуживается через **Waitress** и разделено на **5 API blueprints плюс views/auth routes**. Поверхности маршрутов сгруппированы по ownership, а не по экрану UI, чтобы оркестрация, Bluetooth, Music Assistant, config и status могли развиваться независимо.
 
 ```mermaid
 graph TD
     CLIENT[Browser / Home Assistant] -->|HTTP| WAITRESS[Waitress :8080]
     WAITRESS --> FLASK[Flask app]
-    FLASK --> AUTH[routes/auth.py<br/>optional password]
-    AUTH --> VIEW[routes/views.py<br/>HTML pages]
-    AUTH --> API_MOD[5 API Blueprints]
+    FLASK --> AUTH[routes/auth.py<br/>login / logout]
+    AUTH --> VIEW[routes/views.py<br/>HTML shell]
+    AUTH --> API_MOD[5 API blueprints]
 
     subgraph "routes/api.py — Управление воспроизведением (6)"
-        API_MOD --> CTRL[POST /api/restart<br/>POST /api/volume<br/>POST /api/mute<br/>POST /api/pause_all<br/>POST /api/group/pause<br/>POST /api/pause]
+        API_MOD --> CTRL[restart · volume · mute · pause_all · group_pause · pause/play]
     end
 
-    subgraph "routes/api_bt.py — Bluetooth (9)"
-        API_MOD --> BT[POST /api/bt/reconnect<br/>POST /api/bt/pair<br/>POST /api/bt/management<br/>GET /api/bt/adapters<br/>GET /api/bt/paired<br/>POST /api/bt/scan<br/>GET /api/bt/scan/result/id]
+    subgraph "routes/api_bt.py — Bluetooth (16)"
+        API_MOD --> BT[reconnect · pair · pair_new jobs · management · enabled · adapters · paired · remove · info · disconnect · adapter power · reset reconnect · scan jobs]
     end
 
-    subgraph "routes/api_ma.py — Интеграция MA (10)"
-        API_MOD --> MAAPI[POST /api/ma/discover<br/>POST /api/ma/login<br/>GET /api/ma/ha-auth-page<br/>POST /api/ma/ha-silent-auth<br/>POST /api/ma/ha-login<br/>GET /api/ma/groups<br/>POST /api/ma/rediscover<br/>GET /api/ma/nowplaying<br/>POST /api/ma/queue/cmd<br/>GET /api/debug/ma]
+    subgraph "routes/api_ma.py — Интеграция с MA (11)"
+        API_MOD --> MAAPI[discover · login · HA auth flows · groups · rediscover · nowplaying · artwork · queue cmd · debug]
     end
 
-    subgraph "routes/api_config.py — Конфигурация (9)"
-        API_MOD --> CFG[GET POST /api/config<br/>POST /api/set-password<br/>POST /api/settings/log_level<br/>GET /api/logs<br/>GET /api/version]
+    subgraph "routes/api_config.py — Конфигурация и обновления (12)"
+        API_MOD --> CFG[config get/post · download/upload/validate · set-password · log level · logs/download · version · update check/info/apply]
     end
 
-    subgraph "routes/api_status.py — Статус (8)"
-        API_MOD --> STATUS[GET /api/status<br/>GET /api/groups<br/>GET /api/status/stream SSE<br/>GET /api/diagnostics<br/>GET /api/health<br/>GET /api/preflight]
-    end
-
-    subgraph "routes/views.py — HTML (2)"
-        API_MOD --> VIEWS[GET /<br/>GET /login]
+    subgraph "routes/api_status.py — Статус и диагностика (11)"
+        API_MOD --> STATUS[status · groups · startup-progress · runtime-info · SSE stream · diagnostics · bugreport · diagnostics download · health · onboarding assistant · preflight]
     end
 ```
 
@@ -539,21 +589,25 @@ graph TD
     subgraph "config.py"
         LOAD[load_config&#40;&#41;<br/>reads config.json]
         SAVE[save_device_volume&#40;&#41;<br/>debounced 1s write]
+        UPDATE[update_config&#40;&#41;<br/>validated merge]
+        PORTS[detect_ha_addon_channel&#40;&#41;<br/>resolve_web_port / resolve_base_listen_port]
         LOCK[config_lock<br/>threading.Lock]
     end
 
     subgraph "config.json fields"
-        GLOBAL[Global:<br/>SENDSPIN_SERVER · SENDSPIN_PORT<br/>PULSE_LATENCY_MSEC · BT_CHECK_INTERVAL<br/>BT_MAX_RECONNECT_FAILS · PREFER_SBC_CODEC<br/>MA_API_URL · MA_API_TOKEN<br/>LOG_LEVEL · AUTH_PASSWORD_HASH<br/>BRIDGE_NAME · TIMEZONE]
-        DEVICES[Bluetooth Devices:<br/>name · mac · adapter · listen_host<br/>listen_port · static_delay_ms<br/>preferred_format · keepalive_interval<br/>bt_management_enabled · LAST_VOLUME]
-        ADAPTERS[Bluetooth Adapters:<br/>hci_name · mac · display_name]
+        GLOBAL[Global:<br/>SENDSPIN_SERVER · SENDSPIN_PORT · WEB_PORT · BASE_LISTEN_PORT<br/>PULSE_LATENCY_MSEC · BT_CHECK_INTERVAL · BT_MAX_RECONNECT_FAILS<br/>UPDATE_CHANNEL · CHECK_UPDATES · AUTO_UPDATE<br/>MA_API_URL · MA_API_TOKEN · MA_WEBSOCKET_MONITOR<br/>LOG_LEVEL · AUTH_PASSWORD_HASH · SECRET_KEY · CONFIG_SCHEMA_VERSION]
+        DEVICES[Bluetooth Devices:<br/>player_name · mac · adapter · listen_host · listen_port<br/>static_delay_ms · preferred_format · keepalive_silence<br/>keepalive_interval · enabled · LAST_VOLUME]
+        ADAPTERS[Bluetooth Adapters:<br/>id · mac · name]
     end
 
     JSON["/config/config.json"] --> LOAD
     LOAD --> GLOBAL
     LOAD --> DEVICES
     LOAD --> ADAPTERS
-    BP_API[POST /api/config] -->|validate + write| JSON
+    BP_CFG[POST /api/config<br/>POST /api/config/validate] --> UPDATE
+    UPDATE -->|thread-safe| JSON
     SAVE -->|thread-safe| JSON
+    PORTS --> LOAD
 
     subgraph "HA Addon Path"
         HA_OPT["/data/options.json<br/>written by HA Supervisor"]
@@ -563,6 +617,20 @@ graph TD
         HA_JSON --> LOAD
     end
 ```
+
+### Channel-aware дефолты и семантика add-on
+
+В режиме Home Assistant add-on функция `detect_ha_addon_channel()` определяет **установленный трек аддона** по суффиксу hostname контейнера (`-rc`, `-beta`) и затем подбирает дефолты по треку:
+
+| Track | Ingress-порт по умолчанию | Базовый порт плееров |
+|---|---|---|
+| `stable` | `8080` | `8928` |
+| `rc` | `8081` | `9028` |
+| `beta` | `8082` | `9128` |
+
+`UPDATE_CHANNEL` — отдельная сущность: он влияет только на prerelease lookup / warning surfaces для update checker. Изменение `UPDATE_CHANNEL` **не** переключает установленный вариант HA add-on.
+
+Если в режиме add-on явно задан `WEB_PORT` и он отличается от дефолта текущего трека, `resolve_additional_web_port()` открывает второй прямой host-network listener, а HA ingress продолжает использовать фиксированный порт этого трека.
 
 ### Загрузка конфигурации → Запуск устройств
 
@@ -839,6 +907,15 @@ graph LR
     ST --> MM[services/ma_monitor.py]
     MM --> SVC_MAC
 
+    SC --> UC[services/update_checker.py]
+    UC -.->|GitHub API| GH[(GitHub Releases)]
+
+    DEMO[demo/__init__.py] -.->|patches| SC
+    DEMO -.->|patches| BM
+    DEMO -.->|patches| SVC_PA
+    DEMO_SIM[demo/simulator.py] --> ST
+    DEMO_FIX[demo/fixtures.py] --> DEMO
+
     CFG -.->|config.json| JSON[(config.json)]
     HA_SCRIPT[scripts/translate_ha_config.py] -.->|options.json→config.json| JSON
 ```
@@ -858,3 +935,127 @@ graph LR
 | `aiohttp` / `httpx` | Вызовы MA REST API в `ma_client.py` |
 | `bluetoothctl` | Системное управление BT (подпроцесс) |
 | `pactl` | Обнаружение аудио-синков (подпроцесс, устаревший путь) |
+
+---
+
+## Диаграмма контекста C4
+
+Высокоуровневый обзор sendspin-bt-bridge и его внешних взаимодействий.
+
+```mermaid
+C4Context
+    title System Context — Sendspin Bluetooth Bridge
+
+    Person(user, "Пользователь", "Управляет колонками через<br/>веб-интерфейс или панель HA")
+
+    System(bridge, "Sendspin BT Bridge", "Многопроцессный Python-сервис,<br/>соединяющий аудио MA → BT-колонки")
+
+    System_Ext(ma, "Music Assistant", "Сервер потоковой музыки<br/>протокол Sendspin (WS + FLAC)")
+    System_Ext(ha, "Home Assistant", "Платформа умного дома<br/>хост аддона / провайдер аутентификации")
+    System_Ext(bt, "Bluetooth-колонки", "A2DP-аудиосинки<br/>через BlueZ / PulseAudio")
+    System_Ext(github, "GitHub Releases", "Проверка обновлений<br/>опрос API каждый час")
+
+    Rel(user, bridge, "Веб-интерфейс / REST API", "HTTP / SSE")
+    Rel(user, ha, "Панель Home Assistant", "HTTP")
+    Rel(bridge, ma, "WebSocket Sendspin", "WS + FLAC/RAW")
+    Rel(bridge, ma, "MA REST API", "HTTP")
+    Rel(bridge, bt, "A2DP-аудиопоток", "Bluetooth")
+    Rel(bridge, ha, "Ingress / Auth", "HTTP")
+    Rel(bridge, github, "Проверка обновлений", "HTTPS")
+    Rel(ha, ma, "Интеграция", "API")
+```
+
+---
+
+## IPC-последовательность — изменение громкости
+
+Сквозной сценарий, когда пользователь меняет громкость через веб-интерфейс.
+
+```mermaid
+sequenceDiagram
+    participant UI as Web UI (браузер)
+    participant API as Flask API<br/>routes/api.py
+    participant SC as SendspinClient
+    participant DP as daemon_process.py<br/>(подпроцесс)
+    participant PA as PulseAudio
+    participant MA as Music Assistant
+
+    UI->>API: POST /api/volume {mac, volume: 60}
+    API->>SC: send_command({cmd: set_volume, value: 60})
+    SC->>DP: stdin JSON: {"cmd":"set_volume","value":60}
+    DP->>PA: pulsectl set_sink_volume(60)
+    PA-->>DP: OK
+    DP->>MA: MediaCommand.VOLUME_SET (если VOLUME_VIA_MA)
+    DP-->>SC: stdout JSON: {"type":"status","volume":60}
+    SC->>SC: _update_status({volume: 60})
+    SC->>SC: save_device_volume(mac, 60) [дебаунс 1 с]
+    SC-->>API: notify_status_changed()
+    API-->>UI: SSE event: {"volume": 60, ...}
+```
+
+---
+
+## Поток работы проверки обновлений
+
+Фоновый опрос версий теперь использует **channel-aware выбор релизов**, а не только stable-эндпоинт `releases/latest`.
+
+```mermaid
+flowchart TD
+    START([startup main&#40;&#41;]) --> DELAY[Ждать 30 с<br/>дать приложению инициализироваться]
+    DELAY --> LOADCFG[load_config&#40;&#41; · нормализовать UPDATE_CHANNEL]
+    LOADCFG --> FETCH[Получить список GitHub Releases<br/>api.github.com/repos/.../releases?per_page=100]
+    FETCH --> FILTER[Игнорировать drafts · оставить теги нужного канала]
+    FILTER --> PICK[Выбрать максимальный semver<br/>для stable / rc / beta]
+    PICK --> CMP{remote > current?}
+
+    CMP -->|Да| FOUND[Сохранить update info в state.py<br/>version · url · body · channel]
+    CMP -->|Нет| CLEAR[Сбросить update_available]
+
+    FOUND --> BADGE[UI: channel-aware бейдж обновления]
+    CLEAR --> SLEEP
+    BADGE --> SLEEP[Спать 3600 с]
+    SLEEP --> LOADCFG
+
+    subgraph "Действия пользователя"
+        BADGE --> CLICK[Пользователь открывает модалку обновления]
+        CLICK --> MODAL{GET /api/update/info<br/>определить runtime}
+        MODAL -->|systemd / LXC| LXC_BTN["POST /api/update/apply<br/>ставит upgrade.sh в очередь через systemd-run"]
+        MODAL -->|docker| DOCKER_CMD["Показать channel-aware подсказку по образам<br/>stable / rc / beta tag"]
+        MODAL -->|ha_addon| HA_MSG["Отправить в UI аддонов HA<br/>там обновляется установленный трек"]
+    end
+```
+
+Для Home Assistant установленный трек аддона по-прежнему определяет, что именно будет обновлять Supervisor. Внутренний параметр `UPDATE_CHANNEL` меняет только то, какой канал GitHub-релизов подсвечивается в UI и API бриджа.
+
+## Архитектура демо-режима
+
+Когда `DEMO_MODE=true`, бридж запускается с полностью эмулированным оборудованием (v2.23.0+).
+
+```mermaid
+graph TD
+    subgraph "Патчи демо-режима — demo/__init__.py"
+        INSTALL["install(config)<br/>вызывается из main()"]
+        INSTALL --> BT_PATCH[Патч BluetoothManager<br/>Эмуляция connect/disconnect<br/>Случайный заряд батареи]
+        INSTALL --> PULSE_PATCH[Патч services.pulse<br/>Состояние volume/mute на словарях<br/>Отслеживание по sink]
+        INSTALL --> CLIENT_PATCH[Патч SendspinClient<br/>Без реального подпроцесса<br/>_FakeProc sentinel]
+        INSTALL --> MA_PATCH[Патч команд MA<br/>send_player_cmd → noop<br/>ma_group_play → распространение по группе]
+        INSTALL --> FIXTURES[Загрузить fixtures.py<br/>5 устройств + 3 sync groups<br/>BT-адаптеры + MA discovery]
+    end
+
+    subgraph "Симулятор демо — demo/simulator.py"
+        SIM[run_simulator] --> TRACKS[Подобранный плейлист<br/>10 реальных треков с метаданными]
+        SIM --> CYCLE[Ротация треков по устройствам<br/>Обновление elapsed_ms на каждом тике]
+        SIM --> PLAY_PAUSE[Случайные play/pause-переходы<br/>Реалистичный тайминг]
+    end
+
+    subgraph "Результат"
+        WEB[Веб-интерфейс на :8080<br/>Все функции работают]
+        SSE[SSE-обновления<br/>Изменения статуса в реальном времени]
+        API[REST API<br/>Отвечают все 42 эндпоинта]
+    end
+
+    INSTALL --> SIM
+    SIM --> WEB
+    SIM --> SSE
+    SIM --> API
+```

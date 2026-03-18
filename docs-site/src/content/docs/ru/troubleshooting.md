@@ -20,6 +20,16 @@ description: Решение частых проблем Sendspin Bluetooth Bridg
 3. В логах bridge нет ошибок bind/startup.
 4. Используемый sendspin port не занят другим процессом.
 
+Если у устройства не задан явный `listen_port`, помните, что runtime использует **`BASE_LISTEN_PORT + индекс устройства`**. В multi-bridge setups проверьте, что эти диапазоны не пересекаются между контейнерами/экземплярами на одном хосте.
+
+## Путаница с WEB_PORT и HA Ingress
+
+- В standalone-режиме используется прямой браузерный доступ через `WEB_PORT` (по умолчанию **8080**).
+- В HA addon mode **Ingress** всегда остаётся на primary channel port (`8080` stable, `8081` rc, `8082` beta).
+- Если в addon-режиме задать другой `WEB_PORT`, это добавит **дополнительный прямой listener**, а не перенесёт Ingress.
+
+Если прямой порт не отвечает, проверьте, не занят ли он другим сервисом, и после изменения значения выполните **Save & Restart**.
+
 ## Bluetooth не подключается
 
 1. Устройство действительно спарено на уровне хоста.
@@ -28,6 +38,8 @@ description: Решение частых проблем Sendspin Bluetooth Bridg
 4. Попробуйте **Re-pair** из dashboard.
 
 Если используется несколько адаптеров, отдельно проверьте, что в строке устройства указан правильный adapter ID или MAC.
+
+Если bridge много раз подряд не может переподключить одну и ту же колонку, настроенный **Auto-disable threshold** может сохранить устройство как disabled. После устранения проблемы pairing/signal/adapter включите его снова в **Configuration → Devices**.
 
 ## "No sink" или тишина при воспроизведении
 
@@ -51,6 +63,16 @@ description: Решение частых проблем Sendspin Bluetooth Bridg
 3. Посмотрите текст ошибки прямо в discovery card.
 4. Повторяйте попытку только после окончания cooldown.
 5. Используйте **Already paired**, если хост уже знает устройство.
+
+## Не проходит token-flow Music Assistant
+
+Если **Get token automatically** или **Get token** не завершается успешно:
+
+1. Убедитесь, что URL MA указан правильно и доступен.
+2. В HA Ingress обновите страницу из Home Assistant, чтобы у браузера был актуальный HA session/token.
+3. Разрешите popup-окна для страницы bridge — fallback HA auth flow открывает popup, когда silent auth недостаточно.
+4. Если MA работает поверх HA и встроенный MA-login отклоняет credentials, повторите попытку и завершите шаг HA MFA, а не ожидайте чистый MA-password flow.
+5. Помните, что bridge сохраняет long-lived MA token, но не сохраняет введённый пароль.
 
 ## Empty state ведёт не туда
 
@@ -78,6 +100,8 @@ description: Решение частых проблем Sendspin Bluetooth Bridg
 ### Веб-интерфейс без auth
 
 Если сверху виден жёлтый warning-banner, локальная auth-защита отключена. Используйте ссылку в баннере для быстрого перехода в **Configuration → Security**.
+
+Для standalone-login важны и restart-applied параметры вроде включения auth и session timeout. Если вы меняли эти значения, используйте **Save & Restart** прежде чем делать вывод, что настройка не подхватилась.
 
 ## Mute или volume не совпадают с Music Assistant
 

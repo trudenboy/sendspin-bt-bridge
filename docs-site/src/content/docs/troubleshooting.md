@@ -20,6 +20,16 @@ Check these first:
 3. The bridge logs do not show startup or bind errors.
 4. The per-device sendspin port is not already in use.
 
+If the device has no explicit `listen_port`, remember that the runtime uses **`BASE_LISTEN_PORT + device index`**. In multi-bridge setups, make sure those ranges do not overlap across containers/instances on the same host.
+
+## Web UI port or Ingress access is confusing
+
+- Standalone installs use direct browser access on `WEB_PORT` (default **8080**).
+- HA addon installs always keep their primary channel port for **Ingress** (`8080` stable, `8081` rc, `8082` beta).
+- In addon mode, setting `WEB_PORT` to a different value adds an **extra direct listener**; it does not move Ingress.
+
+If a direct port does not respond, check for another service already bound to that port and use **Save & Restart** after changing the setting.
+
 ## Bluetooth does not connect
 
 1. Confirm the speaker is paired at the host level.
@@ -28,6 +38,8 @@ Check these first:
 4. Try **Re-pair** from the dashboard action menu.
 
 If you use multiple adapters, double-check that the device row is bound to the correct adapter ID or MAC.
+
+If the bridge repeatedly fails to reconnect the same speaker, the configured **Auto-disable threshold** can persist that device as disabled. Re-enable it in **Configuration → Devices** after you fix the pairing, signal, or adapter problem.
 
 ## "No sink" or silent playback
 
@@ -51,6 +63,16 @@ If **Scan** returns no results:
 3. Check the on-screen error text in the discovery card.
 4. Retry only after the cooldown expires.
 5. Use the **Already paired** list if the host already knows the speaker.
+
+## Music Assistant token flow fails
+
+If **Get token automatically** or **Get token** does not complete:
+
+1. Confirm the MA URL is correct and reachable.
+2. In HA Ingress, refresh the page from Home Assistant so the browser has a valid HA session/token.
+3. Allow popups for the bridge page; the fallback HA auth flow opens a popup when silent auth is not enough.
+4. If MA is HA-backed and builtin MA login rejects the credentials, retry and complete the HA MFA step instead of expecting a pure MA-password flow.
+5. Remember that the bridge stores the long-lived MA token, but not the password you entered.
 
 ## Empty state goes to the wrong place
 
@@ -78,6 +100,8 @@ By default, **5 failed attempts within 1 minute** triggers a **5 minute** lockou
 ### Web UI has no auth
 
 If you see the yellow warning banner, local auth is disabled. Use its shortcut to jump straight to **Configuration → Security** and enable protection.
+
+Standalone login also depends on restart-applied settings such as auth enablement and session timeout. If you changed those values, use **Save & Restart** before concluding that the setting did not apply.
 
 ## Mute or volume state does not match Music Assistant
 

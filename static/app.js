@@ -74,6 +74,7 @@ var lastDevices = [];
 var lastGroups = [];
 var lastMaWebUrl = '';
 var VIEW_MODE_STORAGE_KEY = 'sendspin-ui:view-mode';
+var _viewModeStorageScope = 'default';
 var userPreferredViewMode = _loadSavedViewMode();
 var currentViewMode = userPreferredViewMode || 'list';
 var listSortState = {column: 'status', direction: 'desc'};
@@ -916,9 +917,13 @@ function _normalizeDeviceName(name) {
     return String(name || '').trim().toLowerCase();
 }
 
+function _getViewModeStorageKey() {
+    return _viewModeStorageScope === 'demo' ? VIEW_MODE_STORAGE_KEY + ':demo' : VIEW_MODE_STORAGE_KEY;
+}
+
 function _loadSavedViewMode() {
     try {
-        var saved = window.localStorage.getItem(VIEW_MODE_STORAGE_KEY);
+        var saved = window.localStorage.getItem(_getViewModeStorageKey());
         return saved === 'list' || saved === 'grid' ? saved : null;
     } catch (_) {
         return null;
@@ -927,10 +932,19 @@ function _loadSavedViewMode() {
 
 function _persistViewMode(mode) {
     try {
-        window.localStorage.setItem(VIEW_MODE_STORAGE_KEY, mode);
+        window.localStorage.setItem(_getViewModeStorageKey(), mode);
     } catch (_) {
         // Ignore storage failures and fall back to in-memory mode.
     }
+}
+
+function _setViewModeStorageScope(runtimeMode) {
+    var nextScope = runtimeMode === 'demo' ? 'demo' : 'default';
+    if (_viewModeStorageScope === nextScope) return;
+    _viewModeStorageScope = nextScope;
+    userPreferredViewMode = _loadSavedViewMode();
+    currentViewMode = userPreferredViewMode || 'list';
+    _applyViewModeButtons(currentViewMode);
 }
 
 function _getAutomaticViewMode(deviceCount) {
@@ -2146,6 +2160,7 @@ function renderDevicesView() {
 
 function renderStatusPayload(status) {
     var info = [];
+    _setViewModeStorageScope(status.runtime_mode || 'production');
     if (status.hostname) info.push(status.hostname);
     if (status.ip_address) info.push(status.ip_address);
     if (status.uptime) info.push('up ' + status.uptime);

@@ -3,7 +3,9 @@ title: Test Stand
 description: Reference deployment topology with hardware specifications, software versions, and network layout
 ---
 
-Reference deployment used for development and testing of Sendspin BT Bridge v2.20.4.
+Reference deployment used for current validation of Sendspin BT Bridge stable v2.40.5.
+
+The matrix below reflects the March 18 validation cycle: the stable HA add-on track on HAOS, plus standalone Proxmox and Turris LXC installs. RC/Beta add-on variants now use separate default ingress/player port ranges (`8081` / `9028`, `8082` / `9128`) for side-by-side HAOS testing, but the HAOS node documented here remains the stable track unless noted otherwise.
 
 ## Physical topology
 
@@ -20,7 +22,7 @@ graph TB
                 T_DBUS["D-Bus system bus<br/>bind-mount from host"]
                 T_PA["PulseAudio 16.1 --system<br/>user pulse uid=109"]
                 T_BLUEZ["BlueZ 5.72<br/>bluetoothctl"]
-                T_SBB["SBB v2.20.4<br/>Python 3.12.3<br/>aiosendspin 4.3.2"]
+                T_SBB["SBB v2.40.5<br/>Python 3.12.3<br/>aiosendspin 4.3.2"]
                 T_WEB["Flask 3.1.3 + Waitress 3.0.2<br/>:8080"]
                 T_DBUS --> T_BLUEZ
                 T_DBUS --> T_PA
@@ -36,20 +38,20 @@ graph TB
             direction TB
             P_HOST["Proxmox VE 8.4.16<br/>Debian 12 Bookworm<br/>Kernel 6.8.12-18-pve<br/>proxmox.my.lan"]
             P_USB1["USB Bus 4: CSR8510 A10<br/>PVE mapping: Audio"]
-            P_USB2["USB Bus 2: CSR8510 A10<br/>PVE mapping: aTick"]
+            P_USB2["USB Bus 2: CSR8510 A10<br/>PVE mapping: BLE"]
             P_ZIG["USB: SONOFF Zigbee 3.0<br/>1a86:55d4"]
 
             subgraph P_VM["VM 104 haos — QEMU/KVM — 2 vCPU / 6 GB RAM / 64 GB disk"]
                 P_HAOS["Home Assistant OS<br/>haos.my.lan"]
-                P_ADDON["SBB v2.20.4 addon<br/>85b1ecde-sendspin-bt-bridge<br/>3 devices / sync group"]
+                P_ADDON["SBB v2.40.5 addon<br/>85b1ecde-sendspin-bt-bridge<br/>3 devices / sync group"]
                 P_HAOS --> P_ADDON
             end
 
-            subgraph P_CT["CT 101 sendspin — LXC — 2 vCPU / 1 GB RAM / 8 GB disk"]
+            subgraph P_CT["CT 101 sendspin — LXC — 2 vCPU / 1 GB RAM / 4 GB disk"]
                 P_DBUS["D-Bus system bus"]
                 P_PA["PulseAudio 16.1"]
                 P_BLUEZ2["BlueZ 5.72"]
-                P_SBB["SBB v2.20.4<br/>Ubuntu 24.04 x86_64<br/>Python 3.12.3"]
+                P_SBB["SBB v2.40.5<br/>Ubuntu 24.04 x86_64<br/>Python 3.12.3"]
                 P_WEB2["Flask 3.1.3 + Waitress 3.0.2<br/>:8080"]
                 P_DBUS --> P_BLUEZ2
                 P_DBUS --> P_PA
@@ -88,7 +90,7 @@ graph TB
 
 ```mermaid
 graph LR
-    subgraph haos_bridge["HAOS Addon — hci0 C0:FB:F9:62:D6:9D"]
+    subgraph haos_bridge["HAOS Addon (stable track) — hci0 + hci1"]
         direction TB
         H_MA["MA :9000"] -->|FLAC 44100/16/2| H_D1["daemon :8928<br/>PULSE_SINK=bluez_sink<br/>.FC_58_FA_EB_08_6C<br/>.a2dp_sink"]
         H_MA -->|FLAC 44100/16/2| H_D2["daemon :8929<br/>PULSE_SINK=bluez_sink<br/>.2C_D2_6B_B8_EC_5B<br/>.a2dp_sink"]
@@ -103,9 +105,9 @@ graph LR
         T_MA["MA :9000"] -->|FLAC 44100/16/2| T_D1["daemon :8928<br/>PULSE_SINK=bluez_sink<br/>.20_74_CF_61_FB_D8<br/>.a2dp_sink"]
     end
 
-    H_D1 -->|"A2DP / -500ms"| S1["ENEBY20<br/>58%"]
-    H_D2 -->|"A2DP / -500ms"| S2["Yandex mini<br/>52%"]
-    H_D3 -->|"A2DP / -500ms"| S3["Lenco LS-500<br/>52%"]
+    H_D1 -->|"A2DP / -600ms"| S1["ENEBY20<br/>58%"]
+    H_D2 -->|"A2DP / -400ms"| S2["Yandex mini<br/>52%"]
+    H_D3 -->|"A2DP / -600ms"| S3["Lenco LS-500<br/>52%"]
     P_D1 -->|"A2DP / -900ms"| S4["ENEBY Portable<br/>59%"]
     T_D1 -->|"A2DP / -500ms"| S5["AfterShokz<br/>67%"]
 
@@ -153,31 +155,45 @@ graph TB
     style other_players fill:#1a1a1a,stroke:#666
 ```
 
+## Port strategy snapshot
+
+The current deployment matrix reflects the post-`2.40.5` port model:
+
+- stable HA addon keeps the standard HA ingress listener on `8080` and defaults device listeners from `8928` upward
+- prerelease HA addon variants, when installed, use their own channel defaults (`8081` / `9028` for RC, `8082` / `9128` for beta)
+- standalone Docker/LXC deployments can override `WEB_PORT`, `BASE_LISTEN_PORT`, or per-device `listen_port` explicitly
+
 ## Bridge instances
 
-### 1. HAOS Addon — `haos.my.lan:8080`
+### 1. HAOS Addon — `haos.my.lan:8080` (stable track)
 
-Runs as a Home Assistant addon inside HAOS VM on Proxmox.
+Runs as the stable Home Assistant add-on track inside the HAOS VM on Proxmox.
 
 | Parameter | Value |
 |-----------|-------|
 | **Host** | Proxmox VE 8.4.16, VM 104 (HAOS), 2 cores, 6 GB RAM |
 | **Platform** | Home Assistant OS |
+| **Delivery track** | `stable` (`85b1ecde_sendspin_bt_bridge`) |
 | **Hostname** | `85b1ecde-sendspin-bt-bridge` |
-| **Bridge version** | 2.20.4 (build 2026-03-11) |
-| **BT adapter** | CSR8510 A10 via USB passthrough (`C0:FB:F9:62:D6:9D`, hci0) |
-| **Audio** | PulseAudio 16.1, A2DP sinks |
+| **Bridge version** | 2.40.5 (build 2026-03-18) |
+| **BT adapters** | Dual CSR8510 A10 passthrough (Audio + BLE mappings exposed to the addon runtime) |
+| **Audio** | PulseAudio 17.0, A2DP sinks |
+| **Ports** | Ingress `8080`, player base `8928` |
 | **MA server** | auto:9000 (mDNS) |
 
 **Devices (3):**
 
 | Player | BT MAC | Sendspin port | PA sink | Volume | Delay |
 |--------|--------|---------------|---------|--------|-------|
-| ENEBY20 @ HAOS | `FC:58:FA:EB:08:6C` | 8928 | `bluez_sink.FC_58_FA_EB_08_6C.a2dp_sink` | 58% | −500 ms |
-| Yandex mini @ HAOS | `2C:D2:6B:B8:EC:5B` | 8929 | `bluez_sink.2C_D2_6B_B8_EC_5B.a2dp_sink` | 52% | −500 ms |
-| Lenco LS-500 @ HAOS | `30:21:0E:0A:AE:5A` | 8932 | `bluez_sink.30_21_0E_0A_AE_5A.a2dp_sink` | 52% | −500 ms |
+| ENEBY20 @ HAOS | `FC:58:FA:EB:08:6C` | 8928 | `bluez_sink.FC_58_FA_EB_08_6C.a2dp_sink` | 58% | −600 ms |
+| Yandex mini @ HAOS | `2C:D2:6B:B8:EC:5B` | 8929 | `bluez_sink.2C_D2_6B_B8_EC_5B.a2dp_sink` | 52% | −400 ms |
+| Lenco LS-500 @ HAOS | `30:21:0E:0A:AE:5A` | 8932 | `bluez_sink.30_21_0E_0A_AE_5A.a2dp_sink` | 52% | −600 ms |
 
 All 3 devices share MA sync group `b55d7f67-acc2-4cba-b37e-9fbd3eb3b410` for multiroom playback. MA API integration is active (bi-directional volume/transport sync).
+
+:::note[HA add-on track semantics]
+This stand validates the **stable** HA add-on track. RC and Beta variants can be installed side by side with defaults `8081` / `9028` and `8082` / `9128`, but they must not manage the same Bluetooth speakers, adapters, or conflicting manual port overrides at the same time.
+:::
 
 ### 2. Proxmox LXC — `proxmox-lxc.my.lan:8080`
 
@@ -185,10 +201,10 @@ Runs as a systemd service inside an unprivileged LXC container on Proxmox.
 
 | Parameter | Value |
 |-----------|-------|
-| **Host** | Proxmox VE 8.4.16, CT 101, 2 cores, 1 GB RAM, 8 GB disk |
+| **Host** | Proxmox VE 8.4.16, CT 101, 2 cores, 1 GB RAM, 4 GB disk |
 | **OS** | Ubuntu 24.04 LTS (Noble Numbat), x86_64 |
 | **Hostname** | `sendspin` |
-| **Bridge version** | 2.20.4 (build 2026-03-11) |
+| **Bridge version** | 2.40.5 (build 2026-03-18) |
 | **Python** | 3.12.3 |
 | **BlueZ** | 5.72 |
 | **PulseAudio** | 16.1 |
@@ -214,7 +230,7 @@ Runs as a systemd service inside an LXC container on Turris Omnia router (OpenWr
 | **Host** | Turris Omnia, TurrisOS 9.0.4 (OpenWrt), Marvell Armada 385 ARMv7, 2 GB RAM, 8 GB eMMC |
 | **OS** | Ubuntu 24.04.4 LTS (Noble Numbat), armv7l |
 | **Hostname** | `ubuntu` |
-| **Bridge version** | 2.20.4 (build 2026-03-11) |
+| **Bridge version** | 2.40.5 (build 2026-03-18) |
 | **Python** | 3.12.3 |
 | **BlueZ** | 5.72 |
 | **PulseAudio** | 16.1 |
@@ -290,7 +306,7 @@ All LXC bridge instances share the same software stack:
 
 | Component | Version |
 |-----------|---------|
-| **Sendspin BT Bridge** | 2.20.4 |
+| **Sendspin BT Bridge** | 2.40.5 |
 | **Ubuntu** | 24.04 LTS |
 | **Python** | 3.12.3 |
 | **BlueZ** | 5.72 |

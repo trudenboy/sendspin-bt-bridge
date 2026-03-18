@@ -35,7 +35,7 @@ python sendspin_client.py
 
 ## Manual Test Checklist
 
-Run `pytest` for the automated test suite (187 tests across 18 files covering config, volume routing, device status, state management, auth, ingress middleware, BT services, daemon process, MA integration, and scan cooldown).
+Run `pytest` for the automated test suite and use `cd docs-site && npm run build` when changing the Starlight docs. The Python suite currently validates the v2.40.5 runtime, while the docs build catches broken Starlight routes, content, and screenshots.
 
 ### Linting
 
@@ -57,7 +57,7 @@ Additionally, use this manual checklist when testing changes:
 - [ ] `/api/status` returns valid JSON
 - [ ] `/api/config` GET returns current config; POST with valid payload saves it
 
-For HA addon changes, additionally test via the HA Addon Store dev workflow (local repository).
+For HA addon changes, additionally test via the HA Addon Store dev workflow (local repository). For documentation changes that include screenshots, prefer the built-in demo stack (`DEMO_MODE=true python sendspin_client.py`) as the repeatable local capture environment before resorting to live HA-only screenshots.
 
 ---
 
@@ -72,6 +72,29 @@ The single `Dockerfile` builds a multi-arch image (`linux/amd64`, `linux/arm64`,
 **HA addon** (`ha-addon/Dockerfile`) is a thin `FROM` wrapper — no additional layers. HA Supervisor pulls the pre-built image via the `image:` field in `config.yaml`.
 
 **AppArmor** is enabled in enforce mode (`ha-addon/apparmor.txt`). The profile covers S6, Python, bluetoothctl, pactl, D-Bus, and all runtime paths.
+
+---
+
+
+## Runtime Architecture Touchpoints
+
+Keep the current runtime layering in mind when making code or docs changes:
+
+- `entrypoint.sh` prepares D-Bus/audio, translates Home Assistant add-on options, and then `exec`s `python3 sendspin_client.py`.
+- `sendspin_client.py` is now the thin runtime entrypoint; bridge-wide startup sequencing lives in `bridge_orchestrator.py`.
+- `BridgeOrchestrator` owns runtime bootstrap, channel-aware port defaults, lifecycle publication, web startup, Music Assistant bootstrap, and long-running task assembly.
+- `SendspinClient` still owns one speaker lifecycle, but focused subprocess concerns live in `services.subprocess_command`, `services.subprocess_ipc`, `services.subprocess_stderr`, and `services.subprocess_stop`.
+- `services/daemon_process.py` + `services/bridge_daemon.py` run one isolated Sendspin daemon per speaker with `PULSE_SINK` preselected before audio starts.
+- `state.py` plus the newer lifecycle/read-side services publish startup progress, snapshots, update info, onboarding guidance, and SSE payloads to the UI/API.
+
+---
+
+## Release Workflow & Generated Add-on Variants
+
+- `CHANGELOG.md` is the release source of truth. Put user-facing release notes there first.
+- The manual `Create GitHub Release` workflow resolves the target tag/channel, syncs `ha-addon/`, `ha-addon-rc/`, and `ha-addon-beta/` on `main`, and then builds the GitHub Release body from the matching changelog section.
+- `ha-addon/` is the hand-maintained stable source surface. RC/Beta directories are generated/published variants; prefer regenerating them via the script/workflow instead of hand-editing multiple channel copies.
+- `update_channel` in config only controls release lookup/warning surfaces. It does **not** switch the installed Home Assistant add-on variant by itself.
 
 ---
 
@@ -124,3 +147,14 @@ and has since grown into a fully independent project. Credit to loryanstrant for
 
 When contributing:
 - Credit the [Music Assistant](https://www.music-assistant.io/) team for the Sendspin protocol and CLI
+
+
+---
+
+## Release workflow
+
+- Update `config.py` version and add matching sections to `CHANGELOG.md` and `ha-addon/CHANGELOG.md`.
+- Sync addon variants with `python3 scripts/generate_ha_addon_variants.py sync-current-repo ...`.
+- Validate runtime changes with `python3 -m pytest -q && node --check static/app.js && git --no-pager diff --check`.
+- Validate docs changes with `cd docs-site && npm run build`.
+- GitHub Release notes are composed from the matching `CHANGELOG.md` section; GitHub-generated notes are supplemental only.

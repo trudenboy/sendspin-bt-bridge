@@ -1,22 +1,27 @@
 ---
 title: Installation — Home Assistant Addon
-description: Step-by-step installation of Sendspin Bluetooth Bridge as a Home Assistant addon
+description: Install Sendspin Bluetooth Bridge as a Home Assistant addon, with stable/RC/beta track behavior and port planning
 ---
 
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+## Which addon should you install?
+
+| Addon | Best for | Ingress port | Default player-port base | Startup default |
+|---|---|---:|---:|---|
+| **Stable** | Everyday use | `8080` | `8928` | Auto |
+| **RC** | Release-candidate testing | `8081` | `9028` | Manual |
+| **Beta** | Earliest prerelease testing | `8082` | `9128` | Manual |
+
+<Aside type="caution">
+  You can install multiple addon tracks on the same HAOS host, but do <strong>not</strong> configure the same Bluetooth speaker in more than one running addon. A Bluetooth device can only keep one active connection.
+</Aside>
 
 ## Requirements
 
 - Home Assistant OS or Supervised
 - Bluetooth adapter accessible to the HA host
-- Music Assistant Server running on your network
-
-## Supported platforms
-
-| Architecture | HA devices | Status |
-|---|---|---|
-| **amd64** (x86_64) | Intel NUC, Mini PCs, Proxmox/VMware VMs | ✅ Tested |
-| **aarch64** (ARM64) | HA Green, HA Yellow, Raspberry Pi 4/5, ODROID N2+ | ✅ Community-tested |
-| **armv7** (ARM 32-bit) | Raspberry Pi 3, ODROID XU4, Tinker Board | ⚠️ Best-effort |
+- Music Assistant running on your network
 
 ## Installation
 
@@ -24,59 +29,86 @@ description: Step-by-step installation of Sendspin Bluetooth Bridge as a Home As
 
 1. **Add the addon repository**
 
-   Click the button to add the repository automatically:
+   Use the button to add the repository automatically:
 
    [![Add repository to HA](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Ftrudenboy%2Fsendspin-bt-bridge)
 
    Or manually: **Settings → Add-ons → Add-on store → ⋮ → Repositories** and add:
+
    ```
    https://github.com/trudenboy/sendspin-bt-bridge
    ```
 
-2. **Install the addon**
+2. **Choose the addon variant**
 
-   Find **Sendspin Bluetooth Bridge** in the addon store and click **Install**.
+   Install **Sendspin Bluetooth Bridge** for the stable track. Install the **RC** or **Beta** variant only when you specifically want prerelease builds.
 
 3. **Configure the addon**
 
-   Go to the **Configuration** tab and add your devices:
+   On the **Configuration** tab:
 
    ```yaml
-   sendspin_server: auto          # or your MA server hostname/IP
+   sendspin_server: auto
    sendspin_port: 9000
+   web_port: 8090                 # optional: extra direct listener on the host network
+   base_listen_port: 8928         # optional: base port for players without explicit listen_port
+   update_channel: stable         # controls update checks only; does not switch addon variant
    bluetooth_devices:
      - mac: "AA:BB:CC:DD:EE:FF"
        player_name: "Living Room Speaker"
      - mac: "11:22:33:44:55:66"
        player_name: "Kitchen Speaker"
-       adapter: hci1              # only needed for multi-adapter setups
-       static_delay_ms: -500      # A2DP latency compensation in ms
+       adapter: hci1
+       static_delay_ms: -500
+       listen_port: 8935          # optional per-device Sendspin port override
+       listen_host: 192.168.1.50  # optional advertised host/IP for URL display
    ```
 
 4. **Start the addon**
 
-   Click **Start**. The addon will appear in the HA sidebar.
+   Start the addon. The stable addon defaults to auto-start; RC and beta default to manual start so prerelease installs are easier to keep separate.
 
-5. **Connect to Music Assistant**
+5. **Connect to Music Assistant features**
 
-   Open the web UI → Configuration → Advanced settings → click **🏠 Sign in with Home Assistant**. The bridge creates an MA API token automatically — enabling now-playing metadata, transport controls, and group volume sync.
+   Open the web UI → **Configuration → Music Assistant** and click **🏠 Sign in with Home Assistant** if you want MA metadata, transport controls, queue actions, and group-volume sync.
 
 </Steps>
 
+## Port behavior in addon mode
+
+- **Ingress stays fixed per addon track.** Stable uses `8080`, RC uses `8081`, beta uses `8082`.
+- **`web_port` does not replace ingress.** It opens an additional direct listener on the HA host network. Your sidebar link and **Open Web UI** button still use HA Ingress.
+- **`base_listen_port` sets the default Sendspin player range** for devices without an explicit `listen_port`.
+- **Device `listen_port` wins per player.** Use it when one speaker needs a fixed port.
+- **Device `listen_host` changes the advertised host/IP only.** The player still binds on `0.0.0.0` internally.
+
 ## Opening the web interface
 
-The addon provides a web UI via **HA Ingress** — click **Open Web UI** on the addon page or use the sidebar link. No port forwarding required.
+Use **Open Web UI** on the addon page or the HA sidebar entry for the normal ingress path.
 
-The interface automatically applies the HA theme (dark/light) via the Ingress `postMessage` API.
+If you set `web_port`, you also get a direct URL on the HA host network:
 
-## Audio routing (HA OS)
+```text
+http://<ha-host-ip>:<web_port>
+```
 
-The addon requests `audio: true` in its manifest, so the HA Supervisor automatically injects `PULSE_SERVER`. No manual socket configuration needed.
+This is useful for direct diagnostics or API access, but ingress remains the primary HA-integrated path.
+
+## Update channel semantics
+
+- The **installed addon variant** determines whether you are on stable, RC, or beta code.
+- The **`update_channel` option** only controls which releases the in-app updater checks for (`stable`, `rc`, or `beta`).
+- Changing `update_channel` does **not** switch the installed addon track.
+- To move from stable to RC/beta, install that addon variant explicitly from the Add-on Store.
+
+## Audio routing on HA OS
+
+The addon requests `audio: true`, so Home Assistant injects the audio bridge automatically. No manual PulseAudio or PipeWire socket mount is required.
 
 ## Applying configuration changes
 
-Configuration changes take effect after a restart. Use the **Restart** button on the addon page or click **Save & Restart** in the web interface.
+Changes to devices, adapters, `web_port`, `base_listen_port`, and Music Assistant connection settings take effect after a restart. Use **Restart** on the addon page or **Save & Restart** in the web UI.
 
 <Aside type="tip">
-  If Music Assistant doesn't see the player after starting — check that the **Sendspin** provider is enabled in MA. Go to Settings → Providers and make sure Sendspin is active.
+  If Music Assistant does not see the players, verify that the **Sendspin** provider is enabled in Music Assistant.
 </Aside>

@@ -51,6 +51,21 @@ The **Device fleet** table is the canonical place for speaker configuration.
 
 Expanding a row reveals advanced fields such as **preferred format**, **listen host**, and **keepalive interval**.
 
+## Per-device ports, hosts, and keepalive
+
+The current v2.40.5 device flow uses these network/runtime fields:
+
+| Field | Current behavior |
+|---|---|
+| `listen_port` | If set, the device always uses that explicit port |
+| `listen_host` | Overrides the advertised host/address for that device listener |
+| `keepalive_interval` | Any positive value enables silence keepalive; values below 30 seconds are raised to 30 |
+| `keepalive_silence` | Legacy compatibility field from older addon configs; the current web UI no longer exposes it as a separate toggle |
+
+If `listen_port` is empty, the runtime falls back to **`BASE_LISTEN_PORT + device index`**. Every effective listener port must be unique. For multi-bridge setups on one host, either assign different `BASE_LISTEN_PORT` ranges per bridge or set explicit `listen_port` values for every speaker.
+
+`listen_host` is mainly useful when Music Assistant must reach the bridge through a different address than the one the bridge would auto-detect.
+
 ## Adapter management
 
 ![Bluetooth tab with adapter naming and recovery policy](/sendspin-bt-bridge/screenshots/screenshot-config-adapters.png)
@@ -101,10 +116,20 @@ Device actions exposed from the dashboard include:
 
 **Release** keeps the device in the config but stops the bridge from actively reconnecting it until you reclaim it.
 
+## Reconnect policy and auto-disable
+
+The **Bluetooth** tab controls two behaviors that affect device availability:
+
+- **BT check interval** decides how often the bridge probes and retries Bluetooth recovery.
+- **Auto-disable threshold** can persist a device as disabled after repeated failed reconnects.
+
+If a speaker keeps flapping, the bridge may protect the rest of the group by auto-disabling it. Re-enable the device in **Configuration → Devices** after fixing the underlying Bluetooth problem.
+
 ## Delay tuning and keepalive
 
 Use these per-device fields when tuning difficult speakers:
 
 - **`static_delay_ms`** — compensates for Bluetooth latency differences in grouped playback.
 - **`keepalive_interval`** — periodically sends silence so some speakers do not fall asleep between tracks.
+- **`keepalive_silence`** — legacy boolean from older addon configs; keepalive is now effectively controlled by `keepalive_interval > 0`.
 - **`preferred_format`** — can reduce resampling or CPU load depending on your MA output settings.

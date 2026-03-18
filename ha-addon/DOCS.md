@@ -56,18 +56,29 @@ simultaneously.
 
 ## Update channels in Home Assistant
 
-The Home Assistant addon has two related but different channel concepts:
+Home Assistant packaging now has **two separate channel concepts** that are easy to confuse:
 
-- **Installed addon track** — the actual addon variant you installed from the Home Assistant store (`stable`, `RC`, or `Beta` when those variants are published).
-- **`update_channel` setting** — the in-app preference used for prerelease checks and warning text.
+| Concept | What it means | How it changes |
+|---|---|---|
+| **Installed add-on track** | The actual add-on variant installed from the HA store (`stable`, `RC`, or `Beta`). This determines the add-on slug, branding, default ingress port, default player listen-port base, and startup policy. | Install or switch the matching add-on variant in the HA store. |
+| **`update_channel` setting** | The in-app preference used by the bridge update checker and prerelease warning text. | Change it in the add-on options or web UI. |
+
+### Published add-on variants
+
+| Track | Repository directory | Add-on slug | Default ingress | Default player port base | Startup default |
+|---|---|---|---|---|---|
+| **Stable** | `ha-addon/` | `sendspin_bt_bridge` | `8080` | `8928` | `auto` |
+| **RC** | generated `ha-addon-rc/` | `sendspin_bt_bridge_rc` | `8081` | `9028` | `manual` |
+| **Beta** | generated `ha-addon-beta/` | `sendspin_bt_bridge_beta` | `8082` | `9128` | `manual` |
 
 Important:
 
-- changing `update_channel` does **not** switch the installed addon track by itself
-- the checked-in addon manifest in this repository represents the **stable** variant
-- when RC or Beta addon variants are available, switching tracks means installing the matching addon variant from the Home Assistant store first
-- stable / RC / Beta addon variants use different default HA ingress ports and different default player listen-port ranges, so they can run side by side on one HAOS host
-- do **not** configure the same Bluetooth speaker in more than one addon variant at the same time
+- changing `update_channel` does **not** switch the installed add-on track by itself
+- this checked-in `ha-addon/` directory is the **stable** source surface; prerelease variants are generated into `ha-addon-rc/` and `ha-addon-beta/`
+- stable / RC / Beta variants can run side by side on one HAOS host because they use different default HA ingress ports and different default player listen-port ranges
+- do **not** configure the same Bluetooth speaker in more than one variant at the same time
+- do **not** let multiple variants manage the same Bluetooth adapter unless you intentionally isolate devices and ports
+- if you set manual `web_port` or `base_listen_port` overrides, keep them unique across variants
 
 ## Configuration
 
@@ -77,6 +88,8 @@ Important:
 |---|---|---|---|
 | `sendspin_server` | string | `auto` | Hostname or IP of the Music Assistant server. `auto` uses mDNS discovery (recommended). |
 | `sendspin_port` | port | `9000` | WebSocket port exposed by the MA Sendspin provider. Only change if you run multiple MA instances or use a custom port. |
+| `web_port` | port | _(track default)_ | Optional direct host-network web listener. In add-on mode ingress keeps using the installed track default (`8080` stable / `8081` RC / `8082` beta); setting this opens an additional direct listener only when it differs from that fixed ingress port. |
+| `base_listen_port` | port | _(track default)_ | Optional starting port for auto-assigned Sendspin player listeners. Defaults are `8928` (stable), `9028` (RC), and `9128` (beta). |
 | `bridge_name` | string | _(empty)_ | Custom name for this bridge instance. When empty the system hostname is used automatically. |
 | `tz` | string | _(empty)_ | IANA timezone (e.g. `Europe/London`, `America/New_York`). Leave empty to inherit the Home Assistant system timezone. |
 | `pulse_latency_msec` | int | `200` | PulseAudio buffer latency in milliseconds. Higher values (400–600) reduce audio dropouts on slow hardware at the cost of slightly higher latency. |
@@ -135,6 +148,36 @@ adapters.
 | `id` | **yes** | string | Adapter identifier (`hci0`, `hci1`, etc.). |
 | `mac` | no | string | MAC address of the adapter (for display purposes). |
 | `name` | no | string | Friendly name shown in the web UI. |
+
+## Port strategy and addon tracks
+
+### Addon tracks vs `update_channel`
+
+The Home Assistant addon has two related but different channel concepts:
+
+- **Installed addon track** — the actual addon variant installed from the HA store (`stable`, `RC`, or `Beta` when published)
+- **`update_channel`** — the in-app preference used for prerelease checks and warning text
+
+Changing `update_channel` alone does **not** switch the installed addon track.
+
+### Default ports by addon track
+
+When multiple addon variants are installed on the same HAOS host, they use different default ports to reduce collisions:
+
+| Track | Default ingress / web port | Default base listen port |
+|---|---|---|
+| Stable | `8080` | `8928` |
+| RC | `8081` | `9028` |
+| Beta | `8082` | `9128` |
+
+### Manual port overrides
+
+- Leave `web_port` empty if you only use the addon through HA Ingress.
+- Set `web_port` only when you want an additional direct host-network listener.
+- Leave `base_listen_port` empty unless you need to shift the whole device-port range for this addon instance.
+- Use per-device `listen_port` only for targeted exceptions.
+
+> Do **not** configure the same Bluetooth speaker in more than one addon variant at the same time. Port separation avoids listener conflicts, but it cannot safely share a physical speaker across multiple active addon instances.
 
 ## Multi-Speaker Setup
 

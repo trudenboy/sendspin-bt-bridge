@@ -7,7 +7,7 @@ import logging
 import time
 from typing import TYPE_CHECKING
 
-from demo.fixtures import DEMO_DEVICE_STATUS
+from demo.fixtures import DEMO_DEVICE_STATUS, get_demo_adapter
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -34,12 +34,14 @@ class DemoBluetoothManager:
         churn_window: float = 300.0,
     ):
         self.mac_address = mac_address
-        self.adapter = adapter or "hci0"
+        adapter_info = get_demo_adapter(adapter)
+        self.adapter = str(adapter_info["id"])
         self.device_name = device_name
         self.client = client
         self.on_sink_found = on_sink_found
         self.management_enabled = True
-        self.effective_adapter_mac = "00:1A:7D:DA:71:01"
+        self.effective_adapter_mac = str(adapter_info["mac"])
+        self.adapter_hci_name = str(adapter_info["id"])
 
         initial = DEMO_DEVICE_STATUS.get(mac_address, {})
         self.connected: bool = initial.get("bluetooth_connected", False)

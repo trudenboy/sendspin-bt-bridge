@@ -8,7 +8,7 @@
 
 [Read in English](README.md) · [📖 Документация](https://trudenboy.github.io/sendspin-bt-bridge/) · [🎮 Демо](https://sendspin-demo.onrender.com) · [📋 История](HISTORY.ru.md)
 
-Bluetooth-мост для [Music Assistant](https://www.music-assistant.io/) — подключает Bluetooth-колонки к протоколу [Sendspin](https://www.music-assistant.io/player-support/sendspin/) в MA. Работает как Docker-контейнер, аддон для Home Assistant или нативный LXC-контейнер на Proxmox VE / OpenWrt. Предназначен для систем без монитора.
+Bluetooth-мост для [Music Assistant](https://www.music-assistant.io/), который превращает Bluetooth-колонки и наушники в нативные плееры [Sendspin](https://www.music-assistant.io/player-support/sendspin/) в MA. Актуальная релизная линия v2.40.5 работает как аддон Home Assistant (stable / RC / beta), Docker-контейнер, установка на Raspberry Pi или нативное LXC-развёртывание на Proxmox VE / OpenWrt — всё это рассчитано на headless и local-first мультирум-сценарии.
 
 <img width="1400" alt="Инфографика Sendspin Bluetooth Bridge — возможности, архитектура и варианты развёртывания" src="https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/docs-site/public/screenshots/sbb_infographic_ru.png" />
 
@@ -62,6 +62,7 @@ Bluetooth-мост для [Music Assistant](https://www.music-assistant.io/) —
 - **Управление питанием адаптера** — перезагрузка BT-адаптера из веб-интерфейса
 
 ### 🎵 Интеграция с Music Assistant
+- **Авторизация в MA без пароля в режиме аддона** — кнопка «Войти через Home Assistant» создаёт долгоживущий токен MA через Ingress JSONRPC, без ручного ввода учётных данных
 - **Метаданные воспроизведения** — трек, исполнитель, обложка альбома, позиция в очереди из MA REST API
 - **Транспортные кнопки** — предыдущий / следующий / shuffle / repeat для syncgroup и соло-плееров
 - **Групповая громкость** — delta-based `group_volume` с сохранением пропорций между колонками
@@ -75,7 +76,7 @@ Bluetooth-мост для [Music Assistant](https://www.music-assistant.io/) —
 - **Фильтр по группам** — выпадающий список для отображения устройств конкретной MA-syncgroup
 - **Панель диагностики** — адаптеры, синки, D-Bus, состояние каждого устройства одним взглядом
 - **Просмотр логов** — фильтрация по уровню серьёзности с автообновлением
-- **Grid/list режимы** — при количестве устройств больше 6 интерфейс по умолчанию переключается в list view и запоминает ручной выбор
+- **Режимы сетки и списка** — при количестве устройств больше 6 интерфейс по умолчанию переключается в режим списка и запоминает ручной выбор
 - **Переработанные вкладки Configuration** — General, Devices, Bluetooth, Music Assistant и Security разбивают настройку на логичные карточки
 - **Глубокие ссылки в настройки** — шестерёнки устройств/адаптеров и empty-state CTA ведут в точную конфигурационную карточку и подсвечивают нужную строку
 - **Бэкап и восстановление конфига** — скачивание / загрузка JSON-конфигурации из веб-интерфейса
@@ -92,7 +93,9 @@ Bluetooth-мост для [Music Assistant](https://www.music-assistant.io/) —
 - **Защита от перебора** — по умолчанию 5 неудачных попыток → блокировка IP на 5 минут, с настраиваемым окном и длительностью
 
 ### 🚀 Развёртывание
-- **Четыре варианта** — аддон Home Assistant, Docker Compose, Proxmox LXC, OpenWrt LXC
+- **Треки аддона HA: stable / RC / beta** — prerelease-варианты используют разные ingress-порты, диапазоны Sendspin-портов, поведение при старте и branding, поэтому их безопаснее тестировать параллельно
+- **Ручное планирование портов** — глобальные override-параметры `WEB_PORT` и `BASE_LISTEN_PORT` помогают, когда несколько bridge работают на одном хосте или HAOS-инстансе
+- **Порты на уровне устройства** — `listen_port` фиксирует порт конкретного плеера, а `listen_host` меняет рекламируемый host/IP для этого плеера
 - **Несколько экземпляров bridge** — запуск нескольких мостов против одного сервера MA; каждый регистрирует свои плееры
 - **REST API на 42 эндпоинтов** — полный программный контроль (`/api/status`, `/api/volume`, `/api/bt/*`, `/api/ma/*`, …)
 - **Динамический уровень логов** — смена `LOG_LEVEL` через API или веб-интерфейс без перезапуска
@@ -111,6 +114,12 @@ Bluetooth-мост для [Music Assistant](https://www.music-assistant.io/) —
 
 [![Схема развёртывания: план этажа с зонами и адаптерами](https://trudenboy.github.io/sendspin-bt-bridge/diagrams/multiroom-diagram.png)](https://trudenboy.github.io/sendspin-bt-bridge/diagrams/multiroom-diagram/)
 
+### Пример живой топологии
+
+Два экземпляра bridge подключены к одному серверу MA: аддон HA на HAOS (4 колонки, 2 BT-адаптера) и Docker-контейнер в Proxmox LXC (2 колонки, 1 BT-адаптер). Все активные колонки объединены в одну sync group для синхронного воспроизведения.
+
+![Живая топология multi-bridge](multiroom-live.png)
+
 ---
 
 ## Протестированное оборудование
@@ -121,10 +130,24 @@ Bluetooth-мост для [Music Assistant](https://www.music-assistant.io/) —
 | **Proxmox LXC** | HP ProLiant MicroServer Gen8, Ubuntu 24.04 | CSR8510 A10 USB | IKEA ENEBY Portable |
 | **OpenWrt LXC** | Turris Omnia (ARMv7), Ubuntu 24.04 | CSR8510 A10 USB | AfterShokz |
 
-ПО: Python 3.12, BlueZ 5.72, PulseAudio 16.1, aiosendspin 4.3.2.
-Текущий тестовый стенд работает на релизной ветке v2.31.x с одним сервером Music Assistant и мультирум-синхронизацией.
+ПО: Python 3.12, BlueZ 5.72, PulseAudio 16.1, sendspin 5.x.
+Текущая документация отражает релизную линию v2.40.5 и её актуальное поведение для HA addon / Docker / LXC-развёртываний.
 
 📖 [Подробное описание тестового стенда →](https://trudenboy.github.io/sendspin-bt-bridge/ru/test-stand/)
+
+---
+
+## Поддерживаемые платформы
+
+Docker-образы собираются для трёх архитектур. Поддерживаются все популярные устройства Home Assistant.
+
+| Архитектура | Docker-платформа | Устройства HA | Статус |
+|---|---|---|---|
+| **amd64** (x86_64) | `linux/amd64` | Intel NUC, mini PC, Proxmox/VMware VM | ✅ Протестировано |
+| **aarch64** (ARM64) | `linux/arm64` | HA Green, HA Yellow, Raspberry Pi 4/5, ODROID N2+ | ✅ Проверено сообществом |
+| **armv7** (ARM 32-bit) | `linux/arm/v7` | Raspberry Pi 3, ODROID XU4, Tinker Board | ⚠️ Best-effort |
+
+> **Примечание:** Устройства armv7 (например, Raspberry Pi 3 с 1 ГБ ОЗУ) могут упираться в ресурсы при одновременной работе с несколькими Bluetooth-колонками. Для лучшего опыта рекомендуются aarch64 или amd64.
 
 ---
 
@@ -132,10 +155,11 @@ Bluetooth-мост для [Music Assistant](https://www.music-assistant.io/) —
 
 | | Аддон Home Assistant | Docker Compose | Proxmox LXC | OpenWrt LXC |
 |---|---|---|---|---|
-| Установка | Магазин аддонов HA (один клик) | `docker compose up` | Однострочный скрипт | Однострочный скрипт |
-| Bluetooth | bluetoothd хоста через D-Bus | bluetoothd хоста через D-Bus | Собственный bluetoothd внутри LXC | bluetoothd хоста через D-Bus |
+| Установка | Магазин аддонов HA (stable / RC / beta) | `docker compose up` | Однострочный скрипт | Однострочный скрипт |
+| Bluetooth | bluetoothd хоста через Supervisor/runtime mounts | bluetoothd хоста через D-Bus | bluetoothd хоста через D-Bus bridge | bluetoothd хоста через D-Bus bridge |
 | Аудио | Мост через HA Supervisor | PulseAudio/PipeWire хоста | Собственный PulseAudio внутри LXC | Собственный PulseAudio внутри LXC |
-| UI настройки | Панель HA + веб-интерфейс | Веб-интерфейс на :8080 | Веб-интерфейс на :8080 | Веб-интерфейс на :8080 |
+| UI настройки | HA Ingress (`8080` / `8081` / `8082`) + опциональный прямой `WEB_PORT` listener | Прямой `WEB_PORT` listener (по умолчанию `8080`) | Прямой `WEB_PORT` listener (по умолчанию `8080`) | Прямой `WEB_PORT` listener (по умолчанию `8080`) |
+| Порты плееров | Channel default `BASE_LISTEN_PORT` (`8928+`, `9028+`, `9128+`) | `BASE_LISTEN_PORT` (по умолчанию `8928+`) | `BASE_LISTEN_PORT` (по умолчанию `8928+`) | `BASE_LISTEN_PORT` (по умолчанию `8928+`) |
 | Применение изменений | Перезапуск аддона | Перезапуск контейнера | `systemctl restart` | `systemctl restart` |
 
 ---
@@ -150,35 +174,58 @@ Bluetooth-мост для [Music Assistant](https://www.music-assistant.io/) —
 
 Или вручную: **Настройки → Аддоны → Магазин аддонов → ⋮ → Репозитории** → добавьте `https://github.com/trudenboy/sendspin-bt-bridge`
 
-**2.** Найдите **Sendspin Bluetooth Bridge** в магазине и нажмите **Установить**.
+**2.** Установите нужный вариант аддона:
+- **Sendspin Bluetooth Bridge** → stable-трек
+- **Sendspin Bluetooth Bridge (RC)** → RC-трек
+- **Sendspin Bluetooth Bridge (Beta)** → beta-трек
+
+Stable рекомендуется для обычного использования. RC и beta используют разные defaults, поэтому их можно безопаснее тестировать параллельно на одном HAOS-хосте.
 
 ### Настройка
 
-На вкладке **Конфигурация** аддона:
+На вкладке **Configuration** аддона:
 
 ```yaml
-sendspin_server: auto          # или hostname/IP вашего MA
+sendspin_server: auto
 sendspin_port: 9000
+web_port: 8090                 # опционально — дополнительный прямой listener в сети хоста
+base_listen_port: 8928         # опционально — базовый per-device player port
+update_channel: stable         # влияет только на проверку обновлений, не меняет установленный трек аддона
 bluetooth_devices:
   - mac: "AA:BB:CC:DD:EE:FF"
     player_name: "Колонка в гостиной"
   - mac: "11:22:33:44:55:66"
     player_name: "Колонка на кухне"
-    adapter: hci1              # опционально — только для конфигураций с несколькими адаптерами
-    static_delay_ms: -500      # опционально — компенсация задержки A2DP в мс
+    adapter: hci1
+    static_delay_ms: -500
+    listen_port: 8935          # опционально — Sendspin-порт для конкретного устройства
+    listen_host: 192.168.1.50  # опционально — рекламируемый host/IP для отображаемого URL плеера
 ```
 
-Аддон предоставляет веб-интерфейс через **HA Ingress** (переброс портов не нужен) и отображается в боковой панели HA. Интерфейс автоматически подхватывает вашу тему HA (светлую/тёмную) через API postMessage `setTheme`.
+**Как работают ingress и direct listener:**
+- Stable использует ingress-порт **8080**, RC — **8081**, beta — **8082**
+- `web_port` **не** заменяет ingress — он открывает **дополнительный** прямой host-network listener
+- `base_listen_port` меняет базовый блок player-port для устройств без явного `listen_port`
+- `listen_host` меняет только рекламируемый host/IP; сами плееры всё равно bind'ятся на `0.0.0.0`
+
+Основной веб-интерфейс аддон всегда публикует через **HA Ingress** и показывает в боковой панели HA. Если задать `web_port`, появляется и прямой URL вида `http://<ip-хоста-ha>:8090` для диагностики или API-доступа.
 
 ### Требования
 
 - Home Assistant OS или Supervised
 - Bluetooth-адаптер, доступный хосту
-- Сервер Music Assistant, работающий в сети (любой хост)
+- Сервер Music Assistant в вашей сети (на любом хосте)
 
 ### Маршрутизация аудио (HA OS)
 
-Аддон запрашивает `audio: true` в манифесте, поэтому HA Supervisor автоматически подставляет `PULSE_SERVER`. Ручная настройка сокетов не требуется.
+Аддон запрашивает `audio: true` в манифесте, поэтому HA Supervisor автоматически инжектирует `PULSE_SERVER`. Ручная настройка сокетов не требуется.
+
+### Каналы обновлений аддона
+
+- Установленный вариант аддона определяет, на каком кодовом треке вы реально находитесь: stable, RC или beta.
+- Настройка `update_channel` внутри приложения только задаёт, какие релизы проверяет встроенная проверка обновлений; она **не** переключает установленный трек аддона.
+- Stable по умолчанию стартует автоматически. RC и beta по умолчанию запускаются вручную.
+- **Важно:** не настраивайте одно и то же Bluetooth-устройство в нескольких работающих аддонах одновременно.
 
 ---
 
@@ -188,7 +235,7 @@ bluetooth_devices:
 
 - Docker и Docker Compose
 - Bluetooth-колонки **сопряжены** с хостом до запуска контейнера
-- Сервер Music Assistant, работающий в сети
+- Сервер Music Assistant, работающий в вашей сети
 
 ### Сначала сопрягите колонки на хосте
 
@@ -210,17 +257,21 @@ services:
     container_name: sendspin-client
     restart: unless-stopped
     network_mode: host
-    privileged: true
 
     volumes:
       - /var/run/dbus:/var/run/dbus
-      - /run/user/1000/pulse:/run/user/1000/pulse   # PulseAudio
+      - /run/user/${AUDIO_UID:-1000}/pulse:/run/user/${AUDIO_UID:-1000}/pulse
+      - /run/user/${AUDIO_UID:-1000}/pipewire-0:/run/user/${AUDIO_UID:-1000}/pipewire-0
       - /etc/docker/Sendspin:/config
 
     environment:
       - SENDSPIN_SERVER=auto
-      - TZ=Europe/Moscow
-      - WEB_PORT=8080
+      - TZ=${TZ:-UTC}
+      - WEB_PORT=${WEB_PORT:-8080}
+      - BASE_LISTEN_PORT=${BASE_LISTEN_PORT:-8928}
+      - CONFIG_DIR=/config
+      - PULSE_SERVER=unix:/run/user/${AUDIO_UID:-1000}/pulse/native
+      - XDG_RUNTIME_DIR=/run/user/${AUDIO_UID:-1000}
 
     devices:
       - /dev/bus/usb:/dev/bus/usb
@@ -228,7 +279,6 @@ services:
     cap_add:
       - NET_ADMIN
       - NET_RAW
-      - SYS_ADMIN
 ```
 
 Создайте директорию конфигурации и запустите:
@@ -240,7 +290,13 @@ docker compose up -d
 
 > **Обновляетесь с более ранней версии?** Ранее образ публиковался как `ghcr.io/loryanstrant/sendspin-client`. Обновите файл compose или команду pull на `ghcr.io/trudenboy/sendspin-bt-bridge:latest`.
 
-Откройте веб-интерфейс по адресу `http://IP-вашего-хоста:8080` для добавления Bluetooth-устройств и настройки сервера MA.
+Откройте веб-интерфейс по адресу `http://IP-вашего-хоста:${WEB_PORT:-8080}` для добавления Bluetooth-устройств и настройки сервера MA.
+
+**Планирование портов в Docker-режиме:**
+- `WEB_PORT` меняет прямой listener веб-интерфейса/API
+- `BASE_LISTEN_PORT` задаёт базовый player-port для устройств без явного `listen_port`
+- `listen_port` / `listen_host` для конкретных устройств можно добавить позже в `/config/config.json` или через веб-интерфейс
+- если несколько bridge-контейнеров работают на одном хосте, задайте каждому уникальные `WEB_PORT` и `BASE_LISTEN_PORT` и **не** используйте одну и ту же Bluetooth-колонку в двух работающих bridge
 
 ---
 
@@ -358,32 +414,37 @@ lxc-attach -n sendspin -- btctl show
 
 ```json
 {
-  "SENDSPIN_NAME": "Sendspin-Bridge",
   "SENDSPIN_SERVER": "auto",
-  "SENDSPIN_PORT": "9000",
+  "SENDSPIN_PORT": 9000,
+  "WEB_PORT": 8080,
+  "BASE_LISTEN_PORT": 8928,
   "BLUETOOTH_DEVICES": [
     {
       "mac": "80:99:E7:C2:0B:D3",
       "player_name": "Гостиная",
-      "adapter": "hci0"
+      "adapter": "hci0",
+      "listen_port": 8931
     },
     {
       "mac": "FC:58:FA:EB:08:6C",
       "player_name": "Кухня",
-      "adapter": "hci1"
+      "adapter": "hci1",
+      "listen_host": "192.168.1.50"
     }
   ],
   "TZ": "Europe/Moscow"
 }
 ```
 
-Каждое устройство в `BLUETOOTH_DEVICES` запускает отдельный плеер Sendspin и менеджер Bluetooth. Оба отображаются как самостоятельные плееры в Music Assistant.
+Каждое устройство в `BLUETOOTH_DEVICES` запускает отдельный плеер Sendspin и менеджер Bluetooth. Все устройства отображаются как самостоятельные плееры в Music Assistant.
 
-Поле `adapter` опционально — опустите его, если у вас один Bluetooth-адаптер. Укажите `hci0`, `hci1` и т.д. при наличии нескольких адаптеров, чтобы привязать колонку к конкретному.
+- `WEB_PORT` управляет прямым listener'ом веб-интерфейса/API в Docker, Raspberry Pi и LXC-установках. В режиме HA addon то же значение открывает **дополнительный** прямой listener, а ingress остаётся на channel default порту.
+- `BASE_LISTEN_PORT` — это базовый Sendspin listener port. Устройства без явного `listen_port` получают `BASE_LISTEN_PORT + индекс_устройства`.
+- `listen_port` фиксирует порт конкретного плеера.
+- `listen_host` переопределяет рекламируемый host/IP для этого плеера. Он **не** меняет bind-адрес (`0.0.0.0`).
+- Поле `adapter` опционально — опустите его, если у вас один Bluetooth-адаптер.
 
-Большинство изменений конфигурации сразу записываются в `config.json`, но для применения изменений Bluetooth-топологии (устройства/адаптеры), настроек подключения к MA, listen-портов и latency по-прежнему нужен перезапуск сервиса. Runtime-переключатели вроде `LOG_LEVEL` и обновления пароля/аутентификации применяются сразу.
-
-Если bridge не может сопоставить адаптер с реальным `hciN`, он больше не “угадывает” `hci0`, а переключается на polling через bluetoothctl. Дубликаты Bluetooth MAC теперь игнорируются после первого вхождения, а повреждённый `config.json` сохраняется как `config.json.corrupt-*` перед запуском с defaults.
+Большинство изменений конфигурации сразу записываются в `config.json`, но для применения Bluetooth-топологии (устройства/адаптеры), настроек подключения к MA, web/player-port и latency по-прежнему нужен перезапуск сервиса. Runtime-переключатели вроде `LOG_LEVEL` и обновления пароля/аутентификации применяются сразу.
 
 ### Переменные окружения
 
@@ -393,7 +454,8 @@ lxc-attach -n sendspin -- btctl show
 | `SENDSPIN_SERVER` | `auto` | Hostname/IP сервера MA; `auto` — обнаружение через mDNS |
 | `SENDSPIN_PORT` | `9000` | Порт WebSocket Sendspin в MA |
 | `TZ` | `Australia/Melbourne` | Часовой пояс контейнера |
-| `WEB_PORT` | `8080` | Порт веб-интерфейса |
+| `WEB_PORT` | `8080` | Порт веб-интерфейса/API в standalone-режимах; в режиме HA addon добавляет второй прямой listener и не заменяет ingress |
+| `BASE_LISTEN_PORT` | `8928` | Базовый Sendspin player-port для устройств без явного `listen_port` |
 | `MA_API_URL` | `` | Базовый URL REST API Music Assistant (напр. `http://192.168.1.10:8123`) — включает метаданные воспроизведения и транспортные кнопки |
 | `MA_API_TOKEN` | `` | Долгосрочный токен доступа HA для MA API |
 | `VOLUME_VIA_MA` | `true` | Маршрутизация громкости через MA API; `false` = прямой PulseAudio |
@@ -401,14 +463,14 @@ lxc-attach -n sendspin -- btctl show
 | `LOG_LEVEL` | `INFO` | Уровень логирования (`INFO` или `DEBUG`); изменяется через API в реальном времени |
 | `DEMO_MODE` | `false` | Запуск с эмуляцией оборудования — BT/PulseAudio/MA не нужны |
 
-Переменные окружения перекрываются значениями из `/config/config.json`, если файл существует.
+Для стартового планирования портов можно явно задавать `WEB_PORT` и `BASE_LISTEN_PORT`. В режиме Home Assistant addon эти же значения доступны через addon options.
 
 ### Веб-интерфейс
 
-Веб-интерфейс по адресу `http://ваш-хост:8080` (или через HA Ingress) предоставляет:
+Веб-интерфейс доступен на настроенном `WEB_PORT` в Docker / Raspberry Pi / LXC-установках. В режиме HA addon основная ссылка в sidebar всегда остаётся на ingress-порту канала (stable `8080`, RC `8081`, beta `8082`); настройка `WEB_PORT` лишь добавляет второй прямой listener. Интерфейс предоставляет:
 
-- **Дашборд устройств в реальном времени**: карточки устройств или list view со статусом Bluetooth, воспроизведения, маршрутизации, синхронизации и Music Assistant
-- **Запоминаемый grid/list режим**: list view становится режимом по умолчанию при количестве устройств больше 6, а ручной выбор хранится в браузере
+- **Дашборд устройств в реальном времени**: карточки устройств или режим списка со статусом Bluetooth, воспроизведения, маршрутизации, синхронизации и Music Assistant
+- **Запоминаемый режим сетки/списка**: режим списка становится режимом по умолчанию при количестве устройств больше 6, а ручной выбор хранится в браузере
 - **Вкладки Configuration по задачам**: General, Devices, Bluetooth, Music Assistant и Security делают редактирование короче и понятнее
 - **Глубокие ссылки по месту**: шестерёнки и действия из empty-state ведут в точную конфигурационную карточку и подсвечивают нужную строку
 - **Сценарии discovery**: поиск nearby devices, импорт already paired hardware и соблюдение scan cooldown прямо в UI
@@ -419,7 +481,7 @@ lxc-attach -n sendspin -- btctl show
 
 ## Архитектура
 
-Bridge работает как **многопроцессное приложение**: один главный процесс управляет Bluetooth, веб-API и интеграцией с Music Assistant, тогда как каждая настроенная колонка получает собственный изолированный subprocess с выделенным контекстом PulseAudio (`PULSE_SINK`).
+Bridge работает как **многопроцессное приложение**: один главный процесс управляет Bluetooth, веб-API и интеграцией с Music Assistant, тогда как каждая настроенная колонка получает собственный изолированный subprocess с выделенным контекстом PulseAudio (`PULSE_SINK`). В режиме HA addon то же Flask/Waitress-приложение может одновременно публиковать фиксированный ingress-listener и дополнительный прямой listener на `WEB_PORT`.
 
 ```
 ┌─────────────────────────────────────┐
@@ -445,7 +507,7 @@ Bridge работает как **многопроцессное приложен
 │  │  · синк PipeWire/PulseAudio │    │
 │  └─────────────────────────────┘    │
 │  ┌─────────────────────────────┐    │
-│  │  Веб-интерфейс (Flask/8080) │    │
+│  │  Веб-интерфейс (Flask/WSGI) │    │
 │  │  · панель мониторинга       │    │
 │  │  · редактор конфигурации    │    │
 │  │  · групповое управление     │    │
@@ -509,7 +571,7 @@ volumes:
 `GET /api/diagnostics` возвращает JSON-снимок состояния системы — определённые адаптеры, PulseAudio-синки, доступность D-Bus и статус каждого устройства. Удобно для удалённой отладки без доступа к оболочке.
 
 ```bash
-curl http://ваш-хост:8080/api/diagnostics | python3 -m json.tool
+curl http://ваш-хост:${WEB_PORT:-8080}/api/diagnostics | python3 -m json.tool
 ```
 
 ### Нет аудио-синка после подключения Bluetooth
@@ -639,3 +701,18 @@ python sendspin_client.py
 Полная история версий в [CHANGELOG.md](CHANGELOG.md).
 
 Нарративная история развития проекта (архитектурные решения, вехи, миграция v1 → v2) — в [HISTORY.ru.md](HISTORY.ru.md).
+
+
+## Треки аддона и планирование портов
+
+Манифест в `ha-addon/`, который лежит в репозитории, соответствует stable-варианту аддона Home Assistant. Когда публикуются RC или beta-варианты, они устанавливаются как отдельные треки с разными портами по умолчанию:
+
+| Трек | Ingress / веб-порт по умолчанию | Базовый порт плееров по умолчанию |
+|---|---|---|
+| Stable | `8080` | `8928` |
+| RC | `8081` | `9028` |
+| Beta | `8082` | `9128` |
+
+Изменение настройки `update_channel` внутри приложения **не** переключает установленный трек аддона Home Assistant. Эта настройка влияет только на проверку prerelease-обновлений и предупреждающие тексты в интерфейсе.
+
+Если на одном хосте работают несколько bridge-инстансов или несколько вариантов аддона, используйте эти дефолты как отправную точку и задавайте `WEB_PORT`, `BASE_LISTEN_PORT` или индивидуальные `listen_port` вручную, когда нужна дополнительная изоляция.
