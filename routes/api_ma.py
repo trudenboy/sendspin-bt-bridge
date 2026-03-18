@@ -24,11 +24,8 @@ from config import (
     update_config,
 )
 from routes.api_config import _detect_runtime
+from services.device_registry import get_device_registry_snapshot
 from services.ma_artwork import has_valid_artwork_signature
-from state import clients as _clients
-from state import (
-    clients_lock as _clients_lock,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -47,8 +44,7 @@ def _ma_host_from_sendspin_clients():
     resolved address from the live sendspin WebSocket connection.
     Returns host string or None.
     """
-    with _clients_lock:
-        snapshot = list(_clients)
+    snapshot = get_device_registry_snapshot().active_clients
     for client in snapshot:
         host = getattr(client, "server_host", None)
         if host and host.lower() not in ("auto", "discover", ""):
@@ -60,6 +56,30 @@ def _ma_host_from_sendspin_clients():
         if resolved and ":" in resolved:
             return resolved.rsplit(":", 1)[0]
     return None
+
+
+def _bridge_players_snapshot() -> list[dict[str, str]]:
+    """Return active bridge players in MA discovery payload shape."""
+    return [
+        {
+            "player_id": str(getattr(client, "player_id", "") or ""),
+            "player_name": str(getattr(client, "player_name", "") or ""),
+        }
+        for client in get_device_registry_snapshot().active_clients
+        if getattr(client, "player_id", None)
+    ]
+
+
+def _debug_clients_snapshot() -> list[dict[str, str | None]]:
+    """Return active client info for MA debugging surfaces."""
+    return [
+        {
+            "player_name": getattr(client, "player_name", None),
+            "player_id": getattr(client, "player_id", None),
+            "group_id": client.status.get("group_id") if hasattr(client, "status") else None,
+        }
+        for client in get_device_registry_snapshot().active_clients
+    ]
 
 
 def _resolve_target_queue(
@@ -84,7 +104,7 @@ def _resolve_target_queue(
                 return candidate, candidate
 
         active_clients = []
-        for client in state.get_clients_snapshot():
+        for client in get_device_registry_snapshot().active_clients:
             pid = str(getattr(client, "player_id", "") or "").strip()
             if not pid:
                 continue
@@ -367,9 +387,9 @@ def _save_ma_token_and_rediscover(ma_url: str, ma_token: str, username: str = ""
     loop = state.get_main_loop()
     if loop:
         try:
-            with _clients_lock:
-                players = [{"player_id": c.player_id, "player_name": c.player_name} for c in _clients]
-            asyncio.run_coroutine_threadsafe(_rediscover_after_login(ma_url, ma_token, players), loop)
+            asyncio.run_coroutine_threadsafe(
+                _rediscover_after_login(ma_url, ma_token, _bridge_players_snapshot()), loop
+            )
         except Exception:
             pass
 
@@ -1058,11 +1078,8 @@ def api_ma_login():
 
     # Trigger MA group rediscovery in background
     try:
-        with _clients_lock:
-            snapshot = list(_clients)
-        player_names = [c.player_name for c in snapshot]
         asyncio.run_coroutine_threadsafe(
-            _rediscover_after_login(ma_url, token, player_names),
+            _rediscover_after_login(ma_url, token, _bridge_players_snapshot()),
             loop,
         )
     except Exception:
@@ -1347,9 +1364,7 @@ def api_ma_rediscover():
     try:
         from services.ma_client import discover_ma_groups
 
-        with _clients_lock:
-            snapshot = list(_clients)
-        player_info = [{"player_id": c.player_id, "player_name": c.player_name} for c in snapshot]
+        player_info = _bridge_players_snapshot()
         fut = asyncio.run_coroutine_threadsafe(discover_ma_groups(ma_url, ma_token, player_info), loop)
         name_map, all_groups = fut.result(timeout=15.0)
         state.set_ma_api_credentials(ma_url, ma_token)
@@ -1522,15 +1537,7 @@ def api_debug_ma():
     with state._ma_now_playing_lock:
         cache = dict(state._ma_now_playing)
     groups = state.get_ma_groups()
-    with _clients_lock:
-        clients_info = [
-            {
-                "player_name": getattr(c, "player_name", None),
-                "player_id": getattr(c, "player_id", None),
-                "group_id": c.status.get("group_id") if hasattr(c, "status") else None,
-            }
-            for c in _clients
-        ]
+    clients_info = _debug_clients_snapshot()
 
     # Fetch live queue ids from MA WebSocket
     ma_url, ma_token = state.get_ma_api_credentials()

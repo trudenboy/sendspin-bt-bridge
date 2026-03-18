@@ -1123,6 +1123,112 @@ def test_ma_artwork_proxy_rejects_invalid_signature(client):
         state.set_ma_api_credentials("", "")
 
 
+def test_ma_host_from_sendspin_clients_uses_registry_snapshot(monkeypatch):
+    import routes.api_ma as api_ma
+    from services.device_registry import DeviceRegistrySnapshot
+
+    snapshot = DeviceRegistrySnapshot(
+        active_clients=[
+            SimpleNamespace(server_host="auto", connected_server_url="192.168.10.10:9000"),
+            SimpleNamespace(server_host="music-assistant.local", connected_server_url=""),
+        ]
+    )
+    monkeypatch.setattr(api_ma, "get_device_registry_snapshot", lambda: snapshot)
+
+    assert api_ma._ma_host_from_sendspin_clients() == "music-assistant.local"
+
+
+def test_api_ma_rediscover_uses_registry_snapshot_player_payload(client, tmp_path, monkeypatch):
+    import routes.api_ma as api_ma
+    import services.ma_client as ma_client
+    import state
+    from services.device_registry import DeviceRegistrySnapshot
+
+    (tmp_path / "config.json").write_text(json.dumps({"MA_API_URL": "http://ma.local:8095", "MA_API_TOKEN": "token"}))
+    captured = {}
+
+    async def _fake_discover(ma_url, ma_token, player_info):
+        captured["ma_url"] = ma_url
+        captured["ma_token"] = ma_token
+        captured["player_info"] = player_info
+        return (
+            {"sendspin-kitchen": {"id": "syncgroup_1", "name": "Kitchen"}},
+            [{"id": "syncgroup_1", "name": "Kitchen"}],
+        )
+
+    class _DoneFuture:
+        def __init__(self, result):
+            self._result = result
+
+        def result(self, timeout=None):
+            return self._result
+
+    def _run_coroutine_threadsafe(coro, loop):
+        tmp_loop = asyncio.new_event_loop()
+        try:
+            return _DoneFuture(tmp_loop.run_until_complete(coro))
+        finally:
+            tmp_loop.close()
+
+    monkeypatch.setattr(state, "get_main_loop", lambda: object())
+    monkeypatch.setattr(ma_client, "discover_ma_groups", _fake_discover)
+    monkeypatch.setattr(api_ma.asyncio, "run_coroutine_threadsafe", _run_coroutine_threadsafe)
+    monkeypatch.setattr(
+        api_ma,
+        "get_device_registry_snapshot",
+        lambda: DeviceRegistrySnapshot(
+            active_clients=[SimpleNamespace(player_id="sendspin-kitchen", player_name="Kitchen", status={})]
+        ),
+    )
+
+    try:
+        resp = client.post("/api/ma/rediscover")
+
+        assert resp.status_code == 200
+        assert captured["ma_url"] == "http://ma.local:8095"
+        assert captured["ma_token"] == "token"
+        assert captured["player_info"] == [{"player_id": "sendspin-kitchen", "player_name": "Kitchen"}]
+    finally:
+        state.set_ma_api_credentials("", "")
+        state.set_ma_groups({}, [])
+
+
+def test_api_debug_ma_uses_registry_snapshot(client, monkeypatch):
+    import routes.api_ma as api_ma
+    import state
+    from services.device_registry import DeviceRegistrySnapshot
+
+    state.clear_ma_now_playing()
+    state.set_ma_groups({}, [])
+    try:
+        monkeypatch.setattr(
+            api_ma,
+            "get_device_registry_snapshot",
+            lambda: DeviceRegistrySnapshot(
+                active_clients=[
+                    SimpleNamespace(
+                        player_name="Kitchen", player_id="sendspin-kitchen", status={"group_id": "syncgroup_1"}
+                    )
+                ]
+            ),
+        )
+
+        resp = client.get("/api/debug/ma")
+
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["clients"] == [
+            {
+                "player_name": "Kitchen",
+                "player_id": "sendspin-kitchen",
+                "group_id": "syncgroup_1",
+            }
+        ]
+    finally:
+        state.clear_ma_now_playing()
+        state.set_ma_groups({}, [])
+
+
 def test_ma_queue_cmd_returns_structured_predicted_state(client, monkeypatch):
     import routes.api_ma as api_ma
     import services.ma_monitor as ma_monitor
