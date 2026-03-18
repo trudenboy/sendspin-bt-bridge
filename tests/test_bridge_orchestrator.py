@@ -14,6 +14,32 @@ import state
 from bridge_orchestrator import BridgeOrchestrator
 
 
+class RecordingLifecycleState:
+    def __init__(self):
+        self.calls: list[tuple[str, dict[str, object]]] = []
+
+    def begin_startup(self, *, demo_mode: bool) -> None:
+        self.calls.append(("begin_startup", {"demo_mode": demo_mode}))
+
+    def publish_main_loop(self, loop, *, web_thread_name: str = "") -> None:
+        self.calls.append(("publish_main_loop", {"loop": loop, "web_thread_name": web_thread_name}))
+
+    def publish_clients(self, clients) -> None:
+        self.calls.append(("publish_clients", {"clients": clients}))
+
+    def publish_runtime_prepared(self, **kwargs) -> None:
+        self.calls.append(("publish_runtime_prepared", kwargs))
+
+    def publish_device_registry(self, **kwargs) -> None:
+        self.calls.append(("publish_device_registry", kwargs))
+
+    def publish_ma_integration(self, **kwargs) -> None:
+        self.calls.append(("publish_ma_integration", kwargs))
+
+    def complete_startup(self, **kwargs) -> None:
+        self.calls.append(("complete_startup", kwargs))
+
+
 @pytest.fixture(autouse=True)
 def _isolated_config(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
@@ -83,6 +109,16 @@ async def test_initialize_runtime_invokes_demo_install_when_enabled(monkeypatch)
 
 
 @pytest.mark.asyncio
+async def test_initialize_runtime_delegates_startup_publication_to_lifecycle_state():
+    lifecycle_state = RecordingLifecycleState()
+    orchestrator = BridgeOrchestrator(lifecycle_state=lifecycle_state)
+
+    await orchestrator.initialize_runtime()
+
+    assert lifecycle_state.calls[0] == ("begin_startup", {"demo_mode": False})
+
+
+@pytest.mark.asyncio
 async def test_configure_executor_registers_main_loop_and_web_progress():
     orchestrator = BridgeOrchestrator()
     loop = asyncio.get_running_loop()
@@ -102,6 +138,26 @@ async def test_configure_executor_registers_main_loop_and_web_progress():
         loop._default_executor = original_executor
 
 
+@pytest.mark.asyncio
+async def test_configure_executor_delegates_main_loop_publication():
+    lifecycle_state = RecordingLifecycleState()
+    orchestrator = BridgeOrchestrator(lifecycle_state=lifecycle_state)
+    loop = asyncio.get_running_loop()
+    original_executor = getattr(loop, "_default_executor", None)
+
+    try:
+        await orchestrator.configure_executor(2, web_thread_name="DelegatedWeb")
+    finally:
+        current_executor = getattr(loop, "_default_executor", None)
+        if current_executor is not None and current_executor is not original_executor:
+            current_executor.shutdown(wait=False, cancel_futures=True)
+        loop._default_executor = original_executor
+
+    assert lifecycle_state.calls[-1][0] == "publish_main_loop"
+    assert lifecycle_state.calls[-1][1]["loop"] is loop
+    assert lifecycle_state.calls[-1][1]["web_thread_name"] == "DelegatedWeb"
+
+
 def test_start_web_server_publishes_clients_before_running_web_main():
     orchestrator = BridgeOrchestrator()
     clients = [SimpleNamespace(player_name="Kitchen")]
@@ -117,6 +173,17 @@ def test_start_web_server_publishes_clients_before_running_web_main():
 
     assert seen.is_set()
     assert thread.name == "TestWebServer"
+
+
+def test_start_web_server_delegates_client_publication():
+    lifecycle_state = RecordingLifecycleState()
+    orchestrator = BridgeOrchestrator(lifecycle_state=lifecycle_state)
+    clients = [SimpleNamespace(player_name="Kitchen")]
+
+    thread = orchestrator.start_web_server(clients, web_main=lambda: None, thread_name="DelegatedWebServer")
+    thread.join(timeout=1)
+
+    assert lifecycle_state.calls == [("publish_clients", {"clients": clients})]
 
 
 @pytest.mark.asyncio
@@ -237,6 +304,36 @@ async def test_initialize_ma_integration_discovers_groups_and_starts_monitor(mon
 
 
 @pytest.mark.asyncio
+async def test_initialize_ma_integration_delegates_state_publication(monkeypatch):
+    lifecycle_state = RecordingLifecycleState()
+    orchestrator = BridgeOrchestrator(lifecycle_state=lifecycle_state)
+
+    async def fake_discover(_url, _token, _player_info):
+        return (
+            {"sendspin-kitchen": {"id": "syncgroup_1", "name": "Kitchen Group"}},
+            [{"id": "syncgroup_1", "name": "Kitchen Group", "members": []}],
+        )
+
+    monkeypatch.setattr("services.ma_client.discover_ma_groups", fake_discover)
+
+    await orchestrator.initialize_ma_integration(
+        {
+            "MA_API_URL": "http://ma.local:8095",
+            "MA_API_TOKEN": "token",
+            "MA_WEBSOCKET_MONITOR": False,
+        },
+        [SimpleNamespace(player_id="sendspin-kitchen", player_name="Kitchen")],
+        server_host="music-assistant.local",
+    )
+
+    assert lifecycle_state.calls[-1][0] == "publish_ma_integration"
+    assert lifecycle_state.calls[-1][1]["ma_api_url"] == "http://ma.local:8095"
+    assert lifecycle_state.calls[-1][1]["ma_api_token"] == "token"
+    assert lifecycle_state.calls[-1][1]["groups_loaded"] is True
+    assert lifecycle_state.calls[-1][1]["monitor_enabled"] is False
+
+
+@pytest.mark.asyncio
 async def test_assemble_runtime_tasks_marks_startup_complete_and_wires_demo_helpers():
     orchestrator = BridgeOrchestrator()
     client_runs: list[str] = []
@@ -278,6 +375,39 @@ async def test_assemble_runtime_tasks_marks_startup_complete_and_wires_demo_help
     assert progress["phase"] == "ready"
     assert progress["details"]["demo_mode"] is True
     assert progress["details"]["active_clients"] == 2
+
+    for task in tasks:
+        task.cancel()
+    for task in tasks:
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+
+@pytest.mark.asyncio
+async def test_assemble_runtime_tasks_delegates_startup_completion():
+    lifecycle_state = RecordingLifecycleState()
+    orchestrator = BridgeOrchestrator(lifecycle_state=lifecycle_state)
+
+    class FakeClient:
+        async def run(self) -> None:
+            await asyncio.sleep(3600)
+
+    async def fake_update_checker(_version: str) -> None:
+        await asyncio.sleep(3600)
+
+    clients = [FakeClient()]
+    tasks = orchestrator.assemble_runtime_tasks(
+        clients,
+        ma_monitor_task=None,
+        demo_mode=False,
+        version="2.32.12",
+        run_update_checker_fn=fake_update_checker,
+    )
+
+    assert lifecycle_state.calls[-1][0] == "complete_startup"
+    assert lifecycle_state.calls[-1][1]["active_clients"] == clients
+    assert lifecycle_state.calls[-1][1]["demo_mode"] is False
+    assert lifecycle_state.calls[-1][1]["monitor_enabled"] is False
 
     for task in tasks:
         task.cancel()
@@ -549,6 +679,77 @@ def test_initialize_devices_builds_clients_and_registers_disabled_devices():
     client.bt_manager.on_sink_found("bluez_output.demo", 44)
     assert client.bluetooth_sink_name == "bluez_output.demo"
     assert client.status["volume"] == 44
+
+
+def test_initialize_devices_delegates_runtime_and_registry_publication():
+    lifecycle_state = RecordingLifecycleState()
+    orchestrator = BridgeOrchestrator(lifecycle_state=lifecycle_state)
+
+    class FakeClient:
+        def __init__(self, player_name, *_args, listen_port, **_kwargs):
+            self.player_name = player_name
+            self.listen_port = listen_port
+            self.bt_manager = None
+            self.bt_management_enabled = True
+            self.bluetooth_sink_name = None
+            self.status = {"volume": 100, "bluetooth_available": None}
+
+        def _update_status(self, updates):
+            self.status.update(updates)
+
+        def set_bt_management_enabled(self, enabled):
+            self.bt_management_enabled = enabled
+
+    class FakeBtManager:
+        def __init__(self, _mac_address, **kwargs):
+            self.on_sink_found = kwargs["on_sink_found"]
+
+        def check_bluetooth_available(self):
+            return True
+
+    bootstrap_result = orchestrator.initialize_devices(
+        SimpleNamespace(
+            device_configs=[
+                {"player_name": "Kitchen", "mac": "AA:BB:CC:DD:EE:01"},
+                {"player_name": "Bedroom", "mac": "AA:BB:CC:DD:EE:02", "enabled": False},
+            ],
+            server_host="music-assistant.local",
+            server_port=9000,
+            effective_bridge="Bridge",
+            prefer_sbc=False,
+            bt_check_interval=15,
+            bt_max_reconnect_fails=5,
+            bt_churn_threshold=3,
+            bt_churn_window=120.0,
+            log_level="INFO",
+            pulse_latency_msec=250,
+        ),
+        client_factory=FakeClient,
+        bt_manager_factory=FakeBtManager,
+        filter_devices_fn=lambda devices: devices,
+    )
+
+    runtime_call = lifecycle_state.calls[0]
+    registry_call = lifecycle_state.calls[1]
+    assert runtime_call == (
+        "publish_runtime_prepared",
+        {
+            "configured_devices": 2,
+            "log_level": "INFO",
+            "pulse_latency_msec": 250,
+        },
+    )
+    assert registry_call[0] == "publish_device_registry"
+    assert registry_call[1]["configured_devices"] == 2
+    assert registry_call[1]["active_clients"] == bootstrap_result.clients
+    assert registry_call[1]["disabled_devices"] == [
+        {
+            "player_name": "Bedroom @ Bridge",
+            "mac": "AA:BB:CC:DD:EE:02",
+            "adapter": "",
+            "enabled": False,
+        }
+    ]
 
 
 def test_initialize_devices_warns_on_port_collisions_and_persists_enabled(caplog):

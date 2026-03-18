@@ -18,6 +18,7 @@ if TYPE_CHECKING:
 
 import state as _state
 from config import ensure_bridge_name, load_config
+from services.lifecycle_state import BridgeLifecycleState
 from services.sendspin_compat import format_dependency_versions, get_runtime_dependency_versions
 from services.update_checker import run_update_checker
 
@@ -58,26 +59,14 @@ class DeviceBootstrap:
 class BridgeOrchestrator:
     """Own bridge-wide runtime bootstrap without changing device behavior yet."""
 
-    def __init__(self, startup_steps: int = 6):
+    def __init__(self, startup_steps: int = 6, *, lifecycle_state: BridgeLifecycleState | None = None):
         self.startup_steps = startup_steps
+        self.lifecycle_state = lifecycle_state or BridgeLifecycleState(startup_steps=startup_steps)
 
     async def initialize_runtime(self) -> RuntimeBootstrap:
         """Load bridge config and apply process-wide runtime settings."""
         demo_mode = os.getenv("DEMO_MODE", "").lower() in ("1", "true", "yes")
-        _state.set_runtime_mode_info(
-            {
-                "mode": "demo" if demo_mode else "production",
-                "is_mocked": bool(demo_mode),
-                "simulator_active": bool(demo_mode),
-            }
-        )
-        _state.reset_startup_progress(self.startup_steps, message="Startup initiated")
-        _state.update_startup_progress(
-            "config",
-            "Loading configuration",
-            current_step=1,
-            details={"demo_mode": demo_mode},
-        )
+        self.lifecycle_state.begin_startup(demo_mode=demo_mode)
         if demo_mode:
             from demo import install
 
@@ -135,13 +124,7 @@ class BridgeOrchestrator:
         pool_size = min(64, max(8, device_count * 2 + 4))
         asyncio.get_running_loop().set_default_executor(ThreadPoolExecutor(max_workers=pool_size))
         logger.debug("ThreadPoolExecutor: max_workers=%s", pool_size)
-        _state.set_main_loop(asyncio.get_running_loop())
-        _state.update_startup_progress(
-            "web",
-            "Web interface and event loop ready",
-            current_step=4,
-            details={"web_thread": web_thread_name} if web_thread_name else {},
-        )
+        self.lifecycle_state.publish_main_loop(asyncio.get_running_loop(), web_thread_name=web_thread_name)
         return pool_size
 
     def start_web_server(
@@ -159,7 +142,7 @@ class BridgeOrchestrator:
             web_main_fn = imported_web_main
 
         def _run_web_server() -> None:
-            _state.set_clients(clients)
+            self.lifecycle_state.publish_clients(clients)
             web_main_fn()
 
         web_thread = threading.Thread(target=_run_web_server, daemon=True, name=thread_name)
@@ -236,16 +219,16 @@ class BridgeOrchestrator:
                     "Create a long-lived token in MA → Settings → API Tokens and set ma_api_token in bridge config."
                 )
 
+        name_map: dict[str, dict[str, Any]] | None = None
+        all_groups: list[dict[str, Any]] | None = None
+        groups_loaded = False
         if ma_api_url and ma_api_token:
-            _state.set_ma_api_credentials(ma_api_url, ma_api_token)
             try:
                 from services.ma_client import discover_ma_groups
 
                 player_info = [{"player_id": client.player_id, "player_name": client.player_name} for client in clients]
                 name_map, all_groups = await discover_ma_groups(ma_api_url, ma_api_token, player_info)
-                _state.set_ma_groups(name_map, all_groups)
-                if name_map:
-                    _state.set_ma_connected(True)
+                groups_loaded = True
             except Exception as ma_exc:
                 logger.warning("MA API group discovery error: %s", ma_exc)
 
@@ -256,14 +239,13 @@ class BridgeOrchestrator:
             monitor = start_monitor(ma_api_url, ma_api_token)
             ma_monitor_task = asyncio.create_task(monitor.run())
 
-        _state.update_startup_progress(
-            "integrations",
-            "Music Assistant integrations initialized",
-            current_step=5,
-            details={
-                "ma_configured": bool(ma_api_url and ma_api_token),
-                "ma_monitor_enabled": bool(ma_monitor_task),
-            },
+        self.lifecycle_state.publish_ma_integration(
+            ma_api_url=ma_api_url,
+            ma_api_token=ma_api_token,
+            groups_loaded=groups_loaded,
+            name_map=name_map,
+            all_groups=all_groups,
+            monitor_enabled=bool(ma_monitor_task),
         )
         return MaBootstrap(
             ma_api_url=ma_api_url,
@@ -289,15 +271,10 @@ class BridgeOrchestrator:
             if filter_devices_fn is not None
             else list(bootstrap.device_configs)
         )
-        _state.update_startup_progress(
-            "runtime",
-            "Runtime configuration prepared",
-            current_step=2,
-            details={
-                "configured_devices": len(bt_devices),
-                "log_level": bootstrap.log_level,
-                "pulse_latency_msec": bootstrap.pulse_latency_msec,
-            },
+        self.lifecycle_state.publish_runtime_prepared(
+            configured_devices=len(bt_devices),
+            log_level=bootstrap.log_level,
+            pulse_latency_msec=bootstrap.pulse_latency_msec,
         )
 
         logger.info("Starting %s player instance(s)", len(bt_devices))
@@ -391,16 +368,10 @@ class BridgeOrchestrator:
             logger.info("  Player: '%s', BT: %s, Adapter: %s", player_name, mac or "none", adapter or "default")
 
         logger.info("Client instance(s) registered")
-        _state.set_disabled_devices(disabled_list)
-        _state.update_startup_progress(
-            "devices",
-            "Device registry prepared",
-            current_step=3,
-            details={
-                "configured_devices": len(bt_devices),
-                "active_clients": len(clients),
-                "disabled_devices": len(disabled_list),
-            },
+        self.lifecycle_state.publish_device_registry(
+            configured_devices=len(bt_devices),
+            active_clients=clients,
+            disabled_devices=disabled_list,
         )
 
         if persist_enabled_fn is not None:
@@ -455,13 +426,10 @@ class BridgeOrchestrator:
 
         update_checker_fn = run_update_checker_fn or run_update_checker
         tasks.append(asyncio.create_task(update_checker_fn(version)))
-        _state.complete_startup_progress(
-            "Startup complete",
-            details={
-                "active_clients": len(clients),
-                "ma_monitor_enabled": bool(ma_monitor_task),
-                "demo_mode": demo_mode,
-            },
+        self.lifecycle_state.complete_startup(
+            active_clients=clients,
+            demo_mode=demo_mode,
+            monitor_enabled=bool(ma_monitor_task),
         )
         return tasks
 

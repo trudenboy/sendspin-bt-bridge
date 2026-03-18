@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Explicit `CONFIG_SCHEMA_VERSION` handling in `config.py`, including legacy-config backfill so loaded configs are transparently persisted with the current schema version for future migration work
 - Shared `services.ipc_protocol` helpers with `IPC_PROTOCOL_VERSION` so parent↔subprocess JSON-line messages and daemon bootstrap params now carry an explicit protocol contract
 - Internal contract versions are now exposed through shared bridge system info, `/api/version`, and diagnostics payloads so operators can see the active config schema and IPC protocol surfaces at runtime
+- New `services.lifecycle_state` helpers so bridge-wide startup progress, MA integration publication, main-loop publication, and startup completion now have an explicit service seam instead of being scattered across `BridgeOrchestrator`
 
 ### Changed
 - Parent↔subprocess IPC is now versioned end-to-end: daemon status/log envelopes, parent command envelopes, and daemon startup params all include `protocol_version` while remaining backward-compatible with legacy messages that omit it
@@ -19,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `routes/api_ma.py` now builds MA host inference, rediscovery player payloads, queue-target inference, and debug client dumps from shared device-registry snapshots, also fixing one rediscovery path that previously passed only player names instead of MA discovery payload objects
 - `routes/api.py` now resolves volume, mute, group pause, and per-player pause/play targets from shared device-registry snapshots instead of reading the global client list directly
 - `services/ma_monitor.py` now reads active bridge clients through the shared device-registry snapshot service for syncgroup queue discovery, solo queue discovery, stale identity reconciliation, and WS group refresh payload assembly
+- `BridgeOrchestrator` now delegates startup-state publication to `BridgeLifecycleState` for config startup, executor readiness, web client publication, runtime/device inventory, MA integration publication, and final startup completion without changing external behavior
+- Added focused lifecycle-state and orchestrator delegation coverage so the new service seam is locked down before larger `2.37.x` lifecycle extractions
 
 ## [2.32.12] - 2026-03-17
 
