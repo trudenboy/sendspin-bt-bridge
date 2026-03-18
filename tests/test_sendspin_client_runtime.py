@@ -79,6 +79,27 @@ async def test_read_subprocess_output_accepts_protocol_versioned_status_once():
     assert client.status.playing is True
 
 
+@pytest.mark.asyncio
+async def test_read_subprocess_stderr_delegates_to_stderr_service():
+    client = SendspinClient("Test Player", "localhost", 9000)
+    fake_stderr = object()
+    client._daemon_proc = SimpleNamespace(stderr=fake_stderr)
+
+    class _FakeService:
+        def __init__(self):
+            self.stderr = None
+
+        async def read_stream(self, stderr):
+            self.stderr = stderr
+
+    fake_service = _FakeService()
+    client._stderr_service = fake_service
+
+    await client._read_subprocess_stderr()
+
+    assert fake_service.stderr is fake_stderr
+
+
 def test_filter_duplicate_bluetooth_devices_keeps_first_mac():
     devices = [
         {"mac": "aa:bb:cc:dd:ee:ff", "player_name": "Kitchen"},

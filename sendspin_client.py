@@ -35,8 +35,8 @@ from services.ipc_protocol import (
     parse_protocol_version,
     with_protocol_version,
 )
-from services.log_analysis import classify_subprocess_stderr_level
 from services.playback_health import PlaybackHealthMonitor
+from services.subprocess_stderr import SubprocessStderrService
 
 UTC = timezone.utc
 
@@ -246,6 +246,11 @@ class SendspinClient:
         self._restart_delay: float = 1.0  # exponential backoff for unexpected daemon restarts
         self._start_sendspin_lock: asyncio.Lock | None = None  # set in run(), guards concurrent starts
         self._playback_health = PlaybackHealthMonitor()
+        self._stderr_service = SubprocessStderrService(
+            player_name=player_name,
+            update_status=self._update_status,
+            logger_=logger,
+        )
 
     @property
     def _playing_since(self) -> float | None:
@@ -673,31 +678,11 @@ class SendspinClient:
         """Forward daemon subprocess stderr lines with severity matching their content."""
         if self._daemon_proc is None or self._daemon_proc.stderr is None:
             return
-        while self._daemon_proc and self._daemon_proc.stderr:
-            line = await self._daemon_proc.stderr.readline()
-            if not line:
-                break
-            self._handle_subprocess_stderr_line(line.decode(errors="replace").rstrip())
+        await self._stderr_service.read_stream(self._daemon_proc.stderr)
 
     def _handle_subprocess_stderr_line(self, line: str) -> None:
-        """Classify a daemon stderr line and mirror crash-like output into status."""
-        text = line.rstrip()
-        if not text:
-            return
-        level = classify_subprocess_stderr_level(text)
-        if level in ("error", "critical"):
-            self._update_status(
-                {
-                    "last_error": text[:500],
-                    "last_error_at": datetime.now(tz=UTC).isoformat(),
-                }
-            )
-        log_fn = {
-            "warning": logger.warning,
-            "error": logger.error,
-            "critical": logger.critical,
-        }.get(level, logger.warning)
-        log_fn("[%s] daemon stderr: %s", self.player_name, text)
+        """Compatibility proxy for stderr classification tests and legacy call sites."""
+        self._stderr_service.handle_line(line)
 
     async def _send_subprocess_command(self, cmd: dict) -> None:
         """Write a JSON command to the daemon subprocess stdin."""
