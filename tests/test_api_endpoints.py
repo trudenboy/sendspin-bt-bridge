@@ -221,6 +221,8 @@ def test_api_bugreport_uses_issue_worthy_logs_in_summary(client, monkeypatch):
 
 def test_api_version_includes_runtime_dependency_versions(client, monkeypatch):
     import routes.api_config as api_config_mod
+    from config import CONFIG_SCHEMA_VERSION
+    from services.ipc_protocol import IPC_PROTOCOL_VERSION
 
     monkeypatch.setattr(
         api_config_mod,
@@ -234,6 +236,8 @@ def test_api_version_includes_runtime_dependency_versions(client, monkeypatch):
     data = resp.get_json()
     assert data["dependencies"]["sendspin"] == "5.3.1"
     assert data["dependencies"]["aiosendspin"] == "4.3.0"
+    assert data["config_schema_version"] == CONFIG_SCHEMA_VERSION
+    assert data["ipc_protocol_version"] == IPC_PROTOCOL_VERSION
 
 
 def test_api_config_get_includes_security_and_monitor_defaults(client):
@@ -652,6 +656,8 @@ def test_api_diagnostics_includes_playing_and_sink_input_metadata(client, monkey
     """GET /api/diagnostics should expose playing state and parsed sink-input metadata."""
     import routes.api_status as api_status
     import state
+    from config import CONFIG_SCHEMA_VERSION
+    from services.ipc_protocol import IPC_PROTOCOL_VERSION
 
     fake_client = SimpleNamespace(
         player_name="Kitchen",
@@ -705,6 +711,8 @@ def test_api_diagnostics_includes_playing_and_sink_input_metadata(client, monkey
         resp = client.get("/api/diagnostics")
         assert resp.status_code == 200
         data = resp.get_json()
+        assert data["contract_versions"]["config_schema_version"] == CONFIG_SCHEMA_VERSION
+        assert data["contract_versions"]["ipc_protocol_version"] == IPC_PROTOCOL_VERSION
         assert data["devices"][0]["playing"] is True
         assert data["devices"][0]["last_error"] == "Route degraded"
         assert data["sink_inputs"][0]["id"] == "42"

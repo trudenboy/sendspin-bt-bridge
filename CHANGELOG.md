@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Explicit `CONFIG_SCHEMA_VERSION` handling in `config.py`, including legacy-config backfill so loaded configs are transparently persisted with the current schema version for future migration work
 - Shared `services.ipc_protocol` helpers with `IPC_PROTOCOL_VERSION` so parent↔subprocess JSON-line messages and daemon bootstrap params now carry an explicit protocol contract
+- Internal contract versions are now exposed through shared bridge system info, `/api/version`, and diagnostics payloads so operators can see the active config schema and IPC protocol surfaces at runtime
 
 ### Changed
 - Parent↔subprocess IPC is now versioned end-to-end: daemon status/log envelopes, parent command envelopes, and daemon startup params all include `protocol_version` while remaining backward-compatible with legacy messages that omit it

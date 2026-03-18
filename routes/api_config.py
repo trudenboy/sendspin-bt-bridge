@@ -22,6 +22,7 @@ from config import (
     BUILD_DATE,
     CONFIG_DIR,
     CONFIG_FILE,
+    CONFIG_SCHEMA_VERSION,
     VERSION,
     config_lock,
     load_config,
@@ -31,6 +32,7 @@ from services import (
     bt_remove_device as _bt_remove_device,
 )
 from services.bluetooth import _MAC_RE
+from services.ipc_protocol import IPC_PROTOCOL_VERSION
 from services.log_analysis import summarize_issue_logs
 from services.sendspin_compat import get_runtime_dependency_versions
 from services.update_checker import _start_upgrade_job
@@ -769,11 +771,22 @@ def api_version():
                 "version": git_desc or VERSION,
                 "git_sha": git_sha or "unknown",
                 "built_at": (git_date.split(" ")[0] if git_date else BUILD_DATE),
+                "config_schema_version": CONFIG_SCHEMA_VERSION,
+                "ipc_protocol_version": IPC_PROTOCOL_VERSION,
                 "dependencies": dependencies,
             }
         )
     except Exception:
-        return jsonify({"version": VERSION, "git_sha": "unknown", "built_at": BUILD_DATE, "dependencies": dependencies})
+        return jsonify(
+            {
+                "version": VERSION,
+                "git_sha": "unknown",
+                "built_at": BUILD_DATE,
+                "config_schema_version": CONFIG_SCHEMA_VERSION,
+                "ipc_protocol_version": IPC_PROTOCOL_VERSION,
+                "dependencies": dependencies,
+            }
+        )
 
 
 # ---------------------------------------------------------------------------

@@ -21,7 +21,8 @@ from datetime import datetime, timezone
 from flask import Blueprint, Response, jsonify
 
 import state
-from config import BUILD_DATE, VERSION, load_config
+from config import BUILD_DATE, CONFIG_SCHEMA_VERSION, VERSION, load_config
+from services.ipc_protocol import IPC_PROTOCOL_VERSION
 from services.log_analysis import summarize_issue_logs
 from services.pulse import get_server_name, list_sinks
 from services.sendspin_compat import get_runtime_dependency_versions
@@ -289,6 +290,10 @@ def api_diagnostics():
             "build_date": BUILD_DATE,
             "runtime": runtime,
             "uptime": uptime_str,
+            "contract_versions": {
+                "config_schema_version": CONFIG_SCHEMA_VERSION,
+                "ipc_protocol_version": IPC_PROTOCOL_VERSION,
+            },
             "environment": _collect_environment(),
             "startup_progress": build_startup_progress_snapshot().to_dict(),
             "runtime_info": build_mock_runtime_snapshot().to_dict(),

@@ -147,6 +147,9 @@ def test_build_group_snapshots_merges_ma_syncgroup_members():
 
 
 def test_build_bridge_snapshot_no_clients_preserves_bridge_metadata():
+    from config import CONFIG_SCHEMA_VERSION
+    from services.ipc_protocol import IPC_PROTOCOL_VERSION
+
     state.set_disabled_devices([{"player_name": "Disabled", "enabled": False}])
     state.set_ma_api_credentials("http://ma.local:8095", "token")
     state.set_ma_connected(False)
@@ -179,6 +182,8 @@ def test_build_bridge_snapshot_no_clients_preserves_bridge_metadata():
         assert payload["mock_runtime"]["mocked_layers"][0]["layer"] == "BluetoothManager"
         assert payload["version"]
         assert payload["runtime"]
+        assert payload["config_schema_version"] == CONFIG_SCHEMA_VERSION
+        assert payload["ipc_protocol_version"] == IPC_PROTOCOL_VERSION
     finally:
         state.set_disabled_devices([])
         state.set_ma_api_credentials("", "")
