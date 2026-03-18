@@ -7,6 +7,7 @@ All /api/ma/* and /api/debug/ma routes and the helper functions they depend on.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import os
@@ -398,11 +399,12 @@ def _save_ma_token_and_rediscover(ma_url: str, ma_token: str, username: str = ""
 
 
 def _get_ma_oauth_params(ma_url: str):
-    """Call MA /auth/authorize → parse HA URL, client_id, redirect_uri, state.
+    """Resolve HA OAuth parameters from Music Assistant auth endpoints.
 
-    Tries the stable GET endpoint first, then the beta JSONRPC format.
+    Supports legacy JSON responses plus newer redirect-based `/auth/authorize`
+    and JSON-RPC `auth/authorization_url` response shapes used by recent MA
+    stable/beta builds.
     """
-    import urllib.parse as _up
 
     def _parse_auth_url(auth_url: str):
         parsed = _up.urlparse(auth_url)
@@ -413,24 +415,69 @@ def _get_ma_oauth_params(ma_url: str):
         oauth_state = params.get("state", [""])[0]
         return ha_base, client_id, redirect_uri, oauth_state
 
-    # 1) Stable MA: GET /auth/authorize?provider_id=homeassistant
-    try:
-        resp = _ur.urlopen(f"{ma_url}/auth/authorize?provider_id=homeassistant", timeout=10)
-        info = json.loads(resp.read())
-        auth_url = info.get("authorization_url", "")
-        if auth_url:
-            return _parse_auth_url(auth_url)
-    except _ur.HTTPError:
-        pass  # Fall through to beta format
-    except Exception as exc:
-        logger.debug("Stable /auth/authorize failed: %s", exc)
+    def _extract_auth_url(payload: object) -> str:
+        if isinstance(payload, str):
+            return payload.strip()
+        if isinstance(payload, dict):
+            direct = payload.get("authorization_url")
+            if isinstance(direct, str) and direct.strip():
+                return direct.strip()
+            nested = payload.get("result")
+            if nested is not None:
+                return _extract_auth_url(nested)
+        return ""
 
-    # 2) Beta MA: POST /api with JSONRPC command auth/authorization_url
+    def _parse_response_auth_url(location: str = "", payload: object = None) -> tuple[str, str, str, str] | None:
+        auth_url = _extract_auth_url(payload) or str(location or "").strip()
+        if not auth_url:
+            return None
+        parsed = _parse_auth_url(auth_url)
+        if all(parsed):
+            return parsed
+        return None
+
+    return_url = ma_url or "/"
+
+    # 1) Current/legacy MA: GET /auth/authorize?provider_id=homeassistant[&return_url=...]
+    class _NoRedirectHandler(_ur.HTTPRedirectHandler):
+        def redirect_request(self, req, fp, code, msg, headers, newurl):
+            return None
+
+    try:
+        req = _ur.Request(
+            f"{ma_url}/auth/authorize?provider_id=homeassistant&return_url={_up.quote(return_url, safe=':/?=&')}"
+        )
+        opener = _ur.build_opener(_NoRedirectHandler)
+        with opener.open(req, timeout=10) as resp:
+            body = resp.read()
+            payload = None
+            if body:
+                with contextlib.suppress(json.JSONDecodeError, UnicodeDecodeError):
+                    payload = json.loads(body.decode("utf-8"))
+            parsed = _parse_response_auth_url(
+                location=resp.headers.get("Location", "") or getattr(resp, "geturl", lambda: "")(),
+                payload=payload,
+            )
+            if parsed:
+                return parsed
+    except _ue.HTTPError as exc:
+        body = exc.read()
+        payload = None
+        if body:
+            with contextlib.suppress(json.JSONDecodeError, UnicodeDecodeError):
+                payload = json.loads(body.decode("utf-8"))
+        parsed = _parse_response_auth_url(location=exc.headers.get("Location", ""), payload=payload)
+        if parsed:
+            return parsed
+    except Exception as exc:
+        logger.debug("MA /auth/authorize bootstrap failed: %s", exc)
+
+    # 2) Current/legacy MA JSON-RPC: POST /api auth/authorization_url
     try:
         body = json.dumps(
             {
                 "command": "auth/authorization_url",
-                "args": {"provider_id": "homeassistant"},
+                "args": {"provider_id": "homeassistant", "return_url": return_url},
                 "message_id": "oauth",
             }
         ).encode()
@@ -438,13 +485,13 @@ def _get_ma_oauth_params(ma_url: str):
         req.add_header("Content-Type", "application/json")
         with _ur.urlopen(req, timeout=10) as resp:
             data = json.loads(resp.read())
-            auth_url = data.get("result", "")
-            if auth_url:
-                return _parse_auth_url(auth_url)
+            parsed = _parse_response_auth_url(payload=data)
+            if parsed:
+                return parsed
     except Exception as exc:
-        logger.debug("Beta /api auth/authorization_url failed: %s", exc)
+        logger.debug("MA JSON-RPC auth/authorization_url failed: %s", exc)
 
-    logger.warning("MA OAuth params unavailable (both stable and beta methods failed)")
+    logger.warning("MA OAuth params unavailable (HTTP authorize and JSON-RPC methods failed)")
     return None
 
 

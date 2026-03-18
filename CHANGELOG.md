@@ -17,6 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `/api/update/check`, `/api/update/info`, and `/api/update/apply` now return channel-specific release metadata, warnings, and runtime-specific upgrade instructions for Docker, systemd/LXC, and Home Assistant environments
 - Docker publish and GitHub release workflows now split stable, rc, and beta distribution lanes: stable continues from `vX.Y.Z`, rc comes from `vX.Y.Z-rc.N` tags on `main`, and beta comes from the `beta` branch or `vX.Y.Z-beta.N` prerelease tags
 
+### Fixed
+- Home Assistant sign-in for external Music Assistant servers now works again against current Music Assistant stable and beta builds because the bridge accepts the newer redirect-based `/auth/authorize` flow and the newer JSON-RPC `auth/authorization_url` response shape instead of assuming the legacy auth bootstrap payload only
+
 ## [2.40.0] - 2026-03-18
 
 ### Added

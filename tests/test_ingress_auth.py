@@ -1,8 +1,11 @@
 """Tests for MA Ingress JSONRPC silent auth helpers."""
 
+import io
 import json
 import sys
+from email.message import Message
 from unittest.mock import MagicMock, patch
+from urllib.error import HTTPError
 
 import pytest
 
@@ -228,3 +231,67 @@ def test_ingress_failure_returns_502(_ws, _ingress, mock_state, client):
         json={"ha_token": "tok", "ma_url": "http://localhost:8095"},
     )
     assert resp.status_code == 502
+
+
+class TestGetMaOauthParams:
+    @patch("routes.api_ma._ur.urlopen")
+    @patch("routes.api_ma._ur.build_opener")
+    def test_parses_redirect_based_auth_authorize(self, mock_build_opener, mock_urlopen):
+        auth_url = (
+            "http://ha.local:8123/auth/authorize?"
+            "client_id=http%3A%2F%2Fma.local%3A8095&"
+            "redirect_uri=http%3A%2F%2Fma.local%3A8095%2Fauth%2Fcallback%3Fprovider_id%3Dhomeassistant&"
+            "state=test-state"
+        )
+        opener = MagicMock()
+        opener.open.side_effect = _http_error_with_location("http://ma.local:8095/auth/authorize", auth_url)
+        mock_build_opener.return_value = opener
+
+        from routes.api_ma import _get_ma_oauth_params
+
+        result = _get_ma_oauth_params("http://ma.local:8095")
+        assert result == (
+            "http://ha.local:8123",
+            "http://ma.local:8095",
+            "http://ma.local:8095/auth/callback?provider_id=homeassistant",
+            "test-state",
+        )
+        mock_urlopen.assert_not_called()
+
+    @patch("routes.api_ma._ur.urlopen")
+    @patch("routes.api_ma._ur.build_opener")
+    def test_parses_jsonrpc_authorization_url_result_dict(self, mock_build_opener, mock_urlopen):
+        opener = MagicMock()
+        opener.open.side_effect = _http_error_with_location("http://ma.local:8095/auth/authorize", "")
+        mock_build_opener.return_value = opener
+
+        auth_url = (
+            "http://ha.local:8123/auth/authorize?"
+            "client_id=http%3A%2F%2Fma.local%3A8095&"
+            "redirect_uri=http%3A%2F%2Fma.local%3A8095%2Fauth%2Fcallback%3Fprovider_id%3Dhomeassistant&"
+            "state=jsonrpc-state"
+        )
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = json.dumps({"result": {"authorization_url": auth_url}}).encode()
+        mock_resp.__enter__ = MagicMock(return_value=mock_resp)
+        mock_resp.__exit__ = MagicMock(return_value=False)
+        mock_urlopen.return_value = mock_resp
+
+        from routes.api_ma import _get_ma_oauth_params
+
+        result = _get_ma_oauth_params("http://ma.local:8095")
+        assert result == (
+            "http://ha.local:8123",
+            "http://ma.local:8095",
+            "http://ma.local:8095/auth/callback?provider_id=homeassistant",
+            "jsonrpc-state",
+        )
+        req = mock_urlopen.call_args[0][0]
+        assert json.loads(req.data.decode())["args"]["return_url"] == "http://ma.local:8095"
+
+
+def _http_error_with_location(url: str, location: str):
+    headers = Message()
+    if location:
+        headers["Location"] = location
+    return HTTPError(url, 302, "Found", headers, io.BytesIO(b""))
