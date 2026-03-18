@@ -359,6 +359,13 @@ def api_config():
     if not isinstance(config, dict):
         return _error_response("Invalid JSON body")
 
+    validation = validate_uploaded_config(config)
+    warnings = [{"field": issue.field, "message": issue.message} for issue in validation.warnings]
+    if not validation.is_valid:
+        errors = [{"field": issue.field, "message": issue.message} for issue in validation.errors]
+        return _validation_error_response(errors, warnings)
+    config = validation.normalized_config
+
     # Validate top-level string fields
     for str_key in ("SENDSPIN_SERVER", "BRIDGE_NAME", "TZ", "LOG_LEVEL"):
         val = config.get(str_key)
@@ -480,6 +487,7 @@ def api_config():
         "AUTO_UPDATE",
         "CHECK_UPDATES",
         "_new_device_default_volume",
+        "CONFIG_SCHEMA_VERSION",
     }
     config = {k: v for k, v in config.items() if k in _ALLOWED_POST_KEYS}
 
@@ -570,7 +578,10 @@ def api_config():
     _reload_volume_via_ma()
     _sync_ha_options(config)
 
-    return jsonify({"success": True})
+    payload: dict[str, object] = {"success": True}
+    if warnings:
+        payload["validation"] = {"warnings": warnings}
+    return jsonify(payload)
 
 
 @config_bp.route("/api/set-password", methods=["POST"])

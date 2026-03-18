@@ -50,6 +50,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Daemon subprocesses can now emit explicit `type: "error"` IPC envelopes for fatal startup/parameter failures, in addition to the legacy log output path
 - Parent-side IPC handling now consumes structured daemon error envelopes by updating `last_error` / `last_error_at` directly from stdout messages, while preserving compatibility with the older stderr/log-based behavior
 - `/api/config/upload` now delegates validation to the shared config-validation service, returns structured `errors`/`warnings` payloads for invalid imports, and applies additive normalization such as schema-version backfill and uppercase MAC canonicalization before saving
+- `POST /api/config` now also delegates baseline schema validation to the shared config-validation service, persists `CONFIG_SCHEMA_VERSION`, and returns structured validation warnings/errors consistently with the upload path before continuing route-specific coercion and save logic
 
 ## [2.32.12] - 2026-03-17
 
