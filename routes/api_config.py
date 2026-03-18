@@ -32,6 +32,7 @@ from services import (
     bt_remove_device as _bt_remove_device,
 )
 from services.bluetooth import _MAC_RE
+from services.device_registry import get_device_registry_snapshot
 from services.ipc_protocol import IPC_PROTOCOL_VERSION
 from services.log_analysis import summarize_issue_logs
 from services.sendspin_compat import get_runtime_dependency_versions
@@ -39,10 +40,6 @@ from services.update_checker import _start_upgrade_job
 from state import (
     _adapter_cache_lock,
     load_adapter_name_cache,
-)
-from state import clients as _clients
-from state import (
-    clients_lock as _clients_lock,
 )
 
 logger = logging.getLogger(__name__)
@@ -126,10 +123,9 @@ def _build_config_get_response():
     config["_password_set"] = has_password
 
     # Enrich BLUETOOTH_DEVICES with resolved listen_port / listen_host from running clients
-    with _clients_lock:
-        snapshot = list(_clients)
-    client_map = {getattr(c, "player_name", None): c for c in snapshot}
-    mac_map = {getattr(getattr(c, "bt_manager", None), "mac_address", None): c for c in snapshot}
+    registry = get_device_registry_snapshot()
+    client_map = registry.client_map_by_player_name()
+    mac_map = registry.client_map_by_mac()
     for dev in config.get("BLUETOOTH_DEVICES", []):
         client = client_map.get(dev.get("player_name")) or mac_map.get(dev.get("mac"))
         if client:
@@ -532,13 +528,10 @@ def api_config():
         old_devices = {d["mac"]: d for d in existing.get("BLUETOOTH_DEVICES", []) if d.get("mac")}
         new_devices = {d["mac"]: d for d in config.get("BLUETOOTH_DEVICES", []) if d.get("mac")}
 
-        with _clients_lock:
-            client_adapter = {
-                getattr(getattr(c, "bt_manager", None), "mac_address", None): getattr(
-                    getattr(c, "bt_manager", None), "_adapter_select", ""
-                )
-                for c in _clients
-            }
+        client_adapter = {
+            mac: getattr(getattr(client, "bt_manager", None), "_adapter_select", "")
+            for mac, client in get_device_registry_snapshot().client_map_by_mac().items()
+        }
 
         for mac, old_dev in old_devices.items():
             new_dev = new_devices.get(mac)
@@ -632,9 +625,7 @@ def api_set_log_level():
     loop = state.get_main_loop()
     if loop is not None:
         cmd = {"cmd": "set_log_level", "level": level}
-        with _clients_lock:
-            snapshot = list(_clients)
-        for client in snapshot:
+        for client in get_device_registry_snapshot().active_clients:
             if client.is_running():
                 try:
                     asyncio.run_coroutine_threadsafe(client._send_subprocess_command(cmd), loop).result(timeout=2.0)

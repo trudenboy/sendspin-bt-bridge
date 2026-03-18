@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Parent↔subprocess IPC is now versioned end-to-end: daemon status/log envelopes, parent command envelopes, and daemon startup params all include `protocol_version` while remaining backward-compatible with legacy messages that omit it
 - Added a new `services.device_registry` read-side snapshot service and moved low-risk status/helper routes onto it so the UI surfaces depend less on direct global client-list access
+- `routes/api_config.py` now uses the shared device-registry snapshot service for config enrichment, adapter-removal lookups, and log-level propagation instead of reading the global client list directly
 
 ## [2.32.12] - 2026-03-17
 

@@ -5,6 +5,7 @@ use ``from __future__ import annotations`` and/or graceful fallbacks, so they
 import cleanly on Python 3.9.  No module-level sys.modules manipulation needed.
 """
 
+import asyncio
 import json
 import sys
 import threading
@@ -253,6 +254,45 @@ def test_api_config_get_includes_security_and_monitor_defaults(client):
     assert data["MA_WEBSOCKET_MONITOR"] is True
 
 
+def test_api_config_get_enriches_devices_from_registry_snapshot(client, tmp_path, monkeypatch):
+    import routes.api_config as api_config_mod
+    from services.device_registry import DeviceRegistrySnapshot
+
+    monkeypatch.setattr(api_config_mod, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(api_config_mod, "CONFIG_FILE", tmp_path / "config.json")
+    (tmp_path / "config.json").write_text(
+        json.dumps(
+            {
+                "BLUETOOTH_DEVICES": [
+                    {
+                        "mac": "AA:BB:CC:DD:EE:FF",
+                        "player_name": "Kitchen",
+                    }
+                ]
+            }
+        )
+    )
+    fake_client = SimpleNamespace(
+        player_name="Kitchen",
+        listen_port=8930,
+        listen_host="bridge.local",
+        status={"ip_address": "192.168.10.20"},
+        bt_manager=SimpleNamespace(mac_address="AA:BB:CC:DD:EE:FF"),
+    )
+    monkeypatch.setattr(
+        api_config_mod,
+        "get_device_registry_snapshot",
+        lambda: DeviceRegistrySnapshot(active_clients=[fake_client]),
+    )
+
+    resp = client.get("/api/config")
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["BLUETOOTH_DEVICES"][0]["listen_port"] == 8930
+    assert data["BLUETOOTH_DEVICES"][0]["listen_host"] == "bridge.local"
+
+
 def test_api_config_post_accepts_security_and_monitor_settings(client, tmp_path, monkeypatch):
     """POST /api/config persists new security and MA monitor settings."""
     import routes.api_config as api_config_mod
@@ -362,6 +402,72 @@ def test_api_config_post_normalizes_numeric_strings(client, tmp_path, monkeypatc
     assert saved["BLUETOOTH_DEVICES"][0]["keepalive_interval"] == 60
 
 
+def test_api_config_post_uses_registry_snapshot_for_adapter_removal(client, tmp_path, monkeypatch):
+    import routes.api_config as api_config_mod
+    from services.device_registry import DeviceRegistrySnapshot
+
+    monkeypatch.setattr(api_config_mod, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(api_config_mod, "CONFIG_FILE", tmp_path / "config.json")
+    (tmp_path / "config.json").write_text(
+        json.dumps(
+            {
+                "BLUETOOTH_DEVICES": [
+                    {
+                        "mac": "AA:BB:CC:DD:EE:FF",
+                        "player_name": "Kitchen",
+                        "adapter": "hci0",
+                    }
+                ]
+            }
+        )
+    )
+    removed = []
+    fake_client = SimpleNamespace(
+        bt_manager=SimpleNamespace(mac_address="AA:BB:CC:DD:EE:FF", _adapter_select="C0:FB:F9:62:D6:9D")
+    )
+    monkeypatch.setattr(
+        api_config_mod,
+        "get_device_registry_snapshot",
+        lambda: DeviceRegistrySnapshot(active_clients=[fake_client]),
+    )
+    monkeypatch.setattr(api_config_mod, "_bt_remove_device", lambda mac, adapter: removed.append((mac, adapter)))
+    payload = {
+        "SENDSPIN_SERVER": "auto",
+        "SENDSPIN_PORT": 9001,
+        "BRIDGE_NAME": "Bridge",
+        "BLUETOOTH_DEVICES": [
+            {"mac": "AA:BB:CC:DD:EE:FF", "player_name": "Kitchen", "adapter": "hci1"},
+        ],
+        "BLUETOOTH_ADAPTERS": [],
+        "TZ": "UTC",
+        "PULSE_LATENCY_MSEC": 250,
+        "PREFER_SBC_CODEC": False,
+        "BT_CHECK_INTERVAL": 15,
+        "BT_MAX_RECONNECT_FAILS": 3,
+        "AUTH_ENABLED": False,
+        "SESSION_TIMEOUT_HOURS": 12,
+        "BRUTE_FORCE_PROTECTION": True,
+        "BRUTE_FORCE_MAX_ATTEMPTS": 4,
+        "BRUTE_FORCE_WINDOW_MINUTES": 2,
+        "BRUTE_FORCE_LOCKOUT_MINUTES": 10,
+        "LOG_LEVEL": "INFO",
+        "MA_API_URL": "",
+        "MA_API_TOKEN": "",
+        "MA_USERNAME": "",
+        "MA_WEBSOCKET_MONITOR": False,
+        "VOLUME_VIA_MA": True,
+        "MUTE_VIA_MA": False,
+        "SMOOTH_RESTART": True,
+        "AUTO_UPDATE": False,
+        "CHECK_UPDATES": True,
+    }
+
+    resp = client.post("/api/config", data=json.dumps(payload), content_type="application/json")
+
+    assert resp.status_code == 200
+    assert removed == [("AA:BB:CC:DD:EE:FF", "C0:FB:F9:62:D6:9D")]
+
+
 def test_api_config_post_prunes_last_volumes_for_removed_devices(client, tmp_path, monkeypatch):
     import routes.api_config as api_config_mod
 
@@ -416,6 +522,57 @@ def test_api_config_post_prunes_last_volumes_for_removed_devices(client, tmp_pat
     saved = json.loads((tmp_path / "config.json").read_text())
     assert saved["BLUETOOTH_DEVICES"][0]["mac"] == "AA:BB:CC:DD:EE:FF"
     assert saved["LAST_VOLUMES"] == {"AA:BB:CC:DD:EE:FF": 60}
+
+
+def test_api_set_log_level_propagates_via_registry_snapshot(client, monkeypatch):
+    import routes.api_config as api_config_mod
+    import state
+    from services.device_registry import DeviceRegistrySnapshot
+
+    sent = []
+
+    class _DoneFuture:
+        def result(self, timeout=None):
+            return None
+
+    class _FakeClient:
+        def __init__(self, name: str, running: bool):
+            self.player_name = name
+            self._running = running
+
+        def is_running(self):
+            return self._running
+
+        async def _send_subprocess_command(self, cmd):
+            sent.append((self.player_name, cmd))
+
+    monkeypatch.setattr(state, "get_main_loop", lambda: object())
+    monkeypatch.setattr(api_config_mod, "update_config", lambda updater: None)
+    monkeypatch.setattr(
+        api_config_mod,
+        "get_device_registry_snapshot",
+        lambda: DeviceRegistrySnapshot(active_clients=[_FakeClient("Kitchen", True), _FakeClient("Bedroom", False)]),
+    )
+
+    def _run_coroutine_threadsafe(coro, loop):
+        tmp_loop = asyncio.new_event_loop()
+        try:
+            tmp_loop.run_until_complete(coro)
+        finally:
+            tmp_loop.close()
+        return _DoneFuture()
+
+    monkeypatch.setattr(api_config_mod.asyncio, "run_coroutine_threadsafe", _run_coroutine_threadsafe)
+
+    resp = client.post(
+        "/api/settings/log_level",
+        data=json.dumps({"level": "debug"}),
+        content_type="application/json",
+    )
+
+    assert resp.status_code == 200
+    assert resp.get_json()["level"] == "DEBUG"
+    assert sent == [("Kitchen", {"cmd": "set_log_level", "level": "DEBUG"})]
 
 
 def test_api_config_download_redacts_sensitive_tokens(client, tmp_path, monkeypatch):
