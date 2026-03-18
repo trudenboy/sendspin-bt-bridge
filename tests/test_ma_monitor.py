@@ -304,3 +304,27 @@ async def test_send_queue_cmd_repeat_does_not_evaluate_seek_payload(monkeypatch)
 
     assert result["accepted"] is True
     assert result["queue_id"] == "syncgroup_1"
+
+
+@pytest.mark.asyncio
+async def test_send_queue_cmd_allows_explicit_solo_queue_without_groups(monkeypatch):
+    monitor = MaMonitor("http://ma:8095", "token")
+    monitor._running = True
+    monitor._ws = object()
+
+    async def _fake_execute_cmd(command: str, args: dict) -> dict:
+        assert command == "player_queues/next"
+        assert args == {"queue_id": "sendspin-yandex-mini-2---lxc"}
+        return {"result": {"ok": True}}
+
+    monkeypatch.setattr(monitor, "execute_cmd", _fake_execute_cmd)
+    monkeypatch.setattr(ma_monitor, "_monitor_instance", monitor)
+    state.set_ma_groups({}, [])
+    try:
+        result = await ma_monitor.send_queue_cmd("next", None, "sendspin-yandex-mini-2---lxc")
+    finally:
+        ma_monitor._monitor_instance = None
+        state.set_ma_groups({}, [])
+
+    assert result["accepted"] is True
+    assert result["queue_id"] == "sendspin-yandex-mini-2---lxc"

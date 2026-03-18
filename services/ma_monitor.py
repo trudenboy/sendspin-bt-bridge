@@ -770,13 +770,12 @@ async def send_queue_cmd(action: str, value=None, syncgroup_id: str | None = Non
     syncgroup_id: target specific group; falls back to first known group.
     Returns metadata describing MA acknowledgement on success.
     """
-    groups = _state.get_ma_groups()
-    if not groups:
-        return {"accepted": False, "queue_id": "", "error": "no queue available"}
-
     if syncgroup_id:
         queue_id = syncgroup_id
     else:
+        groups = _state.get_ma_groups()
+        if not groups:
+            return {"accepted": False, "queue_id": "", "error": "no queue available"}
         queue_id = groups[0]["id"]  # fallback: first syncgroup
 
     command: str
