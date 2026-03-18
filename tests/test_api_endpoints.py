@@ -112,6 +112,41 @@ def test_set_volume_with_invalid_player_names(client):
     assert "player_names" in data.get("error", "").lower()
 
 
+def test_set_volume_uses_registry_snapshot_for_player_lookup(client, monkeypatch):
+    import routes.api as api_mod
+    from services.device_registry import DeviceRegistrySnapshot
+
+    updates = []
+    fake_client = SimpleNamespace(
+        player_name="Kitchen",
+        status={},
+        bluetooth_sink_name="bluez_sink.AA_BB_CC_DD_EE_FF.a2dp_sink",
+        bt_manager=SimpleNamespace(mac_address="AA:BB:CC:DD:EE:FF"),
+        _update_status=lambda payload: updates.append(payload),
+    )
+    monkeypatch.setattr(
+        api_mod,
+        "get_device_registry_snapshot",
+        lambda: DeviceRegistrySnapshot(active_clients=[fake_client]),
+    )
+    monkeypatch.setattr(api_mod, "get_volume_via_ma", lambda: False)
+    monkeypatch.setattr(api_mod.state, "is_ma_connected", lambda: False)
+    monkeypatch.setattr(api_mod, "set_sink_volume", lambda sink, volume: True)
+    monkeypatch.setattr(api_mod.state, "get_main_loop", lambda: None)
+
+    resp = client.post(
+        "/api/volume",
+        data=json.dumps({"player_name": "Kitchen", "volume": 33}),
+        content_type="application/json",
+    )
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["success"] is True
+    assert data["results"][0]["player"] == "Kitchen"
+    assert updates == [{"volume": 33}]
+
+
 def test_set_password_with_json(client, tmp_path):
     """POST /api/set-password with proper JSON sets password successfully."""
     resp = client.post(
@@ -161,6 +196,100 @@ def test_api_logs_returns_recent_issue_metadata(client, monkeypatch):
     assert data["has_recent_issues"] is True
     assert data["recent_issue_count"] == 2
     assert data["recent_issue_level"] == "error"
+
+
+def test_api_group_pause_uses_registry_snapshot_for_group_lookup(client, monkeypatch):
+    import routes.api as api_mod
+    from services.device_registry import DeviceRegistrySnapshot
+
+    sent = []
+
+    class _DoneFuture:
+        def result(self, timeout=None):
+            return None
+
+    class _FakeClient:
+        player_name = "Kitchen"
+        player_id = "sendspin-kitchen"
+        status = {"group_id": "group-1", "group_name": "Kitchen Group"}
+
+        def is_running(self):
+            return True
+
+        async def _send_subprocess_command(self, payload):
+            sent.append(payload)
+
+    def _run_coroutine_threadsafe(coro, loop):
+        temp_loop = asyncio.new_event_loop()
+        try:
+            temp_loop.run_until_complete(coro)
+        finally:
+            temp_loop.close()
+        return _DoneFuture()
+
+    monkeypatch.setattr(
+        api_mod,
+        "get_device_registry_snapshot",
+        lambda: DeviceRegistrySnapshot(active_clients=[_FakeClient()]),
+    )
+    monkeypatch.setattr(api_mod.state, "get_main_loop", lambda: object())
+    monkeypatch.setattr(api_mod.asyncio, "run_coroutine_threadsafe", _run_coroutine_threadsafe)
+
+    resp = client.post(
+        "/api/group/pause",
+        data=json.dumps({"group_id": "group-1", "action": "pause"}),
+        content_type="application/json",
+    )
+
+    assert resp.status_code == 200
+    assert resp.get_json()["group_name"] == "Kitchen Group"
+    assert sent == [{"cmd": "pause"}]
+
+
+def test_api_pause_uses_registry_snapshot_for_player_lookup(client, monkeypatch):
+    import routes.api as api_mod
+    from services.device_registry import DeviceRegistrySnapshot
+
+    sent = []
+
+    class _DoneFuture:
+        def result(self, timeout=None):
+            return None
+
+    class _FakeClient:
+        player_name = "Kitchen"
+
+        def is_running(self):
+            return True
+
+        async def _send_subprocess_command(self, payload):
+            sent.append(payload)
+
+    def _run_coroutine_threadsafe(coro, loop):
+        temp_loop = asyncio.new_event_loop()
+        try:
+            temp_loop.run_until_complete(coro)
+        finally:
+            temp_loop.close()
+        return _DoneFuture()
+
+    monkeypatch.setattr(
+        api_mod,
+        "get_device_registry_snapshot",
+        lambda: DeviceRegistrySnapshot(active_clients=[_FakeClient()]),
+    )
+    monkeypatch.setattr(api_mod.state, "get_main_loop", lambda: object())
+    monkeypatch.setattr(api_mod.asyncio, "run_coroutine_threadsafe", _run_coroutine_threadsafe)
+
+    resp = client.post(
+        "/api/pause",
+        data=json.dumps({"player_name": "Kitchen", "action": "play"}),
+        content_type="application/json",
+    )
+
+    assert resp.status_code == 200
+    assert resp.get_json()["count"] == 1
+    assert sent == [{"cmd": "play"}]
 
 
 def test_api_bugreport_uses_issue_worthy_logs_in_summary(client, monkeypatch):

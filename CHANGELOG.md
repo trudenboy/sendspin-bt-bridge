@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added a new `services.device_registry` read-side snapshot service and moved low-risk status/helper routes onto it so the UI surfaces depend less on direct global client-list access
 - `routes/api_config.py` now uses the shared device-registry snapshot service for config enrichment, adapter-removal lookups, and log-level propagation instead of reading the global client list directly
 - `routes/api_ma.py` now builds MA host inference, rediscovery player payloads, queue-target inference, and debug client dumps from shared device-registry snapshots, also fixing one rediscovery path that previously passed only player names instead of MA discovery payload objects
+- `routes/api.py` now resolves volume, mute, group pause, and per-player pause/play targets from shared device-registry snapshots instead of reading the global client list directly
 
 ## [2.32.12] - 2026-03-17
 

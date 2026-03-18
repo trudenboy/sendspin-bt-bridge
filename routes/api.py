@@ -19,14 +19,11 @@ from flask import Blueprint, jsonify, request
 import state
 from config import save_device_volume
 from routes.api_config import _detect_runtime, get_mute_via_ma, get_volume_via_ma
+from services.device_registry import get_device_registry_snapshot
 from services.pulse import (
     get_sink_mute,
     set_sink_mute,
     set_sink_volume,
-)
-from state import clients as _clients
-from state import (
-    clients_lock as _clients_lock,
 )
 
 logger = logging.getLogger(__name__)
@@ -236,8 +233,7 @@ def set_volume():
         is_group = data.get("group", False)
         force_local = data.get("force_local", False)
 
-        with _clients_lock:
-            snapshot = list(_clients)
+        snapshot = get_device_registry_snapshot().active_clients
         if group_id is not None:
             targets = [c for c in snapshot if c.status.get("group_id") == group_id]
         elif player_names is not None:
@@ -321,8 +317,7 @@ def set_mute():
         mute_value = data.get("mute")
         force_local = data.get("force_local", False)
 
-        with _clients_lock:
-            snapshot = list(_clients)
+        snapshot = get_device_registry_snapshot().active_clients
         if player_names is not None:
             targets = [c for c in snapshot if getattr(c, "player_name", None) in player_names]
         elif player_name:
@@ -398,8 +393,7 @@ def pause_all():
 
     count = 0
 
-    with _clients_lock:
-        snapshot = list(_clients)
+    snapshot = get_device_registry_snapshot().active_clients
 
     if action == "pause":
         # One pause command per unique Sendspin session group (MA propagates to all members)
@@ -486,8 +480,7 @@ def api_group_pause():
         return jsonify({"success": False, "error": "Event loop not available"}), 503
 
     # Find one running member of the specified group
-    with _clients_lock:
-        snapshot = list(_clients)
+    snapshot = get_device_registry_snapshot().active_clients
     target = next(
         (c for c in snapshot if c.is_running() and c.status.get("group_id") == group_id),
         None,
@@ -540,8 +533,7 @@ def pause_player():
     data = request.get_json() or {}
     player_name = data.get("player_name", "")
     action = data.get("action", "pause")
-    with _clients_lock:
-        snapshot = list(_clients)
+    snapshot = get_device_registry_snapshot().active_clients
     target = next((c for c in snapshot if getattr(c, "player_name", None) == player_name), None)
     if not target or not target.is_running():
         return jsonify({"success": False, "error": "Player not found or not running"}), 404
