@@ -1084,59 +1084,8 @@ async def main():
 
     await orchestrator.configure_executor(len(clients), web_thread_name=web_thread.name)
 
-    # Discover MA syncgroups via MA API.
-    # In HA addon mode (SUPERVISOR_TOKEN present): auto-detect URL and try supervisor token.
-    # Otherwise: use explicit MA_API_URL + MA_API_TOKEN from config.
-    ma_api_url = config.get("MA_API_URL", "").strip()
-    ma_api_token = config.get("MA_API_TOKEN", "").strip()
-
-    supervisor_token = os.environ.get("SUPERVISOR_TOKEN", "")
-    if supervisor_token:
-        # HA addon mode: auto-detect MA URL if not explicitly configured.
-        # Both addons share host networking → localhost:8095 is always reachable.
-        if not ma_api_url:
-            if server_host and server_host.lower() not in ("auto", "discover", ""):
-                ma_api_url = f"http://{server_host}:8095"
-            else:
-                ma_api_url = "http://localhost:8095"
-            logger.info("MA API URL auto-detected (addon mode): %s", ma_api_url)
-        # SUPERVISOR_TOKEN is a HA token, NOT an MA token. MA uses its own JWT auth.
-        # Do NOT use SUPERVISOR_TOKEN for MA auth. Warn user if no explicit MA token.
-        if not ma_api_token:
-            logger.warning(
-                "MA API: running in HA addon mode but no 'ma_api_token' configured. "
-                "Create a long-lived token in MA → Settings → API Tokens and set ma_api_token in bridge config."
-            )
-
-    if ma_api_url and ma_api_token:
-        _state.set_ma_api_credentials(ma_api_url, ma_api_token)
-        try:
-            from services.ma_client import discover_ma_groups
-
-            player_info = [{"player_id": c.player_id, "player_name": c.player_name} for c in clients]
-            name_map, all_groups = await discover_ma_groups(ma_api_url, ma_api_token, player_info)
-            _state.set_ma_groups(name_map, all_groups)
-            if name_map:
-                _state.set_ma_connected(True)
-        except Exception as _ma_exc:
-            logger.warning("MA API group discovery error: %s", _ma_exc)
-
-    # Start MA monitor if credentials configured
-    ma_monitor_task = None
-    if ma_api_url and ma_api_token and config.get("MA_WEBSOCKET_MONITOR", True):
-        from services.ma_monitor import start_monitor
-
-        monitor = start_monitor(ma_api_url, ma_api_token)
-        ma_monitor_task = asyncio.create_task(monitor.run())
-    _state.update_startup_progress(
-        "integrations",
-        "Music Assistant integrations initialized",
-        current_step=5,
-        details={
-            "ma_configured": bool(ma_api_url and ma_api_token),
-            "ma_monitor_enabled": bool(ma_monitor_task),
-        },
-    )
+    ma_bootstrap = await orchestrator.initialize_ma_integration(config, clients, server_host=server_host)
+    ma_monitor_task = ma_bootstrap.ma_monitor_task
 
     # Run all clients in parallel
     client_tasks = [asyncio.create_task(c.run()) for c in clients]

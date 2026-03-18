@@ -149,6 +149,7 @@ def test_build_group_snapshots_merges_ma_syncgroup_members():
 def test_build_bridge_snapshot_no_clients_preserves_bridge_metadata():
     state.set_disabled_devices([{"player_name": "Disabled", "enabled": False}])
     state.set_ma_api_credentials("http://ma.local:8095", "token")
+    state.set_ma_connected(False)
     state.set_update_available({"version": "2.33.0"})
     state.reset_startup_progress(3, message="Booting")
     state.update_startup_progress("devices", "Preparing devices", current_step=2)
@@ -181,6 +182,7 @@ def test_build_bridge_snapshot_no_clients_preserves_bridge_metadata():
     finally:
         state.set_disabled_devices([])
         state.set_ma_api_credentials("", "")
+        state.set_ma_connected(False)
         state.set_update_available(None)
         state.reset_startup_progress()
         state.set_runtime_mode_info(None)

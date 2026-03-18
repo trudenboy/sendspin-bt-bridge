@@ -31,6 +31,9 @@ def _isolated_config(tmp_path, monkeypatch):
     state.reset_startup_progress()
     state.set_runtime_mode_info(None)
     state.set_clients([])
+    state.set_ma_api_credentials("", "")
+    state.set_ma_groups({}, [])
+    state.set_ma_connected(False)
 
 
 @pytest.mark.asyncio
@@ -153,3 +156,68 @@ def test_install_signal_handlers_schedules_shutdown_factory():
     callbacks[0][1]()
     assert len(scheduled) == 1
     scheduled[0].close()
+
+
+@pytest.mark.asyncio
+async def test_initialize_ma_integration_autodetects_addon_url(monkeypatch):
+    orchestrator = BridgeOrchestrator()
+    monkeypatch.setenv("SUPERVISOR_TOKEN", "demo-supervisor-token")
+    config_data = {
+        "MA_API_URL": "",
+        "MA_API_TOKEN": "",
+        "MA_WEBSOCKET_MONITOR": False,
+    }
+
+    bootstrap = await orchestrator.initialize_ma_integration(config_data, [], server_host="ma-host.local")
+
+    assert bootstrap.ma_api_url == "http://ma-host.local:8095"
+    assert bootstrap.ma_api_token == ""
+    progress = state.get_startup_progress()
+    assert progress["phase"] == "integrations"
+    assert progress["details"]["ma_configured"] is False
+
+
+@pytest.mark.asyncio
+async def test_initialize_ma_integration_discovers_groups_and_starts_monitor(monkeypatch):
+    orchestrator = BridgeOrchestrator()
+    monitor_started = asyncio.Event()
+
+    async def fake_discover(_url, _token, player_info):
+        return (
+            {"sendspin-kitchen": {"id": "syncgroup_1", "name": "Kitchen Group"}},
+            [{"id": "syncgroup_1", "name": "Kitchen Group", "members": []}],
+        )
+
+    class FakeMonitor:
+        async def run(self) -> None:
+            monitor_started.set()
+            await asyncio.sleep(3600)
+
+    monkeypatch.setattr("services.ma_client.discover_ma_groups", fake_discover)
+    monkeypatch.setattr("services.ma_monitor.start_monitor", lambda _url, _token: FakeMonitor())
+    clients = [SimpleNamespace(player_id="sendspin-kitchen", player_name="Kitchen")]
+
+    bootstrap = await orchestrator.initialize_ma_integration(
+        {
+            "MA_API_URL": "http://ma.local:8095",
+            "MA_API_TOKEN": "token",
+            "MA_WEBSOCKET_MONITOR": True,
+        },
+        clients,
+        server_host="music-assistant.local",
+    )
+
+    assert bootstrap.ma_api_url == "http://ma.local:8095"
+    assert bootstrap.ma_api_token == "token"
+    assert bootstrap.ma_monitor_task is not None
+    await asyncio.wait_for(monitor_started.wait(), timeout=0.2)
+    assert state.get_ma_groups()[0]["id"] == "syncgroup_1"
+    assert state.is_ma_connected() is True
+    progress = state.get_startup_progress()
+    assert progress["phase"] == "integrations"
+    assert progress["details"]["ma_configured"] is True
+    assert progress["details"]["ma_monitor_enabled"] is True
+
+    bootstrap.ma_monitor_task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await bootstrap.ma_monitor_task
