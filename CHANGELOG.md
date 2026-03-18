@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.40.1] - 2026-03-18
+
 ### Added
 - Config, API, and update surfaces now support an explicit `UPDATE_CHANNEL` setting with `stable`, `rc`, and `beta` options so standalone installs and Home Assistant add-on configs can choose their preferred release lane without changing the main runtime contract
 - The standalone web UI now exposes an update-channel selector with confirmation/warning copy for `rc` and `beta`, making prerelease opt-in explicit before operators leave the stable lane

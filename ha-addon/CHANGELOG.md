@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.40.1] - 2026-03-18
+
 ### Added
 - Add-on options now expose an `update_channel` selector with `stable`, `rc`, and `beta` values, and the option is translated and propagated into the runtime config used by the bridge
 
