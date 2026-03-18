@@ -33,6 +33,7 @@ from services.ipc_protocol import (
     with_protocol_version,
 )
 from services.playback_health import PlaybackHealthMonitor
+from services.status_event_builder import StatusEventBuilder
 from services.subprocess_command import SubprocessCommandService
 from services.subprocess_ipc import SubprocessIpcService
 from services.subprocess_stderr import SubprocessStderrService
@@ -333,86 +334,7 @@ class SendspinClient:
         updates: dict,
     ) -> list[dict[str, object]]:
         """Translate meaningful status transitions into structured device events."""
-        events: list[dict[str, object]] = []
-
-        def _add(
-            event_type: str,
-            *,
-            level: str = "info",
-            message: str,
-            details: dict[str, object] | None = None,
-        ) -> None:
-            events.append(
-                {
-                    "event_type": event_type,
-                    "level": level,
-                    "message": message,
-                    "details": dict(details or {}),
-                }
-            )
-
-        if "bluetooth_connected" in updates and bool(previous.get("bluetooth_connected")) != bool(
-            current.get("bluetooth_connected")
-        ):
-            _add(
-                "bluetooth-connected" if current.get("bluetooth_connected") else "bluetooth-disconnected",
-                level="info" if current.get("bluetooth_connected") else "warning",
-                message="Bluetooth speaker connected"
-                if current.get("bluetooth_connected")
-                else "Bluetooth speaker disconnected",
-            )
-
-        if "server_connected" in updates and bool(previous.get("server_connected")) != bool(
-            current.get("server_connected")
-        ):
-            _add(
-                "daemon-connected" if current.get("server_connected") else "daemon-disconnected",
-                level="info" if current.get("server_connected") else "warning",
-                message="Sendspin daemon connected"
-                if current.get("server_connected")
-                else "Sendspin daemon disconnected",
-            )
-
-        if "playing" in updates and bool(previous.get("playing")) != bool(current.get("playing")):
-            _add(
-                "playback-started" if current.get("playing") else "playback-stopped",
-                message="Playback started" if current.get("playing") else "Playback stopped",
-                details={
-                    "current_track": current.get("current_track"),
-                    "current_artist": current.get("current_artist"),
-                },
-            )
-
-        if updates.get("audio_streaming") and not previous.get("audio_streaming"):
-            _add("audio-streaming", message="Audio stream detected")
-
-        if current.get("reconnecting") and not previous.get("reconnecting"):
-            _add(
-                "reconnecting",
-                level="warning",
-                message="Reconnect in progress",
-                details={"reconnect_attempt": current.get("reconnect_attempt")},
-            )
-
-        if current.get("reanchoring") and not previous.get("reanchoring"):
-            _add(
-                "reanchoring",
-                level="warning",
-                message="Audio sync re-anchor in progress",
-                details={"reanchor_count": current.get("reanchor_count")},
-            )
-
-        current_error = str(current.get("last_error") or "").strip()
-        previous_error = str(previous.get("last_error") or "").strip()
-        if current_error and current_error != previous_error:
-            _add(
-                "runtime-error",
-                level="error",
-                message=current_error,
-                details={"last_error_at": current.get("last_error_at")},
-            )
-
-        return events
+        return StatusEventBuilder.build(previous, current, updates)
 
     def _update_status(self, updates: dict) -> None:
         """Thread-safe update of self.status; notifies SSE listeners."""
