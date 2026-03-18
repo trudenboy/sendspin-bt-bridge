@@ -1,5 +1,6 @@
 """Tests for the 30-second BT scan cooldown behaviour in routes/api_bt.py."""
 
+import importlib
 import json
 from unittest.mock import patch
 
@@ -27,8 +28,7 @@ def client():
 
     from flask import Flask
 
-    _stashed = {}
-    for mod_name in [
+    route_modules = [
         "routes.api",
         "routes.api_bt",
         "routes.api_config",
@@ -36,10 +36,12 @@ def client():
         "routes.auth",
         "routes.views",
         "routes",
-    ]:
-        cached = sys.modules.get(mod_name)
-        if cached is not None and getattr(cached, "__file__", None) is None:
-            _stashed[mod_name] = sys.modules.pop(mod_name)
+    ]
+    _stashed = {}
+    for mod_name in route_modules:
+        cached = sys.modules.pop(mod_name, None)
+        if cached is not None:
+            _stashed[mod_name] = cached
 
     from routes.api_bt import bt_bp
 
@@ -50,8 +52,10 @@ def client():
 
     yield app.test_client()
 
+    for mod_name in route_modules:
+        sys.modules.pop(mod_name, None)
     for mod_name, mod in _stashed.items():
-        sys.modules.setdefault(mod_name, mod)
+        sys.modules[mod_name] = mod
 
 
 # ---------------------------------------------------------------------------
@@ -64,7 +68,7 @@ def test_scan_returns_429_during_cooldown(client):
     with patch("routes.api_bt.is_scan_running", return_value=False), patch("routes.api_bt.time") as mock_time:
         # Simulate a scan that completed 10 seconds ago (within 30 s cooldown)
         mock_time.monotonic.return_value = 100.0
-        import routes.api_bt as _mod
+        _mod = importlib.import_module("routes.api_bt")
 
         _mod._last_scan_completed = 90.0  # 10 s ago
 
@@ -81,7 +85,7 @@ def test_scan_allowed_after_cooldown_expires(client):
         patch("routes.api_bt.threading.Thread") as mock_thread,
     ):
         mock_time.monotonic.return_value = 100.0
-        import routes.api_bt as _mod
+        _mod = importlib.import_module("routes.api_bt")
 
         _mod._last_scan_completed = 60.0  # 40 s ago — past the 30 s cooldown
 
@@ -102,14 +106,15 @@ def test_concurrent_scan_returns_409(client):
 
 
 def test_cooldown_timestamp_updated_after_scan(client):
-    """_last_scan_completed is set to current monotonic time after _run_bt_scan finishes."""
-    import routes.api_bt as _mod
+    """A completed scan immediately activates the cooldown for the next scan request."""
+    _mod = importlib.import_module("routes.api_bt")
 
     _mod._last_scan_completed = 0.0
 
     fake_time = 500.0
     with (
         patch("routes.api_bt.time") as mock_time,
+        patch("routes.api_bt.is_scan_running", return_value=False),
         patch("routes.api_bt.list_bt_adapters", return_value=[]),
         patch("routes.api_bt._run_bluetoothctl_scan", return_value=""),
         patch("routes.api_bt._parse_scan_output", return_value=(set(), {}, {}, set())),
@@ -120,4 +125,6 @@ def test_cooldown_timestamp_updated_after_scan(client):
 
         _mod._run_bt_scan("test-job-id")
 
-        assert _mod._last_scan_completed == fake_time
+        resp = client.post("/api/bt/scan")
+        assert resp.status_code == 429
+        assert "cooldown" in resp.get_json()["error"].lower()

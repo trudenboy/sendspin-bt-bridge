@@ -509,11 +509,18 @@ def install() -> None:
 
         import time as _time
 
-        np["elapsed_updated_at"] = _time.time()
+        accepted_at = _time.time()
+        np["elapsed_updated_at"] = accepted_at
         _st.set_ma_now_playing_for_group(sg_id, np)
         _sync_queue_state_to_clients(sg_id, np)
         logger.debug("[demo] queue cmd: %s value=%s → %s", action, value, sg_id)
-        return {"accepted": True, "queue_id": sg_id, "syncgroup_id": sg_id}
+        return {
+            "accepted": True,
+            "queue_id": sg_id,
+            "syncgroup_id": sg_id,
+            "accepted_at": accepted_at,
+            "ack_latency_ms": 0,
+        }
 
     _ma_monitor.send_queue_cmd = _demo_send_queue_cmd
 

@@ -650,6 +650,9 @@ def _enrich_audio_device(mac: str, names: "dict[str, str]") -> "dict | None":
 
 def _run_bt_scan(job_id: str) -> None:
     """Perform BT scan in a background thread and store result in state."""
+    global _last_scan_completed
+    # Apply cooldown to every scan attempt, even if later enrichment fails.
+    _last_scan_completed = time.monotonic()
     try:
         adapter_macs = list_bt_adapters()
 
@@ -664,20 +667,19 @@ def _run_bt_scan(job_id: str) -> None:
         _resolve_unnamed_devices(all_macs, names)
 
         devices = []
-        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
-            futures = {pool.submit(_enrich_audio_device, mac, names): mac for mac in all_macs}
-            for fut in concurrent.futures.as_completed(futures):
-                result = fut.result()
-                if result is not None:
-                    devices.append(result)
+        if all_macs:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+                futures = {pool.submit(_enrich_audio_device, mac, names): mac for mac in all_macs}
+                for fut in concurrent.futures.as_completed(futures):
+                    result = fut.result()
+                    if result is not None:
+                        devices.append(result)
 
         for d in devices:
             d["adapter"] = device_adapter.get(d["mac"], "")
 
         devices.sort(key=lambda d: (d["name"] == d["mac"], d["name"]))
         finish_scan_job(job_id, {"devices": devices})
-        global _last_scan_completed
-        _last_scan_completed = time.monotonic()
     except Exception:
         logger.exception("BT scan failed")
         finish_scan_job(job_id, {"devices": [], "error": "Bluetooth scan failed"})
