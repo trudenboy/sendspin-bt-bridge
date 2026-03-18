@@ -78,9 +78,9 @@ jobs:
           git checkout main
           git fetch --force --tags
 
-          stable_tag="$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-version:refname | head -n 1 || true)"
-          rc_tag="$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*-rc.[0-9]*' --sort=-version:refname | head -n 1 || true)"
-          beta_tag="$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*-beta.[0-9]*' --sort=-version:refname | head -n 1 || true)"
+          stable_tag="$(git tag --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1 || true)"
+          rc_tag="$(git tag --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$' | head -n 1 || true)"
+          beta_tag="$(git tag --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+$' | head -n 1 || true)"
 
           case "${CHANNEL}" in
             stable) stable_tag="v${VERSION}" ;;
