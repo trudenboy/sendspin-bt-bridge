@@ -38,6 +38,16 @@ _CHANNEL_NETWORK_DEFAULTS = {
     "rc": {"ingress_port": 8081, "base_listen_port": 9028},
     "beta": {"ingress_port": 8082, "base_listen_port": 9128},
 }
+_CHANNEL_BOOT_DEFAULTS = {
+    "stable": "auto",
+    "rc": "manual",
+    "beta": "manual",
+}
+_CHANNEL_PANEL_ICONS = {
+    "stable": "mdi:bluetooth-audio",
+    "rc": "mdi:flag-checkered",
+    "beta": "mdi:flask-outline",
+}
 _CHANNEL_NOTICE_STYLES = {
     "rc": {
         "border": "#f2c94c",
@@ -79,6 +89,18 @@ def _replace_double_quoted_scalar(text: str, key: str, value: str) -> str:
 
 
 def _replace_unquoted_scalar(text: str, key: str, value: int) -> str:
+    pattern = rf"^(?P<indent>\s*){re.escape(key)}:\s+.*$"
+
+    def _repl(match: re.Match[str]) -> str:
+        return f"{match.group('indent')}{key}: {value}"
+
+    updated, count = re.subn(pattern, _repl, text, count=1, flags=re.MULTILINE)
+    if count != 1:
+        raise ValueError(f"Could not replace {key!r} in addon config template")
+    return updated
+
+
+def _replace_plain_scalar(text: str, key: str, value: str) -> str:
     pattern = rf"^(?P<indent>\s*){re.escape(key)}:\s+.*$"
 
     def _repl(match: re.Match[str]) -> str:
@@ -171,7 +193,9 @@ def render_config_yaml(variant: HaAddonVariant, base_text: str | None = None) ->
     text = _replace_double_quoted_scalar(text, "slug", variant.slug)
     text = _replace_double_quoted_scalar(text, "description", variant.description)
     text = _replace_double_quoted_scalar(text, "update_channel", variant.channel)
+    text = _replace_plain_scalar(text, "boot", _CHANNEL_BOOT_DEFAULTS[variant.channel])
     text = _replace_unquoted_scalar(text, "ingress_port", _CHANNEL_NETWORK_DEFAULTS[variant.channel]["ingress_port"])
+    text = _replace_plain_scalar(text, "panel_icon", _CHANNEL_PANEL_ICONS[variant.channel])
     text = _set_optional_stage(text, variant.stage)
     return text
 

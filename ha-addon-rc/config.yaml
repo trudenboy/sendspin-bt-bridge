@@ -11,7 +11,7 @@ arch:
   - amd64
   - armv7
 startup: application
-boot: auto
+boot: manual
 host_network: true
 host_dbus: true
 hassio_api: true
@@ -29,7 +29,7 @@ apparmor: true
 init: false
 ingress: true
 ingress_port: 8081
-panel_icon: mdi:bluetooth-audio
+panel_icon: mdi:flag-checkered
 panel_admin: false
 stage: experimental
 tmpfs: true
