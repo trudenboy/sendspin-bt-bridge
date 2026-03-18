@@ -23,6 +23,12 @@ def _isolated_config(tmp_path, monkeypatch):
             {
                 "SENDSPIN_SERVER": "music-assistant.local",
                 "SENDSPIN_PORT": 9000,
+                "BLUETOOTH_DEVICES": [{"player_name": "Kitchen", "mac": "AA:BB:CC:DD:EE:01"}],
+                "PREFER_SBC_CODEC": True,
+                "BT_CHECK_INTERVAL": 15,
+                "BT_MAX_RECONNECT_FAILS": 5,
+                "BT_CHURN_THRESHOLD": 3,
+                "BT_CHURN_WINDOW": 120,
                 "PULSE_LATENCY_MSEC": 250,
                 "LOG_LEVEL": "DEBUG",
             }
@@ -47,6 +53,12 @@ async def test_initialize_runtime_loads_config_and_updates_progress():
     assert bootstrap.server_port == 9000
     assert bootstrap.pulse_latency_msec == 250
     assert bootstrap.log_level == "DEBUG"
+    assert bootstrap.prefer_sbc is True
+    assert bootstrap.bt_check_interval == 15
+    assert bootstrap.bt_max_reconnect_fails == 5
+    assert bootstrap.bt_churn_threshold == 3
+    assert bootstrap.bt_churn_window == 120.0
+    assert bootstrap.device_configs[0]["player_name"] == "Kitchen"
     progress = state.get_startup_progress()
     assert progress["phase"] == "config"
     assert progress["status"] == "running"
@@ -398,32 +410,34 @@ def test_initialize_devices_builds_clients_and_registers_disabled_devices():
         def check_bluetooth_available(self):
             return True
 
-    bootstrap = orchestrator.initialize_devices(
-        [
-            {
-                "player_name": "Kitchen",
-                "mac": "AA:BB:CC:DD:EE:01",
-                "adapter": "hci0",
-                "keepalive_interval": 45,
-                "released": True,
-            },
-            {
-                "player_name": "Bedroom",
-                "mac": "AA:BB:CC:DD:EE:02",
-                "adapter": "hci1",
-                "enabled": False,
-            },
-        ],
-        server_host="music-assistant.local",
-        server_port=9000,
-        effective_bridge="Bridge",
-        prefer_sbc=True,
-        bt_check_interval=15,
-        bt_max_reconnect_fails=5,
-        bt_churn_threshold=3,
-        bt_churn_window=120.0,
-        log_level="DEBUG",
-        pulse_latency_msec=250,
+    bootstrap_result = orchestrator.initialize_devices(
+        SimpleNamespace(
+            device_configs=[
+                {
+                    "player_name": "Kitchen",
+                    "mac": "AA:BB:CC:DD:EE:01",
+                    "adapter": "hci0",
+                    "keepalive_interval": 45,
+                    "released": True,
+                },
+                {
+                    "player_name": "Bedroom",
+                    "mac": "AA:BB:CC:DD:EE:02",
+                    "adapter": "hci1",
+                    "enabled": False,
+                },
+            ],
+            server_host="music-assistant.local",
+            server_port=9000,
+            effective_bridge="Bridge",
+            prefer_sbc=True,
+            bt_check_interval=15,
+            bt_max_reconnect_fails=5,
+            bt_churn_threshold=3,
+            bt_churn_window=120.0,
+            log_level="DEBUG",
+            pulse_latency_msec=250,
+        ),
         client_factory=FakeClient,
         bt_manager_factory=FakeBtManager,
         filter_devices_fn=lambda devices: devices,
@@ -431,9 +445,9 @@ def test_initialize_devices_builds_clients_and_registers_disabled_devices():
         persist_enabled_fn=lambda player_name, enabled: persisted.append((player_name, enabled)),
     )
 
-    assert len(bootstrap.bt_devices) == 2
-    assert len(bootstrap.clients) == 1
-    client = bootstrap.clients[0]
+    assert len(bootstrap_result.bt_devices) == 2
+    assert len(bootstrap_result.clients) == 1
+    client = bootstrap_result.clients[0]
     assert client.player_name == "Kitchen @ Bridge"
     assert client.status["volume"] == 33
     assert client.status["bluetooth_available"] is True
@@ -489,20 +503,22 @@ def test_initialize_devices_warns_on_port_collisions_and_persists_enabled(caplog
 
     with caplog.at_level("WARNING"):
         bootstrap = orchestrator.initialize_devices(
-            [
-                {"player_name": "One", "mac": "AA:BB:CC:DD:EE:01", "listen_port": 8928},
-                {"player_name": "Two", "mac": "AA:BB:CC:DD:EE:02", "listen_port": 8928},
-            ],
-            server_host="music-assistant.local",
-            server_port=9000,
-            effective_bridge="",
-            prefer_sbc=False,
-            bt_check_interval=10,
-            bt_max_reconnect_fails=0,
-            bt_churn_threshold=0,
-            bt_churn_window=300.0,
-            log_level="INFO",
-            pulse_latency_msec=200,
+            SimpleNamespace(
+                device_configs=[
+                    {"player_name": "One", "mac": "AA:BB:CC:DD:EE:01", "listen_port": 8928},
+                    {"player_name": "Two", "mac": "AA:BB:CC:DD:EE:02", "listen_port": 8928},
+                ],
+                server_host="music-assistant.local",
+                server_port=9000,
+                effective_bridge="",
+                prefer_sbc=False,
+                bt_check_interval=10,
+                bt_max_reconnect_fails=0,
+                bt_churn_threshold=0,
+                bt_churn_window=300.0,
+                log_level="INFO",
+                pulse_latency_msec=200,
+            ),
             client_factory=FakeClient,
             bt_manager_factory=FakeBtManager,
             filter_devices_fn=lambda devices: devices,

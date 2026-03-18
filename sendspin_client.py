@@ -917,23 +917,6 @@ async def main():
     orchestrator = BridgeOrchestrator()
     bootstrap = await orchestrator.initialize_runtime()
     config = bootstrap.config
-    demo_mode = bootstrap.demo_mode
-    server_host = bootstrap.server_host
-    server_port = bootstrap.server_port
-    effective_bridge = bootstrap.effective_bridge
-    pulse_latency_msec = bootstrap.pulse_latency_msec
-    log_level = bootstrap.log_level
-
-    prefer_sbc = bool(config.get("PREFER_SBC_CODEC", False))
-    if prefer_sbc:
-        logger.info("PREFER_SBC_CODEC: enabled — will request SBC codec after BT connect")
-
-    bt_check_interval = int(config.get("BT_CHECK_INTERVAL") or 10)
-    bt_max_reconnect_fails = int(config.get("BT_MAX_RECONNECT_FAILS") or 0)
-    bt_churn_threshold = int(config.get("BT_CHURN_THRESHOLD") or 0)
-    bt_churn_window = float(config.get("BT_CHURN_WINDOW") or 300)
-    if bt_churn_threshold > 0:
-        logger.info("BT churn isolation: enabled (threshold=%d in %.0fs)", bt_churn_threshold, bt_churn_window)
 
     try:
         from services.bluetooth import persist_device_enabled as _persist_enabled
@@ -941,17 +924,7 @@ async def main():
         _persist_enabled = None
 
     device_bootstrap = orchestrator.initialize_devices(
-        config.get("BLUETOOTH_DEVICES", []),
-        server_host=server_host,
-        server_port=server_port,
-        effective_bridge=effective_bridge,
-        prefer_sbc=prefer_sbc,
-        bt_check_interval=bt_check_interval,
-        bt_max_reconnect_fails=bt_max_reconnect_fails,
-        bt_churn_threshold=bt_churn_threshold,
-        bt_churn_window=bt_churn_window,
-        log_level=log_level,
-        pulse_latency_msec=pulse_latency_msec,
+        bootstrap,
         client_factory=SendspinClient,
         bt_manager_factory=BluetoothManager,
         filter_devices_fn=_filter_duplicate_bluetooth_devices,
@@ -968,13 +941,13 @@ async def main():
 
     await orchestrator.configure_executor(len(clients), web_thread_name=web_thread.name)
 
-    ma_bootstrap = await orchestrator.initialize_ma_integration(config, clients, server_host=server_host)
+    ma_bootstrap = await orchestrator.initialize_ma_integration(config, clients, server_host=bootstrap.server_host)
     ma_monitor_task = ma_bootstrap.ma_monitor_task
 
     await orchestrator.run_runtime(
         clients,
         ma_monitor_task=ma_monitor_task,
-        demo_mode=demo_mode,
+        demo_mode=bootstrap.demo_mode,
         version=VERSION,
     )
 

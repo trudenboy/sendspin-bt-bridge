@@ -122,6 +122,8 @@ def test_load_config_normalizes_types_and_prunes_orphan_volumes(tmp_path):
         {
             "SENDSPIN_PORT": "9001",
             "BT_CHECK_INTERVAL": "15",
+            "BT_CHURN_THRESHOLD": "3",
+            "BT_CHURN_WINDOW": "120.5",
             "PREFER_SBC_CODEC": "true",
             "BLUETOOTH_DEVICES": [{"mac": "aa:bb:cc:dd:ee:ff"}],
             "LAST_VOLUMES": {
@@ -136,6 +138,8 @@ def test_load_config_normalizes_types_and_prunes_orphan_volumes(tmp_path):
 
     assert loaded["SENDSPIN_PORT"] == 9001
     assert loaded["BT_CHECK_INTERVAL"] == 15
+    assert loaded["BT_CHURN_THRESHOLD"] == 3
+    assert loaded["BT_CHURN_WINDOW"] == 120.5
     assert loaded["PREFER_SBC_CODEC"] is True
     assert loaded["BLUETOOTH_DEVICES"][0]["mac"] == "AA:BB:CC:DD:EE:FF"
     assert loaded["LAST_VOLUMES"] == {"AA:BB:CC:DD:EE:FF": 55}

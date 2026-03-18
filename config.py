@@ -56,6 +56,8 @@ DEFAULT_CONFIG = {
     "PREFER_SBC_CODEC": False,
     "BT_CHECK_INTERVAL": 10,
     "BT_MAX_RECONNECT_FAILS": 0,
+    "BT_CHURN_THRESHOLD": 0,
+    "BT_CHURN_WINDOW": 300.0,
     "AUTH_ENABLED": False,
     "SESSION_TIMEOUT_HOURS": 24,
     "BRUTE_FORCE_PROTECTION": True,
@@ -131,6 +133,23 @@ def _normalize_bool_setting(config: dict, key: str) -> None:
     config[key] = DEFAULT_CONFIG[key]
 
 
+def _normalize_float_setting(
+    config: dict, key: str, *, min_value: float | None = None, max_value: float | None = None
+) -> None:
+    raw = config.get(key, DEFAULT_CONFIG[key])
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        logger.warning("Invalid %s value %r in config; using default %r", key, raw, DEFAULT_CONFIG[key])
+        config[key] = DEFAULT_CONFIG[key]
+        return
+    if (min_value is not None and value < min_value) or (max_value is not None and value > max_value):
+        logger.warning("Out-of-range %s value %r in config; using default %r", key, raw, DEFAULT_CONFIG[key])
+        config[key] = DEFAULT_CONFIG[key]
+        return
+    config[key] = value
+
+
 def _normalize_bluetooth_devices(config: dict) -> list[dict]:
     devices = config.get("BLUETOOTH_DEVICES", DEFAULT_CONFIG["BLUETOOTH_DEVICES"])
     if not isinstance(devices, list):
@@ -182,12 +201,15 @@ def _normalize_loaded_config(config: dict) -> None:
         ("PULSE_LATENCY_MSEC", 1, 5000),
         ("BT_CHECK_INTERVAL", 1, 3600),
         ("BT_MAX_RECONNECT_FAILS", 0, 1000),
+        ("BT_CHURN_THRESHOLD", 0, 1000),
         ("SESSION_TIMEOUT_HOURS", 1, 168),
         ("BRUTE_FORCE_MAX_ATTEMPTS", 1, 50),
         ("BRUTE_FORCE_WINDOW_MINUTES", 1, 1440),
         ("BRUTE_FORCE_LOCKOUT_MINUTES", 1, 1440),
     ):
         _normalize_int_setting(config, key, min_value=min_value, max_value=max_value)
+
+    _normalize_float_setting(config, "BT_CHURN_WINDOW", min_value=1.0, max_value=86400.0)
 
     for key in (
         "PREFER_SBC_CODEC",
@@ -301,6 +323,8 @@ def load_config() -> dict:
         "PREFER_SBC_CODEC",
         "BT_CHECK_INTERVAL",
         "BT_MAX_RECONNECT_FAILS",
+        "BT_CHURN_THRESHOLD",
+        "BT_CHURN_WINDOW",
         "AUTH_ENABLED",
         "SESSION_TIMEOUT_HOURS",
         "BRUTE_FORCE_PROTECTION",

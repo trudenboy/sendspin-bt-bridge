@@ -27,10 +27,16 @@ logger = logging.getLogger(__name__)
 @dataclass
 class RuntimeBootstrap:
     config: dict[str, Any]
+    device_configs: list[dict[str, Any]]
     demo_mode: bool
     server_host: str
     server_port: int
     effective_bridge: str
+    prefer_sbc: bool
+    bt_check_interval: int
+    bt_max_reconnect_fails: int
+    bt_churn_threshold: int
+    bt_churn_window: float
     pulse_latency_msec: int
     log_level: str
 
@@ -81,6 +87,15 @@ class BridgeOrchestrator:
         server_host = config.get("SENDSPIN_SERVER", "auto")
         server_port = int(config.get("SENDSPIN_PORT") or 9000)
         effective_bridge = ensure_bridge_name(config)
+        prefer_sbc = bool(config.get("PREFER_SBC_CODEC", False))
+        if prefer_sbc:
+            logger.info("PREFER_SBC_CODEC: enabled — will request SBC codec after BT connect")
+        bt_check_interval = int(config.get("BT_CHECK_INTERVAL", 10))
+        bt_max_reconnect_fails = int(config.get("BT_MAX_RECONNECT_FAILS", 0))
+        bt_churn_threshold = int(config.get("BT_CHURN_THRESHOLD", 0))
+        bt_churn_window = float(config.get("BT_CHURN_WINDOW", 300.0))
+        if bt_churn_threshold > 0:
+            logger.info("BT churn isolation: enabled (threshold=%d in %.0fs)", bt_churn_threshold, bt_churn_window)
 
         tz = os.getenv("TZ", config.get("TZ", "UTC"))
         os.environ["TZ"] = tz
@@ -101,10 +116,16 @@ class BridgeOrchestrator:
 
         return RuntimeBootstrap(
             config=config,
+            device_configs=list(config.get("BLUETOOTH_DEVICES", [])),
             demo_mode=demo_mode,
             server_host=server_host,
             server_port=server_port,
             effective_bridge=effective_bridge,
+            prefer_sbc=prefer_sbc,
+            bt_check_interval=bt_check_interval,
+            bt_max_reconnect_fails=bt_max_reconnect_fails,
+            bt_churn_threshold=bt_churn_threshold,
+            bt_churn_window=bt_churn_window,
             pulse_latency_msec=pulse_latency_msec,
             log_level=log_level,
         )
@@ -252,18 +273,8 @@ class BridgeOrchestrator:
 
     def initialize_devices(
         self,
-        device_configs: list[dict[str, Any]],
+        bootstrap: RuntimeBootstrap,
         *,
-        server_host: str,
-        server_port: int,
-        effective_bridge: str,
-        prefer_sbc: bool,
-        bt_check_interval: int,
-        bt_max_reconnect_fails: int,
-        bt_churn_threshold: int,
-        bt_churn_window: float,
-        log_level: str,
-        pulse_latency_msec: int,
         client_factory: Callable[..., Any],
         bt_manager_factory: Callable[..., Any],
         filter_devices_fn: Callable[[list[dict[str, Any]]], list[dict[str, Any]]] | None = None,
@@ -273,23 +284,27 @@ class BridgeOrchestrator:
         default_player_name: str | None = None,
     ) -> DeviceBootstrap:
         """Build device clients, register disabled devices, and publish startup progress."""
-        bt_devices = filter_devices_fn(device_configs) if filter_devices_fn is not None else list(device_configs)
+        bt_devices = (
+            filter_devices_fn(bootstrap.device_configs)
+            if filter_devices_fn is not None
+            else list(bootstrap.device_configs)
+        )
         _state.update_startup_progress(
             "runtime",
             "Runtime configuration prepared",
             current_step=2,
             details={
                 "configured_devices": len(bt_devices),
-                "log_level": log_level,
-                "pulse_latency_msec": pulse_latency_msec,
+                "log_level": bootstrap.log_level,
+                "pulse_latency_msec": bootstrap.pulse_latency_msec,
             },
         )
 
         logger.info("Starting %s player instance(s)", len(bt_devices))
         if not bt_devices:
             logger.warning("No Bluetooth devices configured — bridge will run without players")
-        if server_host and server_host.lower() not in ["auto", "discover", ""]:
-            logger.info("Server: %s:%s", server_host, server_port)
+        if bootstrap.server_host and bootstrap.server_host.lower() not in ["auto", "discover", ""]:
+            logger.info("Server: %s:%s", bootstrap.server_host, bootstrap.server_port)
         else:
             logger.info("Server: Auto-discovery enabled (mDNS)")
 
@@ -301,8 +316,8 @@ class BridgeOrchestrator:
             mac = str(device.get("mac") or "")
             adapter = str(device.get("adapter") or "")
             player_name = str(device.get("player_name") or resolved_default_name)
-            if effective_bridge:
-                player_name = f"{player_name} @ {effective_bridge}"
+            if bootstrap.effective_bridge:
+                player_name = f"{player_name} @ {bootstrap.effective_bridge}"
 
             if not device.get("enabled", True):
                 disabled_list.append(
@@ -328,13 +343,13 @@ class BridgeOrchestrator:
 
             client = client_factory(
                 player_name,
-                server_host,
-                server_port,
+                bootstrap.server_host,
+                bootstrap.server_port,
                 None,
                 listen_port=listen_port,
                 static_delay_ms=static_delay_ms,
                 listen_host=listen_host,
-                effective_bridge=effective_bridge,
+                effective_bridge=bootstrap.effective_bridge,
                 preferred_format=preferred_format or None,
                 keepalive_enabled=keepalive_enabled,
                 keepalive_interval=keepalive_interval,
@@ -352,12 +367,12 @@ class BridgeOrchestrator:
                     adapter=adapter,
                     device_name=player_name,
                     client=client,
-                    prefer_sbc=prefer_sbc,
-                    check_interval=bt_check_interval,
-                    max_reconnect_fails=bt_max_reconnect_fails,
+                    prefer_sbc=bootstrap.prefer_sbc,
+                    check_interval=bootstrap.bt_check_interval,
+                    max_reconnect_fails=bootstrap.bt_max_reconnect_fails,
                     on_sink_found=_on_sink_found,
-                    churn_threshold=bt_churn_threshold,
-                    churn_window=bt_churn_window,
+                    churn_threshold=bootstrap.bt_churn_threshold,
+                    churn_window=bootstrap.bt_churn_window,
                 )
                 bt_available = bool(bt_mgr.check_bluetooth_available())
                 if not bt_available:
