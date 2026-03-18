@@ -62,6 +62,21 @@ class SubprocessIpcService:
             if updates:
                 self._status_updater(updates)
             return updates
+        if msg.get("type") == "error":
+            message = str(msg.get("message", "")).strip()
+            raw_details = msg.get("details")
+            details: dict[str, Any]
+            if isinstance(raw_details, dict):
+                details = raw_details
+            else:
+                details = {}
+            updates = {
+                "last_error": message,
+                "last_error_at": details.get("at"),
+            }
+            self._status_updater(updates)
+            self._logger.error("[%s/proc] %s", self.player_name, message)
+            return updates
         if msg.get("type") == "log":
             log_fn = self._log_methods.get(str(msg.get("level", "info")), self._logger.info)
             log_fn("[%s/proc] %s", self.player_name, msg.get("msg", ""))

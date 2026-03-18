@@ -139,6 +139,47 @@ async def test_read_subprocess_output_accepts_protocol_versioned_status_once():
 
 
 @pytest.mark.asyncio
+async def test_read_subprocess_output_accepts_structured_error_envelope_once():
+    client = SendspinClient("Test Player", "localhost", 9000)
+
+    class _FakeStdout:
+        def __init__(self, lines):
+            self._lines = list(lines)
+
+        def __aiter__(self):
+            self._iter = iter(self._lines)
+            return self
+
+        async def __anext__(self):
+            try:
+                return next(self._iter)
+            except StopIteration as exc:
+                raise StopAsyncIteration from exc
+
+    client._daemon_proc = SimpleNamespace(
+        stdout=_FakeStdout(
+            [
+                json.dumps(
+                    {
+                        "type": "error",
+                        "protocol_version": IPC_PROTOCOL_VERSION,
+                        "error_code": "audio_output_missing",
+                        "message": "No audio output device found",
+                        "details": {"at": "2026-03-18T09:10:00+00:00"},
+                    }
+                ).encode(),
+            ]
+        )
+    )
+
+    with patch("sendspin_client.logger.error"):
+        await client._read_subprocess_output()
+
+    assert client.status.last_error == "No audio output device found"
+    assert client.status.last_error_at == "2026-03-18T09:10:00+00:00"
+
+
+@pytest.mark.asyncio
 async def test_read_subprocess_output_delegates_log_messages_to_ipc_service():
     client = SendspinClient("Test Player", "localhost", 9000)
 

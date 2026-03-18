@@ -48,6 +48,7 @@ for _mod in _STUB_MODULES:
 
 from services.daemon_process import (  # noqa: E402
     _VALID_LOG_LEVELS,
+    _emit_error,
     _emit_status,
     _filter_supported_daemon_args_kwargs,
     _read_commands,
@@ -215,6 +216,17 @@ def test_emit_status_different(capsys):
     assert len(lines) == 2
     assert json.loads(lines[0])["player_name"] == "a"
     assert json.loads(lines[1])["player_name"] == "b"
+
+
+def test_emit_error_structured_envelope(capsys):
+    _emit_error("audio_output_missing", "No audio output device found")
+
+    payload = json.loads(capsys.readouterr().out.strip())
+    assert payload["type"] == "error"
+    assert payload["error_code"] == "audio_output_missing"
+    assert payload["message"] == "No audio output device found"
+    assert payload["protocol_version"] == IPC_PROTOCOL_VERSION
+    assert "at" in payload["details"]
 
 
 # ── _read_commands integration (async) ───────────────────────────────────

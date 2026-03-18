@@ -46,6 +46,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added focused status-event builder tests while preserving existing runtime/API regression coverage for recent events and health summaries
 - Device operational events can now be published through a shared internal event bus via `state.publish_device_event()`, with the default subscriber persisting them into the existing per-device diagnostics ring buffer
 - `SendspinClient` now publishes its structured device events through the internal event bus instead of writing directly to the ring buffer, laying the groundwork for broader 2.38.x event consumers without changing diagnostics output
+- Daemon subprocesses can now emit explicit `type: "error"` IPC envelopes for fatal startup/parameter failures, in addition to the legacy log output path
+- Parent-side IPC handling now consumes structured daemon error envelopes by updating `last_error` / `last_error_at` directly from stdout messages, while preserving compatibility with the older stderr/log-based behavior
 
 ## [2.32.12] - 2026-03-17
 

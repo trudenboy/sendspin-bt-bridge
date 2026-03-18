@@ -57,6 +57,34 @@ def test_handle_message_logs_proc_messages():
     logger.error.assert_called_once()
 
 
+def test_handle_message_updates_last_error_from_error_envelope():
+    updates: list[dict] = []
+    logger = Mock()
+    service = SubprocessIpcService(
+        player_name="Kitchen",
+        protocol_warning_cache=set(),
+        status_updater=updates.append,
+        logger_=logger,
+    )
+
+    returned = service.handle_message(
+        {
+            "type": "error",
+            "protocol_version": IPC_PROTOCOL_VERSION,
+            "error_code": "audio_output_missing",
+            "message": "No audio output device found",
+            "details": {"at": "2026-03-18T09:10:00+00:00"},
+        }
+    )
+
+    assert returned == {
+        "last_error": "No audio output device found",
+        "last_error_at": "2026-03-18T09:10:00+00:00",
+    }
+    assert updates == [returned]
+    logger.error.assert_called_once()
+
+
 @pytest.mark.asyncio
 async def test_read_stream_parses_json_lines_and_ignores_invalid_lines():
     updates: list[dict] = []

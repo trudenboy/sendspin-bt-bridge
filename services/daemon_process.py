@@ -28,6 +28,7 @@ import os
 import re
 import sys
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 from services.ipc_protocol import (
@@ -188,6 +189,25 @@ def _emit_status(status: dict) -> None:
     if payload == _last_status_json:
         return
     _last_status_json = payload
+    print(payload, flush=True)
+
+
+def _emit_error(error_code: str, message: str, *, details: dict[str, object] | None = None) -> None:
+    """Serialize a structured error envelope for the parent process."""
+    payload_details = dict(details or {})
+    payload_details.setdefault("at", datetime.now(tz=timezone.utc).isoformat())
+    payload = json.dumps(
+        with_protocol_version(
+            {
+                "type": "error",
+                "error_code": error_code,
+                "message": message,
+                "details": payload_details,
+            }
+        ),
+        default=_str_default,
+        sort_keys=True,
+    )
     print(payload, flush=True)
 
 
@@ -397,6 +417,7 @@ async def _run(params: dict) -> None:
     if audio_device is None:
         audio_device = devices[0] if devices else None
     if audio_device is None:
+        _emit_error("audio_output_missing", "No audio output device found")
         logger.error("No audio output device found")
         sys.exit(1)
 
@@ -545,6 +566,7 @@ def main() -> None:
             ),
             flush=True,
         )
+        _emit_error("missing_params", "Usage: daemon_process.py <json_params>")
         sys.exit(1)
     try:
         params = json.loads(sys.argv[1])
@@ -553,6 +575,7 @@ def main() -> None:
             json.dumps(with_protocol_version({"type": "log", "level": "error", "msg": f"Invalid JSON params: {e}"})),
             flush=True,
         )
+        _emit_error("invalid_params_json", f"Invalid JSON params: {e}")
         sys.exit(1)
 
     asyncio.run(_run(params))
