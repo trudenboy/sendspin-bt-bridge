@@ -365,8 +365,10 @@ def install() -> None:
 
     _config_mod.load_config = _demo_load_config
     _sc_mod.load_config = _demo_load_config  # type: ignore[attr-defined]
+    import bridge_orchestrator as _bridge_orchestrator
     import routes.api_config as _api_config_mod
 
+    _bridge_orchestrator.load_config = _demo_load_config
     _api_config_mod.load_config = _demo_load_config
 
     # ------------------------------------------------------------------

@@ -13,6 +13,7 @@ from config import VERSION
 from demo.bt_manager import DemoBluetoothManager
 from demo.fixtures import (
     DEMO_ADAPTERS,
+    DEMO_DEVICES,
     DEMO_MA_SERVER_INFO,
     DEMO_MA_TOKEN,
     DEMO_MA_URL,
@@ -173,3 +174,29 @@ async def test_demo_install_seeds_connected_ma_state_and_named_adapters(monkeypa
     assert update_payload["version"] == DEMO_UPDATE_INFO["version"]
     assert update_payload["body"] == DEMO_UPDATE_INFO["body"]
     assert update_payload["channel"] == "stable"
+
+
+@pytest.mark.asyncio
+async def test_demo_install_patches_bridge_orchestrator_load_config(monkeypatch):
+    import bridge_orchestrator
+    import demo
+
+    class StubSendspinClient:
+        def __init__(self):
+            self.player_name = "Office @ DEMO"
+            self.bt_manager = SimpleNamespace(mac_address="AA:BB:CC:DD:EE:04")
+            self.status = {}
+
+        def _update_status(self, updates: dict) -> None:
+            self.status.update(updates)
+
+    monkeypatch.setattr(sys.modules["__main__"], "SendspinClient", StubSendspinClient, raising=False)
+    monkeypatch.setattr(sys.modules["__main__"], "BluetoothManager", object, raising=False)
+
+    demo.install()
+
+    cfg = bridge_orchestrator.load_config()
+    assert len(cfg["BLUETOOTH_DEVICES"]) == len(DEMO_DEVICES)
+    assert [device["player_name"] for device in cfg["BLUETOOTH_DEVICES"]] == [
+        device["player_name"] for device in DEMO_DEVICES
+    ]

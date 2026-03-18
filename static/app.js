@@ -75,6 +75,8 @@ var lastGroups = [];
 var lastMaWebUrl = '';
 var VIEW_MODE_STORAGE_KEY = 'sendspin-ui:view-mode';
 var _viewModeStorageScope = 'default';
+var _runtimeMode = 'production';
+var _demoScreenshotDefaultsApplied = false;
 var userPreferredViewMode = _loadSavedViewMode();
 var currentViewMode = userPreferredViewMode || 'list';
 var listSortState = {column: 'status', direction: 'desc'};
@@ -945,6 +947,29 @@ function _setViewModeStorageScope(runtimeMode) {
     userPreferredViewMode = _loadSavedViewMode();
     currentViewMode = userPreferredViewMode || 'list';
     _applyViewModeButtons(currentViewMode);
+}
+
+function _applyDemoScreenshotDefaults() {
+    if (_runtimeMode !== 'demo' || _demoScreenshotDefaultsApplied) return;
+    _demoScreenshotDefaultsApplied = true;
+
+    var configSection = document.querySelector('.config-section');
+    if (configSection) configSection.open = true;
+    switchConfigTab('devices');
+
+    var diagSection = document.getElementById('diag-details');
+    if (diagSection) diagSection.open = false;
+
+    var logsSection = document.querySelector('.logs-section');
+    if (logsSection) logsSection.open = true;
+
+    var pairedBox = document.getElementById('paired-box');
+    var pairedList = document.getElementById('paired-list');
+    if (pairedBox && pairedList && !pairedBox.hidden) {
+        pairedList.hidden = false;
+        var pairedArrow = pairedBox.querySelector('.paired-arrow');
+        if (pairedArrow) pairedArrow.classList.add('expanded');
+    }
 }
 
 function _getAutomaticViewMode(deviceCount) {
@@ -2160,7 +2185,9 @@ function renderDevicesView() {
 
 function renderStatusPayload(status) {
     var info = [];
-    _setViewModeStorageScope(status.runtime_mode || 'production');
+    _runtimeMode = status.runtime_mode || 'production';
+    _setViewModeStorageScope(_runtimeMode);
+    _applyDemoScreenshotDefaults();
     if (status.hostname) info.push(status.hostname);
     if (status.ip_address) info.push(status.ip_address);
     if (status.uptime) info.push('up ' + status.uptime);
@@ -4118,9 +4145,13 @@ async function loadPairedDevices() {
             titleEl.textContent = 'Already paired \u2014 click to add:' + countHint;
         }
 
-        // Auto-collapse list when more than 5 devices
+        // Auto-collapse list when more than 5 devices, except in demo mode where
+        // the screenshot stand keeps the import drawer open by default.
         var arrow = box.querySelector('.paired-arrow');
-        if (devices.length > 5) {
+        if (_runtimeMode === 'demo') {
+            listDiv.hidden = false;
+            if (arrow) arrow.classList.add('expanded');
+        } else if (devices.length > 5) {
             listDiv.hidden = true;
             if (arrow) arrow.classList.remove('expanded');
         } else {
@@ -4164,6 +4195,7 @@ async function loadPairedDevices() {
                 showBtDeviceInfo(d.mac);
             });
         });
+        _applyDemoScreenshotDefaults();
     } catch (_) {}
 }
 
