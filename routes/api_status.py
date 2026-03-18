@@ -25,6 +25,7 @@ from config import BUILD_DATE, CONFIG_SCHEMA_VERSION, VERSION, load_config
 from services.device_registry import get_device_registry_snapshot
 from services.ipc_protocol import IPC_PROTOCOL_VERSION
 from services.log_analysis import summarize_issue_logs
+from services.onboarding_assistant import build_onboarding_assistant_snapshot
 from services.pulse import get_server_name, list_sinks
 from services.sendspin_compat import get_runtime_dependency_versions
 from services.status_snapshot import (
@@ -120,6 +121,70 @@ def _parse_memtotal_mb(line: str) -> int | None:
         return int(parts[1]) // 1024
     except (TypeError, ValueError):
         return None
+
+
+def _collect_preflight_status() -> dict:
+    """Collect preflight runtime checks for reuse across helper routes."""
+    arch = _platform.machine()
+
+    audio_info: dict = {"system": "unknown", "socket": None, "sinks": 0}
+    try:
+        srv = get_server_name()
+        if srv and "pipewire" in srv.lower():
+            audio_info["system"] = "pipewire"
+        elif srv:
+            audio_info["system"] = "pulseaudio"
+        pulse_sock = os.environ.get("PULSE_SERVER", "")
+        if pulse_sock:
+            audio_info["socket"] = pulse_sock
+        sinks = list_sinks()
+        audio_info["sinks"] = len(sinks) if sinks else 0
+    except Exception:
+        pass
+
+    bt_info: dict = {"controller": False, "adapter": None, "paired_devices": 0}
+    try:
+        result = subprocess.run(
+            ["bluetoothctl", "list"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if "Controller" in result.stdout:
+            bt_info["controller"] = True
+            bt_info["adapter"] = _parse_bluetoothctl_adapter(result.stdout)
+        paired = subprocess.run(
+            ["bluetoothctl", "devices", "Paired"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        bt_info["paired_devices"] = paired.stdout.strip().count("Device")
+    except Exception:
+        pass
+
+    dbus_ok = os.path.exists("/var/run/dbus/system_bus_socket") or os.path.exists("/run/dbus/system_bus_socket")
+
+    mem_mb = 0
+    try:
+        with open("/proc/meminfo") as f:
+            for line in f:
+                if line.startswith("MemTotal:"):
+                    parsed_mem = _parse_memtotal_mb(line)
+                    if parsed_mem is not None:
+                        mem_mb = parsed_mem
+                    break
+    except Exception:
+        pass
+
+    return {
+        "platform": arch,
+        "audio": audio_info,
+        "bluetooth": bt_info,
+        "dbus": dbus_ok,
+        "memory_mb": mem_mb,
+        "version": VERSION,
+    }
 
 
 def get_client_status_for(client):
@@ -1022,6 +1087,24 @@ def api_health():
     return jsonify({"ok": True})
 
 
+@status_bp.route("/api/onboarding/assistant")
+def api_onboarding_assistant():
+    """Return actionable setup guidance derived from current runtime health."""
+    preflight = _collect_preflight_status()
+    config = load_config()
+    registry = get_device_registry_snapshot()
+    devices = [build_device_snapshot(client) for client in registry.active_clients]
+    runtime_mode = build_mock_runtime_snapshot().mode
+    assistant = build_onboarding_assistant_snapshot(
+        config=config,
+        preflight=preflight,
+        devices=devices,
+        ma_connected=state.is_ma_connected(),
+        runtime_mode=runtime_mode,
+    )
+    return jsonify(assistant.to_dict())
+
+
 @status_bp.route("/api/preflight")
 def api_preflight():
     """Setup verification endpoint — no auth required, no sensitive data.
@@ -1030,71 +1113,6 @@ def api_preflight():
     quick troubleshooting without exposing device details.
     """
 
-    # Platform
-    arch = _platform.machine()
-
-    # Audio
-    audio_info: dict = {"system": "unknown", "socket": None, "sinks": 0}
-    try:
-        srv = get_server_name()
-        if srv and "pipewire" in srv.lower():
-            audio_info["system"] = "pipewire"
-        elif srv:
-            audio_info["system"] = "pulseaudio"
-        pulse_sock = os.environ.get("PULSE_SERVER", "")
-        if pulse_sock:
-            audio_info["socket"] = pulse_sock
-        sinks = list_sinks()
-        audio_info["sinks"] = len(sinks) if sinks else 0
-    except Exception:
-        pass
-
-    # Bluetooth
-    bt_info: dict = {"controller": False, "adapter": None, "paired_devices": 0}
-    try:
-        result = subprocess.run(
-            ["bluetoothctl", "list"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        if "Controller" in result.stdout:
-            bt_info["controller"] = True
-            bt_info["adapter"] = _parse_bluetoothctl_adapter(result.stdout)
-        paired = subprocess.run(
-            ["bluetoothctl", "devices", "Paired"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        bt_info["paired_devices"] = paired.stdout.strip().count("Device")
-    except Exception:
-        pass
-
-    # D-Bus
-    dbus_ok = os.path.exists("/var/run/dbus/system_bus_socket") or os.path.exists("/run/dbus/system_bus_socket")
-
-    # Memory
-    mem_mb = 0
-    try:
-        with open("/proc/meminfo") as f:
-            for line in f:
-                if line.startswith("MemTotal:"):
-                    parsed_mem = _parse_memtotal_mb(line)
-                    if parsed_mem is not None:
-                        mem_mb = parsed_mem
-                    break
-    except Exception:
-        pass
-
-    return jsonify(
-        {
-            "ok": True,
-            "platform": arch,
-            "audio": audio_info,
-            "bluetooth": bt_info,
-            "dbus": dbus_ok,
-            "memory_mb": mem_mb,
-            "version": VERSION,
-        }
-    )
+    payload = _collect_preflight_status()
+    payload["ok"] = True
+    return jsonify(payload)

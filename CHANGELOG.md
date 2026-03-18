@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - New `services.status_event_builder` helpers so structured device-event derivation can evolve independently from `SendspinClient`
 - New `services.internal_events` publisher so bridge-internal runtime events can be routed through a lightweight in-process event bus before persistence or diagnostics consumers observe them
 - New `services.config_validation` helpers so uploaded config payloads can be validated through an explicit service that reports structured errors, warnings, and additive normalization before persistence
+- New `services.onboarding_assistant` helpers so operator-facing setup guidance can be derived from preflight checks, configured devices, sink state, MA auth status, and latency settings
 
 ### Changed
 - Parent↔subprocess IPC is now versioned end-to-end: daemon status/log envelopes, parent command envelopes, and daemon startup params all include `protocol_version` while remaining backward-compatible with legacy messages that omit it
@@ -52,6 +53,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `/api/config/upload` now delegates validation to the shared config-validation service, returns structured `errors`/`warnings` payloads for invalid imports, and applies additive normalization such as schema-version backfill and uppercase MAC canonicalization before saving
 - `POST /api/config` now also delegates baseline schema validation to the shared config-validation service, persists `CONFIG_SCHEMA_VERSION`, and returns structured validation warnings/errors consistently with the upload path before continuing route-specific coercion and save logic
 - New dry-run `POST /api/config/validate` surface now exposes explicit config validation results, warnings, and normalized preview payloads without persisting changes, giving the upcoming 2.39.x operator/UI work a stable reporting contract
+- New `GET /api/onboarding/assistant` endpoint now exposes actionable operator guidance for Bluetooth availability, audio availability, sink verification, Music Assistant auth state, and latency calibration using a dedicated service layer, while `/api/preflight` now reuses a shared collector instead of duplicating the same runtime checks inline
 
 ## [2.32.12] - 2026-03-17
 

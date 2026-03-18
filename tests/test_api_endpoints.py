@@ -1073,6 +1073,64 @@ def test_runtime_info_endpoint_and_status_include_mock_runtime(client):
         state.set_runtime_mode_info(None)
 
 
+def test_onboarding_assistant_endpoint_returns_guidance(client, monkeypatch):
+    import routes.api_status as api_status
+    from services.device_registry import DeviceRegistrySnapshot
+
+    monkeypatch.setattr(
+        api_status,
+        "_collect_preflight_status",
+        lambda: {
+            "audio": {"system": "pulseaudio", "sinks": 1},
+            "bluetooth": {"controller": True, "paired_devices": 1},
+        },
+    )
+    monkeypatch.setattr(
+        api_status,
+        "load_config",
+        lambda: {
+            "BLUETOOTH_DEVICES": [{"mac": "AA:BB:CC:DD:EE:FF"}],
+            "PULSE_LATENCY_MSEC": 200,
+            "MA_API_URL": "",
+        },
+    )
+    monkeypatch.setattr(
+        api_status,
+        "get_device_registry_snapshot",
+        lambda: DeviceRegistrySnapshot(
+            active_clients=[
+                SimpleNamespace(
+                    status={"bluetooth_connected": True},
+                    _status_lock=threading.Lock(),
+                    bt_manager=SimpleNamespace(mac_address="AA:BB:CC:DD:EE:FF"),
+                    player_name="Kitchen",
+                    listen_port=8928,
+                    server_host="music-assistant.local",
+                    server_port=9000,
+                    static_delay_ms=0.0,
+                    connected_server_url="",
+                    bluetooth_sink_name="bluez_sink.AA_BB_CC_DD_EE_FF.a2dp_sink",
+                    bt_management_enabled=True,
+                    is_running=lambda: True,
+                )
+            ]
+        ),
+    )
+    monkeypatch.setattr(api_status.state, "is_ma_connected", lambda: False)
+    monkeypatch.setattr(api_status, "build_mock_runtime_snapshot", lambda: SimpleNamespace(mode="production"))
+
+    resp = client.get("/api/onboarding/assistant")
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["runtime_mode"] == "production"
+    assert data["counts"]["configured_devices"] == 1
+    checks = {check["key"]: check for check in data["checks"]}
+    assert checks["sink_verification"]["status"] == "ok"
+    assert checks["ma_auth"]["status"] == "warning"
+    assert data["next_steps"]
+
+
 def test_api_status_parse_helpers_are_defensive():
     """Diagnostics parsers must return None instead of raising on malformed input."""
     from routes.api_status import (
