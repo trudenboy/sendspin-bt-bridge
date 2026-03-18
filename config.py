@@ -24,11 +24,13 @@ from pathlib import Path
 
 VERSION = "2.32.12"
 BUILD_DATE = "2026-03-17"
+CONFIG_SCHEMA_VERSION = 1
 
 __all__ = [
     "BUILD_DATE",
     "CONFIG_DIR",
     "CONFIG_FILE",
+    "CONFIG_SCHEMA_VERSION",
     "DEFAULT_CONFIG",
     "VERSION",
     "check_password",
@@ -44,6 +46,7 @@ __all__ = [
 ]
 
 DEFAULT_CONFIG = {
+    "CONFIG_SCHEMA_VERSION": CONFIG_SCHEMA_VERSION,
     "SENDSPIN_SERVER": "auto",
     "SENDSPIN_PORT": 9000,
     "BRIDGE_NAME": "",
@@ -311,6 +314,7 @@ def load_config() -> dict:
     result = copy.deepcopy(DEFAULT_CONFIG)
 
     allowed_keys = {
+        "CONFIG_SCHEMA_VERSION",
         "SENDSPIN_SERVER",
         "SENDSPIN_PORT",
         "BRIDGE_NAME",
@@ -348,6 +352,7 @@ def load_config() -> dict:
     }
 
     _needs_migration = False
+    legacy_mac = ""
 
     if CONFIG_FILE.exists():
         try:
@@ -358,14 +363,21 @@ def load_config() -> dict:
                     result[key] = value
 
             # Auto-migrate legacy BLUETOOTH_MAC → BLUETOOTH_DEVICES
+            schema_version = saved_config.get("CONFIG_SCHEMA_VERSION")
+            try:
+                loaded_schema_version = int(schema_version) if schema_version is not None else None
+            except (TypeError, ValueError):
+                loaded_schema_version = None
+            if loaded_schema_version != CONFIG_SCHEMA_VERSION:
+                _needs_migration = True
+                result["CONFIG_SCHEMA_VERSION"] = CONFIG_SCHEMA_VERSION
+
             legacy_mac = saved_config.get("BLUETOOTH_MAC", "")
             if legacy_mac and not result.get("BLUETOOTH_DEVICES"):
                 result["BLUETOOTH_DEVICES"] = [
                     {"mac": legacy_mac, "adapter": "", "player_name": "Sendspin Player"},
                 ]
                 _needs_migration = True
-            else:
-                _needs_migration = False
 
             # Auto-migrate legacy LAST_VOLUME (single int) → LAST_VOLUMES (dict)
             legacy_vol = saved_config.get("LAST_VOLUME")
@@ -394,6 +406,7 @@ def load_config() -> dict:
             try:
 
                 def _do_migrate(cfg: dict) -> None:
+                    cfg["CONFIG_SCHEMA_VERSION"] = CONFIG_SCHEMA_VERSION
                     if legacy_mac and not cfg.get("BLUETOOTH_DEVICES"):
                         cfg["BLUETOOTH_DEVICES"] = result["BLUETOOTH_DEVICES"]
                     cfg.pop("BLUETOOTH_MAC", None)

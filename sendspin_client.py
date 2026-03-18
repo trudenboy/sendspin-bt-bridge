@@ -23,10 +23,17 @@ from bluetooth_manager import BluetoothManager
 from bridge_orchestrator import BridgeOrchestrator
 from config import (
     CONFIG_FILE,
+    CONFIG_SCHEMA_VERSION,
     VERSION,
     _player_id_from_mac,
     config_lock,
     save_device_volume,
+)
+from services.ipc_protocol import (
+    IPC_PROTOCOL_VERSION,
+    IPC_PROTOCOL_VERSION_KEY,
+    parse_protocol_version,
+    with_protocol_version,
 )
 from services.log_analysis import classify_subprocess_stderr_level
 
@@ -230,6 +237,7 @@ class SendspinClient:
         self.bt_management_enabled: bool = True
         self.bluetooth_sink_name: str | None = None  # Store Bluetooth sink name for volume sync
         self.connected_server_url: str = ""  # actual resolved ws:// URL (populated after connect)
+        self._seen_ipc_protocol_warnings: set[str] = set()
         self._daemon_proc: asyncio.subprocess.Process | None = None
         self._daemon_task: asyncio.Task | None = None  # stdout reader task
         self._stderr_task: asyncio.Task | None = None  # stderr reader task
@@ -529,18 +537,21 @@ class SendspinClient:
                 )
 
             params = json.dumps(
-                {
-                    "player_name": self.player_name,
-                    "client_id": str(client_id),
-                    "listen_port": self.listen_port,
-                    "url": server_url,
-                    "static_delay_ms": static_delay_ms,
-                    "bluetooth_sink_name": self.bluetooth_sink_name,
-                    "volume": self.status.get("volume", 100),
-                    "muted": bool(self.status.get("muted", False)),
-                    "settings_dir": f"/tmp/sendspin-{self._safe_id}",
-                    "preferred_format": self.preferred_format,
-                }
+                with_protocol_version(
+                    {
+                        "player_name": self.player_name,
+                        "client_id": str(client_id),
+                        "listen_port": self.listen_port,
+                        "url": server_url,
+                        "static_delay_ms": static_delay_ms,
+                        "bluetooth_sink_name": self.bluetooth_sink_name,
+                        "volume": self.status.get("volume", 100),
+                        "muted": bool(self.status.get("muted", False)),
+                        "settings_dir": f"/tmp/sendspin-{self._safe_id}",
+                        "preferred_format": self.preferred_format,
+                        "config_schema_version": CONFIG_SCHEMA_VERSION,
+                    }
+                )
             )
 
             # Build subprocess environment: inherit everything + PULSE_SINK for routing
@@ -618,11 +629,29 @@ class SendspinClient:
                 "track_duration_ms",
             }
         )
+
+        def _warn_incompatible_protocol(value: object) -> None:
+            if value is None:
+                return
+            parsed = parse_protocol_version(value)
+            if parsed == IPC_PROTOCOL_VERSION:
+                return
+            cache_key = str(value)
+            if cache_key in self._seen_ipc_protocol_warnings:
+                return
+            self._seen_ipc_protocol_warnings.add(cache_key)
+            logger.warning(
+                "[%s] Received daemon IPC message with protocol_version=%r; attempting compatible parse",
+                self.player_name,
+                value,
+            )
+
         async for line in self._daemon_proc.stdout:
             try:
                 msg = json.loads(line.decode().strip())
             except (json.JSONDecodeError, ValueError):
                 continue
+            _warn_incompatible_protocol(msg.get(IPC_PROTOCOL_VERSION_KEY))
             if msg.get("type") == "status":
                 updates = {k: v for k, v in msg.items() if k in _ALLOWED_KEYS}
                 # Track volume changes for persistence (read both values atomically)
@@ -680,7 +709,7 @@ class SendspinClient:
         stdin = proc.stdin if proc else None
         if proc and stdin and proc.returncode is None:
             try:
-                stdin.write((json.dumps(cmd) + "\n").encode())
+                stdin.write((json.dumps(with_protocol_version(cmd)) + "\n").encode())
                 await stdin.drain()
             except Exception as exc:
                 logger.debug("Could not send subprocess command: %s", exc)

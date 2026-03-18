@@ -30,6 +30,12 @@ import sys
 import time
 from pathlib import Path
 
+from services.ipc_protocol import (
+    IPC_PROTOCOL_VERSION,
+    IPC_PROTOCOL_VERSION_KEY,
+    parse_protocol_version,
+    with_protocol_version,
+)
 from services.sendspin_compat import filter_supported_call_kwargs
 
 # ---------------------------------------------------------------------------
@@ -95,7 +101,7 @@ logger = logging.getLogger(__name__)
 
 
 class _JsonLineHandler(logging.Handler):
-    """Emit log records as {"type":"log", ...} JSON lines on stdout."""
+    """Emit log records as versioned JSON lines on stdout."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -128,12 +134,14 @@ class _JsonLineHandler(logging.Handler):
                     except Exception:
                         pass  # cannot log inside log handler
             line = json.dumps(
-                {
-                    "type": "log",
-                    "level": record.levelname.lower(),
-                    "name": record.name,
-                    "msg": msg,
-                }
+                with_protocol_version(
+                    {
+                        "type": "log",
+                        "level": record.levelname.lower(),
+                        "name": record.name,
+                        "msg": msg,
+                    }
+                )
             )
             print(line, flush=True)
         except Exception:
@@ -176,7 +184,7 @@ def _emit_status(status: dict) -> None:
     the write is skipped to avoid flooding the parent with no-op updates.
     """
     global _last_status_json
-    payload = json.dumps({"type": "status", **status}, default=_str_default, sort_keys=True)
+    payload = json.dumps(with_protocol_version({"type": "status", **status}), default=_str_default, sort_keys=True)
     if payload == _last_status_json:
         return
     _last_status_json = payload
@@ -287,6 +295,13 @@ async def _read_commands(daemon_ref: list, stop_event: asyncio.Event) -> None:
         except (json.JSONDecodeError, ValueError):
             continue
 
+        protocol_version = parse_protocol_version(cmd.get(IPC_PROTOCOL_VERSION_KEY))
+        if cmd.get(IPC_PROTOCOL_VERSION_KEY) is not None and protocol_version != IPC_PROTOCOL_VERSION:
+            logger.warning(
+                "Received IPC command with protocol_version=%r; attempting compatible parse",
+                cmd.get(IPC_PROTOCOL_VERSION_KEY),
+            )
+
         if cmd.get("cmd") == "stop":
             stop_event.set()
         elif cmd.get("cmd") in ("pause", "play"):
@@ -366,8 +381,15 @@ async def _run(params: dict) -> None:
     if not resolved.startswith("/tmp/"):
         settings_dir = f"/tmp/sendspin-{safe_id}"
     preferred_format_str: str | None = params.get("preferred_format")
+    protocol_version = parse_protocol_version(params.get(IPC_PROTOCOL_VERSION_KEY))
 
     logger = logging.getLogger(__name__)
+    if params.get(IPC_PROTOCOL_VERSION_KEY) is not None and protocol_version != IPC_PROTOCOL_VERSION:
+        logger.warning(
+            "[%s] Started with protocol_version=%r; attempting compatible runtime behavior",
+            player_name,
+            params.get(IPC_PROTOCOL_VERSION_KEY),
+        )
 
     # Resolve audio device — use default since PULSE_SINK in env handles routing
     devices = query_devices()
@@ -516,13 +538,21 @@ def main() -> None:
     _setup_logging()
     if len(sys.argv) < 2:
         print(
-            json.dumps({"type": "log", "level": "error", "msg": "Usage: daemon_process.py <json_params>"}), flush=True
+            json.dumps(
+                with_protocol_version(
+                    {"type": "log", "level": "error", "msg": "Usage: daemon_process.py <json_params>"}
+                )
+            ),
+            flush=True,
         )
         sys.exit(1)
     try:
         params = json.loads(sys.argv[1])
     except json.JSONDecodeError as e:
-        print(json.dumps({"type": "log", "level": "error", "msg": f"Invalid JSON params: {e}"}), flush=True)
+        print(
+            json.dumps(with_protocol_version({"type": "log", "level": "error", "msg": f"Invalid JSON params: {e}"})),
+            flush=True,
+        )
         sys.exit(1)
 
     asyncio.run(_run(params))

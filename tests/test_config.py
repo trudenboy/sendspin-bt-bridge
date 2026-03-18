@@ -19,11 +19,12 @@ def _write_config(tmp_path, data):
 
 
 def test_load_defaults_when_no_file():
-    from config import DEFAULT_CONFIG, load_config
+    from config import CONFIG_SCHEMA_VERSION, DEFAULT_CONFIG, load_config
 
     cfg = load_config()
     for key, default in DEFAULT_CONFIG.items():
         assert cfg[key] == default
+    assert cfg["CONFIG_SCHEMA_VERSION"] == CONFIG_SCHEMA_VERSION
 
 
 def test_load_known_keys(tmp_path):
@@ -143,6 +144,18 @@ def test_load_config_normalizes_types_and_prunes_orphan_volumes(tmp_path):
     assert loaded["PREFER_SBC_CODEC"] is True
     assert loaded["BLUETOOTH_DEVICES"][0]["mac"] == "AA:BB:CC:DD:EE:FF"
     assert loaded["LAST_VOLUMES"] == {"AA:BB:CC:DD:EE:FF": 55}
+
+
+def test_load_config_persists_current_schema_version_for_legacy_file(tmp_path):
+    _write_config(tmp_path, {"SENDSPIN_SERVER": "10.0.0.1"})
+    from config import CONFIG_SCHEMA_VERSION, load_config
+
+    loaded = load_config()
+
+    assert loaded["CONFIG_SCHEMA_VERSION"] == CONFIG_SCHEMA_VERSION
+    with open(tmp_path / "config.json") as f:
+        saved = json.load(f)
+    assert saved["CONFIG_SCHEMA_VERSION"] == CONFIG_SCHEMA_VERSION
 
 
 def test_update_config(tmp_path):

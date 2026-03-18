@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -10,6 +11,7 @@ import pytest
 
 import state
 from sendspin_client import SendspinClient, _filter_duplicate_bluetooth_devices
+from services.ipc_protocol import IPC_PROTOCOL_VERSION
 from services.log_analysis import classify_subprocess_stderr_level
 
 
@@ -43,7 +45,38 @@ async def test_send_subprocess_command_uses_snapshot_when_proc_changes():
 
     await client._send_subprocess_command({"cmd": "stop"})
 
-    assert stdin.writes == [b'{"cmd": "stop"}\n']
+    assert stdin.writes == [f'{{"cmd": "stop", "protocol_version": {IPC_PROTOCOL_VERSION}}}\n'.encode()]
+
+
+@pytest.mark.asyncio
+async def test_read_subprocess_output_accepts_protocol_versioned_status_once():
+    client = SendspinClient("Test Player", "localhost", 9000)
+
+    class _FakeStdout:
+        def __init__(self, lines):
+            self._lines = list(lines)
+
+        def __aiter__(self):
+            self._iter = iter(self._lines)
+            return self
+
+        async def __anext__(self):
+            try:
+                return next(self._iter)
+            except StopIteration as exc:
+                raise StopAsyncIteration from exc
+
+    client._daemon_proc = SimpleNamespace(
+        stdout=_FakeStdout(
+            [
+                json.dumps({"type": "status", "protocol_version": IPC_PROTOCOL_VERSION, "playing": True}).encode(),
+            ]
+        )
+    )
+
+    await client._read_subprocess_output()
+
+    assert client.status.playing is True
 
 
 def test_filter_duplicate_bluetooth_devices_keeps_first_mac():

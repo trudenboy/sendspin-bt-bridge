@@ -52,6 +52,7 @@ from services.daemon_process import (  # noqa: E402
     _filter_supported_daemon_args_kwargs,
     _read_commands,
 )
+from services.ipc_protocol import IPC_PROTOCOL_VERSION  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
@@ -203,6 +204,7 @@ def test_emit_status_dedup(capsys):
     _emit_status(status)
     lines = capsys.readouterr().out.strip().splitlines()
     assert len(lines) == 1
+    assert json.loads(lines[0])["protocol_version"] == IPC_PROTOCOL_VERSION
 
 
 def test_emit_status_different(capsys):
@@ -231,7 +233,7 @@ async def test_read_commands_set_volume():
     stop_event = asyncio.Event()
 
     # Feed a volume command then EOF
-    cmd_line = json.dumps({"cmd": "set_volume", "value": 120}) + "\n"
+    cmd_line = json.dumps({"cmd": "set_volume", "value": 120, "protocol_version": IPC_PROTOCOL_VERSION}) + "\n"
 
     async def _fake_connect_read_pipe(protocol_factory, pipe):
         protocol = protocol_factory()
