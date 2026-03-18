@@ -1,0 +1,36 @@
+#include <tunables/global>
+
+profile sendspin_bt_bridge_beta flags=(attach_disconnected,mediate_deleted) {
+  # Modeled after Music Assistant addon profile.
+  # Granular path rules break on Docker overlayfs — use blanket file/signal
+  # and restrict via capabilities and network rules instead.
+  file,
+  signal,
+
+  capability net_admin,
+  capability net_raw,
+  capability sys_admin,
+  capability dac_read_search,
+  capability setgid,
+  capability setuid,
+
+  # Network (host mode)
+  network inet stream,
+  network inet dgram,
+  network inet6 stream,
+  network inet6 dgram,
+  network bluetooth,
+  network netlink raw,
+  network unix dgram,
+  network unix stream,
+
+  # Docker daemon signal
+  signal (receive) set=(kill,term) peer=/usr/bin/docker,
+
+  /dev/* mrwkl,
+  /tmp/** mrkwl,
+
+  # Data access
+  /data/** rw,
+  /config/** rw,
+}

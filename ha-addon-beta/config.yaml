@@ -1,0 +1,85 @@
+---
+name: "Sendspin Bluetooth Bridge (Beta)"
+version: "2.40.5-beta.1"
+slug: "sendspin_bt_bridge_beta"
+description: "Bridge Music Assistant Sendspin protocol to Bluetooth speakers (Beta channel)"
+url: "https://github.com/trudenboy/sendspin-bt-bridge"
+image: "ghcr.io/trudenboy/sendspin-bt-bridge"
+homeassistant: "2024.1.0"
+arch:
+  - aarch64
+  - amd64
+  - armv7
+startup: application
+boot: manual
+host_network: true
+host_dbus: true
+hassio_api: true
+hassio_role: default
+homeassistant_api: true
+auth_api: true
+privileged:
+  - SYS_ADMIN
+  - NET_ADMIN
+  - NET_RAW
+devices:
+  - /dev/bus/usb
+audio: true
+apparmor: true
+init: false
+ingress: true
+ingress_port: 8082
+panel_icon: mdi:flask-outline
+panel_admin: false
+stage: experimental
+tmpfs: true
+backup_exclude:
+  - __pycache__/*
+  - "*.pyc"
+
+options:
+  sendspin_server: "auto"
+  sendspin_port: 9000
+  bridge_name: ""
+  tz: ""
+  pulse_latency_msec: 200
+  prefer_sbc_codec: false
+  bt_check_interval: 10
+  bt_max_reconnect_fails: 0
+  log_level: "info"
+  update_channel: "beta"
+  ma_api_url: ""
+  ma_api_token: ""
+  volume_via_ma: true
+  bluetooth_devices: []
+  bluetooth_adapters: []
+
+schema:
+  sendspin_server: str
+  sendspin_port: port
+  bridge_name: str?
+  tz: str?
+  pulse_latency_msec: int?
+  prefer_sbc_codec: bool?
+  bt_check_interval: int?
+  bt_max_reconnect_fails: int?
+  log_level: "list(info|debug)?"
+  update_channel: "list(stable|rc|beta)?"
+  ma_api_url: str?
+  ma_api_token: str?
+  volume_via_ma: bool?
+  bluetooth_devices:
+    - mac: "match(([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2})"
+      player_name: str
+      adapter: str?
+      static_delay_ms: int?
+      listen_host: str?
+      listen_port: port?
+      enabled: bool?
+      preferred_format: str?
+      keepalive_silence: bool?
+      keepalive_interval: int?
+  bluetooth_adapters:
+    - id: str
+      mac: str?
+      name: str?
