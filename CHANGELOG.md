@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Shared `services.ipc_protocol` helpers with `IPC_PROTOCOL_VERSION` so parent↔subprocess JSON-line messages and daemon bootstrap params now carry an explicit protocol contract
 - Internal contract versions are now exposed through shared bridge system info, `/api/version`, and diagnostics payloads so operators can see the active config schema and IPC protocol surfaces at runtime
 - New `services.lifecycle_state` helpers so bridge-wide startup progress, MA integration publication, main-loop publication, and startup completion now have an explicit service seam instead of being scattered across `BridgeOrchestrator`
+- New `services.ma_integration_service` helpers so Music Assistant URL/token resolution, syncgroup discovery, and optional monitor startup can evolve independently from orchestrator lifecycle wiring
 
 ### Changed
 - Parent↔subprocess IPC is now versioned end-to-end: daemon status/log envelopes, parent command envelopes, and daemon startup params all include `protocol_version` while remaining backward-compatible with legacy messages that omit it
@@ -22,6 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `services/ma_monitor.py` now reads active bridge clients through the shared device-registry snapshot service for syncgroup queue discovery, solo queue discovery, stale identity reconciliation, and WS group refresh payload assembly
 - `BridgeOrchestrator` now delegates startup-state publication to `BridgeLifecycleState` for config startup, executor readiness, web client publication, runtime/device inventory, MA integration publication, and final startup completion without changing external behavior
 - Added focused lifecycle-state and orchestrator delegation coverage so the new service seam is locked down before larger `2.37.x` lifecycle extractions
+- `BridgeOrchestrator` now delegates MA bootstrap work to `BridgeMaIntegrationService`, keeping lifecycle publication in the orchestrator while moving MA-specific URL autodetect, syncgroup discovery, and monitor startup into a dedicated service
+- Added focused `ma_integration_service` coverage and orchestration delegation tests so the new MA service seam is validated before deeper `2.37.x` runtime extractions
 
 ## [2.32.12] - 2026-03-17
 

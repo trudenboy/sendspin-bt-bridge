@@ -40,6 +40,16 @@ class RecordingLifecycleState:
         self.calls.append(("complete_startup", kwargs))
 
 
+class RecordingMaIntegrationService:
+    def __init__(self, resolved):
+        self.resolved = resolved
+        self.calls: list[tuple[dict[str, object], list[object], str]] = []
+
+    async def initialize(self, config, clients, *, server_host: str):
+        self.calls.append((config, clients, server_host))
+        return self.resolved
+
+
 @pytest.fixture(autouse=True)
 def _isolated_config(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
@@ -331,6 +341,35 @@ async def test_initialize_ma_integration_delegates_state_publication(monkeypatch
     assert lifecycle_state.calls[-1][1]["ma_api_token"] == "token"
     assert lifecycle_state.calls[-1][1]["groups_loaded"] is True
     assert lifecycle_state.calls[-1][1]["monitor_enabled"] is False
+
+
+@pytest.mark.asyncio
+async def test_initialize_ma_integration_delegates_to_ma_service():
+    resolved = SimpleNamespace(
+        ma_api_url="http://ma.local:8095",
+        ma_api_token="token",
+        name_map={"sendspin-kitchen": {"id": "syncgroup_1", "name": "Kitchen Group"}},
+        all_groups=[{"id": "syncgroup_1", "name": "Kitchen Group", "members": []}],
+        groups_loaded=True,
+        ma_monitor_task=None,
+    )
+    ma_service = RecordingMaIntegrationService(resolved)
+    lifecycle_state = RecordingLifecycleState()
+    orchestrator = BridgeOrchestrator(lifecycle_state=lifecycle_state, ma_integration_service=ma_service)
+    clients = [SimpleNamespace(player_id="sendspin-kitchen", player_name="Kitchen")]
+    config_data = {
+        "MA_API_URL": "http://ma.local:8095",
+        "MA_API_TOKEN": "token",
+        "MA_WEBSOCKET_MONITOR": False,
+    }
+
+    bootstrap = await orchestrator.initialize_ma_integration(config_data, clients, server_host="ma-host.local")
+
+    assert ma_service.calls == [(config_data, clients, "ma-host.local")]
+    assert bootstrap.ma_api_url == "http://ma.local:8095"
+    assert bootstrap.ma_api_token == "token"
+    assert lifecycle_state.calls[-1][0] == "publish_ma_integration"
+    assert lifecycle_state.calls[-1][1]["name_map"] == resolved.name_map
 
 
 @pytest.mark.asyncio

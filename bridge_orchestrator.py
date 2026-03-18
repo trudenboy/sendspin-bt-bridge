@@ -19,6 +19,7 @@ if TYPE_CHECKING:
 import state as _state
 from config import ensure_bridge_name, load_config
 from services.lifecycle_state import BridgeLifecycleState
+from services.ma_integration_service import BridgeMaIntegrationService
 from services.sendspin_compat import format_dependency_versions, get_runtime_dependency_versions
 from services.update_checker import run_update_checker
 
@@ -59,9 +60,16 @@ class DeviceBootstrap:
 class BridgeOrchestrator:
     """Own bridge-wide runtime bootstrap without changing device behavior yet."""
 
-    def __init__(self, startup_steps: int = 6, *, lifecycle_state: BridgeLifecycleState | None = None):
+    def __init__(
+        self,
+        startup_steps: int = 6,
+        *,
+        lifecycle_state: BridgeLifecycleState | None = None,
+        ma_integration_service: BridgeMaIntegrationService | None = None,
+    ):
         self.startup_steps = startup_steps
         self.lifecycle_state = lifecycle_state or BridgeLifecycleState(startup_steps=startup_steps)
+        self.ma_integration_service = ma_integration_service or BridgeMaIntegrationService()
 
     async def initialize_runtime(self) -> RuntimeBootstrap:
         """Load bridge config and apply process-wide runtime settings."""
@@ -202,55 +210,20 @@ class BridgeOrchestrator:
         server_host: str,
     ) -> MaBootstrap:
         """Resolve MA credentials, discover groups, and start the optional monitor."""
-        ma_api_url = config.get("MA_API_URL", "").strip()
-        ma_api_token = config.get("MA_API_TOKEN", "").strip()
-
-        supervisor_token = os.environ.get("SUPERVISOR_TOKEN", "")
-        if supervisor_token:
-            if not ma_api_url:
-                if server_host and server_host.lower() not in ("auto", "discover", ""):
-                    ma_api_url = f"http://{server_host}:8095"
-                else:
-                    ma_api_url = "http://localhost:8095"
-                logger.info("MA API URL auto-detected (addon mode): %s", ma_api_url)
-            if not ma_api_token:
-                logger.warning(
-                    "MA API: running in HA addon mode but no 'ma_api_token' configured. "
-                    "Create a long-lived token in MA → Settings → API Tokens and set ma_api_token in bridge config."
-                )
-
-        name_map: dict[str, dict[str, Any]] | None = None
-        all_groups: list[dict[str, Any]] | None = None
-        groups_loaded = False
-        if ma_api_url and ma_api_token:
-            try:
-                from services.ma_client import discover_ma_groups
-
-                player_info = [{"player_id": client.player_id, "player_name": client.player_name} for client in clients]
-                name_map, all_groups = await discover_ma_groups(ma_api_url, ma_api_token, player_info)
-                groups_loaded = True
-            except Exception as ma_exc:
-                logger.warning("MA API group discovery error: %s", ma_exc)
-
-        ma_monitor_task: asyncio.Task[None] | None = None
-        if ma_api_url and ma_api_token and config.get("MA_WEBSOCKET_MONITOR", True):
-            from services.ma_monitor import start_monitor
-
-            monitor = start_monitor(ma_api_url, ma_api_token)
-            ma_monitor_task = asyncio.create_task(monitor.run())
+        resolved = await self.ma_integration_service.initialize(config, clients, server_host=server_host)
 
         self.lifecycle_state.publish_ma_integration(
-            ma_api_url=ma_api_url,
-            ma_api_token=ma_api_token,
-            groups_loaded=groups_loaded,
-            name_map=name_map,
-            all_groups=all_groups,
-            monitor_enabled=bool(ma_monitor_task),
+            ma_api_url=resolved.ma_api_url,
+            ma_api_token=resolved.ma_api_token,
+            groups_loaded=resolved.groups_loaded,
+            name_map=resolved.name_map,
+            all_groups=resolved.all_groups,
+            monitor_enabled=bool(resolved.ma_monitor_task),
         )
         return MaBootstrap(
-            ma_api_url=ma_api_url,
-            ma_api_token=ma_api_token,
-            ma_monitor_task=ma_monitor_task,
+            ma_api_url=resolved.ma_api_url,
+            ma_api_token=resolved.ma_api_token,
+            ma_monitor_task=resolved.ma_monitor_task,
         )
 
     def initialize_devices(
