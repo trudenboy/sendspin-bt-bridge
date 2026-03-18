@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 import pytest
 
+import state
 from sendspin_client import SendspinClient, _filter_duplicate_bluetooth_devices
 from services.log_analysis import classify_subprocess_stderr_level
 
@@ -73,6 +74,31 @@ def test_update_status_resets_stream_tracking_when_playback_stops():
 
     assert client._has_streamed is False
     assert client._playing_since is None
+
+
+def test_update_status_records_structured_device_events():
+    client = SendspinClient("Test Player", "localhost", 9000)
+    state.clear_device_events(client.player_id)
+
+    try:
+        with patch("sendspin_client._state.notify_status_changed"):
+            client._update_status({"bluetooth_connected": True, "server_connected": True})
+            client._update_status({"playing": True})
+            client._update_status({"audio_streaming": True})
+            client._update_status({"last_error": "Route degraded", "last_error_at": "2026-03-18T00:00:00+00:00"})
+
+        events = state.get_device_events(client.player_id)
+        assert [event["event_type"] for event in events[:5]] == [
+            "runtime-error",
+            "audio-streaming",
+            "playback-started",
+            "daemon-connected",
+            "bluetooth-connected",
+        ]
+        assert events[0]["level"] == "error"
+        assert events[0]["message"] == "Route degraded"
+    finally:
+        state.clear_device_events(client.player_id)
 
 
 def test_zombie_watchdog_triggers_after_second_play_without_audio():

@@ -16,7 +16,7 @@ import subprocess
 import sys
 import threading
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 from flask import Blueprint, Response, jsonify
 
@@ -25,12 +25,12 @@ from config import BUILD_DATE, VERSION, load_config
 from services.log_analysis import summarize_issue_logs
 from services.pulse import get_server_name, list_sinks
 from services.sendspin_compat import get_runtime_dependency_versions
+from services.status_snapshot import build_bridge_snapshot, build_device_snapshot, build_group_snapshots
 from state import clients as _clients
 from state import (
     clients_lock as _clients_lock,
 )
 from state import (
-    get_adapter_name,
     get_ma_group_for_player_id,
     get_ma_now_playing_for_group,
 )
@@ -121,72 +121,7 @@ def _parse_memtotal_mb(line: str) -> int | None:
 def get_client_status_for(client):
     """Get status dict for a specific client."""
     try:
-        if client is None:
-            return {
-                "connected": False,
-                "server_connected": False,
-                "bluetooth_connected": False,
-                "bluetooth_available": False,
-                "playing": False,
-                "error": "Client not running",
-                "version": VERSION,
-                "build_date": BUILD_DATE,
-                "bluetooth_mac": None,
-            }
-
-        if not hasattr(client, "status"):
-            return {
-                "connected": False,
-                "server_connected": False,
-                "bluetooth_connected": False,
-                "bluetooth_available": False,
-                "playing": False,
-                "error": "Client initializing",
-                "version": VERSION,
-                "build_date": BUILD_DATE,
-                "bluetooth_mac": None,
-            }
-
-        with client._status_lock:
-            status = client.status.copy()
-
-        if "uptime_start" in status:
-            uptime = datetime.now(tz=UTC) - status["uptime_start"]
-            status["uptime"] = str(timedelta(seconds=int(uptime.total_seconds())))
-            del status["uptime_start"]
-
-        status["version"] = VERSION
-        status["build_date"] = BUILD_DATE
-        status["runtime"] = state._detect_runtime_type()
-        status["connected"] = client.is_running()
-        status["player_name"] = getattr(client, "player_name", None)
-        status["listen_port"] = getattr(client, "listen_port", None)
-        status["server_host"] = getattr(client, "server_host", None)
-        status["server_port"] = getattr(client, "server_port", None)
-        status["static_delay_ms"] = getattr(client, "static_delay_ms", None)
-        status["connected_server_url"] = getattr(client, "connected_server_url", "") or (
-            f"ws://{client.server_host}:{client.server_port}/sendspin"
-            if getattr(client, "server_host", None) and client.server_host.lower() not in ("auto", "discover", "")
-            else ""
-        )
-
-        bt_mgr = getattr(client, "bt_manager", None)
-        status["bluetooth_mac"] = bt_mgr.mac_address if bt_mgr else None
-        status["bluetooth_adapter"] = (bt_mgr.effective_adapter_mac or bt_mgr.adapter) if bt_mgr else None
-        adapter_name = None
-        if bt_mgr:
-            lookup_mac = bt_mgr.effective_adapter_mac or bt_mgr.adapter
-            if lookup_mac:
-                adapter_name = get_adapter_name(lookup_mac.upper())
-        status["bluetooth_adapter_name"] = adapter_name
-        status["bluetooth_adapter_hci"] = getattr(bt_mgr, "adapter_hci_name", "") if bt_mgr else ""
-        status["has_sink"] = bool(getattr(client, "bluetooth_sink_name", None))
-        status["sink_name"] = getattr(client, "bluetooth_sink_name", None)
-        status["bt_management_enabled"] = getattr(client, "bt_management_enabled", True)
-        status["battery_level"] = getattr(bt_mgr, "battery_level", None) if bt_mgr else None
-
-        _enrich_status_with_ma(status, client)
-
+        status = build_device_snapshot(client).to_dict()
         logger.debug("Status retrieved: %s", status)
         return status
 
@@ -217,105 +152,7 @@ def _build_groups_summary(clients: list) -> list[dict]:
     merged entry is then enriched with ``external_members`` (players from
     other bridges) and ``external_count``.
     """
-    groups: dict[str | None, dict] = {}
-    solo_counter = 0
-
-    for client in clients:
-        status = client.status
-        gid = status.get("group_id")
-        # Give each solo player a unique key so they don't merge
-        key = gid if gid is not None else f"__solo_{solo_counter}"
-        if gid is None:
-            solo_counter += 1
-
-        member = {
-            "player_name": getattr(client, "player_name", None),
-            "player_id": getattr(client, "player_id", ""),
-            "volume": status.get("volume", 100),
-            "playing": bool(status.get("playing")),
-            "connected": bool(status.get("connected")),
-            "server_connected": bool(status.get("server_connected")),
-            "bluetooth_connected": bool(status.get("bluetooth_connected")),
-        }
-
-        if key not in groups:
-            groups[key] = {
-                "group_id": gid,
-                "group_name": status.get("group_name"),
-                "members": [],
-            }
-
-        groups[key]["members"].append(member)
-
-    # Merge entries that resolve to the same MA syncgroup.
-    # Sendspin assigns a unique UUID per session, so two local devices in
-    # the same MA syncgroup appear as separate entries — merge them here.
-    ma_groups = state.get_ma_groups()
-    entry_syncgroup: dict[int, str] = {}  # index in merged → ma_syncgroup_id
-    if ma_groups:
-        syncgroup_map: dict[str, dict] = {}  # ma_syncgroup_id → merged entry
-        merged: list[dict] = []
-        for entry in groups.values():
-            ma_syncgroup_id = None
-            if entry["group_id"]:
-                for m in entry["members"]:
-                    pid = m.get("player_id", "")
-                    if not pid:
-                        continue
-                    ma_info = get_ma_group_for_player_id(pid)
-                    if ma_info:
-                        ma_syncgroup_id = ma_info["id"]
-                        if not entry["group_name"] and ma_info.get("name"):
-                            entry["group_name"] = ma_info["name"]
-                        break
-                # Fallback: use group_id directly (it IS the MA syncgroup ID)
-                if not ma_syncgroup_id:
-                    ma_sg = state.get_ma_group_by_id(entry["group_id"])
-                    if ma_sg:
-                        ma_syncgroup_id = ma_sg["id"]
-                        if not entry["group_name"] and ma_sg.get("name"):
-                            entry["group_name"] = ma_sg["name"]
-            if ma_syncgroup_id and ma_syncgroup_id in syncgroup_map:
-                # Merge into existing entry
-                target = syncgroup_map[ma_syncgroup_id]
-                target["members"].extend(entry["members"])
-                if not target["group_name"] and entry.get("group_name"):
-                    target["group_name"] = entry["group_name"]
-            else:
-                if ma_syncgroup_id:
-                    syncgroup_map[ma_syncgroup_id] = entry
-                    entry_syncgroup[len(merged)] = ma_syncgroup_id
-                merged.append(entry)
-    else:
-        merged = list(groups.values())
-
-    result = []
-    for idx, entry in enumerate(merged):
-        members = entry["members"]
-        volumes = [m["volume"] for m in members]
-        entry["avg_volume"] = round(sum(volumes) / len(volumes)) if volumes else 100
-        entry["playing"] = any(m["playing"] for m in members)
-        entry["external_members"] = []
-        entry["external_count"] = 0
-
-        # Enrich with cross-bridge member info from MA API cache
-        ma_sid = entry_syncgroup.get(idx)
-        if ma_sid and ma_groups:
-            ma_group = next((g for g in ma_groups if g["id"] == ma_sid), None)
-            if ma_group:
-                local_ids = {m.get("player_id", "") for m in members if m.get("player_id")}
-                local_names = {(m.get("player_name") or "").lower() for m in members if m.get("player_name")}
-                external = [
-                    {"name": m["name"], "available": m.get("available", True)}
-                    for m in ma_group.get("members", [])
-                    if m.get("id", "") not in local_ids and (m.get("name") or "").lower() not in local_names
-                ]
-                entry["external_members"] = external
-                entry["external_count"] = len(external)
-
-        result.append(entry)
-
-    return result
+    return [group.to_dict() for group in build_group_snapshots(clients)]
 
 
 # ---------------------------------------------------------------------------
@@ -328,28 +165,7 @@ def api_status():
     """Return status for all client instances."""
     with _clients_lock:
         snapshot = list(_clients)
-    if not snapshot:
-        result = state.get_bridge_system_info()
-        result["error"] = "No clients"
-        result["devices"] = []
-        result["groups"] = []
-        result["disabled_devices"] = state.get_disabled_devices()
-        return jsonify(result)
-    if len(snapshot) == 1:
-        result = get_client_status_for(snapshot[0])
-    else:
-        first = get_client_status_for(snapshot[0])
-        result = {**first, "devices": [get_client_status_for(c) for c in snapshot]}
-    result["groups"] = _build_groups_summary(snapshot)
-    result["ma_connected"] = state.is_ma_connected()
-    ma_url, _ = state.get_ma_api_credentials()
-    if ma_url:
-        result["ma_web_url"] = ma_url
-    result["disabled_devices"] = state.get_disabled_devices()
-    _upd = state.get_update_available()
-    if _upd:
-        result["update_available"] = _upd
-    return jsonify(result)
+    return jsonify(build_bridge_snapshot(snapshot).to_status_payload())
 
 
 @status_bp.route("/api/groups")
@@ -391,29 +207,7 @@ def api_status_stream():
             def _build_snapshot():
                 with _clients_lock:
                     snapshot = list(_clients)
-                if not snapshot:
-                    data = state.get_bridge_system_info()
-                    data["devices"] = []
-                    data["groups"] = []
-                    data["ma_connected"] = state.is_ma_connected()
-                    ma_url, _ = state.get_ma_api_credentials()
-                    if ma_url:
-                        data["ma_web_url"] = ma_url
-                    return data
-                if len(snapshot) == 1:
-                    data = get_client_status_for(snapshot[0])
-                else:
-                    first = get_client_status_for(snapshot[0])
-                    data = {**first, "devices": [get_client_status_for(c) for c in snapshot]}
-                data["groups"] = _build_groups_summary(snapshot)
-                data["ma_connected"] = state.is_ma_connected()
-                ma_url, _ = state.get_ma_api_credentials()
-                if ma_url:
-                    data["ma_web_url"] = ma_url
-                _upd = state.get_update_available()
-                if _upd:
-                    data["update_available"] = _upd
-                return data
+                return build_bridge_snapshot(snapshot).to_status_payload()
 
             # Send current status immediately so the client doesn't have to wait
             # for the first change event (important through HA ingress proxy).
@@ -533,16 +327,18 @@ def api_diagnostics():
         with _clients_lock:
             snapshot = list(_clients)
         for client in snapshot:
-            bt_mgr = getattr(client, "bt_manager", None)
+            device = build_device_snapshot(client)
             device_diag.append(
                 {
-                    "name": getattr(client, "player_name", "Unknown"),
-                    "mac": bt_mgr.mac_address if bt_mgr else None,
-                    "connected": client.status.get("bluetooth_connected", False),
-                    "enabled": getattr(client, "bt_management_enabled", True),
-                    "playing": client.status.get("playing", False),
-                    "sink": getattr(client, "bluetooth_sink_name", None),
-                    "last_error": client.status.get("last_error"),
+                    "name": device.player_name or "Unknown",
+                    "mac": device.bluetooth_mac,
+                    "connected": device.bluetooth_connected,
+                    "enabled": device.bt_management_enabled,
+                    "playing": device.playing,
+                    "sink": device.sink_name,
+                    "last_error": device.extra.get("last_error"),
+                    "health_summary": device.health_summary,
+                    "recent_events": device.recent_events,
                 }
             )
         diag["devices"] = device_diag

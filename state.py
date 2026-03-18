@@ -15,6 +15,7 @@ import os
 import socket
 import threading
 import time as _time
+from collections import deque
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -23,6 +24,7 @@ from config import CONFIG_FILE as _config_file
 __all__ = [
     "apply_ma_now_playing_prediction",
     "bridge_start_time",
+    "clear_device_events",
     "clear_ma_now_playing",
     "clients",
     "clients_lock",
@@ -31,6 +33,7 @@ __all__ = [
     "finish_scan_job",
     "get_adapter_name",
     "get_bridge_system_info",
+    "get_device_events",
     "get_disabled_devices",
     "get_ma_api_credentials",
     "get_ma_group_for_player",
@@ -45,6 +48,7 @@ __all__ = [
     "load_adapter_name_cache",
     "mark_ma_now_playing_stale",
     "notify_status_changed",
+    "record_device_event",
     "replace_ma_now_playing",
     "set_clients",
     "set_disabled_devices",
@@ -203,6 +207,60 @@ def get_disabled_devices() -> list[dict]:
     """Return a copy of the disabled devices list (thread-safe)."""
     with _disabled_devices_lock:
         return list(_disabled_devices)
+
+
+# ---------------------------------------------------------------------------
+# Per-device event history — in-memory ring buffer for diagnostics/read models
+# ---------------------------------------------------------------------------
+_device_events: dict[str, deque[dict[str, Any]]] = {}
+_device_events_lock = threading.Lock()
+_DEVICE_EVENT_LIMIT = 25
+
+
+def record_device_event(
+    device_id: str,
+    event_type: str,
+    *,
+    level: str = "info",
+    message: str | None = None,
+    details: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    """Append a structured event to the per-device ring buffer."""
+    if not device_id or not event_type:
+        return None
+
+    event = {
+        "event_type": event_type,
+        "level": level,
+        "message": message or "",
+        "details": dict(details or {}),
+        "at": datetime.now(tz=timezone.utc).isoformat(),
+    }
+    with _device_events_lock:
+        bucket = _device_events.setdefault(device_id, deque(maxlen=_DEVICE_EVENT_LIMIT))
+        bucket.append(event)
+    return dict(event)
+
+
+def get_device_events(device_id: str, limit: int | None = None) -> list[dict[str, Any]]:
+    """Return device events ordered newest-first."""
+    if not device_id:
+        return []
+    with _device_events_lock:
+        events = list(_device_events.get(device_id, ()))
+    events.reverse()
+    if limit is not None:
+        return events[:limit]
+    return events
+
+
+def clear_device_events(device_id: str | None = None) -> None:
+    """Clear device event history for one device or for all devices."""
+    with _device_events_lock:
+        if device_id:
+            _device_events.pop(device_id, None)
+            return
+        _device_events.clear()
 
 
 # ---------------------------------------------------------------------------

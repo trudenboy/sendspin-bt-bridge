@@ -232,9 +232,103 @@ class SendspinClient:
         self._zombie_restart_count: int = 0  # consecutive zombie restarts (reset on real stream)
         self._has_streamed: bool = False  # True after audio_streaming=True in the current play session
 
+    def _event_device_id(self) -> str:
+        """Return the stable event-history key for this device."""
+        return self.player_id or f"sendspin-{self._safe_id}" or self.player_name
+
+    def _build_status_events(
+        self,
+        previous: dict[str, object],
+        current: dict[str, object],
+        updates: dict,
+    ) -> list[dict[str, object]]:
+        """Translate meaningful status transitions into structured device events."""
+        events: list[dict[str, object]] = []
+
+        def _add(
+            event_type: str,
+            *,
+            level: str = "info",
+            message: str,
+            details: dict[str, object] | None = None,
+        ) -> None:
+            events.append(
+                {
+                    "event_type": event_type,
+                    "level": level,
+                    "message": message,
+                    "details": dict(details or {}),
+                }
+            )
+
+        if "bluetooth_connected" in updates and bool(previous.get("bluetooth_connected")) != bool(
+            current.get("bluetooth_connected")
+        ):
+            _add(
+                "bluetooth-connected" if current.get("bluetooth_connected") else "bluetooth-disconnected",
+                level="info" if current.get("bluetooth_connected") else "warning",
+                message="Bluetooth speaker connected"
+                if current.get("bluetooth_connected")
+                else "Bluetooth speaker disconnected",
+            )
+
+        if "server_connected" in updates and bool(previous.get("server_connected")) != bool(
+            current.get("server_connected")
+        ):
+            _add(
+                "daemon-connected" if current.get("server_connected") else "daemon-disconnected",
+                level="info" if current.get("server_connected") else "warning",
+                message="Sendspin daemon connected"
+                if current.get("server_connected")
+                else "Sendspin daemon disconnected",
+            )
+
+        if "playing" in updates and bool(previous.get("playing")) != bool(current.get("playing")):
+            _add(
+                "playback-started" if current.get("playing") else "playback-stopped",
+                message="Playback started" if current.get("playing") else "Playback stopped",
+                details={
+                    "current_track": current.get("current_track"),
+                    "current_artist": current.get("current_artist"),
+                },
+            )
+
+        if updates.get("audio_streaming") and not previous.get("audio_streaming"):
+            _add("audio-streaming", message="Audio stream detected")
+
+        if current.get("reconnecting") and not previous.get("reconnecting"):
+            _add(
+                "reconnecting",
+                level="warning",
+                message="Reconnect in progress",
+                details={"reconnect_attempt": current.get("reconnect_attempt")},
+            )
+
+        if current.get("reanchoring") and not previous.get("reanchoring"):
+            _add(
+                "reanchoring",
+                level="warning",
+                message="Audio sync re-anchor in progress",
+                details={"reanchor_count": current.get("reanchor_count")},
+            )
+
+        current_error = str(current.get("last_error") or "").strip()
+        previous_error = str(previous.get("last_error") or "").strip()
+        if current_error and current_error != previous_error:
+            _add(
+                "runtime-error",
+                level="error",
+                message=current_error,
+                details={"last_error_at": current.get("last_error_at")},
+            )
+
+        return events
+
     def _update_status(self, updates: dict) -> None:
         """Thread-safe update of self.status; notifies SSE listeners."""
+        recorded_events: list[dict[str, object]] = []
         with self._status_lock:
+            previous = self.status.copy()
             # Track zombie-playback timing: record when playing goes True
             if "playing" in updates:
                 if updates["playing"] and not self.status.get("playing"):
@@ -249,6 +343,15 @@ class SendspinClient:
                 self._has_streamed = True
                 self._zombie_restart_count = 0
             self.status.update(updates)
+            recorded_events = self._build_status_events(previous, self.status.copy(), updates)
+        for event in recorded_events:
+            _state.record_device_event(
+                self._event_device_id(),
+                str(event["event_type"]),
+                level=str(event["level"]),
+                message=str(event["message"]),
+                details=event["details"] if isinstance(event["details"], dict) else None,
+            )
         _state.notify_status_changed()
 
     def get_ip_address(self) -> str:

@@ -529,6 +529,49 @@ def test_status_includes_ma_syncgroup_id(client, monkeypatch):
         state.set_ma_api_credentials("", "")
 
 
+def test_status_includes_health_summary_and_recent_events(client, monkeypatch):
+    """GET /api/status exposes health_summary and recent_events from snapshots."""
+    import routes.api_status as api_status
+    import state
+
+    fake_client = SimpleNamespace(
+        status={
+            "server_connected": True,
+            "bluetooth_connected": True,
+            "bluetooth_available": True,
+            "playing": True,
+            "audio_streaming": False,
+            "last_error": "Route degraded",
+            "last_error_at": "2026-03-18T00:00:00+00:00",
+        },
+        _status_lock=threading.Lock(),
+        player_name="Kitchen",
+        player_id="sendspin-kitchen",
+        listen_port=8928,
+        server_host="music-assistant.local",
+        server_port=9000,
+        static_delay_ms=-500.0,
+        connected_server_url="",
+        bt_manager=None,
+        bluetooth_sink_name="bluez_sink.AA_BB_CC_DD_EE_FF.a2dp_sink",
+        bt_management_enabled=True,
+        is_running=lambda: True,
+    )
+
+    monkeypatch.setattr(api_status, "_clients", [fake_client])
+    state.clear_device_events("sendspin-kitchen")
+    state.record_device_event("sendspin-kitchen", "runtime-error", level="error", message="Route degraded")
+    try:
+        resp = client.get("/api/status")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["health_summary"]["state"] == "degraded"
+        assert data["health_summary"]["severity"] == "error"
+        assert data["recent_events"][0]["event_type"] == "runtime-error"
+    finally:
+        state.clear_device_events("sendspin-kitchen")
+
+
 def test_api_status_parse_helpers_are_defensive():
     """Diagnostics parsers must return None instead of raising on malformed input."""
     from routes.api_status import (
