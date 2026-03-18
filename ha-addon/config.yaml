@@ -39,8 +39,6 @@ backup_exclude:
 options:
   sendspin_server: "auto"
   sendspin_port: 9000
-  web_port: null
-  base_listen_port: null
   bridge_name: ""
   tz: ""
   pulse_latency_msec: 200

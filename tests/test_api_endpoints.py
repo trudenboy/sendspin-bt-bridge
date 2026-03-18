@@ -703,6 +703,80 @@ def test_api_config_post_accepts_empty_manual_port_overrides(client, tmp_path, m
     assert saved["BASE_LISTEN_PORT"] is None
 
 
+def test_sync_ha_options_omits_manual_ports_when_unset(monkeypatch):
+    import routes.api_config as api_config_mod
+
+    captured = {}
+
+    class _FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    def fake_urlopen(req, timeout):
+        captured["payload"] = json.loads(req.data.decode())
+        captured["timeout"] = timeout
+        return _FakeResponse()
+
+    monkeypatch.setattr(api_config_mod, "_detect_runtime", lambda: "ha_addon")
+    monkeypatch.setenv("SUPERVISOR_TOKEN", "token")
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+
+    api_config_mod._sync_ha_options(
+        {
+            "SENDSPIN_SERVER": "auto",
+            "SENDSPIN_PORT": 9000,
+            "WEB_PORT": None,
+            "BASE_LISTEN_PORT": None,
+            "BLUETOOTH_DEVICES": [],
+            "BLUETOOTH_ADAPTERS": [],
+        }
+    )
+
+    options = captured["payload"]["options"]
+    assert "web_port" not in options
+    assert "base_listen_port" not in options
+
+
+def test_sync_ha_options_includes_manual_ports_when_set(monkeypatch):
+    import routes.api_config as api_config_mod
+
+    captured = {}
+
+    class _FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    def fake_urlopen(req, timeout):
+        captured["payload"] = json.loads(req.data.decode())
+        captured["timeout"] = timeout
+        return _FakeResponse()
+
+    monkeypatch.setattr(api_config_mod, "_detect_runtime", lambda: "ha_addon")
+    monkeypatch.setenv("SUPERVISOR_TOKEN", "token")
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+
+    api_config_mod._sync_ha_options(
+        {
+            "SENDSPIN_SERVER": "auto",
+            "SENDSPIN_PORT": 9000,
+            "WEB_PORT": 18080,
+            "BASE_LISTEN_PORT": 19000,
+            "BLUETOOTH_DEVICES": [],
+            "BLUETOOTH_ADAPTERS": [],
+        }
+    )
+
+    options = captured["payload"]["options"]
+    assert options["web_port"] == 18080
+    assert options["base_listen_port"] == 19000
+
+
 def test_api_config_post_returns_structured_validation_errors(client):
     payload = {
         "BLUETOOTH_DEVICES": [

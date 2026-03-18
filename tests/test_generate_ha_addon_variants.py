@@ -42,6 +42,8 @@ def test_generate_same_slug_beta_variant_switches_channel_defaults():
     assert 'update_channel: "beta"' in config_text
     assert "boot: manual" in config_text
     assert "ingress_port: 8082" in config_text
+    assert "web_port: null" not in config_text
+    assert "base_listen_port: null" not in config_text
     assert "panel_icon: mdi:flask-outline" in config_text
     assert "stage:" not in config_text
 

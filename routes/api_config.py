@@ -307,24 +307,25 @@ def _sync_ha_options(config: dict) -> None:
             for a in config.get("BLUETOOTH_ADAPTERS", [])
             if a.get("id")
         ]
-        sup_opts = {
-            "options": {
-                "sendspin_server": config.get("SENDSPIN_SERVER", "auto"),
-                "sendspin_port": int(config.get("SENDSPIN_PORT") or 9000),
-                "web_port": config.get("WEB_PORT"),
-                "base_listen_port": config.get("BASE_LISTEN_PORT"),
-                "bridge_name": config.get("BRIDGE_NAME", ""),
-                "tz": config.get("TZ", ""),
-                "pulse_latency_msec": int(config.get("PULSE_LATENCY_MSEC") or 200),
-                "prefer_sbc_codec": bool(config.get("PREFER_SBC_CODEC", False)),
-                "bt_check_interval": int(config.get("BT_CHECK_INTERVAL") or 10),
-                "bt_max_reconnect_fails": int(config.get("BT_MAX_RECONNECT_FAILS") or 0),
-                "auth_enabled": bool(config.get("AUTH_ENABLED", False)),
-                "update_channel": normalize_update_channel(config.get("UPDATE_CHANNEL")),
-                "bluetooth_devices": sup_devices,
-                "bluetooth_adapters": sup_adapters,
-            }
+        options = {
+            "sendspin_server": config.get("SENDSPIN_SERVER", "auto"),
+            "sendspin_port": int(config.get("SENDSPIN_PORT") or 9000),
+            "bridge_name": config.get("BRIDGE_NAME", ""),
+            "tz": config.get("TZ", ""),
+            "pulse_latency_msec": int(config.get("PULSE_LATENCY_MSEC") or 200),
+            "prefer_sbc_codec": bool(config.get("PREFER_SBC_CODEC", False)),
+            "bt_check_interval": int(config.get("BT_CHECK_INTERVAL") or 10),
+            "bt_max_reconnect_fails": int(config.get("BT_MAX_RECONNECT_FAILS") or 0),
+            "auth_enabled": bool(config.get("AUTH_ENABLED", False)),
+            "update_channel": normalize_update_channel(config.get("UPDATE_CHANNEL")),
+            "bluetooth_devices": sup_devices,
+            "bluetooth_adapters": sup_adapters,
         }
+        if config.get("WEB_PORT") is not None:
+            options["web_port"] = int(config["WEB_PORT"])
+        if config.get("BASE_LISTEN_PORT") is not None:
+            options["base_listen_port"] = int(config["BASE_LISTEN_PORT"])
+        sup_opts = {"options": options}
         body = json.dumps(sup_opts).encode()
         req = _ur.Request(
             "http://supervisor/addons/self/options",
