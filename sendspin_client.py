@@ -16,23 +16,20 @@ import socket
 import sys
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field, fields
 from datetime import datetime, timezone
 
 import state as _state
 from bluetooth_manager import BluetoothManager
+from bridge_orchestrator import BridgeOrchestrator
 from config import (
     CONFIG_FILE,
     VERSION,
     _player_id_from_mac,
     config_lock,
-    ensure_bridge_name,
-    load_config,
     save_device_volume,
 )
 from services.log_analysis import classify_subprocess_stderr_level
-from services.sendspin_compat import format_dependency_versions, get_runtime_dependency_versions
 from services.update_checker import run_update_checker
 
 UTC = timezone.utc
@@ -906,54 +903,15 @@ class SendspinClient:
 
 async def main():
     """Main entry point"""
-    startup_steps = 6
-
-    # Demo mode — replace all hardware layers with mocks (BT, PulseAudio, D-Bus)
-    demo_mode = os.getenv("DEMO_MODE", "").lower() in ("1", "true", "yes")
-    _state.set_runtime_mode_info(
-        {
-            "mode": "demo" if demo_mode else "production",
-            "is_mocked": bool(demo_mode),
-            "simulator_active": bool(demo_mode),
-        }
-    )
-    _state.reset_startup_progress(startup_steps, message="Startup initiated")
-    _state.update_startup_progress(
-        "config",
-        "Loading configuration",
-        current_step=1,
-        details={"demo_mode": demo_mode},
-    )
-    if demo_mode:
-        from demo import install
-
-        install()
-
-    config = load_config()
-    server_host = config.get("SENDSPIN_SERVER", "auto")
-    server_port = int(config.get("SENDSPIN_PORT") or 9000)
-
-    # Bridge name identification (auto-populated with hostname on first run)
-    effective_bridge = ensure_bridge_name(config)
-    # Set timezone
-    tz = os.getenv("TZ", config.get("TZ", "UTC"))
-    os.environ["TZ"] = tz
-    time.tzset()
-    logger.info("Timezone: %s", tz)
-
-    # PulseAudio latency — larger buffer reduces underflows on slow hardware
-    pulse_latency_msec = int(config.get("PULSE_LATENCY_MSEC") or 200)
-    os.environ["PULSE_LATENCY_MSEC"] = str(pulse_latency_msec)
-    logger.info("PULSE_LATENCY_MSEC: %s ms", pulse_latency_msec)
-
-    # Log level — apply to root logger and inherit in subprocesses via env var
-    log_level = config.get("LOG_LEVEL", "INFO").upper()
-    if log_level not in ("INFO", "DEBUG"):
-        log_level = "INFO"
-    logging.getLogger().setLevel(getattr(logging, log_level))
-    os.environ["LOG_LEVEL"] = log_level
-    logger.info("Log level: %s", log_level)
-    logger.info("Runtime deps: %s", format_dependency_versions(get_runtime_dependency_versions()))
+    orchestrator = BridgeOrchestrator()
+    bootstrap = await orchestrator.initialize_runtime()
+    config = bootstrap.config
+    demo_mode = bootstrap.demo_mode
+    server_host = bootstrap.server_host
+    server_port = bootstrap.server_port
+    effective_bridge = bootstrap.effective_bridge
+    pulse_latency_msec = bootstrap.pulse_latency_msec
+    log_level = bootstrap.log_level
 
     prefer_sbc = bool(config.get("PREFER_SBC_CODEC", False))
     if prefer_sbc:
@@ -1119,12 +1077,6 @@ async def main():
             )
         used_ports.add(_c.listen_port)
 
-    # Size the thread pool to support concurrent BT reconnects across all devices.
-    # Default asyncio executor has too few threads when many devices reconnect simultaneously.
-    _pool_size = min(64, max(8, len(clients) * 2 + 4))
-    asyncio.get_running_loop().set_default_executor(ThreadPoolExecutor(max_workers=_pool_size))
-    logger.debug("ThreadPoolExecutor: max_workers=%s", _pool_size)
-
     # Start web interface in background thread
     def run_web_server():
         from state import set_clients
@@ -1166,14 +1118,7 @@ async def main():
     for sig in (signal.SIGTERM, signal.SIGINT):
         loop.add_signal_handler(sig, signal_handler)
 
-    # Expose the running loop so Flask/WSGI threads can schedule coroutines
-    _state.set_main_loop(asyncio.get_running_loop())
-    _state.update_startup_progress(
-        "web",
-        "Web interface and event loop ready",
-        current_step=4,
-        details={"web_thread": web_thread.name},
-    )
+    await orchestrator.configure_executor(len(clients), web_thread_name=web_thread.name)
 
     # Discover MA syncgroups via MA API.
     # In HA addon mode (SUPERVISOR_TOKEN present): auto-detect URL and try supervisor token.
