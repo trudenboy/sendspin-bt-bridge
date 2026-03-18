@@ -22,6 +22,7 @@ from flask import Blueprint, Response, jsonify
 
 import state
 from config import BUILD_DATE, CONFIG_SCHEMA_VERSION, VERSION, load_config
+from services.device_registry import get_device_registry_snapshot
 from services.ipc_protocol import IPC_PROTOCOL_VERSION
 from services.log_analysis import summarize_issue_logs
 from services.pulse import get_server_name, list_sinks
@@ -32,10 +33,6 @@ from services.status_snapshot import (
     build_group_snapshots,
     build_mock_runtime_snapshot,
     build_startup_progress_snapshot,
-)
-from state import clients as _clients
-from state import (
-    clients_lock as _clients_lock,
 )
 from state import (
     get_ma_group_for_player_id,
@@ -170,9 +167,8 @@ def _build_groups_summary(clients: list) -> list[dict]:
 @status_bp.route("/api/status")
 def api_status():
     """Return status for all client instances."""
-    with _clients_lock:
-        snapshot = list(_clients)
-    return jsonify(build_bridge_snapshot(snapshot).to_status_payload())
+    registry = get_device_registry_snapshot()
+    return jsonify(build_bridge_snapshot(registry.active_clients).to_status_payload())
 
 
 @status_bp.route("/api/groups")
@@ -183,9 +179,8 @@ def api_groups():
     are returned as one entry. Solo players (not in any MA group) each appear as
     their own single-member entry with group_id=null.
     """
-    with _clients_lock:
-        snapshot = list(_clients)
-    return jsonify(_build_groups_summary(snapshot))
+    registry = get_device_registry_snapshot()
+    return jsonify(_build_groups_summary(registry.active_clients))
 
 
 @status_bp.route("/api/startup-progress")
@@ -224,9 +219,8 @@ def api_status_stream():
         try:
 
             def _build_snapshot():
-                with _clients_lock:
-                    snapshot = list(_clients)
-                return build_bridge_snapshot(snapshot).to_status_payload()
+                registry = get_device_registry_snapshot()
+                return build_bridge_snapshot(registry.active_clients).to_status_payload()
 
             # Send current status immediately so the client doesn't have to wait
             # for the first change event (important through HA ingress proxy).
@@ -349,8 +343,8 @@ def api_diagnostics():
             diag["sinks"] = []
 
         device_diag = []
-        with _clients_lock:
-            snapshot = list(_clients)
+        registry = get_device_registry_snapshot()
+        snapshot = registry.active_clients
         for client in snapshot:
             device = build_device_snapshot(client)
             device_diag.append(
@@ -582,8 +576,7 @@ def _collect_environment() -> dict:
 def _collect_subprocess_info() -> list[dict]:
     """Gather per-device subprocess info."""
     info = []
-    with _clients_lock:
-        snapshot = list(_clients)
+    snapshot = get_device_registry_snapshot().active_clients
     for client in snapshot:
         proc = getattr(client, "_daemon_proc", None)
         entry: dict = {

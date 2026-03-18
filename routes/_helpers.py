@@ -6,8 +6,7 @@ import re
 
 from flask import jsonify
 
-from state import clients as _clients
-from state import clients_lock as _clients_lock
+from services.device_registry import get_device_registry_snapshot
 
 _MAC_RE = re.compile(r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")
 _ADAPTER_ID_RE = re.compile(r"^(hci\d+|[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5})$")
@@ -41,8 +40,7 @@ def get_client_or_error(player_name: str | None):
     on failure.  Single-device shortcut: if *player_name* is ``None`` and
     exactly one client is configured, that client is returned.
     """
-    with _clients_lock:
-        snapshot = list(_clients)
+    snapshot = get_device_registry_snapshot().active_clients
     if not snapshot:
         return None, (jsonify({"success": False, "error": "No clients configured"}), 503)
     if player_name:

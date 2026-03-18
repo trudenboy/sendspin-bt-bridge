@@ -516,7 +516,13 @@ def test_status_includes_ma_syncgroup_id(client, monkeypatch):
         is_running=lambda: True,
     )
 
-    monkeypatch.setattr(api_status, "_clients", [fake_client])
+    from services.device_registry import DeviceRegistrySnapshot
+
+    monkeypatch.setattr(
+        api_status,
+        "get_device_registry_snapshot",
+        lambda: DeviceRegistrySnapshot(active_clients=[fake_client]),
+    )
     state.set_ma_groups(
         {"sendspin-yandex-mini-2---lxc": {"id": "syncgroup_5zr8ss8g", "name": "Semdspin BT"}},
         [{"id": "syncgroup_5zr8ss8g", "name": "Semdspin BT", "members": []}],
@@ -562,7 +568,13 @@ def test_status_includes_health_summary_and_recent_events(client, monkeypatch):
         is_running=lambda: True,
     )
 
-    monkeypatch.setattr(api_status, "_clients", [fake_client])
+    from services.device_registry import DeviceRegistrySnapshot
+
+    monkeypatch.setattr(
+        api_status,
+        "get_device_registry_snapshot",
+        lambda: DeviceRegistrySnapshot(active_clients=[fake_client]),
+    )
     state.clear_device_events("sendspin-kitchen")
     state.record_device_event("sendspin-kitchen", "runtime-error", level="error", message="Route degraded")
     try:
@@ -657,6 +669,7 @@ def test_api_diagnostics_includes_playing_and_sink_input_metadata(client, monkey
     import routes.api_status as api_status
     import state
     from config import CONFIG_SCHEMA_VERSION
+    from services.device_registry import DeviceRegistrySnapshot
     from services.ipc_protocol import IPC_PROTOCOL_VERSION
 
     fake_client = SimpleNamespace(
@@ -694,7 +707,11 @@ def test_api_diagnostics_includes_playing_and_sink_input_metadata(client, monkey
             )
         pytest.fail(f"Unexpected subprocess call: {cmd}")
 
-    monkeypatch.setattr(api_status, "_clients", [fake_client], raising=False)
+    monkeypatch.setattr(
+        api_status,
+        "get_device_registry_snapshot",
+        lambda: DeviceRegistrySnapshot(active_clients=[fake_client]),
+    )
     monkeypatch.setattr(api_status, "get_server_name", lambda: "pulseaudio 16.1")
     monkeypatch.setattr(
         api_status,
