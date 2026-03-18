@@ -4243,9 +4243,19 @@ async function saveConfig() {
     // Log level lives outside the config form (in Logs section)
     var logSel = document.getElementById('log-level-select');
     if (logSel) config.LOG_LEVEL = logSel.value;
+    function readOptionalNumberField(name) {
+        var input = document.querySelector('[name="' + name + '"]');
+        if (!input) return null;
+        var raw = (input.value || '').trim();
+        if (!raw) return null;
+        var value = parseInt(raw, 10);
+        return Number.isFinite(value) ? value : raw;
+    }
     // Cast numeric BT settings to integers
     config.BT_CHECK_INTERVAL = parseInt(config.BT_CHECK_INTERVAL, 10) || 10;
     config.BT_MAX_RECONNECT_FAILS = parseInt(config.BT_MAX_RECONNECT_FAILS, 10) || 0;
+    config.WEB_PORT = readOptionalNumberField('WEB_PORT');
+    config.BASE_LISTEN_PORT = readOptionalNumberField('BASE_LISTEN_PORT');
     config.SESSION_TIMEOUT_HOURS = parseInt(((document.querySelector('[name="SESSION_TIMEOUT_HOURS"]') || {}).value), 10) || 24;
     config.BRUTE_FORCE_MAX_ATTEMPTS = parseInt(((document.querySelector('[name="BRUTE_FORCE_MAX_ATTEMPTS"]') || {}).value), 10) || 5;
     config.BRUTE_FORCE_WINDOW_MINUTES = parseInt(((document.querySelector('[name="BRUTE_FORCE_WINDOW_MINUTES"]') || {}).value), 10) || 1;
@@ -4828,12 +4838,12 @@ async function loadConfig() {
         var config = await resp.json();
 
         // Populate simple fields
-        ['SENDSPIN_SERVER', 'SENDSPIN_PORT', 'BRIDGE_NAME', 'TZ', 'PULSE_LATENCY_MSEC',
+        ['SENDSPIN_SERVER', 'SENDSPIN_PORT', 'WEB_PORT', 'BASE_LISTEN_PORT', 'BRIDGE_NAME', 'TZ', 'PULSE_LATENCY_MSEC',
          'BT_CHECK_INTERVAL', 'BT_MAX_RECONNECT_FAILS', 'MA_API_URL', 'MA_API_TOKEN',
          'SESSION_TIMEOUT_HOURS', 'BRUTE_FORCE_MAX_ATTEMPTS', 'BRUTE_FORCE_WINDOW_MINUTES',
          'BRUTE_FORCE_LOCKOUT_MINUTES'].forEach(function(key) {
             var input = document.querySelector('[name="' + key + '"]');
-            if (input && config[key] !== undefined) input.value = config[key];
+            if (input && config[key] !== undefined) input.value = config[key] == null ? '' : config[key];
         });
         // Populate checkboxes
         var sbcCheck = document.getElementById('prefer-sbc-codec');

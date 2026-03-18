@@ -12,13 +12,14 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 from datetime import timedelta
 from pathlib import Path
 
 from flask import Flask, jsonify, redirect, request, send_from_directory, session, url_for
 from waitress import serve  # type: ignore[import-untyped]
 
-from config import VERSION, ensure_secret_key, load_config, resolve_web_port
+from config import VERSION, ensure_secret_key, load_config, resolve_additional_web_port, resolve_web_port
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -260,7 +261,16 @@ def _handle_500(e):
 def main():
     """Start the web interface"""
     port = resolve_web_port()
+    additional_port = resolve_additional_web_port()
     threads = int(os.getenv("WEB_THREADS", 8))
+    if additional_port is not None:
+        logger.info("Starting additional direct web interface on port %s", additional_port)
+        threading.Thread(
+            target=serve,
+            kwargs={"app": app, "host": "0.0.0.0", "port": additional_port, "threads": threads},
+            name="WebServerDirect",
+            daemon=True,
+        ).start()
     logger.info("Starting web interface on port %s", port)
     serve(app, host="0.0.0.0", port=port, threads=threads)
 

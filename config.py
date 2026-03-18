@@ -60,6 +60,7 @@ __all__ = [
     "is_ha_addon_runtime",
     "load_config",
     "normalize_update_channel",
+    "resolve_additional_web_port",
     "resolve_base_listen_port",
     "resolve_web_port",
     "save_device_sink",
@@ -71,6 +72,8 @@ DEFAULT_CONFIG = {
     "CONFIG_SCHEMA_VERSION": CONFIG_SCHEMA_VERSION,
     "SENDSPIN_SERVER": "auto",
     "SENDSPIN_PORT": 9000,
+    "WEB_PORT": None,
+    "BASE_LISTEN_PORT": None,
     "BRIDGE_NAME": "",
     "BLUETOOTH_DEVICES": [],
     "BLUETOOTH_ADAPTERS": [],
@@ -143,6 +146,30 @@ def _normalize_int_setting(
     config[key] = value
 
 
+def _normalize_optional_int_setting(
+    config: dict, key: str, *, min_value: int | None = None, max_value: int | None = None
+) -> None:
+    raw = config.get(key)
+    if raw in (None, ""):
+        config[key] = None
+        return
+    if not isinstance(raw, (int, str)):
+        logger.warning("Invalid %s value %r in config; clearing override", key, raw)
+        config[key] = None
+        return
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        logger.warning("Invalid %s value %r in config; clearing override", key, raw)
+        config[key] = None
+        return
+    if (min_value is not None and value < min_value) or (max_value is not None and value > max_value):
+        logger.warning("Out-of-range %s value %r in config; clearing override", key, raw)
+        config[key] = None
+        return
+    config[key] = value
+
+
 def _normalize_bool_setting(config: dict, key: str) -> None:
     raw = config.get(key, DEFAULT_CONFIG[key])
     if isinstance(raw, bool):
@@ -201,6 +228,15 @@ def _coerce_port(raw_value: object, default: int) -> int:
     return default
 
 
+def _configured_port_override(config: dict | None, key: str, default: int) -> int | None:
+    if not isinstance(config, dict):
+        return None
+    raw_value = config.get(key)
+    if raw_value in (None, ""):
+        return None
+    return _coerce_port(raw_value, default)
+
+
 def is_ha_addon_runtime(*, env: Mapping[str, str] | None = None) -> bool:
     environ = os.environ if env is None else env
     return bool(environ.get("SUPERVISOR_TOKEN")) or Path("/data/options.json").exists()
@@ -221,20 +257,45 @@ def detect_ha_addon_channel(*, env: Mapping[str, str] | None = None, hostname: s
 
 def resolve_web_port(*, env: Mapping[str, str] | None = None, hostname: str | None = None) -> int:
     environ = os.environ if env is None else env
-    explicit_port = environ.get("WEB_PORT")
-    if explicit_port not in (None, ""):
-        return _coerce_port(explicit_port, DEFAULT_WEB_PORT)
+    if not is_ha_addon_runtime(env=environ):
+        explicit_port = environ.get("WEB_PORT")
+        if explicit_port not in (None, ""):
+            return _coerce_port(explicit_port, DEFAULT_WEB_PORT)
+        configured_port = _configured_port_override(load_config(), "WEB_PORT", DEFAULT_WEB_PORT)
+        if configured_port is not None:
+            return configured_port
     channel = detect_ha_addon_channel(env=environ, hostname=hostname)
     return HA_ADDON_CHANNEL_DEFAULTS[channel]["web_port"]
 
 
+def resolve_additional_web_port(*, env: Mapping[str, str] | None = None, hostname: str | None = None) -> int | None:
+    environ = os.environ if env is None else env
+    if not is_ha_addon_runtime(env=environ):
+        return None
+    channel = detect_ha_addon_channel(env=environ, hostname=hostname)
+    primary_port = HA_ADDON_CHANNEL_DEFAULTS[channel]["web_port"]
+    explicit_port = environ.get("WEB_PORT")
+    extra_port: int | None
+    if explicit_port not in (None, ""):
+        extra_port = _coerce_port(explicit_port, primary_port)
+    else:
+        extra_port = _configured_port_override(load_config(), "WEB_PORT", primary_port)
+    if extra_port in (None, primary_port):
+        return None
+    return extra_port
+
+
 def resolve_base_listen_port(*, env: Mapping[str, str] | None = None, hostname: str | None = None) -> int:
     environ = os.environ if env is None else env
+    channel = detect_ha_addon_channel(env=environ, hostname=hostname)
+    default_port = HA_ADDON_CHANNEL_DEFAULTS[channel]["base_listen_port"]
     explicit_port = environ.get("BASE_LISTEN_PORT")
     if explicit_port not in (None, ""):
-        return _coerce_port(explicit_port, DEFAULT_LISTEN_PORT_BASE)
-    channel = detect_ha_addon_channel(env=environ, hostname=hostname)
-    return HA_ADDON_CHANNEL_DEFAULTS[channel]["base_listen_port"]
+        return _coerce_port(explicit_port, default_port)
+    configured_port = _configured_port_override(load_config(), "BASE_LISTEN_PORT", default_port)
+    if configured_port is not None:
+        return configured_port
+    return default_port
 
 
 def _normalize_choice_setting(config: dict, key: str, *, allowed_values: tuple[str, ...], default: str) -> None:
@@ -306,6 +367,9 @@ def _normalize_loaded_config(config: dict) -> None:
         ("BRUTE_FORCE_LOCKOUT_MINUTES", 1, 1440),
     ):
         _normalize_int_setting(config, key, min_value=min_value, max_value=max_value)
+
+    for key in ("WEB_PORT", "BASE_LISTEN_PORT"):
+        _normalize_optional_int_setting(config, key, min_value=1, max_value=65535)
 
     _normalize_float_setting(config, "BT_CHURN_WINDOW", min_value=1.0, max_value=86400.0)
     _normalize_choice_setting(
@@ -418,6 +482,8 @@ def load_config() -> dict:
         "CONFIG_SCHEMA_VERSION",
         "SENDSPIN_SERVER",
         "SENDSPIN_PORT",
+        "WEB_PORT",
+        "BASE_LISTEN_PORT",
         "BRIDGE_NAME",
         "BLUETOOTH_DEVICES",
         "TZ",

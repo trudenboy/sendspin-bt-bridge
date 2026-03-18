@@ -195,6 +195,26 @@
                                     </label>
                                     <input type="number" name="PULSE_LATENCY_MSEC" placeholder="200" min="50" max="2000">
                                 </div>
+
+                                <div class="form-group">
+                                    <label>Web UI port
+                                        <span class="form-hint">
+                                            {% if ha_mode %}
+                                            Optional extra direct host-network port. Home Assistant Ingress keeps using the fixed addon port.
+                                            {% else %}
+                                            Primary web UI port for direct browser access. Leave empty to keep the default.
+                                            {% endif %}
+                                        </span>
+                                    </label>
+                                    <input type="number" name="WEB_PORT" placeholder="{% if ha_mode %}Optional extra port{% else %}8080{% endif %}" min="1" max="65535">
+                                </div>
+
+                                <div class="form-group">
+                                    <label>Base player listen port
+                                        <span class="form-hint">Starting port for automatically assigned Sendspin listeners. Device-level <code>listen_port</code> overrides still win.</span>
+                                    </label>
+                                    <input type="number" name="BASE_LISTEN_PORT" placeholder="8928" min="1" max="65535">
+                                </div>
                             </div>
                         </div>
 

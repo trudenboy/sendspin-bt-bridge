@@ -26,6 +26,22 @@ class ConfigValidationResult:
         return not self.errors
 
 
+def _normalize_optional_port(normalized: dict[str, Any], result: ConfigValidationResult, field: str) -> None:
+    raw_value = normalized.get(field)
+    if raw_value in (None, ""):
+        normalized[field] = None
+        return
+    try:
+        value = int(str(raw_value))
+    except (ValueError, TypeError):
+        result.errors.append(ConfigValidationIssue(field=field, message=f"Invalid {field}: {raw_value}"))
+        return
+    if not (1 <= value <= 65535):
+        result.errors.append(ConfigValidationIssue(field=field, message=f"Invalid {field}: {raw_value}"))
+        return
+    normalized[field] = value
+
+
 def validate_uploaded_config(uploaded: dict[str, Any]) -> ConfigValidationResult:
     """Validate an uploaded config payload and normalize additive defaults."""
     normalized = dict(uploaded)
@@ -150,5 +166,8 @@ def validate_uploaded_config(uploaded: dict[str, Any]) -> ConfigValidationResult
                 )
             else:
                 normalized["SENDSPIN_PORT"] = sp_int
+
+    for port_field in ("WEB_PORT", "BASE_LISTEN_PORT"):
+        _normalize_optional_port(normalized, result, port_field)
 
     return result

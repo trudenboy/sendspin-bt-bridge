@@ -146,6 +146,26 @@ def test_load_config_normalizes_types_and_prunes_orphan_volumes(tmp_path):
     assert loaded["LAST_VOLUMES"] == {"AA:BB:CC:DD:EE:FF": 55}
 
 
+def test_load_config_normalizes_optional_port_overrides(tmp_path):
+    _write_config(tmp_path, {"WEB_PORT": "18080", "BASE_LISTEN_PORT": "19000"})
+    from config import load_config
+
+    loaded = load_config()
+
+    assert loaded["WEB_PORT"] == 18080
+    assert loaded["BASE_LISTEN_PORT"] == 19000
+
+
+def test_load_config_clears_invalid_optional_port_overrides(tmp_path):
+    _write_config(tmp_path, {"WEB_PORT": "99999", "BASE_LISTEN_PORT": "invalid"})
+    from config import load_config
+
+    loaded = load_config()
+
+    assert loaded["WEB_PORT"] is None
+    assert loaded["BASE_LISTEN_PORT"] is None
+
+
 def test_load_config_normalizes_update_channel(tmp_path):
     _write_config(tmp_path, {"UPDATE_CHANNEL": "RC"})
     from config import load_config
@@ -207,18 +227,37 @@ def test_resolve_runtime_ports_follow_installed_addon_track_not_update_channel()
     assert resolve_base_listen_port(env=stable_env) == 8928
 
 
-def test_resolve_runtime_ports_allow_env_overrides():
+def test_resolve_runtime_ports_allow_base_port_env_override_in_ha_addon():
     from config import resolve_base_listen_port, resolve_web_port
 
     env = {
         "SUPERVISOR_TOKEN": "token",
         "HOSTNAME": "85b1ecde-sendspin-bt-bridge-beta",
-        "WEB_PORT": "18080",
         "BASE_LISTEN_PORT": "19000",
     }
 
-    assert resolve_web_port(env=env) == 18080
+    assert resolve_web_port(env=env) == 8082
     assert resolve_base_listen_port(env=env) == 19000
+
+
+def test_resolve_additional_web_port_uses_explicit_ha_override():
+    from config import resolve_additional_web_port
+
+    env = {
+        "SUPERVISOR_TOKEN": "token",
+        "HOSTNAME": "85b1ecde-sendspin-bt-bridge-beta",
+        "WEB_PORT": "18080",
+    }
+
+    assert resolve_additional_web_port(env=env) == 18080
+
+
+def test_resolve_ports_follow_saved_config_overrides(tmp_path):
+    _write_config(tmp_path, {"WEB_PORT": 18080, "BASE_LISTEN_PORT": 19000})
+    from config import resolve_base_listen_port, resolve_web_port
+
+    assert resolve_web_port() == 18080
+    assert resolve_base_listen_port() == 19000
 
 
 def test_load_config_persists_current_schema_version_for_legacy_file(tmp_path):

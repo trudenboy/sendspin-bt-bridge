@@ -18,6 +18,7 @@ from scripts.translate_ha_config import (
     _detect_adapters,
     _int_opt,
     _merge_adapters,
+    _optional_int_opt,
     main,
 )
 
@@ -74,6 +75,18 @@ def test_int_opt_missing():
 
 def test_int_opt_none():
     assert _int_opt({"k": None}, "k", 200) == 200
+
+
+def test_optional_int_opt_present():
+    assert _optional_int_opt({"k": "42"}, "k") == 42
+
+
+def test_optional_int_opt_missing():
+    assert _optional_int_opt({}, "k") is None
+
+
+def test_optional_int_opt_blank():
+    assert _optional_int_opt({"k": ""}, "k") is None
 
 
 # ── Zero-valued options ──────────────────────────────────────────────────
@@ -189,6 +202,8 @@ def test_basic_translation(tmp_path):
     opts = _minimal_options(
         sendspin_server="10.0.0.5",
         sendspin_port=9001,
+        web_port=18080,
+        base_listen_port=19000,
         bridge_name="MyBridge",
         bluetooth_devices=[
             {"mac": "AA:BB:CC:DD:EE:FF", "name": "Kitchen"},
@@ -213,6 +228,8 @@ def test_basic_translation(tmp_path):
 
     assert cfg["SENDSPIN_SERVER"] == "10.0.0.5"
     assert cfg["SENDSPIN_PORT"] == 9001
+    assert cfg["WEB_PORT"] == 18080
+    assert cfg["BASE_LISTEN_PORT"] == 19000
     assert cfg["BRIDGE_NAME"] == "MyBridge"
     assert len(cfg["BLUETOOTH_DEVICES"]) == 2
     assert cfg["BLUETOOTH_DEVICES"][0]["mac"] == "AA:BB:CC:DD:EE:FF"
@@ -254,6 +271,25 @@ def test_translation_normalizes_update_channel(tmp_path):
     # enabled defaults to True for devices without explicit field
     for dev in cfg["BLUETOOTH_DEVICES"]:
         assert dev.get("enabled") is True
+
+
+def test_translation_preserves_saved_port_overrides_when_options_omit_them(tmp_path):
+    _write_json(
+        tmp_path / "config.json",
+        {
+            "WEB_PORT": 18080,
+            "BASE_LISTEN_PORT": 19000,
+            "BLUETOOTH_DEVICES": [],
+        },
+    )
+    _write_json(tmp_path / "options.json", _minimal_options())
+
+    with patch("scripts.translate_ha_config._detect_adapters", return_value=[]):
+        main()
+
+    cfg = _read_json(tmp_path / "config.json")
+    assert cfg["WEB_PORT"] == 18080
+    assert cfg["BASE_LISTEN_PORT"] == 19000
 
 
 def test_translate_script_runs_as_direct_file() -> None:

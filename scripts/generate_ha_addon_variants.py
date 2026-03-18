@@ -73,6 +73,16 @@ _VALID_STRATEGIES = frozenset({"same_slug", "suffix_slug"})
 _BINARY_VARIANT_FILES = ("icon.png", "logo.png")
 
 
+def _translation_variant_files() -> dict[str, str]:
+    translations_dir = _HA_ADDON_DIR / "translations"
+    if not translations_dir.exists():
+        return {}
+    return {
+        str(Path("translations") / path.relative_to(translations_dir)): path.read_text()
+        for path in sorted(translations_dir.rglob("*.yaml"))
+    }
+
+
 def _replace_first(text: str, old: str, new: str) -> str:
     if old not in text:
         raise ValueError(f"Could not replace expected text: {old!r}")
@@ -250,10 +260,13 @@ def render_apparmor_txt(variant: HaAddonVariant, base_text: str | None = None) -
 
 
 def generate_variant_files(variant: HaAddonVariant) -> dict[str, str]:
-    return {
+    files = {
         "ha-addon/config.yaml": render_config_yaml(variant),
         "ha-addon/build.yaml": render_build_yaml(variant),
     }
+    for relative_path, content in _translation_variant_files().items():
+        files[f"ha-addon/{relative_path}"] = content
+    return files
 
 
 def write_variant_files(output_root: Path, variant: HaAddonVariant) -> None:
@@ -308,6 +321,8 @@ def generate_multi_addon_repo_files(
         files[f"{addon_dir}/CHANGELOG.md"] = _BASE_CHANGELOG_PATH.read_text()
         files[f"{addon_dir}/Dockerfile"] = _BASE_DOCKERFILE_PATH.read_text()
         files[f"{addon_dir}/apparmor.txt"] = render_apparmor_txt(variant)
+        for relative_path, content in _translation_variant_files().items():
+            files[f"{addon_dir}/{relative_path}"] = content
     return files
 
 

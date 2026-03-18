@@ -311,6 +311,8 @@ def _sync_ha_options(config: dict) -> None:
             "options": {
                 "sendspin_server": config.get("SENDSPIN_SERVER", "auto"),
                 "sendspin_port": int(config.get("SENDSPIN_PORT") or 9000),
+                "web_port": config.get("WEB_PORT"),
+                "base_listen_port": config.get("BASE_LISTEN_PORT"),
                 "bridge_name": config.get("BRIDGE_NAME", ""),
                 "tz": config.get("TZ", ""),
                 "pulse_latency_msec": int(config.get("PULSE_LATENCY_MSEC") or 200),
@@ -559,6 +561,12 @@ def api_config():
         )
         if bt_max_reconnect_fails is not None:
             config["BT_MAX_RECONNECT_FAILS"] = bt_max_reconnect_fails
+        web_port = _parse_optional_int(config.get("WEB_PORT"), "WEB_PORT", min_value=1, max_value=65535)
+        config["WEB_PORT"] = web_port
+        base_listen_port = _parse_optional_int(
+            config.get("BASE_LISTEN_PORT"), "BASE_LISTEN_PORT", min_value=1, max_value=65535
+        )
+        config["BASE_LISTEN_PORT"] = base_listen_port
         for int_key, min_val, max_val in (
             ("SESSION_TIMEOUT_HOURS", 1, 168),
             ("BRUTE_FORCE_MAX_ATTEMPTS", 1, 50),
@@ -575,6 +583,8 @@ def api_config():
     _ALLOWED_POST_KEYS = {
         "SENDSPIN_SERVER",
         "SENDSPIN_PORT",
+        "WEB_PORT",
+        "BASE_LISTEN_PORT",
         "BRIDGE_NAME",
         "BLUETOOTH_DEVICES",
         "BLUETOOTH_ADAPTERS",

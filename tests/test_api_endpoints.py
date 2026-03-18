@@ -174,6 +174,8 @@ def test_config_validate_returns_normalized_preview(client):
         data=json.dumps(
             {
                 "SENDSPIN_PORT": "9000",
+                "WEB_PORT": "18080",
+                "BASE_LISTEN_PORT": "19000",
                 "BLUETOOTH_DEVICES": [{"mac": "aa:bb:cc:dd:ee:ff"}],
             }
         ),
@@ -185,6 +187,8 @@ def test_config_validate_returns_normalized_preview(client):
     assert data["valid"] is True
     assert data["warnings"][0]["field"] == "CONFIG_SCHEMA_VERSION"
     assert data["normalized_config"]["SENDSPIN_PORT"] == 9000
+    assert data["normalized_config"]["WEB_PORT"] == 18080
+    assert data["normalized_config"]["BASE_LISTEN_PORT"] == 19000
     assert data["normalized_config"]["BLUETOOTH_DEVICES"][0]["mac"] == "AA:BB:CC:DD:EE:FF"
 
 
@@ -604,6 +608,8 @@ def test_api_config_post_normalizes_numeric_strings(client, tmp_path, monkeypatc
     payload = {
         "SENDSPIN_SERVER": "auto",
         "SENDSPIN_PORT": "9001",
+        "WEB_PORT": "18080",
+        "BASE_LISTEN_PORT": "19000",
         "BRIDGE_NAME": "Bridge",
         "BLUETOOTH_DEVICES": [
             {
@@ -642,6 +648,8 @@ def test_api_config_post_normalizes_numeric_strings(client, tmp_path, monkeypatc
     assert resp.status_code == 200
     saved = json.loads((tmp_path / "config.json").read_text())
     assert saved["SENDSPIN_PORT"] == 9001
+    assert saved["WEB_PORT"] == 18080
+    assert saved["BASE_LISTEN_PORT"] == 19000
     assert saved["PULSE_LATENCY_MSEC"] == 250
     assert saved["BT_CHECK_INTERVAL"] == 15
     assert saved["BT_MAX_RECONNECT_FAILS"] == 3
@@ -650,6 +658,49 @@ def test_api_config_post_normalizes_numeric_strings(client, tmp_path, monkeypatc
     assert saved["CONFIG_SCHEMA_VERSION"] == 1
     assert saved["BLUETOOTH_DEVICES"][0]["listen_port"] == 8930
     assert saved["BLUETOOTH_DEVICES"][0]["keepalive_interval"] == 60
+
+
+def test_api_config_post_accepts_empty_manual_port_overrides(client, tmp_path, monkeypatch):
+    import routes.api_config as api_config_mod
+
+    monkeypatch.setattr(api_config_mod, "CONFIG_FILE", tmp_path / "config.json")
+    payload = {
+        "SENDSPIN_SERVER": "auto",
+        "SENDSPIN_PORT": 9000,
+        "WEB_PORT": "",
+        "BASE_LISTEN_PORT": "",
+        "BRIDGE_NAME": "",
+        "BLUETOOTH_DEVICES": [],
+        "BLUETOOTH_ADAPTERS": [],
+        "TZ": "UTC",
+        "PULSE_LATENCY_MSEC": 200,
+        "PREFER_SBC_CODEC": False,
+        "BT_CHECK_INTERVAL": 10,
+        "BT_MAX_RECONNECT_FAILS": 0,
+        "AUTH_ENABLED": False,
+        "SESSION_TIMEOUT_HOURS": 12,
+        "BRUTE_FORCE_PROTECTION": True,
+        "BRUTE_FORCE_MAX_ATTEMPTS": 4,
+        "BRUTE_FORCE_WINDOW_MINUTES": 2,
+        "BRUTE_FORCE_LOCKOUT_MINUTES": 10,
+        "LOG_LEVEL": "INFO",
+        "MA_API_URL": "",
+        "MA_API_TOKEN": "",
+        "MA_USERNAME": "",
+        "MA_WEBSOCKET_MONITOR": False,
+        "VOLUME_VIA_MA": True,
+        "MUTE_VIA_MA": False,
+        "SMOOTH_RESTART": True,
+        "AUTO_UPDATE": False,
+        "CHECK_UPDATES": True,
+    }
+
+    resp = client.post("/api/config", data=json.dumps(payload), content_type="application/json")
+
+    assert resp.status_code == 200
+    saved = json.loads((tmp_path / "config.json").read_text())
+    assert saved["WEB_PORT"] is None
+    assert saved["BASE_LISTEN_PORT"] is None
 
 
 def test_api_config_post_returns_structured_validation_errors(client):

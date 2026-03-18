@@ -106,6 +106,14 @@ def _int_opt(opts: dict, key: str, default: int) -> int:
     return int(v) if v is not None else default
 
 
+def _optional_int_opt(opts: dict, key: str) -> int | None:
+    """Return opts[key] as int, or None when absent/blank."""
+    v = opts.get(key)
+    if v in (None, ""):
+        return None
+    return int(v)
+
+
 def main() -> None:
     if not os.path.exists(OPTIONS_FILE):
         print(f"[translate_ha_config] {OPTIONS_FILE} not found — nothing to do")
@@ -123,6 +131,8 @@ def main() -> None:
     config: dict = {
         "SENDSPIN_SERVER": str(opts.get("sendspin_server") or "auto"),
         "SENDSPIN_PORT": _int_opt(opts, "sendspin_port", 9000),
+        "WEB_PORT": _optional_int_opt(opts, "web_port"),
+        "BASE_LISTEN_PORT": _optional_int_opt(opts, "base_listen_port"),
         "BRIDGE_NAME": str(opts.get("bridge_name") or ""),
         "BLUETOOTH_DEVICES": list(opts.get("bluetooth_devices") or []),
         "BLUETOOTH_ADAPTERS": adapters,
@@ -158,6 +168,10 @@ def main() -> None:
                 config[key] = existing[key]
         if opts.get("update_channel") in (None, "") and existing.get("UPDATE_CHANNEL"):
             config["UPDATE_CHANNEL"] = normalize_update_channel(existing.get("UPDATE_CHANNEL"))
+        for key in ("WEB_PORT", "BASE_LISTEN_PORT"):
+            option_name = key.lower()
+            if opts.get(option_name) in (None, "") and existing.get(key) not in (None, ""):
+                config[key] = int(existing[key])
         # Preserve per-device web UI settings (e.g. keepalive) not present in options.json
         existing_devs = {
             d["mac"]: d for d in existing.get("BLUETOOTH_DEVICES", []) if isinstance(d, dict) and d.get("mac")

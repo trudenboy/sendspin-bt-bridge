@@ -47,6 +47,35 @@ def test_validate_uploaded_config_normalizes_update_channel():
     assert result.normalized_config["UPDATE_CHANNEL"] == "rc"
 
 
+def test_validate_uploaded_config_normalizes_optional_top_level_ports():
+    result = validate_uploaded_config(
+        {
+            "CONFIG_SCHEMA_VERSION": 1,
+            "WEB_PORT": "18080",
+            "BASE_LISTEN_PORT": "19000",
+            "BLUETOOTH_DEVICES": [],
+        }
+    )
+
+    assert result.is_valid is True
+    assert result.normalized_config["WEB_PORT"] == 18080
+    assert result.normalized_config["BASE_LISTEN_PORT"] == 19000
+
+
+def test_validate_uploaded_config_rejects_invalid_optional_top_level_ports():
+    result = validate_uploaded_config(
+        {
+            "CONFIG_SCHEMA_VERSION": 1,
+            "WEB_PORT": "99999",
+            "BLUETOOTH_DEVICES": [],
+        }
+    )
+
+    assert result.is_valid is False
+    assert result.errors[0].field == "WEB_PORT"
+    assert result.errors[0].message == "Invalid WEB_PORT: 99999"
+
+
 def test_validate_uploaded_config_rejects_invalid_update_channel():
     result = validate_uploaded_config(
         {

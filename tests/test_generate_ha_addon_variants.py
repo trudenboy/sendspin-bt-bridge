@@ -28,6 +28,7 @@ def test_generate_stable_variant_matches_current_addon_files():
 
     assert rendered["ha-addon/config.yaml"] == (root / "ha-addon" / "config.yaml").read_text()
     assert rendered["ha-addon/build.yaml"] == (root / "ha-addon" / "build.yaml").read_text()
+    assert rendered["ha-addon/translations/en.yaml"] == (root / "ha-addon" / "translations" / "en.yaml").read_text()
 
 
 def test_generate_same_slug_beta_variant_switches_channel_defaults():
@@ -130,6 +131,7 @@ def test_write_multi_addon_repo_writes_expected_repository_tree(tmp_path):
     assert (tmp_path / "ha-addon" / "config.yaml").exists()
     assert (tmp_path / "ha-addon-rc" / "README.md").exists()
     assert (tmp_path / "ha-addon-beta" / "DOCS.md").exists()
+    assert (tmp_path / "ha-addon-beta" / "translations" / "en.yaml").exists()
     assert (tmp_path / "ha-addon" / "icon.png").exists()
     assert (tmp_path / "ha-addon-beta" / "logo.png").exists()
     assert (tmp_path / "ha-addon-rc" / "build.yaml").read_text().count("ghcr.io/trudenboy/sendspin-bt-bridge:rc") == 3
