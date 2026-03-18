@@ -359,6 +359,83 @@ async def test_run_runtime_delegates_to_gather_with_assembled_tasks():
     assert progress["status"] == "ready"
 
 
+@pytest.mark.asyncio
+async def test_run_bridge_lifecycle_sequences_remaining_flow(monkeypatch):
+    orchestrator = BridgeOrchestrator()
+    call_order: list[str] = []
+    observed: dict[str, object] = {}
+    loop = asyncio.get_running_loop()
+    bootstrap = await orchestrator.initialize_runtime()
+
+    class FakeThread:
+        name = "LifecycleWebThread"
+
+    fake_clients = [SimpleNamespace(player_name="Kitchen"), SimpleNamespace(player_name="Bedroom")]
+    fake_monitor_task = asyncio.create_task(asyncio.sleep(3600))
+
+    def fake_initialize_devices(*args, **kwargs):
+        assert args[0] is bootstrap
+        call_order.append("devices")
+        return SimpleNamespace(clients=fake_clients)
+
+    def fake_start_web_server(clients, *, web_main=None, thread_name="WebServer"):
+        assert clients == fake_clients
+        observed["web_main"] = web_main
+        observed["thread_name"] = thread_name
+        call_order.append("web")
+        return FakeThread()
+
+    def fake_install_signal_handlers(current_loop, *, shutdown_factory=None):
+        assert current_loop is loop
+        observed["shutdown_factory"] = shutdown_factory
+        call_order.append("signals")
+
+    async def fake_configure_executor(device_count, *, web_thread_name=""):
+        assert device_count == 2
+        assert web_thread_name == "LifecycleWebThread"
+        call_order.append("executor")
+        return 8
+
+    async def fake_initialize_ma(config_data, clients, *, server_host):
+        assert config_data is bootstrap.config
+        assert clients == fake_clients
+        assert server_host == bootstrap.server_host
+        call_order.append("ma")
+        return SimpleNamespace(ma_monitor_task=fake_monitor_task)
+
+    async def fake_run_runtime(clients, *, ma_monitor_task, demo_mode, version, **_kwargs):
+        assert clients == fake_clients
+        assert ma_monitor_task is fake_monitor_task
+        assert demo_mode is bootstrap.demo_mode
+        assert version == "2.32.12"
+        call_order.append("runtime")
+        return "done"
+
+    monkeypatch.setattr(orchestrator, "initialize_devices", fake_initialize_devices)
+    monkeypatch.setattr(orchestrator, "start_web_server", fake_start_web_server)
+    monkeypatch.setattr(orchestrator, "install_signal_handlers", fake_install_signal_handlers)
+    monkeypatch.setattr(orchestrator, "configure_executor", fake_configure_executor)
+    monkeypatch.setattr(orchestrator, "initialize_ma_integration", fake_initialize_ma)
+    monkeypatch.setattr(orchestrator, "run_runtime", fake_run_runtime)
+
+    result = await orchestrator.run_bridge_lifecycle(
+        bootstrap,
+        version="2.32.12",
+        client_factory=object,
+        bt_manager_factory=object,
+    )
+
+    assert result == "done"
+    assert call_order == ["devices", "web", "signals", "executor", "ma", "runtime"]
+    assert observed["web_main"] is None
+    assert observed["thread_name"] == "WebServer"
+    assert observed["shutdown_factory"] is None
+
+    fake_monitor_task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await fake_monitor_task
+
+
 def test_initialize_devices_builds_clients_and_registers_disabled_devices():
     orchestrator = BridgeOrchestrator()
     persisted: list[tuple[str, bool]] = []

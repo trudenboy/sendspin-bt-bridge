@@ -487,3 +487,39 @@ class BridgeOrchestrator:
         )
         runtime_gather = gather_fn or asyncio.gather
         return await runtime_gather(*tasks)
+
+    async def run_bridge_lifecycle(
+        self,
+        bootstrap: RuntimeBootstrap,
+        *,
+        version: str,
+        client_factory: Callable[..., Any],
+        bt_manager_factory: Callable[..., Any],
+        filter_devices_fn: Callable[[list[dict[str, Any]]], list[dict[str, Any]]] | None = None,
+        load_saved_volume_fn: Callable[[str], int | None] | None = None,
+        persist_enabled_fn: Callable[[str, bool], None] | None = None,
+        web_main: Callable[[], None] | None = None,
+    ) -> Any:
+        """Run the remaining bridge lifecycle after runtime bootstrap is complete."""
+        device_bootstrap = self.initialize_devices(
+            bootstrap,
+            client_factory=client_factory,
+            bt_manager_factory=bt_manager_factory,
+            filter_devices_fn=filter_devices_fn,
+            load_saved_volume_fn=load_saved_volume_fn,
+            persist_enabled_fn=persist_enabled_fn,
+        )
+        clients = device_bootstrap.clients
+        web_thread = self.start_web_server(clients, web_main=web_main) if web_main else self.start_web_server(clients)
+        loop = asyncio.get_running_loop()
+        self.install_signal_handlers(loop)
+        await self.configure_executor(len(clients), web_thread_name=web_thread.name)
+        ma_bootstrap = await self.initialize_ma_integration(
+            bootstrap.config, clients, server_host=bootstrap.server_host
+        )
+        return await self.run_runtime(
+            clients,
+            ma_monitor_task=ma_bootstrap.ma_monitor_task,
+            demo_mode=bootstrap.demo_mode,
+            version=version,
+        )

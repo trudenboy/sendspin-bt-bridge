@@ -916,39 +916,20 @@ async def main():
     """Main entry point"""
     orchestrator = BridgeOrchestrator()
     bootstrap = await orchestrator.initialize_runtime()
-    config = bootstrap.config
 
     try:
         from services.bluetooth import persist_device_enabled as _persist_enabled
     except Exception:
         _persist_enabled = None
 
-    device_bootstrap = orchestrator.initialize_devices(
+    await orchestrator.run_bridge_lifecycle(
         bootstrap,
+        version=VERSION,
         client_factory=SendspinClient,
         bt_manager_factory=BluetoothManager,
         filter_devices_fn=_filter_duplicate_bluetooth_devices,
         load_saved_volume_fn=_load_saved_device_volume,
         persist_enabled_fn=_persist_enabled,
-    )
-    clients = device_bootstrap.clients
-
-    web_thread = orchestrator.start_web_server(clients)
-
-    # Handle shutdown signals
-    loop = asyncio.get_running_loop()
-    orchestrator.install_signal_handlers(loop)
-
-    await orchestrator.configure_executor(len(clients), web_thread_name=web_thread.name)
-
-    ma_bootstrap = await orchestrator.initialize_ma_integration(config, clients, server_host=bootstrap.server_host)
-    ma_monitor_task = ma_bootstrap.ma_monitor_task
-
-    await orchestrator.run_runtime(
-        clients,
-        ma_monitor_task=ma_monitor_task,
-        demo_mode=bootstrap.demo_mode,
-        version=VERSION,
     )
 
 
