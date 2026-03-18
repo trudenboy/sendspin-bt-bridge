@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.40.3] - 2026-03-18
+
+### Fixed
+- Add-on images now copy all top-level Python modules from the repository root instead of a hand-maintained file list, fixing the `bridge_orchestrator` startup failure that remained after `2.40.2`
+- HA startup diagnostics now report the persistent `/data/config.json` path correctly during addon boot instead of warning about a missing `/config/config.json`
+
 ## [2.40.2] - 2026-03-18
 
 ### Fixed

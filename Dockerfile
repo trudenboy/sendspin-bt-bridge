@@ -124,7 +124,7 @@ RUN chmod +x entrypoint.sh && \
     chmod +x /etc/s6-overlay/s6-rc.d/sendspin/finish
 
 # Copy application files
-COPY sendspin_client.py web_interface.py config.py bluetooth_manager.py state.py ./
+COPY *.py ./
 COPY routes/ routes/
 COPY services/ services/
 COPY scripts/ scripts/

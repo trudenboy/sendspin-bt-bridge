@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.40.3] - 2026-03-18
+
+### Fixed
+- Docker and Home Assistant add-on images now copy all top-level Python modules from the repository root instead of a hand-maintained file list, fixing the `ModuleNotFoundError: No module named 'bridge_orchestrator'` startup regression exposed by the `2.40.2` image
+- HA add-on startup diagnostics now point at `/data/config.json` before the main process starts, so addon logs no longer report a misleading `/config/config.json not found` message during Home Assistant boot
+
 ## [2.40.2] - 2026-03-18
 
 ### Fixed

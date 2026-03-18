@@ -10,6 +10,7 @@ echo "=== Starting Sendspin Client Container ==="
 # Translate it to /data/config.json so the rest of the startup is uniform.
 if [ -f /data/options.json ]; then
     echo "HA Addon mode detected — reading /data/options.json"
+    export CONFIG_DIR=/data
     python3 /app/scripts/translate_ha_config.py
 fi
 
@@ -91,11 +92,6 @@ printf "║  Config:      %-38s ║\n" "$CONFIG_STATUS"
 printf "║  MA Server:   %-38s ║\n" "$MA_SERVER"
 echo "╚══════════════════════════════════════════════════════╝"
 echo ""
-
-# In HA addon mode, use /data (persistent volume) for runtime config
-if [ -f /data/options.json ]; then
-    export CONFIG_DIR=/data
-fi
 
 # Start the Sendspin client (includes web interface)
 echo "Starting Sendspin client with web interface..."
