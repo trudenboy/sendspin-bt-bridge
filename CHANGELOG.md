@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Internal contract versions are now exposed through shared bridge system info, `/api/version`, and diagnostics payloads so operators can see the active config schema and IPC protocol surfaces at runtime
 - New `services.lifecycle_state` helpers so bridge-wide startup progress, MA integration publication, main-loop publication, and startup completion now have an explicit service seam instead of being scattered across `BridgeOrchestrator`
 - New `services.ma_integration_service` helpers so Music Assistant URL/token resolution, syncgroup discovery, and optional monitor startup can evolve independently from orchestrator lifecycle wiring
+- New `services.playback_health` helpers so zombie-playback watchdog state and restart thresholds are owned by a focused monitor instead of living directly on `SendspinClient`
 
 ### Changed
 - Parent↔subprocess IPC is now versioned end-to-end: daemon status/log envelopes, parent command envelopes, and daemon startup params all include `protocol_version` while remaining backward-compatible with legacy messages that omit it
@@ -25,6 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added focused lifecycle-state and orchestrator delegation coverage so the new service seam is locked down before larger `2.37.x` lifecycle extractions
 - `BridgeOrchestrator` now delegates MA bootstrap work to `BridgeMaIntegrationService`, keeping lifecycle publication in the orchestrator while moving MA-specific URL autodetect, syncgroup discovery, and monitor startup into a dedicated service
 - Added focused `ma_integration_service` coverage and orchestration delegation tests so the new MA service seam is validated before deeper `2.37.x` runtime extractions
+- `SendspinClient` now delegates zombie-playback session tracking and restart-threshold logic to `PlaybackHealthMonitor`, while keeping compatibility through temporary proxy properties so existing diagnostics and callers keep working unchanged
+- Added focused playback-health tests plus runtime regression coverage to lock down the new watchdog seam before larger daemon/process extractions
 
 ## [2.32.12] - 2026-03-17
 
