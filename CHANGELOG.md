@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.40.2] - 2026-03-18
+
+### Fixed
+- Home Assistant add-on startup now works again after the `2.40.1` update because `scripts/translate_ha_config.py` restores access to the repository root before importing shared config helpers, so the addon no longer crashes with `ModuleNotFoundError: No module named 'config'` during HA options translation
+
 ## [2.40.1] - 2026-03-18
 
 ### Added

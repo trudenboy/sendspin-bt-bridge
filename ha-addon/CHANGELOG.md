@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.40.2] - 2026-03-18
+
+### Fixed
+- Add-on startup no longer fails during `/data/options.json` translation after the `2.40.1` update; the translator now resolves shared config helpers correctly when Home Assistant launches it as a direct script from `/app/scripts`
+
 ## [2.40.1] - 2026-03-18
 
 ### Added

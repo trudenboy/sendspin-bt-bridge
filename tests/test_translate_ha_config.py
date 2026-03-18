@@ -7,11 +7,10 @@ for zero-valued options, runtime state preservation, and adapter merging.
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING
+import subprocess
+import sys
+from pathlib import Path
 from unittest.mock import patch
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 import pytest
 
@@ -255,3 +254,17 @@ def test_translation_normalizes_update_channel(tmp_path):
     # enabled defaults to True for devices without explicit field
     for dev in cfg["BLUETOOTH_DEVICES"]:
         assert dev.get("enabled") is True
+
+
+def test_translate_script_runs_as_direct_file() -> None:
+    script_path = Path(__file__).resolve().parents[1] / "scripts" / "translate_ha_config.py"
+    result = subprocess.run(
+        [sys.executable, str(script_path)],
+        cwd="/",
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    assert "options.json not found" in result.stdout

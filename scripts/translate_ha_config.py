@@ -17,8 +17,23 @@ import os
 import re
 import subprocess
 import sys
+from pathlib import Path
+from typing import TYPE_CHECKING
 
-from config import DEFAULT_UPDATE_CHANNEL, normalize_update_channel
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+
+def _load_config_helpers() -> tuple[str, Callable[[object], str]]:
+    repo_root = Path(__file__).resolve().parents[1]
+    if str(repo_root) not in sys.path:
+        sys.path.insert(0, str(repo_root))
+    from config import DEFAULT_UPDATE_CHANNEL, normalize_update_channel
+
+    return DEFAULT_UPDATE_CHANNEL, normalize_update_channel
+
+
+DEFAULT_UPDATE_CHANNEL, normalize_update_channel = _load_config_helpers()
 
 logger = logging.getLogger(__name__)
 
