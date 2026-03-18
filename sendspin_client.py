@@ -36,6 +36,7 @@ from services.playback_health import PlaybackHealthMonitor
 from services.subprocess_command import SubprocessCommandService
 from services.subprocess_ipc import SubprocessIpcService
 from services.subprocess_stderr import SubprocessStderrService
+from services.subprocess_stop import SubprocessStopService
 
 UTC = timezone.utc
 
@@ -295,6 +296,7 @@ class SendspinClient:
             update_status=self._update_status,
             logger_=logger,
         )
+        self._stop_service = SubprocessStopService(logger_=logger)
 
     @property
     def _playing_since(self) -> float | None:
@@ -734,28 +736,20 @@ class SendspinClient:
 
     async def stop_sendspin(self) -> None:
         """Stop the daemon subprocess gracefully."""
-        # Cancel stdout/stderr reader tasks
-        for _task_attr in ("_daemon_task", "_stderr_task"):
-            _t = getattr(self, _task_attr, None)
-            if _t and not _t.done():
-                _t.cancel()
-                try:
-                    await asyncio.wait_for(_t, timeout=2.0)
-                except (TimeoutError, asyncio.CancelledError):
-                    pass
-            setattr(self, _task_attr, None)
+        cleared_tasks = await self._stop_service.cancel_reader_tasks(
+            {
+                "_daemon_task": self._daemon_task,
+                "_stderr_task": self._stderr_task,
+            }
+        )
+        self._daemon_task = cleared_tasks["_daemon_task"]
+        self._stderr_task = cleared_tasks["_stderr_task"]
 
-        # Terminate subprocess
-        if self._daemon_proc and self._daemon_proc.returncode is None:
-            try:
-                await self._send_subprocess_command({"cmd": "stop"})
-                await asyncio.wait_for(self._daemon_proc.wait(), timeout=3.0)
-            except TimeoutError:
-                logger.warning("[%s] Daemon subprocess did not exit, killing", self.player_name)
-                self._daemon_proc.kill()
-                await self._daemon_proc.wait()
-            except Exception as exc:
-                logger.debug("stop_sendspin: %s", exc)
+        await self._stop_service.stop_process(
+            self._daemon_proc,
+            send_stop=self._send_subprocess_command,
+            player_name=self.player_name,
+        )
         self._daemon_proc = None
 
         self._update_status(

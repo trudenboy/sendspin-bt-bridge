@@ -70,6 +70,44 @@ async def test_send_subprocess_command_delegates_to_command_service():
 
 
 @pytest.mark.asyncio
+async def test_stop_sendspin_delegates_to_stop_service():
+    client = SendspinClient("Test Player", "localhost", 9000)
+    proc = object()
+    client._daemon_proc = proc
+    daemon_task = asyncio.create_task(asyncio.sleep(3600))
+    stderr_task = asyncio.create_task(asyncio.sleep(3600))
+    client._daemon_task = daemon_task
+    client._stderr_task = stderr_task
+
+    class _FakeService:
+        def __init__(self):
+            self.cancel_calls = []
+            self.stop_calls = []
+
+        async def cancel_reader_tasks(self, tasks):
+            self.cancel_calls.append(tasks)
+            for task in tasks.values():
+                if task:
+                    task.cancel()
+            return {"_daemon_task": None, "_stderr_task": None}
+
+        async def stop_process(self, current_proc, *, send_stop, player_name):
+            self.stop_calls.append((current_proc, send_stop, player_name))
+
+    fake_service = _FakeService()
+    client._stop_service = fake_service
+
+    with patch("sendspin_client._state.notify_status_changed"):
+        await client.stop_sendspin()
+
+    assert fake_service.cancel_calls == [{"_daemon_task": daemon_task, "_stderr_task": stderr_task}]
+    assert fake_service.stop_calls == [(proc, client._send_subprocess_command, "Test Player")]
+    assert client._daemon_task is None
+    assert client._stderr_task is None
+    assert client._daemon_proc is None
+
+
+@pytest.mark.asyncio
 async def test_read_subprocess_output_accepts_protocol_versioned_status_once():
     client = SendspinClient("Test Player", "localhost", 9000)
 

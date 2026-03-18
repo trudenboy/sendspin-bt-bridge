@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - New `services.subprocess_stderr` helpers so daemon `stderr` classification and crash-like status publication can evolve independently from `SendspinClient`
 - New `services.subprocess_ipc` helpers so daemon stdout parsing, protocol-version warning policy, and log/status message dispatch can evolve independently from `SendspinClient`
 - New `services.subprocess_command` helpers so daemon stdin command serialization and protocol-version envelopes can evolve independently from `SendspinClient`
+- New `services.subprocess_stop` helpers so daemon reader-task cancellation and graceful stop/kill flow can evolve independently from `SendspinClient`
 
 ### Changed
 - Parent↔subprocess IPC is now versioned end-to-end: daemon status/log envelopes, parent command envelopes, and daemon startup params all include `protocol_version` while remaining backward-compatible with legacy messages that omit it
@@ -37,6 +38,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added focused subprocess-IPC tests and client delegation coverage to lock down the new daemon stdout seam before deeper process-lifecycle extractions
 - `SendspinClient` now delegates daemon stdin command writing to `SubprocessCommandService`, while keeping `_send_subprocess_command()` as a thin compatibility proxy for routes, Bluetooth hooks, and tests
 - Added focused subprocess-command tests and client delegation coverage to lock down the new daemon stdin seam before larger lifecycle extractions
+- `SendspinClient` now delegates reader-task cancellation and graceful subprocess stop/kill logic to `SubprocessStopService`, while keeping `stop_sendspin()` as a thin coordinator that still owns the final status reset
+- Added focused subprocess-stop tests and client delegation coverage to lock down the new stop/shutdown seam before extracting higher-level restart lifecycle flows
 
 ## [2.32.12] - 2026-03-17
 
