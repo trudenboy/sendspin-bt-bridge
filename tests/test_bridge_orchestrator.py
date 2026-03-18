@@ -85,8 +85,11 @@ async def test_initialize_runtime_loads_config_and_updates_progress():
 
     bootstrap = await orchestrator.initialize_runtime()
 
+    assert bootstrap.delivery_channel == "stable"
     assert bootstrap.server_host == "music-assistant.local"
     assert bootstrap.server_port == 9000
+    assert bootstrap.web_port == 8080
+    assert bootstrap.base_listen_port == 8928
     assert bootstrap.pulse_latency_msec == 250
     assert bootstrap.log_level == "DEBUG"
     assert bootstrap.prefer_sbc is True
@@ -116,6 +119,19 @@ async def test_initialize_runtime_invokes_demo_install_when_enabled(monkeypatch)
     assert called == ["install"]
     progress = state.get_startup_progress()
     assert progress["details"]["demo_mode"] is True
+
+
+@pytest.mark.asyncio
+async def test_initialize_runtime_derives_channel_specific_ports_for_ha_addon(monkeypatch):
+    orchestrator = BridgeOrchestrator()
+    monkeypatch.setenv("SUPERVISOR_TOKEN", "demo-supervisor-token")
+    monkeypatch.setenv("HOSTNAME", "85b1ecde-sendspin-bt-bridge-rc")
+
+    bootstrap = await orchestrator.initialize_runtime()
+
+    assert bootstrap.delivery_channel == "rc"
+    assert bootstrap.web_port == 8081
+    assert bootstrap.base_listen_port == 9028
 
 
 @pytest.mark.asyncio
@@ -544,6 +560,7 @@ async def test_run_bridge_lifecycle_sequences_remaining_flow(monkeypatch):
 
     def fake_initialize_devices(*args, **kwargs):
         assert args[0] is bootstrap
+        assert kwargs["base_listen_port"] == bootstrap.base_listen_port
         call_order.append("devices")
         return SimpleNamespace(clients=fake_clients)
 

@@ -2,7 +2,7 @@
 
 ## About
 
-> **RC channel notice:** This Home Assistant addon variant tracks the `rc` image lane. Install this variant from the store to receive RC builds; changing `update_channel` inside the app does not switch the installed addon track.
+<div style="margin: 0 0 16px; padding: 12px 14px; border-left: 4px solid #f2c94c; background: #fff7d6; color: #7a5d00; border-radius: 6px;"><strong>RC channel notice:</strong> This Home Assistant addon variant tracks the <code>rc</code> image lane. Install this variant from the store to receive RC builds; changing <code>update_channel</code> inside the app does not switch the installed addon track.</div>
 
 The Sendspin Bluetooth Bridge addon connects
 [Music Assistant](https://music-assistant.io/) to Bluetooth speakers via the
@@ -68,6 +68,8 @@ Important:
 - changing `update_channel` does **not** switch the installed addon track by itself
 - the checked-in addon manifest in this repository represents the **stable** variant
 - when RC or Beta addon variants are available, switching tracks means installing the matching addon variant from the Home Assistant store first
+- stable / RC / Beta addon variants use different default HA ingress ports and different default player listen-port ranges, so they can run side by side on one HAOS host
+- do **not** configure the same Bluetooth speaker in more than one addon variant at the same time
 
 ## Configuration
 

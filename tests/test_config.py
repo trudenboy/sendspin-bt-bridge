@@ -164,6 +164,63 @@ def test_load_config_falls_back_to_stable_for_invalid_update_channel(tmp_path):
     assert loaded["UPDATE_CHANNEL"] == DEFAULT_UPDATE_CHANNEL
 
 
+def test_detect_ha_addon_channel_uses_hostname_suffix():
+    from config import detect_ha_addon_channel
+
+    assert (
+        detect_ha_addon_channel(
+            env={"SUPERVISOR_TOKEN": "token", "HOSTNAME": "85b1ecde-sendspin-bt-bridge-rc"},
+        )
+        == "rc"
+    )
+    assert (
+        detect_ha_addon_channel(
+            env={"SUPERVISOR_TOKEN": "token", "HOSTNAME": "85b1ecde-sendspin-bt-bridge-beta"},
+        )
+        == "beta"
+    )
+    assert (
+        detect_ha_addon_channel(
+            env={"SUPERVISOR_TOKEN": "token", "HOSTNAME": "85b1ecde-sendspin-bt-bridge"},
+        )
+        == "stable"
+    )
+
+
+def test_resolve_runtime_ports_follow_installed_addon_track_not_update_channel():
+    from config import resolve_base_listen_port, resolve_web_port
+
+    rc_env = {
+        "SUPERVISOR_TOKEN": "token",
+        "HOSTNAME": "85b1ecde-sendspin-bt-bridge-rc",
+        "UPDATE_CHANNEL": "stable",
+    }
+    stable_env = {
+        "SUPERVISOR_TOKEN": "token",
+        "HOSTNAME": "85b1ecde-sendspin-bt-bridge",
+        "UPDATE_CHANNEL": "beta",
+    }
+
+    assert resolve_web_port(env=rc_env) == 8081
+    assert resolve_base_listen_port(env=rc_env) == 9028
+    assert resolve_web_port(env=stable_env) == 8080
+    assert resolve_base_listen_port(env=stable_env) == 8928
+
+
+def test_resolve_runtime_ports_allow_env_overrides():
+    from config import resolve_base_listen_port, resolve_web_port
+
+    env = {
+        "SUPERVISOR_TOKEN": "token",
+        "HOSTNAME": "85b1ecde-sendspin-bt-bridge-beta",
+        "WEB_PORT": "18080",
+        "BASE_LISTEN_PORT": "19000",
+    }
+
+    assert resolve_web_port(env=env) == 18080
+    assert resolve_base_listen_port(env=env) == 19000
+
+
 def test_load_config_persists_current_schema_version_for_legacy_file(tmp_path):
     _write_config(tmp_path, {"SENDSPIN_SERVER": "10.0.0.1"})
     from config import CONFIG_SCHEMA_VERSION, load_config

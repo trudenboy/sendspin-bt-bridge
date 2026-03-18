@@ -21,12 +21,23 @@ import threading
 import time
 import uuid as _uuid
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 VERSION = "2.40.5-rc.1"
 BUILD_DATE = "2026-03-18"
 CONFIG_SCHEMA_VERSION = 1
 UPDATE_CHANNELS = ("stable", "rc", "beta")
 DEFAULT_UPDATE_CHANNEL = "stable"
+DEFAULT_WEB_PORT = 8080
+DEFAULT_LISTEN_PORT_BASE = 8928
+HA_ADDON_CHANNEL_DEFAULTS = {
+    "stable": {"web_port": DEFAULT_WEB_PORT, "base_listen_port": DEFAULT_LISTEN_PORT_BASE},
+    "rc": {"web_port": 8081, "base_listen_port": 9028},
+    "beta": {"web_port": 8082, "base_listen_port": 9128},
+}
 
 __all__ = [
     "BUILD_DATE",
@@ -34,17 +45,23 @@ __all__ = [
     "CONFIG_FILE",
     "CONFIG_SCHEMA_VERSION",
     "DEFAULT_CONFIG",
+    "DEFAULT_LISTEN_PORT_BASE",
     "DEFAULT_UPDATE_CHANNEL",
+    "DEFAULT_WEB_PORT",
     "UPDATE_CHANNELS",
     "VERSION",
     "check_password",
     "config_lock",
+    "detect_ha_addon_channel",
     "ensure_bridge_name",
     "ensure_secret_key",
     "get_local_ip",
     "hash_password",
+    "is_ha_addon_runtime",
     "load_config",
     "normalize_update_channel",
+    "resolve_base_listen_port",
+    "resolve_web_port",
     "save_device_sink",
     "save_device_volume",
     "update_config",
@@ -167,6 +184,57 @@ def normalize_update_channel(raw_channel: object) -> str:
     if normalized in UPDATE_CHANNELS:
         return normalized
     return DEFAULT_UPDATE_CHANNEL
+
+
+def _coerce_port(raw_value: object, default: int) -> int:
+    if isinstance(raw_value, bool):
+        port = int(raw_value)
+    elif isinstance(raw_value, (int, str)):
+        try:
+            port = int(raw_value)
+        except ValueError:
+            return default
+    else:
+        return default
+    if 1 <= port <= 65535:
+        return port
+    return default
+
+
+def is_ha_addon_runtime(*, env: Mapping[str, str] | None = None) -> bool:
+    environ = os.environ if env is None else env
+    return bool(environ.get("SUPERVISOR_TOKEN")) or Path("/data/options.json").exists()
+
+
+def detect_ha_addon_channel(*, env: Mapping[str, str] | None = None, hostname: str | None = None) -> str:
+    """Infer the installed HA addon delivery channel from the container hostname."""
+    environ = os.environ if env is None else env
+    if not is_ha_addon_runtime(env=environ):
+        return DEFAULT_UPDATE_CHANNEL
+    detected_hostname = (hostname or environ.get("HOSTNAME") or _socket.gethostname()).strip().lower()
+    if detected_hostname.endswith("-rc"):
+        return "rc"
+    if detected_hostname.endswith("-beta"):
+        return "beta"
+    return DEFAULT_UPDATE_CHANNEL
+
+
+def resolve_web_port(*, env: Mapping[str, str] | None = None, hostname: str | None = None) -> int:
+    environ = os.environ if env is None else env
+    explicit_port = environ.get("WEB_PORT")
+    if explicit_port not in (None, ""):
+        return _coerce_port(explicit_port, DEFAULT_WEB_PORT)
+    channel = detect_ha_addon_channel(env=environ, hostname=hostname)
+    return HA_ADDON_CHANNEL_DEFAULTS[channel]["web_port"]
+
+
+def resolve_base_listen_port(*, env: Mapping[str, str] | None = None, hostname: str | None = None) -> int:
+    environ = os.environ if env is None else env
+    explicit_port = environ.get("BASE_LISTEN_PORT")
+    if explicit_port not in (None, ""):
+        return _coerce_port(explicit_port, DEFAULT_LISTEN_PORT_BASE)
+    channel = detect_ha_addon_channel(env=environ, hostname=hostname)
+    return HA_ADDON_CHANNEL_DEFAULTS[channel]["base_listen_port"]
 
 
 def _normalize_choice_setting(config: dict, key: str, *, allowed_values: tuple[str, ...], default: str) -> None:

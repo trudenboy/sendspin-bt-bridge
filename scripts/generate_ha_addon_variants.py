@@ -23,6 +23,7 @@ _BASE_CHANGELOG_PATH = _HA_ADDON_DIR / "CHANGELOG.md"
 _BASE_DOCKERFILE_PATH = _HA_ADDON_DIR / "Dockerfile"
 _BASE_APPARMOR_PATH = _HA_ADDON_DIR / "apparmor.txt"
 _BASE_REPOSITORY_PATH = _REPO_ROOT / "repository.yaml"
+_VARIANT_ASSETS_DIR = _REPO_ROOT / "ha-addon-assets"
 
 _BASE_NAME = "Sendspin Bluetooth Bridge"
 _BASE_DESCRIPTION = "Bridge Music Assistant Sendspin protocol to Bluetooth speakers"
@@ -31,6 +32,23 @@ _CHANNEL_LABELS = {
     "stable": "Stable",
     "rc": "RC",
     "beta": "Beta",
+}
+_CHANNEL_NETWORK_DEFAULTS = {
+    "stable": {"ingress_port": 8080, "base_listen_port": 8928},
+    "rc": {"ingress_port": 8081, "base_listen_port": 9028},
+    "beta": {"ingress_port": 8082, "base_listen_port": 9128},
+}
+_CHANNEL_NOTICE_STYLES = {
+    "rc": {
+        "border": "#f2c94c",
+        "background": "#fff7d6",
+        "text": "#7a5d00",
+    },
+    "beta": {
+        "border": "#ef4444",
+        "background": "#fee2e2",
+        "text": "#991b1b",
+    },
 }
 _CHANNEL_ADDON_DIRS = {
     "stable": "ha-addon",
@@ -60,6 +78,18 @@ def _replace_double_quoted_scalar(text: str, key: str, value: str) -> str:
     return updated
 
 
+def _replace_unquoted_scalar(text: str, key: str, value: int) -> str:
+    pattern = rf"^(?P<indent>\s*){re.escape(key)}:\s+.*$"
+
+    def _repl(match: re.Match[str]) -> str:
+        return f"{match.group('indent')}{key}: {value}"
+
+    updated, count = re.subn(pattern, _repl, text, count=1, flags=re.MULTILINE)
+    if count != 1:
+        raise ValueError(f"Could not replace {key!r} in addon config template")
+    return updated
+
+
 def _set_optional_stage(text: str, stage: str | None) -> str:
     pattern = r"^stage: .*$"
     if stage is None:
@@ -80,11 +110,15 @@ def _channel_notice(variant: HaAddonVariant) -> str:
     if variant.channel == "stable":
         return ""
     label = _CHANNEL_LABELS[variant.channel]
+    style = _CHANNEL_NOTICE_STYLES[variant.channel]
     return (
-        f"> **{label} channel notice:** This Home Assistant addon variant tracks the "
-        f"`{variant.channel}` image lane. Install this variant from the store to receive "
-        f"{label} builds; changing `update_channel` inside the app does not switch the "
-        "installed addon track.\n\n"
+        f'<div style="margin: 0 0 16px; padding: 12px 14px; border-left: 4px solid {style["border"]}; '
+        f'background: {style["background"]}; color: {style["text"]}; border-radius: 6px;">'
+        f"<strong>{label} channel notice:</strong> This Home Assistant addon variant tracks the "
+        f"<code>{variant.channel}</code> image lane. Install this variant from the store to receive "
+        f"{label} builds; changing <code>update_channel</code> inside the app does not switch the "
+        "installed addon track."
+        "</div>\n\n"
     )
 
 
@@ -137,6 +171,7 @@ def render_config_yaml(variant: HaAddonVariant, base_text: str | None = None) ->
     text = _replace_double_quoted_scalar(text, "slug", variant.slug)
     text = _replace_double_quoted_scalar(text, "description", variant.description)
     text = _replace_double_quoted_scalar(text, "update_channel", variant.channel)
+    text = _replace_unquoted_scalar(text, "ingress_port", _CHANNEL_NETWORK_DEFAULTS[variant.channel]["ingress_port"])
     text = _set_optional_stage(text, variant.stage)
     return text
 
@@ -245,6 +280,14 @@ def generate_multi_addon_repo_files(
     return files
 
 
+def _binary_asset_source(channel: str, filename: str) -> Path:
+    if channel != "stable":
+        variant_asset = _VARIANT_ASSETS_DIR / channel / filename
+        if variant_asset.exists():
+            return variant_asset
+    return _HA_ADDON_DIR / filename
+
+
 def write_multi_addon_repo(
     output_root: Path,
     *,
@@ -274,8 +317,9 @@ def write_multi_addon_repo(
         beta_stage=beta_stage,
     )
     for addon_dir in [variant.addon_dir for variant in variants]:
+        channel = next(variant.channel for variant in variants if variant.addon_dir == addon_dir)
         for filename in _BINARY_VARIANT_FILES:
-            source = _HA_ADDON_DIR / filename
+            source = _binary_asset_source(channel, filename)
             target = output_root / addon_dir / filename
             if source.resolve() == target.resolve():
                 continue

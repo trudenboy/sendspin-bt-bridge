@@ -10,7 +10,7 @@ connected to your Home Assistant host.
 
 ## About
 
-> **RC channel notice:** This Home Assistant addon variant tracks the `rc` image lane. Install this variant from the store to receive RC builds; changing `update_channel` inside the app does not switch the installed addon track.
+<div style="margin: 0 0 16px; padding: 12px 14px; border-left: 4px solid #f2c94c; background: #fff7d6; color: #7a5d00; border-radius: 6px;"><strong>RC channel notice:</strong> This Home Assistant addon variant tracks the <code>rc</code> image lane. Install this variant from the store to receive RC builds; changing <code>update_channel</code> inside the app does not switch the installed addon track.</div>
 
 This add-on allows you to use Bluetooth speakers as audio output
 players in Music Assistant. It connects to Music Assistant via the
@@ -35,6 +35,8 @@ For full documentation, see [DOCS.md](DOCS.md) or visit the
 - The `update_channel` option inside the app affects prerelease checks and warnings only.
 - It does **not** change the installed addon track by itself.
 - When RC or Beta addon variants are published, switching tracks means installing the matching addon variant from the Home Assistant store.
+- Stable / RC / Beta addon variants use different default HA ingress ports and different default player listen-port ranges, so they can run side by side on one HAOS host.
+- Do **not** configure the same Bluetooth speaker in more than one addon variant at the same time.
 
 [aarch64-shield]: https://img.shields.io/badge/aarch64-yes-green.svg
 [amd64-shield]: https://img.shields.io/badge/amd64-yes-green.svg

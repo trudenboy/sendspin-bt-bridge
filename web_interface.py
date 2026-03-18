@@ -18,7 +18,7 @@ from pathlib import Path
 from flask import Flask, jsonify, redirect, request, send_from_directory, session, url_for
 from waitress import serve  # type: ignore[import-untyped]
 
-from config import VERSION, ensure_secret_key, load_config
+from config import VERSION, ensure_secret_key, load_config, resolve_web_port
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -259,7 +259,7 @@ def _handle_500(e):
 
 def main():
     """Start the web interface"""
-    port = int(os.getenv("WEB_PORT", 8080))
+    port = resolve_web_port()
     threads = int(os.getenv("WEB_THREADS", 8))
     logger.info("Starting web interface on port %s", port)
     serve(app, host="0.0.0.0", port=port, threads=threads)

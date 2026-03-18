@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Coroutine
 
 import state as _state
-from config import ensure_bridge_name, load_config
+from config import detect_ha_addon_channel, ensure_bridge_name, load_config, resolve_base_listen_port, resolve_web_port
 from services.lifecycle_state import BridgeLifecycleState
 from services.ma_integration_service import BridgeMaIntegrationService
 from services.sendspin_compat import format_dependency_versions, get_runtime_dependency_versions
@@ -31,6 +31,7 @@ class RuntimeBootstrap:
     config: dict[str, Any]
     device_configs: list[dict[str, Any]]
     demo_mode: bool
+    delivery_channel: str
     server_host: str
     server_port: int
     effective_bridge: str
@@ -39,6 +40,8 @@ class RuntimeBootstrap:
     bt_max_reconnect_fails: int
     bt_churn_threshold: int
     bt_churn_window: float
+    base_listen_port: int
+    web_port: int
     pulse_latency_msec: int
     log_level: str
 
@@ -103,6 +106,16 @@ class BridgeOrchestrator:
         os.environ["PULSE_LATENCY_MSEC"] = str(pulse_latency_msec)
         logger.info("PULSE_LATENCY_MSEC: %s ms", pulse_latency_msec)
 
+        delivery_channel = detect_ha_addon_channel()
+        base_listen_port = resolve_base_listen_port()
+        web_port = resolve_web_port()
+        logger.info(
+            "Delivery channel defaults: channel=%s, web_port=%s, base_listen_port=%s",
+            delivery_channel,
+            web_port,
+            base_listen_port,
+        )
+
         log_level = config.get("LOG_LEVEL", "INFO").upper()
         if log_level not in ("INFO", "DEBUG"):
             log_level = "INFO"
@@ -115,6 +128,7 @@ class BridgeOrchestrator:
             config=config,
             device_configs=list(config.get("BLUETOOTH_DEVICES", [])),
             demo_mode=demo_mode,
+            delivery_channel=delivery_channel,
             server_host=server_host,
             server_port=server_port,
             effective_bridge=effective_bridge,
@@ -123,6 +137,8 @@ class BridgeOrchestrator:
             bt_max_reconnect_fails=bt_max_reconnect_fails,
             bt_churn_threshold=bt_churn_threshold,
             bt_churn_window=bt_churn_window,
+            base_listen_port=base_listen_port,
+            web_port=web_port,
             pulse_latency_msec=pulse_latency_msec,
             log_level=log_level,
         )
@@ -449,6 +465,7 @@ class BridgeOrchestrator:
             filter_devices_fn=filter_devices_fn,
             load_saved_volume_fn=load_saved_volume_fn,
             persist_enabled_fn=persist_enabled_fn,
+            base_listen_port=bootstrap.base_listen_port,
         )
         clients = device_bootstrap.clients
         web_thread = self.start_web_server(clients, web_main=web_main) if web_main else self.start_web_server(clients)

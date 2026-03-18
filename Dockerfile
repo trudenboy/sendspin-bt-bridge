@@ -136,7 +136,7 @@ EXPOSE 8080
 
 # Health check — verify only that the web UI is reachable (BT disconnected is normal)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD python3 -c "import urllib.request, os; urllib.request.urlopen(f'http://localhost:{os.environ.get(\"WEB_PORT\",\"8080\")}/api/health')" || exit 1
+    CMD python3 -c "import urllib.request; from config import resolve_web_port; urllib.request.urlopen(f'http://localhost:{resolve_web_port()}/api/health')" || exit 1
 
 # S6 init wrapper — /init permissions are set at build time (line 94).
 RUN printf '#!/bin/sh\nexec /init "$@"\n' > /s6-init && \

@@ -39,6 +39,7 @@ def test_generate_same_slug_beta_variant_switches_channel_defaults():
     assert 'slug: "sendspin_bt_bridge"' in config_text
     assert 'version: "2.41.0-beta.1"' in config_text
     assert 'update_channel: "beta"' in config_text
+    assert "ingress_port: 8082" in config_text
     assert "stage:" not in config_text
 
     assert "aarch64: ghcr.io/trudenboy/sendspin-bt-bridge:beta" in build_text
@@ -62,6 +63,7 @@ def test_generate_suffix_slug_rc_variant_supports_multi_addon_layout():
     assert 'description: "Bridge Music Assistant Sendspin protocol to Bluetooth speakers (RC channel)"' in config_text
     assert 'version: "2.41.0-rc.1"' in config_text
     assert 'update_channel: "rc"' in config_text
+    assert "ingress_port: 8081" in config_text
     assert "stage: experimental" in config_text
 
 
@@ -93,10 +95,20 @@ def test_generate_multi_addon_repo_files_renders_suffix_slug_repository_layout()
     assert rendered["ha-addon/config.yaml"] == (root / "ha-addon" / "config.yaml").read_text()
     assert 'slug: "sendspin_bt_bridge_rc"' in rendered["ha-addon-rc/config.yaml"]
     assert 'slug: "sendspin_bt_bridge_beta"' in rendered["ha-addon-beta/config.yaml"]
+    assert "ingress_port: 8081" in rendered["ha-addon-rc/config.yaml"]
+    assert "ingress_port: 8082" in rendered["ha-addon-beta/config.yaml"]
     assert "stage: experimental" in rendered["ha-addon-rc/config.yaml"]
     assert "# Sendspin Bluetooth Bridge (RC)" in rendered["ha-addon-rc/README.md"]
     assert "RC channel notice" in rendered["ha-addon-rc/README.md"]
+    assert "background: #fff7d6" in rendered["ha-addon-rc/README.md"]
+    assert "color: #7a5d00" in rendered["ha-addon-rc/README.md"]
+    assert "border-left: 4px solid #f2c94c" in rendered["ha-addon-rc/README.md"]
+    assert "different default HA ingress ports" in rendered["ha-addon-rc/README.md"]
     assert "**Sendspin Bluetooth Bridge (Beta)** now appears in the store." in rendered["ha-addon-beta/DOCS.md"]
+    assert "background: #fee2e2" in rendered["ha-addon-beta/DOCS.md"]
+    assert "color: #991b1b" in rendered["ha-addon-beta/DOCS.md"]
+    assert "border-left: 4px solid #ef4444" in rendered["ha-addon-beta/DOCS.md"]
+    assert "different default HA ingress ports" in rendered["ha-addon-beta/DOCS.md"]
     assert "profile sendspin_bt_bridge_rc " in rendered["ha-addon-rc/apparmor.txt"]
 
 
@@ -157,3 +169,49 @@ def test_write_multi_addon_repo_skips_copying_binary_assets_over_themselves(tmp_
 
     for filename in addon_variants._BINARY_VARIANT_FILES:
         assert (source_addon / filename).read_bytes() == filename.encode()
+
+
+def test_binary_asset_source_prefers_channel_specific_assets(tmp_path, monkeypatch):
+    base_addon = tmp_path / "ha-addon"
+    variant_assets = tmp_path / "ha-addon-assets"
+    base_addon.mkdir(parents=True)
+    (variant_assets / "rc").mkdir(parents=True)
+    (base_addon / "icon.png").write_bytes(b"stable-icon")
+    (variant_assets / "rc" / "icon.png").write_bytes(b"rc-icon")
+
+    monkeypatch.setattr(addon_variants, "_HA_ADDON_DIR", base_addon)
+    monkeypatch.setattr(addon_variants, "_VARIANT_ASSETS_DIR", variant_assets)
+
+    assert addon_variants._binary_asset_source("stable", "icon.png").read_bytes() == b"stable-icon"
+    assert addon_variants._binary_asset_source("rc", "icon.png").read_bytes() == b"rc-icon"
+    assert addon_variants._binary_asset_source("beta", "icon.png").read_bytes() == b"stable-icon"
+
+
+def test_write_multi_addon_repo_copies_channel_specific_binary_assets(tmp_path, monkeypatch):
+    base_addon = tmp_path / "base" / "ha-addon"
+    variant_assets = tmp_path / "base" / "ha-addon-assets"
+    output_root = tmp_path / "output"
+    base_addon.mkdir(parents=True)
+    for filename in addon_variants._BINARY_VARIANT_FILES:
+        (base_addon / filename).write_bytes(f"stable-{filename}".encode())
+    for channel in ("rc", "beta"):
+        asset_dir = variant_assets / channel
+        asset_dir.mkdir(parents=True)
+        for filename in addon_variants._BINARY_VARIANT_FILES:
+            (asset_dir / filename).write_bytes(f"{channel}-{filename}".encode())
+
+    monkeypatch.setattr(addon_variants, "_HA_ADDON_DIR", base_addon)
+    monkeypatch.setattr(addon_variants, "_VARIANT_ASSETS_DIR", variant_assets)
+
+    write_multi_addon_repo(
+        output_root,
+        stable_version=_current_stable_version(),
+        rc_version="2.41.0-rc.1",
+        beta_version="2.41.0-beta.1",
+    )
+
+    assert (output_root / "ha-addon" / "icon.png").read_bytes() == b"stable-icon.png"
+    assert (output_root / "ha-addon-rc" / "icon.png").read_bytes() == b"rc-icon.png"
+    assert (output_root / "ha-addon-rc" / "logo.png").read_bytes() == b"rc-logo.png"
+    assert (output_root / "ha-addon-beta" / "icon.png").read_bytes() == b"beta-icon.png"
+    assert (output_root / "ha-addon-beta" / "logo.png").read_bytes() == b"beta-logo.png"
