@@ -8,12 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [2.40.0] - 2026-03-18
 
 ### Added
+- Repository `ROADMAP.md` and execution-backlog documentation now track the delivered `2.33.x`-`2.40.x` architecture waves alongside the addon release
+- Status/read-model snapshots now expose per-device `health_summary`, `recent_events`, startup progress, and runtime/mock metadata across the web UI support surfaces
 - Structured config validation for config upload, config save, and dry-run validation so operators can catch malformed payloads before persisting changes
 - A dedicated onboarding diagnostics assistant with actionable guidance for Bluetooth availability, sink readiness, Music Assistant auth state, and latency calibration
 
 ### Changed
+- Bridge startup and shutdown are now coordinated through the extracted `BridgeOrchestrator`, which incrementally absorbed runtime bootstrap, device initialization, Music Assistant bootstrap, task assembly, and lifecycle sequencing without changing addon-facing behavior
 - Bridge runtime internals are now split across explicit lifecycle, MA integration, subprocess IPC, subprocess command, subprocess stop, playback-health, and event-builder services without breaking the existing addon UX
-- Diagnostics, bugreport exports, and runtime status surfaces now expose richer contract/version metadata, device event history, onboarding guidance, and structured daemon error reporting
+- Diagnostics, bugreport exports, and runtime status surfaces now expose richer contract/version metadata, device event history, onboarding guidance, structured daemon error reporting, and cleaner signal/noise handling for routine Bluetooth reconnect churn
+
+### Fixed
+- Enabled/released Bluetooth device persistence now writes consistently through the active config path, preventing edge-case drift between runtime toggles and saved addon configuration
 
 ## [2.32.12] - 2026-03-17
 

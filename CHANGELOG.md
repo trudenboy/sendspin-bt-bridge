@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [2.40.0] - 2026-03-18
 
 ### Added
+- Repository-level `ROADMAP.md` and execution backlog documentation so the multi-release architecture plan from `2.33.x` through `2.40.x` is captured alongside the shipped implementation waves
+- Shared status/read-model snapshots for bridge status surfaces, including per-device `health_summary`, `recent_events`, and a centralized snapshot service used by status, groups, SSE, and later diagnostics surfaces
+- Bridge-wide startup progress snapshots plus additive `/api/startup-progress`, `/api/status`, `/api/diagnostics`, and SSE exposure so operators can see startup phase transitions instead of waiting for an opaque ready/not-ready flip
+- Explicit runtime-info and mock/demo runtime snapshots, including metadata about simulated layers registered by `demo.install()`, so diagnostics can explain when Bluetooth/runtime behavior is mocked
 - Explicit `CONFIG_SCHEMA_VERSION` handling in `config.py`, including legacy-config backfill so loaded configs are transparently persisted with the current schema version for future migration work
 - Shared `services.ipc_protocol` helpers with `IPC_PROTOCOL_VERSION` so parent↔subprocess JSON-line messages and daemon bootstrap params now carry an explicit protocol contract
 - Internal contract versions are now exposed through shared bridge system info, `/api/version`, and diagnostics payloads so operators can see the active config schema and IPC protocol surfaces at runtime
@@ -26,7 +30,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - New `services.onboarding_assistant` helpers so operator-facing setup guidance can be derived from preflight checks, configured devices, sink state, MA auth status, and latency settings
 
 ### Changed
+- Routine Bluetooth reconnect warnings are now ignored by log analysis so diagnostics and issue-reporting surfaces stay focused on actionable failures during normal reconnect churn
+- `services.bluetooth` now persists `device enabled/released` state through the bound config path consistently, removing a path-mismatch edge case between runtime persistence and tests
 - Parent↔subprocess IPC is now versioned end-to-end: daemon status/log envelopes, parent command envelopes, and daemon startup params all include `protocol_version` while remaining backward-compatible with legacy messages that omit it
+- Bridge bootstrapping now runs through the dedicated `BridgeOrchestrator`, which incrementally took ownership of runtime initialization, web startup, shutdown, Music Assistant bootstrap, task assembly, runtime execution, device initialization, option normalization, and final lifecycle sequencing without changing external behavior
 - Added a new `services.device_registry` read-side snapshot service and moved low-risk status/helper routes onto it so the UI surfaces depend less on direct global client-list access
 - `routes/api_config.py` now uses the shared device-registry snapshot service for config enrichment, adapter-removal lookups, and log-level propagation instead of reading the global client list directly
 - `routes/api_ma.py` now builds MA host inference, rediscovery player payloads, queue-target inference, and debug client dumps from shared device-registry snapshots, also fixing one rediscovery path that previously passed only player names instead of MA discovery payload objects
@@ -57,6 +64,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - New dry-run `POST /api/config/validate` surface now exposes explicit config validation results, warnings, and normalized preview payloads without persisting changes, giving the upcoming 2.39.x operator/UI work a stable reporting contract
 - New `GET /api/onboarding/assistant` endpoint now exposes actionable operator guidance for Bluetooth availability, audio availability, sink verification, Music Assistant auth state, and latency calibration using a dedicated service layer, while `/api/preflight` now reuses a shared collector instead of duplicating the same runtime checks inline
 - `/api/diagnostics`, `/api/bugreport`, and diagnostics text exports now include the onboarding assistant payload so setup guidance travels with the richer support/bugreport surfaces instead of being isolated to a standalone endpoint
+
+### Fixed
+- Added focused demo-runtime helper coverage so mock/demo support paths are regression-tested alongside the production runtime contracts introduced in `2.34.x`
 
 ## [2.32.12] - 2026-03-17
 
