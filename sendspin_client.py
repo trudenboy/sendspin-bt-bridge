@@ -30,12 +30,10 @@ from config import (
     save_device_volume,
 )
 from services.ipc_protocol import (
-    IPC_PROTOCOL_VERSION,
-    IPC_PROTOCOL_VERSION_KEY,
-    parse_protocol_version,
     with_protocol_version,
 )
 from services.playback_health import PlaybackHealthMonitor
+from services.subprocess_ipc import SubprocessIpcService
 from services.subprocess_stderr import SubprocessStderrService
 
 UTC = timezone.utc
@@ -43,6 +41,42 @@ UTC = timezone.utc
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
+
+_IPC_ALLOWED_KEYS = frozenset(
+    {
+        "playing",
+        "connected",
+        "server_connected",
+        "server_connected_at",
+        "connected_server_url",
+        "group_id",
+        "group_name",
+        "audio_format",
+        "audio_streaming",
+        "volume",
+        "muted",
+        "sink_muted",
+        "reanchoring",
+        "reanchor_count",
+        "last_sync_error_ms",
+        "last_reanchor_at",
+        "current_track",
+        "current_artist",
+        "state_changed_at",
+        "last_error",
+        "last_error_at",
+        "track_progress_ms",
+        "track_duration_ms",
+    }
+)
+
+_IPC_LOG_METHODS = {
+    "debug": logger.debug,
+    "info": logger.info,
+    "warning": logger.warning,
+    "error": logger.error,
+    "critical": logger.critical,
+}
 
 
 @dataclass
@@ -246,6 +280,14 @@ class SendspinClient:
         self._restart_delay: float = 1.0  # exponential backoff for unexpected daemon restarts
         self._start_sendspin_lock: asyncio.Lock | None = None  # set in run(), guards concurrent starts
         self._playback_health = PlaybackHealthMonitor()
+        self._ipc_service = SubprocessIpcService(
+            player_name=player_name,
+            protocol_warning_cache=self._seen_ipc_protocol_warnings,
+            status_updater=self._update_status,
+            log_methods=_IPC_LOG_METHODS,
+            logger_=logger,
+            allowed_keys=_IPC_ALLOWED_KEYS,
+        )
         self._stderr_service = SubprocessStderrService(
             player_name=player_name,
             update_status=self._update_status,
@@ -595,73 +637,18 @@ class SendspinClient:
         """Read JSON lines from daemon subprocess stdout and merge into self.status."""
         if self._daemon_proc is None or self._daemon_proc.stdout is None:
             return
-        _LOG_METHODS = {
-            "debug": logger.debug,
-            "info": logger.info,
-            "warning": logger.warning,
-            "error": logger.error,
-            "critical": logger.critical,
-        }
-        # Whitelist of keys accepted from subprocess — prevents unbounded status dict growth
-        _ALLOWED_KEYS = frozenset(
-            {
-                "playing",
-                "connected",
-                "server_connected",
-                "server_connected_at",
-                "connected_server_url",
-                "group_id",
-                "group_name",
-                "audio_format",
-                "audio_streaming",
-                "volume",
-                "muted",
-                "sink_muted",
-                "reanchoring",
-                "reanchor_count",
-                "last_sync_error_ms",
-                "last_reanchor_at",
-                "current_track",
-                "current_artist",
-                "state_changed_at",
-                "last_error",
-                "last_error_at",
-                "track_progress_ms",
-                "track_duration_ms",
-            }
-        )
-
-        def _warn_incompatible_protocol(value: object) -> None:
-            if value is None:
-                return
-            parsed = parse_protocol_version(value)
-            if parsed == IPC_PROTOCOL_VERSION:
-                return
-            cache_key = str(value)
-            if cache_key in self._seen_ipc_protocol_warnings:
-                return
-            self._seen_ipc_protocol_warnings.add(cache_key)
-            logger.warning(
-                "[%s] Received daemon IPC message with protocol_version=%r; attempting compatible parse",
-                self.player_name,
-                value,
-            )
-
         async for line in self._daemon_proc.stdout:
-            try:
-                msg = json.loads(line.decode().strip())
-            except (json.JSONDecodeError, ValueError):
+            msg = self._ipc_service.parse_line(line)
+            if msg is None:
                 continue
-            _warn_incompatible_protocol(msg.get(IPC_PROTOCOL_VERSION_KEY))
             if msg.get("type") == "status":
-                updates = {k: v for k, v in msg.items() if k in _ALLOWED_KEYS}
                 # Track volume changes for persistence (read both values atomically)
                 volume_changed = False
                 new_volume = None
+                with self._status_lock:
+                    prev_volume = self.status.get("volume")
+                updates = self._ipc_service.handle_message(msg)
                 if updates:
-                    with self._status_lock:
-                        prev_volume = self.status.get("volume")
-                    self._update_status(updates)
                     with self._status_lock:
                         new_volume = self.status.get("volume")
                     volume_changed = (
@@ -670,9 +657,8 @@ class SendspinClient:
                 _mac = self.bt_manager.mac_address if self.bt_manager else None
                 if volume_changed and _mac and isinstance(new_volume, int):
                     save_device_volume(_mac, new_volume)
-            elif msg.get("type") == "log":
-                log_fn = _LOG_METHODS.get(msg.get("level", "info"), logger.info)
-                log_fn("[%s/proc] %s", self.player_name, msg.get("msg", ""))
+            else:
+                self._ipc_service.handle_message(msg)
 
     async def _read_subprocess_stderr(self) -> None:
         """Forward daemon subprocess stderr lines with severity matching their content."""

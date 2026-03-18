@@ -80,6 +80,45 @@ async def test_read_subprocess_output_accepts_protocol_versioned_status_once():
 
 
 @pytest.mark.asyncio
+async def test_read_subprocess_output_delegates_log_messages_to_ipc_service():
+    client = SendspinClient("Test Player", "localhost", 9000)
+
+    class _FakeStdout:
+        def __aiter__(self):
+            self._iter = iter([json.dumps({"type": "log", "level": "info", "msg": "hello"}).encode()])
+            return self
+
+        async def __anext__(self):
+            try:
+                return next(self._iter)
+            except StopIteration as exc:
+                raise StopAsyncIteration from exc
+
+    class _FakeService:
+        def __init__(self):
+            self.seen = []
+
+        def parse_line(self, line):
+            self.seen.append(("parse", line))
+            return {"type": "log", "level": "info", "msg": "hello"}
+
+        def handle_message(self, msg):
+            self.seen.append(("handle", msg))
+            return None
+
+    fake_service = _FakeService()
+    client._ipc_service = fake_service
+    client._daemon_proc = SimpleNamespace(stdout=_FakeStdout())
+
+    await client._read_subprocess_output()
+
+    assert fake_service.seen == [
+        ("parse", json.dumps({"type": "log", "level": "info", "msg": "hello"}).encode()),
+        ("handle", {"type": "log", "level": "info", "msg": "hello"}),
+    ]
+
+
+@pytest.mark.asyncio
 async def test_read_subprocess_stderr_delegates_to_stderr_service():
     client = SendspinClient("Test Player", "localhost", 9000)
     fake_stderr = object()
