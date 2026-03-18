@@ -123,6 +123,7 @@ Run multiple bridge instances against the same Music Assistant server to cover e
   <LinkCard title="Install: Docker Compose" href="/sendspin-bt-bridge/installation/docker/" />
   <LinkCard title="Install: Proxmox LXC" href="/sendspin-bt-bridge/installation/lxc/" />
   <LinkCard title="Configuration" href="/sendspin-bt-bridge/configuration/" />
+  <LinkCard title="Journey log" href="/sendspin-bt-bridge/journey-log/" description="Release milestones, rollout notes, and project logbook entries" />
   <LinkCard title="Architecture" href="/sendspin-bt-bridge/architecture/" description="Process model, IPC, audio routing, BT state machine, auth" />
   <LinkCard title="Project History" href="https://github.com/trudenboy/sendspin-bt-bridge/blob/main/HISTORY.md" description="Architectural evolution, milestones, v1 → v2 migration" />
   <LinkCard title="API Reference" href="/sendspin-bt-bridge/api/" />

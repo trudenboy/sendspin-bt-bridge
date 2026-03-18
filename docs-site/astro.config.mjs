@@ -33,6 +33,11 @@ export default defineConfig({
           label: 'Installation', translations: { ru: 'Установка' },
           autogenerate: { directory: 'installation' },
         },
+        {
+          label: 'Journey log',
+          translations: { ru: 'Бортжурнал' },
+          autogenerate: { directory: 'journey-log' },
+        },
         { label: 'Configuration', translations: { ru: 'Настройка' }, slug: 'configuration' },
         { label: 'Web UI', translations: { ru: 'Веб-интерфейс' }, slug: 'web-ui' },
         { label: 'Devices', translations: { ru: 'Устройства' }, slug: 'devices' },
