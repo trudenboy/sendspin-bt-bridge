@@ -152,6 +152,15 @@ def test_build_bridge_snapshot_no_clients_preserves_bridge_metadata():
     state.set_update_available({"version": "2.33.0"})
     state.reset_startup_progress(3, message="Booting")
     state.update_startup_progress("devices", "Preparing devices", current_step=2)
+    state.set_runtime_mode_info(
+        {
+            "mode": "demo",
+            "is_mocked": True,
+            "simulator_active": True,
+            "fixture_devices": 2,
+            "mocked_layers": [{"layer": "BluetoothManager", "summary": "Mocked adapter"}],
+        }
+    )
     try:
         snapshot = build_bridge_snapshot([])
         payload = snapshot.to_status_payload()
@@ -164,6 +173,9 @@ def test_build_bridge_snapshot_no_clients_preserves_bridge_metadata():
         assert payload["update_available"]["version"] == "2.33.0"
         assert payload["startup_progress"]["phase"] == "devices"
         assert payload["startup_progress"]["percent"] == 67
+        assert payload["runtime_mode"] == "demo"
+        assert payload["mock_runtime"]["is_mocked"] is True
+        assert payload["mock_runtime"]["mocked_layers"][0]["layer"] == "BluetoothManager"
         assert payload["version"]
         assert payload["runtime"]
     finally:
@@ -171,3 +183,4 @@ def test_build_bridge_snapshot_no_clients_preserves_bridge_metadata():
         state.set_ma_api_credentials("", "")
         state.set_update_available(None)
         state.reset_startup_progress()
+        state.set_runtime_mode_info(None)

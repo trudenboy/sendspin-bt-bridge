@@ -102,6 +102,42 @@ class StartupProgressSnapshot:
 
 
 @dataclass
+class MockRuntimeLayerSnapshot:
+    layer: str
+    summary: str
+    details: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class MockRuntimeSnapshot:
+    mode: str
+    is_mocked: bool
+    simulator_active: bool
+    fixture_devices: int
+    fixture_groups: int
+    disclaimer: str
+    mocked_layers: list[MockRuntimeLayerSnapshot] = field(default_factory=list)
+    details: dict[str, Any] = field(default_factory=dict)
+    updated_at: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "mode": self.mode,
+            "is_mocked": self.is_mocked,
+            "simulator_active": self.simulator_active,
+            "fixture_devices": self.fixture_devices,
+            "fixture_groups": self.fixture_groups,
+            "disclaimer": self.disclaimer,
+            "mocked_layers": [layer.to_dict() for layer in self.mocked_layers],
+            "details": dict(self.details),
+            "updated_at": self.updated_at,
+        }
+
+
+@dataclass
 class GroupSnapshot:
     group_id: str | None
     group_name: str | None
@@ -133,6 +169,8 @@ class BridgeSnapshot:
     ma_web_url: str | None = None
     update_available: dict[str, Any] | None = None
     startup_progress: StartupProgressSnapshot | None = None
+    runtime_mode: str = "production"
+    mock_runtime: MockRuntimeSnapshot | None = None
     error: str | None = None
 
     def to_status_payload(self) -> dict[str, Any]:
@@ -152,6 +190,9 @@ class BridgeSnapshot:
         payload["disabled_devices"] = list(self.disabled_devices)
         if self.startup_progress:
             payload["startup_progress"] = self.startup_progress.to_dict()
+        payload["runtime_mode"] = self.runtime_mode
+        if self.mock_runtime:
+            payload["mock_runtime"] = self.mock_runtime.to_dict()
         if self.ma_web_url:
             payload["ma_web_url"] = self.ma_web_url
         if self.update_available:
@@ -291,6 +332,30 @@ def build_startup_progress_snapshot() -> StartupProgressSnapshot:
         started_at=progress.get("started_at"),
         updated_at=progress.get("updated_at"),
         completed_at=progress.get("completed_at"),
+    )
+
+
+def build_mock_runtime_snapshot() -> MockRuntimeSnapshot:
+    """Build a typed mock runtime snapshot from bridge state."""
+    runtime_info = state.get_runtime_mode_info()
+    return MockRuntimeSnapshot(
+        mode=str(runtime_info.get("mode") or "production"),
+        is_mocked=bool(runtime_info.get("is_mocked", False)),
+        simulator_active=bool(runtime_info.get("simulator_active", False)),
+        fixture_devices=int(runtime_info.get("fixture_devices") or 0),
+        fixture_groups=int(runtime_info.get("fixture_groups") or 0),
+        disclaimer=str(runtime_info.get("disclaimer") or ""),
+        mocked_layers=[
+            MockRuntimeLayerSnapshot(
+                layer=str(layer.get("layer") or ""),
+                summary=str(layer.get("summary") or ""),
+                details=dict(layer.get("details") or {}),
+            )
+            for layer in runtime_info.get("mocked_layers", [])
+            if isinstance(layer, dict)
+        ],
+        details=dict(runtime_info.get("details") or {}),
+        updated_at=runtime_info.get("updated_at"),
     )
 
 
@@ -503,6 +568,7 @@ def build_bridge_snapshot(clients: list[Any]) -> BridgeSnapshot:
     """Build the normalized bridge snapshot for `/api/status`-style responses."""
     ma_url, _token = state.get_ma_api_credentials()
     update_available = state.get_update_available()
+    mock_runtime = build_mock_runtime_snapshot()
     if not clients:
         return BridgeSnapshot(
             devices=[],
@@ -513,6 +579,8 @@ def build_bridge_snapshot(clients: list[Any]) -> BridgeSnapshot:
             system_info=state.get_bridge_system_info(),
             update_available=update_available,
             startup_progress=build_startup_progress_snapshot(),
+            runtime_mode=mock_runtime.mode,
+            mock_runtime=mock_runtime,
             error="No clients",
         )
 
@@ -525,4 +593,6 @@ def build_bridge_snapshot(clients: list[Any]) -> BridgeSnapshot:
         disabled_devices=state.get_disabled_devices(),
         update_available=update_available,
         startup_progress=build_startup_progress_snapshot(),
+        runtime_mode=mock_runtime.mode,
+        mock_runtime=mock_runtime,
     )

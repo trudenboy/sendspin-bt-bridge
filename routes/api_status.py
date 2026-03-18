@@ -29,6 +29,7 @@ from services.status_snapshot import (
     build_bridge_snapshot,
     build_device_snapshot,
     build_group_snapshots,
+    build_mock_runtime_snapshot,
     build_startup_progress_snapshot,
 )
 from state import clients as _clients
@@ -192,6 +193,12 @@ def api_startup_progress():
     return jsonify(build_startup_progress_snapshot().to_dict())
 
 
+@status_bp.route("/api/runtime-info")
+def api_runtime_info():
+    """Return bridge runtime-mode and mock-runtime explainability metadata."""
+    return jsonify(build_mock_runtime_snapshot().to_dict())
+
+
 @status_bp.route("/api/status/stream")
 def api_status_stream():
     """Server-Sent Events endpoint — pushes status when it changes.
@@ -284,6 +291,7 @@ def api_diagnostics():
             "uptime": uptime_str,
             "environment": _collect_environment(),
             "startup_progress": build_startup_progress_snapshot().to_dict(),
+            "runtime_info": build_mock_runtime_snapshot().to_dict(),
         }
 
         try:

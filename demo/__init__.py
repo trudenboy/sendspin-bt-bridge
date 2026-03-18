@@ -33,6 +33,7 @@ def install() -> None:
     # 1. Patch BluetoothManager class
     # ------------------------------------------------------------------
     import bluetooth_manager
+    import state as _st
     from demo.bt_manager import DemoBluetoothManager
     from demo.fixtures import (
         DEMO_ADAPTER_INFO,
@@ -47,6 +48,44 @@ def install() -> None:
         DEMO_MA_URL,
         DEMO_PAIRED_DEVICES,
         DEMO_SCAN_RESULTS,
+    )
+
+    _st.set_runtime_mode_info(
+        {
+            "mode": "demo",
+            "is_mocked": True,
+            "simulator_active": True,
+            "fixture_devices": len(DEMO_DEVICES),
+            "fixture_groups": len(DEMO_MA_ALL_GROUPS),
+            "disclaimer": "Demo mode simulates Bluetooth, PulseAudio, Music Assistant, and subprocess runtime layers.",
+            "details": {
+                "bridge_name": "DEMO",
+                "adapter_name": DEMO_ADAPTER_INFO["name"],
+                "adapter_mac": DEMO_ADAPTER_MAC,
+            },
+            "mocked_layers": [
+                {
+                    "layer": "BluetoothManager",
+                    "summary": "Bluetooth transport is simulated with DemoBluetoothManager.",
+                    "details": {"adapter_mac": DEMO_ADAPTER_MAC, "scan_results": len(DEMO_SCAN_RESULTS)},
+                },
+                {
+                    "layer": "PulseAudio",
+                    "summary": "Pulse sink control is served from in-memory demo state.",
+                    "details": {"sinks": len(DEMO_DEVICES)},
+                },
+                {
+                    "layer": "Sendspin subprocess",
+                    "summary": "Per-device subprocess lifecycle is short-circuited to local status updates.",
+                    "details": {"simulated_devices": len(DEMO_DEVICES)},
+                },
+                {
+                    "layer": "Music Assistant",
+                    "summary": "MA discovery, groups, monitor, and commands use demo fixtures.",
+                    "details": {"syncgroups": len(DEMO_MA_ALL_GROUPS)},
+                },
+            ],
+        }
     )
 
     bluetooth_manager.BluetoothManager = DemoBluetoothManager  # type: ignore[misc,assignment]
@@ -252,8 +291,6 @@ def install() -> None:
     # ------------------------------------------------------------------
     # 6. Patch state module
     # ------------------------------------------------------------------
-    import state as _st
-
     _st.get_adapter_name = lambda mac: "Demo Adapter"  # type: ignore[assignment]
 
     # ------------------------------------------------------------------

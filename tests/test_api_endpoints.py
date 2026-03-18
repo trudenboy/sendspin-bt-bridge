@@ -595,6 +595,36 @@ def test_status_and_startup_progress_endpoint_include_startup_progress(client):
         state.reset_startup_progress()
 
 
+def test_runtime_info_endpoint_and_status_include_mock_runtime(client):
+    """Runtime explainability is exposed directly and via the status payload."""
+    import state
+
+    state.set_runtime_mode_info(
+        {
+            "mode": "demo",
+            "is_mocked": True,
+            "simulator_active": True,
+            "fixture_devices": 3,
+            "mocked_layers": [{"layer": "Music Assistant", "summary": "Fixture-backed"}],
+        }
+    )
+    try:
+        resp = client.get("/api/runtime-info")
+        assert resp.status_code == 200
+        runtime_info = resp.get_json()
+        assert runtime_info["mode"] == "demo"
+        assert runtime_info["is_mocked"] is True
+        assert runtime_info["mocked_layers"][0]["layer"] == "Music Assistant"
+
+        status_resp = client.get("/api/status")
+        assert status_resp.status_code == 200
+        status_data = status_resp.get_json()
+        assert status_data["runtime_mode"] == "demo"
+        assert status_data["mock_runtime"]["fixture_devices"] == 3
+    finally:
+        state.set_runtime_mode_info(None)
+
+
 def test_api_status_parse_helpers_are_defensive():
     """Diagnostics parsers must return None instead of raising on malformed input."""
     from routes.api_status import (

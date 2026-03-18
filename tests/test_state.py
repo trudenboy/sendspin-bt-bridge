@@ -145,6 +145,29 @@ def test_fail_startup_progress_marks_error():
     assert progress["completed_at"] is not None
 
 
+def test_set_runtime_mode_info_replaces_metadata():
+    info = state.set_runtime_mode_info(
+        {
+            "mode": "demo",
+            "is_mocked": True,
+            "simulator_active": True,
+            "fixture_devices": 4,
+            "mocked_layers": [{"layer": "PulseAudio", "summary": "Mocked"}],
+        }
+    )
+
+    assert info["mode"] == "demo"
+    assert info["is_mocked"] is True
+    assert info["fixture_devices"] == 4
+    assert info["mocked_layers"][0]["layer"] == "PulseAudio"
+    assert info["updated_at"] is not None
+
+    state.set_runtime_mode_info(None)
+    reset = state.get_runtime_mode_info()
+    assert reset["mode"] == "production"
+    assert reset["is_mocked"] is False
+
+
 # ---------------------------------------------------------------------------
 # Music Assistant now-playing state
 # ---------------------------------------------------------------------------

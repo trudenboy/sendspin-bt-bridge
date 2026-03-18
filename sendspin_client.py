@@ -910,6 +910,13 @@ async def main():
 
     # Demo mode — replace all hardware layers with mocks (BT, PulseAudio, D-Bus)
     demo_mode = os.getenv("DEMO_MODE", "").lower() in ("1", "true", "yes")
+    _state.set_runtime_mode_info(
+        {
+            "mode": "demo" if demo_mode else "production",
+            "is_mocked": bool(demo_mode),
+            "simulator_active": bool(demo_mode),
+        }
+    )
     _state.reset_startup_progress(startup_steps, message="Startup initiated")
     _state.update_startup_progress(
         "config",

@@ -44,6 +44,7 @@ __all__ = [
     "get_ma_now_playing_for_group",
     "get_ma_server_version",
     "get_main_loop",
+    "get_runtime_mode_info",
     "get_scan_job",
     "get_startup_progress",
     "is_ma_connected",
@@ -63,6 +64,7 @@ __all__ = [
     "set_ma_now_playing_for_group",
     "set_ma_server_version",
     "set_main_loop",
+    "set_runtime_mode_info",
     "update_startup_progress",
 ]
 
@@ -113,8 +115,24 @@ def _new_startup_progress() -> dict[str, Any]:
     }
 
 
+def _new_runtime_mode_info() -> dict[str, Any]:
+    return {
+        "mode": "production",
+        "is_mocked": False,
+        "mocked_layers": [],
+        "simulator_active": False,
+        "fixture_devices": 0,
+        "fixture_groups": 0,
+        "disclaimer": "",
+        "details": {},
+        "updated_at": None,
+    }
+
+
 _startup_progress: dict[str, Any] = _new_startup_progress()
 _startup_progress_lock = threading.Lock()
+_runtime_mode_info: dict[str, Any] = _new_runtime_mode_info()
+_runtime_mode_info_lock = threading.Lock()
 
 
 def _copy_startup_progress(snapshot: dict[str, Any]) -> dict[str, Any]:
@@ -217,6 +235,26 @@ def fail_startup_progress(message: str, *, details: dict[str, Any] | None = None
         if details is not None:
             _startup_progress["details"] = copy.deepcopy(details)
         result = _copy_startup_progress(_startup_progress)
+    notify_status_changed()
+    return result
+
+
+def get_runtime_mode_info() -> dict[str, Any]:
+    """Return bridge runtime/mock-mode metadata."""
+    with _runtime_mode_info_lock:
+        return copy.deepcopy(_runtime_mode_info)
+
+
+def set_runtime_mode_info(data: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Replace bridge runtime/mock-mode metadata and notify SSE listeners."""
+    global _runtime_mode_info
+    now = datetime.now(tz=timezone.utc).isoformat()
+    with _runtime_mode_info_lock:
+        _runtime_mode_info = _new_runtime_mode_info()
+        if data:
+            _runtime_mode_info.update(copy.deepcopy(data))
+        _runtime_mode_info["updated_at"] = now
+        result = copy.deepcopy(_runtime_mode_info)
     notify_status_changed()
     return result
 
