@@ -29,7 +29,6 @@ from config import (
     save_device_volume,
 )
 from services.log_analysis import classify_subprocess_stderr_level
-from services.update_checker import run_update_checker
 
 UTC = timezone.utc
 
@@ -1087,25 +1086,11 @@ async def main():
     ma_bootstrap = await orchestrator.initialize_ma_integration(config, clients, server_host=server_host)
     ma_monitor_task = ma_bootstrap.ma_monitor_task
 
-    # Run all clients in parallel
-    client_tasks = [asyncio.create_task(c.run()) for c in clients]
-    tasks = client_tasks + ([ma_monitor_task] if ma_monitor_task else [])
-
-    # Start demo simulator if in demo mode
-    if demo_mode:
-        from demo.simulator import run_simulator
-
-        tasks.append(asyncio.create_task(run_simulator(clients)))
-
-    # Background update checker (all deployment types)
-    tasks.append(asyncio.create_task(run_update_checker(VERSION)))
-    _state.complete_startup_progress(
-        "Startup complete",
-        details={
-            "active_clients": len(clients),
-            "ma_monitor_enabled": bool(ma_monitor_task),
-            "demo_mode": demo_mode,
-        },
+    tasks = orchestrator.assemble_runtime_tasks(
+        clients,
+        ma_monitor_task=ma_monitor_task,
+        demo_mode=demo_mode,
+        version=VERSION,
     )
 
     await asyncio.gather(*tasks)

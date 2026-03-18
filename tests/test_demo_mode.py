@@ -52,6 +52,8 @@ async def test_demo_bluetooth_manager_monitor_loop_stops_after_shutdown(monkeypa
 
 @pytest.mark.asyncio
 async def test_demo_simulator_advances_track_progress(monkeypatch):
+    progress_updated = asyncio.Event()
+
     class FakeClient:
         def __init__(self):
             self.player_name = "Living Room"
@@ -69,6 +71,8 @@ async def test_demo_simulator_advances_track_progress(monkeypatch):
 
         def _update_status(self, updates: dict) -> None:
             self.status.update(updates)
+            if self.status.get("track_progress_ms", 0) > 0:
+                progress_updated.set()
 
     client = FakeClient()
     real_sleep = asyncio.sleep
@@ -79,7 +83,7 @@ async def test_demo_simulator_advances_track_progress(monkeypatch):
     monkeypatch.setattr("demo.simulator.asyncio.sleep", fast_sleep)
 
     task = asyncio.create_task(run_simulator([client]))
-    await real_sleep(0.01)
+    await asyncio.wait_for(progress_updated.wait(), timeout=0.2)
     task.cancel()
     await task
 

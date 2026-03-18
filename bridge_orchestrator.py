@@ -18,6 +18,7 @@ if TYPE_CHECKING:
 import state as _state
 from config import ensure_bridge_name, load_config
 from services.sendspin_compat import format_dependency_versions, get_runtime_dependency_versions
+from services.update_checker import run_update_checker
 
 logger = logging.getLogger(__name__)
 
@@ -240,3 +241,38 @@ class BridgeOrchestrator:
             ma_api_token=ma_api_token,
             ma_monitor_task=ma_monitor_task,
         )
+
+    def assemble_runtime_tasks(
+        self,
+        clients: list[Any],
+        *,
+        ma_monitor_task: asyncio.Task[None] | None,
+        demo_mode: bool,
+        version: str,
+        run_simulator_fn: Callable[[list[Any]], Coroutine[Any, Any, None]] | None = None,
+        run_update_checker_fn: Callable[[str], Coroutine[Any, Any, None]] | None = None,
+    ) -> list[asyncio.Task[Any]]:
+        """Create the long-running runtime tasks and mark startup complete."""
+        tasks: list[asyncio.Task[Any]] = [asyncio.create_task(client.run()) for client in clients]
+        if ma_monitor_task is not None:
+            tasks.append(ma_monitor_task)
+
+        simulator_fn = run_simulator_fn
+        if demo_mode:
+            if simulator_fn is None:
+                from demo.simulator import run_simulator as imported_run_simulator
+
+                simulator_fn = imported_run_simulator
+            tasks.append(asyncio.create_task(simulator_fn(clients)))
+
+        update_checker_fn = run_update_checker_fn or run_update_checker
+        tasks.append(asyncio.create_task(update_checker_fn(version)))
+        _state.complete_startup_progress(
+            "Startup complete",
+            details={
+                "active_clients": len(clients),
+                "ma_monitor_enabled": bool(ma_monitor_task),
+                "demo_mode": demo_mode,
+            },
+        )
+        return tasks

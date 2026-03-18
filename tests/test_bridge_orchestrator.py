@@ -221,3 +221,90 @@ async def test_initialize_ma_integration_discovers_groups_and_starts_monitor(mon
     bootstrap.ma_monitor_task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await bootstrap.ma_monitor_task
+
+
+@pytest.mark.asyncio
+async def test_assemble_runtime_tasks_marks_startup_complete_and_wires_demo_helpers():
+    orchestrator = BridgeOrchestrator()
+    client_runs: list[str] = []
+    update_checker_started = asyncio.Event()
+    simulator_started = asyncio.Event()
+
+    class FakeClient:
+        def __init__(self, name: str):
+            self.player_name = name
+
+        async def run(self) -> None:
+            client_runs.append(self.player_name)
+            await asyncio.sleep(3600)
+
+    async def fake_update_checker(_version: str) -> None:
+        update_checker_started.set()
+        await asyncio.sleep(3600)
+
+    async def fake_simulator(clients) -> None:
+        assert len(clients) == 2
+        simulator_started.set()
+        await asyncio.sleep(3600)
+
+    clients = [FakeClient("Kitchen"), FakeClient("Bedroom")]
+    tasks = orchestrator.assemble_runtime_tasks(
+        clients,
+        ma_monitor_task=None,
+        demo_mode=True,
+        version="2.32.12",
+        run_simulator_fn=fake_simulator,
+        run_update_checker_fn=fake_update_checker,
+    )
+
+    await asyncio.wait_for(update_checker_started.wait(), timeout=0.2)
+    await asyncio.wait_for(simulator_started.wait(), timeout=0.2)
+    assert sorted(client_runs) == ["Bedroom", "Kitchen"]
+    progress = state.get_startup_progress()
+    assert progress["status"] == "ready"
+    assert progress["phase"] == "ready"
+    assert progress["details"]["demo_mode"] is True
+    assert progress["details"]["active_clients"] == 2
+
+    for task in tasks:
+        task.cancel()
+    for task in tasks:
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+
+@pytest.mark.asyncio
+async def test_assemble_runtime_tasks_includes_existing_ma_monitor_task():
+    orchestrator = BridgeOrchestrator()
+    update_checker_started = asyncio.Event()
+
+    class FakeClient:
+        async def run(self) -> None:
+            await asyncio.sleep(3600)
+
+    async def fake_update_checker(_version: str) -> None:
+        update_checker_started.set()
+        await asyncio.sleep(3600)
+
+    async def fake_monitor() -> None:
+        await asyncio.sleep(3600)
+
+    monitor_task = asyncio.create_task(fake_monitor())
+    tasks = orchestrator.assemble_runtime_tasks(
+        [FakeClient()],
+        ma_monitor_task=monitor_task,
+        demo_mode=False,
+        version="2.32.12",
+        run_update_checker_fn=fake_update_checker,
+    )
+
+    await asyncio.wait_for(update_checker_started.wait(), timeout=0.2)
+    assert monitor_task in tasks
+    progress = state.get_startup_progress()
+    assert progress["details"]["ma_monitor_enabled"] is True
+
+    for task in tasks:
+        task.cancel()
+    for task in tasks:
+        with pytest.raises(asyncio.CancelledError):
+            await task
