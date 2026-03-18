@@ -2,7 +2,9 @@
 
 ## About
 
-<div style="margin: 0 0 16px; padding: 12px 14px; border-left: 4px solid #f2c94c; background: #fff7d6; color: #7a5d00; border-radius: 6px;"><strong>RC channel notice:</strong> This Home Assistant addon variant tracks the <code>rc</code> image lane. Install this variant from the store to receive RC builds; changing <code>update_channel</code> inside the app does not switch the installed addon track.</div>
+![RC channel notice](https://img.shields.io/badge/RC%20channel-Prerelease-f2c94c?style=for-the-badge&labelColor=7a5d00&color=f2c94c)
+
+**RC channel notice:** This Home Assistant addon variant tracks the `rc` image lane. Install this variant from the store to receive RC builds; changing `update_channel` inside the app does not switch the installed addon track.
 
 The Sendspin Bluetooth Bridge addon connects
 [Music Assistant](https://music-assistant.io/) to Bluetooth speakers via the

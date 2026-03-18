@@ -11,6 +11,7 @@ import argparse
 import json
 import re
 import shutil
+import urllib.parse as _up
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -53,11 +54,13 @@ _CHANNEL_NOTICE_STYLES = {
         "border": "#f2c94c",
         "background": "#fff7d6",
         "text": "#7a5d00",
+        "badge_message": "Prerelease",
     },
     "beta": {
         "border": "#ef4444",
         "background": "#fee2e2",
         "text": "#991b1b",
+        "badge_message": "Experimental",
     },
 }
 _CHANNEL_ADDON_DIRS = {
@@ -133,14 +136,18 @@ def _channel_notice(variant: HaAddonVariant) -> str:
         return ""
     label = _CHANNEL_LABELS[variant.channel]
     style = _CHANNEL_NOTICE_STYLES[variant.channel]
+    badge_label = _up.quote(f"{label} channel")
+    badge_message = _up.quote(style["badge_message"])
+    badge_url = (
+        f"https://img.shields.io/badge/{badge_label}-{badge_message}-{style['border'].lstrip('#')}"
+        f"?style=for-the-badge&labelColor={style['text'].lstrip('#')}&color={style['border'].lstrip('#')}"
+    )
     return (
-        f'<div style="margin: 0 0 16px; padding: 12px 14px; border-left: 4px solid {style["border"]}; '
-        f'background: {style["background"]}; color: {style["text"]}; border-radius: 6px;">'
-        f"<strong>{label} channel notice:</strong> This Home Assistant addon variant tracks the "
-        f"<code>{variant.channel}</code> image lane. Install this variant from the store to receive "
-        f"{label} builds; changing <code>update_channel</code> inside the app does not switch the "
-        "installed addon track."
-        "</div>\n\n"
+        f"![{label} channel notice]({badge_url})\n\n"
+        f"**{label} channel notice:** This Home Assistant addon variant tracks the "
+        f"`{variant.channel}` image lane. Install this variant from the store to receive "
+        f"{label} builds; changing `update_channel` inside the app does not switch the "
+        "installed addon track.\n\n"
     )
 
 

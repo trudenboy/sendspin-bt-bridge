@@ -2,7 +2,9 @@
 
 ## About
 
-<div style="margin: 0 0 16px; padding: 12px 14px; border-left: 4px solid #ef4444; background: #fee2e2; color: #991b1b; border-radius: 6px;"><strong>Beta channel notice:</strong> This Home Assistant addon variant tracks the <code>beta</code> image lane. Install this variant from the store to receive Beta builds; changing <code>update_channel</code> inside the app does not switch the installed addon track.</div>
+![Beta channel notice](https://img.shields.io/badge/Beta%20channel-Experimental-ef4444?style=for-the-badge&labelColor=991b1b&color=ef4444)
+
+**Beta channel notice:** This Home Assistant addon variant tracks the `beta` image lane. Install this variant from the store to receive Beta builds; changing `update_channel` inside the app does not switch the installed addon track.
 
 The Sendspin Bluetooth Bridge addon connects
 [Music Assistant](https://music-assistant.io/) to Bluetooth speakers via the
