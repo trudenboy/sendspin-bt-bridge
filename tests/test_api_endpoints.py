@@ -6,6 +6,7 @@ import cleanly on Python 3.9.  No module-level sys.modules manipulation needed.
 """
 
 import asyncio
+import io
 import json
 import sys
 import threading
@@ -86,6 +87,59 @@ def test_health_endpoint(client):
     assert resp.status_code == 200
     data = resp.get_json()
     assert data == {"ok": True}
+
+
+def test_config_upload_returns_structured_validation_errors(client):
+    resp = client.post(
+        "/api/config/upload",
+        data={
+            "file": (
+                io.BytesIO(
+                    json.dumps(
+                        {
+                            "CONFIG_SCHEMA_VERSION": 1,
+                            "BLUETOOTH_DEVICES": [
+                                {"mac": "AA:BB:CC:DD:EE:FF"},
+                                {"mac": "aa:bb:cc:dd:ee:ff"},
+                            ],
+                        }
+                    ).encode()
+                ),
+                "config.json",
+            )
+        },
+        content_type="multipart/form-data",
+    )
+
+    assert resp.status_code == 400
+    data = resp.get_json()
+    assert data["error"] == "Duplicate MAC address: AA:BB:CC:DD:EE:FF"
+    assert data["errors"][0]["field"] == "BLUETOOTH_DEVICES[1].mac"
+
+
+def test_config_upload_returns_validation_warnings_on_success(client):
+    resp = client.post(
+        "/api/config/upload",
+        data={
+            "file": (
+                io.BytesIO(
+                    json.dumps(
+                        {
+                            "SENDSPIN_PORT": "9000",
+                            "BLUETOOTH_DEVICES": [{"mac": "aa:bb:cc:dd:ee:ff"}],
+                        }
+                    ).encode()
+                ),
+                "config.json",
+            )
+        },
+        content_type="multipart/form-data",
+    )
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["success"] is True
+    assert data["validation"]["warnings"][0]["field"] == "CONFIG_SCHEMA_VERSION"
 
 
 def test_set_volume_empty_body(client):

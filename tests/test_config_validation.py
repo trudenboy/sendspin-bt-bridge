@@ -1,0 +1,34 @@
+from __future__ import annotations
+
+from services.config_validation import validate_uploaded_config
+
+
+def test_validate_uploaded_config_adds_schema_version_warning_when_missing():
+    result = validate_uploaded_config(
+        {
+            "SENDSPIN_PORT": "9000",
+            "BLUETOOTH_DEVICES": [{"mac": "aa:bb:cc:dd:ee:ff"}],
+        }
+    )
+
+    assert result.is_valid is True
+    assert result.normalized_config["CONFIG_SCHEMA_VERSION"] == 1
+    assert result.normalized_config["SENDSPIN_PORT"] == 9000
+    assert result.normalized_config["BLUETOOTH_DEVICES"][0]["mac"] == "AA:BB:CC:DD:EE:FF"
+    assert result.warnings[0].field == "CONFIG_SCHEMA_VERSION"
+
+
+def test_validate_uploaded_config_reports_duplicate_device_macs():
+    result = validate_uploaded_config(
+        {
+            "CONFIG_SCHEMA_VERSION": 1,
+            "BLUETOOTH_DEVICES": [
+                {"mac": "AA:BB:CC:DD:EE:FF"},
+                {"mac": "aa:bb:cc:dd:ee:ff"},
+            ],
+        }
+    )
+
+    assert result.is_valid is False
+    assert result.errors[0].field == "BLUETOOTH_DEVICES[1].mac"
+    assert result.errors[0].message == "Duplicate MAC address: AA:BB:CC:DD:EE:FF"

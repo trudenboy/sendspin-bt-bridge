@@ -32,6 +32,7 @@ from services import (
     bt_remove_device as _bt_remove_device,
 )
 from services.bluetooth import _MAC_RE
+from services.config_validation import validate_uploaded_config
 from services.device_registry import get_device_registry_snapshot
 from services.ipc_protocol import IPC_PROTOCOL_VERSION
 from services.log_analysis import summarize_issue_logs
@@ -93,6 +94,19 @@ def _sanitize_download_config(config: dict) -> dict:
 def _error_response(message: str, status: int = 400):
     """Return a consistent JSON error payload."""
     return jsonify({"error": message}), status
+
+
+def _validation_error_response(
+    errors: list[dict[str, str]], warnings: list[dict[str, str]] | None = None, status: int = 400
+):
+    """Return a structured validation error payload."""
+    payload = {
+        "error": errors[0]["message"] if errors else "Validation failed",
+        "errors": errors,
+    }
+    if warnings:
+        payload["warnings"] = warnings
+    return jsonify(payload), status
 
 
 def _parse_optional_int(
@@ -289,30 +303,12 @@ def api_config_upload():
 
     if not isinstance(uploaded, dict):
         return _error_response("Config must be a JSON object")
-
-    # Basic validation — devices and adapters
-    bt_devices = uploaded.get("BLUETOOTH_DEVICES", [])
-    if not isinstance(bt_devices, list):
-        return _error_response("BLUETOOTH_DEVICES must be an array")
-    for dev in bt_devices:
-        if not isinstance(dev, dict):
-            return _error_response("Each device must be an object")
-        mac = str(dev.get("mac", ""))
-        if mac and not _MAC_RE.match(mac):
-            return _error_response(f"Invalid MAC address: {mac}")
-
-    bt_adapters = uploaded.get("BLUETOOTH_ADAPTERS", [])
-    if not isinstance(bt_adapters, list):
-        return _error_response("BLUETOOTH_ADAPTERS must be an array")
-
-    sp = uploaded.get("SENDSPIN_PORT")
-    if sp is not None and sp != "":
-        try:
-            sp_int = int(sp)
-            if not (1 <= sp_int <= 65535):
-                raise ValueError
-        except (ValueError, TypeError):
-            return _error_response(f"Invalid SENDSPIN_PORT: {sp}")
+    validation = validate_uploaded_config(uploaded)
+    warnings = [{"field": issue.field, "message": issue.message} for issue in validation.warnings]
+    if not validation.is_valid:
+        errors = [{"field": issue.field, "message": issue.message} for issue in validation.errors]
+        return _validation_error_response(errors, warnings)
+    uploaded = validation.normalized_config
 
     # Preserve sensitive keys from existing config
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
@@ -346,7 +342,10 @@ def api_config_upload():
                 pass
             raise
 
-    return jsonify({"success": True})
+    payload: dict[str, object] = {"success": True}
+    if warnings:
+        payload["validation"] = {"warnings": warnings}
+    return jsonify(payload)
 
 
 @config_bp.route("/api/config", methods=["GET", "POST"])

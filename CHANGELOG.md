@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - New `services.subprocess_stop` helpers so daemon reader-task cancellation and graceful stop/kill flow can evolve independently from `SendspinClient`
 - New `services.status_event_builder` helpers so structured device-event derivation can evolve independently from `SendspinClient`
 - New `services.internal_events` publisher so bridge-internal runtime events can be routed through a lightweight in-process event bus before persistence or diagnostics consumers observe them
+- New `services.config_validation` helpers so uploaded config payloads can be validated through an explicit service that reports structured errors, warnings, and additive normalization before persistence
 
 ### Changed
 - Parent↔subprocess IPC is now versioned end-to-end: daemon status/log envelopes, parent command envelopes, and daemon startup params all include `protocol_version` while remaining backward-compatible with legacy messages that omit it
@@ -48,6 +49,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `SendspinClient` now publishes its structured device events through the internal event bus instead of writing directly to the ring buffer, laying the groundwork for broader 2.38.x event consumers without changing diagnostics output
 - Daemon subprocesses can now emit explicit `type: "error"` IPC envelopes for fatal startup/parameter failures, in addition to the legacy log output path
 - Parent-side IPC handling now consumes structured daemon error envelopes by updating `last_error` / `last_error_at` directly from stdout messages, while preserving compatibility with the older stderr/log-based behavior
+- `/api/config/upload` now delegates validation to the shared config-validation service, returns structured `errors`/`warnings` payloads for invalid imports, and applies additive normalization such as schema-version backfill and uppercase MAC canonicalization before saving
 
 ## [2.32.12] - 2026-03-17
 
