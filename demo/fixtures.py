@@ -241,6 +241,8 @@ DEMO_DEVICE_STATUS: dict[str, dict] = {
         "track_progress_ms": 68000,
         "group_id": "syncgroup_main_floor",
         "group_name": "Main Floor",
+        "reanchor_count": 5,
+        "last_reanchor_at": 1012.4,
     },
     "AA:BB:CC:DD:EE:02": {
         "bluetooth_connected": True,
@@ -257,6 +259,10 @@ DEMO_DEVICE_STATUS: dict[str, dict] = {
         "track_progress_ms": 68000,
         "group_id": "syncgroup_main_floor",
         "group_name": "Main Floor",
+        "reanchor_count": 112,
+        "last_sync_error_ms": 286.4,
+        "last_reanchor_at": 1021.8,
+        "reanchoring": True,
     },
     "AA:BB:CC:DD:EE:03": {
         "bluetooth_connected": True,
@@ -273,6 +279,8 @@ DEMO_DEVICE_STATUS: dict[str, dict] = {
         "track_progress_ms": 68000,
         "group_id": "syncgroup_main_floor",
         "group_name": "Main Floor",
+        "reanchor_count": 15,
+        "last_reanchor_at": 998.1,
     },
     "AA:BB:CC:DD:EE:04": {
         "bluetooth_connected": True,

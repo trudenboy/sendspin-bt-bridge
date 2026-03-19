@@ -14,6 +14,7 @@ from demo.bt_manager import DemoBluetoothManager
 from demo.fixtures import (
     DEMO_ADAPTERS,
     DEMO_BT_DEVICE_INFO,
+    DEMO_DEVICE_STATUS,
     DEMO_DEVICES,
     DEMO_DISPLAY_VERSION,
     DEMO_LOG_LINES,
@@ -67,13 +68,27 @@ async def test_demo_bluetooth_manager_monitor_loop_stops_after_shutdown(monkeypa
     await asyncio.wait_for(task, timeout=0.1)
 
 
-def test_demo_bluetooth_manager_seeds_buffering_and_group_reconnecting_states():
+def test_demo_bluetooth_manager_seeds_reanchor_buffering_and_group_reconnecting_states():
     class StubClient:
         def __init__(self):
             self.status = {}
 
         def _update_status(self, updates: dict) -> None:
             self.status.update(updates)
+
+    reanchor_client = StubClient()
+    DemoBluetoothManager("AA:BB:CC:DD:EE:02", device_name="Kitchen", client=reanchor_client)
+    assert reanchor_client.status["reanchoring"] is True
+    assert reanchor_client.status["reanchor_count"] == DEMO_DEVICE_STATUS["AA:BB:CC:DD:EE:02"]["reanchor_count"]
+    assert reanchor_client.status["last_sync_error_ms"] == DEMO_DEVICE_STATUS["AA:BB:CC:DD:EE:02"]["last_sync_error_ms"]
+
+    low_reanchor_client = StubClient()
+    DemoBluetoothManager("AA:BB:CC:DD:EE:01", device_name="Living Room", client=low_reanchor_client)
+    assert low_reanchor_client.status["reanchor_count"] == 5
+
+    medium_reanchor_client = StubClient()
+    DemoBluetoothManager("AA:BB:CC:DD:EE:03", device_name="Studio", client=medium_reanchor_client)
+    assert medium_reanchor_client.status["reanchor_count"] == 15
 
     reconnecting_client = StubClient()
     reconnecting_manager = DemoBluetoothManager("AA:BB:CC:DD:EE:05", device_name="Patio", client=reconnecting_client)
@@ -245,6 +260,7 @@ async def test_demo_install_seeds_connected_ma_state_and_named_adapters(monkeypa
     client = StubSendspinClient()
     await client._start_sendspin_inner()
     assert client.player_id == demo_player_id_for_name("Office")
+    assert client.status["reanchor_count"] == 0
 
     from routes.api_bt import bt_bp
     from routes.api_config import config_bp
@@ -358,6 +374,7 @@ async def test_demo_install_exposes_demo_logs_diagnostics_and_bugreport(monkeypa
     client = StubSendspinClient()
     await client._start_sendspin_inner()
     state.set_clients([client])
+    assert client.status["reanchor_count"] == 5
 
     app = Flask(__name__)
     app.register_blueprint(config_bp)

@@ -1263,6 +1263,33 @@ function _getSyncStatusMeta(dev, i) {
         };
     }
 
+    if (dev.reanchoring) {
+        if (!reanchorShownAt[i]) {
+            reanchorShownAt[i] = Date.now();
+        }
+        lastReanchorCount[i] = currCount;
+        lastReanchorAt[i] = currAt;
+        var reanchorParts = [];
+        if (dev.last_sync_error_ms != null) {
+            reanchorParts.push('\u0394' + dev.last_sync_error_ms.toFixed(0) + ' ms');
+        }
+        if (currCount) {
+            reanchorParts.push(currCount + 'x');
+        }
+        return {
+            visible: true,
+            text: 'Re-anchoring',
+            indicatorKind: 'anchor',
+            toneClass: _deviceStatusToneClass('warning'),
+            dotClass: _deviceStatusDotClass('warning', true),
+            title: 'Re-anchoring stream timing',
+            detailText: reanchorParts.join(' · '),
+            detailToneClass: _deviceStatusToneClass('warning'),
+            detailTitle: reanchorParts.length ? 'Current sync correction' : '',
+            detailIndicatorKind: reanchorParts.length ? 'anchor' : '',
+        };
+    }
+
     var countIncreased = lastReanchorCount[i] !== undefined && currCount > lastReanchorCount[i];
     var tsChanged = lastReanchorAt[i] !== undefined && currAt && currAt !== lastReanchorAt[i];
     if (countIncreased || tsChanged) {
