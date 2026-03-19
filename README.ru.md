@@ -6,7 +6,7 @@
 [![GitHub Stars](https://img.shields.io/github/stars/trudenboy/sendspin-bt-bridge?style=flat&logo=github)](https://github.com/trudenboy/sendspin-bt-bridge/stargazers)
 [![Try Demo](https://img.shields.io/badge/Try_Demo-Live-brightgreen?style=flat&logo=render)](https://sendspin-demo.onrender.com)
 
-[Read in English](README.md) · [Документация](https://trudenboy.github.io/sendspin-bt-bridge/ru/) · [Демо](https://sendspin-demo.onrender.com) · [История проекта](HISTORY.ru.md)
+[Read in English](README.md) · [Документация](https://trudenboy.github.io/sendspin-bt-bridge/ru/) · [Дорожная карта](ROADMAP.ru.md) · [Демо](https://sendspin-demo.onrender.com) · [История проекта](HISTORY.ru.md)
 
 Превратите Bluetooth-колонки и наушники в нативные плееры [Music Assistant](https://www.music-assistant.io/) на протоколе [Sendspin](https://www.music-assistant.io/player-support/sendspin/).
 
@@ -21,6 +21,14 @@ Sendspin Bluetooth Bridge — это local-first мост для headless-сце
 - Позволяет масштабироваться на несколько комнат через несколько bridge-экземпляров против одного MA-сервера.
 
 ![Инфографика Sendspin Bluetooth Bridge — возможности, архитектура и варианты развёртывания](docs-site/public/screenshots/sbb_infographic_ru.png)
+
+## Что потребуется
+
+- Bluetooth-колонка или наушники — подойдёт любое устройство с профилем A2DP.
+- Сервер [Music Assistant](https://www.music-assistant.io/) (v2.3+) с включённым провайдером [Sendspin](https://www.music-assistant.io/player-support/sendspin/).
+- Linux-хост с USB или встроенным Bluetooth-адаптером — Raspberry Pi, NUC, Proxmox VM или Home Assistant OS.
+
+Командная строка не нужна. Веб-интерфейс полностью берёт на себя поиск Bluetooth-устройств, сопряжение и настройку Music Assistant.
 
 ## Быстрый старт: Home Assistant
 
@@ -46,14 +54,25 @@ Sendspin Bluetooth Bridge — это local-first мост для headless-сце
 
 ## Ключевые возможности
 
-- **Несколько устройств** — публикует несколько Bluetooth-колонок как отдельные плееры Music Assistant.
-- **Изоляция по колонкам** — один subprocess на устройство для более предсказуемой маршрутизации и локализации сбоев.
-- **Восстановление Bluetooth** — D-Bus-детекция отключений, резервный reconnect polling и защита от churn.
-- **Интеграция с Music Assistant** — now playing, transport controls, group volume и token flows.
-- **Веб-интерфейс** — pairing, управление адаптерами, диагностика, логи, backup/restore конфигурации и проверка обновлений.
-- **Гибкое развёртывание** — Home Assistant addon, Docker, Raspberry Pi и нативные LXC-сценарии.
-- **Планирование нескольких bridge** — `WEB_PORT`, `BASE_LISTEN_PORT` и per-device listener overrides для больших установок.
-- **REST API и live updates** — удобные для автоматизации эндпоинты и статус-обновления через SSE.
+- **Синхронизированный стриминг** — использует протокол [Sendspin](https://www.music-assistant.io/player-support/sendspin/) для передачи lossless-аудио с выравниванием по времени, чтобы сгруппированные колонки играли синхронно в разных комнатах.
+- **Без командной строки** — поиск Bluetooth-устройств, сопряжение и подключение к Music Assistant целиком через веб-интерфейс. Никакого `bluetoothctl`, конфигов вручную или SSH.
+- **Глубокая интеграция с Music Assistant** — текущий трек, обложка, управление воспроизведением, групповая громкость, shuffle и repeat — всё синхронизируется в реальном времени через постоянное соединение с сервером MA.
+- **Автоматизации Home Assistant** — каждая Bluetooth-колонка становится плеером Music Assistant, видимым в HA. Используйте в автоматизациях, скриптах, сценах, дашбордах и с голосовыми ассистентами.
+- **Надёжный Bluetooth** — автоматическое переподключение, детекция отключений и мониторинг состояния устройств поддерживают связь с колонками без ручного вмешательства.
+- **Мультирум** — один bridge на комнату или один bridge на несколько колонок. Несколько bridge-экземпляров работают с одним сервером Music Assistant для озвучки всего дома.
+- **Пять вариантов развёртывания** — Home Assistant addon, Docker, Raspberry Pi, Proxmox VE LXC и OpenWrt LXC — один и тот же bridge, один веб-интерфейс, одни и те же функции везде.
+- **REST API и live-обновления** — 60+ эндпоинтов для автоматизации и поток статусов в реальном времени через SSE для кастомных дашбордов и интеграций.
+
+## Коротко о roadmap
+
+Дорожная карта теперь синхронизирована с **реальным состоянием кода**, а не со старым списком планируемых рефакторингов.
+
+- **Сейчас:** довести до конца уже начатый v2 refactor — snapshot-first чтение, явное владение реестром устройств и уменьшение роли `state.py`.
+- **Дальше:** формализовать IPC-контракты, event history, диагностику, telemetry и lifecycle конфигурации.
+- **Потом:** усилить onboarding, recovery UX, подсказки по latency и capability-aware поведение UI/API.
+- **После этого:** переходить к backend abstraction для v3 и только затем аккуратно добавлять соседние backend'ы вроде local sink или ALSA.
+
+Полная англоязычная версия находится в [`ROADMAP.md`](ROADMAP.md), а краткая русская — в [`ROADMAP.ru.md`](ROADMAP.ru.md).
 
 ## Карта документации
 
@@ -78,6 +97,8 @@ Sendspin Bluetooth Bridge — это local-first мост для headless-сце
 ## Ссылки по проекту
 
 - [Участие в разработке](CONTRIBUTING.md)
+- [Дорожная карта (RU)](ROADMAP.ru.md)
+- [Roadmap (EN)](ROADMAP.md)
 - [Лицензия](LICENSE)
 - [История изменений](CHANGELOG.md)
 - [История проекта](HISTORY.ru.md)

@@ -6,7 +6,7 @@
 [![GitHub Stars](https://img.shields.io/github/stars/trudenboy/sendspin-bt-bridge?style=flat&logo=github)](https://github.com/trudenboy/sendspin-bt-bridge/stargazers)
 [![Try Demo](https://img.shields.io/badge/Try_Demo-Live-brightgreen?style=flat&logo=render)](https://sendspin-demo.onrender.com)
 
-[Read in Russian](README.ru.md) · [Documentation](https://trudenboy.github.io/sendspin-bt-bridge/) · [Live Demo](https://sendspin-demo.onrender.com) · [Changelog](CHANGELOG.md)
+[Read in Russian](README.ru.md) · [Documentation](https://trudenboy.github.io/sendspin-bt-bridge/) · [Roadmap](ROADMAP.md) · [Live Demo](https://sendspin-demo.onrender.com) · [Changelog](CHANGELOG.md)
 
 Turn Bluetooth speakers and headphones into native [Music Assistant](https://www.music-assistant.io/) [Sendspin](https://www.music-assistant.io/player-support/sendspin/) players.
 
@@ -21,6 +21,14 @@ Sendspin Bluetooth Bridge is a local-first, headless-friendly bridge for Home As
 - Helps you scale beyond one room by running multiple bridge instances against the same MA server.
 
 ![Sendspin Bluetooth Bridge infographic — features, architecture and deployment options](docs-site/public/screenshots/sbb_infographic_en.png)
+
+## What you need
+
+- A Bluetooth speaker or headphones — any A2DP-capable device works.
+- A [Music Assistant](https://www.music-assistant.io/) server (v2.3+) with the [Sendspin provider](https://www.music-assistant.io/player-support/sendspin/) enabled.
+- A Linux host with a USB or built-in Bluetooth adapter — Raspberry Pi, NUC, Proxmox VM, or a Home Assistant OS installation.
+
+No command-line setup required. The web UI handles Bluetooth scanning, pairing, and Music Assistant configuration entirely from the browser.
 
 ## Quick start: Home Assistant
 
@@ -46,14 +54,25 @@ Full Home Assistant guide: <https://trudenboy.github.io/sendspin-bt-bridge/insta
 
 ## Key capabilities
 
-- **Multi-device bridge** — expose several Bluetooth speakers as separate Music Assistant players.
-- **Per-speaker isolation** — one subprocess per device for cleaner routing and failure containment.
-- **Bluetooth recovery** — D-Bus disconnect detection, reconnect polling fallback, and device churn protection.
-- **Music Assistant integration** — now playing, transport controls, group volume, and token flows.
-- **Web UI** — pairing flows, adapter management, diagnostics, logs, config backup/restore, and update checks.
-- **Flexible deployment** — Home Assistant addon, Docker, Raspberry Pi, and native LXC setups.
-- **Multi-bridge planning** — `WEB_PORT`, `BASE_LISTEN_PORT`, and per-device listener overrides for larger setups.
-- **REST API and live updates** — automation-friendly endpoints with SSE-powered status updates.
+- **Synchronized streaming** — uses the [Sendspin](https://www.music-assistant.io/player-support/sendspin/) protocol to deliver lossless audio with time-aligned playback, so grouped speakers stay in sync across rooms.
+- **No console required** — scan for Bluetooth devices, pair them, and connect to Music Assistant entirely from the web UI. No `bluetoothctl`, no config files, no SSH.
+- **Deep Music Assistant integration** — now playing, album art, transport controls, group volume, shuffle and repeat — all synced in real time through a persistent connection to the MA server.
+- **Home Assistant automations** — every Bluetooth speaker becomes a Music Assistant player entity visible in HA. Use it in automations, scripts, scenes, dashboards, and with voice assistants.
+- **Reliable Bluetooth** — automatic reconnection, disconnect detection, and device health monitoring keep your speakers connected without manual intervention.
+- **Multi-room ready** — run one bridge per room or one bridge with many speakers. Multiple bridges share the same Music Assistant server for whole-home audio.
+- **Five deployment options** — Home Assistant addon, Docker, Raspberry Pi, Proxmox VE LXC, and OpenWrt LXC — same bridge, same web UI, same features everywhere.
+- **REST API and live updates** — 60+ automation-friendly endpoints with real-time SSE status stream for custom dashboards and integrations.
+
+## Roadmap at a glance
+
+The roadmap is now aligned with the **current runtime**, not an older refactor wishlist.
+
+- **Now:** finish the v2 runtime foundation already in progress — snapshot-first reads, clearer device registry ownership, and less `state.py` coupling.
+- **Next:** formalize contracts, diagnostics, event history, telemetry, and config migrations so the bridge is easier to evolve and easier to operate.
+- **Then:** deepen onboarding, recovery UX, latency guidance, and capability-aware UI/API behavior.
+- **Later:** introduce backend abstraction for v3 only after the Bluetooth core is explicit and stable, then selectively add adjacent backends such as local sinks or ALSA outputs.
+
+See [`ROADMAP.md`](ROADMAP.md) for the full phased plan, epics, PR sequence, and guardrails.
 
 ## Documentation map
 
@@ -78,6 +97,7 @@ Use the docs site for the full guides and reference:
 ## Project links
 
 - [Contributing](CONTRIBUTING.md)
+- [Roadmap](ROADMAP.md)
 - [License](LICENSE)
 - [Changelog](CHANGELOG.md)
 - [History](HISTORY.md)
