@@ -54,7 +54,7 @@ sync_app_tree() {
   mkdir -p "${dest_root}"
   find "${src_root}" -maxdepth 1 -type f \( -name '*.py' -o -name 'requirements.txt' \) -exec cp -a {} "${dest_root}/" \;
 
-  for dir in services routes demo templates static lxc; do
+  for dir in services routes demo templates static lxc scripts; do
     rm -rf "${dest_root}/${dir}"
     cp -a "${src_root}/${dir}" "${dest_root}/${dir}"
   done

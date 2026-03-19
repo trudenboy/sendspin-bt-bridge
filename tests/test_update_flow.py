@@ -354,4 +354,4 @@ def test_lxc_scripts_sync_repo_snapshot_recursively():
         assert "ARCHIVE_URL=" in text
         assert "download_repo_snapshot()" in text
         assert 'find "${src_root}" -maxdepth 1 -type f' in text
-        assert "for dir in services routes demo templates static lxc; do" in text
+        assert "for dir in services routes demo templates static lxc scripts; do" in text

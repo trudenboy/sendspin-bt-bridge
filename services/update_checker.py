@@ -11,7 +11,6 @@ from typing import Any
 from urllib.parse import quote
 
 from config import DEFAULT_UPDATE_CHANNEL, load_config, normalize_update_channel
-from scripts.release_notes import extract_changelog_section
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +27,19 @@ _CHANNEL_IMAGE_TAGS = {
     "rc": "rc",
     "beta": "beta",
 }
+
+
+def _extract_changelog_section(changelog_text: str, version: str) -> str:
+    """Return the Keep a Changelog section body for *version*, without the heading."""
+    header_re = re.compile(rf"^## \[{re.escape(version)}\](?:\s+-\s+.+)?$", flags=re.MULTILINE)
+    match = header_re.search(changelog_text)
+    if not match:
+        return ""
+
+    remainder = changelog_text[match.end() :].lstrip("\n")
+    next_header = re.search(r"^## \[", remainder, flags=re.MULTILINE)
+    section = remainder[: next_header.start()] if next_header else remainder
+    return section.strip()
 
 
 def _parse_version(v: str) -> tuple[int, int, int, int, int]:
@@ -156,7 +168,7 @@ async def _fetch_changelog_section_for_tag(tag: str) -> str:
         logger.debug("Version check failed: could not decode CHANGELOG.md for %s", tag)
         return ""
 
-    return extract_changelog_section(changelog_text, tag.lstrip("v"))
+    return _extract_changelog_section(changelog_text, tag.lstrip("v"))
 
 
 def _select_latest_release(releases: list[dict[str, Any]], channel: str) -> dict[str, Any] | None:
