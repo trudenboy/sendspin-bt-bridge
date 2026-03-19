@@ -80,3 +80,37 @@ def test_publish_main_loop_and_complete_startup_updates_shared_progress():
         assert progress["details"]["demo_mode"] is False
     finally:
         loop.close()
+
+
+def test_publish_startup_failure_marks_phase_and_error_details():
+    lifecycle_state = BridgeLifecycleState()
+
+    lifecycle_state.publish_startup_failure("Failed to boot web", phase="web", details={"error_type": "RuntimeError"})
+
+    progress = state.get_startup_progress()
+    assert progress["status"] == "error"
+    assert progress["phase"] == "idle"
+    assert progress["message"] == "Failed to boot web"
+    assert progress["details"]["startup_phase"] == "web"
+    assert progress["details"]["error_type"] == "RuntimeError"
+
+
+def test_publish_shutdown_updates_progress_and_clears_main_loop():
+    lifecycle_state = BridgeLifecycleState(startup_steps=6)
+    loop = asyncio.new_event_loop()
+    try:
+        state.set_main_loop(loop)
+        lifecycle_state.publish_shutdown_started(active_clients=2)
+        progress = state.get_startup_progress()
+        assert progress["phase"] == "shutdown"
+        assert progress["status"] == "stopping"
+        assert progress["details"]["active_clients"] == 2
+
+        lifecycle_state.publish_shutdown_complete(stopped_clients=2)
+        progress = state.get_startup_progress()
+        assert progress["phase"] == "shutdown"
+        assert progress["status"] == "stopped"
+        assert progress["details"]["stopped_clients"] == 2
+        assert state.get_main_loop() is None
+    finally:
+        loop.close()

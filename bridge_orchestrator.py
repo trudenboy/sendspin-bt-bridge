@@ -165,8 +165,9 @@ class BridgeOrchestrator:
 
             web_main_fn = imported_web_main
 
+        self.lifecycle_state.publish_clients(clients)
+
         def _run_web_server() -> None:
-            self.lifecycle_state.publish_clients(clients)
             web_main_fn()
 
         web_thread = threading.Thread(target=_run_web_server, daemon=True, name=thread_name)
@@ -189,6 +190,7 @@ class BridgeOrchestrator:
             mute_sink_fn = imported_mute_sink
 
         shutdown_clients = list(clients) if clients is not None else get_device_registry_snapshot().active_clients
+        self.lifecycle_state.publish_shutdown_started(active_clients=len(shutdown_clients))
         muted: list[str] = []
         for client in shutdown_clients:
             sink = getattr(client, "bluetooth_sink_name", None)
@@ -200,6 +202,9 @@ class BridgeOrchestrator:
         for client in shutdown_clients:
             client.running = False
             await client.stop_sendspin()
+
+        self.lifecycle_state.publish_clients([])
+        self.lifecycle_state.publish_shutdown_complete(stopped_clients=len(shutdown_clients))
 
     def install_signal_handlers(
         self,
@@ -458,6 +463,7 @@ class BridgeOrchestrator:
         web_main: Callable[[], None] | None = None,
     ) -> Any:
         """Run the remaining bridge lifecycle after runtime bootstrap is complete."""
+        startup_phase = "devices"
         device_bootstrap = self.initialize_devices(
             bootstrap,
             client_factory=client_factory,
@@ -468,13 +474,26 @@ class BridgeOrchestrator:
             base_listen_port=bootstrap.base_listen_port,
         )
         clients = device_bootstrap.clients
-        web_thread = self.start_web_server(clients, web_main=web_main) if web_main else self.start_web_server(clients)
-        loop = asyncio.get_running_loop()
-        self.install_signal_handlers(loop)
-        await self.configure_executor(len(clients), web_thread_name=web_thread.name)
-        ma_bootstrap = await self.initialize_ma_integration(
-            bootstrap.config, clients, server_host=bootstrap.server_host
-        )
+        try:
+            startup_phase = "web"
+            web_thread = (
+                self.start_web_server(clients, web_main=web_main) if web_main else self.start_web_server(clients)
+            )
+            loop = asyncio.get_running_loop()
+            await self.configure_executor(len(clients), web_thread_name=web_thread.name)
+            startup_phase = "signals"
+            self.install_signal_handlers(loop, shutdown_factory=lambda: self.graceful_shutdown(clients=clients))
+            startup_phase = "integrations"
+            ma_bootstrap = await self.initialize_ma_integration(
+                bootstrap.config, clients, server_host=bootstrap.server_host
+            )
+        except Exception as exc:
+            self.lifecycle_state.publish_startup_failure(
+                f"Startup failed during {startup_phase}: {exc}",
+                phase=startup_phase,
+                details={"error_type": type(exc).__name__},
+            )
+            raise
         return await self.run_runtime(
             clients,
             ma_monitor_task=ma_bootstrap.ma_monitor_task,

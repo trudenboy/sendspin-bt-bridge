@@ -36,8 +36,17 @@ class RecordingLifecycleState:
     def publish_ma_integration(self, **kwargs) -> None:
         self.calls.append(("publish_ma_integration", kwargs))
 
+    def publish_startup_failure(self, message: str, *, phase: str, details=None) -> None:
+        self.calls.append(("publish_startup_failure", {"message": message, "phase": phase, "details": details}))
+
     def complete_startup(self, **kwargs) -> None:
         self.calls.append(("complete_startup", kwargs))
+
+    def publish_shutdown_started(self, *, active_clients: int) -> None:
+        self.calls.append(("publish_shutdown_started", {"active_clients": active_clients}))
+
+    def publish_shutdown_complete(self, *, stopped_clients: int) -> None:
+        self.calls.append(("publish_shutdown_complete", {"stopped_clients": stopped_clients}))
 
 
 class RecordingMaIntegrationService:
@@ -214,7 +223,8 @@ def test_start_web_server_delegates_client_publication():
 
 @pytest.mark.asyncio
 async def test_graceful_shutdown_mutes_sinks_and_stops_clients():
-    orchestrator = BridgeOrchestrator()
+    lifecycle_state = RecordingLifecycleState()
+    orchestrator = BridgeOrchestrator(lifecycle_state=lifecycle_state)
     stopped: list[str] = []
     muted: list[tuple[str, bool]] = []
 
@@ -238,6 +248,12 @@ async def test_graceful_shutdown_mutes_sinks_and_stops_clients():
     assert muted == [("sink.one", True)]
     assert stopped == ["Kitchen", "Bedroom"]
     assert all(client.running is False for client in clients)
+    assert lifecycle_state.calls[-3:] == [
+        ("publish_shutdown_started", {"active_clients": 2}),
+        ("publish_clients", {"clients": []}),
+        ("publish_shutdown_complete", {"stopped_clients": 2}),
+    ]
+    assert state.get_clients_snapshot() == []
 
 
 def test_install_signal_handlers_schedules_shutdown_factory():
@@ -612,14 +628,54 @@ async def test_run_bridge_lifecycle_sequences_remaining_flow(monkeypatch):
     )
 
     assert result == "done"
-    assert call_order == ["devices", "web", "signals", "executor", "ma", "runtime"]
+    assert call_order == ["devices", "web", "executor", "signals", "ma", "runtime"]
     assert observed["web_main"] is None
     assert observed["thread_name"] == "WebServer"
-    assert observed["shutdown_factory"] is None
+    assert callable(observed["shutdown_factory"])
 
     fake_monitor_task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await fake_monitor_task
+
+
+@pytest.mark.asyncio
+async def test_run_bridge_lifecycle_marks_startup_failure_when_ma_init_fails(monkeypatch):
+    orchestrator = BridgeOrchestrator()
+    bootstrap = await orchestrator.initialize_runtime()
+
+    fake_clients = [SimpleNamespace(player_name="Kitchen")]
+
+    def fake_initialize_devices(*args, **kwargs):
+        return SimpleNamespace(clients=fake_clients)
+
+    def fake_start_web_server(clients, *, web_main=None, thread_name="WebServer"):
+        return SimpleNamespace(name="LifecycleWebThread")
+
+    async def fake_configure_executor(device_count, *, web_thread_name=""):
+        return 8
+
+    async def fake_initialize_ma(config_data, clients, *, server_host):
+        raise RuntimeError("MA bootstrap failed")
+
+    monkeypatch.setattr(orchestrator, "initialize_devices", fake_initialize_devices)
+    monkeypatch.setattr(orchestrator, "start_web_server", fake_start_web_server)
+    monkeypatch.setattr(orchestrator, "configure_executor", fake_configure_executor)
+    monkeypatch.setattr(orchestrator, "install_signal_handlers", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(orchestrator, "initialize_ma_integration", fake_initialize_ma)
+
+    with pytest.raises(RuntimeError, match="MA bootstrap failed"):
+        await orchestrator.run_bridge_lifecycle(
+            bootstrap,
+            version="2.32.12",
+            client_factory=object,
+            bt_manager_factory=object,
+        )
+
+    progress = state.get_startup_progress()
+    assert progress["status"] == "error"
+    assert progress["details"]["startup_phase"] == "integrations"
+    assert progress["details"]["error_type"] == "RuntimeError"
+    assert "Startup failed during integrations" in progress["message"]
 
 
 def test_initialize_devices_builds_clients_and_registers_disabled_devices():

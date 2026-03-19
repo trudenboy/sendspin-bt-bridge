@@ -294,7 +294,7 @@ _status_condition: threading.Condition = threading.Condition()
 _main_loop: asyncio.AbstractEventLoop | None = None
 
 
-def set_main_loop(loop: asyncio.AbstractEventLoop) -> None:
+def set_main_loop(loop: asyncio.AbstractEventLoop | None) -> None:
     """Store the main asyncio event loop for use by Flask/WSGI threads."""
     global _main_loop
     _main_loop = loop
