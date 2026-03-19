@@ -6,19 +6,18 @@
     <title>Sendspin Bluetooth Bridge</title>
     <script>
         (function() {
-            var mode = null;
+            var mode = 'auto';
             try {
                 var saved = window.localStorage.getItem('sendspin-ui:theme-mode');
-                if (saved === 'light' || saved === 'dark') mode = saved;
+                if (saved === 'light' || saved === 'dark' || saved === 'auto') mode = saved;
             } catch (_) {}
-            if (!mode) {
-                mode = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
-                    ? 'dark'
-                    : 'light';
-            }
+            var resolved = mode === 'auto'
+                ? (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+                : mode;
             var root = document.documentElement;
-            root.classList.add(mode === 'dark' ? 'theme-dark' : 'theme-light');
+            root.classList.add(resolved === 'dark' ? 'theme-dark' : 'theme-light');
             root.setAttribute('data-theme-mode', mode);
+            root.setAttribute('data-theme-resolved-mode', resolved);
         })();
     </script>
     <link rel="stylesheet" href="{{ url_for('vstatic', version=asset_version('style.css'), filename='style.css') }}">
@@ -50,8 +49,8 @@
             </div>
             <div class="header-actions">
                 <button type="button" class="header-theme-btn" id="theme-toggle-btn"
-                        onclick="toggleThemeMode()" title="Switch to dark theme" aria-label="Switch to dark theme">
-                    <span id="theme-toggle-icon" class="ui-icon-slot" data-ui-icon="moon" aria-hidden="true"></span>
+                        onclick="toggleThemeMode()" title="Theme: Auto. Click to switch to Light." aria-label="Theme: Auto. Click to switch to Light.">
+                    <span id="theme-toggle-icon" class="ui-icon-slot" data-ui-icon="theme-auto" aria-hidden="true"></span>
                 </button>
                 <a href="#" class="header-link" id="report-link" title="Submit a bug report"
                    onclick="return _openBugReport(event)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5 3.5 19h17L12 3.5Z"></path><path d="M12 9v4.75"></path><circle cx="12" cy="17.1" r="1" fill="currentColor" stroke="none"></circle></svg> Report</a>

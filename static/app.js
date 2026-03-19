@@ -32,10 +32,10 @@ var _themeManagedVars = [
     'app-header-text-color',
 ];
 var _systemThemeMedia = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
-var userThemeMode = _loadSavedThemeMode();
+var userThemeMode = _loadSavedThemeMode() || 'auto';
 
 function _normalizeThemeMode(mode) {
-    return mode === 'light' || mode === 'dark' ? mode : null;
+    return mode === 'light' || mode === 'dark' || mode === 'auto' ? mode : null;
 }
 
 function _loadSavedThemeMode() {
@@ -96,12 +96,39 @@ function _getAutomaticThemeMode() {
     return _systemThemeMedia && _systemThemeMedia.matches ? 'dark' : 'light';
 }
 
-function applyThemeMode(mode) {
+function _resolveThemeMode(mode) {
+    var normalized = _normalizeThemeMode(mode) || 'auto';
+    return normalized === 'auto' ? _getAutomaticThemeMode() : normalized;
+}
+
+function _nextThemeMode(mode) {
+    if (mode === 'auto') return 'light';
+    if (mode === 'light') return 'dark';
+    return 'auto';
+}
+
+function _describeThemeMode(mode) {
+    if (mode === 'dark') return 'Dark';
+    if (mode === 'light') return 'Light';
+    return 'Auto';
+}
+
+function _themeModeIcon(mode) {
+    if (mode === 'dark') return 'moon';
+    if (mode === 'light') return 'sun';
+    return 'theme-auto';
+}
+
+function applyThemeMode(mode, resolvedModeOverride) {
     var root = document.documentElement;
-    var resolved = mode === 'dark' ? 'dark' : 'light';
+    var selected = _normalizeThemeMode(mode) || 'auto';
+    var resolved = resolvedModeOverride === 'dark' || resolvedModeOverride === 'light'
+        ? resolvedModeOverride
+        : _resolveThemeMode(selected);
     root.classList.toggle('theme-dark', resolved === 'dark');
     root.classList.toggle('theme-light', resolved === 'light');
-    root.setAttribute('data-theme-mode', resolved);
+    root.setAttribute('data-theme-mode', selected);
+    root.setAttribute('data-theme-resolved-mode', resolved);
 }
 
 function _refreshThemeDependentUi() {
@@ -113,30 +140,26 @@ function _refreshThemeDependentUi() {
 function _syncThemeToggleUi() {
     var btn = document.getElementById('theme-toggle-btn');
     var icon = document.getElementById('theme-toggle-icon');
-    var currentMode = document.documentElement.classList.contains('theme-dark') ? 'dark' : 'light';
-    var nextMode = currentMode === 'dark' ? 'light' : 'dark';
+    var currentMode = _normalizeThemeMode(userThemeMode) || 'auto';
+    var nextMode = _nextThemeMode(currentMode);
     if (btn) {
-        var actionLabel = 'Switch to ' + nextMode + ' theme';
+        var actionLabel = 'Theme: ' + _describeThemeMode(currentMode) + '. Click to switch to ' + _describeThemeMode(nextMode) + '.';
         btn.title = actionLabel;
         btn.setAttribute('aria-label', actionLabel);
+        btn.setAttribute('data-theme-cycle-mode', currentMode);
     }
-    if (icon) _setUiIconSlot(icon, nextMode === 'dark' ? 'moon' : 'sun');
+    if (icon) _setUiIconSlot(icon, _themeModeIcon(currentMode));
 }
 
 function _applyStoredOrAutomaticTheme() {
-    if (userThemeMode) {
-        _clearManagedThemeVars();
-        applyThemeMode(userThemeMode);
-    } else {
-        applyThemeMode(_getAutomaticThemeMode());
-    }
+    _clearManagedThemeVars();
+    applyThemeMode(userThemeMode);
     _syncThemeToggleUi();
     _refreshThemeDependentUi();
 }
 
 function toggleThemeMode() {
-    var currentMode = document.documentElement.classList.contains('theme-dark') ? 'dark' : 'light';
-    userThemeMode = currentMode === 'dark' ? 'light' : 'dark';
+    userThemeMode = _nextThemeMode(_normalizeThemeMode(userThemeMode) || 'auto');
     _persistThemeMode(userThemeMode);
     _clearManagedThemeVars();
     applyThemeMode(userThemeMode);
@@ -147,9 +170,9 @@ function toggleThemeMode() {
 _applyStoredOrAutomaticTheme();
 
 function _handleSystemThemeChange(event) {
-    if (userThemeMode) return;
+    if (userThemeMode !== 'auto') return;
     _clearManagedThemeVars();
-    applyThemeMode(event.matches ? 'dark' : 'light');
+    applyThemeMode('auto', event.matches ? 'dark' : 'light');
     _syncThemeToggleUi();
     _refreshThemeDependentUi();
 }
@@ -168,7 +191,7 @@ window.addEventListener('message', function(e) {
     if (!e.data || typeof e.data !== 'object') return;
     if (e.data.type !== 'setTheme') return;
     if (e.origin !== window.location.origin && e.source !== window.parent) return;
-    if (userThemeMode) return;
+    if (userThemeMode !== 'auto') return;
     var theme = e.data.theme || {};
     var root = document.documentElement;
     Object.keys(theme).forEach(function(key) {
@@ -176,14 +199,14 @@ window.addEventListener('message', function(e) {
     });
     var mode = e.data.mode || e.data.themeMode || '';
     if (mode === 'dark' || mode === 'light') {
-        applyThemeMode(mode);
+        applyThemeMode('auto', mode);
         _syncThemeToggleUi();
         _refreshThemeDependentUi();
         return;
     }
     var bg = theme['primary-background-color'] || theme['card-background-color'];
     if (bg) {
-        applyThemeMode(_isDarkThemeColor(bg) ? 'dark' : 'light');
+        applyThemeMode('auto', _isDarkThemeColor(bg) ? 'dark' : 'light');
         _syncThemeToggleUi();
         _refreshThemeDependentUi();
     }
@@ -662,6 +685,11 @@ function _uiIconSvg(kind, className) {
     if (kind === 'moon') {
         return '<svg' + cls + ' viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
             '<path d="M21 12.4A8.4 8.4 0 1 1 11.6 3a6.9 6.9 0 0 0 9.4 9.4Z"/>' +
+        '</svg>';
+    }
+    if (kind === 'theme-auto') {
+        return '<svg' + cls + ' viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+            '<circle cx="12" cy="12" r="8"/><path d="M9.2 16.6 12 7.4l2.8 9.2"/><path d="M10.15 13.5h3.7"/>' +
         '</svg>';
     }
     if (kind === 'download') {

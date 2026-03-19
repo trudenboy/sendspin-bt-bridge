@@ -6,19 +6,18 @@
     <title>Sign in — Sendspin Bluetooth Bridge</title>
     <script>
         (function() {
-            var mode = null;
+            var mode = 'auto';
             try {
                 var saved = window.localStorage.getItem('sendspin-ui:theme-mode');
-                if (saved === 'light' || saved === 'dark') mode = saved;
+                if (saved === 'light' || saved === 'dark' || saved === 'auto') mode = saved;
             } catch (_) {}
-            if (!mode) {
-                mode = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
-                    ? 'dark'
-                    : 'light';
-            }
+            var resolved = mode === 'auto'
+                ? (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+                : mode;
             var root = document.documentElement;
-            root.classList.add(mode === 'dark' ? 'theme-dark' : 'theme-light');
+            root.classList.add(resolved === 'dark' ? 'theme-dark' : 'theme-light');
             root.setAttribute('data-theme-mode', mode);
+            root.setAttribute('data-theme-resolved-mode', resolved);
         })();
     </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
