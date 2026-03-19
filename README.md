@@ -22,18 +22,6 @@ Sendspin Bluetooth Bridge is a local-first, headless-friendly bridge for Home As
 
 ![Sendspin Bluetooth Bridge infographic — features, architecture and deployment options](docs-site/public/screenshots/sbb_infographic_en.png)
 
-> [!CAUTION]
-> You can run multiple bridge instances against the same Music Assistant server, including multiple Home Assistant addon tracks on one HAOS host. Do **not** configure the same Bluetooth speaker in more than one running bridge at the same time.
-
-## Choose your deployment
-
-| Deployment | Best for | Install path | Docs |
-|---|---|---|---|
-| **Home Assistant Addon** | HAOS / Supervised users | Add-on Store | [Open guide](https://trudenboy.github.io/sendspin-bt-bridge/installation/ha-addon/) |
-| **Docker** | Generic Linux hosts | `docker compose up -d` | [Open guide](https://trudenboy.github.io/sendspin-bt-bridge/installation/docker/) |
-| **Raspberry Pi** | Pi-based installs | Docker-based setup | [Open guide](https://trudenboy.github.io/sendspin-bt-bridge/installation/raspberry-pi/) |
-| **Proxmox / OpenWrt LXC** | Appliances, routers, lightweight hosts | Host bootstrap script | [Open guide](https://trudenboy.github.io/sendspin-bt-bridge/installation/lxc/) |
-
 ## Quick start: Home Assistant
 
 The fastest path is the Home Assistant addon.
@@ -47,11 +35,14 @@ The fastest path is the Home Assistant addon.
 
 Full Home Assistant guide: <https://trudenboy.github.io/sendspin-bt-bridge/installation/ha-addon/>
 
-Other install guides:
+## Choose your deployment
 
-- [Docker](https://trudenboy.github.io/sendspin-bt-bridge/installation/docker/)
-- [Raspberry Pi](https://trudenboy.github.io/sendspin-bt-bridge/installation/raspberry-pi/)
-- [Proxmox / OpenWrt LXC](https://trudenboy.github.io/sendspin-bt-bridge/installation/lxc/)
+| Deployment | Best for | Install path | Docs |
+|---|---|---|---|
+| **Home Assistant Addon** | HAOS / Supervised users | Add-on Store | [Open guide](https://trudenboy.github.io/sendspin-bt-bridge/installation/ha-addon/) |
+| **Docker** | Generic Linux hosts | `docker compose up -d` | [Open guide](https://trudenboy.github.io/sendspin-bt-bridge/installation/docker/) |
+| **Raspberry Pi** | Pi-based installs | Docker-based setup | [Open guide](https://trudenboy.github.io/sendspin-bt-bridge/installation/raspberry-pi/) |
+| **Proxmox / OpenWrt LXC** | Appliances, routers, lightweight hosts | Host bootstrap script | [Open guide](https://trudenboy.github.io/sendspin-bt-bridge/installation/lxc/) |
 
 ## Key capabilities
 

@@ -22,18 +22,6 @@ Sendspin Bluetooth Bridge — это local-first мост для headless-сце
 
 ![Инфографика Sendspin Bluetooth Bridge — возможности, архитектура и варианты развёртывания](docs-site/public/screenshots/sbb_infographic_ru.png)
 
-> [!CAUTION]
-> Можно запускать несколько bridge-экземпляров против одного сервера Music Assistant, включая несколько треков Home Assistant addon на одном HAOS-хосте. Не настраивайте одну и ту же Bluetooth-колонку в нескольких одновременно работающих bridge.
-
-## Выберите вариант развёртывания
-
-| Вариант | Для кого | Путь установки | Документация |
-|---|---|---|---|
-| **Home Assistant Addon** | Пользователи HAOS / Supervised | Add-on Store | [Открыть гайд](https://trudenboy.github.io/sendspin-bt-bridge/ru/installation/ha-addon/) |
-| **Docker** | Обычные Linux-хосты | `docker compose up -d` | [Открыть гайд](https://trudenboy.github.io/sendspin-bt-bridge/ru/installation/docker/) |
-| **Raspberry Pi** | Установки на Pi | Настройка на базе Docker | [Открыть гайд](https://trudenboy.github.io/sendspin-bt-bridge/ru/installation/raspberry-pi/) |
-| **Proxmox / OpenWrt LXC** | Маршрутизаторы, appliance-сценарии и лёгкие хосты | Bootstrap-скрипт на хосте | [Открыть гайд](https://trudenboy.github.io/sendspin-bt-bridge/ru/installation/lxc/) |
-
 ## Быстрый старт: Home Assistant
 
 Самый быстрый путь — установить Home Assistant addon.
@@ -47,11 +35,14 @@ Sendspin Bluetooth Bridge — это local-first мост для headless-сце
 
 Полный гайд по Home Assistant: <https://trudenboy.github.io/sendspin-bt-bridge/ru/installation/ha-addon/>
 
-Другие варианты установки:
+## Выберите вариант развёртывания
 
-- [Docker](https://trudenboy.github.io/sendspin-bt-bridge/ru/installation/docker/)
-- [Raspberry Pi](https://trudenboy.github.io/sendspin-bt-bridge/ru/installation/raspberry-pi/)
-- [Proxmox / OpenWrt LXC](https://trudenboy.github.io/sendspin-bt-bridge/ru/installation/lxc/)
+| Вариант | Для кого | Путь установки | Документация |
+|---|---|---|---|
+| **Home Assistant Addon** | Пользователи HAOS / Supervised | Add-on Store | [Открыть гайд](https://trudenboy.github.io/sendspin-bt-bridge/ru/installation/ha-addon/) |
+| **Docker** | Обычные Linux-хосты | `docker compose up -d` | [Открыть гайд](https://trudenboy.github.io/sendspin-bt-bridge/ru/installation/docker/) |
+| **Raspberry Pi** | Установки на Pi | Настройка на базе Docker | [Открыть гайд](https://trudenboy.github.io/sendspin-bt-bridge/ru/installation/raspberry-pi/) |
+| **Proxmox / OpenWrt LXC** | Маршрутизаторы, appliance-сценарии и лёгкие хосты | Bootstrap-скрипт на хосте | [Открыть гайд](https://trudenboy.github.io/sendspin-bt-bridge/ru/installation/lxc/) |
 
 ## Ключевые возможности
 
