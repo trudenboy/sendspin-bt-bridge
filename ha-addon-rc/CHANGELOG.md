@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.40.6-rc.7] - 2026-03-19
+
+### Fixed
+- Music Assistant beta queue mode controls now work again for solo bridge players: `shuffle` / `repeat` treat MA `error_code` replies as real rejections and fall back from modern solo player ids to legacy `up...` queue ids when that is the actual queue target.
+- Standalone Configuration now uses a shorter `Web UI port` helper so the port description fits on one line without wrapping.
+
 ## [2.40.6-rc.6] - 2026-03-19
 
 ### Fixed
