@@ -13,10 +13,14 @@ from config import VERSION
 from demo.bt_manager import DemoBluetoothManager
 from demo.fixtures import (
     DEMO_ADAPTERS,
+    DEMO_BT_DEVICE_INFO,
     DEMO_DEVICES,
+    DEMO_DISPLAY_VERSION,
+    DEMO_LOG_LINES,
     DEMO_MA_SERVER_INFO,
     DEMO_MA_TOKEN,
     DEMO_MA_URL,
+    DEMO_PORTAUDIO_DEVICES,
     DEMO_UPDATE_INFO,
     demo_player_id_for_name,
 )
@@ -63,6 +67,26 @@ async def test_demo_bluetooth_manager_monitor_loop_stops_after_shutdown(monkeypa
     await asyncio.wait_for(task, timeout=0.1)
 
 
+def test_demo_bluetooth_manager_seeds_buffering_and_group_reconnecting_states():
+    class StubClient:
+        def __init__(self):
+            self.status = {}
+
+        def _update_status(self, updates: dict) -> None:
+            self.status.update(updates)
+
+    reconnecting_client = StubClient()
+    reconnecting_manager = DemoBluetoothManager("AA:BB:CC:DD:EE:05", device_name="Patio", client=reconnecting_client)
+    assert reconnecting_client.status["group_name"] == "Focus Zone"
+    assert reconnecting_client.status["reconnecting"] is True
+    assert reconnecting_manager.connect_device() is False
+
+    buffering_client = StubClient()
+    DemoBluetoothManager("AA:BB:CC:DD:EE:06", device_name="Bedroom", client=buffering_client)
+    assert buffering_client.status["buffering"] is True
+    assert buffering_client.status["muted"] is True
+
+
 @pytest.mark.asyncio
 async def test_demo_simulator_advances_track_progress(monkeypatch):
     progress_updated = asyncio.Event()
@@ -101,6 +125,73 @@ async def test_demo_simulator_advances_track_progress(monkeypatch):
     await task
 
     assert client.status["track_progress_ms"] > 0
+
+
+@pytest.mark.asyncio
+async def test_demo_simulator_keeps_group_members_on_same_track(monkeypatch):
+    real_sleep = asyncio.sleep
+    group_aligned = asyncio.Event()
+
+    class FakeClient:
+        def __init__(self, player_name, group_id=None, player_id=None, track=None, artist=None):
+            self.player_name = player_name
+            self.player_id = player_id
+            self.status = {
+                "group_id": group_id,
+                "server_connected": True,
+                "bluetooth_connected": True,
+                "playing": True,
+                "track_progress_ms": 0,
+                "track_duration_ms": 10000,
+                "battery_level": 80,
+                "current_track": track,
+                "current_artist": artist,
+            }
+
+        def _update_status(self, updates: dict) -> None:
+            self.status.update(updates)
+            if (
+                living.status.get("current_track") == kitchen.status.get("current_track")
+                and living.status.get("current_artist") == kitchen.status.get("current_artist")
+                and living.status.get("track_progress_ms") == kitchen.status.get("track_progress_ms")
+                and bedroom.status.get("current_track") != living.status.get("current_track")
+                and living.status.get("track_progress_ms", 0) > 0
+            ):
+                group_aligned.set()
+
+    living = FakeClient(
+        "Living Room",
+        group_id="syncgroup_main_floor",
+        track="Midnight City",
+        artist="M83",
+    )
+    kitchen = FakeClient(
+        "Kitchen",
+        group_id="syncgroup_main_floor",
+        track="Texas Sun",
+        artist="Khruangbin & Leon Bridges",
+    )
+    bedroom = FakeClient(
+        "Bedroom",
+        player_id="sendspin-demo-bedroom",
+        track="Sunset Lover",
+        artist="Petit Biscuit",
+    )
+
+    async def fast_sleep(_delay: float) -> None:
+        await real_sleep(0)
+
+    monkeypatch.setattr("demo.simulator.asyncio.sleep", fast_sleep)
+
+    task = asyncio.create_task(run_simulator([living, kitchen, bedroom]))
+    await asyncio.wait_for(group_aligned.wait(), timeout=0.2)
+    task.cancel()
+    await task
+
+    assert living.status["current_track"] == kitchen.status["current_track"]
+    assert living.status["current_artist"] == kitchen.status["current_artist"]
+    assert living.status["track_progress_ms"] == kitchen.status["track_progress_ms"]
+    assert bedroom.status["current_track"] != living.status["current_track"]
 
 
 @pytest.mark.asyncio
@@ -175,6 +266,36 @@ async def test_demo_install_seeds_connected_ma_state_and_named_adapters(monkeypa
     assert update_payload["body"] == DEMO_UPDATE_INFO["body"]
     assert update_payload["channel"] == "stable"
 
+    version_response = app.test_client().get("/api/version")
+    assert version_response.status_code == 200
+    version_payload = version_response.get_json()
+    assert version_payload["version"] == DEMO_DISPLAY_VERSION
+
+
+def test_demo_bt_manager_seeds_released_ready_and_stopping_states():
+    class StubClient:
+        def __init__(self):
+            self.status = {}
+
+        def _update_status(self, updates: dict) -> None:
+            self.status.update(updates)
+
+    released_client = StubClient()
+    DemoBluetoothManager("AA:BB:CC:DD:EE:07", device_name="Guest Room", client=released_client)
+    assert released_client.status["bt_management_enabled"] is False
+    assert released_client.status["bt_released_by"] == "user"
+
+    ready_client = StubClient()
+    ready_manager = DemoBluetoothManager("AA:BB:CC:DD:EE:08", device_name="Bathroom", client=ready_client)
+    assert ready_client.status["muted"] is True
+    assert ready_client.status["battery_level"] is None
+    assert ready_manager.connect_device() is True
+    assert ready_client.status["reconnecting"] is False
+
+    stopping_client = StubClient()
+    DemoBluetoothManager("AA:BB:CC:DD:EE:09", device_name="Balcony", client=stopping_client)
+    assert stopping_client.status["stopping"] is True
+
 
 @pytest.mark.asyncio
 async def test_demo_install_patches_bridge_orchestrator_load_config(monkeypatch):
@@ -200,3 +321,75 @@ async def test_demo_install_patches_bridge_orchestrator_load_config(monkeypatch)
     assert [device["player_name"] for device in cfg["BLUETOOTH_DEVICES"]] == [
         device["player_name"] for device in DEMO_DEVICES
     ]
+
+
+@pytest.mark.asyncio
+async def test_demo_install_exposes_demo_logs_diagnostics_and_bugreport(monkeypatch):
+    import demo
+    import state
+    from routes.api_config import config_bp
+    from routes.api_status import status_bp
+
+    class StubSendspinClient:
+        def __init__(self):
+            self.player_name = "Living Room @ DEMO"
+            self.bt_manager = SimpleNamespace(mac_address="AA:BB:CC:DD:EE:01")
+            self.status = {}
+            self.bluetooth_sink_name = None
+            self._daemon_proc = None
+            self._daemon_task = None
+            self._stderr_task = None
+            self._restart_delay = 1.0
+            self._zombie_restart_count = 0
+            self.bt_management_enabled = True
+
+        def _update_status(self, updates: dict) -> None:
+            self.status.update(updates)
+
+        def is_running(self) -> bool:
+            proc = getattr(self, "_daemon_proc", None)
+            return bool(proc) and getattr(proc, "returncode", 1) is None
+
+    monkeypatch.setattr(sys.modules["__main__"], "SendspinClient", StubSendspinClient, raising=False)
+    monkeypatch.setattr(sys.modules["__main__"], "BluetoothManager", object, raising=False)
+
+    demo.install()
+
+    client = StubSendspinClient()
+    await client._start_sendspin_inner()
+    state.set_clients([client])
+
+    app = Flask(__name__)
+    app.register_blueprint(config_bp)
+    app.register_blueprint(status_bp)
+    test_client = app.test_client()
+
+    logs_resp = test_client.get("/api/logs")
+    assert logs_resp.status_code == 200
+    logs_data = logs_resp.get_json()
+    assert logs_data["logs"] == DEMO_LOG_LINES
+    assert logs_data["has_recent_issues"] is True
+    assert logs_data["recent_issue_level"] == "error"
+
+    diag_resp = test_client.get("/api/diagnostics")
+    assert diag_resp.status_code == 200
+    diag_data = diag_resp.get_json()
+    assert diag_data["runtime_info"]["mode"] == "demo"
+    assert diag_data["bluetooth_daemon"] == "active"
+    assert len(diag_data["adapters"]) == len(DEMO_ADAPTERS)
+    assert diag_data["dbus_available"] is True
+    assert diag_data["sink_inputs"]
+    assert [device["name"] for device in diag_data["portaudio_devices"]] == [
+        device["name"] for device in DEMO_PORTAUDIO_DEVICES
+    ]
+    assert diag_data["onboarding_assistant"]["runtime_mode"] == "demo"
+
+    bugreport_resp = test_client.get("/api/bugreport")
+    assert bugreport_resp.status_code == 200
+    bugreport_data = bugreport_resp.get_json()
+    report = bugreport_data["report"]
+    assert report["recent_issue_logs"]
+    assert report["diagnostics"]["runtime_info"]["mode"] == "demo"
+    assert [device["name"] for device in report["bt_device_info"]] == [device["name"] for device in DEMO_BT_DEVICE_INFO]
+    assert "BUG REPORT — FULL DIAGNOSTICS" in bugreport_data["text_full"]
+    assert "ONBOARDING ASSISTANT" in bugreport_data["text_full"]

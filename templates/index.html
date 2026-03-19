@@ -4,6 +4,23 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sendspin Bluetooth Bridge</title>
+    <script>
+        (function() {
+            var mode = null;
+            try {
+                var saved = window.localStorage.getItem('sendspin-ui:theme-mode');
+                if (saved === 'light' || saved === 'dark') mode = saved;
+            } catch (_) {}
+            if (!mode) {
+                mode = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+                    ? 'dark'
+                    : 'light';
+            }
+            var root = document.documentElement;
+            root.classList.add(mode === 'dark' ? 'theme-dark' : 'theme-light');
+            root.setAttribute('data-theme-mode', mode);
+        })();
+    </script>
     <link rel="stylesheet" href="{{ url_for('vstatic', version=asset_version('style.css'), filename='style.css') }}">
     <link rel="icon" type="image/svg+xml" href="{{ url_for('vstatic', version=VERSION, filename='favicon.svg') }}">
     <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('vstatic', version=VERSION, filename='favicon.png') }}">
@@ -21,7 +38,7 @@
                     <div class="header-meta">
                         <a class="header-version" id="version-display" title="{{ BUILD_DATE }}"
                            href="https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v{{ VERSION }}"
-                           target="_blank" rel="noopener">v{{ VERSION }}</a>
+                           target="_blank" rel="noopener">v{{ DISPLAY_VERSION }}</a>
                         <span id="update-badge">
                             <a id="update-link" href="#" class="update-badge-link" title="Check for updates"
                                onclick="return _onUpdateBadgeClick(event)">
@@ -32,6 +49,10 @@
                 </div>
             </div>
             <div class="header-actions">
+                <button type="button" class="header-theme-btn" id="theme-toggle-btn"
+                        onclick="toggleThemeMode()" title="Switch to dark theme" aria-label="Switch to dark theme">
+                    <span id="theme-toggle-icon" class="ui-icon-slot" data-ui-icon="moon" aria-hidden="true"></span>
+                </button>
                 <a href="#" class="header-link" id="report-link" title="Submit a bug report"
                    onclick="return _openBugReport(event)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5 3.5 19h17L12 3.5Z"></path><path d="M12 9v4.75"></path><circle cx="12" cy="17.1" r="1" fill="currentColor" stroke="none"></circle></svg> Report</a>
                 <a href="https://trudenboy.github.io/sendspin-bt-bridge/" target="_blank" rel="noopener"
@@ -91,6 +112,7 @@
                 <option value="">All statuses</option>
                 <option value="playing">▶ Playing</option>
                 <option value="idle">⏸ Idle</option>
+                <option value="stopping">⏹ Stopping</option>
                 <option value="reconnecting">⟳ Reconnecting</option>
                 <option value="released">Released</option>
                 <option value="error">Error</option>

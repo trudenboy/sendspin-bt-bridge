@@ -93,6 +93,26 @@ def test_build_device_snapshot_includes_recent_events_and_health_summary():
         state.clear_device_events(client.player_id)
 
 
+def test_build_device_snapshot_reports_stopping_transition():
+    client = _make_client()
+    client.status.update(
+        {
+            "server_connected": True,
+            "bluetooth_connected": True,
+            "stopping": True,
+            "playing": False,
+        }
+    )
+
+    snapshot = build_device_snapshot(client)
+    data = snapshot.to_dict()
+
+    assert data["stopping"] is True
+    assert data["health_summary"]["state"] == "transitioning"
+    assert data["health_summary"]["summary"] == "Stopping playback service"
+    assert "stopping" in data["health_summary"]["reasons"]
+
+
 def test_build_group_snapshots_merges_ma_syncgroup_members():
     client_a = _make_client(
         player_name="Kitchen",

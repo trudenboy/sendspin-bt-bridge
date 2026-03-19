@@ -1,4 +1,4 @@
-"""Demo mode — run the web UI against a canonical six-player demo stand.
+"""Demo mode — run the web UI against a canonical nine-player demo stand.
 
 Usage:
     DEMO_MODE=true python sendspin_client.py
@@ -12,11 +12,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import subprocess as _real_subprocess
 import sys
 import time
 from copy import deepcopy
-from typing import Any
+from types import ModuleType, SimpleNamespace
+from typing import Any, cast
 
 logger = logging.getLogger(__name__)
 
@@ -38,8 +40,11 @@ def install() -> None:
     from demo.fixtures import (
         DEMO_ADAPTER_NAMES,
         DEMO_ADAPTERS,
+        DEMO_BT_DEVICE_INFO,
         DEMO_DEVICE_STATUS,
         DEMO_DEVICES,
+        DEMO_DISPLAY_VERSION,
+        DEMO_LOG_LINES,
         DEMO_MA_ALL_GROUPS,
         DEMO_MA_NAME_MAP,
         DEMO_MA_NOW_PLAYING,
@@ -47,6 +52,7 @@ def install() -> None:
         DEMO_MA_TOKEN,
         DEMO_MA_URL,
         DEMO_PAIRED_DEVICES,
+        DEMO_PORTAUDIO_DEVICES,
         DEMO_SCAN_RESULTS,
         DEMO_TRACKS,
         DEMO_UPDATE_INFO,
@@ -107,6 +113,14 @@ def install() -> None:
     _st.replace_ma_now_playing({queue_id: deepcopy(data) for queue_id, data in DEMO_MA_NOW_PLAYING.items()})
     _st.set_update_available(deepcopy(DEMO_UPDATE_INFO))
 
+    demo_dbus_path = "/tmp/sendspin-demo-dbus.sock"
+    try:
+        with open(demo_dbus_path, "a", encoding="utf-8"):
+            pass
+    except OSError:
+        logger.debug("Could not create demo D-Bus marker at %s", demo_dbus_path)
+    os.environ["DBUS_SYSTEM_BUS_ADDRESS"] = f"unix:path={demo_dbus_path}"
+
     bluetooth_manager.BluetoothManager = DemoBluetoothManager  # type: ignore[misc,assignment]
     # Also patch the already-imported name in __main__ (sendspin_client.py)
     _sc_mod = sys.modules.get("__main__")
@@ -140,6 +154,8 @@ def install() -> None:
             "description": d.get("player_name", d["mac"]),
         }
         for d in DEMO_DEVICES
+        if _demo_status_for(str(d["mac"])).get("bluetooth_connected")
+        and _demo_status_for(str(d["mac"])).get("bt_management_enabled", True)
     ]
     # Stateful sink volume/mute so API reads back correct values
     _demo_sink_vol: dict[str, int] = {
@@ -179,6 +195,11 @@ def install() -> None:
     _api_mod.set_sink_mute = _sp_set_mute
     _api_mod.get_sink_mute = _sp_get_mute
 
+    import routes.api_status as _api_status_mod
+
+    _api_status_mod.get_server_name = _sp.get_server_name
+    _api_status_mod.list_sinks = _sp.list_sinks
+
     # ------------------------------------------------------------------
     # 4. Patch SendspinClient methods
     # ------------------------------------------------------------------
@@ -192,8 +213,22 @@ def install() -> None:
         initial = DEMO_DEVICE_STATUS.get(mac or "", {})
 
         self.player_id = demo_player_id_for_name(self.player_name)
+        self.bt_management_enabled = bool(initial.get("bt_management_enabled", True))
         # Sentinel so is_running() returns True (checks returncode is None)
-        self._daemon_proc = type("_FakeProc", (), {"returncode": None})()
+        fake_pid = 9000 + next(
+            (
+                idx
+                for idx, device in enumerate(DEMO_DEVICES, start=1)
+                if device.get("player_name") == self.player_name.split(" @ ", 1)[0]
+            ),
+            0,
+        )
+        daemon_should_run = bool(
+            initial.get("connected", True) or initial.get("server_connected", False) or initial.get("stopping", False)
+        )
+        self._daemon_proc = (
+            type("_FakeProc", (), {"returncode": None, "pid": fake_pid})() if daemon_should_run else None
+        )
         self._daemon_task = None
         self._stderr_task = None
 
@@ -222,6 +257,12 @@ def install() -> None:
                 "battery_level": initial.get("battery_level"),
                 "bluetooth_connected": bt_connected,
                 "bluetooth_available": True,
+                "buffering": initial.get("buffering", False),
+                "reconnecting": initial.get("reconnecting", False),
+                "reconnect_attempt": initial.get("reconnect_attempt", 0),
+                "stopping": initial.get("stopping", False),
+                "bt_management_enabled": self.bt_management_enabled,
+                "bt_released_by": initial.get("bt_released_by"),
                 "group_id": initial.get("group_id"),
                 "group_name": initial.get("group_name"),
             }
@@ -302,12 +343,52 @@ def install() -> None:
                     return self._paired_output()
                 if "show" in input_text:
                     return self._adapter_output(input_text)
+                if "info " in input_text:
+                    return self._info_output(input_text)
+            if args == ["bluetoothctl", "list"]:
+                return self._adapter_list_output()
+            if args == ["bluetoothctl", "devices", "Paired"]:
+                return self._paired_devices_output()
+            if args == ["bluetoothctl", "--version"]:
+                return _real_subprocess.CompletedProcess(args, 0, stdout="bluetoothctl: 5.72-demo\n", stderr="")
+            if args == ["systemctl", "is-active", "bluetooth"]:
+                return _real_subprocess.CompletedProcess(args, 0, stdout="active\n", stderr="")
+            if args == ["pactl", "info"]:
+                return _real_subprocess.CompletedProcess(
+                    args,
+                    0,
+                    stdout="Server Name: pulseaudio (demo)\nDefault Sink: bluez_output.AA_BB_CC_DD_EE_01.1\n",
+                    stderr="",
+                )
+            if args == ["pactl", "list", "sink-inputs"]:
+                return self._sink_inputs_output()
+            if args == ["pulseaudio", "--version"]:
+                return _real_subprocess.CompletedProcess(args, 0, stdout="pulseaudio 17.0-demo\n", stderr="")
+            if args == ["pipewire", "--version"]:
+                return _real_subprocess.CompletedProcess(args, 127, stdout="", stderr="pipewire not installed\n")
+            if args[:3] == ["git", "describe", "--tags"]:
+                return _real_subprocess.CompletedProcess(args, 0, stdout=f"{DEMO_DISPLAY_VERSION}\n", stderr="")
             return _real_subprocess.run(args, *a, **kw)
 
         @staticmethod
         def _paired_output() -> _real_subprocess.CompletedProcess:  # type: ignore[type-arg]
             lines = [f"Device {d['mac']} {d['name']}" for d in DEMO_PAIRED_DEVICES]
             return _real_subprocess.CompletedProcess(["bluetoothctl"], 0, stdout="\n".join(lines), stderr="")
+
+        @staticmethod
+        def _paired_devices_output() -> _real_subprocess.CompletedProcess:  # type: ignore[type-arg]
+            lines = [f"Device {d['mac']} {d['name']}" for d in DEMO_PAIRED_DEVICES]
+            return _real_subprocess.CompletedProcess(
+                ["bluetoothctl", "devices", "Paired"], 0, stdout="\n".join(lines), stderr=""
+            )
+
+        @staticmethod
+        def _adapter_list_output() -> _real_subprocess.CompletedProcess:  # type: ignore[type-arg]
+            lines = []
+            for idx, adapter in enumerate(DEMO_ADAPTERS):
+                suffix = " [default]" if idx == 0 else ""
+                lines.append(f"Controller {adapter['mac']} {adapter['name']}{suffix}")
+            return _real_subprocess.CompletedProcess(["bluetoothctl", "list"], 0, stdout="\n".join(lines), stderr="")
 
         @staticmethod
         def _adapter_output(input_text: str) -> _real_subprocess.CompletedProcess:  # type: ignore[type-arg]
@@ -331,7 +412,60 @@ def install() -> None:
             )
             return _real_subprocess.CompletedProcess(["bluetoothctl"], 0, stdout=stdout, stderr="")
 
-    _abt.subprocess = _DemoSubprocess()  # type: ignore[assignment]
+        @staticmethod
+        def _info_output(input_text: str) -> _real_subprocess.CompletedProcess:  # type: ignore[type-arg]
+            selected_mac = ""
+            for line in str(input_text).splitlines():
+                if line.startswith("info "):
+                    selected_mac = line.split(" ", 1)[1].strip().upper()
+                    break
+            device = next(
+                (item for item in DEMO_BT_DEVICE_INFO if str(item.get("mac", "")).upper() == selected_mac),
+                None,
+            )
+            if not device:
+                return _real_subprocess.CompletedProcess(["bluetoothctl"], 0, stdout="", stderr="")
+            stdout = (
+                f"Device {device['mac']} {device['name']}\n"
+                f"\tPaired: {device.get('paired', 'yes')}\n"
+                f"\tBonded: {device.get('bonded', 'yes')}\n"
+                f"\tTrusted: {device.get('trusted', 'yes')}\n"
+                f"\tBlocked: {device.get('blocked', 'no')}\n"
+                f"\tConnected: {device.get('connected', 'no')}\n"
+                f"\tIcon: {device.get('icon', 'audio-card')}\n"
+            )
+            return _real_subprocess.CompletedProcess(["bluetoothctl"], 0, stdout=stdout, stderr="")
+
+        @staticmethod
+        def _sink_inputs_output() -> _real_subprocess.CompletedProcess:  # type: ignore[type-arg]
+            blocks = []
+            sink_input_id = 40
+            for device in DEMO_DEVICES:
+                mac = str(device["mac"])
+                status = DEMO_DEVICE_STATUS.get(mac, {})
+                if not status.get("playing"):
+                    continue
+                sink_input_id += 1
+                sink_name = f"bluez_output.{mac.replace(':', '_')}.1"
+                blocks.extend(
+                    [
+                        f"Sink Input #{sink_input_id}",
+                        f"Sink: {sink_name}",
+                        "State: RUNNING",
+                        "application.name = Sendspin Bridge",
+                        "application.process.binary = python3",
+                        f"media.name = {status.get('current_track', 'Demo Track')}",
+                        f"media.title = {status.get('current_artist', 'Demo Artist')}",
+                        "",
+                    ]
+                )
+            return _real_subprocess.CompletedProcess(
+                ["pactl", "list", "sink-inputs"], 0, stdout="\n".join(blocks).strip(), stderr=""
+            )
+
+    _demo_subprocess = _DemoSubprocess()
+    _abt.subprocess = _demo_subprocess  # type: ignore[assignment]
+    _api_status_mod.subprocess = _demo_subprocess  # type: ignore[assignment]
 
     # ------------------------------------------------------------------
     # 6. Patch state module
@@ -370,9 +504,72 @@ def install() -> None:
 
     _bridge_orchestrator.load_config = _demo_load_config
     _api_config_mod.load_config = _demo_load_config
+    _api_config_mod._read_log_lines = lambda runtime, lines: list(DEMO_LOG_LINES)[-lines:]
+    _api_config_mod.subprocess = _demo_subprocess  # type: ignore[assignment]
 
     # ------------------------------------------------------------------
-    # 8. Patch MA client (discover_ma_groups)
+    # 8. Patch diagnostics / bugreport helpers
+    # ------------------------------------------------------------------
+    def _demo_collect_subprocess_info() -> list[dict]:
+        info = []
+        for idx, client in enumerate(_st.clients, start=1):
+            status = getattr(client, "status", {}) or {}
+            is_running = (
+                client.is_running() if hasattr(client, "is_running") else bool(getattr(client, "_daemon_proc", None))
+            )
+            info.append(
+                {
+                    "name": getattr(client, "player_name", "?"),
+                    "pid": getattr(getattr(client, "_daemon_proc", None), "pid", 9000 + idx),
+                    "alive": bool(is_running),
+                    "running": bool(is_running),
+                    "restart_delay": getattr(client, "_restart_delay", 1.0),
+                    "zombie_restarts": getattr(client, "_zombie_restart_count", 0),
+                    "reconnecting": status.get("reconnecting", False),
+                    "reconnect_attempt": status.get("reconnect_attempt", 0),
+                    "last_error": status.get("last_error"),
+                    "last_error_at": status.get("last_error_at"),
+                }
+            )
+        return info
+
+    def _demo_collect_preflight_status() -> dict:
+        return {
+            "platform": "demo",
+            "audio": {
+                "system": "pulseaudio",
+                "socket": "unix:/tmp/sendspin-demo-pulse.sock",
+                "sinks": len(DEMO_DEVICES),
+            },
+            "bluetooth": {
+                "controller": True,
+                "adapter": DEMO_ADAPTERS[0]["mac"],
+                "paired_devices": len(DEMO_PAIRED_DEVICES),
+            },
+            "dbus": True,
+            "memory_mb": 512,
+            "version": _api_status_mod.VERSION,
+        }
+
+    _api_status_mod._collect_preflight_status = _demo_collect_preflight_status
+    _api_status_mod._collect_recent_logs = lambda n=100: list(DEMO_LOG_LINES)[-n:]
+    _api_status_mod._collect_bt_device_info = lambda: deepcopy(DEMO_BT_DEVICE_INFO)
+    _api_status_mod._collect_subprocess_info = _demo_collect_subprocess_info
+
+    try:
+        import sendspin.audio as _sendspin_audio  # type: ignore[import-not-found]
+    except Exception:
+        sendspin_pkg = sys.modules.get("sendspin")
+        if sendspin_pkg is None:
+            sendspin_pkg = ModuleType("sendspin")
+            sys.modules["sendspin"] = sendspin_pkg
+        _sendspin_audio = ModuleType("sendspin.audio")
+        sys.modules["sendspin.audio"] = _sendspin_audio
+        cast("Any", sendspin_pkg).audio = _sendspin_audio
+    _sendspin_audio.query_devices = lambda: [SimpleNamespace(**device) for device in DEMO_PORTAUDIO_DEVICES]
+
+    # ------------------------------------------------------------------
+    # 9. Patch MA client (discover_ma_groups)
     # ------------------------------------------------------------------
     import services.ma_client as _ma_client
 
@@ -398,7 +595,7 @@ def install() -> None:
     _ma_client.discover_ma_groups = _demo_discover_ma_groups  # type: ignore[assignment]
 
     # ------------------------------------------------------------------
-    # 9. Patch MA monitor (start_monitor, send_queue_cmd)
+    # 10. Patch MA monitor (start_monitor, send_queue_cmd)
     # ------------------------------------------------------------------
     import services.ma_monitor as _ma_monitor
 
@@ -539,7 +736,7 @@ def install() -> None:
     _ma_client.ma_group_play = _demo_ma_group_play
 
     # ------------------------------------------------------------------
-    # 10. Patch MA discovery (validate_ma_url, discover_ma_servers)
+    # 11. Patch MA discovery (validate_ma_url, discover_ma_servers)
     # ------------------------------------------------------------------
     import services.ma_discovery as _ma_disc
     import services.update_checker as _update_checker

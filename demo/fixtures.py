@@ -1,4 +1,4 @@
-"""Canonical demo fixtures for the local six-player screenshot stand."""
+"""Canonical demo fixtures for the local nine-player screenshot stand."""
 
 from __future__ import annotations
 
@@ -6,6 +6,8 @@ import re
 from urllib.parse import quote
 
 from config import VERSION
+
+DEMO_DISPLAY_VERSION = f"{VERSION}-demo"
 
 
 # ---------------------------------------------------------------------------
@@ -53,12 +55,12 @@ DEMO_TRACKS = [
 ]
 
 MAIN_FLOOR_TRACK_INDEX = 3
-OFFICE_TRACK_INDEX = 5
-PATIO_TRACK_INDEX = 6
+SECOND_GROUP_TRACK_INDEX = 5
+SOLO_TRACK_INDEX = 6
 
 MAIN_FLOOR_TRACK = DEMO_TRACKS[MAIN_FLOOR_TRACK_INDEX]
-OFFICE_TRACK = DEMO_TRACKS[OFFICE_TRACK_INDEX]
-PATIO_TRACK = DEMO_TRACKS[PATIO_TRACK_INDEX]
+SECOND_GROUP_TRACK = DEMO_TRACKS[SECOND_GROUP_TRACK_INDEX]
+SOLO_TRACK = DEMO_TRACKS[SOLO_TRACK_INDEX]
 
 
 def demo_track_summary(track_index: int) -> dict[str, str]:
@@ -195,6 +197,31 @@ DEMO_DEVICES = [
         "listen_port": 8933,
         "preferred_format": "flac:44100:16:2",
     },
+    {
+        "mac": "AA:BB:CC:DD:EE:07",
+        "player_name": "Guest Room",
+        "adapter": "hci0",
+        "enabled": True,
+        "released": True,
+        "listen_port": 8934,
+        "preferred_format": "aac:44100:16:2",
+    },
+    {
+        "mac": "AA:BB:CC:DD:EE:08",
+        "player_name": "Bathroom",
+        "adapter": "hci1",
+        "enabled": True,
+        "listen_port": 8935,
+        "preferred_format": "mp3:44100:16:2",
+    },
+    {
+        "mac": "AA:BB:CC:DD:EE:09",
+        "player_name": "Balcony",
+        "adapter": "hci0",
+        "enabled": True,
+        "listen_port": 8936,
+        "preferred_format": "flac:44100:16:2",
+    },
 ]
 
 # Initial status per device (keyed by MAC)
@@ -205,8 +232,8 @@ DEMO_DEVICE_STATUS: dict[str, dict] = {
         "connected": True,
         "playing": True,
         "volume": 72,
-        "muted": False,
-        "battery_level": 88,
+        "muted": True,
+        "battery_level": None,
         "audio_format": "FLAC 48000Hz 24bit 2ch",
         "current_track": MAIN_FLOOR_TRACK["title"],
         "current_artist": MAIN_FLOOR_TRACK["artist"],
@@ -235,10 +262,10 @@ DEMO_DEVICE_STATUS: dict[str, dict] = {
         "bluetooth_connected": True,
         "server_connected": True,
         "connected": True,
-        "playing": False,
+        "playing": True,
         "volume": 41,
         "muted": False,
-        "battery_level": 37,
+        "battery_level": 17,
         "audio_format": "AAC 44100Hz 16bit 2ch",
         "current_track": MAIN_FLOOR_TRACK["title"],
         "current_artist": MAIN_FLOOR_TRACK["artist"],
@@ -254,35 +281,88 @@ DEMO_DEVICE_STATUS: dict[str, dict] = {
         "playing": True,
         "volume": 47,
         "muted": False,
-        "battery_level": 53,
+        "battery_level": None,
         "audio_format": "AAC 44100Hz 16bit 2ch",
-        "current_track": OFFICE_TRACK["title"],
-        "current_artist": OFFICE_TRACK["artist"],
-        "track_duration_ms": OFFICE_TRACK["duration_ms"],
+        "current_track": SECOND_GROUP_TRACK["title"],
+        "current_artist": SECOND_GROUP_TRACK["artist"],
+        "track_duration_ms": SECOND_GROUP_TRACK["duration_ms"],
         "track_progress_ms": 131000,
+        "group_id": "syncgroup_focus_zone",
+        "group_name": "Focus Zone",
     },
     "AA:BB:CC:DD:EE:05": {
-        "bluetooth_connected": True,
-        "server_connected": True,
-        "connected": True,
-        "playing": False,
-        "volume": 28,
-        "muted": True,
-        "battery_level": 74,
-        "audio_format": "MP3 44100Hz 16bit 2ch",
-        "current_track": PATIO_TRACK["title"],
-        "current_artist": PATIO_TRACK["artist"],
-        "track_duration_ms": PATIO_TRACK["duration_ms"],
-        "track_progress_ms": 42000,
-    },
-    "AA:BB:CC:DD:EE:06": {
         "bluetooth_connected": False,
         "server_connected": False,
         "connected": False,
         "playing": False,
-        "volume": 100,
+        "volume": 28,
+        "muted": False,
+        "battery_level": 9,
+        "audio_format": "MP3 44100Hz 16bit 2ch",
+        "current_track": SECOND_GROUP_TRACK["title"],
+        "current_artist": SECOND_GROUP_TRACK["artist"],
+        "track_duration_ms": SECOND_GROUP_TRACK["duration_ms"],
+        "track_progress_ms": 131000,
+        "group_id": "syncgroup_focus_zone",
+        "group_name": "Focus Zone",
+        "reconnecting": True,
+        "reconnect_attempt": 2,
+    },
+    "AA:BB:CC:DD:EE:06": {
+        "bluetooth_connected": True,
+        "server_connected": True,
+        "connected": True,
+        "playing": False,
+        "volume": 36,
+        "muted": True,
+        "battery_level": 41,
+        "audio_format": "FLAC 44100Hz 16bit 2ch",
+        "current_track": SOLO_TRACK["title"],
+        "current_artist": SOLO_TRACK["artist"],
+        "track_duration_ms": SOLO_TRACK["duration_ms"],
+        "track_progress_ms": 42000,
+        "buffering": True,
+    },
+    "AA:BB:CC:DD:EE:07": {
+        "bluetooth_connected": False,
+        "server_connected": False,
+        "connected": False,
+        "playing": False,
+        "volume": 34,
         "muted": False,
         "battery_level": None,
+        "audio_format": "AAC 44100Hz 16bit 2ch",
+        "bt_management_enabled": False,
+        "bt_released_by": "user",
+    },
+    "AA:BB:CC:DD:EE:08": {
+        "bluetooth_connected": True,
+        "server_connected": True,
+        "connected": True,
+        "playing": False,
+        "volume": 61,
+        "muted": True,
+        "battery_level": None,
+        "audio_format": "MP3 44100Hz 16bit 2ch",
+        "current_track": "Dreams",
+        "current_artist": "Fleetwood Mac",
+        "track_duration_ms": 257000,
+        "track_progress_ms": 0,
+    },
+    "AA:BB:CC:DD:EE:09": {
+        "bluetooth_connected": True,
+        "server_connected": True,
+        "connected": True,
+        "playing": False,
+        "volume": 22,
+        "muted": False,
+        "battery_level": 48,
+        "audio_format": "FLAC 44100Hz 16bit 2ch",
+        "current_track": "Nightcall",
+        "current_artist": "Kavinsky",
+        "track_duration_ms": 257000,
+        "track_progress_ms": 201000,
+        "stopping": True,
     },
 }
 
@@ -296,6 +376,9 @@ DEMO_SCAN_RESULTS = [
     {"mac": "AA:BB:CC:DD:EE:04", "name": "Office", "adapter": "hci2"},
     {"mac": "AA:BB:CC:DD:EE:05", "name": "Patio", "adapter": "hci1"},
     {"mac": "AA:BB:CC:DD:EE:06", "name": "Bedroom", "adapter": "hci2"},
+    {"mac": "AA:BB:CC:DD:EE:07", "name": "Guest Room", "adapter": "hci0"},
+    {"mac": "AA:BB:CC:DD:EE:08", "name": "Bathroom", "adapter": "hci1"},
+    {"mac": "AA:BB:CC:DD:EE:09", "name": "Balcony", "adapter": "hci0"},
     {"mac": "11:22:33:44:55:01", "name": "Guest Speaker", "adapter": "hci0"},
     {"mac": "11:22:33:44:55:02", "name": "Desk Headphones", "adapter": "hci2"},
     {"mac": "11:22:33:44:55:03", "name": "Portable Boom", "adapter": "hci1"},
@@ -309,10 +392,45 @@ DEMO_PAIRED_DEVICES = [
     {"mac": "AA:BB:CC:DD:EE:02", "name": "Kitchen", "connected": True},
     {"mac": "AA:BB:CC:DD:EE:03", "name": "Studio", "connected": True},
     {"mac": "AA:BB:CC:DD:EE:04", "name": "Office", "connected": True},
-    {"mac": "AA:BB:CC:DD:EE:05", "name": "Patio", "connected": True},
-    {"mac": "AA:BB:CC:DD:EE:06", "name": "Bedroom", "connected": False},
+    {"mac": "AA:BB:CC:DD:EE:05", "name": "Patio", "connected": False},
+    {"mac": "AA:BB:CC:DD:EE:06", "name": "Bedroom", "connected": True},
+    {"mac": "AA:BB:CC:DD:EE:07", "name": "Guest Room", "connected": False},
+    {"mac": "AA:BB:CC:DD:EE:08", "name": "Bathroom", "connected": True},
+    {"mac": "AA:BB:CC:DD:EE:09", "name": "Balcony", "connected": True},
     {"mac": "11:22:33:44:55:04", "name": "Sony WH-1000XM4", "connected": False},
     {"mac": "11:22:33:44:55:05", "name": "Marshall Emberton", "connected": False},
+]
+
+# ---------------------------------------------------------------------------
+# Demo logs / diagnostics fixtures
+# ---------------------------------------------------------------------------
+DEMO_LOG_LINES = [
+    "2026-03-18 21:49:07,102 - demo - INFO - Demo runtime bootstrapped with 9 fixture devices",
+    "2026-03-18 21:49:07,188 - demo.bt_manager - INFO - [demo] Audio configured: bluez_output.AA_BB_CC_DD_EE_01.1",
+    "2026-03-18 21:49:07,322 - demo - INFO - [demo] MA monitor connected (simulated)",
+    "2026-03-18 21:49:08,041 - demo-sim - INFO - [demo-sim] Canonical simulator started for 9 device(s)",
+    "2026-03-18 21:49:09,552 - demo - WARNING - daemon stderr: simulated sink latency spike on Patio",
+    "2026-03-18 21:49:10,004 - demo - ERROR - demo watchdog noticed a stalled stream and marked diagnostics degraded",
+]
+
+DEMO_BT_DEVICE_INFO = [
+    {
+        "mac": str(device["mac"]),
+        "name": str(device["name"]),
+        "paired": "yes",
+        "trusted": "yes",
+        "connected": "yes" if bool(device.get("connected")) else "no",
+        "bonded": "yes",
+        "blocked": "no",
+        "icon": "audio-card",
+    }
+    for device in DEMO_PAIRED_DEVICES
+    if str(device["mac"]).startswith("AA:BB:CC:DD:EE:")
+]
+
+DEMO_PORTAUDIO_DEVICES = [
+    {"index": 0, "name": "Demo Bluetooth Mix", "is_default": True, "output_channels": 2},
+    {"index": 1, "name": "Demo Monitor Output", "is_default": False, "output_channels": 2},
 ]
 
 # ---------------------------------------------------------------------------
@@ -344,8 +462,28 @@ DEMO_MA_ALL_GROUPS = [
             {
                 "id": demo_player_id_for_name("Studio"),
                 "name": "Studio",
-                "state": "idle",
+                "state": "playing",
                 "volume": 41,
+                "available": True,
+            },
+        ],
+    },
+    {
+        "id": "syncgroup_focus_zone",
+        "name": "Focus Zone",
+        "members": [
+            {
+                "id": demo_player_id_for_name("Office"),
+                "name": "Office",
+                "state": "playing",
+                "volume": 47,
+                "available": True,
+            },
+            {
+                "id": demo_player_id_for_name("Patio"),
+                "name": "Patio",
+                "state": "reconnecting",
+                "volume": 28,
                 "available": True,
             },
         ],
@@ -357,6 +495,8 @@ DEMO_MA_NAME_MAP: dict[str, dict] = {
     "living room": {"id": "syncgroup_main_floor", "name": "Main Floor"},
     "kitchen": {"id": "syncgroup_main_floor", "name": "Main Floor"},
     "studio": {"id": "syncgroup_main_floor", "name": "Main Floor"},
+    "office": {"id": "syncgroup_focus_zone", "name": "Focus Zone"},
+    "patio": {"id": "syncgroup_focus_zone", "name": "Focus Zone"},
 }
 
 
@@ -403,21 +543,21 @@ DEMO_MA_NOW_PLAYING = {
         connected=True,
         elapsed_seconds=68,
     ),
-    demo_player_id_for_name("Office"): _ma_now_playing_entry(
-        demo_player_id_for_name("Office"),
-        "Office",
-        OFFICE_TRACK_INDEX,
+    "syncgroup_focus_zone": _ma_now_playing_entry(
+        "syncgroup_focus_zone",
+        "Focus Zone",
+        SECOND_GROUP_TRACK_INDEX,
         state="playing",
         connected=True,
         elapsed_seconds=131,
         shuffle=True,
         repeat="all",
     ),
-    demo_player_id_for_name("Patio"): _ma_now_playing_entry(
-        demo_player_id_for_name("Patio"),
-        "Patio",
-        PATIO_TRACK_INDEX,
-        state="paused",
+    demo_player_id_for_name("Bedroom"): _ma_now_playing_entry(
+        demo_player_id_for_name("Bedroom"),
+        "Bedroom",
+        SOLO_TRACK_INDEX,
+        state="playing",
         connected=True,
         elapsed_seconds=42,
     ),

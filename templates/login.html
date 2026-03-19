@@ -4,6 +4,23 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sign in — Sendspin Bluetooth Bridge</title>
+    <script>
+        (function() {
+            var mode = null;
+            try {
+                var saved = window.localStorage.getItem('sendspin-ui:theme-mode');
+                if (saved === 'light' || saved === 'dark') mode = saved;
+            } catch (_) {}
+            if (!mode) {
+                mode = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+                    ? 'dark'
+                    : 'light';
+            }
+            var root = document.documentElement;
+            root.classList.add(mode === 'dark' ? 'theme-dark' : 'theme-light');
+            root.setAttribute('data-theme-mode', mode);
+        })();
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">

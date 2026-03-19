@@ -131,6 +131,8 @@ class DeviceStatus:
     uptime_start: datetime = field(default_factory=lambda: datetime.now(tz=UTC))
     reconnecting: bool = False
     reconnect_attempt: int = 0
+    buffering: bool = False
+    stopping: bool = False
     bt_management_enabled: bool = True
     bt_released_by: str | None = None
     battery_level: int | None = None

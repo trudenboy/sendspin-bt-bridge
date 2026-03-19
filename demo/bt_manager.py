@@ -47,6 +47,32 @@ class DemoBluetoothManager:
         self.connected: bool = initial.get("bluetooth_connected", False)
         self.battery_level: int | None = initial.get("battery_level")
         self._battery_start = time.monotonic()
+        if self.client and hasattr(self.client, "_update_status"):
+            self.client._update_status(
+                {
+                    "bluetooth_available": True,
+                    "bluetooth_connected": self.connected,
+                    "server_connected": initial.get("server_connected", False),
+                    "connected": initial.get("connected", self.connected),
+                    "playing": initial.get("playing", False),
+                    "volume": initial.get("volume", 100),
+                    "muted": initial.get("muted", False),
+                    "battery_level": initial.get("battery_level"),
+                    "audio_format": initial.get("audio_format"),
+                    "current_track": initial.get("current_track"),
+                    "current_artist": initial.get("current_artist"),
+                    "track_duration_ms": initial.get("track_duration_ms"),
+                    "track_progress_ms": initial.get("track_progress_ms"),
+                    "buffering": initial.get("buffering", False),
+                    "group_id": initial.get("group_id"),
+                    "group_name": initial.get("group_name"),
+                    "reconnecting": initial.get("reconnecting", False),
+                    "reconnect_attempt": initial.get("reconnect_attempt", 0),
+                    "stopping": initial.get("stopping", False),
+                    "bt_management_enabled": initial.get("bt_management_enabled", True),
+                    "bt_released_by": initial.get("bt_released_by"),
+                }
+            )
 
         self._running = True
         self._sink_name = self._make_sink_name()
@@ -78,8 +104,25 @@ class DemoBluetoothManager:
     def connect_device(self) -> bool:
         logger.info("[demo] Connecting %s ...", self.device_name or self.mac_address)
         time.sleep(1.5)
+        initial = DEMO_DEVICE_STATUS.get(self.mac_address, {})
+        if initial.get("reconnecting"):
+            logger.info("[demo] Reconnect still pending for %s", self.device_name or self.mac_address)
+            self.connected = False
+            if self.client and hasattr(self.client, "_update_status"):
+                self.client._update_status(
+                    {
+                        "bluetooth_connected": False,
+                        "connected": False,
+                        "server_connected": False,
+                        "playing": False,
+                        "audio_streaming": False,
+                        "reconnecting": True,
+                        "reconnect_attempt": initial.get("reconnect_attempt", 1),
+                    }
+                )
+            return False
         self.connected = True
-        self.battery_level = DEMO_DEVICE_STATUS.get(self.mac_address, {}).get("battery_level", 75)
+        self.battery_level = initial.get("battery_level", 75)
         # Trigger sink discovery so the client sets bluetooth_sink_name
         self.configure_bluetooth_audio()
         return True

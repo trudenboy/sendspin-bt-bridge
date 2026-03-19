@@ -9,6 +9,62 @@ var API_BASE = (function() {
     return p.endsWith('/') ? p.slice(0, -1) : p.split('/').slice(0, -1).join('/');
 })();
 
+var THEME_MODE_STORAGE_KEY = 'sendspin-ui:theme-mode';
+var _themeManagedVars = [
+    'primary-color',
+    'dark-primary-color',
+    'accent-color',
+    'primary-text-color',
+    'secondary-text-color',
+    'disabled-text-color',
+    'primary-background-color',
+    'secondary-background-color',
+    'card-background-color',
+    'divider-color',
+    'error-color',
+    'success-color',
+    'warning-color',
+    'info-color',
+    'ha-card-box-shadow',
+    'code-background-color',
+    'code-text-color',
+    'app-header-background-color',
+    'app-header-text-color',
+];
+var _systemThemeMedia = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+var userThemeMode = _loadSavedThemeMode();
+
+function _normalizeThemeMode(mode) {
+    return mode === 'light' || mode === 'dark' ? mode : null;
+}
+
+function _loadSavedThemeMode() {
+    try {
+        return _normalizeThemeMode(window.localStorage.getItem(THEME_MODE_STORAGE_KEY));
+    } catch (_) {
+        return null;
+    }
+}
+
+function _persistThemeMode(mode) {
+    try {
+        if (mode) {
+            window.localStorage.setItem(THEME_MODE_STORAGE_KEY, mode);
+        } else {
+            window.localStorage.removeItem(THEME_MODE_STORAGE_KEY);
+        }
+    } catch (_) {
+        // Ignore storage failures and fall back to in-memory state.
+    }
+}
+
+function _clearManagedThemeVars() {
+    var root = document.documentElement;
+    _themeManagedVars.forEach(function(key) {
+        root.style.removeProperty('--' + key);
+    });
+}
+
 function _parseThemeColorToRgb(color) {
     if (!color || typeof color !== 'string') return null;
     var trimmed = color.trim();
@@ -36,11 +92,75 @@ function _isDarkThemeColor(color) {
     return luminance < 0.5;
 }
 
-function applyThemeMode(isDark) {
-    document.documentElement.classList.toggle('theme-dark', !!isDark);
+function _getAutomaticThemeMode() {
+    return _systemThemeMedia && _systemThemeMedia.matches ? 'dark' : 'light';
 }
 
-applyThemeMode(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+function applyThemeMode(mode) {
+    var root = document.documentElement;
+    var resolved = mode === 'dark' ? 'dark' : 'light';
+    root.classList.toggle('theme-dark', resolved === 'dark');
+    root.classList.toggle('theme-light', resolved === 'light');
+    root.setAttribute('data-theme-mode', resolved);
+}
+
+function _refreshThemeDependentUi() {
+    document.querySelectorAll('input[type="range"]').forEach(function(el) {
+        updateSliderFill(el);
+    });
+}
+
+function _syncThemeToggleUi() {
+    var btn = document.getElementById('theme-toggle-btn');
+    var icon = document.getElementById('theme-toggle-icon');
+    var currentMode = document.documentElement.classList.contains('theme-dark') ? 'dark' : 'light';
+    var nextMode = currentMode === 'dark' ? 'light' : 'dark';
+    if (btn) {
+        var actionLabel = 'Switch to ' + nextMode + ' theme';
+        btn.title = actionLabel;
+        btn.setAttribute('aria-label', actionLabel);
+    }
+    if (icon) _setUiIconSlot(icon, nextMode === 'dark' ? 'moon' : 'sun');
+}
+
+function _applyStoredOrAutomaticTheme() {
+    if (userThemeMode) {
+        _clearManagedThemeVars();
+        applyThemeMode(userThemeMode);
+    } else {
+        applyThemeMode(_getAutomaticThemeMode());
+    }
+    _syncThemeToggleUi();
+    _refreshThemeDependentUi();
+}
+
+function toggleThemeMode() {
+    var currentMode = document.documentElement.classList.contains('theme-dark') ? 'dark' : 'light';
+    userThemeMode = currentMode === 'dark' ? 'light' : 'dark';
+    _persistThemeMode(userThemeMode);
+    _clearManagedThemeVars();
+    applyThemeMode(userThemeMode);
+    _syncThemeToggleUi();
+    _refreshThemeDependentUi();
+}
+
+_applyStoredOrAutomaticTheme();
+
+function _handleSystemThemeChange(event) {
+    if (userThemeMode) return;
+    _clearManagedThemeVars();
+    applyThemeMode(event.matches ? 'dark' : 'light');
+    _syncThemeToggleUi();
+    _refreshThemeDependentUi();
+}
+
+if (_systemThemeMedia) {
+    if (typeof _systemThemeMedia.addEventListener === 'function') {
+        _systemThemeMedia.addEventListener('change', _handleSystemThemeChange);
+    } else if (typeof _systemThemeMedia.addListener === 'function') {
+        _systemThemeMedia.addListener(_handleSystemThemeChange);
+    }
+}
 
 // HA Ingress theme injection listener
 // HA sends setTheme postMessage when theme changes (Ingress mode)
@@ -48,6 +168,7 @@ window.addEventListener('message', function(e) {
     if (!e.data || typeof e.data !== 'object') return;
     if (e.data.type !== 'setTheme') return;
     if (e.origin !== window.location.origin && e.source !== window.parent) return;
+    if (userThemeMode) return;
     var theme = e.data.theme || {};
     var root = document.documentElement;
     Object.keys(theme).forEach(function(key) {
@@ -55,11 +176,17 @@ window.addEventListener('message', function(e) {
     });
     var mode = e.data.mode || e.data.themeMode || '';
     if (mode === 'dark' || mode === 'light') {
-        applyThemeMode(mode === 'dark');
+        applyThemeMode(mode);
+        _syncThemeToggleUi();
+        _refreshThemeDependentUi();
         return;
     }
     var bg = theme['primary-background-color'] || theme['card-background-color'];
-    if (bg) applyThemeMode(_isDarkThemeColor(bg));
+    if (bg) {
+        applyThemeMode(_isDarkThemeColor(bg) ? 'dark' : 'light');
+        _syncThemeToggleUi();
+        _refreshThemeDependentUi();
+    }
 });
 
 // ---- State ----
@@ -364,6 +491,7 @@ function deviceMatchesFilters(dev) {
     if (!statusVal) return true;
     if (statusVal === 'playing') return !!dev.playing;
     if (statusVal === 'idle') return !dev.playing && dev.bluetooth_connected && dev.bt_management_enabled !== false;
+    if (statusVal === 'stopping') return !!dev.stopping;
     if (statusVal === 'reconnecting') return !!dev.reconnecting;
     if (statusVal === 'released') return dev.bt_management_enabled === false;
     if (statusVal === 'error') return getDeviceStatusKey(dev) === 'no-sink';
@@ -434,6 +562,7 @@ function _getStatusIndicatorSymbol(statusMeta) {
     var key = (statusMeta && statusMeta.key) || 'idle';
     if (key === 'playing') return '▶';
     if (key === 'reconnecting' || key === 'buffering') return '⟳';
+    if (key === 'stopping') return '⏹';
     if (key === 'stale') return '⚠';
     if (key === 'no-sink') return '⛔';
     if (key === 'disconnected') return '⊘';
@@ -517,6 +646,16 @@ function _uiIconSvg(kind, className) {
             '<path d="M20 5v5h-5"/><path d="M4 19v-5h5"/><path d="M6.9 9A7 7 0 0 1 18 7.5L20 10"/><path d="M17.1 15A7 7 0 0 1 6 16.5L4 14"/>' +
         '</svg>';
     }
+    if (kind === 'sun') {
+        return '<svg' + cls + ' viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+            '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.5"/><path d="M12 19v2.5"/><path d="m4.93 4.93 1.77 1.77"/><path d="m17.3 17.3 1.77 1.77"/><path d="M2.5 12H5"/><path d="M19 12h2.5"/><path d="m4.93 19.07 1.77-1.77"/><path d="m17.3 6.7 1.77-1.77"/>' +
+        '</svg>';
+    }
+    if (kind === 'moon') {
+        return '<svg' + cls + ' viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+            '<path d="M21 12.4A8.4 8.4 0 1 1 11.6 3a6.9 6.9 0 0 0 9.4 9.4Z"/>' +
+        '</svg>';
+    }
     if (kind === 'download') {
         return '<svg' + cls + ' viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
             '<path d="M12 4v11"/><path d="m8 11 4 4 4-4"/><path d="M5 19h14"/>' +
@@ -585,6 +724,7 @@ function _hydrateUiIcons(root) {
 function _setUiIconSlot(el, kind) {
     if (!el) return;
     el.innerHTML = _uiIconSvg(kind, 'ui-icon-svg');
+    el.removeAttribute('data-ui-icon');
 }
 
 function _buttonLabelWithIconHtml(kind, label) {
@@ -693,7 +833,13 @@ function getUnifiedDeviceStatusMeta(dev) {
     var summary = 'Connected and ready';
     var pulse = false;
 
-    if (safeDev.reconnecting) {
+    if (safeDev.stopping) {
+        key = 'stopping';
+        label = 'Stopping';
+        tone = 'warning';
+        summary = 'Stopping playback service';
+        pulse = true;
+    } else if (safeDev.reconnecting) {
         key = 'reconnecting';
         label = 'Reconnecting';
         tone = 'warning';
@@ -961,7 +1107,7 @@ function _applyDemoScreenshotDefaults() {
     if (diagSection) diagSection.open = false;
 
     var logsSection = document.querySelector('.logs-section');
-    if (logsSection) logsSection.open = true;
+    if (logsSection) logsSection.open = false;
 
     var pairedBox = document.getElementById('paired-box');
     var pairedList = document.getElementById('paired-list');
@@ -1627,6 +1773,7 @@ function _compareListValues(a, b, column) {
         var statusWeight = function(dev) {
             if (dev.playing) return 4;
             if (dev.bluetooth_connected) return 3;
+            if (dev.stopping) return 2.5;
             if (dev.reconnecting) return 2;
             if (dev.bt_management_enabled === false) return 1;
             return 0;
@@ -1666,8 +1813,15 @@ function _muteIconHtml(isMuted) {
         : '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>';
 }
 
+function _shouldShowEqualizer(dev) {
+    var key = getUnifiedDeviceStatusMeta(dev).key;
+    return !!(dev && dev.playing) || key === 'buffering';
+}
+
 function _getEqualizerStateClass(dev) {
+    var key = getUnifiedDeviceStatusMeta(dev).key;
     if (!!dev.playing && !!dev.audio_streaming) return ' active';
+    if (key === 'buffering') return ' stale';
     if (!!dev.playing) return ' stale';
     return '';
 }
@@ -2027,10 +2181,10 @@ function buildListView(entries, hiddenCount) {
         var muteTitle = canMute
             ? (effectiveMuted ? 'Unmute' : 'Mute')
             : transportState.muteUnavailableTitle;
-        var trackTitleEq = dev.playing && trackLabel !== 'Nothing playing'
+        var trackTitleEq = _shouldShowEqualizer(dev) && trackLabel !== 'Nothing playing'
             ? _getEqualizerHtml(dev, 'list-track-eq')
             : '';
-        var playerNameEq = !expanded && dev.playing
+        var playerNameEq = !expanded && _shouldShowEqualizer(dev)
             ? _getEqualizerHtml(dev, 'list-name-eq')
             : '';
         var rowPauseBtnId = 'drow-pause-' + i;
@@ -2058,7 +2212,7 @@ function buildListView(entries, hiddenCount) {
         var detailCurrentCopy = _renderNowPlayingTextHtml(mediaState, {
             containerClass: 'list-detail-current-copy is-rail',
             preTitleHtml: '<div class="list-now-playing-row">' +
-                ((dev.playing && trackLabel !== 'Nothing playing')
+                ((_shouldShowEqualizer(dev) && trackLabel !== 'Nothing playing')
                     ? _renderNowPlayingInfoBadgeHtml('list-now-playing-badge')
                     : _renderNowPlayingInfoBadgeHtml('list-now-playing-badge', { placeholder: true })) +
                 '</div>',
@@ -5219,7 +5373,7 @@ async function loadVersionInfo() {
         var data = await resp.json();
         var el = document.getElementById('version-display');
         if (!el) return;
-        var ver = data.version || el.textContent;
+        var ver = String(data.version || el.textContent || '').replace(/^v/i, '');
         var title = data.built_at || '';
         if (data.git_sha && data.git_sha !== 'unknown') title += ' · ' + data.git_sha;
         el.textContent = 'v' + ver;
@@ -5230,6 +5384,7 @@ async function loadVersionInfo() {
 
 function _releaseChannelFromVersion(version) {
     var normalized = String(version || '').toLowerCase();
+    if (normalized.indexOf('-demo') !== -1) return 'demo';
     if (normalized.indexOf('-beta') !== -1) return 'beta';
     if (normalized.indexOf('-rc') !== -1) return 'rc';
     return 'stable';
@@ -5237,8 +5392,8 @@ function _releaseChannelFromVersion(version) {
 
 function _applyReleaseChannelTextTone(el, channel) {
     if (!el) return;
-    el.classList.remove('channel-rc', 'channel-beta');
-    if (channel === 'rc' || channel === 'beta') {
+    el.classList.remove('channel-rc', 'channel-beta', 'channel-demo');
+    if (channel === 'rc' || channel === 'beta' || channel === 'demo') {
         el.classList.add('channel-' + channel);
     }
 }

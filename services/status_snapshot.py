@@ -252,6 +252,16 @@ def _build_health_summary(device: DeviceSnapshot) -> DeviceHealthSummary:
             or (device.recent_events[0]["at"] if device.recent_events else None),
         )
 
+    if device.extra.get("stopping"):
+        reasons.append("stopping")
+        return DeviceHealthSummary(
+            state="transitioning",
+            severity="info",
+            summary="Stopping playback service",
+            reasons=reasons,
+            last_event_at=device.recent_events[0]["at"] if device.recent_events else None,
+        )
+
     if device.extra.get("reconnecting"):
         reasons.append("reconnecting")
         return DeviceHealthSummary(

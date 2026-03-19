@@ -73,5 +73,7 @@ def test_field_names_cached():
     assert isinstance(status._field_names, frozenset)
     assert "volume" in status._field_names
     assert "connected" in status._field_names
+    assert "buffering" in status._field_names
+    assert "stopping" in status._field_names
     assert "hostname" in status._field_names
     assert "_field_names" not in status._field_names
