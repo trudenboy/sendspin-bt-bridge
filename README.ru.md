@@ -6,7 +6,7 @@
 [![GitHub Stars](https://img.shields.io/github/stars/trudenboy/sendspin-bt-bridge?style=flat&logo=github)](https://github.com/trudenboy/sendspin-bt-bridge/stargazers)
 [![Try Demo](https://img.shields.io/badge/Try_Demo-Live-brightgreen?style=flat&logo=render)](https://sendspin-demo.onrender.com)
 
-[Read in English](README.md) · [Документация](https://trudenboy.github.io/sendspin-bt-bridge/ru/) · [Демо](https://sendspin-demo.onrender.com) · [История проекта](HISTORY.ru.md)
+[Read in English](README.md) · [Документация](https://trudenboy.github.io/sendspin-bt-bridge/ru/) · [Дорожная карта](ROADMAP.ru.md) · [Демо](https://sendspin-demo.onrender.com) · [История проекта](HISTORY.ru.md)
 
 Превратите Bluetooth-колонки и наушники в нативные плееры [Music Assistant](https://www.music-assistant.io/) на протоколе [Sendspin](https://www.music-assistant.io/player-support/sendspin/).
 
@@ -63,6 +63,17 @@ Sendspin Bluetooth Bridge — это local-first мост для headless-сце
 - **Пять вариантов развёртывания** — Home Assistant addon, Docker, Raspberry Pi, Proxmox VE LXC и OpenWrt LXC — один и тот же bridge, один веб-интерфейс, одни и те же функции везде.
 - **REST API и live-обновления** — 60+ эндпоинтов для автоматизации и поток статусов в реальном времени через SSE для кастомных дашбордов и интеграций.
 
+## Коротко о roadmap
+
+Дорожная карта теперь синхронизирована с **реальным состоянием кода**, а не со старым списком планируемых рефакторингов.
+
+- **Сейчас:** довести до конца уже начатый v2 refactor — snapshot-first чтение, явное владение реестром устройств и уменьшение роли `state.py`.
+- **Дальше:** формализовать IPC-контракты, event history, диагностику, telemetry и lifecycle конфигурации.
+- **Потом:** усилить onboarding, recovery UX, подсказки по latency и capability-aware поведение UI/API.
+- **После этого:** переходить к backend abstraction для v3 и только затем аккуратно добавлять соседние backend'ы вроде local sink или ALSA.
+
+Полная англоязычная версия находится в [`ROADMAP.md`](ROADMAP.md), а краткая русская — в [`ROADMAP.ru.md`](ROADMAP.ru.md).
+
 ## Карта документации
 
 Полные инструкции и справка живут на docs site:
@@ -86,7 +97,8 @@ Sendspin Bluetooth Bridge — это local-first мост для headless-сце
 ## Ссылки по проекту
 
 - [Участие в разработке](CONTRIBUTING.md)
-- [Дорожная карта](ROADMAP.md)
+- [Дорожная карта (RU)](ROADMAP.ru.md)
+- [Roadmap (EN)](ROADMAP.md)
 - [Лицензия](LICENSE)
 - [История изменений](CHANGELOG.md)
 - [История проекта](HISTORY.ru.md)

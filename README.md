@@ -6,7 +6,7 @@
 [![GitHub Stars](https://img.shields.io/github/stars/trudenboy/sendspin-bt-bridge?style=flat&logo=github)](https://github.com/trudenboy/sendspin-bt-bridge/stargazers)
 [![Try Demo](https://img.shields.io/badge/Try_Demo-Live-brightgreen?style=flat&logo=render)](https://sendspin-demo.onrender.com)
 
-[Read in Russian](README.ru.md) · [Documentation](https://trudenboy.github.io/sendspin-bt-bridge/) · [Live Demo](https://sendspin-demo.onrender.com) · [Changelog](CHANGELOG.md)
+[Read in Russian](README.ru.md) · [Documentation](https://trudenboy.github.io/sendspin-bt-bridge/) · [Roadmap](ROADMAP.md) · [Live Demo](https://sendspin-demo.onrender.com) · [Changelog](CHANGELOG.md)
 
 Turn Bluetooth speakers and headphones into native [Music Assistant](https://www.music-assistant.io/) [Sendspin](https://www.music-assistant.io/player-support/sendspin/) players.
 
@@ -62,6 +62,17 @@ Full Home Assistant guide: <https://trudenboy.github.io/sendspin-bt-bridge/insta
 - **Multi-room ready** — run one bridge per room or one bridge with many speakers. Multiple bridges share the same Music Assistant server for whole-home audio.
 - **Five deployment options** — Home Assistant addon, Docker, Raspberry Pi, Proxmox VE LXC, and OpenWrt LXC — same bridge, same web UI, same features everywhere.
 - **REST API and live updates** — 60+ automation-friendly endpoints with real-time SSE status stream for custom dashboards and integrations.
+
+## Roadmap at a glance
+
+The roadmap is now aligned with the **current runtime**, not an older refactor wishlist.
+
+- **Now:** finish the v2 runtime foundation already in progress — snapshot-first reads, clearer device registry ownership, and less `state.py` coupling.
+- **Next:** formalize contracts, diagnostics, event history, telemetry, and config migrations so the bridge is easier to evolve and easier to operate.
+- **Then:** deepen onboarding, recovery UX, latency guidance, and capability-aware UI/API behavior.
+- **Later:** introduce backend abstraction for v3 only after the Bluetooth core is explicit and stable, then selectively add adjacent backends such as local sinks or ALSA outputs.
+
+See [`ROADMAP.md`](ROADMAP.md) for the full phased plan, epics, PR sequence, and guardrails.
 
 ## Documentation map
 
