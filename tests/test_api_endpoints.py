@@ -555,6 +555,25 @@ def test_api_config_get_includes_security_and_monitor_defaults(client):
     assert data["MA_WEBSOCKET_MONITOR"] is True
 
 
+def test_api_config_get_reports_fixed_ha_ingress_web_port(client, monkeypatch):
+    import routes.api_config as api_config_mod
+
+    monkeypatch.setattr(api_config_mod, "_detect_runtime", lambda: "ha_addon")
+    monkeypatch.setattr(api_config_mod, "resolve_web_port", lambda: 8081)
+    monkeypatch.setattr(api_config_mod, "resolve_base_listen_port", lambda: 9028)
+    monkeypatch.setattr(api_config_mod, "detect_ha_addon_channel", lambda: "rc")
+    monkeypatch.setattr(api_config_mod, "load_config", lambda: {"WEB_PORT": 18080, "BASE_LISTEN_PORT": 19000})
+
+    resp = client.get("/api/config")
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["WEB_PORT"] is None
+    assert data["_effective_web_port"] == 8081
+    assert data["_effective_base_listen_port"] == 9028
+    assert data["_delivery_channel"] == "rc"
+
+
 def test_api_config_get_enriches_devices_from_registry_snapshot(client, tmp_path, monkeypatch):
     import routes.api_config as api_config_mod
     from services.device_registry import DeviceRegistrySnapshot
@@ -690,6 +709,7 @@ def test_api_config_post_uses_installed_addon_channel_in_ha_runtime(client, tmp_
 
     assert resp.status_code == 200
     saved = json.loads((tmp_path / "config.json").read_text())
+    assert saved["WEB_PORT"] is None
     assert saved["UPDATE_CHANNEL"] == "rc"
 
 
@@ -870,7 +890,7 @@ def test_sync_ha_options_includes_manual_ports_when_set(monkeypatch):
     )
 
     options = captured["payload"]["options"]
-    assert options["web_port"] == 18080
+    assert "web_port" not in options
     assert options["base_listen_port"] == 19000
     assert "update_channel" not in options
     assert options["ma_auto_silent_auth"] is False

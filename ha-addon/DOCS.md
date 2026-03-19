@@ -77,7 +77,7 @@ Important:
 - stable / RC / Beta variants can run side by side on one HAOS host because they use different default HA ingress ports and different default player listen-port ranges
 - do **not** configure the same Bluetooth speaker in more than one variant at the same time
 - do **not** let multiple variants manage the same Bluetooth adapter unless you intentionally isolate devices and ports
-- if you set manual `web_port` or `base_listen_port` overrides, keep them unique across variants
+- if you set a manual `base_listen_port` override, keep it unique across variants
 
 ## Configuration
 
@@ -87,7 +87,6 @@ Important:
 |---|---|---|---|
 | `sendspin_server` | string | `auto` | Hostname or IP of the Music Assistant server. `auto` uses mDNS discovery (recommended). |
 | `sendspin_port` | port | `9000` | WebSocket port exposed by the MA Sendspin provider. Only change if you run multiple MA instances or use a custom port. |
-| `web_port` | port | _(track default)_ | Optional direct host-network web listener. In add-on mode ingress keeps using the installed track default (`8080` stable / `8081` RC / `8082` beta); setting this opens an additional direct listener only when it differs from that fixed ingress port. |
 | `base_listen_port` | port | _(track default)_ | Optional starting port for auto-assigned Sendspin player listeners. Defaults are `8928` (stable), `9028` (RC), and `9128` (beta). |
 | `bridge_name` | string | _(empty)_ | Custom name for this bridge instance. When empty the system hostname is used automatically. |
 | `tz` | string | _(empty)_ | IANA timezone (e.g. `Europe/London`, `America/New_York`). Leave empty to inherit the Home Assistant system timezone. |
@@ -166,8 +165,7 @@ When multiple addon variants are installed on the same HAOS host, they use diffe
 
 ### Manual port overrides
 
-- Leave `web_port` empty if you only use the addon through HA Ingress.
-- Set `web_port` only when you want an additional direct host-network listener.
+- The Home Assistant Ingress web UI port is fixed by the installed addon track: `8080` (stable), `8081` (RC), `8082` (beta).
 - Leave `base_listen_port` empty unless you need to shift the whole device-port range for this addon instance.
 - Use per-device `listen_port` only for targeted exceptions.
 

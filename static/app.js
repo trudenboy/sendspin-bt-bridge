@@ -5325,6 +5325,10 @@ async function loadConfig() {
             updateChannelSelect.value = (config.UPDATE_CHANNEL || 'stable').toLowerCase();
             _lastConfirmedUpdateChannel = updateChannelSelect.value;
         }
+        var haWebPortIndicator = document.getElementById('ha-web-port-indicator');
+        if (haWebPortIndicator && config._effective_web_port !== undefined && config._effective_web_port !== null) {
+            haWebPortIndicator.value = config._effective_web_port;
+        }
         var autoUpdateCheck = document.getElementById('auto-update');
         if (autoUpdateCheck) autoUpdateCheck.checked = !!config.AUTO_UPDATE;
         var checkUpdatesCheck = document.getElementById('check-updates');

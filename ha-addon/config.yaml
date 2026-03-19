@@ -56,7 +56,6 @@ options:
 schema:
   sendspin_server: str
   sendspin_port: port
-  web_port: port?
   base_listen_port: port?
   bridge_name: str?
   tz: str?

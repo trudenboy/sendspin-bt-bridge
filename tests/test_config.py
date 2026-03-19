@@ -248,7 +248,7 @@ def test_resolve_runtime_ports_allow_base_port_env_override_in_ha_addon():
     assert resolve_base_listen_port(env=env) == 19000
 
 
-def test_resolve_additional_web_port_uses_explicit_ha_override():
+def test_resolve_additional_web_port_is_disabled_in_ha_addon():
     from config import resolve_additional_web_port
 
     env = {
@@ -257,7 +257,7 @@ def test_resolve_additional_web_port_uses_explicit_ha_override():
         "WEB_PORT": "18080",
     }
 
-    assert resolve_additional_web_port(env=env) == 18080
+    assert resolve_additional_web_port(env=env) is None
 
 
 def test_resolve_ports_follow_saved_config_overrides(tmp_path):

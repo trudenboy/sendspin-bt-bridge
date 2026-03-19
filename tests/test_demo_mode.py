@@ -456,6 +456,8 @@ def test_ha_addon_index_hides_logout_button(monkeypatch):
         "routes.views.get_ma_addon_ui_url",
         lambda: "/api/hassio_ingress/ma-token",
     )
+    monkeypatch.setattr("routes.views.resolve_web_port", lambda: 8081)
+    monkeypatch.setattr("routes.views.detect_ha_addon_channel", lambda: "rc")
 
     template_root = Path(__file__).resolve().parents[1]
     app = Flask(
@@ -492,4 +494,7 @@ def test_ha_addon_index_hides_logout_button(monkeypatch):
     assert 'id="header-user-link"' in html
     assert 'href="/api/hassio_ingress/ma-token/#/settings/profile"' in html
     assert 'data-ma-profile-url="/api/hassio_ingress/ma-token/#/settings/profile"' in html
+    assert 'id="ha-web-port-indicator"' in html
+    assert 'value="8081"' in html
+    assert "installed add-on track (RC)" in html
     assert "header-btn-signout" not in html

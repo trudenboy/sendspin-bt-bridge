@@ -131,7 +131,7 @@ def main() -> None:
     config: dict = {
         "SENDSPIN_SERVER": str(opts.get("sendspin_server") or "auto"),
         "SENDSPIN_PORT": _int_opt(opts, "sendspin_port", 9000),
-        "WEB_PORT": _optional_int_opt(opts, "web_port"),
+        "WEB_PORT": None,
         "BASE_LISTEN_PORT": _optional_int_opt(opts, "base_listen_port"),
         "BRIDGE_NAME": str(opts.get("bridge_name") or ""),
         "BLUETOOTH_DEVICES": list(opts.get("bluetooth_devices") or []),
@@ -167,7 +167,7 @@ def main() -> None:
         for key in ("MA_API_URL", "MA_API_TOKEN"):
             if not config.get(key) and existing.get(key):
                 config[key] = existing[key]
-        for key in ("WEB_PORT", "BASE_LISTEN_PORT"):
+        for key in ("BASE_LISTEN_PORT",):
             option_name = key.lower()
             if opts.get(option_name) in (None, "") and existing.get(key) not in (None, ""):
                 config[key] = int(existing[key])

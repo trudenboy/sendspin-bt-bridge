@@ -255,16 +255,20 @@
                                 </div>
 
                                 <div class="form-group">
-                                    <label>Web UI port
+                                    <label>{% if ha_mode %}Home Assistant Ingress web UI port{% else %}Web UI port{% endif %}
                                         <span class="form-hint">
                                             {% if ha_mode %}
-                                            Optional extra direct host-network port. Home Assistant Ingress keeps using the fixed addon port.
+                                            Fixed by the installed add-on track{% if ha_delivery_channel %} ({{ ha_delivery_channel|upper }}){% endif %}. Not configurable in HA add-on mode.
                                             {% else %}
                                             Primary web UI port for direct browser access. Leave empty to keep the default.
                                             {% endif %}
                                         </span>
                                     </label>
-                                    <input type="number" name="WEB_PORT" placeholder="{% if ha_mode %}Optional extra port{% else %}8080{% endif %}" min="1" max="65535">
+                                    {% if ha_mode %}
+                                    <input type="number" id="ha-web-port-indicator" value="{{ ha_ingress_web_port or '' }}" readonly disabled>
+                                    {% else %}
+                                    <input type="number" name="WEB_PORT" placeholder="8080" min="1" max="65535">
+                                    {% endif %}
                                 </div>
 
                                 <div class="form-group">

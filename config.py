@@ -273,17 +273,7 @@ def resolve_additional_web_port(*, env: Mapping[str, str] | None = None, hostnam
     environ = os.environ if env is None else env
     if not is_ha_addon_runtime(env=environ):
         return None
-    channel = detect_ha_addon_channel(env=environ, hostname=hostname)
-    primary_port = HA_ADDON_CHANNEL_DEFAULTS[channel]["web_port"]
-    explicit_port = environ.get("WEB_PORT")
-    extra_port: int | None
-    if explicit_port not in (None, ""):
-        extra_port = _coerce_port(explicit_port, primary_port)
-    else:
-        extra_port = _configured_port_override(load_config(), "WEB_PORT", primary_port)
-    if extra_port in (None, primary_port):
-        return None
-    return extra_port
+    return None
 
 
 def resolve_base_listen_port(*, env: Mapping[str, str] | None = None, hostname: str | None = None) -> int:

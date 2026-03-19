@@ -40,6 +40,7 @@ def test_generate_same_slug_beta_variant_switches_channel_defaults():
     assert 'slug: "sendspin_bt_bridge"' in config_text
     assert 'version: "2.41.0-beta.1"' in config_text
     assert "update_channel:" not in config_text
+    assert "web_port:" not in config_text
     assert "boot: manual" in config_text
     assert "ingress_port: 8082" in config_text
     assert "web_port: null" not in config_text
@@ -68,6 +69,7 @@ def test_generate_suffix_slug_rc_variant_supports_multi_addon_layout():
     assert 'description: "Bridge Music Assistant Sendspin protocol to Bluetooth speakers (RC channel)"' in config_text
     assert 'version: "2.41.0-rc.1"' in config_text
     assert "update_channel:" not in config_text
+    assert "web_port:" not in config_text
     assert "boot: manual" in config_text
     assert "ingress_port: 8081" in config_text
     assert "panel_icon: mdi:flag-checkered" in config_text

@@ -27,8 +27,11 @@ from config import (
     DEFAULT_UPDATE_CHANNEL,
     VERSION,
     config_lock,
+    detect_ha_addon_channel,
     load_config,
     normalize_update_channel,
+    resolve_base_listen_port,
+    resolve_web_port,
     update_config,
 )
 from services import (
@@ -160,12 +163,18 @@ def _parse_optional_int(
 def _build_config_get_response():
     """Return the current config payload for the web UI."""
     config = load_config()
+    runtime = _detect_runtime()
 
     # Never expose secrets to the browser — but indicate whether password is set
     has_password = bool(config.get("AUTH_PASSWORD_HASH"))
     config.pop("AUTH_PASSWORD_HASH", None)
     config.pop("SECRET_KEY", None)
     config["_password_set"] = has_password
+    if runtime == "ha_addon":
+        config["WEB_PORT"] = None
+        config["_effective_web_port"] = resolve_web_port()
+        config["_delivery_channel"] = detect_ha_addon_channel()
+    config["_effective_base_listen_port"] = resolve_base_listen_port()
 
     # Enrich BLUETOOTH_DEVICES with resolved listen_port / listen_host from running clients
     registry = get_device_registry_snapshot()
@@ -330,8 +339,6 @@ def _sync_ha_options(config: dict) -> None:
             "bluetooth_devices": sup_devices,
             "bluetooth_adapters": sup_adapters,
         }
-        if config.get("WEB_PORT") is not None:
-            options["web_port"] = int(config["WEB_PORT"])
         if config.get("BASE_LISTEN_PORT") is not None:
             options["base_listen_port"] = int(config["BASE_LISTEN_PORT"])
         sup_opts = {"options": options}
@@ -497,6 +504,7 @@ def api_config():
         if val is not None and not isinstance(val, str):
             return _error_response(f"{str_key} must be a string")
     if _detect_runtime() == "ha_addon":
+        config["WEB_PORT"] = None
         config["UPDATE_CHANNEL"] = get_self_delivery_channel()
     else:
         config["UPDATE_CHANNEL"] = normalize_update_channel(config.get("UPDATE_CHANNEL", DEFAULT_UPDATE_CHANNEL))

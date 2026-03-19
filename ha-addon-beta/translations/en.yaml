@@ -11,13 +11,6 @@ configuration:
       WebSocket port exposed by the Music Assistant Sendspin provider.
       The default (9000) matches the MA default; only change if you have
       multiple instances or a custom port.
-  web_port:
-    name: "Web UI port"
-    description: >-
-      Direct web UI port for browser access over the host network. Leave empty
-      to use the default port for this install. In Home Assistant addon mode,
-      Ingress keeps using the fixed addon port; this option opens an additional
-      direct listener instead of changing the Ingress endpoint.
   base_listen_port:
     name: "Base player listen port"
     description: >-

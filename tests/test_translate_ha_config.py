@@ -231,7 +231,7 @@ def test_basic_translation(tmp_path):
 
     assert cfg["SENDSPIN_SERVER"] == "10.0.0.5"
     assert cfg["SENDSPIN_PORT"] == 9001
-    assert cfg["WEB_PORT"] == 18080
+    assert cfg["WEB_PORT"] is None
     assert cfg["BASE_LISTEN_PORT"] == 19000
     assert cfg["BRIDGE_NAME"] == "MyBridge"
     assert len(cfg["BLUETOOTH_DEVICES"]) == 2
@@ -291,11 +291,14 @@ def test_translation_preserves_saved_port_overrides_when_options_omit_them(tmp_p
     )
     _write_json(tmp_path / "options.json", _minimal_options())
 
-    with patch("scripts.translate_ha_config._detect_adapters", return_value=[]):
+    with (
+        patch("scripts.translate_ha_config._detect_adapters", return_value=[]),
+        patch("scripts.translate_ha_config.get_self_delivery_channel", return_value="stable"),
+    ):
         main()
 
     cfg = _read_json(tmp_path / "config.json")
-    assert cfg["WEB_PORT"] == 18080
+    assert cfg["WEB_PORT"] is None
     assert cfg["BASE_LISTEN_PORT"] == 19000
 
 
