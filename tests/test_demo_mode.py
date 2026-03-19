@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import sys
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -26,6 +27,8 @@ from demo.fixtures import (
     demo_player_id_for_name,
 )
 from demo.simulator import run_simulator
+from routes.auth import auth_bp
+from routes.views import views_bp
 
 
 def test_demo_bluetooth_manager_connect_device_restores_sink_and_volume():
@@ -410,3 +413,38 @@ async def test_demo_install_exposes_demo_logs_diagnostics_and_bugreport(monkeypa
     assert [device["name"] for device in report["bt_device_info"]] == [device["name"] for device in DEMO_BT_DEVICE_INFO]
     assert "BUG REPORT — FULL DIAGNOSTICS" in bugreport_data["text_full"]
     assert "ONBOARDING ASSISTANT" in bugreport_data["text_full"]
+
+
+def test_demo_index_shows_demo_user_and_ma_token_notice_by_default(monkeypatch):
+    monkeypatch.setenv("DEMO_MODE", "true")
+
+    template_root = Path(__file__).resolve().parents[1]
+    app = Flask(
+        __name__,
+        template_folder=str(template_root / "templates"),
+        static_folder=str(template_root / "static"),
+    )
+    app.secret_key = "testing"
+    app.config["AUTH_ENABLED"] = False
+    app.config["IS_HA_ADDON"] = False
+
+    @app.context_processor
+    def inject_version():
+        return {"VERSION": VERSION, "asset_version": lambda _filename: "test-asset-version"}
+
+    @app.route("/static/v<version>/<path:filename>", endpoint="vstatic")
+    def _vstatic(version, filename):
+        return f"{version}:{filename}"
+
+    app.register_blueprint(auth_bp)
+    app.register_blueprint(views_bp)
+
+    response = app.test_client().get("/")
+
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert "Demo User" in html
+    assert "header-btn-signout" in html
+    assert "Music Assistant token needs attention" in html
+    assert "Open Configuration \u2192 Music Assistant to get one." in html
+    assert 'id="auth-warning-notice"' not in html

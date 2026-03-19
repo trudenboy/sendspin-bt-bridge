@@ -27,6 +27,14 @@ Unit tests: `pytest` (see `tests/`). 187 tests across 18 files. Manual testing v
 
 CI/CD builds multi-platform Docker images (`linux/amd64`, `linux/arm64`) to `ghcr.io/trudenboy/sendspin-bt-bridge` on `v*` tag push. GitHub releases are created by the separate manual `Create GitHub Release` workflow, which defaults to the latest tag and syncs `ha-addon/config.yaml` on release instead of on tag push.
 
+## Local Demo Workflow
+
+- Run no more than one local demo instance at a time.
+- Start the demo from the current repository directory so it always picks up live code and template changes.
+- When restarting the demo, inspect the process first instead of assuming a busy port belongs to something else.
+- After sending `kill`, verify that the exact PID you targeted is actually gone before starting a replacement.
+- Account for OS-specific command syntax and behavior when managing the demo process, especially on macOS.
+
 ## Architecture (v2.30.7)
 
 **Subprocess isolation**: each Bluetooth speaker runs as a dedicated Python subprocess (`services/daemon_process.py`) with `PULSE_SINK=<bt_sink_name>` in env. This gives every speaker its own PulseAudio context → correct audio routing from the first sample, no `move-sink-input` needed.

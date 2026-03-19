@@ -5598,7 +5598,7 @@ function _showUpdateBadge(upd) {
         link.title = 'Update available on ' + channel.toUpperCase() + ' channel — click to apply';
         link.classList.remove('no-update');
         link.classList.add('has-update');
-        _applyReleaseChannelTextTone(ver, channel);
+        if (ver) ver.classList.remove('channel-rc', 'channel-beta', 'channel-demo');
         link.dataset.updateVersion = upd.version;
         link.dataset.updateUrl = upd.url || '';
         link.dataset.updateChannel = channel;
@@ -5611,7 +5611,7 @@ function _showUpdateBadge(upd) {
         link.title = 'Check for updates';
         link.classList.remove('has-update');
         link.classList.add('no-update');
-        _applyReleaseChannelTextTone(ver, 'stable');
+        if (ver) ver.classList.remove('channel-rc', 'channel-beta', 'channel-demo');
         delete link.dataset.updateVersion;
         delete link.dataset.updateUrl;
         delete link.dataset.updateChannel;
