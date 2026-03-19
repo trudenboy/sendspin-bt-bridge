@@ -1,5 +1,6 @@
 """Tests for Music Assistant now-playing metadata helpers."""
 
+import importlib
 import json
 from types import SimpleNamespace
 from urllib.parse import parse_qs, urlparse
@@ -304,6 +305,69 @@ async def test_send_queue_cmd_repeat_does_not_evaluate_seek_payload(monkeypatch)
 
     assert result["accepted"] is True
     assert result["queue_id"] == "syncgroup_1"
+
+
+@pytest.mark.asyncio
+async def test_send_queue_cmd_shuffle_falls_back_to_legacy_sendspin_queue(monkeypatch):
+    real_ma_monitor = importlib.reload(ma_monitor)
+    monitor = real_ma_monitor.MaMonitor("http://ma:8095", "token")
+    monitor._running = True
+    monitor._ws = object()
+    calls = []
+
+    async def _fake_execute_cmd(command: str, args: dict) -> dict:
+        calls.append((command, dict(args)))
+        assert command == "player_queues/shuffle"
+        if args["queue_id"] == "sendspin-yandex-mini-2---lxc":
+            return {"error_code": 999, "details": "'sendspin-yandex-mini-2---lxc'"}
+        assert args == {"queue_id": "upsendspinyandexmini2lxc", "shuffle_enabled": True}
+        return {"result": {"ok": True}}
+
+    monkeypatch.setattr(monitor, "execute_cmd", _fake_execute_cmd)
+    monkeypatch.setattr(real_ma_monitor, "_monitor_instance", monitor)
+    state.set_ma_groups({}, [])
+    try:
+        result = await real_ma_monitor.send_queue_cmd(
+            "shuffle",
+            True,
+            "sendspin-yandex-mini-2---lxc",
+            player_id="sendspin-yandex-mini-2---lxc",
+        )
+    finally:
+        real_ma_monitor._monitor_instance = None
+        state.set_ma_groups({}, [])
+
+    assert calls == [
+        ("player_queues/shuffle", {"queue_id": "sendspin-yandex-mini-2---lxc", "shuffle_enabled": True}),
+        ("player_queues/shuffle", {"queue_id": "upsendspinyandexmini2lxc", "shuffle_enabled": True}),
+    ]
+    assert result["accepted"] is True
+    assert result["queue_id"] == "upsendspinyandexmini2lxc"
+
+
+@pytest.mark.asyncio
+async def test_send_queue_cmd_rejects_error_code_response(monkeypatch):
+    real_ma_monitor = importlib.reload(ma_monitor)
+    monitor = real_ma_monitor.MaMonitor("http://ma:8095", "token")
+    monitor._running = True
+    monitor._ws = object()
+
+    async def _fake_execute_cmd(command: str, args: dict) -> dict:
+        assert command == "player_queues/repeat"
+        assert args == {"queue_id": "syncgroup_1", "repeat_mode": "all"}
+        return {"error_code": 999, "details": "queue missing"}
+
+    monkeypatch.setattr(monitor, "execute_cmd", _fake_execute_cmd)
+    monkeypatch.setattr(real_ma_monitor, "_monitor_instance", monitor)
+    state.set_ma_groups({}, [{"id": "syncgroup_1", "name": "Kitchen", "members": []}])
+    try:
+        result = await real_ma_monitor.send_queue_cmd("repeat", "all", "syncgroup_1")
+    finally:
+        real_ma_monitor._monitor_instance = None
+        state.set_ma_groups({}, [])
+
+    assert result["accepted"] is False
+    assert result["error"] == "queue missing"
 
 
 @pytest.mark.asyncio

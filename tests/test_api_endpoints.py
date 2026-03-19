@@ -2278,6 +2278,102 @@ def test_ma_queue_cmd_prefers_player_queue_over_stale_group_id(client, monkeypat
         state.set_ma_connected(False)
 
 
+def test_ma_queue_cmd_refreshes_actual_accepted_solo_queue(client, monkeypatch):
+    import routes.api_ma as api_ma
+    import services.ma_monitor as ma_monitor
+    import state
+
+    class _FakeMonitor:
+        def is_connected(self):
+            return True
+
+    class _ImmediateThread:
+        def __init__(self, target, args=(), kwargs=None, daemon=None, name=None):
+            self._target = target
+            self._args = args
+            self._kwargs = kwargs or {}
+
+        def start(self):
+            self._target(*self._args, **self._kwargs)
+
+    captured = {}
+
+    async def _fake_send_queue_cmd(action, value, syncgroup_id, player_id=None):
+        captured["action"] = action
+        captured["value"] = value
+        captured["syncgroup_id"] = syncgroup_id
+        captured["player_id"] = player_id
+        return {
+            "accepted": True,
+            "queue_id": "upsendspinyandexmini2lxc",
+            "ack_latency_ms": 9,
+            "accepted_at": 789.01,
+        }
+
+    async def _fake_request_queue_refresh(syncgroup_id):
+        captured["refresh_syncgroup_id"] = syncgroup_id
+        return True
+
+    class _DoneFuture:
+        def __init__(self, result):
+            self._result = result
+
+        def result(self, timeout=None):
+            return self._result
+
+    def _fake_run_coroutine_threadsafe(coro, loop):
+        import asyncio
+
+        temp_loop = asyncio.new_event_loop()
+        try:
+            return _DoneFuture(temp_loop.run_until_complete(coro))
+        finally:
+            temp_loop.close()
+
+    state.set_ma_connected(True)
+    state.set_ma_groups({}, [])
+    state.set_ma_now_playing_for_group(
+        "sendspin-yandex-mini-2---lxc",
+        {"syncgroup_id": "sendspin-yandex-mini-2---lxc", "shuffle": False, "connected": True},
+    )
+    try:
+        monkeypatch.setattr(state, "get_main_loop", lambda: object())
+        monkeypatch.setattr(ma_monitor, "send_queue_cmd", _fake_send_queue_cmd)
+        monkeypatch.setattr(ma_monitor, "request_queue_refresh", _fake_request_queue_refresh)
+        monkeypatch.setattr(ma_monitor, "get_monitor", lambda: _FakeMonitor())
+        monkeypatch.setattr(api_ma.asyncio, "run_coroutine_threadsafe", _fake_run_coroutine_threadsafe)
+        monkeypatch.setattr(api_ma.threading, "Thread", _ImmediateThread)
+
+        resp = client.post(
+            "/api/ma/queue/cmd",
+            data=json.dumps(
+                {
+                    "action": "shuffle",
+                    "value": True,
+                    "syncgroup_id": "sendspin-yandex-mini-2---lxc",
+                    "player_id": "sendspin-yandex-mini-2---lxc",
+                }
+            ),
+            content_type="application/json",
+        )
+
+        assert resp.status_code == 202
+        data = resp.get_json()
+        assert captured["syncgroup_id"] == "sendspin-yandex-mini-2---lxc"
+        assert captured["player_id"] == "sendspin-yandex-mini-2---lxc"
+        assert captured["refresh_syncgroup_id"] == "upsendspinyandexmini2lxc"
+        assert data["queue_id"] == "sendspin-yandex-mini-2---lxc"
+        result = client.get(f"/api/ma/queue/cmd/result/{data['job_id']}")
+        assert result.status_code == 200
+        result_data = result.get_json()
+        assert result_data["success"] is True
+        assert result_data["queue_id"] == "upsendspinyandexmini2lxc"
+    finally:
+        state.clear_ma_now_playing()
+        state.set_ma_groups({}, [])
+        state.set_ma_connected(False)
+
+
 def test_resolve_target_queue_uses_player_id_queue_for_solo_sendspin_player():
     import routes.api_ma as api_ma
     import state

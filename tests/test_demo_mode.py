@@ -450,6 +450,39 @@ def test_demo_index_shows_demo_user_and_ma_token_notice_by_default(monkeypatch):
     assert 'id="auth-warning-notice"' not in html
 
 
+def test_standalone_index_shows_short_web_port_hint(monkeypatch):
+    monkeypatch.delenv("DEMO_MODE", raising=False)
+    monkeypatch.delenv("SUPERVISOR_TOKEN", raising=False)
+
+    template_root = Path(__file__).resolve().parents[1]
+    app = Flask(
+        __name__,
+        template_folder=str(template_root / "templates"),
+        static_folder=str(template_root / "static"),
+    )
+    app.secret_key = "testing"
+    app.config["AUTH_ENABLED"] = False
+    app.config["IS_HA_ADDON"] = False
+
+    @app.context_processor
+    def inject_version():
+        return {"VERSION": VERSION, "asset_version": lambda _filename: "test-asset-version"}
+
+    @app.route("/static/v<version>/<path:filename>", endpoint="vstatic")
+    def _vstatic(version, filename):
+        return f"{version}:{filename}"
+
+    app.register_blueprint(auth_bp)
+    app.register_blueprint(views_bp)
+
+    response = app.test_client().get("/")
+
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert "Web UI port" in html
+    assert "Direct web UI port. Leave empty for 8080." in html
+
+
 def test_ha_addon_index_hides_logout_button(monkeypatch):
     monkeypatch.setenv("SUPERVISOR_TOKEN", "test-token")
     monkeypatch.setattr(

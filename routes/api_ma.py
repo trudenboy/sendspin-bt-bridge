@@ -1045,6 +1045,7 @@ def _run_ma_queue_cmd_job(
             )
             return
 
+        accepted_queue_id = str(result.get("queue_id") or target_queue_id)
         predicted = state.apply_ma_now_playing_prediction(
             state_key,
             {},
@@ -1056,9 +1057,9 @@ def _run_ma_queue_cmd_job(
         )
         _await_loop_result(
             loop,
-            request_queue_refresh(target_queue_id),
+            request_queue_refresh(accepted_queue_id),
             timeout=1.0,
-            description=f"MA queue refresh {target_queue_id}",
+            description=f"MA queue refresh {accepted_queue_id}",
         )
         state.finish_async_job(
             job_id,
@@ -1066,7 +1067,7 @@ def _run_ma_queue_cmd_job(
                 "success": True,
                 "op_id": op_id,
                 "syncgroup_id": state_key,
-                "queue_id": target_queue_id,
+                "queue_id": accepted_queue_id,
                 "accepted": True,
                 "accepted_at": result.get("accepted_at"),
                 "ack_latency_ms": result.get("ack_latency_ms"),

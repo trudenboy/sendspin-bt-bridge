@@ -659,9 +659,13 @@ def install() -> None:
     _ma_monitor.start_monitor = _demo_start_monitor  # type: ignore[assignment]
 
     async def _demo_send_queue_cmd(
-        action: str, value: Any = None, syncgroup_id: str | None = None
+        action: str,
+        value: Any = None,
+        syncgroup_id: str | None = None,
+        player_id: str | None = None,
     ) -> dict[str, object]:
         """Handle queue commands locally — update now-playing state."""
+        del player_id
         sg_id = syncgroup_id or next(iter(DEMO_MA_NOW_PLAYING), None)
         if not sg_id:
             return {"accepted": False, "queue_id": "", "error": "no queue available"}

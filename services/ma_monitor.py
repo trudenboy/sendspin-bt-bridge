@@ -786,6 +786,24 @@ async def send_queue_cmd(
     if not resolved_player_id and queue_id and not queue_id.startswith("up"):
         resolved_player_id = queue_id
 
+    def _response_error(resp: dict) -> str | None:
+        error = resp.get("error")
+        if error is not None:
+            return str(error)
+        error_code = resp.get("error_code")
+        if error_code is not None:
+            details = str(resp.get("details") or "").strip()
+            return details or f"error_code={error_code}"
+        return None
+
+    def _queue_targets() -> list[str]:
+        targets = [queue_id]
+        if resolved_player_id and not queue_id.startswith("syncgroup_"):
+            for candidate in solo_queue_candidates(resolved_player_id):
+                if candidate and candidate not in targets:
+                    targets.append(candidate)
+        return targets
+
     if action == "next":
         if resolved_player_id:
             command, args = "players/cmd/next", {"player_id": resolved_player_id}
@@ -812,23 +830,43 @@ async def send_queue_cmd(
         return {"accepted": False, "queue_id": queue_id, "error": "monitor unavailable"}
 
     try:
-        started = time.monotonic()
-        resp = await mon.execute_cmd(command, args)
-        accepted_at = time.time()
-        latency_ms = int((time.monotonic() - started) * 1000)
-        if resp.get("error") is None:
-            logger.info("MA queue cmd (monitor): %s value=%s → %s ack=%dms", action, value, queue_id, latency_ms)
-            return {
-                "accepted": True,
-                "queue_id": queue_id,
-                "ack_latency_ms": latency_ms,
-                "accepted_at": accepted_at,
-            }
-        logger.warning("MA queue cmd rejected: %s value=%s → %s resp=%s", action, value, queue_id, resp)
+        last_error = "command rejected"
+        queue_targets = _queue_targets() if action in {"shuffle", "repeat", "seek"} else [queue_id]
+        for target_queue_id in queue_targets:
+            attempt_args = dict(args)
+            if "queue_id" in attempt_args:
+                attempt_args["queue_id"] = target_queue_id
+            started = time.monotonic()
+            resp = await mon.execute_cmd(command, attempt_args)
+            accepted_at = time.time()
+            latency_ms = int((time.monotonic() - started) * 1000)
+            error = _response_error(resp)
+            if error is None:
+                logger.info(
+                    "MA queue cmd (monitor): %s value=%s → %s ack=%dms",
+                    action,
+                    value,
+                    target_queue_id,
+                    latency_ms,
+                )
+                return {
+                    "accepted": True,
+                    "queue_id": target_queue_id,
+                    "ack_latency_ms": latency_ms,
+                    "accepted_at": accepted_at,
+                }
+            last_error = error
+            logger.warning(
+                "MA queue cmd rejected: %s value=%s → %s resp=%s",
+                action,
+                value,
+                target_queue_id,
+                resp,
+            )
     except Exception as exc:
         logger.warning("MA queue cmd %s failed via monitor: %s", action, exc)
         return {"accepted": False, "queue_id": queue_id, "error": str(exc)}
-    return {"accepted": False, "queue_id": queue_id, "error": "command rejected"}
+    return {"accepted": False, "queue_id": queue_id, "error": last_error}
 
 
 async def request_queue_refresh(syncgroup_id: str | None = None) -> bool:
