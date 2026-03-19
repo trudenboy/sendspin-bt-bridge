@@ -1,4 +1,4 @@
-"""Background version checker — polls GitHub releases API periodically."""
+"""Background version checker — polls stable GitHub releases and prerelease tags."""
 
 from __future__ import annotations
 
@@ -8,14 +8,18 @@ import os
 import re
 import subprocess
 from typing import Any
+from urllib.parse import quote
 
 from config import DEFAULT_UPDATE_CHANNEL, load_config, normalize_update_channel
+from scripts.release_notes import extract_changelog_section
 
 logger = logging.getLogger(__name__)
 
 GITHUB_REPO = "trudenboy/sendspin-bt-bridge"
+_REPO_WEB_URL = f"https://github.com/{GITHUB_REPO}"
 CHECK_INTERVAL = 3600  # 1 hour
 _RELEASES_URL = f"https://api.github.com/repos/{GITHUB_REPO}/releases?per_page=100"
+_TAGS_URL = f"https://api.github.com/repos/{GITHUB_REPO}/tags?per_page=100"
 _SEMVER_RE = re.compile(
     r"^v?(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)(?:-(?P<channel>rc|beta)\.(?P<serial>\d+))?$"
 )
@@ -66,14 +70,17 @@ def _release_sort_key(release: dict[str, Any]) -> tuple[int, int, int, int, int]
     return _parse_version(str(release.get("tag_name", "")))
 
 
-async def _fetch_releases() -> list[dict[str, Any]] | None:
-    import json as _json
+def _tag_sort_key(tag: dict[str, Any]) -> tuple[int, int, int, int, int]:
+    return _parse_version(str(tag.get("name", "")))
+
+
+async def _fetch_url(url: str, accept: str = "application/vnd.github+json") -> tuple[bytes, dict[str, str]] | None:
     import urllib.request
 
     try:
         req = urllib.request.Request(
-            _RELEASES_URL,
-            headers={"Accept": "application/vnd.github+json", "User-Agent": "sendspin-bt-bridge"},
+            url,
+            headers={"Accept": accept, "User-Agent": "sendspin-bt-bridge"},
         )
         loop = asyncio.get_running_loop()
 
@@ -82,31 +89,74 @@ async def _fetch_releases() -> list[dict[str, Any]] | None:
             headers = {k.lower(): v for k, v in resp.getheaders()}
             return resp.read(), headers
 
-        resp_text, headers = await loop.run_in_executor(None, _fetch)
-
-        remaining = headers.get("x-ratelimit-remaining")
-        if remaining is not None and int(remaining) <= 1:
-            reset_at = int(headers.get("x-ratelimit-reset", "0"))
-            import time
-
-            wait = max(reset_at - int(time.time()), 60)
-            logger.warning("GitHub API rate limit nearly exhausted, backing off %ds", wait)
-            await asyncio.sleep(wait)
-
-        data = _json.loads(resp_text)
-        if isinstance(data, list):
-            return [release for release in data if isinstance(release, dict)]
-        logger.debug("Version check failed: unexpected releases payload %r", type(data).__name__)
-        return None
+        return await loop.run_in_executor(None, _fetch)
     except urllib.request.HTTPError as exc:
-        if exc.code == 403:
+        if exc.code == 403 and "api.github.com" in url:
             logger.warning("GitHub API rate-limited (HTTP 403), will retry next cycle")
         else:
-            logger.debug("Version check failed: HTTP %d", exc.code)
+            logger.debug("Version check failed for %s: HTTP %d", url, exc.code)
         return None
     except Exception as exc:
-        logger.debug("Version check failed: %s", exc)
+        logger.debug("Version check failed for %s: %s", url, exc)
         return None
+
+
+async def _fetch_json(url: str) -> Any | None:
+    import json as _json
+
+    response = await _fetch_url(url)
+    if response is None:
+        return None
+
+    resp_text, headers = response
+    remaining = headers.get("x-ratelimit-remaining")
+    if remaining is not None and int(remaining) <= 1:
+        import time
+
+        reset_at = int(headers.get("x-ratelimit-reset", "0"))
+        wait = max(reset_at - int(time.time()), 60)
+        logger.warning("GitHub API rate limit nearly exhausted, backing off %ds", wait)
+        await asyncio.sleep(wait)
+
+    try:
+        return _json.loads(resp_text)
+    except Exception as exc:
+        logger.debug("Version check failed: could not decode JSON from %s: %s", url, exc)
+        return None
+
+
+async def _fetch_releases() -> list[dict[str, Any]] | None:
+    data = await _fetch_json(_RELEASES_URL)
+    if isinstance(data, list):
+        return [release for release in data if isinstance(release, dict)]
+    logger.debug("Version check failed: unexpected releases payload %r", type(data).__name__)
+    return None
+
+
+async def _fetch_tags() -> list[dict[str, Any]] | None:
+    data = await _fetch_json(_TAGS_URL)
+    if isinstance(data, list):
+        return [tag for tag in data if isinstance(tag, dict)]
+    logger.debug("Version check failed: unexpected tags payload %r", type(data).__name__)
+    return None
+
+
+async def _fetch_changelog_section_for_tag(tag: str) -> str:
+    response = await _fetch_url(
+        f"https://raw.githubusercontent.com/{GITHUB_REPO}/{quote(tag, safe='')}/CHANGELOG.md",
+        accept="text/plain",
+    )
+    if response is None:
+        return ""
+
+    resp_text, _headers = response
+    try:
+        changelog_text = resp_text.decode("utf-8")
+    except UnicodeDecodeError:
+        logger.debug("Version check failed: could not decode CHANGELOG.md for %s", tag)
+        return ""
+
+    return extract_changelog_section(changelog_text, tag.lstrip("v"))
 
 
 def _select_latest_release(releases: list[dict[str, Any]], channel: str) -> dict[str, Any] | None:
@@ -132,6 +182,24 @@ def _select_latest_release(releases: list[dict[str, Any]], channel: str) -> dict
     return max(eligible, key=_release_sort_key)
 
 
+def _select_latest_tag(tags: list[dict[str, Any]], channel: str) -> dict[str, Any] | None:
+    normalized_channel = normalize_update_channel(channel)
+    eligible: list[dict[str, Any]] = []
+    for tag in tags:
+        name = str(tag.get("name", "")).strip()
+        if _classify_release_channel(name) != normalized_channel:
+            continue
+        try:
+            _parse_version(name)
+        except ValueError:
+            continue
+        eligible.append(tag)
+
+    if not eligible:
+        return None
+    return max(eligible, key=_tag_sort_key)
+
+
 def _release_to_payload(release: dict[str, Any], channel: str) -> dict[str, Any]:
     tag = str(release.get("tag_name", "")).strip()
     return {
@@ -146,16 +214,40 @@ def _release_to_payload(release: dict[str, Any], channel: str) -> dict[str, Any]
     }
 
 
+def _tag_to_payload(tag: dict[str, Any], channel: str, body: str) -> dict[str, Any]:
+    tag_name = str(tag.get("name", "")).strip()
+    return {
+        "version": tag_name.lstrip("v"),
+        "tag": tag_name,
+        "url": f"{_REPO_WEB_URL}/tree/{quote(tag_name, safe='')}",
+        "published_at": "",
+        "body": body[:2000],
+        "channel": channel,
+        "target_ref": tag_name,
+        "prerelease": channel != "stable",
+    }
+
+
 async def check_latest_version(channel: str | None = None) -> dict[str, Any] | None:
-    """Fetch the newest published release for the requested update channel."""
+    """Fetch the newest stable release or prerelease tag for the requested channel."""
     effective_channel = normalize_update_channel(channel or load_config().get("UPDATE_CHANNEL"))
-    releases = await _fetch_releases()
-    if not releases:
+    if effective_channel == "stable":
+        releases = await _fetch_releases()
+        if not releases:
+            return None
+        release = _select_latest_release(releases, effective_channel)
+        if not release:
+            return None
+        return _release_to_payload(release, effective_channel)
+
+    tags = await _fetch_tags()
+    if not tags:
         return None
-    release = _select_latest_release(releases, effective_channel)
-    if not release:
+    tag = _select_latest_tag(tags, effective_channel)
+    if not tag:
         return None
-    return _release_to_payload(release, effective_channel)
+    body = await _fetch_changelog_section_for_tag(str(tag.get("name", "")).strip())
+    return _tag_to_payload(tag, effective_channel, body)
 
 
 async def run_update_checker(current_version: str) -> None:

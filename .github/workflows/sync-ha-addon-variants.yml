@@ -1,0 +1,119 @@
+name: Sync HA Addon Variants
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to sync (leave blank to use the latest tag)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ha-addon-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve target tag and channel
+        id: resolve
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          REF_NAME: ${{ github.ref_name }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          git fetch --force --tags
+          TAG="${INPUT_TAG}"
+          if [ -z "${TAG}" ]; then
+            if [ "${EVENT_NAME}" = "push" ]; then
+              TAG="${REF_NAME}"
+            else
+              TAG="$(git tag --sort=-version:refname | head -n 1 || true)"
+            fi
+          fi
+          if [ -z "${TAG}" ]; then
+            echo "No tags found in the repository" >&2
+            exit 1
+          fi
+          git rev-parse "${TAG}^{tag}" >/dev/null 2>&1 || git rev-parse "${TAG}^{commit}" >/dev/null 2>&1
+
+          CHANNEL="stable"
+          if [[ "${TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$ ]]; then
+            CHANNEL="rc"
+          elif [[ "${TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+$ ]]; then
+            CHANNEL="beta"
+          elif [[ ! "${TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Unsupported tag format: ${TAG}" >&2
+            exit 1
+          fi
+
+          VERSION="${TAG#v}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "channel=${CHANNEL}" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Addon sync target"
+            echo ""
+            echo "- Tag: \`${TAG}\`"
+            echo "- Version: \`${VERSION}\`"
+            echo "- Channel: \`${CHANNEL}\`"
+            echo "- This workflow syncs addon directories only; it does not create GitHub release objects."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Sync HA addon directories on main
+        env:
+          CHANNEL: ${{ steps.resolve.outputs.channel }}
+          VERSION: ${{ steps.resolve.outputs.version }}
+        run: |
+          set -euo pipefail
+          git checkout main
+          git fetch origin main --force
+          git fetch --force --tags
+          git reset --hard origin/main
+
+          stable_tag="$(git tag --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1 || true)"
+          rc_tag="$(git tag --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$' | head -n 1 || true)"
+          beta_tag="$(git tag --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+$' | head -n 1 || true)"
+
+          case "${CHANNEL}" in
+            stable) stable_tag="v${VERSION}" ;;
+            rc) rc_tag="v${VERSION}" ;;
+            beta) beta_tag="v${VERSION}" ;;
+          esac
+
+          cmd=(python scripts/generate_ha_addon_variants.py sync-current-repo --output-dir .)
+          if [ -n "${stable_tag}" ]; then
+            cmd+=(--stable-version "${stable_tag#v}")
+          fi
+          if [ -n "${rc_tag}" ]; then
+            cmd+=(--rc-version "${rc_tag#v}")
+          fi
+          if [ -n "${beta_tag}" ]; then
+            cmd+=(--beta-version "${beta_tag#v}")
+          fi
+          "${cmd[@]}"
+
+          if [ -z "$(git status --short)" ]; then
+            echo "- HA addon directories on \`main\` already matched the latest stable/rc/beta tags" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A .
+          git commit -m "chore: sync HA addon directories for ${VERSION}"
+          git push origin HEAD:main
+          echo "- Updated \`ha-addon\` / \`ha-addon-rc\` / \`ha-addon-beta\` on \`main\` from the latest known channel tags" >> "$GITHUB_STEP_SUMMARY"

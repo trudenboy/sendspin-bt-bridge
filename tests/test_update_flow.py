@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import importlib
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -90,6 +91,91 @@ def test_select_latest_release_filters_by_channel():
     assert update_checker._select_latest_release(releases, "beta")["tag_name"] == "v2.41.0-beta.2"
     assert update_checker._select_latest_release(releases, "rc")["tag_name"] == "v2.41.0-rc.1"
     assert update_checker._select_latest_release(releases, "stable")["tag_name"] == "v2.41.0"
+
+
+def test_select_latest_tag_filters_by_channel():
+    import services.update_checker as update_checker
+
+    tags = [
+        {"name": "v2.41.0-beta.2"},
+        {"name": "v2.41.0-rc.1"},
+        {"name": "v2.40.9"},
+        {"name": "invalid-tag"},
+    ]
+
+    assert update_checker._select_latest_tag(tags, "beta")["name"] == "v2.41.0-beta.2"
+    assert update_checker._select_latest_tag(tags, "rc")["name"] == "v2.41.0-rc.1"
+    assert update_checker._select_latest_tag(tags, "stable")["name"] == "v2.40.9"
+
+
+def test_check_latest_version_uses_releases_for_stable(monkeypatch):
+    import services.update_checker as update_checker
+
+    update_checker = importlib.reload(update_checker)
+
+    async def fake_fetch_releases():
+        return [
+            {
+                "tag_name": "v2.41.0",
+                "html_url": "https://example.invalid/releases/v2.41.0",
+                "published_at": "2026-03-19T00:00:00Z",
+                "body": "Stable notes",
+                "prerelease": False,
+                "draft": False,
+            }
+        ]
+
+    async def fake_fetch_tags():
+        raise AssertionError("stable update checks must not query tag-only prerelease metadata")
+
+    monkeypatch.setattr(update_checker, "_fetch_releases", fake_fetch_releases)
+    monkeypatch.setattr(update_checker, "_fetch_tags", fake_fetch_tags)
+
+    latest = asyncio.run(update_checker.check_latest_version("stable"))
+
+    assert latest == {
+        "version": "2.41.0",
+        "tag": "v2.41.0",
+        "url": "https://example.invalid/releases/v2.41.0",
+        "published_at": "2026-03-19T00:00:00Z",
+        "body": "Stable notes",
+        "channel": "stable",
+        "target_ref": "v2.41.0",
+        "prerelease": False,
+    }
+
+
+def test_check_latest_version_uses_tags_for_prerelease(monkeypatch):
+    import services.update_checker as update_checker
+
+    update_checker = importlib.reload(update_checker)
+
+    async def fake_fetch_releases():
+        raise AssertionError("rc update checks must not depend on GitHub release objects")
+
+    async def fake_fetch_tags():
+        return [{"name": "v2.41.0-rc.2"}, {"name": "v2.41.0-rc.1"}]
+
+    async def fake_fetch_changelog_section_for_tag(tag):
+        assert tag == "v2.41.0-rc.2"
+        return "### Fixed\n- RC tag notes"
+
+    monkeypatch.setattr(update_checker, "_fetch_releases", fake_fetch_releases)
+    monkeypatch.setattr(update_checker, "_fetch_tags", fake_fetch_tags)
+    monkeypatch.setattr(update_checker, "_fetch_changelog_section_for_tag", fake_fetch_changelog_section_for_tag)
+
+    latest = asyncio.run(update_checker.check_latest_version("rc"))
+
+    assert latest == {
+        "version": "2.41.0-rc.2",
+        "tag": "v2.41.0-rc.2",
+        "url": "https://github.com/trudenboy/sendspin-bt-bridge/tree/v2.41.0-rc.2",
+        "published_at": "",
+        "body": "### Fixed\n- RC tag notes",
+        "channel": "rc",
+        "target_ref": "v2.41.0-rc.2",
+        "prerelease": True,
+    }
 
 
 def test_api_update_apply_starts_requested_version(config_client, monkeypatch):

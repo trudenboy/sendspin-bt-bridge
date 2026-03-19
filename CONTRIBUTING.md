@@ -92,7 +92,8 @@ Keep the current runtime layering in mind when making code or docs changes:
 ## Release Workflow & Generated Add-on Variants
 
 - `CHANGELOG.md` is the release source of truth. Put user-facing release notes there first.
-- The manual `Create GitHub Release` workflow resolves the target tag/channel, syncs `ha-addon/`, `ha-addon-rc/`, and `ha-addon-beta/` on `main`, and then builds the GitHub Release body from the matching changelog section.
+- The manual `Create Stable GitHub Release` workflow only creates GitHub release objects for stable `vX.Y.Z` tags and builds the release body from the matching changelog section.
+- The `Sync HA Addon Variants` workflow runs on every stable/RC/beta tag push to refresh `ha-addon/`, `ha-addon-rc/`, and `ha-addon-beta/` on `main`; prerelease tags stay tag-only and do not create GitHub release objects.
 - `ha-addon/` is the hand-maintained stable source surface. RC/Beta directories are generated/published variants; prefer regenerating them via the script/workflow instead of hand-editing multiple channel copies.
 - `update_channel` in config only controls release lookup/warning surfaces. It does **not** switch the installed Home Assistant add-on variant by itself.
 

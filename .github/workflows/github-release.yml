@@ -1,10 +1,10 @@
-name: Create GitHub Release
+name: Create Stable GitHub Release
 
 on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag to release (leave blank to use the latest tag)"
+        description: "Stable tag to release (leave blank to use the latest stable tag)"
         required: false
         default: ""
 
@@ -20,7 +20,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Resolve target tag and channel
+      - name: Resolve stable target tag
         id: resolve
         env:
           INPUT_TAG: ${{ inputs.tag }}
@@ -29,127 +29,62 @@ jobs:
           git fetch --force --tags
           TAG="${INPUT_TAG}"
           if [ -z "${TAG}" ]; then
-            TAG="$(git tag --sort=-version:refname | head -n 1)"
+            TAG="$(git tag --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1 || true)"
           fi
           if [ -z "${TAG}" ]; then
-            echo "No tags found in the repository" >&2
+            echo "No stable tags found in the repository" >&2
+            exit 1
+          fi
+          if [[ ! "${TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "This workflow only creates GitHub releases for stable tags. Use tag-only CI for prerelease tags: ${TAG}" >&2
             exit 1
           fi
           git rev-parse "${TAG}^{tag}" >/dev/null 2>&1 || git rev-parse "${TAG}^{commit}" >/dev/null 2>&1
 
-          CHANNEL="stable"
-          PRERELEASE="false"
-          MAKE_LATEST="true"
-          if [[ "${TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$ ]]; then
-            CHANNEL="rc"
-            PRERELEASE="true"
-            MAKE_LATEST="false"
-          elif [[ "${TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+$ ]]; then
-            CHANNEL="beta"
-            PRERELEASE="true"
-            MAKE_LATEST="false"
-          elif [[ ! "${TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "Unsupported tag format: ${TAG}" >&2
-            exit 1
-          fi
-
           VERSION="${TAG#v}"
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-          echo "channel=${CHANNEL}" >> "$GITHUB_OUTPUT"
-          echo "prerelease=${PRERELEASE}" >> "$GITHUB_OUTPUT"
-          echo "make_latest=${MAKE_LATEST}" >> "$GITHUB_OUTPUT"
           {
-            echo "### Release target"
+            echo "### Stable release target"
             echo ""
             echo "- Tag: \`${TAG}\`"
             echo "- Version: \`${VERSION}\`"
-            echo "- Channel: \`${CHANNEL}\`"
-            echo "- Prerelease: \`${PRERELEASE}\`"
+            echo "- Prerelease tags remain tag-only and do not create GitHub release objects."
           } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Sync HA addon directories on main
-        id: sync_addon_repo
-        env:
-          CHANNEL: ${{ steps.resolve.outputs.channel }}
-          VERSION: ${{ steps.resolve.outputs.version }}
-        run: |
-          set -euo pipefail
-          git checkout main
-          git fetch --force --tags
-
-          stable_tag="$(git tag --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1 || true)"
-          rc_tag="$(git tag --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$' | head -n 1 || true)"
-          beta_tag="$(git tag --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+$' | head -n 1 || true)"
-
-          case "${CHANNEL}" in
-            stable) stable_tag="v${VERSION}" ;;
-            rc) rc_tag="v${VERSION}" ;;
-            beta) beta_tag="v${VERSION}" ;;
-          esac
-
-          cmd=(python scripts/generate_ha_addon_variants.py sync-current-repo --output-dir .)
-          if [ -n "${stable_tag}" ]; then
-            cmd+=(--stable-version "${stable_tag#v}")
-          fi
-          if [ -n "${rc_tag}" ]; then
-            cmd+=(--rc-version "${rc_tag#v}")
-          fi
-          if [ -n "${beta_tag}" ]; then
-            cmd+=(--beta-version "${beta_tag#v}")
-          fi
-          "${cmd[@]}"
-
-          if [ -z "$(git status --short)" ]; then
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-            echo "- HA addon directories on \`main\` already matched the latest stable/rc/beta tags" >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add -A .
-          git commit -m "chore: sync HA addon directories for ${VERSION}"
-          git push origin HEAD:main
-          echo "changed=true" >> "$GITHUB_OUTPUT"
-          echo "- Updated \`ha-addon\` / \`ha-addon-rc\` / \`ha-addon-beta\` on \`main\` from the latest known channel tags" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Summarize current-repo HA publishing
         run: |
-          echo "- Home Assistant addon channels are published from this repository itself using \`ha-addon\`, \`ha-addon-rc\`, and \`ha-addon-beta\` directories." >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "- Home Assistant addon channels are published from this repository itself using \`ha-addon\`, \`ha-addon-rc\`, and \`ha-addon-beta\` directories."
+            echo "- Addon directory sync now happens on tag push for stable/rc/beta, independently from this stable-only GitHub release workflow."
+          } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Resolve previous comparable release
+      - name: Resolve previous stable release
         id: previous_release
         uses: actions/github-script@v7
         with:
           script: |
             const {owner, repo} = context.repo;
             const targetTag = '${{ steps.resolve.outputs.tag }}';
-            const targetChannel = '${{ steps.resolve.outputs.channel }}';
 
-            function parseTag(tag) {
-              const normalized = String(tag || '').replace(/^v/, '');
-              const match = normalized.match(/^(\d+)\.(\d+)\.(\d+)(?:-(rc|beta)\.(\d+))?$/);
+            function parseStableTag(tag) {
+              const match = String(tag || '').match(/^v(\d+)\.(\d+)\.(\d+)$/);
               if (!match) return null;
               return {
                 major: Number(match[1]),
                 minor: Number(match[2]),
                 patch: Number(match[3]),
-                channel: match[4] || 'stable',
-                serial: Number(match[5] || 0),
               };
             }
 
-            function compareTags(a, b) {
-              const pa = parseTag(a);
-              const pb = parseTag(b);
+            function compareStableTags(a, b) {
+              const pa = parseStableTag(a);
+              const pb = parseStableTag(b);
               if (!pa || !pb) return String(a).localeCompare(String(b));
               for (const key of ['major', 'minor', 'patch']) {
                 if (pa[key] !== pb[key]) return pa[key] - pb[key];
               }
-              const rank = { beta: 0, rc: 1, stable: 2 };
-              if (rank[pa.channel] !== rank[pb.channel]) return rank[pa.channel] - rank[pb.channel];
-              return pa.serial - pb.serial;
+              return 0;
             }
 
             const releases = await github.paginate(github.rest.repos.listReleases, {
@@ -158,23 +93,19 @@ jobs:
               per_page: 100,
             });
 
-            const comparableTags = releases
-              .filter((release) => !release.draft)
-              .filter((release) => {
-                const parsed = parseTag(release.tag_name);
-                if (!parsed || release.tag_name === targetTag) return false;
-                if (targetChannel === 'stable') return !release.prerelease && parsed.channel === 'stable';
-                return parsed.channel === targetChannel;
-              })
+            const previousTag = releases
+              .filter((release) => !release.draft && !release.prerelease)
               .map((release) => release.tag_name)
-              .sort(compareTags);
+              .filter((tag) => parseStableTag(tag) && tag !== targetTag)
+              .sort(compareStableTags)
+              .filter((tag) => compareStableTags(tag, targetTag) < 0)
+              .pop() || '';
 
-            const previousTag = comparableTags.filter((tag) => compareTags(tag, targetTag) < 0).pop() || '';
             core.setOutput('tag', previousTag);
             await core.summary
               .addRaw(previousTag
-                ? `Previous comparable ${targetChannel} release tag for notes: ${previousTag}`
-                : `No previous comparable ${targetChannel} release found; generating notes without a lower bound`)
+                ? `Previous stable release tag for notes: ${previousTag}`
+                : 'No previous stable release found; generating notes without a lower bound')
               .write();
 
       - name: Generate release notes
@@ -222,8 +153,6 @@ jobs:
             const {owner, repo} = context.repo;
             const tag = '${{ steps.resolve.outputs.tag }}';
             const body = ${{ toJSON(steps.release_body.outputs.body) }};
-            const prerelease = '${{ steps.resolve.outputs.prerelease }}' === 'true';
-            const makeLatest = '${{ steps.resolve.outputs.make_latest }}';
 
             let existing = null;
             try {
@@ -240,8 +169,8 @@ jobs:
               name: tag,
               body,
               draft: false,
-              prerelease,
-              make_latest: makeLatest,
+              prerelease: false,
+              make_latest: 'true',
             };
 
             if (existing) {
@@ -249,7 +178,7 @@ jobs:
                 ...basePayload,
                 release_id: existing.id,
               });
-              await core.summary.addRaw(`Updated existing release for ${tag}`).write();
+              await core.summary.addRaw(`Updated existing stable release for ${tag}`).write();
               return;
             }
 
@@ -257,4 +186,4 @@ jobs:
               ...basePayload,
               generate_release_notes: false,
             });
-            await core.summary.addRaw(`Created release for ${tag}`).write();
+            await core.summary.addRaw(`Created stable release for ${tag}`).write();

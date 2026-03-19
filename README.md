@@ -84,7 +84,7 @@ A Bluetooth bridge for [Music Assistant](https://www.music-assistant.io/) that t
 - **BT device info modal** — view device details with one-click copy
 - **Scan cooldown countdown** — visual timer showing when the next BT scan is available
 - **Update badge & modal** — check availability, read release notes, and trigger runtime-specific update actions
-- **Version badge → release notes** — click the version to open the GitHub release page
+- **Version badge → release or tag notes** — click the version to open the matching stable GitHub release or the tagged prerelease snapshot
 - **Profile link** — clickable username links to MA or HA profile based on auth method
 
 ### 🔐 Security
