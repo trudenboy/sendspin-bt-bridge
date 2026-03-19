@@ -34,6 +34,10 @@ from pathlib import Path
 from services.ipc_protocol import (
     IPC_PROTOCOL_VERSION,
     IPC_PROTOCOL_VERSION_KEY,
+    build_error_envelope,
+    build_log_envelope,
+    build_status_envelope,
+    parse_command_envelope,
     parse_protocol_version,
     with_protocol_version,
 )
@@ -134,16 +138,7 @@ class _JsonLineHandler(logging.Handler):
                         self._on_status_change()
                     except Exception:
                         pass  # cannot log inside log handler
-            line = json.dumps(
-                with_protocol_version(
-                    {
-                        "type": "log",
-                        "level": record.levelname.lower(),
-                        "name": record.name,
-                        "msg": msg,
-                    }
-                )
-            )
+            line = json.dumps(build_log_envelope(level=record.levelname.lower(), name=record.name, msg=msg))
             print(line, flush=True)
         except Exception:
             pass  # cannot log inside log handler
@@ -185,7 +180,7 @@ def _emit_status(status: dict) -> None:
     the write is skipped to avoid flooding the parent with no-op updates.
     """
     global _last_status_json
-    payload = json.dumps(with_protocol_version({"type": "status", **status}), default=_str_default, sort_keys=True)
+    payload = json.dumps(build_status_envelope(status), default=_str_default, sort_keys=True)
     if payload == _last_status_json:
         return
     _last_status_json = payload
@@ -197,14 +192,7 @@ def _emit_error(error_code: str, message: str, *, details: dict[str, object] | N
     payload_details = dict(details or {})
     payload_details.setdefault("at", datetime.now(tz=timezone.utc).isoformat())
     payload = json.dumps(
-        with_protocol_version(
-            {
-                "type": "error",
-                "error_code": error_code,
-                "message": message,
-                "details": payload_details,
-            }
-        ),
+        build_error_envelope(error_code, message, details=payload_details),
         default=_str_default,
         sort_keys=True,
     )
@@ -311,49 +299,52 @@ async def _read_commands(daemon_ref: list, stop_event: asyncio.Event) -> None:
         if not line:
             break
         try:
-            cmd = json.loads(line.decode().strip())
+            cmd = parse_command_envelope(json.loads(line.decode().strip()))
         except (json.JSONDecodeError, ValueError):
             continue
+        if cmd is None:
+            continue
 
-        protocol_version = parse_protocol_version(cmd.get(IPC_PROTOCOL_VERSION_KEY))
-        if cmd.get(IPC_PROTOCOL_VERSION_KEY) is not None and protocol_version != IPC_PROTOCOL_VERSION:
+        protocol_version = cmd.protocol_version
+        if cmd.raw.get(IPC_PROTOCOL_VERSION_KEY) is not None and protocol_version != IPC_PROTOCOL_VERSION:
             logger.warning(
                 "Received IPC command with protocol_version=%r; attempting compatible parse",
-                cmd.get(IPC_PROTOCOL_VERSION_KEY),
+                cmd.raw.get(IPC_PROTOCOL_VERSION_KEY),
             )
 
-        if cmd.get("cmd") == "stop":
+        if cmd.cmd == "stop":
             stop_event.set()
-        elif cmd.get("cmd") in ("pause", "play"):
+        elif cmd.cmd in ("pause", "play"):
             daemon = daemon_ref[0] if daemon_ref else None
             if daemon and daemon._client and daemon._client.connected:
                 from aiosendspin.models.types import MediaCommand
 
-                mc = MediaCommand.PAUSE if cmd["cmd"] == "pause" else MediaCommand.PLAY
+                mc = MediaCommand.PAUSE if cmd.cmd == "pause" else MediaCommand.PLAY
                 _task = asyncio.ensure_future(daemon._client.send_group_command(mc))
                 _task.add_done_callback(
                     lambda t: logger.debug("send_group_command error: %s", t.exception()) if t.exception() else None
                 )
-        elif cmd.get("cmd") == "set_volume":
+        elif cmd.cmd == "set_volume":
             daemon = daemon_ref[0] if daemon_ref else None
-            if daemon and cmd.get("value") is not None:
+            value = cmd.payload.get("value")
+            if daemon and value is not None:
                 try:
-                    vol = max(0, min(100, int(cmd["value"])))
+                    vol = max(0, min(100, int(value)))
                 except (ValueError, TypeError):
-                    logger.warning("Invalid volume value: %s", cmd.get("value"))
+                    logger.warning("Invalid volume value: %s", value)
                     continue
                 daemon._bridge_status["volume"] = vol
                 daemon._sync_bt_sink_volume(vol)
                 daemon._notify()
-        elif cmd.get("cmd") == "set_mute":
+        elif cmd.cmd == "set_mute":
             daemon = daemon_ref[0] if daemon_ref else None
-            if daemon and "muted" in cmd:
-                daemon._bridge_status["muted"] = bool(cmd["muted"])
+            if daemon and "muted" in cmd.payload:
+                daemon._bridge_status["muted"] = bool(cmd.payload["muted"])
                 daemon._notify()
-        elif cmd.get("cmd") == "reconnect":
+        elif cmd.cmd == "reconnect":
             daemon = daemon_ref[0] if daemon_ref else None
             if daemon and getattr(daemon, "_client", None):
-                delay = float(cmd.get("delay", 0))
+                delay = float(cmd.payload.get("delay", 0))
 
                 async def _delayed_reconnect(_d=daemon, _delay=delay):
                     await _d._client.disconnect()
@@ -365,8 +356,8 @@ async def _read_commands(daemon_ref: list, stop_event: asyncio.Event) -> None:
                 asyncio.ensure_future(_delayed_reconnect()).add_done_callback(
                     lambda t: logger.debug("reconnect error: %s", t.exception()) if t.exception() else None
                 )
-        elif cmd.get("cmd") == "set_log_level":
-            level_name = str(cmd.get("level", "INFO")).upper()
+        elif cmd.cmd == "set_log_level":
+            level_name = str(cmd.payload.get("level", "INFO")).upper()
             if level_name not in _VALID_LOG_LEVELS:
                 logger.warning("Invalid log level requested: %s", level_name)
                 continue

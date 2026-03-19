@@ -6,7 +6,7 @@ import json
 import logging
 from typing import Any
 
-from services.ipc_protocol import with_protocol_version
+from services.ipc_protocol import build_command_envelope
 
 
 class SubprocessCommandService:
@@ -20,7 +20,11 @@ class SubprocessCommandService:
         stdin = proc.stdin if proc else None
         if proc and stdin and proc.returncode is None:
             try:
-                stdin.write((json.dumps(with_protocol_version(cmd)) + "\n").encode())
+                command = str(cmd.get("cmd") or "").strip()
+                if not command:
+                    return
+                payload = {key: value for key, value in cmd.items() if key != "cmd"}
+                stdin.write((json.dumps(build_command_envelope(command, **payload)) + "\n").encode())
                 await stdin.drain()
             except Exception as exc:
                 self._logger.debug("Could not send subprocess command: %s", exc)
