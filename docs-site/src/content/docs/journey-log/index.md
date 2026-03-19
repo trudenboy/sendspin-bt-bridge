@@ -17,6 +17,7 @@ If you want the latest status first, start with the newest entry below.
 
 ## Latest entries
 
+- [2026-03-19 — 2.40.6 release wave, UI polish, and roadmap realignment](./2026-03-19-roadmap-and-docs-realignment/)
 - [2026-03-18 — Stable 2.40.5: manual ports, prerelease channels, and HA fixes](./2026-03-18-stable-2-40-5/)
 
 ## What belongs here
