@@ -20,7 +20,7 @@ _HA_ADDON_DIR = _REPO_ROOT / "ha-addon"
 _BASE_CONFIG_PATH = _HA_ADDON_DIR / "config.yaml"
 _BASE_README_PATH = _HA_ADDON_DIR / "README.md"
 _BASE_DOCS_PATH = _HA_ADDON_DIR / "DOCS.md"
-_BASE_CHANGELOG_PATH = _HA_ADDON_DIR / "CHANGELOG.md"
+_ROOT_CHANGELOG_PATH = _REPO_ROOT / "CHANGELOG.md"
 _BASE_DOCKERFILE_PATH = _HA_ADDON_DIR / "Dockerfile"
 _BASE_APPARMOR_PATH = _HA_ADDON_DIR / "apparmor.txt"
 _BASE_REPOSITORY_PATH = _REPO_ROOT / "repository.yaml"
@@ -123,6 +123,13 @@ def _replace_plain_scalar(text: str, key: str, value: str) -> str:
     if count != 1:
         raise ValueError(f"Could not replace {key!r} in addon config template")
     return updated
+
+
+def _release_channel_for_version(version: str) -> str | None:
+    match = re.fullmatch(r"\d+\.\d+\.\d+(?:-(rc|beta)\.\d+)?", version)
+    if not match:
+        return None
+    return match.group(1) or "stable"
 
 
 def _set_optional_stage(text: str, stage: str | None) -> str:
@@ -249,6 +256,33 @@ def render_docs_md(variant: HaAddonVariant, base_text: str | None = None) -> str
     return text
 
 
+def render_changelog_md(variant: HaAddonVariant, base_text: str | None = None) -> str:
+    text = _ROOT_CHANGELOG_PATH.read_text() if base_text is None else base_text
+    version_heading_re = re.compile(r"^## \[(?P<version>[^\]]+)\](?:[ \t]+-[ \t]+.+)?$", flags=re.MULTILINE)
+    matches = list(version_heading_re.finditer(text))
+    if not matches:
+        raise ValueError("Could not find any changelog headings in the root changelog")
+
+    first_release_match = next((match for match in matches if match.group("version") != "Unreleased"), None)
+    if first_release_match is None:
+        raise ValueError("Could not find any release entries in the root changelog")
+
+    unreleased_match = next((match for match in matches if match.group("version") == "Unreleased"), None)
+    header_end = unreleased_match.end() if unreleased_match else first_release_match.start()
+    parts = [text[:header_end].rstrip()]
+
+    for index, match in enumerate(matches):
+        version = match.group("version")
+        if version == "Unreleased":
+            continue
+        if _release_channel_for_version(version) != variant.channel:
+            continue
+        next_start = matches[index + 1].start() if index + 1 < len(matches) else len(text)
+        parts.append(text[match.start() : next_start].strip())
+
+    return "\n\n".join(part for part in parts if part).strip() + "\n"
+
+
 def render_apparmor_txt(variant: HaAddonVariant, base_text: str | None = None) -> str:
     text = _BASE_APPARMOR_PATH.read_text() if base_text is None else base_text
     pattern = rf"^profile\s+{re.escape(_BASE_SLUG)}\s+"
@@ -317,7 +351,7 @@ def generate_multi_addon_repo_files(
         files[f"{addon_dir}/build.yaml"] = render_build_yaml(variant)
         files[f"{addon_dir}/README.md"] = render_readme_md(variant)
         files[f"{addon_dir}/DOCS.md"] = render_docs_md(variant)
-        files[f"{addon_dir}/CHANGELOG.md"] = _BASE_CHANGELOG_PATH.read_text()
+        files[f"{addon_dir}/CHANGELOG.md"] = render_changelog_md(variant)
         files[f"{addon_dir}/Dockerfile"] = _BASE_DOCKERFILE_PATH.read_text()
         files[f"{addon_dir}/apparmor.txt"] = render_apparmor_txt(variant)
         for relative_path, content in _translation_variant_files().items():

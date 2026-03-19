@@ -6,6 +6,7 @@ from scripts.generate_ha_addon_variants import (
     HaAddonVariant,
     generate_multi_addon_repo_files,
     generate_variant_files,
+    render_changelog_md,
     sync_multi_addon_repo,
     write_multi_addon_repo,
     write_variant_files,
@@ -121,6 +122,56 @@ def test_generate_multi_addon_repo_files_renders_suffix_slug_repository_layout()
     assert "https://img.shields.io/badge/Beta%20channel-Experimental-ef4444" in rendered["ha-addon-beta/DOCS.md"]
     assert "different default HA ingress ports" in rendered["ha-addon-beta/DOCS.md"]
     assert "profile sendspin_bt_bridge_rc " in rendered["ha-addon-rc/apparmor.txt"]
+    assert "## [2.40.5]" in rendered["ha-addon/CHANGELOG.md"]
+    assert "## [2.40.5-rc.3]" not in rendered["ha-addon/CHANGELOG.md"]
+    assert "## [2.40.5-rc.3]" in rendered["ha-addon-rc/CHANGELOG.md"]
+    assert "## [2.40.5]" not in rendered["ha-addon-rc/CHANGELOG.md"]
+    assert "## [2.40.5-beta.1]" in rendered["ha-addon-beta/CHANGELOG.md"]
+    assert "## [2.40.5-rc.1]" not in rendered["ha-addon-beta/CHANGELOG.md"]
+
+
+def test_render_changelog_md_filters_entries_to_variant_channel():
+    changelog_text = """# Changelog
+
+All notable changes to this project will be documented in this file.
+
+## [Unreleased]
+
+- upcoming root-only note
+
+## [2.40.6-rc.4] - 2026-03-19
+
+### Fixed
+- rc fix
+
+## [2.40.6-beta.1] - 2026-03-19
+
+### Fixed
+- beta fix
+
+## [2.40.5] - 2026-03-18
+
+### Fixed
+- stable fix
+"""
+
+    stable = render_changelog_md(HaAddonVariant(channel="stable", version="2.40.5"), base_text=changelog_text)
+    rc = render_changelog_md(HaAddonVariant(channel="rc", version="2.40.6-rc.4"), base_text=changelog_text)
+    beta = render_changelog_md(HaAddonVariant(channel="beta", version="2.40.6-beta.1"), base_text=changelog_text)
+
+    assert "## [Unreleased]" in stable
+    assert "upcoming root-only note" not in stable
+    assert "## [2.40.5]" in stable
+    assert "## [2.40.6-rc.4]" not in stable
+    assert "## [2.40.6-beta.1]" not in stable
+
+    assert "## [2.40.6-rc.4]" in rc
+    assert "## [2.40.5]" not in rc
+    assert "## [2.40.6-beta.1]" not in rc
+
+    assert "## [2.40.6-beta.1]" in beta
+    assert "## [2.40.6-rc.4]" not in beta
+    assert "## [2.40.5]" not in beta
 
 
 def test_write_multi_addon_repo_writes_expected_repository_tree(tmp_path):
