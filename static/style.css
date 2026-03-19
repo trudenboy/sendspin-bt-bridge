@@ -2911,6 +2911,15 @@ body {
         }
         .form-group input:focus,
         .form-group select:focus { outline: none; border-color: var(--primary-color); }
+        .form-group input.config-readonly-input[readonly],
+        .form-group input.config-readonly-input:disabled {
+            background: var(--secondary-background-color);
+            color: var(--secondary-text-color);
+            border-color: var(--divider-color);
+            cursor: not-allowed;
+            opacity: 1;
+            box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.03);
+        }
         .form-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 15px; }
         #config-form { padding-bottom: 0; }
         .form-inline,

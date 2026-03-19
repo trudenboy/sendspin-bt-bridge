@@ -2108,7 +2108,7 @@ def test_ma_queue_cmd_returns_structured_predicted_state(client, monkeypatch):
         def start(self):
             self._target(*self._args, **self._kwargs)
 
-    async def _fake_send_queue_cmd(action, value, syncgroup_id):
+    async def _fake_send_queue_cmd(action, value, syncgroup_id, player_id=None):
         return {
             "accepted": True,
             "queue_id": syncgroup_id,
@@ -2202,10 +2202,11 @@ def test_ma_queue_cmd_prefers_player_queue_over_stale_group_id(client, monkeypat
 
     captured = {}
 
-    async def _fake_send_queue_cmd(action, value, syncgroup_id):
+    async def _fake_send_queue_cmd(action, value, syncgroup_id, player_id=None):
         captured["action"] = action
         captured["value"] = value
         captured["syncgroup_id"] = syncgroup_id
+        captured["player_id"] = player_id
         return {
             "accepted": True,
             "queue_id": syncgroup_id,
@@ -2264,6 +2265,7 @@ def test_ma_queue_cmd_prefers_player_queue_over_stale_group_id(client, monkeypat
         assert resp.status_code == 202
         data = resp.get_json()
         assert captured["syncgroup_id"] == "sendspin-yandex-mini-2---lxc"
+        assert captured["player_id"] == "sendspin-yandex-mini-2---lxc"
         assert captured["refresh_syncgroup_id"] == "sendspin-yandex-mini-2---lxc"
         assert data["syncgroup_id"] == "sendspin-yandex-mini-2---lxc"
         assert data["queue_id"] == "sendspin-yandex-mini-2---lxc"

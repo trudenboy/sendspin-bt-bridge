@@ -1279,11 +1279,6 @@ function openDeviceGroupSettings(i) {
 
 function _openExternalUrlInNewTab(url) {
     if (!url) return false;
-    var popup = window.open(url, '_blank', 'noopener,noreferrer');
-    if (popup) {
-        try { popup.opener = null; } catch (_) {}
-        return true;
-    }
     var link = document.createElement('a');
     link.href = url;
     link.target = '_blank';
@@ -1293,6 +1288,12 @@ function _openExternalUrlInNewTab(url) {
     link.click();
     link.remove();
     return true;
+}
+
+function _followLinkInNewTab(event, link) {
+    if (event) event.preventDefault();
+    if (!link || !link.href) return false;
+    return _openExternalUrlInNewTab(link.href);
 }
 
 function _trashIconSvg(className) {

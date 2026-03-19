@@ -263,8 +263,8 @@ async def test_send_queue_cmd_returns_ack_metadata(monkeypatch):
     monitor._ws = object()
 
     async def _fake_execute_cmd(command: str, args: dict) -> dict:
-        assert command == "player_queues/next"
-        assert args == {"queue_id": "syncgroup_1"}
+        assert command == "players/cmd/next"
+        assert args == {"player_id": "syncgroup_1"}
         return {"result": {"ok": True}}
 
     monkeypatch.setattr(monitor, "execute_cmd", _fake_execute_cmd)
@@ -313,8 +313,8 @@ async def test_send_queue_cmd_allows_explicit_solo_queue_without_groups(monkeypa
     monitor._ws = object()
 
     async def _fake_execute_cmd(command: str, args: dict) -> dict:
-        assert command == "player_queues/next"
-        assert args == {"queue_id": "sendspin-yandex-mini-2---lxc"}
+        assert command == "players/cmd/next"
+        assert args == {"player_id": "sendspin-yandex-mini-2---lxc"}
         return {"result": {"ok": True}}
 
     monkeypatch.setattr(monitor, "execute_cmd", _fake_execute_cmd)
@@ -328,3 +328,27 @@ async def test_send_queue_cmd_allows_explicit_solo_queue_without_groups(monkeypa
 
     assert result["accepted"] is True
     assert result["queue_id"] == "sendspin-yandex-mini-2---lxc"
+
+
+@pytest.mark.asyncio
+async def test_send_queue_cmd_falls_back_to_queue_api_for_legacy_universal_queue(monkeypatch):
+    monitor = MaMonitor("http://ma:8095", "token")
+    monitor._running = True
+    monitor._ws = object()
+
+    async def _fake_execute_cmd(command: str, args: dict) -> dict:
+        assert command == "player_queues/next"
+        assert args == {"queue_id": "upd3002d0ddb4751e2b3a200f79b7fc683"}
+        return {"result": {"ok": True}}
+
+    monkeypatch.setattr(monitor, "execute_cmd", _fake_execute_cmd)
+    monkeypatch.setattr(ma_monitor, "_monitor_instance", monitor)
+    state.set_ma_groups({}, [])
+    try:
+        result = await ma_monitor.send_queue_cmd("next", None, "upd3002d0ddb4751e2b3a200f79b7fc683")
+    finally:
+        ma_monitor._monitor_instance = None
+        state.set_ma_groups({}, [])
+
+    assert result["accepted"] is True
+    assert result["queue_id"] == "upd3002d0ddb4751e2b3a200f79b7fc683"

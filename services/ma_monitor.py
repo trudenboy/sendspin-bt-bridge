@@ -763,7 +763,9 @@ def start_monitor(ma_url: str, ma_token: str) -> MaMonitor:
     return _monitor_instance
 
 
-async def send_queue_cmd(action: str, value=None, syncgroup_id: str | None = None) -> dict:
+async def send_queue_cmd(
+    action: str, value=None, syncgroup_id: str | None = None, player_id: str | None = None
+) -> dict:
     """Send a queue command through the persistent MA monitor only.
 
     Supported actions: next, previous, shuffle, repeat, seek.
@@ -780,10 +782,20 @@ async def send_queue_cmd(action: str, value=None, syncgroup_id: str | None = Non
 
     command: str
     args: dict[str, object]
+    resolved_player_id = str(player_id or "").strip()
+    if not resolved_player_id and queue_id and not queue_id.startswith("up"):
+        resolved_player_id = queue_id
+
     if action == "next":
-        command, args = "player_queues/next", {"queue_id": queue_id}
+        if resolved_player_id:
+            command, args = "players/cmd/next", {"player_id": resolved_player_id}
+        else:
+            command, args = "player_queues/next", {"queue_id": queue_id}
     elif action == "previous":
-        command, args = "player_queues/previous", {"queue_id": queue_id}
+        if resolved_player_id:
+            command, args = "players/cmd/previous", {"player_id": resolved_player_id}
+        else:
+            command, args = "player_queues/previous", {"queue_id": queue_id}
     elif action == "shuffle":
         command, args = "player_queues/shuffle", {"queue_id": queue_id, "shuffle_enabled": bool(value)}
     elif action == "repeat":

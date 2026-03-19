@@ -493,8 +493,13 @@ def test_ha_addon_index_hides_logout_button(monkeypatch):
     assert 'data-ma-ui-url="/api/hassio_ingress/ma-token"' in html
     assert 'id="header-user-link"' in html
     assert 'href="/api/hassio_ingress/ma-token/#/settings/profile"' in html
+    assert 'target="_blank"' in html
+    assert 'rel="noopener noreferrer"' in html
+    assert 'onclick="return _followLinkInNewTab(event, this)"' in html
     assert 'data-ma-profile-url="/api/hassio_ingress/ma-token/#/settings/profile"' in html
     assert 'id="ha-web-port-indicator"' in html
+    assert 'class="config-readonly-input"' in html
     assert 'value="8081"' in html
-    assert "installed add-on track (RC)" in html
+    assert "Home Assistant ingress port" in html
+    assert "Fixed by installed add-on track (RC)." in html
     assert "header-btn-signout" not in html

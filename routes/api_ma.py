@@ -1014,6 +1014,7 @@ def _run_ma_queue_cmd_job(
     action: str,
     value,
     target_queue_id: str,
+    target_player_id: str | None,
     state_key: str,
     op_id: str,
 ) -> None:
@@ -1023,7 +1024,7 @@ def _run_ma_queue_cmd_job(
 
         result = _await_loop_result(
             loop,
-            send_queue_cmd(action, value, target_queue_id),
+            send_queue_cmd(action, value, target_queue_id, player_id=target_player_id),
             timeout=5.0,
             description=f"MA queue cmd {action}",
         )
@@ -1624,6 +1625,10 @@ def api_ma_queue_cmd():
         data.get("player_id"),
         data.get("group_id"),
     )
+    raw_player_id = str(data.get("player_id") or "").strip()
+    target_player_id = raw_player_id or (
+        target_queue_id if target_queue_id and not str(target_queue_id).startswith("up") else None
+    )
 
     if action not in ("next", "previous", "shuffle", "repeat", "seek"):
         return jsonify({"success": False, "error": f"Unknown action: {action}", "error_code": "unknown_action"}), 400
@@ -1670,6 +1675,7 @@ def api_ma_queue_cmd():
                 "action": action,
                 "value": value,
                 "target_queue_id": target_queue_id,
+                "target_player_id": target_player_id,
                 "state_key": state_key,
                 "op_id": op_id,
             },

@@ -63,7 +63,7 @@
                 {% if auth_enabled and ha_mode and ha_user %}
                     <span class="header-user-name">
                         <span class="header-user-icon ui-icon-slot" data-ui-icon="user" aria-hidden="true"></span>
-                        <a id="header-user-link" href="{{ ma_profile_url or '/profile' }}" target="_blank" rel="noopener" data-auth-method="ha" data-ma-profile-url="{{ ma_profile_url or '' }}" style="color:inherit;text-decoration:none">{{ ha_user }}</a>
+                        <a id="header-user-link" href="{{ ma_profile_url or '/profile' }}" target="_blank" rel="noopener noreferrer" data-auth-method="ha" data-ma-profile-url="{{ ma_profile_url or '' }}" onclick="return _followLinkInNewTab(event, this)" style="color:inherit;text-decoration:none">{{ ha_user }}</a>
                     </span>
                 {% elif auth_enabled and not ha_mode %}
                     <span class="header-user-name">
@@ -255,17 +255,17 @@
                                 </div>
 
                                 <div class="form-group">
-                                    <label>{% if ha_mode %}Home Assistant Ingress web UI port{% else %}Web UI port{% endif %}
+                                    <label>{% if ha_mode %}Home Assistant ingress port{% else %}Web UI port{% endif %}
                                         <span class="form-hint">
                                             {% if ha_mode %}
-                                            Fixed by the installed add-on track{% if ha_delivery_channel %} ({{ ha_delivery_channel|upper }}){% endif %}. Not configurable in HA add-on mode.
+                                            Fixed by installed add-on track{% if ha_delivery_channel %} ({{ ha_delivery_channel|upper }}){% endif %}.
                                             {% else %}
                                             Primary web UI port for direct browser access. Leave empty to keep the default.
                                             {% endif %}
                                         </span>
                                     </label>
                                     {% if ha_mode %}
-                                    <input type="number" id="ha-web-port-indicator" value="{{ ha_ingress_web_port or '' }}" readonly disabled>
+                                    <input type="number" id="ha-web-port-indicator" class="config-readonly-input" value="{{ ha_ingress_web_port or '' }}" readonly disabled>
                                     {% else %}
                                     <input type="number" name="WEB_PORT" placeholder="8080" min="1" max="65535">
                                     {% endif %}
