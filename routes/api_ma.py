@@ -255,6 +255,7 @@ def _build_ma_integration_summary(discovered_url: str = "") -> dict[str, object]
     configured_url = str(cfg.get("MA_API_URL") or "").strip().rstrip("/")
     configured_token = str(cfg.get("MA_API_TOKEN") or "").strip()
     discovered_url = str(discovered_url or "").strip().rstrip("/")
+    connected = state.is_ma_connected()
     token_valid = False
     if configured_url and configured_token:
         token_valid = _validate_ma_token(configured_url, configured_token)
@@ -264,6 +265,7 @@ def _build_ma_integration_summary(discovered_url: str = "") -> dict[str, object]
         "url_configured": bool(configured_url),
         "token_configured": bool(configured_token),
         "token_valid": token_valid,
+        "connected": connected,
         "matches_discovered_server": bool(discovered_url and configured_url and discovered_url == configured_url),
         "username": str(cfg.get("MA_USERNAME") or "").strip(),
         "auth_provider": str(cfg.get("MA_AUTH_PROVIDER") or "").strip(),

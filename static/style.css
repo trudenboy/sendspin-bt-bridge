@@ -655,19 +655,100 @@ body {
             background: rgba(255,255,255,0.7);
             transition: width 0.5s ease;
         }
-        .auth-warning-banner {
-            border-radius: 8px; padding: 10px 16px; margin-bottom: 16px;
-            font-size: 13px; font-weight: 500; text-align: center;
-            background: #fef3c7; color: #92400e; border: 1px solid #fcd34d;
-            display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap;
+        .notice-stack {
+            display: grid;
+            gap: 12px;
+            margin-bottom: 16px;
         }
-        .auth-warning-banner a { color: #92400e; font-weight: 600; text-decoration: underline; }
-        .ma-warning-banner {
-            background: rgba(255, 166, 0, 0.12);
-            border-color: rgba(255, 166, 0, 0.28);
-            color: #9a5a00;
+        .notice-stack[hidden] {
+            display: none !important;
         }
-        .ma-warning-banner a { color: #9a5a00; }
+        .notice-card {
+            --notice-accent: var(--warning-color, #f59e0b);
+            --notice-border: rgba(245, 158, 11, 0.2);
+            --notice-icon-bg: rgba(245, 158, 11, 0.12);
+            --notice-action-bg: var(--notice-accent);
+            --notice-action-border: transparent;
+            --notice-action-text: #fff;
+            display: grid;
+            grid-template-columns: auto minmax(0, 1fr) auto;
+            align-items: center;
+            gap: 14px;
+            padding: 14px 16px;
+            border-radius: var(--ha-card-border-radius);
+            background: var(--card-background-color);
+            border: 1px solid var(--notice-border);
+            border-inline-start: 4px solid var(--notice-accent);
+            box-shadow: var(--ha-card-box-shadow);
+        }
+        .notice-card--warning {
+            --notice-accent: #c77700;
+            --notice-border: rgba(255, 166, 0, 0.28);
+            --notice-icon-bg: rgba(255, 166, 0, 0.12);
+        }
+        .notice-card--danger {
+            --notice-accent: var(--error-color, #db4437);
+            --notice-border: rgba(219, 68, 55, 0.2);
+            --notice-icon-bg: rgba(219, 68, 55, 0.12);
+        }
+        .notice-card-icon {
+            width: 36px;
+            height: 36px;
+            padding: 8px;
+            border-radius: 10px;
+            background: var(--notice-icon-bg);
+            color: var(--notice-accent);
+            align-self: start;
+        }
+        .notice-card-copy {
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+        .notice-card-title {
+            font-size: 13px;
+            font-weight: 700;
+            line-height: 1.35;
+            color: var(--primary-text-color);
+        }
+        .notice-card-text {
+            font-size: 12px;
+            line-height: 1.5;
+            color: var(--secondary-text-color);
+        }
+        .notice-card-actions {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .notice-card-action {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 34px;
+            padding: 0 14px;
+            border-radius: 999px;
+            text-decoration: none;
+            font-size: 12px;
+            font-weight: 700;
+            white-space: nowrap;
+            transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease, background 0.15s ease;
+        }
+        .notice-card-action:hover {
+            transform: translateY(-1px);
+        }
+        .notice-card-action--primary {
+            background: var(--notice-action-bg);
+            border: 1px solid var(--notice-action-border);
+            color: var(--notice-action-text);
+            box-shadow: 0 6px 14px rgba(0, 0, 0, 0.12);
+        }
+        .notice-card-action--primary:hover {
+            opacity: 0.92;
+        }
 
         /* Status grid — responsive card grid */
         .status-grid {
@@ -4175,6 +4256,18 @@ body {
             .health-indicator {
                 font-size: 0;
                 gap: 8px;
+            }
+            .notice-card {
+                grid-template-columns: auto minmax(0, 1fr);
+                align-items: start;
+            }
+            .notice-card-actions {
+                grid-column: 1 / -1;
+                width: 100%;
+                justify-content: stretch;
+            }
+            .notice-card-action {
+                width: 100%;
             }
 
             .status-grid { grid-template-columns: 1fr; }

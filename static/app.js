@@ -475,6 +475,19 @@ function _highlightConfigTarget(target) {
     }, 3000);
 }
 
+function openAuthSettings() {
+    var opened = _openConfigPanel('security', 'auth-enabled', 'center');
+    var target = document.getElementById('auth-enabled');
+    var highlightTarget = target && typeof target.closest === 'function'
+        ? target.closest('.config-setting-row') || target
+        : target || (opened && opened.target);
+    _highlightConfigTarget(highlightTarget);
+    if (target && typeof target.focus === 'function') {
+        target.focus({preventScroll: true});
+    }
+    return false;
+}
+
 function initConfigTabs() {
     document.querySelectorAll('.config-tab').forEach(function(tab) {
         tab.addEventListener('click', function() {
@@ -4662,17 +4675,31 @@ async function maHaConnect() {
     maHaAuthPopup();
 }
 
-function _setMaIntegrationBanner(message) {
+function _syncNoticeStack() {
+    var stack = document.getElementById('notice-stack');
+    if (!stack) return;
+    var visible = Array.prototype.some.call(stack.children || [], function(node) {
+        return !!node && !node.hidden;
+    });
+    stack.hidden = !visible;
+}
+
+function _setMaIntegrationBanner(message, title) {
     var banner = document.getElementById('ma-integration-banner');
+    var titleEl = document.getElementById('ma-integration-banner-title');
     var text = document.getElementById('ma-integration-banner-text');
-    if (!banner || !text) return;
+    if (!banner || !text || !titleEl) return;
     if (!message) {
         banner.hidden = true;
+        titleEl.textContent = '';
         text.textContent = '';
+        _syncNoticeStack();
         return;
     }
+    titleEl.textContent = title || 'Music Assistant needs attention';
     text.textContent = message;
     banner.hidden = false;
+    _syncNoticeStack();
 }
 
 function openMaTokenSettings() {
@@ -4945,6 +4972,7 @@ async function _maAutoConnect() {
     var foundServer = discovery && discovery.success && Array.isArray(discovery.servers) && discovery.servers.length > 0
         ? discovery.servers[0]
         : null;
+    var integrationConnected = !!integration.connected;
     var tokenConfigured = !!integration.token_configured;
     var tokenValid = !!integration.token_valid;
     var autoSilentAuthEnabled = ((document.getElementById('ma-auto-silent-auth') || {}).checked) !== false;
@@ -4955,7 +4983,7 @@ async function _maAutoConnect() {
         return;
     }
 
-    if (tokenConfigured && !tokenValid) {
+    if (tokenConfigured && !tokenValid && !integrationConnected) {
         _setMaStatus(false);
     }
 
@@ -4969,27 +4997,30 @@ async function _maAutoConnect() {
         }
     }
 
-    if (tokenValid) {
+    if (tokenValid || integrationConnected) {
         _setMaIntegrationBanner('');
         return;
     }
 
     if (tokenConfigured) {
         _setMaIntegrationBanner(
-            'Music Assistant was found, but the saved bridge token is invalid. Open Configuration → Music Assistant and get a new long-lived token.'
+            'Music Assistant was found, but the saved bridge token is invalid. Open Configuration → Music Assistant and get a new long-lived token.',
+            'Saved Music Assistant token is no longer valid'
         );
         return;
     }
 
     if (addonMode && _isIngress() && autoSilentAuthEnabled && _maAutoSilentAuthAttempted && _maAutoSilentAuthFailed) {
         _setMaIntegrationBanner(
-            'Music Assistant was found, but automatic Home Assistant sign-in did not complete. Open Configuration → Music Assistant to retry or get a long-lived token.'
+            'Music Assistant was found, but automatic Home Assistant sign-in did not complete. Open Configuration → Music Assistant to retry or get a long-lived token.',
+            'Automatic Music Assistant sign-in did not complete'
         );
         return;
     }
 
     _setMaIntegrationBanner(
-        'Music Assistant was found, but this bridge is not connected yet. Open Configuration → Music Assistant and get a long-lived token.'
+        'Music Assistant was found, but this bridge is not connected yet. Open Configuration → Music Assistant and get a long-lived token.',
+        'Music Assistant was found, but the bridge is not connected'
     );
 }
 

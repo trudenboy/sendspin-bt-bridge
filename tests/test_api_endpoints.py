@@ -833,7 +833,60 @@ def test_api_ma_discover_reports_invalid_saved_token(client, monkeypatch):
     assert data["servers"][0]["url"] == "http://localhost:8095"
     assert data["integration"]["token_configured"] is True
     assert data["integration"]["token_valid"] is False
+    assert data["integration"]["connected"] is False
     assert data["integration"]["matches_discovered_server"] is True
+
+
+def test_api_ma_discover_reports_connected_runtime_when_saved_token_validation_fails(client, monkeypatch):
+    import routes.api_ma as api_ma
+    import services.ma_discovery as ma_discovery
+    import state
+
+    class _DoneFuture:
+        def __init__(self, result):
+            self._result = result
+
+        def result(self, timeout=None):
+            return self._result
+
+    async def _fake_validate_ma_url(_url):
+        return {
+            "url": "http://localhost:8095",
+            "version": "2.0.0",
+            "homeassistant_addon": False,
+        }
+
+    def _run_coroutine_threadsafe(coro, loop):
+        tmp_loop = asyncio.new_event_loop()
+        try:
+            return _DoneFuture(tmp_loop.run_until_complete(coro))
+        finally:
+            tmp_loop.close()
+
+    monkeypatch.setattr(state, "get_main_loop", lambda: object())
+    monkeypatch.setattr(state, "is_ma_connected", lambda: True)
+    monkeypatch.setattr(api_ma, "_detect_runtime", lambda: "docker")
+    monkeypatch.setattr(api_ma.asyncio, "run_coroutine_threadsafe", _run_coroutine_threadsafe)
+    monkeypatch.setattr(ma_discovery, "validate_ma_url", _fake_validate_ma_url)
+    monkeypatch.setattr(
+        api_ma,
+        "load_config",
+        lambda: {
+            "MA_API_URL": "http://localhost:8095",
+            "MA_API_TOKEN": "working-token",
+            "MA_USERNAME": "admin",
+            "MA_AUTH_PROVIDER": "ha",
+        },
+    )
+    monkeypatch.setattr(api_ma, "_validate_ma_token", lambda ma_url, token: False)
+
+    resp = client.get("/api/ma/discover")
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["integration"]["token_configured"] is True
+    assert data["integration"]["token_valid"] is False
+    assert data["integration"]["connected"] is True
 
 
 def test_api_config_post_returns_structured_validation_errors(client):
