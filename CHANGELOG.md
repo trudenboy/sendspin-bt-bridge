@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.40.6] - 2026-03-19
+
+### Changed
+- GitHub Releases are now a stable-only surface: RC/Beta update discovery uses Git tags plus the tagged `CHANGELOG.md`, while Home Assistant add-on directory sync runs directly on every stable/RC/beta tag push without depending on a prerelease GitHub release object.
+- High-frequency bridge control routes and long-running Music Assistant/update actions now avoid blocking Flask request threads: MA discovery/rediscovery, update checks, and queue commands use async job polling or optimistic completion flows instead of waiting synchronously in the request path.
+- Home Assistant add-on mode now treats the web UI ingress port and installed delivery track as fixed channel properties, so the configuration UI presents them as read-only channel information instead of editable update-track settings.
+
+### Fixed
+- Existing LXC installs can update onto the prerelease tag-based channel flow again: runtime update checking no longer imports `scripts.release_notes`, and the LXC install/upgrade snapshot sync now copies the `scripts/` directory so staged validations keep matching the real application tree.
+- Music Assistant beta transport compatibility is restored across solo players and groups: `next` / `previous` prefer player-level commands where supported, and solo `shuffle` / `repeat` now fall back to legacy `up...` queue ids while treating MA `error_code` responses as real command rejections.
+- Home Assistant and standalone UI polish: add-on profile/group-settings links use ingress-safe URLs, the signed-in user link opens in a normal new tab, and the standalone `Web UI port` helper text is short enough to stay on one line.
+
 ## [2.40.6-rc.7] - 2026-03-19
 
 ### Fixed
