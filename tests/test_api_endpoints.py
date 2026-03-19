@@ -612,6 +612,43 @@ def test_api_config_get_enriches_devices_from_registry_snapshot(client, tmp_path
     assert data["BLUETOOTH_DEVICES"][0]["listen_host"] == "bridge.local"
 
 
+def test_api_config_get_uses_snapshot_ip_address_for_listen_host_fallback(client, tmp_path, monkeypatch):
+    import routes.api_config as api_config_mod
+    from services.device_registry import DeviceRegistrySnapshot
+
+    monkeypatch.setattr(api_config_mod, "CONFIG_FILE", tmp_path / "config.json")
+    (tmp_path / "config.json").write_text(
+        json.dumps(
+            {
+                "BLUETOOTH_DEVICES": [
+                    {
+                        "mac": "AA:BB:CC:DD:EE:FF",
+                        "player_name": "Kitchen",
+                    }
+                ]
+            }
+        )
+    )
+    fake_client = SimpleNamespace(
+        player_name="Kitchen",
+        listen_port=8930,
+        listen_host=None,
+        status={"ip_address": "192.168.10.20"},
+        bt_manager=SimpleNamespace(mac_address="AA:BB:CC:DD:EE:FF"),
+    )
+    monkeypatch.setattr(
+        api_config_mod,
+        "get_device_registry_snapshot",
+        lambda: DeviceRegistrySnapshot(active_clients=[fake_client]),
+    )
+
+    resp = client.get("/api/config")
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["BLUETOOTH_DEVICES"][0]["listen_host"] == "192.168.10.20"
+
+
 def test_api_config_post_accepts_security_and_monitor_settings(client, tmp_path, monkeypatch):
     """POST /api/config persists new security and MA monitor settings."""
     import routes.api_config as api_config_mod

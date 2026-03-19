@@ -31,13 +31,10 @@ from services.sendspin_compat import get_runtime_dependency_versions
 from services.status_snapshot import (
     build_bridge_snapshot,
     build_device_snapshot,
+    build_device_snapshot_pairs,
     build_group_snapshots,
     build_mock_runtime_snapshot,
     build_startup_progress_snapshot,
-)
-from state import (
-    get_ma_group_for_player_id,
-    get_ma_now_playing_for_group,
 )
 
 UTC = timezone.utc
@@ -59,31 +56,6 @@ _SSE_MAX_LIFETIME = 1800  # 30 minutes
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-
-def _enrich_status_with_ma(status: dict, client) -> None:
-    """Add MA syncgroup name and now-playing metadata to a client status dict."""
-    player_id = getattr(client, "player_id", "")
-    if not player_id:
-        return
-    ma_group = get_ma_group_for_player_id(player_id)
-    if ma_group and ma_group.get("name"):
-        status["group_name"] = ma_group["name"]
-    if ma_group and ma_group.get("id"):
-        status["ma_syncgroup_id"] = ma_group["id"]
-    elif status.get("group_id"):
-        ma_group_by_id = state.get_ma_group_by_id(status["group_id"])
-        if ma_group_by_id and ma_group_by_id.get("id"):
-            status["ma_syncgroup_id"] = ma_group_by_id["id"]
-    # Per-device MA now-playing: prefer id-matched syncgroup, then Sendspin-reported
-    # group_id (which IS the MA syncgroup id), then solo player_id queue
-    if ma_group:
-        status["ma_now_playing"] = get_ma_now_playing_for_group(ma_group["id"])
-    else:
-        dev_group_id: str = status.get("group_id", "")
-        status["ma_now_playing"] = (
-            get_ma_now_playing_for_group(dev_group_id) or get_ma_now_playing_for_group(player_id) or {}
-        )
 
 
 def _parse_sink_input_id(line: str) -> str | None:
@@ -427,9 +399,8 @@ def api_diagnostics():
 
         device_diag = []
         registry = get_device_registry_snapshot()
-        snapshot = registry.active_clients
-        for client in snapshot:
-            device = build_device_snapshot(client)
+        snapshot_pairs = build_device_snapshot_pairs(registry.active_clients)
+        for _client, device in snapshot_pairs:
             device_diag.append(
                 {
                     "name": device.player_name or "Unknown",
@@ -450,28 +421,33 @@ def api_diagnostics():
         ma_groups = state.get_ma_groups()
 
         # Build a player_id→client lookup for matching MA members to bridge devices
-        bridge_by_id = {getattr(c, "player_id", ""): c for c in snapshot if getattr(c, "player_id", "")}
+        bridge_by_id = {
+            getattr(client, "player_id", ""): (client, device)
+            for client, device in snapshot_pairs
+            if getattr(client, "player_id", "")
+        }
 
         enriched_groups = []
         for g in ma_groups:
             members_detail = []
             for m in g.get("members", []):
                 mid = m.get("id", "")
-                bridge_client = bridge_by_id.get(mid)
+                bridge_entry = bridge_by_id.get(mid)
                 member_info: dict = {
                     "id": mid,
                     "name": m.get("name", m.get("id", "")),
                     "state": m.get("state"),
                     "volume": m.get("volume"),
                     "available": m.get("available", True),
-                    "is_bridge": bridge_client is not None,
+                    "is_bridge": bridge_entry is not None,
                 }
-                if bridge_client:
+                if bridge_entry:
+                    bridge_client, bridge_device = bridge_entry
                     member_info["enabled"] = getattr(bridge_client, "bt_management_enabled", True)
-                    member_info["bt_connected"] = bridge_client.status.get("bluetooth_connected", False)
-                    member_info["server_connected"] = bridge_client.status.get("server_connected", False)
-                    member_info["playing"] = bridge_client.status.get("playing", False)
-                    member_info["sink"] = getattr(bridge_client, "bluetooth_sink_name", None)
+                    member_info["bt_connected"] = bridge_device.bluetooth_connected
+                    member_info["server_connected"] = bridge_device.server_connected
+                    member_info["playing"] = bridge_device.playing
+                    member_info["sink"] = bridge_device.sink_name
                     member_info["bt_mac"] = (
                         getattr(bridge_client.bt_manager, "mac_address", None) if bridge_client.bt_manager else None
                     )

@@ -369,6 +369,11 @@ def build_mock_runtime_snapshot() -> MockRuntimeSnapshot:
     )
 
 
+def build_device_snapshot_pairs(clients: list[Any]) -> list[tuple[Any, DeviceSnapshot]]:
+    """Build `(client, snapshot)` pairs for routes that need reads plus runtime objects."""
+    return [(client, build_device_snapshot(client)) for client in clients]
+
+
 def build_device_snapshot(client) -> DeviceSnapshot:
     """Build a typed device snapshot from a runtime client object."""
     if client is None:
@@ -472,13 +477,16 @@ def build_device_snapshot(client) -> DeviceSnapshot:
     return device
 
 
-def build_group_snapshots(clients: list[Any]) -> list[GroupSnapshot]:
+def build_group_snapshots(
+    clients: list[Any],
+    *,
+    snapshot_pairs: list[tuple[Any, DeviceSnapshot]] | None = None,
+) -> list[GroupSnapshot]:
     """Build normalized group snapshots from the current client list."""
     groups: dict[str | None, dict[str, Any]] = {}
     solo_counter = 0
 
-    for client in clients:
-        device = build_device_snapshot(client)
+    for client, device in snapshot_pairs or build_device_snapshot_pairs(clients):
         status = device.extra
         group_id = status.get("group_id")
         key = group_id if group_id is not None else f"__solo_{solo_counter}"
@@ -594,10 +602,11 @@ def build_bridge_snapshot(clients: list[Any]) -> BridgeSnapshot:
             error="No clients",
         )
 
-    devices = [build_device_snapshot(client) for client in clients]
+    snapshot_pairs = build_device_snapshot_pairs(clients)
+    devices = [device for _client, device in snapshot_pairs]
     return BridgeSnapshot(
         devices=devices,
-        groups=build_group_snapshots(clients),
+        groups=build_group_snapshots(clients, snapshot_pairs=snapshot_pairs),
         ma_connected=state.is_ma_connected(),
         ma_web_url=ma_url or None,
         disabled_devices=state.get_disabled_devices(),

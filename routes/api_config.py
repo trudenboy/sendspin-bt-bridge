@@ -44,6 +44,7 @@ from services.ha_addon import detect_delivery_channel_from_slug, get_self_addon_
 from services.ipc_protocol import IPC_PROTOCOL_VERSION
 from services.log_analysis import summarize_issue_logs
 from services.sendspin_compat import get_runtime_dependency_versions
+from services.status_snapshot import build_device_snapshot
 from services.update_checker import _is_newer_version, _start_upgrade_job, channel_image_tag, check_latest_version
 from state import (
     _adapter_cache_lock,
@@ -183,10 +184,11 @@ def _build_config_get_response():
     for dev in config.get("BLUETOOTH_DEVICES", []):
         client = client_map.get(dev.get("player_name")) or mac_map.get(dev.get("mac"))
         if client:
+            device = build_device_snapshot(client)
             if "listen_port" not in dev or not dev["listen_port"]:
                 dev["listen_port"] = getattr(client, "listen_port", None)
             if "listen_host" not in dev or not dev["listen_host"]:
-                dev["listen_host"] = getattr(client, "listen_host", None) or client.status.get("ip_address")
+                dev["listen_host"] = getattr(client, "listen_host", None) or device.extra.get("ip_address")
 
     return jsonify(config)
 
