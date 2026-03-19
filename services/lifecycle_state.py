@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 import state as _state
+from services.device_registry import set_active_clients, set_disabled_devices
 
 
 class BridgeLifecycleState:
@@ -42,7 +43,7 @@ class BridgeLifecycleState:
 
     def publish_clients(self, clients: list[Any]) -> None:
         """Publish active clients for route and UI access."""
-        _state.set_clients(clients)
+        set_active_clients(clients)
 
     def publish_runtime_prepared(
         self,
@@ -71,7 +72,7 @@ class BridgeLifecycleState:
         disabled_devices: list[dict[str, Any]],
     ) -> None:
         """Publish device registry inventory and related startup progress."""
-        _state.set_disabled_devices(disabled_devices)
+        set_disabled_devices(disabled_devices)
         _state.update_startup_progress(
             "devices",
             "Device registry prepared",

@@ -2480,6 +2480,7 @@ def test_resolve_target_queue_ignores_stale_syncgroup_id_for_solo_player():
 def test_resolve_target_queue_infers_single_active_player_for_stale_page(monkeypatch):
     import routes.api_ma as api_ma
     import state
+    from services.device_registry import DeviceRegistrySnapshot
 
     fake_client = SimpleNamespace(
         player_id="sendspin-yandex-mini-2---lxc",
@@ -2497,7 +2498,9 @@ def test_resolve_target_queue_infers_single_active_player_for_stale_page(monkeyp
             }
         ],
     )
-    monkeypatch.setattr(state, "get_clients_snapshot", lambda: [fake_client])
+    monkeypatch.setattr(
+        api_ma, "get_device_registry_snapshot", lambda: DeviceRegistrySnapshot(active_clients=[fake_client])
+    )
     try:
         state_key, queue_id = api_ma._resolve_target_queue("syncgroup_5zr8ss8g", None, None)
     finally:

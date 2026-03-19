@@ -2,25 +2,26 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-import state
 from services.device_registry import (
     build_device_registry_snapshot,
     get_device_registry_snapshot,
+    set_active_clients,
+    set_disabled_devices,
 )
 
 
-def test_build_device_registry_snapshot_uses_state_surfaces():
+def test_build_device_registry_snapshot_uses_canonical_registry_surfaces():
     client = SimpleNamespace(player_name="Kitchen", bt_manager=SimpleNamespace(mac_address="AA:BB:CC:DD:EE:FF"))
-    state.set_clients([client])
-    state.set_disabled_devices([{"player_name": "Bedroom", "enabled": False}])
+    set_active_clients([client])
+    set_disabled_devices([{"player_name": "Bedroom", "enabled": False}])
     try:
         snapshot = get_device_registry_snapshot()
 
         assert snapshot.active_clients == [client]
         assert snapshot.disabled_devices == [{"player_name": "Bedroom", "enabled": False}]
     finally:
-        state.set_clients([])
-        state.set_disabled_devices([])
+        set_active_clients([])
+        set_disabled_devices([])
 
 
 def test_device_registry_snapshot_indexes_active_clients():
@@ -37,6 +38,8 @@ def test_device_registry_snapshot_indexes_active_clients():
         "AA:BB:CC:DD:EE:FF": kitchen,
         "11:22:33:44:55:66": bedroom,
     }
+    assert snapshot.find_client_by_mac("AA:BB:CC:DD:EE:FF") is kitchen
+    assert snapshot.find_client_by_mac("FF:FF:FF:FF:FF:FF") is None
 
 
 def test_device_registry_snapshot_copies_inputs():
@@ -49,3 +52,14 @@ def test_device_registry_snapshot_copies_inputs():
 
     assert len(snapshot.active_clients) == 1
     assert snapshot.disabled_devices == [{"player_name": "Bedroom", "enabled": False}]
+
+
+def test_device_registry_snapshot_reports_released_clients():
+    active = [
+        SimpleNamespace(player_name="Kitchen", bt_management_enabled=True),
+        SimpleNamespace(player_name="Bedroom", bt_management_enabled=False),
+    ]
+
+    snapshot = build_device_registry_snapshot(active_clients=active, disabled_devices=[])
+
+    assert snapshot.released_clients() == [active[1]]

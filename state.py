@@ -1,9 +1,4 @@
-"""
-Shared application state for sendspin-bt-bridge.
-
-Single source of truth for the active SendspinClient list, shared between
-web_interface.py (reads for API responses) and sendspin_client.py (writes via set_clients).
-"""
+"""Shared compatibility state for sendspin-bt-bridge runtime and routes."""
 
 from __future__ import annotations
 
@@ -20,6 +15,24 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from config import CONFIG_FILE as _config_file
+from services.device_registry import (
+    get_active_clients_snapshot as _get_registry_active_clients_snapshot,
+)
+from services.device_registry import (
+    get_device_registry_snapshot as _get_device_registry_snapshot,
+)
+from services.device_registry import (
+    get_disabled_devices_snapshot as _get_registry_disabled_devices_snapshot,
+)
+from services.device_registry import (
+    register_registry_listener as _register_registry_listener,
+)
+from services.device_registry import (
+    set_active_clients as _set_registry_active_clients,
+)
+from services.device_registry import (
+    set_disabled_devices as _set_registry_disabled_devices,
+)
 from services.internal_events import InternalEvent, InternalEventPublisher
 
 __all__ = [
@@ -345,42 +358,44 @@ logger = logging.getLogger(__name__)
 # references (imported via `from state import clients`) stay valid.
 clients: list[Any] = []
 clients_lock = threading.Lock()
-
-
-def set_clients(new_clients: list[Any]) -> None:
-    """Replace active client list in-place (keeps existing references valid)."""
-    with clients_lock:
-        clients.clear()
-        clients.extend(new_clients if new_clients else [])
-    logger.info("Client references updated: %s client(s)", len(clients))
-
-
-def get_clients_snapshot() -> list[Any]:
-    """Return a snapshot copy of the active clients list (thread-safe)."""
-    with clients_lock:
-        return list(clients)
-
-
-# ---------------------------------------------------------------------------
-# Disabled devices — metadata for devices with enabled=false in config.
-# Not active (no client/BT/PA), but shown in UI for re-enabling.
-# ---------------------------------------------------------------------------
 _disabled_devices: list[dict] = []
 _disabled_devices_lock = threading.Lock()
 
 
-def set_disabled_devices(devices: list[dict]) -> None:
-    """Store disabled device metadata (called from main() at startup)."""
+def _sync_legacy_registry_aliases(snapshot) -> None:
+    """Mirror canonical registry state onto legacy module-level aliases."""
+    with clients_lock:
+        clients.clear()
+        clients.extend(snapshot.active_clients)
     with _disabled_devices_lock:
         _disabled_devices.clear()
-        _disabled_devices.extend(devices)
+        _disabled_devices.extend(snapshot.disabled_devices)
+
+
+_register_registry_listener(_sync_legacy_registry_aliases)
+_sync_legacy_registry_aliases(_get_device_registry_snapshot())
+
+
+def set_clients(new_clients: list[Any]) -> None:
+    """Replace the canonical active client inventory."""
+    _set_registry_active_clients(new_clients)
+    logger.info("Client references updated: %s client(s)", len(clients))
+
+
+def get_clients_snapshot() -> list[Any]:
+    """Return a snapshot copy of the canonical active client inventory."""
+    return _get_registry_active_clients_snapshot()
+
+
+def set_disabled_devices(devices: list[dict]) -> None:
+    """Store disabled device metadata in the canonical registry service."""
+    _set_registry_disabled_devices(devices)
     logger.info("Disabled devices registered: %d", len(devices))
 
 
 def get_disabled_devices() -> list[dict]:
-    """Return a copy of the disabled devices list (thread-safe)."""
-    with _disabled_devices_lock:
-        return list(_disabled_devices)
+    """Return a copy of the canonical disabled-device inventory."""
+    return _get_registry_disabled_devices_snapshot()
 
 
 # ---------------------------------------------------------------------------

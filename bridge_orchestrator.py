@@ -16,8 +16,8 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Coroutine
 
-import state as _state
 from config import detect_ha_addon_channel, ensure_bridge_name, load_config, resolve_base_listen_port, resolve_web_port
+from services.device_registry import get_device_registry_snapshot
 from services.lifecycle_state import BridgeLifecycleState
 from services.ma_integration_service import BridgeMaIntegrationService
 from services.sendspin_compat import format_dependency_versions, get_runtime_dependency_versions
@@ -188,7 +188,7 @@ class BridgeOrchestrator:
 
             mute_sink_fn = imported_mute_sink
 
-        shutdown_clients = list(clients) if clients is not None else _state.get_clients_snapshot()
+        shutdown_clients = list(clients) if clients is not None else get_device_registry_snapshot().active_clients
         muted: list[str] = []
         for client in shutdown_clients:
             sink = getattr(client, "bluetooth_sink_name", None)
