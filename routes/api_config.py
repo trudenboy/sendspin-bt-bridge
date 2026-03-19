@@ -318,6 +318,7 @@ def _sync_ha_options(config: dict) -> None:
             "bt_max_reconnect_fails": int(config.get("BT_MAX_RECONNECT_FAILS") or 0),
             "auth_enabled": bool(config.get("AUTH_ENABLED", False)),
             "update_channel": normalize_update_channel(config.get("UPDATE_CHANNEL")),
+            "ma_auto_silent_auth": bool(config.get("MA_AUTO_SILENT_AUTH", True)),
             "bluetooth_devices": sup_devices,
             "bluetooth_adapters": sup_adapters,
         }
@@ -493,6 +494,7 @@ def api_config():
         "PREFER_SBC_CODEC",
         "AUTH_ENABLED",
         "BRUTE_FORCE_PROTECTION",
+        "MA_AUTO_SILENT_AUTH",
         "MA_WEBSOCKET_MONITOR",
         "VOLUME_VIA_MA",
         "MUTE_VIA_MA",
@@ -605,6 +607,7 @@ def api_config():
         "MA_API_URL",
         "MA_API_TOKEN",
         "MA_USERNAME",
+        "MA_AUTO_SILENT_AUTH",
         "MA_WEBSOCKET_MONITOR",
         "VOLUME_VIA_MA",
         "MUTE_VIA_MA",

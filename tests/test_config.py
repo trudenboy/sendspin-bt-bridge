@@ -117,6 +117,14 @@ def test_load_volume_via_ma(tmp_path):
     assert load_config()["VOLUME_VIA_MA"] is False
 
 
+def test_load_ma_auto_silent_auth(tmp_path):
+    """MA_AUTO_SILENT_AUTH must survive load_config() round-trip."""
+    _write_config(tmp_path, {"MA_AUTO_SILENT_AUTH": False})
+    from config import load_config
+
+    assert load_config()["MA_AUTO_SILENT_AUTH"] is False
+
+
 def test_load_config_normalizes_types_and_prunes_orphan_volumes(tmp_path):
     _write_config(
         tmp_path,

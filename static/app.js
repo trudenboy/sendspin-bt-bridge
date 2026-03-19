@@ -444,6 +444,14 @@ function _openConfigPanel(tabName, targetId, block) {
     return {section: configSection, panel: panel, target: target || panel};
 }
 
+function _highlightConfigTarget(target) {
+    if (!target) return;
+    target.classList.add('config-target-highlight');
+    setTimeout(function() {
+        target.classList.remove('config-target-highlight');
+    }, 3000);
+}
+
 function initConfigTabs() {
     document.querySelectorAll('.config-tab').forEach(function(tab) {
         tab.addEventListener('click', function() {
@@ -4461,6 +4469,7 @@ async function saveConfig() {
     config.PREFER_SBC_CODEC = !!(document.getElementById('prefer-sbc-codec') || {}).checked;
     config.AUTH_ENABLED = !!(document.getElementById('auth-enabled') || {}).checked;
     config.BRUTE_FORCE_PROTECTION = !!(document.getElementById('brute-force-protection') || {}).checked;
+    config.MA_AUTO_SILENT_AUTH = !!(document.getElementById('ma-auto-silent-auth') || {}).checked;
     config.MA_WEBSOCKET_MONITOR = !!(document.getElementById('ma-websocket-monitor') || {}).checked;
     config.VOLUME_VIA_MA = !!(document.getElementById('volume-via-ma') || {}).checked;
     config.MUTE_VIA_MA = !!(document.getElementById('mute-via-ma') || {}).checked;
@@ -4558,6 +4567,9 @@ async function setPassword() {
 
 // ---- Music Assistant discover & login ----
 
+var _maAutoSilentAuthAttempted = false;
+var _maAutoSilentAuthFailed = false;
+
 async function maDiscover() {
     var btn = document.getElementById('ma-discover-btn');
     var urlInput = document.getElementById('ma-login-url');
@@ -4574,11 +4586,14 @@ async function maDiscover() {
             _setStatusText(msgEl, '\u2714 Found: MA v' + (s.version || '?') + ' at ' + s.url, 'success');
             // Detect HA addon mode — check both bridge flag and MA server flag
             _setMaAddonMode(!!(data.is_addon || s.homeassistant_addon));
+            return data;
         } else {
             _setStatusText(msgEl, '\u2716 No MA server found on network', 'error');
+            return data;
         }
     } catch (err) {
         _setStatusText(msgEl, '\u2716 Discovery error: ' + err.message, 'error');
+        return null;
     } finally {
         if (btn) btn.disabled = false;
     }
@@ -4617,6 +4632,35 @@ async function maHaConnect() {
         // Silent failed — fall through to popup
     }
     maHaAuthPopup();
+}
+
+function _setMaIntegrationBanner(message) {
+    var banner = document.getElementById('ma-integration-banner');
+    var text = document.getElementById('ma-integration-banner-text');
+    if (!banner || !text) return;
+    if (!message) {
+        banner.hidden = true;
+        text.textContent = '';
+        return;
+    }
+    text.textContent = message;
+    banner.hidden = false;
+}
+
+function openMaTokenSettings() {
+    var opened = _openConfigPanel('ma', 'ma-connect-panel', 'start');
+    var target = document.getElementById('ma-ha-login-btn');
+    if (!target || target.hidden || target.offsetParent === null) {
+        target = document.getElementById('ma-login-btn');
+    }
+    if (!target || target.hidden || target.offsetParent === null) {
+        target = document.getElementById('ma-conn-form') || (opened && opened.target);
+    }
+    _highlightConfigTarget(target);
+    if (target && typeof target.focus === 'function') {
+        target.focus({preventScroll: true});
+    }
+    return false;
 }
 
 function maHaAuthPopup() {
@@ -4706,6 +4750,8 @@ function _setMaStatus(connected, username, url) {
     var icon = document.getElementById('ma-status-icon');
     var text = document.getElementById('ma-status-text');
     if (connected) {
+        _maAutoSilentAuthFailed = false;
+        _setMaIntegrationBanner('');
         if (bar) {
             bar.classList.add('panel-status--success');
             bar.classList.remove('panel-status--neutral');
@@ -4849,6 +4895,7 @@ async function _maSilentAuth(maUrl) {
         });
         var data = await resp.json().catch(function() { return {}; });
         if (data.success) {
+            _maAutoSilentAuthFailed = false;
             _setMaStatus(true, data.username || '', data.url || maUrl);
             showToast('\u2714 Connected to Music Assistant', 'success');
             await loadConfig();
@@ -4865,9 +4912,57 @@ async function _maSilentAuth(maUrl) {
 }
 
 async function _maAutoConnect() {
-    // Auto-discover MA server and detect addon mode for UI
-    await maDiscover();
-    // No auto silent auth — user clicks "Sign in with HA" button explicitly
+    var discovery = await maDiscover();
+    var integration = discovery && discovery.integration ? discovery.integration : {};
+    var foundServer = discovery && discovery.success && Array.isArray(discovery.servers) && discovery.servers.length > 0
+        ? discovery.servers[0]
+        : null;
+    var tokenConfigured = !!integration.token_configured;
+    var tokenValid = !!integration.token_valid;
+    var autoSilentAuthEnabled = ((document.getElementById('ma-auto-silent-auth') || {}).checked) !== false;
+    var addonMode = !!(discovery && (discovery.is_addon || (foundServer && foundServer.homeassistant_addon)));
+
+    if (!foundServer) {
+        _setMaIntegrationBanner('');
+        return;
+    }
+
+    if (tokenConfigured && !tokenValid) {
+        _setMaStatus(false);
+    }
+
+    if (addonMode && _isIngress() && autoSilentAuthEnabled && !tokenValid && !_maAutoSilentAuthAttempted) {
+        _maAutoSilentAuthAttempted = true;
+        var autoOk = await _maSilentAuth(foundServer.url || (document.getElementById('ma-login-url').value || '').trim());
+        _maAutoSilentAuthFailed = !autoOk;
+        if (autoOk) {
+            _setMaIntegrationBanner('');
+            return;
+        }
+    }
+
+    if (tokenValid) {
+        _setMaIntegrationBanner('');
+        return;
+    }
+
+    if (tokenConfigured) {
+        _setMaIntegrationBanner(
+            'Music Assistant was found, but the saved bridge token is invalid. Open Configuration → Music Assistant and get a new long-lived token.'
+        );
+        return;
+    }
+
+    if (addonMode && _isIngress() && autoSilentAuthEnabled && _maAutoSilentAuthAttempted && _maAutoSilentAuthFailed) {
+        _setMaIntegrationBanner(
+            'Music Assistant was found, but automatic Home Assistant sign-in did not complete. Open Configuration → Music Assistant to retry or get a long-lived token.'
+        );
+        return;
+    }
+
+    _setMaIntegrationBanner(
+        'Music Assistant was found, but this bridge is not connected yet. Open Configuration → Music Assistant and get a long-lived token.'
+    );
 }
 
 // ---- Apply log level immediately ----
@@ -5085,6 +5180,8 @@ async function loadConfig() {
         var bruteForceCheck = document.getElementById('brute-force-protection');
         if (bruteForceCheck) bruteForceCheck.checked = config.BRUTE_FORCE_PROTECTION !== false;
         _syncSecurityPolicyState();
+        var maAutoSilentAuthCheck = document.getElementById('ma-auto-silent-auth');
+        if (maAutoSilentAuthCheck) maAutoSilentAuthCheck.checked = config.MA_AUTO_SILENT_AUTH !== false;
         var maMonitorCheck = document.getElementById('ma-websocket-monitor');
         if (maMonitorCheck) maMonitorCheck.checked = config.MA_WEBSOCKET_MONITOR !== false;
         var volMaCheck = document.getElementById('volume-via-ma');

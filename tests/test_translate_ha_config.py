@@ -41,6 +41,7 @@ def _minimal_options(**overrides) -> dict:
         "bluetooth_adapters": [],
         "tz": "UTC",
         "log_level": "info",
+        "ma_auto_silent_auth": True,
         "volume_via_ma": True,
         "update_channel": "stable",
     }
@@ -251,6 +252,7 @@ def test_translation_normalizes_update_channel(tmp_path):
             bt_max_reconnect_fails=5,
             ma_api_url="http://ma:8095",
             ma_api_token="tok123",
+            ma_auto_silent_auth=False,
         ),
     )
 
@@ -268,6 +270,7 @@ def test_translation_normalizes_update_channel(tmp_path):
     assert cfg["BT_MAX_RECONNECT_FAILS"] == 5
     assert cfg["MA_API_URL"] == "http://ma:8095"
     assert cfg["MA_API_TOKEN"] == "tok123"
+    assert cfg["MA_AUTO_SILENT_AUTH"] is False
     # enabled defaults to True for devices without explicit field
     for dev in cfg["BLUETOOTH_DEVICES"]:
         assert dev.get("enabled") is True

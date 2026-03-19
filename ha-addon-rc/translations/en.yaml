@@ -91,6 +91,12 @@ configuration:
     description: >-
       Authentication token for the Music Assistant REST API. Required only
       if your MA instance has authentication enabled. Leave empty otherwise.
+  ma_auto_silent_auth:
+    name: "Auto-get MA token on UI open"
+    description: >-
+      When enabled, the ingress web UI will try to create a long-lived Music
+      Assistant token automatically using the current Home Assistant session
+      as soon as the page opens. Applies to Home Assistant addon ingress mode only.
   volume_via_ma:
     name: "Volume via Music Assistant"
     description: >-

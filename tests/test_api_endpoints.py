@@ -505,6 +505,7 @@ def test_api_config_get_includes_security_and_monitor_defaults(client):
     assert data["BRUTE_FORCE_MAX_ATTEMPTS"] == 5
     assert data["BRUTE_FORCE_WINDOW_MINUTES"] == 1
     assert data["BRUTE_FORCE_LOCKOUT_MINUTES"] == 5
+    assert data["MA_AUTO_SILENT_AUTH"] is True
     assert data["MA_WEBSOCKET_MONITOR"] is True
 
 
@@ -575,6 +576,7 @@ def test_api_config_post_accepts_security_and_monitor_settings(client, tmp_path,
         "MA_API_URL": "",
         "MA_API_TOKEN": "",
         "MA_USERNAME": "",
+        "MA_AUTO_SILENT_AUTH": False,
         "MA_WEBSOCKET_MONITOR": False,
         "VOLUME_VIA_MA": True,
         "MUTE_VIA_MA": False,
@@ -595,6 +597,7 @@ def test_api_config_post_accepts_security_and_monitor_settings(client, tmp_path,
     assert saved["BRUTE_FORCE_MAX_ATTEMPTS"] == 4
     assert saved["BRUTE_FORCE_WINDOW_MINUTES"] == 2
     assert saved["BRUTE_FORCE_LOCKOUT_MINUTES"] == 10
+    assert saved["MA_AUTO_SILENT_AUTH"] is False
     assert saved["MA_WEBSOCKET_MONITOR"] is False
     assert saved["UPDATE_CHANNEL"] == "beta"
     assert saved["BLUETOOTH_ADAPTERS"][0]["name"] == "Living room"
@@ -730,6 +733,7 @@ def test_sync_ha_options_omits_manual_ports_when_unset(monkeypatch):
             "SENDSPIN_PORT": 9000,
             "WEB_PORT": None,
             "BASE_LISTEN_PORT": None,
+            "MA_AUTO_SILENT_AUTH": True,
             "BLUETOOTH_DEVICES": [],
             "BLUETOOTH_ADAPTERS": [],
         }
@@ -738,6 +742,7 @@ def test_sync_ha_options_omits_manual_ports_when_unset(monkeypatch):
     options = captured["payload"]["options"]
     assert "web_port" not in options
     assert "base_listen_port" not in options
+    assert options["ma_auto_silent_auth"] is True
 
 
 def test_sync_ha_options_includes_manual_ports_when_set(monkeypatch):
@@ -767,6 +772,7 @@ def test_sync_ha_options_includes_manual_ports_when_set(monkeypatch):
             "SENDSPIN_PORT": 9000,
             "WEB_PORT": 18080,
             "BASE_LISTEN_PORT": 19000,
+            "MA_AUTO_SILENT_AUTH": False,
             "BLUETOOTH_DEVICES": [],
             "BLUETOOTH_ADAPTERS": [],
         }
@@ -775,6 +781,59 @@ def test_sync_ha_options_includes_manual_ports_when_set(monkeypatch):
     options = captured["payload"]["options"]
     assert options["web_port"] == 18080
     assert options["base_listen_port"] == 19000
+    assert options["ma_auto_silent_auth"] is False
+
+
+def test_api_ma_discover_reports_invalid_saved_token(client, monkeypatch):
+    import routes.api_ma as api_ma
+    import services.ma_discovery as ma_discovery
+    import state
+
+    class _DoneFuture:
+        def __init__(self, result):
+            self._result = result
+
+        def result(self, timeout=None):
+            return self._result
+
+    async def _fake_validate_ma_url(_url):
+        return {
+            "url": "http://localhost:8095",
+            "version": "2.0.0",
+            "homeassistant_addon": True,
+        }
+
+    def _run_coroutine_threadsafe(coro, loop):
+        tmp_loop = asyncio.new_event_loop()
+        try:
+            return _DoneFuture(tmp_loop.run_until_complete(coro))
+        finally:
+            tmp_loop.close()
+
+    monkeypatch.setattr(state, "get_main_loop", lambda: object())
+    monkeypatch.setattr(api_ma, "_detect_runtime", lambda: "ha_addon")
+    monkeypatch.setattr(api_ma.asyncio, "run_coroutine_threadsafe", _run_coroutine_threadsafe)
+    monkeypatch.setattr(ma_discovery, "validate_ma_url", _fake_validate_ma_url)
+    monkeypatch.setattr(
+        api_ma,
+        "load_config",
+        lambda: {
+            "MA_API_URL": "http://localhost:8095",
+            "MA_API_TOKEN": "expired-token",
+            "MA_USERNAME": "admin",
+            "MA_AUTH_PROVIDER": "ha",
+        },
+    )
+    monkeypatch.setattr(api_ma, "_validate_ma_token", lambda ma_url, token: False)
+
+    resp = client.get("/api/ma/discover")
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["servers"][0]["url"] == "http://localhost:8095"
+    assert data["integration"]["token_configured"] is True
+    assert data["integration"]["token_valid"] is False
+    assert data["integration"]["matches_discovered_server"] is True
 
 
 def test_api_config_post_returns_structured_validation_errors(client):

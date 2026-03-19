@@ -49,6 +49,7 @@ options:
   update_channel: "stable"
   ma_api_url: ""
   ma_api_token: ""
+  ma_auto_silent_auth: true
   volume_via_ma: true
   bluetooth_devices: []
   bluetooth_adapters: []
@@ -68,6 +69,7 @@ schema:
   update_channel: "list(stable|rc|beta)?"
   ma_api_url: str?
   ma_api_token: str?
+  ma_auto_silent_auth: bool?
   volume_via_ma: bool?
   bluetooth_devices:
     - mac: "match(([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2})"

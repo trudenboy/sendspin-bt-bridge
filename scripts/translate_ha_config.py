@@ -144,6 +144,7 @@ def main() -> None:
         "LOG_LEVEL": (opts.get("log_level") or "info").upper(),
         "MA_API_URL": opts.get("ma_api_url") or "",
         "MA_API_TOKEN": opts.get("ma_api_token") or "",
+        "MA_AUTO_SILENT_AUTH": bool(opts.get("ma_auto_silent_auth", True)),
         "VOLUME_VIA_MA": bool(opts.get("volume_via_ma", True)),
         "UPDATE_CHANNEL": normalize_update_channel(opts.get("update_channel", DEFAULT_UPDATE_CHANNEL)),
     }

@@ -662,6 +662,12 @@ body {
             display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap;
         }
         .auth-warning-banner a { color: #92400e; font-weight: 600; text-decoration: underline; }
+        .ma-warning-banner {
+            background: rgba(255, 166, 0, 0.12);
+            border-color: rgba(255, 166, 0, 0.28);
+            color: #9a5a00;
+        }
+        .ma-warning-banner a { color: #9a5a00; }
 
         /* Status grid — responsive card grid */
         .status-grid {
@@ -3948,6 +3954,12 @@ body {
             display: flex;
             flex-direction: column;
             gap: 6px;
+        }
+        .config-target-highlight {
+            outline: 2px solid rgba(255, 166, 0, 0.95);
+            outline-offset: 2px;
+            box-shadow: 0 0 0 4px rgba(255, 166, 0, 0.14);
+            transition: outline-color 0.2s ease, box-shadow 0.2s ease;
         }
         .config-status-message {
             min-height: 18px;

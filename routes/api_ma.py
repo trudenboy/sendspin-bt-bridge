@@ -249,6 +249,27 @@ def _validate_ma_token(ma_url: str, token: str) -> bool:
         return False
 
 
+def _build_ma_integration_summary(discovered_url: str = "") -> dict[str, object]:
+    """Return current bridge-side MA auth state for UI bootstrapping."""
+    cfg = load_config()
+    configured_url = str(cfg.get("MA_API_URL") or "").strip().rstrip("/")
+    configured_token = str(cfg.get("MA_API_TOKEN") or "").strip()
+    discovered_url = str(discovered_url or "").strip().rstrip("/")
+    token_valid = False
+    if configured_url and configured_token:
+        token_valid = _validate_ma_token(configured_url, configured_token)
+    return {
+        "configured": bool(configured_url and configured_token),
+        "configured_url": configured_url,
+        "url_configured": bool(configured_url),
+        "token_configured": bool(configured_token),
+        "token_valid": token_valid,
+        "matches_discovered_server": bool(discovered_url and configured_url and discovered_url == configured_url),
+        "username": str(cfg.get("MA_USERNAME") or "").strip(),
+        "auth_provider": str(cfg.get("MA_AUTH_PROVIDER") or "").strip(),
+    }
+
+
 def _exchange_for_long_lived_token(ma_url: str, session_token: str) -> str:
     """Exchange a short-lived MA session token for a long-lived API token.
 
@@ -938,7 +959,17 @@ def api_ma_discover():
     is_addon = _detect_runtime() == "ha_addon"
 
     def _ok(servers):
-        return jsonify({"success": True, "is_addon": is_addon, "servers": servers})
+        discovered_url = ""
+        if servers and isinstance(servers[0], dict):
+            discovered_url = str(servers[0].get("url") or "")
+        return jsonify(
+            {
+                "success": True,
+                "is_addon": is_addon,
+                "servers": servers,
+                "integration": _build_ma_integration_summary(discovered_url),
+            }
+        )
 
     # --- HA addon shortcut: MA is on the same HA host ---
     if is_addon:
