@@ -701,8 +701,8 @@ function _uiIconSvg(kind, className) {
         '</svg>';
     }
     if (kind === 'theme-auto') {
-        return '<svg' + cls + ' viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
-            '<circle cx="12" cy="12" r="8"/><path d="M9.2 16.6 12 7.4l2.8 9.2"/><path d="M10.15 13.5h3.7"/>' +
+        return '<svg' + cls + ' viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+            '<circle cx="12" cy="12" r="8" fill="none"/><path d="M9.2 16.6 12 7.4l2.8 9.2" fill="none"/><path d="M10.15 13.5h3.7" fill="none"/>' +
         '</svg>';
     }
     if (kind === 'download') {
