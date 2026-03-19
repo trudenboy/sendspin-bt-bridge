@@ -54,7 +54,9 @@ _LOCKOUT_MAX_ATTEMPTS = 5
 _LOCKOUT_WINDOW_SECS = 60
 _LOCKOUT_DURATION_SECS = 300  # 5 minutes
 
-_failed: dict[str, tuple[int, float]] = {}  # ip → (count, first_failure_ts)
+_TRUSTED_PROXY_DEFAULTS = frozenset({"127.0.0.1", "::1", "172.30.32.2"})
+
+_failed: dict[str, tuple[int, float]] = {}  # client_id → (count, first_failure_ts)
 _failed_lock = threading.Lock()
 
 
@@ -106,47 +108,86 @@ def _format_duration(seconds: int) -> str:
     return f"{seconds} seconds"
 
 
-def _check_rate_limit(ip: str) -> bool:
-    """Return True if the IP is currently locked out."""
+def _get_trusted_proxies() -> set[str]:
+    """Return trusted proxy IPs used for validated forwarded client identity."""
+    trusted = set(_TRUSTED_PROXY_DEFAULTS)
+    config = load_config()
+    extra = config.get("TRUSTED_PROXIES") or []
+    if isinstance(extra, list):
+        trusted.update(value.strip() for value in extra if isinstance(value, str) and value.strip())
+    return trusted
+
+
+def _get_forwarded_client_ip() -> str:
+    """Return the proxied client IP from trusted forwarding headers, if present."""
+    forwarded_for = request.headers.get("X-Forwarded-For", "")
+    if forwarded_for:
+        for part in forwarded_for.split(","):
+            candidate = part.strip()
+            if candidate:
+                return candidate
+    return request.headers.get("X-Real-IP", "").strip()
+
+
+def _get_rate_limit_client_id() -> str:
+    """Return the best-available brute-force bucket key for this request."""
+    peer = (request.remote_addr or "").strip()
+    if peer and peer in _get_trusted_proxies():
+        forwarded_ip = _get_forwarded_client_ip()
+        if forwarded_ip:
+            return forwarded_ip
+        username = request.form.get("username", "").strip().casefold()
+        if username:
+            return f"proxy-login:{username}"
+        session_client_id = session.get("_lockout_client_id")
+        if not isinstance(session_client_id, str) or not session_client_id:
+            session_client_id = secrets.token_hex(16)
+            session["_lockout_client_id"] = session_client_id
+        return f"proxy-session:{session_client_id}"
+    return peer or "unknown"
+
+
+def _check_rate_limit(client_id: str) -> bool:
+    """Return True if the client identifier is currently locked out."""
     enabled, max_attempts, _, duration_secs = _get_lockout_settings()
     if not enabled:
         return False
     now = time.monotonic()
     with _failed_lock:
-        entry = _failed.get(ip)
+        entry = _failed.get(client_id)
         if not entry:
             return False
         count, first_ts = entry
         # Reset window if enough time has passed since first failure
         if now - first_ts > duration_secs:
-            del _failed[ip]
+            del _failed[client_id]
             return False
         return count >= max_attempts
 
 
-def _record_failure(ip: str) -> None:
+def _record_failure(client_id: str) -> None:
     enabled, _, window_secs, _ = _get_lockout_settings()
     if not enabled:
         return
     now = time.monotonic()
     with _failed_lock:
-        entry = _failed.get(ip)
+        entry = _failed.get(client_id)
         if entry:
             count, first_ts = entry
             if now - first_ts > window_secs:
-                _failed[ip] = (1, now)
+                _failed[client_id] = (1, now)
             else:
-                _failed[ip] = (count + 1, first_ts)
+                _failed[client_id] = (count + 1, first_ts)
         else:
-            _failed[ip] = (1, now)
+            _failed[client_id] = (1, now)
         if len(_failed) > 1000:
             oldest = min(_failed, key=lambda k: _failed[k][1])
             del _failed[oldest]
 
 
-def _clear_failures(ip: str) -> None:
+def _clear_failures(client_id: str) -> None:
     with _failed_lock:
-        _failed.pop(ip, None)
+        _failed.pop(client_id, None)
 
 
 def _generate_csrf_token() -> str:
@@ -675,8 +716,8 @@ def login():
             csrf_token=_generate_csrf_token(),
         ), 403
 
-    client_ip = request.remote_addr or "unknown"
-    if _check_rate_limit(client_ip):
+    client_id = _get_rate_limit_client_id()
+    if _check_rate_limit(client_id):
         _, _, _, duration_secs = _get_lockout_settings()
         return render_template(
             "login.html",
@@ -691,13 +732,13 @@ def login():
     response = None
 
     if method == "ma":
-        error, response = _handle_ma_login(client_ip)
+        error, response = _handle_ma_login(client_id)
     elif method == "ha_via_ma":
-        error, response = _handle_ha_via_ma_login(client_ip, ha_mode, auth_methods)
+        error, response = _handle_ha_via_ma_login(client_id, ha_mode, auth_methods)
     elif method == "ha" or (ha_mode and method not in ("ma", "password")):
-        error, response = _handle_ha_direct_login(client_ip, ha_mode, auth_methods)
+        error, response = _handle_ha_direct_login(client_id, ha_mode, auth_methods)
     else:
-        error, response = _handle_local_password_login(client_ip)
+        error, response = _handle_local_password_login(client_id)
 
     if response is not None:
         session["auth_method"] = method

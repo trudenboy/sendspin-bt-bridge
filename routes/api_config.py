@@ -13,6 +13,8 @@ import json
 import logging
 import os
 import subprocess
+import threading
+import uuid
 from datetime import datetime, timezone
 
 from flask import Blueprint, Response, jsonify, request
@@ -53,6 +55,32 @@ config_bp = Blueprint("api_config", __name__)
 # since config.py is re-read.  Does NOT auto-reload on manual file edit.
 _volume_via_ma: bool = True
 _mute_via_ma: bool = False
+
+
+def _submit_loop_coroutine(loop, coro, *, description: str) -> bool:
+    """Schedule work on the main loop without blocking the current request."""
+    try:
+        future = asyncio.run_coroutine_threadsafe(coro, loop)
+    except Exception as exc:
+        if asyncio.iscoroutine(coro):
+            coro.close()
+        logger.debug("Could not schedule %s: %s", description, exc)
+        return False
+
+    add_done_callback = getattr(future, "add_done_callback", None)
+    if callable(add_done_callback):
+
+        def _log_completion(done_future) -> None:
+            result_getter = getattr(done_future, "result", None)
+            if not callable(result_getter):
+                return
+            try:
+                result_getter()
+            except Exception as exc:
+                logger.debug("%s failed asynchronously: %s", description, exc)
+
+        add_done_callback(_log_completion)
+    return True
 
 
 def _reload_volume_via_ma() -> None:
@@ -736,8 +764,9 @@ def api_set_password():
 
     try:
         update_config(lambda cfg: cfg.__setitem__("AUTH_PASSWORD_HASH", pw_hash))
-    except Exception as exc:
-        logger.debug("read config for auth update failed: %s", exc)
+    except (OSError, json.JSONDecodeError, ValueError):
+        logger.exception("Could not persist auth password hash")
+        return jsonify({"success": False, "error": "Could not save password"}), 500
 
     return jsonify({"success": True})
 
@@ -750,15 +779,16 @@ def api_set_log_level():
     if level not in ("INFO", "DEBUG"):
         return jsonify({"error": "level must be 'info' or 'debug'"}), 400
 
-    # Apply to main process root logger immediately
-    logging.getLogger().setLevel(getattr(logging, level))
-    os.environ["LOG_LEVEL"] = level
-
     # Persist to config.json
     try:
         update_config(lambda cfg: cfg.__setitem__("LOG_LEVEL", level))
-    except Exception as exc:
-        logger.debug("read config for log level update failed: %s", exc)
+    except (OSError, json.JSONDecodeError, ValueError):
+        logger.exception("Could not persist log level %s", level)
+        return jsonify({"success": False, "error": "Could not persist log level"}), 500
+
+    # Apply to main process root logger immediately after persistence succeeds
+    logging.getLogger().setLevel(getattr(logging, level))
+    os.environ["LOG_LEVEL"] = level
 
     # Propagate to all running subprocesses via stdin IPC
     loop = state.get_main_loop()
@@ -766,10 +796,11 @@ def api_set_log_level():
         cmd = {"cmd": "set_log_level", "level": level}
         for client in get_device_registry_snapshot().active_clients:
             if client.is_running():
-                try:
-                    asyncio.run_coroutine_threadsafe(client._send_subprocess_command(cmd), loop).result(timeout=2.0)
-                except Exception as exc:
-                    logger.debug("Could not send set_log_level to %s: %s", client.player_name, exc)
+                _submit_loop_coroutine(
+                    loop,
+                    client._send_subprocess_command(cmd),
+                    description=f"set_log_level for {client.player_name}",
+                )
 
     return jsonify({"success": True, "level": level})
 
@@ -924,36 +955,63 @@ def api_version():
 # ---------------------------------------------------------------------------
 
 
-@config_bp.route("/api/update/check", methods=["POST"])
-def api_update_check():
-    """Force an immediate version check against GitHub releases."""
-    loop = state.get_main_loop()
-    if not loop:
-        return jsonify({"success": False, "error": "Event loop not available"}), 503
+def _run_update_check_job(job_id: str, channel: str, loop) -> None:
+    """Resolve update availability in a background thread and store the result."""
     try:
-        payload = request.get_json(silent=True) or {}
-        requested_channel = payload.get("channel") or request.args.get("channel")
-        channel = normalize_update_channel(requested_channel or load_config().get("UPDATE_CHANNEL"))
         fut = asyncio.run_coroutine_threadsafe(check_latest_version(channel), loop)
         latest = fut.result(timeout=20)
         if not latest:
-            return jsonify({"success": False, "error": "Could not reach GitHub API"}), 502
+            state.finish_async_job(job_id, {"success": False, "error": "Could not reach GitHub API"})
+            return
         if _is_newer_version(latest["tag"], VERSION):
             latest["current_version"] = VERSION
             state.set_update_available(latest)
-            return jsonify({"success": True, "update_available": True, **latest})
+            state.finish_async_job(job_id, {"success": True, "update_available": True, **latest})
+            return
         state.set_update_available(None)
-        return jsonify(
+        state.finish_async_job(
+            job_id,
             {
                 "success": True,
                 "update_available": False,
                 "latest": latest["version"],
                 "channel": channel,
-            }
+            },
         )
     except Exception:
         logger.exception("Update check failed")
-        return jsonify({"success": False, "error": "Internal error"}), 500
+        state.finish_async_job(job_id, {"success": False, "error": "Internal error"})
+
+
+@config_bp.route("/api/update/check", methods=["POST"])
+def api_update_check():
+    """Start an async version check against GitHub releases."""
+    loop = state.get_main_loop()
+    if not loop:
+        return jsonify({"success": False, "error": "Event loop not available"}), 503
+    payload = request.get_json(silent=True) or {}
+    requested_channel = payload.get("channel") or request.args.get("channel")
+    channel = normalize_update_channel(requested_channel or load_config().get("UPDATE_CHANNEL"))
+    job_id = str(uuid.uuid4())
+    state.create_async_job(job_id, "update-check")
+    threading.Thread(
+        target=_run_update_check_job,
+        args=(job_id, channel, loop),
+        daemon=True,
+        name=f"update-check-{job_id[:8]}",
+    ).start()
+    return jsonify({"job_id": job_id, "status": "running", "channel": channel}), 202
+
+
+@config_bp.route("/api/update/check/result/<job_id>", methods=["GET"])
+def api_update_check_result(job_id: str):
+    """Poll for async update-check result by job_id."""
+    job = state.get_async_job(job_id)
+    if job is None or job.get("job_type") != "update-check":
+        return jsonify({"error": "Job not found"}), 404
+    if job.get("status") == "running":
+        return jsonify({"status": "running", "channel": job.get("channel")})
+    return jsonify(job)
 
 
 @config_bp.route("/api/update/info")

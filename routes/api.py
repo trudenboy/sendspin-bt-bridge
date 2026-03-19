@@ -39,6 +39,32 @@ _volume_timers: dict[str, threading.Timer] = {}
 _volume_timers_lock = threading.Lock()
 
 
+def _submit_loop_coroutine(loop, coro, *, description: str) -> bool:
+    """Schedule work on the main loop without blocking the request thread."""
+    try:
+        future = asyncio.run_coroutine_threadsafe(coro, loop)
+    except Exception as exc:
+        if asyncio.iscoroutine(coro):
+            coro.close()
+        logger.debug("Could not schedule %s: %s", description, exc)
+        return False
+
+    add_done_callback = getattr(future, "add_done_callback", None)
+    if callable(add_done_callback):
+
+        def _log_completion(done_future) -> None:
+            result_getter = getattr(done_future, "result", None)
+            if not callable(result_getter):
+                return
+            try:
+                result_getter()
+            except Exception as exc:
+                logger.debug("%s failed asynchronously: %s", description, exc)
+
+        add_done_callback(_log_completion)
+    return True
+
+
 def _persist_volume(mac: str, volume: int) -> None:
     """Write volume to config.json (called via debounce timer, not inline)."""
     with _volume_timers_lock:
@@ -262,8 +288,10 @@ def set_volume():
                                 client._update_status({"volume": volume})
                                 _loop = state.get_main_loop()
                                 if _loop:
-                                    asyncio.run_coroutine_threadsafe(
-                                        client._send_subprocess_command({"cmd": "set_volume", "value": volume}), _loop
+                                    _submit_loop_coroutine(
+                                        _loop,
+                                        client._send_subprocess_command({"cmd": "set_volume", "value": volume}),
+                                        description=f"set_volume for {client.player_name}",
                                     )
                                 mac = getattr(getattr(client, "bt_manager", None), "mac_address", None)
                                 if mac:
@@ -280,8 +308,10 @@ def set_volume():
                 client._update_status({"volume": volume})
                 loop = state.get_main_loop()
                 if loop:
-                    asyncio.run_coroutine_threadsafe(
-                        client._send_subprocess_command({"cmd": "set_volume", "value": volume}), loop
+                    _submit_loop_coroutine(
+                        loop,
+                        client._send_subprocess_command({"cmd": "set_volume", "value": volume}),
+                        description=f"set_volume for {client.player_name}",
                     )
                 mac = getattr(getattr(client, "bt_manager", None), "mac_address", None)
                 if mac:
@@ -350,8 +380,10 @@ def set_mute():
                         muted = bool(mute_value) if mute_value is not None else not client.status.get("muted", False)
                     client._update_status({"muted": muted})
                     if loop:
-                        asyncio.run_coroutine_threadsafe(
-                            client._send_subprocess_command({"cmd": "set_mute", "muted": muted}), loop
+                        _submit_loop_coroutine(
+                            loop,
+                            client._send_subprocess_command({"cmd": "set_mute", "muted": muted}),
+                            description=f"set_mute for {client.player_name}",
                         )
                     results.append(
                         {
@@ -407,11 +439,14 @@ def pause_all():
                     continue
                 seen_groups.add(gid)
             try:
-                fut = asyncio.run_coroutine_threadsafe(client._send_subprocess_command({"cmd": "pause"}), loop)
-                fut.result(timeout=2.0)
-                count += 1
+                if _submit_loop_coroutine(
+                    loop,
+                    client._send_subprocess_command({"cmd": "pause"}),
+                    description=f"pause for {client.player_name}",
+                ):
+                    count += 1
             except Exception as exc:
-                logger.debug("Could not send pause to %s: %s", client.player_name, exc)
+                logger.debug("Could not queue pause for %s: %s", client.player_name, exc)
 
     else:  # play / unpause
         ma_url, ma_token = state.get_ma_api_credentials()
@@ -449,11 +484,14 @@ def pause_all():
                     continue
                 seen_session_groups.add(gid)
             try:
-                fut = asyncio.run_coroutine_threadsafe(client._send_subprocess_command({"cmd": "play"}), loop)
-                fut.result(timeout=2.0)
-                count += 1
+                if _submit_loop_coroutine(
+                    loop,
+                    client._send_subprocess_command({"cmd": "play"}),
+                    description=f"play for {client.player_name}",
+                ):
+                    count += 1
             except Exception as exc:
-                logger.debug("Could not send play to %s: %s", client.player_name, exc)
+                logger.debug("Could not queue play for %s: %s", client.player_name, exc)
 
     return jsonify({"success": True, "action": action, "count": count})
 
@@ -513,8 +551,13 @@ def api_group_pause():
                     logger.warning("MA API group play failed, falling back: %s", exc)
 
     try:
-        fut = asyncio.run_coroutine_threadsafe(target._send_subprocess_command({"cmd": action}), loop)
-        fut.result(timeout=2.0)
+        scheduled = _submit_loop_coroutine(
+            loop,
+            target._send_subprocess_command({"cmd": action}),
+            description=f"{action} for group {group_id}",
+        )
+        if not scheduled:
+            return jsonify({"success": False, "error": "Could not schedule command"}), 503
         group_name = target.status.get("group_name")
         return jsonify({"success": True, "action": action, "group_id": group_id, "group_name": group_name})
     except Exception:
@@ -541,8 +584,13 @@ def pause_player():
     if loop is None:
         return jsonify({"success": False, "error": "Event loop not available"}), 503
     try:
-        fut = asyncio.run_coroutine_threadsafe(target._send_subprocess_command({"cmd": action}), loop)
-        fut.result(timeout=2.0)
+        scheduled = _submit_loop_coroutine(
+            loop,
+            target._send_subprocess_command({"cmd": action}),
+            description=f"{action} for {player_name}",
+        )
+        if not scheduled:
+            return jsonify({"success": False, "error": "Could not schedule command"}), 503
         return jsonify({"success": True, "action": action, "count": 1})
     except Exception:
         logger.exception("Pause/play command failed")

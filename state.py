@@ -30,11 +30,14 @@ __all__ = [
     "clients",
     "clients_lock",
     "complete_startup_progress",
+    "create_async_job",
     "create_scan_job",
     "fail_ma_pending_op",
     "fail_startup_progress",
+    "finish_async_job",
     "finish_scan_job",
     "get_adapter_name",
+    "get_async_job",
     "get_bridge_system_info",
     "get_device_events",
     "get_disabled_devices",
@@ -560,6 +563,46 @@ def get_adapter_name(mac_upper: str) -> str | None:
 
 
 # ---------------------------------------------------------------------------
+# Generic async job store — keyed by UUID, TTL ~2 min
+# ---------------------------------------------------------------------------
+
+_async_jobs: dict[str, dict] = {}
+_async_jobs_lock = threading.Lock()
+_ASYNC_JOB_TTL = 120  # seconds
+
+
+def _evict_expired_jobs(store: dict[str, dict], ttl: int) -> None:
+    """Remove expired jobs from *store* based on their ``created`` timestamp."""
+    now = _time.time()
+    expired = [jid for jid, job in store.items() if now - job.get("created", 0) > ttl]
+    for jid in expired:
+        del store[jid]
+
+
+def create_async_job(job_id: str, job_type: str) -> None:
+    """Register a new in-progress generic async job."""
+    with _async_jobs_lock:
+        _evict_expired_jobs(_async_jobs, _ASYNC_JOB_TTL)
+        _async_jobs[job_id] = {"status": "running", "created": _time.time(), "job_type": job_type}
+
+
+def finish_async_job(job_id: str, result: dict) -> None:
+    """Mark a generic async job as done with its result payload."""
+    with _async_jobs_lock:
+        if job_id in _async_jobs:
+            _async_jobs[job_id]["status"] = "done"
+            _async_jobs[job_id].update(result)
+
+
+def get_async_job(job_id: str) -> dict | None:
+    """Return a shallow copy of the generic async job dict or None if missing."""
+    with _async_jobs_lock:
+        _evict_expired_jobs(_async_jobs, _ASYNC_JOB_TTL)
+        job = _async_jobs.get(job_id)
+        return dict(job) if job else None
+
+
+# ---------------------------------------------------------------------------
 # BT scan job store — keyed by UUID, TTL ~2 min
 # ---------------------------------------------------------------------------
 
@@ -571,12 +614,8 @@ _SCAN_JOB_TTL = 120  # seconds
 def create_scan_job(job_id: str) -> None:
     """Register a new in-progress scan job."""
     with _scan_jobs_lock:
-        # Evict expired jobs before adding new one
-        now = _time.time()
-        expired = [jid for jid, j in _scan_jobs.items() if now - j.get("created", 0) > _SCAN_JOB_TTL]
-        for jid in expired:
-            del _scan_jobs[jid]
-        _scan_jobs[job_id] = {"status": "running", "created": now}
+        _evict_expired_jobs(_scan_jobs, _SCAN_JOB_TTL)
+        _scan_jobs[job_id] = {"status": "running", "created": _time.time()}
 
 
 def finish_scan_job(job_id: str, result: dict) -> None:
@@ -596,6 +635,7 @@ def is_scan_running() -> bool:
 def get_scan_job(job_id: str) -> dict | None:
     """Return a shallow copy of the job dict or None if not found."""
     with _scan_jobs_lock:
+        _evict_expired_jobs(_scan_jobs, _SCAN_JOB_TTL)
         job = _scan_jobs.get(job_id)
         return dict(job) if job else None
 

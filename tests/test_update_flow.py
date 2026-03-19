@@ -132,17 +132,30 @@ def test_api_update_check_uses_selected_channel(config_client, monkeypatch):
             "prerelease": True,
         }
 
+    class _ImmediateThread:
+        def __init__(self, target, args=(), kwargs=None, daemon=None, name=None):
+            self._target = target
+            self._args = args
+            self._kwargs = kwargs or {}
+
+        def start(self):
+            self._target(*self._args, **self._kwargs)
+
     def fake_run_coroutine_threadsafe(coro, loop):
         return SimpleNamespace(result=lambda timeout=None: asyncio.run(coro))
 
     monkeypatch.setattr(api_config, "check_latest_version", fake_check_latest_version)
     monkeypatch.setattr(api_config.asyncio, "run_coroutine_threadsafe", fake_run_coroutine_threadsafe)
+    monkeypatch.setattr(api_config.threading, "Thread", _ImmediateThread)
 
     resp = config_client.post("/api/update/check")
 
-    assert resp.status_code == 200
+    assert resp.status_code == 202
+    job_id = resp.get_json()["job_id"]
     assert captured["channel"] == "rc"
-    assert resp.get_json()["channel"] == "rc"
+    result = config_client.get(f"/api/update/check/result/{job_id}")
+    assert result.status_code == 200
+    assert result.get_json()["channel"] == "rc"
 
 
 def test_api_update_info_reports_beta_channel_warning(config_client, monkeypatch):

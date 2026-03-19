@@ -13,6 +13,7 @@ from routes.auth import (
     _clear_failures,
     _detect_auth_methods,
     _failed,
+    _get_rate_limit_client_id,
     _ma_validate_credentials,
     _record_failure,
     _safe_next_url,
@@ -101,6 +102,41 @@ def test_custom_max_attempts_applied():
         assert _check_rate_limit("10.0.0.8") is False
         _record_failure("10.0.0.8")
         assert _check_rate_limit("10.0.0.8") is True
+
+
+def test_rate_limit_client_id_uses_forwarded_for_from_trusted_proxy():
+    with patch("routes.auth.load_config", return_value={"TRUSTED_PROXIES": ["10.0.0.10"]}):
+        with _app.test_request_context(
+            "/login",
+            method="POST",
+            data={"username": "alice"},
+            environ_base={"REMOTE_ADDR": "10.0.0.10"},
+            headers={"X-Forwarded-For": "198.51.100.7, 10.0.0.10"},
+        ):
+            assert _get_rate_limit_client_id() == "198.51.100.7"
+
+
+def test_rate_limit_client_id_ignores_forwarded_for_from_untrusted_proxy():
+    with patch("routes.auth.load_config", return_value={"TRUSTED_PROXIES": []}):
+        with _app.test_request_context(
+            "/login",
+            method="POST",
+            data={"username": "alice"},
+            environ_base={"REMOTE_ADDR": "10.0.0.10"},
+            headers={"X-Forwarded-For": "198.51.100.7"},
+        ):
+            assert _get_rate_limit_client_id() == "10.0.0.10"
+
+
+def test_rate_limit_client_id_falls_back_to_username_for_trusted_proxy_without_client_ip():
+    with patch("routes.auth.load_config", return_value={"TRUSTED_PROXIES": ["10.0.0.10"]}):
+        with _app.test_request_context(
+            "/login",
+            method="POST",
+            data={"username": "Alice"},
+            environ_base={"REMOTE_ADDR": "10.0.0.10"},
+        ):
+            assert _get_rate_limit_client_id() == "proxy-login:alice"
 
 
 # ── _safe_next_url ───────────────────────────────────────────────────────

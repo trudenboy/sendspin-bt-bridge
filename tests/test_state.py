@@ -52,6 +52,27 @@ def test_create_scan_job():
     assert "created" in job
 
 
+def test_create_async_job():
+    job_id = str(uuid.uuid4())
+    state.create_async_job(job_id, "update-check")
+    job = state.get_async_job(job_id)
+    assert job is not None
+    assert job["status"] == "running"
+    assert job["job_type"] == "update-check"
+
+
+def test_finish_async_job():
+    job_id = str(uuid.uuid4())
+    state.create_async_job(job_id, "ma-discover")
+    result = {"success": True, "servers": [{"url": "http://localhost:8095"}]}
+    state.finish_async_job(job_id, result)
+    job = state.get_async_job(job_id)
+    assert job is not None
+    assert job["status"] == "done"
+    assert job["success"] is True
+    assert job["servers"][0]["url"] == "http://localhost:8095"
+
+
 def test_finish_scan_job():
     job_id = str(uuid.uuid4())
     state.create_scan_job(job_id)
@@ -66,6 +87,11 @@ def test_finish_scan_job():
 def test_get_nonexistent_job():
     job_id = str(uuid.uuid4())
     assert state.get_scan_job(job_id) is None
+
+
+def test_get_nonexistent_async_job():
+    job_id = str(uuid.uuid4())
+    assert state.get_async_job(job_id) is None
 
 
 # ---------------------------------------------------------------------------

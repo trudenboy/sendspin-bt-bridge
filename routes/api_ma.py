@@ -10,8 +10,8 @@ import asyncio
 import contextlib
 import json
 import logging
-import os
 import re
+import threading
 import urllib.error as _ue
 import urllib.parse as _up
 import urllib.request as _ur
@@ -26,6 +26,7 @@ from config import (
 )
 from routes.api_config import _detect_runtime
 from services.device_registry import get_device_registry_snapshot
+from services.ha_addon import get_ma_addon_internal_ingress_url
 from services.ma_artwork import has_valid_artwork_signature
 from services.ma_monitor import solo_queue_candidates
 
@@ -655,46 +656,8 @@ def _get_ha_user_via_ws(ha_token: str):
 
 
 def _find_ma_ingress_url():
-    """Discover the MA addon's Ingress base URL via the Supervisor API.
-
-    Returns e.g. ``http://d5369777-music-assistant:8094`` or falls back
-    to ``http://localhost:8094``.  Uses the addon's Docker hostname which
-    is resolvable from any addon on the hassio network.
-    """
-
-    token = os.environ.get("SUPERVISOR_TOKEN", "")
-    if not token:
-        return "http://localhost:8094"
-
-    # Known MA addon slugs (stable, beta, dev)
-    ma_slugs = [
-        "d5369777_music_assistant",
-        "d5369777_music_assistant_beta",
-        "d5369777_music_assistant_dev",
-    ]
-
-    for slug in ma_slugs:
-        try:
-            req = _ur.Request(
-                f"http://supervisor/addons/{slug}/info",
-                headers={"Authorization": f"Bearer {token}"},
-            )
-            with _ur.urlopen(req, timeout=5) as resp:
-                info = json.loads(resp.read().decode()).get("data", {})
-
-            if info.get("state") != "started":
-                continue
-
-            hostname = info.get("hostname", slug.replace("_", "-"))
-            port = info.get("ingress_port", 8094)
-            url = f"http://{hostname}:{port}"
-            logger.debug("Discovered MA Ingress at %s (slug=%s)", url, slug)
-            return url
-        except Exception:
-            continue
-
-    logger.debug("No MA addon found via Supervisor — falling back to localhost:8094")
-    return "http://localhost:8094"
+    """Discover the MA addon's internal Ingress base URL."""
+    return get_ma_addon_internal_ingress_url()
 
 
 def _create_ma_token_via_ingress(ha_user_id: str, ha_username: str, ha_display_name: str = ""):
@@ -942,6 +905,192 @@ function onSuccess(data) {
 # ---------------------------------------------------------------------------
 
 
+def _await_loop_result(loop, coro, *, timeout: float, description: str):
+    """Run a coroutine on the main loop and wait in a background thread."""
+    try:
+        fut = asyncio.run_coroutine_threadsafe(coro, loop)
+        return fut.result(timeout=timeout)
+    except Exception:
+        logger.debug("%s failed", description, exc_info=True)
+        return None
+
+
+def _run_ma_discover_job(job_id: str, loop, is_addon: bool) -> None:
+    """Resolve Music Assistant discovery in a background thread and store the result."""
+    from services.ma_discovery import discover_ma_servers, validate_ma_url
+
+    def _finish_success(servers: list[dict]) -> None:
+        discovered_url = ""
+        if servers and isinstance(servers[0], dict):
+            discovered_url = str(servers[0].get("url") or "")
+        state.finish_async_job(
+            job_id,
+            {
+                "success": True,
+                "is_addon": is_addon,
+                "servers": servers,
+                "integration": _build_ma_integration_summary(discovered_url),
+            },
+        )
+
+    for candidate in ("http://localhost:8095", "http://homeassistant.local:8095") if is_addon else ():
+        info = _await_loop_result(loop, validate_ma_url(candidate), timeout=5.0, description=f"validate {candidate}")
+        if info:
+            _finish_success([info])
+            return
+
+    ma_url, _ = state.get_ma_api_credentials()
+    if ma_url:
+        info = _await_loop_result(loop, validate_ma_url(ma_url), timeout=5.0, description=f"validate {ma_url}")
+        if info:
+            _finish_success([info])
+            return
+
+    if is_addon:
+        _finish_success([])
+        return
+
+    cfg = load_config()
+    sendspin_host = (cfg.get("SENDSPIN_SERVER") or "").strip()
+    if sendspin_host and sendspin_host.lower() not in ("auto", "discover", ""):
+        candidate = f"http://{sendspin_host}:8095"
+        info = _await_loop_result(loop, validate_ma_url(candidate), timeout=5.0, description=f"validate {candidate}")
+        if info:
+            _finish_success([info])
+            return
+
+    sendspin_ma_host = _ma_host_from_sendspin_clients()
+    if sendspin_ma_host:
+        candidate = f"http://{sendspin_ma_host}:8095"
+        info = _await_loop_result(loop, validate_ma_url(candidate), timeout=5.0, description=f"validate {candidate}")
+        if info:
+            _finish_success([info])
+            return
+
+    try:
+        servers = _await_loop_result(loop, discover_ma_servers(timeout=5.0), timeout=10.0, description="mDNS discover")
+        if servers is None:
+            raise RuntimeError("Discovery failed")
+        _finish_success(servers)
+    except Exception:
+        logger.exception("MA mDNS discovery failed")
+        state.finish_async_job(job_id, {"success": False, "is_addon": is_addon, "error": "Discovery failed"})
+
+
+def _run_ma_rediscover_job(job_id: str, loop, ma_url: str, ma_token: str, player_info: list[dict[str, str]]) -> None:
+    """Refresh MA groups in a background thread and store the result."""
+    try:
+        from services.ma_client import discover_ma_groups
+
+        result = _await_loop_result(
+            loop,
+            discover_ma_groups(ma_url, ma_token, player_info),
+            timeout=15.0,
+            description="MA rediscover",
+        )
+        if result is None:
+            raise RuntimeError("MA rediscover failed")
+        name_map, all_groups = result
+        state.set_ma_api_credentials(ma_url, ma_token)
+        state.set_ma_groups(name_map, all_groups)
+        state.finish_async_job(
+            job_id,
+            {
+                "success": True,
+                "syncgroups": len(all_groups),
+                "mapped_players": len(name_map),
+                "groups": [{"id": g["id"], "name": g["name"]} for g in all_groups],
+            },
+        )
+    except Exception:
+        logger.exception("MA rediscover failed")
+        state.finish_async_job(job_id, {"success": False, "error": "Internal error"})
+
+
+def _run_ma_queue_cmd_job(
+    job_id: str,
+    loop,
+    *,
+    action: str,
+    value,
+    target_queue_id: str,
+    state_key: str,
+    op_id: str,
+) -> None:
+    """Execute an MA queue command in the background and store its result."""
+    try:
+        from services.ma_monitor import request_queue_refresh, send_queue_cmd
+
+        result = _await_loop_result(
+            loop,
+            send_queue_cmd(action, value, target_queue_id),
+            timeout=5.0,
+            description=f"MA queue cmd {action}",
+        )
+        if not result or not result.get("accepted"):
+            error = (result or {}).get("error") or "MA command was not accepted"
+            predicted = state.fail_ma_pending_op(state_key or target_queue_id, op_id, error)
+            state.finish_async_job(
+                job_id,
+                {
+                    "success": False,
+                    "error": error,
+                    "error_code": "command_rejected",
+                    "op_id": op_id,
+                    "syncgroup_id": state_key,
+                    "queue_id": target_queue_id,
+                    "ma_now_playing": predicted,
+                },
+            )
+            return
+
+        predicted = state.apply_ma_now_playing_prediction(
+            state_key,
+            {},
+            op_id=op_id,
+            action=action,
+            value=value,
+            accepted_at=result.get("accepted_at"),
+            ack_latency_ms=result.get("ack_latency_ms"),
+        )
+        _await_loop_result(
+            loop,
+            request_queue_refresh(target_queue_id),
+            timeout=1.0,
+            description=f"MA queue refresh {target_queue_id}",
+        )
+        state.finish_async_job(
+            job_id,
+            {
+                "success": True,
+                "op_id": op_id,
+                "syncgroup_id": state_key,
+                "queue_id": target_queue_id,
+                "accepted": True,
+                "accepted_at": result.get("accepted_at"),
+                "ack_latency_ms": result.get("ack_latency_ms"),
+                "confirmed": False,
+                "pending": True,
+                "ma_now_playing": predicted,
+            },
+        )
+    except Exception as exc:
+        predicted = state.fail_ma_pending_op(state_key or target_queue_id, op_id, str(exc))
+        logger.exception("MA queue command '%s' failed", action)
+        state.finish_async_job(
+            job_id,
+            {
+                "success": False,
+                "error": "Internal error",
+                "error_code": "internal_error",
+                "op_id": op_id,
+                "syncgroup_id": state_key,
+                "queue_id": target_queue_id,
+                "ma_now_playing": predicted,
+            },
+        )
+
+
 @ma_bp.route("/api/ma/discover", methods=["GET"])
 def api_ma_discover():
     """Discover Music Assistant servers.
@@ -952,88 +1101,30 @@ def api_ma_discover():
 
     Always returns ``is_addon`` flag so frontend can adjust UI.
     """
+    is_addon = _detect_runtime() == "ha_addon"
     loop = state.get_main_loop()
     if not loop:
         return jsonify({"success": False, "error": "Event loop not available"}), 503
+    job_id = str(uuid.uuid4())
+    state.create_async_job(job_id, "ma-discover")
+    threading.Thread(
+        target=_run_ma_discover_job,
+        args=(job_id, loop, is_addon),
+        daemon=True,
+        name=f"ma-discover-{job_id[:8]}",
+    ).start()
+    return jsonify({"job_id": job_id, "status": "running", "is_addon": is_addon}), 202
 
-    from services.ma_discovery import validate_ma_url
 
-    is_addon = _detect_runtime() == "ha_addon"
-
-    def _ok(servers):
-        discovered_url = ""
-        if servers and isinstance(servers[0], dict):
-            discovered_url = str(servers[0].get("url") or "")
-        return jsonify(
-            {
-                "success": True,
-                "is_addon": is_addon,
-                "servers": servers,
-                "integration": _build_ma_integration_summary(discovered_url),
-            }
-        )
-
-    # --- HA addon shortcut: MA is on the same HA host ---
-    if is_addon:
-        for candidate in ("http://localhost:8095", "http://homeassistant.local:8095"):
-            try:
-                fut = asyncio.run_coroutine_threadsafe(validate_ma_url(candidate), loop)
-                info = fut.result(timeout=5.0)
-                if info:
-                    return _ok([info])
-            except Exception:
-                pass
-
-    # 1) Try already-known MA_API_URL
-    ma_url, _ = state.get_ma_api_credentials()
-    if ma_url:
-        try:
-            fut = asyncio.run_coroutine_threadsafe(validate_ma_url(ma_url), loop)
-            info = fut.result(timeout=5.0)
-            if info:
-                return _ok([info])
-        except Exception:
-            pass
-
-    # In addon mode, no need for further heuristics — fall through to error
-    if is_addon:
-        return _ok([])
-
-    # 2) Derive from SENDSPIN_SERVER (same host, default MA port 8095)
-    cfg = load_config()
-    sendspin_host = (cfg.get("SENDSPIN_SERVER") or "").strip()
-    if sendspin_host and sendspin_host.lower() not in ("auto", "discover", ""):
-        candidate = f"http://{sendspin_host}:8095"
-        try:
-            fut = asyncio.run_coroutine_threadsafe(validate_ma_url(candidate), loop)
-            info = fut.result(timeout=5.0)
-            if info:
-                return _ok([info])
-        except Exception:
-            pass
-
-    # 3) Check connected sendspin clients — MA lives on the same host
-    sendspin_ma_host = _ma_host_from_sendspin_clients()
-    if sendspin_ma_host:
-        candidate = f"http://{sendspin_ma_host}:8095"
-        try:
-            fut = asyncio.run_coroutine_threadsafe(validate_ma_url(candidate), loop)
-            info = fut.result(timeout=5.0)
-            if info:
-                return _ok([info])
-        except Exception:
-            pass
-
-    # 4) Fallback: mDNS scan
-    try:
-        from services.ma_discovery import discover_ma_servers
-
-        fut = asyncio.run_coroutine_threadsafe(discover_ma_servers(timeout=5.0), loop)
-        servers = fut.result(timeout=10.0)
-        return _ok(servers)
-    except Exception:
-        logger.exception("MA mDNS discovery failed")
-        return jsonify({"success": False, "is_addon": is_addon, "error": "Discovery failed"}), 500
+@ma_bp.route("/api/ma/discover/result/<job_id>", methods=["GET"])
+def api_ma_discover_result(job_id: str):
+    """Poll for async Music Assistant discovery results."""
+    job = state.get_async_job(job_id)
+    if job is None or job.get("job_type") != "ma-discover":
+        return jsonify({"error": "Job not found"}), 404
+    if job.get("status") == "running":
+        return jsonify({"status": "running", "is_addon": job.get("is_addon", False)})
+    return jsonify(job)
 
 
 @ma_bp.route("/api/ma/login", methods=["POST"])
@@ -1444,25 +1535,26 @@ def api_ma_rediscover():
     if not loop:
         return jsonify({"success": False, "error": "Event loop not available"}), 503
 
-    try:
-        from services.ma_client import discover_ma_groups
+    job_id = str(uuid.uuid4())
+    state.create_async_job(job_id, "ma-rediscover")
+    threading.Thread(
+        target=_run_ma_rediscover_job,
+        args=(job_id, loop, ma_url, ma_token, _bridge_players_snapshot()),
+        daemon=True,
+        name=f"ma-rediscover-{job_id[:8]}",
+    ).start()
+    return jsonify({"success": True, "job_id": job_id, "status": "running"}), 202
 
-        player_info = _bridge_players_snapshot()
-        fut = asyncio.run_coroutine_threadsafe(discover_ma_groups(ma_url, ma_token, player_info), loop)
-        name_map, all_groups = fut.result(timeout=15.0)
-        state.set_ma_api_credentials(ma_url, ma_token)
-        state.set_ma_groups(name_map, all_groups)
-        return jsonify(
-            {
-                "success": True,
-                "syncgroups": len(all_groups),
-                "mapped_players": len(name_map),
-                "groups": [{"id": g["id"], "name": g["name"]} for g in all_groups],
-            }
-        )
-    except Exception:
-        logger.exception("MA rediscover failed")
-        return jsonify({"success": False, "error": "Internal error"}), 500
+
+@ma_bp.route("/api/ma/rediscover/result/<job_id>", methods=["GET"])
+def api_ma_rediscover_result(job_id: str):
+    """Poll for async MA rediscover results."""
+    job = state.get_async_job(job_id)
+    if job is None or job.get("job_type") != "ma-rediscover":
+        return jsonify({"error": "Job not found"}), 404
+    if job.get("status") == "running":
+        return jsonify({"status": "running"})
+    return jsonify(job)
 
 
 @ma_bp.route("/api/ma/nowplaying", methods=["GET"])
@@ -1545,7 +1637,7 @@ def api_ma_queue_cmd():
 
     op_id = uuid.uuid4().hex
     try:
-        from services.ma_monitor import get_monitor, request_queue_refresh, send_queue_cmd
+        from services.ma_monitor import get_monitor
 
         monitor = get_monitor()
         if monitor is None or not monitor.is_connected():
@@ -1562,56 +1654,60 @@ def api_ma_queue_cmd():
                 503,
             )
 
-        fut = asyncio.run_coroutine_threadsafe(send_queue_cmd(action, value, target_queue_id), loop)
-        result = fut.result(timeout=5.0)
-        if not result.get("accepted"):
-            return (
-                jsonify(
-                    {
-                        "success": False,
-                        "error": result.get("error") or "MA command was not accepted",
-                        "error_code": "command_rejected",
-                        "op_id": op_id,
-                        "syncgroup_id": state_key,
-                        "queue_id": target_queue_id,
-                    }
-                ),
-                503,
-            )
         predicted = state.apply_ma_now_playing_prediction(
             state_key,
             _build_ma_prediction_patch(action, value),
             op_id=op_id,
             action=action,
             value=value,
-            accepted_at=result.get("accepted_at"),
-            ack_latency_ms=result.get("ack_latency_ms"),
         )
-        try:
-            refresh_fut = asyncio.run_coroutine_threadsafe(request_queue_refresh(target_queue_id), loop)
-            refresh_fut.result(timeout=1.0)
-        except Exception:
-            logger.debug("MA fast refresh request failed for %s", target_queue_id, exc_info=True)
+        job_id = str(uuid.uuid4())
+        state.create_async_job(job_id, "ma-queue-cmd")
+        threading.Thread(
+            target=_run_ma_queue_cmd_job,
+            args=(job_id, loop),
+            kwargs={
+                "action": action,
+                "value": value,
+                "target_queue_id": target_queue_id,
+                "state_key": state_key,
+                "op_id": op_id,
+            },
+            daemon=True,
+            name=f"ma-queue-{job_id[:8]}",
+        ).start()
         return jsonify(
             {
                 "success": True,
+                "job_id": job_id,
                 "op_id": op_id,
                 "syncgroup_id": state_key,
                 "queue_id": target_queue_id,
-                "accepted": True,
-                "accepted_at": result.get("accepted_at"),
-                "ack_latency_ms": result.get("ack_latency_ms"),
+                "accepted": False,
+                "accepted_at": None,
+                "ack_latency_ms": None,
                 "confirmed": False,
                 "pending": True,
                 "ma_now_playing": predicted,
             }
-        )
+        ), 202
     except Exception as exc:
         state.fail_ma_pending_op(state_key or target_queue_id or "", op_id, str(exc))
         logger.exception("MA queue command '%s' failed", action)
         return jsonify(
             {"success": False, "error": "Internal error", "error_code": "internal_error", "op_id": op_id}
         ), 500
+
+
+@ma_bp.route("/api/ma/queue/cmd/result/<job_id>", methods=["GET"])
+def api_ma_queue_cmd_result(job_id: str):
+    """Poll for async MA queue command results."""
+    job = state.get_async_job(job_id)
+    if job is None or job.get("job_type") != "ma-queue-cmd":
+        return jsonify({"error": "Job not found"}), 404
+    if job.get("status") == "running":
+        return jsonify({"status": "running"})
+    return jsonify(job)
 
 
 @ma_bp.route("/api/debug/ma")

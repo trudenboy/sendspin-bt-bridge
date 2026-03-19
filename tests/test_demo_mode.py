@@ -448,3 +448,48 @@ def test_demo_index_shows_demo_user_and_ma_token_notice_by_default(monkeypatch):
     assert "Music Assistant token needs attention" in html
     assert "Open Configuration \u2192 Music Assistant to get one." in html
     assert 'id="auth-warning-notice"' not in html
+
+
+def test_ha_addon_index_hides_logout_button(monkeypatch):
+    monkeypatch.setenv("SUPERVISOR_TOKEN", "test-token")
+    monkeypatch.setattr(
+        "routes.views.get_ma_addon_ui_url",
+        lambda: "/api/hassio_ingress/ma-token",
+    )
+
+    template_root = Path(__file__).resolve().parents[1]
+    app = Flask(
+        __name__,
+        template_folder=str(template_root / "templates"),
+        static_folder=str(template_root / "static"),
+    )
+    app.secret_key = "testing"
+    app.config["AUTH_ENABLED"] = True
+    app.config["IS_HA_ADDON"] = True
+
+    @app.context_processor
+    def inject_version():
+        return {"VERSION": VERSION, "asset_version": lambda _filename: "test-asset-version"}
+
+    @app.route("/static/v<version>/<path:filename>", endpoint="vstatic")
+    def _vstatic(version, filename):
+        return f"{version}:{filename}"
+
+    app.register_blueprint(auth_bp)
+    app.register_blueprint(views_bp)
+
+    client = app.test_client()
+    with client.session_transaction() as sess:
+        sess["authenticated"] = True
+        sess["ha_user"] = "HA Admin"
+
+    response = client.get("/")
+
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert "HA Admin" in html
+    assert 'data-ma-ui-url="/api/hassio_ingress/ma-token"' in html
+    assert 'id="header-user-link"' in html
+    assert 'href="/api/hassio_ingress/ma-token/#/settings/profile"' in html
+    assert 'data-ma-profile-url="/api/hassio_ingress/ma-token/#/settings/profile"' in html
+    assert "header-btn-signout" not in html

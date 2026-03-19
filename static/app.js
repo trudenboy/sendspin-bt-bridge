@@ -222,6 +222,7 @@ var btAdapters = [];
 var btManualAdapters = [];
 var lastDevices = [];
 var lastGroups = [];
+var lastMaUiUrl = '';
 var lastMaWebUrl = '';
 var VIEW_MODE_STORAGE_KEY = 'sendspin-ui:view-mode';
 var _viewModeStorageScope = 'default';
@@ -235,6 +236,18 @@ var _muteDebounce = {};  // player_name → timestamp of last user mute action
 var _btnLocks = {};      // btnId → expiry timestamp
 var _deviceSettingsHighlightTimer = null;
 var _adapterSettingsHighlightTimer = null;
+
+function _normalizeExternalUrlBase(url) {
+    return url ? String(url).replace(/\/+$/, '') : '';
+}
+
+function _getConfiguredMaUiUrl() {
+    var body = document.body;
+    if (!body || !body.dataset) return '';
+    return _normalizeExternalUrlBase(body.dataset.maUiUrl || '');
+}
+
+lastMaUiUrl = _getConfiguredMaUiUrl();
 
 // Lock a button during an async operation; SSE polls skip disabled override while locked.
 function _lockBtn(btnId) {
@@ -1245,9 +1258,9 @@ function _getMaGroupSettingsUrl(dev) {
     var groupId = '';
     if (dev && dev.ma_syncgroup_id) groupId = String(dev.ma_syncgroup_id);
     else if (dev && dev.group_id && String(dev.group_id).indexOf('syncgroup_') === 0) groupId = String(dev.group_id);
-    var maWebUrl = lastMaWebUrl ? String(lastMaWebUrl).replace(/\/+$/, '') : '';
-    if (!groupId || !maWebUrl) return '';
-    return maWebUrl + '/#/settings/editplayer/' + encodeURIComponent(groupId);
+    var maUiUrl = _normalizeExternalUrlBase(lastMaUiUrl || _getConfiguredMaUiUrl() || lastMaWebUrl || '');
+    if (!groupId || !maUiUrl) return '';
+    return maUiUrl + '/#/settings/editplayer/' + encodeURIComponent(groupId);
 }
 
 function openDeviceGroupSettings(i) {
@@ -2436,14 +2449,19 @@ function renderStatusPayload(status) {
     }
 
     _showUpdateBadge(status.update_available);
-    var resolvedMaWebUrl = status.ma_web_url || lastMaWebUrl || '';
+    var resolvedMaUiUrl = _normalizeExternalUrlBase(lastMaUiUrl || _getConfiguredMaUiUrl() || '');
+    if (resolvedMaUiUrl) lastMaUiUrl = resolvedMaUiUrl;
+    var resolvedMaWebUrl = _normalizeExternalUrlBase(status.ma_web_url || lastMaWebUrl || '');
     if (resolvedMaWebUrl) lastMaWebUrl = resolvedMaWebUrl;
 
     var userLink = document.getElementById('header-user-link');
     if (userLink) {
         var method = userLink.dataset.authMethod || '';
-        if (status.ma_connected && resolvedMaWebUrl) {
-            userLink.href = resolvedMaWebUrl + '/#/settings/profile';
+        var preferredMaProfileUrl = userLink.dataset.maProfileUrl || '';
+        if ((method === 'ha' || method === 'ha_via_ma') && preferredMaProfileUrl) {
+            userLink.href = preferredMaProfileUrl;
+        } else if (status.ma_connected && (resolvedMaUiUrl || resolvedMaWebUrl)) {
+            userLink.href = (resolvedMaUiUrl || resolvedMaWebUrl) + '/#/settings/profile';
         } else if (method === 'ha' || method === 'ha_via_ma') {
             if (resolvedMaWebUrl) {
                 var u = new URL(resolvedMaWebUrl);
@@ -3487,6 +3505,29 @@ async function maQueueCmd(action, value, devIdx) {
         if (dev && data && data.ma_now_playing) {
             dev.ma_now_playing = data.ma_now_playing;
             renderDevicesView();
+        }
+        if (data && data.job_id) {
+            _pollBackgroundJob(API_BASE + '/api/ma/queue/cmd/result/' + data.job_id, {
+                delayMs: 400,
+                maxAttempts: 15,
+                timeoutMessage: 'Music Assistant command timed out'
+            }).then(function(result) {
+                if (!result) return;
+                if (!result.success) {
+                    if (dev && result.ma_now_playing) {
+                        dev.ma_now_playing = result.ma_now_playing;
+                        renderDevicesView();
+                    }
+                    showToast('Music Assistant command failed: ' + (result.error || 'Unknown error'), 'error');
+                    return;
+                }
+                if (dev && result.ma_now_playing) {
+                    dev.ma_now_playing = result.ma_now_playing;
+                    renderDevicesView();
+                }
+            }).catch(function(err) {
+                console.warn('MA queue cmd result poll failed:', err);
+            });
         }
     } catch (err) {
         console.warn('MA queue cmd failed:', err);
@@ -4611,6 +4652,21 @@ async function setPassword() {
 var _maAutoSilentAuthAttempted = false;
 var _maAutoSilentAuthFailed = false;
 
+async function _pollBackgroundJob(resultUrl, options) {
+    options = options || {};
+    var delayMs = options.delayMs || 1000;
+    var maxAttempts = options.maxAttempts || 20;
+    for (var attempt = 0; attempt < maxAttempts; attempt++) {
+        await new Promise(function(resolve) { setTimeout(resolve, delayMs); });
+        var pollResp = await fetch(resultUrl);
+        if (pollResp.status === 401) { _handleUnauthorized(); return null; }
+        var pollData = await pollResp.json().catch(function() { return {}; });
+        if (pollData.status === 'running') continue;
+        return pollData;
+    }
+    throw new Error(options.timeoutMessage || 'Background job timed out');
+}
+
 async function maDiscover() {
     var btn = document.getElementById('ma-discover-btn');
     var urlInput = document.getElementById('ma-login-url');
@@ -4621,6 +4677,18 @@ async function maDiscover() {
         var resp = await fetch(API_BASE + '/api/ma/discover');
         if (resp.status === 401) { _handleUnauthorized(); return; }
         var data = await resp.json().catch(function() { return {}; });
+        if (data && data.job_id) {
+            data = await _pollBackgroundJob(API_BASE + '/api/ma/discover/result/' + data.job_id, {
+                delayMs: 1000,
+                maxAttempts: 20,
+                timeoutMessage: 'Discovery timed out'
+            });
+            if (!data) return null;
+        }
+        if (data.success === false && data.error) {
+            _setStatusText(msgEl, '\u2716 ' + data.error, 'error');
+            return data;
+        }
         if (data.success && data.servers && data.servers.length > 0) {
             var s = data.servers[0];
             if (urlInput) urlInput.value = s.url;
@@ -5963,8 +6031,7 @@ function _onUpdateBadgeClick(e) {
     if (link) link.classList.add('checking');
     var verEl = document.getElementById('update-version');
     if (verEl) verEl.textContent = 'checking…';
-    fetch(API_BASE + '/api/update/check', {method: 'POST'})
-        .then(function(r) { return r.json(); })
+    _runUpdateCheck()
         .then(function(data) {
             if (data.update_available) {
                 _showUpdateBadge({version: data.version, url: data.url, channel: data.channel});
@@ -5979,6 +6046,27 @@ function _onUpdateBadgeClick(e) {
             showToast('Update check failed', 'error');
         });
     return false;
+}
+
+async function _runUpdateCheck(channel) {
+    var req = { method: 'POST' };
+    if (channel) {
+        req.headers = { 'Content-Type': 'application/json' };
+        req.body = JSON.stringify({ channel: channel });
+    }
+    var resp = await fetch(API_BASE + '/api/update/check', req);
+    if (resp.status === 401) { _handleUnauthorized(); return {}; }
+    var data = await resp.json().catch(function() { return {}; });
+    if (!resp.ok) throw new Error(data.error || 'Update check failed');
+    if (!data.job_id) return data;
+    var result = await _pollBackgroundJob(API_BASE + '/api/update/check/result/' + data.job_id, {
+        delayMs: 1000,
+        maxAttempts: 25,
+        timeoutMessage: 'Update check timed out'
+    });
+    if (!result) return {};
+    if (result.success === false) throw new Error(result.error || 'Update check failed');
+    return result;
 }
 
 // SVG icons for update modal
@@ -6055,8 +6143,7 @@ function _showUpdateDialog(ver, releaseUrl, releaseChannel) {
                 if (link) link.classList.add('checking');
                 var verEl = document.getElementById('update-version');
                 if (verEl) verEl.textContent = 'checking\u2026';
-                fetch(API_BASE + '/api/update/check', {method: 'POST'})
-                    .then(function(r) { return r.json(); })
+                _runUpdateCheck(channel)
                     .then(function(data) {
                         if (data.update_available) {
                             _showUpdateBadge({version: data.version, url: data.url, channel: data.channel});

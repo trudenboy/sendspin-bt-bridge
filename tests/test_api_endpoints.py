@@ -409,6 +409,52 @@ def test_api_pause_uses_registry_snapshot_for_player_lookup(client, monkeypatch)
     assert sent == [{"cmd": "play"}]
 
 
+def test_api_pause_does_not_require_future_result(client, monkeypatch):
+    import routes.api as api_mod
+    from services.device_registry import DeviceRegistrySnapshot
+
+    sent = []
+
+    class _NoWaitFuture:
+        def add_done_callback(self, callback):
+            callback(self)
+
+    class _FakeClient:
+        player_name = "Kitchen"
+
+        def is_running(self):
+            return True
+
+        async def _send_subprocess_command(self, payload):
+            sent.append(payload)
+
+    def _run_coroutine_threadsafe(coro, loop):
+        temp_loop = asyncio.new_event_loop()
+        try:
+            temp_loop.run_until_complete(coro)
+        finally:
+            temp_loop.close()
+        return _NoWaitFuture()
+
+    monkeypatch.setattr(
+        api_mod,
+        "get_device_registry_snapshot",
+        lambda: DeviceRegistrySnapshot(active_clients=[_FakeClient()]),
+    )
+    monkeypatch.setattr(api_mod.state, "get_main_loop", lambda: object())
+    monkeypatch.setattr(api_mod.asyncio, "run_coroutine_threadsafe", _run_coroutine_threadsafe)
+
+    resp = client.post(
+        "/api/pause",
+        data=json.dumps({"player_name": "Kitchen", "action": "pause"}),
+        content_type="application/json",
+    )
+
+    assert resp.status_code == 200
+    assert resp.get_json()["count"] == 1
+    assert sent == [{"cmd": "pause"}]
+
+
 def test_api_bugreport_uses_issue_worthy_logs_in_summary(client, monkeypatch):
     import routes.api_status as api_status_mod
 
@@ -789,12 +835,14 @@ def test_api_ma_discover_reports_invalid_saved_token(client, monkeypatch):
     import services.ma_discovery as ma_discovery
     import state
 
-    class _DoneFuture:
-        def __init__(self, result):
-            self._result = result
+    class _ImmediateThread:
+        def __init__(self, target, args=(), kwargs=None, daemon=None, name=None):
+            self._target = target
+            self._args = args
+            self._kwargs = kwargs or {}
 
-        def result(self, timeout=None):
-            return self._result
+        def start(self):
+            self._target(*self._args, **self._kwargs)
 
     async def _fake_validate_ma_url(_url):
         return {
@@ -802,6 +850,13 @@ def test_api_ma_discover_reports_invalid_saved_token(client, monkeypatch):
             "version": "2.0.0",
             "homeassistant_addon": True,
         }
+
+    class _DoneFuture:
+        def __init__(self, result):
+            self._result = result
+
+        def result(self, timeout=None):
+            return self._result
 
     def _run_coroutine_threadsafe(coro, loop):
         tmp_loop = asyncio.new_event_loop()
@@ -813,6 +868,7 @@ def test_api_ma_discover_reports_invalid_saved_token(client, monkeypatch):
     monkeypatch.setattr(state, "get_main_loop", lambda: object())
     monkeypatch.setattr(api_ma, "_detect_runtime", lambda: "ha_addon")
     monkeypatch.setattr(api_ma.asyncio, "run_coroutine_threadsafe", _run_coroutine_threadsafe)
+    monkeypatch.setattr(api_ma.threading, "Thread", _ImmediateThread)
     monkeypatch.setattr(ma_discovery, "validate_ma_url", _fake_validate_ma_url)
     monkeypatch.setattr(
         api_ma,
@@ -828,8 +884,11 @@ def test_api_ma_discover_reports_invalid_saved_token(client, monkeypatch):
 
     resp = client.get("/api/ma/discover")
 
-    assert resp.status_code == 200
-    data = resp.get_json()
+    assert resp.status_code == 202
+    job_id = resp.get_json()["job_id"]
+    result = client.get(f"/api/ma/discover/result/{job_id}")
+    assert result.status_code == 200
+    data = result.get_json()
     assert data["servers"][0]["url"] == "http://localhost:8095"
     assert data["integration"]["token_configured"] is True
     assert data["integration"]["token_valid"] is False
@@ -842,12 +901,14 @@ def test_api_ma_discover_reports_connected_runtime_when_saved_token_validation_f
     import services.ma_discovery as ma_discovery
     import state
 
-    class _DoneFuture:
-        def __init__(self, result):
-            self._result = result
+    class _ImmediateThread:
+        def __init__(self, target, args=(), kwargs=None, daemon=None, name=None):
+            self._target = target
+            self._args = args
+            self._kwargs = kwargs or {}
 
-        def result(self, timeout=None):
-            return self._result
+        def start(self):
+            self._target(*self._args, **self._kwargs)
 
     async def _fake_validate_ma_url(_url):
         return {
@@ -855,6 +916,13 @@ def test_api_ma_discover_reports_connected_runtime_when_saved_token_validation_f
             "version": "2.0.0",
             "homeassistant_addon": False,
         }
+
+    class _DoneFuture:
+        def __init__(self, result):
+            self._result = result
+
+        def result(self, timeout=None):
+            return self._result
 
     def _run_coroutine_threadsafe(coro, loop):
         tmp_loop = asyncio.new_event_loop()
@@ -867,6 +935,7 @@ def test_api_ma_discover_reports_connected_runtime_when_saved_token_validation_f
     monkeypatch.setattr(state, "is_ma_connected", lambda: True)
     monkeypatch.setattr(api_ma, "_detect_runtime", lambda: "docker")
     monkeypatch.setattr(api_ma.asyncio, "run_coroutine_threadsafe", _run_coroutine_threadsafe)
+    monkeypatch.setattr(api_ma.threading, "Thread", _ImmediateThread)
     monkeypatch.setattr(ma_discovery, "validate_ma_url", _fake_validate_ma_url)
     monkeypatch.setattr(
         api_ma,
@@ -882,8 +951,11 @@ def test_api_ma_discover_reports_connected_runtime_when_saved_token_validation_f
 
     resp = client.get("/api/ma/discover")
 
-    assert resp.status_code == 200
-    data = resp.get_json()
+    assert resp.status_code == 202
+    job_id = resp.get_json()["job_id"]
+    result = client.get(f"/api/ma/discover/result/{job_id}")
+    assert result.status_code == 200
+    data = result.get_json()
     assert data["integration"]["token_configured"] is True
     assert data["integration"]["token_valid"] is False
     assert data["integration"]["connected"] is True
@@ -1115,6 +1187,104 @@ def test_api_set_log_level_propagates_via_registry_snapshot(client, monkeypatch)
     assert resp.status_code == 200
     assert resp.get_json()["level"] == "DEBUG"
     assert sent == [("Kitchen", {"cmd": "set_log_level", "level": "DEBUG"})]
+
+
+def test_api_set_log_level_does_not_require_future_result(client, monkeypatch):
+    import routes.api_config as api_config_mod
+    import state
+    from services.device_registry import DeviceRegistrySnapshot
+
+    sent = []
+
+    class _NoWaitFuture:
+        def add_done_callback(self, callback):
+            callback(self)
+
+    class _FakeClient:
+        player_name = "Kitchen"
+
+        def is_running(self):
+            return True
+
+        async def _send_subprocess_command(self, cmd):
+            sent.append(cmd)
+
+    monkeypatch.setattr(state, "get_main_loop", lambda: object())
+    monkeypatch.setattr(api_config_mod, "update_config", lambda updater: None)
+    monkeypatch.setattr(
+        api_config_mod,
+        "get_device_registry_snapshot",
+        lambda: DeviceRegistrySnapshot(active_clients=[_FakeClient()]),
+    )
+
+    def _run_coroutine_threadsafe(coro, loop):
+        tmp_loop = asyncio.new_event_loop()
+        try:
+            tmp_loop.run_until_complete(coro)
+        finally:
+            tmp_loop.close()
+        return _NoWaitFuture()
+
+    monkeypatch.setattr(api_config_mod.asyncio, "run_coroutine_threadsafe", _run_coroutine_threadsafe)
+
+    resp = client.post(
+        "/api/settings/log_level",
+        data=json.dumps({"level": "debug"}),
+        content_type="application/json",
+    )
+
+    assert resp.status_code == 200
+    assert resp.get_json()["level"] == "DEBUG"
+    assert sent == [{"cmd": "set_log_level", "level": "DEBUG"}]
+
+
+def test_api_set_password_returns_error_when_config_persist_fails(client, monkeypatch):
+    import routes.api_config as api_config_mod
+
+    def _raise_update_error(_updater):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(api_config_mod, "update_config", _raise_update_error)
+
+    resp = client.post(
+        "/api/set-password",
+        data=json.dumps({"password": "verysecurepassword"}),
+        content_type="application/json",
+    )
+
+    assert resp.status_code == 500
+    assert resp.get_json() == {"success": False, "error": "Could not save password"}
+
+
+def test_api_set_log_level_returns_error_when_config_persist_fails(client, monkeypatch):
+    import routes.api_config as api_config_mod
+
+    root_logger = api_config_mod.logging.getLogger()
+    original_level = root_logger.level
+    monkeypatch.delenv("LOG_LEVEL", raising=False)
+
+    def _raise_update_error(_updater):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(api_config_mod, "update_config", _raise_update_error)
+    monkeypatch.setattr(
+        api_config_mod.asyncio,
+        "run_coroutine_threadsafe",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("unexpected propagation")),
+    )
+
+    try:
+        resp = client.post(
+            "/api/settings/log_level",
+            data=json.dumps({"level": "debug"}),
+            content_type="application/json",
+        )
+        assert resp.status_code == 500
+        assert resp.get_json() == {"success": False, "error": "Could not persist log level"}
+        assert root_logger.level == original_level
+        assert "LOG_LEVEL" not in api_config_mod.os.environ
+    finally:
+        root_logger.setLevel(original_level)
 
 
 def test_api_config_download_redacts_sensitive_tokens(client, tmp_path, monkeypatch):
@@ -1758,6 +1928,15 @@ def test_api_ma_rediscover_uses_registry_snapshot_player_payload(client, tmp_pat
     (tmp_path / "config.json").write_text(json.dumps({"MA_API_URL": "http://ma.local:8095", "MA_API_TOKEN": "token"}))
     captured = {}
 
+    class _ImmediateThread:
+        def __init__(self, target, args=(), kwargs=None, daemon=None, name=None):
+            self._target = target
+            self._args = args
+            self._kwargs = kwargs or {}
+
+        def start(self):
+            self._target(*self._args, **self._kwargs)
+
     async def _fake_discover(ma_url, ma_token, player_info):
         captured["ma_url"] = ma_url
         captured["ma_token"] = ma_token
@@ -1784,6 +1963,7 @@ def test_api_ma_rediscover_uses_registry_snapshot_player_payload(client, tmp_pat
     monkeypatch.setattr(state, "get_main_loop", lambda: object())
     monkeypatch.setattr(ma_client, "discover_ma_groups", _fake_discover)
     monkeypatch.setattr(api_ma.asyncio, "run_coroutine_threadsafe", _run_coroutine_threadsafe)
+    monkeypatch.setattr(api_ma.threading, "Thread", _ImmediateThread)
     monkeypatch.setattr(
         api_ma,
         "get_device_registry_snapshot",
@@ -1795,7 +1975,11 @@ def test_api_ma_rediscover_uses_registry_snapshot_player_payload(client, tmp_pat
     try:
         resp = client.post("/api/ma/rediscover")
 
-        assert resp.status_code == 200
+        assert resp.status_code == 202
+        job_id = resp.get_json()["job_id"]
+        result = client.get(f"/api/ma/rediscover/result/{job_id}")
+        assert result.status_code == 200
+        assert result.get_json()["success"] is True
         assert captured["ma_url"] == "http://ma.local:8095"
         assert captured["ma_token"] == "token"
         assert captured["player_info"] == [{"player_id": "sendspin-kitchen", "player_name": "Kitchen"}]
@@ -1849,14 +2033,14 @@ def test_ma_queue_cmd_returns_structured_predicted_state(client, monkeypatch):
         def is_connected(self):
             return True
 
-    class _DoneFuture:
-        def result(self, timeout=None):
-            return {
-                "accepted": True,
-                "queue_id": "syncgroup_1",
-                "ack_latency_ms": 42,
-                "accepted_at": 123.45,
-            }
+    class _ImmediateThread:
+        def __init__(self, target, args=(), kwargs=None, daemon=None, name=None):
+            self._target = target
+            self._args = args
+            self._kwargs = kwargs or {}
+
+        def start(self):
+            self._target(*self._args, **self._kwargs)
 
     async def _fake_send_queue_cmd(action, value, syncgroup_id):
         return {
@@ -1869,9 +2053,19 @@ def test_ma_queue_cmd_returns_structured_predicted_state(client, monkeypatch):
     async def _fake_request_queue_refresh(syncgroup_id):
         return True
 
+    class _DoneFuture:
+        def __init__(self, result):
+            self._result = result
+
+        def result(self, timeout=None):
+            return self._result
+
     def _fake_run_coroutine_threadsafe(coro, loop):
-        coro.close()
-        return _DoneFuture()
+        temp_loop = asyncio.new_event_loop()
+        try:
+            return _DoneFuture(temp_loop.run_until_complete(coro))
+        finally:
+            temp_loop.close()
 
     state.set_ma_connected(True)
     state.set_ma_groups({}, [{"id": "syncgroup_1", "name": "Kitchen", "members": []}])
@@ -1885,6 +2079,7 @@ def test_ma_queue_cmd_returns_structured_predicted_state(client, monkeypatch):
         monkeypatch.setattr(ma_monitor, "request_queue_refresh", _fake_request_queue_refresh)
         monkeypatch.setattr(ma_monitor, "get_monitor", lambda: _FakeMonitor())
         monkeypatch.setattr(api_ma.asyncio, "run_coroutine_threadsafe", _fake_run_coroutine_threadsafe)
+        monkeypatch.setattr(api_ma.threading, "Thread", _ImmediateThread)
 
         resp = client.post(
             "/api/ma/queue/cmd",
@@ -1892,20 +2087,29 @@ def test_ma_queue_cmd_returns_structured_predicted_state(client, monkeypatch):
             content_type="application/json",
         )
 
-        assert resp.status_code == 200
+        assert resp.status_code == 202
         data = resp.get_json()
         assert data["success"] is True
-        assert data["accepted"] is True
-        assert data["accepted_at"] == 123.45
-        assert data["ack_latency_ms"] == 42
+        assert data["accepted"] is False
+        assert data["accepted_at"] is None
+        assert data["ack_latency_ms"] is None
         assert data["confirmed"] is False
         assert data["pending"] is True
         assert data["syncgroup_id"] == "syncgroup_1"
         assert data["ma_now_playing"]["shuffle"] is True
         assert data["ma_now_playing"]["_sync_meta"]["pending"] is True
-        assert data["ma_now_playing"]["_sync_meta"]["last_accepted_at"] == 123.45
         assert data["ma_now_playing"]["_sync_meta"]["pending_ops"][0]["action"] == "shuffle"
         assert data["op_id"]
+        assert data["job_id"]
+
+        result = client.get(f"/api/ma/queue/cmd/result/{data['job_id']}")
+        assert result.status_code == 200
+        result_data = result.get_json()
+        assert result_data["success"] is True
+        assert result_data["accepted"] is True
+        assert result_data["accepted_at"] == 123.45
+        assert result_data["ack_latency_ms"] == 42
+        assert result_data["ma_now_playing"]["_sync_meta"]["last_accepted_at"] == 123.45
     finally:
         state.clear_ma_now_playing()
         state.set_ma_groups({}, [])
@@ -1920,6 +2124,15 @@ def test_ma_queue_cmd_prefers_player_queue_over_stale_group_id(client, monkeypat
     class _FakeMonitor:
         def is_connected(self):
             return True
+
+    class _ImmediateThread:
+        def __init__(self, target, args=(), kwargs=None, daemon=None, name=None):
+            self._target = target
+            self._args = args
+            self._kwargs = kwargs or {}
+
+        def start(self):
+            self._target(*self._args, **self._kwargs)
 
     captured = {}
 
@@ -1966,6 +2179,7 @@ def test_ma_queue_cmd_prefers_player_queue_over_stale_group_id(client, monkeypat
         monkeypatch.setattr(ma_monitor, "request_queue_refresh", _fake_request_queue_refresh)
         monkeypatch.setattr(ma_monitor, "get_monitor", lambda: _FakeMonitor())
         monkeypatch.setattr(api_ma.asyncio, "run_coroutine_threadsafe", _fake_run_coroutine_threadsafe)
+        monkeypatch.setattr(api_ma.threading, "Thread", _ImmediateThread)
 
         resp = client.post(
             "/api/ma/queue/cmd",
@@ -1981,12 +2195,15 @@ def test_ma_queue_cmd_prefers_player_queue_over_stale_group_id(client, monkeypat
             content_type="application/json",
         )
 
-        assert resp.status_code == 200
+        assert resp.status_code == 202
         data = resp.get_json()
         assert captured["syncgroup_id"] == "sendspin-yandex-mini-2---lxc"
         assert captured["refresh_syncgroup_id"] == "sendspin-yandex-mini-2---lxc"
         assert data["syncgroup_id"] == "sendspin-yandex-mini-2---lxc"
         assert data["queue_id"] == "sendspin-yandex-mini-2---lxc"
+        result = client.get(f"/api/ma/queue/cmd/result/{data['job_id']}")
+        assert result.status_code == 200
+        assert result.get_json()["success"] is True
     finally:
         state.clear_ma_now_playing()
         state.set_ma_groups({}, [])

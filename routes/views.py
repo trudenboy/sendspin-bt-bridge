@@ -1,10 +1,9 @@
-"""Views blueprint — serves the main HTML page."""
-
 import os
 
 from flask import Blueprint, current_app, render_template, session
 
 from config import BUILD_DATE, VERSION
+from services.ha_addon import get_ma_addon_ui_url
 
 views_bp = Blueprint("views", __name__)
 
@@ -16,6 +15,8 @@ def index():
     is_ha_addon = current_app.config.get("IS_HA_ADDON", False)
     demo_mode = os.environ.get("DEMO_MODE", "").lower() == "true"
     display_version = f"{VERSION}-demo" if demo_mode else VERSION
+    ma_ui_url = get_ma_addon_ui_url()
+    ma_profile_url = f"{ma_ui_url}/#/settings/profile" if ma_ui_url else ""
     return render_template(
         "index.html",
         VERSION=VERSION,
@@ -27,4 +28,6 @@ def index():
         is_ha_addon=is_ha_addon,
         ha_user=session.get("ha_user", ""),
         auth_method=session.get("auth_method", ""),
+        ma_ui_url=ma_ui_url,
+        ma_profile_url=ma_profile_url,
     )

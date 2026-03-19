@@ -24,7 +24,7 @@
     <link rel="icon" type="image/svg+xml" href="{{ url_for('vstatic', version=VERSION, filename='favicon.svg') }}">
     <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('vstatic', version=VERSION, filename='favicon.png') }}">
 </head>
-<body>
+<body data-ma-ui-url="{{ ma_ui_url or '' }}">
 <div class="container">
 
     <!-- Header -->
@@ -63,11 +63,8 @@
                 {% if auth_enabled and ha_mode and ha_user %}
                     <span class="header-user-name">
                         <span class="header-user-icon ui-icon-slot" data-ui-icon="user" aria-hidden="true"></span>
-                        <a id="header-user-link" href="/profile" target="_blank" rel="noopener" data-auth-method="ha" style="color:inherit;text-decoration:none">{{ ha_user }}</a>
+                        <a id="header-user-link" href="{{ ma_profile_url or '/profile' }}" target="_blank" rel="noopener" data-auth-method="ha" data-ma-profile-url="{{ ma_profile_url or '' }}" style="color:inherit;text-decoration:none">{{ ha_user }}</a>
                     </span>
-                    <button class="header-btn-signout" title="Sign out" onclick="window.location.href='{{ url_for('auth.logout') }}'">
-                        <span class="header-btn-signout-icon ui-icon-slot" data-ui-icon="signout" aria-hidden="true"></span>
-                    </button>
                 {% elif auth_enabled and not ha_mode %}
                     <span class="header-user-name">
                         <span class="header-user-icon ui-icon-slot" data-ui-icon="user" aria-hidden="true"></span>
