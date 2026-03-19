@@ -456,6 +456,7 @@ body {
         .header-theme-btn {
             display: inline-flex;
             align-items: center;
+            gap: 6px;
             min-height: 32px;
             font-size: 13px;
             font-weight: 500;
