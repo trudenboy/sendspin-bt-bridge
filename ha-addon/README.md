@@ -30,8 +30,8 @@ For full documentation, see [DOCS.md](DOCS.md) or visit the
 ## Update channels
 
 - The checked-in addon manifest in this repository is the **stable** Home Assistant addon variant.
-- The `update_channel` option inside the app affects prerelease checks and warnings only.
-- It does **not** change the installed addon track by itself.
+- The installed addon track is determined by the addon variant you install from the Home Assistant store.
+- The bridge UI only indicates the current track and update guidance; it does not switch the installed addon track.
 - When RC or Beta addon variants are published, switching tracks means installing the matching addon variant from the Home Assistant store.
 - Stable / RC / Beta addon variants use different default HA ingress ports and different default player listen-port ranges, so they can run side by side on one HAOS host.
 - Do **not** configure the same Bluetooth speaker in more than one addon variant at the same time.

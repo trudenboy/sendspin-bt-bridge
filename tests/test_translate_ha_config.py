@@ -43,7 +43,6 @@ def _minimal_options(**overrides) -> dict:
         "log_level": "info",
         "ma_auto_silent_auth": True,
         "volume_via_ma": True,
-        "update_channel": "stable",
     }
     opts.update(overrides)
     return opts
@@ -222,7 +221,10 @@ def test_basic_translation(tmp_path):
     )
     _write_json(tmp_path / "options.json", opts)
 
-    with patch("scripts.translate_ha_config._detect_adapters", return_value=[]):
+    with (
+        patch("scripts.translate_ha_config._detect_adapters", return_value=[]),
+        patch("scripts.translate_ha_config.get_self_delivery_channel", return_value="stable"),
+    ):
         main()
 
     cfg = _read_json(tmp_path / "config.json")
@@ -239,11 +241,10 @@ def test_basic_translation(tmp_path):
     assert cfg["UPDATE_CHANNEL"] == "stable"
 
 
-def test_translation_normalizes_update_channel(tmp_path):
+def test_translation_uses_installed_addon_track(tmp_path):
     _write_json(
         tmp_path / "options.json",
         _minimal_options(
-            update_channel="RC",
             log_level="debug",
             volume_via_ma=False,
             prefer_sbc_codec=True,
@@ -256,7 +257,10 @@ def test_translation_normalizes_update_channel(tmp_path):
         ),
     )
 
-    with patch("scripts.translate_ha_config._detect_adapters", return_value=[]):
+    with (
+        patch("scripts.translate_ha_config._detect_adapters", return_value=[]),
+        patch("scripts.translate_ha_config.get_self_delivery_channel", return_value="rc"),
+    ):
         main()
 
     cfg = _read_json(tmp_path / "config.json")

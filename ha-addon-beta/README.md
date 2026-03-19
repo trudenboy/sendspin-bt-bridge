@@ -12,7 +12,7 @@ connected to your Home Assistant host.
 
 ![Beta channel notice](https://img.shields.io/badge/Beta%20channel-Experimental-ef4444?style=for-the-badge&labelColor=991b1b&color=ef4444)
 
-**Beta channel notice:** This Home Assistant addon variant tracks the `beta` image lane. Install this variant from the store to receive Beta builds; changing `update_channel` inside the app does not switch the installed addon track.
+**Beta channel notice:** This Home Assistant addon variant tracks the `beta` image lane. Install this variant from the store to receive Beta builds; the bridge UI only indicates the installed track, while switching tracks still happens in the Home Assistant store.
 
 This add-on allows you to use Bluetooth speakers as audio output
 players in Music Assistant. It connects to Music Assistant via the
@@ -34,8 +34,8 @@ For full documentation, see [DOCS.md](DOCS.md) or visit the
 ## Update channels
 
 - The checked-in addon manifest in this repository is the **stable** Home Assistant addon variant.
-- The `update_channel` option inside the app affects prerelease checks and warnings only.
-- It does **not** change the installed addon track by itself.
+- The installed addon track is determined by the addon variant you install from the Home Assistant store.
+- The bridge UI only indicates the current track and update guidance; it does not switch the installed addon track.
 - When RC or Beta addon variants are published, switching tracks means installing the matching addon variant from the Home Assistant store.
 - Stable / RC / Beta addon variants use different default HA ingress ports and different default player listen-port ranges, so they can run side by side on one HAOS host.
 - Do **not** configure the same Bluetooth speaker in more than one addon variant at the same time.

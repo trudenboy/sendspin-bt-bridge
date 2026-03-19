@@ -40,7 +40,6 @@ def _build_minimal_options() -> dict[str, object]:
         "bluetooth_adapters": [],
         "tz": "UTC",
         "log_level": "info",
-        "update_channel": "rc",
         "volume_via_ma": True,
     }
 
@@ -55,6 +54,7 @@ def _run_translation_smoke() -> dict[str, object]:
         env = os.environ.copy()
         env["SENDSPIN_HA_OPTIONS_FILE"] = str(options_path)
         env["SENDSPIN_HA_CONFIG_FILE"] = str(config_path)
+        env["HOSTNAME"] = "sendspin-bt-bridge-rc"
 
         result = subprocess.run(
             [sys.executable, str(TRANSLATOR_PATH)],

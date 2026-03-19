@@ -649,6 +649,50 @@ def test_api_config_post_accepts_security_and_monitor_settings(client, tmp_path,
     assert saved["BLUETOOTH_ADAPTERS"][0]["name"] == "Living room"
 
 
+def test_api_config_post_uses_installed_addon_channel_in_ha_runtime(client, tmp_path, monkeypatch):
+    import routes.api_config as api_config_mod
+
+    monkeypatch.setattr(api_config_mod, "CONFIG_FILE", tmp_path / "config.json")
+    monkeypatch.setattr(api_config_mod, "_detect_runtime", lambda: "ha_addon")
+    monkeypatch.setattr(api_config_mod, "get_self_delivery_channel", lambda: "rc")
+    payload = {
+        "SENDSPIN_SERVER": "auto",
+        "SENDSPIN_PORT": 9000,
+        "BRIDGE_NAME": "",
+        "BLUETOOTH_DEVICES": [],
+        "BLUETOOTH_ADAPTERS": [],
+        "TZ": "UTC",
+        "PULSE_LATENCY_MSEC": 200,
+        "PREFER_SBC_CODEC": False,
+        "BT_CHECK_INTERVAL": 10,
+        "BT_MAX_RECONNECT_FAILS": 0,
+        "AUTH_ENABLED": False,
+        "SESSION_TIMEOUT_HOURS": 12,
+        "BRUTE_FORCE_PROTECTION": True,
+        "BRUTE_FORCE_MAX_ATTEMPTS": 4,
+        "BRUTE_FORCE_WINDOW_MINUTES": 2,
+        "BRUTE_FORCE_LOCKOUT_MINUTES": 10,
+        "LOG_LEVEL": "INFO",
+        "MA_API_URL": "",
+        "MA_API_TOKEN": "",
+        "MA_USERNAME": "",
+        "MA_AUTO_SILENT_AUTH": False,
+        "MA_WEBSOCKET_MONITOR": False,
+        "VOLUME_VIA_MA": True,
+        "MUTE_VIA_MA": False,
+        "SMOOTH_RESTART": True,
+        "UPDATE_CHANNEL": "beta",
+        "AUTO_UPDATE": False,
+        "CHECK_UPDATES": True,
+    }
+
+    resp = client.post("/api/config", data=json.dumps(payload), content_type="application/json")
+
+    assert resp.status_code == 200
+    saved = json.loads((tmp_path / "config.json").read_text())
+    assert saved["UPDATE_CHANNEL"] == "rc"
+
+
 def test_api_config_post_normalizes_numeric_strings(client, tmp_path, monkeypatch):
     """POST /api/config should coerce known numeric fields to ints before saving."""
     import routes.api_config as api_config_mod
@@ -788,6 +832,7 @@ def test_sync_ha_options_omits_manual_ports_when_unset(monkeypatch):
     options = captured["payload"]["options"]
     assert "web_port" not in options
     assert "base_listen_port" not in options
+    assert "update_channel" not in options
     assert options["ma_auto_silent_auth"] is True
 
 
@@ -827,6 +872,7 @@ def test_sync_ha_options_includes_manual_ports_when_set(monkeypatch):
     options = captured["payload"]["options"]
     assert options["web_port"] == 18080
     assert options["base_listen_port"] == 19000
+    assert "update_channel" not in options
     assert options["ma_auto_silent_auth"] is False
 
 

@@ -156,8 +156,8 @@ def _channel_notice(variant: HaAddonVariant) -> str:
         f"![{label} channel notice]({badge_url})\n\n"
         f"**{label} channel notice:** This Home Assistant addon variant tracks the "
         f"`{variant.channel}` image lane. Install this variant from the store to receive "
-        f"{label} builds; changing `update_channel` inside the app does not switch the "
-        "installed addon track.\n\n"
+        f"{label} builds; the bridge UI only indicates the installed track, while switching "
+        "tracks still happens in the Home Assistant store.\n\n"
     )
 
 
@@ -209,7 +209,6 @@ def render_config_yaml(variant: HaAddonVariant, base_text: str | None = None) ->
     text = _replace_double_quoted_scalar(text, "version", variant.version)
     text = _replace_double_quoted_scalar(text, "slug", variant.slug)
     text = _replace_double_quoted_scalar(text, "description", variant.description)
-    text = _replace_double_quoted_scalar(text, "update_channel", variant.channel)
     text = _replace_plain_scalar(text, "boot", _CHANNEL_BOOT_DEFAULTS[variant.channel])
     text = _replace_unquoted_scalar(text, "ingress_port", _CHANNEL_NETWORK_DEFAULTS[variant.channel]["ingress_port"])
     text = _replace_plain_scalar(text, "panel_icon", _CHANNEL_PANEL_ICONS[variant.channel])

@@ -37,6 +37,7 @@ from services import (
 from services.bluetooth import _MAC_RE
 from services.config_validation import validate_uploaded_config
 from services.device_registry import get_device_registry_snapshot
+from services.ha_addon import detect_delivery_channel_from_slug, get_self_addon_info, get_self_delivery_channel
 from services.ipc_protocol import IPC_PROTOCOL_VERSION
 from services.log_analysis import summarize_issue_logs
 from services.sendspin_compat import get_runtime_dependency_versions
@@ -233,16 +234,7 @@ def _detect_runtime() -> str:
 
 
 def _detect_ha_addon_delivery_channel_from_slug(slug: str) -> str | None:
-    normalized = str(slug or "").strip().lower()
-    if not normalized:
-        return None
-    if normalized.endswith(f"{_HA_ADDON_BASE_SLUG}_beta"):
-        return "beta"
-    if normalized.endswith(f"{_HA_ADDON_BASE_SLUG}_rc"):
-        return "rc"
-    if normalized.endswith(_HA_ADDON_BASE_SLUG):
-        return "stable"
-    return None
+    return detect_delivery_channel_from_slug(slug)
 
 
 def _get_ha_addon_delivery_details() -> dict[str, str] | None:
@@ -253,22 +245,11 @@ def _get_ha_addon_delivery_details() -> dict[str, str] | None:
         return None
 
     try:
-        import urllib.request as _ur
-
-        req = _ur.Request(
-            "http://supervisor/addons/self/info",
-            headers={"Authorization": f"Bearer {token}"},
-            method="GET",
-        )
-        with _ur.urlopen(req, timeout=10) as resp:
-            payload = json.loads(resp.read().decode() or "{}")
-    except (OSError, ValueError) as exc:
+        data = get_self_addon_info(timeout=10)
+    except OSError as exc:
         logger.warning("Failed to query HA addon self info: %s", exc)
         return None
 
-    if not isinstance(payload, dict):
-        return None
-    data = payload.get("data")
     if not isinstance(data, dict):
         return None
 
@@ -345,7 +326,6 @@ def _sync_ha_options(config: dict) -> None:
             "bt_check_interval": int(config.get("BT_CHECK_INTERVAL") or 10),
             "bt_max_reconnect_fails": int(config.get("BT_MAX_RECONNECT_FAILS") or 0),
             "auth_enabled": bool(config.get("AUTH_ENABLED", False)),
-            "update_channel": normalize_update_channel(config.get("UPDATE_CHANNEL")),
             "ma_auto_silent_auth": bool(config.get("MA_AUTO_SILENT_AUTH", True)),
             "bluetooth_devices": sup_devices,
             "bluetooth_adapters": sup_adapters,
@@ -516,7 +496,10 @@ def api_config():
         val = config.get(str_key)
         if val is not None and not isinstance(val, str):
             return _error_response(f"{str_key} must be a string")
-    config["UPDATE_CHANNEL"] = normalize_update_channel(config.get("UPDATE_CHANNEL", DEFAULT_UPDATE_CHANNEL))
+    if _detect_runtime() == "ha_addon":
+        config["UPDATE_CHANNEL"] = get_self_delivery_channel()
+    else:
+        config["UPDATE_CHANNEL"] = normalize_update_channel(config.get("UPDATE_CHANNEL", DEFAULT_UPDATE_CHANNEL))
 
     for bool_key in (
         "PREFER_SBC_CODEC",

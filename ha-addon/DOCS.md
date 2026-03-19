@@ -56,12 +56,12 @@ simultaneously.
 
 ## Update channels in Home Assistant
 
-Home Assistant packaging now has **two separate channel concepts** that are easy to confuse:
+Home Assistant packaging now uses the **installed add-on track** as the only real channel selector:
 
 | Concept | What it means | How it changes |
 |---|---|---|
-| **Installed add-on track** | The actual add-on variant installed from the HA store (`stable`, `RC`, or `Beta`). This determines the add-on slug, branding, default ingress port, default player listen-port base, and startup policy. | Install or switch the matching add-on variant in the HA store. |
-| **`update_channel` setting** | The in-app preference used by the bridge update checker and prerelease warning text. | Change it in the add-on options or web UI. |
+| **Installed add-on track** | The actual add-on variant installed from the HA store (`stable`, `RC`, or `Beta`). This determines the add-on slug, branding, default ingress port, default player listen-port base, startup policy, and update lane. | Install or switch the matching add-on variant in the HA store. |
+| **Bridge UI indication** | The bridge web UI shows which track is installed and explains how updates work for that track. | Read-only indication; switching tracks still happens in the HA store. |
 
 ### Published add-on variants
 
@@ -73,7 +73,6 @@ Home Assistant packaging now has **two separate channel concepts** that are easy
 
 Important:
 
-- changing `update_channel` does **not** switch the installed add-on track by itself
 - this checked-in `ha-addon/` directory is the **stable** source surface; prerelease variants are generated into `ha-addon-rc/` and `ha-addon-beta/`
 - stable / RC / Beta variants can run side by side on one HAOS host because they use different default HA ingress ports and different default player listen-port ranges
 - do **not** configure the same Bluetooth speaker in more than one variant at the same time
@@ -98,8 +97,6 @@ Important:
 | `bt_max_reconnect_fails` | int | `0` | Maximum consecutive reconnect attempts before giving up. `0` means unlimited (keep retrying forever). |
 | `auth_enabled` | bool | `false` | Enable password protection for the web UI. Set the password through the web interface after enabling. |
 | `log_level` | list | `info` | Logging verbosity: `info` or `debug`. Use `debug` when troubleshooting. |
-| `update_channel` | list | `stable` | Release track preference for update checks and prerelease notifications. `stable` is recommended. `rc` and `beta` are not stable and may contain unfinished changes or regressions. Changing this value alone does not switch the installed HA addon track. |
-
 ### Music Assistant API options
 
 | Option | Type | Default | Description |
@@ -151,14 +148,11 @@ adapters.
 
 ## Port strategy and addon tracks
 
-### Addon tracks vs `update_channel`
+### Addon tracks
 
-The Home Assistant addon has two related but different channel concepts:
-
-- **Installed addon track** — the actual addon variant installed from the HA store (`stable`, `RC`, or `Beta` when published)
-- **`update_channel`** — the in-app preference used for prerelease checks and warning text
-
-Changing `update_channel` alone does **not** switch the installed addon track.
+The Home Assistant addon track is the variant you actually installed (`stable`, `RC`, or `Beta` when published).
+That installed variant determines the update lane. The bridge web UI only indicates the current track and the
+appropriate update instructions.
 
 ### Default ports by addon track
 

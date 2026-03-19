@@ -10,6 +10,8 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+HA_ADDON_BASE_SLUG = "sendspin_bt_bridge"
+
 KNOWN_MA_ADDON_SLUGS = (
     "d5369777_music_assistant",
     "d5369777_music_assistant_beta",
@@ -43,6 +45,42 @@ def get_supervisor_addon_info(slug: str, timeout: float = 5.0) -> dict[str, Any]
         return None
     data = payload.get("data")
     return data if isinstance(data, dict) else None
+
+
+def get_self_addon_info(timeout: float = 5.0) -> dict[str, Any] | None:
+    payload = _get_supervisor_payload("/addons/self/info", timeout=timeout)
+    if not payload:
+        return None
+    data = payload.get("data")
+    return data if isinstance(data, dict) else None
+
+
+def detect_delivery_channel_from_slug(slug: str) -> str | None:
+    normalized = str(slug or "").strip().lower()
+    if not normalized:
+        return None
+    if normalized.endswith(f"{HA_ADDON_BASE_SLUG}_beta"):
+        return "beta"
+    if normalized.endswith(f"{HA_ADDON_BASE_SLUG}_rc"):
+        return "rc"
+    if normalized.endswith(HA_ADDON_BASE_SLUG):
+        return "stable"
+    return None
+
+
+def get_self_delivery_channel() -> str:
+    data = get_self_addon_info()
+    if data:
+        detected = detect_delivery_channel_from_slug(str(data.get("slug") or ""))
+        if detected:
+            return detected
+
+    hostname = str(os.environ.get("HOSTNAME") or "").strip().lower()
+    if hostname.endswith("-beta"):
+        return "beta"
+    if hostname.endswith("-rc"):
+        return "rc"
+    return "stable"
 
 
 def find_started_ma_addon_info() -> dict[str, Any] | None:

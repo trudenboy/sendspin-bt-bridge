@@ -24,16 +24,16 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
 
-def _load_config_helpers() -> tuple[str, Callable[[object], str]]:
+def _load_config_helpers() -> Callable[[], str]:
     repo_root = Path(__file__).resolve().parents[1]
     if str(repo_root) not in sys.path:
         sys.path.insert(0, str(repo_root))
-    from config import DEFAULT_UPDATE_CHANNEL, normalize_update_channel
+    from services.ha_addon import get_self_delivery_channel
 
-    return DEFAULT_UPDATE_CHANNEL, normalize_update_channel
+    return get_self_delivery_channel
 
 
-DEFAULT_UPDATE_CHANNEL, normalize_update_channel = _load_config_helpers()
+get_self_delivery_channel = _load_config_helpers()
 
 logger = logging.getLogger(__name__)
 
@@ -146,7 +146,7 @@ def main() -> None:
         "MA_API_TOKEN": opts.get("ma_api_token") or "",
         "MA_AUTO_SILENT_AUTH": bool(opts.get("ma_auto_silent_auth", True)),
         "VOLUME_VIA_MA": bool(opts.get("volume_via_ma", True)),
-        "UPDATE_CHANNEL": normalize_update_channel(opts.get("update_channel", DEFAULT_UPDATE_CHANNEL)),
+        "UPDATE_CHANNEL": get_self_delivery_channel(),
     }
 
     # Normalize: devices without explicit 'enabled' field default to True
@@ -167,8 +167,6 @@ def main() -> None:
         for key in ("MA_API_URL", "MA_API_TOKEN"):
             if not config.get(key) and existing.get(key):
                 config[key] = existing[key]
-        if opts.get("update_channel") in (None, "") and existing.get("UPDATE_CHANNEL"):
-            config["UPDATE_CHANNEL"] = normalize_update_channel(existing.get("UPDATE_CHANNEL"))
         for key in ("WEB_PORT", "BASE_LISTEN_PORT"):
             option_name = key.lower()
             if opts.get(option_name) in (None, "") and existing.get(key) not in (None, ""):

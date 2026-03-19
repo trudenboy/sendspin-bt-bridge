@@ -4556,7 +4556,10 @@ async function saveConfig() {
     config.VOLUME_VIA_MA = !!(document.getElementById('volume-via-ma') || {}).checked;
     config.MUTE_VIA_MA = !!(document.getElementById('mute-via-ma') || {}).checked;
     config.SMOOTH_RESTART = !!(document.getElementById('smooth-restart') || {}).checked;
-    config.UPDATE_CHANNEL = (((document.getElementById('update-channel') || {}).value) || 'stable').toLowerCase();
+    var updateChannelSelect = document.getElementById('update-channel');
+    if (updateChannelSelect) {
+        config.UPDATE_CHANNEL = (updateChannelSelect.value || 'stable').toLowerCase();
+    }
     config.AUTO_UPDATE = !!(document.getElementById('auto-update') || {}).checked;
     config.CHECK_UPDATES = !!(document.getElementById('check-updates') || {}).checked;
     // Log level lives outside the config form (in Logs section)
