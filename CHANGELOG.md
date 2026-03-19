@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.40.6-rc.2] - 2026-03-19
+
+### Changed
+- Top-of-page warnings now use a shared stacked notice-card layout with consistent icon/title/body/CTA structure, so security and Music Assistant notices match the rest of the dashboard card system and stack cleanly on mobile.
+
+### Fixed
+- The Music Assistant warning notice no longer appears when the runtime bridge integration is already connected, even if the saved-token validation probe disagrees.
+- Header action links in the top-right corner once again keep visible spacing between their icons and labels.
+- The theme switcher's `Auto` icon now renders as a visible circled `A` instead of collapsing into a filled circle in the header button.
+
 ## [2.40.6-rc.1] - 2026-03-19
 
 ### Added
