@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.40.6-rc.3] - 2026-03-19
+
+### Changed
+- The local demo now defaults to a more realistic signed-in header state, showing a user/logout block plus a Music Assistant token notice so preview screenshots better reflect the intended top-bar layout and onboarding guidance.
+
+### Fixed
+- Hidden notice cards now stay truly hidden even when the shared notice layout applies `display: grid`, preventing duplicate Music Assistant notices from appearing in demo.
+- The header utility area now includes a visible divider between the theme toggle and the user/logout controls, so the top-right actions read as distinct groups again.
+- The update-available badge no longer reuses RC/beta channel tinting; prerelease text coloring remains on the current-version badge only.
+
 ## [2.40.6-rc.2] - 2026-03-19
 
 ### Changed
