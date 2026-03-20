@@ -7632,7 +7632,7 @@ function _renderRecoveryIssueActionRow(issue) {
 
 function _renderRecoveryIssues(issues) {
     if (!issues || !issues.length) {
-        return '<div class="diag-mini-card"><div class="diag-mini-meta">No active recovery issues.</div></div>';
+        return '<div class="diag-mini-card"><div class="diag-mini-meta">Nothing needs recovery right now.</div></div>';
     }
     return '<div class="diag-recovery-list">' + issues.map(function(issue) {
         var tone = issue.severity === 'error' ? 'error' : 'warning';
@@ -7646,12 +7646,12 @@ function _renderRecoveryIssues(issues) {
 
 function _renderRecoveryTraces(traces) {
     if (!traces || !traces.length) {
-        return '<div class="diag-mini-card"><div class="diag-mini-meta">No recovery traces recorded yet.</div></div>';
+        return '<div class="diag-mini-card"><div class="diag-mini-meta">No recent recovery events recorded yet.</div></div>';
     }
     return '<div class="diag-trace-list">' + traces.map(function(trace) {
         var entries = trace.entries || [];
         return '<div class="diag-mini-card">' +
-            '<div class="diag-mini-title">' + dot(_diagRecoveryDotTone(trace.tone)) + '<span>' + escHtml(trace.label || 'Trace') + '</span></div>' +
+            '<div class="diag-mini-title">' + dot(_diagRecoveryDotTone(trace.tone)) + '<span>' + escHtml(trace.label || 'Recovery event') + '</span></div>' +
             '<div class="diag-mini-meta">' + escHtml(trace.summary || '') + '</div>' +
             (entries.length ? entries.map(function(entry) {
                 return '<div class="diag-trace-entry">' +
@@ -7672,7 +7672,7 @@ function _renderRecoveryTraces(traces) {
 function _renderKnownGoodTestPath(testPath) {
     var steps = testPath && testPath.steps ? testPath.steps : [];
     if (!steps.length) {
-        return '<div class="diag-mini-card"><div class="diag-mini-meta">No known-good recovery path available yet.</div></div>';
+        return '<div class="diag-mini-card"><div class="diag-mini-meta">No recommended verification path is available yet.</div></div>';
     }
     return '<div class="diag-test-path">' + steps.map(function(step) {
         return '<div class="diag-test-step' + (step.reached ? ' is-reached' : '') + '">' +
@@ -7724,7 +7724,7 @@ function renderDiagnostics(d) {
 
     var summaryCards = [
         {
-            title: 'Bridge devices',
+            title: 'Speakers connected',
             value: connectedDevices.length + '/' + activeDevices.length,
             tone: connectedDevices.length === activeDevices.length && activeDevices.length
                 ? (degradedDevices.length ? 'warn' : 'ok')
@@ -7808,7 +7808,7 @@ function renderDiagnostics(d) {
                 '</div>' +
             '</div>';
         }).join('')
-        : '<div class="diag-mini-card"><div class="diag-mini-meta">No bridge devices configured.</div></div>';
+        : '<div class="diag-mini-card"><div class="diag-mini-meta">No speakers are configured yet.</div></div>';
 
     var sinkStates = {};
     var sinkOwners = {};
@@ -7881,7 +7881,7 @@ function renderDiagnostics(d) {
                 '</div>' +
             '</div>';
         }).join('')
-        : '<div class="diag-mini-card"><div class="diag-mini-meta">No MA sync groups available.</div></div>';
+        : '<div class="diag-mini-card"><div class="diag-mini-meta">No Music Assistant groups are available.</div></div>';
 
     var subprocessInfo = subprocesses.length
         ? subprocesses.map(function(proc) {
@@ -7896,7 +7896,7 @@ function renderDiagnostics(d) {
                 '<div class="diag-mini-meta">' + escHtml(parts.join(' · ') || 'No extra details') + '</div>' +
             '</div>';
         }).join('')
-        : '<div class="diag-mini-card"><div class="diag-mini-meta">No subprocess telemetry available.</div></div>';
+        : '<div class="diag-mini-card"><div class="diag-mini-meta">No advanced runtime details are available.</div></div>';
 
     var advancedOverview = [
         ['Audio server', audioServerLabel],
@@ -7904,17 +7904,17 @@ function renderDiagnostics(d) {
         ['Memory (RSS)', env.process_rss_mb != null ? env.process_rss_mb + ' MB' : 'Unknown'],
         ['MA connection', ma.connected ? 'Connected' : (ma.configured ? 'Configured' : 'Offline')],
         ['Sink inputs', sinkInputError ? 'Error' : String(visibleSinkInputs.length)],
-        ['PortAudio outputs', portAudioError ? 'Error' : String(visiblePortAudioDevices.length)],
+        ['Local audio outputs', portAudioError ? 'Error' : String(visiblePortAudioDevices.length)],
         ['MA URL', ma.url || 'Not configured'],
     ].map(function(item) {
         return '<div class="diag-item"><span class="diag-label">' + escHtml(item[0]) + '</span><span class="diag-value">' + escHtml(item[1]) + '</span></div>';
     }).join('');
 
     var sinkInputCards = sinkInputError
-        ? '<div class="diag-mini-card"><div class="diag-mini-title">' + dot('err') + '<span>Sink input scan failed</span></div><div class="diag-mini-meta">' + escHtml(sinkInputError.error) + '</div></div>'
+        ? '<div class="diag-mini-card"><div class="diag-mini-title">' + dot('err') + '<span>Audio stream scan failed</span></div><div class="diag-mini-meta">' + escHtml(sinkInputError.error) + '</div></div>'
         : (visibleSinkInputs.length
             ? visibleSinkInputs.map(function(input) {
-                var inputTitle = input.application_name || input.media_name || input.media_title || ('Sink input #' + (input.id || '?'));
+                var inputTitle = input.application_name || input.media_name || input.media_title || ('Audio stream #' + (input.id || '?'));
                 var inputTone = input.state && input.state.toUpperCase() === 'RUNNING' ? 'ok' : 'warn';
                 return '<div class="diag-mini-card">' +
                     '<div class="diag-mini-title">' + dot(inputTone) + '<span>' + escHtml(inputTitle) + '</span></div>' +
@@ -7926,10 +7926,10 @@ function renderDiagnostics(d) {
                     '</div>' +
                 '</div>';
             }).join('')
-            : '<div class="diag-mini-card"><div class="diag-mini-meta">No active sink inputs.</div></div>');
+            : '<div class="diag-mini-card"><div class="diag-mini-meta">No current audio streams.</div></div>');
 
     var portAudioCards = portAudioError
-        ? '<div class="diag-mini-card"><div class="diag-mini-title">' + dot('err') + '<span>PortAudio probe failed</span></div><div class="diag-mini-meta">' + escHtml(portAudioError.error) + '</div></div>'
+        ? '<div class="diag-mini-card"><div class="diag-mini-title">' + dot('err') + '<span>Local output scan failed</span></div><div class="diag-mini-meta">' + escHtml(portAudioError.error) + '</div></div>'
         : (visiblePortAudioDevices.length
             ? visiblePortAudioDevices.map(function(device) {
                 return '<div class="diag-mini-card">' +
@@ -7940,19 +7940,19 @@ function renderDiagnostics(d) {
                     '</div>' +
                 '</div>';
             }).join('')
-            : '<div class="diag-mini-card"><div class="diag-mini-meta">No PortAudio output devices detected.</div></div>');
+            : '<div class="diag-mini-card"><div class="diag-mini-meta">No local audio outputs were detected.</div></div>');
 
     var recoverySummary = recovery.summary || {};
     var recoveryLatency = recovery.latency_assistant || {};
     var recoveryOverviewCards = [
         {
-            title: 'Open issues',
+            title: 'Needs attention',
             value: String(recoverySummary.open_issue_count || 0),
             tone: _diagRecoveryToneClass(recoverySummary.highest_severity || 'ok'),
-            hint: recoverySummary.headline || 'No active recovery issues',
+            hint: recoverySummary.headline || 'Nothing needs recovery right now',
         },
         {
-            title: 'Latency tuning',
+            title: 'Latency review',
             value: recoveryLatency.recommended_pulse_latency_msec != null
                 ? String(recoveryLatency.recommended_pulse_latency_msec) + ' ms'
                 : '—',
@@ -7982,30 +7982,30 @@ function renderDiagnostics(d) {
 
     return '<div class="diag-panel">' +
         '<div class="diag-card diag-card--primary">' +
-            '<div class="diag-card-header"><div><div class="diag-card-title">Recovery center</div><div class="diag-card-subtitle">Start here for current blockers, safe reruns, and the next best recovery step.</div></div></div>' +
+            '<div class="diag-card-header"><div><div class="diag-card-title">Recovery center</div><div class="diag-card-subtitle">Start here for current blockers, recent recovery signals, and the safest next step.</div></div></div>' +
             '<div class="diag-summary-grid">' + recoveryOverviewCards + '</div>' +
             '<div class="diag-recovery-summary diag-recovery-summary--hero">' +
-                '<div class="diag-recovery-headline">' + escHtml(recoverySummary.headline || 'No active recovery issues') + '</div>' +
-                '<div class="diag-recovery-copy">' + escHtml(recoverySummary.summary || 'The bridge looks healthy right now.') + '</div>' +
+                '<div class="diag-recovery-headline">' + escHtml(recoverySummary.headline || 'Nothing needs recovery right now') + '</div>' +
+                '<div class="diag-recovery-copy">' + escHtml(recoverySummary.summary || 'Playback and recovery signals look healthy right now.') + '</div>' +
                 (recoverySafeActions ? '<div class="diag-recovery-actions">' + recoverySafeActions + '</div>' : '') +
                 diagnosticsActions +
             '</div>' +
             '<div class="diag-recovery-grid">' +
                 '<div><div class="diag-subsection-title">Active issues</div>' + _renderRecoveryIssues(recovery.issues || []) + '</div>' +
-                '<div><div class="diag-subsection-title">Recovery traces</div>' + _renderRecoveryTraces(recovery.traces || []) + '</div>' +
+                '<div><div class="diag-subsection-title">Recent recovery events</div>' + _renderRecoveryTraces(recovery.traces || []) + '</div>' +
             '</div>' +
             '<div class="diag-recovery-grid">' +
-                '<div><div class="diag-subsection-title">Latency assistant</div><div class="diag-mini-card"><div class="diag-mini-title">' + dot(_diagRecoveryDotTone(recoveryLatency.tone || 'ok')) + '<span>Latency guidance</span></div><div class="diag-mini-meta">' + escHtml(recoveryLatency.summary || 'No latency guidance available.') + '</div><div class="diag-grid diag-runtime-grid">' + latencyHints + '</div>' + ((recoveryLatency.safe_actions || []).length ? '<div class="diag-recovery-actions">' + (recoveryLatency.safe_actions || []).map(_renderRecoveryActionButton).join('') + '</div>' : '') + '</div></div>' +
-                '<div><div class="diag-subsection-title">Known-good test path</div>' + _renderKnownGoodTestPath(recovery.known_good_test_path || {}) + '</div>' +
+                '<div><div class="diag-subsection-title">Latency review</div><div class="diag-mini-card"><div class="diag-mini-title">' + dot(_diagRecoveryDotTone(recoveryLatency.tone || 'ok')) + '<span>Latency guidance</span></div><div class="diag-mini-meta">' + escHtml(recoveryLatency.summary || 'No latency guidance available.') + '</div><div class="diag-grid diag-runtime-grid">' + latencyHints + '</div>' + ((recoveryLatency.safe_actions || []).length ? '<div class="diag-recovery-actions">' + (recoveryLatency.safe_actions || []).map(_renderRecoveryActionButton).join('') + '</div>' : '') + '</div></div>' +
+                '<div><div class="diag-subsection-title">Recommended verification path</div>' + _renderKnownGoodTestPath(recovery.known_good_test_path || {}) + '</div>' +
             '</div>' +
         '</div>' +
         '<div class="diag-card">' +
-            '<div class="diag-card-header"><div><div class="diag-card-title">Health summary</div><div class="diag-card-subtitle">Quick read on overall bridge health, routing coverage, and Music Assistant state.</div></div></div>' +
+            '<div class="diag-card-header"><div><div class="diag-card-title">Health summary</div><div class="diag-card-subtitle">Fast read on speaker health, routing coverage, and Music Assistant readiness.</div></div></div>' +
             '<div class="diag-summary-grid">' + summaryCards + '</div>' +
             '<div class="diag-grid diag-runtime-grid">' + overview + '</div>' +
         '</div>' +
         '<div class="diag-card">' +
-            '<div class="diag-card-header"><div><div class="diag-card-title">Bridge devices</div><div class="diag-card-subtitle">Per-speaker status, sink attachment, and the most recent device-level trouble spot.</div></div></div>' +
+            '<div class="diag-card-header"><div><div class="diag-card-title">Speaker states</div><div class="diag-card-subtitle">Connection state, sink attachment, and the clearest next hint for each speaker.</div></div></div>' +
             '<div class="diag-devices">' + deviceCards + '</div>' +
         '</div>' +
         '<div class="diag-card">' +
@@ -8018,15 +8018,15 @@ function renderDiagnostics(d) {
             '<div class="diag-ma-groups">' + groupCards + '</div>' +
         '</div>' +
         '<div class="diag-card">' +
-            '<div class="diag-card-header"><div><div class="diag-card-title">Subprocesses & advanced</div><div class="diag-card-subtitle">Per-device bridge daemon telemetry and runtime details.</div></div></div>' +
+            '<div class="diag-card-header"><div><div class="diag-card-title">Advanced runtime details</div><div class="diag-card-subtitle">Deep runtime details for bridge daemons, audio streams, and local outputs.</div></div></div>' +
             '<div class="diag-devices">' + subprocessInfo + '</div>' +
             '<div class="diag-grid diag-runtime-grid">' + advancedOverview + '</div>' +
             '<div class="diag-subsection">' +
-                '<div class="diag-subsection-title">Active sink inputs</div>' +
+                '<div class="diag-subsection-title">Current audio streams</div>' +
                 '<div class="diag-devices diag-subsection-grid">' + sinkInputCards + '</div>' +
             '</div>' +
             '<div class="diag-subsection">' +
-                '<div class="diag-subsection-title">PortAudio outputs</div>' +
+                '<div class="diag-subsection-title">Local audio outputs</div>' +
                 '<div class="diag-devices diag-subsection-grid">' + portAudioCards + '</div>' +
             '</div>' +
         '</div>' +
