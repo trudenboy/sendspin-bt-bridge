@@ -3930,6 +3930,13 @@ body {
             background: var(--card-background-color);
             overflow: hidden;
         }
+        .diag-card--primary {
+            border-color: rgba(33, 150, 243, 0.22);
+            box-shadow: 0 14px 32px rgba(15, 23, 42, 0.08);
+        }
+        .diag-card--primary .diag-card-header {
+            background: linear-gradient(180deg, rgba(33, 150, 243, 0.12), var(--primary-background-color));
+        }
         .diag-card-header {
             display: flex;
             align-items: center;
@@ -4113,6 +4120,10 @@ body {
             flex-wrap: wrap;
             padding: 0 2px;
         }
+        .diag-actions--hero {
+            padding: 0;
+            margin-top: 2px;
+        }
         .diag-actions-left,
         .diag-actions-right {
             display: flex;
@@ -4129,6 +4140,13 @@ body {
         .diag-recovery-summary {
             padding: 16px;
             border-top: 1px solid var(--divider-color);
+        }
+        .diag-recovery-summary--hero {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            padding: 18px 16px;
+            background: linear-gradient(180deg, rgba(33, 150, 243, 0.08), rgba(33, 150, 243, 0.02));
         }
         .diag-recovery-headline {
             font-size: 14px;

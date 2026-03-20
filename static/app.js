@@ -7967,23 +7967,28 @@ function renderDiagnostics(d) {
         '</div>';
     }).join('');
     var recoverySafeActions = (recovery.safe_actions || []).map(_renderRecoveryActionButton).join('');
+    var diagnosticsActions = '<div class="diag-actions diag-actions--hero">' +
+        '<div class="diag-actions-left">' +
+            '<button type="button" class="btn btn-sm btn-refresh" onclick="reloadDiagnostics()">' + _buttonLabelWithIconHtml('refresh', 'Refresh') + '</button>' +
+            '<button type="button" class="btn btn-sm" onclick="downloadDiagnostics()">' + _buttonLabelWithIconHtml('download', 'Download diagnostics') + '</button>' +
+        '</div>' +
+        '<div class="diag-actions-right">' +
+            '<button type="button" class="btn btn-sm" onclick="return _openBugReport(event)">' + _buttonLabelWithIconHtml('report', 'Submit bug report') + '</button>' +
+        '</div>' +
+    '</div>';
     var latencyHints = (recoveryLatency.hints || []).map(function(hint) {
         return '<div class="diag-item"><span class="diag-label">Hint</span><span class="diag-value">' + escHtml(hint) + '</span></div>';
     }).join('');
 
     return '<div class="diag-panel">' +
-        '<div class="diag-card">' +
-            '<div class="diag-card-header"><div><div class="diag-card-title">Health summary</div><div class="diag-card-subtitle">Start here for overall bridge, routing, and MA health.</div></div></div>' +
-            '<div class="diag-summary-grid">' + summaryCards + '</div>' +
-            '<div class="diag-grid diag-runtime-grid">' + overview + '</div>' +
-        '</div>' +
-        '<div class="diag-card">' +
-            '<div class="diag-card-header"><div><div class="diag-card-title">Recovery center</div><div class="diag-card-subtitle">Active issues, safe reruns, recovery traces, and latency guidance.</div></div></div>' +
+        '<div class="diag-card diag-card--primary">' +
+            '<div class="diag-card-header"><div><div class="diag-card-title">Recovery center</div><div class="diag-card-subtitle">Start here for current blockers, safe reruns, and the next best recovery step.</div></div></div>' +
             '<div class="diag-summary-grid">' + recoveryOverviewCards + '</div>' +
-            '<div class="diag-recovery-summary">' +
+            '<div class="diag-recovery-summary diag-recovery-summary--hero">' +
                 '<div class="diag-recovery-headline">' + escHtml(recoverySummary.headline || 'No active recovery issues') + '</div>' +
                 '<div class="diag-recovery-copy">' + escHtml(recoverySummary.summary || 'The bridge looks healthy right now.') + '</div>' +
                 (recoverySafeActions ? '<div class="diag-recovery-actions">' + recoverySafeActions + '</div>' : '') +
+                diagnosticsActions +
             '</div>' +
             '<div class="diag-recovery-grid">' +
                 '<div><div class="diag-subsection-title">Active issues</div>' + _renderRecoveryIssues(recovery.issues || []) + '</div>' +
@@ -7995,13 +8000,18 @@ function renderDiagnostics(d) {
             '</div>' +
         '</div>' +
         '<div class="diag-card">' +
+            '<div class="diag-card-header"><div><div class="diag-card-title">Health summary</div><div class="diag-card-subtitle">Quick read on overall bridge health, routing coverage, and Music Assistant state.</div></div></div>' +
+            '<div class="diag-summary-grid">' + summaryCards + '</div>' +
+            '<div class="diag-grid diag-runtime-grid">' + overview + '</div>' +
+        '</div>' +
+        '<div class="diag-card">' +
+            '<div class="diag-card-header"><div><div class="diag-card-title">Bridge devices</div><div class="diag-card-subtitle">Per-speaker status, sink attachment, and the most recent device-level trouble spot.</div></div></div>' +
+            '<div class="diag-devices">' + deviceCards + '</div>' +
+        '</div>' +
+        '<div class="diag-card">' +
             '<div class="diag-card-header"><div><div class="diag-card-title">Adapters & routing</div><div class="diag-card-subtitle">Detected controllers and attached PulseAudio / PipeWire outputs.</div></div></div>' +
             '<div class="diag-adapters">' + adapterCards + '</div>' +
             '<div class="sink-table-wrap"><table class="sink-table"><thead><tr><th>Sink</th><th>Status</th><th>Attached device</th></tr></thead><tbody>' + sinkRows + '</tbody></table></div>' +
-        '</div>' +
-        '<div class="diag-card">' +
-            '<div class="diag-card-header"><div><div class="diag-card-title">Bridge devices</div><div class="diag-card-subtitle">Connection state, sink assignment and last-known issues.</div></div></div>' +
-            '<div class="diag-devices">' + deviceCards + '</div>' +
         '</div>' +
         '<div class="diag-card">' +
             '<div class="diag-card-header"><div><div class="diag-card-title">Music Assistant groups</div><div class="diag-card-subtitle">' + escHtml(ma.url || 'No MA URL configured') + '</div></div></div>' +
@@ -8018,15 +8028,6 @@ function renderDiagnostics(d) {
             '<div class="diag-subsection">' +
                 '<div class="diag-subsection-title">PortAudio outputs</div>' +
                 '<div class="diag-devices diag-subsection-grid">' + portAudioCards + '</div>' +
-            '</div>' +
-        '</div>' +
-        '<div class="diag-actions">' +
-            '<div class="diag-actions-left">' +
-                '<button type="button" class="btn btn-sm" onclick="downloadDiagnostics()">' + _buttonLabelWithIconHtml('download', 'Download diagnostics') + '</button>' +
-                '<button type="button" class="btn btn-sm" onclick="return _openBugReport(event)">' + _buttonLabelWithIconHtml('report', 'Submit bug report') + '</button>' +
-            '</div>' +
-            '<div class="diag-actions-right">' +
-                '<button type="button" class="btn btn-sm btn-refresh" onclick="reloadDiagnostics()">' + _buttonLabelWithIconHtml('refresh', 'Refresh') + '</button>' +
             '</div>' +
         '</div>' +
     '</div>';
