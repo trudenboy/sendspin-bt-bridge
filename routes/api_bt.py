@@ -513,7 +513,7 @@ def api_bt_scan_result(job_id: str):
 _MAX_SCAN_RESULTS = 50
 
 _last_scan_completed: float = 0.0
-_SCAN_COOLDOWN = 30.0  # seconds between scans
+_SCAN_COOLDOWN = 10.0  # seconds between scans
 
 
 def _run_bluetoothctl_scan(adapter_macs: "list[str]") -> str:

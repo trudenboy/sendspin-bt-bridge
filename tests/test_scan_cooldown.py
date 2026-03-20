@@ -1,4 +1,4 @@
-"""Tests for the 30-second BT scan cooldown behaviour in routes/api_bt.py."""
+"""Tests for the 10-second BT scan cooldown behaviour in routes/api_bt.py."""
 
 import importlib
 import json
@@ -66,11 +66,11 @@ def client():
 def test_scan_returns_429_during_cooldown(client):
     """POST /api/bt/scan during cooldown returns 429."""
     with patch("routes.api_bt.is_scan_running", return_value=False), patch("routes.api_bt.time") as mock_time:
-        # Simulate a scan that completed 10 seconds ago (within 30 s cooldown)
+        # Simulate a scan that completed 5 seconds ago (within 10 s cooldown)
         mock_time.monotonic.return_value = 100.0
         _mod = importlib.import_module("routes.api_bt")
 
-        _mod._last_scan_completed = 90.0  # 10 s ago
+        _mod._last_scan_completed = 95.0  # 5 s ago
 
         resp = client.post("/api/bt/scan")
         assert resp.status_code == 429
@@ -87,7 +87,7 @@ def test_scan_allowed_after_cooldown_expires(client):
         mock_time.monotonic.return_value = 100.0
         _mod = importlib.import_module("routes.api_bt")
 
-        _mod._last_scan_completed = 60.0  # 40 s ago — past the 30 s cooldown
+        _mod._last_scan_completed = 80.0  # 20 s ago — past the 10 s cooldown
 
         mock_thread.return_value.start = lambda: None
 

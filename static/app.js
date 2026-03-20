@@ -4340,7 +4340,7 @@ async function startBtScan() {
             });
             box.hidden = false;
         }
-        _startScanCooldown(btn, 30);
+        _startScanCooldown(btn, 10);
     } catch (err) {
         status.textContent = 'Scan failed: ' + err.message;
         btn.disabled = false;
