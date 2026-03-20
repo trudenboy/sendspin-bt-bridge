@@ -674,7 +674,7 @@ body {
         .notice-stack[hidden] {
             display: none !important;
         }
-        body.backend-ui-locked .container > :not(.header) {
+        body.backend-ui-locked .container > :not(.header):not(#status-grid) {
             display: none !important;
         }
         .notice-card {

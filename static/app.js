@@ -240,6 +240,7 @@ var _muteDebounce = {};  // player_name → timestamp of last user mute action
 var _btnLocks = {};      // btnId → expiry timestamp
 var _deviceSettingsHighlightTimer = null;
 var _adapterSettingsHighlightTimer = null;
+var _restartMonitor = null;
 
 function _normalizeExternalUrlBase(url) {
     return url ? String(url).replace(/\/+$/, '') : '';
@@ -2527,12 +2528,7 @@ function renderStatusPayload(status) {
         if (zeroDeviceRuntimeState) {
             _applyBackendServiceState(zeroDeviceRuntimeState);
             _hideOperatorGuidance();
-            if (grid) {
-                grid.classList.remove('list-view');
-                grid.innerHTML = '';
-            } else if (emptyEl) {
-                emptyEl.remove();
-            }
+            _renderBackendServicePlaceholder(zeroDeviceRuntimeState);
         } else if (grid) {
             _applyOperatorGuidance(status.operator_guidance || null);
             grid.classList.remove('list-view');
@@ -2543,6 +2539,7 @@ function renderStatusPayload(status) {
         }
         _updateGroupPanel();
         updateHealthIndicator([], status.operator_guidance || null);
+        _syncRestartBanner(status, zeroDeviceRuntimeState);
         return;
     }
     _applyOperatorGuidance(status.operator_guidance || null);
@@ -2585,6 +2582,7 @@ function renderStatusPayload(status) {
     refreshBtDeviceRowsRuntime();
     _updateGroupPanel();
     updateHealthIndicator(sorted, status.operator_guidance || null);
+    _syncRestartBanner(status, null);
 }
 
 async function updateStatus() {
@@ -2611,6 +2609,7 @@ async function updateStatus() {
             _renderBackendServicePlaceholder(unavailableState);
         }
         updateHealthIndicator(lastDevices || [], _lastOperatorGuidance || null);
+        _syncRestartBanner(null, unavailableState);
     }
 }
 
@@ -4971,6 +4970,10 @@ function _deriveZeroDeviceRuntimeState(status, devices) {
     var startup = status && status.startup_progress ? status.startup_progress : null;
     var startupStatus = startup && startup.status ? String(startup.status) : '';
     var startupRunning = startupStatus === 'running' || startupStatus === 'starting';
+    var headerLabel = headerStatus && headerStatus.label ? String(headerStatus.label) : '';
+    if (headerLabel.toLowerCase() === 'waiting for setup') {
+        headerLabel = '';
+    }
     if (status && status.error && !_isZeroClientStatusError(status.error)) {
         return {
             kind: 'unavailable',
@@ -4983,10 +4986,10 @@ function _deriveZeroDeviceRuntimeState(status, devices) {
     }
     if (!devices || devices.length !== 0) return null;
     if (!guidance || guidance.mode === 'empty_state') return null;
-    var title = startupRunning ? 'Bridge is starting' : 'Restoring bridge state';
-    var label = startupRunning ? 'Starting bridge' : 'Restoring bridge state';
+    var title = headerLabel || (startupRunning ? 'Bridge is starting' : 'Restoring bridge state');
+    var label = headerLabel || (startupRunning ? 'Starting bridge' : 'Restoring bridge state');
     var summary = startupRunning
-        ? ((startup && startup.message) || 'Waiting for bridge startup checks to finish.')
+        ? ((startup && startup.message) || (headerStatus && headerStatus.summary) || 'Waiting for bridge startup checks to finish.')
         : ((startup && startup.message) || (headerStatus && headerStatus.summary) || 'Configured bridge devices are still reconnecting after restart.');
     return {
         kind: startupRunning ? 'starting' : 'restoring',
@@ -6202,31 +6205,17 @@ async function loadConfig() {
 
 // ---- Restart ----
 
-function _restartDeviceStats(statusData) {
-    var devs = statusData.devices || [statusData];
-    var total = devs.length;
-    var bt = 0, pa = 0, ss = 0;
-    var perDevice = [];
-    for (var i = 0; i < devs.length; i++) {
-        var d = devs[i];
-        var dBt = !!d.bluetooth_connected;
-        var dPa = deviceHasSink(d);
-        var dSs = !!d.server_connected;
-        if (dBt) bt++;
-        if (dPa) pa++;
-        if (dSs) ss++;
-        perDevice.push({
-            name: d.player_name || d.bluetooth_mac || ('Device ' + (i + 1)),
-            bt: dBt, pa: dPa, ss: dSs
-        });
-    }
-    return { total: total, bt: bt, pa: pa, ss: ss, ma: !!statusData.ma_connected, perDevice: perDevice };
+function _restartMonitorElapsedSeconds() {
+    if (!_restartMonitor || !_restartMonitor.startedAt) return 0;
+    return Math.max(0, Math.round((Date.now() - _restartMonitor.startedAt) / 1000));
 }
 
-function _restartProgressHtml(step, totalSteps, message, elapsed) {
-    var pct = Math.min(100, Math.round((step / totalSteps) * 100));
-    var done = step >= totalSteps;
-    var failed = message.indexOf('\u26a0') >= 0 || message.indexOf('\u2717') >= 0;
+function _restartProgressHtml(step, totalSteps, message, elapsed, options) {
+    var opts = options || {};
+    var safeTotal = Math.max(1, Number(totalSteps) || 0);
+    var pct = Math.max(0, Math.min(100, Math.round((step / safeTotal) * 100)));
+    var done = !!opts.done || step >= safeTotal;
+    var failed = !!opts.failed || message.indexOf('\u26a0') >= 0 || message.indexOf('\u2717') >= 0;
     var icon;
     if (done && !failed) {
         icon = '<svg class="restart-check" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3.5 8.5 6.5 11.5 12.5 5.5"/></svg>';
@@ -6240,6 +6229,128 @@ function _restartProgressHtml(step, totalSteps, message, elapsed) {
         '<span>' + message + '</span>' + elapsedHtml +
         '</div>' +
         '<div class="restart-progress-bar"><div class="restart-progress-fill" style="width:' + pct + '%"></div></div>';
+}
+
+function _setRestartBannerState(state) {
+    var banner = document.getElementById('restart-banner');
+    if (!banner) return;
+    if (!state) {
+        banner.className = 'restart-banner';
+        banner.innerHTML = '';
+        return;
+    }
+    banner.className = 'restart-banner active';
+    banner.innerHTML = _restartProgressHtml(
+        Math.max(0, Math.min(100, Number(state.percent) || 0)),
+        100,
+        state.message || 'Restart in progress…',
+        state.elapsedSeconds || 0,
+        {done: !!state.done, failed: !!state.failed}
+    );
+}
+
+function _clearRestartMonitorAfter(delayMs) {
+    var monitor = _restartMonitor;
+    setTimeout(function() {
+        if (_restartMonitor !== monitor) return;
+        _restartMonitor = null;
+        _setRestartBannerState(null);
+    }, delayMs);
+}
+
+function _isRestartRuntimeState(state) {
+    return !!(state && (state.kind === 'starting' || state.kind === 'restoring' || state.kind === 'unavailable'));
+}
+
+function _syncRestartBanner(status, overrideServiceState) {
+    var serviceState = overrideServiceState || _backendServiceState;
+    var startup = status && status.startup_progress ? status.startup_progress : null;
+    var startupStatus = startup && startup.status ? String(startup.status) : '';
+    if (!_restartMonitor && _isRestartRuntimeState(serviceState)) {
+        _restartMonitor = {startedAt: Date.now(), manual: false, sawRuntimeRestart: true};
+    }
+    if (!_restartMonitor) return;
+
+    var elapsedSeconds = _restartMonitorElapsedSeconds();
+    var startupPercent = startup && typeof startup.percent === 'number' ? startup.percent : 0;
+    var sawLiveRestartState =
+        startupStatus === 'stopping' ||
+        startupStatus === 'running' ||
+        startupStatus === 'starting' ||
+        startupStatus === 'error' ||
+        _isRestartRuntimeState(serviceState);
+    if (sawLiveRestartState) {
+        _restartMonitor.sawRuntimeRestart = true;
+    }
+
+    if (_restartMonitor.manual && !_restartMonitor.sawRuntimeRestart) {
+        _setRestartBannerState({
+            percent: 10,
+            message: 'Restart requested… Waiting for the service to restart.',
+            elapsedSeconds: elapsedSeconds,
+        });
+        return;
+    }
+
+    if (startupStatus === 'stopping') {
+        _setRestartBannerState({
+            percent: Math.max(5, startupPercent || 5),
+            message: startup.message || 'Stopping service…',
+            elapsedSeconds: elapsedSeconds,
+        });
+        return;
+    }
+
+    if (startupStatus === 'running' || startupStatus === 'starting') {
+        _setRestartBannerState({
+            percent: Math.max(12, startupPercent || 12),
+            message: startup.message || 'Starting service…',
+            elapsedSeconds: elapsedSeconds,
+        });
+        return;
+    }
+
+    if (startupStatus === 'error') {
+        _setRestartBannerState({
+            percent: Math.max(20, startupPercent || 20),
+            message: startup.message || 'Startup failed',
+            elapsedSeconds: elapsedSeconds,
+            failed: true,
+        });
+        return;
+    }
+
+    if (serviceState && serviceState.kind === 'unavailable') {
+        _setRestartBannerState({
+            percent: Math.max(15, startupPercent || 15),
+            message: serviceState.summary || 'Waiting for the backend to come back…',
+            elapsedSeconds: elapsedSeconds,
+        });
+        return;
+    }
+
+    if (serviceState && (serviceState.kind === 'starting' || serviceState.kind === 'restoring')) {
+        _setRestartBannerState({
+            percent: Math.max(serviceState.kind === 'restoring' ? 85 : 20, startupPercent || 0),
+            message: serviceState.summary || serviceState.title || 'Restoring bridge state…',
+            elapsedSeconds: elapsedSeconds,
+        });
+        return;
+    }
+
+    if (_restartMonitor.sawRuntimeRestart && status) {
+        _setRestartBannerState({
+            percent: 100,
+            message: 'Restart complete — bridge is ready',
+            elapsedSeconds: elapsedSeconds,
+            done: true,
+        });
+        _clearRestartMonitorAfter(4000);
+        return;
+    }
+
+    _restartMonitor = null;
+    _setRestartBannerState(null);
 }
 
 async function uploadConfig(input) {
@@ -6264,29 +6375,26 @@ async function uploadConfig(input) {
 }
 
 async function saveAndRestart() {
-    var banner = document.getElementById('restart-banner');
     var smooth = !!(document.getElementById('smooth-restart') || {}).checked;
-    var totalSteps = smooth ? 6 : 5;
-
-    banner.className = 'restart-banner active';
-    banner.innerHTML = _restartProgressHtml(0, totalSteps, 'Saving configuration…', 0);
+    _restartMonitor = null;
+    _setRestartBannerState({percent: 2, message: 'Saving configuration…', elapsedSeconds: 0});
 
     try {
         var saved = await saveConfig();
         if (!saved || !saved.ok) {
-            banner.innerHTML = _restartProgressHtml(0, totalSteps, '\u2717 ' + (saved && saved.error || 'Failed to save configuration'), 0);
-            setTimeout(function() { banner.className = 'restart-banner'; }, 3000);
+            _setRestartBannerState({
+                percent: 0,
+                message: '\u2717 ' + ((saved && saved.error) || 'Failed to save configuration'),
+                elapsedSeconds: 0,
+                failed: true,
+            });
+            _clearRestartMonitorAfter(3000);
             return;
         }
         _setConfigDirty(false);
 
-        var step = 1;
-
         if (smooth) {
-            // Mute local PA sinks (not MA pause) to avoid audio glitches on shutdown.
-            // This only silences THIS bridge's speakers — other players in a sync group keep playing.
-            // After restart, _startup_unmute_watcher unmutes each sink once audio stabilizes.
-            banner.innerHTML = _restartProgressHtml(step, totalSteps, 'Muting speakers…', 0);
+            _setRestartBannerState({percent: 8, message: 'Muting speakers…', elapsedSeconds: 0});
             var _allDeviceNames = (lastDevices || []).map(function(d) { return d.player_name; });
             if (_allDeviceNames.length > 0) {
                 try {
@@ -6298,93 +6406,26 @@ async function saveAndRestart() {
                     await new Promise(function(r) { setTimeout(r, 300); });
                 } catch (_) { /* Non-critical — continue with restart */ }
             }
-            step++;
         }
 
-        banner.innerHTML = _restartProgressHtml(step, totalSteps, 'Stopping service…', 0);
+        _restartMonitor = {startedAt: Date.now(), manual: true, sawRuntimeRestart: false};
+        _setRestartBannerState({
+            percent: smooth ? 12 : 8,
+            message: 'Restart requested… Waiting for the service to restart.',
+            elapsedSeconds: 0,
+        });
         try {
             await fetch(API_BASE + '/api/restart', { method: 'POST' });
         } catch (_) { /* Service dropped connection — expected */ }
-
-        await new Promise(function(r) { setTimeout(r, 2000); });
-        step++;
-
-        // Wait for service to come back
-        var serviceUp = false;
-        var statusData = null;
-        for (var attempt = 1; attempt <= 40; attempt++) {
-            banner.innerHTML = _restartProgressHtml(step, totalSteps, 'Starting service…', attempt);
-            await new Promise(function(r) { setTimeout(r, 1000); });
-            try {
-                var resp = await fetch(API_BASE + '/api/status');
-                if (resp.ok) {
-                    statusData = await resp.json();
-                    serviceUp = true;
-                    break;
-                }
-            } catch (_) {}
-        }
-
-        if (!serviceUp) {
-            banner.innerHTML = _restartProgressHtml(step, totalSteps, '\u26a0\ufe0f Service did not respond within 40s', 0);
-            return;
-        }
-        step++;
-
-        // Wait for devices to initialize
-        var stats = _restartDeviceStats(statusData);
-        var allReady = stats.total === 0 || (stats.bt >= stats.total && stats.pa >= stats.total &&
-                       stats.ss >= stats.total);
-        if (!allReady) {
-            for (var w = 1; w <= 30; w++) {
-                var readyCount = Math.min(stats.bt, stats.pa, stats.ss);
-                var msg = 'Connecting devices… ' + readyCount + '/' + stats.total;
-                banner.innerHTML = _restartProgressHtml(step, totalSteps, msg, w);
-                await new Promise(function(r) { setTimeout(r, 1000); });
-                try {
-                    var r2 = await fetch(API_BASE + '/api/status');
-                    if (r2.ok) {
-                        statusData = await r2.json();
-                        stats = _restartDeviceStats(statusData);
-                        allReady = stats.bt >= stats.total && stats.pa >= stats.total &&
-                                   stats.ss >= stats.total;
-                        if (allReady) break;
-                    }
-                } catch (_) {}
-            }
-        }
-        step++;
-
-        // Wait for MA connection
-        stats = _restartDeviceStats(statusData);
-        if (!stats.ma && stats.total > 0) {
-            banner.innerHTML = _restartProgressHtml(step, totalSteps, 'Connecting to Music Assistant…', 0);
-            for (var m = 1; m <= 15; m++) {
-                await new Promise(function(r) { setTimeout(r, 1000); });
-                try {
-                    var r3 = await fetch(API_BASE + '/api/status');
-                    if (r3.ok) {
-                        statusData = await r3.json();
-                        stats = _restartDeviceStats(statusData);
-                        if (stats.ma) break;
-                    }
-                } catch (_) {}
-                banner.innerHTML = _restartProgressHtml(step, totalSteps, 'Connecting to Music Assistant…', m);
-            }
-        }
-
-        // Final
-        stats = _restartDeviceStats(statusData);
-        allReady = (stats.total === 0 || (stats.bt >= stats.total && stats.pa >= stats.total &&
-                   stats.ss >= stats.total)) && stats.ma;
-
-        banner.innerHTML = _restartProgressHtml(totalSteps, totalSteps,
-            allReady ? 'Restart complete — all systems operational' : '\u26a0\ufe0f Restart complete — some connections pending', 0);
-        setTimeout(function() { banner.className = 'restart-banner'; }, allReady ? 4000 : 10000);
-        updateStatus();
+        setTimeout(updateStatus, 250);
 
     } catch (err) {
-        banner.innerHTML = _restartProgressHtml(0, totalSteps, '\u26a0\ufe0f Error: ' + err.message, 0);
+        _setRestartBannerState({
+            percent: 0,
+            message: '\u26a0\ufe0f Error: ' + err.message,
+            elapsedSeconds: 0,
+            failed: true,
+        });
     }
 }
 
