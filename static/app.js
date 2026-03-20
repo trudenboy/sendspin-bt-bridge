@@ -2494,6 +2494,7 @@ function renderStatusPayload(status) {
     var resolvedMaWebUrl = _normalizeExternalUrlBase(status.ma_web_url || lastMaWebUrl || '');
     if (resolvedMaWebUrl) lastMaWebUrl = resolvedMaWebUrl;
     loadOnboardingAssistant(false);
+    loadRecoveryAssistant(false);
 
     var userLink = document.getElementById('header-user-link');
     if (userLink) {
@@ -4828,6 +4829,8 @@ function _setMaIntegrationBanner(message, title) {
 
 var _onboardingAssistantRefreshAt = 0;
 var _onboardingAssistantRequest = null;
+var _recoveryAssistantRefreshAt = 0;
+var _recoveryAssistantRequest = null;
 
 function _openDiagnosticsPanel() {
     var details = document.getElementById('diag-details');
@@ -4836,6 +4839,15 @@ function _openDiagnosticsPanel() {
     onDiagToggle(details);
     details.scrollIntoView({behavior: 'smooth', block: 'start'});
     return false;
+}
+
+function _findDeviceIndexByName(deviceName) {
+    if (!deviceName || !lastDevices || !lastDevices.length) return -1;
+    for (var i = 0; i < lastDevices.length; i++) {
+        var dev = lastDevices[i];
+        if (dev && (dev.player_name || '') === deviceName) return i;
+    }
+    return -1;
 }
 
 function _runOnboardingAssistantAction(actionKey) {
@@ -4858,6 +4870,79 @@ function _runOnboardingAssistantAction(actionKey) {
     }
     if (actionKey === 'open_diagnostics') {
         return _openDiagnosticsPanel();
+    }
+    return false;
+}
+
+async function _retryMaDiscoveryFromRecovery() {
+    try {
+        showToast('Retrying Music Assistant discovery…', 'info');
+        var resp = await fetch(API_BASE + '/api/ma/discover');
+        if (resp.status === 401) { _handleUnauthorized(); return false; }
+        var data = await resp.json();
+        if (data && data.job_id) {
+            data = await _pollBackgroundJob(API_BASE + '/api/ma/discover/result/' + data.job_id, {
+                timeoutMs: 15000,
+                intervalMs: 750,
+            });
+        }
+        if (data && data.success === false) {
+            showToast('Music Assistant discovery failed: ' + (data.error || 'Unknown error'), 'error');
+            return false;
+        }
+        showToast('Music Assistant discovery finished', 'success');
+        updateStatus();
+        loadOnboardingAssistant(true);
+        loadRecoveryAssistant(true);
+        return false;
+    } catch (err) {
+        showToast('Music Assistant discovery failed: ' + err.message, 'error');
+        return false;
+    }
+}
+
+function _runRecoveryAssistantAction(actionKey, deviceName) {
+    if (!actionKey) return false;
+    if (
+        actionKey === 'open_bluetooth_settings' ||
+        actionKey === 'scan_devices' ||
+        actionKey === 'open_devices_settings' ||
+        actionKey === 'open_ma_settings' ||
+        actionKey === 'open_diagnostics'
+    ) {
+        return _runOnboardingAssistantAction(actionKey);
+    }
+    if (actionKey === 'refresh_diagnostics') {
+        if (document.getElementById('diag-details') && document.getElementById('diag-details').open) {
+            reloadDiagnostics();
+        }
+        updateStatus();
+        loadOnboardingAssistant(true);
+        loadRecoveryAssistant(true);
+        showToast('Rerunning bridge checks…', 'info');
+        return false;
+    }
+    if (actionKey === 'retry_ma_discovery') {
+        _retryMaDiscoveryFromRecovery();
+        return false;
+    }
+    if (actionKey === 'reconnect_device') {
+        var reconnectIndex = _findDeviceIndexByName(deviceName);
+        if (reconnectIndex < 0) {
+            showToast('Device not found in current bridge status', 'error');
+            return _runOnboardingAssistantAction('open_devices_settings');
+        }
+        btReconnect(reconnectIndex);
+        return false;
+    }
+    if (actionKey === 'toggle_bt_management') {
+        var managementIndex = _findDeviceIndexByName(deviceName);
+        if (managementIndex < 0) {
+            showToast('Device not found in current bridge status', 'error');
+            return _runOnboardingAssistantAction('open_devices_settings');
+        }
+        btToggleManagement(managementIndex);
+        return false;
     }
     return false;
 }
@@ -4949,6 +5034,75 @@ function _setOnboardingAssistantBanner(assistant) {
     _syncNoticeStack();
 }
 
+function _recoveryNoticeToneClass(tone) {
+    if (tone === 'error' || tone === 'err') return 'notice-card--danger';
+    if (tone === 'ok') return 'notice-card--info';
+    return 'notice-card--warning';
+}
+
+function _renderRecoveryIssuePills(issues) {
+    if (!issues || !issues.length) return '';
+    return issues.slice(0, 3).map(function(issue) {
+        var tone = issue.severity === 'error' ? 'error' : 'warning';
+        return '<div class="recovery-issue-pill is-' + tone + '">' +
+            '<span class="recovery-issue-pill-icon">' +
+                (tone === 'error' ? _uiIconSvg('warning', 'ui-icon-svg') : _uiIconSvg('info', 'ui-icon-svg')) +
+            '</span>' +
+            '<span>' + escHtml(issue.title || 'Issue') + '</span>' +
+        '</div>';
+    }).join('');
+}
+
+function _buildRecoveryActionHtml(action, isPrimary) {
+    if (!action || !action.key) return '';
+    return '<a href="#" class="notice-card-action' + (isPrimary ? ' notice-card-action--primary' : '') +
+        '" onclick=\'return _runRecoveryAssistantAction(' +
+            JSON.stringify(String(action.key || '')) +
+            (action.device_name ? ',' + JSON.stringify(String(action.device_name || '')) : '') +
+        ')\'>' + escHtml(action.label || 'Open diagnostics') + '</a>';
+}
+
+function _setRecoveryAssistantBanner(assistant) {
+    var banner = document.getElementById('recovery-assistant-banner');
+    var titleEl = document.getElementById('recovery-assistant-title');
+    var textEl = document.getElementById('recovery-assistant-text');
+    var issuesEl = document.getElementById('recovery-assistant-issues');
+    var actionsEl = document.getElementById('recovery-assistant-actions');
+    if (!banner || !titleEl || !textEl || !issuesEl || !actionsEl) return;
+    var summary = assistant && assistant.summary ? assistant.summary : {};
+    var issues = assistant && assistant.issues ? assistant.issues : [];
+    var latency = assistant && assistant.latency_assistant ? assistant.latency_assistant : {};
+    var showBanner = issues.length > 0 || latency.tone === 'warning';
+    if (!showBanner) {
+        banner.hidden = true;
+        titleEl.textContent = '';
+        textEl.textContent = '';
+        issuesEl.hidden = true;
+        issuesEl.innerHTML = '';
+        actionsEl.innerHTML = '';
+        _syncNoticeStack();
+        return;
+    }
+
+    banner.className = 'notice-card recovery-card ' + _recoveryNoticeToneClass(summary.highest_severity || latency.tone || 'warning');
+    titleEl.textContent = summary.headline || 'Recovery guidance';
+    textEl.textContent = summary.summary || latency.summary || 'Review the latest recovery guidance.';
+    issuesEl.hidden = !issues.length;
+    issuesEl.innerHTML = _renderRecoveryIssuePills(issues);
+
+    var primaryAction = issues.length && issues[0].recommended_action
+        ? issues[0].recommended_action
+        : ((latency.safe_actions && latency.safe_actions[0]) || {key: 'open_diagnostics', label: 'Open diagnostics'});
+    var secondaryAction = {key: 'refresh_diagnostics', label: 'Rerun checks'};
+    var actionsHtml = _buildRecoveryActionHtml(primaryAction, true);
+    if (!primaryAction || primaryAction.key !== secondaryAction.key) {
+        actionsHtml += _buildRecoveryActionHtml(secondaryAction, false);
+    }
+    actionsEl.innerHTML = actionsHtml;
+    banner.hidden = false;
+    _syncNoticeStack();
+}
+
 async function loadOnboardingAssistant(force) {
     var now = Date.now();
     if (!force && now - _onboardingAssistantRefreshAt < 15000) return;
@@ -4966,6 +5120,25 @@ async function loadOnboardingAssistant(force) {
         }
     })();
     return _onboardingAssistantRequest;
+}
+
+async function loadRecoveryAssistant(force) {
+    var now = Date.now();
+    if (!force && now - _recoveryAssistantRefreshAt < 15000) return;
+    _recoveryAssistantRefreshAt = now;
+    if (_recoveryAssistantRequest) return _recoveryAssistantRequest;
+    _recoveryAssistantRequest = (async function() {
+        try {
+            var resp = await fetch(API_BASE + '/api/recovery/assistant');
+            if (resp.status === 401) { _handleUnauthorized(); return; }
+            _setRecoveryAssistantBanner(await resp.json());
+        } catch (err) {
+            console.warn('Recovery assistant refresh failed:', err);
+        } finally {
+            _recoveryAssistantRequest = null;
+        }
+    })();
+    return _recoveryAssistantRequest;
 }
 
 function openMaTokenSettings() {
@@ -6473,6 +6646,82 @@ function dot(state) {
     return '<span class="diag-dot ' + tone + '"></span>';
 }
 
+function _diagRecoveryToneClass(tone) {
+    return tone === 'error' ? 'error' : (tone === 'warning' || tone === 'warn' ? 'warn' : 'ok');
+}
+
+function _diagRecoveryDotTone(tone) {
+    return tone === 'error' ? 'err' : (tone === 'warning' || tone === 'warn' ? 'warn' : 'ok');
+}
+
+function _renderRecoveryActionButton(action) {
+    if (!action || !action.key) return '';
+    return '<button type="button" class="btn btn-sm diag-recovery-action" onclick=\'return _runRecoveryAssistantAction(' +
+        JSON.stringify(String(action.key || '')) +
+        (action.device_name ? ',' + JSON.stringify(String(action.device_name || '')) : '') +
+    ')\'>' + escHtml(action.label || 'Open diagnostics') + '</button>';
+}
+
+function _renderRecoveryIssues(issues) {
+    if (!issues || !issues.length) {
+        return '<div class="diag-mini-card"><div class="diag-mini-meta">No active recovery issues.</div></div>';
+    }
+    return '<div class="diag-recovery-list">' + issues.map(function(issue) {
+        var tone = issue.severity === 'error' ? 'error' : 'warning';
+        return '<div class="diag-recovery-item is-' + tone + '">' +
+            '<div class="diag-recovery-item-title">' + dot(_diagRecoveryDotTone(issue.severity)) + '<span>' + escHtml(issue.title || 'Issue') + '</span></div>' +
+            '<div class="diag-recovery-item-summary">' + escHtml(issue.summary || '') + '</div>' +
+            (issue.recommended_action
+                ? '<div class="diag-recovery-actions">' + _renderRecoveryActionButton(issue.recommended_action) + '</div>'
+                : '') +
+        '</div>';
+    }).join('') + '</div>';
+}
+
+function _renderRecoveryTraces(traces) {
+    if (!traces || !traces.length) {
+        return '<div class="diag-mini-card"><div class="diag-mini-meta">No recovery traces recorded yet.</div></div>';
+    }
+    return '<div class="diag-trace-list">' + traces.map(function(trace) {
+        var entries = trace.entries || [];
+        return '<div class="diag-mini-card">' +
+            '<div class="diag-mini-title">' + dot(_diagRecoveryDotTone(trace.tone)) + '<span>' + escHtml(trace.label || 'Trace') + '</span></div>' +
+            '<div class="diag-mini-meta">' + escHtml(trace.summary || '') + '</div>' +
+            (entries.length ? entries.map(function(entry) {
+                return '<div class="diag-trace-entry">' +
+                    dot(_diagRecoveryDotTone(entry.level === 'error' ? 'error' : (entry.level === 'warning' ? 'warning' : 'ok'))) +
+                    '<div class="diag-trace-copy">' +
+                        '<div class="diag-trace-label">' + escHtml(entry.label || 'Event') + '</div>' +
+                        '<div class="diag-trace-meta">' +
+                            escHtml(entry.summary || '') +
+                            (entry.at ? ' · ' + escHtml(entry.at) : '') +
+                        '</div>' +
+                    '</div>' +
+                '</div>';
+            }).join('') : '') +
+        '</div>';
+    }).join('') + '</div>';
+}
+
+function _renderKnownGoodTestPath(testPath) {
+    var steps = testPath && testPath.steps ? testPath.steps : [];
+    if (!steps.length) {
+        return '<div class="diag-mini-card"><div class="diag-mini-meta">No known-good recovery path available yet.</div></div>';
+    }
+    return '<div class="diag-test-path">' + steps.map(function(step) {
+        return '<div class="diag-test-step' + (step.reached ? ' is-reached' : '') + '">' +
+            '<div>' + (step.reached ? dot('ok') : dot('warn')) + '</div>' +
+            '<div class="diag-test-step-copy">' +
+                '<div class="diag-test-step-title">' + escHtml(step.label || 'Step') + '</div>' +
+                '<div class="diag-test-step-summary">' + escHtml(step.summary || '') + '</div>' +
+            '</div>' +
+        '</div>';
+    }).join('') + '</div>' +
+    (testPath.recommended_action
+        ? '<div class="diag-recovery-actions" style="margin-top:12px">' + _renderRecoveryActionButton(testPath.recommended_action) + '</div>'
+        : '');
+}
+
 function renderDiagnostics(d) {
     var env = d.environment || {};
     var ma = d.ma_integration || {};
@@ -6483,6 +6732,7 @@ function renderDiagnostics(d) {
     var sinkInputs = d.sink_inputs || [];
     var portAudioDevices = d.portaudio_devices || [];
     var subprocesses = d.subprocesses || [];
+    var recovery = d.recovery_assistant || {};
 
     var activeDevices = devices.filter(function(dev) { return dev.enabled !== false; });
     var connectedDevices = activeDevices.filter(function(dev) { return !!dev.connected; });
@@ -6726,11 +6976,57 @@ function renderDiagnostics(d) {
             }).join('')
             : '<div class="diag-mini-card"><div class="diag-mini-meta">No PortAudio output devices detected.</div></div>');
 
+    var recoverySummary = recovery.summary || {};
+    var recoveryLatency = recovery.latency_assistant || {};
+    var recoveryOverviewCards = [
+        {
+            title: 'Open issues',
+            value: String(recoverySummary.open_issue_count || 0),
+            tone: _diagRecoveryToneClass(recoverySummary.highest_severity || 'ok'),
+            hint: recoverySummary.headline || 'No active recovery issues',
+        },
+        {
+            title: 'Latency tuning',
+            value: recoveryLatency.recommended_pulse_latency_msec != null
+                ? String(recoveryLatency.recommended_pulse_latency_msec) + ' ms'
+                : '—',
+            tone: _diagRecoveryToneClass(recoveryLatency.tone || 'ok'),
+            hint: recoveryLatency.summary || 'No latency guidance available.',
+        },
+    ].map(function(card) {
+        return '<div class="diag-summary-card ' + card.tone + '">' +
+            '<div class="diag-summary-label">' + escHtml(card.title) + '</div>' +
+            '<div class="diag-summary-value">' + escHtml(card.value) + '</div>' +
+            '<div class="diag-summary-hint">' + escHtml(card.hint) + '</div>' +
+        '</div>';
+    }).join('');
+    var recoverySafeActions = (recovery.safe_actions || []).map(_renderRecoveryActionButton).join('');
+    var latencyHints = (recoveryLatency.hints || []).map(function(hint) {
+        return '<div class="diag-item"><span class="diag-label">Hint</span><span class="diag-value">' + escHtml(hint) + '</span></div>';
+    }).join('');
+
     return '<div class="diag-panel">' +
         '<div class="diag-card">' +
             '<div class="diag-card-header"><div><div class="diag-card-title">Health summary</div><div class="diag-card-subtitle">Start here for overall bridge, routing, and MA health.</div></div></div>' +
             '<div class="diag-summary-grid">' + summaryCards + '</div>' +
             '<div class="diag-grid diag-runtime-grid">' + overview + '</div>' +
+        '</div>' +
+        '<div class="diag-card">' +
+            '<div class="diag-card-header"><div><div class="diag-card-title">Recovery center</div><div class="diag-card-subtitle">Active issues, safe reruns, recovery traces, and latency guidance.</div></div></div>' +
+            '<div class="diag-summary-grid">' + recoveryOverviewCards + '</div>' +
+            '<div class="diag-recovery-summary">' +
+                '<div class="diag-recovery-headline">' + escHtml(recoverySummary.headline || 'No active recovery issues') + '</div>' +
+                '<div class="diag-recovery-copy">' + escHtml(recoverySummary.summary || 'The bridge looks healthy right now.') + '</div>' +
+                (recoverySafeActions ? '<div class="diag-recovery-actions">' + recoverySafeActions + '</div>' : '') +
+            '</div>' +
+            '<div class="diag-recovery-grid">' +
+                '<div><div class="diag-subsection-title">Active issues</div>' + _renderRecoveryIssues(recovery.issues || []) + '</div>' +
+                '<div><div class="diag-subsection-title">Recovery traces</div>' + _renderRecoveryTraces(recovery.traces || []) + '</div>' +
+            '</div>' +
+            '<div class="diag-recovery-grid">' +
+                '<div><div class="diag-subsection-title">Latency assistant</div><div class="diag-mini-card"><div class="diag-mini-title">' + dot(_diagRecoveryDotTone(recoveryLatency.tone || 'ok')) + '<span>Latency guidance</span></div><div class="diag-mini-meta">' + escHtml(recoveryLatency.summary || 'No latency guidance available.') + '</div><div class="diag-grid diag-runtime-grid">' + latencyHints + '</div>' + ((recoveryLatency.safe_actions || []).length ? '<div class="diag-recovery-actions">' + (recoveryLatency.safe_actions || []).map(_renderRecoveryActionButton).join('') + '</div>' : '') + '</div></div>' +
+                '<div><div class="diag-subsection-title">Known-good test path</div>' + _renderKnownGoodTestPath(recovery.known_good_test_path || {}) + '</div>' +
+            '</div>' +
         '</div>' +
         '<div class="diag-card">' +
             '<div class="diag-card-header"><div><div class="diag-card-title">Adapters & routing</div><div class="diag-card-subtitle">Detected controllers and attached PulseAudio / PipeWire outputs.</div></div></div>' +
@@ -6773,6 +7069,7 @@ function renderDiagnostics(d) {
 function reloadDiagnostics() {
     var content = document.getElementById('diag-content');
     delete content.dataset.loaded;
+    loadRecoveryAssistant(true);
     loadDiagnostics(content);
 }
 
@@ -6865,6 +7162,7 @@ _hydrateUiIcons(document);
 initConfigTabs();
 loadConfig();   // calls loadBtAdapters() internally after restoring btManualAdapters
 loadOnboardingAssistant(true);
+loadRecoveryAssistant(true);
 updateStatus();
 
 // Use SSE for real-time status push; fall back to polling if not supported

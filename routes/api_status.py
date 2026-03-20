@@ -48,6 +48,7 @@ from services.ma_runtime_state import (
 )
 from services.onboarding_assistant import build_onboarding_assistant_snapshot
 from services.pulse import get_server_name, list_sinks
+from services.recovery_assistant import build_recovery_assistant_snapshot
 from services.sendspin_compat import get_runtime_dependency_versions
 from services.status_snapshot import (
     build_bridge_snapshot,
@@ -196,6 +197,26 @@ def _build_onboarding_assistant_payload(preflight: dict | None = None) -> dict:
         runtime_mode=runtime_mode,
     )
     return assistant.to_dict()
+
+
+def _build_recovery_assistant_payload(
+    *,
+    preflight: dict | None = None,
+    onboarding_assistant: dict | None = None,
+) -> dict:
+    """Build the recovery/latency guidance payload used by diagnostics and the UI."""
+    config = load_config()
+    registry = get_device_registry_snapshot()
+    devices = [build_device_snapshot(client) for client in registry.active_clients]
+    if onboarding_assistant is None:
+        onboarding_assistant = _build_onboarding_assistant_payload(preflight=preflight)
+    recovery = build_recovery_assistant_snapshot(
+        config=config,
+        devices=devices,
+        onboarding_assistant=onboarding_assistant,
+        startup_progress=build_startup_progress_snapshot().to_dict(),
+    )
+    return recovery.to_dict()
 
 
 def get_client_status_for(client):
@@ -598,6 +619,9 @@ def api_diagnostics():
         diag["subprocesses"] = _collect_subprocess_info()
         diag["event_hooks"] = get_event_hook_registry().snapshot()
         diag["onboarding_assistant"] = _build_onboarding_assistant_payload()
+        diag["recovery_assistant"] = _build_recovery_assistant_payload(
+            onboarding_assistant=diag["onboarding_assistant"]
+        )
         diag["telemetry"] = _build_bridge_telemetry_payload(
             environment=diag["environment"],
             subprocesses=diag["subprocesses"],
@@ -1022,6 +1046,7 @@ def _build_full_text_report(
     ma_info = diag.get("ma_integration", {})
     sinks = diag.get("sinks", [])
     assistant = diag.get("onboarding_assistant", {})
+    recovery = diag.get("recovery_assistant", {})
 
     # Environment
     if env:
@@ -1089,6 +1114,24 @@ def _build_full_text_report(
             full.append("  Next steps:")
             for step in next_steps:
                 full.append(f"    - {step}")
+        full.append("")
+
+    if recovery:
+        full.append("--- RECOVERY ASSISTANT ---")
+        summary = recovery.get("summary", {})
+        full.append(
+            "  "
+            f"{summary.get('headline', 'Recovery summary')}: "
+            f"{summary.get('summary', 'No recovery details available.')}"
+        )
+        for issue in recovery.get("issues", []):
+            severity = str(issue.get("severity", "?")).upper()
+            full.append(f"  [{severity}] {issue.get('title', '?')}: {issue.get('summary', '')}")
+        for trace in recovery.get("traces", []):
+            full.append(f"  Trace: {trace.get('label', '?')} — {trace.get('summary', '')}")
+        latency = recovery.get("latency_assistant", {})
+        if latency:
+            full.append(f"  Latency: {latency.get('summary', '')}")
         full.append("")
 
     # Adapters
@@ -1223,6 +1266,12 @@ def api_health():
 def api_onboarding_assistant():
     """Return actionable setup guidance derived from current runtime health."""
     return jsonify(_build_onboarding_assistant_payload())
+
+
+@status_bp.route("/api/recovery/assistant")
+def api_recovery_assistant():
+    """Return recovery, trace, and latency guidance derived from runtime health."""
+    return jsonify(_build_recovery_assistant_payload())
 
 
 @status_bp.route("/api/preflight")

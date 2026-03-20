@@ -772,6 +772,10 @@ body {
             grid-template-columns: auto minmax(0, 1fr) auto;
             align-items: start;
         }
+        .recovery-card {
+            grid-template-columns: auto minmax(0, 1fr) auto;
+            align-items: start;
+        }
         .onboarding-progress {
             margin-top: 10px;
             display: flex;
@@ -918,6 +922,44 @@ body {
             font-size: 12px;
             line-height: 1.45;
             color: var(--secondary-text-color);
+        }
+        .recovery-issue-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 10px;
+        }
+        .recovery-issue-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            min-height: 28px;
+            padding: 0 10px;
+            border-radius: 999px;
+            border: 1px solid rgba(148, 163, 184, 0.22);
+            background: rgba(148, 163, 184, 0.08);
+            color: var(--secondary-text-color);
+            font-size: 11px;
+            font-weight: 700;
+            line-height: 1.2;
+        }
+        .recovery-issue-pill.is-error {
+            border-color: rgba(219, 68, 55, 0.24);
+            background: rgba(219, 68, 55, 0.1);
+            color: var(--primary-text-color);
+        }
+        .recovery-issue-pill.is-warning {
+            border-color: rgba(255, 166, 0, 0.28);
+            background: rgba(255, 166, 0, 0.12);
+            color: var(--primary-text-color);
+        }
+        .recovery-issue-pill-icon {
+            width: 14px;
+            height: 14px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: inherit;
         }
 
         /* Status grid — responsive card grid */
@@ -3876,6 +3918,125 @@ body {
             display: flex;
             gap: 10px;
             flex-wrap: wrap;
+        }
+        .diag-recovery-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 12px;
+            padding: 16px;
+            border-top: 1px solid var(--divider-color);
+        }
+        .diag-recovery-summary {
+            padding: 16px;
+            border-top: 1px solid var(--divider-color);
+        }
+        .diag-recovery-headline {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--primary-text-color);
+        }
+        .diag-recovery-copy {
+            margin-top: 6px;
+            font-size: 12px;
+            line-height: 1.6;
+            color: var(--secondary-text-color);
+        }
+        .diag-recovery-list {
+            display: grid;
+            gap: 10px;
+        }
+        .diag-recovery-item {
+            border: 1px solid var(--divider-color);
+            border-radius: 10px;
+            background: var(--primary-background-color);
+            padding: 12px;
+        }
+        .diag-recovery-item.is-error {
+            border-color: rgba(219, 68, 55, 0.28);
+        }
+        .diag-recovery-item.is-warning {
+            border-color: rgba(255, 166, 0, 0.28);
+        }
+        .diag-recovery-item-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--primary-text-color);
+        }
+        .diag-recovery-item-summary {
+            margin-top: 6px;
+            font-size: 12px;
+            line-height: 1.55;
+            color: var(--secondary-text-color);
+        }
+        .diag-recovery-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 10px;
+        }
+        .diag-recovery-action {
+            min-height: 32px;
+        }
+        .diag-trace-list {
+            display: grid;
+            gap: 10px;
+        }
+        .diag-trace-entry {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--divider-color);
+        }
+        .diag-trace-entry:last-child {
+            border-bottom: 0;
+            padding-bottom: 0;
+        }
+        .diag-trace-copy {
+            min-width: 0;
+        }
+        .diag-trace-label {
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--primary-text-color);
+        }
+        .diag-trace-meta {
+            font-size: 11px;
+            line-height: 1.5;
+            color: var(--secondary-text-color);
+        }
+        .diag-test-path {
+            display: grid;
+            gap: 8px;
+        }
+        .diag-test-step {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            padding: 10px 12px;
+            border: 1px solid var(--divider-color);
+            border-radius: 10px;
+            background: var(--primary-background-color);
+        }
+        .diag-test-step.is-reached {
+            border-color: rgba(67, 160, 71, 0.28);
+        }
+        .diag-test-step-copy {
+            min-width: 0;
+        }
+        .diag-test-step-title {
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--primary-text-color);
+        }
+        .diag-test-step-summary {
+            margin-top: 4px;
+            font-size: 11px;
+            line-height: 1.5;
+            color: var(--secondary-text-color);
         }
 
         /* Timezone preview */

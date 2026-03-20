@@ -552,6 +552,21 @@ def test_api_bugreport_uses_issue_worthy_logs_in_summary(client, monkeypatch):
                     ],
                     "next_steps": ["Configure MA_API_URL before using MA sync features."],
                 },
+                "recovery_assistant": {
+                    "summary": {
+                        "headline": "Kitchen is disconnected",
+                        "summary": "Power on the speaker or trigger a reconnect.",
+                    },
+                    "issues": [
+                        {
+                            "severity": "warning",
+                            "title": "Kitchen is disconnected",
+                            "summary": "Power on the speaker or trigger a reconnect.",
+                        }
+                    ],
+                    "traces": [{"label": "Bridge startup", "summary": "Waiting for devices to stabilize."}],
+                    "latency_assistant": {"summary": "Multi-device setup detected without per-device static delays."},
+                },
             }
         ),
     )
@@ -589,7 +604,9 @@ def test_api_bugreport_uses_issue_worthy_logs_in_summary(client, monkeypatch):
     assert "daemon crashed" in data["markdown_short"]
     assert "reconnecting to bluetooth speaker" not in data["markdown_short"]
     assert "ONBOARDING ASSISTANT" in data["text_full"]
+    assert "RECOVERY ASSISTANT" in data["text_full"]
     assert "Configure MA_API_URL before using MA sync features." in data["text_full"]
+    assert "Kitchen is disconnected" in data["text_full"]
     assert data["report"]["recent_issue_logs"] == [
         "2026-03-17 18:00:01,000 - root - WARNING - daemon stderr: ALSA setup failed",
         "2026-03-17 18:00:02,000 - root - ERROR - daemon crashed",
@@ -2113,6 +2130,40 @@ def test_onboarding_assistant_endpoint_returns_guidance(client, monkeypatch):
     assert data["next_steps"]
 
 
+def test_recovery_assistant_endpoint_returns_guidance(client, monkeypatch):
+    import routes.api_status as api_status
+
+    monkeypatch.setattr(
+        api_status,
+        "_build_recovery_assistant_payload",
+        lambda preflight=None, onboarding_assistant=None: {
+            "summary": {
+                "open_issue_count": 1,
+                "highest_severity": "warning",
+                "headline": "Kitchen is disconnected",
+                "summary": "Power on the speaker or reconnect it.",
+            },
+            "issues": [
+                {
+                    "severity": "warning",
+                    "title": "Kitchen is disconnected",
+                    "summary": "Power on the speaker or reconnect it.",
+                    "recommended_action": {"key": "reconnect_device", "label": "Reconnect speaker"},
+                }
+            ],
+            "safe_actions": [{"key": "refresh_diagnostics", "label": "Rerun checks"}],
+        },
+    )
+
+    resp = client.get("/api/recovery/assistant")
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["summary"]["headline"] == "Kitchen is disconnected"
+    assert data["issues"][0]["recommended_action"]["key"] == "reconnect_device"
+    assert data["safe_actions"][0]["key"] == "refresh_diagnostics"
+
+
 def test_api_status_parse_helpers_are_defensive():
     """Diagnostics parsers must return None instead of raising on malformed input."""
     from routes.api_status import (
@@ -2201,6 +2252,15 @@ def test_api_diagnostics_includes_playing_and_sink_input_metadata(client, monkey
             "next_steps": [],
         },
     )
+    monkeypatch.setattr(
+        api_status,
+        "_build_recovery_assistant_payload",
+        lambda preflight=None, onboarding_assistant=None: {
+            "summary": {"headline": "No active recovery issues", "open_issue_count": 0},
+            "issues": [],
+            "traces": [{"label": "Bridge startup", "summary": "Startup complete."}],
+        },
+    )
     monkeypatch.setattr(api_status.subprocess, "run", fake_run)
 
     state.set_ma_api_credentials("", "")
@@ -2228,6 +2288,8 @@ def test_api_diagnostics_includes_playing_and_sink_input_metadata(client, monkey
         assert data["event_hooks"]["summary"]["registered_hooks"] == 1
         assert data["telemetry"]["event_hooks"]["summary"]["registered_hooks"] == 1
         assert data["onboarding_assistant"]["checks"][0]["key"] == "sink_verification"
+        assert data["recovery_assistant"]["summary"]["headline"] == "No active recovery issues"
+        assert data["recovery_assistant"]["traces"][0]["label"] == "Bridge startup"
     finally:
         sys.modules.pop("sendspin.audio", None)
         state.set_ma_groups({}, [])
