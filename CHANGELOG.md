@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.42.0-rc.13] - 2026-03-20
+
+### Fixed
+- Restart/runtime lockout now also overrides the onboarding empty-state path, so the main UI is hidden correctly during restart even when the bridge is still in first-run onboarding mode.
+
 ## [2.42.0-rc.12] - 2026-03-20
 
 ### Fixed
