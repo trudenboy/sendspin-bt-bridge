@@ -1177,8 +1177,8 @@ body {
             opacity: 0.6;
         }
         .device-card.device-card--disabled {
-            opacity: 0.45;
-            filter: saturate(0.7);
+            opacity: 0.5;
+            filter: grayscale(1);
             pointer-events: none;
         }
         .device-card.device-card--disabled:hover,
@@ -2209,8 +2209,8 @@ body {
             box-shadow: inset 3px 0 0 var(--error-color);
         }
         .list-row.list-row--disabled {
-            opacity: 0.45;
-            filter: saturate(0.7);
+            opacity: 0.5;
+            filter: grayscale(1);
         }
         .list-row.list-row--disabled .list-row-main,
         .list-row.list-row--disabled .list-row-detail {
