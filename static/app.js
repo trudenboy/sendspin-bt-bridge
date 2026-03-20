@@ -507,6 +507,20 @@ function openAuthSettings() {
     return false;
 }
 
+function openLatencySettings() {
+    var target = document.querySelector('[name="PULSE_LATENCY_MSEC"]');
+    var opened = _openConfigPanel('general', target && target.id ? target.id : null, 'center');
+    var highlightTarget = target && typeof target.closest === 'function'
+        ? target.closest('.config-setting-row') || target
+        : target || (opened && opened.target);
+    _highlightConfigTarget(highlightTarget);
+    if (target && typeof target.focus === 'function') {
+        target.focus({preventScroll: true});
+        if (typeof target.select === 'function') target.select();
+    }
+    return false;
+}
+
 function initConfigTabs() {
     document.querySelectorAll('.config-tab').forEach(function(tab) {
         tab.addEventListener('click', function() {
@@ -1180,6 +1194,13 @@ function _normalizeDeviceName(name) {
     return String(name || '').trim().toLowerCase();
 }
 
+function _deviceNamesMatch(configName, runtimeName) {
+    var normalizedConfig = _normalizeDeviceName(configName);
+    var normalizedRuntime = _normalizeDeviceName(runtimeName);
+    if (!normalizedConfig || !normalizedRuntime) return false;
+    return normalizedRuntime === normalizedConfig || normalizedRuntime.indexOf(normalizedConfig + ' @ ') === 0;
+}
+
 function _getViewModeStorageKey() {
     return _viewModeStorageScope === 'demo' ? VIEW_MODE_STORAGE_KEY + ':demo' : VIEW_MODE_STORAGE_KEY;
 }
@@ -1263,16 +1284,33 @@ function _settingsIconHtml() {
     return '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19.14 12.94c.04-.31.06-.62.06-.94s-.02-.63-.06-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.03 7.03 0 0 0-1.63-.94l-.36-2.54a.5.5 0 0 0-.5-.42h-3.84a.5.5 0 0 0-.5.42l-.36 2.54c-.58.23-1.13.54-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.7 8.84a.5.5 0 0 0 .12.64l2.03 1.58c-.04.31-.06.62-.06.94s.02.63.06.94L2.82 14.52a.5.5 0 0 0-.12.64l1.92 3.32c.13.23.4.32.64.22l2.39-.96c.5.4 1.05.72 1.63.94l.36 2.54c.04.24.25.42.5.42h3.84c.25 0 .46-.18.5-.42l.36-2.54c.58-.23 1.13-.54 1.63-.94l2.39.96c.24.1.51.01.64-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58ZM12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7Z"/></svg>';
 }
 
-function _findBtConfigWrap(dev) {
-    var targetMac = _normalizeDeviceMac(dev && (dev.bluetooth_mac || dev.mac));
-    var targetName = _normalizeDeviceName(dev && dev.player_name);
+function _findBtConfigWrapByIdentity(playerName, mac) {
+    var targetMac = _normalizeDeviceMac(mac);
+    var targetName = _normalizeDeviceName(playerName);
     var wraps = document.querySelectorAll('#bt-devices-table .bt-device-wrap');
     for (var i = 0; i < wraps.length; i++) {
         var wrap = wraps[i];
         if (targetMac && wrap.dataset.deviceMac === targetMac) return wrap;
-        if (targetName && wrap.dataset.deviceName === targetName) return wrap;
+        if (!targetName) continue;
+        if (wrap.dataset.deviceName === targetName) return wrap;
+        if (_deviceNamesMatch(wrap.dataset.deviceName, targetName) || _deviceNamesMatch(targetName, wrap.dataset.deviceName)) {
+            return wrap;
+        }
     }
     return null;
+}
+
+function _findBtConfigWrap(dev) {
+    return _findBtConfigWrapByIdentity(dev && dev.player_name, dev && (dev.bluetooth_mac || dev.mac));
+}
+
+function _setBtConfigWrapEnabledState(wrap, enabled) {
+    if (!wrap) return false;
+    var enabledCb = wrap.querySelector('.bt-enabled');
+    if (!enabledCb) return false;
+    enabledCb.checked = enabled !== false;
+    wrap.classList.toggle('disabled', !enabledCb.checked);
+    return true;
 }
 
 function _highlightBtConfigWrap(wrap) {
@@ -3817,7 +3855,17 @@ async function btToggleManagement(i) {
 
 // ---- Device enabled toggle (used by config checkbox and dashboard Disable button) ----
 
-async function toggleDeviceEnabled(playerName, enabled) {
+async function toggleDeviceEnabled(deviceRef, enabled) {
+    var dev = deviceRef && typeof deviceRef === 'object' ? deviceRef : null;
+    var playerName = dev ? (dev.player_name || null) : deviceRef;
+    var wrap = _findBtConfigWrapByIdentity(playerName, dev && (dev.bluetooth_mac || dev.mac));
+    var enabledCb = wrap ? wrap.querySelector('.bt-enabled') : null;
+    var previousConfigEnabled = enabledCb ? enabledCb.checked : null;
+    var previousDeviceEnabled = dev ? dev.enabled !== false : null;
+    if (wrap) {
+        _setBtConfigWrapEnabledState(wrap, enabled);
+        refreshBtDeviceRowsRuntime();
+    }
     try {
         var resp = await fetch(API_BASE + '/api/device/enabled', {
             method: 'POST',
@@ -3826,11 +3874,25 @@ async function toggleDeviceEnabled(playerName, enabled) {
         });
         var d = await resp.json();
         if (d.success) {
+            if (dev) dev.enabled = enabled !== false;
+            refreshBtDeviceRowsRuntime();
             showToast(d.message, 'success');
         } else {
+            if (wrap && previousConfigEnabled !== null) _setBtConfigWrapEnabledState(wrap, previousConfigEnabled);
+            if (dev) {
+                dev.enabled = previousDeviceEnabled;
+                renderDevicesView();
+            }
+            refreshBtDeviceRowsRuntime();
             showToast(d.error || 'Failed', 'error');
         }
     } catch (e) {
+        if (wrap && previousConfigEnabled !== null) _setBtConfigWrapEnabledState(wrap, previousConfigEnabled);
+        if (dev) {
+            dev.enabled = previousDeviceEnabled;
+            renderDevicesView();
+        }
+        refreshBtDeviceRowsRuntime();
         showToast('Error: ' + e.message, 'error');
     }
 }
@@ -3846,7 +3908,7 @@ function confirmDisableDevice(i) {
     _groupSelected[i] = false;
     if (expandedListRowKey === listRowKey(dev)) expandedListRowKey = null;
     renderDevicesView();
-    toggleDeviceEnabled(name, false);
+    toggleDeviceEnabled(dev, false);
 }
 
 function toggleAutoRefresh(forceState) {
@@ -5287,11 +5349,16 @@ function _isOnboardingAssistantShown(card, options) {
     return !!_onboardingAssistantExpanded;
 }
 
+function _onboardingShowByDefault(guidance) {
+    var card = guidance && guidance.onboarding_card ? guidance.onboarding_card : null;
+    return !!(card && card.show_by_default);
+}
+
 function _toggleOnboardingAssistant() {
     var guidance = _lastOperatorGuidance;
     var card = guidance && guidance.onboarding_card ? guidance.onboarding_card : null;
     if (!card || !card.checklist) return false;
-    var showByDefault = !!(guidance && guidance.mode === 'empty_state');
+    var showByDefault = _onboardingShowByDefault(guidance);
     var currentlyShown = _isOnboardingAssistantShown(card, {showByDefault: showByDefault});
     _onboardingAssistantExpanded = !currentlyShown;
     if (_onboardingAssistantExpanded && card.preference_key) _setGuidanceVisible(card.preference_key, true);
@@ -5336,6 +5403,9 @@ function _runOnboardingAssistantAction(actionKey) {
         var opened = _openConfigPanel('devices', 'config-panel-devices', 'start');
         _highlightConfigTarget((opened && opened.target) || document.getElementById('config-panel-devices'));
         return false;
+    }
+    if (actionKey === 'open_latency_settings') {
+        return openLatencySettings();
     }
     if (actionKey === 'open_ma_settings') {
         return openMaTokenSettings();
@@ -5408,6 +5478,7 @@ function _runOperatorGuidanceAction(action) {
         actionKey === 'open_bluetooth_settings' ||
         actionKey === 'scan_devices' ||
         actionKey === 'open_devices_settings' ||
+        actionKey === 'open_latency_settings' ||
         actionKey === 'open_ma_settings' ||
         actionKey === 'open_diagnostics'
     ) {
@@ -5735,7 +5806,7 @@ function _applyOperatorGuidance(guidance) {
     _syncGuidancePreferenceControls(guidance && guidance.visibility_keys);
     _setOnboardingAssistantBanner(
         guidance && guidance.onboarding_card ? guidance.onboarding_card : null,
-        {showByDefault: !!(guidance && guidance.mode === 'empty_state')}
+        {showByDefault: _onboardingShowByDefault(guidance)}
     );
     _setRecoveryAssistantBanner(guidance || null);
     _syncEmptyStatePlaceholder(guidance || null);

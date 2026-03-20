@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -101,6 +102,7 @@ class GuidanceOnboardingCard:
     preference_key: str
     primary_action: GuidanceAction | None = None
     secondary_actions: list[GuidanceAction] = field(default_factory=list)
+    show_by_default: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         payload = {
@@ -110,6 +112,7 @@ class GuidanceOnboardingCard:
             "dismissible": self.dismissible,
             "preference_key": self.preference_key,
             "secondary_actions": [action.to_dict() for action in self.secondary_actions],
+            "show_by_default": self.show_by_default,
         }
         if self.primary_action:
             payload["primary_action"] = self.primary_action.to_dict()
@@ -491,21 +494,66 @@ def _build_issue_groups(
 def _build_onboarding_card(
     *,
     empty_state: bool,
+    all_devices_globally_disabled: bool,
+    disabled_devices: list[dict[str, Any]] | None,
     onboarding_assistant: dict[str, Any],
 ) -> GuidanceOnboardingCard | None:
     checklist = onboarding_assistant.get("checklist") or {}
     if not checklist:
         return None
-    primary_action = _guidance_action_from_dict(checklist.get("primary_action"))
+    card_checklist = checklist
+    if all_devices_globally_disabled:
+        disabled_count = len(disabled_devices or [])
+        card_checklist = deepcopy(checklist)
+        card_checklist["headline"] = "Re-enable a speaker to resume playback"
+        card_checklist["summary"] = (
+            "All configured Bluetooth devices are currently disabled. "
+            "Re-enable at least one device in Configuration → Devices, then save and restart the bridge."
+        )
+        card_checklist["primary_action"] = {"key": "open_devices_settings", "label": "Open device settings"}
+        card_checklist["current_step_key"] = "sink_verification"
+        card_checklist["current_step_title"] = "Re-enable a speaker"
+        steps = card_checklist.get("steps")
+        if isinstance(steps, list):
+            adapted_steps = []
+            for step in steps:
+                if not isinstance(step, dict):
+                    adapted_steps.append(step)
+                    continue
+                adapted_step = dict(step)
+                if adapted_step.get("key") == "sink_verification":
+                    adapted_step.update(
+                        {
+                            "title": "Re-enable a speaker",
+                            "status": "warning",
+                            "stage": "current",
+                            "summary": "All configured speakers are globally disabled right now.",
+                            "details": {"configured_devices": disabled_count},
+                            "actions": [
+                                "Open Configuration → Devices and turn at least one speaker back on.",
+                                "Click Save and restart so the bridge reloads the enabled devices.",
+                            ],
+                            "recommended_action": {
+                                "key": "open_devices_settings",
+                                "label": "Open device settings",
+                            },
+                        }
+                    )
+                elif adapted_step.get("stage") == "current":
+                    adapted_step["stage"] = "upcoming"
+                adapted_steps.append(adapted_step)
+            card_checklist["steps"] = adapted_steps
+    primary_action = _guidance_action_from_dict(card_checklist.get("primary_action"))
     secondary_actions = [GuidanceAction(key="open_diagnostics", label="Open diagnostics")]
     return GuidanceOnboardingCard(
-        headline=str(checklist.get("headline") or "Get started"),
-        summary=str(checklist.get("summary") or "Finish the first-run checklist."),
-        checklist=checklist,
+        headline=str(card_checklist.get("headline") or "Get started"),
+        summary=str(card_checklist.get("summary") or "Finish the first-run checklist."),
+        checklist=card_checklist,
         dismissible=True,
         preference_key=_ONBOARDING_VISIBILITY_KEY,
         primary_action=primary_action,
         secondary_actions=secondary_actions,
+        show_by_default=empty_state or all_devices_globally_disabled,
     )
 
 
@@ -668,6 +716,11 @@ def build_operator_guidance_snapshot(
             disabled_devices=disabled_devices,
         ),
         banner=_build_banner(mode=mode, issue_groups=issue_groups),
-        onboarding_card=_build_onboarding_card(empty_state=empty_state, onboarding_assistant=onboarding_assistant),
+        onboarding_card=_build_onboarding_card(
+            empty_state=empty_state,
+            all_devices_globally_disabled=all_devices_globally_disabled,
+            disabled_devices=disabled_devices,
+            onboarding_assistant=onboarding_assistant,
+        ),
         issue_groups=issue_groups,
     )

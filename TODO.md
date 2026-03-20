@@ -56,6 +56,7 @@ Roadmap for HA addon standards compliance and improvements.
 - [ ] **Show hierarchical blocking explanations** — explain not only that an action is blocked, but the dependency chain causing it.
 - [ ] **Expose advanced recovery views for power users** — e.g. richer trace history, filtering, or longer event timelines in diagnostics.
 - [ ] **Show current vs recommended latency values together** — include current setting, recommendation, and direct config/edit path in the latency assistant.
+- [ ] **Allow inline latency editing from onboarding guidance** — when `Review latency tuning` is the active step, let operators change `PULSE_LATENCY_MSEC` directly from the onboarding card instead of only jumping to General settings.
 
 ## Future
 

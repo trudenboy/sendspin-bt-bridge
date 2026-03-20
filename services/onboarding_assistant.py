@@ -162,7 +162,7 @@ def _recommended_action_for_check(check: OnboardingCheck) -> OnboardingChecklist
     if check.key == "ma_auth":
         return OnboardingChecklistAction(key="open_ma_settings", label="Open Music Assistant settings")
     if check.key == "latency":
-        return OnboardingChecklistAction(key="open_devices_settings", label="Review device delays")
+        return OnboardingChecklistAction(key="open_latency_settings", label="Review Pulse latency")
     return None
 
 

@@ -332,7 +332,32 @@ def test_operator_guidance_reports_all_devices_disabled_as_neutral():
     snapshot = build_operator_guidance_snapshot(
         config={"BLUETOOTH_ADAPTERS": [{"id": "hci0"}], "BLUETOOTH_DEVICES": [{"mac": "AA"}, {"mac": "BB"}]},
         onboarding_assistant={
-            "checklist": {"overall_status": "warning", "progress_percent": 0, "summary": "No active devices."},
+            "checklist": {
+                "overall_status": "warning",
+                "progress_percent": 60,
+                "completed_steps": 3,
+                "total_steps": 5,
+                "headline": "Next recommended step: Attach your first speaker",
+                "summary": "Devices are configured, but none are currently connected over Bluetooth.",
+                "current_step_key": "sink_verification",
+                "current_step_title": "Attach your first speaker",
+                "primary_action": {"key": "open_devices_settings", "label": "Open device settings"},
+                "checkpoints": [],
+                "steps": [
+                    {"key": "bluetooth", "title": "Check Bluetooth access", "status": "ok", "stage": "complete"},
+                    {"key": "audio", "title": "Verify audio backend", "status": "ok", "stage": "complete"},
+                    {
+                        "key": "sink_verification",
+                        "title": "Attach your first speaker",
+                        "status": "warning",
+                        "stage": "current",
+                        "summary": "Devices are configured, but none are currently connected over Bluetooth.",
+                        "details": {"configured_devices": 2},
+                        "actions": ["Power on a configured speaker."],
+                        "recommended_action": {"key": "open_devices_settings", "label": "Open device settings"},
+                    },
+                ],
+            },
             "counts": {"configured_devices": 2, "connected_devices": 0, "sink_ready_devices": 0},
         },
         recovery_assistant={"summary": {"summary": "No active recovery issues."}},
@@ -349,3 +374,12 @@ def test_operator_guidance_reports_all_devices_disabled_as_neutral():
     assert data["issue_groups"] == []
     assert data["header_status"]["tone"] == "neutral"
     assert data["header_status"]["label"] == "All devices disabled"
+    assert data["onboarding_card"]["show_by_default"] is True
+    assert data["onboarding_card"]["headline"] == "Re-enable a speaker to resume playback"
+    assert data["onboarding_card"]["summary"].startswith("All configured Bluetooth devices are currently disabled.")
+    assert data["onboarding_card"]["primary_action"]["key"] == "open_devices_settings"
+    assert data["onboarding_card"]["checklist"]["current_step_title"] == "Re-enable a speaker"
+    step = data["onboarding_card"]["checklist"]["steps"][2]
+    assert step["title"] == "Re-enable a speaker"
+    assert step["stage"] == "current"
+    assert step["summary"] == "All configured speakers are globally disabled right now."
