@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.42.1] - 2026-03-20
+
+### Added
+- The bridge now ships a fuller operator-assistance layer: onboarding checklist guidance, a recovery assistant, and richer diagnostics tools including per-section copy helpers and expandable raw payload details for expert troubleshooting.
+
+### Changed
+- The dashboard guidance flow is now much clearer across setup, recovery, and diagnostics: onboarding stays available from the header, diagnostics is split into a simpler `Overview` plus `Advanced diagnostics`, and key sections jump directly into the relevant configuration panels.
+- Grid view playback cards now use larger album-art thumbnails so artwork fills the media block more effectively.
+
+### Fixed
+- Restart, startup, and update flows now stay locked to live backend progress more reliably, including the full finalizing phase and LXC update/restart cycles, with a cache-busting refresh after updates so the browser loads the new UI immediately.
+- Disabled-device handling is now consistent across the dashboard and configuration flows: disabling a live device persists instantly, keeps the disabled visuals intact, and survives `Save and restart` without requiring a page refresh first.
+- Guidance edge cases are corrected for `All devices disabled` installs and latency review actions, so operators are sent to the correct settings and shown copy that matches the real system state.
+
 ## [2.40.6] - 2026-03-19
 
 ### Changed
