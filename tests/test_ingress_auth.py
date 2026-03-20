@@ -171,13 +171,9 @@ def test_missing_params_returns_400(client):
     assert resp.status_code == 400
 
 
-@patch("routes.api_ma.state")
+@patch("routes.api_ma.get_ma_api_credentials", return_value=("http://localhost:8095", "existing_token"))
 @patch("routes.api_ma._validate_ma_token", return_value=True)
-def test_idempotent_reuse(_mock_validate, mock_state, client):
-    mock_state.get_ma_api_credentials.return_value = (
-        "http://localhost:8095",
-        "existing_token",
-    )
+def test_idempotent_reuse(_mock_validate, _mock_get_ma_api_credentials, client):
     resp = client.post(
         "/api/ma/ha-silent-auth",
         json={"ha_token": "tok", "ma_url": "http://localhost:8095"},
@@ -187,10 +183,9 @@ def test_idempotent_reuse(_mock_validate, mock_state, client):
     assert "Already connected" in data["message"]
 
 
-@patch("routes.api_ma.state")
+@patch("routes.api_ma.get_ma_api_credentials", return_value=("", ""))
 @patch("routes.api_ma._get_ha_user_via_ws", return_value=None)
-def test_ha_ws_failure_returns_401(_mock_ws, mock_state, client):
-    mock_state.get_ma_api_credentials.return_value = ("", "")
+def test_ha_ws_failure_returns_401(_mock_ws, _mock_get_ma_api_credentials, client):
     resp = client.post(
         "/api/ma/ha-silent-auth",
         json={"ha_token": "bad", "ma_url": "http://localhost:8095"},
@@ -198,7 +193,7 @@ def test_ha_ws_failure_returns_401(_mock_ws, mock_state, client):
     assert resp.status_code == 401
 
 
-@patch("routes.api_ma.state")
+@patch("routes.api_ma.get_ma_api_credentials", return_value=("", ""))
 @patch("routes.api_ma._save_ma_token_and_rediscover")
 @patch("routes.api_ma._validate_ma_token", return_value=True)
 @patch("routes.api_ma._create_ma_token_via_ingress", return_value="new_ma_token")
@@ -206,8 +201,7 @@ def test_ha_ws_failure_returns_401(_mock_ws, mock_state, client):
     "routes.api_ma._get_ha_user_via_ws",
     return_value={"id": "u1", "name": "admin", "is_admin": True},
 )
-def test_full_flow_success(_ws, _ingress, _validate, _save, mock_state, client):
-    mock_state.get_ma_api_credentials.return_value = ("", "")
+def test_full_flow_success(_ws, _ingress, _validate, _save, _mock_get_ma_api_credentials, client):
     resp = client.post(
         "/api/ma/ha-silent-auth",
         json={"ha_token": "tok", "ma_url": "http://localhost:8095"},
@@ -218,14 +212,13 @@ def test_full_flow_success(_ws, _ingress, _validate, _save, mock_state, client):
     _save.assert_called_once()
 
 
-@patch("routes.api_ma.state")
+@patch("routes.api_ma.get_ma_api_credentials", return_value=("", ""))
 @patch("routes.api_ma._create_ma_token_via_ingress", return_value=None)
 @patch(
     "routes.api_ma._get_ha_user_via_ws",
     return_value={"id": "u1", "name": "user", "is_admin": False},
 )
-def test_ingress_failure_returns_502(_ws, _ingress, mock_state, client):
-    mock_state.get_ma_api_credentials.return_value = ("", "")
+def test_ingress_failure_returns_502(_ws, _ingress, _mock_get_ma_api_credentials, client):
     resp = client.post(
         "/api/ma/ha-silent-auth",
         json={"ha_token": "tok", "ma_url": "http://localhost:8095"},

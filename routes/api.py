@@ -16,10 +16,11 @@ import time
 
 from flask import Blueprint, jsonify, request
 
-import state
 from config import save_device_volume
 from routes.api_config import _detect_runtime, get_mute_via_ma, get_volume_via_ma
+from services.bridge_runtime_state import get_main_loop
 from services.device_registry import get_device_registry_snapshot
+from services.ma_runtime_state import get_ma_api_credentials, get_ma_group_for_player, is_ma_connected
 from services.pulse import (
     get_sink_mute,
     set_sink_mute,
@@ -204,7 +205,7 @@ def _set_volume_via_ma(target_pairs, volume: int, *, is_group: bool = False) -> 
     """
     from services.ma_monitor import send_player_cmd
 
-    loop = state.get_main_loop()
+    loop = get_main_loop()
     if not loop:
         return False
     target_pairs = _ensure_target_pairs(target_pairs)
@@ -253,7 +254,7 @@ def _set_mute_via_ma(target_pairs, muted: bool) -> bool:
     """Proxy mute change through MA WebSocket API."""
     from services.ma_monitor import send_player_cmd
 
-    loop = state.get_main_loop()
+    loop = get_main_loop()
     if not loop:
         return False
     target_pairs = _ensure_target_pairs(target_pairs)
@@ -308,7 +309,7 @@ def set_volume():
         targets = [client for client, _device in target_pairs]
 
         # --- MA path: proxy through MA API when connected ---
-        if not force_local and get_volume_via_ma() and state.is_ma_connected() and targets:
+        if not force_local and get_volume_via_ma() and is_ma_connected() and targets:
             ma_ok = _set_volume_via_ma(target_pairs, volume, is_group=is_group)
             if ma_ok:
                 # Do NOT update local status — bridge_daemon will receive the
@@ -324,7 +325,7 @@ def set_volume():
                             ok = set_sink_volume(client.bluetooth_sink_name, volume)
                             if ok:
                                 client._update_status({"volume": volume})
-                                _loop = state.get_main_loop()
+                                _loop = get_main_loop()
                                 if _loop:
                                     _submit_loop_coroutine(
                                         _loop,
@@ -344,7 +345,7 @@ def set_volume():
             ok = set_sink_volume(client.bluetooth_sink_name, volume)
             if ok:
                 client._update_status({"volume": volume})
-                loop = state.get_main_loop()
+                loop = get_main_loop()
                 if loop:
                     _submit_loop_coroutine(
                         loop,
@@ -393,7 +394,7 @@ def set_mute():
         target_snapshot_map = {id(client): device for client, device in target_pairs}
 
         # --- MA path ---
-        if not force_local and get_mute_via_ma() and state.is_ma_connected() and targets:
+        if not force_local and get_mute_via_ma() and is_ma_connected() and targets:
             # Resolve desired mute state
             current_muted = bool(target_pairs[0][1].extra.get("muted", False)) if target_pairs else False
             desired = bool(mute_value) if mute_value is not None else not current_muted
@@ -408,7 +409,7 @@ def set_mute():
 
         # --- Local fallback ---
         results = []
-        loop = state.get_main_loop()
+        loop = get_main_loop()
         for client in targets:
             if client.bluetooth_sink_name:
                 ok = set_sink_mute(client.bluetooth_sink_name, mute_value)
@@ -459,7 +460,7 @@ def pause_all():
     """
     data = request.get_json() or {}
     action = data.get("action", "pause")
-    loop = state.get_main_loop()
+    loop = get_main_loop()
     if loop is None:
         return jsonify({"success": False, "error": "Event loop not available"}), 503
 
@@ -489,7 +490,7 @@ def pause_all():
                 logger.debug("Could not queue pause for %s: %s", client.player_name, exc)
 
     else:  # play / unpause
-        ma_url, ma_token = state.get_ma_api_credentials()
+        ma_url, ma_token = get_ma_api_credentials()
         seen_ma_syncgroups: set = set()
         seen_session_groups: set = set()
 
@@ -499,7 +500,7 @@ def pause_all():
 
             # Try MA syncgroup play first (preserves group sync)
             if ma_url and ma_token:
-                ma_group = state.get_ma_group_for_player(getattr(client, "player_id", ""))
+                ma_group = get_ma_group_for_player(getattr(client, "player_id", ""))
                 if ma_group:
                     sid = ma_group["id"]
                     if sid not in seen_ma_syncgroups:
@@ -553,7 +554,7 @@ def api_group_pause():
     if not group_id:
         return jsonify({"success": False, "error": "group_id is required"}), 400
 
-    loop = state.get_main_loop()
+    loop = get_main_loop()
     if loop is None:
         return jsonify({"success": False, "error": "Event loop not available"}), 503
 
@@ -573,9 +574,9 @@ def api_group_pause():
 
     # For play: prefer MA API so the persistent syncgroup resumes all members in sync
     if action == "play":
-        ma_url, ma_token = state.get_ma_api_credentials()
+        ma_url, ma_token = get_ma_api_credentials()
         if ma_url and ma_token:
-            ma_group = state.get_ma_group_for_player(getattr(target, "player_id", ""))
+            ma_group = get_ma_group_for_player(getattr(target, "player_id", ""))
             if ma_group:
                 try:
                     from services.ma_client import ma_group_play
@@ -625,7 +626,7 @@ def pause_player():
     target = next((c for c in snapshot if getattr(c, "player_name", None) == player_name), None)
     if not target or not target.is_running():
         return jsonify({"success": False, "error": "Player not found or not running"}), 404
-    loop = state.get_main_loop()
+    loop = get_main_loop()
     if loop is None:
         return jsonify({"success": False, "error": "Event loop not available"}), 503
     try:

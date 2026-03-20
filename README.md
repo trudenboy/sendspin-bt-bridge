@@ -74,6 +74,15 @@ The roadmap is now aligned with the **current runtime**, not an older refactor w
 
 See [`ROADMAP.md`](ROADMAP.md) for the full phased plan, epics, PR sequence, and guardrails.
 
+## Runtime contracts
+
+The bridge now treats a few runtime surfaces as operator-facing contracts:
+
+- **Lifecycle publication** — startup and shutdown move through explicit `bridge.startup.started`, `bridge.startup.failed`, `bridge.startup.completed`, `bridge.shutdown.started`, and `bridge.shutdown.completed` events. The same phases are reflected in `startup_progress` and `runtime_info`.
+- **Diagnostics and telemetry** — `/api/diagnostics` and `/api/bridge/telemetry` are the canonical runtime inspection endpoints. They include `startup_progress`, `runtime_info`, hook delivery status, and `contract_versions` for the config schema and subprocess IPC protocol.
+- **Subprocess IPC** — parent/daemon JSON-line envelopes always carry `protocol_version` from `services/ipc_protocol.py`. Compatibility checks happen at the envelope layer instead of silently reshaping messages.
+- **Runtime hooks** — `/api/hooks` delivers the same internal bridge and device events that power diagnostics, so lifecycle automations can subscribe to a stable event stream instead of scraping logs.
+
 ## Documentation map
 
 Use the docs site for the full guides and reference:

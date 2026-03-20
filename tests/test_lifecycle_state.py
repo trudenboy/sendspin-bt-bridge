@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from types import SimpleNamespace
 
 import pytest
 
@@ -134,3 +135,45 @@ def test_lifecycle_state_publishes_bridge_events(monkeypatch):
         "bridge.shutdown.started",
         "bridge.shutdown.completed",
     ]
+
+
+def test_lifecycle_failure_contract_publishes_structured_bridge_event(monkeypatch):
+    lifecycle_state = BridgeLifecycleState()
+    published = []
+
+    def _capture_internal_event(*, event_type, category, subject_id, payload=None):
+        published.append(
+            {
+                "event_type": event_type,
+                "category": category,
+                "subject_id": subject_id,
+                "payload": payload,
+            }
+        )
+        return SimpleNamespace(at="2026-03-20T00:00:00+00:00")
+
+    monkeypatch.setattr(state, "publish_internal_event", _capture_internal_event)
+
+    lifecycle_state.begin_startup(demo_mode=False)
+    lifecycle_state.publish_startup_failure(
+        "Failed to boot web",
+        phase="web",
+        details={"error_type": "RuntimeError", "component": "waitress"},
+    )
+
+    progress = state.get_startup_progress()
+    assert progress["status"] == "error"
+    assert progress["message"] == "Failed to boot web"
+    assert progress["details"]["startup_phase"] == "web"
+    assert progress["details"]["error_type"] == "RuntimeError"
+    assert published[-1] == {
+        "event_type": "bridge.startup.failed",
+        "category": "bridge_event",
+        "subject_id": "bridge",
+        "payload": {
+            "message": "Failed to boot web",
+            "startup_phase": "web",
+            "error_type": "RuntimeError",
+            "component": "waitress",
+        },
+    }

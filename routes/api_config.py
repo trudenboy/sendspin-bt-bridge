@@ -19,7 +19,6 @@ from datetime import datetime, timezone
 
 from flask import Blueprint, Response, jsonify, request
 
-import state
 from config import (
     BUILD_DATE,
     CONFIG_ALLOWED_KEYS,
@@ -40,7 +39,16 @@ from config import (
 from services import (
     bt_remove_device as _bt_remove_device,
 )
+from services.adapter_names import refresh_adapter_name_cache
+from services.async_job_state import (
+    create_async_job,
+    finish_async_job,
+    get_async_job,
+    get_update_available,
+    set_update_available,
+)
 from services.bluetooth import _MAC_RE
+from services.bridge_runtime_state import get_main_loop
 from services.config_validation import validate_uploaded_config
 from services.device_registry import get_device_registry_snapshot
 from services.ha_addon import detect_delivery_channel_from_slug, get_self_addon_info, get_self_delivery_channel
@@ -49,10 +57,6 @@ from services.log_analysis import summarize_issue_logs
 from services.sendspin_compat import get_runtime_dependency_versions
 from services.status_snapshot import build_device_snapshot
 from services.update_checker import _is_newer_version, _start_upgrade_job, channel_image_tag, check_latest_version
-from state import (
-    _adapter_cache_lock,
-    load_adapter_name_cache,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -677,8 +681,7 @@ def api_config():
         write_config_file(config, config_file=CONFIG_FILE, config_dir=CONFIG_FILE.parent)
 
     # Invalidate adapter name cache so next status poll picks up changes
-    with _adapter_cache_lock:
-        load_adapter_name_cache()
+    refresh_adapter_name_cache()
 
     _reload_volume_via_ma()
     _sync_ha_options(config)
@@ -739,7 +742,7 @@ def api_set_log_level():
     os.environ["LOG_LEVEL"] = level
 
     # Propagate to all running subprocesses via stdin IPC
-    loop = state.get_main_loop()
+    loop = get_main_loop()
     if loop is not None:
         cmd = {"cmd": "set_log_level", "level": level}
         for client in get_device_registry_snapshot().active_clients:
@@ -909,15 +912,15 @@ def _run_update_check_job(job_id: str, channel: str, loop) -> None:
         fut = asyncio.run_coroutine_threadsafe(check_latest_version(channel), loop)
         latest = fut.result(timeout=20)
         if not latest:
-            state.finish_async_job(job_id, {"success": False, "error": "Could not reach GitHub API"})
+            finish_async_job(job_id, {"success": False, "error": "Could not reach GitHub API"})
             return
         if _is_newer_version(latest["tag"], VERSION):
             latest["current_version"] = VERSION
-            state.set_update_available(latest)
-            state.finish_async_job(job_id, {"success": True, "update_available": True, **latest})
+            set_update_available(latest)
+            finish_async_job(job_id, {"success": True, "update_available": True, **latest})
             return
-        state.set_update_available(None)
-        state.finish_async_job(
+        set_update_available(None)
+        finish_async_job(
             job_id,
             {
                 "success": True,
@@ -928,20 +931,20 @@ def _run_update_check_job(job_id: str, channel: str, loop) -> None:
         )
     except Exception:
         logger.exception("Update check failed")
-        state.finish_async_job(job_id, {"success": False, "error": "Internal error"})
+        finish_async_job(job_id, {"success": False, "error": "Internal error"})
 
 
 @config_bp.route("/api/update/check", methods=["POST"])
 def api_update_check():
     """Start an async version check against GitHub releases."""
-    loop = state.get_main_loop()
+    loop = get_main_loop()
     if not loop:
         return jsonify({"success": False, "error": "Event loop not available"}), 503
     payload = request.get_json(silent=True) or {}
     requested_channel = payload.get("channel") or request.args.get("channel")
     channel = normalize_update_channel(requested_channel or load_config().get("UPDATE_CHANNEL"))
     job_id = str(uuid.uuid4())
-    state.create_async_job(job_id, "update-check")
+    create_async_job(job_id, "update-check")
     threading.Thread(
         target=_run_update_check_job,
         args=(job_id, channel, loop),
@@ -954,7 +957,7 @@ def api_update_check():
 @config_bp.route("/api/update/check/result/<job_id>", methods=["GET"])
 def api_update_check_result(job_id: str):
     """Poll for async update-check result by job_id."""
-    job = state.get_async_job(job_id)
+    job = get_async_job(job_id)
     if job is None or job.get("job_type") != "update-check":
         return jsonify({"error": "Job not found"}), 404
     if job.get("status") == "running":
@@ -965,7 +968,7 @@ def api_update_check_result(job_id: str):
 @config_bp.route("/api/update/info")
 def api_update_info():
     """Return cached update availability information."""
-    info = state.get_update_available()
+    info = get_update_available()
     runtime = _detect_runtime()
     cfg = load_config()
     channel = normalize_update_channel(cfg.get("UPDATE_CHANNEL"))

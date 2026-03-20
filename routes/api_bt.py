@@ -18,10 +18,10 @@ from flask import Blueprint, jsonify, request
 from config import CONFIG_FILE, config_lock, load_config
 from routes._helpers import get_client_or_error, validate_adapter, validate_mac
 from services import persist_device_enabled as _persist_device_enabled
+from services.async_job_state import create_scan_job, finish_scan_job, get_scan_job, is_scan_running
 from services.bluetooth import _AUDIO_UUIDS, list_bt_adapters
 from services.bluetooth import bt_remove_device as _bt_remove_device
 from services.bluetooth import persist_device_released as _persist_device_released
-from state import create_scan_job, finish_scan_job, get_scan_job, is_scan_running
 
 logger = logging.getLogger(__name__)
 

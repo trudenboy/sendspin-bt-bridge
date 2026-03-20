@@ -199,10 +199,9 @@ def test_api_update_apply_starts_requested_version(config_client, monkeypatch):
 
 def test_api_update_check_uses_selected_channel(config_client, monkeypatch):
     import routes.api_config as api_config
-    import state
 
     captured = {}
-    monkeypatch.setattr(state, "get_main_loop", lambda: object())
+    monkeypatch.setattr(api_config, "get_main_loop", lambda: object())
     monkeypatch.setattr(api_config, "load_config", lambda: {"UPDATE_CHANNEL": "rc"})
 
     async def fake_check_latest_version(channel=None):
