@@ -256,6 +256,98 @@ async def test_graceful_shutdown_mutes_sinks_and_stops_clients():
     assert state.get_clients_snapshot() == []
 
 
+@pytest.mark.asyncio
+async def test_orchestrator_lifecycle_contract_sequence_updates_shared_state(monkeypatch):
+    published = []
+    orchestrator = BridgeOrchestrator()
+
+    def _capture_internal_event(*, event_type, category, subject_id, payload=None):
+        published.append(
+            {
+                "event_type": event_type,
+                "category": category,
+                "subject_id": subject_id,
+                "payload": payload,
+            }
+        )
+        return SimpleNamespace(at="2026-03-20T00:00:00+00:00")
+
+    monkeypatch.setattr(state, "publish_internal_event", _capture_internal_event)
+
+    class FakeClient:
+        def __init__(self, name: str, sink: str | None, player_id: str):
+            self.player_name = name
+            self.player_id = player_id
+            self.bluetooth_sink_name = sink
+            self.status: dict[str, object] = {}
+            self.running = True
+
+        async def stop_sendspin(self) -> None:
+            self.running = False
+
+    async def _mute_sink(_sink: str, _muted_flag: bool) -> bool:
+        return True
+
+    bootstrap = await orchestrator.initialize_runtime()
+    loop = asyncio.get_running_loop()
+    original_executor = getattr(loop, "_default_executor", None)
+    clients = [FakeClient("Kitchen", "sink.one", "sendspin-kitchen")]
+
+    try:
+        await orchestrator.configure_executor(len(bootstrap.device_configs), web_thread_name="LifecycleWeb")
+        web_thread = orchestrator.start_web_server(clients, web_main=lambda: None, thread_name="LifecycleWeb")
+        web_thread.join(timeout=1)
+
+        orchestrator.lifecycle_state.publish_device_registry(
+            configured_devices=len(bootstrap.device_configs),
+            active_clients=clients,
+            disabled_devices=[],
+        )
+        orchestrator.lifecycle_state.publish_ma_integration(
+            ma_api_url="http://ma.local:8095",
+            ma_api_token="token",
+            groups_loaded=True,
+            name_map={"sendspin-kitchen": {"id": "syncgroup_1", "name": "Kitchen Group"}},
+            all_groups=[{"id": "syncgroup_1", "name": "Kitchen Group", "members": []}],
+            monitor_enabled=True,
+        )
+        orchestrator.lifecycle_state.complete_startup(
+            active_clients=clients,
+            demo_mode=False,
+            monitor_enabled=True,
+        )
+
+        await orchestrator.graceful_shutdown(clients=clients, mute_sink=_mute_sink)
+    finally:
+        current_executor = getattr(loop, "_default_executor", None)
+        if current_executor is not None and current_executor is not original_executor:
+            current_executor.shutdown(wait=False, cancel_futures=True)
+        loop._default_executor = original_executor
+
+    progress = state.get_startup_progress()
+    runtime_info = state.get_runtime_mode_info()
+    assert runtime_info["mode"] == "production"
+    assert progress["phase"] == "shutdown"
+    assert progress["status"] == "stopped"
+    assert progress["details"]["stopped_clients"] == 1
+    assert state.get_main_loop() is None
+    assert state.get_clients_snapshot() == []
+    assert [event["event_type"] for event in published] == [
+        "bridge.startup.started",
+        "bridge.startup.completed",
+        "bridge.shutdown.started",
+        "bridge.shutdown.completed",
+    ]
+    assert published[0]["payload"] == {"demo_mode": False}
+    assert published[1]["payload"] == {
+        "active_clients": 1,
+        "ma_monitor_enabled": True,
+        "demo_mode": False,
+    }
+    assert published[2]["payload"] == {"active_clients": 1}
+    assert published[3]["payload"] == {"stopped_clients": 1}
+
+
 def test_install_signal_handlers_schedules_shutdown_factory():
     orchestrator = BridgeOrchestrator()
     scheduled = []
