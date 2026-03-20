@@ -45,6 +45,18 @@ Roadmap for HA addon standards compliance and improvements.
 - [x] **Bind MA long-lived token identity to the physical bridge instance (hostname-based)** — completed. Long-lived MA tokens are now named from the current hostname, non-sensitive instance metadata is persisted, preserved across config save/upload flows, and silent auth reuse now distinguishes current-instance tokens from foreign-instance copies.
 - [ ] **Sync Home Assistant area name to `BRIDGE_NAME`** — useful later, but not the next priority. Feasibility: medium/high. The bridge currently has Supervisor/addon integration, but no direct HA device/entity/area registry lookup, so it needs either an explicit HA mapping source or new HA registry API integration before area-based bridge naming can be made reliable.
 
+## Deferred UX ideas (captured for later review, 2026-03-20)
+
+- [ ] **Add stronger inline affordances for disabled compact controls** — e.g. visible blocked markers or inline badges in list/grid controls instead of relying only on banner-level explanation and hover `title`.
+- [ ] **Compact recovery pills on mobile** — collapse multiple issue pills into “top issue + N more” to reduce wrapping and improve small-screen scannability.
+- [ ] **Make the known-good test path interactive** — let each step expand into concrete checks/actions instead of being read-only status guidance.
+- [ ] **Group safe actions into a progressive-disclosure action menu** — reduce button crowding by keeping one primary action and tucking secondary recovery actions behind a “More options” affordance.
+- [ ] **Expose latency guidance as a standalone dashboard card** when latency is the main active problem, instead of only inside diagnostics/banner summaries.
+- [ ] **Add adaptive explanation depth for novice vs advanced users** — short default explanations with optional deeper technical detail for power users.
+- [ ] **Show hierarchical blocking explanations** — explain not only that an action is blocked, but the dependency chain causing it.
+- [ ] **Expose advanced recovery views for power users** — e.g. richer trace history, filtering, or longer event timelines in diagnostics.
+- [ ] **Show current vs recommended latency values together** — include current setting, recommendation, and direct config/edit path in the latency assistant.
+
 ## Future
 
 - [ ] **IPC: add ack, heartbeat, ready signal** — evolve JSON Lines protocol: message IDs + ack/nack for critical commands (`stop`, `set_volume`), `{"type": "ready"}` signal at subprocess start, heartbeat every 10s, move logs from stdout JSON to stderr

@@ -10,6 +10,8 @@ var API_BASE = (function() {
 })();
 
 var THEME_MODE_STORAGE_KEY = 'sendspin-ui:theme-mode';
+var GUIDANCE_ONBOARDING_STORAGE_KEY = 'sendspin-ui:show-onboarding-guidance';
+var GUIDANCE_RECOVERY_STORAGE_KEY = 'sendspin-ui:show-recovery-guidance';
 var _themeManagedVars = [
     'primary-color',
     'dark-primary-color',
@@ -2493,8 +2495,7 @@ function renderStatusPayload(status) {
     if (resolvedMaUiUrl) lastMaUiUrl = resolvedMaUiUrl;
     var resolvedMaWebUrl = _normalizeExternalUrlBase(status.ma_web_url || lastMaWebUrl || '');
     if (resolvedMaWebUrl) lastMaWebUrl = resolvedMaWebUrl;
-    loadOnboardingAssistant(false);
-    loadRecoveryAssistant(false);
+    _applyOperatorGuidance(status.operator_guidance || null);
 
     var userLink = document.getElementById('header-user-link');
     if (userLink) {
@@ -2525,7 +2526,7 @@ function renderStatusPayload(status) {
             emptyEl.innerHTML = _buildEmptyStateHTML();
         }
         _updateGroupPanel();
-        updateHealthIndicator([]);
+        updateHealthIndicator([], status.operator_guidance || null);
         return;
     }
     if (emptyEl) emptyEl.remove();
@@ -2566,7 +2567,7 @@ function renderStatusPayload(status) {
     renderDevicesView();
     refreshBtDeviceRowsRuntime();
     _updateGroupPanel();
-    updateHealthIndicator(sorted);
+    updateHealthIndicator(sorted, status.operator_guidance || null);
 }
 
 async function updateStatus() {
@@ -3603,6 +3604,7 @@ async function btReconnect(i) {
     var btn = document.getElementById('dbtn-reconnect-' + i);
     var pairBtn = document.getElementById('dbtn-pair-' + i);
     var status = document.getElementById('dbt-action-status-' + i);
+    var result = {success: false, message: 'Reconnect failed'};
     if (btn) btn.disabled = true;
     if (pairBtn) pairBtn.disabled = true;
     if (status) status.textContent = '&#8635; Reconnecting\u2026';
@@ -3614,26 +3616,30 @@ async function btReconnect(i) {
         });
         var d = await resp.json();
         var msg = d.success ? '\u2713 ' + (d.message || 'Reconnect started') : '\u2717 ' + (d.error || 'Failed');
+        result = {success: !!d.success, message: d.message || d.error || 'Reconnect finished'};
         if (status) status.textContent = msg;
         showToast(msg, d.success ? 'success' : 'error');
     } catch (e) {
         if (status) status.textContent = '\u2717 Error';
         showToast('\u2717 Reconnect error', 'error');
+        result = {success: false, message: e && e.message ? e.message : 'Reconnect error'};
     }
     setTimeout(function() {
         if (btn) btn.disabled = false;
         if (pairBtn) pairBtn.disabled = false;
         if (status) status.textContent = '';
     }, 8000);
+    return result;
 }
 
 async function btToggleManagement(i) {
     var dev = lastDevices && lastDevices[i];
-    if (!dev) return;
+    if (!dev) return {success: false, message: 'Device not found'};
     var playerName = dev.player_name || null;
     var newEnabled = dev.bt_management_enabled === false;  // toggle
     var btn = document.getElementById('dbtn-release-' + i);
     var status = document.getElementById('dbt-action-status-' + i);
+    var result = {success: false, message: 'Bluetooth management update failed'};
     if (btn) btn.disabled = true;
     if (status) status.textContent = newEnabled ? '\u21BB Reclaiming\u2026' : '\u21BB Releasing\u2026';
     try {
@@ -3654,11 +3660,14 @@ async function btToggleManagement(i) {
             if (reconnBtn) reconnBtn.disabled = newEnabled ? false : true;
         }
         if (status) status.textContent = d.success ? '\u2713 ' + d.message : '\u2717 ' + (d.error || 'Failed');
+        result = {success: !!d.success, message: d.message || d.error || 'Bluetooth management updated'};
     } catch (e) {
         if (status) status.textContent = '\u2717 Error';
+        result = {success: false, message: e && e.message ? e.message : 'Bluetooth management error'};
     }
     if (btn) btn.disabled = false;
     setTimeout(function() { if (status) status.textContent = ''; }, 4000);
+    return result;
 }
 
 // ---- Device enabled toggle (used by config checkbox and dashboard Disable button) ----
@@ -4814,6 +4823,13 @@ function _setMaIntegrationBanner(message, title) {
     var titleEl = document.getElementById('ma-integration-banner-title');
     var text = document.getElementById('ma-integration-banner-text');
     if (!banner || !text || !titleEl) return;
+    if (_guidanceOwnsMaBanner()) {
+        banner.hidden = true;
+        titleEl.textContent = '';
+        text.textContent = '';
+        _syncNoticeStack();
+        return;
+    }
     if (!message) {
         banner.hidden = true;
         titleEl.textContent = '';
@@ -4827,10 +4843,79 @@ function _setMaIntegrationBanner(message, title) {
     _syncNoticeStack();
 }
 
-var _onboardingAssistantRefreshAt = 0;
-var _onboardingAssistantRequest = null;
-var _recoveryAssistantRefreshAt = 0;
-var _recoveryAssistantRequest = null;
+var _lastOperatorGuidance = null;
+
+function _guidancePreferenceKeys(visibilityKeys) {
+    return {
+        onboarding: (visibilityKeys && visibilityKeys.onboarding) || GUIDANCE_ONBOARDING_STORAGE_KEY,
+        recovery: (visibilityKeys && visibilityKeys.recovery) || GUIDANCE_RECOVERY_STORAGE_KEY,
+    };
+}
+
+function _isGuidanceVisible(preferenceKey) {
+    if (!preferenceKey) return true;
+    try {
+        return window.localStorage.getItem(preferenceKey) !== 'hidden';
+    } catch (_) {
+        return true;
+    }
+}
+
+function _setGuidanceVisible(preferenceKey, visible) {
+    if (!preferenceKey) return;
+    try {
+        if (visible) {
+            window.localStorage.removeItem(preferenceKey);
+        } else {
+            window.localStorage.setItem(preferenceKey, 'hidden');
+        }
+    } catch (_) {
+        // Ignore storage failures and keep the current in-memory rendering.
+    }
+}
+
+function _syncGuidancePreferenceControls(visibilityKeys) {
+    var keys = _guidancePreferenceKeys(visibilityKeys);
+    var onboardingToggle = document.getElementById('guidance-show-onboarding');
+    if (onboardingToggle) onboardingToggle.checked = _isGuidanceVisible(keys.onboarding);
+    var recoveryToggle = document.getElementById('guidance-show-recovery');
+    if (recoveryToggle) recoveryToggle.checked = _isGuidanceVisible(keys.recovery);
+}
+
+function _dismissGuidance(preferenceKey) {
+    _setGuidanceVisible(preferenceKey, false);
+    _syncGuidancePreferenceControls(_lastOperatorGuidance && _lastOperatorGuidance.visibility_keys);
+    _applyOperatorGuidance(_lastOperatorGuidance);
+    showToast('Guidance hidden. Restore it anytime in Configuration → General.', 'info');
+    return false;
+}
+
+function _encodeGuidanceAction(action) {
+    return encodeURIComponent(JSON.stringify({
+        key: String((action && action.key) || ''),
+        device_names: (action && action.device_names) || [],
+    }));
+}
+
+function _runEncodedOperatorGuidanceAction(encodedAction) {
+    if (!encodedAction) return false;
+    try {
+        return _runOperatorGuidanceAction(JSON.parse(decodeURIComponent(encodedAction)));
+    } catch (err) {
+        console.warn('Invalid operator guidance action payload:', err);
+        return false;
+    }
+}
+
+function _resetGuidancePreferences() {
+    var keys = _guidancePreferenceKeys(_lastOperatorGuidance && _lastOperatorGuidance.visibility_keys);
+    _setGuidanceVisible(keys.onboarding, true);
+    _setGuidanceVisible(keys.recovery, true);
+    _syncGuidancePreferenceControls(_lastOperatorGuidance && _lastOperatorGuidance.visibility_keys);
+    _applyOperatorGuidance(_lastOperatorGuidance);
+    showToast('Guidance visibility reset', 'success');
+    return false;
+}
 
 function _openDiagnosticsPanel() {
     var details = document.getElementById('diag-details');
@@ -4848,6 +4933,13 @@ function _findDeviceIndexByName(deviceName) {
         if (dev && (dev.player_name || '') === deviceName) return i;
     }
     return -1;
+}
+
+function _findDeviceIndicesByNames(deviceNames) {
+    if (!deviceNames || !deviceNames.length) return [];
+    return deviceNames
+        .map(function(name) { return _findDeviceIndexByName(name); })
+        .filter(function(index, position, values) { return index >= 0 && values.indexOf(index) === position; });
 }
 
 function _runOnboardingAssistantAction(actionKey) {
@@ -4892,8 +4984,6 @@ async function _retryMaDiscoveryFromRecovery() {
         }
         showToast('Music Assistant discovery finished', 'success');
         updateStatus();
-        loadOnboardingAssistant(true);
-        loadRecoveryAssistant(true);
         return false;
     } catch (err) {
         showToast('Music Assistant discovery failed: ' + err.message, 'error');
@@ -4901,7 +4991,38 @@ async function _retryMaDiscoveryFromRecovery() {
     }
 }
 
-function _runRecoveryAssistantAction(actionKey, deviceName) {
+async function _runGuidanceDeviceBatch(deviceNames, runner, pendingMessage, successLabel) {
+    var indices = _findDeviceIndicesByNames(deviceNames || []);
+    if (!indices.length) {
+        showToast('Affected devices are no longer present in the current bridge status', 'error');
+        return false;
+    }
+    if (pendingMessage) showToast(pendingMessage, 'info');
+    var results = await Promise.all(indices.map(function(index) { return runner(index); }));
+    var successCount = results.filter(function(result) { return !!(result && result.success); }).length;
+    var failed = results.length - successCount;
+    if (failed === 0) {
+        showToast(successLabel || 'Bulk action queued', 'success');
+    } else if (successCount === 0) {
+        showToast('Bulk action failed for all selected devices', 'error');
+    } else {
+        showToast(successCount + ' succeeded, ' + failed + ' failed', 'warning');
+    }
+    updateStatus();
+    return false;
+}
+
+function _guidanceOwnsMaBanner() {
+    return !!(
+        _lastOperatorGuidance &&
+        _lastOperatorGuidance.issue_groups &&
+        _lastOperatorGuidance.issue_groups.some(function(issue) { return issue && issue.key === 'ma_auth'; })
+    );
+}
+
+function _runOperatorGuidanceAction(action) {
+    var actionKey = action && action.key ? action.key : '';
+    var deviceNames = action && action.device_names ? action.device_names : [];
     if (!actionKey) return false;
     if (
         actionKey === 'open_bluetooth_settings' ||
@@ -4917,8 +5038,6 @@ function _runRecoveryAssistantAction(actionKey, deviceName) {
             reloadDiagnostics();
         }
         updateStatus();
-        loadOnboardingAssistant(true);
-        loadRecoveryAssistant(true);
         showToast('Rerunning bridge checks…', 'info');
         return false;
     }
@@ -4927,7 +5046,7 @@ function _runRecoveryAssistantAction(actionKey, deviceName) {
         return false;
     }
     if (actionKey === 'reconnect_device') {
-        var reconnectIndex = _findDeviceIndexByName(deviceName);
+        var reconnectIndex = _findDeviceIndexByName(deviceNames[0]);
         if (reconnectIndex < 0) {
             showToast('Device not found in current bridge status', 'error');
             return _runOnboardingAssistantAction('open_devices_settings');
@@ -4935,13 +5054,31 @@ function _runRecoveryAssistantAction(actionKey, deviceName) {
         btReconnect(reconnectIndex);
         return false;
     }
+    if (actionKey === 'reconnect_devices') {
+        _runGuidanceDeviceBatch(
+            deviceNames,
+            btReconnect,
+            'Reconnecting affected devices…',
+            'Reconnect queued for ' + deviceNames.length + ' devices'
+        );
+        return false;
+    }
     if (actionKey === 'toggle_bt_management') {
-        var managementIndex = _findDeviceIndexByName(deviceName);
+        var managementIndex = _findDeviceIndexByName(deviceNames[0]);
         if (managementIndex < 0) {
             showToast('Device not found in current bridge status', 'error');
             return _runOnboardingAssistantAction('open_devices_settings');
         }
         btToggleManagement(managementIndex);
+        return false;
+    }
+    if (actionKey === 'toggle_bt_management_devices') {
+        _runGuidanceDeviceBatch(
+            deviceNames,
+            btToggleManagement,
+            'Updating Bluetooth management for affected devices…',
+            'Bluetooth management updated for ' + deviceNames.length + ' devices'
+        );
         return false;
     }
     return false;
@@ -4985,7 +5122,7 @@ function _renderOnboardingSteps(steps) {
     }).join('');
 }
 
-function _setOnboardingAssistantBanner(assistant) {
+function _setOnboardingAssistantBanner(card) {
     var banner = document.getElementById('onboarding-assistant-banner');
     var titleEl = document.getElementById('onboarding-assistant-title');
     var textEl = document.getElementById('onboarding-assistant-text');
@@ -4994,7 +5131,7 @@ function _setOnboardingAssistantBanner(assistant) {
     var stepsEl = document.getElementById('onboarding-assistant-steps');
     var actionsEl = document.getElementById('onboarding-assistant-actions');
     if (!banner || !titleEl || !textEl || !progressEl || !checkpointsEl || !stepsEl || !actionsEl) return;
-    if (!assistant || !assistant.checklist) {
+    if (!card || !card.checklist || !_isGuidanceVisible(card.preference_key)) {
         banner.hidden = true;
         titleEl.textContent = '';
         textEl.textContent = '';
@@ -5008,9 +5145,9 @@ function _setOnboardingAssistantBanner(assistant) {
         return;
     }
 
-    var checklist = assistant.checklist || {};
-    titleEl.textContent = checklist.headline || 'Setup checklist';
-    textEl.textContent = checklist.summary || 'Review the bridge setup checklist.';
+    var checklist = card.checklist || {};
+    titleEl.textContent = card.headline || checklist.headline || 'Setup checklist';
+    textEl.textContent = card.summary || checklist.summary || 'Review the bridge setup checklist.';
     progressEl.hidden = false;
     progressEl.innerHTML =
         '<div class="onboarding-progress-bar">' +
@@ -5024,11 +5161,23 @@ function _setOnboardingAssistantBanner(assistant) {
     checkpointsEl.innerHTML = _renderOnboardingCheckpoints(checklist.checkpoints || []);
     stepsEl.innerHTML = _renderOnboardingSteps((checklist.steps || []).slice(0, 5));
 
-    var action = checklist.primary_action || {key: 'open_diagnostics', label: 'Review diagnostics'};
-    actionsEl.innerHTML =
-        '<a href="#" class="notice-card-action notice-card-action--primary" onclick="return _runOnboardingAssistantAction(\'' +
-            escHtml(action.key || 'open_diagnostics') +
-        '\')">' + escHtml(action.label || 'Review diagnostics') + '</a>';
+    var primaryAction = card.primary_action || checklist.primary_action || {key: 'open_diagnostics', label: 'Review diagnostics'};
+    var secondaryActions = card.secondary_actions || [];
+    var actionsHtml =
+        '<a href="#" class="notice-card-action notice-card-action--primary" onclick="return _runEncodedOperatorGuidanceAction(\'' +
+            _encodeGuidanceAction(primaryAction || {key: 'open_diagnostics'}) +
+        '\')">' + escHtml(primaryAction.label || 'Review diagnostics') + '</a>';
+    secondaryActions.forEach(function(action) {
+        actionsHtml += '<a href="#" class="notice-card-action" onclick="return _runEncodedOperatorGuidanceAction(\'' +
+            _encodeGuidanceAction(action) +
+        '\')">' + escHtml(action.label || 'Open diagnostics') + '</a>';
+    });
+    if (card.dismissible && card.preference_key) {
+        actionsHtml += '<a href="#" class="notice-card-action" onclick="return _dismissGuidance(\'' +
+            escHtml(card.preference_key) +
+        '\')">Don’t show again</a>';
+    }
+    actionsEl.innerHTML = actionsHtml;
 
     banner.hidden = false;
     _syncNoticeStack();
@@ -5056,23 +5205,21 @@ function _renderRecoveryIssuePills(issues) {
 function _buildRecoveryActionHtml(action, isPrimary) {
     if (!action || !action.key) return '';
     return '<a href="#" class="notice-card-action' + (isPrimary ? ' notice-card-action--primary' : '') +
-        '" onclick=\'return _runRecoveryAssistantAction(' +
-            JSON.stringify(String(action.key || '')) +
-            (action.device_name ? ',' + JSON.stringify(String(action.device_name || '')) : '') +
-        ')\'>' + escHtml(action.label || 'Open diagnostics') + '</a>';
+        '" onclick="return _runEncodedOperatorGuidanceAction(\'' + _encodeGuidanceAction(action) + '\')">' +
+            escHtml(action.label || 'Open diagnostics') +
+        '</a>';
 }
 
-function _setRecoveryAssistantBanner(assistant) {
+function _setRecoveryAssistantBanner(guidance) {
     var banner = document.getElementById('recovery-assistant-banner');
     var titleEl = document.getElementById('recovery-assistant-title');
     var textEl = document.getElementById('recovery-assistant-text');
     var issuesEl = document.getElementById('recovery-assistant-issues');
     var actionsEl = document.getElementById('recovery-assistant-actions');
     if (!banner || !titleEl || !textEl || !issuesEl || !actionsEl) return;
-    var summary = assistant && assistant.summary ? assistant.summary : {};
-    var issues = assistant && assistant.issues ? assistant.issues : [];
-    var latency = assistant && assistant.latency_assistant ? assistant.latency_assistant : {};
-    var showBanner = issues.length > 0 || latency.tone === 'warning';
+    var notice = guidance && guidance.banner ? guidance.banner : null;
+    var issues = guidance && guidance.issue_groups ? guidance.issue_groups : [];
+    var showBanner = !!(notice && _isGuidanceVisible(notice.preference_key));
     if (!showBanner) {
         banner.hidden = true;
         titleEl.textContent = '';
@@ -5084,61 +5231,34 @@ function _setRecoveryAssistantBanner(assistant) {
         return;
     }
 
-    banner.className = 'notice-card recovery-card ' + _recoveryNoticeToneClass(summary.highest_severity || latency.tone || 'warning');
-    titleEl.textContent = summary.headline || 'Recovery guidance';
-    textEl.textContent = summary.summary || latency.summary || 'Review the latest recovery guidance.';
+    banner.className = 'notice-card recovery-card ' + _recoveryNoticeToneClass(notice.tone || 'warning');
+    titleEl.textContent = notice.headline || 'Recovery guidance';
+    textEl.textContent = notice.summary || 'Review the latest recovery guidance.';
     issuesEl.hidden = !issues.length;
     issuesEl.innerHTML = _renderRecoveryIssuePills(issues);
 
-    var primaryAction = issues.length && issues[0].recommended_action
-        ? issues[0].recommended_action
-        : ((latency.safe_actions && latency.safe_actions[0]) || {key: 'open_diagnostics', label: 'Open diagnostics'});
-    var secondaryAction = {key: 'refresh_diagnostics', label: 'Rerun checks'};
+    var primaryAction = notice.primary_action || {key: 'open_diagnostics', label: 'Open diagnostics'};
     var actionsHtml = _buildRecoveryActionHtml(primaryAction, true);
-    if (!primaryAction || primaryAction.key !== secondaryAction.key) {
-        actionsHtml += _buildRecoveryActionHtml(secondaryAction, false);
+    (notice.secondary_actions || []).forEach(function(action) {
+        if (!primaryAction || action.key !== primaryAction.key) {
+            actionsHtml += _buildRecoveryActionHtml(action, false);
+        }
+    });
+    if (notice.dismissible && notice.preference_key) {
+        actionsHtml += '<a href="#" class="notice-card-action" onclick="return _dismissGuidance(\'' +
+            escHtml(notice.preference_key) +
+        '\')">Don’t show again</a>';
     }
     actionsEl.innerHTML = actionsHtml;
     banner.hidden = false;
     _syncNoticeStack();
 }
 
-async function loadOnboardingAssistant(force) {
-    var now = Date.now();
-    if (!force && now - _onboardingAssistantRefreshAt < 15000) return;
-    _onboardingAssistantRefreshAt = now;
-    if (_onboardingAssistantRequest) return _onboardingAssistantRequest;
-    _onboardingAssistantRequest = (async function() {
-        try {
-            var resp = await fetch(API_BASE + '/api/onboarding/assistant');
-            if (resp.status === 401) { _handleUnauthorized(); return; }
-            _setOnboardingAssistantBanner(await resp.json());
-        } catch (err) {
-            console.warn('Onboarding assistant refresh failed:', err);
-        } finally {
-            _onboardingAssistantRequest = null;
-        }
-    })();
-    return _onboardingAssistantRequest;
-}
-
-async function loadRecoveryAssistant(force) {
-    var now = Date.now();
-    if (!force && now - _recoveryAssistantRefreshAt < 15000) return;
-    _recoveryAssistantRefreshAt = now;
-    if (_recoveryAssistantRequest) return _recoveryAssistantRequest;
-    _recoveryAssistantRequest = (async function() {
-        try {
-            var resp = await fetch(API_BASE + '/api/recovery/assistant');
-            if (resp.status === 401) { _handleUnauthorized(); return; }
-            _setRecoveryAssistantBanner(await resp.json());
-        } catch (err) {
-            console.warn('Recovery assistant refresh failed:', err);
-        } finally {
-            _recoveryAssistantRequest = null;
-        }
-    })();
-    return _recoveryAssistantRequest;
+function _applyOperatorGuidance(guidance) {
+    _lastOperatorGuidance = guidance || null;
+    _syncGuidancePreferenceControls(guidance && guidance.visibility_keys);
+    _setOnboardingAssistantBanner(guidance && guidance.onboarding_card ? guidance.onboarding_card : null);
+    _setRecoveryAssistantBanner(guidance || null);
 }
 
 function openMaTokenSettings() {
@@ -5538,8 +5658,14 @@ function _setConfigDirty(dirty) {
     _syncConfigFooterActions();
 }
 // Watch config form for any change
-document.getElementById('config-form').addEventListener('input', function() { _setConfigDirty(true); });
-document.getElementById('config-form').addEventListener('change', function() { _setConfigDirty(true); });
+document.getElementById('config-form').addEventListener('input', function(event) {
+    if (event && event.target && event.target.closest('[data-config-transient="true"]')) return;
+    _setConfigDirty(true);
+});
+document.getElementById('config-form').addEventListener('change', function(event) {
+    if (event && event.target && event.target.closest('[data-config-transient="true"]')) return;
+    _setConfigDirty(true);
+});
 window.addEventListener('beforeunload', function(e) {
     if (_configDirty) {
         e.preventDefault();
@@ -5584,6 +5710,33 @@ function _syncSecurityPolicyState() {
     updateChannelSelect.addEventListener('change', _onUpdateChannelChange);
     _lastConfirmedUpdateChannel = (updateChannelSelect.value || 'stable').toLowerCase();
     _syncUpdateChannelState();
+})();
+
+(function() {
+    var onboardingToggle = document.getElementById('guidance-show-onboarding');
+    if (onboardingToggle) {
+        onboardingToggle.addEventListener('change', function() {
+            var keys = _guidancePreferenceKeys(_lastOperatorGuidance && _lastOperatorGuidance.visibility_keys);
+            _setGuidanceVisible(keys.onboarding, !!this.checked);
+            _applyOperatorGuidance(_lastOperatorGuidance);
+        });
+    }
+    var recoveryToggle = document.getElementById('guidance-show-recovery');
+    if (recoveryToggle) {
+        recoveryToggle.addEventListener('change', function() {
+            var keys = _guidancePreferenceKeys(_lastOperatorGuidance && _lastOperatorGuidance.visibility_keys);
+            _setGuidanceVisible(keys.recovery, !!this.checked);
+            _applyOperatorGuidance(_lastOperatorGuidance);
+        });
+    }
+    var resetBtn = document.getElementById('guidance-reset-dismissed');
+    if (resetBtn) {
+        resetBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            _resetGuidancePreferences();
+        });
+    }
+    _syncGuidancePreferenceControls(null);
 })();
 
 function _updateAuthMethodsHint() {
@@ -5705,6 +5858,7 @@ async function loadConfig() {
         var logLevelSel = document.getElementById('log-level-select');
         if (logLevelSel && config.LOG_LEVEL) logLevelSel.value = config.LOG_LEVEL.toUpperCase();
         _restoreConfigTransientInputs(config);
+        _syncGuidancePreferenceControls(_lastOperatorGuidance && _lastOperatorGuidance.visibility_keys);
         updateTzPreview();
 
         // Restore manual adapters before re-running loadBtAdapters so merging picks them up
@@ -6656,10 +6810,12 @@ function _diagRecoveryDotTone(tone) {
 
 function _renderRecoveryActionButton(action) {
     if (!action || !action.key) return '';
-    return '<button type="button" class="btn btn-sm diag-recovery-action" onclick=\'return _runRecoveryAssistantAction(' +
-        JSON.stringify(String(action.key || '')) +
-        (action.device_name ? ',' + JSON.stringify(String(action.device_name || '')) : '') +
-    ')\'>' + escHtml(action.label || 'Open diagnostics') + '</button>';
+    return '<button type="button" class="btn btn-sm diag-recovery-action" onclick="return _runEncodedOperatorGuidanceAction(\'' +
+        _encodeGuidanceAction({
+            key: String(action.key || ''),
+            device_names: action.device_name ? [String(action.device_name || '')] : (action.device_names || []),
+        }) +
+    '\')">' + escHtml(action.label || 'Open diagnostics') + '</button>';
 }
 
 function _renderRecoveryIssues(issues) {
@@ -7069,7 +7225,6 @@ function renderDiagnostics(d) {
 function reloadDiagnostics() {
     var content = document.getElementById('diag-content');
     delete content.dataset.loaded;
-    loadRecoveryAssistant(true);
     loadDiagnostics(content);
 }
 
@@ -7091,11 +7246,33 @@ async function downloadDiagnostics() {
 }
 
 // ---- Global Health Indicator ----
-function updateHealthIndicator(devices) {
+function _guidanceHeaderToneClass(tone) {
+    return tone === 'error'
+        ? 'error'
+        : tone === 'warning'
+            ? 'warning'
+            : tone === 'info'
+                ? 'info'
+                : tone === 'success'
+                    ? 'success'
+                    : 'neutral';
+}
+
+function updateHealthIndicator(devices, guidance) {
     var el = document.getElementById('health-indicator');
     if (!el) return;
+    var parts = [];
+    var headerStatus = guidance && guidance.header_status ? guidance.header_status : null;
+    if (headerStatus && headerStatus.label) {
+        parts.push(
+            '<span class="health-pill meta-badge meta-badge-status guidance-health-pill is-' + _guidanceHeaderToneClass(headerStatus.tone) +
+            '" title="' + escHtmlAttr(headerStatus.summary || '') + '">' +
+                '<span class="health-pill-text">' + escHtml(headerStatus.label || '') + '</span>' +
+            '</span>'
+        );
+    }
     if (!devices || !devices.length) {
-        el.innerHTML = '';
+        el.innerHTML = parts.join('');
         return;
     }
     var active = devices.filter(function(d) {
@@ -7109,7 +7286,6 @@ function updateHealthIndicator(devices) {
         if (d.bluetooth_connected) btOk++;
         if (d.connected) maOk++;
     });
-    var parts = [];
     if (total > 0) {
         var btClass = btOk === total ? 'ok' : btOk > 0 ? 'warn' : 'error';
         var btTone = btClass === 'ok' ? 'success' : btClass === 'warn' ? 'warning' : 'error';
@@ -7161,8 +7337,6 @@ function updateSliderFill(el) {
 _hydrateUiIcons(document);
 initConfigTabs();
 loadConfig();   // calls loadBtAdapters() internally after restoring btManualAdapters
-loadOnboardingAssistant(true);
-loadRecoveryAssistant(true);
 updateStatus();
 
 // Use SSE for real-time status push; fall back to polling if not supported

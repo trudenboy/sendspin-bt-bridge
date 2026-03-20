@@ -320,6 +320,42 @@
                                 </span>
                             </label>
 
+                            <label class="config-setting-row">
+                                <span class="config-setting-copy">
+                                    <strong>Show empty-state onboarding guidance</strong>
+                                    <span class="form-hint">Controls whether the full first-run checklist stays visible when no adapters or devices are configured.</span>
+                                </span>
+                                <span class="config-setting-control">
+                                    <span class="config-switch">
+                                        <input type="checkbox" id="guidance-show-onboarding" data-config-transient="true" checked>
+                                        <span class="config-switch-track"></span>
+                                    </span>
+                                </span>
+                            </label>
+
+                            <label class="config-setting-row">
+                                <span class="config-setting-copy">
+                                    <strong>Show recovery banners</strong>
+                                    <span class="form-hint">Keep top-level recovery and attention banners visible when grouped issues need action.</span>
+                                </span>
+                                <span class="config-setting-control">
+                                    <span class="config-switch">
+                                        <input type="checkbox" id="guidance-show-recovery" data-config-transient="true" checked>
+                                        <span class="config-switch-track"></span>
+                                    </span>
+                                </span>
+                            </label>
+
+                            <div class="config-setting-row">
+                                <span class="config-setting-copy">
+                                    <strong>Restore dismissed guidance</strong>
+                                    <span class="form-hint">Bring back onboarding and recovery guidance that was hidden with “Don’t show again”.</span>
+                                </span>
+                                <span class="config-setting-control">
+                                    <button type="button" class="btn btn-sm" id="guidance-reset-dismissed" data-config-transient="true">Reset</button>
+                                </span>
+                            </div>
+
                             {% if not ha_mode %}
                             <label class="config-setting-row">
                                 <span class="config-setting-copy">

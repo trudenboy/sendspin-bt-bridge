@@ -340,6 +340,107 @@ Suggested PRs:
 - onboarding feels like a checklist-driven workflow instead of a passive status dump
 - operators can trace and retry the most important recovery paths without leaving the UI
 
+## Phase 2.1: Guidance Consolidation and Operator Control
+
+### Goal
+
+Consolidate the Phase 2 onboarding + capability + recovery surfaces into one calmer, more operator-controlled guidance layer without losing the detailed diagnostics that now exist.
+
+### Why this phase exists
+
+Phase 2 successfully added:
+
+- guided onboarding
+- explicit capability-aware controls
+- recovery banners and a diagnostics recovery center
+
+The next UX step is not “add even more surfaces”, but to **reduce overlap** between them:
+
+- full onboarding should dominate only in the real first-run empty state
+- ongoing readiness should move into compact header/status guidance
+- recovery guidance should stay actionable without permanently taking over the dashboard
+- repeated multi-device problems should be recoverable in fewer clicks
+- disabled controls should be explained by one visible top-level guidance surface instead of scattered microcopy
+
+### Epics
+
+#### Epic 6A. Unify guidance and reduce dashboard noise
+
+Outcome:
+
+- onboarding and recovery stop competing for the same attention slot
+- first-run installs stay guided, while existing installs regain dashboard space
+
+Backlog:
+
+1. Add a unified operator-guidance model that resolves current state into `empty_state`, `progress`, `attention`, or `healthy`
+2. Use onboarding, recovery, capability, and startup-progress data as inputs to that unified model instead of keeping multiple unrelated top-level guidance surfaces
+3. Keep the full onboarding checklist only for the true empty state (no configured adapters and no configured devices)
+4. Move non-empty-state setup/readiness guidance into compact header/runtime progress and status messaging
+5. Ensure one primary banner/headline owns the “next best action” at any given time
+6. Preserve the richer diagnostics detail behind that summary layer instead of deleting it
+
+Suggested PRs:
+
+- PR 13: unified guidance contract and API exposure
+- PR 14: empty-state onboarding and header-progress UI refactor
+
+#### Epic 6B. Make guidance operator-controlled
+
+Outcome:
+
+- operators can reduce noise without losing access to help and diagnostics
+
+Backlog:
+
+1. Add “Don’t show again” dismissal for onboarding guidance
+2. Add “Don’t show again” dismissal for recovery banners
+3. Persist those visibility preferences as UI/operator preferences
+4. Add explicit settings to restore onboarding guidance, recovery banners, and dismissed guidance state
+5. Always keep `Open Diagnostics` as a stable secondary action on guidance/attention banners
+6. Keep diagnostics and bugreport detail available even when top-level banners are hidden
+
+Suggested PRs:
+
+- PR 15: dismissible guidance banners and preference persistence
+- PR 16: guidance visibility settings and diagnostics fallback polish
+
+#### Epic 6C. Improve recovery efficiency and blocked-state clarity
+
+Outcome:
+
+- multi-device attention states become easier to understand and recover from
+
+Backlog:
+
+1. Detect repeated issue groups such as:
+   - multiple disconnected devices
+   - multiple released devices
+   - multiple missing sinks
+   - repeated Music Assistant-related failures
+2. Expose bulk actions for repeated issues, such as:
+   - reconnect all affected
+   - reclaim all affected
+   - rerun checks
+   - retry MA discovery
+3. Show the affected count and affected device list before a bulk action runs
+4. Align capability-blocked controls with the unified guidance layer so important disabled states always have a matching visible explanation
+5. Keep compact inline controls visually clean; prefer banner/header-level explanation over extra inline warning chrome
+6. Ensure diagnostics still provide the deeper per-device breakdown after the top-level guidance has explained the root cause
+
+Suggested PRs:
+
+- PR 17: grouped issue detection and bulk recovery actions
+- PR 18: blocked-state explanation alignment and compact control UX cleanup
+
+### Exit Criteria
+
+- only true empty-state installs show the full onboarding card as the dominant guidance surface
+- existing installs see readiness/progress in the header/status layer instead of persistent large onboarding chrome
+- operators can dismiss onboarding/recovery banners and restore them later from settings
+- repeated multi-device issues can be recovered with grouped actions instead of only one-by-one clicks
+- important disabled states are explained by the unified top-level guidance surface
+
 ## Phase 3: Backend Abstraction for v3
 
 ### Goal

@@ -1925,6 +1925,15 @@ def test_status_and_startup_progress_endpoint_include_startup_progress(client):
         state.reset_startup_progress()
 
 
+def test_status_includes_operator_guidance(client):
+    resp = client.get("/api/status")
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert "operator_guidance" in data
+    assert data["operator_guidance"]["visibility_keys"]["onboarding"] == "sendspin-ui:show-onboarding-guidance"
+    assert "header_status" in data["operator_guidance"]
+
+
 def test_runtime_info_endpoint_and_status_include_mock_runtime(client):
     """Runtime explainability is exposed directly and via the status payload."""
     import state
@@ -2136,7 +2145,7 @@ def test_recovery_assistant_endpoint_returns_guidance(client, monkeypatch):
     monkeypatch.setattr(
         api_status,
         "_build_recovery_assistant_payload",
-        lambda preflight=None, onboarding_assistant=None: {
+        lambda **kwargs: {
             "summary": {
                 "open_issue_count": 1,
                 "highest_severity": "warning",
@@ -2162,6 +2171,65 @@ def test_recovery_assistant_endpoint_returns_guidance(client, monkeypatch):
     assert data["summary"]["headline"] == "Kitchen is disconnected"
     assert data["issues"][0]["recommended_action"]["key"] == "reconnect_device"
     assert data["safe_actions"][0]["key"] == "refresh_diagnostics"
+
+
+def test_operator_guidance_endpoint_returns_unified_payload(client, monkeypatch):
+    import routes.api_status as api_status
+
+    monkeypatch.setattr(
+        api_status,
+        "_build_operator_guidance_payload",
+        lambda **kwargs: {
+            "mode": "attention",
+            "visibility_keys": {
+                "onboarding": "sendspin-ui:show-onboarding-guidance",
+                "recovery": "sendspin-ui:show-recovery-guidance",
+            },
+            "header_status": {
+                "tone": "warning",
+                "label": "2 issues need attention",
+                "summary": "Reconnect affected devices.",
+            },
+            "banner": {
+                "tone": "warning",
+                "headline": "2 devices are disconnected",
+                "summary": "Reconnect Kitchen and Office.",
+                "dismissible": True,
+                "preference_key": "sendspin-ui:show-recovery-guidance",
+                "primary_action": {
+                    "key": "reconnect_devices",
+                    "label": "Reconnect 2 devices",
+                    "device_names": ["Kitchen", "Office"],
+                },
+                "secondary_actions": [{"key": "open_diagnostics", "label": "Open diagnostics"}],
+                "issue_count": 1,
+            },
+            "issue_groups": [
+                {
+                    "key": "disconnected",
+                    "severity": "warning",
+                    "title": "2 devices are disconnected",
+                    "summary": "Reconnect Kitchen and Office.",
+                    "count": 2,
+                    "device_names": ["Kitchen", "Office"],
+                    "primary_action": {
+                        "key": "reconnect_devices",
+                        "label": "Reconnect 2 devices",
+                        "device_names": ["Kitchen", "Office"],
+                    },
+                    "secondary_actions": [{"key": "open_diagnostics", "label": "Open diagnostics"}],
+                }
+            ],
+        },
+    )
+
+    resp = client.get("/api/operator/guidance")
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["mode"] == "attention"
+    assert data["banner"]["primary_action"]["key"] == "reconnect_devices"
+    assert data["issue_groups"][0]["count"] == 2
 
 
 def test_api_status_parse_helpers_are_defensive():
@@ -2247,7 +2315,7 @@ def test_api_diagnostics_includes_playing_and_sink_input_metadata(client, monkey
     monkeypatch.setattr(
         api_status,
         "_build_onboarding_assistant_payload",
-        lambda preflight=None: {
+        lambda **kwargs: {
             "checks": [{"key": "sink_verification", "status": "ok", "summary": "All sinks look good."}],
             "next_steps": [],
         },
@@ -2255,10 +2323,23 @@ def test_api_diagnostics_includes_playing_and_sink_input_metadata(client, monkey
     monkeypatch.setattr(
         api_status,
         "_build_recovery_assistant_payload",
-        lambda preflight=None, onboarding_assistant=None: {
+        lambda **kwargs: {
             "summary": {"headline": "No active recovery issues", "open_issue_count": 0},
             "issues": [],
             "traces": [{"label": "Bridge startup", "summary": "Startup complete."}],
+        },
+    )
+    monkeypatch.setattr(
+        api_status,
+        "_build_operator_guidance_payload",
+        lambda **kwargs: {
+            "mode": "healthy",
+            "visibility_keys": {
+                "onboarding": "sendspin-ui:show-onboarding-guidance",
+                "recovery": "sendspin-ui:show-recovery-guidance",
+            },
+            "header_status": {"tone": "success", "label": "1/1 devices ready", "summary": "Healthy."},
+            "issue_groups": [],
         },
     )
     monkeypatch.setattr(api_status.subprocess, "run", fake_run)
@@ -2290,6 +2371,8 @@ def test_api_diagnostics_includes_playing_and_sink_input_metadata(client, monkey
         assert data["onboarding_assistant"]["checks"][0]["key"] == "sink_verification"
         assert data["recovery_assistant"]["summary"]["headline"] == "No active recovery issues"
         assert data["recovery_assistant"]["traces"][0]["label"] == "Bridge startup"
+        assert data["operator_guidance"]["mode"] == "healthy"
+        assert data["operator_guidance"]["header_status"]["label"] == "1/1 devices ready"
     finally:
         sys.modules.pop("sendspin.audio", None)
         state.set_ma_groups({}, [])

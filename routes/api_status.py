@@ -47,6 +47,7 @@ from services.ma_runtime_state import (
     is_ma_connected,
 )
 from services.onboarding_assistant import build_onboarding_assistant_snapshot
+from services.operator_guidance import build_operator_guidance_snapshot
 from services.pulse import get_server_name, list_sinks
 from services.recovery_assistant import build_recovery_assistant_snapshot
 from services.sendspin_compat import get_runtime_dependency_versions
@@ -181,19 +182,31 @@ def _collect_preflight_status() -> dict:
     }
 
 
-def _build_onboarding_assistant_payload(preflight: dict | None = None) -> dict:
+def _build_onboarding_assistant_payload(
+    preflight: dict | None = None,
+    *,
+    config: dict | None = None,
+    devices: list | None = None,
+    runtime_mode: str | None = None,
+    ma_connected: bool | None = None,
+) -> dict:
     """Build the operator-facing onboarding assistant payload."""
     if preflight is None:
         preflight = _collect_preflight_status()
-    config = load_config()
-    registry = get_device_registry_snapshot()
-    devices = [build_device_snapshot(client) for client in registry.active_clients]
-    runtime_mode = build_mock_runtime_snapshot().mode
+    if config is None:
+        config = load_config()
+    if devices is None:
+        registry = get_device_registry_snapshot()
+        devices = [build_device_snapshot(client) for client in registry.active_clients]
+    if runtime_mode is None:
+        runtime_mode = build_mock_runtime_snapshot().mode
+    if ma_connected is None:
+        ma_connected = is_ma_connected()
     assistant = build_onboarding_assistant_snapshot(
         config=config,
         preflight=preflight,
         devices=devices,
-        ma_connected=is_ma_connected(),
+        ma_connected=ma_connected,
         runtime_mode=runtime_mode,
     )
     return assistant.to_dict()
@@ -202,21 +215,107 @@ def _build_onboarding_assistant_payload(preflight: dict | None = None) -> dict:
 def _build_recovery_assistant_payload(
     *,
     preflight: dict | None = None,
+    config: dict | None = None,
+    devices: list | None = None,
     onboarding_assistant: dict | None = None,
+    startup_progress: dict | None = None,
 ) -> dict:
     """Build the recovery/latency guidance payload used by diagnostics and the UI."""
-    config = load_config()
-    registry = get_device_registry_snapshot()
-    devices = [build_device_snapshot(client) for client in registry.active_clients]
+    if config is None:
+        config = load_config()
+    if devices is None:
+        registry = get_device_registry_snapshot()
+        devices = [build_device_snapshot(client) for client in registry.active_clients]
     if onboarding_assistant is None:
-        onboarding_assistant = _build_onboarding_assistant_payload(preflight=preflight)
+        onboarding_assistant = _build_onboarding_assistant_payload(preflight=preflight, config=config, devices=devices)
+    if startup_progress is None:
+        startup_progress = build_startup_progress_snapshot().to_dict()
     recovery = build_recovery_assistant_snapshot(
         config=config,
         devices=devices,
         onboarding_assistant=onboarding_assistant,
-        startup_progress=build_startup_progress_snapshot().to_dict(),
+        startup_progress=startup_progress,
     )
     return recovery.to_dict()
+
+
+def _build_operator_guidance_payload(
+    *,
+    config: dict | None = None,
+    devices: list | None = None,
+    onboarding_assistant: dict | None = None,
+    recovery_assistant: dict | None = None,
+    startup_progress: dict | None = None,
+    preflight: dict | None = None,
+    runtime_mode: str | None = None,
+    ma_connected: bool | None = None,
+) -> dict:
+    """Build the unified top-level operator guidance payload."""
+    if config is None:
+        config = load_config()
+    if devices is None:
+        registry = get_device_registry_snapshot()
+        devices = [build_device_snapshot(client) for client in registry.active_clients]
+    if startup_progress is None:
+        startup_progress = build_startup_progress_snapshot().to_dict()
+    if onboarding_assistant is None:
+        onboarding_assistant = _build_onboarding_assistant_payload(
+            preflight=preflight,
+            config=config,
+            devices=devices,
+            runtime_mode=runtime_mode,
+            ma_connected=ma_connected,
+        )
+    if recovery_assistant is None:
+        recovery_assistant = _build_recovery_assistant_payload(
+            preflight=preflight,
+            config=config,
+            devices=devices,
+            onboarding_assistant=onboarding_assistant,
+            startup_progress=startup_progress,
+        )
+    return build_operator_guidance_snapshot(
+        config=config,
+        onboarding_assistant=onboarding_assistant,
+        recovery_assistant=recovery_assistant,
+        startup_progress=startup_progress,
+        devices=devices,
+    ).to_dict()
+
+
+def _build_status_payload() -> dict:
+    """Build the full `/api/status` payload including unified operator guidance."""
+    registry = get_device_registry_snapshot()
+    bridge_snapshot = build_bridge_snapshot(registry.active_clients)
+    payload = bridge_snapshot.to_status_payload()
+    config = load_config()
+    preflight = _collect_preflight_status()
+    startup_progress = bridge_snapshot.startup_progress.to_dict() if bridge_snapshot.startup_progress else {}
+    onboarding_assistant = _build_onboarding_assistant_payload(
+        preflight=preflight,
+        config=config,
+        devices=bridge_snapshot.devices,
+        runtime_mode=bridge_snapshot.runtime_mode,
+        ma_connected=bridge_snapshot.ma_connected,
+    )
+    recovery_assistant = _build_recovery_assistant_payload(
+        preflight=preflight,
+        config=config,
+        devices=bridge_snapshot.devices,
+        onboarding_assistant=onboarding_assistant,
+        startup_progress=startup_progress,
+    )
+    payload["operator_guidance"] = _build_operator_guidance_payload(
+        config=config,
+        devices=bridge_snapshot.devices,
+        onboarding_assistant=onboarding_assistant,
+        recovery_assistant=recovery_assistant,
+        startup_progress=startup_progress,
+        preflight=preflight,
+        runtime_mode=bridge_snapshot.runtime_mode,
+        ma_connected=bridge_snapshot.ma_connected,
+    )
+    return payload
 
 
 def get_client_status_for(client):
@@ -264,8 +363,7 @@ def _build_groups_summary(clients: list) -> list[dict]:
 @status_bp.route("/api/status")
 def api_status():
     """Return status for all client instances."""
-    registry = get_device_registry_snapshot()
-    return jsonify(build_bridge_snapshot(registry.active_clients).to_status_payload())
+    return jsonify(_build_status_payload())
 
 
 @status_bp.route("/api/groups")
@@ -364,8 +462,7 @@ def api_status_stream():
         try:
 
             def _build_snapshot():
-                registry = get_device_registry_snapshot()
-                return build_bridge_snapshot(registry.active_clients).to_status_payload()
+                return _build_status_payload()
 
             # Send current status immediately so the client doesn't have to wait
             # for the first change event (important through HA ingress proxy).
@@ -618,9 +715,27 @@ def api_diagnostics():
 
         diag["subprocesses"] = _collect_subprocess_info()
         diag["event_hooks"] = get_event_hook_registry().snapshot()
-        diag["onboarding_assistant"] = _build_onboarding_assistant_payload()
+        onboarding_assistant = _build_onboarding_assistant_payload(
+            config=load_config(),
+            devices=[device for _client, device in snapshot_pairs],
+            runtime_mode=diag["runtime_info"]["mode"],
+            ma_connected=is_ma_connected(),
+        )
+        diag["onboarding_assistant"] = onboarding_assistant
         diag["recovery_assistant"] = _build_recovery_assistant_payload(
-            onboarding_assistant=diag["onboarding_assistant"]
+            config=load_config(),
+            devices=[device for _client, device in snapshot_pairs],
+            onboarding_assistant=onboarding_assistant,
+            startup_progress=diag["startup_progress"],
+        )
+        diag["operator_guidance"] = _build_operator_guidance_payload(
+            config=load_config(),
+            devices=[device for _client, device in snapshot_pairs],
+            onboarding_assistant=onboarding_assistant,
+            recovery_assistant=diag["recovery_assistant"],
+            startup_progress=diag["startup_progress"],
+            runtime_mode=diag["runtime_info"]["mode"],
+            ma_connected=is_ma_connected(),
         )
         diag["telemetry"] = _build_bridge_telemetry_payload(
             environment=diag["environment"],
@@ -1047,6 +1162,7 @@ def _build_full_text_report(
     sinks = diag.get("sinks", [])
     assistant = diag.get("onboarding_assistant", {})
     recovery = diag.get("recovery_assistant", {})
+    guidance = diag.get("operator_guidance", {})
 
     # Environment
     if env:
@@ -1132,6 +1248,21 @@ def _build_full_text_report(
         latency = recovery.get("latency_assistant", {})
         if latency:
             full.append(f"  Latency: {latency.get('summary', '')}")
+        full.append("")
+
+    if guidance:
+        full.append("--- OPERATOR GUIDANCE ---")
+        full.append(f"  Mode: {guidance.get('mode', '?')}")
+        banner = guidance.get("banner", {})
+        if banner:
+            full.append(f"  Banner: {banner.get('headline', '')} — {banner.get('summary', '')}")
+        header = guidance.get("header_status", {})
+        if header:
+            full.append(f"  Header: {header.get('label', '')} — {header.get('summary', '')}")
+        for issue in guidance.get("issue_groups", []):
+            full.append(
+                f"  [{str(issue.get('severity', '?')).upper()}] {issue.get('title', '?')}: {issue.get('summary', '')}"
+            )
         full.append("")
 
     # Adapters
@@ -1272,6 +1403,12 @@ def api_onboarding_assistant():
 def api_recovery_assistant():
     """Return recovery, trace, and latency guidance derived from runtime health."""
     return jsonify(_build_recovery_assistant_payload())
+
+
+@status_bp.route("/api/operator/guidance")
+def api_operator_guidance():
+    """Return the unified operator guidance surface used by the dashboard header and banners."""
+    return jsonify(_build_operator_guidance_payload())
 
 
 @status_bp.route("/api/preflight")
