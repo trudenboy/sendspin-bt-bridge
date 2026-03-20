@@ -4045,6 +4045,53 @@ body {
         .diag-copy-btn {
             white-space: nowrap;
         }
+        .diag-raw-details {
+            margin-top: 10px;
+            padding-top: 8px;
+            border-top: 1px solid var(--divider-color);
+        }
+        .diag-raw-details > summary {
+            list-style: none;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            color: var(--primary-color);
+        }
+        .diag-raw-details > summary::-webkit-details-marker {
+            display: none;
+        }
+        .diag-raw-details > summary::before {
+            content: '';
+            display: inline-flex;
+            width: 7px;
+            height: 7px;
+            border-right: 1.6px solid currentColor;
+            border-bottom: 1.6px solid currentColor;
+            transform: rotate(-45deg);
+            transition: transform 0.2s;
+            flex-shrink: 0;
+        }
+        .diag-raw-details[open] > summary::before {
+            transform: rotate(45deg);
+        }
+        .diag-raw-pre {
+            margin: 8px 0 0;
+            padding: 10px;
+            border-radius: 10px;
+            background: rgba(127, 127, 127, 0.08);
+            color: var(--primary-text-color);
+            font-size: 11px;
+            line-height: 1.55;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+            white-space: pre-wrap;
+            word-break: break-word;
+            overflow-x: auto;
+        }
         .diag-grid {
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));

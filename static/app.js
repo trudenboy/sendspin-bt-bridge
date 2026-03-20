@@ -7698,6 +7698,16 @@ function copyDiagnosticsSection(sectionId, label) {
     return false;
 }
 
+function _renderDiagRawDetails(payload, summaryLabel) {
+    if (!payload) return '';
+    var rawJson = JSON.stringify(payload, null, 2);
+    if (!rawJson) return '';
+    return '<details class="diag-raw-details">' +
+        '<summary>' + escHtml(summaryLabel || 'Raw details') + '</summary>' +
+        '<pre class="diag-raw-pre">' + escHtml(rawJson) + '</pre>' +
+    '</details>';
+}
+
 function _renderRecoveryActionButton(action, options) {
     if (!action || !action.key) return '';
     var opts = options || {};
@@ -7900,6 +7910,7 @@ function renderDiagnostics(d) {
                     _renderDiagMetaRow('MAC', adapter.mac, {code: true, stack: true}) +
                     (adapter.error ? _renderDiagMetaRow('Issue', adapter.error, {stack: true}) : '') +
                 '</div>' +
+                _renderDiagRawDetails(adapter, 'Raw adapter data') +
             '</div>';
         }).join('')
         : '<div class="diag-mini-card"><div class="diag-mini-meta">No Bluetooth adapters detected.</div></div>';
@@ -7924,6 +7935,7 @@ function renderDiagnostics(d) {
                     (dev.sink ? _renderDiagMetaRow('Sink', dev.sink, {code: true, stack: true}) : _renderDiagMetaRow('Sink', 'Not attached')) +
                     (dev.last_error ? _renderDiagMetaRow('Issue', dev.last_error, {stack: true}) : '') +
                 '</div>' +
+                _renderDiagRawDetails(dev, 'Raw speaker data') +
             '</div>';
         }).join('')
         : '<div class="diag-mini-card"><div class="diag-mini-meta">No speakers are configured yet.</div></div>';
@@ -7999,6 +8011,7 @@ function renderDiagnostics(d) {
                     _renderDiagMetaRow('Group health', groupStatus.join(' · '), {stack: true}) +
                     _renderDiagMetaRow('Now playing', nowPlaying, {stack: true}) +
                 '</div>' +
+                _renderDiagRawDetails(group, 'Raw group data') +
             '</div>';
         }).join('')
         : '<div class="diag-mini-card"><div class="diag-mini-meta">No Music Assistant groups are available.</div></div>';
@@ -8016,6 +8029,7 @@ function renderDiagnostics(d) {
                     _renderDiagMetaRow('State', parts.join(' · ') || 'No extra details', {stack: true}) +
                     (proc.last_error ? _renderDiagMetaRow('Issue', proc.last_error, {stack: true}) : '') +
                 '</div>' +
+                _renderDiagRawDetails(proc, 'Raw process data') +
             '</div>';
         }).join('')
         : '<div class="diag-mini-card"><div class="diag-mini-meta">No advanced runtime details are available.</div></div>';
@@ -8046,6 +8060,7 @@ function renderDiagnostics(d) {
                         _renderDiagMetaRow('State', input.state) +
                         (input.media_name && input.application_name !== input.media_name ? _renderDiagMetaRow('Media', input.media_name, {stack: true}) : '') +
                     '</div>' +
+                    _renderDiagRawDetails(input, 'Raw stream data') +
                 '</div>';
             }).join('')
             : '<div class="diag-mini-card"><div class="diag-mini-meta">No current audio streams.</div></div>');
@@ -8060,6 +8075,7 @@ function renderDiagnostics(d) {
                         _renderDiagMetaRow('Index', device.index, {code: true}) +
                         _renderDiagMetaRow('Role', device.is_default ? 'Default output device' : 'Available output device', {stack: true}) +
                     '</div>' +
+                    _renderDiagRawDetails(device, 'Raw output data') +
                 '</div>';
             }).join('')
             : '<div class="diag-mini-card"><div class="diag-mini-meta">No local audio outputs were detected.</div></div>');
