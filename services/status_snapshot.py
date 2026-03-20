@@ -13,7 +13,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import state
-from config import BUILD_DATE, VERSION
+from config import BUILD_DATE, VERSION, load_config
+from services.bluetooth import _match_player_name
 from state import get_adapter_name, get_ma_group_for_player_id, get_ma_now_playing_for_group
 
 UTC = timezone.utc
@@ -41,6 +42,7 @@ class DeviceSnapshot:
     bluetooth_adapter_hci: str = ""
     has_sink: bool = False
     sink_name: str | None = None
+    enabled: bool = True
     bt_management_enabled: bool = True
     battery_level: int | None = None
     runtime: str | None = None
@@ -564,12 +566,36 @@ def build_mock_runtime_snapshot() -> MockRuntimeSnapshot:
     )
 
 
-def build_device_snapshot_pairs(clients: list[Any]) -> list[tuple[Any, DeviceSnapshot]]:
+def _configured_enabled_by_player_name() -> dict[str, bool]:
+    configured: dict[str, bool] = {}
+    for dev in load_config().get("BLUETOOTH_DEVICES", []) or []:
+        player_name = str(dev.get("player_name") or "").strip()
+        if not player_name:
+            continue
+        configured[player_name] = bool(dev.get("enabled", True))
+    return configured
+
+
+def _resolve_global_enabled(player_name: str | None, configured_enabled: dict[str, bool] | None) -> bool:
+    if not player_name:
+        return True
+    for configured_name, enabled in (configured_enabled or {}).items():
+        if _match_player_name(configured_name, player_name):
+            return enabled
+    return True
+
+
+def build_device_snapshot_pairs(
+    clients: list[Any],
+    *,
+    configured_enabled: dict[str, bool] | None = None,
+) -> list[tuple[Any, DeviceSnapshot]]:
     """Build `(client, snapshot)` pairs for routes that need reads plus runtime objects."""
-    return [(client, build_device_snapshot(client)) for client in clients]
+    resolved_enabled = configured_enabled if configured_enabled is not None else _configured_enabled_by_player_name()
+    return [(client, build_device_snapshot(client, configured_enabled=resolved_enabled)) for client in clients]
 
 
-def build_device_snapshot(client) -> DeviceSnapshot:
+def build_device_snapshot(client, *, configured_enabled: dict[str, bool] | None = None) -> DeviceSnapshot:
     """Build a typed device snapshot from a runtime client object."""
     if client is None:
         return DeviceSnapshot(error="Client not running")
@@ -582,6 +608,7 @@ def build_device_snapshot(client) -> DeviceSnapshot:
             status = client.status.copy()
     else:
         status = client.status.copy()
+    resolved_enabled = configured_enabled if configured_enabled is not None else _configured_enabled_by_player_name()
 
     uptime = None
     if "uptime_start" in status:
@@ -632,6 +659,7 @@ def build_device_snapshot(client) -> DeviceSnapshot:
         bluetooth_adapter_hci=getattr(bt_mgr, "adapter_hci_name", "") if bt_mgr else "",
         has_sink=bool(getattr(client, "bluetooth_sink_name", None)),
         sink_name=getattr(client, "bluetooth_sink_name", None),
+        enabled=_resolve_global_enabled(getattr(client, "player_name", None), resolved_enabled),
         bt_management_enabled=bool(getattr(client, "bt_management_enabled", True)),
         battery_level=getattr(bt_mgr, "battery_level", None) if bt_mgr else None,
         runtime=state._detect_runtime_type(),
@@ -654,6 +682,7 @@ def build_device_snapshot(client) -> DeviceSnapshot:
     device.extra["bluetooth_adapter_hci"] = device.bluetooth_adapter_hci
     device.extra["has_sink"] = device.has_sink
     device.extra["sink_name"] = device.sink_name
+    device.extra["enabled"] = device.enabled
     device.extra["bt_management_enabled"] = device.bt_management_enabled
     device.extra["battery_level"] = device.battery_level
     device.extra["bluetooth_paired"] = getattr(bt_mgr, "paired", None) if bt_mgr else None
@@ -790,6 +819,7 @@ def build_bridge_snapshot(clients: list[Any]) -> BridgeSnapshot:
     ma_url, _token = state.get_ma_api_credentials()
     update_available = state.get_update_available()
     mock_runtime = build_mock_runtime_snapshot()
+    configured_enabled = _configured_enabled_by_player_name()
     if not clients:
         return BridgeSnapshot(
             devices=[],
@@ -805,7 +835,7 @@ def build_bridge_snapshot(clients: list[Any]) -> BridgeSnapshot:
             error="No clients",
         )
 
-    snapshot_pairs = build_device_snapshot_pairs(clients)
+    snapshot_pairs = build_device_snapshot_pairs(clients, configured_enabled=configured_enabled)
     devices = [device for _client, device in snapshot_pairs]
     return BridgeSnapshot(
         devices=devices,

@@ -590,22 +590,26 @@ function _capabilityBlockedReason(capability, fallback) {
 function getDeviceSinkLabel(dev) {
     var sinkName = getDeviceSinkName(dev);
     if (sinkName) return sinkName;
+    if (_isDeviceDisabled(dev)) return 'Disabled';
     if (dev && dev.bt_management_enabled === false) return 'Released';
     if (dev && dev.bluetooth_connected) return 'Waiting for sink';
     return 'Not attached';
 }
 
 function getDeviceStatusKey(dev) {
+    if (_isDeviceDisabled(dev)) return 'disabled';
     if (dev && dev.bt_management_enabled === false) return 'released';
     return getUnifiedDeviceStatusMeta(dev).key;
 }
 
 function getDeviceStatusLabel(dev) {
+    if (_isDeviceDisabled(dev)) return 'Disabled';
     if (dev && dev.bt_management_enabled === false) return getDeviceReleaseMeta(dev).label;
     return getUnifiedDeviceStatusMeta(dev).label;
 }
 
 function getDeviceStatusClass(dev) {
+    if (_isDeviceDisabled(dev)) return 'neutral';
     if (dev && dev.bt_management_enabled === false) {
         return dev.bt_released_by === 'auto' ? 'warning' : 'released';
     }
@@ -820,6 +824,9 @@ function _buttonLabelWithIconHtml(kind, label) {
 function _getBtBadgeStateMeta(dev, adapterInfo) {
     var info = adapterInfo || _getAdapterDisplayInfo(dev);
     if (info.empty) return _buildBadgeStateMeta('neutral', false, 'No Bluetooth adapter assigned');
+    if (_isDeviceDisabled(dev)) {
+        return _buildBadgeStateMeta('neutral', false, 'Device is globally disabled');
+    }
     if (dev && dev.bt_management_enabled === false && dev.bt_released_by === 'auto') {
         return _buildBadgeStateMeta('warning', false, 'Bluetooth management auto-released');
     }
@@ -846,6 +853,16 @@ function _getGroupBadgeStateMeta(dev, groupMeta) {
 }
 
 function getDeviceReleaseMeta(dev) {
+    if (_isDeviceDisabled(dev)) {
+        return {
+            visible: false,
+            isAuto: false,
+            label: 'Disabled',
+            summary: 'Device is globally disabled',
+            title: 'Device is globally disabled until it is re-enabled in Configuration → Devices',
+            stateMeta: _buildBadgeStateMeta('neutral', false, 'Device is globally disabled'),
+        };
+    }
     var isReleased = !!(dev && dev.bt_management_enabled === false);
     var isAuto = !!(isReleased && dev.bt_released_by === 'auto');
     var stateMeta = _buildBadgeStateMeta(isAuto ? 'warning' : 'neutral', false, isAuto

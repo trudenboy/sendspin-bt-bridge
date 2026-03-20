@@ -99,6 +99,20 @@ def test_build_device_snapshot_includes_recent_events_and_health_summary():
         state.clear_device_events(client.player_id)
 
 
+def test_build_device_snapshot_includes_global_enabled_flag(monkeypatch):
+    client = _make_client(player_name="Kitchen @ LXC")
+    monkeypatch.setattr(
+        "services.status_snapshot.load_config",
+        lambda: {"BLUETOOTH_DEVICES": [{"player_name": "Kitchen", "enabled": False}]},
+    )
+
+    snapshot = build_device_snapshot(client)
+    data = snapshot.to_dict()
+
+    assert data["enabled"] is False
+    assert snapshot.enabled is False
+
+
 def test_build_device_snapshot_includes_capability_payload():
     client = _make_client()
     client.status.update({"server_connected": False, "bluetooth_connected": False, "reconnecting": True})
