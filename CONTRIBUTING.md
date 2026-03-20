@@ -63,7 +63,7 @@ For HA addon changes, additionally test via the HA Addon Store dev workflow (loc
 
 ## Docker & HA Addon Architecture
 
-The single `Dockerfile` builds a multi-arch image (`linux/amd64`, `linux/arm64`, `linux/arm/v7`) pushed to `ghcr.io/trudenboy/sendspin-bt-bridge`.
+The single `Dockerfile` builds published multi-arch images for `linux/amd64` and `linux/arm64` on every release channel, while `linux/arm/v7` is published only for stable releases.
 
 **S6 overlay** (v3.2.0.2) provides PID 1 process supervision:
 - `/init` → S6 boot → `rootfs/etc/s6-overlay/s6-rc.d/sendspin/run` → `/app/entrypoint.sh` → `python3 sendspin_client.py`

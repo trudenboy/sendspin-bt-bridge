@@ -4,8 +4,6 @@ on:
   push:
     tags:
       - "v*"
-    branches:
-      - beta
   workflow_dispatch:
     inputs:
       tag:
@@ -18,7 +16,64 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      release_channel: ${{ steps.publish_context.outputs.channel }}
+      metadata_tags: ${{ steps.publish_context.outputs.metadata_tags }}
+    steps:
+      - name: Resolve publish context
+        id: publish_context
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          target_ref="${INPUT_TAG:-}"
+          if [ -z "${target_ref}" ]; then
+            target_ref="${REF_NAME}"
+          fi
+
+          channel="skip"
+          metadata_tags=""
+          if [[ "${target_ref}" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+            channel="stable"
+            version="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.${BASH_REMATCH[3]}"
+            printf -v metadata_tags '%s\n%s\n%s\n%s\n%s' \
+              "type=raw,value=${version}" \
+              "type=raw,value=${BASH_REMATCH[1]}.${BASH_REMATCH[2]}" \
+              "type=raw,value=${BASH_REMATCH[1]}" \
+              "type=raw,value=latest" \
+              "type=raw,value=stable"
+          elif [[ "${target_ref}" =~ ^v([0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+)$ ]]; then
+            channel="rc"
+          elif [[ "${target_ref}" =~ ^v([0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+)$ ]]; then
+            channel="beta"
+          fi
+
+          echo "channel=${channel}" >> "$GITHUB_OUTPUT"
+          {
+            echo "metadata_tags<<EOF"
+            printf '%s\n' "${metadata_tags}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### ARMv7 publish context"
+            echo ""
+            echo "- Ref: \`${target_ref}\`"
+            echo "- Channel: \`${channel}\`"
+            if [ "${channel}" = "stable" ]; then
+              echo "- ARMv7 build: enabled"
+            else
+              echo "- ARMv7 build: skipped (stable releases only)"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
   build-armv7:
+    needs: prepare
+    if: ${{ needs.prepare.outputs.release_channel == 'stable' }}
     runs-on: ubuntu-latest
     permissions:
       packages: write
@@ -72,62 +127,12 @@ jobs:
           echo "ARMv7 digest: ${digest}"
         id: digest
 
-      - name: Resolve publish context
-        id: publish_context
-        env:
-          INPUT_TAG: ${{ inputs.tag }}
-          REF_NAME: ${{ github.ref_name }}
-          GIT_SHA: ${{ github.sha }}
-        run: |
-          set -euo pipefail
-
-          target_ref="${INPUT_TAG:-}"
-          if [ -z "${target_ref}" ]; then
-            target_ref="${REF_NAME}"
-          fi
-
-          metadata_tags=""
-          if [[ "${target_ref}" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
-            version="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.${BASH_REMATCH[3]}"
-            printf -v metadata_tags '%s\n%s\n%s\n%s\n%s' \
-              "type=raw,value=${version}" \
-              "type=raw,value=${BASH_REMATCH[1]}.${BASH_REMATCH[2]}" \
-              "type=raw,value=${BASH_REMATCH[1]}" \
-              "type=raw,value=latest" \
-              "type=raw,value=stable"
-          elif [[ "${target_ref}" =~ ^v([0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+)$ ]]; then
-            version="${BASH_REMATCH[1]}"
-            printf -v metadata_tags '%s\n%s' \
-              "type=raw,value=${version}" \
-              "type=raw,value=rc"
-          elif [[ "${target_ref}" =~ ^v([0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+)$ ]]; then
-            version="${BASH_REMATCH[1]}"
-            printf -v metadata_tags '%s\n%s' \
-              "type=raw,value=${version}" \
-              "type=raw,value=beta"
-          elif [[ "${target_ref}" == "beta" ]]; then
-            short_sha="${GIT_SHA::7}"
-            printf -v metadata_tags '%s\n%s' \
-              "type=raw,value=beta" \
-              "type=raw,value=beta-${short_sha}"
-          else
-            printf -v metadata_tags '%s\n%s' \
-              "type=raw,value=latest" \
-              "type=raw,value=stable"
-          fi
-
-          {
-            echo "metadata_tags<<EOF"
-            printf '%s\n' "${metadata_tags}"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
-
       - name: Extract metadata for tags
         id: tags
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: ${{ steps.publish_context.outputs.metadata_tags }}
+          tags: ${{ needs.prepare.outputs.metadata_tags }}
 
       - name: Append armv7 to manifest
         run: |
