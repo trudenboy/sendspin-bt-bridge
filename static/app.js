@@ -227,7 +227,6 @@ var lastGroups = [];
 var lastMaUiUrl = '';
 var lastMaWebUrl = '';
 var _backendServiceState = null;
-var _backendServiceReleaseTimer = null;
 var _statusHasEverSucceeded = false;
 var VIEW_MODE_STORAGE_KEY = 'sendspin-ui:view-mode';
 var _viewModeStorageScope = 'default';
@@ -1277,7 +1276,7 @@ function _highlightBtConfigWrap(wrap) {
 
 function openDeviceSettings(i) {
     var dev = lastDevices && lastDevices[i];
-    if (!dev) return;
+    if (!dev || dev.enabled === false) return;
     _openConfigPanel('devices', 'config-panel-devices', 'start');
     setTimeout(function() {
         var target = _findBtConfigWrap(dev);
@@ -1287,6 +1286,10 @@ function openDeviceSettings(i) {
         }
         _highlightBtConfigWrap(target);
     }, 180);
+}
+
+function _isDeviceDisabled(dev) {
+    return !!(dev && dev.enabled === false);
 }
 
 function _getMaGroupSettingsUrl(dev) {
@@ -2337,6 +2340,7 @@ function buildListView(entries, hiddenCount) {
         var rowPauseBtnId = 'drow-pause-' + i;
         var rowMuteBtnId = 'drow-mute-' + i;
         var releaseActionClass = mgmtEnabled ? 'warn' : 'success';
+        var cardDisabled = _isDeviceDisabled(dev);
         var detailTransport = '<div class="list-player-transport" onclick="event.stopPropagation()">' +
             _renderPlaybackTransportButtonsHtml(i, transportState, {
                 buttonBaseClass: 'icon-btn list-player-transport-btn',
@@ -2348,9 +2352,9 @@ function buildListView(entries, hiddenCount) {
             }) +
         '</div>';
         var detailActions = '<div class="list-detail-actions" onclick="event.stopPropagation()">' +
-            '<button type="button" class="list-action-btn accent" id="dbtn-reconnect-' + i + '" onclick="btReconnect(' + i + ')" title="' + escHtmlAttr(reconnectTitle) + '"' + (reconnectAvailable ? '' : ' disabled') + '>' + _actionButtonInnerHtml('reconnect', 'Reconnect') + '</button>' +
-            '<button type="button" class="list-action-btn ' + releaseActionClass + '" id="dbtn-release-' + i + '" onclick="btToggleManagement(' + i + ')" title="' + escHtmlAttr(releaseTitle) + '"' + (releaseAvailable ? '' : ' disabled') + '>' + _actionButtonInnerHtml('release', mgmtEnabled ? 'Release' : 'Reclaim') + '</button>' +
-            '<button type="button" class="list-action-btn danger" onclick="confirmDisableDevice(' + i + ')">' + _actionButtonInnerHtml('disable', 'Disable') + '</button>' +
+            '<button type="button" class="list-action-btn accent" id="dbtn-reconnect-' + i + '" onclick="btReconnect(' + i + ')" title="' + escHtmlAttr(reconnectTitle) + '"' + (reconnectAvailable && !cardDisabled ? '' : ' disabled') + '>' + _actionButtonInnerHtml('reconnect', 'Reconnect') + '</button>' +
+            '<button type="button" class="list-action-btn ' + releaseActionClass + '" id="dbtn-release-' + i + '" onclick="btToggleManagement(' + i + ')" title="' + escHtmlAttr(releaseTitle) + '"' + (releaseAvailable && !cardDisabled ? '' : ' disabled') + '>' + _actionButtonInnerHtml('release', mgmtEnabled ? 'Release' : 'Reclaim') + '</button>' +
+            '<button type="button" class="list-action-btn danger" onclick="confirmDisableDevice(' + i + ')"' + (cardDisabled ? ' disabled' : '') + '>' + _actionButtonInnerHtml('disable', 'Disable') + '</button>' +
         '</div>';
         var routeSummary = _getListRoutingSummary(dev);
         var detailFooter = '<div class="list-detail-footer">' +
@@ -2388,9 +2392,9 @@ function buildListView(entries, hiddenCount) {
             detailMediaLane +
         '</div>';
         var quickActions = '<div class="list-actions" onclick="event.stopPropagation()">' +
-            '<button type="button" class="icon-btn list-inline-btn' + (dev.playing ? '' : ' paused') + '" id="' + rowPauseBtnId + '" onclick="event.stopPropagation();onDevicePause(' + i + ', \'' + rowPauseBtnId + '\')" title="' + escHtmlAttr(pauseTitle) + '"' + (canTransport ? '' : ' disabled') + '>' + _playPauseIconHtml(dev.playing) + '</button>' +
-            '<button type="button" class="icon-btn list-inline-btn' + (effectiveMuted ? ' muted' : '') + '" id="' + rowMuteBtnId + '" onclick="event.stopPropagation();onMuteClick(' + i + ', \'' + rowMuteBtnId + '\')" title="' + escHtmlAttr(muteTitle) + '"' + (canMute ? '' : ' disabled') + '>' + _muteIconHtml(effectiveMuted) + '</button>' +
-            '<button type="button" class="icon-btn list-inline-btn list-settings-btn" onclick="event.stopPropagation();openDeviceSettings(' + i + ')" title="Device settings">' + _settingsIconHtml() + '</button>' +
+            '<button type="button" class="icon-btn list-inline-btn' + (dev.playing ? '' : ' paused') + '" id="' + rowPauseBtnId + '" onclick="event.stopPropagation();onDevicePause(' + i + ', \'' + rowPauseBtnId + '\')" title="' + escHtmlAttr(pauseTitle) + '"' + (canTransport && !cardDisabled ? '' : ' disabled') + '>' + _playPauseIconHtml(dev.playing) + '</button>' +
+            '<button type="button" class="icon-btn list-inline-btn' + (effectiveMuted ? ' muted' : '') + '" id="' + rowMuteBtnId + '" onclick="event.stopPropagation();onMuteClick(' + i + ', \'' + rowMuteBtnId + '\')" title="' + escHtmlAttr(muteTitle) + '"' + (canMute && !cardDisabled ? '' : ' disabled') + '>' + _muteIconHtml(effectiveMuted) + '</button>' +
+            '<button type="button" class="icon-btn list-inline-btn list-settings-btn" onclick="event.stopPropagation();openDeviceSettings(' + i + ')" title="Device settings"' + (cardDisabled ? ' disabled' : '') + '>' + _settingsIconHtml() + '</button>' +
             '<span class="list-row-affordance' + (expanded ? ' expanded' : '') + '" aria-hidden="true">' +
                 '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>' +
             '</span>' +
@@ -2408,9 +2412,9 @@ function buildListView(entries, hiddenCount) {
         var nameMetaRow = nameMetaContent
             ? '<span class="list-name-meta-row' + (expanded ? ' is-controls' : '') + '">' + nameMetaContent + '</span>'
             : '';
-        return '<div class="list-row ' + statusMeta.cardStateClass + ' ' + (expanded ? 'expanded' : '') + '">' +
+        return '<div class="list-row ' + statusMeta.cardStateClass + ' ' + (expanded ? 'expanded' : '') + (cardDisabled ? ' list-row--disabled' : '') + '">' +
             '<div class="list-row-main" onclick="toggleListRow(\'' + escHtmlAttr(key) + '\')">' +
-                '<div class="list-select-cell"><input type="checkbox" id="dsel-' + i + '" ' + (_groupSelected[i] !== false ? 'checked' : '') + ' onclick="event.stopPropagation()" onchange="onDeviceSelect(' + i + ', this.checked)"></div>' +
+                '<div class="list-select-cell"><input type="checkbox" id="dsel-' + i + '" ' + (_groupSelected[i] !== false && !cardDisabled ? 'checked' : '') + (cardDisabled ? ' disabled' : '') + ' onclick="event.stopPropagation()" onchange="onDeviceSelect(' + i + ', this.checked)"></div>' +
                 '<div class="list-cell-name">' +
                     '<span class="list-name-icon ' + statusMeta.iconToneClass + '">' +
                         _uiIconSvg('speaker') +
@@ -2424,7 +2428,7 @@ function buildListView(entries, hiddenCount) {
                 '<div class="list-adapter-cell">' + _adapterBadgeHtml(dev, i, 'chip') + '</div>' +
                 '<div class="list-group-cell">' + _groupBadgeHtml(dev, i, 'chip') + '</div>' +
                 '<div class="list-vol-wrap" onclick="event.stopPropagation()">' +
-                    '<input type="range" min="0" max="100" value="' + (dev.volume || 0) + '" id="vslider-' + i + '" oninput="onVolumeInput(' + i + ', this.value)">' +
+                    '<input type="range" min="0" max="100" value="' + (dev.volume || 0) + '" id="vslider-' + i + '" oninput="onVolumeInput(' + i + ', this.value)"' + (cardDisabled ? ' disabled' : '') + '>' +
                     '<span class="vol-pct" id="dvol-' + i + '">' + (dev.volume || 0) + '</span>' +
                 '</div>' +
                 quickActions +
@@ -2536,17 +2540,6 @@ function renderStatusPayload(status) {
     var zeroDeviceRuntimeState = _deriveZeroDeviceRuntimeState(status, devices);
     var grid = document.getElementById('status-grid');
     var emptyEl = document.getElementById('no-devices-hint');
-    var lockoutPendingRelease = !!(_backendServiceState && _backendServiceReleaseTimer && !zeroDeviceRuntimeState);
-    if (lockoutPendingRelease) {
-        lastDevices = [];
-        lastGroups = [];
-        _hideOperatorGuidance();
-        _renderBackendServicePlaceholder(_backendServiceState);
-        _updateGroupPanel();
-        updateHealthIndicator([], status.operator_guidance || null);
-        _syncRestartBanner(status, null);
-        return;
-    }
     if (devices.length === 0) {
         lastDevices = [];
         if (zeroDeviceRuntimeState) {
@@ -2792,13 +2785,19 @@ function populateDeviceCard(i, dev) {
     var card = document.getElementById('device-card-' + i);
     if (card) {
         var isActive = dev.bluetooth_connected || dev.playing;
+        var isDisabled = _isDeviceDisabled(dev);
         card.classList.toggle('inactive', !isActive);
+        card.classList.toggle('device-card--disabled', isDisabled);
         card.classList.remove('is-success', 'is-warning', 'is-error', 'is-neutral');
         card.classList.toggle('playing', statusMeta.key === 'playing');
         card.classList.add(statusMeta.cardStateClass);
         var selCb = document.getElementById('dsel-' + i);
         if (selCb) {
-            if (!isActive && selCb.checked) {
+            selCb.disabled = isDisabled;
+            if (isDisabled) {
+                selCb.checked = false;
+                _groupSelected[i] = false;
+            } else if (!isActive && selCb.checked) {
                 selCb.checked = false;
                 _groupSelected[i] = false;
             } else if (isActive && !selCb.checked && _groupSelected[i] !== false) {
@@ -2839,9 +2838,9 @@ function populateDeviceCard(i, dev) {
         var adapterRenderData = _getAdapterBadgeRenderData(dev, i, 'chip');
         btChipEl.className = adapterRenderData.className;
         btChipEl.innerHTML = adapterRenderData.innerHtml;
-        btChipEl.disabled = adapterRenderData.disabled;
+        btChipEl.disabled = adapterRenderData.disabled || _isDeviceDisabled(dev);
         btChipEl.title = adapterRenderData.title;
-        btChipEl.onclick = adapterRenderData.disabled ? null : function() { openDeviceAdapterSettings(i); };
+        btChipEl.onclick = (adapterRenderData.disabled || _isDeviceDisabled(dev)) ? null : function() { openDeviceAdapterSettings(i); };
     }
 
     var srvInd = document.getElementById('dsrv-ind-' + i);
@@ -2889,7 +2888,7 @@ function populateDeviceCard(i, dev) {
             pauseBtn.classList.add('paused');
             pauseBtn.title = transportState.canTransport ? 'Play' : transportState.transportUnavailableTitle;
         }
-        pauseBtn.disabled = !transportState.canTransport;
+        pauseBtn.disabled = !transportState.canTransport || _isDeviceDisabled(dev);
         pauseBtn.style.display = '';
         pauseBtn.style.opacity = transportState.canTransport ? '' : '0.35';
     }
@@ -2988,7 +2987,7 @@ function populateDeviceCard(i, dev) {
         var volEl = document.getElementById('dvol-' + i);
         if (slider) {
             slider.value = dev.volume;
-            slider.disabled = !transportState.hasSink;
+            slider.disabled = !transportState.hasSink || _isDeviceDisabled(dev);
             slider.style.opacity = hasSink ? '' : '0.35';
             slider.title = hasSink ? '' : 'Audio sink not configured';
         }
@@ -3013,7 +3012,7 @@ function populateDeviceCard(i, dev) {
                 : 'Mute')
             : transportState.muteUnavailableTitle;
         muteBtn.classList.toggle('muted', effectiveMuted);
-        muteBtn.disabled = !transportState.hasSink;
+        muteBtn.disabled = !transportState.hasSink || _isDeviceDisabled(dev);
         muteBtn.style.opacity = hasSink ? '' : '0.35';
     }
 
@@ -3027,13 +3026,13 @@ function populateDeviceCard(i, dev) {
     if (relBtn) {
         var mgmtEnabled = dev.bt_management_enabled !== false;
         _setReleaseActionButtonState(relBtn, mgmtEnabled);
-        relBtn.disabled = !_capabilityAvailable(toggleManagementCapability, true);
+        relBtn.disabled = !_capabilityAvailable(toggleManagementCapability, true) || _isDeviceDisabled(dev);
         relBtn.title = relBtn.disabled
             ? _capabilityBlockedReason(toggleManagementCapability, 'BT management action unavailable')
             : relBtn.title;
         var reconnBtn = document.getElementById('dbtn-reconnect-' + i);
         if (reconnBtn) {
-            reconnBtn.disabled = !reconnectAvailable;
+            reconnBtn.disabled = !reconnectAvailable || _isDeviceDisabled(dev);
             reconnBtn.title = reconnectAvailable
                 ? 'Reconnect Bluetooth and refresh sink routing'
                 : _capabilityBlockedReason(reconnectCapability, 'Reconnect unavailable');
@@ -3522,6 +3521,8 @@ function sortListBy(column) {
 }
 
 function toggleListRow(key) {
+    var dev = (lastDevices || []).find(function(entry) { return listRowKey(entry) === key; });
+    if (_isDeviceDisabled(dev)) return;
     expandedListRowKey = expandedListRowKey === key ? null : key;
     renderDevicesView();
 }
@@ -3656,6 +3657,7 @@ function maCycleRepeat(devIdx) {
 
 async function btReconnect(i) {
     var dev = lastDevices && lastDevices[i];
+    if (_isDeviceDisabled(dev)) return {success: false, message: 'Device is disabled'};
     var playerName = dev ? dev.player_name : null;
     var btn = document.getElementById('dbtn-reconnect-' + i);
     var pairBtn = document.getElementById('dbtn-pair-' + i);
@@ -3724,6 +3726,7 @@ async function btPairConfiguredDevice(i) {
 async function btToggleManagement(i) {
     var dev = lastDevices && lastDevices[i];
     if (!dev) return {success: false, message: 'Device not found'};
+    if (_isDeviceDisabled(dev)) return {success: false, message: 'Device is disabled'};
     var playerName = dev.player_name || null;
     var newEnabled = dev.bt_management_enabled === false;  // toggle
     var btn = document.getElementById('dbtn-release-' + i);
@@ -3781,11 +3784,15 @@ async function toggleDeviceEnabled(playerName, enabled) {
 
 function confirmDisableDevice(i) {
     var dev = lastDevices && lastDevices[i];
-    if (!dev) return;
+    if (!dev || _isDeviceDisabled(dev)) return;
     var name = dev.player_name || 'Device ' + (i + 1);
     if (!confirm('Disable "' + name + '"?\n\nThe device will be skipped on next bridge restart.\nYou can re-enable it from the config page.')) return;
     var btn = document.getElementById('dbtn-disable-' + i);
     if (btn) btn.disabled = true;
+    dev.enabled = false;
+    _groupSelected[i] = false;
+    if (expandedListRowKey === listRowKey(dev)) expandedListRowKey = null;
+    renderDevicesView();
     toggleDeviceEnabled(name, false);
 }
 
@@ -4998,21 +5005,7 @@ function _commitBackendServiceState(state) {
 }
 
 function _applyBackendServiceState(state) {
-    if (state) {
-        if (_backendServiceReleaseTimer) {
-            clearTimeout(_backendServiceReleaseTimer);
-            _backendServiceReleaseTimer = null;
-        }
-        _commitBackendServiceState(state);
-        return;
-    }
-    if (!_backendServiceState) return;
-    if (_backendServiceReleaseTimer) return;
-    _backendServiceReleaseTimer = setTimeout(function() {
-        _backendServiceReleaseTimer = null;
-        _commitBackendServiceState(null);
-        updateStatus();
-    }, 5000);
+    _commitBackendServiceState(state);
 }
 
 function _isZeroClientStatusError(errorValue) {
@@ -5028,7 +5021,9 @@ function _deriveZeroDeviceRuntimeState(status, devices) {
     var startupRunning = startupStatus === 'running' || startupStatus === 'starting';
     var startupRestarting = startupStatus === 'stopping' || startupStatus === 'stopped';
     var headerLabel = headerStatus && headerStatus.label ? String(headerStatus.label) : '';
-    if (headerLabel.toLowerCase() === 'waiting for setup') {
+    var normalizedHeaderLabel = headerLabel.trim().toLowerCase();
+    var startupFinalizing = normalizedHeaderLabel === 'finalizing startup';
+    if (normalizedHeaderLabel === 'waiting for setup') {
         headerLabel = '';
     }
     if (status && status.error && !_isZeroClientStatusError(status.error)) {
@@ -5043,7 +5038,7 @@ function _deriveZeroDeviceRuntimeState(status, devices) {
     }
     if (!devices || devices.length !== 0) return null;
     if (!guidance) return null;
-    if (guidance.mode === 'empty_state' && !startupRunning && !startupRestarting) return null;
+    if (guidance.mode === 'empty_state' && !startupRunning && !startupRestarting && !startupFinalizing) return null;
     var title = startupRestarting
         ? 'Restart in progress'
         : (headerLabel || (startupRunning ? 'Bridge is starting' : 'Restoring bridge state'));
@@ -5052,11 +5047,11 @@ function _deriveZeroDeviceRuntimeState(status, devices) {
         : (headerLabel || (startupRunning ? 'Starting bridge' : 'Restoring bridge state'));
     var summary = startupRestarting
         ? 'The bridge is restarting. Waiting for startup to resume.'
-        : startupRunning
+        : (startupRunning || startupFinalizing)
         ? ((startup && startup.message) || (headerStatus && headerStatus.summary) || 'Waiting for bridge startup checks to finish.')
         : ((startup && startup.message) || (headerStatus && headerStatus.summary) || 'Configured bridge devices are still reconnecting after restart.');
     return {
-        kind: (startupRunning || startupRestarting) ? 'starting' : 'restoring',
+        kind: (startupRunning || startupRestarting || startupFinalizing) ? 'starting' : 'restoring',
         tone: _backendServiceToneClass((headerStatus && headerStatus.tone) || 'info'),
         label: label,
         title: title,
