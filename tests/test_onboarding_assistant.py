@@ -23,6 +23,14 @@ def test_onboarding_assistant_reports_missing_prerequisites():
     assert checks["sink_verification"].status == "warning"
     assert checks["ma_auth"].status == "warning"
     assert snapshot.next_steps
+    assert snapshot.checklist is not None
+    assert snapshot.checklist.current_step_key == "bluetooth"
+    assert snapshot.checklist.primary_action is not None
+    assert snapshot.checklist.primary_action.key == "open_bluetooth_settings"
+    assert snapshot.checklist.progress_percent == 0
+    assert snapshot.checklist.checkpoints[0].reached is False
+    assert snapshot.checklist.steps[0].stage == "current"
+    assert snapshot.checklist.steps[1].stage == "upcoming"
 
 
 def test_onboarding_assistant_reports_connected_bridge_readiness():
@@ -64,3 +72,9 @@ def test_onboarding_assistant_reports_connected_bridge_readiness():
     assert checks["ma_auth"].status == "ok"
     assert checks["latency"].status == "ok"
     assert snapshot.counts["sink_ready_devices"] == 2
+    assert snapshot.checklist is not None
+    assert snapshot.checklist.overall_status == "ok"
+    assert snapshot.checklist.current_step_key is None
+    assert snapshot.checklist.progress_percent == 100
+    assert all(step.stage == "complete" for step in snapshot.checklist.steps)
+    assert all(checkpoint.reached for checkpoint in snapshot.checklist.checkpoints)

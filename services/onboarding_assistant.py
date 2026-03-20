@@ -7,6 +7,97 @@ from datetime import datetime, timezone
 from typing import Any
 
 UTC = timezone.utc
+_CHECKLIST_ORDER = ("bluetooth", "audio", "sink_verification", "ma_auth", "latency")
+_CHECKLIST_TITLES = {
+    "bluetooth": "Check Bluetooth access",
+    "audio": "Verify audio backend",
+    "sink_verification": "Attach your first speaker",
+    "ma_auth": "Connect Music Assistant",
+    "latency": "Review latency tuning",
+}
+
+
+@dataclass
+class OnboardingChecklistAction:
+    key: str
+    label: str
+
+    def to_dict(self) -> dict[str, str]:
+        return {"key": self.key, "label": self.label}
+
+
+@dataclass
+class OnboardingCheckpoint:
+    key: str
+    label: str
+    reached: bool
+    summary: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "key": self.key,
+            "label": self.label,
+            "reached": self.reached,
+            "summary": self.summary,
+        }
+
+
+@dataclass
+class OnboardingChecklistStep:
+    key: str
+    title: str
+    status: str
+    stage: str
+    summary: str
+    details: dict[str, Any] = field(default_factory=dict)
+    actions: list[str] = field(default_factory=list)
+    recommended_action: OnboardingChecklistAction | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        payload = {
+            "key": self.key,
+            "title": self.title,
+            "status": self.status,
+            "stage": self.stage,
+            "summary": self.summary,
+            "details": dict(self.details),
+            "actions": list(self.actions),
+        }
+        if self.recommended_action:
+            payload["recommended_action"] = self.recommended_action.to_dict()
+        return payload
+
+
+@dataclass
+class OnboardingChecklistSnapshot:
+    overall_status: str
+    headline: str
+    summary: str
+    progress_percent: int
+    completed_steps: int
+    total_steps: int
+    current_step_key: str | None
+    current_step_title: str | None
+    steps: list[OnboardingChecklistStep] = field(default_factory=list)
+    checkpoints: list[OnboardingCheckpoint] = field(default_factory=list)
+    primary_action: OnboardingChecklistAction | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        payload = {
+            "overall_status": self.overall_status,
+            "headline": self.headline,
+            "summary": self.summary,
+            "progress_percent": self.progress_percent,
+            "completed_steps": self.completed_steps,
+            "total_steps": self.total_steps,
+            "current_step_key": self.current_step_key,
+            "current_step_title": self.current_step_title,
+            "steps": [step.to_dict() for step in self.steps],
+            "checkpoints": [checkpoint.to_dict() for checkpoint in self.checkpoints],
+        }
+        if self.primary_action:
+            payload["primary_action"] = self.primary_action.to_dict()
+        return payload
 
 
 @dataclass
@@ -34,19 +125,162 @@ class OnboardingAssistantSnapshot:
     counts: dict[str, int]
     checks: list[OnboardingCheck]
     next_steps: list[str]
+    checklist: OnboardingChecklistSnapshot | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        payload = {
             "runtime_mode": self.runtime_mode,
             "generated_at": self.generated_at,
             "counts": dict(self.counts),
             "checks": [check.to_dict() for check in self.checks],
             "next_steps": list(self.next_steps),
         }
+        if self.checklist:
+            payload["checklist"] = self.checklist.to_dict()
+        return payload
 
 
 def _status_rank(status: str) -> int:
     return {"ok": 0, "warning": 1, "error": 2}.get(status, 1)
+
+
+def _recommended_action_for_check(check: OnboardingCheck) -> OnboardingChecklistAction | None:
+    if check.key == "bluetooth":
+        return OnboardingChecklistAction(key="open_bluetooth_settings", label="Open Bluetooth settings")
+    if check.key == "audio":
+        return OnboardingChecklistAction(key="open_diagnostics", label="Open diagnostics")
+    if check.key == "sink_verification":
+        if int(check.details.get("configured_devices") or 0) == 0:
+            return OnboardingChecklistAction(key="scan_devices", label="Scan for devices")
+        if check.status == "error":
+            return OnboardingChecklistAction(key="open_diagnostics", label="Open diagnostics")
+        return OnboardingChecklistAction(key="open_devices_settings", label="Open device settings")
+    if check.key == "ma_auth":
+        return OnboardingChecklistAction(key="open_ma_settings", label="Open Music Assistant settings")
+    if check.key == "latency":
+        return OnboardingChecklistAction(key="open_devices_settings", label="Open device settings")
+    return None
+
+
+def _build_checkpoints(counts: dict[str, int], checks_by_key: dict[str, OnboardingCheck]) -> list[OnboardingCheckpoint]:
+    configured_devices = int(counts.get("configured_devices") or 0)
+    connected_devices = int(counts.get("connected_devices") or 0)
+    sink_ready_devices = int(counts.get("sink_ready_devices") or 0)
+    ma_ready = checks_by_key.get("ma_auth", OnboardingCheck(key="ma_auth", status="warning", summary="")).status == "ok"
+    return [
+        OnboardingCheckpoint(
+            key="devices_configured",
+            label="Bridge device created",
+            reached=configured_devices > 0,
+            summary=(
+                f"{configured_devices} device{'s' if configured_devices != 1 else ''} configured"
+                if configured_devices > 0
+                else "Add your first Bluetooth device"
+            ),
+        ),
+        OnboardingCheckpoint(
+            key="bluetooth_connected",
+            label="Bluetooth connected",
+            reached=connected_devices > 0,
+            summary=(
+                f"{connected_devices} speaker{'s' if connected_devices != 1 else ''} connected"
+                if connected_devices > 0
+                else "Waiting for a configured speaker to connect"
+            ),
+        ),
+        OnboardingCheckpoint(
+            key="sink_ready",
+            label="Audio sink ready",
+            reached=sink_ready_devices > 0,
+            summary=(
+                f"{sink_ready_devices} sink{'s' if sink_ready_devices != 1 else ''} resolved"
+                if sink_ready_devices > 0
+                else "No connected speaker has a resolved sink yet"
+            ),
+        ),
+        OnboardingCheckpoint(
+            key="ma_visible",
+            label="Music Assistant linked",
+            reached=ma_ready,
+            summary="Music Assistant is connected" if ma_ready else "Music Assistant still needs attention",
+        ),
+    ]
+
+
+def _build_onboarding_checklist(checks: list[OnboardingCheck], counts: dict[str, int]) -> OnboardingChecklistSnapshot:
+    checks_by_key = {check.key: check for check in checks}
+    ordered_checks = [checks_by_key[key] for key in _CHECKLIST_ORDER if key in checks_by_key]
+    ordered_checks.extend(check for check in checks if check.key not in _CHECKLIST_ORDER)
+
+    current_check = next((check for check in ordered_checks if check.status != "ok"), None)
+    total_steps = len(ordered_checks)
+
+    if any(check.status == "error" for check in ordered_checks):
+        overall_status = "error"
+    elif any(check.status == "warning" for check in ordered_checks):
+        overall_status = "warning"
+    else:
+        overall_status = "ok"
+
+    if current_check:
+        headline = (
+            f"Finish setup: {_CHECKLIST_TITLES.get(current_check.key, current_check.key)}"
+            if current_check.status == "error"
+            else f"Next recommended step: {_CHECKLIST_TITLES.get(current_check.key, current_check.key)}"
+        )
+        summary = current_check.summary
+        current_step_key = current_check.key
+        current_step_title = _CHECKLIST_TITLES.get(current_check.key, current_check.key)
+        primary_action = _recommended_action_for_check(current_check)
+    else:
+        headline = "Bridge setup looks ready"
+        summary = "Core setup checks are green and the bridge is ready for first playback."
+        current_step_key = None
+        current_step_title = None
+        primary_action = OnboardingChecklistAction(key="open_diagnostics", label="Review diagnostics")
+
+    steps: list[OnboardingChecklistStep] = []
+    completed_steps = 0
+    current_step_reached = current_check is None
+    for check in ordered_checks:
+        if current_check is None:
+            stage = "complete"
+        elif not current_step_reached and check.key == current_check.key:
+            stage = "current"
+            current_step_reached = True
+        elif not current_step_reached and check.status == "ok":
+            stage = "complete"
+        else:
+            stage = "upcoming"
+        if stage == "complete":
+            completed_steps += 1
+        steps.append(
+            OnboardingChecklistStep(
+                key=check.key,
+                title=_CHECKLIST_TITLES.get(check.key, check.key),
+                status=check.status,
+                stage=stage,
+                summary=check.summary,
+                details=check.details,
+                actions=check.actions,
+                recommended_action=_recommended_action_for_check(check),
+            )
+        )
+    progress_percent = int(round((completed_steps / total_steps) * 100)) if total_steps else 0
+
+    return OnboardingChecklistSnapshot(
+        overall_status=overall_status,
+        headline=headline,
+        summary=summary,
+        progress_percent=progress_percent,
+        completed_steps=completed_steps,
+        total_steps=total_steps,
+        current_step_key=current_step_key,
+        current_step_title=current_step_title,
+        steps=steps,
+        checkpoints=_build_checkpoints(counts, checks_by_key),
+        primary_action=primary_action,
+    )
 
 
 def build_onboarding_assistant_snapshot(
@@ -157,6 +391,7 @@ def build_onboarding_assistant_snapshot(
                 key="sink_verification",
                 status="warning",
                 summary="No bridge devices are configured yet.",
+                details={"configured_devices": configured_count},
                 actions=["Add at least one Bluetooth device in the config UI before verifying sinks."],
             )
         )
@@ -291,15 +526,18 @@ def build_onboarding_assistant_snapshot(
             if action not in next_steps:
                 next_steps.append(action)
 
+    counts = {
+        "configured_devices": configured_count,
+        "active_devices": len(devices),
+        "connected_devices": connected_devices,
+        "sink_ready_devices": sink_ready_devices,
+    }
+
     return OnboardingAssistantSnapshot(
         runtime_mode=runtime_mode,
         generated_at=datetime.now(tz=UTC).isoformat(),
-        counts={
-            "configured_devices": configured_count,
-            "active_devices": len(devices),
-            "connected_devices": connected_devices,
-            "sink_ready_devices": sink_ready_devices,
-        },
+        counts=counts,
         checks=checks,
         next_steps=next_steps,
+        checklist=_build_onboarding_checklist(checks, counts),
     )

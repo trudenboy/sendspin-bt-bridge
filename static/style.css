@@ -705,6 +705,11 @@ body {
             --notice-border: rgba(219, 68, 55, 0.2);
             --notice-icon-bg: rgba(219, 68, 55, 0.12);
         }
+        .notice-card--info {
+            --notice-accent: var(--info-color, #039be5);
+            --notice-border: rgba(3, 155, 229, 0.22);
+            --notice-icon-bg: rgba(3, 155, 229, 0.12);
+        }
         .notice-card-icon {
             width: 36px;
             height: 36px;
@@ -762,6 +767,157 @@ body {
         }
         .notice-card-action--primary:hover {
             opacity: 0.92;
+        }
+        .onboarding-card {
+            grid-template-columns: auto minmax(0, 1fr) auto;
+            align-items: start;
+        }
+        .onboarding-progress {
+            margin-top: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .onboarding-progress-bar {
+            position: relative;
+            width: min(280px, 100%);
+            height: 8px;
+            border-radius: 999px;
+            overflow: hidden;
+            background: rgba(148, 163, 184, 0.22);
+        }
+        .onboarding-progress-fill {
+            height: 100%;
+            border-radius: inherit;
+            background: linear-gradient(90deg, var(--notice-accent), rgba(3, 155, 229, 0.5));
+            transition: width 0.2s ease;
+        }
+        .onboarding-progress-text {
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--primary-text-color);
+        }
+        .onboarding-checkpoints {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 10px;
+        }
+        .onboarding-checkpoint {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            min-height: 28px;
+            padding: 0 10px;
+            border-radius: 999px;
+            border: 1px solid rgba(148, 163, 184, 0.22);
+            background: rgba(148, 163, 184, 0.08);
+            color: var(--secondary-text-color);
+            font-size: 11px;
+            font-weight: 700;
+            line-height: 1.2;
+        }
+        .onboarding-checkpoint.is-reached {
+            border-color: rgba(67, 160, 71, 0.24);
+            background: rgba(67, 160, 71, 0.12);
+            color: var(--primary-text-color);
+        }
+        .onboarding-checkpoint-icon {
+            width: 14px;
+            height: 14px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: inherit;
+        }
+        .onboarding-step-list {
+            display: grid;
+            gap: 8px;
+            margin-top: 12px;
+        }
+        .onboarding-step {
+            display: grid;
+            grid-template-columns: auto minmax(0, 1fr);
+            gap: 10px;
+            align-items: start;
+            padding: 10px 12px;
+            border-radius: 10px;
+            background: rgba(148, 163, 184, 0.08);
+            border: 1px solid rgba(148, 163, 184, 0.16);
+        }
+        .onboarding-step.is-complete {
+            border-color: rgba(67, 160, 71, 0.22);
+            background: rgba(67, 160, 71, 0.08);
+        }
+        .onboarding-step.is-current {
+            border-color: rgba(3, 155, 229, 0.24);
+            background: rgba(3, 155, 229, 0.08);
+        }
+        .onboarding-step.is-upcoming {
+            opacity: 0.92;
+        }
+        .onboarding-step-indicator {
+            width: 24px;
+            height: 24px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 700;
+            background: rgba(148, 163, 184, 0.18);
+            color: var(--secondary-text-color);
+        }
+        .onboarding-step.is-complete .onboarding-step-indicator {
+            background: rgba(67, 160, 71, 0.18);
+            color: var(--success-color, #43a047);
+        }
+        .onboarding-step.is-current .onboarding-step-indicator {
+            background: rgba(3, 155, 229, 0.18);
+            color: var(--info-color, #039be5);
+        }
+        .onboarding-step-title-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .onboarding-step-title {
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--primary-text-color);
+        }
+        .onboarding-step-badge {
+            display: inline-flex;
+            align-items: center;
+            min-height: 20px;
+            padding: 0 8px;
+            border-radius: 999px;
+            background: rgba(148, 163, 184, 0.18);
+            color: var(--secondary-text-color);
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.01em;
+            text-transform: uppercase;
+        }
+        .onboarding-step-badge.is-warning {
+            background: rgba(255, 166, 0, 0.15);
+            color: #c77700;
+        }
+        .onboarding-step-badge.is-error {
+            background: rgba(219, 68, 55, 0.14);
+            color: var(--error-color, #db4437);
+        }
+        .onboarding-step-badge.is-ok {
+            background: rgba(67, 160, 71, 0.14);
+            color: var(--success-color, #43a047);
+        }
+        .onboarding-step-summary {
+            margin-top: 4px;
+            font-size: 12px;
+            line-height: 1.45;
+            color: var(--secondary-text-color);
         }
 
         /* Status grid — responsive card grid */
@@ -4473,6 +4629,12 @@ body {
                 justify-content: stretch;
             }
             .notice-card-action {
+                width: 100%;
+            }
+            .onboarding-card {
+                grid-template-columns: 1fr;
+            }
+            .onboarding-progress-bar {
                 width: 100%;
             }
 

@@ -2454,6 +2454,7 @@ function renderStatusPayload(status) {
     if (resolvedMaUiUrl) lastMaUiUrl = resolvedMaUiUrl;
     var resolvedMaWebUrl = _normalizeExternalUrlBase(status.ma_web_url || lastMaWebUrl || '');
     if (resolvedMaWebUrl) lastMaWebUrl = resolvedMaWebUrl;
+    loadOnboardingAssistant(false);
 
     var userLink = document.getElementById('header-user-link');
     if (userLink) {
@@ -4774,6 +4775,148 @@ function _setMaIntegrationBanner(message, title) {
     _syncNoticeStack();
 }
 
+var _onboardingAssistantRefreshAt = 0;
+var _onboardingAssistantRequest = null;
+
+function _openDiagnosticsPanel() {
+    var details = document.getElementById('diag-details');
+    if (!details) return false;
+    details.open = true;
+    onDiagToggle(details);
+    details.scrollIntoView({behavior: 'smooth', block: 'start'});
+    return false;
+}
+
+function _runOnboardingAssistantAction(actionKey) {
+    if (!actionKey) return false;
+    if (actionKey === 'open_bluetooth_settings') {
+        _goToAdapters();
+        return false;
+    }
+    if (actionKey === 'scan_devices') {
+        openConfigAndAddDevice();
+        return false;
+    }
+    if (actionKey === 'open_devices_settings') {
+        var opened = _openConfigPanel('devices', 'config-panel-devices', 'start');
+        _highlightConfigTarget((opened && opened.target) || document.getElementById('config-panel-devices'));
+        return false;
+    }
+    if (actionKey === 'open_ma_settings') {
+        return openMaTokenSettings();
+    }
+    if (actionKey === 'open_diagnostics') {
+        return _openDiagnosticsPanel();
+    }
+    return false;
+}
+
+function _onboardingStageLabel(step) {
+    if (!step) return 'Upcoming';
+    if (step.stage === 'complete') return 'Done';
+    if (step.stage === 'current') return step.status === 'error' ? 'Blocked' : 'Next';
+    return 'Upcoming';
+}
+
+function _renderOnboardingCheckpoints(checkpoints) {
+    if (!checkpoints || !checkpoints.length) return '';
+    return checkpoints.map(function(checkpoint) {
+        return '<div class="onboarding-checkpoint' + (checkpoint.reached ? ' is-reached' : '') + '"' +
+            ' title="' + escHtml(checkpoint.summary || '') + '">' +
+            '<span class="onboarding-checkpoint-icon">' +
+            (checkpoint.reached ? _uiIconSvg('check', 'ui-icon-svg') : _uiIconSvg('status-neutral', 'ui-icon-svg')) +
+            '</span>' +
+            '<span>' + escHtml(checkpoint.label) + '</span>' +
+        '</div>';
+    }).join('');
+}
+
+function _renderOnboardingSteps(steps) {
+    if (!steps || !steps.length) return '';
+    return steps.map(function(step, index) {
+        var badgeTone = step.status === 'error' ? 'error' : step.status === 'warning' ? 'warning' : 'ok';
+        var indicator = step.stage === 'complete' ? _uiIconSvg('check', 'ui-icon-svg') : escHtml(String(index + 1));
+        return '<div class="onboarding-step is-' + escHtml(step.stage || 'upcoming') + '">' +
+            '<div class="onboarding-step-indicator">' + indicator + '</div>' +
+            '<div>' +
+                '<div class="onboarding-step-title-row">' +
+                    '<div class="onboarding-step-title">' + escHtml(step.title || step.key || 'Step') + '</div>' +
+                    '<span class="onboarding-step-badge is-' + badgeTone + '">' + escHtml(_onboardingStageLabel(step)) + '</span>' +
+                '</div>' +
+                '<div class="onboarding-step-summary">' + escHtml(step.summary || '') + '</div>' +
+            '</div>' +
+        '</div>';
+    }).join('');
+}
+
+function _setOnboardingAssistantBanner(assistant) {
+    var banner = document.getElementById('onboarding-assistant-banner');
+    var titleEl = document.getElementById('onboarding-assistant-title');
+    var textEl = document.getElementById('onboarding-assistant-text');
+    var progressEl = document.getElementById('onboarding-assistant-progress');
+    var checkpointsEl = document.getElementById('onboarding-assistant-checkpoints');
+    var stepsEl = document.getElementById('onboarding-assistant-steps');
+    var actionsEl = document.getElementById('onboarding-assistant-actions');
+    if (!banner || !titleEl || !textEl || !progressEl || !checkpointsEl || !stepsEl || !actionsEl) return;
+    if (!assistant || !assistant.checklist) {
+        banner.hidden = true;
+        titleEl.textContent = '';
+        textEl.textContent = '';
+        progressEl.hidden = true;
+        progressEl.innerHTML = '';
+        checkpointsEl.hidden = true;
+        checkpointsEl.innerHTML = '';
+        stepsEl.innerHTML = '';
+        actionsEl.innerHTML = '';
+        _syncNoticeStack();
+        return;
+    }
+
+    var checklist = assistant.checklist || {};
+    titleEl.textContent = checklist.headline || 'Setup checklist';
+    textEl.textContent = checklist.summary || 'Review the bridge setup checklist.';
+    progressEl.hidden = false;
+    progressEl.innerHTML =
+        '<div class="onboarding-progress-bar">' +
+            '<div class="onboarding-progress-fill" style="width:' + Math.max(0, Math.min(100, checklist.progress_percent || 0)) + '%"></div>' +
+        '</div>' +
+        '<div class="onboarding-progress-text">' +
+            escHtml(String(checklist.completed_steps || 0)) + '/' + escHtml(String(checklist.total_steps || 0)) +
+            ' complete · ' + escHtml(String(checklist.progress_percent || 0)) + '%' +
+        '</div>';
+    checkpointsEl.hidden = !(checklist.checkpoints && checklist.checkpoints.length);
+    checkpointsEl.innerHTML = _renderOnboardingCheckpoints(checklist.checkpoints || []);
+    stepsEl.innerHTML = _renderOnboardingSteps((checklist.steps || []).slice(0, 5));
+
+    var action = checklist.primary_action || {key: 'open_diagnostics', label: 'Review diagnostics'};
+    actionsEl.innerHTML =
+        '<a href="#" class="notice-card-action notice-card-action--primary" onclick="return _runOnboardingAssistantAction(\'' +
+            escHtml(action.key || 'open_diagnostics') +
+        '\')">' + escHtml(action.label || 'Review diagnostics') + '</a>';
+
+    banner.hidden = false;
+    _syncNoticeStack();
+}
+
+async function loadOnboardingAssistant(force) {
+    var now = Date.now();
+    if (!force && now - _onboardingAssistantRefreshAt < 15000) return;
+    _onboardingAssistantRefreshAt = now;
+    if (_onboardingAssistantRequest) return _onboardingAssistantRequest;
+    _onboardingAssistantRequest = (async function() {
+        try {
+            var resp = await fetch(API_BASE + '/api/onboarding/assistant');
+            if (resp.status === 401) { _handleUnauthorized(); return; }
+            _setOnboardingAssistantBanner(await resp.json());
+        } catch (err) {
+            console.warn('Onboarding assistant refresh failed:', err);
+        } finally {
+            _onboardingAssistantRequest = null;
+        }
+    })();
+    return _onboardingAssistantRequest;
+}
+
 function openMaTokenSettings() {
     var opened = _openConfigPanel('ma', 'ma-connect-panel', 'start');
     var target = document.getElementById('ma-ha-login-btn');
@@ -6670,6 +6813,7 @@ function updateSliderFill(el) {
 _hydrateUiIcons(document);
 initConfigTabs();
 loadConfig();   // calls loadBtAdapters() internally after restoring btManualAdapters
+loadOnboardingAssistant(true);
 updateStatus();
 
 // Use SSE for real-time status push; fall back to polling if not supported

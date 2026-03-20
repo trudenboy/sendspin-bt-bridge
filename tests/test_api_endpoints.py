@@ -2101,6 +2101,9 @@ def test_onboarding_assistant_endpoint_returns_guidance(client, monkeypatch):
     checks = {check["key"]: check for check in data["checks"]}
     assert checks["sink_verification"]["status"] == "ok"
     assert checks["ma_auth"]["status"] == "warning"
+    assert data["checklist"]["current_step_key"] == "ma_auth"
+    assert data["checklist"]["primary_action"]["key"] == "open_ma_settings"
+    assert data["checklist"]["checkpoints"][2]["reached"] is True
     assert data["next_steps"]
 
 

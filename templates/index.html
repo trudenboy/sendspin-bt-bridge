@@ -132,6 +132,18 @@
                 <a href="#" class="notice-card-action notice-card-action--primary" onclick="return openMaTokenSettings()">Open Music Assistant settings</a>
             </div>
         </div>
+
+        <div id="onboarding-assistant-banner" class="notice-card notice-card--info onboarding-card" hidden>
+            <span class="notice-card-icon ui-icon-slot" data-ui-icon="info" aria-hidden="true"></span>
+            <div class="notice-card-copy">
+                <div id="onboarding-assistant-title" class="notice-card-title">Setup checklist</div>
+                <div id="onboarding-assistant-text" class="notice-card-text">Loading setup guidance…</div>
+                <div id="onboarding-assistant-progress" class="onboarding-progress" hidden></div>
+                <div id="onboarding-assistant-checkpoints" class="onboarding-checkpoints" hidden></div>
+                <div id="onboarding-assistant-steps" class="onboarding-step-list"></div>
+            </div>
+            <div id="onboarding-assistant-actions" class="notice-card-actions"></div>
+        </div>
     </div>
 
     <!-- Toolbar: Filter + Actions -->
