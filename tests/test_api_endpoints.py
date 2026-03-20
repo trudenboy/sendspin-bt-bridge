@@ -260,9 +260,9 @@ def test_set_volume_uses_registry_snapshot_for_player_lookup(client, monkeypatch
         lambda: DeviceRegistrySnapshot(active_clients=[fake_client]),
     )
     monkeypatch.setattr(api_mod, "get_volume_via_ma", lambda: False)
-    monkeypatch.setattr(api_mod.state, "is_ma_connected", lambda: False)
+    monkeypatch.setattr(api_mod, "is_ma_connected", lambda: False)
     monkeypatch.setattr(api_mod, "set_sink_volume", lambda sink, volume: True)
-    monkeypatch.setattr(api_mod.state, "get_main_loop", lambda: None)
+    monkeypatch.setattr(api_mod, "get_main_loop", lambda: None)
 
     resp = client.post(
         "/api/volume",
@@ -362,7 +362,7 @@ def test_api_group_pause_uses_registry_snapshot_for_group_lookup(client, monkeyp
         "get_device_registry_snapshot",
         lambda: DeviceRegistrySnapshot(active_clients=[_FakeClient()]),
     )
-    monkeypatch.setattr(api_mod.state, "get_main_loop", lambda: object())
+    monkeypatch.setattr(api_mod, "get_main_loop", lambda: object())
     monkeypatch.setattr(api_mod.asyncio, "run_coroutine_threadsafe", _run_coroutine_threadsafe)
 
     resp = client.post(
@@ -408,7 +408,7 @@ def test_api_pause_uses_registry_snapshot_for_player_lookup(client, monkeypatch)
         "get_device_registry_snapshot",
         lambda: DeviceRegistrySnapshot(active_clients=[_FakeClient()]),
     )
-    monkeypatch.setattr(api_mod.state, "get_main_loop", lambda: object())
+    monkeypatch.setattr(api_mod, "get_main_loop", lambda: object())
     monkeypatch.setattr(api_mod.asyncio, "run_coroutine_threadsafe", _run_coroutine_threadsafe)
 
     resp = client.post(
@@ -454,7 +454,7 @@ def test_api_pause_does_not_require_future_result(client, monkeypatch):
         "get_device_registry_snapshot",
         lambda: DeviceRegistrySnapshot(active_clients=[_FakeClient()]),
     )
-    monkeypatch.setattr(api_mod.state, "get_main_loop", lambda: object())
+    monkeypatch.setattr(api_mod, "get_main_loop", lambda: object())
     monkeypatch.setattr(api_mod.asyncio, "run_coroutine_threadsafe", _run_coroutine_threadsafe)
 
     resp = client.post(
@@ -1853,7 +1853,7 @@ def test_onboarding_assistant_endpoint_returns_guidance(client, monkeypatch):
             ]
         ),
     )
-    monkeypatch.setattr(api_status.state, "is_ma_connected", lambda: False)
+    monkeypatch.setattr(api_status, "is_ma_connected", lambda: False)
     monkeypatch.setattr(api_status, "build_mock_runtime_snapshot", lambda: SimpleNamespace(mode="production"))
 
     resp = client.get("/api/onboarding/assistant")

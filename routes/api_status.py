@@ -20,7 +20,6 @@ from datetime import datetime, timezone
 
 from flask import Blueprint, Response, jsonify, request
 
-import state
 from config import (
     BUILD_DATE,
     CONFIG_SCHEMA_VERSION,
@@ -29,10 +28,24 @@ from config import (
     VERSION,
     load_config,
 )
+from services.bridge_runtime_state import (
+    get_bridge_uptime,
+    get_bridge_uptime_seconds,
+    get_bridge_uptime_text,
+    get_status_version,
+    wait_for_status_change,
+)
 from services.device_registry import get_device_registry_snapshot
 from services.event_hooks import get_event_hook_registry
 from services.ipc_protocol import IPC_PROTOCOL_VERSION
 from services.log_analysis import summarize_issue_logs
+from services.ma_runtime_state import (
+    get_ma_api_credentials,
+    get_ma_groups,
+    get_ma_now_playing_for_group,
+    get_ma_server_version,
+    is_ma_connected,
+)
 from services.onboarding_assistant import build_onboarding_assistant_snapshot
 from services.pulse import get_server_name, list_sinks
 from services.sendspin_compat import get_runtime_dependency_versions
@@ -179,7 +192,7 @@ def _build_onboarding_assistant_payload(preflight: dict | None = None) -> dict:
         config=config,
         preflight=preflight,
         devices=devices,
-        ma_connected=state.is_ma_connected(),
+        ma_connected=is_ma_connected(),
         runtime_mode=runtime_mode,
     )
     return assistant.to_dict()
@@ -345,14 +358,14 @@ def api_status_stream():
             if initial:
                 yield f"data: {json.dumps(initial)}\n\n"
 
-            last_version = state.get_status_version()
+            last_version = get_status_version()
             started = time.monotonic()
             while True:
                 if time.monotonic() - started >= _SSE_MAX_LIFETIME:
                     yield 'data: {"error": "session expired"}\n\n'
                     break
 
-                changed, last_version = state.wait_for_status_change(last_version, timeout=15)
+                changed, last_version = wait_for_status_change(last_version, timeout=15)
 
                 if changed:
                     data = _build_snapshot()
@@ -388,7 +401,7 @@ def api_diagnostics():
         elif os.path.exists("/etc/systemd/system/sendspin-client.service"):
             runtime = "systemd"
 
-        uptime_str = str(datetime.now(tz=UTC) - state.bridge_start_time).split(".")[0]
+        uptime_str = get_bridge_uptime_text()
 
         diag: dict = {
             "version": VERSION,
@@ -473,8 +486,8 @@ def api_diagnostics():
         diag["devices"] = device_diag
 
         # MA API integration status
-        ma_url, ma_token = state.get_ma_api_credentials()
-        ma_groups = state.get_ma_groups()
+        ma_url, ma_token = get_ma_api_credentials()
+        ma_groups = get_ma_groups()
 
         # Build a player_id→client lookup for matching MA members to bridge devices
         bridge_by_id = {
@@ -509,7 +522,7 @@ def api_diagnostics():
                     )
                 members_detail.append(member_info)
 
-            np = state.get_ma_now_playing_for_group(g["id"])
+            np = get_ma_now_playing_for_group(g["id"])
             group_info: dict = {
                 "id": g["id"],
                 "name": g.get("name", ""),
@@ -525,8 +538,8 @@ def api_diagnostics():
 
         diag["ma_integration"] = {
             "configured": bool(ma_url and ma_token),
-            "connected": state.is_ma_connected(),
-            "version": state.get_ma_server_version(),
+            "connected": is_ma_connected(),
+            "version": get_ma_server_version(),
             "url": ma_url or "",
             "syncgroups": enriched_groups,
         }
@@ -754,7 +767,7 @@ def _build_bridge_telemetry_payload(
     startup_progress = build_startup_progress_snapshot().to_dict() if startup_progress is None else startup_progress
     runtime_info = build_mock_runtime_snapshot().to_dict() if runtime_info is None else runtime_info
     event_hooks = get_event_hook_registry().snapshot() if event_hooks is None else event_hooks
-    uptime_seconds = round((datetime.now(tz=UTC) - state.bridge_start_time).total_seconds(), 1)
+    uptime_seconds = get_bridge_uptime_seconds()
     return {
         "bridge": {
             "uptime_seconds": uptime_seconds,
@@ -897,7 +910,7 @@ def api_bugreport():
         elif os.path.exists("/etc/systemd/system/sendspin-client.service"):
             runtime = "systemd"
 
-        uptime_str = str(datetime.now(tz=UTC) - state.bridge_start_time)
+        uptime_str = str(get_bridge_uptime())
 
         issue_summary = summarize_issue_logs(log_lines, max_lines=3)
 
@@ -1160,7 +1173,7 @@ def api_diagnostics_download():
         config_info = _sanitized_config()
         log_lines = _collect_recent_logs(100)
 
-        uptime_str = str(datetime.now(tz=UTC) - state.bridge_start_time)
+        uptime_str = str(get_bridge_uptime())
 
         runtime = "unknown"
         if os.path.exists("/data/options.json"):

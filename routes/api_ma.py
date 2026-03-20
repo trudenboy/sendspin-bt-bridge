@@ -19,16 +19,30 @@ import uuid
 
 from flask import Blueprint, Response, jsonify, request
 
-import state
 from config import (
     load_config,
     update_config,
 )
 from routes.api_config import _detect_runtime
+from services.async_job_state import create_async_job, finish_async_job, get_async_job
+from services.bridge_runtime_state import get_main_loop
 from services.device_registry import get_device_registry_snapshot
 from services.ha_addon import get_ma_addon_internal_ingress_url
 from services.ma_artwork import has_valid_artwork_signature
 from services.ma_monitor import solo_queue_candidates
+from services.ma_runtime_state import (
+    apply_ma_now_playing_prediction,
+    fail_ma_pending_op,
+    get_ma_api_credentials,
+    get_ma_group_by_id,
+    get_ma_group_for_player_id,
+    get_ma_groups,
+    get_ma_now_playing,
+    get_ma_now_playing_cache_snapshot,
+    is_ma_connected,
+    set_ma_api_credentials,
+    set_ma_groups,
+)
 from services.status_snapshot import build_device_snapshot_pairs
 
 logger = logging.getLogger(__name__)
@@ -128,14 +142,14 @@ def _resolve_target_queue(
             inferred_solo_queue_id = inferred_solo_queue_ids[0] if inferred_solo_queue_ids else ""
             for candidate in (raw_syncgroup_id, raw_group_id):
                 if candidate.startswith("syncgroup_"):
-                    ma_group = state.get_ma_group_by_id(candidate)
+                    ma_group = get_ma_group_by_id(candidate)
                     members = {str(m.get("id", "")) for m in (ma_group or {}).get("members", [])}
                     if any(queue_id in members for queue_id in inferred_solo_queue_ids):
                         return candidate, candidate
             return inferred_player_id, inferred_solo_queue_id
 
     if raw_player_id:
-        ma_group = state.get_ma_group_for_player_id(raw_player_id)
+        ma_group = get_ma_group_for_player_id(raw_player_id)
         if ma_group and ma_group.get("id"):
             resolved = ma_group["id"]
             return resolved, resolved
@@ -146,7 +160,7 @@ def _resolve_target_queue(
             if candidate.startswith(("up", "media_player.", "ma_")):
                 return raw_player_id, candidate
             if candidate.startswith("syncgroup_"):
-                ma_group = state.get_ma_group_by_id(candidate)
+                ma_group = get_ma_group_by_id(candidate)
                 members = {str(m.get("id", "")) for m in (ma_group or {}).get("members", [])}
                 if any(queue_id in members for queue_id in solo_queue_ids):
                     return candidate, candidate
@@ -157,7 +171,7 @@ def _resolve_target_queue(
     for candidate in (raw_syncgroup_id, raw_group_id):
         if not candidate:
             continue
-        ma_group = state.get_ma_group_by_id(candidate)
+        ma_group = get_ma_group_by_id(candidate)
         if ma_group and ma_group.get("id"):
             resolved = ma_group["id"]
             return resolved, resolved
@@ -169,7 +183,7 @@ def _resolve_target_queue(
     if player_id:
         return raw_player_id, raw_player_id
 
-    groups = state.get_ma_groups()
+    groups = get_ma_groups()
     if not groups:
         return None, None
     first_group = groups[0] if isinstance(groups[0], dict) else {}
@@ -209,7 +223,7 @@ def _ws_connect(url: str, **kwargs):
 
 def _resolve_ma_artwork_url(raw_url: str) -> tuple[str, bool]:
     """Resolve a raw artwork path/URL and report whether it targets the MA origin."""
-    ma_url, _token = state.get_ma_api_credentials()
+    ma_url, _token = get_ma_api_credentials()
     if not ma_url:
         raise ValueError("MA API URL is not configured")
 
@@ -256,7 +270,7 @@ def _build_ma_integration_summary(discovered_url: str = "") -> dict[str, object]
     configured_url = str(cfg.get("MA_API_URL") or "").strip().rstrip("/")
     configured_token = str(cfg.get("MA_API_TOKEN") or "").strip()
     discovered_url = str(discovered_url or "").strip().rstrip("/")
-    connected = state.is_ma_connected()
+    connected = is_ma_connected()
     token_valid = False
     if configured_url and configured_token:
         token_valid = _validate_ma_token(configured_url, configured_token)
@@ -392,7 +406,7 @@ async def _rediscover_after_login(
         from services.ma_client import discover_ma_groups
 
         id_map, all_groups = await discover_ma_groups(ma_url, ma_token, bridge_players)
-        state.set_ma_groups(id_map, all_groups)
+        set_ma_groups(id_map, all_groups)
         logger.info("MA groups rediscovered after login: %d groups", len(all_groups))
     except Exception:
         logger.debug("MA group rediscovery after login failed", exc_info=True)
@@ -410,9 +424,9 @@ def _save_ma_token_and_rediscover(ma_url: str, ma_token: str, username: str = ""
             cfg["MA_AUTH_PROVIDER"] = auth_provider
 
     update_config(_save)
-    state.set_ma_api_credentials(ma_url, ma_token)
+    set_ma_api_credentials(ma_url, ma_token)
 
-    loop = state.get_main_loop()
+    loop = get_main_loop()
     if loop:
         try:
             asyncio.run_coroutine_threadsafe(
@@ -923,7 +937,7 @@ def _run_ma_discover_job(job_id: str, loop, is_addon: bool) -> None:
         discovered_url = ""
         if servers and isinstance(servers[0], dict):
             discovered_url = str(servers[0].get("url") or "")
-        state.finish_async_job(
+        finish_async_job(
             job_id,
             {
                 "success": True,
@@ -939,7 +953,7 @@ def _run_ma_discover_job(job_id: str, loop, is_addon: bool) -> None:
             _finish_success([info])
             return
 
-    ma_url, _ = state.get_ma_api_credentials()
+    ma_url, _ = get_ma_api_credentials()
     if ma_url:
         info = _await_loop_result(loop, validate_ma_url(ma_url), timeout=5.0, description=f"validate {ma_url}")
         if info:
@@ -974,7 +988,7 @@ def _run_ma_discover_job(job_id: str, loop, is_addon: bool) -> None:
         _finish_success(servers)
     except Exception:
         logger.exception("MA mDNS discovery failed")
-        state.finish_async_job(job_id, {"success": False, "is_addon": is_addon, "error": "Discovery failed"})
+        finish_async_job(job_id, {"success": False, "is_addon": is_addon, "error": "Discovery failed"})
 
 
 def _run_ma_rediscover_job(job_id: str, loop, ma_url: str, ma_token: str, player_info: list[dict[str, str]]) -> None:
@@ -991,9 +1005,9 @@ def _run_ma_rediscover_job(job_id: str, loop, ma_url: str, ma_token: str, player
         if result is None:
             raise RuntimeError("MA rediscover failed")
         name_map, all_groups = result
-        state.set_ma_api_credentials(ma_url, ma_token)
-        state.set_ma_groups(name_map, all_groups)
-        state.finish_async_job(
+        set_ma_api_credentials(ma_url, ma_token)
+        set_ma_groups(name_map, all_groups)
+        finish_async_job(
             job_id,
             {
                 "success": True,
@@ -1004,7 +1018,7 @@ def _run_ma_rediscover_job(job_id: str, loop, ma_url: str, ma_token: str, player
         )
     except Exception:
         logger.exception("MA rediscover failed")
-        state.finish_async_job(job_id, {"success": False, "error": "Internal error"})
+        finish_async_job(job_id, {"success": False, "error": "Internal error"})
 
 
 def _run_ma_queue_cmd_job(
@@ -1030,8 +1044,8 @@ def _run_ma_queue_cmd_job(
         )
         if not result or not result.get("accepted"):
             error = (result or {}).get("error") or "MA command was not accepted"
-            predicted = state.fail_ma_pending_op(state_key or target_queue_id, op_id, error)
-            state.finish_async_job(
+            predicted = fail_ma_pending_op(state_key or target_queue_id, op_id, error)
+            finish_async_job(
                 job_id,
                 {
                     "success": False,
@@ -1046,7 +1060,7 @@ def _run_ma_queue_cmd_job(
             return
 
         accepted_queue_id = str(result.get("queue_id") or target_queue_id)
-        predicted = state.apply_ma_now_playing_prediction(
+        predicted = apply_ma_now_playing_prediction(
             state_key,
             {},
             op_id=op_id,
@@ -1061,7 +1075,7 @@ def _run_ma_queue_cmd_job(
             timeout=1.0,
             description=f"MA queue refresh {accepted_queue_id}",
         )
-        state.finish_async_job(
+        finish_async_job(
             job_id,
             {
                 "success": True,
@@ -1077,9 +1091,9 @@ def _run_ma_queue_cmd_job(
             },
         )
     except Exception as exc:
-        predicted = state.fail_ma_pending_op(state_key or target_queue_id, op_id, str(exc))
+        predicted = fail_ma_pending_op(state_key or target_queue_id, op_id, str(exc))
         logger.exception("MA queue command '%s' failed", action)
-        state.finish_async_job(
+        finish_async_job(
             job_id,
             {
                 "success": False,
@@ -1104,11 +1118,11 @@ def api_ma_discover():
     Always returns ``is_addon`` flag so frontend can adjust UI.
     """
     is_addon = _detect_runtime() == "ha_addon"
-    loop = state.get_main_loop()
+    loop = get_main_loop()
     if not loop:
         return jsonify({"success": False, "error": "Event loop not available"}), 503
     job_id = str(uuid.uuid4())
-    state.create_async_job(job_id, "ma-discover")
+    create_async_job(job_id, "ma-discover")
     threading.Thread(
         target=_run_ma_discover_job,
         args=(job_id, loop, is_addon),
@@ -1121,7 +1135,7 @@ def api_ma_discover():
 @ma_bp.route("/api/ma/discover/result/<job_id>", methods=["GET"])
 def api_ma_discover_result(job_id: str):
     """Poll for async Music Assistant discovery results."""
-    job = state.get_async_job(job_id)
+    job = get_async_job(job_id)
     if job is None or job.get("job_type") != "ma-discover":
         return jsonify({"error": "Job not found"}), 404
     if job.get("status") == "running":
@@ -1147,7 +1161,7 @@ def api_ma_login():
     if not username or not password:
         return jsonify({"success": False, "error": "Username and password are required"}), 400
 
-    loop = state.get_main_loop()
+    loop = get_main_loop()
     if not loop:
         return jsonify({"success": False, "error": "Event loop not available"}), 503
 
@@ -1159,7 +1173,7 @@ def api_ma_login():
         ma_url_candidate = ""
 
         # From existing MA config
-        known_url, _ = state.get_ma_api_credentials()
+        known_url, _ = get_ma_api_credentials()
         if known_url:
             ma_url_candidate = known_url
 
@@ -1250,7 +1264,7 @@ def api_ma_login():
         cfg["MA_AUTH_PROVIDER"] = "builtin"
 
     update_config(_save_ma_creds)
-    state.set_ma_api_credentials(ma_url, token)
+    set_ma_api_credentials(ma_url, token)
 
     # Trigger MA group rediscovery in background
     try:
@@ -1317,7 +1331,7 @@ def api_ma_ha_silent_auth():
         return jsonify({"success": False, "error": "Missing ha_token or ma_url"}), 400
 
     # Idempotency: reuse existing token if it still works for this MA instance
-    existing_url, existing_token = state.get_ma_api_credentials()
+    existing_url, existing_token = get_ma_api_credentials()
     if existing_token and existing_url and existing_url.rstrip("/") == ma_url:
         if _validate_ma_token(ma_url, existing_token):
             logger.debug("Silent auth: existing MA token still valid — reusing")
@@ -1517,7 +1531,7 @@ def api_ma_groups():
     Each group includes id, name, and members with id/name/state/volume/available.
     Returns empty list if MA API is not configured or discovery has not run yet.
     """
-    return jsonify(state.get_ma_groups())
+    return jsonify(get_ma_groups())
 
 
 @ma_bp.route("/api/ma/rediscover", methods=["POST"])
@@ -1533,12 +1547,12 @@ def api_ma_rediscover():
     if not ma_url or not ma_token:
         return jsonify({"success": False, "error": "MA_API_URL or MA_API_TOKEN not configured"}), 400
 
-    loop = state.get_main_loop()
+    loop = get_main_loop()
     if not loop:
         return jsonify({"success": False, "error": "Event loop not available"}), 503
 
     job_id = str(uuid.uuid4())
-    state.create_async_job(job_id, "ma-rediscover")
+    create_async_job(job_id, "ma-rediscover")
     threading.Thread(
         target=_run_ma_rediscover_job,
         args=(job_id, loop, ma_url, ma_token, _bridge_players_snapshot()),
@@ -1551,7 +1565,7 @@ def api_ma_rediscover():
 @ma_bp.route("/api/ma/rediscover/result/<job_id>", methods=["GET"])
 def api_ma_rediscover_result(job_id: str):
     """Poll for async MA rediscover results."""
-    job = state.get_async_job(job_id)
+    job = get_async_job(job_id)
     if job is None or job.get("job_type") != "ma-rediscover":
         return jsonify({"error": "Job not found"}), 404
     if job.get("status") == "running":
@@ -1568,9 +1582,9 @@ def api_ma_nowplaying():
     elapsed, elapsed_updated_at, duration, shuffle, repeat,
     queue_index, queue_total, syncgroup_id, and optional prev_/next_ track metadata.
     """
-    if not state.is_ma_connected():
+    if not is_ma_connected():
         return jsonify({"connected": False})
-    return jsonify(state.get_ma_now_playing())
+    return jsonify(get_ma_now_playing())
 
 
 @ma_bp.route("/api/ma/artwork", methods=["GET"])
@@ -1588,7 +1602,7 @@ def api_ma_artwork():
     except ValueError as exc:
         return Response(str(exc), status=400)
 
-    _ma_url, ma_token = state.get_ma_api_credentials()
+    _ma_url, ma_token = get_ma_api_credentials()
     req = _ur.Request(artwork_url, headers={"Accept": "image/*"})
     if is_ma_origin and ma_token:
         req.add_header("Authorization", f"Bearer {ma_token}")
@@ -1615,7 +1629,7 @@ def api_ma_queue_cmd():
     - repeat: value="off"|"all"|"one"
     - seek: value=<seconds int>
     """
-    if not state.is_ma_connected():
+    if not is_ma_connected():
         return jsonify({"success": False, "error": "MA not connected", "error_code": "ma_unavailable"}), 503
 
     data = request.get_json(silent=True) or {}
@@ -1637,7 +1651,7 @@ def api_ma_queue_cmd():
     if not state_key or not target_queue_id:
         return jsonify({"success": False, "error": "No MA queue available", "error_code": "queue_unavailable"}), 503
 
-    loop = state.get_main_loop()
+    loop = get_main_loop()
     if not loop:
         return jsonify({"success": False, "error": "Event loop not available", "error_code": "loop_unavailable"}), 503
 
@@ -1660,7 +1674,7 @@ def api_ma_queue_cmd():
                 503,
             )
 
-        predicted = state.apply_ma_now_playing_prediction(
+        predicted = apply_ma_now_playing_prediction(
             state_key,
             _build_ma_prediction_patch(action, value),
             op_id=op_id,
@@ -1668,7 +1682,7 @@ def api_ma_queue_cmd():
             value=value,
         )
         job_id = str(uuid.uuid4())
-        state.create_async_job(job_id, "ma-queue-cmd")
+        create_async_job(job_id, "ma-queue-cmd")
         threading.Thread(
             target=_run_ma_queue_cmd_job,
             args=(job_id, loop),
@@ -1699,7 +1713,7 @@ def api_ma_queue_cmd():
             }
         ), 202
     except Exception as exc:
-        state.fail_ma_pending_op(state_key or target_queue_id or "", op_id, str(exc))
+        fail_ma_pending_op(state_key or target_queue_id or "", op_id, str(exc))
         logger.exception("MA queue command '%s' failed", action)
         return jsonify(
             {"success": False, "error": "Internal error", "error_code": "internal_error", "op_id": op_id}
@@ -1709,7 +1723,7 @@ def api_ma_queue_cmd():
 @ma_bp.route("/api/ma/queue/cmd/result/<job_id>", methods=["GET"])
 def api_ma_queue_cmd_result(job_id: str):
     """Poll for async MA queue command results."""
-    job = state.get_async_job(job_id)
+    job = get_async_job(job_id)
     if job is None or job.get("job_type") != "ma-queue-cmd":
         return jsonify({"error": "Job not found"}), 404
     if job.get("status") == "running":
@@ -1720,13 +1734,12 @@ def api_ma_queue_cmd_result(job_id: str):
 @ma_bp.route("/api/debug/ma")
 def api_debug_ma():
     """Debug: dump MA now-playing cache, groups, per-client player_ids, and live queues."""
-    with state._ma_now_playing_lock:
-        cache = dict(state._ma_now_playing)
-    groups = state.get_ma_groups()
+    cache = get_ma_now_playing_cache_snapshot()
+    groups = get_ma_groups()
     clients_info = _debug_clients_snapshot()
 
     # Fetch live queue ids from MA WebSocket
-    ma_url, ma_token = state.get_ma_api_credentials()
+    ma_url, ma_token = get_ma_api_credentials()
     live_queue_ids: list[str] = []
     if ma_url and ma_token:
         try:
@@ -1746,7 +1759,7 @@ def api_debug_ma():
                             return [q.get("queue_id", "") for q in (msg.get("result") or [])]
                 return []
 
-            loop = state.get_main_loop()
+            loop = get_main_loop()
             if loop:
                 fut = asyncio.run_coroutine_threadsafe(_fetch(), loop)
                 live_queue_ids = fut.result(timeout=10)
