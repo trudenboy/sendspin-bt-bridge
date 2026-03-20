@@ -7614,6 +7614,39 @@ function _renderDiagInfoItem(label, value, options) {
     '</div>';
 }
 
+function _renderDiagSummaryCard(card) {
+    var classes = ['diag-summary-card', card.tone || 'ok'];
+    var attrs = '';
+    if (card.target) {
+        classes.push('diag-summary-card--link');
+        attrs = ' type="button" onclick="return focusDiagnosticsSection(\'' + String(card.target) + '\')"';
+    }
+    return '<button class="' + classes.join(' ') + '"' + attrs + '>' +
+        '<div class="diag-summary-label">' + escHtml(card.title) + '</div>' +
+        '<div class="diag-summary-value">' + escHtml(card.value) + '</div>' +
+        '<div class="diag-summary-hint">' + escHtml(card.hint) + '</div>' +
+    '</button>';
+}
+
+function focusDiagnosticsSection(targetId) {
+    var target = document.getElementById(targetId);
+    if (!target) return false;
+    var advancedSection = target.closest('.diag-advanced-section');
+    if (advancedSection && !advancedSection.open) advancedSection.open = true;
+    window.requestAnimationFrame(function() {
+        window.requestAnimationFrame(function() {
+            target.classList.remove('diag-target-highlight');
+            void target.offsetWidth;
+            target.classList.add('diag-target-highlight');
+            target.scrollIntoView({behavior: 'smooth', block: 'start'});
+            window.setTimeout(function() {
+                target.classList.remove('diag-target-highlight');
+            }, 1800);
+        });
+    });
+    return false;
+}
+
 function _renderRecoveryActionButton(action, options) {
     if (!action || !action.key) return '';
     var opts = options || {};
@@ -7753,6 +7786,7 @@ function renderDiagnostics(d) {
     var summaryCards = [
         {
             title: 'Speakers connected',
+            target: 'diag-speaker-states',
             value: connectedDevices.length + '/' + activeDevices.length,
             tone: connectedDevices.length === activeDevices.length && activeDevices.length
                 ? (degradedDevices.length ? 'warn' : 'ok')
@@ -7762,6 +7796,7 @@ function renderDiagnostics(d) {
         },
         {
             title: 'Audio routing',
+            target: 'diag-routing',
             value: routedDevices.length + '/' + activeDevices.length,
             tone: routedDevices.length === activeDevices.length && activeDevices.length
                 ? (sinkIssueDevices.length ? 'warn' : 'ok')
@@ -7771,6 +7806,7 @@ function renderDiagnostics(d) {
         },
         {
             title: 'Music Assistant',
+            target: 'diag-ma-groups-card',
             value: ma.connected ? 'Connected' : (ma.configured ? 'Configured' : 'Offline'),
             tone: ma.connected ? (degradedGroups.length ? 'warn' : 'ok') : (ma.configured ? 'warn' : 'error'),
             hint: groups.length + ' sync group' + (groups.length === 1 ? '' : 's') +
@@ -7778,19 +7814,14 @@ function renderDiagnostics(d) {
         },
         {
             title: 'Bluetooth adapters',
+            target: 'diag-routing',
             value: (daemonActive ? healthyAdapters.length : 0) + '/' + adapters.length,
             tone: daemonActive && healthyAdapters.length === adapters.length && adapters.length
                 ? 'ok'
                 : ((daemonActive || daemonState === 'unknown') && healthyAdapters.length ? 'warn' : 'error'),
             hint: 'Daemon ' + daemonState + ' · ' + audioServerLabel,
         },
-    ].map(function(card) {
-        return '<div class="diag-summary-card ' + card.tone + '">' +
-            '<div class="diag-summary-label">' + escHtml(card.title) + '</div>' +
-            '<div class="diag-summary-value">' + escHtml(card.value) + '</div>' +
-            '<div class="diag-summary-hint">' + escHtml(card.hint) + '</div>' +
-        '</div>';
-    }).join('');
+    ].map(_renderDiagSummaryCard).join('');
 
     var overview = [
         {label: 'Version', value: d.version || 'Unknown', code: true},
@@ -7977,25 +8008,21 @@ function renderDiagnostics(d) {
     var recoveryOverviewCards = [
         {
             title: 'Needs attention',
+            target: 'diag-recovery-issues',
             value: String(recoverySummary.open_issue_count || 0),
             tone: _diagRecoveryToneClass(recoverySummary.highest_severity || 'ok'),
             hint: recoverySummary.headline || 'Nothing needs recovery right now',
         },
         {
             title: 'Latency review',
+            target: 'diag-recovery-latency',
             value: recoveryLatency.recommended_pulse_latency_msec != null
                 ? String(recoveryLatency.recommended_pulse_latency_msec) + ' ms'
                 : '—',
             tone: _diagRecoveryToneClass(recoveryLatency.tone || 'ok'),
             hint: recoveryLatency.summary || 'No latency guidance available.',
         },
-    ].map(function(card) {
-        return '<div class="diag-summary-card ' + card.tone + '">' +
-            '<div class="diag-summary-label">' + escHtml(card.title) + '</div>' +
-            '<div class="diag-summary-value">' + escHtml(card.value) + '</div>' +
-            '<div class="diag-summary-hint">' + escHtml(card.hint) + '</div>' +
-        '</div>';
-    }).join('');
+    ].map(_renderDiagSummaryCard).join('');
     var recoverySafeActions = (recovery.safe_actions || []).map(_renderRecoveryActionButton).join('');
     var diagnosticsActions = '<div class="diag-actions diag-actions--hero">' +
         '<div class="diag-actions-left">' +
@@ -8020,7 +8047,7 @@ function renderDiagnostics(d) {
             '<div class="diag-overview-title">Overview</div>' +
             '<div class="diag-overview-copy">Start in this first layer for the current issue, bridge health, and speaker readiness.</div>' +
         '</div>' +
-        '<div class="diag-card diag-card--primary">' +
+        '<div class="diag-card diag-card--primary diag-jump-target" id="diag-recovery-center">' +
             '<div class="diag-card-header"><div><div class="diag-card-title">Recovery center</div><div class="diag-card-subtitle">Start here for current blockers, recent recovery signals, and the safest next step.</div></div></div>' +
             '<div class="diag-summary-grid">' + recoveryOverviewCards + '</div>' +
             '<div class="diag-recovery-summary diag-recovery-summary--hero">' +
@@ -8030,11 +8057,11 @@ function renderDiagnostics(d) {
                 diagnosticsActions +
             '</div>' +
             '<div class="diag-recovery-grid">' +
-                '<div><div class="diag-subsection-title">Active issues</div>' + _renderRecoveryIssues(recovery.issues || []) + '</div>' +
+                '<div class="diag-jump-target" id="diag-recovery-issues"><div class="diag-subsection-title">Active issues</div>' + _renderRecoveryIssues(recovery.issues || []) + '</div>' +
                 '<div><div class="diag-subsection-title">Recent recovery events</div>' + _renderRecoveryTraces(recovery.traces || []) + '</div>' +
             '</div>' +
             '<div class="diag-recovery-grid">' +
-                '<div><div class="diag-subsection-title">Latency review</div><div class="diag-mini-card"><div class="diag-mini-title">' + dot(_diagRecoveryDotTone(recoveryLatency.tone || 'ok')) + '<span>Latency guidance</span></div><div class="diag-mini-meta">' + escHtml(recoveryLatency.summary || 'No latency guidance available.') + '</div><div class="diag-grid diag-runtime-grid">' + latencyHints + '</div>' + ((recoveryLatency.safe_actions || []).length ? '<div class="diag-recovery-actions">' + (recoveryLatency.safe_actions || []).map(_renderRecoveryActionButton).join('') + '</div>' : '') + '</div></div>' +
+                '<div class="diag-jump-target" id="diag-recovery-latency"><div class="diag-subsection-title">Latency review</div><div class="diag-mini-card"><div class="diag-mini-title">' + dot(_diagRecoveryDotTone(recoveryLatency.tone || 'ok')) + '<span>Latency guidance</span></div><div class="diag-mini-meta">' + escHtml(recoveryLatency.summary || 'No latency guidance available.') + '</div><div class="diag-grid diag-runtime-grid">' + latencyHints + '</div>' + ((recoveryLatency.safe_actions || []).length ? '<div class="diag-recovery-actions">' + (recoveryLatency.safe_actions || []).map(_renderRecoveryActionButton).join('') + '</div>' : '') + '</div></div>' +
                 '<div><div class="diag-subsection-title">Recommended verification path</div>' + _renderKnownGoodTestPath(recovery.known_good_test_path || {}) + '</div>' +
             '</div>' +
         '</div>' +
@@ -8043,16 +8070,16 @@ function renderDiagnostics(d) {
             '<div class="diag-summary-grid">' + summaryCards + '</div>' +
             '<div class="diag-grid diag-runtime-grid">' + overview + '</div>' +
         '</div>' +
-        '<div class="diag-card">' +
+        '<div class="diag-card diag-jump-target" id="diag-speaker-states">' +
             '<div class="diag-card-header"><div><div class="diag-card-title">Speaker states</div><div class="diag-card-subtitle">Connection state, sink attachment, and the clearest next hint for each speaker.</div></div></div>' +
             '<div class="diag-devices">' + deviceCards + '</div>' +
         '</div>' +
-        '<div class="diag-card">' +
+        '<div class="diag-card diag-jump-target" id="diag-routing">' +
             '<div class="diag-card-header"><div><div class="diag-card-title">Adapters & routing</div><div class="diag-card-subtitle">Detected controllers and attached PulseAudio / PipeWire outputs.</div></div></div>' +
             '<div class="diag-adapters">' + adapterCards + '</div>' +
             '<div class="sink-table-wrap"><table class="sink-table"><thead><tr><th>Sink</th><th>Status</th><th>Attached device</th></tr></thead><tbody>' + sinkRows + '</tbody></table></div>' +
         '</div>' +
-        '<div class="diag-card">' +
+        '<div class="diag-card diag-jump-target" id="diag-ma-groups-card">' +
             '<div class="diag-card-header"><div><div class="diag-card-title">Music Assistant groups</div><div class="diag-card-subtitle">' + escHtml(ma.url || 'No MA URL configured') + '</div></div></div>' +
             '<div class="diag-ma-groups">' + groupCards + '</div>' +
         '</div>' +

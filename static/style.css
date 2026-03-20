@@ -4049,10 +4049,29 @@ body {
             border-bottom: 1px solid var(--divider-color);
         }
         .diag-summary-card {
+            display: block;
+            width: 100%;
             border: 1px solid var(--divider-color);
             border-radius: 12px;
             padding: 14px;
             background: var(--primary-background-color);
+            text-align: left;
+            font: inherit;
+            color: inherit;
+            appearance: none;
+            -webkit-appearance: none;
+        }
+        .diag-summary-card--link {
+            cursor: pointer;
+            transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+        }
+        .diag-summary-card--link:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
+        }
+        .diag-summary-card--link:focus-visible {
+            outline: 2px solid rgba(33, 150, 243, 0.38);
+            outline-offset: 2px;
         }
         .diag-summary-card.ok {
             border-color: rgba(67, 160, 71, 0.28);
@@ -4177,6 +4196,14 @@ body {
             font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
             word-break: break-all;
             white-space: normal;
+        }
+        .diag-jump-target {
+            border-radius: 12px;
+            transition: box-shadow 0.22s ease, border-color 0.22s ease, background 0.22s ease;
+        }
+        .diag-target-highlight {
+            box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.2), 0 14px 32px rgba(15, 23, 42, 0.12);
+            border-color: rgba(33, 150, 243, 0.34);
         }
         .diag-dot {
             display: inline-block;
