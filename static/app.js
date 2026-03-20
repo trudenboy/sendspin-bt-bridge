@@ -5067,17 +5067,7 @@ function _deriveZeroDeviceRuntimeState(status, devices) {
             action: guidance && guidance.banner && guidance.banner.primary_action ? guidance.banner.primary_action : {key: 'refresh_diagnostics', label: 'Retry now'},
         };
     }
-    if (!devices || devices.length !== 0) return null;
-    if (!guidance) return null;
-    if (guidance.mode === 'empty_state') return null;
-    return {
-        kind: 'restoring',
-        tone: _backendServiceToneClass((headerStatus && headerStatus.tone) || 'info'),
-        label: label,
-        title: title,
-        summary: summary,
-        action: guidance && guidance.banner && guidance.banner.primary_action ? guidance.banner.primary_action : {key: 'refresh_diagnostics', label: 'Retry now'},
-    };
+    return null;
 }
 
 async function _retryBackendStatus() {
