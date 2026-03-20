@@ -224,6 +224,7 @@ var btAdapters = [];
 var btManualAdapters = [];
 var lastDevices = [];
 var lastGroups = [];
+var _lastDisabledDevices = [];
 var lastMaUiUrl = '';
 var lastMaWebUrl = '';
 var _backendServiceState = null;
@@ -1290,6 +1291,30 @@ function openDeviceSettings(i) {
 
 function _isDeviceDisabled(dev) {
     return !!(dev && dev.enabled === false);
+}
+
+function _mergeDisabledDeviceState(devices, disabledDevices) {
+    if (!Array.isArray(devices) || !devices.length || !Array.isArray(disabledDevices) || !disabledDevices.length) {
+        return devices;
+    }
+    var disabledByName = Object.create(null);
+    var disabledByMac = Object.create(null);
+    disabledDevices.forEach(function(entry) {
+        if (!entry || entry.enabled !== false) return;
+        var name = entry.player_name ? String(entry.player_name) : '';
+        var mac = entry.bluetooth_mac || entry.mac || '';
+        if (name) disabledByName[name] = true;
+        if (mac) disabledByMac[String(mac).toUpperCase()] = true;
+    });
+    return devices.map(function(dev) {
+        if (!dev) return dev;
+        var name = dev.player_name ? String(dev.player_name) : '';
+        var mac = dev.bluetooth_mac || dev.mac || '';
+        if (disabledByName[name] || (mac && disabledByMac[String(mac).toUpperCase()])) {
+            return Object.assign({}, dev, {enabled: false});
+        }
+        return dev;
+    });
 }
 
 function _getMaGroupSettingsUrl(dev) {
@@ -2490,6 +2515,7 @@ function renderDevicesView() {
 
 function renderStatusPayload(status) {
     _statusHasEverSucceeded = true;
+    _lastDisabledDevices = Array.isArray(status && status.disabled_devices) ? status.disabled_devices : [];
     var info = [];
     _runtimeMode = status.runtime_mode || 'production';
     _setViewModeStorageScope(_runtimeMode);
@@ -2535,7 +2561,10 @@ function renderStatusPayload(status) {
         }
     }
 
-    var devices = status.devices || (status.error ? [] : [status]);
+    var devices = _mergeDisabledDeviceState(
+        status.devices || (status.error ? [] : [status]),
+        _lastDisabledDevices
+    );
     var runtimeServiceState = _deriveZeroDeviceRuntimeState(status, devices);
     var grid = document.getElementById('status-grid');
     var emptyEl = document.getElementById('no-devices-hint');
@@ -4201,7 +4230,18 @@ function _hasDetectedAdapter() {
     return btAdapters.some(function(a) { return !a.manual; });
 }
 
-function _buildEmptyStateHTML() {
+function _buildEmptyStateHTML(disabledDevices) {
+    var disabledCount = Array.isArray(disabledDevices) ? disabledDevices.length : 0;
+    if (disabledCount > 0) {
+        return '<div class="no-devices-icon">' + _uiIconSvg('settings', 'ui-icon-svg') + '</div>' +
+            '<div class="no-devices-text">All Bluetooth devices are disabled</div>' +
+            '<div class="service-state-copy">Re-enable a device in Configuration \u2192 Devices to bring it back into the bridge.' +
+                (disabledCount > 1 ? ' (' + disabledCount + ' devices disabled)' : '') +
+            '</div>' +
+            '<a href="#" class="no-devices-link" onclick="return _runOnboardingAssistantAction(\'open_devices_settings\')">' +
+                _uiIconSvg('settings', 'no-devices-link-icon') + '<span>Open device settings</span>' +
+            '</a>';
+    }
     if (!_hasDetectedAdapter()) {
         return '<div class="no-devices-icon">' + _uiIconSvg('plug', 'ui-icon-svg') + '</div>' +
             '<div class="no-devices-text">No Bluetooth adapter detected</div>' +
@@ -4255,7 +4295,7 @@ function _syncEmptyStatePlaceholder(guidance) {
         grid.innerHTML = '';
         return;
     }
-    grid.innerHTML = '<div id="no-devices-hint" class="no-devices-hint">' + _buildEmptyStateHTML() + '</div>';
+    grid.innerHTML = '<div id="no-devices-hint" class="no-devices-hint">' + _buildEmptyStateHTML(_lastDisabledDevices) + '</div>';
 }
 
 function _refreshEmptyState() {
@@ -5103,6 +5143,7 @@ function _setMaIntegrationBanner(message, title) {
 }
 
 var _lastOperatorGuidance = null;
+var _onboardingAssistantExpanded = false;
 
 function _guidancePreferenceKeys(visibilityKeys) {
     return {
@@ -5142,6 +5183,8 @@ function _syncGuidancePreferenceControls(visibilityKeys) {
 }
 
 function _dismissGuidance(preferenceKey) {
+    var keys = _guidancePreferenceKeys(_lastOperatorGuidance && _lastOperatorGuidance.visibility_keys);
+    if (preferenceKey === keys.onboarding) _onboardingAssistantExpanded = false;
     _setGuidanceVisible(preferenceKey, false);
     _syncGuidancePreferenceControls(_lastOperatorGuidance && _lastOperatorGuidance.visibility_keys);
     _applyOperatorGuidance(_lastOperatorGuidance);
@@ -5209,6 +5252,26 @@ function _openDiagnosticsPanel() {
     details.open = true;
     onDiagToggle(details);
     details.scrollIntoView({behavior: 'smooth', block: 'start'});
+    return false;
+}
+
+function _hasPendingOnboardingChecklist(card) {
+    var checklist = card && card.checklist ? card.checklist : null;
+    return !!(card && checklist && String(checklist.overall_status || '') !== 'ok');
+}
+
+function _openOnboardingAssistant() {
+    var guidance = _lastOperatorGuidance;
+    var card = guidance && guidance.onboarding_card ? guidance.onboarding_card : null;
+    if (!card || !card.checklist) return false;
+    _onboardingAssistantExpanded = true;
+    if (card.preference_key) _setGuidanceVisible(card.preference_key, true);
+    _syncGuidancePreferenceControls(guidance && guidance.visibility_keys);
+    _applyOperatorGuidance(guidance);
+    var banner = document.getElementById('onboarding-assistant-banner');
+    if (banner && !banner.hidden) {
+        banner.scrollIntoView({behavior: 'smooth', block: 'start'});
+    }
     return false;
 }
 
@@ -5492,8 +5555,11 @@ function _renderOnboardingSteps(steps) {
     return steps.map(function(step, index) {
         var interactive = _hasInteractiveOnboardingContent(step);
         var badgeTone = step.status === 'error' ? 'error' : step.status === 'warning' ? 'warning' : 'ok';
-        var indicator = step.stage === 'complete' ? _uiIconSvg('check', 'ui-icon-svg') : escHtml(String(index + 1));
-        var headerHtml = '<div class="onboarding-step-indicator">' + indicator + '</div>' +
+        var indicator = step.stage === 'complete'
+            ? '<span class="onboarding-step-indicator-icon">' + _uiIconSvg('check', 'ui-icon-svg') + '</span>'
+            : '<span class="onboarding-step-indicator-number">' + escHtml(String(index + 1)) + '</span>';
+        var indicatorLabel = step.stage === 'complete' ? 'Completed step' : 'Step ' + String(index + 1);
+        var headerHtml = '<div class="onboarding-step-indicator" aria-label="' + escHtmlAttr(indicatorLabel) + '">' + indicator + '</div>' +
             '<div class="onboarding-step-main">' +
                 '<div class="onboarding-step-title-row">' +
                     '<div class="onboarding-step-title">' + escHtml(step.title || step.key || 'Step') + '</div>' +
@@ -5513,7 +5579,7 @@ function _renderOnboardingSteps(steps) {
     }).join('');
 }
 
-function _setOnboardingAssistantBanner(card) {
+function _setOnboardingAssistantBanner(card, options) {
     var banner = document.getElementById('onboarding-assistant-banner');
     var titleEl = document.getElementById('onboarding-assistant-title');
     var textEl = document.getElementById('onboarding-assistant-text');
@@ -5521,8 +5587,14 @@ function _setOnboardingAssistantBanner(card) {
     var checkpointsEl = document.getElementById('onboarding-assistant-checkpoints');
     var stepsEl = document.getElementById('onboarding-assistant-steps');
     var actionsEl = document.getElementById('onboarding-assistant-actions');
+    var opts = options || {};
     if (!banner || !titleEl || !textEl || !progressEl || !checkpointsEl || !stepsEl || !actionsEl) return;
-    if (!card || !card.checklist || !_isGuidanceVisible(card.preference_key)) {
+    if (
+        !card ||
+        !card.checklist ||
+        !_isGuidanceVisible(card.preference_key) ||
+        !(opts.showByDefault || _onboardingAssistantExpanded)
+    ) {
         banner.hidden = true;
         titleEl.textContent = '';
         textEl.textContent = '';
@@ -5631,7 +5703,10 @@ function _setRecoveryAssistantBanner(guidance) {
 function _applyOperatorGuidance(guidance) {
     _lastOperatorGuidance = guidance || null;
     _syncGuidancePreferenceControls(guidance && guidance.visibility_keys);
-    _setOnboardingAssistantBanner(guidance && guidance.onboarding_card ? guidance.onboarding_card : null);
+    _setOnboardingAssistantBanner(
+        guidance && guidance.onboarding_card ? guidance.onboarding_card : null,
+        {showByDefault: !!(guidance && guidance.mode === 'empty_state')}
+    );
     _setRecoveryAssistantBanner(guidance || null);
     _syncEmptyStatePlaceholder(guidance || null);
 }
@@ -6097,6 +6172,7 @@ function _syncSecurityPolicyState() {
     if (onboardingToggle) {
         onboardingToggle.addEventListener('change', function() {
             var keys = _guidancePreferenceKeys(_lastOperatorGuidance && _lastOperatorGuidance.visibility_keys);
+            _onboardingAssistantExpanded = !!this.checked;
             _setGuidanceVisible(keys.onboarding, !!this.checked);
             _applyOperatorGuidance(_lastOperatorGuidance);
         });
@@ -7732,12 +7808,28 @@ function updateHealthIndicator(devices, guidance) {
     }
     var headerStatus = !_backendServiceState && guidance && guidance.header_status ? guidance.header_status : null;
     if (headerStatus && headerStatus.label) {
-        parts.push(
-            '<span class="health-pill meta-badge meta-badge-status guidance-health-pill is-' + _guidanceHeaderToneClass(headerStatus.tone) +
-            '" title="' + escHtmlAttr(headerStatus.summary || '') + '">' +
-                '<span class="health-pill-text">' + escHtml(headerStatus.label || '') + '</span>' +
-            '</span>'
-        );
+        var headerToneClass = _guidanceHeaderToneClass(headerStatus.tone);
+        var onboardingCard = guidance && guidance.onboarding_card ? guidance.onboarding_card : null;
+        var opensOnboarding = _hasPendingOnboardingChecklist(onboardingCard);
+        var headerTitle = headerStatus.summary || '';
+        if (opensOnboarding) {
+            headerTitle = headerTitle
+                ? headerTitle + ' Click to open the setup checklist.'
+                : 'Click to open the setup checklist.';
+            parts.push(
+                '<button type="button" class="health-pill meta-badge meta-badge-link meta-badge-interactive guidance-health-pill is-' + headerToneClass +
+                '" title="' + escHtmlAttr(headerTitle) + '" onclick="return _openOnboardingAssistant()">' +
+                    '<span class="health-pill-text">' + escHtml(headerStatus.label || '') + '</span>' +
+                '</button>'
+            );
+        } else {
+            parts.push(
+                '<span class="health-pill meta-badge meta-badge-status guidance-health-pill is-' + headerToneClass +
+                '" title="' + escHtmlAttr(headerTitle) + '">' +
+                    '<span class="health-pill-text">' + escHtml(headerStatus.label || '') + '</span>' +
+                '</span>'
+            );
+        }
     }
     if (!devices || !devices.length) {
         el.innerHTML = parts.join('');

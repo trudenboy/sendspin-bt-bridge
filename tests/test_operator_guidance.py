@@ -65,6 +65,43 @@ def test_operator_guidance_keeps_onboarding_when_adapter_exists_but_no_devices()
     assert data["onboarding_card"]["preference_key"] == "sendspin-ui:show-onboarding-guidance"
 
 
+def test_operator_guidance_exposes_pending_onboarding_card_for_progress_state():
+    snapshot = build_operator_guidance_snapshot(
+        config={"BLUETOOTH_ADAPTERS": [{"id": "hci0"}], "BLUETOOTH_DEVICES": [{"mac": "AA"}]},
+        onboarding_assistant={
+            "checklist": {
+                "headline": "Setup checklist",
+                "summary": "Finish the remaining setup steps.",
+                "overall_status": "warning",
+                "completed_steps": 3,
+                "total_steps": 5,
+                "progress_percent": 60,
+                "checkpoints": [],
+                "steps": [],
+                "primary_action": {"key": "open_ma_settings", "label": "Open Music Assistant settings"},
+            },
+            "counts": {"configured_devices": 1, "connected_devices": 1, "sink_ready_devices": 1},
+        },
+        recovery_assistant={"summary": {"summary": "Setup is still in progress."}},
+        startup_progress={"status": "complete"},
+        devices=[
+            SimpleNamespace(
+                player_name="Kitchen",
+                bt_management_enabled=True,
+                bluetooth_connected=True,
+                has_sink=True,
+                server_connected=True,
+            )
+        ],
+    )
+
+    data = snapshot.to_dict()
+    assert data["mode"] == "progress"
+    assert data["header_status"]["label"] == "Setup 60%"
+    assert data["onboarding_card"]["summary"] == "Finish the remaining setup steps."
+    assert data["onboarding_card"]["primary_action"]["key"] == "open_ma_settings"
+
+
 def test_operator_guidance_groups_disconnected_devices_into_bulk_reconnect():
     snapshot = build_operator_guidance_snapshot(
         config={"BLUETOOTH_ADAPTERS": [{"id": "hci0"}], "BLUETOOTH_DEVICES": [{"mac": "AA"}, {"mac": "BB"}]},
@@ -251,3 +288,26 @@ def test_operator_guidance_treats_user_released_devices_as_neutral():
     assert data["issue_groups"] == []
     assert data["header_status"]["tone"] == "neutral"
     assert data["header_status"]["label"] == "Bluetooth released"
+
+
+def test_operator_guidance_reports_all_devices_disabled_as_neutral():
+    snapshot = build_operator_guidance_snapshot(
+        config={"BLUETOOTH_ADAPTERS": [{"id": "hci0"}], "BLUETOOTH_DEVICES": [{"mac": "AA"}, {"mac": "BB"}]},
+        onboarding_assistant={
+            "checklist": {"overall_status": "warning", "progress_percent": 0, "summary": "No active devices."},
+            "counts": {"configured_devices": 2, "connected_devices": 0, "sink_ready_devices": 0},
+        },
+        recovery_assistant={"summary": {"summary": "No active recovery issues."}},
+        startup_progress={"status": "complete"},
+        devices=[],
+        disabled_devices=[
+            {"player_name": "Kitchen", "enabled": False},
+            {"player_name": "Office", "enabled": False},
+        ],
+    )
+
+    data = snapshot.to_dict()
+    assert data["mode"] == "healthy"
+    assert data["issue_groups"] == []
+    assert data["header_status"]["tone"] == "neutral"
+    assert data["header_status"]["label"] == "All devices disabled"

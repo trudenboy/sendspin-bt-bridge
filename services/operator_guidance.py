@@ -493,10 +493,10 @@ def _build_onboarding_card(
     empty_state: bool,
     onboarding_assistant: dict[str, Any],
 ) -> GuidanceOnboardingCard | None:
-    if not empty_state:
-        return None
     checklist = onboarding_assistant.get("checklist") or {}
     if not checklist:
+        return None
+    if not empty_state and str(checklist.get("overall_status") or "") == "ok":
         return None
     primary_action = _guidance_action_from_dict(checklist.get("primary_action"))
     secondary_actions = [GuidanceAction(key="open_diagnostics", label="Open diagnostics")]
@@ -520,12 +520,15 @@ def _build_header_status(
     startup_progress: dict[str, Any],
     recovery_assistant: dict[str, Any],
     devices: list[Any],
+    disabled_devices: list[dict[str, Any]] | None = None,
 ) -> GuidanceHeaderStatus:
     configured_adapters = _count_config_entries(config, "BLUETOOTH_ADAPTERS")
     configured_devices = _count_config_entries(config, "BLUETOOTH_DEVICES")
     checklist = onboarding_assistant.get("checklist") or {}
     active_devices = [device for device in devices if getattr(device, "bt_management_enabled", True)]
     released_devices = [device for device in devices if getattr(device, "bt_management_enabled", True) is False]
+    disabled_count = len(disabled_devices or [])
+    all_devices_globally_disabled = configured_devices > 0 and not devices and disabled_count >= configured_devices
     startup_status = str(startup_progress.get("status") or "idle")
     if startup_status in {"running", "starting"}:
         percent = int(startup_progress.get("percent") or 0)
@@ -542,6 +545,12 @@ def _build_header_status(
                 str(startup_progress.get("message") or "").strip()
                 or "Initial device checks just completed. Waiting briefly before surfacing recovery issues."
             ),
+        )
+    if all_devices_globally_disabled:
+        return GuidanceHeaderStatus(
+            tone="neutral",
+            label="All devices disabled",
+            summary="All configured Bluetooth devices are globally disabled. Re-enable a device in Configuration → Devices.",
         )
     if mode == "empty_state":
         return GuidanceHeaderStatus(
@@ -618,6 +627,7 @@ def build_operator_guidance_snapshot(
     recovery_assistant: dict[str, Any],
     startup_progress: dict[str, Any],
     devices: list[Any],
+    disabled_devices: list[dict[str, Any]] | None = None,
 ) -> OperatorGuidanceSnapshot:
     configured_devices = _count_config_entries(config, "BLUETOOTH_DEVICES")
     checklist = onboarding_assistant.get("checklist") or {}
@@ -626,12 +636,16 @@ def build_operator_guidance_snapshot(
     startup_banner_cooldown_active = _startup_banner_cooldown_active(startup_progress)
     active_devices = [device for device in devices if getattr(device, "bt_management_enabled", True)]
     released_devices = [device for device in devices if getattr(device, "bt_management_enabled", True) is False]
+    disabled_count = len(disabled_devices or [])
+    all_devices_globally_disabled = configured_devices > 0 and not devices and disabled_count >= configured_devices
 
     empty_state = configured_devices == 0
     if empty_state:
         mode = "empty_state"
     elif startup_banner_cooldown_active:
         mode = "progress"
+    elif all_devices_globally_disabled:
+        mode = "healthy"
     elif issue_groups:
         mode = "attention"
     elif not active_devices and released_devices:
@@ -656,6 +670,7 @@ def build_operator_guidance_snapshot(
             startup_progress=startup_progress,
             recovery_assistant=recovery_assistant,
             devices=devices,
+            disabled_devices=disabled_devices,
         ),
         banner=_build_banner(mode=mode, issue_groups=issue_groups),
         onboarding_card=_build_onboarding_card(empty_state=empty_state, onboarding_assistant=onboarding_assistant),

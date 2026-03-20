@@ -1796,6 +1796,38 @@ def test_status_includes_disabled_devices(client):
     state.set_disabled_devices([])
 
 
+def test_status_reports_all_devices_disabled_header_status(client, monkeypatch):
+    """GET /api/status reports a dedicated neutral header when all configured devices are disabled."""
+    import routes.api_status as api_status
+    import state
+
+    monkeypatch.setattr(
+        api_status,
+        "load_config",
+        lambda: {
+            "BLUETOOTH_ADAPTERS": [{"id": "hci0"}],
+            "BLUETOOTH_DEVICES": [
+                {"player_name": "Kitchen", "mac": "AA", "enabled": False},
+                {"player_name": "Office", "mac": "BB", "enabled": False},
+            ],
+        },
+    )
+    state.set_disabled_devices(
+        [
+            {"player_name": "Kitchen", "mac": "AA", "enabled": False},
+            {"player_name": "Office", "mac": "BB", "enabled": False},
+        ]
+    )
+    try:
+        resp = client.get("/api/status")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["operator_guidance"]["mode"] == "healthy"
+        assert data["operator_guidance"]["header_status"]["label"] == "All devices disabled"
+    finally:
+        state.set_disabled_devices([])
+
+
 def test_status_includes_ma_syncgroup_id(client, monkeypatch):
     """GET /api/status exposes the MA syncgroup player_id for grouped devices."""
     import routes.api_status as api_status

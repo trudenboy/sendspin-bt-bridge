@@ -243,6 +243,7 @@ def _build_operator_guidance_payload(
     *,
     config: dict | None = None,
     devices: list | None = None,
+    disabled_devices: list[dict] | None = None,
     onboarding_assistant: dict | None = None,
     recovery_assistant: dict | None = None,
     startup_progress: dict | None = None,
@@ -256,6 +257,10 @@ def _build_operator_guidance_payload(
     if devices is None:
         registry = get_device_registry_snapshot()
         devices = [build_device_snapshot(client) for client in registry.active_clients]
+        if disabled_devices is None:
+            disabled_devices = registry.disabled_devices
+    elif disabled_devices is None:
+        disabled_devices = []
     if startup_progress is None:
         startup_progress = build_startup_progress_snapshot().to_dict()
     if onboarding_assistant is None:
@@ -280,6 +285,7 @@ def _build_operator_guidance_payload(
         recovery_assistant=recovery_assistant,
         startup_progress=startup_progress,
         devices=devices,
+        disabled_devices=disabled_devices,
     ).to_dict()
 
 
@@ -308,6 +314,7 @@ def _build_status_payload() -> dict:
     payload["operator_guidance"] = _build_operator_guidance_payload(
         config=config,
         devices=bridge_snapshot.devices,
+        disabled_devices=bridge_snapshot.disabled_devices,
         onboarding_assistant=onboarding_assistant,
         recovery_assistant=recovery_assistant,
         startup_progress=startup_progress,
