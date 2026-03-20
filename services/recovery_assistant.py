@@ -31,32 +31,44 @@ class RecoveryAction:
     key: str
     label: str
     device_name: str | None = None
+    device_names: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         payload: dict[str, Any] = {"key": self.key, "label": self.label}
-        if self.device_name:
+        if self.device_names:
+            payload["device_names"] = [name for name in self.device_names if name]
+        elif self.device_name:
             payload["device_name"] = self.device_name
         return payload
 
 
 @dataclass
 class RecoveryIssue:
+    key: str
     severity: str
     title: str
     summary: str
-    recommended_action: RecoveryAction | None = None
+    primary_action: RecoveryAction | None = None
+    secondary_actions: list[RecoveryAction] = field(default_factory=list)
     device_name: str | None = None
+
+    @property
+    def recommended_action(self) -> RecoveryAction | None:
+        return self.primary_action
 
     def to_dict(self) -> dict[str, Any]:
         payload: dict[str, Any] = {
+            "key": self.key,
             "severity": self.severity,
             "title": self.title,
             "summary": self.summary,
+            "secondary_actions": [action.to_dict() for action in self.secondary_actions],
         }
         if self.device_name:
             payload["device_name"] = self.device_name
-        if self.recommended_action:
-            payload["recommended_action"] = self.recommended_action.to_dict()
+        if self.primary_action:
+            payload["primary_action"] = self.primary_action.to_dict()
+            payload["recommended_action"] = self.primary_action.to_dict()
         return payload
 
 
@@ -107,41 +119,124 @@ def _recommended_action_from_onboarding(checklist: dict[str, Any]) -> RecoveryAc
     return RecoveryAction(key=key, label=label)
 
 
+def _normalize_device_names(device_names: list[str] | None) -> list[str]:
+    return [str(name).strip() for name in (device_names or []) if str(name).strip()]
+
+
+def _recovery_action(
+    key: str,
+    label: str,
+    *,
+    device_names: list[str] | None = None,
+) -> RecoveryAction:
+    names = _normalize_device_names(device_names)
+    return RecoveryAction(
+        key=key,
+        label=label,
+        device_name=names[0] if len(names) == 1 else None,
+        device_names=names if len(names) > 1 else [],
+    )
+
+
+def _merge_secondary_actions(
+    primary_action: RecoveryAction | None,
+    secondary_actions: list[RecoveryAction] | None = None,
+) -> list[RecoveryAction]:
+    actions = list(secondary_actions or [])
+    seen = {
+        (action.key, action.label, tuple(action.device_names), action.device_name)
+        for action in actions
+        if action and action.key
+    }
+    if primary_action:
+        seen.add(
+            (
+                primary_action.key,
+                primary_action.label,
+                tuple(primary_action.device_names),
+                primary_action.device_name,
+            )
+        )
+    diagnostics = _recovery_action("open_diagnostics", "Open diagnostics")
+    marker = (diagnostics.key, diagnostics.label, tuple(diagnostics.device_names), diagnostics.device_name)
+    if marker not in seen:
+        actions.append(diagnostics)
+    return actions
+
+
+def build_recovery_issue_actions(
+    issue_key: str,
+    device_names: list[str] | None = None,
+    *,
+    extra_secondary_actions: list[RecoveryAction] | None = None,
+) -> tuple[RecoveryAction | None, list[RecoveryAction]]:
+    names = _normalize_device_names(device_names)
+    primary_action: RecoveryAction | None
+    secondary_actions = list(extra_secondary_actions or [])
+    if issue_key in {"missing_sink", "disconnected", "transport_down"}:
+        primary_action = _recovery_action(
+            "reconnect_devices" if len(names) > 1 else "reconnect_device",
+            f"Reconnect {len(names)} devices" if len(names) > 1 else "Reconnect speaker",
+            device_names=names,
+        )
+    elif issue_key == "repair_required":
+        primary_action = _recovery_action(
+            "open_devices_settings" if len(names) > 1 else "pair_device",
+            "Open device settings" if len(names) > 1 else "Re-pair speaker",
+            device_names=names,
+        )
+        if len(names) == 1:
+            secondary_actions.insert(
+                0,
+                _recovery_action("toggle_bt_management", "Release Bluetooth", device_names=names),
+            )
+    elif issue_key == "auto_released":
+        primary_action = _recovery_action(
+            "toggle_bt_management_devices" if len(names) > 1 else "toggle_bt_management",
+            f"Reclaim {len(names)} devices" if len(names) > 1 else "Reclaim Bluetooth",
+            device_names=names,
+        )
+    elif issue_key == "setup_step":
+        primary_action = None
+    else:
+        primary_action = _recovery_action("open_diagnostics", "Open diagnostics", device_names=names)
+    return primary_action, _merge_secondary_actions(primary_action, secondary_actions)
+
+
 def _build_device_issues(devices: list[Any]) -> list[RecoveryIssue]:
     issues: list[RecoveryIssue] = []
     for device in devices:
         name = str(getattr(device, "player_name", None) or "Unknown")
+        device_names = [name]
         health = getattr(device, "health_summary", None) or {}
         summary = str(health.get("summary") or "")
         if getattr(device, "bt_management_enabled", True) is False:
             if _device_extra(device).get("bt_released_by") != "auto":
                 continue
+            primary_action, secondary_actions = build_recovery_issue_actions("auto_released", device_names)
             issues.append(
                 RecoveryIssue(
+                    key="auto_released",
                     severity="warning",
                     title=f"{name} was auto-released",
                     summary=summary
                     or "Bluetooth management was auto-released for this speaker after connection problems.",
-                    recommended_action=RecoveryAction(
-                        key="toggle_bt_management",
-                        label="Reclaim Bluetooth",
-                        device_name=name,
-                    ),
+                    primary_action=primary_action,
+                    secondary_actions=secondary_actions,
                     device_name=name,
                 )
             )
             continue
         if getattr(device, "bluetooth_connected", False) and not getattr(device, "has_sink", False):
+            primary_action, secondary_actions = build_recovery_issue_actions("missing_sink", device_names)
             issues.append(
                 RecoveryIssue(
+                    key="missing_sink",
                     severity="error",
                     title=f"{name} is missing a sink",
                     summary=summary or "The speaker is connected, but no Bluetooth sink is resolved yet.",
-                    recommended_action=RecoveryAction(
-                        key="open_diagnostics",
-                        label="Inspect routing",
-                        device_name=name,
-                    ),
+                    primary_action=primary_action,
+                    secondary_actions=secondary_actions,
                     device_name=name,
                 )
             )
@@ -149,8 +244,11 @@ def _build_device_issues(devices: list[Any]) -> list[RecoveryIssue]:
         if not getattr(device, "bluetooth_connected", False):
             attempt_summary = _reconnect_attempt_summary(device)
             bluetooth_paired = _device_extra(device).get("bluetooth_paired")
+            issue_key = "repair_required" if bluetooth_paired is False else "disconnected"
+            primary_action, secondary_actions = build_recovery_issue_actions(issue_key, device_names)
             issues.append(
                 RecoveryIssue(
+                    key=issue_key,
                     severity="warning",
                     title=f"{name} needs re-pairing" if bluetooth_paired is False else f"{name} is disconnected",
                     summary=(
@@ -162,26 +260,22 @@ def _build_device_issues(devices: list[Any]) -> list[RecoveryIssue]:
                         )
                     )
                     + (f" {attempt_summary}" if attempt_summary else ""),
-                    recommended_action=RecoveryAction(
-                        key="pair_device" if bluetooth_paired is False else "reconnect_device",
-                        label="Re-pair speaker" if bluetooth_paired is False else "Reconnect speaker",
-                        device_name=name,
-                    ),
+                    primary_action=primary_action,
+                    secondary_actions=secondary_actions,
                     device_name=name,
                 )
             )
             continue
         if not getattr(device, "server_connected", False):
+            primary_action, secondary_actions = build_recovery_issue_actions("transport_down", device_names)
             issues.append(
                 RecoveryIssue(
+                    key="transport_down",
                     severity="error",
                     title=f"{name} lost bridge transport",
                     summary=summary or "The Sendspin daemon is not connected for this device.",
-                    recommended_action=RecoveryAction(
-                        key="reconnect_device",
-                        label="Reconnect speaker",
-                        device_name=name,
-                    ),
+                    primary_action=primary_action,
+                    secondary_actions=secondary_actions,
                     device_name=name,
                 )
             )
@@ -190,14 +284,11 @@ def _build_device_issues(devices: list[Any]) -> list[RecoveryIssue]:
         if health_state in {"degraded", "recovering", "transitioning"}:
             issues.append(
                 RecoveryIssue(
+                    key="needs_attention",
                     severity="error" if health_state == "degraded" else "warning",
                     title=f"{name} needs recovery attention",
                     summary=summary or "Review the recent recovery timeline and diagnostics.",
-                    recommended_action=RecoveryAction(
-                        key="open_diagnostics",
-                        label="Open diagnostics",
-                        device_name=name,
-                    ),
+                    primary_action=_recovery_action("open_diagnostics", "Open diagnostics", device_names=device_names),
                     device_name=name,
                 )
             )
@@ -211,11 +302,15 @@ def _build_onboarding_issue(onboarding_assistant: dict[str, Any]) -> RecoveryIss
     overall_status = str(checklist.get("overall_status") or "")
     if not current_title or overall_status == "ok":
         return None
+    primary_action = _recommended_action_from_onboarding(checklist)
+    secondary_actions = _merge_secondary_actions(primary_action)
     return RecoveryIssue(
+        key=str(checklist.get("current_step_key") or "setup_step"),
         severity="error" if overall_status == "error" else "warning",
         title=current_title,
         summary=current_summary or "The setup checklist still has an unresolved step.",
-        recommended_action=_recommended_action_from_onboarding(checklist),
+        primary_action=primary_action,
+        secondary_actions=secondary_actions,
     )
 
 

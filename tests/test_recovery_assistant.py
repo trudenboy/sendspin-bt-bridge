@@ -65,7 +65,9 @@ def test_recovery_assistant_flags_sink_and_disconnect_issues():
     assert data["summary"]["open_issue_count"] == 3
     assert data["summary"]["highest_severity"] == "error"
     assert data["issues"][0]["title"] == "Kitchen is missing a sink"
-    assert data["issues"][0]["recommended_action"]["key"] == "open_diagnostics"
+    assert data["issues"][0]["primary_action"]["key"] == "reconnect_device"
+    assert data["issues"][0]["recommended_action"]["key"] == "reconnect_device"
+    assert data["issues"][0]["secondary_actions"][0]["key"] == "open_diagnostics"
     assert data["safe_actions"][2]["key"] == "retry_ma_discovery"
     assert data["traces"][0]["label"] == "Bridge startup"
     assert data["latency_assistant"]["tone"] == "warning"
@@ -121,7 +123,10 @@ def test_recovery_assistant_prefers_repair_for_unpaired_device():
 
     data = snapshot.to_dict()
     assert data["issues"][0]["title"] == "Kitchen needs re-pairing"
+    assert data["issues"][0]["primary_action"]["key"] == "pair_device"
     assert data["issues"][0]["recommended_action"]["key"] == "pair_device"
+    assert data["issues"][0]["secondary_actions"][0]["key"] == "toggle_bt_management"
+    assert data["issues"][0]["secondary_actions"][1]["key"] == "open_diagnostics"
     assert "3/5" in data["issues"][0]["summary"]
 
 
@@ -159,4 +164,6 @@ def test_recovery_assistant_only_flags_auto_released_devices():
     data = snapshot.to_dict()
     assert len(data["issues"]) == 1
     assert data["issues"][0]["title"] == "Office was auto-released"
+    assert data["issues"][0]["primary_action"]["key"] == "toggle_bt_management"
     assert data["issues"][0]["recommended_action"]["key"] == "toggle_bt_management"
+    assert data["issues"][0]["secondary_actions"][0]["key"] == "open_diagnostics"

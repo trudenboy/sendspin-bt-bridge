@@ -226,6 +226,8 @@ var lastDevices = [];
 var lastGroups = [];
 var lastMaUiUrl = '';
 var lastMaWebUrl = '';
+var _backendServiceState = null;
+var _statusHasEverSucceeded = false;
 var VIEW_MODE_STORAGE_KEY = 'sendspin-ui:view-mode';
 var _viewModeStorageScope = 'default';
 var _runtimeMode = 'production';
@@ -2469,6 +2471,8 @@ function renderDevicesView() {
 }
 
 function renderStatusPayload(status) {
+    _statusHasEverSucceeded = true;
+    _applyBackendServiceState(null);
     var info = [];
     _runtimeMode = status.runtime_mode || 'production';
     _setViewModeStorageScope(_runtimeMode);
@@ -2516,10 +2520,13 @@ function renderStatusPayload(status) {
     }
 
     var devices = status.devices || (status.error ? [] : [status]);
+    var zeroDeviceRuntimeState = _deriveZeroDeviceRuntimeState(status, devices);
     var grid = document.getElementById('status-grid');
     var emptyEl = document.getElementById('no-devices-hint');
     if (devices.length === 0) {
-        if (grid) {
+        if (zeroDeviceRuntimeState) {
+            _renderBackendServicePlaceholder(zeroDeviceRuntimeState);
+        } else if (grid) {
             grid.classList.remove('list-view');
             grid.innerHTML = '<div id="no-devices-hint" class="no-devices-hint">' + _buildEmptyStateHTML() + '</div>';
         } else if (emptyEl) {
@@ -2574,9 +2581,25 @@ async function updateStatus() {
     try {
         var resp = await fetch(API_BASE + '/api/status');
         if (resp.status === 401) { _handleUnauthorized(); return; }
+        if (!resp.ok) throw new Error('HTTP ' + resp.status + ' ' + (resp.statusText || 'status error'));
         renderStatusPayload(await resp.json());
     } catch (err) {
         console.error('Status update failed:', err);
+        var unavailableState = {
+            kind: _statusHasEverSucceeded ? 'unavailable' : 'connecting',
+            tone: _statusHasEverSucceeded ? 'warning' : 'info',
+            label: _statusHasEverSucceeded ? 'Backend unavailable' : 'Connecting…',
+            title: _statusHasEverSucceeded ? 'Bridge backend is temporarily unavailable' : 'Connecting to bridge',
+            summary: _statusHasEverSucceeded
+                ? 'The backend stopped responding. It may still be restarting. Retrying automatically in the background.'
+                : 'Waiting for the backend to start. This page will update automatically when the service becomes ready.',
+            action: {key: 'refresh_diagnostics', label: 'Retry now'},
+        };
+        _applyBackendServiceState(unavailableState);
+        if (!_statusHasEverSucceeded || !lastDevices.length) {
+            _renderBackendServicePlaceholder(unavailableState);
+        }
+        updateHealthIndicator(lastDevices || [], _lastOperatorGuidance || null);
     }
 }
 
@@ -4851,6 +4874,107 @@ function _syncNoticeStack() {
     stack.hidden = !visible;
 }
 
+function _backendServiceToneClass(tone) {
+    return tone === 'error' || tone === 'warning' ? 'warning' : 'info';
+}
+
+function _backendServiceIcon(kind, tone) {
+    if (kind === 'unavailable' || tone === 'error' || tone === 'warning') {
+        return _uiIconSvg('warning', 'ui-icon-svg');
+    }
+    return _uiIconSvg('refresh', 'ui-icon-svg');
+}
+
+function _buildBackendServiceStateHtml(state) {
+    var tone = (state && state.tone) || 'info';
+    var title = (state && state.title) || 'Connecting to bridge';
+    var summary = (state && state.summary) || 'Waiting for backend status. This page will refresh automatically.';
+    var action = state && state.action ? state.action : {key: 'refresh_diagnostics', label: 'Retry now'};
+    var actionHtml = action.key === 'refresh_diagnostics'
+        ? '<a href="#" class="no-devices-link" onclick="return _retryBackendStatus()">' +
+            _uiIconSvg('refresh', 'no-devices-link-icon') + '<span>' + escHtml(action.label || 'Retry now') + '</span>' +
+          '</a>'
+        : '<a href="#" class="no-devices-link" onclick="return _runEncodedOperatorGuidanceAction(\'' + _encodeGuidanceAction(action) + '\')">' +
+            _uiIconSvg('info', 'no-devices-link-icon') + '<span>' + escHtml(action.label || 'Open diagnostics') + '</span>' +
+          '</a>';
+    return '<div class="no-devices-icon service-state-icon is-' + escHtml(tone) + '">' +
+            _backendServiceIcon(state && state.kind, tone) +
+        '</div>' +
+        '<div class="no-devices-text">' + escHtml(title) + '</div>' +
+        '<div class="service-state-copy">' + escHtml(summary) + '</div>' +
+        actionHtml;
+}
+
+function _renderBackendServicePlaceholder(state) {
+    var grid = document.getElementById('status-grid');
+    if (!grid) return;
+    grid.classList.remove('list-view');
+    grid.innerHTML = '<div id="service-state-hint" class="no-devices-hint service-state-hint is-' +
+        escHtml((state && state.tone) || 'info') + '">' + _buildBackendServiceStateHtml(state) + '</div>';
+}
+
+function _setBackendServiceBanner(state) {
+    var banner = document.getElementById('backend-service-banner');
+    var titleEl = document.getElementById('backend-service-banner-title');
+    var textEl = document.getElementById('backend-service-banner-text');
+    var actionsEl = document.getElementById('backend-service-banner-actions');
+    if (!banner || !titleEl || !textEl || !actionsEl) return;
+    if (!state) {
+        banner.hidden = true;
+        titleEl.textContent = '';
+        textEl.textContent = '';
+        actionsEl.innerHTML = '';
+        _syncNoticeStack();
+        return;
+    }
+    banner.className = 'notice-card notice-card--' + _backendServiceToneClass(state.tone || 'info');
+    titleEl.textContent = state.title || 'Connecting to bridge';
+    textEl.textContent = state.summary || 'Waiting for backend status.';
+    actionsEl.innerHTML = '<a href="#" class="notice-card-action notice-card-action--primary" onclick="return _retryBackendStatus()">' +
+        escHtml(((state.action && state.action.key === 'refresh_diagnostics') ? state.action.label : 'Retry now') || 'Retry now') +
+        '</a>';
+    banner.hidden = false;
+    _syncNoticeStack();
+}
+
+function _applyBackendServiceState(state) {
+    _backendServiceState = state || null;
+    _setBackendServiceBanner(_backendServiceState);
+}
+
+function _deriveZeroDeviceRuntimeState(status, devices) {
+    var guidance = status && status.operator_guidance ? status.operator_guidance : null;
+    var headerStatus = guidance && guidance.header_status ? guidance.header_status : null;
+    var startup = status && status.startup_progress ? status.startup_progress : null;
+    if (status && status.error) {
+        return {
+            kind: 'unavailable',
+            tone: 'warning',
+            label: 'Backend unavailable',
+            title: 'Bridge backend is unavailable',
+            summary: String(status.error || 'The backend did not return a usable status payload.'),
+            action: {key: 'refresh_diagnostics', label: 'Retry now'},
+        };
+    }
+    if (!devices || devices.length !== 0) return null;
+    if (!guidance || guidance.mode === 'empty_state') return null;
+    return {
+        kind: startup && (startup.status === 'running' || startup.status === 'starting') ? 'starting' : 'restoring',
+        tone: _backendServiceToneClass((headerStatus && headerStatus.tone) || 'info'),
+        label: (headerStatus && headerStatus.label) || 'Restoring bridge state',
+        title: (headerStatus && headerStatus.label) || 'Restoring bridge state',
+        summary: (headerStatus && headerStatus.summary) || (startup && startup.message) || 'Configured bridge state is still loading.',
+        action: guidance && guidance.banner && guidance.banner.primary_action ? guidance.banner.primary_action : {key: 'refresh_diagnostics', label: 'Retry now'},
+    };
+}
+
+async function _retryBackendStatus() {
+    showToast('Retrying bridge status…', 'info');
+    updateStatus();
+    if (!_configLoading) loadConfig();
+    return false;
+}
+
 function _setMaIntegrationBanner(message, title) {
     var banner = document.getElementById('ma-integration-banner');
     var titleEl = document.getElementById('ma-integration-banner-title');
@@ -5160,6 +5284,94 @@ function _onboardingStageLabel(step) {
     return 'Upcoming';
 }
 
+function _hasOnboardingStepDetailValue(value) {
+    if (value === null || value === undefined) return false;
+    if (Array.isArray(value)) return value.length > 0;
+    return String(value).trim() !== '';
+}
+
+function _onboardingStepDetailLabel(key) {
+    var labels = {
+        paired_devices: 'Paired devices',
+        configured_devices: 'Configured devices',
+        connected_devices: 'Connected devices',
+        sink_ready_devices: 'Ready sinks',
+        missing_sink_devices: 'Missing sinks',
+        configured_url: 'Configured URL',
+        has_token: 'Has token',
+        has_username: 'Has username',
+        pulse_latency_msec: 'Pulse latency',
+        custom_device_delays: 'Device delays',
+        sinks: 'Detected sinks',
+        system: 'Audio backend',
+    };
+    if (labels[key]) return labels[key];
+    return String(key || '')
+        .replace(/_/g, ' ')
+        .replace(/\b\w/g, function(chr) { return chr.toUpperCase(); });
+}
+
+function _onboardingStepDetailValue(value) {
+    if (Array.isArray(value)) return value.join(', ');
+    if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+    return String(value);
+}
+
+function _renderOnboardingStepDetails(details) {
+    if (!details || typeof details !== 'object') return '';
+    var items = Object.keys(details).filter(function(key) {
+        return _hasOnboardingStepDetailValue(details[key]);
+    }).map(function(key) {
+        var value = details[key];
+        return '<div class="onboarding-step-detail">' +
+            '<div class="onboarding-step-detail-label">' + escHtml(_onboardingStepDetailLabel(key)) + '</div>' +
+            '<div class="onboarding-step-detail-value">' + escHtml(_onboardingStepDetailValue(value)) + '</div>' +
+        '</div>';
+    });
+    if (!items.length) return '';
+    return '<div class="onboarding-step-detail-list">' + items.join('') + '</div>';
+}
+
+function _renderOnboardingStepGuidance(actions) {
+    if (!actions || !actions.length) return '';
+    return '<ul class="onboarding-step-guidance">' + actions.map(function(action) {
+        return '<li>' + escHtml(action || '') + '</li>';
+    }).join('') + '</ul>';
+}
+
+function _stepHasOnboardingAction(step) {
+    return !!(step && step.recommended_action && step.recommended_action.key);
+}
+
+function _hasInteractiveOnboardingContent(step) {
+    return !!(
+        step &&
+        step.stage !== 'complete' &&
+        (
+            _stepHasOnboardingAction(step) ||
+            ((step.actions || []).length > 0) ||
+            (step.details && Object.keys(step.details).some(function(key) {
+                return _hasOnboardingStepDetailValue(step.details[key]);
+            }))
+        )
+    );
+}
+
+function _renderOnboardingStepBody(step) {
+    if (!step) return '';
+    var detailsHtml = _renderOnboardingStepDetails(step.details || {});
+    var guidanceHtml = _renderOnboardingStepGuidance(step.actions || []);
+    var actionHtml = _stepHasOnboardingAction(step)
+        ? '<div class="onboarding-step-actions">' +
+            _renderGuidanceActionLink(step.recommended_action, {primary: true}) +
+        '</div>'
+        : '';
+    return '<div class="onboarding-step-summary">' + escHtml(step.summary || '') + '</div>' +
+        detailsHtml +
+        guidanceHtml +
+        actionHtml;
+}
+
 function _renderOnboardingCheckpoints(checkpoints) {
     if (!checkpoints || !checkpoints.length) return '';
     return checkpoints.map(function(checkpoint) {
@@ -5176,18 +5388,26 @@ function _renderOnboardingCheckpoints(checkpoints) {
 function _renderOnboardingSteps(steps) {
     if (!steps || !steps.length) return '';
     return steps.map(function(step, index) {
+        var interactive = _hasInteractiveOnboardingContent(step);
         var badgeTone = step.status === 'error' ? 'error' : step.status === 'warning' ? 'warning' : 'ok';
         var indicator = step.stage === 'complete' ? _uiIconSvg('check', 'ui-icon-svg') : escHtml(String(index + 1));
-        return '<div class="onboarding-step is-' + escHtml(step.stage || 'upcoming') + '">' +
-            '<div class="onboarding-step-indicator">' + indicator + '</div>' +
-            '<div>' +
+        var headerHtml = '<div class="onboarding-step-indicator">' + indicator + '</div>' +
+            '<div class="onboarding-step-main">' +
                 '<div class="onboarding-step-title-row">' +
                     '<div class="onboarding-step-title">' + escHtml(step.title || step.key || 'Step') + '</div>' +
                     '<span class="onboarding-step-badge is-' + badgeTone + '">' + escHtml(_onboardingStageLabel(step)) + '</span>' +
                 '</div>' +
-                '<div class="onboarding-step-summary">' + escHtml(step.summary || '') + '</div>' +
+                (!interactive ? '<div class="onboarding-step-summary">' + escHtml(step.summary || '') + '</div>' : '') +
             '</div>' +
-        '</div>';
+            (interactive ? '<span class="onboarding-step-expander" aria-hidden="true"></span>' : '');
+        if (!interactive) {
+            return '<div class="onboarding-step is-' + escHtml(step.stage || 'upcoming') + '">' + headerHtml + '</div>';
+        }
+        return '<details class="onboarding-step onboarding-step--interactive is-' + escHtml(step.stage || 'upcoming') + '"' +
+            (step.stage === 'current' ? ' open' : '') + '>' +
+            '<summary class="onboarding-step-toggle">' + headerHtml + '</summary>' +
+            '<div class="onboarding-step-body">' + _renderOnboardingStepBody(step) + '</div>' +
+        '</details>';
     }).join('');
 }
 
@@ -6863,14 +7083,48 @@ function _diagRecoveryDotTone(tone) {
     return tone === 'error' ? 'err' : (tone === 'warning' || tone === 'warn' ? 'warn' : 'ok');
 }
 
-function _renderRecoveryActionButton(action) {
+function _renderRecoveryActionButton(action, options) {
     if (!action || !action.key) return '';
-    return '<button type="button" class="btn btn-sm diag-recovery-action" onclick="return _runEncodedOperatorGuidanceAction(\'' +
+    var opts = options || {};
+    var classes = ['btn', 'btn-sm', 'diag-recovery-action'];
+    if (opts.primary) classes.push('diag-recovery-action--primary');
+    if (opts.menuItem) classes.push('diag-recovery-action--menu-item');
+    return '<button type="button" class="' + classes.join(' ') + '" onclick="return _runEncodedOperatorGuidanceAction(\'' +
         _encodeGuidanceAction({
             key: String(action.key || ''),
             device_names: action.device_name ? [String(action.device_name || '')] : (action.device_names || []),
         }) +
     '\')">' + escHtml(action.label || 'Open diagnostics') + '</button>';
+}
+
+function _renderRecoveryActionMenu(actions) {
+    var visibleActions = (actions || []).filter(function(action) { return action && action.key; });
+    if (!visibleActions.length) return '';
+    return '<details class="diag-action-menu">' +
+        '<summary class="btn btn-sm diag-recovery-action diag-action-menu-toggle">More actions</summary>' +
+        '<div class="diag-action-menu-list">' +
+            visibleActions.map(function(action) {
+                return _renderRecoveryActionButton(action, {menuItem: true});
+            }).join('') +
+        '</div>' +
+    '</details>';
+}
+
+function _renderRecoveryIssueActionRow(issue) {
+    var primaryAction = issue.primary_action || issue.recommended_action || null;
+    var primaryNames = primaryAction && primaryAction.device_name
+        ? [String(primaryAction.device_name || '')]
+        : ((primaryAction && primaryAction.device_names) || []);
+    var secondaryActions = (issue.secondary_actions || []).filter(function(action) {
+        if (!primaryAction) return true;
+        var actionNames = action.device_name ? [String(action.device_name || '')] : (action.device_names || []);
+        return action.key !== primaryAction.key || JSON.stringify(actionNames) !== JSON.stringify(primaryNames);
+    });
+    if (!primaryAction && !secondaryActions.length) return '';
+    return '<div class="diag-recovery-actions">' +
+        (primaryAction ? _renderRecoveryActionButton(primaryAction, {primary: true}) : '') +
+        _renderRecoveryActionMenu(secondaryActions) +
+    '</div>';
 }
 
 function _renderRecoveryIssues(issues) {
@@ -6882,9 +7136,7 @@ function _renderRecoveryIssues(issues) {
         return '<div class="diag-recovery-item is-' + tone + '">' +
             '<div class="diag-recovery-item-title">' + dot(_diagRecoveryDotTone(issue.severity)) + '<span>' + escHtml(issue.title || 'Issue') + '</span></div>' +
             '<div class="diag-recovery-item-summary">' + escHtml(issue.summary || '') + '</div>' +
-            (issue.recommended_action
-                ? '<div class="diag-recovery-actions">' + _renderRecoveryActionButton(issue.recommended_action) + '</div>'
-                : '') +
+            _renderRecoveryIssueActionRow(issue) +
         '</div>';
     }).join('') + '</div>';
 }
@@ -7317,7 +7569,16 @@ function updateHealthIndicator(devices, guidance) {
     var el = document.getElementById('health-indicator');
     if (!el) return;
     var parts = [];
-    var headerStatus = guidance && guidance.header_status ? guidance.header_status : null;
+    if (_backendServiceState && _backendServiceState.label) {
+        parts.push(
+            '<span class="health-pill meta-badge meta-badge-status guidance-health-pill is-' +
+            _guidanceHeaderToneClass(_backendServiceState.tone || 'info') +
+            '" title="' + escHtmlAttr(_backendServiceState.summary || '') + '">' +
+                '<span class="health-pill-text">' + escHtml(_backendServiceState.label || '') + '</span>' +
+            '</span>'
+        );
+    }
+    var headerStatus = !_backendServiceState && guidance && guidance.header_status ? guidance.header_status : null;
     if (headerStatus && headerStatus.label) {
         parts.push(
             '<span class="health-pill meta-badge meta-badge-status guidance-health-pill is-' + _guidanceHeaderToneClass(headerStatus.tone) +
@@ -7391,6 +7652,15 @@ function updateSliderFill(el) {
 // ---- Init ----
 _hydrateUiIcons(document);
 initConfigTabs();
+_applyBackendServiceState({
+    kind: 'connecting',
+    tone: 'info',
+    label: 'Connecting…',
+    title: 'Connecting to bridge',
+    summary: 'Waiting for the backend to start. This page will update automatically when the service becomes ready.',
+    action: {key: 'refresh_diagnostics', label: 'Retry now'},
+});
+_renderBackendServicePlaceholder(_backendServiceState);
 loadConfig();   // calls loadBtAdapters() internally after restoring btManualAdapters
 updateStatus();
 

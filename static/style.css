@@ -900,6 +900,9 @@ body {
         .onboarding-step.is-upcoming {
             opacity: 0.92;
         }
+        .onboarding-step-main {
+            min-width: 0;
+        }
         .onboarding-step-indicator {
             width: 24px;
             height: 24px;
@@ -961,6 +964,83 @@ body {
             font-size: 12px;
             line-height: 1.45;
             color: var(--secondary-text-color);
+        }
+        .onboarding-step--interactive {
+            display: block;
+            padding: 0;
+            overflow: hidden;
+        }
+        .onboarding-step-toggle {
+            list-style: none;
+            display: grid;
+            grid-template-columns: auto minmax(0, 1fr) auto;
+            gap: 10px;
+            align-items: start;
+            padding: 10px 12px;
+            cursor: pointer;
+        }
+        .onboarding-step-toggle::-webkit-details-marker {
+            display: none;
+        }
+        .onboarding-step-expander {
+            align-self: center;
+            color: var(--secondary-text-color);
+            font-size: 11px;
+            line-height: 1;
+        }
+        .onboarding-step-expander::before {
+            content: "▾";
+        }
+        .onboarding-step--interactive[open] .onboarding-step-expander::before {
+            content: "▴";
+        }
+        .onboarding-step-body {
+            display: grid;
+            gap: 10px;
+            padding: 0 12px 12px 46px;
+            border-top: 1px solid rgba(148, 163, 184, 0.14);
+        }
+        .onboarding-step--interactive .onboarding-step-summary {
+            margin-top: 0;
+        }
+        .onboarding-step-detail-list {
+            display: grid;
+            gap: 8px;
+            grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+        }
+        .onboarding-step-detail {
+            padding: 8px 10px;
+            border-radius: 8px;
+            border: 1px solid rgba(148, 163, 184, 0.18);
+            background: rgba(148, 163, 184, 0.06);
+        }
+        .onboarding-step-detail-label {
+            font-size: 10px;
+            font-weight: 700;
+            line-height: 1.2;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            color: var(--secondary-text-color);
+        }
+        .onboarding-step-detail-value {
+            margin-top: 4px;
+            font-size: 12px;
+            line-height: 1.4;
+            color: var(--primary-text-color);
+        }
+        .onboarding-step-guidance {
+            display: grid;
+            gap: 6px;
+            margin: 0;
+            padding-left: 18px;
+            font-size: 12px;
+            line-height: 1.45;
+            color: var(--secondary-text-color);
+        }
+        .onboarding-step-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
         }
         .recovery-issue-list {
             display: flex;
@@ -1037,6 +1117,30 @@ body {
             height: 14px;
         }
         .no-devices-link:hover { opacity: 0.85; }
+        .service-state-hint {
+            text-align: center;
+        }
+        .service-state-hint.is-warning,
+        .service-state-hint.is-error {
+            border: 1px solid rgba(255, 166, 0, 0.24);
+        }
+        .service-state-hint.is-info {
+            border: 1px solid rgba(59, 130, 246, 0.22);
+        }
+        .service-state-copy {
+            margin: 0 auto 14px;
+            max-width: 560px;
+            font-size: 13px;
+            line-height: 1.6;
+            color: var(--secondary-text-color);
+        }
+        .service-state-icon.is-warning,
+        .service-state-icon.is-error {
+            color: var(--warning-color);
+        }
+        .service-state-icon.is-info {
+            color: var(--info-color);
+        }
         .device-card {
             background: var(--card-background-color);
             border-radius: var(--ha-card-border-radius); padding: 12px 14px;
@@ -4018,6 +4122,45 @@ body {
         }
         .diag-recovery-action {
             min-height: 32px;
+        }
+        .diag-recovery-action--primary {
+            font-weight: 600;
+        }
+        .diag-action-menu {
+            position: relative;
+        }
+        .diag-action-menu > summary {
+            list-style: none;
+            cursor: pointer;
+        }
+        .diag-action-menu > summary::-webkit-details-marker {
+            display: none;
+        }
+        .diag-action-menu-toggle::after {
+            content: "▾";
+            margin-left: 8px;
+            font-size: 11px;
+        }
+        .diag-action-menu[open] .diag-action-menu-toggle::after {
+            content: "▴";
+        }
+        .diag-action-menu-list {
+            position: absolute;
+            left: 0;
+            top: calc(100% + 8px);
+            min-width: 220px;
+            display: grid;
+            gap: 6px;
+            padding: 8px;
+            border-radius: 14px;
+            border: 1px solid var(--divider-color);
+            background: var(--card-background-color);
+            box-shadow: var(--ha-card-box-shadow);
+            z-index: 20;
+        }
+        .diag-recovery-action--menu-item {
+            width: 100%;
+            justify-content: flex-start;
         }
         .diag-trace-list {
             display: grid;

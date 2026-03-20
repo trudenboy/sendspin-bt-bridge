@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
+from services.recovery_assistant import RecoveryAction, build_recovery_issue_actions
+
 UTC = timezone.utc
 
 _ONBOARDING_VISIBILITY_KEY = "sendspin-ui:show-onboarding-guidance"
@@ -176,6 +178,41 @@ def _guidance_action_from_dict(payload: dict[str, Any] | None) -> GuidanceAction
     )
 
 
+def _guidance_action_from_recovery(action: RecoveryAction | None) -> GuidanceAction | None:
+    if action is None:
+        return None
+    payload = action.to_dict()
+    if payload.get("device_name") and not payload.get("device_names"):
+        payload["device_names"] = [payload["device_name"]]
+    return _guidance_action_from_dict(payload)
+
+
+def _guidance_actions_from_recovery(
+    issue_key: str,
+    device_names: list[str],
+    *,
+    extra_secondary_actions: list[GuidanceAction] | None = None,
+) -> tuple[GuidanceAction | None, list[GuidanceAction]]:
+    recovery_secondary = []
+    for action in extra_secondary_actions or []:
+        recovery_secondary.append(
+            RecoveryAction(
+                key=action.key,
+                label=action.label,
+                device_name=action.device_names[0] if len(action.device_names) == 1 else None,
+                device_names=list(action.device_names) if len(action.device_names) > 1 else [],
+            )
+        )
+    primary_action, secondary_actions = build_recovery_issue_actions(
+        issue_key,
+        device_names,
+        extra_secondary_actions=recovery_secondary,
+    )
+    return _guidance_action_from_recovery(primary_action), [
+        action for action in (_guidance_action_from_recovery(item) for item in secondary_actions) if action is not None
+    ]
+
+
 def _format_device_label(device_names: list[str]) -> str:
     names = [name for name in device_names if name]
     if not names:
@@ -279,6 +316,7 @@ def _build_issue_groups(
             if len(missing_sink) == 1
             else f"Reconnect or inspect routing for {_format_device_label(missing_sink)}."
         )
+        primary_action, secondary_actions = _guidance_actions_from_recovery("missing_sink", missing_sink)
         _append_group(
             groups,
             key="missing_sink",
@@ -286,11 +324,8 @@ def _build_issue_groups(
             title=title,
             summary=summary,
             device_names=missing_sink,
-            primary_action=GuidanceAction(
-                key="reconnect_devices" if len(missing_sink) > 1 else "reconnect_device",
-                label=f"Reconnect {len(missing_sink)} devices" if len(missing_sink) > 1 else "Reconnect speaker",
-                device_names=missing_sink,
-            ),
+            primary_action=primary_action,
+            secondary_actions=secondary_actions,
         )
     if transport_down:
         title = (
@@ -303,6 +338,7 @@ def _build_issue_groups(
             if len(transport_down) == 1
             else f"Reconnect {_format_device_label(transport_down)} to restore bridge transport."
         )
+        primary_action, secondary_actions = _guidance_actions_from_recovery("transport_down", transport_down)
         _append_group(
             groups,
             key="transport_down",
@@ -310,11 +346,8 @@ def _build_issue_groups(
             title=title,
             summary=summary,
             device_names=transport_down,
-            primary_action=GuidanceAction(
-                key="reconnect_devices" if len(transport_down) > 1 else "reconnect_device",
-                label=f"Reconnect {len(transport_down)} devices" if len(transport_down) > 1 else "Reconnect speaker",
-                device_names=transport_down,
-            ),
+            primary_action=primary_action,
+            secondary_actions=secondary_actions,
         )
     if repair_needed:
         repair_names = [str(getattr(device, "player_name", None) or "Unknown") for device in repair_needed]
@@ -331,6 +364,7 @@ def _build_issue_groups(
         )
         if attempt_summary:
             summary = f"{summary} {attempt_summary}"
+        primary_action, secondary_actions = _guidance_actions_from_recovery("repair_required", repair_names)
         _append_group(
             groups,
             key="repair_required",
@@ -338,20 +372,8 @@ def _build_issue_groups(
             title=title,
             summary=summary,
             device_names=repair_names,
-            primary_action=GuidanceAction(
-                key="pair_device" if len(repair_names) == 1 else "open_devices_settings",
-                label="Re-pair speaker" if len(repair_names) == 1 else "Open device settings",
-                device_names=repair_names,
-            ),
-            secondary_actions=[
-                GuidanceAction(
-                    key="toggle_bt_management",
-                    label="Release Bluetooth",
-                    device_names=repair_names,
-                )
-            ]
-            if len(repair_names) == 1
-            else None,
+            primary_action=primary_action,
+            secondary_actions=secondary_actions,
         )
     if disconnected:
         title = (
@@ -375,6 +397,7 @@ def _build_issue_groups(
             )
             if attempt_summary:
                 summary = f"{summary} {attempt_summary}"
+        primary_action, secondary_actions = _guidance_actions_from_recovery("disconnected", disconnected)
         _append_group(
             groups,
             key="disconnected",
@@ -382,11 +405,8 @@ def _build_issue_groups(
             title=title,
             summary=summary,
             device_names=disconnected,
-            primary_action=GuidanceAction(
-                key="reconnect_devices" if len(disconnected) > 1 else "reconnect_device",
-                label=f"Reconnect {len(disconnected)} devices" if len(disconnected) > 1 else "Reconnect speaker",
-                device_names=disconnected,
-            ),
+            primary_action=primary_action,
+            secondary_actions=secondary_actions,
         )
     if auto_released:
         title = (
@@ -399,6 +419,7 @@ def _build_issue_groups(
             if len(auto_released) == 1
             else f"Reclaim {_format_device_label(auto_released)} to restore bridge management."
         )
+        primary_action, secondary_actions = _guidance_actions_from_recovery("auto_released", auto_released)
         _append_group(
             groups,
             key="auto_released",
@@ -406,11 +427,8 @@ def _build_issue_groups(
             title=title,
             summary=summary,
             device_names=auto_released,
-            primary_action=GuidanceAction(
-                key="toggle_bt_management_devices" if len(auto_released) > 1 else "toggle_bt_management",
-                label=f"Reclaim {len(auto_released)} devices" if len(auto_released) > 1 else "Reclaim Bluetooth",
-                device_names=auto_released,
-            ),
+            primary_action=primary_action,
+            secondary_actions=secondary_actions,
         )
 
     checklist = onboarding_assistant.get("checklist") or {}
@@ -476,6 +494,7 @@ def _build_header_status(
     recovery_assistant: dict[str, Any],
     devices: list[Any],
 ) -> GuidanceHeaderStatus:
+    configured_adapters = _count_config_entries(config, "BLUETOOTH_ADAPTERS")
     configured_devices = _count_config_entries(config, "BLUETOOTH_DEVICES")
     checklist = onboarding_assistant.get("checklist") or {}
     active_devices = [device for device in devices if getattr(device, "bt_management_enabled", True)]
@@ -491,8 +510,12 @@ def _build_header_status(
     if mode == "empty_state":
         return GuidanceHeaderStatus(
             tone="info",
-            label="First run",
-            summary="Add your first Bluetooth adapter and speaker to start guided setup.",
+            label="First run" if configured_adapters == 0 else "Add first speaker",
+            summary=(
+                "Add your first Bluetooth adapter and speaker to start guided setup."
+                if configured_adapters == 0
+                else "Scan for and attach your first Bluetooth speaker to continue guided setup."
+            ),
         )
     if issue_groups:
         lead = issue_groups[0]
@@ -560,7 +583,6 @@ def build_operator_guidance_snapshot(
     startup_progress: dict[str, Any],
     devices: list[Any],
 ) -> OperatorGuidanceSnapshot:
-    configured_adapters = _count_config_entries(config, "BLUETOOTH_ADAPTERS")
     configured_devices = _count_config_entries(config, "BLUETOOTH_DEVICES")
     checklist = onboarding_assistant.get("checklist") or {}
     issue_groups = _build_issue_groups(devices, onboarding_assistant, recovery_assistant)
@@ -568,7 +590,7 @@ def build_operator_guidance_snapshot(
     active_devices = [device for device in devices if getattr(device, "bt_management_enabled", True)]
     released_devices = [device for device in devices if getattr(device, "bt_management_enabled", True) is False]
 
-    empty_state = configured_adapters == 0 and configured_devices == 0
+    empty_state = configured_devices == 0
     if empty_state:
         mode = "empty_state"
     elif issue_groups:

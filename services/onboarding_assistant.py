@@ -146,19 +146,23 @@ def _status_rank(status: str) -> int:
 
 def _recommended_action_for_check(check: OnboardingCheck) -> OnboardingChecklistAction | None:
     if check.key == "bluetooth":
+        if check.status == "error":
+            return OnboardingChecklistAction(key="open_bluetooth_settings", label="Open adapter settings")
+        if int(check.details.get("paired_devices") or 0) == 0:
+            return OnboardingChecklistAction(key="scan_devices", label="Scan for speakers")
         return OnboardingChecklistAction(key="open_bluetooth_settings", label="Open Bluetooth settings")
     if check.key == "audio":
-        return OnboardingChecklistAction(key="open_diagnostics", label="Open diagnostics")
+        return OnboardingChecklistAction(key="open_diagnostics", label="Open audio diagnostics")
     if check.key == "sink_verification":
         if int(check.details.get("configured_devices") or 0) == 0:
-            return OnboardingChecklistAction(key="scan_devices", label="Scan for devices")
+            return OnboardingChecklistAction(key="scan_devices", label="Open device scan")
         if check.status == "error":
-            return OnboardingChecklistAction(key="open_diagnostics", label="Open diagnostics")
+            return OnboardingChecklistAction(key="open_diagnostics", label="Open sink diagnostics")
         return OnboardingChecklistAction(key="open_devices_settings", label="Open device settings")
     if check.key == "ma_auth":
         return OnboardingChecklistAction(key="open_ma_settings", label="Open Music Assistant settings")
     if check.key == "latency":
-        return OnboardingChecklistAction(key="open_devices_settings", label="Open device settings")
+        return OnboardingChecklistAction(key="open_devices_settings", label="Review device delays")
     return None
 
 
@@ -327,8 +331,8 @@ def build_onboarding_assistant_snapshot(
                 summary="No Bluetooth controller detected by preflight checks.",
                 details={"paired_devices": paired_devices},
                 actions=[
-                    "Verify Bluetooth adapter passthrough or host access.",
-                    "Check that `bluetoothctl list` shows a controller inside the runtime.",
+                    "Open Bluetooth settings and press Refresh adapters.",
+                    "If no adapter appears, verify Bluetooth passthrough or host access, then add the adapter manually.",
                 ],
             )
         )
@@ -339,7 +343,7 @@ def build_onboarding_assistant_snapshot(
                 status="warning",
                 summary="Bluetooth controller is available, but no paired devices were found.",
                 details={"paired_devices": paired_devices, "configured_devices": configured_count},
-                actions=["Pair at least one speaker before assigning it in the bridge UI."],
+                actions=["Put a speaker in pairing mode, then open device scan to pair it with the bridge."],
             )
         )
     else:
@@ -360,8 +364,8 @@ def build_onboarding_assistant_snapshot(
                 summary="No PulseAudio or PipeWire server was detected.",
                 details={"sinks": audio_sinks},
                 actions=[
+                    "Open diagnostics to confirm the runtime can reach PulseAudio or PipeWire.",
                     "Verify the audio socket mount and `PULSE_SERVER` configuration.",
-                    "Confirm the runtime can access the host PulseAudio or PipeWire service.",
                 ],
             )
         )
@@ -372,7 +376,10 @@ def build_onboarding_assistant_snapshot(
                 status="warning",
                 summary="The audio server is reachable, but it currently exposes no sinks.",
                 details={"system": audio_system, "sinks": audio_sinks},
-                actions=["Connect a Bluetooth output and verify that `pactl list sinks short` shows it."],
+                actions=[
+                    "Power on a Bluetooth speaker and wait for its `bluez_*` sink to appear.",
+                    "If no sink appears, open diagnostics and confirm `pactl list sinks short` shows it.",
+                ],
             )
         )
     else:
@@ -392,7 +399,10 @@ def build_onboarding_assistant_snapshot(
                 status="warning",
                 summary="No bridge devices are configured yet.",
                 details={"configured_devices": configured_count},
-                actions=["Add at least one Bluetooth device in the config UI before verifying sinks."],
+                actions=[
+                    "Put your speaker in pairing mode, then open device scan to discover it.",
+                    "If scanning finds nothing, open device settings and add the speaker manually.",
+                ],
             )
         )
     elif missing_sink_devices:
@@ -419,7 +429,10 @@ def build_onboarding_assistant_snapshot(
                 status="warning",
                 summary="Devices are configured, but none are currently connected over Bluetooth.",
                 details={"configured_devices": configured_count},
-                actions=["Power on a configured speaker and wait for the bridge to acquire its sink."],
+                actions=[
+                    "Power on a configured speaker and wait for the bridge to acquire its sink.",
+                    "If the speaker stays offline, open device settings and run reconnect or re-pair.",
+                ],
             )
         )
     else:
@@ -441,7 +454,7 @@ def build_onboarding_assistant_snapshot(
                 key="ma_auth",
                 status="warning",
                 summary="Music Assistant API URL is not configured.",
-                actions=["Set `MA_API_URL` if you want group control and now-playing integration."],
+                actions=["Open Music Assistant settings and set the server URL before continuing."],
             )
         )
     elif not ma_token and not ma_username:
@@ -451,7 +464,7 @@ def build_onboarding_assistant_snapshot(
                 status="warning",
                 summary="Music Assistant credentials are missing.",
                 details={"configured_url": ma_url},
-                actions=["Provide an API token or complete Music Assistant sign-in from the web UI."],
+                actions=["Open Music Assistant settings and sign in or paste a long-lived token."],
             )
         )
     elif ma_connected:
@@ -471,7 +484,7 @@ def build_onboarding_assistant_snapshot(
                 summary="Music Assistant credentials are configured, but the bridge is not connected.",
                 details={"configured_url": ma_url, "has_token": bool(ma_token), "has_username": bool(ma_username)},
                 actions=[
-                    "Verify the Music Assistant URL, token, and network reachability.",
+                    "Open Music Assistant settings and verify the URL and credentials.",
                     "Use diagnostics to confirm the MA server is reachable from the bridge runtime.",
                 ],
             )
@@ -493,9 +506,7 @@ def build_onboarding_assistant_snapshot(
                 status="warning",
                 summary="Multi-device setup detected without per-device static delay tuning.",
                 details={"pulse_latency_msec": pulse_latency, "configured_devices": configured_count},
-                actions=[
-                    "Measure drift between rooms and set `static_delay_ms` per device if playback feels out of sync."
-                ],
+                actions=["Open device settings and set `static_delay_ms` after both rooms stay connected reliably."],
             )
         )
     elif pulse_latency >= 800:
@@ -506,7 +517,7 @@ def build_onboarding_assistant_snapshot(
                 summary="Latency tuning is present, but the global PulseAudio latency is quite high.",
                 details={"pulse_latency_msec": pulse_latency, "custom_device_delays": custom_delays},
                 actions=[
-                    "Keep the high latency for VMs if needed, but lower it if playback reaction feels too sluggish."
+                    "Review device settings after playback stabilizes and lower latency if reaction feels too sluggish."
                 ],
             )
         )

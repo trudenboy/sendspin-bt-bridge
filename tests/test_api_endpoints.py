@@ -2135,6 +2135,8 @@ def test_onboarding_assistant_endpoint_returns_guidance(client, monkeypatch):
     assert checks["ma_auth"]["status"] == "warning"
     assert data["checklist"]["current_step_key"] == "ma_auth"
     assert data["checklist"]["primary_action"]["key"] == "open_ma_settings"
+    ma_step = next(step for step in data["checklist"]["steps"] if step["key"] == "ma_auth")
+    assert ma_step["recommended_action"]["key"] == "open_ma_settings"
     assert data["checklist"]["checkpoints"][2]["reached"] is True
     assert data["next_steps"]
 
@@ -2154,10 +2156,13 @@ def test_recovery_assistant_endpoint_returns_guidance(client, monkeypatch):
             },
             "issues": [
                 {
+                    "key": "disconnected",
                     "severity": "warning",
                     "title": "Kitchen is disconnected",
                     "summary": "Power on the speaker or reconnect it.",
+                    "primary_action": {"key": "reconnect_device", "label": "Reconnect speaker"},
                     "recommended_action": {"key": "reconnect_device", "label": "Reconnect speaker"},
+                    "secondary_actions": [{"key": "open_diagnostics", "label": "Open diagnostics"}],
                 }
             ],
             "safe_actions": [{"key": "refresh_diagnostics", "label": "Rerun checks"}],
@@ -2169,7 +2174,9 @@ def test_recovery_assistant_endpoint_returns_guidance(client, monkeypatch):
     assert resp.status_code == 200
     data = resp.get_json()
     assert data["summary"]["headline"] == "Kitchen is disconnected"
+    assert data["issues"][0]["primary_action"]["key"] == "reconnect_device"
     assert data["issues"][0]["recommended_action"]["key"] == "reconnect_device"
+    assert data["issues"][0]["secondary_actions"][0]["key"] == "open_diagnostics"
     assert data["safe_actions"][0]["key"] == "refresh_diagnostics"
 
 

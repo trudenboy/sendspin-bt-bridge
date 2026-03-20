@@ -78,3 +78,41 @@ def test_onboarding_assistant_reports_connected_bridge_readiness():
     assert snapshot.checklist.progress_percent == 100
     assert all(step.stage == "complete" for step in snapshot.checklist.steps)
     assert all(checkpoint.reached for checkpoint in snapshot.checklist.checkpoints)
+
+
+def test_onboarding_assistant_recommends_scanning_for_unpaired_speakers():
+    snapshot = build_onboarding_assistant_snapshot(
+        config={"BLUETOOTH_DEVICES": [{"mac": "AA"}], "PULSE_LATENCY_MSEC": 200},
+        preflight={
+            "audio": {"system": "pulseaudio", "sinks": 1},
+            "bluetooth": {"controller": True, "paired_devices": 0},
+        },
+        devices=[],
+        ma_connected=False,
+        runtime_mode="production",
+    )
+
+    assert snapshot.checklist is not None
+    bluetooth_step = next(step for step in snapshot.checklist.steps if step.key == "bluetooth")
+    assert bluetooth_step.recommended_action is not None
+    assert bluetooth_step.recommended_action.key == "scan_devices"
+    assert "pairing mode" in bluetooth_step.actions[0].lower()
+
+
+def test_onboarding_assistant_recommends_device_scan_when_no_devices_configured():
+    snapshot = build_onboarding_assistant_snapshot(
+        config={"BLUETOOTH_DEVICES": [], "PULSE_LATENCY_MSEC": 200},
+        preflight={
+            "audio": {"system": "pulseaudio", "sinks": 1},
+            "bluetooth": {"controller": True, "paired_devices": 1},
+        },
+        devices=[],
+        ma_connected=False,
+        runtime_mode="production",
+    )
+
+    assert snapshot.checklist is not None
+    sink_step = next(step for step in snapshot.checklist.steps if step.key == "sink_verification")
+    assert sink_step.recommended_action is not None
+    assert sink_step.recommended_action.key == "scan_devices"
+    assert "pairing mode" in sink_step.actions[0].lower()
