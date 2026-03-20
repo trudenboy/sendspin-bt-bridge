@@ -21,7 +21,14 @@ from datetime import datetime, timezone
 from flask import Blueprint, Response, jsonify, request
 
 import state
-from config import BUILD_DATE, CONFIG_SCHEMA_VERSION, VERSION, load_config
+from config import (
+    BUILD_DATE,
+    CONFIG_SCHEMA_VERSION,
+    RUNTIME_STATE_CONFIG_KEYS,
+    SENSITIVE_CONFIG_KEYS,
+    VERSION,
+    load_config,
+)
 from services.device_registry import get_device_registry_snapshot
 from services.event_hooks import get_event_hook_registry
 from services.ipc_protocol import IPC_PROTOCOL_VERSION
@@ -565,9 +572,15 @@ def api_diagnostics():
             diag["portaudio_devices"] = [{"error": "Failed to list PortAudio devices"}]
 
         diag["subprocesses"] = _collect_subprocess_info()
-        diag["telemetry"] = _build_bridge_telemetry_payload()
         diag["event_hooks"] = get_event_hook_registry().snapshot()
         diag["onboarding_assistant"] = _build_onboarding_assistant_payload()
+        diag["telemetry"] = _build_bridge_telemetry_payload(
+            environment=diag["environment"],
+            subprocesses=diag["subprocesses"],
+            startup_progress=diag["startup_progress"],
+            runtime_info=diag["runtime_info"],
+            event_hooks=diag["event_hooks"],
+        )
 
         return jsonify(diag)
     except Exception:
@@ -718,11 +731,19 @@ def _collect_process_rss_mb(pid: int | None) -> float | None:
     return round(rss_kb / 1024, 1)
 
 
-def _build_bridge_telemetry_payload() -> dict:
-    environment = _collect_environment()
-    subprocesses = _collect_subprocess_info()
-    startup_progress = build_startup_progress_snapshot().to_dict()
-    runtime_info = build_mock_runtime_snapshot().to_dict()
+def _build_bridge_telemetry_payload(
+    *,
+    environment: dict | None = None,
+    subprocesses: list[dict] | None = None,
+    startup_progress: dict | None = None,
+    runtime_info: dict | None = None,
+    event_hooks: dict | None = None,
+) -> dict:
+    environment = _collect_environment() if environment is None else environment
+    subprocesses = _collect_subprocess_info() if subprocesses is None else subprocesses
+    startup_progress = build_startup_progress_snapshot().to_dict() if startup_progress is None else startup_progress
+    runtime_info = build_mock_runtime_snapshot().to_dict() if runtime_info is None else runtime_info
+    event_hooks = get_event_hook_registry().snapshot() if event_hooks is None else event_hooks
     uptime_seconds = round((datetime.now(tz=UTC) - state.bridge_start_time).total_seconds(), 1)
     return {
         "bridge": {
@@ -738,7 +759,7 @@ def _build_bridge_telemetry_payload() -> dict:
         "startup_progress": startup_progress,
         "runtime_info": runtime_info,
         "subprocesses": subprocesses,
-        "event_hooks": get_event_hook_registry().snapshot(),
+        "event_hooks": event_hooks,
     }
 
 
@@ -749,12 +770,7 @@ def _sanitized_config() -> dict:
     except Exception:
         return {"error": "could not load config"}
 
-    redacted_keys = {
-        "AUTH_PASSWORD_HASH",
-        "SECRET_KEY",
-        "MA_API_TOKEN",
-        "LAST_VOLUMES",
-    }
+    redacted_keys = SENSITIVE_CONFIG_KEYS | RUNTIME_STATE_CONFIG_KEYS
     result: dict = {}
     for k, v in cfg.items():
         if k in redacted_keys:

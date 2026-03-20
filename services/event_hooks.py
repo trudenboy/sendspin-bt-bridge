@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import logging
+import socket
 import threading
 import time
 import urllib.error
@@ -142,7 +144,50 @@ class EventHookRegistry:
         parsed = urlparse(normalized)
         if parsed.scheme not in {"http", "https"} or not parsed.netloc:
             raise ValueError("url must be an absolute http:// or https:// URL")
+        hostname = (parsed.hostname or "").strip()
+        if not hostname:
+            raise ValueError("url must include a hostname")
+        EventHookRegistry._validate_hook_host(hostname, parsed.port, parsed.scheme)
         return normalized
+
+    @staticmethod
+    def _validate_hook_host(hostname: str, port: int | None, scheme: str) -> None:
+        normalized_host = hostname.strip().lower()
+        if normalized_host in {"localhost", "localhost.localdomain"} or normalized_host.endswith(".local"):
+            raise ValueError("url must not target loopback, local, or private network hosts")
+        try:
+            addresses = EventHookRegistry._resolve_host_addresses(normalized_host, port, scheme)
+        except OSError as exc:
+            raise ValueError(f"could not resolve hook host: {normalized_host}") from exc
+        if not addresses:
+            raise ValueError(f"could not resolve hook host: {normalized_host}")
+        for address in addresses:
+            ip = ipaddress.ip_address(address)
+            if (
+                ip.is_private
+                or ip.is_loopback
+                or ip.is_link_local
+                or ip.is_multicast
+                or ip.is_reserved
+                or ip.is_unspecified
+            ):
+                raise ValueError("url must not target loopback, local, or private network hosts")
+
+    @staticmethod
+    def _resolve_host_addresses(hostname: str, port: int | None, scheme: str) -> set[str]:
+        try:
+            return {str(ipaddress.ip_address(hostname))}
+        except ValueError:
+            resolved_port = port or (443 if scheme == "https" else 80)
+            addresses: set[str] = set()
+            for item in socket.getaddrinfo(hostname, resolved_port, type=socket.SOCK_STREAM):
+                sockaddr = item[4]
+                if not sockaddr:
+                    continue
+                address = sockaddr[0]
+                if isinstance(address, str) and address:
+                    addresses.add(address)
+            return addresses
 
     def _matching_hooks(self, event: InternalEvent) -> list[EventHook]:
         with self._lock:

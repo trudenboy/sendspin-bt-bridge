@@ -96,6 +96,16 @@ def test_save_volume_zero(tmp_path):
         assert json.load(f)["LAST_VOLUMES"]["AA:BB:CC:DD:EE:FF"] == 0
 
 
+def test_save_device_sink_normalizes_mac_and_sink(tmp_path):
+    _write_config(tmp_path, {"BLUETOOTH_DEVICES": [{"mac": "AA:BB:CC:DD:EE:FF"}]})
+    from config import save_device_sink
+
+    save_device_sink(" aa:bb:cc:dd:ee:ff ", " bluez_sink.AA_BB_CC_DD_EE_FF.a2dp_sink ")
+
+    with open(tmp_path / "config.json") as f:
+        assert json.load(f)["LAST_SINKS"]["AA:BB:CC:DD:EE:FF"] == "bluez_sink.AA_BB_CC_DD_EE_FF.a2dp_sink"
+
+
 def test_save_device_volume_skips_unknown_device(tmp_path):
     _write_config(
         tmp_path,
@@ -163,6 +173,21 @@ def test_load_preserves_ma_oauth_tokens(tmp_path):
 
     assert loaded["MA_ACCESS_TOKEN"] == "access-token"
     assert loaded["MA_REFRESH_TOKEN"] == "refresh-token"
+
+
+def test_load_normalizes_last_sinks_keys(tmp_path):
+    _write_config(
+        tmp_path,
+        {
+            "BLUETOOTH_DEVICES": [{"mac": "AA:BB:CC:DD:EE:FF"}],
+            "LAST_SINKS": {" aa:bb:cc:dd:ee:ff ": " bluez_sink.AA_BB_CC_DD_EE_FF.a2dp_sink "},
+        },
+    )
+    from config import load_config
+
+    loaded = load_config()
+
+    assert loaded["LAST_SINKS"] == {"AA:BB:CC:DD:EE:FF": "bluez_sink.AA_BB_CC_DD_EE_FF.a2dp_sink"}
 
 
 def test_load_config_normalizes_types_and_prunes_orphan_volumes(tmp_path):

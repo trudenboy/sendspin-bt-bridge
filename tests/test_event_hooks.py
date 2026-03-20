@@ -4,7 +4,16 @@ from services.event_hooks import EventHookRegistry
 from services.internal_events import InternalEvent
 
 
+def _allow_public_example(monkeypatch):
+    monkeypatch.setattr(
+        EventHookRegistry,
+        "_resolve_host_addresses",
+        staticmethod(lambda hostname, port, scheme: {"93.184.216.34"}),
+    )
+
+
 def test_event_hook_registry_delivers_matching_events(monkeypatch):
+    _allow_public_example(monkeypatch)
     registry = EventHookRegistry()
     requests = []
 
@@ -51,6 +60,7 @@ def test_event_hook_registry_delivers_matching_events(monkeypatch):
 
 
 def test_event_hook_registry_records_delivery_failures(monkeypatch):
+    _allow_public_example(monkeypatch)
     registry = EventHookRegistry()
 
     def _fake_urlopen(_request, timeout=0):
@@ -87,7 +97,24 @@ def test_event_hook_registry_rejects_invalid_urls():
         raise AssertionError("Expected ValueError for invalid hook URL")
 
 
-def test_event_hook_registry_unregister_removes_hook():
+def test_event_hook_registry_rejects_private_network_targets(monkeypatch):
+    monkeypatch.setattr(
+        EventHookRegistry,
+        "_resolve_host_addresses",
+        staticmethod(lambda hostname, port, scheme: {"127.0.0.1"}),
+    )
+    registry = EventHookRegistry()
+
+    try:
+        registry.register(url="http://example.com/hook")
+    except ValueError as exc:
+        assert str(exc) == "url must not target loopback, local, or private network hosts"
+    else:
+        raise AssertionError("Expected ValueError for private target")
+
+
+def test_event_hook_registry_unregister_removes_hook(monkeypatch):
+    _allow_public_example(monkeypatch)
     registry = EventHookRegistry()
     hook = registry.register(url="https://example.com/hook")
 

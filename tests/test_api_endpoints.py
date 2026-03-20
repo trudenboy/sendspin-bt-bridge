@@ -533,6 +533,35 @@ def test_api_bugreport_uses_issue_worthy_logs_in_summary(client, monkeypatch):
     ]
 
 
+def test_api_bugreport_redacts_oauth_tokens_and_runtime_state(client, monkeypatch):
+    import routes.api_status as api_status_mod
+
+    monkeypatch.setattr(
+        api_status_mod,
+        "load_config",
+        lambda: {
+            "MA_ACCESS_TOKEN": "oauth-access",
+            "MA_REFRESH_TOKEN": "oauth-refresh",
+            "MA_API_TOKEN": "legacy-token",
+            "AUTH_PASSWORD_HASH": "hashed",
+            "SECRET_KEY": "secret",
+            "LAST_VOLUMES": {"AA:BB:CC:DD:EE:FF": 20},
+            "LAST_SINKS": {"AA:BB:CC:DD:EE:FF": "bluez_sink.AA_BB_CC_DD_EE_FF.a2dp_sink"},
+            "BLUETOOTH_DEVICES": [{"mac": "AA:BB:CC:DD:EE:FF"}],
+        },
+    )
+
+    sanitized = api_status_mod._sanitized_config()
+
+    assert sanitized["MA_ACCESS_TOKEN"] == "***"
+    assert sanitized["MA_REFRESH_TOKEN"] == "***"
+    assert sanitized["MA_API_TOKEN"] == "***"
+    assert sanitized["AUTH_PASSWORD_HASH"] == "***"
+    assert sanitized["SECRET_KEY"] == "***"
+    assert sanitized["LAST_VOLUMES"] == "***"
+    assert sanitized["LAST_SINKS"] == "***"
+
+
 def test_api_version_includes_runtime_dependency_versions(client, monkeypatch):
     import routes.api_config as api_config_mod
     from config import CONFIG_SCHEMA_VERSION
@@ -1669,10 +1698,15 @@ def test_runtime_info_endpoint_and_status_include_mock_runtime(client):
 
 def test_api_bridge_telemetry_includes_resource_and_hook_data(client, monkeypatch):
     import routes.api_status as api_status
-    from services.event_hooks import get_event_hook_registry
+    from services.event_hooks import EventHookRegistry, get_event_hook_registry
 
     registry = get_event_hook_registry()
     registry.clear()
+    monkeypatch.setattr(
+        EventHookRegistry,
+        "_resolve_host_addresses",
+        staticmethod(lambda hostname, port, scheme: {"93.184.216.34"}),
+    )
     registry.register(url="https://example.com/hook", categories=["bridge_event"])
     monkeypatch.setattr(
         api_status,
@@ -1703,11 +1737,16 @@ def test_api_bridge_telemetry_includes_resource_and_hook_data(client, monkeypatc
         registry.clear()
 
 
-def test_api_hooks_register_list_and_delete(client):
-    from services.event_hooks import get_event_hook_registry
+def test_api_hooks_register_list_and_delete(client, monkeypatch):
+    from services.event_hooks import EventHookRegistry, get_event_hook_registry
 
     registry = get_event_hook_registry()
     registry.clear()
+    monkeypatch.setattr(
+        EventHookRegistry,
+        "_resolve_host_addresses",
+        staticmethod(lambda hostname, port, scheme: {"93.184.216.34"}),
+    )
     try:
         create_resp = client.post(
             "/api/hooks",
@@ -1739,6 +1778,25 @@ def test_api_hooks_reject_invalid_url(client):
 
     assert resp.status_code == 400
     assert resp.get_json() == {"error": "url must be an absolute http:// or https:// URL"}
+
+
+def test_api_hooks_reject_private_network_targets(client, monkeypatch):
+    from services.event_hooks import EventHookRegistry
+
+    monkeypatch.setattr(
+        EventHookRegistry,
+        "_resolve_host_addresses",
+        staticmethod(lambda hostname, port, scheme: {"127.0.0.1"}),
+    )
+
+    resp = client.post(
+        "/api/hooks",
+        data=json.dumps({"url": "http://example.com/hook"}),
+        content_type="application/json",
+    )
+
+    assert resp.status_code == 400
+    assert resp.get_json() == {"error": "url must not target loopback, local, or private network hosts"}
 
 
 def test_onboarding_assistant_endpoint_returns_guidance(client, monkeypatch):
@@ -1828,7 +1886,7 @@ def test_api_diagnostics_includes_playing_and_sink_input_metadata(client, monkey
     import state
     from config import CONFIG_SCHEMA_VERSION
     from services.device_registry import DeviceRegistrySnapshot
-    from services.event_hooks import get_event_hook_registry
+    from services.event_hooks import EventHookRegistry, get_event_hook_registry
     from services.ipc_protocol import IPC_PROTOCOL_VERSION
 
     fake_client = SimpleNamespace(
@@ -1893,6 +1951,11 @@ def test_api_diagnostics_includes_playing_and_sink_input_metadata(client, monkey
     state.set_ma_groups({}, [])
     hook_registry = get_event_hook_registry()
     hook_registry.clear()
+    monkeypatch.setattr(
+        EventHookRegistry,
+        "_resolve_host_addresses",
+        staticmethod(lambda hostname, port, scheme: {"93.184.216.34"}),
+    )
     hook_registry.register(url="https://example.com/hook", categories=["device_event"])
     try:
         resp = client.get("/api/diagnostics")

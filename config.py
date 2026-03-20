@@ -366,6 +366,12 @@ def _normalize_bluetooth_devices(config: dict) -> list[dict]:
     return normalized_devices
 
 
+def _normalize_mac_key(raw_mac: object) -> str:
+    if not isinstance(raw_mac, str):
+        return ""
+    return raw_mac.strip().upper()
+
+
 def _prune_last_volumes(config: dict) -> None:
     last_volumes = config.get("LAST_VOLUMES", DEFAULT_CONFIG["LAST_VOLUMES"])
     if not isinstance(last_volumes, dict):
@@ -397,18 +403,22 @@ def _prune_last_sinks(config: dict) -> None:
         return
 
     configured_macs = {
-        device.get("mac")
+        _normalize_mac_key(device.get("mac"))
         for device in config.get("BLUETOOTH_DEVICES", [])
-        if isinstance(device, dict) and isinstance(device.get("mac"), str) and device.get("mac")
+        if isinstance(device, dict) and _normalize_mac_key(device.get("mac"))
     }
     sanitized: dict[str, str] = {}
     for mac, sink_name in last_sinks.items():
-        if mac not in configured_macs:
+        normalized_mac = _normalize_mac_key(mac)
+        if not normalized_mac:
+            logger.warning("Ignoring non-string MAC key %r in LAST_SINKS", mac)
+            continue
+        if normalized_mac not in configured_macs:
             continue
         if not isinstance(sink_name, str) or not sink_name.strip():
             logger.warning("Ignoring invalid saved sink %r for %s", sink_name, mac)
             continue
-        sanitized[mac] = sink_name
+        sanitized[normalized_mac] = sink_name.strip()
     config["LAST_SINKS"] = sanitized
 
 
@@ -629,7 +639,10 @@ def save_device_sink(mac: str | None, sink_name: str) -> None:
         return
 
     def _set_sink(cfg: dict) -> None:
-        cfg.setdefault("LAST_SINKS", {})[mac] = sink_name
+        normalized_mac = _normalize_mac_key(mac)
+        if not normalized_mac:
+            return
+        cfg.setdefault("LAST_SINKS", {})[normalized_mac] = sink_name.strip()
 
     try:
         update_config(_set_sink)
