@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.42.0-rc.18] - 2026-03-20
+
+### Changed
+- The onboarding checklist now uses clearer step circles with visible checkmarks for completed steps and ordinal numbers for the remaining steps.
+- The header setup/status pill now opens the onboarding checklist directly, so operators can jump into pending setup work from the compact header state.
+
+### Fixed
+- Disabled device cards no longer lose their grayscale/inert state on the next live status refresh when `/api/status` omits `enabled` for active runtime devices.
+- When configured devices exist but all of them are globally disabled, the dashboard now shows an explicit `All devices disabled` guidance state with a direct path to `Configuration → Devices`.
+
 ## [2.42.0-rc.17] - 2026-03-20
 
 ### Changed
