@@ -2,6 +2,8 @@
 
 import asyncio
 import sys
+from types import ModuleType
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -14,6 +16,14 @@ _state_mock._ma_connected = False
 _state_mock._main_loop = None
 _state_mock.is_ma_connected = lambda: _state_mock._ma_connected
 _state_mock.get_main_loop = lambda: _state_mock._main_loop
+
+_bridge_runtime_state_mock: Any = ModuleType("services.bridge_runtime_state")
+_bridge_runtime_state_mock.get_main_loop = lambda: _state_mock.get_main_loop()
+
+_ma_runtime_state_mock: Any = ModuleType("services.ma_runtime_state")
+_ma_runtime_state_mock.is_ma_connected = lambda: _state_mock.is_ma_connected()
+_ma_runtime_state_mock.get_ma_api_credentials = lambda: ("http://ma.local:8095", "token")
+_ma_runtime_state_mock.get_ma_group_for_player = lambda _player_id: None
 
 # Also need to mock pulsectl-based helpers that aren't available in test env
 _pulse_mock = MagicMock()
@@ -44,6 +54,9 @@ def _patch_imports(monkeypatch):
     """Ensure state and pulse modules are mocked before importing routes.api."""
     monkeypatch.setitem(sys.modules, "state", _state_mock)
     monkeypatch.setitem(sys.modules, "services.pulse", _pulse_mock)
+    monkeypatch.setitem(sys.modules, "services.bridge_runtime_state", _bridge_runtime_state_mock)
+    monkeypatch.setitem(sys.modules, "services.ma_runtime_state", _ma_runtime_state_mock)
+    sys.modules.pop("routes.api", None)
     # Reset state between tests
     _state_mock._ma_connected = False
     _state_mock._main_loop = None
