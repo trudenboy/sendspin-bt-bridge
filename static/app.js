@@ -1059,12 +1059,24 @@ function onArtworkPreviewKeydown(event, el) {
     }
 }
 
-document.addEventListener('click', function() {
+function _closeActionMenus(eventTarget) {
+    var openMenus = document.querySelectorAll('.notice-action-menu[open], .diag-action-menu[open]');
+    openMenus.forEach(function(menu) {
+        if (eventTarget && menu.contains(eventTarget)) return;
+        menu.open = false;
+    });
+}
+
+document.addEventListener('click', function(event) {
     _closeArtworkPreviews();
+    _closeActionMenus(event && event.target ? event.target : null);
 });
 
 document.addEventListener('keydown', function(event) {
-    if (event.key === 'Escape') _closeArtworkPreviews();
+    if (event.key === 'Escape') {
+        _closeArtworkPreviews();
+        _closeActionMenus(null);
+    }
 });
 
 function _renderArtworkThumbHtml(artUrl, thumbClass, previewClass) {
