@@ -1875,6 +1875,12 @@ def test_status_includes_health_summary_and_recent_events(client, monkeypatch):
         assert data["health_summary"]["state"] == "degraded"
         assert data["health_summary"]["severity"] == "error"
         assert data["recent_events"][0]["event_type"] == "runtime-error"
+        assert data["capabilities"]["domains"]["playback"]["currently_available"] is True
+        assert data["capabilities"]["actions"]["queue_control"]["currently_available"] is False
+        assert (
+            data["capabilities"]["actions"]["queue_control"]["blocked_reason"]
+            == "Music Assistant API is not connected."
+        )
     finally:
         state.clear_device_events("sendspin-kitchen")
 

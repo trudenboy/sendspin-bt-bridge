@@ -49,6 +49,7 @@ class DeviceSnapshot:
     ma_now_playing: dict[str, Any] | None = None
     recent_events: list[dict[str, Any]] = field(default_factory=list)
     health_summary: dict[str, Any] | None = None
+    capabilities: dict[str, Any] | None = None
     extra: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -256,6 +257,147 @@ def _derive_event_reasons(events: list[dict[str, Any]]) -> list[str]:
     if "ma-monitor-stale" in event_types:
         _append_reason(reasons, "ma_monitor_stale")
     return reasons
+
+
+def _capability_payload(
+    *,
+    supported: bool,
+    currently_available: bool,
+    blocked_reason: str | None = None,
+    safe_actions: list[str] | None = None,
+) -> dict[str, Any]:
+    return {
+        "supported": supported,
+        "currently_available": currently_available,
+        "blocked_reason": blocked_reason,
+        "safe_actions": list(safe_actions or []),
+    }
+
+
+def _capability_domain_payload(*capabilities: dict[str, Any]) -> dict[str, Any]:
+    supported = any(bool(item.get("supported")) for item in capabilities)
+    currently_available = any(bool(item.get("currently_available")) for item in capabilities)
+    blocked_reason = None
+    if supported and not currently_available:
+        blocked_reason = next((item.get("blocked_reason") for item in capabilities if item.get("blocked_reason")), None)
+    safe_actions: list[str] = []
+    for item in capabilities:
+        for action in item.get("safe_actions") or []:
+            if action not in safe_actions:
+                safe_actions.append(action)
+    return _capability_payload(
+        supported=supported,
+        currently_available=currently_available,
+        blocked_reason=blocked_reason,
+        safe_actions=safe_actions,
+    )
+
+
+def _build_device_capabilities(device: DeviceSnapshot) -> dict[str, Any]:
+    ma_connected = bool((device.ma_now_playing or {}).get("connected"))
+    reconnecting = bool(device.extra.get("reconnecting"))
+    stopping = bool(device.extra.get("stopping"))
+    released = device.bt_management_enabled is False
+    has_sink = bool(device.has_sink)
+
+    if released:
+        reconnect_blocked_reason = "Bluetooth management is released; reclaim it before reconnecting."
+    elif reconnecting:
+        reconnect_blocked_reason = "Reconnect is already in progress."
+    elif stopping:
+        reconnect_blocked_reason = "Device is stopping."
+    else:
+        reconnect_blocked_reason = None
+    reconnect = _capability_payload(
+        supported=bool(device.bluetooth_mac),
+        currently_available=reconnect_blocked_reason is None and bool(device.bluetooth_mac),
+        blocked_reason=reconnect_blocked_reason,
+        safe_actions=["toggle_bt_management", "open_diagnostics"] if reconnect_blocked_reason else ["reconnect"],
+    )
+
+    if reconnecting:
+        toggle_management_blocked_reason = "Wait for the current reconnect attempt to finish first."
+    elif stopping:
+        toggle_management_blocked_reason = "Device is stopping."
+    else:
+        toggle_management_blocked_reason = None
+    toggle_bt_management = _capability_payload(
+        supported=True,
+        currently_available=toggle_management_blocked_reason is None,
+        blocked_reason=toggle_management_blocked_reason,
+        safe_actions=["open_diagnostics"] if toggle_management_blocked_reason else ["toggle_bt_management"],
+    )
+
+    play_pause = _capability_payload(
+        supported=True,
+        currently_available=bool(device.server_connected),
+        blocked_reason=None if device.server_connected else "Sendspin is not connected.",
+        safe_actions=["reconnect", "open_diagnostics"] if not device.server_connected else ["play_pause"],
+    )
+
+    volume = _capability_payload(
+        supported=True,
+        currently_available=has_sink,
+        blocked_reason=(
+            None if has_sink else "Bluetooth management is released." if released else "Audio sink is not configured."
+        ),
+        safe_actions=["reconnect", "open_diagnostics"] if not has_sink else ["volume"],
+    )
+    mute = _capability_payload(
+        supported=True,
+        currently_available=has_sink,
+        blocked_reason=volume["blocked_reason"],
+        safe_actions=["reconnect", "open_diagnostics"] if not has_sink else ["mute"],
+    )
+
+    queue_control = _capability_payload(
+        supported=bool(device.server_connected),
+        currently_available=bool(device.server_connected and ma_connected),
+        blocked_reason=(
+            "Sendspin is not connected."
+            if not device.server_connected
+            else "Music Assistant API is not connected."
+            if not ma_connected
+            else None
+        ),
+        safe_actions=["open_ma_settings", "open_diagnostics"] if not ma_connected else ["queue_control"],
+    )
+
+    diagnostics = _capability_payload(
+        supported=True,
+        currently_available=True,
+        blocked_reason=None,
+        safe_actions=["open_diagnostics", "download_diagnostics"],
+    )
+    disable_device = _capability_payload(
+        supported=True,
+        currently_available=not stopping,
+        blocked_reason=None if not stopping else "Device is stopping.",
+        safe_actions=["disable_device"] if not stopping else ["open_diagnostics"],
+    )
+
+    actions = {
+        "reconnect": reconnect,
+        "toggle_bt_management": toggle_bt_management,
+        "play_pause": play_pause,
+        "volume": volume,
+        "mute": mute,
+        "queue_control": queue_control,
+        "diagnostics": diagnostics,
+        "disable_device": disable_device,
+    }
+    domains = {
+        "connectivity": _capability_domain_payload(reconnect, toggle_bt_management),
+        "playback": _capability_domain_payload(play_pause, volume, mute),
+        "music_assistant": _capability_domain_payload(queue_control),
+        "recovery": _capability_domain_payload(reconnect, toggle_bt_management, diagnostics),
+        "diagnostics": _capability_domain_payload(diagnostics),
+    }
+    return {
+        "health_state": str((device.health_summary or {}).get("state") or "unknown"),
+        "domains": domains,
+        "actions": actions,
+    }
 
 
 def _build_health_summary(device: DeviceSnapshot) -> DeviceHealthSummary:
@@ -520,6 +662,7 @@ def build_device_snapshot(client) -> DeviceSnapshot:
         device.extra["recent_events"] = device.recent_events
     if device.health_summary is not None:
         device.extra["health_summary"] = device.health_summary
+    device.capabilities = _build_device_capabilities(device)
     return device
 
 

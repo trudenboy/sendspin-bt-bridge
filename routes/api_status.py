@@ -480,6 +480,7 @@ def api_diagnostics():
                     "sink": device.sink_name,
                     "last_error": device.extra.get("last_error"),
                     "health_summary": device.health_summary,
+                    "capabilities": device.capabilities,
                     "recent_events": device.recent_events,
                 }
             )

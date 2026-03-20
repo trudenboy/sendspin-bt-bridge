@@ -99,6 +99,22 @@ def test_build_device_snapshot_includes_recent_events_and_health_summary():
         state.clear_device_events(client.player_id)
 
 
+def test_build_device_snapshot_includes_capability_payload():
+    client = _make_client()
+    client.status.update({"server_connected": False, "bluetooth_connected": False, "reconnecting": True})
+
+    snapshot = build_device_snapshot(client)
+    data = snapshot.to_dict()
+
+    assert data["capabilities"]["health_state"] == data["health_summary"]["state"]
+    assert data["capabilities"]["domains"]["playback"]["currently_available"] is True
+    assert data["capabilities"]["actions"]["play_pause"]["blocked_reason"] == "Sendspin is not connected."
+    assert data["capabilities"]["actions"]["volume"]["currently_available"] is True
+    assert data["capabilities"]["actions"]["reconnect"]["currently_available"] is False
+    assert "Reconnect is already in progress." in data["capabilities"]["actions"]["reconnect"]["blocked_reason"]
+    assert data["capabilities"]["actions"]["queue_control"]["blocked_reason"] == "Sendspin is not connected."
+
+
 def test_build_device_snapshot_reports_stopping_transition():
     client = _make_client()
     client.status.update(

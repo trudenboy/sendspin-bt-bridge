@@ -564,6 +564,23 @@ function deviceHasSink(dev) {
     return !!(dev && (dev.has_sink || getDeviceSinkName(dev)));
 }
 
+function _getDeviceActionCapability(dev, actionKey) {
+    var actions = (((dev || {}).capabilities || {}).actions) || {};
+    return actions[actionKey] || null;
+}
+
+function _capabilityAvailable(capability, fallback) {
+    if (!capability || capability.currently_available === undefined || capability.currently_available === null) {
+        return !!fallback;
+    }
+    return !!capability.currently_available;
+}
+
+function _capabilityBlockedReason(capability, fallback) {
+    if (capability && capability.blocked_reason) return capability.blocked_reason;
+    return fallback || '';
+}
+
 function getDeviceSinkLabel(dev) {
     var sinkName = getDeviceSinkName(dev);
     if (sinkName) return sinkName;
@@ -2012,24 +2029,34 @@ function _getDeviceTransportState(dev, mediaState) {
     var media = mediaState || _getDeviceNowPlayingState(safeDev, null);
     var ma = media.ma || {};
     var maMeta = _getMaSyncMeta(ma);
-    var hasSink = deviceHasSink(safeDev);
-    var hasSendspin = !!safeDev.server_connected;
-    var hasMaApi = !!ma.connected;
-    var queueUnavailableTitle = !hasSendspin ? 'Sendspin not connected' : 'Music Assistant API not connected';
+    var playPauseCapability = _getDeviceActionCapability(safeDev, 'play_pause');
+    var volumeCapability = _getDeviceActionCapability(safeDev, 'volume');
+    var muteCapability = _getDeviceActionCapability(safeDev, 'mute');
+    var queueCapability = _getDeviceActionCapability(safeDev, 'queue_control');
+    var hasSink = _capabilityAvailable(volumeCapability, deviceHasSink(safeDev));
+    var canTransport = _capabilityAvailable(playPauseCapability, !!safeDev.server_connected);
+    var hasQueueControls = _capabilityAvailable(queueCapability, !!(safeDev.server_connected && ma.connected));
+    var queueUnavailableTitle = _capabilityBlockedReason(
+        queueCapability,
+        !safeDev.server_connected ? 'Sendspin not connected' : 'Music Assistant API not connected'
+    );
     var pendingSummary = _getPendingMaSummary(maMeta);
     var queueActionPending = _isQueueTransportActionPending(maMeta);
     var shufflePending = _hasPendingMaAction(maMeta, 'shuffle');
     var repeatPending = _hasPendingMaAction(maMeta, 'repeat');
     return {
         hasSink: hasSink,
-        canTransport: hasSendspin,
-        hasQueueControls: !!(hasSendspin && hasMaApi),
+        canTransport: canTransport,
+        hasQueueControls: hasQueueControls,
         isPlaying: !!safeDev.playing,
         shuffle: !!ma.shuffle,
         repeat: ma.repeat || 'off',
-        transportUnavailableTitle: hasSendspin ? '' : 'Sendspin not connected',
+        transportUnavailableTitle: _capabilityBlockedReason(playPauseCapability, canTransport ? '' : 'Sendspin not connected'),
         queueUnavailableTitle: queueUnavailableTitle,
-        muteUnavailableTitle: hasSink ? '' : 'Audio sink not configured',
+        muteUnavailableTitle: _capabilityBlockedReason(
+            muteCapability || volumeCapability,
+            hasSink ? '' : 'Audio sink not configured'
+        ),
         pendingSummary: pendingSummary,
         queueActionPending: queueActionPending,
         shufflePending: shufflePending,
@@ -2037,13 +2064,13 @@ function _getDeviceTransportState(dev, mediaState) {
         shuffleTitle: _buildQueueActionTitle(
             ma.shuffle ? 'Shuffle on — click to disable' : 'Shuffle off — click to enable',
             queueActionPending,
-            !!(hasSendspin && hasMaApi) ? '' : queueUnavailableTitle,
+            hasQueueControls ? '' : queueUnavailableTitle,
             pendingSummary
         ),
         repeatTitle: _buildQueueActionTitle(
             'Repeat: ' + (ma.repeat || 'off') + ' — click to cycle',
             queueActionPending,
-            !!(hasSendspin && hasMaApi) ? '' : queueUnavailableTitle,
+            hasQueueControls ? '' : queueUnavailableTitle,
             pendingSummary
         ),
     };
@@ -2264,6 +2291,18 @@ function buildListView(entries, hiddenCount) {
         var effectiveMuted = !!dev.muted || !!dev.sink_muted;
         var mgmtEnabled = dev.bt_management_enabled !== false;
         var transportState = _getDeviceTransportState(dev, mediaState);
+        var reconnectCapability = _getDeviceActionCapability(dev, 'reconnect');
+        var toggleManagementCapability = _getDeviceActionCapability(dev, 'toggle_bt_management');
+        var reconnectAvailable = _capabilityAvailable(reconnectCapability, mgmtEnabled);
+        var releaseAvailable = _capabilityAvailable(toggleManagementCapability, true);
+        var reconnectTitle = reconnectAvailable
+            ? 'Reconnect Bluetooth and refresh sink routing'
+            : _capabilityBlockedReason(reconnectCapability, 'Reconnect unavailable');
+        var releaseTitle = releaseAvailable
+            ? (mgmtEnabled
+                ? 'Stop BT management for this device (it will stop auto-reconnecting)'
+                : 'Resume BT management and auto-reconnect')
+            : _capabilityBlockedReason(toggleManagementCapability, 'BT management action unavailable');
         var canTransport = transportState.canTransport;
         var canMute = transportState.hasSink;
         var hasQueueNeighbors = !!(mediaState.ma || {}).connected;
@@ -2291,8 +2330,8 @@ function buildListView(entries, hiddenCount) {
             }) +
         '</div>';
         var detailActions = '<div class="list-detail-actions" onclick="event.stopPropagation()">' +
-            '<button type="button" class="list-action-btn accent" id="dbtn-reconnect-' + i + '" onclick="btReconnect(' + i + ')"' + (mgmtEnabled ? '' : ' disabled') + '>' + _actionButtonInnerHtml('reconnect', 'Reconnect') + '</button>' +
-            '<button type="button" class="list-action-btn ' + releaseActionClass + '" id="dbtn-release-' + i + '" onclick="btToggleManagement(' + i + ')">' + _actionButtonInnerHtml('release', mgmtEnabled ? 'Release' : 'Reclaim') + '</button>' +
+            '<button type="button" class="list-action-btn accent" id="dbtn-reconnect-' + i + '" onclick="btReconnect(' + i + ')" title="' + escHtmlAttr(reconnectTitle) + '"' + (reconnectAvailable ? '' : ' disabled') + '>' + _actionButtonInnerHtml('reconnect', 'Reconnect') + '</button>' +
+            '<button type="button" class="list-action-btn ' + releaseActionClass + '" id="dbtn-release-' + i + '" onclick="btToggleManagement(' + i + ')" title="' + escHtmlAttr(releaseTitle) + '"' + (releaseAvailable ? '' : ' disabled') + '>' + _actionButtonInnerHtml('release', mgmtEnabled ? 'Release' : 'Reclaim') + '</button>' +
             '<button type="button" class="list-action-btn danger" onclick="confirmDisableDevice(' + i + ')">' + _actionButtonInnerHtml('disable', 'Disable') + '</button>' +
         '</div>';
         var routeSummary = _getListRoutingSummary(dev);
@@ -2924,11 +2963,23 @@ function populateDeviceCard(i, dev) {
     if (vslider) updateSliderFill(vslider);
 
     var relBtn = document.getElementById('dbtn-release-' + i);
+    var reconnectCapability = _getDeviceActionCapability(dev, 'reconnect');
+    var toggleManagementCapability = _getDeviceActionCapability(dev, 'toggle_bt_management');
+    var reconnectAvailable = _capabilityAvailable(reconnectCapability, dev.bt_management_enabled !== false);
     if (relBtn) {
         var mgmtEnabled = dev.bt_management_enabled !== false;
         _setReleaseActionButtonState(relBtn, mgmtEnabled);
+        relBtn.disabled = !_capabilityAvailable(toggleManagementCapability, true);
+        relBtn.title = relBtn.disabled
+            ? _capabilityBlockedReason(toggleManagementCapability, 'BT management action unavailable')
+            : relBtn.title;
         var reconnBtn = document.getElementById('dbtn-reconnect-' + i);
-        if (reconnBtn) reconnBtn.disabled = !mgmtEnabled;
+        if (reconnBtn) {
+            reconnBtn.disabled = !reconnectAvailable;
+            reconnBtn.title = reconnectAvailable
+                ? 'Reconnect Bluetooth and refresh sink routing'
+                : _capabilityBlockedReason(reconnectCapability, 'Reconnect unavailable');
+        }
     }
 }
 
