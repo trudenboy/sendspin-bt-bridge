@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 from typing import TYPE_CHECKING
@@ -32,6 +33,16 @@ async def _fetch_all_players(ma_url: str, ma_token: str) -> list[dict]:
     async with MusicAssistantClient(await _normalize_ma_url(ma_url), None, token=ma_token) as client:
         await client.connect()
         return await client.send_command("players/all")
+
+
+def fetch_all_players_snapshot(ma_url: str, ma_token: str) -> list[dict]:
+    """Return the current MA players/all payload from sync Flask code.
+
+    Config validation runs in regular Flask request threads, so expose a tiny
+    synchronous wrapper instead of making routes manage their own event loops.
+    """
+
+    return asyncio.run(_fetch_all_players(ma_url, ma_token))
 
 
 async def discover_ma_groups(

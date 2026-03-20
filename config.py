@@ -107,6 +107,8 @@ DEFAULT_CONFIG = {
     "MA_API_TOKEN": "",
     "MA_AUTH_PROVIDER": "",
     "MA_USERNAME": "",
+    "MA_TOKEN_INSTANCE_HOSTNAME": "",
+    "MA_TOKEN_LABEL": "",
     "MA_ACCESS_TOKEN": "",
     "MA_REFRESH_TOKEN": "",
     "MA_AUTO_SILENT_AUTH": True,

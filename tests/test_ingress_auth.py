@@ -118,8 +118,9 @@ class TestGetHaUserViaWs:
 
 class TestCreateMaTokenViaIngress:
     @patch("routes.api_ma._find_ma_ingress_url", return_value="http://localhost:8094")
+    @patch("routes.api_ma.socket.gethostname", return_value="bridge-host")
     @patch("urllib.request.urlopen")
-    def test_success_returns_token(self, mock_urlopen, _mock_find):
+    def test_success_returns_token(self, mock_urlopen, _mock_hostname, _mock_find):
         resp_body = json.dumps({"result": "long_lived_token_123"}).encode()
         mock_resp = MagicMock()
         mock_resp.read.return_value = resp_body
@@ -135,6 +136,7 @@ class TestCreateMaTokenViaIngress:
         req = mock_urlopen.call_args[0][0]
         assert req.get_header("X-remote-user-id") == "user123"
         assert req.get_header("X-remote-user-name") == "admin"
+        assert json.loads(req.data.decode())["args"]["name"] == "Sendspin BT Bridge (bridge-host)"
 
     @patch("routes.api_ma._find_ma_ingress_url", return_value="http://localhost:8094")
     @patch("urllib.request.urlopen")
@@ -181,6 +183,44 @@ def test_idempotent_reuse(_mock_validate, _mock_get_ma_api_credentials, client):
     data = resp.get_json()
     assert data["success"] is True
     assert "Already connected" in data["message"]
+
+
+@patch("routes.api_ma.socket.gethostname", return_value="current-host")
+@patch("routes.api_ma.get_ma_api_credentials", return_value=("http://localhost:8095", "existing_token"))
+@patch("routes.api_ma._save_ma_token_and_rediscover")
+@patch("routes.api_ma._validate_ma_token", return_value=True)
+@patch("routes.api_ma._create_ma_token_via_ingress", return_value="new_ma_token")
+@patch(
+    "routes.api_ma._get_ha_user_via_ws",
+    return_value={"id": "u1", "name": "admin", "is_admin": True},
+)
+@patch(
+    "routes.api_ma.load_config",
+    return_value={
+        "MA_API_URL": "http://localhost:8095",
+        "MA_API_TOKEN": "existing_token",
+        "MA_TOKEN_INSTANCE_HOSTNAME": "other-host",
+    },
+)
+def test_silent_auth_does_not_reuse_foreign_instance_token(
+    _mock_load,
+    _mock_ws,
+    _mock_ingress,
+    _mock_validate,
+    _mock_save,
+    _mock_get_ma_api_credentials,
+    _mock_hostname,
+    client,
+):
+    resp = client.post(
+        "/api/ma/ha-silent-auth",
+        json={"ha_token": "tok", "ma_url": "http://localhost:8095"},
+    )
+    data = resp.get_json()
+    assert data["success"] is True
+    assert "Already connected" not in data["message"]
+    _mock_ingress.assert_called_once()
+    _mock_save.assert_called_once_with("http://localhost:8095", "new_ma_token", "admin", auth_provider="ha")
 
 
 @patch("routes.api_ma.get_ma_api_credentials", return_value=("", ""))

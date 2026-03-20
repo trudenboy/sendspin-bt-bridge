@@ -11,6 +11,7 @@ import contextlib
 import json
 import logging
 import re
+import socket
 import threading
 import urllib.error as _ue
 import urllib.parse as _up
@@ -205,7 +206,37 @@ def _build_ma_prediction_patch(action: str, value) -> dict:
     return {}
 
 
-_MA_TOKEN_NAME = "Sendspin BT Bridge"
+_MA_TOKEN_NAME_PREFIX = "Sendspin BT Bridge"
+
+
+def _current_instance_hostname() -> str:
+    """Return a stable hostname label for this physical bridge instance."""
+    try:
+        hostname = socket.gethostname().strip()
+    except Exception:
+        hostname = ""
+    return hostname or "unknown-host"
+
+
+def _ma_token_name() -> str:
+    """Return the long-lived MA token label for this bridge instance."""
+    return f"{_MA_TOKEN_NAME_PREFIX} ({_current_instance_hostname()})"
+
+
+def _ma_token_matches_current_instance(cfg: dict, ma_url: str, ma_token: str) -> bool:
+    """Return True when a saved token belongs to this instance and MA URL.
+
+    Empty hostname metadata is treated as a legacy token that can still be
+    reused and backfilled on the next successful save.
+    """
+    configured_url = str(cfg.get("MA_API_URL") or "").strip().rstrip("/")
+    configured_token = str(cfg.get("MA_API_TOKEN") or "").strip()
+    if configured_url and configured_url != ma_url.rstrip("/"):
+        return False
+    if configured_token and configured_token != ma_token:
+        return False
+    saved_hostname = str(cfg.get("MA_TOKEN_INSTANCE_HOSTNAME") or "").strip()
+    return not saved_hostname or saved_hostname == _current_instance_hostname()
 
 
 def _ws_connect(url: str, **kwargs):
@@ -313,7 +344,7 @@ def _exchange_for_long_lived_token(ma_url: str, session_token: str) -> str:
                 json.dumps(
                     {
                         "command": "auth/token/create",
-                        "args": {"name": _MA_TOKEN_NAME},
+                        "args": {"name": _ma_token_name()},
                         "message_id": 2,
                     }
                 )
@@ -321,7 +352,7 @@ def _exchange_for_long_lived_token(ma_url: str, session_token: str) -> str:
             create_resp = json.loads(ws.recv(timeout=10))
             long_lived = create_resp.get("result")
             if long_lived and isinstance(long_lived, str):
-                logger.info("Created long-lived MA API token '%s'", _MA_TOKEN_NAME)
+                logger.info("Created long-lived MA API token '%s'", _ma_token_name())
                 return long_lived
             logger.warning("auth/token/create returned unexpected result: %s", create_resp)
             return session_token
@@ -414,10 +445,14 @@ async def _rediscover_after_login(
 
 def _save_ma_token_and_rediscover(ma_url: str, ma_token: str, username: str = "", auth_provider: str = "") -> None:
     """Save MA token to config and trigger group rediscovery."""
+    token_label = _ma_token_name()
+    token_hostname = _current_instance_hostname()
 
     def _save(cfg: dict) -> None:
         cfg["MA_API_URL"] = ma_url
         cfg["MA_API_TOKEN"] = ma_token
+        cfg["MA_TOKEN_INSTANCE_HOSTNAME"] = token_hostname
+        cfg["MA_TOKEN_LABEL"] = token_label
         if username:
             cfg["MA_USERNAME"] = username
         if auth_provider:
@@ -695,7 +730,7 @@ def _create_ma_token_via_ingress(ha_user_id: str, ha_username: str, ha_display_n
     payload = json.dumps(
         {
             "command": "auth/token/create",
-            "args": {"name": _MA_TOKEN_NAME},
+            "args": {"name": _ma_token_name()},
             "message_id": "1",
         }
     ).encode()
@@ -1227,8 +1262,7 @@ def api_ma_login():
         from music_assistant_client import login_with_token
 
         fut = asyncio.run_coroutine_threadsafe(
-            login_with_token(ma_url, username, password, token_name=_MA_TOKEN_NAME),
-            loop,
+            login_with_token(ma_url, username, password, token_name=_ma_token_name()), loop
         )
         _user, token = fut.result(timeout=30.0)
     except Exception as lib_exc:
@@ -1256,24 +1290,7 @@ def api_ma_login():
     if not token:
         return jsonify({"success": False, "error": "Login succeeded but no token received"}), 500
 
-    # Save to config.json
-    def _save_ma_creds(cfg: dict) -> None:
-        cfg["MA_API_URL"] = ma_url
-        cfg["MA_API_TOKEN"] = token
-        cfg["MA_USERNAME"] = username
-        cfg["MA_AUTH_PROVIDER"] = "builtin"
-
-    update_config(_save_ma_creds)
-    set_ma_api_credentials(ma_url, token)
-
-    # Trigger MA group rediscovery in background
-    try:
-        asyncio.run_coroutine_threadsafe(
-            _rediscover_after_login(ma_url, token, _bridge_players_snapshot()),
-            loop,
-        )
-    except Exception:
-        pass  # Non-critical — groups will be discovered on next poll
+    _save_ma_token_and_rediscover(ma_url, token, username, auth_provider="builtin")
 
     return jsonify(
         {
@@ -1333,7 +1350,17 @@ def api_ma_ha_silent_auth():
     # Idempotency: reuse existing token if it still works for this MA instance
     existing_url, existing_token = get_ma_api_credentials()
     if existing_token and existing_url and existing_url.rstrip("/") == ma_url:
-        if _validate_ma_token(ma_url, existing_token):
+        cfg = load_config()
+        if _ma_token_matches_current_instance(cfg, ma_url, existing_token) and _validate_ma_token(
+            ma_url, existing_token
+        ):
+            if not cfg.get("MA_TOKEN_INSTANCE_HOSTNAME") or not cfg.get("MA_TOKEN_LABEL"):
+                _save_ma_token_and_rediscover(
+                    ma_url,
+                    existing_token,
+                    str(cfg.get("MA_USERNAME") or ""),
+                    auth_provider=str(cfg.get("MA_AUTH_PROVIDER") or ""),
+                )
             logger.debug("Silent auth: existing MA token still valid — reusing")
             return jsonify(
                 {

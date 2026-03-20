@@ -27,6 +27,7 @@ from config import (
     DEFAULT_UPDATE_CHANNEL,
     SENSITIVE_CONFIG_KEYS,
     VERSION,
+    _player_id_from_mac,
     config_lock,
     detect_ha_addon_channel,
     load_config,
@@ -54,6 +55,7 @@ from services.device_registry import get_device_registry_snapshot
 from services.ha_addon import detect_delivery_channel_from_slug, get_self_addon_info, get_self_delivery_channel
 from services.ipc_protocol import IPC_PROTOCOL_VERSION
 from services.log_analysis import summarize_issue_logs
+from services.ma_client import fetch_all_players_snapshot
 from services.sendspin_compat import get_runtime_dependency_versions
 from services.status_snapshot import build_device_snapshot
 from services.update_checker import _is_newer_version, _start_upgrade_job, channel_image_tag, check_latest_version
@@ -121,6 +123,8 @@ _DOWNLOAD_REDACTED_KEYS = (
     "MA_API_TOKEN",
     "MA_ACCESS_TOKEN",
     "MA_REFRESH_TOKEN",
+    "MA_TOKEN_INSTANCE_HOSTNAME",
+    "MA_TOKEN_LABEL",
 )
 _HA_ADDON_BASE_SLUG = "sendspin_bt_bridge"
 
@@ -179,6 +183,8 @@ def _build_config_get_response():
     config.pop("SECRET_KEY", None)
     config.pop("MA_ACCESS_TOKEN", None)
     config.pop("MA_REFRESH_TOKEN", None)
+    config.pop("MA_TOKEN_INSTANCE_HOSTNAME", None)
+    config.pop("MA_TOKEN_LABEL", None)
     config["_password_set"] = has_password
     if runtime == "ha_addon":
         config["WEB_PORT"] = None
@@ -216,6 +222,72 @@ def _sanitize_last_volumes(last_volumes, valid_macs: set[str]) -> dict[str, int]
         for mac, volume in last_volumes.items()
         if mac in valid_macs and isinstance(volume, int) and 0 <= volume <= 100
     }
+
+
+def _load_existing_config_for_validation() -> dict:
+    """Read the current config file for compare-against-existing warnings."""
+    if not CONFIG_FILE.exists():
+        return {}
+    try:
+        with config_lock, open(CONFIG_FILE) as f:
+            data = json.load(f)
+    except Exception as exc:
+        logger.debug("Could not read existing config for validation warnings: %s", exc)
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _append_ma_duplicate_device_warnings(
+    config: dict, warnings: list[dict[str, str]], *, existing_config: dict | None = None
+) -> list[dict[str, str]]:
+    """Warn when newly added MACs already appear in MA under the same player_id."""
+    ma_url = str(config.get("MA_API_URL") or "").strip()
+    ma_token = str(config.get("MA_API_TOKEN") or "").strip()
+    if not ma_url or not ma_token:
+        return warnings
+
+    existing = existing_config if isinstance(existing_config, dict) else _load_existing_config_for_validation()
+    existing_macs = {
+        _normalize_device_mac(dev.get("mac"))
+        for dev in existing.get("BLUETOOTH_DEVICES", [])
+        if isinstance(dev, dict) and dev.get("mac")
+    }
+    candidates = [
+        (index, _normalize_device_mac(dev.get("mac")))
+        for index, dev in enumerate(config.get("BLUETOOTH_DEVICES", []))
+        if isinstance(dev, dict)
+    ]
+    if not any(mac and mac not in existing_macs for _, mac in candidates):
+        return warnings
+
+    try:
+        players = fetch_all_players_snapshot(ma_url, ma_token)
+    except Exception as exc:
+        logger.debug("Skipping MA duplicate-device warnings: %s", exc)
+        return warnings
+
+    players_by_id = {
+        str(player.get("player_id") or "").strip(): str(player.get("display_name") or player.get("name") or "").strip()
+        for player in players
+        if isinstance(player, dict)
+    }
+    for index, mac in candidates:
+        if not mac or mac in existing_macs:
+            continue
+        player_id = _player_id_from_mac(mac)
+        existing_name = players_by_id.get(player_id)
+        if not existing_name:
+            continue
+        warnings.append(
+            {
+                "field": f"BLUETOOTH_DEVICES[{index}].mac",
+                "message": (
+                    f"This device already appears in Music Assistant as '{existing_name}' and may belong "
+                    "to another bridge. Disconnect or remove it there first to avoid conflicts."
+                ),
+            }
+        )
+    return warnings
 
 
 def _update_channel_warning(channel: str) -> str | None:
@@ -396,7 +468,7 @@ def api_config_download():
     )
 
 
-_PRESERVED_KEYS = tuple(sorted(SENSITIVE_CONFIG_KEYS))
+_PRESERVED_KEYS = tuple(sorted(SENSITIVE_CONFIG_KEYS | {"MA_TOKEN_INSTANCE_HOSTNAME", "MA_TOKEN_LABEL"}))
 
 
 @config_bp.route("/api/config/upload", methods=["POST"])
@@ -426,6 +498,7 @@ def api_config_upload():
         errors = [{"field": issue.field, "message": issue.message} for issue in validation.errors]
         return _validation_error_response(errors, warnings)
     uploaded = validation.normalized_config
+    warnings = _append_ma_duplicate_device_warnings(uploaded, warnings)
 
     # Preserve sensitive keys from existing config
     CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -465,6 +538,8 @@ def api_config_validate():
     validation = validate_uploaded_config(config)
     errors = [{"field": issue.field, "message": issue.message} for issue in validation.errors]
     warnings = [{"field": issue.field, "message": issue.message} for issue in validation.warnings]
+    if validation.is_valid:
+        warnings = _append_ma_duplicate_device_warnings(validation.normalized_config, warnings)
     status = 200 if validation.is_valid else 400
     return (
         jsonify(
@@ -496,6 +571,7 @@ def api_config():
         errors = [{"field": issue.field, "message": issue.message} for issue in validation.errors]
         return _validation_error_response(errors, warnings)
     config = validation.normalized_config
+    warnings = _append_ma_duplicate_device_warnings(config, warnings)
 
     # Validate top-level string fields
     for str_key in ("SENDSPIN_SERVER", "BRIDGE_NAME", "TZ", "LOG_LEVEL", "UPDATE_CHANNEL"):
@@ -633,6 +709,8 @@ def api_config():
                     "AUTH_PASSWORD_HASH",
                     "SECRET_KEY",
                     "MA_AUTH_PROVIDER",
+                    "MA_TOKEN_INSTANCE_HOSTNAME",
+                    "MA_TOKEN_LABEL",
                     "MA_ACCESS_TOKEN",
                     "MA_REFRESH_TOKEN",
                 ):

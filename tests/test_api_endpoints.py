@@ -192,6 +192,69 @@ def test_config_validate_returns_normalized_preview(client):
     assert data["normalized_config"]["BLUETOOTH_DEVICES"][0]["mac"] == "AA:BB:CC:DD:EE:FF"
 
 
+def test_config_validate_warns_when_new_mac_already_exists_in_ma(client, tmp_path, monkeypatch):
+    import routes.api_config as api_config_mod
+    from config import _player_id_from_mac
+
+    monkeypatch.setattr(api_config_mod, "CONFIG_FILE", tmp_path / "config.json")
+    (tmp_path / "config.json").write_text(json.dumps({}))
+    mac = "AA:BB:CC:DD:EE:FF"
+    monkeypatch.setattr(
+        api_config_mod,
+        "fetch_all_players_snapshot",
+        lambda ma_url, ma_token: [{"player_id": _player_id_from_mac(mac), "display_name": "Kitchen @ Other Bridge"}],
+    )
+
+    resp = client.post(
+        "/api/config/validate",
+        data=json.dumps(
+            {
+                "MA_API_URL": "http://ma:8095",
+                "MA_API_TOKEN": "token",
+                "BLUETOOTH_DEVICES": [{"mac": mac}],
+            }
+        ),
+        content_type="application/json",
+    )
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    messages = [warning["message"] for warning in data["warnings"]]
+    assert any("may belong to another bridge" in message for message in messages)
+    assert any(warning["field"] == "BLUETOOTH_DEVICES[0].mac" for warning in data["warnings"])
+
+
+def test_config_validate_does_not_warn_for_existing_mac_on_same_bridge(client, tmp_path, monkeypatch):
+    import routes.api_config as api_config_mod
+    from config import _player_id_from_mac
+
+    monkeypatch.setattr(api_config_mod, "CONFIG_FILE", tmp_path / "config.json")
+    mac = "AA:BB:CC:DD:EE:FF"
+    (tmp_path / "config.json").write_text(json.dumps({"BLUETOOTH_DEVICES": [{"mac": mac}]}))
+    monkeypatch.setattr(
+        api_config_mod,
+        "fetch_all_players_snapshot",
+        lambda ma_url, ma_token: [{"player_id": _player_id_from_mac(mac), "display_name": "Kitchen @ This Bridge"}],
+    )
+
+    resp = client.post(
+        "/api/config/validate",
+        data=json.dumps(
+            {
+                "MA_API_URL": "http://ma:8095",
+                "MA_API_TOKEN": "token",
+                "BLUETOOTH_DEVICES": [{"mac": mac}],
+            }
+        ),
+        content_type="application/json",
+    )
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    messages = [warning["message"] for warning in data["warnings"]]
+    assert not any("may belong to another bridge" in message for message in messages)
+
+
 def test_config_validate_returns_errors_for_invalid_payload(client):
     resp = client.post(
         "/api/config/validate",
@@ -1281,6 +1344,179 @@ def test_api_config_post_returns_validation_warnings(client, tmp_path, monkeypat
     assert data["validation"]["warnings"][0]["field"] == "CONFIG_SCHEMA_VERSION"
 
 
+def test_api_config_post_includes_ma_duplicate_warning(client, tmp_path, monkeypatch):
+    import routes.api_config as api_config_mod
+    from config import _player_id_from_mac
+
+    monkeypatch.setattr(api_config_mod, "CONFIG_FILE", tmp_path / "config.json")
+    (tmp_path / "config.json").write_text(json.dumps({}))
+    mac = "AA:BB:CC:DD:EE:FF"
+    monkeypatch.setattr(
+        api_config_mod,
+        "fetch_all_players_snapshot",
+        lambda ma_url, ma_token: [{"player_id": _player_id_from_mac(mac), "display_name": "Kitchen @ Other Bridge"}],
+    )
+    payload = {
+        "SENDSPIN_SERVER": "auto",
+        "SENDSPIN_PORT": "9001",
+        "BRIDGE_NAME": "Bridge",
+        "BLUETOOTH_DEVICES": [{"mac": mac, "player_name": "Kitchen"}],
+        "BLUETOOTH_ADAPTERS": [],
+        "TZ": "UTC",
+        "PULSE_LATENCY_MSEC": 250,
+        "PREFER_SBC_CODEC": False,
+        "BT_CHECK_INTERVAL": 15,
+        "BT_MAX_RECONNECT_FAILS": 3,
+        "AUTH_ENABLED": False,
+        "SESSION_TIMEOUT_HOURS": 12,
+        "BRUTE_FORCE_PROTECTION": True,
+        "BRUTE_FORCE_MAX_ATTEMPTS": 4,
+        "BRUTE_FORCE_WINDOW_MINUTES": 2,
+        "BRUTE_FORCE_LOCKOUT_MINUTES": 10,
+        "LOG_LEVEL": "INFO",
+        "MA_API_URL": "http://ma:8095",
+        "MA_API_TOKEN": "token",
+        "MA_USERNAME": "",
+        "MA_WEBSOCKET_MONITOR": False,
+        "VOLUME_VIA_MA": True,
+        "MUTE_VIA_MA": False,
+        "SMOOTH_RESTART": True,
+        "AUTO_UPDATE": False,
+        "CHECK_UPDATES": True,
+    }
+
+    resp = client.post("/api/config", data=json.dumps(payload), content_type="application/json")
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    messages = [warning["message"] for warning in data["validation"]["warnings"]]
+    assert any("may belong to another bridge" in message for message in messages)
+
+
+def test_api_config_post_preserves_ma_token_metadata(client, tmp_path, monkeypatch):
+    import routes.api_config as api_config_mod
+
+    monkeypatch.setattr(api_config_mod, "CONFIG_FILE", tmp_path / "config.json")
+    (tmp_path / "config.json").write_text(
+        json.dumps(
+            {
+                "MA_TOKEN_INSTANCE_HOSTNAME": "bridge-host",
+                "MA_TOKEN_LABEL": "Sendspin BT Bridge (bridge-host)",
+            }
+        )
+    )
+    payload = {
+        "SENDSPIN_SERVER": "auto",
+        "SENDSPIN_PORT": "9001",
+        "BRIDGE_NAME": "Bridge",
+        "BLUETOOTH_DEVICES": [{"mac": "aa:bb:cc:dd:ee:ff", "player_name": "Kitchen"}],
+        "BLUETOOTH_ADAPTERS": [],
+        "TZ": "UTC",
+        "PULSE_LATENCY_MSEC": 250,
+        "PREFER_SBC_CODEC": False,
+        "BT_CHECK_INTERVAL": 15,
+        "BT_MAX_RECONNECT_FAILS": 3,
+        "AUTH_ENABLED": False,
+        "SESSION_TIMEOUT_HOURS": 12,
+        "BRUTE_FORCE_PROTECTION": True,
+        "BRUTE_FORCE_MAX_ATTEMPTS": 4,
+        "BRUTE_FORCE_WINDOW_MINUTES": 2,
+        "BRUTE_FORCE_LOCKOUT_MINUTES": 10,
+        "LOG_LEVEL": "INFO",
+        "MA_API_URL": "",
+        "MA_API_TOKEN": "",
+        "MA_USERNAME": "",
+        "MA_WEBSOCKET_MONITOR": False,
+        "VOLUME_VIA_MA": True,
+        "MUTE_VIA_MA": False,
+        "SMOOTH_RESTART": True,
+        "AUTO_UPDATE": False,
+        "CHECK_UPDATES": True,
+    }
+
+    resp = client.post("/api/config", data=json.dumps(payload), content_type="application/json")
+
+    assert resp.status_code == 200
+    saved = json.loads((tmp_path / "config.json").read_text())
+    assert saved["MA_TOKEN_INSTANCE_HOSTNAME"] == "bridge-host"
+    assert saved["MA_TOKEN_LABEL"] == "Sendspin BT Bridge (bridge-host)"
+
+
+def test_config_upload_includes_ma_duplicate_warning(client, tmp_path, monkeypatch):
+    import routes.api_config as api_config_mod
+    from config import _player_id_from_mac
+
+    monkeypatch.setattr(api_config_mod, "CONFIG_FILE", tmp_path / "config.json")
+    (tmp_path / "config.json").write_text(json.dumps({}))
+    mac = "AA:BB:CC:DD:EE:FF"
+    monkeypatch.setattr(
+        api_config_mod,
+        "fetch_all_players_snapshot",
+        lambda ma_url, ma_token: [{"player_id": _player_id_from_mac(mac), "display_name": "Kitchen @ Other Bridge"}],
+    )
+
+    resp = client.post(
+        "/api/config/upload",
+        data={
+            "file": (
+                io.BytesIO(
+                    json.dumps(
+                        {
+                            "MA_API_URL": "http://ma:8095",
+                            "MA_API_TOKEN": "token",
+                            "BLUETOOTH_DEVICES": [{"mac": mac}],
+                        }
+                    ).encode()
+                ),
+                "config.json",
+            )
+        },
+        content_type="multipart/form-data",
+    )
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    messages = [warning["message"] for warning in data["validation"]["warnings"]]
+    assert any("may belong to another bridge" in message for message in messages)
+
+
+def test_config_upload_preserves_ma_token_metadata(client, tmp_path, monkeypatch):
+    import routes.api_config as api_config_mod
+
+    monkeypatch.setattr(api_config_mod, "CONFIG_FILE", tmp_path / "config.json")
+    (tmp_path / "config.json").write_text(
+        json.dumps(
+            {
+                "MA_TOKEN_INSTANCE_HOSTNAME": "bridge-host",
+                "MA_TOKEN_LABEL": "Sendspin BT Bridge (bridge-host)",
+            }
+        )
+    )
+
+    resp = client.post(
+        "/api/config/upload",
+        data={
+            "file": (
+                io.BytesIO(
+                    json.dumps(
+                        {
+                            "MA_API_URL": "http://ma:8095",
+                            "BLUETOOTH_DEVICES": [{"mac": "AA:BB:CC:DD:EE:FF"}],
+                        }
+                    ).encode()
+                ),
+                "config.json",
+            )
+        },
+        content_type="multipart/form-data",
+    )
+
+    assert resp.status_code == 200
+    saved = json.loads((tmp_path / "config.json").read_text())
+    assert saved["MA_TOKEN_INSTANCE_HOSTNAME"] == "bridge-host"
+    assert saved["MA_TOKEN_LABEL"] == "Sendspin BT Bridge (bridge-host)"
+
+
 def test_api_set_log_level_propagates_via_registry_snapshot(client, monkeypatch):
     import routes.api_config as api_config_mod
     from services.device_registry import DeviceRegistrySnapshot
@@ -1439,6 +1675,8 @@ def test_api_config_download_redacts_sensitive_tokens(client, tmp_path, monkeypa
         "MA_API_TOKEN": "super-secret-token",
         "MA_ACCESS_TOKEN": "oauth-access",
         "MA_REFRESH_TOKEN": "oauth-refresh",
+        "MA_TOKEN_INSTANCE_HOSTNAME": "bridge-host",
+        "MA_TOKEN_LABEL": "Sendspin BT Bridge (bridge-host)",
         "AUTH_PASSWORD_HASH": "hashed-password",
         "SECRET_KEY": "very-secret",
     }
@@ -1452,6 +1690,8 @@ def test_api_config_download_redacts_sensitive_tokens(client, tmp_path, monkeypa
         "MA_API_TOKEN",
         "MA_ACCESS_TOKEN",
         "MA_REFRESH_TOKEN",
+        "MA_TOKEN_INSTANCE_HOSTNAME",
+        "MA_TOKEN_LABEL",
         "AUTH_PASSWORD_HASH",
         "SECRET_KEY",
     ):

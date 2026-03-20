@@ -39,6 +39,12 @@ Roadmap for HA addon standards compliance and improvements.
 - [ ] **LXC auto-update system** — version check via GitHub API + web UI notification badge + one-click update button (see [analysis](https://github.com/trudenboy/sendspin-bt-bridge/blob/main/TODO.md))
 - [ ] **Add HA discovery integration** — support HA discovery protocol for auto-configuring MA connection
 
+## Assessed ideas (2026-03-20)
+
+- [x] **Warn when a BT device may already belong to another bridge** — completed. Config validation/save/upload now checks Music Assistant `players/all` using the stable MAC-derived `player_id` and shows a non-blocking warning for newly added MACs that already appear to belong to another bridge.
+- [x] **Bind MA long-lived token identity to the physical bridge instance (hostname-based)** — completed. Long-lived MA tokens are now named from the current hostname, non-sensitive instance metadata is persisted, preserved across config save/upload flows, and silent auth reuse now distinguishes current-instance tokens from foreign-instance copies.
+- [ ] **Sync Home Assistant area name to `BRIDGE_NAME`** — useful later, but not the next priority. Feasibility: medium/high. The bridge currently has Supervisor/addon integration, but no direct HA device/entity/area registry lookup, so it needs either an explicit HA mapping source or new HA registry API integration before area-based bridge naming can be made reliable.
+
 ## Future
 
 - [ ] **IPC: add ack, heartbeat, ready signal** — evolve JSON Lines protocol: message IDs + ack/nack for critical commands (`stop`, `set_volume`), `{"type": "ready"}` signal at subprocess start, heartbeat every 10s, move logs from stdout JSON to stderr

@@ -125,7 +125,8 @@ class TestExchangeForLongLivedToken:
         ws.recv.side_effect = responses
         return ws
 
-    def test_success_returns_long_lived(self):
+    @patch("routes.api_ma.socket.gethostname", return_value="bridge-host")
+    def test_success_returns_long_lived(self, _mock_hostname):
         long_jwt = "eyJ_long_lived_token"
         ws = self._make_ws_mock(True, long_jwt)
         mock_mod = types.ModuleType("websockets.sync.client")
@@ -139,7 +140,8 @@ class TestExchangeForLongLivedToken:
         assert result == long_jwt
         # Verify auth/token/create was sent
         calls = [json.loads(c[0][0]) for c in ws.send.call_args_list]
-        assert any(c["command"] == "auth/token/create" for c in calls)
+        create_call = next(c for c in calls if c["command"] == "auth/token/create")
+        assert create_call["args"]["name"] == "Sendspin BT Bridge (bridge-host)"
 
     def test_auth_failure_returns_session_token(self):
         ws = self._make_ws_mock(False)
