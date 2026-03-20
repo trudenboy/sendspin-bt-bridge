@@ -67,6 +67,10 @@
     "2026-03-17T00:00:00Z": {
       "count": 70,
       "uniques": 22
+    },
+    "2026-03-18T00:00:00Z": {
+      "count": 372,
+      "uniques": 89
     }
   },
   "views": {
@@ -137,23 +141,27 @@
     "2026-03-17T00:00:00Z": {
       "count": 148,
       "uniques": 28
+    },
+    "2026-03-18T00:00:00Z": {
+      "count": 230,
+      "uniques": 25
     }
   },
   "referrers": [
     {
       "referrer": "github.com",
-      "count": 120,
-      "uniques": 32
+      "count": 166,
+      "uniques": 38
     },
     {
       "referrer": "community.home-assistant.io",
-      "count": 70,
-      "uniques": 28
+      "count": 73,
+      "uniques": 31
     },
     {
       "referrer": "trudenboy.github.io",
-      "count": 11,
-      "uniques": 4
+      "count": 14,
+      "uniques": 5
     },
     {
       "referrer": "Google",
@@ -181,45 +189,57 @@
       "uniques": 1
     }
   ],
-  "last_updated": "2026-03-19T04:56:40.780Z",
+  "last_updated": "2026-03-20T04:49:25.757Z",
   "clones_window": {
-    "count": 3449,
-    "uniques": 1122
+    "count": 3512,
+    "uniques": 1085
   },
   "views_window": {
-    "count": 556,
-    "uniques": 165
+    "count": 778,
+    "uniques": 180
   },
   "paths": [
     {
       "path": "/trudenboy/sendspin-bt-bridge",
-      "title": "GitHub - trudenboy/sendspin-bt-bridge: A Bluetooth bridge for Music Assistant...",
-      "count": 279,
-      "uniques": 130
-    },
-    {
-      "path": "/trudenboy/sendspin-bt-bridge/blob/main/README.ru.md",
-      "title": "sendspin-bt-bridge/README.ru.md at main · trudenboy/sendspin-bt-bridge · GitHub",
-      "count": 46,
-      "uniques": 35
+      "title": "trudenboy/sendspin-bt-bridge: A Bluetooth bridge for Music Assistant — connec...",
+      "count": 355,
+      "uniques": 141
     },
     {
       "path": "/trudenboy/sendspin-bt-bridge/issues",
       "title": "GitHub · Where software is built",
-      "count": 44,
-      "uniques": 16
+      "count": 55,
+      "uniques": 19
     },
     {
       "path": "/trudenboy/sendspin-bt-bridge/actions",
       "title": "Workflow runs · trudenboy/sendspin-bt-bridge",
-      "count": 15,
+      "count": 54,
       "uniques": 4
     },
     {
+      "path": "/trudenboy/sendspin-bt-bridge/blob/main/README.ru.md",
+      "title": "sendspin-bt-bridge/README.ru.md at main · trudenboy/sendspin-bt-bridge · GitHub",
+      "count": 49,
+      "uniques": 38
+    },
+    {
+      "path": "/trudenboy/sendspin-bt-bridge/releases",
+      "title": "Releases · trudenboy/sendspin-bt-bridge",
+      "count": 15,
+      "uniques": 6
+    },
+    {
       "path": "/trudenboy/sendspin-bt-bridge/tree/main",
-      "title": "GitHub - trudenboy/sendspin-bt-bridge: A Bluetooth bridge for Music Assistant...",
-      "count": 11,
+      "title": "trudenboy/sendspin-bt-bridge: A Bluetooth bridge for Music Assistant — connec...",
+      "count": 13,
       "uniques": 7
+    },
+    {
+      "path": "/trudenboy/sendspin-bt-bridge/actions/runs/23264458415",
+      "title": "Release 2.40.5-rc.3 · trudenboy/sendspin-bt-bridge@86e5fd4",
+      "count": 12,
+      "uniques": 1
     },
     {
       "path": "/trudenboy/sendspin-bt-bridge/issues/77",
@@ -228,42 +248,30 @@
       "uniques": 2
     },
     {
+      "path": "/trudenboy/sendspin-bt-bridge/tree/main/ha-addon",
+      "title": "trudenboy/sendspin-bt-bridge: A Bluetooth bridge for Music Assistant — connec...",
+      "count": 7,
+      "uniques": 4
+    },
+    {
       "path": "/trudenboy/sendspin-bt-bridge/pulls",
       "title": "Pull requests · trudenboy/sendspin-bt-bridge",
-      "count": 6,
-      "uniques": 3
-    },
-    {
-      "path": "/trudenboy/sendspin-bt-bridge/actions/runs/23210691261",
-      "title": "Release 2.32.9 · trudenboy/sendspin-bt-bridge@f8420a2",
-      "count": 6,
-      "uniques": 1
-    },
-    {
-      "path": "/trudenboy/sendspin-bt-bridge/projects",
-      "title": "Projects · sendspin-bt-bridge · GitHub",
-      "count": 6,
-      "uniques": 1
-    },
-    {
-      "path": "/trudenboy/sendspin-bt-bridge/tree/main/ha-addon",
-      "title": "GitHub - trudenboy/sendspin-bt-bridge: A Bluetooth bridge for Music Assistant...",
-      "count": 5,
+      "count": 7,
       "uniques": 3
     }
   ],
   "repo": {
     "full_name": "trudenboy/sendspin-bt-bridge",
     "default_branch": "main",
-    "open_issues_count": 1,
-    "stargazers_count": 22,
+    "open_issues_count": 2,
+    "stargazers_count": 23,
     "subscribers_count": 0,
-    "watchers_count": 22,
+    "watchers_count": 23,
     "forks_count": 1,
     "network_count": 1,
-    "size_kb": 28823,
-    "pushed_at": "2026-03-18T22:48:58Z",
-    "updated_at": "2026-03-18T22:49:02Z"
+    "size_kb": 28735,
+    "pushed_at": "2026-03-20T04:44:22Z",
+    "updated_at": "2026-03-20T03:11:08Z"
   },
   "repo_history": {
     "2026-03-17": {
@@ -304,14 +312,83 @@
       "size_kb": 28823,
       "pushed_at": "2026-03-18T22:48:58Z",
       "updated_at": "2026-03-18T22:49:02Z"
+    },
+    "2026-03-20": {
+      "full_name": "trudenboy/sendspin-bt-bridge",
+      "default_branch": "main",
+      "open_issues_count": 2,
+      "stargazers_count": 23,
+      "subscribers_count": 0,
+      "watchers_count": 23,
+      "forks_count": 1,
+      "network_count": 1,
+      "size_kb": 28735,
+      "pushed_at": "2026-03-20T04:44:22Z",
+      "updated_at": "2026-03-20T03:11:08Z"
     }
   },
   "releases": {
     "total_downloads": 0,
-    "release_count": 146,
-    "latest_release_tag": "v2.40.5",
-    "latest_release_published_at": "2026-03-18T20:21:40Z",
+    "release_count": 153,
+    "latest_release_tag": "v2.40.6",
+    "latest_release_published_at": "2026-03-19T17:12:00Z",
     "by_tag": {
+      "v2.40.6": {
+        "name": "v2.40.6",
+        "prerelease": false,
+        "published_at": "2026-03-19T17:12:00Z",
+        "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.40.6",
+        "asset_downloads": 0,
+        "assets": []
+      },
+      "v2.40.6-rc.6": {
+        "name": "v2.40.6-rc.6",
+        "prerelease": true,
+        "published_at": "2026-03-19T15:52:48Z",
+        "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.40.6-rc.6",
+        "asset_downloads": 0,
+        "assets": []
+      },
+      "v2.40.6-rc.5": {
+        "name": "v2.40.6-rc.5",
+        "prerelease": true,
+        "published_at": "2026-03-19T15:24:23Z",
+        "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.40.6-rc.5",
+        "asset_downloads": 0,
+        "assets": []
+      },
+      "v2.40.6-rc.4": {
+        "name": "v2.40.6-rc.4",
+        "prerelease": true,
+        "published_at": "2026-03-19T13:53:02Z",
+        "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.40.6-rc.4",
+        "asset_downloads": 0,
+        "assets": []
+      },
+      "v2.40.6-rc.3": {
+        "name": "v2.40.6-rc.3",
+        "prerelease": true,
+        "published_at": "2026-03-19T08:12:10Z",
+        "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.40.6-rc.3",
+        "asset_downloads": 0,
+        "assets": []
+      },
+      "v2.40.6-rc.2": {
+        "name": "v2.40.6-rc.2",
+        "prerelease": true,
+        "published_at": "2026-03-19T07:27:53Z",
+        "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.40.6-rc.2",
+        "asset_downloads": 0,
+        "assets": []
+      },
+      "v2.40.6-rc.1": {
+        "name": "v2.40.6-rc.1",
+        "prerelease": true,
+        "published_at": "2026-03-19T06:43:47Z",
+        "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.40.6-rc.1",
+        "asset_downloads": 0,
+        "assets": []
+      },
       "v2.40.5": {
         "name": "v2.40.5",
         "prerelease": false,
@@ -1497,6 +1574,11 @@
       "total_downloads": 0,
       "release_count": 146,
       "latest_release_tag": "v2.40.5"
+    },
+    "2026-03-20": {
+      "total_downloads": 0,
+      "release_count": 153,
+      "latest_release_tag": "v2.40.6"
     }
   }
 }
