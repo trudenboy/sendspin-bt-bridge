@@ -5073,7 +5073,7 @@ function _deriveZeroDeviceRuntimeState(status, devices) {
     var startupRestarting = startupStatus === 'stopping' || startupStatus === 'stopped';
     var headerLabel = headerStatus && headerStatus.label ? String(headerStatus.label) : '';
     var normalizedHeaderLabel = headerLabel.trim().toLowerCase();
-    var startupFinalizing = normalizedHeaderLabel === 'finalizing startup';
+    var startupFinalizing = normalizedHeaderLabel === 'finalizing startup' || normalizedHeaderLabel === 'startup 90%';
     if (normalizedHeaderLabel === 'waiting for setup') {
         headerLabel = '';
     }
@@ -5089,14 +5089,16 @@ function _deriveZeroDeviceRuntimeState(status, devices) {
     }
     var title = startupRestarting
         ? 'Restart in progress'
-        : (headerLabel || (startupRunning ? 'Bridge is starting' : 'Restoring bridge state'));
+        : (startupFinalizing ? 'Startup 90%' : (headerLabel || (startupRunning ? 'Bridge is starting' : 'Restoring bridge state')));
     var label = startupRestarting
         ? 'Restart in progress'
-        : (headerLabel || (startupRunning ? 'Starting bridge' : 'Restoring bridge state'));
+        : (startupFinalizing ? 'Startup 90%' : (headerLabel || (startupRunning ? 'Starting bridge' : 'Restoring bridge state')));
     var summary = startupRestarting
         ? 'The bridge is restarting. Waiting for startup to resume.'
         : (startupRunning || startupFinalizing)
-        ? ((startup && startup.message) || (headerStatus && headerStatus.summary) || 'Waiting for bridge startup checks to finish.')
+        ? (startupFinalizing
+            ? 'Finalizing Startup'
+            : ((startup && startup.message) || (headerStatus && headerStatus.summary) || 'Waiting for bridge startup checks to finish.'))
         : ((startup && startup.message) || (headerStatus && headerStatus.summary) || 'Configured bridge devices are still reconnecting after restart.');
     if (startupRunning || startupRestarting || startupFinalizing) {
         return {
@@ -6496,9 +6498,10 @@ function _syncRestartBanner(status, overrideServiceState) {
     }
 
     if (serviceState && (serviceState.kind === 'starting' || serviceState.kind === 'restoring')) {
+        var finalizingStartup = serviceState.label === 'Startup 90%' || serviceState.title === 'Startup 90%';
         _setRestartBannerState({
-            percent: Math.max(serviceState.kind === 'restoring' ? 85 : 20, startupPercent || 0),
-            message: serviceState.summary || serviceState.title || 'Restoring bridge state…',
+            percent: Math.max(finalizingStartup ? 90 : (serviceState.kind === 'restoring' ? 85 : 20), startupPercent || 0),
+            message: finalizingStartup ? 'Finalizing Startup' : (serviceState.summary || serviceState.title || 'Restoring bridge state…'),
             elapsedSeconds: elapsedSeconds,
         });
         return;

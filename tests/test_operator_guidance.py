@@ -268,7 +268,8 @@ def test_operator_guidance_suppresses_problem_banner_during_startup_grace_period
     assert data["mode"] == "progress"
     assert "banner" not in data
     assert data["header_status"]["tone"] == "info"
-    assert data["header_status"]["label"] == "Finalizing startup"
+    assert data["header_status"]["label"] == "Startup 90%"
+    assert data["header_status"]["summary"] == "Finalizing Startup"
     assert data["issue_groups"][0]["key"] == "disconnected"
 
 

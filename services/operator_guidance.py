@@ -538,11 +538,8 @@ def _build_header_status(
     if _startup_banner_cooldown_active(startup_progress):
         return GuidanceHeaderStatus(
             tone="info",
-            label="Finalizing startup",
-            summary=(
-                str(startup_progress.get("message") or "").strip()
-                or "Initial device checks just completed. Waiting briefly before surfacing recovery issues."
-            ),
+            label="Startup 90%",
+            summary="Finalizing Startup",
         )
     if all_devices_globally_disabled:
         return GuidanceHeaderStatus(
