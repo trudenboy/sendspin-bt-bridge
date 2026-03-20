@@ -242,9 +242,19 @@ var _btnLocks = {};      // btnId → expiry timestamp
 var _deviceSettingsHighlightTimer = null;
 var _adapterSettingsHighlightTimer = null;
 var _restartMonitor = null;
+var _updateMonitor = null;
 
 function _normalizeExternalUrlBase(url) {
     return url ? String(url).replace(/\/+$/, '') : '';
+}
+
+function _normalizeBridgeVersion(version) {
+    return String(version || '').trim().replace(/^v/i, '').toLowerCase();
+}
+
+function _currentDisplayedBridgeVersion() {
+    var el = document.getElementById('version-display');
+    return _normalizeBridgeVersion(el ? el.textContent : '');
 }
 
 function _getConfiguredMaUiUrl() {
@@ -2594,6 +2604,7 @@ function renderStatusPayload(status) {
     }
 
     _showUpdateBadge(status.update_available);
+    _syncVersionDisplayFromStatus(status);
     var resolvedMaUiUrl = _normalizeExternalUrlBase(lastMaUiUrl || _getConfiguredMaUiUrl() || '');
     if (resolvedMaUiUrl) lastMaUiUrl = resolvedMaUiUrl;
     var resolvedMaWebUrl = _normalizeExternalUrlBase(status.ma_web_url || lastMaWebUrl || '');
@@ -2621,7 +2632,7 @@ function renderStatusPayload(status) {
         status.devices || (status.error ? [] : [status]),
         _lastDisabledDevices
     );
-    var runtimeServiceState = _deriveZeroDeviceRuntimeState(status, devices);
+    var runtimeServiceState = _deriveUpdateRuntimeState(status) || _deriveZeroDeviceRuntimeState(status, devices);
     var grid = document.getElementById('status-grid');
     var emptyEl = document.getElementById('no-devices-hint');
     _applyBackendServiceState(runtimeServiceState);
@@ -2710,13 +2721,14 @@ async function updateStatus() {
                 : 'Waiting for the backend to start. This page will update automatically when the service becomes ready.',
             action: {key: 'refresh_diagnostics', label: 'Retry now'},
         };
-        _applyBackendServiceState(unavailableState);
+        var updateUnavailableState = _deriveUpdateRuntimeState(null, {backendUnavailable: true});
+        _applyBackendServiceState(updateUnavailableState || unavailableState);
         _hideOperatorGuidance();
-        if (!_statusHasEverSucceeded || !lastDevices.length) {
-            _renderBackendServicePlaceholder(unavailableState);
+        if (updateUnavailableState || !_statusHasEverSucceeded || !lastDevices.length) {
+            _renderBackendServicePlaceholder(updateUnavailableState || unavailableState);
         }
         updateHealthIndicator(lastDevices || [], _lastOperatorGuidance || null);
-        _syncRestartBanner(null, unavailableState);
+        _syncRestartBanner(null, updateUnavailableState || unavailableState);
     }
 }
 
@@ -5143,6 +5155,144 @@ function _isZeroClientStatusError(errorValue) {
     return normalized === 'no clients' || normalized === 'no clients configured' || normalized === 'no clients available';
 }
 
+function _updateMonitorElapsedSeconds() {
+    if (!_updateMonitor || !_updateMonitor.startedAt) return 0;
+    return Math.max(0, Math.round((Date.now() - _updateMonitor.startedAt) / 1000));
+}
+
+function _refreshPageAfterUpdate(version) {
+    try {
+        var url = new URL(window.location.href);
+        url.searchParams.set('_ui_refresh', String(Date.now()));
+        if (version) url.searchParams.set('_ui_ver', String(version));
+        window.location.replace(url.toString());
+    } catch (_) {
+        window.location.reload();
+    }
+}
+
+function _clearUpdateMonitor() {
+    _updateMonitor = null;
+}
+
+function _renderLockedBackendState(state) {
+    _applyBackendServiceState(state);
+    lastDevices = [];
+    lastGroups = [];
+    _hideOperatorGuidance();
+    _renderBackendServicePlaceholder(state);
+    _updateGroupPanel();
+    updateHealthIndicator([], _lastOperatorGuidance || null);
+    _syncRestartBanner(null, state);
+}
+
+function _startUpdateMonitor(version, channel, options) {
+    var opts = options || {};
+    _updateMonitor = {
+        startedAt: Date.now(),
+        targetVersion: _normalizeBridgeVersion(version),
+        initialVersion: _currentDisplayedBridgeVersion(),
+        channel: (channel || 'stable').toLowerCase(),
+        alreadyRunning: !!opts.alreadyRunning,
+        sawBackendUnavailable: false,
+        sawRestartTransition: false,
+    };
+    _renderLockedBackendState(_deriveUpdateRuntimeState(null));
+}
+
+function _deriveUpdateRuntimeState(status, options) {
+    if (!_updateMonitor) return null;
+    var opts = options || {};
+    var monitor = _updateMonitor;
+    var startup = status && status.startup_progress ? status.startup_progress : null;
+    var startupStatus = startup && startup.status ? String(startup.status) : '';
+    var guidance = status && status.operator_guidance ? status.operator_guidance : null;
+    var headerStatus = guidance && guidance.header_status ? guidance.header_status : null;
+    var headerLabel = headerStatus && headerStatus.label ? String(headerStatus.label) : '';
+    var normalizedHeaderLabel = headerLabel.trim().toLowerCase();
+    var startupFinalizing = normalizedHeaderLabel === 'finalizing startup' || normalizedHeaderLabel === 'startup 90%';
+    var backendUnavailable = !!opts.backendUnavailable;
+    if (backendUnavailable) {
+        monitor.sawBackendUnavailable = true;
+    }
+    if (
+        backendUnavailable ||
+        startupStatus === 'stopping' ||
+        startupStatus === 'stopped' ||
+        startupStatus === 'running' ||
+        startupStatus === 'starting' ||
+        startupStatus === 'error' ||
+        startupFinalizing
+    ) {
+        monitor.sawRestartTransition = true;
+    }
+
+    var currentVersion = _normalizeBridgeVersion(status && status.version);
+    if (
+        monitor.targetVersion &&
+        currentVersion &&
+        currentVersion === monitor.targetVersion &&
+        ((monitor.initialVersion && monitor.initialVersion !== monitor.targetVersion) || monitor.sawRestartTransition) &&
+        !backendUnavailable &&
+        startupStatus !== 'stopping' &&
+        startupStatus !== 'stopped' &&
+        startupStatus !== 'running' &&
+        startupStatus !== 'starting' &&
+        startupStatus !== 'error' &&
+        !startupFinalizing
+    ) {
+        if (!monitor.refreshing) {
+            monitor.refreshing = true;
+            _refreshPageAfterUpdate(currentVersion);
+        }
+        return {
+            kind: 'updating',
+            tone: 'info',
+            label: 'Update complete',
+            title: 'Update complete',
+            summary: 'Refreshing the page to load the updated UI…',
+            action: {key: 'refresh_diagnostics', label: 'Retry now'},
+            elapsedSeconds: _updateMonitorElapsedSeconds(),
+        };
+    }
+
+    var label = 'Updating…';
+    var title = 'Update in progress';
+    var summary = monitor.alreadyRunning
+        ? 'An update is already running. Waiting for the bridge service to restart.'
+        : 'Preparing the update and waiting for the bridge service to restart.';
+
+    if (monitor.targetVersion) {
+        summary = (monitor.alreadyRunning ? 'Continuing update to ' : 'Preparing update to ') +
+            'v' + monitor.targetVersion + '. Waiting for the bridge service to restart.';
+    }
+    if (backendUnavailable) {
+        summary = 'Applying the update. Waiting for the bridge service to stop and come back online.';
+    } else if (startupStatus === 'stopping' || startupStatus === 'stopped') {
+        summary = 'Applying the update and restarting the bridge service.';
+    } else if (startupStatus === 'running' || startupStatus === 'starting') {
+        label = headerLabel || ('Startup ' + String(startup && startup.percent ? startup.percent : 0) + '%');
+        title = label;
+        summary = (startup && startup.message) || (headerStatus && headerStatus.summary) || 'Starting the updated bridge service.';
+    } else if (startupFinalizing) {
+        label = 'Startup 90%';
+        title = 'Startup 90%';
+        summary = 'Finalizing Startup';
+    } else if (headerStatus && headerStatus.summary && monitor.sawRestartTransition) {
+        summary = headerStatus.summary;
+    }
+
+    return {
+        kind: 'updating',
+        tone: 'info',
+        label: label,
+        title: title,
+        summary: summary,
+        action: {key: 'refresh_diagnostics', label: 'Retry now'},
+        elapsedSeconds: _updateMonitorElapsedSeconds(),
+    };
+}
+
 function _deriveZeroDeviceRuntimeState(status, devices) {
     var guidance = status && status.operator_guidance ? status.operator_guidance : null;
     var headerStatus = guidance && guidance.header_status ? guidance.header_status : null;
@@ -6752,6 +6902,17 @@ var _tzPreviewInterval = setInterval(updateTzPreview, 1000);
 
 // ---- Version ----
 
+function _syncVersionDisplayFromStatus(status) {
+    if (!status || !status.version) return;
+    var el = document.getElementById('version-display');
+    if (!el) return;
+    var ver = String(status.version || '').replace(/^v/i, '');
+    var title = status.build_date || '';
+    el.textContent = 'v' + ver;
+    if (title) el.title = title;
+    _applyReleaseChannelTextTone(el, _releaseChannelFromVersion(ver));
+}
+
 async function loadVersionInfo() {
     try {
         var resp = await fetch(API_BASE + '/api/version');
@@ -6790,6 +6951,14 @@ function _showUpdateBadge(upd) {
     var icon = document.getElementById('update-icon');
     if (!badge || !link) return;
     link.classList.remove('checking');
+    if (_updateMonitor) {
+        link.classList.add('checking');
+        if (ver) ver.textContent = 'updating…';
+        _setUiIconSlot(icon, 'refresh');
+        link.href = '#';
+        link.title = 'Update in progress';
+        return;
+    }
     if (upd && upd.version) {
         var channel = upd.channel || _releaseChannelFromVersion(upd.version);
         if (ver) ver.textContent = 'v' + upd.version + (channel !== 'stable' ? ' · ' + channel.toUpperCase() : '');
@@ -7353,6 +7522,7 @@ function _applyUpdate(ver, releaseUrl, channel) {
     if (link) link.classList.add('checking');
     if (verEl) verEl.textContent = 'updating…';
     _setUiIconSlot(iconEl, 'refresh');
+    _startUpdateMonitor(ver, channel || (link && link.dataset.updateChannel) || 'stable');
     fetch(API_BASE + '/api/update/apply', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
@@ -7361,16 +7531,19 @@ function _applyUpdate(ver, releaseUrl, channel) {
         .then(function(r) { return r.json(); })
         .then(function(data) {
             if (data.success) {
-                showToast(data.already_running ? 'Update already in progress…' : 'Update started! Restarting…', 'info');
-                setTimeout(function() { location.reload(); }, 8000);
+                if (_updateMonitor) _updateMonitor.alreadyRunning = !!data.already_running;
+                showToast(data.already_running ? 'Update already in progress…' : 'Update started! Waiting for restart…', 'info');
+                setTimeout(updateStatus, 250);
             } else {
+                _clearUpdateMonitor();
                 showToast('Update failed: ' + (data.error || 'unknown error'), 'error');
                 _showUpdateBadge({version: ver, url: releaseUrl, channel: channel || (link && link.dataset.updateChannel) || 'stable'});
+                updateStatus();
             }
         })
         .catch(function() {
-            showToast('Update started…', 'info');
-            setTimeout(function() { location.reload(); }, 8000);
+            showToast('Update started… Waiting for restart…', 'info');
+            setTimeout(updateStatus, 250);
         });
 }
 
