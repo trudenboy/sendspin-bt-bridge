@@ -4181,7 +4181,8 @@ function _goToAdapters() {
     }, 180);
 }
 
-function _goToDevicesAndScan() {
+function _goToDevicesAndScan(options) {
+    var opts = options || {};
     if (!_hasDetectedAdapter()) {
         _goToAdapters();
         return;
@@ -4190,6 +4191,7 @@ function _goToDevicesAndScan() {
     setTimeout(function() {
         var scanBtn = document.getElementById('scan-btn');
         if (scanBtn) scanBtn.focus({preventScroll: true});
+        if (opts.expandPaired) loadPairedDevices({forceExpand: true});
         startBtScan();
     }, 180);
 }
@@ -4199,11 +4201,11 @@ function _refreshEmptyState() {
     if (el) el.innerHTML = _buildEmptyStateHTML();
 }
 
-function openConfigAndAddDevice() {
+function openConfigAndAddDevice(options) {
     if (!_hasDetectedAdapter()) {
         _goToAdapters();
     } else {
-        _goToDevicesAndScan();
+        _goToDevicesAndScan(options);
     }
 }
 
@@ -4509,8 +4511,9 @@ function _showBtInfoModal(title, text) {
     document.body.appendChild(overlay);
 }
 
-async function loadPairedDevices() {
+async function loadPairedDevices(options) {
     try {
+        var opts = options || {};
         var showAll = document.getElementById('paired-show-all');
         var showAllChecked = showAll && showAll.checked;
         var qs = showAllChecked ? '?filter=0' : '';
@@ -4538,7 +4541,10 @@ async function loadPairedDevices() {
         // Auto-collapse list when more than 5 devices, except in demo mode where
         // the screenshot stand keeps the import drawer open by default.
         var arrow = box.querySelector('.paired-arrow');
-        if (_runtimeMode === 'demo') {
+        if (opts.forceExpand) {
+            listDiv.hidden = false;
+            if (arrow) arrow.classList.add('expanded');
+        } else if (_runtimeMode === 'demo') {
             listDiv.hidden = false;
             if (arrow) arrow.classList.add('expanded');
         } else if (devices.length > 5) {
@@ -4942,11 +4948,16 @@ function _applyBackendServiceState(state) {
     _setBackendServiceBanner(_backendServiceState);
 }
 
+function _isZeroClientStatusError(errorValue) {
+    var normalized = String(errorValue || '').trim().toLowerCase();
+    return normalized === 'no clients' || normalized === 'no clients configured' || normalized === 'no clients available';
+}
+
 function _deriveZeroDeviceRuntimeState(status, devices) {
     var guidance = status && status.operator_guidance ? status.operator_guidance : null;
     var headerStatus = guidance && guidance.header_status ? guidance.header_status : null;
     var startup = status && status.startup_progress ? status.startup_progress : null;
-    if (status && status.error) {
+    if (status && status.error && !_isZeroClientStatusError(status.error)) {
         return {
             kind: 'unavailable',
             tone: 'warning',
@@ -5133,7 +5144,7 @@ function _runOnboardingAssistantAction(actionKey) {
         return false;
     }
     if (actionKey === 'scan_devices') {
-        openConfigAndAddDevice();
+        openConfigAndAddDevice({expandPaired: true});
         return false;
     }
     if (actionKey === 'open_devices_settings') {
@@ -5450,7 +5461,6 @@ function _setOnboardingAssistantBanner(card) {
     checkpointsEl.innerHTML = _renderOnboardingCheckpoints(checklist.checkpoints || []);
     stepsEl.innerHTML = _renderOnboardingSteps((checklist.steps || []).slice(0, 5));
 
-    var primaryAction = card.primary_action || checklist.primary_action || {key: 'open_diagnostics', label: 'Review diagnostics'};
     var secondaryActions = card.secondary_actions || [];
     var dismissHtml = '';
     if (card.dismissible && card.preference_key) {
@@ -5458,9 +5468,7 @@ function _setOnboardingAssistantBanner(card) {
             escHtml(card.preference_key) +
         '\')">Don’t show again</a>';
     }
-    var actionsHtml = _renderGuidanceActionLink(primaryAction || {key: 'open_diagnostics'}, {primary: true});
-    actionsHtml += _renderGuidanceActionMenu(secondaryActions, dismissHtml);
-    actionsEl.innerHTML = actionsHtml;
+    actionsEl.innerHTML = _renderGuidanceActionMenu(secondaryActions, dismissHtml);
 
     banner.hidden = false;
     _syncNoticeStack();
