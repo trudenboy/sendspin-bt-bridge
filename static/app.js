@@ -5012,7 +5012,8 @@ function _deriveZeroDeviceRuntimeState(status, devices) {
         };
     }
     if (!devices || devices.length !== 0) return null;
-    if (!guidance || guidance.mode === 'empty_state') return null;
+    if (!guidance) return null;
+    if (guidance.mode === 'empty_state' && !startupRunning && !startupRestarting) return null;
     var title = startupRestarting
         ? 'Restart in progress'
         : (headerLabel || (startupRunning ? 'Bridge is starting' : 'Restoring bridge state'));
