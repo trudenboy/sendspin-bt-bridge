@@ -6,12 +6,13 @@ import json
 import logging
 import threading
 
-from config import CONFIG_FILE
+import config
 
 logger = logging.getLogger(__name__)
 
 _adapter_names_by_mac: dict[str, str] = {}
 _adapter_cache_lock = threading.Lock()
+_adapter_cache_loaded = False
 
 
 def load_adapter_name_cache() -> None:
@@ -22,10 +23,11 @@ def load_adapter_name_cache() -> None:
     ``_adapter_cache_lock`` is **not** reentrant, so this function must
     not reacquire it.
     """
-    global _adapter_names_by_mac
+    global _adapter_cache_loaded, _adapter_names_by_mac
     _adapter_names_by_mac = {}
     try:
-        cfg = json.loads(CONFIG_FILE.read_text(encoding="utf-8")) if CONFIG_FILE.exists() else {}
+        config_file = config.CONFIG_FILE
+        cfg = json.loads(config_file.read_text(encoding="utf-8")) if config_file.exists() else {}
         adapters = cfg.get("adapters") or cfg.get("BLUETOOTH_ADAPTERS") or []
         for adapter in adapters:
             mac = str(adapter.get("mac") or adapter.get("id") or "").upper()
@@ -34,13 +36,15 @@ def load_adapter_name_cache() -> None:
                 _adapter_names_by_mac[mac] = name
     except Exception as exc:
         logger.debug("Failed to load adapter name cache: %s", exc)
+    finally:
+        _adapter_cache_loaded = True
 
 
 def get_adapter_name(mac_upper: str) -> str | None:
     """Return cached adapter friendly name for the given uppercase MAC."""
     if mac_upper:
         with _adapter_cache_lock:
-            if not _adapter_names_by_mac:
+            if not _adapter_cache_loaded:
                 load_adapter_name_cache()
             return _adapter_names_by_mac.get(mac_upper)
     return None
