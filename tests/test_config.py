@@ -53,6 +53,30 @@ def test_load_handles_corrupted_json(tmp_path):
     assert backups[0].read_text() == "{bad"
 
 
+def test_load_migrates_legacy_config_keys(tmp_path):
+    _write_config(
+        tmp_path,
+        {
+            "BLUETOOTH_MAC": "aa:bb:cc:dd:ee:ff",
+            "LAST_VOLUME": 33,
+            "SENDSPIN_SERVER": "10.0.0.1",
+        },
+    )
+    from config import CONFIG_SCHEMA_VERSION, load_config
+
+    loaded = load_config()
+
+    assert loaded["CONFIG_SCHEMA_VERSION"] == CONFIG_SCHEMA_VERSION
+    assert loaded["BLUETOOTH_DEVICES"] == [
+        {"mac": "AA:BB:CC:DD:EE:FF", "adapter": "", "player_name": "Sendspin Player"}
+    ]
+    assert loaded["LAST_VOLUMES"] == {"AA:BB:CC:DD:EE:FF": 33}
+    saved = json.loads((tmp_path / "config.json").read_text())
+    assert "BLUETOOTH_MAC" not in saved
+    assert "LAST_VOLUME" not in saved
+    assert saved["LAST_VOLUMES"] == {"AA:BB:CC:DD:EE:FF": 33}
+
+
 def test_save_device_volume(tmp_path):
     _write_config(tmp_path, {"BLUETOOTH_DEVICES": [{"mac": "AA:BB:CC:DD:EE:FF"}]})
     from config import save_device_volume
@@ -123,6 +147,22 @@ def test_load_ma_auto_silent_auth(tmp_path):
     from config import load_config
 
     assert load_config()["MA_AUTO_SILENT_AUTH"] is False
+
+
+def test_load_preserves_ma_oauth_tokens(tmp_path):
+    _write_config(
+        tmp_path,
+        {
+            "MA_ACCESS_TOKEN": "access-token",
+            "MA_REFRESH_TOKEN": "refresh-token",
+        },
+    )
+    from config import load_config
+
+    loaded = load_config()
+
+    assert loaded["MA_ACCESS_TOKEN"] == "access-token"
+    assert loaded["MA_REFRESH_TOKEN"] == "refresh-token"
 
 
 def test_load_config_normalizes_types_and_prunes_orphan_volumes(tmp_path):

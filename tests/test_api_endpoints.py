@@ -205,6 +205,19 @@ def test_config_validate_returns_errors_for_invalid_payload(client):
     assert data["errors"][0]["field"] == "BLUETOOTH_DEVICES[0].mac"
 
 
+def test_config_validate_rejects_future_schema_version(client):
+    resp = client.post(
+        "/api/config/validate",
+        data=json.dumps({"CONFIG_SCHEMA_VERSION": 999, "BLUETOOTH_DEVICES": []}),
+        content_type="application/json",
+    )
+
+    assert resp.status_code == 400
+    data = resp.get_json()
+    assert data["valid"] is False
+    assert data["errors"][0]["field"] == "CONFIG_SCHEMA_VERSION"
+
+
 def test_set_volume_empty_body(client):
     """POST /api/volume with an empty JSON object must not return 500."""
     resp = client.post(
@@ -1418,6 +1431,48 @@ def test_api_config_download_redacts_sensitive_tokens(client, tmp_path, monkeypa
         "SECRET_KEY",
     ):
         assert key not in exported
+
+
+def test_api_config_get_redacts_oauth_tokens(client, tmp_path, monkeypatch):
+    import routes.api_config as api_config_mod
+
+    monkeypatch.setattr(api_config_mod, "CONFIG_FILE", tmp_path / "config.json")
+    monkeypatch.setattr(
+        api_config_mod,
+        "load_config",
+        lambda: {
+            "AUTH_PASSWORD_HASH": "hashed-password",
+            "SECRET_KEY": "secret",
+            "MA_ACCESS_TOKEN": "oauth-access",
+            "MA_REFRESH_TOKEN": "oauth-refresh",
+            "BLUETOOTH_DEVICES": [],
+            "WEB_PORT": None,
+        },
+    )
+    monkeypatch.setattr(api_config_mod, "_detect_runtime", lambda: "docker")
+    monkeypatch.setattr(api_config_mod, "resolve_base_listen_port", lambda: 8928)
+
+    resp = client.get("/api/config")
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["_password_set"] is True
+    assert "AUTH_PASSWORD_HASH" not in data
+    assert "SECRET_KEY" not in data
+    assert "MA_ACCESS_TOKEN" not in data
+    assert "MA_REFRESH_TOKEN" not in data
+
+
+def test_api_config_download_returns_error_for_invalid_json(client, tmp_path, monkeypatch):
+    import routes.api_config as api_config_mod
+
+    monkeypatch.setattr(api_config_mod, "CONFIG_FILE", tmp_path / "config.json")
+    (tmp_path / "config.json").write_text("{bad")
+
+    resp = client.get("/api/config/download")
+
+    assert resp.status_code == 500
+    assert resp.get_json() == {"error": "Could not read config file"}
 
 
 def test_error_response_no_leak(client):
