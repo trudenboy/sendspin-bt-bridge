@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.42.0-rc.19] - 2026-03-20
+
+### Changed
+- The onboarding checklist is now toggleable from the header status badge in every guidance mode, while still opening by default only when no bridge devices are configured.
+- Even healthy bridges keep the onboarding checklist available as an on-demand reference instead of dropping it entirely from the guidance payload.
+
+### Fixed
+- Completed onboarding steps once again render a visible checkmark inside their success indicator instead of showing only a green circle.
+
 ## [2.42.0-rc.18] - 2026-03-20
 
 ### Changed
