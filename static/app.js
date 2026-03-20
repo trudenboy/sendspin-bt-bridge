@@ -2490,7 +2490,6 @@ function renderDevicesView() {
 
 function renderStatusPayload(status) {
     _statusHasEverSucceeded = true;
-    _applyBackendServiceState(null);
     var info = [];
     _runtimeMode = status.runtime_mode || 'production';
     _setViewModeStorageScope(_runtimeMode);
@@ -2537,16 +2536,23 @@ function renderStatusPayload(status) {
     }
 
     var devices = status.devices || (status.error ? [] : [status]);
-    var zeroDeviceRuntimeState = _deriveZeroDeviceRuntimeState(status, devices);
+    var runtimeServiceState = _deriveZeroDeviceRuntimeState(status, devices);
     var grid = document.getElementById('status-grid');
     var emptyEl = document.getElementById('no-devices-hint');
+    _applyBackendServiceState(runtimeServiceState);
+    if (runtimeServiceState) {
+        lastDevices = [];
+        lastGroups = [];
+        _hideOperatorGuidance();
+        _renderBackendServicePlaceholder(runtimeServiceState);
+        _updateGroupPanel();
+        updateHealthIndicator([], status.operator_guidance || null);
+        _syncRestartBanner(status, runtimeServiceState);
+        return;
+    }
     if (devices.length === 0) {
         lastDevices = [];
-        if (zeroDeviceRuntimeState) {
-            _applyBackendServiceState(zeroDeviceRuntimeState);
-            _hideOperatorGuidance();
-            _renderBackendServicePlaceholder(zeroDeviceRuntimeState);
-        } else if (grid) {
+        if (grid) {
             _applyOperatorGuidance(status.operator_guidance || null);
             _syncEmptyStatePlaceholder(status.operator_guidance || null);
         } else if (emptyEl) {
@@ -2555,7 +2561,7 @@ function renderStatusPayload(status) {
         }
         _updateGroupPanel();
         updateHealthIndicator([], status.operator_guidance || null);
-        _syncRestartBanner(status, zeroDeviceRuntimeState);
+        _syncRestartBanner(status, null);
         return;
     }
     _applyOperatorGuidance(status.operator_guidance || null);
@@ -5036,9 +5042,6 @@ function _deriveZeroDeviceRuntimeState(status, devices) {
             action: {key: 'refresh_diagnostics', label: 'Retry now'},
         };
     }
-    if (!devices || devices.length !== 0) return null;
-    if (!guidance) return null;
-    if (guidance.mode === 'empty_state' && !startupRunning && !startupRestarting && !startupFinalizing) return null;
     var title = startupRestarting
         ? 'Restart in progress'
         : (headerLabel || (startupRunning ? 'Bridge is starting' : 'Restoring bridge state'));
@@ -5050,8 +5053,21 @@ function _deriveZeroDeviceRuntimeState(status, devices) {
         : (startupRunning || startupFinalizing)
         ? ((startup && startup.message) || (headerStatus && headerStatus.summary) || 'Waiting for bridge startup checks to finish.')
         : ((startup && startup.message) || (headerStatus && headerStatus.summary) || 'Configured bridge devices are still reconnecting after restart.');
+    if (startupRunning || startupRestarting || startupFinalizing) {
+        return {
+            kind: 'starting',
+            tone: _backendServiceToneClass((headerStatus && headerStatus.tone) || 'info'),
+            label: label,
+            title: title,
+            summary: summary,
+            action: guidance && guidance.banner && guidance.banner.primary_action ? guidance.banner.primary_action : {key: 'refresh_diagnostics', label: 'Retry now'},
+        };
+    }
+    if (!devices || devices.length !== 0) return null;
+    if (!guidance) return null;
+    if (guidance.mode === 'empty_state') return null;
     return {
-        kind: (startupRunning || startupRestarting || startupFinalizing) ? 'starting' : 'restoring',
+        kind: 'restoring',
         tone: _backendServiceToneClass((headerStatus && headerStatus.tone) || 'info'),
         label: label,
         title: title,
