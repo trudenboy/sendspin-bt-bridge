@@ -3,7 +3,7 @@
 import json
 from unittest.mock import MagicMock, patch
 
-from services.bluetooth import bt_remove_device, is_audio_device, persist_device_enabled
+from services.bluetooth import bt_remove_device, is_audio_device, persist_device_enabled, persist_device_released
 
 # ---------------------------------------------------------------------------
 # bt_remove_device
@@ -102,3 +102,26 @@ def test_persist_device_enabled(tmp_config, monkeypatch):
     devs = result["BLUETOOTH_DEVICES"]
     assert devs[0]["enabled"] is False
     assert devs[1]["enabled"] is True
+
+
+def test_persist_device_released(tmp_config, monkeypatch):
+    """persist_device_released should update the released flag in config.json."""
+
+    import services.bluetooth as _bt_mod
+
+    monkeypatch.setattr(_bt_mod, "_CONFIG_FILE", tmp_config)
+
+    data = {
+        "BLUETOOTH_DEVICES": [
+            {"player_name": "Speaker1", "released": False},
+            {"player_name": "Speaker2", "released": False},
+        ]
+    }
+    tmp_config.write_text(json.dumps(data))
+
+    persist_device_released("Speaker1", True)
+
+    result = json.loads(tmp_config.read_text())
+    devs = result["BLUETOOTH_DEVICES"]
+    assert devs[0]["released"] is True
+    assert devs[1]["released"] is False

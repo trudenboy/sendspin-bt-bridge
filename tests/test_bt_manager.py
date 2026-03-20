@@ -166,11 +166,11 @@ def test_check_reconnect_churn_disables_management(bt_manager):
 
     with (
         patch("bluetooth_manager.time.monotonic", return_value=100.0),
-        patch("services.bluetooth.persist_device_enabled") as persist_enabled,
+        patch("services.bluetooth.persist_device_released") as persist_released,
     ):
         assert bt_manager._check_reconnect_churn() is True
 
     assert bt_manager.management_enabled is False
     assert bt_manager.client.bt_management_enabled is False
     bt_manager.client._update_status.assert_called_once()
-    persist_enabled.assert_called_once_with("TestSpeaker", False)
+    persist_released.assert_called_once_with("TestSpeaker", True)

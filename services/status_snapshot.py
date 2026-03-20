@@ -299,9 +299,12 @@ def _build_device_capabilities(device: DeviceSnapshot) -> dict[str, Any]:
     stopping = bool(device.extra.get("stopping"))
     released = device.bt_management_enabled is False
     has_sink = bool(device.has_sink)
+    bluetooth_paired = device.extra.get("bluetooth_paired")
 
     if released:
         reconnect_blocked_reason = "Bluetooth management is released; reclaim it before reconnecting."
+    elif bluetooth_paired is False:
+        reconnect_blocked_reason = "Device is no longer paired; put it in pairing mode and run re-pair."
     elif reconnecting:
         reconnect_blocked_reason = "Reconnect is already in progress."
     elif stopping:
@@ -312,10 +315,18 @@ def _build_device_capabilities(device: DeviceSnapshot) -> dict[str, Any]:
         supported=bool(device.bluetooth_mac),
         currently_available=reconnect_blocked_reason is None and bool(device.bluetooth_mac),
         blocked_reason=reconnect_blocked_reason,
-        safe_actions=["toggle_bt_management", "open_diagnostics"] if reconnect_blocked_reason else ["reconnect"],
+        safe_actions=(
+            ["pair_device", "open_diagnostics"]
+            if bluetooth_paired is False
+            else ["toggle_bt_management", "open_diagnostics"]
+            if reconnect_blocked_reason
+            else ["reconnect"]
+        ),
     )
 
-    if reconnecting:
+    if bluetooth_paired is False:
+        toggle_management_blocked_reason = "Device is no longer paired; re-pair it or disable it from configuration."
+    elif reconnecting:
         toggle_management_blocked_reason = "Wait for the current reconnect attempt to finish first."
     elif stopping:
         toggle_management_blocked_reason = "Device is stopping."
@@ -325,7 +336,13 @@ def _build_device_capabilities(device: DeviceSnapshot) -> dict[str, Any]:
         supported=True,
         currently_available=toggle_management_blocked_reason is None,
         blocked_reason=toggle_management_blocked_reason,
-        safe_actions=["open_diagnostics"] if toggle_management_blocked_reason else ["toggle_bt_management"],
+        safe_actions=(
+            ["pair_device", "open_diagnostics"]
+            if bluetooth_paired is False
+            else ["open_diagnostics"]
+            if toggle_management_blocked_reason
+            else ["toggle_bt_management"]
+        ),
     )
 
     play_pause = _capability_payload(
@@ -408,7 +425,7 @@ def _build_health_summary(device: DeviceSnapshot) -> DeviceHealthSummary:
         return DeviceHealthSummary(
             state="disabled",
             severity="info",
-            summary="Bluetooth management disabled",
+            summary="Bluetooth management released",
             reasons=["bt_management_disabled", *event_reasons],
             last_event_at=device.recent_events[0]["at"] if device.recent_events else None,
         )
@@ -649,6 +666,13 @@ def build_device_snapshot(client) -> DeviceSnapshot:
     device.extra["sink_name"] = device.sink_name
     device.extra["bt_management_enabled"] = device.bt_management_enabled
     device.extra["battery_level"] = device.battery_level
+    device.extra["bluetooth_paired"] = getattr(bt_mgr, "paired", None) if bt_mgr else None
+    if bt_mgr:
+        device.extra["max_reconnect_fails"] = int(getattr(bt_mgr, "max_reconnect_fails", 0) or 0)
+        threshold = int(getattr(bt_mgr, "max_reconnect_fails", 0) or 0)
+        reconnect_attempt = int(status.get("reconnect_attempt") or 0)
+        if threshold > 0:
+            device.extra["reconnect_attempts_remaining"] = max(threshold - reconnect_attempt, 0)
     if uptime is not None:
         device.extra["uptime"] = uptime
     _enrich_device_snapshot_with_ma(device, client)

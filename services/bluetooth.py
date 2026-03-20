@@ -174,6 +174,23 @@ def persist_device_released(player_name: str, released: bool) -> None:
     except Exception as e:
         logger.warning("Could not persist released flag for '%s': %s", player_name, e)
 
+    if _OPTIONS_FILE.exists():
+        try:
+            with _config_lock:
+                with open(_OPTIONS_FILE) as f:
+                    opts = json.load(f)
+                for dev in opts.get("bluetooth_devices", []):
+                    if _match_player_name(dev.get("player_name", ""), player_name):
+                        dev["released"] = released
+                        break
+                tmp = str(_OPTIONS_FILE) + ".tmp"
+                with open(tmp, "w") as f:
+                    json.dump(opts, f, indent=2)
+                os.replace(tmp, str(_OPTIONS_FILE))
+            logger.debug("Synced released=%s for '%s' to options.json", released, player_name)
+        except Exception as e:
+            logger.debug("Could not sync released flag to options.json: %s", e)
+
 
 def is_audio_device(mac: str) -> bool:
     """Return True if the BT device is an audio device (A2DP/HFP)."""

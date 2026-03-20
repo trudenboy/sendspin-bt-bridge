@@ -181,6 +181,7 @@ class BluetoothManager:
         self._adapter_select = self._resolve_adapter_select(adapter) if adapter else ""
         self.management_enabled: bool = True  # False = released; monitor loop skips reconnect
         self._running: bool = True  # False = shutdown; monitor loops exit
+        self.paired: bool | None = None
         self._connect_lock = threading.Lock()  # prevents concurrent connect_device() calls
         self._reconnect_timestamps: list[float] = []  # monotonic timestamps of recent reconnects
         # Guard churn tracking because reconnect decisions can be touched from
@@ -459,6 +460,7 @@ class BluetoothManager:
             out = "".join(collected)
             logger.info("Pair output (last 600 chars): %s", out[-600:])
             ok = "pairing successful" in out.lower() or "already paired" in out.lower() or "paired: yes" in out.lower()
+            self.paired = ok
             if ok:
                 logger.info("Pairing successful")
             else:
@@ -608,6 +610,7 @@ class BluetoothManager:
         if self.is_device_connected():
             logger.info("Device already connected")
             self.connected = True
+            self.paired = self.is_device_paired()
             # Ensure audio is configured
             self.configure_bluetooth_audio()
             return True
@@ -615,7 +618,8 @@ class BluetoothManager:
         logger.info("Connecting to %s...", self.mac_address)
 
         # Ensure paired and trusted (pair_device also runs trust)
-        if not self.is_device_paired():
+        self.paired = self.is_device_paired()
+        if not self.paired:
             logger.info("Device not paired, attempting to pair...")
             if not self.pair_device():
                 return False
@@ -633,6 +637,7 @@ class BluetoothManager:
             if self.is_device_connected():
                 logger.info("Successfully connected to Bluetooth speaker")
                 self.connected = True
+                self.paired = True
                 # Configure audio routing
                 self.configure_bluetooth_audio()
                 return True
@@ -670,9 +675,9 @@ class BluetoothManager:
             self._reconnect_timestamps = [t for t in self._reconnect_timestamps if t > cutoff]
 
     def _check_reconnect_churn(self) -> bool:
-        """Auto-disable device if too many reconnects in the time window.
+        """Auto-release device if too many reconnects in the time window.
 
-        Returns True if management was disabled.  Disabled when threshold <= 0.
+        Returns True if management was released. Released when threshold <= 0.
         """
         if self._CHURN_THRESHOLD <= 0:
             return False
@@ -685,7 +690,7 @@ class BluetoothManager:
                 return False
 
         logger.warning(
-            "[%s] BT churn detected: %d reconnects in %.0fs — auto-disabling to protect group",
+            "[%s] BT churn detected: %d reconnects in %.0fs — auto-releasing to protect group",
             self.device_name,
             reconnect_count,
             self._CHURN_WINDOW,
@@ -698,24 +703,24 @@ class BluetoothManager:
                     "bt_management_enabled": False,
                     "bt_released_by": "auto",
                     "reconnecting": False,
-                    "last_error": f"Auto-disabled: {reconnect_count} reconnects in {int(self._CHURN_WINDOW)}s",
+                    "last_error": f"Auto-released: {reconnect_count} reconnects in {int(self._CHURN_WINDOW)}s",
                     "last_error_at": datetime.now(tz=UTC).isoformat(),
                 }
             )
         try:
-            from services.bluetooth import persist_device_enabled
+            from services.bluetooth import persist_device_released
 
-            persist_device_enabled(self.device_name, False)
+            persist_device_released(self.device_name, True)
         except Exception as _e:
-            logger.debug("persist_device_enabled failed: %s", _e)
+            logger.debug("persist_device_released failed: %s", _e)
         return True
 
     def _handle_reconnect_failure(self, attempt: int) -> bool:
-        """Disable BT management after too many consecutive failed reconnects.
+        """Release BT management after too many consecutive failed reconnects.
 
-        Returns True if management was disabled (caller should stop reconnecting).
+        Returns True if management was released (caller should stop reconnecting).
         Side-effects: sets self.management_enabled=False, updates client status,
-        calls persist_device_enabled().
+        calls persist_device_released().
         """
         # Also check time-windowed churn (many successful-then-failed cycles)
         if self._check_reconnect_churn():
@@ -723,7 +728,7 @@ class BluetoothManager:
         if self.max_reconnect_fails <= 0 or attempt < self.max_reconnect_fails:
             return False
         logger.warning(
-            "[%s] %d consecutive failed reconnects (threshold=%d) — auto-disabling BT management",
+            "[%s] %d consecutive failed reconnects (threshold=%d) — auto-releasing BT management",
             self.device_name,
             attempt,
             self.max_reconnect_fails,
@@ -736,14 +741,16 @@ class BluetoothManager:
                     "bt_management_enabled": False,
                     "bt_released_by": "auto",
                     "reconnecting": False,
+                    "last_error": f"Auto-released after {attempt} reconnect attempts",
+                    "last_error_at": datetime.now(tz=UTC).isoformat(),
                 }
             )
         try:
-            from services.bluetooth import persist_device_enabled
+            from services.bluetooth import persist_device_released
 
-            persist_device_enabled(self.device_name, False)
+            persist_device_released(self.device_name, True)
         except Exception as _e:
-            logger.debug("persist_device_enabled failed: %s", _e)
+            logger.debug("persist_device_released failed: %s", _e)
         return True
 
     def _publish_client_event(
@@ -814,6 +821,8 @@ class BluetoothManager:
 
                     if not connected:
                         self.battery_level = None
+                        paired = await loop.run_in_executor(_bt_executor, self.is_device_paired)
+                        self.paired = paired
                         reconnect_attempt += 1
                         if self.client:
                             self.client._update_status(
@@ -1049,6 +1058,8 @@ class BluetoothManager:
                 # Device is disconnected — attempt reconnect
                 self.battery_level = None
                 disconnect_event.clear()
+                paired = await loop.run_in_executor(_bt_executor, self.is_device_paired)
+                self.paired = paired
                 reconnect_attempt += 1
                 if self.client:
                     self.client._update_status(

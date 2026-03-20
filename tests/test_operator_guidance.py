@@ -106,3 +106,32 @@ def test_operator_guidance_promotes_ma_auth_attention():
     assert data["issue_groups"][0]["key"] == "ma_auth"
     assert data["banner"]["headline"] == "Music Assistant needs attention"
     assert data["banner"]["primary_action"]["key"] == "open_ma_settings"
+
+
+def test_operator_guidance_prefers_repair_for_unpaired_reconnecting_device():
+    snapshot = build_operator_guidance_snapshot(
+        config={"BLUETOOTH_ADAPTERS": [{"id": "hci0"}], "BLUETOOTH_DEVICES": [{"mac": "AA"}]},
+        onboarding_assistant={
+            "checklist": {"overall_status": "ok", "progress_percent": 100},
+            "counts": {"configured_devices": 1, "connected_devices": 0, "sink_ready_devices": 0},
+        },
+        recovery_assistant={"summary": {"summary": "Repair is required."}},
+        startup_progress={"status": "complete"},
+        devices=[
+            SimpleNamespace(
+                player_name="Kitchen",
+                bt_management_enabled=True,
+                bluetooth_connected=False,
+                has_sink=False,
+                server_connected=False,
+                extra={"bluetooth_paired": False, "reconnect_attempt": 3, "max_reconnect_fails": 5},
+            )
+        ],
+    )
+
+    data = snapshot.to_dict()
+    assert data["mode"] == "attention"
+    assert data["issue_groups"][0]["key"] == "repair_required"
+    assert data["issue_groups"][0]["primary_action"]["key"] == "pair_device"
+    assert "3/5" in data["issue_groups"][0]["summary"]
+    assert "2 attempts remain" in data["issue_groups"][0]["summary"]

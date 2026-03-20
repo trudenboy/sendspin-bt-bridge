@@ -816,7 +816,7 @@ function _getBtBadgeStateMeta(dev, adapterInfo) {
     var info = adapterInfo || _getAdapterDisplayInfo(dev);
     if (info.empty) return _buildBadgeStateMeta('neutral', false, 'No Bluetooth adapter assigned');
     if (dev && dev.bt_management_enabled === false && dev.bt_released_by === 'auto') {
-        return _buildBadgeStateMeta('warning', false, 'Bluetooth management auto-disabled');
+        return _buildBadgeStateMeta('warning', false, 'Bluetooth management auto-released');
     }
     if (dev && dev.bt_management_enabled === false) {
         return _buildBadgeStateMeta('neutral', false, 'Bluetooth management released');
@@ -844,16 +844,16 @@ function getDeviceReleaseMeta(dev) {
     var isReleased = !!(dev && dev.bt_management_enabled === false);
     var isAuto = !!(isReleased && dev.bt_released_by === 'auto');
     var stateMeta = _buildBadgeStateMeta(isAuto ? 'warning' : 'neutral', false, isAuto
-        ? 'Bluetooth management auto-disabled'
+        ? 'Bluetooth management auto-released'
         : 'Bluetooth management released');
     return {
         visible: isReleased,
         isAuto: isAuto,
-        label: isAuto ? 'Auto-disabled' : 'Released',
-        summary: isAuto ? 'Auto-disabled after connection issues' : 'Ready to reclaim',
+        label: isAuto ? 'Auto-released' : 'Released',
+        summary: isAuto ? 'Auto-released after connection issues' : 'Ready to reclaim',
         title: isAuto
-            ? 'Auto-disabled due to connection issues — click Reclaim to retry'
-            : 'BT management disabled — click Reclaim to resume',
+            ? 'Auto-released due to connection issues — click Reclaim to retry'
+            : 'BT management released — click Reclaim to resume',
         tone: isAuto ? 'warning' : 'neutral',
         toneClass: _deviceStatusToneClass(isAuto ? 'warning' : 'neutral'),
         stateMeta: stateMeta,
@@ -3632,6 +3632,39 @@ async function btReconnect(i) {
     return result;
 }
 
+async function btPairConfiguredDevice(i) {
+    var dev = lastDevices && lastDevices[i];
+    if (!dev) return {success: false, message: 'Device not found'};
+    var playerName = dev.player_name || null;
+    var displayName = playerName || ('Device ' + (i + 1));
+    if (!confirm('Put "' + displayName + '" into pairing mode, then click OK.\n\nThis will re-pair, trust, and reconnect the device (~25 s).')) {
+        return {success: false, message: 'Pairing cancelled'};
+    }
+    var status = document.getElementById('dbt-action-status-' + i);
+    var result = {success: false, message: 'Re-pair failed'};
+    if (status) status.textContent = '\u21BB Re-pairing\u2026';
+    try {
+        var resp = await fetch(API_BASE + '/api/bt/pair', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({player_name: playerName})
+        });
+        var data = await resp.json();
+        var msg = data.success ? '\u2713 ' + (data.message || 'Pairing started') : '\u2717 ' + (data.error || 'Failed');
+        result = {success: !!data.success, message: data.message || data.error || 'Re-pair finished'};
+        if (status) status.textContent = msg;
+        showToast(msg, data.success ? 'success' : 'error');
+    } catch (e) {
+        if (status) status.textContent = '\u2717 Error';
+        result = {success: false, message: e && e.message ? e.message : 'Re-pair error'};
+        showToast('\u2717 Re-pair error', 'error');
+    }
+    setTimeout(function() {
+        if (status) status.textContent = '';
+    }, 8000);
+    return result;
+}
+
 async function btToggleManagement(i) {
     var dev = lastDevices && lastDevices[i];
     if (!dev) return {success: false, message: 'Device not found'};
@@ -5052,6 +5085,15 @@ function _runOperatorGuidanceAction(action) {
             return _runOnboardingAssistantAction('open_devices_settings');
         }
         btReconnect(reconnectIndex);
+        return false;
+    }
+    if (actionKey === 'pair_device') {
+        var pairIndex = _findDeviceIndexByName(deviceNames[0]);
+        if (pairIndex < 0) {
+            showToast('Device not found in current bridge status', 'error');
+            return _runOnboardingAssistantAction('open_devices_settings');
+        }
+        btPairConfiguredDevice(pairIndex);
         return false;
     }
     if (actionKey === 'reconnect_devices') {

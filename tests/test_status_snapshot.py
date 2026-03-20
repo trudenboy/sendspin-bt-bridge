@@ -115,6 +115,25 @@ def test_build_device_snapshot_includes_capability_payload():
     assert data["capabilities"]["actions"]["queue_control"]["blocked_reason"] == "Sendspin is not connected."
 
 
+def test_build_device_snapshot_prefers_repair_when_device_is_unpaired():
+    client = _make_client()
+    client.status.update(
+        {"server_connected": False, "bluetooth_connected": False, "reconnecting": True, "reconnect_attempt": 3}
+    )
+    client.bt_manager.paired = False
+    client.bt_manager.max_reconnect_fails = 5
+
+    snapshot = build_device_snapshot(client)
+    data = snapshot.to_dict()
+
+    assert data["bluetooth_paired"] is False
+    assert data["reconnect_attempts_remaining"] == 2
+    assert data["capabilities"]["actions"]["reconnect"]["currently_available"] is False
+    assert "run re-pair" in data["capabilities"]["actions"]["reconnect"]["blocked_reason"]
+    assert data["capabilities"]["actions"]["reconnect"]["safe_actions"][0] == "pair_device"
+    assert data["capabilities"]["actions"]["toggle_bt_management"]["safe_actions"][0] == "pair_device"
+
+
 def test_build_device_snapshot_reports_stopping_transition():
     client = _make_client()
     client.status.update(

@@ -144,6 +144,23 @@ def _count_config_entries(config: dict[str, Any], key: str) -> int:
     return len(value) if isinstance(value, list) else 0
 
 
+def _device_extra(device: Any) -> dict[str, Any]:
+    extra = getattr(device, "extra", None)
+    return extra if isinstance(extra, dict) else {}
+
+
+def _reconnect_attempt_summary(device: Any) -> str:
+    extra = _device_extra(device)
+    attempt = int(extra.get("reconnect_attempt") or 0)
+    if attempt <= 0:
+        return ""
+    threshold = int(extra.get("max_reconnect_fails") or 0)
+    if threshold > 0:
+        remaining = max(threshold - attempt, 0)
+        return f"Reconnect attempt {attempt}/{threshold}; {remaining} attempts remain before auto-release."
+    return f"Reconnect attempt {attempt} is in progress."
+
+
 def _guidance_action_from_dict(payload: dict[str, Any] | None) -> GuidanceAction | None:
     if not isinstance(payload, dict):
         return None
@@ -215,10 +232,19 @@ def _build_issue_groups(
     recovery_assistant: dict[str, Any],
 ) -> list[GuidanceIssueGroup]:
     groups: list[GuidanceIssueGroup] = []
+    repair_needed = [
+        device
+        for device in devices
+        if getattr(device, "bt_management_enabled", True)
+        and not getattr(device, "bluetooth_connected", False)
+        and _device_extra(device).get("bluetooth_paired") is False
+    ]
     disconnected = [
         str(getattr(device, "player_name", None) or "Unknown")
         for device in devices
-        if getattr(device, "bt_management_enabled", True) and not getattr(device, "bluetooth_connected", False)
+        if getattr(device, "bt_management_enabled", True)
+        and not getattr(device, "bluetooth_connected", False)
+        and _device_extra(device).get("bluetooth_paired") is not False
     ]
     missing_sink = [
         str(getattr(device, "player_name", None) or "Unknown")
@@ -289,6 +315,34 @@ def _build_issue_groups(
                 device_names=transport_down,
             ),
         )
+    if repair_needed:
+        repair_names = [str(getattr(device, "player_name", None) or "Unknown") for device in repair_needed]
+        title = (
+            f"{repair_names[0]} needs re-pairing"
+            if len(repair_names) == 1
+            else f"{len(repair_names)} devices need re-pairing"
+        )
+        attempt_summary = _reconnect_attempt_summary(repair_needed[0]) if len(repair_needed) == 1 else ""
+        summary = (
+            "The speaker is no longer paired, so reconnect attempts will keep failing. Put it in pairing mode and run re-pair."
+            if len(repair_names) == 1
+            else f"These speakers are no longer paired. Re-pair {_format_device_label(repair_names)} from pairing mode."
+        )
+        if attempt_summary:
+            summary = f"{summary} {attempt_summary}"
+        _append_group(
+            groups,
+            key="repair_required",
+            severity="error",
+            title=title,
+            summary=summary,
+            device_names=repair_names,
+            primary_action=GuidanceAction(
+                key="pair_device" if len(repair_names) == 1 else "open_devices_settings",
+                label="Re-pair speaker" if len(repair_names) == 1 else "Open device settings",
+                device_names=repair_names,
+            ),
+        )
     if disconnected:
         title = (
             f"{disconnected[0]} is disconnected"
@@ -300,6 +354,17 @@ def _build_issue_groups(
             if len(disconnected) == 1
             else f"Power on or reconnect {_format_device_label(disconnected)}."
         )
+        if len(disconnected) == 1:
+            attempt_summary = next(
+                (
+                    _reconnect_attempt_summary(device)
+                    for device in devices
+                    if str(getattr(device, "player_name", None) or "Unknown") == disconnected[0]
+                ),
+                "",
+            )
+            if attempt_summary:
+                summary = f"{summary} {attempt_summary}"
         _append_group(
             groups,
             key="disconnected",
@@ -316,7 +381,7 @@ def _build_issue_groups(
     if released:
         title = f"{released[0]} is released" if len(released) == 1 else f"{len(released)} devices are released"
         summary = (
-            "Bluetooth management is disabled for this speaker."
+            "Bluetooth management is released for this speaker."
             if len(released) == 1
             else f"Reclaim {_format_device_label(released)} to restore bridge management."
         )

@@ -97,3 +97,29 @@ def test_recovery_assistant_reports_healthy_single_device_setup():
     assert data["issues"] == []
     assert data["latency_assistant"]["tone"] == "ok"
     assert "Single-device" in data["latency_assistant"]["summary"]
+
+
+def test_recovery_assistant_prefers_repair_for_unpaired_device():
+    snapshot = build_recovery_assistant_snapshot(
+        config={"BLUETOOTH_DEVICES": [{"mac": "AA"}], "PULSE_LATENCY_MSEC": 250},
+        devices=[
+            SimpleNamespace(
+                player_name="Kitchen",
+                bt_management_enabled=True,
+                bluetooth_connected=False,
+                has_sink=False,
+                server_connected=False,
+                static_delay_ms=0.0,
+                recent_events=[],
+                health_summary={"state": "recovering", "severity": "warning", "summary": ""},
+                extra={"bluetooth_paired": False, "reconnect_attempt": 3, "max_reconnect_fails": 5},
+            )
+        ],
+        onboarding_assistant={"checklist": {"overall_status": "ok", "checkpoints": []}},
+        startup_progress={"status": "complete", "message": "Startup complete."},
+    )
+
+    data = snapshot.to_dict()
+    assert data["issues"][0]["title"] == "Kitchen needs re-pairing"
+    assert data["issues"][0]["recommended_action"]["key"] == "pair_device"
+    assert "3/5" in data["issues"][0]["summary"]

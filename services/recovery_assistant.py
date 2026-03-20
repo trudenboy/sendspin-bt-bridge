@@ -9,6 +9,23 @@ from typing import Any
 UTC = timezone.utc
 
 
+def _device_extra(device: Any) -> dict[str, Any]:
+    extra = getattr(device, "extra", None)
+    return extra if isinstance(extra, dict) else {}
+
+
+def _reconnect_attempt_summary(device: Any) -> str:
+    extra = _device_extra(device)
+    attempt = int(extra.get("reconnect_attempt") or 0)
+    if attempt <= 0:
+        return ""
+    threshold = int(extra.get("max_reconnect_fails") or 0)
+    if threshold > 0:
+        remaining = max(threshold - attempt, 0)
+        return f"Reconnect attempt {attempt}/{threshold}. {remaining} attempts remain before auto-release."
+    return f"Reconnect attempt {attempt} is in progress."
+
+
 @dataclass
 class RecoveryAction:
     key: str
@@ -101,7 +118,7 @@ def _build_device_issues(devices: list[Any]) -> list[RecoveryIssue]:
                 RecoveryIssue(
                     severity="warning",
                     title=f"{name} is released",
-                    summary=summary or "Bluetooth management is disabled for this speaker.",
+                    summary=summary or "Bluetooth management is released for this speaker.",
                     recommended_action=RecoveryAction(
                         key="toggle_bt_management",
                         label="Reclaim Bluetooth",
@@ -127,14 +144,24 @@ def _build_device_issues(devices: list[Any]) -> list[RecoveryIssue]:
             )
             continue
         if not getattr(device, "bluetooth_connected", False):
+            attempt_summary = _reconnect_attempt_summary(device)
+            bluetooth_paired = _device_extra(device).get("bluetooth_paired")
             issues.append(
                 RecoveryIssue(
                     severity="warning",
-                    title=f"{name} is disconnected",
-                    summary=summary or "Power on the speaker or trigger a reconnect.",
+                    title=f"{name} needs re-pairing" if bluetooth_paired is False else f"{name} is disconnected",
+                    summary=(
+                        summary
+                        or (
+                            "The speaker is no longer paired, so reconnect attempts will keep failing. Put it in pairing mode and run re-pair."
+                            if bluetooth_paired is False
+                            else "Power on the speaker or trigger a reconnect."
+                        )
+                    )
+                    + (f" {attempt_summary}" if attempt_summary else ""),
                     recommended_action=RecoveryAction(
-                        key="reconnect_device",
-                        label="Reconnect speaker",
+                        key="pair_device" if bluetooth_paired is False else "reconnect_device",
+                        label="Re-pair speaker" if bluetooth_paired is False else "Reconnect speaker",
                         device_name=name,
                     ),
                     device_name=name,
