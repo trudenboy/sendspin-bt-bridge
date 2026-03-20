@@ -22,9 +22,11 @@ from flask import Blueprint, Response, jsonify, request
 import state
 from config import (
     BUILD_DATE,
+    CONFIG_ALLOWED_KEYS,
     CONFIG_FILE,
     CONFIG_SCHEMA_VERSION,
     DEFAULT_UPDATE_CHANNEL,
+    SENSITIVE_CONFIG_KEYS,
     VERSION,
     config_lock,
     detect_ha_addon_channel,
@@ -33,6 +35,7 @@ from config import (
     resolve_base_listen_port,
     resolve_web_port,
     update_config,
+    write_config_file,
 )
 from services import (
     bt_remove_device as _bt_remove_device,
@@ -44,6 +47,7 @@ from services.ha_addon import detect_delivery_channel_from_slug, get_self_addon_
 from services.ipc_protocol import IPC_PROTOCOL_VERSION
 from services.log_analysis import summarize_issue_logs
 from services.sendspin_compat import get_runtime_dependency_versions
+from services.status_snapshot import build_device_snapshot
 from services.update_checker import _is_newer_version, _start_upgrade_job, channel_image_tag, check_latest_version
 from state import (
     _adapter_cache_lock,
@@ -169,6 +173,8 @@ def _build_config_get_response():
     has_password = bool(config.get("AUTH_PASSWORD_HASH"))
     config.pop("AUTH_PASSWORD_HASH", None)
     config.pop("SECRET_KEY", None)
+    config.pop("MA_ACCESS_TOKEN", None)
+    config.pop("MA_REFRESH_TOKEN", None)
     config["_password_set"] = has_password
     if runtime == "ha_addon":
         config["WEB_PORT"] = None
@@ -183,10 +189,11 @@ def _build_config_get_response():
     for dev in config.get("BLUETOOTH_DEVICES", []):
         client = client_map.get(dev.get("player_name")) or mac_map.get(dev.get("mac"))
         if client:
+            device = build_device_snapshot(client)
             if "listen_port" not in dev or not dev["listen_port"]:
                 dev["listen_port"] = getattr(client, "listen_port", None)
             if "listen_host" not in dev or not dev["listen_host"]:
-                dev["listen_host"] = getattr(client, "listen_host", None) or client.status.get("ip_address")
+                dev["listen_host"] = getattr(client, "listen_host", None) or device.extra.get("ip_address")
 
     return jsonify(config)
 
@@ -367,8 +374,12 @@ def api_config_download():
     """Download a share-safe config export with sensitive tokens removed."""
     if not CONFIG_FILE.exists():
         return _error_response("No config file found", 404)
-    with config_lock, open(CONFIG_FILE) as f:
-        config = json.load(f)
+    try:
+        with config_lock, open(CONFIG_FILE) as f:
+            config = json.load(f)
+    except (OSError, json.JSONDecodeError, ValueError):
+        logger.exception("Could not read config for download")
+        return _error_response("Could not read config file", 500)
     raw = json.dumps(_sanitize_download_config(config), indent=2)
     bridge_name = config.get("BRIDGE_NAME", "").strip() or "Bridge"
     bridge_name = bridge_name.replace(" ", "_")
@@ -381,13 +392,7 @@ def api_config_download():
     )
 
 
-_PRESERVED_KEYS = (
-    "AUTH_PASSWORD_HASH",
-    "SECRET_KEY",
-    "MA_API_TOKEN",
-    "MA_ACCESS_TOKEN",
-    "MA_REFRESH_TOKEN",
-)
+_PRESERVED_KEYS = tuple(sorted(SENSITIVE_CONFIG_KEYS))
 
 
 @config_bp.route("/api/config/upload", methods=["POST"])
@@ -438,17 +443,7 @@ def api_config_upload():
             if key not in existing:
                 uploaded.pop(key, None)
 
-        tmp = str(CONFIG_FILE) + ".tmp"
-        try:
-            with open(tmp, "w") as wf:
-                json.dump(uploaded, wf, indent=2)
-            os.replace(tmp, str(CONFIG_FILE))
-        except Exception:
-            try:
-                os.unlink(tmp)
-            except OSError:
-                pass
-            raise
+        write_config_file(uploaded, config_file=CONFIG_FILE, config_dir=CONFIG_FILE.parent)
 
     payload: dict[str, object] = {"success": True}
     if warnings:
@@ -602,41 +597,10 @@ def api_config():
         return _error_response(str(exc))
 
     # Strip unknown top-level keys (whitelist)
-    _ALLOWED_POST_KEYS = {
-        "SENDSPIN_SERVER",
-        "SENDSPIN_PORT",
-        "WEB_PORT",
-        "BASE_LISTEN_PORT",
-        "BRIDGE_NAME",
-        "BLUETOOTH_DEVICES",
-        "BLUETOOTH_ADAPTERS",
-        "TZ",
-        "PULSE_LATENCY_MSEC",
-        "PREFER_SBC_CODEC",
-        "BT_CHECK_INTERVAL",
-        "BT_MAX_RECONNECT_FAILS",
-        "AUTH_ENABLED",
-        "SESSION_TIMEOUT_HOURS",
-        "BRUTE_FORCE_PROTECTION",
-        "BRUTE_FORCE_MAX_ATTEMPTS",
-        "BRUTE_FORCE_WINDOW_MINUTES",
-        "BRUTE_FORCE_LOCKOUT_MINUTES",
-        "LAST_VOLUMES",
-        "LOG_LEVEL",
-        "MA_API_URL",
-        "MA_API_TOKEN",
-        "MA_USERNAME",
-        "MA_AUTO_SILENT_AUTH",
-        "MA_WEBSOCKET_MONITOR",
-        "VOLUME_VIA_MA",
-        "MUTE_VIA_MA",
-        "SMOOTH_RESTART",
-        "UPDATE_CHANNEL",
-        "AUTO_UPDATE",
-        "CHECK_UPDATES",
-        "_new_device_default_volume",
-        "CONFIG_SCHEMA_VERSION",
-    }
+    _ALLOWED_POST_KEYS = (
+        CONFIG_ALLOWED_KEYS
+        - {"AUTH_PASSWORD_HASH", "SECRET_KEY", "MA_ACCESS_TOKEN", "MA_REFRESH_TOKEN", "LAST_SINKS", "MA_AUTH_PROVIDER"}
+    ) | {"_new_device_default_volume"}
     config = {k: v for k, v in config.items() if k in _ALLOWED_POST_KEYS}
 
     # Require password when enabling auth (except HA addon — uses HA login)
@@ -661,8 +625,12 @@ def api_config():
                 # Preserve keys that are never submitted via the form
                 for key in (
                     "LAST_VOLUMES",
+                    "LAST_SINKS",
                     "AUTH_PASSWORD_HASH",
                     "SECRET_KEY",
+                    "MA_AUTH_PROVIDER",
+                    "MA_ACCESS_TOKEN",
+                    "MA_REFRESH_TOKEN",
                 ):
                     if key in existing and key not in config:
                         config[key] = existing[key]
@@ -706,18 +674,7 @@ def api_config():
                     last_volumes[mac] = default_vol
         config["LAST_VOLUMES"] = _sanitize_last_volumes(last_volumes, set(new_devices))
 
-        tmp = str(CONFIG_FILE) + ".tmp"
-        try:
-            with open(tmp, "w") as f:
-                json.dump(config, f, indent=2)
-            os.replace(tmp, str(CONFIG_FILE))
-        except Exception:
-            # Remove partial temp file on failure
-            try:
-                os.unlink(tmp)
-            except OSError as exc:
-                logger.debug("cleanup temp config file failed: %s", exc)
-            raise
+        write_config_file(config, config_file=CONFIG_FILE, config_dir=CONFIG_FILE.parent)
 
     # Invalidate adapter name cache so next status poll picks up changes
     with _adapter_cache_lock:

@@ -205,6 +205,19 @@ def test_config_validate_returns_errors_for_invalid_payload(client):
     assert data["errors"][0]["field"] == "BLUETOOTH_DEVICES[0].mac"
 
 
+def test_config_validate_rejects_future_schema_version(client):
+    resp = client.post(
+        "/api/config/validate",
+        data=json.dumps({"CONFIG_SCHEMA_VERSION": 999, "BLUETOOTH_DEVICES": []}),
+        content_type="application/json",
+    )
+
+    assert resp.status_code == 400
+    data = resp.get_json()
+    assert data["valid"] is False
+    assert data["errors"][0]["field"] == "CONFIG_SCHEMA_VERSION"
+
+
 def test_set_volume_empty_body(client):
     """POST /api/volume with an empty JSON object must not return 500."""
     resp = client.post(
@@ -520,6 +533,35 @@ def test_api_bugreport_uses_issue_worthy_logs_in_summary(client, monkeypatch):
     ]
 
 
+def test_api_bugreport_redacts_oauth_tokens_and_runtime_state(client, monkeypatch):
+    import routes.api_status as api_status_mod
+
+    monkeypatch.setattr(
+        api_status_mod,
+        "load_config",
+        lambda: {
+            "MA_ACCESS_TOKEN": "oauth-access",
+            "MA_REFRESH_TOKEN": "oauth-refresh",
+            "MA_API_TOKEN": "legacy-token",
+            "AUTH_PASSWORD_HASH": "hashed",
+            "SECRET_KEY": "secret",
+            "LAST_VOLUMES": {"AA:BB:CC:DD:EE:FF": 20},
+            "LAST_SINKS": {"AA:BB:CC:DD:EE:FF": "bluez_sink.AA_BB_CC_DD_EE_FF.a2dp_sink"},
+            "BLUETOOTH_DEVICES": [{"mac": "AA:BB:CC:DD:EE:FF"}],
+        },
+    )
+
+    sanitized = api_status_mod._sanitized_config()
+
+    assert sanitized["MA_ACCESS_TOKEN"] == "***"
+    assert sanitized["MA_REFRESH_TOKEN"] == "***"
+    assert sanitized["MA_API_TOKEN"] == "***"
+    assert sanitized["AUTH_PASSWORD_HASH"] == "***"
+    assert sanitized["SECRET_KEY"] == "***"
+    assert sanitized["LAST_VOLUMES"] == "***"
+    assert sanitized["LAST_SINKS"] == "***"
+
+
 def test_api_version_includes_runtime_dependency_versions(client, monkeypatch):
     import routes.api_config as api_config_mod
     from config import CONFIG_SCHEMA_VERSION
@@ -610,6 +652,43 @@ def test_api_config_get_enriches_devices_from_registry_snapshot(client, tmp_path
     data = resp.get_json()
     assert data["BLUETOOTH_DEVICES"][0]["listen_port"] == 8930
     assert data["BLUETOOTH_DEVICES"][0]["listen_host"] == "bridge.local"
+
+
+def test_api_config_get_uses_snapshot_ip_address_for_listen_host_fallback(client, tmp_path, monkeypatch):
+    import routes.api_config as api_config_mod
+    from services.device_registry import DeviceRegistrySnapshot
+
+    monkeypatch.setattr(api_config_mod, "CONFIG_FILE", tmp_path / "config.json")
+    (tmp_path / "config.json").write_text(
+        json.dumps(
+            {
+                "BLUETOOTH_DEVICES": [
+                    {
+                        "mac": "AA:BB:CC:DD:EE:FF",
+                        "player_name": "Kitchen",
+                    }
+                ]
+            }
+        )
+    )
+    fake_client = SimpleNamespace(
+        player_name="Kitchen",
+        listen_port=8930,
+        listen_host=None,
+        status={"ip_address": "192.168.10.20"},
+        bt_manager=SimpleNamespace(mac_address="AA:BB:CC:DD:EE:FF"),
+    )
+    monkeypatch.setattr(
+        api_config_mod,
+        "get_device_registry_snapshot",
+        lambda: DeviceRegistrySnapshot(active_clients=[fake_client]),
+    )
+
+    resp = client.get("/api/config")
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["BLUETOOTH_DEVICES"][0]["listen_host"] == "192.168.10.20"
 
 
 def test_api_config_post_accepts_security_and_monitor_settings(client, tmp_path, monkeypatch):
@@ -1383,6 +1462,48 @@ def test_api_config_download_redacts_sensitive_tokens(client, tmp_path, monkeypa
         assert key not in exported
 
 
+def test_api_config_get_redacts_oauth_tokens(client, tmp_path, monkeypatch):
+    import routes.api_config as api_config_mod
+
+    monkeypatch.setattr(api_config_mod, "CONFIG_FILE", tmp_path / "config.json")
+    monkeypatch.setattr(
+        api_config_mod,
+        "load_config",
+        lambda: {
+            "AUTH_PASSWORD_HASH": "hashed-password",
+            "SECRET_KEY": "secret",
+            "MA_ACCESS_TOKEN": "oauth-access",
+            "MA_REFRESH_TOKEN": "oauth-refresh",
+            "BLUETOOTH_DEVICES": [],
+            "WEB_PORT": None,
+        },
+    )
+    monkeypatch.setattr(api_config_mod, "_detect_runtime", lambda: "docker")
+    monkeypatch.setattr(api_config_mod, "resolve_base_listen_port", lambda: 8928)
+
+    resp = client.get("/api/config")
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["_password_set"] is True
+    assert "AUTH_PASSWORD_HASH" not in data
+    assert "SECRET_KEY" not in data
+    assert "MA_ACCESS_TOKEN" not in data
+    assert "MA_REFRESH_TOKEN" not in data
+
+
+def test_api_config_download_returns_error_for_invalid_json(client, tmp_path, monkeypatch):
+    import routes.api_config as api_config_mod
+
+    monkeypatch.setattr(api_config_mod, "CONFIG_FILE", tmp_path / "config.json")
+    (tmp_path / "config.json").write_text("{bad")
+
+    resp = client.get("/api/config/download")
+
+    assert resp.status_code == 500
+    assert resp.get_json() == {"error": "Could not read config file"}
+
+
 def test_error_response_no_leak(client):
     """Error responses must not expose Python tracebacks or file paths."""
     # Trigger a volume error with an impossible scenario — no clients available
@@ -1575,6 +1696,120 @@ def test_runtime_info_endpoint_and_status_include_mock_runtime(client):
         state.set_runtime_mode_info(None)
 
 
+def test_api_bridge_telemetry_includes_resource_and_hook_data(client, monkeypatch):
+    import routes.api_status as api_status
+    from services.event_hooks import EventHookRegistry, get_event_hook_registry
+
+    registry = get_event_hook_registry()
+    registry.clear()
+    monkeypatch.setattr(
+        EventHookRegistry,
+        "_resolve_host_addresses",
+        staticmethod(lambda hostname, port, scheme: {"93.184.216.34"}),
+    )
+    registry.register(url="https://example.com/hook", categories=["bridge_event"])
+    monkeypatch.setattr(
+        api_status,
+        "_collect_environment",
+        lambda: {
+            "process_rss_mb": 42.5,
+            "python": "3.12.0",
+            "platform": "Linux-test",
+            "arch": "x86_64",
+            "kernel": "6.8.0",
+            "audio_server": "pulseaudio 16.1",
+            "bluez": "5.72",
+        },
+    )
+    monkeypatch.setattr(
+        api_status,
+        "_collect_subprocess_info",
+        lambda: [{"name": "Kitchen", "pid": 1234, "process_rss_mb": 12.3}],
+    )
+    try:
+        resp = client.get("/api/bridge/telemetry")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["bridge"]["process_rss_mb"] == 42.5
+        assert data["subprocesses"][0]["process_rss_mb"] == 12.3
+        assert data["event_hooks"]["summary"]["registered_hooks"] == 1
+    finally:
+        registry.clear()
+
+
+def test_api_hooks_register_list_and_delete(client, monkeypatch):
+    from services.event_hooks import EventHookRegistry, get_event_hook_registry
+
+    registry = get_event_hook_registry()
+    registry.clear()
+    monkeypatch.setattr(
+        EventHookRegistry,
+        "_resolve_host_addresses",
+        staticmethod(lambda hostname, port, scheme: {"93.184.216.34"}),
+    )
+    try:
+        create_resp = client.post(
+            "/api/hooks",
+            data=json.dumps({"url": "https://example.com/hook", "categories": ["bridge_event"]}),
+            content_type="application/json",
+        )
+        assert create_resp.status_code == 201
+        hook = create_resp.get_json()["hook"]
+
+        list_resp = client.get("/api/hooks")
+        assert list_resp.status_code == 200
+        list_data = list_resp.get_json()
+        assert list_data["summary"]["registered_hooks"] == 1
+        assert list_data["hooks"][0]["id"] == hook["id"]
+
+        delete_resp = client.delete(f"/api/hooks/{hook['id']}")
+        assert delete_resp.status_code == 200
+        assert delete_resp.get_json() == {"success": True}
+    finally:
+        registry.clear()
+
+
+def test_api_hooks_reject_invalid_url(client):
+    resp = client.post(
+        "/api/hooks",
+        data=json.dumps({"url": "/relative/path"}),
+        content_type="application/json",
+    )
+
+    assert resp.status_code == 400
+    assert resp.get_json() == {"error": "url must be an absolute http:// or https:// URL"}
+
+
+def test_api_hooks_reject_private_network_targets(client, monkeypatch):
+    from services.event_hooks import EventHookRegistry
+
+    monkeypatch.setattr(
+        EventHookRegistry,
+        "_resolve_host_addresses",
+        staticmethod(lambda hostname, port, scheme: {"127.0.0.1"}),
+    )
+
+    resp = client.post(
+        "/api/hooks",
+        data=json.dumps({"url": "http://example.com/hook"}),
+        content_type="application/json",
+    )
+
+    assert resp.status_code == 400
+    assert resp.get_json() == {"error": "url must not target loopback, local, or private network hosts"}
+
+
+def test_api_hooks_reject_non_numeric_timeout_values(client):
+    resp = client.post(
+        "/api/hooks",
+        data=json.dumps({"url": "https://example.com/hook", "timeout_sec": {"seconds": 5}}),
+        content_type="application/json",
+    )
+
+    assert resp.status_code == 400
+    assert resp.get_json() == {"error": "Invalid timeout_sec: must be a number"}
+
+
 def test_onboarding_assistant_endpoint_returns_guidance(client, monkeypatch):
     import routes.api_status as api_status
     from services.device_registry import DeviceRegistrySnapshot
@@ -1662,6 +1897,7 @@ def test_api_diagnostics_includes_playing_and_sink_input_metadata(client, monkey
     import state
     from config import CONFIG_SCHEMA_VERSION
     from services.device_registry import DeviceRegistrySnapshot
+    from services.event_hooks import EventHookRegistry, get_event_hook_registry
     from services.ipc_protocol import IPC_PROTOCOL_VERSION
 
     fake_client = SimpleNamespace(
@@ -1724,6 +1960,14 @@ def test_api_diagnostics_includes_playing_and_sink_input_metadata(client, monkey
 
     state.set_ma_api_credentials("", "")
     state.set_ma_groups({}, [])
+    hook_registry = get_event_hook_registry()
+    hook_registry.clear()
+    monkeypatch.setattr(
+        EventHookRegistry,
+        "_resolve_host_addresses",
+        staticmethod(lambda hostname, port, scheme: {"93.184.216.34"}),
+    )
+    hook_registry.register(url="https://example.com/hook", categories=["device_event"])
     try:
         resp = client.get("/api/diagnostics")
         assert resp.status_code == 200
@@ -1736,11 +1980,14 @@ def test_api_diagnostics_includes_playing_and_sink_input_metadata(client, monkey
         assert data["sink_inputs"][0]["state"] == "RUNNING"
         assert data["sink_inputs"][0]["application_name"] == "Sendspin Bridge"
         assert data["sink_inputs"][0]["media_name"] == "Quiet Woods"
+        assert data["event_hooks"]["summary"]["registered_hooks"] == 1
+        assert data["telemetry"]["event_hooks"]["summary"]["registered_hooks"] == 1
         assert data["onboarding_assistant"]["checks"][0]["key"] == "sink_verification"
     finally:
         sys.modules.pop("sendspin.audio", None)
         state.set_ma_groups({}, [])
         state.set_ma_api_credentials("", "")
+        hook_registry.clear()
 
 
 def test_device_enabled_toggle(client, tmp_path, monkeypatch):
@@ -2443,6 +2690,7 @@ def test_resolve_target_queue_ignores_stale_syncgroup_id_for_solo_player():
 def test_resolve_target_queue_infers_single_active_player_for_stale_page(monkeypatch):
     import routes.api_ma as api_ma
     import state
+    from services.device_registry import DeviceRegistrySnapshot
 
     fake_client = SimpleNamespace(
         player_id="sendspin-yandex-mini-2---lxc",
@@ -2460,7 +2708,9 @@ def test_resolve_target_queue_infers_single_active_player_for_stale_page(monkeyp
             }
         ],
     )
-    monkeypatch.setattr(state, "get_clients_snapshot", lambda: [fake_client])
+    monkeypatch.setattr(
+        api_ma, "get_device_registry_snapshot", lambda: DeviceRegistrySnapshot(active_clients=[fake_client])
+    )
     try:
         state_key, queue_id = api_ma._resolve_target_queue("syncgroup_5zr8ss8g", None, None)
     finally:

@@ -18,11 +18,19 @@ import threading
 import time
 from datetime import datetime, timezone
 
-from flask import Blueprint, Response, jsonify
+from flask import Blueprint, Response, jsonify, request
 
 import state
-from config import BUILD_DATE, CONFIG_SCHEMA_VERSION, VERSION, load_config
+from config import (
+    BUILD_DATE,
+    CONFIG_SCHEMA_VERSION,
+    RUNTIME_STATE_CONFIG_KEYS,
+    SENSITIVE_CONFIG_KEYS,
+    VERSION,
+    load_config,
+)
 from services.device_registry import get_device_registry_snapshot
+from services.event_hooks import get_event_hook_registry
 from services.ipc_protocol import IPC_PROTOCOL_VERSION
 from services.log_analysis import summarize_issue_logs
 from services.onboarding_assistant import build_onboarding_assistant_snapshot
@@ -31,13 +39,10 @@ from services.sendspin_compat import get_runtime_dependency_versions
 from services.status_snapshot import (
     build_bridge_snapshot,
     build_device_snapshot,
+    build_device_snapshot_pairs,
     build_group_snapshots,
     build_mock_runtime_snapshot,
     build_startup_progress_snapshot,
-)
-from state import (
-    get_ma_group_for_player_id,
-    get_ma_now_playing_for_group,
 )
 
 UTC = timezone.utc
@@ -59,31 +64,6 @@ _SSE_MAX_LIFETIME = 1800  # 30 minutes
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-
-def _enrich_status_with_ma(status: dict, client) -> None:
-    """Add MA syncgroup name and now-playing metadata to a client status dict."""
-    player_id = getattr(client, "player_id", "")
-    if not player_id:
-        return
-    ma_group = get_ma_group_for_player_id(player_id)
-    if ma_group and ma_group.get("name"):
-        status["group_name"] = ma_group["name"]
-    if ma_group and ma_group.get("id"):
-        status["ma_syncgroup_id"] = ma_group["id"]
-    elif status.get("group_id"):
-        ma_group_by_id = state.get_ma_group_by_id(status["group_id"])
-        if ma_group_by_id and ma_group_by_id.get("id"):
-            status["ma_syncgroup_id"] = ma_group_by_id["id"]
-    # Per-device MA now-playing: prefer id-matched syncgroup, then Sendspin-reported
-    # group_id (which IS the MA syncgroup id), then solo player_id queue
-    if ma_group:
-        status["ma_now_playing"] = get_ma_now_playing_for_group(ma_group["id"])
-    else:
-        dev_group_id: str = status.get("group_id", "")
-        status["ma_now_playing"] = (
-            get_ma_now_playing_for_group(dev_group_id) or get_ma_now_playing_for_group(player_id) or {}
-        )
 
 
 def _parse_sink_input_id(line: str) -> str | None:
@@ -278,6 +258,54 @@ def api_runtime_info():
     return jsonify(build_mock_runtime_snapshot().to_dict())
 
 
+@status_bp.route("/api/bridge/telemetry")
+def api_bridge_telemetry():
+    """Return bridge resource telemetry and runtime-scoped hook activity."""
+    return jsonify(_build_bridge_telemetry_payload())
+
+
+@status_bp.route("/api/hooks")
+def api_hook_registry_status():
+    """Return registered runtime webhooks and recent delivery results."""
+    return jsonify(get_event_hook_registry().snapshot())
+
+
+@status_bp.route("/api/hooks", methods=["POST"])
+def api_hook_register():
+    """Register a runtime-scoped webhook for bridge or device events."""
+    payload = request.get_json(silent=True) or {}
+    if not isinstance(payload, dict):
+        return jsonify({"error": "Invalid JSON body"}), 400
+    timeout_raw = payload.get("timeout_sec")
+    if timeout_raw in (None, ""):
+        timeout_sec = 5.0
+    elif isinstance(timeout_raw, (int, float, str)):
+        try:
+            timeout_sec = float(timeout_raw)
+        except (TypeError, ValueError) as exc:
+            return jsonify({"error": f"Invalid timeout_sec: {exc}"}), 400
+    else:
+        return jsonify({"error": "Invalid timeout_sec: must be a number"}), 400
+    try:
+        hook = get_event_hook_registry().register(
+            url=str(payload.get("url") or ""),
+            categories=payload.get("categories") if isinstance(payload.get("categories"), list) else None,
+            event_types=payload.get("event_types") if isinstance(payload.get("event_types"), list) else None,
+            timeout_sec=timeout_sec,
+        )
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"success": True, "hook": hook}), 201
+
+
+@status_bp.route("/api/hooks/<hook_id>", methods=["DELETE"])
+def api_hook_unregister(hook_id: str):
+    """Remove a runtime-scoped webhook subscription."""
+    if not get_event_hook_registry().unregister(hook_id):
+        return jsonify({"error": "Hook not found"}), 404
+    return jsonify({"success": True})
+
+
 @status_bp.route("/api/status/stream")
 def api_status_stream():
     """Server-Sent Events endpoint — pushes status when it changes.
@@ -427,9 +455,8 @@ def api_diagnostics():
 
         device_diag = []
         registry = get_device_registry_snapshot()
-        snapshot = registry.active_clients
-        for client in snapshot:
-            device = build_device_snapshot(client)
+        snapshot_pairs = build_device_snapshot_pairs(registry.active_clients)
+        for _client, device in snapshot_pairs:
             device_diag.append(
                 {
                     "name": device.player_name or "Unknown",
@@ -450,28 +477,33 @@ def api_diagnostics():
         ma_groups = state.get_ma_groups()
 
         # Build a player_id→client lookup for matching MA members to bridge devices
-        bridge_by_id = {getattr(c, "player_id", ""): c for c in snapshot if getattr(c, "player_id", "")}
+        bridge_by_id = {
+            getattr(client, "player_id", ""): (client, device)
+            for client, device in snapshot_pairs
+            if getattr(client, "player_id", "")
+        }
 
         enriched_groups = []
         for g in ma_groups:
             members_detail = []
             for m in g.get("members", []):
                 mid = m.get("id", "")
-                bridge_client = bridge_by_id.get(mid)
+                bridge_entry = bridge_by_id.get(mid)
                 member_info: dict = {
                     "id": mid,
                     "name": m.get("name", m.get("id", "")),
                     "state": m.get("state"),
                     "volume": m.get("volume"),
                     "available": m.get("available", True),
-                    "is_bridge": bridge_client is not None,
+                    "is_bridge": bridge_entry is not None,
                 }
-                if bridge_client:
+                if bridge_entry:
+                    bridge_client, bridge_device = bridge_entry
                     member_info["enabled"] = getattr(bridge_client, "bt_management_enabled", True)
-                    member_info["bt_connected"] = bridge_client.status.get("bluetooth_connected", False)
-                    member_info["server_connected"] = bridge_client.status.get("server_connected", False)
-                    member_info["playing"] = bridge_client.status.get("playing", False)
-                    member_info["sink"] = getattr(bridge_client, "bluetooth_sink_name", None)
+                    member_info["bt_connected"] = bridge_device.bluetooth_connected
+                    member_info["server_connected"] = bridge_device.server_connected
+                    member_info["playing"] = bridge_device.playing
+                    member_info["sink"] = bridge_device.sink_name
                     member_info["bt_mac"] = (
                         getattr(bridge_client.bt_manager, "mac_address", None) if bridge_client.bt_manager else None
                     )
@@ -550,7 +582,15 @@ def api_diagnostics():
             diag["portaudio_devices"] = [{"error": "Failed to list PortAudio devices"}]
 
         diag["subprocesses"] = _collect_subprocess_info()
+        diag["event_hooks"] = get_event_hook_registry().snapshot()
         diag["onboarding_assistant"] = _build_onboarding_assistant_payload()
+        diag["telemetry"] = _build_bridge_telemetry_payload(
+            environment=diag["environment"],
+            subprocesses=diag["subprocesses"],
+            startup_progress=diag["startup_progress"],
+            runtime_info=diag["runtime_info"],
+            event_hooks=diag["event_hooks"],
+        )
 
         return jsonify(diag)
     except Exception:
@@ -678,8 +718,59 @@ def _collect_subprocess_info() -> list[dict]:
             entry["reconnect_attempt"] = status.get("reconnect_attempt", 0)
             entry["last_error"] = status.get("last_error")
             entry["last_error_at"] = status.get("last_error_at")
+        entry["process_rss_mb"] = _collect_process_rss_mb(entry["pid"])
         info.append(entry)
     return info
+
+
+def _collect_process_rss_mb(pid: int | None) -> float | None:
+    if not pid:
+        return None
+    try:
+        result = subprocess.run(
+            ["ps", "-o", "rss=", "-p", str(pid)],
+            capture_output=True,
+            text=True,
+            timeout=3,
+        )
+        if result.returncode != 0:
+            return None
+        rss_kb = int(result.stdout.strip() or "0")
+    except (OSError, ValueError):
+        return None
+    return round(rss_kb / 1024, 1)
+
+
+def _build_bridge_telemetry_payload(
+    *,
+    environment: dict | None = None,
+    subprocesses: list[dict] | None = None,
+    startup_progress: dict | None = None,
+    runtime_info: dict | None = None,
+    event_hooks: dict | None = None,
+) -> dict:
+    environment = _collect_environment() if environment is None else environment
+    subprocesses = _collect_subprocess_info() if subprocesses is None else subprocesses
+    startup_progress = build_startup_progress_snapshot().to_dict() if startup_progress is None else startup_progress
+    runtime_info = build_mock_runtime_snapshot().to_dict() if runtime_info is None else runtime_info
+    event_hooks = get_event_hook_registry().snapshot() if event_hooks is None else event_hooks
+    uptime_seconds = round((datetime.now(tz=UTC) - state.bridge_start_time).total_seconds(), 1)
+    return {
+        "bridge": {
+            "uptime_seconds": uptime_seconds,
+            "process_rss_mb": environment.get("process_rss_mb"),
+            "python": environment.get("python"),
+            "platform": environment.get("platform"),
+            "arch": environment.get("arch"),
+            "kernel": environment.get("kernel"),
+            "audio_server": environment.get("audio_server"),
+            "bluez": environment.get("bluez"),
+        },
+        "startup_progress": startup_progress,
+        "runtime_info": runtime_info,
+        "subprocesses": subprocesses,
+        "event_hooks": event_hooks,
+    }
 
 
 def _sanitized_config() -> dict:
@@ -689,12 +780,7 @@ def _sanitized_config() -> dict:
     except Exception:
         return {"error": "could not load config"}
 
-    redacted_keys = {
-        "AUTH_PASSWORD_HASH",
-        "SECRET_KEY",
-        "MA_API_TOKEN",
-        "LAST_VOLUMES",
-    }
+    redacted_keys = SENSITIVE_CONFIG_KEYS | RUNTIME_STATE_CONFIG_KEYS
     result: dict = {}
     for k, v in cfg.items():
         if k in redacted_keys:

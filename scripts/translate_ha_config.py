@@ -28,12 +28,15 @@ def _load_config_helpers() -> Callable[[], str]:
     repo_root = Path(__file__).resolve().parents[1]
     if str(repo_root) not in sys.path:
         sys.path.insert(0, str(repo_root))
+    from config import CONFIG_SCHEMA_VERSION
     from services.ha_addon import get_self_delivery_channel
 
+    globals()["CONFIG_SCHEMA_VERSION"] = CONFIG_SCHEMA_VERSION
     return get_self_delivery_channel
 
 
 get_self_delivery_channel = _load_config_helpers()
+CONFIG_SCHEMA_VERSION = globals()["CONFIG_SCHEMA_VERSION"]
 
 logger = logging.getLogger(__name__)
 
@@ -129,6 +132,7 @@ def main() -> None:
     adapters = _merge_adapters(detected, raw_adapters)
 
     config: dict = {
+        "CONFIG_SCHEMA_VERSION": CONFIG_SCHEMA_VERSION,
         "SENDSPIN_SERVER": str(opts.get("sendspin_server") or "auto"),
         "SENDSPIN_PORT": _int_opt(opts, "sendspin_port", 9000),
         "WEB_PORT": None,
@@ -160,8 +164,13 @@ def main() -> None:
             existing: dict = json.load(f)
         if "LAST_VOLUMES" in existing:
             config["LAST_VOLUMES"] = existing["LAST_VOLUMES"]
+        if "LAST_SINKS" in existing:
+            config["LAST_SINKS"] = existing["LAST_SINKS"]
         for key in ("AUTH_PASSWORD_HASH", "SECRET_KEY"):
             if key in existing:
+                config[key] = existing[key]
+        for key in ("MA_ACCESS_TOKEN", "MA_REFRESH_TOKEN"):
+            if existing.get(key):
                 config[key] = existing[key]
         # Preserve MA API credentials if not overridden via HA addon options
         for key in ("MA_API_URL", "MA_API_TOKEN"):

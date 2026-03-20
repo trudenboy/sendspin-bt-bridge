@@ -25,6 +25,7 @@ from services.pulse import (
     set_sink_mute,
     set_sink_volume,
 )
+from services.status_snapshot import build_device_snapshot_pairs
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +83,42 @@ def _schedule_volume_persist(mac: str, volume: int) -> None:
         t.daemon = True
         _volume_timers[mac] = t
         t.start()
+
+
+def _select_target_pairs(clients, *, group_id=None, player_names=None, player_name=None):
+    """Return `(client, snapshot)` pairs matching the request target selectors."""
+    target_pairs = build_device_snapshot_pairs(clients)
+    if group_id is not None:
+        return [(client, device) for client, device in target_pairs if device.extra.get("group_id") == group_id]
+    if player_names is not None:
+        return [
+            (client, device) for client, device in target_pairs if getattr(client, "player_name", None) in player_names
+        ]
+    if player_name:
+        return [
+            (client, device) for client, device in target_pairs if getattr(client, "player_name", None) == player_name
+        ]
+    return target_pairs
+
+
+def _ensure_target_pairs(targets):
+    """Normalize legacy client lists and snapshot-pair lists to `(client, snapshot)` pairs."""
+    if not targets:
+        return []
+    first = targets[0]
+    if isinstance(first, tuple) and len(first) == 2:
+        return list(targets)
+    target_pairs = build_device_snapshot_pairs(list(targets))
+    for client, device in target_pairs:
+        status_get = getattr(getattr(client, "status", None), "get", None)
+        if not callable(status_get):
+            continue
+        for key in ("group_id", "group_name", "muted"):
+            if device.extra.get(key) is None:
+                value = status_get(key)
+                if value is not None:
+                    device.extra[key] = value
+    return target_pairs
 
 
 # ---------------------------------------------------------------------------
@@ -156,7 +193,7 @@ def api_restart():
 # ---------------------------------------------------------------------------
 
 
-def _set_volume_via_ma(targets, volume: int, *, is_group: bool = False) -> bool:
+def _set_volume_via_ma(target_pairs, volume: int, *, is_group: bool = False) -> bool:
     """Proxy volume change through MA WebSocket API.
 
     For group requests (is_group=True), uses ``players/cmd/group_volume``
@@ -170,12 +207,13 @@ def _set_volume_via_ma(targets, volume: int, *, is_group: bool = False) -> bool:
     loop = state.get_main_loop()
     if not loop:
         return False
+    target_pairs = _ensure_target_pairs(target_pairs)
 
-    if is_group and targets:
+    if is_group and target_pairs:
         # Group volume: send one group_volume per unique sync group
         seen_groups: set[str] = set()
-        for client in targets:
-            gid = client.status.get("group_id")
+        for client, device in target_pairs:
+            gid = device.extra.get("group_id")
             if not gid or gid in seen_groups:
                 continue
             seen_groups.add(gid)
@@ -194,7 +232,7 @@ def _set_volume_via_ma(targets, volume: int, *, is_group: bool = False) -> bool:
         return bool(seen_groups)
 
     # Individual / all: flat volume_set for each target
-    for client in targets:
+    for client, _device in target_pairs:
         pid = getattr(client, "player_id", None)
         if not pid:
             continue
@@ -208,18 +246,19 @@ def _set_volume_via_ma(targets, volume: int, *, is_group: bool = False) -> bool:
         except Exception:
             logger.debug("MA volume_set failed for %s", pid, exc_info=True)
             return False
-    return bool(targets)
+    return bool(target_pairs)
 
 
-def _set_mute_via_ma(targets, muted: bool) -> bool:
+def _set_mute_via_ma(target_pairs, muted: bool) -> bool:
     """Proxy mute change through MA WebSocket API."""
     from services.ma_monitor import send_player_cmd
 
     loop = state.get_main_loop()
     if not loop:
         return False
+    target_pairs = _ensure_target_pairs(target_pairs)
 
-    for client in targets:
+    for client, _device in target_pairs:
         pid = getattr(client, "player_id", None)
         if not pid:
             continue
@@ -233,7 +272,7 @@ def _set_mute_via_ma(targets, muted: bool) -> bool:
         except Exception:
             logger.debug("MA volume_mute failed for %s", pid, exc_info=True)
             return False
-    return bool(targets)
+    return bool(target_pairs)
 
 
 @api_bp.route("/api/volume", methods=["POST"])
@@ -260,18 +299,17 @@ def set_volume():
         force_local = data.get("force_local", False)
 
         snapshot = get_device_registry_snapshot().active_clients
-        if group_id is not None:
-            targets = [c for c in snapshot if c.status.get("group_id") == group_id]
-        elif player_names is not None:
-            targets = [c for c in snapshot if getattr(c, "player_name", None) in player_names]
-        elif player_name:
-            targets = [c for c in snapshot if getattr(c, "player_name", None) == player_name]
-        else:
-            targets = snapshot
+        target_pairs = _select_target_pairs(
+            snapshot,
+            group_id=group_id,
+            player_names=player_names,
+            player_name=player_name,
+        )
+        targets = [client for client, _device in target_pairs]
 
         # --- MA path: proxy through MA API when connected ---
         if not force_local and get_volume_via_ma() and state.is_ma_connected() and targets:
-            ma_ok = _set_volume_via_ma(targets, volume, is_group=is_group)
+            ma_ok = _set_volume_via_ma(target_pairs, volume, is_group=is_group)
             if ma_ok:
                 # Do NOT update local status — bridge_daemon will receive the
                 # VolumeChanged echo from MA via sendspin protocol, apply pactl,
@@ -280,7 +318,7 @@ def set_volume():
                 # However, devices NOT in a MA sync group won't receive the
                 # echo.  Apply volume locally for those orphan devices.
                 if is_group:
-                    orphans = [c for c in targets if not c.status.get("group_id")]
+                    orphans = [client for client, device in target_pairs if not device.extra.get("group_id")]
                     for client in orphans:
                         if client.bluetooth_sink_name:
                             ok = set_sink_volume(client.bluetooth_sink_name, volume)
@@ -348,18 +386,18 @@ def set_mute():
         force_local = data.get("force_local", False)
 
         snapshot = get_device_registry_snapshot().active_clients
-        if player_names is not None:
-            targets = [c for c in snapshot if getattr(c, "player_name", None) in player_names]
-        elif player_name:
-            targets = [c for c in snapshot if getattr(c, "player_name", None) == player_name]
-        else:
-            targets = snapshot[:1]
+        target_pairs = _select_target_pairs(snapshot, player_names=player_names, player_name=player_name)
+        if player_names is None and not player_name:
+            target_pairs = target_pairs[:1]
+        targets = [client for client, _device in target_pairs]
+        target_snapshot_map = {id(client): device for client, device in target_pairs}
 
         # --- MA path ---
         if not force_local and get_mute_via_ma() and state.is_ma_connected() and targets:
             # Resolve desired mute state
-            desired = bool(mute_value) if mute_value is not None else not targets[0].status.get("muted", False)
-            if _set_mute_via_ma(targets, desired):
+            current_muted = bool(target_pairs[0][1].extra.get("muted", False)) if target_pairs else False
+            desired = bool(mute_value) if mute_value is not None else not current_muted
+            if _set_mute_via_ma(target_pairs, desired):
                 # Also apply to PulseAudio sink so audio actually mutes/unmutes
                 for client in targets:
                     if client.bluetooth_sink_name:
@@ -377,7 +415,9 @@ def set_mute():
                 if ok:
                     muted = get_sink_mute(client.bluetooth_sink_name)
                     if muted is None:
-                        muted = bool(mute_value) if mute_value is not None else not client.status.get("muted", False)
+                        snapshot_device = target_snapshot_map.get(id(client))
+                        current_muted = bool(snapshot_device.extra.get("muted", False)) if snapshot_device else False
+                        muted = bool(mute_value) if mute_value is not None else not current_muted
                     client._update_status({"muted": muted})
                     if loop:
                         _submit_loop_coroutine(
@@ -425,15 +465,15 @@ def pause_all():
 
     count = 0
 
-    snapshot = get_device_registry_snapshot().active_clients
+    snapshot_pairs = build_device_snapshot_pairs(get_device_registry_snapshot().active_clients)
 
     if action == "pause":
         # One pause command per unique Sendspin session group (MA propagates to all members)
         seen_groups: set = set()
-        for client in snapshot:
+        for client, device in snapshot_pairs:
             if not client.is_running():
                 continue
-            gid = client.status.get("group_id")
+            gid = device.extra.get("group_id")
             if gid:
                 if gid in seen_groups:
                     continue
@@ -453,7 +493,7 @@ def pause_all():
         seen_ma_syncgroups: set = set()
         seen_session_groups: set = set()
 
-        for client in snapshot:
+        for client, device in snapshot_pairs:
             if not client.is_running():
                 continue
 
@@ -478,7 +518,7 @@ def pause_all():
                         continue  # already sent for this MA syncgroup
 
             # Fallback: Sendspin session-group command (one per session group or solo)
-            gid = client.status.get("group_id")
+            gid = device.extra.get("group_id")
             if gid:
                 if gid in seen_session_groups:
                     continue
@@ -518,13 +558,18 @@ def api_group_pause():
         return jsonify({"success": False, "error": "Event loop not available"}), 503
 
     # Find one running member of the specified group
-    snapshot = get_device_registry_snapshot().active_clients
-    target = next(
-        (c for c in snapshot if c.is_running() and c.status.get("group_id") == group_id),
+    snapshot_pairs = build_device_snapshot_pairs(get_device_registry_snapshot().active_clients)
+    target_pair = next(
+        (
+            (client, device)
+            for client, device in snapshot_pairs
+            if client.is_running() and device.extra.get("group_id") == group_id
+        ),
         None,
     )
-    if not target:
+    if not target_pair:
         return jsonify({"success": False, "error": "Group not found or no running members"}), 404
+    target, target_device = target_pair
 
     # For play: prefer MA API so the persistent syncgroup resumes all members in sync
     if action == "play":
@@ -558,7 +603,7 @@ def api_group_pause():
         )
         if not scheduled:
             return jsonify({"success": False, "error": "Could not schedule command"}), 503
-        group_name = target.status.get("group_name")
+        group_name = target_device.extra.get("group_name")
         return jsonify({"success": True, "action": action, "group_id": group_id, "group_name": group_name})
     except Exception:
         logger.exception("Group pause/play failed")

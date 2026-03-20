@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 import state as _state
+from services.device_registry import set_active_clients, set_disabled_devices
 
 
 class BridgeLifecycleState:
@@ -29,6 +30,7 @@ class BridgeLifecycleState:
             current_step=1,
             details={"demo_mode": demo_mode},
         )
+        _state.publish_bridge_event("bridge.startup.started", payload={"demo_mode": demo_mode})
 
     def publish_main_loop(self, loop, *, web_thread_name: str = "") -> None:
         """Publish the main event loop and web readiness progress."""
@@ -42,7 +44,7 @@ class BridgeLifecycleState:
 
     def publish_clients(self, clients: list[Any]) -> None:
         """Publish active clients for route and UI access."""
-        _state.set_clients(clients)
+        set_active_clients(clients)
 
     def publish_runtime_prepared(
         self,
@@ -71,7 +73,7 @@ class BridgeLifecycleState:
         disabled_devices: list[dict[str, Any]],
     ) -> None:
         """Publish device registry inventory and related startup progress."""
-        _state.set_disabled_devices(disabled_devices)
+        set_disabled_devices(disabled_devices)
         _state.update_startup_progress(
             "devices",
             "Device registry prepared",
@@ -110,6 +112,23 @@ class BridgeLifecycleState:
             },
         )
 
+    def publish_startup_failure(
+        self,
+        message: str,
+        *,
+        phase: str,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        """Mark startup as failed with an explicit lifecycle phase marker."""
+        payload = {"startup_phase": phase}
+        if details:
+            payload.update(details)
+        _state.fail_startup_progress(message, details=payload)
+        _state.publish_bridge_event(
+            "bridge.startup.failed",
+            payload={"message": message, "startup_phase": phase, **payload},
+        )
+
     def complete_startup(
         self,
         *,
@@ -126,3 +145,36 @@ class BridgeLifecycleState:
                 "demo_mode": demo_mode,
             },
         )
+        _state.publish_bridge_event(
+            "bridge.startup.completed",
+            payload={
+                "active_clients": len(active_clients),
+                "ma_monitor_enabled": monitor_enabled,
+                "demo_mode": demo_mode,
+            },
+        )
+
+    def publish_shutdown_started(self, *, active_clients: int) -> None:
+        """Mark bridge shutdown as in progress with explicit lifecycle metadata."""
+        _state.update_startup_progress(
+            "shutdown",
+            "Shutdown in progress",
+            current_step=self.startup_steps,
+            total_steps=self.startup_steps,
+            status="stopping",
+            details={"active_clients": active_clients},
+        )
+        _state.publish_bridge_event("bridge.shutdown.started", payload={"active_clients": active_clients})
+
+    def publish_shutdown_complete(self, *, stopped_clients: int) -> None:
+        """Mark bridge shutdown as complete and clear loop publication."""
+        _state.set_main_loop(None)
+        _state.update_startup_progress(
+            "shutdown",
+            "Shutdown complete",
+            current_step=self.startup_steps,
+            total_steps=self.startup_steps,
+            status="stopped",
+            details={"stopped_clients": stopped_clients},
+        )
+        _state.publish_bridge_event("bridge.shutdown.completed", payload={"stopped_clients": stopped_clients})

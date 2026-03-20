@@ -5,6 +5,7 @@ import time
 import uuid
 
 import state
+from services.device_registry import set_active_clients
 
 
 def test_get_status_version_initial():
@@ -92,6 +93,19 @@ def test_get_nonexistent_job():
 def test_get_nonexistent_async_job():
     job_id = str(uuid.uuid4())
     assert state.get_async_job(job_id) is None
+
+
+def test_state_client_aliases_follow_registry_updates():
+    client = object()
+
+    set_active_clients([client])
+
+    assert state.get_clients_snapshot() == [client]
+    with state.clients_lock:
+        assert state.clients == [client]
+
+    set_active_clients([])
+    assert state.get_clients_snapshot() == []
 
 
 # ---------------------------------------------------------------------------

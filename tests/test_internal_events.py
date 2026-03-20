@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import state
-from services.internal_events import InternalEventPublisher
+from services.internal_events import DeviceEventType, InternalEventPublisher, normalize_device_event
 
 
 def test_internal_event_publisher_notifies_subscribers():
@@ -44,3 +44,18 @@ def test_publish_device_event_persists_through_state_event_bus():
     assert stored[0]["level"] == "error"
     assert stored[0]["message"] == "Route degraded"
     assert stored[0]["details"] == {"last_error_at": "2026-03-18T09:00:00+00:00"}
+
+
+def test_normalize_device_event_applies_defaults_and_drops_none_details():
+    normalized = normalize_device_event(
+        DeviceEventType.BLUETOOTH_RECONNECTED,
+        message="Bluetooth reconnect succeeded",
+        details={"attempt": 2, "next_retry_delay": None},
+    )
+
+    assert normalized == {
+        "event_type": "bluetooth-reconnected",
+        "level": "info",
+        "message": "Bluetooth reconnect succeeded",
+        "details": {"attempt": 2},
+    }

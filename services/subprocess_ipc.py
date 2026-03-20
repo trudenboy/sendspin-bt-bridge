@@ -6,7 +6,15 @@ import json
 import logging
 from typing import TYPE_CHECKING, Any
 
-from services.ipc_protocol import IPC_PROTOCOL_VERSION, IPC_PROTOCOL_VERSION_KEY, parse_protocol_version
+from services.ipc_protocol import (
+    IPC_PROTOCOL_VERSION,
+    IPC_PROTOCOL_VERSION_KEY,
+    coerce_message_dict,
+    parse_error_envelope,
+    parse_log_envelope,
+    parse_protocol_version,
+    parse_status_envelope,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -50,36 +58,33 @@ class SubprocessIpcService:
     def parse_line(self, line: bytes) -> dict[str, Any] | None:
         """Decode one stdout line into a JSON message if possible."""
         try:
-            return json.loads(line.decode().strip())
+            return coerce_message_dict(json.loads(line.decode().strip()))
         except (json.JSONDecodeError, ValueError):
             return None
 
     def handle_message(self, msg: dict[str, Any]) -> dict[str, Any] | None:
         """Dispatch one parsed IPC message and return status updates if present."""
         self._warn_incompatible_protocol(msg.get(IPC_PROTOCOL_VERSION_KEY))
-        if msg.get("type") == "status":
-            updates = {k: v for k, v in msg.items() if k in self._allowed_keys}
-            if updates:
-                self._status_updater(updates)
-            return updates
-        if msg.get("type") == "error":
-            message = str(msg.get("message", "")).strip()
-            raw_details = msg.get("details")
-            details: dict[str, Any]
-            if isinstance(raw_details, dict):
-                details = raw_details
-            else:
-                details = {}
+        status_envelope = parse_status_envelope(msg, allowed_keys=self._allowed_keys)
+        if status_envelope is not None:
+            if status_envelope.updates:
+                self._status_updater(status_envelope.updates)
+            return status_envelope.updates
+
+        error_envelope = parse_error_envelope(msg)
+        if error_envelope is not None:
             updates = {
-                "last_error": message,
-                "last_error_at": details.get("at"),
+                "last_error": error_envelope.message,
+                "last_error_at": error_envelope.details.get("at"),
             }
             self._status_updater(updates)
-            self._logger.error("[%s/proc] %s", self.player_name, message)
+            self._logger.error("[%s/proc] %s", self.player_name, error_envelope.message)
             return updates
-        if msg.get("type") == "log":
-            log_fn = self._log_methods.get(str(msg.get("level", "info")), self._logger.info)
-            log_fn("[%s/proc] %s", self.player_name, msg.get("msg", ""))
+
+        log_envelope = parse_log_envelope(msg)
+        if log_envelope is not None:
+            log_fn = self._log_methods.get(log_envelope.level, self._logger.info)
+            log_fn("[%s/proc] %s", self.player_name, log_envelope.msg)
         return None
 
     def _warn_incompatible_protocol(self, value: object) -> None:

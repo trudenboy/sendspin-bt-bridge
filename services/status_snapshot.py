@@ -229,20 +229,52 @@ def _get_device_event_id(client, device: DeviceSnapshot) -> str:
     return str(device.player_name or "")
 
 
+def _append_reason(reasons: list[str], reason: str) -> None:
+    if reason and reason not in reasons:
+        reasons.append(reason)
+
+
+def _derive_event_reasons(events: list[dict[str, Any]]) -> list[str]:
+    reasons: list[str] = []
+    if not events:
+        return reasons
+    event_types = [str(event.get("event_type") or "") for event in events]
+    if "runtime-error" in event_types:
+        _append_reason(reasons, "recent_runtime_error")
+    if "bluetooth-reconnect-failed" in event_types:
+        _append_reason(reasons, "recent_reconnect_failure")
+    if event_types.count("bluetooth-reconnect-failed") >= 2:
+        _append_reason(reasons, "repeated_reconnect_failures")
+    if "bluetooth-reconnected" in event_types or "reconnecting" in event_types:
+        _append_reason(reasons, "recent_reconnect_activity")
+    if "audio-stream-stalled" in event_types:
+        _append_reason(reasons, "recent_audio_stall")
+    if "reanchoring" in event_types:
+        _append_reason(reasons, "recent_reanchor")
+    if "bt-management-disabled" in event_types:
+        _append_reason(reasons, "management_auto_disabled")
+    if "ma-monitor-stale" in event_types:
+        _append_reason(reasons, "ma_monitor_stale")
+    return reasons
+
+
 def _build_health_summary(device: DeviceSnapshot) -> DeviceHealthSummary:
     reasons: list[str] = []
+    event_reasons = _derive_event_reasons(device.recent_events)
 
     if not device.bt_management_enabled:
         return DeviceHealthSummary(
             state="disabled",
             severity="info",
             summary="Bluetooth management disabled",
-            reasons=["bt_management_disabled"],
+            reasons=["bt_management_disabled", *event_reasons],
             last_event_at=device.recent_events[0]["at"] if device.recent_events else None,
         )
 
     if device.extra.get("last_error"):
-        reasons.append("last_error")
+        _append_reason(reasons, "last_error")
+        for reason in event_reasons:
+            _append_reason(reasons, reason)
         return DeviceHealthSummary(
             state="degraded",
             severity="error",
@@ -253,7 +285,9 @@ def _build_health_summary(device: DeviceSnapshot) -> DeviceHealthSummary:
         )
 
     if device.extra.get("stopping"):
-        reasons.append("stopping")
+        _append_reason(reasons, "stopping")
+        for reason in event_reasons:
+            _append_reason(reasons, reason)
         return DeviceHealthSummary(
             state="transitioning",
             severity="info",
@@ -263,7 +297,9 @@ def _build_health_summary(device: DeviceSnapshot) -> DeviceHealthSummary:
         )
 
     if device.extra.get("reconnecting"):
-        reasons.append("reconnecting")
+        _append_reason(reasons, "reconnecting")
+        for reason in event_reasons:
+            _append_reason(reasons, reason)
         return DeviceHealthSummary(
             state="recovering",
             severity="warning",
@@ -273,7 +309,9 @@ def _build_health_summary(device: DeviceSnapshot) -> DeviceHealthSummary:
         )
 
     if device.extra.get("reanchoring"):
-        reasons.append("reanchoring")
+        _append_reason(reasons, "reanchoring")
+        for reason in event_reasons:
+            _append_reason(reasons, reason)
         return DeviceHealthSummary(
             state="recovering",
             severity="warning",
@@ -283,7 +321,9 @@ def _build_health_summary(device: DeviceSnapshot) -> DeviceHealthSummary:
         )
 
     if not device.bluetooth_connected:
-        reasons.append("bluetooth_disconnected")
+        _append_reason(reasons, "bluetooth_disconnected")
+        for reason in event_reasons:
+            _append_reason(reasons, reason)
         return DeviceHealthSummary(
             state="offline",
             severity="warning",
@@ -293,7 +333,9 @@ def _build_health_summary(device: DeviceSnapshot) -> DeviceHealthSummary:
         )
 
     if not device.server_connected:
-        reasons.append("daemon_disconnected")
+        _append_reason(reasons, "daemon_disconnected")
+        for reason in event_reasons:
+            _append_reason(reasons, reason)
         return DeviceHealthSummary(
             state="degraded",
             severity="warning",
@@ -303,7 +345,9 @@ def _build_health_summary(device: DeviceSnapshot) -> DeviceHealthSummary:
         )
 
     if device.playing and not device.extra.get("audio_streaming", False):
-        reasons.append("playback_without_audio")
+        _append_reason(reasons, "playback_without_audio")
+        for reason in event_reasons:
+            _append_reason(reasons, reason)
         return DeviceHealthSummary(
             state="degraded",
             severity="warning",
@@ -317,6 +361,7 @@ def _build_health_summary(device: DeviceSnapshot) -> DeviceHealthSummary:
             state="streaming",
             severity="info",
             summary="Streaming audio",
+            reasons=event_reasons,
             last_event_at=device.recent_events[0]["at"] if device.recent_events else None,
         )
 
@@ -324,6 +369,7 @@ def _build_health_summary(device: DeviceSnapshot) -> DeviceHealthSummary:
         state="ready" if device.connected else "idle",
         severity="info",
         summary="Connected and ready" if device.connected else "Idle",
+        reasons=event_reasons,
         last_event_at=device.recent_events[0]["at"] if device.recent_events else None,
     )
 
@@ -367,6 +413,11 @@ def build_mock_runtime_snapshot() -> MockRuntimeSnapshot:
         details=dict(runtime_info.get("details") or {}),
         updated_at=runtime_info.get("updated_at"),
     )
+
+
+def build_device_snapshot_pairs(clients: list[Any]) -> list[tuple[Any, DeviceSnapshot]]:
+    """Build `(client, snapshot)` pairs for routes that need reads plus runtime objects."""
+    return [(client, build_device_snapshot(client)) for client in clients]
 
 
 def build_device_snapshot(client) -> DeviceSnapshot:
@@ -472,13 +523,16 @@ def build_device_snapshot(client) -> DeviceSnapshot:
     return device
 
 
-def build_group_snapshots(clients: list[Any]) -> list[GroupSnapshot]:
+def build_group_snapshots(
+    clients: list[Any],
+    *,
+    snapshot_pairs: list[tuple[Any, DeviceSnapshot]] | None = None,
+) -> list[GroupSnapshot]:
     """Build normalized group snapshots from the current client list."""
     groups: dict[str | None, dict[str, Any]] = {}
     solo_counter = 0
 
-    for client in clients:
-        device = build_device_snapshot(client)
+    for client, device in snapshot_pairs or build_device_snapshot_pairs(clients):
         status = device.extra
         group_id = status.get("group_id")
         key = group_id if group_id is not None else f"__solo_{solo_counter}"
@@ -594,10 +648,11 @@ def build_bridge_snapshot(clients: list[Any]) -> BridgeSnapshot:
             error="No clients",
         )
 
-    devices = [build_device_snapshot(client) for client in clients]
+    snapshot_pairs = build_device_snapshot_pairs(clients)
+    devices = [device for _client, device in snapshot_pairs]
     return BridgeSnapshot(
         devices=devices,
-        groups=build_group_snapshots(clients),
+        groups=build_group_snapshots(clients, snapshot_pairs=snapshot_pairs),
         ma_connected=state.is_ma_connected(),
         ma_web_url=ma_url or None,
         disabled_devices=state.get_disabled_devices(),

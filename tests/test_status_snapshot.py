@@ -3,7 +3,12 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import state
-from services.status_snapshot import build_bridge_snapshot, build_device_snapshot, build_group_snapshots
+from services.status_snapshot import (
+    build_bridge_snapshot,
+    build_device_snapshot,
+    build_device_snapshot_pairs,
+    build_group_snapshots,
+)
 
 UTC = timezone.utc
 
@@ -89,6 +94,7 @@ def test_build_device_snapshot_includes_recent_events_and_health_summary():
         assert data["health_summary"]["state"] == "degraded"
         assert data["health_summary"]["severity"] == "error"
         assert "last_error" in data["health_summary"]["reasons"]
+        assert "recent_runtime_error" in data["health_summary"]["reasons"]
     finally:
         state.clear_device_events(client.player_id)
 
@@ -111,6 +117,33 @@ def test_build_device_snapshot_reports_stopping_transition():
     assert data["health_summary"]["state"] == "transitioning"
     assert data["health_summary"]["summary"] == "Stopping playback service"
     assert "stopping" in data["health_summary"]["reasons"]
+
+
+def test_build_device_snapshot_surfaces_recent_event_reasons_when_ready():
+    client = _make_client()
+    state.clear_device_events(client.player_id)
+    state.record_device_event(client.player_id, "bluetooth-reconnect-failed", details={"attempt": 2})
+    state.record_device_event(client.player_id, "ma-monitor-stale", details={"error": "connection lost"})
+    try:
+        snapshot = build_device_snapshot(client)
+        data = snapshot.to_dict()
+        assert data["health_summary"]["state"] == "ready"
+        assert "recent_reconnect_failure" in data["health_summary"]["reasons"]
+        assert "ma_monitor_stale" in data["health_summary"]["reasons"]
+    finally:
+        state.clear_device_events(client.player_id)
+
+
+def test_build_device_snapshot_pairs_return_client_and_snapshot_together():
+    client = _make_client(group_id="runtime-group-id")
+
+    pairs = build_device_snapshot_pairs([client])
+
+    assert len(pairs) == 1
+    returned_client, snapshot = pairs[0]
+    assert returned_client is client
+    assert snapshot.extra["group_id"] == "runtime-group-id"
+    assert snapshot.player_name == "Kitchen"
 
 
 def test_build_group_snapshots_merges_ma_syncgroup_members():

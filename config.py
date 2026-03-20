@@ -20,8 +20,9 @@ import tempfile
 import threading
 import time
 import uuid as _uuid
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -41,6 +42,7 @@ HA_ADDON_CHANNEL_DEFAULTS = {
 
 __all__ = [
     "BUILD_DATE",
+    "CONFIG_ALLOWED_KEYS",
     "CONFIG_DIR",
     "CONFIG_FILE",
     "CONFIG_SCHEMA_VERSION",
@@ -48,8 +50,12 @@ __all__ = [
     "DEFAULT_LISTEN_PORT_BASE",
     "DEFAULT_UPDATE_CHANNEL",
     "DEFAULT_WEB_PORT",
+    "RUNTIME_STATE_CONFIG_KEYS",
+    "SENSITIVE_CONFIG_KEYS",
     "UPDATE_CHANNELS",
     "VERSION",
+    "ConfigMigrationIssue",
+    "ConfigMigrationResult",
     "check_password",
     "config_lock",
     "detect_ha_addon_channel",
@@ -59,6 +65,7 @@ __all__ = [
     "hash_password",
     "is_ha_addon_runtime",
     "load_config",
+    "migrate_config_payload",
     "normalize_update_channel",
     "resolve_additional_web_port",
     "resolve_base_listen_port",
@@ -66,6 +73,7 @@ __all__ = [
     "save_device_sink",
     "save_device_volume",
     "update_config",
+    "write_config_file",
 ]
 
 DEFAULT_CONFIG = {
@@ -97,7 +105,10 @@ DEFAULT_CONFIG = {
     "LOG_LEVEL": "INFO",
     "MA_API_URL": "",
     "MA_API_TOKEN": "",
+    "MA_AUTH_PROVIDER": "",
     "MA_USERNAME": "",
+    "MA_ACCESS_TOKEN": "",
+    "MA_REFRESH_TOKEN": "",
     "MA_AUTO_SILENT_AUTH": True,
     "MA_WEBSOCKET_MONITOR": True,
     "VOLUME_VIA_MA": True,
@@ -114,6 +125,30 @@ logger = logging.getLogger(__name__)
 CONFIG_DIR = Path(os.getenv("CONFIG_DIR", "/config"))
 CONFIG_FILE = CONFIG_DIR / "config.json"
 config_lock = threading.Lock()  # serializes all config.json read-modify-write ops
+CONFIG_ALLOWED_KEYS = frozenset(DEFAULT_CONFIG)
+RUNTIME_STATE_CONFIG_KEYS = frozenset(("LAST_VOLUMES", "LAST_SINKS"))
+SENSITIVE_CONFIG_KEYS = frozenset(
+    (
+        "AUTH_PASSWORD_HASH",
+        "SECRET_KEY",
+        "MA_API_TOKEN",
+        "MA_ACCESS_TOKEN",
+        "MA_REFRESH_TOKEN",
+    )
+)
+
+
+@dataclass(frozen=True)
+class ConfigMigrationIssue:
+    field: str
+    message: str
+
+
+@dataclass
+class ConfigMigrationResult:
+    normalized_config: dict[str, Any]
+    warnings: list[ConfigMigrationIssue] = field(default_factory=list)
+    needs_persist: bool = False
 
 
 def _backup_corrupt_config() -> Path | None:
@@ -128,6 +163,18 @@ def _backup_corrupt_config() -> Path | None:
     except OSError as exc:
         logger.error("Could not back up corrupt config %s: %s", CONFIG_FILE, exc)
         return None
+
+
+def _read_raw_config_file() -> dict[str, Any]:
+    with open(CONFIG_FILE) as f:
+        data = json.load(f)
+    if not isinstance(data, dict):
+        raise ValueError("Config file must contain a JSON object")
+    return data
+
+
+def _filter_allowed_config_keys(config: dict[str, Any]) -> dict[str, Any]:
+    return {key: copy.deepcopy(value) for key, value in config.items() if key in CONFIG_ALLOWED_KEYS}
 
 
 def _normalize_int_setting(
@@ -319,6 +366,12 @@ def _normalize_bluetooth_devices(config: dict) -> list[dict]:
     return normalized_devices
 
 
+def _normalize_mac_key(raw_mac: object) -> str:
+    if not isinstance(raw_mac, str):
+        return ""
+    return raw_mac.strip().upper()
+
+
 def _prune_last_volumes(config: dict) -> None:
     last_volumes = config.get("LAST_VOLUMES", DEFAULT_CONFIG["LAST_VOLUMES"])
     if not isinstance(last_volumes, dict):
@@ -342,9 +395,37 @@ def _prune_last_volumes(config: dict) -> None:
     config["LAST_VOLUMES"] = sanitized
 
 
+def _prune_last_sinks(config: dict) -> None:
+    last_sinks = config.get("LAST_SINKS", DEFAULT_CONFIG["LAST_SINKS"])
+    if not isinstance(last_sinks, dict):
+        logger.warning("Invalid LAST_SINKS value %r in config; using default %r", last_sinks, {})
+        config["LAST_SINKS"] = {}
+        return
+
+    configured_macs = {
+        _normalize_mac_key(device.get("mac"))
+        for device in config.get("BLUETOOTH_DEVICES", [])
+        if isinstance(device, dict) and _normalize_mac_key(device.get("mac"))
+    }
+    sanitized: dict[str, str] = {}
+    for mac, sink_name in last_sinks.items():
+        normalized_mac = _normalize_mac_key(mac)
+        if not normalized_mac:
+            logger.warning("Ignoring non-string MAC key %r in LAST_SINKS", mac)
+            continue
+        if normalized_mac not in configured_macs:
+            continue
+        if not isinstance(sink_name, str) or not sink_name.strip():
+            logger.warning("Ignoring invalid saved sink %r for %s", sink_name, mac)
+            continue
+        sanitized[normalized_mac] = sink_name.strip()
+    config["LAST_SINKS"] = sanitized
+
+
 def _normalize_loaded_config(config: dict) -> None:
     config["BLUETOOTH_DEVICES"] = _normalize_bluetooth_devices(config)
     _prune_last_volumes(config)
+    _prune_last_sinks(config)
 
     for key, min_value, max_value in (
         ("SENDSPIN_PORT", 1, 65535),
@@ -391,6 +472,122 @@ def _normalize_loaded_config(config: dict) -> None:
             config[key] = []
 
 
+def migrate_config_payload(config: dict[str, Any]) -> ConfigMigrationResult:
+    normalized = _filter_allowed_config_keys(config)
+    warnings: list[ConfigMigrationIssue] = []
+    needs_persist = False
+
+    raw_schema_version = config.get("CONFIG_SCHEMA_VERSION")
+    try:
+        schema_version = int(str(raw_schema_version)) if raw_schema_version not in (None, "") else None
+    except (TypeError, ValueError):
+        schema_version = None
+        warnings.append(
+            ConfigMigrationIssue(
+                field="CONFIG_SCHEMA_VERSION",
+                message=f"Invalid CONFIG_SCHEMA_VERSION {raw_schema_version!r}; migrating to {CONFIG_SCHEMA_VERSION}",
+            )
+        )
+        needs_persist = True
+
+    if schema_version is None or schema_version < CONFIG_SCHEMA_VERSION:
+        if raw_schema_version in (None, ""):
+            warnings.append(
+                ConfigMigrationIssue(
+                    field="CONFIG_SCHEMA_VERSION",
+                    message=f"CONFIG_SCHEMA_VERSION missing; migrating to {CONFIG_SCHEMA_VERSION}",
+                )
+            )
+        elif schema_version is not None:
+            warnings.append(
+                ConfigMigrationIssue(
+                    field="CONFIG_SCHEMA_VERSION",
+                    message=f"Config schema v{schema_version} migrated to v{CONFIG_SCHEMA_VERSION}",
+                )
+            )
+        normalized["CONFIG_SCHEMA_VERSION"] = CONFIG_SCHEMA_VERSION
+        needs_persist = True
+    elif schema_version > CONFIG_SCHEMA_VERSION:
+        warnings.append(
+            ConfigMigrationIssue(
+                field="CONFIG_SCHEMA_VERSION",
+                message=(
+                    f"Config schema v{schema_version} is newer than supported v{CONFIG_SCHEMA_VERSION}; "
+                    "using compatible keys only"
+                ),
+            )
+        )
+        normalized["CONFIG_SCHEMA_VERSION"] = schema_version
+    else:
+        normalized["CONFIG_SCHEMA_VERSION"] = CONFIG_SCHEMA_VERSION
+
+    legacy_mac = config.get("BLUETOOTH_MAC")
+    if isinstance(legacy_mac, str):
+        legacy_mac = legacy_mac.strip().upper()
+    else:
+        legacy_mac = ""
+    if legacy_mac and not normalized.get("BLUETOOTH_DEVICES"):
+        normalized["BLUETOOTH_DEVICES"] = [
+            {"mac": legacy_mac, "adapter": "", "player_name": "Sendspin Player"},
+        ]
+        warnings.append(
+            ConfigMigrationIssue(
+                field="BLUETOOTH_DEVICES",
+                message="Migrated legacy BLUETOOTH_MAC into BLUETOOTH_DEVICES",
+            )
+        )
+        needs_persist = True
+
+    legacy_volume = config.get("LAST_VOLUME")
+    if legacy_volume is not None and not normalized.get("LAST_VOLUMES"):
+        migrated_volumes: dict[str, int] = {}
+        target_mac = legacy_mac
+        devices = normalized.get("BLUETOOTH_DEVICES", [])
+        if not target_mac and isinstance(devices, list) and len(devices) == 1 and isinstance(devices[0], dict):
+            maybe_mac = devices[0].get("mac")
+            if isinstance(maybe_mac, str):
+                target_mac = maybe_mac.strip().upper()
+        if target_mac:
+            try:
+                migrated_value = int(legacy_volume)
+            except (TypeError, ValueError):
+                migrated_value = None
+            if migrated_value is not None and 0 <= migrated_value <= 100:
+                migrated_volumes[target_mac] = migrated_value
+        normalized["LAST_VOLUMES"] = migrated_volumes
+        warnings.append(
+            ConfigMigrationIssue(
+                field="LAST_VOLUMES",
+                message="Migrated legacy LAST_VOLUME into LAST_VOLUMES",
+            )
+        )
+        needs_persist = True
+
+    return ConfigMigrationResult(normalized_config=normalized, warnings=warnings, needs_persist=needs_persist)
+
+
+def write_config_file(
+    config: dict[str, Any], *, config_file: Path | None = None, config_dir: Path | None = None
+) -> None:
+    target_file = CONFIG_FILE if config_file is None else config_file
+    target_dir = CONFIG_DIR if config_dir is None else config_dir
+    target_dir.mkdir(parents=True, exist_ok=True)
+    tmp_f = tempfile.NamedTemporaryFile(dir=str(target_dir), delete=False, mode="w", suffix=".tmp")  # noqa: SIM115
+    try:
+        json.dump(config, tmp_f, indent=2)
+        tmp_f.flush()
+        os.fsync(tmp_f.fileno())
+        tmp_f.close()
+        os.replace(tmp_f.name, str(target_file))
+    except BaseException:
+        tmp_f.close()
+        try:
+            os.unlink(tmp_f.name)
+        except OSError:
+            pass
+        raise
+
+
 def update_config(mutator) -> None:
     """Atomically read-modify-write config.json under config_lock.
 
@@ -398,28 +595,12 @@ def update_config(mutator) -> None:
     in-place.  The result is written to a temp file and atomically renamed.
     """
     with config_lock:
-        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
         existing: dict = {}
         if CONFIG_FILE.exists():
-            with open(CONFIG_FILE) as f:
-                existing = json.load(f)
+            existing = _read_raw_config_file()
         mutator(existing)
-        tmp_f = tempfile.NamedTemporaryFile(  # noqa: SIM115
-            dir=str(CONFIG_DIR), delete=False, mode="w", suffix=".tmp"
-        )
-        try:
-            json.dump(existing, tmp_f, indent=2)
-            tmp_f.flush()
-            os.fsync(tmp_f.fileno())
-            tmp_f.close()
-            os.replace(tmp_f.name, str(CONFIG_FILE))
-        except BaseException:
-            tmp_f.close()
-            try:
-                os.unlink(tmp_f.name)
-            except OSError:
-                pass
-            raise
+        existing.setdefault("CONFIG_SCHEMA_VERSION", CONFIG_SCHEMA_VERSION)
+        write_config_file(existing)
 
 
 def _player_id_from_mac(mac: str) -> str:
@@ -458,7 +639,10 @@ def save_device_sink(mac: str | None, sink_name: str) -> None:
         return
 
     def _set_sink(cfg: dict) -> None:
-        cfg.setdefault("LAST_SINKS", {})[mac] = sink_name
+        normalized_mac = _normalize_mac_key(mac)
+        if not normalized_mac:
+            return
+        cfg.setdefault("LAST_SINKS", {})[normalized_mac] = sink_name.strip()
 
     try:
         update_config(_set_sink)
@@ -470,82 +654,14 @@ def load_config() -> dict:
     """Load configuration from file, falling back to defaults."""
     result = copy.deepcopy(DEFAULT_CONFIG)
 
-    allowed_keys = {
-        "CONFIG_SCHEMA_VERSION",
-        "SENDSPIN_SERVER",
-        "SENDSPIN_PORT",
-        "WEB_PORT",
-        "BASE_LISTEN_PORT",
-        "BRIDGE_NAME",
-        "BLUETOOTH_DEVICES",
-        "TZ",
-        "LAST_VOLUMES",
-        "LAST_SINKS",
-        "BLUETOOTH_ADAPTERS",
-        "PULSE_LATENCY_MSEC",
-        "PREFER_SBC_CODEC",
-        "BT_CHECK_INTERVAL",
-        "BT_MAX_RECONNECT_FAILS",
-        "BT_CHURN_THRESHOLD",
-        "BT_CHURN_WINDOW",
-        "AUTH_ENABLED",
-        "SESSION_TIMEOUT_HOURS",
-        "BRUTE_FORCE_PROTECTION",
-        "BRUTE_FORCE_MAX_ATTEMPTS",
-        "BRUTE_FORCE_WINDOW_MINUTES",
-        "BRUTE_FORCE_LOCKOUT_MINUTES",
-        "AUTH_PASSWORD_HASH",
-        "SECRET_KEY",
-        "LOG_LEVEL",
-        "MA_API_URL",
-        "MA_API_TOKEN",
-        "MA_AUTH_PROVIDER",
-        "MA_USERNAME",
-        "MA_AUTO_SILENT_AUTH",
-        "MA_WEBSOCKET_MONITOR",
-        "VOLUME_VIA_MA",
-        "MUTE_VIA_MA",
-        "SMOOTH_RESTART",
-        "UPDATE_CHANNEL",
-        "AUTO_UPDATE",
-        "CHECK_UPDATES",
-        "TRUSTED_PROXIES",
-    }
-
-    _needs_migration = False
-    legacy_mac = ""
-
     if CONFIG_FILE.exists():
         try:
-            with config_lock, open(CONFIG_FILE) as f:
-                saved_config = json.load(f)
-            for key, value in saved_config.items():
-                if key in allowed_keys:
-                    result[key] = value
-
-            # Auto-migrate legacy BLUETOOTH_MAC → BLUETOOTH_DEVICES
-            schema_version = saved_config.get("CONFIG_SCHEMA_VERSION")
-            try:
-                loaded_schema_version = int(schema_version) if schema_version is not None else None
-            except (TypeError, ValueError):
-                loaded_schema_version = None
-            if loaded_schema_version != CONFIG_SCHEMA_VERSION:
-                _needs_migration = True
-                result["CONFIG_SCHEMA_VERSION"] = CONFIG_SCHEMA_VERSION
-
-            legacy_mac = saved_config.get("BLUETOOTH_MAC", "")
-            if legacy_mac and not result.get("BLUETOOTH_DEVICES"):
-                result["BLUETOOTH_DEVICES"] = [
-                    {"mac": legacy_mac, "adapter": "", "player_name": "Sendspin Player"},
-                ]
-                _needs_migration = True
-
-            # Auto-migrate legacy LAST_VOLUME (single int) → LAST_VOLUMES (dict)
-            legacy_vol = saved_config.get("LAST_VOLUME")
-            if legacy_vol is not None and not result.get("LAST_VOLUMES"):
-                result["LAST_VOLUMES"] = {}
-                _needs_migration = True
-
+            with config_lock:
+                saved_config = _read_raw_config_file()
+            migrated = migrate_config_payload(saved_config)
+            result.update(migrated.normalized_config)
+            for issue in migrated.warnings:
+                logger.info("%s", issue.message)
             logger.info("Loaded config from %s", CONFIG_FILE)
         except json.JSONDecodeError as e:
             backup_path = _backup_corrupt_config()
@@ -561,26 +677,30 @@ def load_config() -> dict:
             _needs_migration = False
         except (OSError, ValueError) as e:
             logger.warning("Error loading config: %s, using defaults", e)
-            _needs_migration = False
+        else:
+            if migrated.needs_persist:
+                try:
 
-        if _needs_migration:
-            try:
+                    def _persist_migration(cfg: dict) -> None:
+                        cfg.clear()
+                        cfg.update(result)
 
-                def _do_migrate(cfg: dict) -> None:
-                    cfg["CONFIG_SCHEMA_VERSION"] = CONFIG_SCHEMA_VERSION
-                    if legacy_mac and not cfg.get("BLUETOOTH_DEVICES"):
-                        cfg["BLUETOOTH_DEVICES"] = result["BLUETOOTH_DEVICES"]
-                    cfg.pop("BLUETOOTH_MAC", None)
-                    cfg.pop("LAST_VOLUME", None)
-
-                update_config(_do_migrate)
-                logger.info("Migrated legacy config keys to current format")
-            except (OSError, json.JSONDecodeError) as exc:
-                logger.warning("Could not persist config migration: %s", exc)
+                    update_config(_persist_migration)
+                    logger.info("Migrated legacy config keys to current format")
+                except (OSError, json.JSONDecodeError) as exc:
+                    logger.warning("Could not persist config migration: %s", exc)
     else:
         logger.info("Config file not found at %s, using defaults", CONFIG_FILE)
 
     _normalize_loaded_config(result)
+    if result.get("CONFIG_SCHEMA_VERSION") != CONFIG_SCHEMA_VERSION:
+        logger.warning(
+            "Loaded config schema version %r differs from supported version %r",
+            result.get("CONFIG_SCHEMA_VERSION"),
+            CONFIG_SCHEMA_VERSION,
+        )
+    else:
+        result["CONFIG_SCHEMA_VERSION"] = CONFIG_SCHEMA_VERSION
     return result
 
 

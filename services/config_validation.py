@@ -5,7 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from config import CONFIG_SCHEMA_VERSION, DEFAULT_UPDATE_CHANNEL, UPDATE_CHANNELS, normalize_update_channel
+from config import (
+    CONFIG_SCHEMA_VERSION,
+    DEFAULT_UPDATE_CHANNEL,
+    UPDATE_CHANNELS,
+    migrate_config_payload,
+    normalize_update_channel,
+)
 from services.bluetooth import _MAC_RE
 
 
@@ -44,28 +50,45 @@ def _normalize_optional_port(normalized: dict[str, Any], result: ConfigValidatio
 
 def validate_uploaded_config(uploaded: dict[str, Any]) -> ConfigValidationResult:
     """Validate an uploaded config payload and normalize additive defaults."""
-    normalized = dict(uploaded)
+    migration = migrate_config_payload(uploaded)
+    normalized = migration.normalized_config
     result = ConfigValidationResult(normalized_config=normalized)
+    result.warnings.extend(
+        ConfigValidationIssue(field=issue.field, message=issue.message) for issue in migration.warnings
+    )
 
     schema_version: object = normalized.get("CONFIG_SCHEMA_VERSION")
-    if schema_version in (None, ""):
-        normalized["CONFIG_SCHEMA_VERSION"] = CONFIG_SCHEMA_VERSION
-        result.warnings.append(
+    try:
+        normalized["CONFIG_SCHEMA_VERSION"] = int(str(schema_version))
+    except (TypeError, ValueError):
+        result.errors.append(
             ConfigValidationIssue(
                 field="CONFIG_SCHEMA_VERSION",
-                message=f"CONFIG_SCHEMA_VERSION missing; defaulting to {CONFIG_SCHEMA_VERSION}",
+                message=f"Invalid CONFIG_SCHEMA_VERSION: {schema_version}",
             )
         )
     else:
-        try:
-            normalized["CONFIG_SCHEMA_VERSION"] = int(str(schema_version))
-        except (TypeError, ValueError):
+        if normalized["CONFIG_SCHEMA_VERSION"] > CONFIG_SCHEMA_VERSION:
             result.errors.append(
                 ConfigValidationIssue(
                     field="CONFIG_SCHEMA_VERSION",
-                    message=f"Invalid CONFIG_SCHEMA_VERSION: {schema_version}",
+                    message=(
+                        f"Unsupported CONFIG_SCHEMA_VERSION: {normalized['CONFIG_SCHEMA_VERSION']} "
+                        f"(max supported {CONFIG_SCHEMA_VERSION})"
+                    ),
                 )
             )
+        elif normalized["CONFIG_SCHEMA_VERSION"] < CONFIG_SCHEMA_VERSION:
+            result.warnings.append(
+                ConfigValidationIssue(
+                    field="CONFIG_SCHEMA_VERSION",
+                    message=(
+                        f"CONFIG_SCHEMA_VERSION {normalized['CONFIG_SCHEMA_VERSION']} will be migrated "
+                        f"to {CONFIG_SCHEMA_VERSION}"
+                    ),
+                )
+            )
+            normalized["CONFIG_SCHEMA_VERSION"] = CONFIG_SCHEMA_VERSION
 
     update_channel = normalized.get("UPDATE_CHANNEL")
     if update_channel in (None, ""):

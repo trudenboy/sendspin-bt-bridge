@@ -29,6 +29,7 @@ from services.device_registry import get_device_registry_snapshot
 from services.ha_addon import get_ma_addon_internal_ingress_url
 from services.ma_artwork import has_valid_artwork_signature
 from services.ma_monitor import solo_queue_candidates
+from services.status_snapshot import build_device_snapshot_pairs
 
 logger = logging.getLogger(__name__)
 
@@ -79,9 +80,9 @@ def _debug_clients_snapshot() -> list[dict[str, str | None]]:
         {
             "player_name": getattr(client, "player_name", None),
             "player_id": getattr(client, "player_id", None),
-            "group_id": client.status.get("group_id") if hasattr(client, "status") else None,
+            "group_id": device.extra.get("group_id"),
         }
-        for client in get_device_registry_snapshot().active_clients
+        for client, device in build_device_snapshot_pairs(get_device_registry_snapshot().active_clients)
     ]
 
 
@@ -108,19 +109,18 @@ def _resolve_target_queue(
                 return candidate, candidate
 
         active_clients = []
-        for client in get_device_registry_snapshot().active_clients:
+        for client, device in build_device_snapshot_pairs(get_device_registry_snapshot().active_clients):
             pid = str(getattr(client, "player_id", "") or "").strip()
             if not pid:
                 continue
-            status = getattr(client, "status", {}) or {}
             is_running = False
             try:
                 is_running = bool(client.is_running())
             except Exception:
                 is_running = False
-            if not (is_running or status.get("server_connected")):
+            if not (is_running or device.server_connected):
                 continue
-            active_clients.append((pid, status))
+            active_clients.append((pid, device))
 
         if len(active_clients) == 1:
             inferred_player_id, _status = active_clients[0]

@@ -88,3 +88,32 @@ def test_validate_uploaded_config_rejects_invalid_update_channel():
     assert result.is_valid is False
     assert result.errors[0].field == "UPDATE_CHANNEL"
     assert result.errors[0].message == "Invalid UPDATE_CHANNEL: nightly"
+
+
+def test_validate_uploaded_config_rejects_future_schema_version():
+    result = validate_uploaded_config(
+        {
+            "CONFIG_SCHEMA_VERSION": 999,
+            "BLUETOOTH_DEVICES": [],
+        }
+    )
+
+    assert result.is_valid is False
+    assert result.errors[0].field == "CONFIG_SCHEMA_VERSION"
+    assert "Unsupported CONFIG_SCHEMA_VERSION" in result.errors[0].message
+
+
+def test_validate_uploaded_config_migrates_legacy_shape():
+    result = validate_uploaded_config(
+        {
+            "BLUETOOTH_MAC": "aa:bb:cc:dd:ee:ff",
+            "LAST_VOLUME": 40,
+        }
+    )
+
+    assert result.is_valid is True
+    assert result.normalized_config["BLUETOOTH_DEVICES"] == [
+        {"mac": "AA:BB:CC:DD:EE:FF", "adapter": "", "player_name": "Sendspin Player"}
+    ]
+    assert result.normalized_config["LAST_VOLUMES"] == {"AA:BB:CC:DD:EE:FF": 40}
+    assert any(issue.field == "BLUETOOTH_DEVICES" for issue in result.warnings)

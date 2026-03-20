@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING
 
 from config import CONFIG_FILE, save_device_sink
 from config import config_lock as config_lock
+from services.internal_events import DeviceEventType
 from services.pulse import get_sink_volume, list_sinks, set_sink_mute, set_sink_volume
 
 if TYPE_CHECKING:
@@ -745,6 +746,26 @@ class BluetoothManager:
             logger.debug("persist_device_enabled failed: %s", _e)
         return True
 
+    def _publish_client_event(
+        self,
+        event_type: DeviceEventType,
+        *,
+        level: str = "info",
+        message: str | None = None,
+        details: dict[str, object] | None = None,
+    ) -> None:
+        if not self.client:
+            return
+        import state as _state
+
+        _state.publish_device_event(
+            getattr(self.client, "player_id", "") or self.device_name,
+            event_type,
+            level=level,
+            message=message,
+            details=details,
+        )
+
     async def monitor_and_reconnect(self):
         """Continuously monitor BT connection and reconnect if needed.
 
@@ -822,14 +843,26 @@ class BluetoothManager:
                         )
                         success = await loop.run_in_executor(_bt_executor, self.connect_device)
                         if success and self.client:
+                            completed_attempt = reconnect_attempt
                             reconnect_attempt = 0
                             self._record_reconnect()
                             self.client._update_status({"reconnecting": False, "reconnect_attempt": 0})
+                            self._publish_client_event(
+                                DeviceEventType.BLUETOOTH_RECONNECTED,
+                                message="Bluetooth reconnect succeeded",
+                                details={"attempt": completed_attempt},
+                            )
                             logger.info("BT reconnected for %s, starting sendspin...", self.device_name)
                             await self.client.start_sendspin()
                         else:
                             # Back off: delay next check proportional to failure count
                             delay = self._reconnect_delay(reconnect_attempt)
+                            self._publish_client_event(
+                                DeviceEventType.BLUETOOTH_RECONNECT_FAILED,
+                                level="warning",
+                                message="Bluetooth reconnect attempt failed",
+                                details={"attempt": reconnect_attempt, "next_retry_delay": delay},
+                            )
                             self.last_check = time.time() + delay - self.check_interval
                             logger.debug("[%s] Backoff: next attempt in %.0fs", self.device_name, delay)
                     else:

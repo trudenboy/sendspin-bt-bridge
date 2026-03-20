@@ -1,9 +1,4 @@
-"""
-Shared application state for sendspin-bt-bridge.
-
-Single source of truth for the active SendspinClient list, shared between
-web_interface.py (reads for API responses) and sendspin_client.py (writes via set_clients).
-"""
+"""Shared compatibility state for sendspin-bt-bridge runtime and routes."""
 
 from __future__ import annotations
 
@@ -20,7 +15,26 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from config import CONFIG_FILE as _config_file
-from services.internal_events import InternalEvent, InternalEventPublisher
+from services.device_registry import (
+    get_active_clients_snapshot as _get_registry_active_clients_snapshot,
+)
+from services.device_registry import (
+    get_device_registry_snapshot as _get_device_registry_snapshot,
+)
+from services.device_registry import (
+    get_disabled_devices_snapshot as _get_registry_disabled_devices_snapshot,
+)
+from services.device_registry import (
+    register_registry_listener as _register_registry_listener,
+)
+from services.device_registry import (
+    set_active_clients as _set_registry_active_clients,
+)
+from services.device_registry import (
+    set_disabled_devices as _set_registry_disabled_devices,
+)
+from services.event_hooks import dispatch_internal_event_to_hooks
+from services.internal_events import DeviceEventType, InternalEvent, InternalEventPublisher, normalize_device_event
 
 __all__ = [
     "apply_ma_now_playing_prediction",
@@ -56,6 +70,7 @@ __all__ = [
     "load_adapter_name_cache",
     "mark_ma_now_playing_stale",
     "notify_status_changed",
+    "publish_bridge_event",
     "publish_device_event",
     "publish_internal_event",
     "record_device_event",
@@ -281,7 +296,7 @@ _status_condition: threading.Condition = threading.Condition()
 _main_loop: asyncio.AbstractEventLoop | None = None
 
 
-def set_main_loop(loop: asyncio.AbstractEventLoop) -> None:
+def set_main_loop(loop: asyncio.AbstractEventLoop | None) -> None:
     """Store the main asyncio event loop for use by Flask/WSGI threads."""
     global _main_loop
     _main_loop = loop
@@ -293,7 +308,23 @@ def get_main_loop() -> asyncio.AbstractEventLoop | None:
 
 
 _notify_lock: threading.Lock = threading.Lock()
-_notify_timer: threading.Timer | None = None
+_NotifyThreadBase = threading.Thread
+
+
+class _NotifyTimer(_NotifyThreadBase):
+    """Small timer thread resilient to monkeypatches of `threading.Thread`."""
+
+    def __init__(self, interval: float, callback):
+        super().__init__(daemon=True)
+        self._interval = interval
+        self._callback = callback
+
+    def run(self) -> None:
+        _time.sleep(self._interval)
+        self._callback()
+
+
+_notify_timer: _NotifyTimer | None = None
 
 
 def notify_status_changed() -> None:
@@ -308,8 +339,7 @@ def notify_status_changed() -> None:
         # Race between is_alive() and start() is benign: worst case two timers
         # fire, producing two increments + notify_all() calls which is harmless.
         if _notify_timer is None or not _notify_timer.is_alive():
-            _notify_timer = threading.Timer(0.1, _flush_notify)
-            _notify_timer.daemon = True
+            _notify_timer = _NotifyTimer(0.1, _flush_notify)
             _notify_timer.start()
 
 
@@ -345,42 +375,44 @@ logger = logging.getLogger(__name__)
 # references (imported via `from state import clients`) stay valid.
 clients: list[Any] = []
 clients_lock = threading.Lock()
-
-
-def set_clients(new_clients: list[Any]) -> None:
-    """Replace active client list in-place (keeps existing references valid)."""
-    with clients_lock:
-        clients.clear()
-        clients.extend(new_clients if new_clients else [])
-    logger.info("Client references updated: %s client(s)", len(clients))
-
-
-def get_clients_snapshot() -> list[Any]:
-    """Return a snapshot copy of the active clients list (thread-safe)."""
-    with clients_lock:
-        return list(clients)
-
-
-# ---------------------------------------------------------------------------
-# Disabled devices — metadata for devices with enabled=false in config.
-# Not active (no client/BT/PA), but shown in UI for re-enabling.
-# ---------------------------------------------------------------------------
 _disabled_devices: list[dict] = []
 _disabled_devices_lock = threading.Lock()
 
 
-def set_disabled_devices(devices: list[dict]) -> None:
-    """Store disabled device metadata (called from main() at startup)."""
+def _sync_legacy_registry_aliases(snapshot) -> None:
+    """Mirror canonical registry state onto legacy module-level aliases."""
+    with clients_lock:
+        clients.clear()
+        clients.extend(snapshot.active_clients)
     with _disabled_devices_lock:
         _disabled_devices.clear()
-        _disabled_devices.extend(devices)
+        _disabled_devices.extend(snapshot.disabled_devices)
+
+
+_register_registry_listener(_sync_legacy_registry_aliases)
+_sync_legacy_registry_aliases(_get_device_registry_snapshot())
+
+
+def set_clients(new_clients: list[Any]) -> None:
+    """Replace the canonical active client inventory."""
+    _set_registry_active_clients(new_clients)
+    logger.info("Client references updated: %s client(s)", len(clients))
+
+
+def get_clients_snapshot() -> list[Any]:
+    """Return a snapshot copy of the canonical active client inventory."""
+    return _get_registry_active_clients_snapshot()
+
+
+def set_disabled_devices(devices: list[dict]) -> None:
+    """Store disabled device metadata in the canonical registry service."""
+    _set_registry_disabled_devices(devices)
     logger.info("Disabled devices registered: %d", len(devices))
 
 
 def get_disabled_devices() -> list[dict]:
-    """Return a copy of the disabled devices list (thread-safe)."""
-    with _disabled_devices_lock:
-        return list(_disabled_devices)
+    """Return a copy of the canonical disabled-device inventory."""
+    return _get_registry_disabled_devices_snapshot()
 
 
 # ---------------------------------------------------------------------------
@@ -394,7 +426,7 @@ _internal_event_publisher = InternalEventPublisher()
 
 def _store_device_event(
     device_id: str,
-    event_type: str,
+    event_type: str | DeviceEventType,
     *,
     level: str = "info",
     message: str | None = None,
@@ -402,16 +434,13 @@ def _store_device_event(
     at: str | None = None,
 ) -> dict[str, Any] | None:
     """Append a structured event directly to the per-device ring buffer."""
-    if not device_id or not event_type:
+    if not device_id:
         return None
-
-    event = {
-        "event_type": event_type,
-        "level": level,
-        "message": message or "",
-        "details": dict(details or {}),
-        "at": at or datetime.now(tz=timezone.utc).isoformat(),
-    }
+    normalized = normalize_device_event(event_type, level=level, message=message, details=details)
+    if normalized is None:
+        return None
+    event = dict(normalized)
+    event["at"] = at or datetime.now(tz=timezone.utc).isoformat()
     with _device_events_lock:
         bucket = _device_events.setdefault(device_id, deque(maxlen=_DEVICE_EVENT_LIMIT))
         bucket.append(event)
@@ -434,6 +463,7 @@ def _persist_internal_device_event(event: InternalEvent) -> None:
 
 
 _internal_event_publisher.subscribe(_persist_internal_device_event)
+_internal_event_publisher.subscribe(dispatch_internal_event_to_hooks)
 
 
 def publish_internal_event(
@@ -454,38 +484,40 @@ def publish_internal_event(
 
 def publish_device_event(
     device_id: str,
-    event_type: str,
+    event_type: str | DeviceEventType,
     *,
     level: str = "info",
     message: str | None = None,
     details: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     """Publish a per-device operational event through the internal event bus."""
+    normalized = normalize_device_event(event_type, level=level, message=message, details=details)
+    if normalized is None:
+        return None
     event = publish_internal_event(
         event_type="device.event.recorded",
         category="device_event",
         subject_id=device_id,
-        payload={
-            "event_type": event_type,
-            "level": level,
-            "message": message or "",
-            "details": dict(details or {}),
-        },
+        payload=normalized,
     )
     if event is None:
         return None
-    return {
-        "event_type": event_type,
-        "level": level,
-        "message": message or "",
-        "details": dict(details or {}),
-        "at": event.at,
-    }
+    return {**normalized, "at": event.at}
+
+
+def publish_bridge_event(event_type: str, *, payload: dict[str, Any] | None = None) -> InternalEvent | None:
+    """Publish a bridge-wide lifecycle/telemetry event through the internal event bus."""
+    return publish_internal_event(
+        event_type=event_type,
+        category="bridge_event",
+        subject_id="bridge",
+        payload=payload,
+    )
 
 
 def record_device_event(
     device_id: str,
-    event_type: str,
+    event_type: str | DeviceEventType,
     *,
     level: str = "info",
     message: str | None = None,

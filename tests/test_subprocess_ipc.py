@@ -5,7 +5,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from services.ipc_protocol import IPC_PROTOCOL_VERSION
+from services.ipc_protocol import IPC_PROTOCOL_VERSION, build_log_envelope
 from services.subprocess_ipc import SubprocessIpcService
 
 
@@ -52,7 +52,7 @@ def test_handle_message_logs_proc_messages():
         logger_=logger,
     )
 
-    assert service.handle_message({"type": "log", "level": "error", "msg": "daemon crashed"}) is None
+    assert service.handle_message(build_log_envelope(level="error", msg="daemon crashed")) is None
 
     logger.error.assert_called_once()
 
@@ -107,3 +107,38 @@ async def test_read_stream_parses_json_lines_and_ignores_invalid_lines():
     )
 
     assert updates == [{"playing": True}]
+
+
+def test_parse_line_ignores_json_arrays():
+    service = SubprocessIpcService(
+        player_name="Kitchen",
+        protocol_warning_cache=set(),
+        status_updater=lambda _updates: None,
+    )
+
+    assert service.parse_line(b"[1, 2, 3]\n") is None
+
+
+def test_handle_message_defaults_invalid_error_details_to_empty_dict():
+    updates: list[dict] = []
+    logger = Mock()
+    service = SubprocessIpcService(
+        player_name="Kitchen",
+        protocol_warning_cache=set(),
+        status_updater=updates.append,
+        logger_=logger,
+    )
+
+    returned = service.handle_message(
+        {
+            "type": "error",
+            "protocol_version": IPC_PROTOCOL_VERSION,
+            "error_code": "runtime_error",
+            "message": "boom",
+            "details": "not-a-dict",
+        }
+    )
+
+    assert returned == {"last_error": "boom", "last_error_at": None}
+    assert updates == [returned]
+    logger.error.assert_called_once()
