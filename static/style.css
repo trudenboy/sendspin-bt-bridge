@@ -4045,6 +4045,9 @@ body {
         .diag-copy-btn {
             white-space: nowrap;
         }
+        .diag-config-btn {
+            white-space: nowrap;
+        }
         .diag-raw-details {
             margin-top: 10px;
             padding-top: 8px;

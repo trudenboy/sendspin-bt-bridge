@@ -7670,6 +7670,31 @@ function _diagGroupOutcome(unavailableMembers, bridgeIssues) {
     return 'Group is ready for synced playback.';
 }
 
+function openDiagnosticsDeviceSettings() {
+    var opened = _openConfigPanel('devices', 'config-panel-devices', 'start');
+    _highlightConfigTarget((opened && opened.target) || document.getElementById('config-panel-devices'));
+    return false;
+}
+
+function openBluetoothSettings() {
+    var opened = _openConfigPanel('bluetooth', 'config-bluetooth-adapters-card', 'start');
+    _highlightConfigTarget((opened && opened.target) || document.getElementById('config-bluetooth-adapters-card'));
+    return false;
+}
+
+function _renderDiagConfigButton(actionKey, buttonLabel) {
+    return '<button type="button" class="btn btn-sm btn-ghost diag-config-btn" onclick="return runDiagnosticsConfigJump(\'' +
+        String(actionKey) + '\')">' + escHtml(buttonLabel || 'Open settings') + '</button>';
+}
+
+function runDiagnosticsConfigJump(actionKey) {
+    if (actionKey === 'devices') return openDiagnosticsDeviceSettings();
+    if (actionKey === 'bluetooth') return openBluetoothSettings();
+    if (actionKey === 'ma') return openMaTokenSettings();
+    if (actionKey === 'latency') return openLatencySettings();
+    return false;
+}
+
 function _renderDiagCopyButton(sectionId, label, buttonLabel) {
     return '<button type="button" class="btn btn-sm btn-ghost diag-copy-btn" onclick="return copyDiagnosticsSection(\'' +
         String(sectionId) + '\', \'' + String(label) + '\')">' + escHtml(buttonLabel || 'Copy') + '</button>';
@@ -8138,7 +8163,7 @@ function renderDiagnostics(d) {
                 '<div><div class="diag-subsection-title">Recent recovery events</div>' + _renderRecoveryTraces(recovery.traces || []) + '</div>' +
             '</div>' +
             '<div class="diag-recovery-grid">' +
-                '<div class="diag-jump-target" id="diag-recovery-latency"><div class="diag-subsection-title">Latency review</div><div class="diag-mini-card"><div class="diag-mini-title">' + dot(_diagRecoveryDotTone(recoveryLatency.tone || 'ok')) + '<span>Latency guidance</span></div><div class="diag-mini-meta">' + escHtml(recoveryLatency.summary || 'No latency guidance available.') + '</div><div class="diag-grid diag-runtime-grid">' + latencyHints + '</div>' + ((recoveryLatency.safe_actions || []).length ? '<div class="diag-recovery-actions">' + (recoveryLatency.safe_actions || []).map(_renderRecoveryActionButton).join('') + '</div>' : '') + '</div></div>' +
+                '<div class="diag-jump-target" id="diag-recovery-latency"><div class="diag-subsection-title">Latency review</div><div class="diag-mini-card"><div class="diag-mini-title">' + dot(_diagRecoveryDotTone(recoveryLatency.tone || 'ok')) + '<span>Latency guidance</span></div><div class="diag-mini-meta">' + escHtml(recoveryLatency.summary || 'No latency guidance available.') + '</div><div class="diag-grid diag-runtime-grid">' + latencyHints + '</div><div class="diag-recovery-actions">' + _renderDiagConfigButton('latency', 'Latency settings') + (((recoveryLatency.safe_actions || []).length) ? (recoveryLatency.safe_actions || []).map(_renderRecoveryActionButton).join('') : '') + '</div></div></div>' +
                 '<div><div class="diag-subsection-title">Recommended verification path</div>' + _renderKnownGoodTestPath(recovery.known_good_test_path || {}) + '</div>' +
             '</div>' +
         '</div>' +
@@ -8148,16 +8173,16 @@ function renderDiagnostics(d) {
             '<div class="diag-grid diag-runtime-grid">' + overview + '</div>' +
         '</div>' +
         '<div class="diag-card diag-jump-target" id="diag-speaker-states">' +
-            '<div class="diag-card-header"><div><div class="diag-card-title">Speaker states</div><div class="diag-card-subtitle">Connection state, sink attachment, and the clearest next hint for each speaker.</div></div><div class="diag-card-header-actions">' + _renderDiagCopyButton('diag-speaker-states', 'Speaker states') + '</div></div>' +
+            '<div class="diag-card-header"><div><div class="diag-card-title">Speaker states</div><div class="diag-card-subtitle">Connection state, sink attachment, and the clearest next hint for each speaker.</div></div><div class="diag-card-header-actions">' + _renderDiagConfigButton('devices', 'Device settings') + _renderDiagCopyButton('diag-speaker-states', 'Speaker states') + '</div></div>' +
             '<div class="diag-devices">' + deviceCards + '</div>' +
         '</div>' +
         '<div class="diag-card diag-jump-target" id="diag-routing">' +
-            '<div class="diag-card-header"><div><div class="diag-card-title">Adapters & routing</div><div class="diag-card-subtitle">Detected controllers and attached PulseAudio / PipeWire outputs.</div></div><div class="diag-card-header-actions">' + _renderDiagCopyButton('diag-routing', 'Adapters & routing') + '</div></div>' +
+            '<div class="diag-card-header"><div><div class="diag-card-title">Adapters & routing</div><div class="diag-card-subtitle">Detected controllers and attached PulseAudio / PipeWire outputs.</div></div><div class="diag-card-header-actions">' + _renderDiagConfigButton('bluetooth', 'Bluetooth settings') + _renderDiagCopyButton('diag-routing', 'Adapters & routing') + '</div></div>' +
             '<div class="diag-adapters">' + adapterCards + '</div>' +
             '<div class="sink-table-wrap"><table class="sink-table"><thead><tr><th>Sink</th><th>Status</th><th>Used by</th></tr></thead><tbody>' + sinkRows + '</tbody></table></div>' +
         '</div>' +
         '<div class="diag-card diag-jump-target" id="diag-ma-groups-card">' +
-            '<div class="diag-card-header"><div><div class="diag-card-title">Music Assistant groups</div><div class="diag-card-subtitle">' + escHtml(ma.url || 'No MA URL configured') + '</div></div><div class="diag-card-header-actions">' + _renderDiagCopyButton('diag-ma-groups-card', 'Music Assistant groups') + '</div></div>' +
+            '<div class="diag-card-header"><div><div class="diag-card-title">Music Assistant groups</div><div class="diag-card-subtitle">' + escHtml(ma.url || 'No MA URL configured') + '</div></div><div class="diag-card-header-actions">' + _renderDiagConfigButton('ma', 'MA settings') + _renderDiagCopyButton('diag-ma-groups-card', 'Music Assistant groups') + '</div></div>' +
             '<div class="diag-ma-groups">' + groupCards + '</div>' +
         '</div>' +
         '<details class="diag-advanced-section">' +
