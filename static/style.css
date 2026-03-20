@@ -1107,6 +1107,7 @@ body {
             height: 44px;
             margin: 0 auto 10px;
             color: var(--secondary-text-color);
+            transform-origin: center;
         }
         .no-devices-text { font-size: 1.1em; margin-bottom: 14px; }
         .no-devices-link {
@@ -1143,6 +1144,21 @@ body {
         }
         .service-state-icon.is-info {
             color: var(--info-color);
+        }
+        .service-state-icon--spin {
+            animation: service-state-icon-spin 2.8s linear infinite;
+        }
+        .service-state-icon--pulse {
+            animation: service-state-icon-pulse 1.8s ease-in-out infinite;
+        }
+        @keyframes service-state-icon-spin {
+            0% { transform: rotate(0deg) scale(1); }
+            50% { transform: rotate(180deg) scale(1.06); }
+            100% { transform: rotate(360deg) scale(1); }
+        }
+        @keyframes service-state-icon-pulse {
+            0%, 100% { transform: scale(1); opacity: 0.92; }
+            50% { transform: scale(1.08); opacity: 1; }
         }
         .device-card {
             background: var(--card-background-color);

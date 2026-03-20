@@ -4954,9 +4954,13 @@ function _backendServiceIcon(kind, tone) {
 
 function _buildBackendServiceStateHtml(state) {
     var tone = (state && state.tone) || 'info';
+    var kind = (state && state.kind) || 'connecting';
     var title = (state && state.title) || 'Connecting to bridge';
     var summary = (state && state.summary) || 'Waiting for backend status. This page will refresh automatically.';
     var action = state && state.action ? state.action : {key: 'refresh_diagnostics', label: 'Retry now'};
+    var iconAnimationClass = (kind === 'unavailable' || tone === 'warning' || tone === 'error')
+        ? ' service-state-icon--pulse'
+        : ' service-state-icon--spin';
     var actionHtml = action.key === 'refresh_diagnostics'
         ? '<a href="#" class="no-devices-link" onclick="return _retryBackendStatus()">' +
             _uiIconSvg('refresh', 'no-devices-link-icon') + '<span>' + escHtml(action.label || 'Retry now') + '</span>' +
@@ -4964,8 +4968,8 @@ function _buildBackendServiceStateHtml(state) {
         : '<a href="#" class="no-devices-link" onclick="return _runEncodedOperatorGuidanceAction(\'' + _encodeGuidanceAction(action) + '\')">' +
             _uiIconSvg('info', 'no-devices-link-icon') + '<span>' + escHtml(action.label || 'Open diagnostics') + '</span>' +
           '</a>';
-    return '<div class="no-devices-icon service-state-icon is-' + escHtml(tone) + '">' +
-            _backendServiceIcon(state && state.kind, tone) +
+    return '<div class="no-devices-icon service-state-icon is-' + escHtml(tone) + iconAnimationClass + '">' +
+            _backendServiceIcon(kind, tone) +
         '</div>' +
         '<div class="no-devices-text">' + escHtml(title) + '</div>' +
         '<div class="service-state-copy">' + escHtml(summary) + '</div>' +
