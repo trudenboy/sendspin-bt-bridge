@@ -133,5 +133,34 @@ def test_operator_guidance_prefers_repair_for_unpaired_reconnecting_device():
     assert data["mode"] == "attention"
     assert data["issue_groups"][0]["key"] == "repair_required"
     assert data["issue_groups"][0]["primary_action"]["key"] == "pair_device"
+    assert data["issue_groups"][0]["secondary_actions"][0]["key"] == "toggle_bt_management"
     assert "3/5" in data["issue_groups"][0]["summary"]
     assert "2 attempts remain" in data["issue_groups"][0]["summary"]
+
+
+def test_operator_guidance_treats_user_released_devices_as_neutral():
+    snapshot = build_operator_guidance_snapshot(
+        config={"BLUETOOTH_ADAPTERS": [{"id": "hci0"}], "BLUETOOTH_DEVICES": [{"mac": "AA"}]},
+        onboarding_assistant={
+            "checklist": {"overall_status": "warning", "progress_percent": 0, "summary": "No active devices."},
+            "counts": {"configured_devices": 1, "connected_devices": 0, "sink_ready_devices": 0},
+        },
+        recovery_assistant={"summary": {"summary": "No active recovery issues."}},
+        startup_progress={"status": "complete"},
+        devices=[
+            SimpleNamespace(
+                player_name="Kitchen",
+                bt_management_enabled=False,
+                bluetooth_connected=False,
+                has_sink=False,
+                server_connected=False,
+                extra={"bt_released_by": "user"},
+            )
+        ],
+    )
+
+    data = snapshot.to_dict()
+    assert data["mode"] == "healthy"
+    assert data["issue_groups"] == []
+    assert data["header_status"]["tone"] == "neutral"
+    assert data["header_status"]["label"] == "Bluetooth released"

@@ -324,11 +324,7 @@ def _build_device_capabilities(device: DeviceSnapshot) -> dict[str, Any]:
         ),
     )
 
-    if bluetooth_paired is False:
-        toggle_management_blocked_reason = "Device is no longer paired; re-pair it or disable it from configuration."
-    elif reconnecting:
-        toggle_management_blocked_reason = "Wait for the current reconnect attempt to finish first."
-    elif stopping:
+    if stopping:
         toggle_management_blocked_reason = "Device is stopping."
     else:
         toggle_management_blocked_reason = None
@@ -336,13 +332,7 @@ def _build_device_capabilities(device: DeviceSnapshot) -> dict[str, Any]:
         supported=True,
         currently_available=toggle_management_blocked_reason is None,
         blocked_reason=toggle_management_blocked_reason,
-        safe_actions=(
-            ["pair_device", "open_diagnostics"]
-            if bluetooth_paired is False
-            else ["open_diagnostics"]
-            if toggle_management_blocked_reason
-            else ["toggle_bt_management"]
-        ),
+        safe_actions=(["open_diagnostics"] if toggle_management_blocked_reason else ["toggle_bt_management"]),
     )
 
     play_pause = _capability_payload(

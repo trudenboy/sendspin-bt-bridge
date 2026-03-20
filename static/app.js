@@ -4940,6 +4940,33 @@ function _runEncodedOperatorGuidanceAction(encodedAction) {
     }
 }
 
+function _renderGuidanceActionLink(action, options) {
+    if (!action || !action.key) return '';
+    var opts = options || {};
+    var classes = ['notice-card-action'];
+    if (opts.primary) classes.push('notice-card-action--primary');
+    if (opts.menuItem) classes.push('notice-card-action--menu-item');
+    return '<a href="#" class="' + classes.join(' ') + '" onclick="return _runEncodedOperatorGuidanceAction(\'' +
+        _encodeGuidanceAction(action) +
+    '\')">' + escHtml(action.label || 'Open diagnostics') + '</a>';
+}
+
+function _renderGuidanceActionMenu(actions, dismissHtml) {
+    var visibleActions = (actions || []).filter(function(action) { return action && action.key; });
+    if (!visibleActions.length && !dismissHtml) return '';
+    if (visibleActions.length <= 1 && !dismissHtml) {
+        return visibleActions.length ? _renderGuidanceActionLink(visibleActions[0]) : '';
+    }
+    var itemsHtml = visibleActions.map(function(action) {
+        return _renderGuidanceActionLink(action, {menuItem: true});
+    }).join('');
+    if (dismissHtml) itemsHtml += dismissHtml;
+    return '<details class="notice-action-menu">' +
+        '<summary class="notice-card-action notice-action-menu-toggle">More actions</summary>' +
+        '<div class="notice-action-menu-list">' + itemsHtml + '</div>' +
+    '</details>';
+}
+
 function _resetGuidancePreferences() {
     var keys = _guidancePreferenceKeys(_lastOperatorGuidance && _lastOperatorGuidance.visibility_keys);
     _setGuidanceVisible(keys.onboarding, true);
@@ -5205,20 +5232,14 @@ function _setOnboardingAssistantBanner(card) {
 
     var primaryAction = card.primary_action || checklist.primary_action || {key: 'open_diagnostics', label: 'Review diagnostics'};
     var secondaryActions = card.secondary_actions || [];
-    var actionsHtml =
-        '<a href="#" class="notice-card-action notice-card-action--primary" onclick="return _runEncodedOperatorGuidanceAction(\'' +
-            _encodeGuidanceAction(primaryAction || {key: 'open_diagnostics'}) +
-        '\')">' + escHtml(primaryAction.label || 'Review diagnostics') + '</a>';
-    secondaryActions.forEach(function(action) {
-        actionsHtml += '<a href="#" class="notice-card-action" onclick="return _runEncodedOperatorGuidanceAction(\'' +
-            _encodeGuidanceAction(action) +
-        '\')">' + escHtml(action.label || 'Open diagnostics') + '</a>';
-    });
+    var dismissHtml = '';
     if (card.dismissible && card.preference_key) {
-        actionsHtml += '<a href="#" class="notice-card-action" onclick="return _dismissGuidance(\'' +
+        dismissHtml = '<a href="#" class="notice-card-action notice-card-action--menu-item" onclick="return _dismissGuidance(\'' +
             escHtml(card.preference_key) +
         '\')">Don’t show again</a>';
     }
+    var actionsHtml = _renderGuidanceActionLink(primaryAction || {key: 'open_diagnostics'}, {primary: true});
+    actionsHtml += _renderGuidanceActionMenu(secondaryActions, dismissHtml);
     actionsEl.innerHTML = actionsHtml;
 
     banner.hidden = false;
@@ -5242,14 +5263,6 @@ function _renderRecoveryIssuePills(issues) {
             '<span>' + escHtml(issue.title || 'Issue') + '</span>' +
         '</div>';
     }).join('');
-}
-
-function _buildRecoveryActionHtml(action, isPrimary) {
-    if (!action || !action.key) return '';
-    return '<a href="#" class="notice-card-action' + (isPrimary ? ' notice-card-action--primary' : '') +
-        '" onclick="return _runEncodedOperatorGuidanceAction(\'' + _encodeGuidanceAction(action) + '\')">' +
-            escHtml(action.label || 'Open diagnostics') +
-        '</a>';
 }
 
 function _setRecoveryAssistantBanner(guidance) {
@@ -5280,17 +5293,17 @@ function _setRecoveryAssistantBanner(guidance) {
     issuesEl.innerHTML = _renderRecoveryIssuePills(issues);
 
     var primaryAction = notice.primary_action || {key: 'open_diagnostics', label: 'Open diagnostics'};
-    var actionsHtml = _buildRecoveryActionHtml(primaryAction, true);
-    (notice.secondary_actions || []).forEach(function(action) {
-        if (!primaryAction || action.key !== primaryAction.key) {
-            actionsHtml += _buildRecoveryActionHtml(action, false);
-        }
+    var secondaryActions = (notice.secondary_actions || []).filter(function(action) {
+        return !primaryAction || action.key !== primaryAction.key;
     });
+    var dismissHtml = '';
     if (notice.dismissible && notice.preference_key) {
-        actionsHtml += '<a href="#" class="notice-card-action" onclick="return _dismissGuidance(\'' +
+        dismissHtml = '<a href="#" class="notice-card-action notice-card-action--menu-item" onclick="return _dismissGuidance(\'' +
             escHtml(notice.preference_key) +
         '\')">Don’t show again</a>';
     }
+    var actionsHtml = _renderGuidanceActionLink(primaryAction, {primary: true});
+    actionsHtml += _renderGuidanceActionMenu(secondaryActions, dismissHtml);
     actionsEl.innerHTML = actionsHtml;
     banner.hidden = false;
     _syncNoticeStack();

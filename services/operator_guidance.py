@@ -261,10 +261,11 @@ def _build_issue_groups(
         and getattr(device, "has_sink", False)
         and not getattr(device, "server_connected", False)
     ]
-    released = [
+    auto_released = [
         str(getattr(device, "player_name", None) or "Unknown")
         for device in devices
         if getattr(device, "bt_management_enabled", True) is False
+        and _device_extra(device).get("bt_released_by") == "auto"
     ]
 
     if missing_sink:
@@ -342,6 +343,15 @@ def _build_issue_groups(
                 label="Re-pair speaker" if len(repair_names) == 1 else "Open device settings",
                 device_names=repair_names,
             ),
+            secondary_actions=[
+                GuidanceAction(
+                    key="toggle_bt_management",
+                    label="Release Bluetooth",
+                    device_names=repair_names,
+                )
+            ]
+            if len(repair_names) == 1
+            else None,
         )
     if disconnected:
         title = (
@@ -378,24 +388,28 @@ def _build_issue_groups(
                 device_names=disconnected,
             ),
         )
-    if released:
-        title = f"{released[0]} is released" if len(released) == 1 else f"{len(released)} devices are released"
+    if auto_released:
+        title = (
+            f"{auto_released[0]} was auto-released"
+            if len(auto_released) == 1
+            else f"{len(auto_released)} devices were auto-released"
+        )
         summary = (
-            "Bluetooth management is released for this speaker."
-            if len(released) == 1
-            else f"Reclaim {_format_device_label(released)} to restore bridge management."
+            "Bluetooth management was auto-released after repeated connection problems."
+            if len(auto_released) == 1
+            else f"Reclaim {_format_device_label(auto_released)} to restore bridge management."
         )
         _append_group(
             groups,
-            key="released",
+            key="auto_released",
             severity="warning",
             title=title,
             summary=summary,
-            device_names=released,
+            device_names=auto_released,
             primary_action=GuidanceAction(
-                key="toggle_bt_management_devices" if len(released) > 1 else "toggle_bt_management",
-                label=f"Reclaim {len(released)} devices" if len(released) > 1 else "Reclaim Bluetooth",
-                device_names=released,
+                key="toggle_bt_management_devices" if len(auto_released) > 1 else "toggle_bt_management",
+                label=f"Reclaim {len(auto_released)} devices" if len(auto_released) > 1 else "Reclaim Bluetooth",
+                device_names=auto_released,
             ),
         )
 
@@ -460,10 +474,12 @@ def _build_header_status(
     issue_groups: list[GuidanceIssueGroup],
     startup_progress: dict[str, Any],
     recovery_assistant: dict[str, Any],
+    devices: list[Any],
 ) -> GuidanceHeaderStatus:
     configured_devices = _count_config_entries(config, "BLUETOOTH_DEVICES")
     checklist = onboarding_assistant.get("checklist") or {}
-    counts = onboarding_assistant.get("counts") or {}
+    active_devices = [device for device in devices if getattr(device, "bt_management_enabled", True)]
+    released_devices = [device for device in devices if getattr(device, "bt_management_enabled", True) is False]
     startup_status = str(startup_progress.get("status") or "idle")
     if startup_status in {"running", "starting"}:
         percent = int(startup_progress.get("percent") or 0)
@@ -482,23 +498,29 @@ def _build_header_status(
         lead = issue_groups[0]
         label = lead.title if len(issue_groups) == 1 else f"{len(issue_groups)} issues need attention"
         return GuidanceHeaderStatus(tone=lead.severity, label=label, summary=lead.summary)
-    if configured_devices > 0 and str(checklist.get("overall_status") or "") != "ok":
+    if not active_devices and released_devices:
+        return GuidanceHeaderStatus(
+            tone="neutral",
+            label="Bluetooth released",
+            summary="All configured devices are intentionally released from bridge management.",
+        )
+    if active_devices and configured_devices > 0 and str(checklist.get("overall_status") or "") != "ok":
         return GuidanceHeaderStatus(
             tone="warning",
             label=f"Setup {int(checklist.get('progress_percent') or 0)}%",
             summary=str(checklist.get("summary") or "Bridge setup still has pending steps."),
         )
 
-    ready_devices = int(counts.get("sink_ready_devices") or 0)
-    connected_devices = int(counts.get("connected_devices") or 0)
+    ready_devices = sum(1 for device in active_devices if getattr(device, "has_sink", False))
+    connected_devices = sum(1 for device in active_devices if getattr(device, "bluetooth_connected", False))
     recovery_summary = recovery_assistant.get("summary") or {}
-    if configured_devices > 0:
+    if active_devices:
         return GuidanceHeaderStatus(
             tone="success",
-            label=f"{ready_devices}/{configured_devices} devices ready",
+            label=f"{ready_devices}/{len(active_devices)} active devices ready",
             summary=(
-                "All configured devices have sinks and are ready for playback."
-                if ready_devices == configured_devices and configured_devices > 0
+                "All active devices have sinks and are ready for playback."
+                if ready_devices == len(active_devices) and active_devices
                 else f"{connected_devices} connected · {ready_devices} with sinks ready."
             ),
         )
@@ -543,12 +565,16 @@ def build_operator_guidance_snapshot(
     checklist = onboarding_assistant.get("checklist") or {}
     issue_groups = _build_issue_groups(devices, onboarding_assistant, recovery_assistant)
     startup_status = str(startup_progress.get("status") or "idle")
+    active_devices = [device for device in devices if getattr(device, "bt_management_enabled", True)]
+    released_devices = [device for device in devices if getattr(device, "bt_management_enabled", True) is False]
 
     empty_state = configured_adapters == 0 and configured_devices == 0
     if empty_state:
         mode = "empty_state"
     elif issue_groups:
         mode = "attention"
+    elif not active_devices and released_devices:
+        mode = "healthy"
     elif startup_status in {"running", "starting"} or str(checklist.get("overall_status") or "") != "ok":
         mode = "progress"
     else:
@@ -568,6 +594,7 @@ def build_operator_guidance_snapshot(
             issue_groups=issue_groups,
             startup_progress=startup_progress,
             recovery_assistant=recovery_assistant,
+            devices=devices,
         ),
         banner=_build_banner(mode=mode, issue_groups=issue_groups),
         onboarding_card=_build_onboarding_card(empty_state=empty_state, onboarding_assistant=onboarding_assistant),

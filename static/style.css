@@ -768,6 +768,45 @@ body {
         .notice-card-action--primary:hover {
             opacity: 0.92;
         }
+        .notice-action-menu {
+            position: relative;
+        }
+        .notice-action-menu > summary {
+            list-style: none;
+            cursor: pointer;
+        }
+        .notice-action-menu > summary::-webkit-details-marker {
+            display: none;
+        }
+        .notice-action-menu-toggle::after {
+            content: "▾";
+            margin-left: 8px;
+            font-size: 11px;
+        }
+        .notice-action-menu[open] .notice-action-menu-toggle::after {
+            content: "▴";
+        }
+        .notice-action-menu-list {
+            position: absolute;
+            right: 0;
+            top: calc(100% + 8px);
+            min-width: 200px;
+            display: grid;
+            gap: 6px;
+            padding: 8px;
+            border-radius: 14px;
+            border: 1px solid var(--divider-color);
+            background: var(--card-background-color);
+            box-shadow: var(--ha-card-box-shadow);
+            z-index: 20;
+        }
+        .notice-card-action--menu-item {
+            justify-content: flex-start;
+            border-radius: 10px;
+            background: rgba(148, 163, 184, 0.08);
+            border: 1px solid rgba(148, 163, 184, 0.14);
+            color: var(--primary-text-color);
+        }
         .onboarding-card {
             grid-template-columns: auto minmax(0, 1fr) auto;
             align-items: start;

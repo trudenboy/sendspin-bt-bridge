@@ -174,3 +174,35 @@ def test_check_reconnect_churn_disables_management(bt_manager):
     assert bt_manager.client.bt_management_enabled is False
     bt_manager.client._update_status.assert_called_once()
     persist_released.assert_called_once_with("TestSpeaker", True)
+
+
+def test_cancel_reconnect_clears_runtime_reconnect_status(bt_manager):
+    bt_manager.client = MagicMock()
+    bt_manager.client.status = {"reconnecting": True}
+
+    bt_manager.cancel_reconnect()
+
+    assert bt_manager.management_enabled is False
+    assert bt_manager._cancel_reconnect.is_set() is True
+    bt_manager.client._update_status.assert_called_once_with({"reconnecting": False, "reconnect_attempt": 0})
+
+
+def test_connect_device_aborts_when_release_cancels_active_reconnect(bt_manager):
+    with (
+        patch.object(bt_manager, "is_device_connected", side_effect=[False, True]),
+        patch.object(bt_manager, "is_device_paired", return_value=True),
+        patch.object(bt_manager, "disconnect_device", return_value=True) as disconnect_device,
+        patch.object(bt_manager, "configure_bluetooth_audio"),
+        patch.object(bt_manager, "_wait_with_cancel", return_value=True),
+    ):
+
+        def _run_side_effect(commands):
+            if commands == [f"connect {bt_manager.mac_address}"]:
+                bt_manager.cancel_reconnect()
+            return True, ""
+
+        bt_manager._run_bluetoothctl = MagicMock(side_effect=_run_side_effect)
+
+        assert bt_manager.connect_device() is False
+
+    disconnect_device.assert_called_once()

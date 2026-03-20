@@ -114,11 +114,14 @@ def _build_device_issues(devices: list[Any]) -> list[RecoveryIssue]:
         health = getattr(device, "health_summary", None) or {}
         summary = str(health.get("summary") or "")
         if getattr(device, "bt_management_enabled", True) is False:
+            if _device_extra(device).get("bt_released_by") != "auto":
+                continue
             issues.append(
                 RecoveryIssue(
                     severity="warning",
-                    title=f"{name} is released",
-                    summary=summary or "Bluetooth management is released for this speaker.",
+                    title=f"{name} was auto-released",
+                    summary=summary
+                    or "Bluetooth management was auto-released for this speaker after connection problems.",
                     recommended_action=RecoveryAction(
                         key="toggle_bt_management",
                         label="Reclaim Bluetooth",

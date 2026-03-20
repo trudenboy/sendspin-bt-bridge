@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import threading
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -105,6 +106,36 @@ async def test_stop_sendspin_delegates_to_stop_service():
     assert client._daemon_task is None
     assert client._stderr_task is None
     assert client._daemon_proc is None
+
+
+def test_set_bt_management_enabled_cancels_reconnect_before_release():
+    client = SendspinClient("Test Player", "localhost", 9000)
+    bt_manager = SimpleNamespace(
+        cancel_reconnect_calls=0,
+        allow_reconnect_calls=0,
+        cancel_reconnect=lambda: None,
+        allow_reconnect=lambda: None,
+    )
+
+    def _cancel():
+        bt_manager.cancel_reconnect_calls += 1
+
+    def _allow():
+        bt_manager.allow_reconnect_calls += 1
+
+    bt_manager.cancel_reconnect = _cancel
+    bt_manager.allow_reconnect = _allow
+    client.bt_manager = bt_manager
+    client._status_lock = threading.Lock()
+    client.status.update({"reconnecting": True, "bt_management_enabled": True})
+
+    with patch.object(client, "is_running", return_value=False):
+        client.set_bt_management_enabled(False)
+        client.set_bt_management_enabled(True)
+
+    assert bt_manager.cancel_reconnect_calls == 1
+    assert bt_manager.allow_reconnect_calls == 1
+    assert client.status["bt_management_enabled"] is True
 
 
 @pytest.mark.asyncio

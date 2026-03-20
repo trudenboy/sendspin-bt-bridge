@@ -183,6 +183,7 @@ class BluetoothManager:
         self._running: bool = True  # False = shutdown; monitor loops exit
         self.paired: bool | None = None
         self._connect_lock = threading.Lock()  # prevents concurrent connect_device() calls
+        self._cancel_reconnect = threading.Event()
         self._reconnect_timestamps: list[float] = []  # monotonic timestamps of recent reconnects
         # Guard churn tracking because reconnect decisions can be touched from
         # multiple execution contexts (polling loop, D-Bus reconnect path).
@@ -216,6 +217,45 @@ class BluetoothManager:
     def shutdown(self) -> None:
         """Signal all monitor loops to exit."""
         self._running = False
+
+    def cancel_reconnect(self) -> None:
+        """Request cancellation of any in-flight reconnect attempt."""
+        self.management_enabled = False
+        self._cancel_reconnect.set()
+        if self.client and self.client.status.get("reconnecting"):
+            self.client._update_status({"reconnecting": False, "reconnect_attempt": 0})
+
+    def allow_reconnect(self) -> None:
+        """Clear reconnect cancellation so monitor loops may reconnect again."""
+        self._cancel_reconnect.clear()
+        self.management_enabled = True
+
+    def _reconnect_cancelled(self) -> bool:
+        return self._cancel_reconnect.is_set() or not self.management_enabled
+
+    def _wait_with_cancel(self, duration: float, *, step: float = 0.2) -> bool:
+        """Sleep in small chunks so release can cancel reconnect promptly."""
+        deadline = time.monotonic() + duration
+        while True:
+            if self._reconnect_cancelled():
+                return False
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return True
+            time.sleep(min(step, remaining))
+
+    def _abort_connect_if_cancelled(self) -> bool:
+        """Abort a connect attempt and disconnect if release landed mid-flight."""
+        if not self._reconnect_cancelled():
+            return False
+        logger.info("[%s] Reconnect cancelled — aborting active connect attempt", self.device_name)
+        try:
+            if self.is_device_connected():
+                self.disconnect_device()
+        except Exception as exc:
+            logger.debug("[%s] Disconnect during reconnect cancellation failed: %s", self.device_name, exc)
+        self.connected = False
+        return True
 
     def _detect_default_adapter_mac(self) -> str:
         """Return the MAC of the default Bluetooth controller, or empty string."""
@@ -390,6 +430,9 @@ class BluetoothManager:
             return False
 
         logger.info("Pairing with %s...", mac)
+        if self._reconnect_cancelled():
+            logger.info("[%s] Pairing skipped because reconnect was cancelled", self.device_name)
+            return False
 
         initial_cmds = []
         if self._adapter_select:
@@ -412,7 +455,8 @@ class BluetoothManager:
 
             proc.stdin.write("\n".join(initial_cmds) + "\n")
             proc.stdin.flush()
-            time.sleep(_PAIRING_SCAN_DURATION)
+            if not self._wait_with_cancel(_PAIRING_SCAN_DURATION):
+                return False
 
             proc.stdin.write("\n".join(pair_cmds) + "\n")
             proc.stdin.flush()
@@ -426,6 +470,8 @@ class BluetoothManager:
             sel.register(proc.stdout, selectors.EVENT_READ)  # type: ignore[arg-type]
             try:
                 while time.monotonic() < deadline and proc.poll() is None:
+                    if self._reconnect_cancelled():
+                        return False
                     remaining = deadline - time.monotonic()
                     if remaining <= 0:
                         break
@@ -445,7 +491,8 @@ class BluetoothManager:
                     # Early exit on success
                     if "pairing successful" in stripped.lower() or "already paired" in stripped.lower():
                         # Give trust command time to complete
-                        time.sleep(1)
+                        if not self._wait_with_cancel(1):
+                            return False
                         break
             finally:
                 sel.close()
@@ -485,6 +532,8 @@ class BluetoothManager:
     def configure_bluetooth_audio(self) -> bool:
         """Configure host's PipeWire/PulseAudio to use the Bluetooth device as audio output"""
         try:
+            if self._reconnect_cancelled():
+                return False
             pa_mac = self.mac_address.replace(":", "_")
 
             # Try cached sink name first — avoids 3s A2DP delay on service restart
@@ -506,7 +555,8 @@ class BluetoothManager:
                     logger.debug("Cached sink %s not available, falling back to discovery", cached_sink)
                 # Wait for PipeWire/PulseAudio to register the device.
                 # A2DP profile takes a few seconds to appear after BT connects.
-                time.sleep(_A2DP_PROFILE_DELAY)
+                if not self._wait_with_cancel(_A2DP_PROFILE_DELAY):
+                    return False
 
                 # Log available sinks for diagnostics
                 sinks = list_sinks()
@@ -541,7 +591,8 @@ class BluetoothManager:
                             attempt + 1,
                             _SINK_RETRY_COUNT,
                         )
-                        time.sleep(_SINK_RETRY_DELAY)
+                        if not self._wait_with_cancel(_SINK_RETRY_DELAY):
+                            return False
                         sinks = list_sinks()
                         known_names = {s["name"] for s in sinks}
 
@@ -594,10 +645,15 @@ class BluetoothManager:
 
     def connect_device(self) -> bool:
         """Connect to the Bluetooth device"""
+        if self._reconnect_cancelled():
+            logger.info("[%s] Connect skipped because reconnect was cancelled", self.device_name)
+            return False
         if not self._connect_lock.acquire(blocking=False):
             logger.debug("[%s] connect_device already in progress, waiting...", self.device_name)
             with self._connect_lock:  # wait for ongoing call to finish
                 pass
+            if self._abort_connect_if_cancelled():
+                return False
             return self.is_device_connected()
         try:
             return self._connect_device_inner()
@@ -606,14 +662,18 @@ class BluetoothManager:
 
     def _connect_device_inner(self) -> bool:
         """Connect to the Bluetooth device (called with _connect_lock held)"""
+        if self._abort_connect_if_cancelled():
+            return False
         # First check if already connected
         if self.is_device_connected():
             logger.info("Device already connected")
             self.connected = True
             self.paired = self.is_device_paired()
+            if self._abort_connect_if_cancelled():
+                return False
             # Ensure audio is configured
             self.configure_bluetooth_audio()
-            return True
+            return not self._abort_connect_if_cancelled()
 
         logger.info("Connecting to %s...", self.mac_address)
 
@@ -623,24 +683,32 @@ class BluetoothManager:
             logger.info("Device not paired, attempting to pair...")
             if not self.pair_device():
                 return False
+        if self._abort_connect_if_cancelled():
+            return False
 
         # Power on bluetooth
         self._run_bluetoothctl(["power on"])
-        time.sleep(1)
+        if not self._wait_with_cancel(1):
+            return False
 
         # Try to connect
         _success, _output = self._run_bluetoothctl([f"connect {self.mac_address}"])
+        if self._abort_connect_if_cancelled():
+            return False
 
         # Wait for connection to establish
         for _i in range(_CONNECT_CHECK_RETRIES):
-            time.sleep(1)
+            if not self._wait_with_cancel(1):
+                return False
             if self.is_device_connected():
                 logger.info("Successfully connected to Bluetooth speaker")
                 self.connected = True
                 self.paired = True
+                if self._abort_connect_if_cancelled():
+                    return False
                 # Configure audio routing
                 self.configure_bluetooth_audio()
-                return True
+                return not self._abort_connect_if_cancelled()
 
         logger.warning("Failed to connect (not connected after 5 status checks)")
         return False
@@ -851,6 +919,9 @@ class BluetoothManager:
                             reconnect_attempt,
                         )
                         success = await loop.run_in_executor(_bt_executor, self.connect_device)
+                        if self._reconnect_cancelled():
+                            reconnect_attempt = 0
+                            continue
                         if success and self.client:
                             completed_attempt = reconnect_attempt
                             reconnect_attempt = 0
@@ -1085,6 +1156,9 @@ class BluetoothManager:
 
                 logger.warning("[%s] Disconnected, reconnecting... (attempt %s)", self.device_name, reconnect_attempt)
                 success = await loop.run_in_executor(_bt_executor, self.connect_device)
+                if self._reconnect_cancelled():
+                    reconnect_attempt = 0
+                    continue
 
                 if success:
                     reconnect_attempt = 0

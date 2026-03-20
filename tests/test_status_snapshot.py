@@ -112,6 +112,8 @@ def test_build_device_snapshot_includes_capability_payload():
     assert data["capabilities"]["actions"]["volume"]["currently_available"] is True
     assert data["capabilities"]["actions"]["reconnect"]["currently_available"] is False
     assert "Reconnect is already in progress." in data["capabilities"]["actions"]["reconnect"]["blocked_reason"]
+    assert data["capabilities"]["actions"]["toggle_bt_management"]["currently_available"] is True
+    assert data["capabilities"]["actions"]["toggle_bt_management"]["safe_actions"][0] == "toggle_bt_management"
     assert data["capabilities"]["actions"]["queue_control"]["blocked_reason"] == "Sendspin is not connected."
 
 
@@ -131,7 +133,8 @@ def test_build_device_snapshot_prefers_repair_when_device_is_unpaired():
     assert data["capabilities"]["actions"]["reconnect"]["currently_available"] is False
     assert "run re-pair" in data["capabilities"]["actions"]["reconnect"]["blocked_reason"]
     assert data["capabilities"]["actions"]["reconnect"]["safe_actions"][0] == "pair_device"
-    assert data["capabilities"]["actions"]["toggle_bt_management"]["safe_actions"][0] == "pair_device"
+    assert data["capabilities"]["actions"]["toggle_bt_management"]["currently_available"] is True
+    assert data["capabilities"]["actions"]["toggle_bt_management"]["safe_actions"][0] == "toggle_bt_management"
 
 
 def test_build_device_snapshot_reports_stopping_transition():

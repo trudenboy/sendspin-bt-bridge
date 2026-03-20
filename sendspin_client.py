@@ -792,7 +792,10 @@ class SendspinClient:
             }
         )
         if self.bt_manager:
-            self.bt_manager.management_enabled = enabled
+            if enabled:
+                self.bt_manager.allow_reconnect()
+            else:
+                self.bt_manager.cancel_reconnect()
         if not enabled:
             # Stop daemon via asyncio event loop (subprocess objects are not thread-safe)
             if self.is_running() and self._daemon_proc:
