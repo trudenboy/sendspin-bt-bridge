@@ -7647,6 +7647,29 @@ function focusDiagnosticsSection(targetId) {
     return false;
 }
 
+function _diagDeviceOutcome(dev) {
+    if (dev.enabled === false) return 'Unavailable until you re-enable this speaker.';
+    if (!dev.connected) return 'Unavailable until Bluetooth reconnects.';
+    if (!dev.sink) return 'Connected, but audio cannot route until a sink attaches.';
+    if (dev.last_error) return 'Connected, but playback may stay unstable until the issue clears.';
+    if (dev.playing) return 'Healthy and playing now.';
+    return 'Healthy and ready for playback.';
+}
+
+function _diagAdapterOutcome(adapter, daemonActive, daemonState) {
+    if (adapter.error) return 'Bluetooth routing on this adapter needs attention before speakers can attach reliably.';
+    if (!daemonActive) return 'Adapter is detected, but Bluetooth control is limited until the daemon is ' + daemonState + '.';
+    return adapter.default
+        ? 'Primary adapter is ready for pairing and audio routing.'
+        : 'Adapter is available for pairing and audio routing.';
+}
+
+function _diagGroupOutcome(unavailableMembers, bridgeIssues) {
+    if (unavailableMembers.length) return 'Group playback is degraded until unavailable members return.';
+    if (bridgeIssues.length) return 'Group playback may drift or stall until bridge members recover.';
+    return 'Group is ready for synced playback.';
+}
+
 function _renderRecoveryActionButton(action, options) {
     if (!action || !action.key) return '';
     var opts = options || {};
@@ -7839,12 +7862,14 @@ function renderDiagnostics(d) {
     var adapterCards = adapters.length
         ? adapters.map(function(adapter, idx) {
             var tone = adapter.error ? 'err' : (daemonActive ? 'ok' : 'warn');
+            var adapterOutcome = _diagAdapterOutcome(adapter, daemonActive, daemonState);
             return '<div class="diag-mini-card">' +
                 '<div class="diag-mini-title">' + dot(tone) + '<span>' + escHtml(adapter.id || ('hci' + idx)) + '</span></div>' +
                 '<div class="diag-mini-meta">' +
+                    _renderDiagMetaRow('Availability', adapterOutcome, {stack: true}) +
+                    _renderDiagMetaRow('Daemon', daemonState === 'active' ? 'Active' : daemonState, {stack: true}) +
+                    (adapter.default ? _renderDiagMetaRow('Role', 'Default adapter') : _renderDiagMetaRow('Role', 'Available adapter')) +
                     _renderDiagMetaRow('MAC', adapter.mac, {code: true, stack: true}) +
-                    (adapter.default ? _renderDiagMetaRow('Role', 'Default adapter') : '') +
-                    (!adapter.error && !daemonActive ? _renderDiagMetaRow('Daemon', daemonState) : '') +
                     (adapter.error ? _renderDiagMetaRow('Issue', adapter.error, {stack: true}) : '') +
                 '</div>' +
             '</div>';
@@ -7855,12 +7880,18 @@ function renderDiagnostics(d) {
         ? devices.map(function(dev) {
             var deviceTone = dev.enabled === false ? 'warn' : (dev.connected ? (dev.last_error ? 'warn' : 'ok') : 'err');
             var deviceStatus = dev.playing ? 'Playing' : (dev.connected ? 'Connected' : 'Disconnected');
+            var deviceOutcome = _diagDeviceOutcome(dev);
+            var routingOutcome = dev.sink
+                ? 'Audio is routed to the attached sink.'
+                : (dev.connected ? 'Waiting for sink attachment before playback can route.' : 'No Bluetooth audio route is available yet.');
             if (dev.enabled === false) deviceStatus += ' · Disabled';
             if (dev.last_error) deviceStatus += ' · Attention needed';
             return '<div class="diag-mini-card">' +
                 '<div class="diag-mini-title">' + dot(deviceTone) + '<span>' + escHtml(dev.name || dev.mac || 'Unknown') + '</span></div>' +
                 '<div class="diag-mini-meta">' +
-                    _renderDiagMetaRow('Status', deviceStatus, {stack: true}) +
+                    _renderDiagMetaRow('Availability', deviceOutcome, {stack: true}) +
+                    _renderDiagMetaRow('Status', deviceStatus) +
+                    _renderDiagMetaRow('Routing', routingOutcome, {stack: true}) +
                     _renderDiagMetaRow('MAC', dev.mac, {code: true, stack: true}) +
                     (dev.sink ? _renderDiagMetaRow('Sink', dev.sink, {code: true, stack: true}) : _renderDiagMetaRow('Sink', 'Not attached')) +
                     (dev.last_error ? _renderDiagMetaRow('Issue', dev.last_error, {stack: true}) : '') +
@@ -7929,12 +7960,14 @@ function renderDiagnostics(d) {
             if (!unavailableMembers.length && !bridgeIssues.length) {
                 groupStatus.push('All members healthy');
             }
+            var groupOutcome = _diagGroupOutcome(unavailableMembers, bridgeIssues);
             var nowPlaying = group.now_playing && group.now_playing.title
                 ? (group.now_playing.artist ? group.now_playing.artist + ' — ' + group.now_playing.title : group.now_playing.title)
                 : 'Nothing playing';
             return '<div class="diag-mini-card">' +
                 '<div class="diag-mini-title">' + dot(groupTone) + '<span>' + escHtml(group.name || group.id || 'Unnamed group') + '</span></div>' +
                 '<div class="diag-mini-meta">' +
+                    _renderDiagMetaRow('Availability', groupOutcome, {stack: true}) +
                     _renderDiagMetaRow('Group health', groupStatus.join(' · '), {stack: true}) +
                     _renderDiagMetaRow('Now playing', nowPlaying, {stack: true}) +
                 '</div>' +
@@ -8077,7 +8110,7 @@ function renderDiagnostics(d) {
         '<div class="diag-card diag-jump-target" id="diag-routing">' +
             '<div class="diag-card-header"><div><div class="diag-card-title">Adapters & routing</div><div class="diag-card-subtitle">Detected controllers and attached PulseAudio / PipeWire outputs.</div></div></div>' +
             '<div class="diag-adapters">' + adapterCards + '</div>' +
-            '<div class="sink-table-wrap"><table class="sink-table"><thead><tr><th>Sink</th><th>Status</th><th>Attached device</th></tr></thead><tbody>' + sinkRows + '</tbody></table></div>' +
+            '<div class="sink-table-wrap"><table class="sink-table"><thead><tr><th>Sink</th><th>Status</th><th>Used by</th></tr></thead><tbody>' + sinkRows + '</tbody></table></div>' +
         '</div>' +
         '<div class="diag-card diag-jump-target" id="diag-ma-groups-card">' +
             '<div class="diag-card-header"><div><div class="diag-card-title">Music Assistant groups</div><div class="diag-card-subtitle">' + escHtml(ma.url || 'No MA URL configured') + '</div></div></div>' +
