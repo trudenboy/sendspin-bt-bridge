@@ -2531,11 +2531,10 @@ function renderStatusPayload(status) {
             _renderBackendServicePlaceholder(zeroDeviceRuntimeState);
         } else if (grid) {
             _applyOperatorGuidance(status.operator_guidance || null);
-            grid.classList.remove('list-view');
-            grid.innerHTML = '<div id="no-devices-hint" class="no-devices-hint">' + _buildEmptyStateHTML() + '</div>';
+            _syncEmptyStatePlaceholder(status.operator_guidance || null);
         } else if (emptyEl) {
             _applyOperatorGuidance(status.operator_guidance || null);
-            emptyEl.innerHTML = _buildEmptyStateHTML();
+            _syncEmptyStatePlaceholder(status.operator_guidance || null);
         }
         _updateGroupPanel();
         updateHealthIndicator([], status.operator_guidance || null);
@@ -4206,9 +4205,24 @@ function _goToDevicesAndScan(options) {
     }, 180);
 }
 
+function _isOnboardingCardVisible(guidance) {
+    var card = guidance && guidance.onboarding_card ? guidance.onboarding_card : null;
+    return !!(card && card.checklist && _isGuidanceVisible(card.preference_key));
+}
+
+function _syncEmptyStatePlaceholder(guidance) {
+    var grid = document.getElementById('status-grid');
+    if (!grid || _backendServiceState || (lastDevices && lastDevices.length)) return;
+    grid.classList.remove('list-view');
+    if (_isOnboardingCardVisible(guidance)) {
+        grid.innerHTML = '';
+        return;
+    }
+    grid.innerHTML = '<div id="no-devices-hint" class="no-devices-hint">' + _buildEmptyStateHTML() + '</div>';
+}
+
 function _refreshEmptyState() {
-    var el = document.getElementById('no-devices-hint');
-    if (el) el.innerHTML = _buildEmptyStateHTML();
+    _syncEmptyStatePlaceholder(_lastOperatorGuidance);
 }
 
 function openConfigAndAddDevice(options) {
@@ -4970,6 +4984,7 @@ function _deriveZeroDeviceRuntimeState(status, devices) {
     var startup = status && status.startup_progress ? status.startup_progress : null;
     var startupStatus = startup && startup.status ? String(startup.status) : '';
     var startupRunning = startupStatus === 'running' || startupStatus === 'starting';
+    var startupRestarting = startupStatus === 'stopping' || startupStatus === 'stopped';
     var headerLabel = headerStatus && headerStatus.label ? String(headerStatus.label) : '';
     if (headerLabel.toLowerCase() === 'waiting for setup') {
         headerLabel = '';
@@ -4986,13 +5001,19 @@ function _deriveZeroDeviceRuntimeState(status, devices) {
     }
     if (!devices || devices.length !== 0) return null;
     if (!guidance || guidance.mode === 'empty_state') return null;
-    var title = headerLabel || (startupRunning ? 'Bridge is starting' : 'Restoring bridge state');
-    var label = headerLabel || (startupRunning ? 'Starting bridge' : 'Restoring bridge state');
-    var summary = startupRunning
+    var title = startupRestarting
+        ? 'Restart in progress'
+        : (headerLabel || (startupRunning ? 'Bridge is starting' : 'Restoring bridge state'));
+    var label = startupRestarting
+        ? 'Restart in progress'
+        : (headerLabel || (startupRunning ? 'Starting bridge' : 'Restoring bridge state'));
+    var summary = startupRestarting
+        ? 'The bridge is restarting. Waiting for startup to resume.'
+        : startupRunning
         ? ((startup && startup.message) || (headerStatus && headerStatus.summary) || 'Waiting for bridge startup checks to finish.')
         : ((startup && startup.message) || (headerStatus && headerStatus.summary) || 'Configured bridge devices are still reconnecting after restart.');
     return {
-        kind: startupRunning ? 'starting' : 'restoring',
+        kind: (startupRunning || startupRestarting) ? 'starting' : 'restoring',
         tone: _backendServiceToneClass((headerStatus && headerStatus.tone) || 'info'),
         label: label,
         title: title,
@@ -5564,6 +5585,7 @@ function _applyOperatorGuidance(guidance) {
     _syncGuidancePreferenceControls(guidance && guidance.visibility_keys);
     _setOnboardingAssistantBanner(guidance && guidance.onboarding_card ? guidance.onboarding_card : null);
     _setRecoveryAssistantBanner(guidance || null);
+    _syncEmptyStatePlaceholder(guidance || null);
 }
 
 function _hideOperatorGuidance() {
@@ -6295,7 +6317,16 @@ function _syncRestartBanner(status, overrideServiceState) {
     if (startupStatus === 'stopping') {
         _setRestartBannerState({
             percent: Math.max(5, startupPercent || 5),
-            message: startup.message || 'Stopping service…',
+            message: 'Restart in progress…',
+            elapsedSeconds: elapsedSeconds,
+        });
+        return;
+    }
+
+    if (startupStatus === 'stopped') {
+        _setRestartBannerState({
+            percent: Math.max(10, startupPercent || 10),
+            message: 'Restart in progress…',
             elapsedSeconds: elapsedSeconds,
         });
         return;
