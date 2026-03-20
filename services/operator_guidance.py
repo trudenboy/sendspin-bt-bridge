@@ -496,8 +496,6 @@ def _build_onboarding_card(
     checklist = onboarding_assistant.get("checklist") or {}
     if not checklist:
         return None
-    if not empty_state and str(checklist.get("overall_status") or "") == "ok":
-        return None
     primary_action = _guidance_action_from_dict(checklist.get("primary_action"))
     secondary_actions = [GuidanceAction(key="open_diagnostics", label="Open diagnostics")]
     return GuidanceOnboardingCard(

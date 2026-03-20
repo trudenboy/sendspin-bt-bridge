@@ -102,6 +102,43 @@ def test_operator_guidance_exposes_pending_onboarding_card_for_progress_state():
     assert data["onboarding_card"]["primary_action"]["key"] == "open_ma_settings"
 
 
+def test_operator_guidance_keeps_onboarding_card_available_in_healthy_mode():
+    snapshot = build_operator_guidance_snapshot(
+        config={"BLUETOOTH_ADAPTERS": [{"id": "hci0"}], "BLUETOOTH_DEVICES": [{"mac": "AA"}]},
+        onboarding_assistant={
+            "checklist": {
+                "headline": "Setup checklist",
+                "summary": "Bridge setup is complete.",
+                "overall_status": "ok",
+                "completed_steps": 5,
+                "total_steps": 5,
+                "progress_percent": 100,
+                "checkpoints": [],
+                "steps": [],
+                "primary_action": {"key": "open_diagnostics", "label": "Open diagnostics"},
+            },
+            "counts": {"configured_devices": 1, "connected_devices": 1, "sink_ready_devices": 1},
+        },
+        recovery_assistant={"summary": {"summary": "No active recovery issues."}},
+        startup_progress={"status": "complete"},
+        devices=[
+            SimpleNamespace(
+                player_name="Kitchen",
+                bt_management_enabled=True,
+                bluetooth_connected=True,
+                has_sink=True,
+                server_connected=True,
+            )
+        ],
+    )
+
+    data = snapshot.to_dict()
+    assert data["mode"] == "healthy"
+    assert data["header_status"]["label"] == "1/1 active devices ready"
+    assert data["onboarding_card"]["summary"] == "Bridge setup is complete."
+    assert data["onboarding_card"]["primary_action"]["key"] == "open_diagnostics"
+
+
 def test_operator_guidance_groups_disconnected_devices_into_bulk_reconnect():
     snapshot = build_operator_guidance_snapshot(
         config={"BLUETOOTH_ADAPTERS": [{"id": "hci0"}], "BLUETOOTH_DEVICES": [{"mac": "AA"}, {"mac": "BB"}]},
