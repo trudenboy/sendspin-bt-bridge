@@ -114,3 +114,23 @@ def test_publish_shutdown_updates_progress_and_clears_main_loop():
         assert state.get_main_loop() is None
     finally:
         loop.close()
+
+
+def test_lifecycle_state_publishes_bridge_events(monkeypatch):
+    lifecycle_state = BridgeLifecycleState()
+    events = []
+    monkeypatch.setattr(
+        state, "publish_bridge_event", lambda event_type, payload=None: events.append((event_type, payload))
+    )
+
+    lifecycle_state.begin_startup(demo_mode=False)
+    lifecycle_state.complete_startup(active_clients=[object()], demo_mode=False, monitor_enabled=True)
+    lifecycle_state.publish_shutdown_started(active_clients=1)
+    lifecycle_state.publish_shutdown_complete(stopped_clients=1)
+
+    assert [event_type for event_type, _payload in events] == [
+        "bridge.startup.started",
+        "bridge.startup.completed",
+        "bridge.shutdown.started",
+        "bridge.shutdown.completed",
+    ]

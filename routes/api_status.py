@@ -18,11 +18,12 @@ import threading
 import time
 from datetime import datetime, timezone
 
-from flask import Blueprint, Response, jsonify
+from flask import Blueprint, Response, jsonify, request
 
 import state
 from config import BUILD_DATE, CONFIG_SCHEMA_VERSION, VERSION, load_config
 from services.device_registry import get_device_registry_snapshot
+from services.event_hooks import get_event_hook_registry
 from services.ipc_protocol import IPC_PROTOCOL_VERSION
 from services.log_analysis import summarize_issue_logs
 from services.onboarding_assistant import build_onboarding_assistant_snapshot
@@ -248,6 +249,44 @@ def api_startup_progress():
 def api_runtime_info():
     """Return bridge runtime-mode and mock-runtime explainability metadata."""
     return jsonify(build_mock_runtime_snapshot().to_dict())
+
+
+@status_bp.route("/api/bridge/telemetry")
+def api_bridge_telemetry():
+    """Return bridge resource telemetry and runtime-scoped hook activity."""
+    return jsonify(_build_bridge_telemetry_payload())
+
+
+@status_bp.route("/api/hooks")
+def api_hook_registry_status():
+    """Return registered runtime webhooks and recent delivery results."""
+    return jsonify(get_event_hook_registry().snapshot())
+
+
+@status_bp.route("/api/hooks", methods=["POST"])
+def api_hook_register():
+    """Register a runtime-scoped webhook for bridge or device events."""
+    payload = request.get_json(silent=True) or {}
+    if not isinstance(payload, dict):
+        return jsonify({"error": "Invalid JSON body"}), 400
+    try:
+        hook = get_event_hook_registry().register(
+            url=str(payload.get("url") or ""),
+            categories=payload.get("categories") if isinstance(payload.get("categories"), list) else None,
+            event_types=payload.get("event_types") if isinstance(payload.get("event_types"), list) else None,
+            timeout_sec=float(payload.get("timeout_sec") or 5.0),
+        )
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"success": True, "hook": hook}), 201
+
+
+@status_bp.route("/api/hooks/<hook_id>", methods=["DELETE"])
+def api_hook_unregister(hook_id: str):
+    """Remove a runtime-scoped webhook subscription."""
+    if not get_event_hook_registry().unregister(hook_id):
+        return jsonify({"error": "Hook not found"}), 404
+    return jsonify({"success": True})
 
 
 @status_bp.route("/api/status/stream")
@@ -526,6 +565,8 @@ def api_diagnostics():
             diag["portaudio_devices"] = [{"error": "Failed to list PortAudio devices"}]
 
         diag["subprocesses"] = _collect_subprocess_info()
+        diag["telemetry"] = _build_bridge_telemetry_payload()
+        diag["event_hooks"] = get_event_hook_registry().snapshot()
         diag["onboarding_assistant"] = _build_onboarding_assistant_payload()
 
         return jsonify(diag)
@@ -654,8 +695,51 @@ def _collect_subprocess_info() -> list[dict]:
             entry["reconnect_attempt"] = status.get("reconnect_attempt", 0)
             entry["last_error"] = status.get("last_error")
             entry["last_error_at"] = status.get("last_error_at")
+        entry["process_rss_mb"] = _collect_process_rss_mb(entry["pid"])
         info.append(entry)
     return info
+
+
+def _collect_process_rss_mb(pid: int | None) -> float | None:
+    if not pid:
+        return None
+    try:
+        result = subprocess.run(
+            ["ps", "-o", "rss=", "-p", str(pid)],
+            capture_output=True,
+            text=True,
+            timeout=3,
+        )
+        if result.returncode != 0:
+            return None
+        rss_kb = int(result.stdout.strip() or "0")
+    except (OSError, ValueError):
+        return None
+    return round(rss_kb / 1024, 1)
+
+
+def _build_bridge_telemetry_payload() -> dict:
+    environment = _collect_environment()
+    subprocesses = _collect_subprocess_info()
+    startup_progress = build_startup_progress_snapshot().to_dict()
+    runtime_info = build_mock_runtime_snapshot().to_dict()
+    uptime_seconds = round((datetime.now(tz=UTC) - state.bridge_start_time).total_seconds(), 1)
+    return {
+        "bridge": {
+            "uptime_seconds": uptime_seconds,
+            "process_rss_mb": environment.get("process_rss_mb"),
+            "python": environment.get("python"),
+            "platform": environment.get("platform"),
+            "arch": environment.get("arch"),
+            "kernel": environment.get("kernel"),
+            "audio_server": environment.get("audio_server"),
+            "bluez": environment.get("bluez"),
+        },
+        "startup_progress": startup_progress,
+        "runtime_info": runtime_info,
+        "subprocesses": subprocesses,
+        "event_hooks": get_event_hook_registry().snapshot(),
+    }
 
 
 def _sanitized_config() -> dict:

@@ -33,6 +33,7 @@ from services.device_registry import (
 from services.device_registry import (
     set_disabled_devices as _set_registry_disabled_devices,
 )
+from services.event_hooks import dispatch_internal_event_to_hooks
 from services.internal_events import InternalEvent, InternalEventPublisher, normalize_device_event
 
 __all__ = [
@@ -69,6 +70,7 @@ __all__ = [
     "load_adapter_name_cache",
     "mark_ma_now_playing_stale",
     "notify_status_changed",
+    "publish_bridge_event",
     "publish_device_event",
     "publish_internal_event",
     "record_device_event",
@@ -446,6 +448,7 @@ def _persist_internal_device_event(event: InternalEvent) -> None:
 
 
 _internal_event_publisher.subscribe(_persist_internal_device_event)
+_internal_event_publisher.subscribe(dispatch_internal_event_to_hooks)
 
 
 def publish_internal_event(
@@ -485,6 +488,16 @@ def publish_device_event(
     if event is None:
         return None
     return {**normalized, "at": event.at}
+
+
+def publish_bridge_event(event_type: str, *, payload: dict[str, Any] | None = None) -> InternalEvent | None:
+    """Publish a bridge-wide lifecycle/telemetry event through the internal event bus."""
+    return publish_internal_event(
+        event_type=event_type,
+        category="bridge_event",
+        subject_id="bridge",
+        payload=payload,
+    )
 
 
 def record_device_event(

@@ -1667,6 +1667,80 @@ def test_runtime_info_endpoint_and_status_include_mock_runtime(client):
         state.set_runtime_mode_info(None)
 
 
+def test_api_bridge_telemetry_includes_resource_and_hook_data(client, monkeypatch):
+    import routes.api_status as api_status
+    from services.event_hooks import get_event_hook_registry
+
+    registry = get_event_hook_registry()
+    registry.clear()
+    registry.register(url="https://example.com/hook", categories=["bridge_event"])
+    monkeypatch.setattr(
+        api_status,
+        "_collect_environment",
+        lambda: {
+            "process_rss_mb": 42.5,
+            "python": "3.12.0",
+            "platform": "Linux-test",
+            "arch": "x86_64",
+            "kernel": "6.8.0",
+            "audio_server": "pulseaudio 16.1",
+            "bluez": "5.72",
+        },
+    )
+    monkeypatch.setattr(
+        api_status,
+        "_collect_subprocess_info",
+        lambda: [{"name": "Kitchen", "pid": 1234, "process_rss_mb": 12.3}],
+    )
+    try:
+        resp = client.get("/api/bridge/telemetry")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["bridge"]["process_rss_mb"] == 42.5
+        assert data["subprocesses"][0]["process_rss_mb"] == 12.3
+        assert data["event_hooks"]["summary"]["registered_hooks"] == 1
+    finally:
+        registry.clear()
+
+
+def test_api_hooks_register_list_and_delete(client):
+    from services.event_hooks import get_event_hook_registry
+
+    registry = get_event_hook_registry()
+    registry.clear()
+    try:
+        create_resp = client.post(
+            "/api/hooks",
+            data=json.dumps({"url": "https://example.com/hook", "categories": ["bridge_event"]}),
+            content_type="application/json",
+        )
+        assert create_resp.status_code == 201
+        hook = create_resp.get_json()["hook"]
+
+        list_resp = client.get("/api/hooks")
+        assert list_resp.status_code == 200
+        list_data = list_resp.get_json()
+        assert list_data["summary"]["registered_hooks"] == 1
+        assert list_data["hooks"][0]["id"] == hook["id"]
+
+        delete_resp = client.delete(f"/api/hooks/{hook['id']}")
+        assert delete_resp.status_code == 200
+        assert delete_resp.get_json() == {"success": True}
+    finally:
+        registry.clear()
+
+
+def test_api_hooks_reject_invalid_url(client):
+    resp = client.post(
+        "/api/hooks",
+        data=json.dumps({"url": "/relative/path"}),
+        content_type="application/json",
+    )
+
+    assert resp.status_code == 400
+    assert resp.get_json() == {"error": "url must be an absolute http:// or https:// URL"}
+
+
 def test_onboarding_assistant_endpoint_returns_guidance(client, monkeypatch):
     import routes.api_status as api_status
     from services.device_registry import DeviceRegistrySnapshot
@@ -1754,6 +1828,7 @@ def test_api_diagnostics_includes_playing_and_sink_input_metadata(client, monkey
     import state
     from config import CONFIG_SCHEMA_VERSION
     from services.device_registry import DeviceRegistrySnapshot
+    from services.event_hooks import get_event_hook_registry
     from services.ipc_protocol import IPC_PROTOCOL_VERSION
 
     fake_client = SimpleNamespace(
@@ -1816,6 +1891,9 @@ def test_api_diagnostics_includes_playing_and_sink_input_metadata(client, monkey
 
     state.set_ma_api_credentials("", "")
     state.set_ma_groups({}, [])
+    hook_registry = get_event_hook_registry()
+    hook_registry.clear()
+    hook_registry.register(url="https://example.com/hook", categories=["device_event"])
     try:
         resp = client.get("/api/diagnostics")
         assert resp.status_code == 200
@@ -1828,11 +1906,14 @@ def test_api_diagnostics_includes_playing_and_sink_input_metadata(client, monkey
         assert data["sink_inputs"][0]["state"] == "RUNNING"
         assert data["sink_inputs"][0]["application_name"] == "Sendspin Bridge"
         assert data["sink_inputs"][0]["media_name"] == "Quiet Woods"
+        assert data["event_hooks"]["summary"]["registered_hooks"] == 1
+        assert data["telemetry"]["event_hooks"]["summary"]["registered_hooks"] == 1
         assert data["onboarding_assistant"]["checks"][0]["key"] == "sink_verification"
     finally:
         sys.modules.pop("sendspin.audio", None)
         state.set_ma_groups({}, [])
         state.set_ma_api_credentials("", "")
+        hook_registry.clear()
 
 
 def test_device_enabled_toggle(client, tmp_path, monkeypatch):
