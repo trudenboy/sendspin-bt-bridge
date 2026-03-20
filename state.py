@@ -34,7 +34,7 @@ from services.device_registry import (
     set_disabled_devices as _set_registry_disabled_devices,
 )
 from services.event_hooks import dispatch_internal_event_to_hooks
-from services.internal_events import InternalEvent, InternalEventPublisher, normalize_device_event
+from services.internal_events import DeviceEventType, InternalEvent, InternalEventPublisher, normalize_device_event
 
 __all__ = [
     "apply_ma_now_playing_prediction",
@@ -426,7 +426,7 @@ _internal_event_publisher = InternalEventPublisher()
 
 def _store_device_event(
     device_id: str,
-    event_type: str,
+    event_type: str | DeviceEventType,
     *,
     level: str = "info",
     message: str | None = None,
@@ -484,7 +484,7 @@ def publish_internal_event(
 
 def publish_device_event(
     device_id: str,
-    event_type: str,
+    event_type: str | DeviceEventType,
     *,
     level: str = "info",
     message: str | None = None,
@@ -517,7 +517,7 @@ def publish_bridge_event(event_type: str, *, payload: dict[str, Any] | None = No
 
 def record_device_event(
     device_id: str,
-    event_type: str,
+    event_type: str | DeviceEventType,
     *,
     level: str = "info",
     message: str | None = None,

@@ -276,12 +276,22 @@ def api_hook_register():
     payload = request.get_json(silent=True) or {}
     if not isinstance(payload, dict):
         return jsonify({"error": "Invalid JSON body"}), 400
+    timeout_raw = payload.get("timeout_sec")
+    if timeout_raw in (None, ""):
+        timeout_sec = 5.0
+    elif isinstance(timeout_raw, (int, float, str)):
+        try:
+            timeout_sec = float(timeout_raw)
+        except (TypeError, ValueError) as exc:
+            return jsonify({"error": f"Invalid timeout_sec: {exc}"}), 400
+    else:
+        return jsonify({"error": "Invalid timeout_sec: must be a number"}), 400
     try:
         hook = get_event_hook_registry().register(
             url=str(payload.get("url") or ""),
             categories=payload.get("categories") if isinstance(payload.get("categories"), list) else None,
             event_types=payload.get("event_types") if isinstance(payload.get("event_types"), list) else None,
-            timeout_sec=float(payload.get("timeout_sec") or 5.0),
+            timeout_sec=timeout_sec,
         )
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400

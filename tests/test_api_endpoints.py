@@ -1799,6 +1799,17 @@ def test_api_hooks_reject_private_network_targets(client, monkeypatch):
     assert resp.get_json() == {"error": "url must not target loopback, local, or private network hosts"}
 
 
+def test_api_hooks_reject_non_numeric_timeout_values(client):
+    resp = client.post(
+        "/api/hooks",
+        data=json.dumps({"url": "https://example.com/hook", "timeout_sec": {"seconds": 5}}),
+        content_type="application/json",
+    )
+
+    assert resp.status_code == 400
+    assert resp.get_json() == {"error": "Invalid timeout_sec: must be a number"}
+
+
 def test_onboarding_assistant_endpoint_returns_guidance(client, monkeypatch):
     import routes.api_status as api_status
     from services.device_registry import DeviceRegistrySnapshot

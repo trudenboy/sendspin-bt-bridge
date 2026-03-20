@@ -398,7 +398,7 @@ def _prune_last_volumes(config: dict) -> None:
 def _prune_last_sinks(config: dict) -> None:
     last_sinks = config.get("LAST_SINKS", DEFAULT_CONFIG["LAST_SINKS"])
     if not isinstance(last_sinks, dict):
-        logger.warning("Invalid LAST_SINKS value %r in config; using default {}", last_sinks)
+        logger.warning("Invalid LAST_SINKS value %r in config; using default %r", last_sinks, {})
         config["LAST_SINKS"] = {}
         return
 
