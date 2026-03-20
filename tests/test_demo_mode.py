@@ -55,6 +55,28 @@ def test_demo_bluetooth_manager_disconnect_clears_connection_state():
     assert manager.battery_level is None
 
 
+def test_demo_bluetooth_manager_supports_reconnect_cancellation_api():
+    class StubClient:
+        def __init__(self):
+            self.status = {"reconnecting": True, "reconnect_attempt": 3}
+
+        def _update_status(self, updates: dict) -> None:
+            self.status.update(updates)
+
+    client = StubClient()
+    manager = DemoBluetoothManager("AA:BB:CC:DD:EE:05", device_name="Patio", client=client)
+
+    manager.cancel_reconnect()
+
+    assert manager.management_enabled is False
+    assert client.status["reconnecting"] is False
+    assert client.status["reconnect_attempt"] == 0
+
+    manager.allow_reconnect()
+
+    assert manager.management_enabled is True
+
+
 @pytest.mark.asyncio
 async def test_demo_bluetooth_manager_monitor_loop_stops_after_shutdown(monkeypatch):
     manager = DemoBluetoothManager("AA:BB:CC:DD:EE:01", device_name="Living Room")

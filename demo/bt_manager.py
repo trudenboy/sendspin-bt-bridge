@@ -154,3 +154,13 @@ class DemoBluetoothManager:
 
     def shutdown(self) -> None:
         self._running = False
+
+    def cancel_reconnect(self) -> None:
+        """Mirror runtime API so release flows can stop demo reconnect loops."""
+        self.management_enabled = False
+        if self.client and hasattr(self.client, "_update_status"):
+            self.client._update_status({"reconnecting": False, "reconnect_attempt": 0})
+
+    def allow_reconnect(self) -> None:
+        """Mirror runtime API so reclaim flows can re-enable demo reconnects."""
+        self.management_enabled = True

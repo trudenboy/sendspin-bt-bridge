@@ -845,6 +845,38 @@ function _buttonLabelWithIconHtml(kind, label) {
     return _uiIconSvg(kind, 'btn-icon-svg') + '<span>' + escHtml(label) + '</span>';
 }
 
+function _renderEmptyStateHtml(options) {
+    var opts = options || {};
+    var classes = ['ui-empty-state'];
+    if (opts.className) classes.push(opts.className);
+    if (opts.center) classes.push('ui-empty-state--center');
+    if (opts.compact) classes.push('ui-empty-state--compact');
+    if (opts.inline) classes.push('ui-empty-state--inline');
+    if (opts.tone) classes.push('is-' + opts.tone);
+    return '<div class="' + classes.join(' ') + '">' +
+        (opts.icon ? '<div class="ui-empty-state-icon">' + _uiIconSvg(opts.icon, 'ui-icon-svg') + '</div>' : '') +
+        (opts.title ? '<div class="ui-empty-state-title">' + escHtml(opts.title) + '</div>' : '') +
+        (opts.copyHtml
+            ? '<div class="ui-empty-state-copy">' + opts.copyHtml + '</div>'
+            : (opts.copy ? '<div class="ui-empty-state-copy">' + escHtml(opts.copy) + '</div>' : '')) +
+        (opts.actionsHtml ? '<div class="ui-empty-state-actions">' + opts.actionsHtml + '</div>' : '') +
+    '</div>';
+}
+
+function _renderDiagEmptyCardHtml(title, copy, options) {
+    var opts = options || {};
+    return '<div class="diag-mini-card diag-mini-card--empty">' +
+        _renderEmptyStateHtml({
+            icon: opts.icon || 'info',
+            title: title,
+            copy: copy,
+            compact: true,
+            center: true,
+            tone: opts.tone || 'neutral',
+        }) +
+    '</div>';
+}
+
 function _getBtBadgeStateMeta(dev, adapterInfo) {
     var info = adapterInfo || _getAdapterDisplayInfo(dev);
     if (info.empty) return _buildBadgeStateMeta('neutral', false, 'No Bluetooth adapter assigned');
@@ -2375,7 +2407,17 @@ function _getListArtworkHtml(mediaState) {
 
 function buildListView(entries, hiddenCount) {
     if (!entries.length) {
-        return '<div class="list-view-shell"><div class="list-empty-state">No devices match the current filters.</div></div>';
+        return '<div class="list-view-shell">' +
+            _renderEmptyStateHtml({
+                className: 'list-empty-state',
+                icon: 'search',
+                title: 'No matching devices',
+                copy: 'Adjust the current filters to show more players.',
+                compact: true,
+                center: true,
+                inline: true,
+            }) +
+        '</div>';
     }
     var dirArrow = listSortState.direction === 'asc' ? '&#9652;' : '&#9662;';
     var header = '<div class="list-header">' +
@@ -2434,9 +2476,9 @@ function buildListView(entries, hiddenCount) {
         var cardDisabled = _isDeviceDisabled(dev);
         var detailTransport = '<div class="list-player-transport" onclick="event.stopPropagation()">' +
             _renderPlaybackTransportButtonsHtml(i, transportState, {
-                buttonBaseClass: 'icon-btn list-player-transport-btn',
-                primaryButtonClass: 'icon-btn list-player-transport-btn is-primary',
-                modeButtonClass: 'icon-btn list-player-transport-btn is-mode',
+                buttonBaseClass: 'media-btn list-player-transport-btn',
+                primaryButtonClass: 'media-btn list-player-transport-btn is-primary',
+                modeButtonClass: 'media-btn list-player-transport-btn is-mode',
                 modeFirst: true,
                 prevTitle: 'Previous track',
                 nextTitle: 'Next track',
@@ -2483,12 +2525,9 @@ function buildListView(entries, hiddenCount) {
             detailMediaLane +
         '</div>';
         var quickActions = '<div class="list-actions" onclick="event.stopPropagation()">' +
-            '<button type="button" class="icon-btn list-inline-btn' + (dev.playing ? '' : ' paused') + '" id="' + rowPauseBtnId + '" onclick="event.stopPropagation();onDevicePause(' + i + ', \'' + rowPauseBtnId + '\')" title="' + escHtmlAttr(pauseTitle) + '"' + (canTransport && !cardDisabled ? '' : ' disabled') + '>' + _playPauseIconHtml(dev.playing) + '</button>' +
-            '<button type="button" class="icon-btn list-inline-btn' + (effectiveMuted ? ' muted' : '') + '" id="' + rowMuteBtnId + '" onclick="event.stopPropagation();onMuteClick(' + i + ', \'' + rowMuteBtnId + '\')" title="' + escHtmlAttr(muteTitle) + '"' + (canMute && !cardDisabled ? '' : ' disabled') + '>' + _muteIconHtml(effectiveMuted) + '</button>' +
+            '<button type="button" class="media-btn list-inline-btn' + (dev.playing ? '' : ' paused') + '" id="' + rowPauseBtnId + '" onclick="event.stopPropagation();onDevicePause(' + i + ', \'' + rowPauseBtnId + '\')" title="' + escHtmlAttr(pauseTitle) + '"' + (canTransport && !cardDisabled ? '' : ' disabled') + '>' + _playPauseIconHtml(dev.playing) + '</button>' +
+            '<button type="button" class="media-btn list-inline-btn' + (effectiveMuted ? ' muted' : '') + '" id="' + rowMuteBtnId + '" onclick="event.stopPropagation();onMuteClick(' + i + ', \'' + rowMuteBtnId + '\')" title="' + escHtmlAttr(muteTitle) + '"' + (canMute && !cardDisabled ? '' : ' disabled') + '>' + _muteIconHtml(effectiveMuted) + '</button>' +
             '<button type="button" class="icon-btn list-inline-btn list-settings-btn" onclick="event.stopPropagation();openDeviceSettings(' + i + ')" title="Device settings"' + (cardDisabled ? ' disabled' : '') + '>' + _settingsIconHtml() + '</button>' +
-            '<span class="list-row-affordance' + (expanded ? ' expanded' : '') + '" aria-hidden="true">' +
-                '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>' +
-            '</span>' +
         '</div>';
         var nameTitleRow = '<span class="list-name-title-row">' +
             '<span class="list-name-title-group">' +
@@ -2555,7 +2594,17 @@ function renderDevicesView() {
     var entries = _getVisibleDeviceEntries();
     if (!entries.length && lastDevices.length) {
         grid.classList.toggle('list-view', currentViewMode === 'list');
-        grid.innerHTML = '<div class="list-view-shell"><div class="list-empty-state">No devices match the current filters.</div></div>';
+        grid.innerHTML = '<div class="list-view-shell">' +
+            _renderEmptyStateHtml({
+                className: 'list-empty-state',
+                icon: 'search',
+                title: 'No matching devices',
+                copy: 'Adjust the current filters to show more players.',
+                compact: true,
+                center: true,
+                inline: true,
+            }) +
+        '</div>';
         return;
     }
     if (currentViewMode === 'list') {
@@ -2795,9 +2844,9 @@ function buildDeviceCard(i) {
         '</div>' +
         '<div class="card-controls">' +
           _renderPlaybackTransportButtonsHtml(i, placeholderTransport, {
-              buttonBaseClass: 'icon-btn',
-              primaryButtonClass: 'icon-btn',
-              modeButtonClass: 'icon-btn',
+              buttonBaseClass: 'media-btn',
+              primaryButtonClass: 'media-btn',
+              modeButtonClass: 'media-btn',
               renderPrevNextWhenInactive: true,
               renderModeButtonsWhenInactive: true,
               disableWhenInactive: true,
@@ -2807,7 +2856,7 @@ function buildDeviceCard(i) {
             '<input type="range" min="0" max="100" value="100" id="vslider-' + i + '" oninput="onVolumeInput(' + i + ', this.value)">' +
             '<span class="vol-pct" id="dvol-' + i + '">100</span>' +
           '</div>' +
-          '<button type="button" class="icon-btn" id="dmute-' + i + '" title="Mute/Unmute"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg></button>' +
+          '<button type="button" class="media-btn" id="dmute-' + i + '" title="Mute/Unmute"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg></button>' +
         '</div>' +
         '<div class="card-np" id="dnp-' + i + '" style="display:none">' +
           _renderNowPlayingArtworkHtml(i, placeholderMedia, {
@@ -3545,7 +3594,7 @@ function onGroupMute() {
                 ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>'
                 : '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>';
             btn.title = muteVal ? 'Unmute All' : 'Mute All';
-            btn.className = 'icon-btn' + (muteVal ? ' muted' : '');
+            btn.className = 'media-btn media-btn--toolbar' + (muteVal ? ' muted' : '');
         }
     }).finally(function() { _unlockBtn(btnId); });
 }
@@ -4325,27 +4374,37 @@ function _hasDetectedAdapter() {
 function _buildEmptyStateHTML(disabledDevices) {
     var disabledCount = Array.isArray(disabledDevices) ? disabledDevices.length : 0;
     if (disabledCount > 0) {
-        return '<div class="no-devices-icon">' + _uiIconSvg('settings', 'ui-icon-svg') + '</div>' +
-            '<div class="no-devices-text">All Bluetooth devices are disabled</div>' +
-            '<div class="service-state-copy">Re-enable a device in Configuration \u2192 Devices to bring it back into the bridge.' +
-                (disabledCount > 1 ? ' (' + disabledCount + ' devices disabled)' : '') +
-            '</div>' +
-            '<a href="#" class="no-devices-link" onclick="return _runOnboardingAssistantAction(\'open_devices_settings\')">' +
+        return _renderEmptyStateHtml({
+            icon: 'settings',
+            title: 'All Bluetooth devices are disabled',
+            copy: 'Re-enable a device in Configuration → Devices to bring it back into the bridge.' +
+                (disabledCount > 1 ? ' (' + disabledCount + ' devices disabled)' : ''),
+            center: true,
+            actionsHtml: '<a href="#" class="no-devices-link" onclick="return _runOnboardingAssistantAction(\'open_devices_settings\')">' +
                 _uiIconSvg('settings', 'no-devices-link-icon') + '<span>Open device settings</span>' +
-            '</a>';
+            '</a>',
+        });
     }
     if (!_hasDetectedAdapter()) {
-        return '<div class="no-devices-icon">' + _uiIconSvg('plug', 'ui-icon-svg') + '</div>' +
-            '<div class="no-devices-text">No Bluetooth adapter detected</div>' +
-            '<a href="#" class="no-devices-link" onclick="_goToAdapters(); return false;">' +
+        return _renderEmptyStateHtml({
+            icon: 'plug',
+            title: 'No Bluetooth adapter detected',
+            copy: 'Add or map an adapter before scanning for speakers.',
+            center: true,
+            actionsHtml: '<a href="#" class="no-devices-link" onclick="_goToAdapters(); return false;">' +
                 _uiIconSvg('plus', 'no-devices-link-icon') + '<span>Add adapter</span>' +
-            '</a>';
+            '</a>',
+        });
     }
-    return '<div class="no-devices-icon">' + _uiIconSvg('bt', 'ui-icon-svg') + '</div>' +
-        '<div class="no-devices-text">No Bluetooth devices configured</div>' +
-        '<a href="#" class="no-devices-link" onclick="_goToDevicesAndScan(); return false;">' +
+    return _renderEmptyStateHtml({
+        icon: 'bt',
+        title: 'No Bluetooth devices configured',
+        copy: 'Scan nearby speakers or add a device manually to start playback.',
+        center: true,
+        actionsHtml: '<a href="#" class="no-devices-link" onclick="_goToDevicesAndScan(); return false;">' +
             _uiIconSvg('search', 'no-devices-link-icon') + '<span>Scan for devices</span>' +
-        '</a>';
+        '</a>',
+    });
 }
 
 function _goToAdapters() {
@@ -4411,7 +4470,11 @@ async function startBtScan() {
     var listDiv = document.getElementById('scan-results-list');
 
     btn.disabled = true;
-    status.innerHTML = '<span class="scan-spinner"></span> Scanning\u2026 (~15s)';
+    status.innerHTML = '<span class="scan-status-pill is-scanning">' +
+        '<span class="scan-spinner"></span>' +
+        '<span class="scan-status-label">Scanning nearby devices</span>' +
+        '<span class="scan-status-hint">~15 s</span>' +
+    '</span>';
     box.hidden = true;
 
     try {
@@ -4442,14 +4505,23 @@ async function startBtScan() {
         if (devices === null) { throw new Error('Scan timed out'); }
 
         if (devices.length === 0) {
-            status.innerHTML = '<strong>No devices found.</strong>' +
-                '<div style="margin-top:6px;font-size:12px;color:var(--text-secondary,#888);line-height:1.5">' +
-                '\u2022 Make sure your speaker is in <b>pairing mode</b> (usually hold the Bluetooth button for 3\u20135 s)<br>' +
-                '\u2022 Move the device closer to the Bluetooth adapter<br>' +
-                '\u2022 Some devices need to be <b>unpaired</b> from other sources (phone, laptop) first<br>' +
-                '\u2022 Try scanning again \u2014 some speakers advertise intermittently</div>';
+            status.innerHTML = _renderEmptyStateHtml({
+                className: 'scan-status-card is-empty',
+                icon: 'search',
+                title: 'No devices found',
+                copyHtml: '<ul class="ui-empty-state-list">' +
+                    '<li>Make sure your speaker is in <strong>pairing mode</strong> (usually hold the Bluetooth button for 3–5 s)</li>' +
+                    '<li>Move the device closer to the Bluetooth adapter</li>' +
+                    '<li>Some devices need to be <strong>unpaired</strong> from other sources first</li>' +
+                    '<li>Try scanning again — some speakers advertise intermittently</li>' +
+                '</ul>',
+                compact: true,
+                inline: true,
+            });
         } else {
-            status.textContent = 'Found ' + devices.length + ' device(s)';
+            status.innerHTML = '<span class="scan-status-pill is-success">' +
+                '<span class="scan-status-label">Found ' + String(devices.length) + ' device(s)</span>' +
+            '</span>';
             listDiv.innerHTML = devices.map(function(d, i) {
                 return '<div class="scan-result-item" data-scan-idx="' + i + '">' +
                     '<span class="scan-result-actions">' +
@@ -4480,7 +4552,9 @@ async function startBtScan() {
         }
         _startScanCooldown(btn, 10);
     } catch (err) {
-        status.textContent = 'Scan failed: ' + err.message;
+        status.innerHTML = '<span class="scan-status-pill is-error">' +
+            '<span class="scan-status-label">Scan failed: ' + escHtml(err.message || 'Unknown error') + '</span>' +
+        '</span>';
         btn.disabled = false;
     }
 }
@@ -6361,6 +6435,11 @@ function _setConfigDirty(dirty) {
     }
     var footer = document.getElementById('config-footer');
     if (footer) footer.classList.toggle('is-dirty', dirty);
+    var banner = document.getElementById('config-dirty-banner');
+    if (banner) {
+        banner.hidden = !dirty;
+        _syncNoticeStack();
+    }
     _syncConfigFooterActions();
 }
 // Watch config form for any change
@@ -7683,7 +7762,7 @@ function openBluetoothSettings() {
 }
 
 function _renderDiagConfigButton(actionKey, buttonLabel) {
-    return '<button type="button" class="btn btn-sm btn-ghost diag-config-btn" onclick="return runDiagnosticsConfigJump(\'' +
+    return '<button type="button" class="btn btn-sm btn-secondary diag-config-btn" onclick="return runDiagnosticsConfigJump(\'' +
         String(actionKey) + '\')">' + escHtml(buttonLabel || 'Open settings') + '</button>';
 }
 
@@ -7696,7 +7775,7 @@ function runDiagnosticsConfigJump(actionKey) {
 }
 
 function _renderDiagCopyButton(sectionId, label, buttonLabel) {
-    return '<button type="button" class="btn btn-sm btn-ghost diag-copy-btn" onclick="return copyDiagnosticsSection(\'' +
+    return '<button type="button" class="btn btn-sm btn-secondary diag-copy-btn" onclick="return copyDiagnosticsSection(\'' +
         String(sectionId) + '\', \'' + String(label) + '\')">' + escHtml(buttonLabel || 'Copy') + '</button>';
 }
 
@@ -7779,7 +7858,7 @@ function _renderRecoveryIssueActionRow(issue) {
 
 function _renderRecoveryIssues(issues) {
     if (!issues || !issues.length) {
-        return '<div class="diag-mini-card"><div class="diag-mini-meta">Nothing needs recovery right now.</div></div>';
+        return _renderDiagEmptyCardHtml('Recovery clear', 'Nothing needs recovery right now.', {icon: 'check', tone: 'success'});
     }
     return '<div class="diag-recovery-list">' + issues.map(function(issue) {
         var tone = issue.severity === 'error' ? 'error' : 'warning';
@@ -7793,7 +7872,7 @@ function _renderRecoveryIssues(issues) {
 
 function _renderRecoveryTraces(traces) {
     if (!traces || !traces.length) {
-        return '<div class="diag-mini-card"><div class="diag-mini-meta">No recent recovery events recorded yet.</div></div>';
+        return _renderDiagEmptyCardHtml('No recent recovery events', 'No recovery events have been recorded yet.', {icon: 'info'});
     }
     return '<div class="diag-trace-list">' + traces.map(function(trace) {
         var entries = trace.entries || [];
@@ -7819,7 +7898,7 @@ function _renderRecoveryTraces(traces) {
 function _renderKnownGoodTestPath(testPath) {
     var steps = testPath && testPath.steps ? testPath.steps : [];
     if (!steps.length) {
-        return '<div class="diag-mini-card"><div class="diag-mini-meta">No recommended verification path is available yet.</div></div>';
+        return _renderDiagEmptyCardHtml('Verification path unavailable', 'No recommended verification path is available yet.', {icon: 'info'});
     }
     return '<div class="diag-test-path">' + steps.map(function(step) {
         return '<div class="diag-test-step' + (step.reached ? ' is-reached' : '') + '">' +
@@ -7938,7 +8017,7 @@ function renderDiagnostics(d) {
                 _renderDiagRawDetails(adapter, 'Raw adapter data') +
             '</div>';
         }).join('')
-        : '<div class="diag-mini-card"><div class="diag-mini-meta">No Bluetooth adapters detected.</div></div>';
+        : _renderDiagEmptyCardHtml('No Bluetooth adapters', 'No Bluetooth adapters were detected.', {icon: 'bt'});
 
     var deviceCards = devices.length
         ? devices.map(function(dev) {
@@ -7963,7 +8042,7 @@ function renderDiagnostics(d) {
                 _renderDiagRawDetails(dev, 'Raw speaker data') +
             '</div>';
         }).join('')
-        : '<div class="diag-mini-card"><div class="diag-mini-meta">No speakers are configured yet.</div></div>';
+        : _renderDiagEmptyCardHtml('No speakers configured', 'Add a speaker in Configuration → Devices to start monitoring it here.', {icon: 'speaker'});
 
     var sinkStates = {};
     var sinkOwners = {};
@@ -8002,7 +8081,17 @@ function renderDiagnostics(d) {
                 '<td>' + escHtml(sinkOwners[sink] || '—') + '</td>' +
             '</tr>';
         }).join('')
-        : '<tr><td colspan="3">No Bluetooth sinks detected.</td></tr>';
+        : '<tr class="sink-table-empty-row"><td colspan="3">' +
+            _renderEmptyStateHtml({
+                className: 'sink-table-empty-state',
+                icon: 'bt',
+                title: 'No Bluetooth sinks',
+                copy: 'No Bluetooth sinks were detected for the current runtime.',
+                compact: true,
+                center: true,
+                inline: true,
+            }) +
+        '</td></tr>';
 
     var groupCards = groups.length
         ? groups.map(function(group) {
@@ -8039,7 +8128,7 @@ function renderDiagnostics(d) {
                 _renderDiagRawDetails(group, 'Raw group data') +
             '</div>';
         }).join('')
-        : '<div class="diag-mini-card"><div class="diag-mini-meta">No Music Assistant groups are available.</div></div>';
+        : _renderDiagEmptyCardHtml('No Music Assistant groups', 'No Music Assistant groups are available.', {icon: 'ma'});
 
     var subprocessInfo = subprocesses.length
         ? subprocesses.map(function(proc) {
@@ -8057,7 +8146,7 @@ function renderDiagnostics(d) {
                 _renderDiagRawDetails(proc, 'Raw process data') +
             '</div>';
         }).join('')
-        : '<div class="diag-mini-card"><div class="diag-mini-meta">No advanced runtime details are available.</div></div>';
+        : _renderDiagEmptyCardHtml('No advanced runtime details', 'No advanced runtime details are available.', {icon: 'info'});
 
     var advancedOverview = [
         {label: 'Audio server', value: audioServerLabel, code: true, stack: true},
@@ -8088,7 +8177,7 @@ function renderDiagnostics(d) {
                     _renderDiagRawDetails(input, 'Raw stream data') +
                 '</div>';
             }).join('')
-            : '<div class="diag-mini-card"><div class="diag-mini-meta">No current audio streams.</div></div>');
+            : _renderDiagEmptyCardHtml('No current audio streams', 'No current audio streams were detected.', {icon: 'speaker'}));
 
     var portAudioCards = portAudioError
         ? '<div class="diag-mini-card"><div class="diag-mini-title">' + dot('err') + '<span>Local output scan failed</span></div><div class="diag-mini-meta">' + escHtml(portAudioError.error) + '</div></div>'
@@ -8103,7 +8192,7 @@ function renderDiagnostics(d) {
                     _renderDiagRawDetails(device, 'Raw output data') +
                 '</div>';
             }).join('')
-            : '<div class="diag-mini-card"><div class="diag-mini-meta">No local audio outputs were detected.</div></div>');
+            : _renderDiagEmptyCardHtml('No local audio outputs', 'No local audio outputs were detected.', {icon: 'plug'}));
 
     var recoverySummary = recovery.summary || {};
     var recoveryLatency = recovery.latency_assistant || {};
@@ -8128,11 +8217,11 @@ function renderDiagnostics(d) {
     var recoverySafeActions = (recovery.safe_actions || []).map(_renderRecoveryActionButton).join('');
     var diagnosticsActions = '<div class="diag-actions diag-actions--hero">' +
         '<div class="diag-actions-left">' +
-            '<button type="button" class="btn btn-sm btn-refresh" onclick="reloadDiagnostics()">' + _buttonLabelWithIconHtml('refresh', 'Refresh') + '</button>' +
-            '<button type="button" class="btn btn-sm" onclick="downloadDiagnostics()">' + _buttonLabelWithIconHtml('download', 'Download diagnostics') + '</button>' +
+            '<button type="button" class="btn btn-sm btn-secondary" onclick="reloadDiagnostics()">' + _buttonLabelWithIconHtml('refresh', 'Refresh') + '</button>' +
+            '<button type="button" class="btn btn-sm btn-secondary" onclick="downloadDiagnostics()">' + _buttonLabelWithIconHtml('download', 'Download diagnostics') + '</button>' +
         '</div>' +
         '<div class="diag-actions-right">' +
-            '<button type="button" class="btn btn-sm" onclick="return _openBugReport(event)">' + _buttonLabelWithIconHtml('report', 'Submit bug report') + '</button>' +
+            '<button type="button" class="btn btn-sm btn-primary" onclick="return _openBugReport(event)">' + _buttonLabelWithIconHtml('report', 'Submit bug report') + '</button>' +
         '</div>' +
     '</div>';
     var latencyHints = (recoveryLatency.hints || []).map(function(hint) {
