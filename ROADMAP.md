@@ -223,6 +223,42 @@ Reduce setup friction and make operational recovery more actionable.
 
 The project already has onboarding snapshots, diagnostics, startup progress, and event history. The next step is to turn those into **guided operator flows**, not just passive status outputs.
 
+### Design principles for Phase 2
+
+Phase 2 should follow a few proven UI/UX patterns instead of growing ad hoc status screens:
+
+1. **Checklist first, advanced details second**
+   - show the shortest path to first successful playback up front
+   - progressively disclose advanced diagnostics and tuning only when the operator needs them
+
+2. **Use staged flows for linear setup tasks**
+   - pairing, assigning, authenticating, and testing are better represented as a short sequence than as a large static configuration screen
+   - keep exploratory diagnostics outside the main setup path so operators do not have to scan everything at once
+
+3. **Make diagnostics action-oriented**
+   - every important warning should answer three questions:
+     - what is wrong
+     - what probably caused it
+     - what the safest next action is
+
+4. **Separate capability from current health**
+   - the UI should distinguish:
+     - what a bridge/device supports in principle
+     - what is currently available right now
+     - what is blocked and why
+
+5. **Prefer traceable recovery over opaque automation**
+   - automatic reconnects and self-healing still matter, but operators should be able to inspect the recent path, rerun checks, and understand what the bridge just attempted
+
+6. **Keep operator UX mobile-safe and low-friction**
+   - primary actions should stay obvious, touch-safe, and readable in Home Assistant/mobile contexts
+   - auth/setup forms should favor clear labels, inline validation, and minimal dead-end states
+
+7. **Teach the system model, not just the settings**
+   - the UI should make it obvious how the operator should think about the bridge:
+     - adapter / speaker / bridge device / MA player / zone
+   - first-run UX should reinforce that mental model instead of only exposing raw config fields
+
 ### Epics
 
 #### Epic 4. Expand onboarding assistant into guided setup flows
@@ -237,11 +273,18 @@ Backlog:
 2. Add remediation actions and stronger UI entry points
 3. Reuse the same guidance model across dashboard, diagnostics, and bugreport outputs
 4. Align onboarding state with live lifecycle and telemetry data
+5. Add a persistent setup checklist with completion state, current blocker, and explicit “next best action”
+6. Split first-run setup from advanced diagnostics via progressive disclosure instead of one large mixed surface
+7. Turn MA sign-in and device-attachment steps into staged flows with inline validation, duplicate-device warnings, and explicit success/failure checkpoints
+8. Add context-aware empty states that explain why a section is empty and what action unlocks it
+9. Introduce a simple operator IA that makes “Get started”, “Operate”, and “Recover” feel like distinct jobs instead of one flat admin page
+10. Add a “first room / first speaker” golden path that explicitly walks through naming, assignment, and first successful playback instead of dropping the operator into the full admin surface
+11. Confirm successful player creation with live status updates (for example: bridge device created, BT connected, sink attached, MA player visible) so operators do not have to infer success from scattered status widgets
 
 Suggested PRs:
 
-- PR 7: guided onboarding backend surfaces
-- PR 8: onboarding UI integration and remediation actions
+- PR 7: checklist-driven onboarding backend and step model
+- PR 8: staged onboarding UI, empty states, and remediation actions
 
 #### Epic 5. Introduce an explicit capability model
 
@@ -255,11 +298,15 @@ Backlog:
 2. Model battery support, release/reclaim support, routing modes, sink presence, and recovery affordances
 3. Expose capabilities in API payloads and diagnostics
 4. Render capability-aware UI controls and messaging
+5. Distinguish `supported`, `currently_available`, and `blocked_reason` so UI controls can explain themselves
+6. Expose recommended actions / safe actions per runtime state instead of deriving them ad hoc in the frontend
+7. Group capabilities into operator-facing domains such as connectivity, playback/control, Music Assistant integration, recovery, and diagnostics
+8. Use the capability model to decide which onboarding and recovery steps are relevant on a given device/runtime
 
 Suggested PRs:
 
-- PR 9: capability model and API exposure
-- PR 10: capability-aware UI and diagnostics
+- PR 9: capability schema, action affordances, and API exposure
+- PR 10: capability-aware UI states, onboarding, and diagnostics
 
 #### Epic 6. Improve latency and recovery tooling
 
@@ -273,17 +320,25 @@ Backlog:
 2. Improve sink verification and sink recovery explainability
 3. Add structured timeline/export surfaces for event history and recovery paths
 4. Expose sync-related hints in diagnostics and onboarding
+5. Add an issue/recovery center that groups active problems by severity, recommended action, and affected devices
+6. Add trace-style recovery timelines for startup, reconnect, sink attach, MA auth, and playback-health transitions
+7. Let operators rerun safe checks/actions from the UI (for example: rerun preflight, retry MA auth validation, retry sink verification, reconnect a device)
+8. Add a latency calibration assistant for multi-device setups with presets, comparison hints, and safe default recommendations
+9. Attach trace/timeline context directly to diagnostics download and bugreport generation so support flows start with actionable evidence
+10. Add a known-good test path for recovery (“test this speaker / test this routing path / confirm MA visibility”) so operators can separate wiring/config issues from playback/content issues
 
 Suggested PRs:
 
-- PR 11: latency and sink recovery guidance
-- PR 12: timeline exports and richer recovery tooling
+- PR 11: issue center, rerunnable checks, and sink recovery guidance
+- PR 12: trace timelines, latency assistant, and richer recovery tooling
 
 ### Exit Criteria
 
 - new users can identify setup blockers with less guesswork
 - operators can see which actions are possible on a given device/runtime
 - multi-device recovery and tuning are practical without deep code familiarity
+- onboarding feels like a checklist-driven workflow instead of a passive status dump
+- operators can trace and retry the most important recovery paths without leaving the UI
 
 ## Phase 3: Backend Abstraction for v3
 
