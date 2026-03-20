@@ -67,9 +67,9 @@ Full Home Assistant guide: <https://trudenboy.github.io/sendspin-bt-bridge/insta
 
 The roadmap is now aligned with the **current runtime**, not an older refactor wishlist.
 
-- **Now:** finish the v2 runtime foundation already in progress — snapshot-first reads, clearer device registry ownership, and less `state.py` coupling.
-- **Next:** formalize contracts, diagnostics, event history, telemetry, and config migrations so the bridge is easier to evolve and easier to operate.
-- **Then:** deepen onboarding, recovery UX, latency guidance, and capability-aware UI/API behavior.
+- **Now:** Phase 1 runtime cleanup is complete; the current focus is guided onboarding, capability modeling, and stronger recovery UX on top of the shipped v2 runtime.
+- **Next:** deepen onboarding flows, make bridge/device capabilities explicit, and improve latency/recovery guidance so setup and troubleshooting require less guesswork.
+- **Then:** keep expanding operator-facing UX and diagnostics without reintroducing `state.py`-centric coupling.
 - **Later:** introduce backend abstraction for v3 only after the Bluetooth core is explicit and stable, then selectively add adjacent backends such as local sinks or ALSA outputs.
 
 See [`ROADMAP.md`](ROADMAP.md) for the full phased plan, epics, PR sequence, and guardrails.

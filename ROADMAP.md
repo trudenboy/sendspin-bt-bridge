@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This roadmap reflects the **current `main` branch after PR #80 and release `v2.41.0-rc.1`**.
+This roadmap reflects the **current `main` branch after PR #81 and tag `v2.41.0-rc.2`**.
 
 Its job is no longer to describe an aspirational Phase 1 / Phase 2 foundation that has not shipped yet. That foundation is now largely in the repository and on the release track. The roadmap should therefore answer a different question:
 
@@ -17,7 +17,7 @@ The project remains Bluetooth-first. Reliability on real Home Assistant, Docker,
 
 ### What is already shipped
 
-The former Phase 1 and Phase 2 foundation work is now effectively **complete and shipped in `v2.41.0-rc.1`**:
+The former Phase 1 and Phase 2 foundation work shipped in `v2.41.0-rc.1`, and the follow-up **Phase 1 integration cleanup shipped in `v2.41.0-rc.2`**:
 
 - snapshot-first read models are the default path across the main status and diagnostics surfaces
 - `DeviceRegistry` is a real canonical inventory service instead of only a read helper
@@ -26,13 +26,15 @@ The former Phase 1 and Phase 2 foundation work is now effectively **complete and
 - device event history and health explanations are normalized enough to drive richer diagnostics
 - config lifecycle handling is schema-aware across load / save / import / validation / HA translation paths
 - bridge telemetry and runtime event hooks exist and are operator-visible
+- route modules now read bridge / MA / async-job / adapter state through dedicated services instead of direct `state.py` imports
+- `state.py` is now a compatibility facade over explicit runtime-state owners (`bridge_runtime_state`, `ma_runtime_state`, `async_job_state`, `adapter_names`)
+- lifecycle startup/shutdown contracts are integration-tested and documented as operator-facing runtime guarantees
 
 ### What is still unfinished
 
 The remaining gaps are now narrower and more specific:
 
-- `state.py` is still the main mutable coordination surface and compatibility layer
-- routes and services still contain direct `state.*` access that should move behind registry / snapshot / lifecycle seams
+- `state.py` is still the compatibility home for some shared runtime surfaces (event bus, client publication, device-event history), even though it is no longer the route-level ownership center
 - onboarding exists as a guidance snapshot, but not yet as guided operator flows
 - there is still no explicit device / bridge capability model
 - latency tuning, recovery tooling, and timeline-style diagnostics are still shallow
@@ -89,14 +91,14 @@ Every phase must preserve the realities of A2DP output:
 - delayed post-reconnect availability
 - hardware-specific latency behavior
 
-### 2. Finish integration cleanup before starting new abstractions
+### 2. Keep integration cleanup finished before starting new abstractions
 
-The biggest risk is no longer “missing architecture”. It is **running two architectural styles in parallel**:
+The biggest risk is no longer “missing architecture”. It is regressing back into **two architectural styles in parallel**:
 
-- newer registry / snapshot / lifecycle seams
-- older `state.py`-centric coordination and route access patterns
+- the newer registry / snapshot / lifecycle / runtime-state seams
+- ad hoc `state.py`-centric access patterns reintroduced by later feature work
 
-The next phase should reduce that overlap before adding broader backend concepts.
+The next phase should preserve the completed cleanup while moving on to onboarding, capability modeling, and recovery UX.
 
 ### 3. Keep migrations incremental
 
@@ -139,86 +141,61 @@ Backend abstraction, local audio outputs, and broader platform expansion are sti
 
 ### Remaining architectural hotspot
 
-The architecture is materially better than it was before `v2.41.0-rc.1`, but `state.py` still carries too much coordination weight. The next phase should make the shipped architecture the **only** architecture, not just the preferred one.
+The architecture is materially better than it was before `v2.41.0-rc.1`: route-level cleanup is complete, lifecycle contracts are documented, and `state.py` is no longer the practical ownership center for bridge / MA / job / adapter state. The remaining hotspot is narrower:
 
-## Phase 1: Finish v2 Integration Cleanup
+- shared compatibility state still mixes event publication, client snapshots, and device-event history
+- future features still need to avoid sliding back into direct mutable shared-state coupling
 
-### Goal
+## Phase 1: Finish v2 Integration Cleanup — Completed
 
-Turn the newly shipped runtime foundation into the unambiguous canonical path.
+### Delivery summary
 
-### Why this phase exists
+Phase 1 was completed across PR `#81` and tag `v2.41.0-rc.2`.
 
-Former Phase 1 and 2 already delivered the main building blocks. What remains is the cleanup work that those phases exposed:
+#### Epic 1. De-centered route and service reads from `state.py` ✓
 
-- route-level dependence on `state.py`
-- compatibility wrappers that still act like first-class runtime ownership
-- lifecycle and contract seams that are implemented, but not yet documented and integration-tested enough
+Delivered:
 
-### Epics
+1. Route modules now read bridge / MA / async-job / adapter state through dedicated services
+2. Route knowledge of shared mutable internals was reduced substantially
+3. Compatibility tests were updated to patch the new route-facing seams instead of old `state` imports
 
-#### Epic 1. De-center route and service reads from `state.py`
+#### Epic 2. Clarified write-side ownership and shared-state boundaries ✓
 
-Outcome:
+Delivered:
 
-- routes read from registry / snapshot / lifecycle services by default
+1. `bridge_runtime_state`, `ma_runtime_state`, `async_job_state`, and `adapter_names` now own their respective runtime domains
+2. `state.py` delegates to those owners as a compatibility facade instead of remaining the practical center of runtime ownership
+3. Lifecycle publication, MA state, jobs, and adapter cache responsibilities are now materially more explicit
 
-Backlog:
+#### Epic 3. Added lifecycle integration tests and contract documentation ✓
 
-1. Audit and migrate remaining direct `state.*` read paths in route modules
-2. Move remaining status/MA/runtime lookups behind explicit helpers or snapshot builders
-3. Reduce route knowledge of shared mutable internals
-4. Add focused tests proving compatibility after the migration
+Delivered:
 
-Suggested PRs:
+1. Lifecycle integration coverage now locks down startup/shutdown publication ordering and failure publication
+2. README-level runtime contract documentation now describes lifecycle events, diagnostics/telemetry, IPC, and runtime hook guarantees
+3. Release-facing runtime contracts are aligned with tests and the changelog
 
-- PR 1: route read-path cleanup
-- PR 2: registry/lifecycle helper expansion and compatibility tests
+### Exit Criteria Verification
 
-#### Epic 2. Clarify write-side ownership and shared-state boundaries
+- ✓ routes no longer depend heavily on direct `state.py` reads
+- ✓ `state.py` is a compatibility facade, not the architectural center for route/runtime ownership
+- ✓ lifecycle and IPC guarantees are documented and integration-tested
+- ✓ the v2 runtime foundation is clearly finished, not merely shipped
 
-Outcome:
+### Follow-through, not a new phase
 
-- `state.py` becomes a thinner compatibility facade instead of the practical center of the runtime
+Phase 1 should not be re-planned. The only remaining Phase 1-shaped work is minor guardrail follow-through:
 
-Backlog:
-
-1. Separate true ownership surfaces from compatibility shims inside `state.py`
-2. Make lifecycle publication, MA state, jobs, and event persistence boundaries more explicit
-3. Identify what should remain in shared state versus move into dedicated services
-4. Document stable write-side responsibilities
-
-Suggested PRs:
-
-- PR 3: state ownership reduction
-- PR 4: shared-state boundary documentation and cleanup
-
-#### Epic 3. Add lifecycle integration tests and contract documentation
-
-Outcome:
-
-- startup/shutdown/runtime contracts are testable and easier to evolve safely
-
-Backlog:
-
-1. Add integration-style coverage for startup ordering, shutdown ordering, and recovery-sensitive flows
-2. Document supported IPC and telemetry guarantees in code/docs
-3. Tighten diagnostics expectations around lifecycle transitions
-4. Keep release-facing operational contracts aligned with tests
-
-Suggested PRs:
-
-- PR 5: lifecycle integration coverage
-- PR 6: contract and diagnostics documentation
-
-### Exit Criteria
-
-- routes no longer depend heavily on direct `state.py` reads
-- `state.py` is a compatibility facade, not the architectural center
-- lifecycle and IPC guarantees are documented and integration-tested
-- the v2 runtime foundation is clearly “finished”, not merely shipped
+1. keep new features on the explicit runtime-state seams instead of reintroducing direct mutable shared-state access
+2. continue trimming compatibility-only responsibilities from `state.py` when adjacent feature work makes that safe
+3. treat future cleanup as opportunistic maintenance, not as a standalone roadmap phase
 
 ## Phase 2: Onboarding, Capability Model, and Recovery UX
+
+### Status
+
+This is now the **current** roadmap phase.
 
 ### Goal
 
@@ -413,21 +390,19 @@ Suggested PRs:
 
 The safest sequence from the current codebase is now:
 
-1. finish v2 integration cleanup and de-center `state.py`
-2. add lifecycle integration coverage and explicit contract docs
-3. expand onboarding into guided flows
-4. introduce the capability model
-5. improve latency and recovery tooling
-6. only then start backend abstraction
-7. add backend-oriented config schema
-8. prove one or two non-Bluetooth backends
-9. only then consider broader expansion
+1. expand onboarding into guided flows
+2. introduce the capability model
+3. improve latency and recovery tooling
+4. only then start backend abstraction
+5. add backend-oriented config schema
+6. prove one or two non-Bluetooth backends
+7. only then consider broader expansion
 
 ## Dependency Summary
 
-- route cleanup should follow the shipped snapshot / registry / lifecycle seams
-- reducing `state.py` coupling should happen before onboarding and capability work spreads new read paths
-- backend abstraction should come after runtime cleanup and capability modeling
+- guided onboarding should build on the shipped snapshot / registry / lifecycle seams instead of bypassing them
+- capability modeling should precede most UX branching so the UI/API can describe real bridge/device constraints
+- backend abstraction should come after onboarding, capability modeling, and recovery semantics are clearer
 - config schema v2 should come after the current config lifecycle is fully settled
 - speculative platform work should remain downstream from proven backend and diagnostics work
 
@@ -447,7 +422,8 @@ This roadmap is successfully executed when:
 Do not:
 
 - re-plan already completed Phase 1 / Phase 2 work as if it still has to be implemented
-- start backend abstraction while `state.py` still dominates runtime coordination
+- reintroduce direct `state.py` coupling in new feature work now that Phase 1 cleanup is complete
+- start backend abstraction before onboarding, capability, and recovery semantics are clearer
 - treat hooks, telemetry, or diagnostics as substitutes for fixing ownership boundaries
 - expand to speculative backends before guided onboarding and capability clarity exist
 - turn backend abstraction into a rewrite excuse
