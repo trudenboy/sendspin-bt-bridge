@@ -33,7 +33,7 @@ from services.device_registry import (
 from services.device_registry import (
     set_disabled_devices as _set_registry_disabled_devices,
 )
-from services.internal_events import InternalEvent, InternalEventPublisher
+from services.internal_events import InternalEvent, InternalEventPublisher, normalize_device_event
 
 __all__ = [
     "apply_ma_now_playing_prediction",
@@ -417,16 +417,13 @@ def _store_device_event(
     at: str | None = None,
 ) -> dict[str, Any] | None:
     """Append a structured event directly to the per-device ring buffer."""
-    if not device_id or not event_type:
+    if not device_id:
         return None
-
-    event = {
-        "event_type": event_type,
-        "level": level,
-        "message": message or "",
-        "details": dict(details or {}),
-        "at": at or datetime.now(tz=timezone.utc).isoformat(),
-    }
+    normalized = normalize_device_event(event_type, level=level, message=message, details=details)
+    if normalized is None:
+        return None
+    event = dict(normalized)
+    event["at"] = at or datetime.now(tz=timezone.utc).isoformat()
     with _device_events_lock:
         bucket = _device_events.setdefault(device_id, deque(maxlen=_DEVICE_EVENT_LIMIT))
         bucket.append(event)
@@ -476,26 +473,18 @@ def publish_device_event(
     details: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     """Publish a per-device operational event through the internal event bus."""
+    normalized = normalize_device_event(event_type, level=level, message=message, details=details)
+    if normalized is None:
+        return None
     event = publish_internal_event(
         event_type="device.event.recorded",
         category="device_event",
         subject_id=device_id,
-        payload={
-            "event_type": event_type,
-            "level": level,
-            "message": message or "",
-            "details": dict(details or {}),
-        },
+        payload=normalized,
     )
     if event is None:
         return None
-    return {
-        "event_type": event_type,
-        "level": level,
-        "message": message or "",
-        "details": dict(details or {}),
-        "at": event.at,
-    }
+    return {**normalized, "at": event.at}
 
 
 def record_device_event(

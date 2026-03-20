@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING
 
 import state as _state
 from services.device_registry import get_device_registry_snapshot
+from services.internal_events import DeviceEventType
 from services.ma_artwork import build_artwork_proxy_url
 
 if TYPE_CHECKING:
@@ -723,6 +724,16 @@ class MaMonitor:
                     break
             _state.set_ma_connected(False)
             _state.mark_ma_now_playing_stale(disconnect_error)
+            for client in _active_bridge_clients():
+                player_id = str(getattr(client, "player_id", "") or "").strip()
+                if player_id:
+                    _state.publish_device_event(
+                        player_id,
+                        DeviceEventType.MA_MONITOR_STALE,
+                        level="warning",
+                        message=f"MA monitor disconnected: {disconnect_error}",
+                        details={"error": disconnect_error},
+                    )
             if not self._running:
                 break
             await asyncio.sleep(delay)
