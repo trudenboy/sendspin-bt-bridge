@@ -3929,12 +3929,86 @@ body {
             gap: 20px;
             margin-top: 6px;
         }
+        .diag-overview-head {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            padding: 0 2px 2px;
+        }
+        .diag-overview-title {
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--secondary-text-color);
+        }
+        .diag-overview-copy {
+            font-size: 12px;
+            line-height: 1.5;
+            color: var(--secondary-text-color);
+        }
         .diag-card {
             border: 1px solid var(--divider-color);
             border-radius: 12px;
             background: var(--card-background-color);
             overflow: hidden;
             scroll-margin-top: 22px;
+        }
+        .diag-advanced-section {
+            border: 1px solid var(--divider-color);
+            border-radius: 12px;
+            background: var(--card-background-color);
+            overflow: hidden;
+        }
+        .diag-advanced-section > summary {
+            list-style: none;
+            cursor: pointer;
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 14px 16px;
+            color: var(--primary-text-color);
+        }
+        .diag-advanced-section > summary::-webkit-details-marker {
+            display: none;
+        }
+        .diag-advanced-section > summary::before {
+            content: '';
+            display: inline-flex;
+            width: 8px;
+            height: 8px;
+            margin-top: 5px;
+            border-right: 1.7px solid currentColor;
+            border-bottom: 1.7px solid currentColor;
+            transform: rotate(-45deg);
+            transition: transform 0.2s;
+            flex-shrink: 0;
+        }
+        .diag-advanced-section[open] > summary::before {
+            transform: rotate(45deg);
+        }
+        .diag-advanced-section[open] > summary {
+            border-bottom: 1px solid var(--divider-color);
+            background: var(--primary-background-color);
+        }
+        .diag-advanced-summary {
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .diag-advanced-title {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--primary-text-color);
+        }
+        .diag-advanced-copy {
+            font-size: 12px;
+            line-height: 1.5;
+            color: var(--secondary-text-color);
+        }
+        .diag-advanced-panel {
+            padding: 16px;
         }
         .diag-card--primary {
             border-color: rgba(33, 150, 243, 0.22);
@@ -5070,6 +5144,11 @@ body {
             .diag-panel {
                 gap: 16px;
             }
+            .diag-advanced-section > summary,
+            .diag-advanced-panel {
+                padding-left: 14px;
+                padding-right: 14px;
+            }
             .diag-card-header,
             .diag-summary-grid,
             .diag-grid,
@@ -5282,6 +5361,14 @@ body {
             }
             .diag-section summary {
                 font-size: 17px;
+            }
+            .diag-advanced-section > summary {
+                padding-left: 12px;
+                padding-right: 12px;
+            }
+            .diag-advanced-panel {
+                padding-left: 12px;
+                padding-right: 12px;
             }
             .filter-bar select,
             .form-inline > input,

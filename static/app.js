@@ -8009,8 +8009,17 @@ function renderDiagnostics(d) {
     var latencyHints = (recoveryLatency.hints || []).map(function(hint) {
         return _renderDiagInfoItem('Hint', hint, {stack: true});
     }).join('');
+    var advancedPreviewBits = [
+        subprocesses.length + ' daemon' + (subprocesses.length === 1 ? '' : 's'),
+        (sinkInputError ? 'audio stream scan failed' : (visibleSinkInputs.length + ' audio stream' + (visibleSinkInputs.length === 1 ? '' : 's'))),
+        (portAudioError ? 'local output scan failed' : (visiblePortAudioDevices.length + ' local output' + (visiblePortAudioDevices.length === 1 ? '' : 's'))),
+    ].join(' · ');
 
     return '<div class="diag-panel">' +
+        '<div class="diag-overview-head">' +
+            '<div class="diag-overview-title">Overview</div>' +
+            '<div class="diag-overview-copy">Start in this first layer for the current issue, bridge health, and speaker readiness.</div>' +
+        '</div>' +
         '<div class="diag-card diag-card--primary">' +
             '<div class="diag-card-header"><div><div class="diag-card-title">Recovery center</div><div class="diag-card-subtitle">Start here for current blockers, recent recovery signals, and the safest next step.</div></div></div>' +
             '<div class="diag-summary-grid">' + recoveryOverviewCards + '</div>' +
@@ -8047,19 +8056,29 @@ function renderDiagnostics(d) {
             '<div class="diag-card-header"><div><div class="diag-card-title">Music Assistant groups</div><div class="diag-card-subtitle">' + escHtml(ma.url || 'No MA URL configured') + '</div></div></div>' +
             '<div class="diag-ma-groups">' + groupCards + '</div>' +
         '</div>' +
-        '<div class="diag-card">' +
-            '<div class="diag-card-header"><div><div class="diag-card-title">Advanced runtime details</div><div class="diag-card-subtitle">Deep runtime details for bridge daemons, audio streams, and local outputs.</div></div></div>' +
-            '<div class="diag-devices">' + subprocessInfo + '</div>' +
-            '<div class="diag-grid diag-runtime-grid">' + advancedOverview + '</div>' +
-            '<div class="diag-subsection">' +
-                '<div class="diag-subsection-title">Current audio streams</div>' +
-                '<div class="diag-devices diag-subsection-grid">' + sinkInputCards + '</div>' +
+        '<details class="diag-advanced-section">' +
+            '<summary>' +
+                '<span class="diag-advanced-summary">' +
+                    '<span class="diag-advanced-title">Advanced diagnostics</span>' +
+                    '<span class="diag-advanced-copy">' + escHtml(advancedPreviewBits) + '</span>' +
+                '</span>' +
+            '</summary>' +
+            '<div class="diag-advanced-panel">' +
+                '<div class="diag-card">' +
+                    '<div class="diag-card-header"><div><div class="diag-card-title">Advanced runtime details</div><div class="diag-card-subtitle">Deep runtime details for bridge daemons, audio streams, and local outputs.</div></div></div>' +
+                    '<div class="diag-devices">' + subprocessInfo + '</div>' +
+                    '<div class="diag-grid diag-runtime-grid">' + advancedOverview + '</div>' +
+                    '<div class="diag-subsection">' +
+                        '<div class="diag-subsection-title">Current audio streams</div>' +
+                        '<div class="diag-devices diag-subsection-grid">' + sinkInputCards + '</div>' +
+                    '</div>' +
+                    '<div class="diag-subsection">' +
+                        '<div class="diag-subsection-title">Local audio outputs</div>' +
+                        '<div class="diag-devices diag-subsection-grid">' + portAudioCards + '</div>' +
+                    '</div>' +
+                '</div>' +
             '</div>' +
-            '<div class="diag-subsection">' +
-                '<div class="diag-subsection-title">Local audio outputs</div>' +
-                '<div class="diag-devices diag-subsection-grid">' + portAudioCards + '</div>' +
-            '</div>' +
-        '</div>' +
+        '</details>' +
     '</div>';
 }
 
