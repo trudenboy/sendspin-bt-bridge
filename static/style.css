@@ -4026,6 +4026,13 @@ body {
             background: var(--primary-background-color);
             border-bottom: 1px solid var(--divider-color);
         }
+        .diag-card-header-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            flex-shrink: 0;
+        }
         .diag-card-title {
             font-size: 15px;
             font-weight: 700;
@@ -4034,6 +4041,9 @@ body {
         .diag-card-subtitle {
             font-size: 12px;
             color: var(--secondary-text-color);
+        }
+        .diag-copy-btn {
+            white-space: nowrap;
         }
         .diag-grid {
             display: grid;

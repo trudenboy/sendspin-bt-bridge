@@ -7670,6 +7670,34 @@ function _diagGroupOutcome(unavailableMembers, bridgeIssues) {
     return 'Group is ready for synced playback.';
 }
 
+function _renderDiagCopyButton(sectionId, label, buttonLabel) {
+    return '<button type="button" class="btn btn-sm btn-ghost diag-copy-btn" onclick="return copyDiagnosticsSection(\'' +
+        String(sectionId) + '\', \'' + String(label) + '\')">' + escHtml(buttonLabel || 'Copy') + '</button>';
+}
+
+function copyDiagnosticsSection(sectionId, label) {
+    var target = document.getElementById(sectionId);
+    if (!target) {
+        showToast('Could not find diagnostics section to copy', 'error');
+        return false;
+    }
+    var copySource = target.cloneNode(true);
+    Array.prototype.forEach.call(copySource.querySelectorAll('.diag-copy-btn'), function(node) {
+        node.remove();
+    });
+    var text = (copySource.innerText || copySource.textContent || '').trim().replace(/\n{3,}/g, '\n\n');
+    if (!text) {
+        showToast('Nothing to copy from this diagnostics section', 'error');
+        return false;
+    }
+    _copyToClipboard((label ? label + '\n\n' : '') + text).then(function() {
+        showToast((label || 'Diagnostics section') + ' copied to clipboard', 'info');
+    }).catch(function() {
+        showToast('Could not copy diagnostics section', 'error');
+    });
+    return false;
+}
+
 function _renderRecoveryActionButton(action, options) {
     if (!action || !action.key) return '';
     var opts = options || {};
@@ -8081,7 +8109,7 @@ function renderDiagnostics(d) {
             '<div class="diag-overview-copy">Start in this first layer for the current issue, bridge health, and speaker readiness.</div>' +
         '</div>' +
         '<div class="diag-card diag-card--primary diag-jump-target" id="diag-recovery-center">' +
-            '<div class="diag-card-header"><div><div class="diag-card-title">Recovery center</div><div class="diag-card-subtitle">Start here for current blockers, recent recovery signals, and the safest next step.</div></div></div>' +
+            '<div class="diag-card-header"><div><div class="diag-card-title">Recovery center</div><div class="diag-card-subtitle">Start here for current blockers, recent recovery signals, and the safest next step.</div></div><div class="diag-card-header-actions">' + _renderDiagCopyButton('diag-recovery-center', 'Recovery center') + '</div></div>' +
             '<div class="diag-summary-grid">' + recoveryOverviewCards + '</div>' +
             '<div class="diag-recovery-summary diag-recovery-summary--hero">' +
                 '<div class="diag-recovery-headline">' + escHtml(recoverySummary.headline || 'Nothing needs recovery right now') + '</div>' +
@@ -8098,22 +8126,22 @@ function renderDiagnostics(d) {
                 '<div><div class="diag-subsection-title">Recommended verification path</div>' + _renderKnownGoodTestPath(recovery.known_good_test_path || {}) + '</div>' +
             '</div>' +
         '</div>' +
-        '<div class="diag-card">' +
-            '<div class="diag-card-header"><div><div class="diag-card-title">Health summary</div><div class="diag-card-subtitle">Fast read on speaker health, routing coverage, and Music Assistant readiness.</div></div></div>' +
+        '<div class="diag-card diag-jump-target" id="diag-health-summary">' +
+            '<div class="diag-card-header"><div><div class="diag-card-title">Health summary</div><div class="diag-card-subtitle">Fast read on speaker health, routing coverage, and Music Assistant readiness.</div></div><div class="diag-card-header-actions">' + _renderDiagCopyButton('diag-health-summary', 'Health summary') + '</div></div>' +
             '<div class="diag-summary-grid">' + summaryCards + '</div>' +
             '<div class="diag-grid diag-runtime-grid">' + overview + '</div>' +
         '</div>' +
         '<div class="diag-card diag-jump-target" id="diag-speaker-states">' +
-            '<div class="diag-card-header"><div><div class="diag-card-title">Speaker states</div><div class="diag-card-subtitle">Connection state, sink attachment, and the clearest next hint for each speaker.</div></div></div>' +
+            '<div class="diag-card-header"><div><div class="diag-card-title">Speaker states</div><div class="diag-card-subtitle">Connection state, sink attachment, and the clearest next hint for each speaker.</div></div><div class="diag-card-header-actions">' + _renderDiagCopyButton('diag-speaker-states', 'Speaker states') + '</div></div>' +
             '<div class="diag-devices">' + deviceCards + '</div>' +
         '</div>' +
         '<div class="diag-card diag-jump-target" id="diag-routing">' +
-            '<div class="diag-card-header"><div><div class="diag-card-title">Adapters & routing</div><div class="diag-card-subtitle">Detected controllers and attached PulseAudio / PipeWire outputs.</div></div></div>' +
+            '<div class="diag-card-header"><div><div class="diag-card-title">Adapters & routing</div><div class="diag-card-subtitle">Detected controllers and attached PulseAudio / PipeWire outputs.</div></div><div class="diag-card-header-actions">' + _renderDiagCopyButton('diag-routing', 'Adapters & routing') + '</div></div>' +
             '<div class="diag-adapters">' + adapterCards + '</div>' +
             '<div class="sink-table-wrap"><table class="sink-table"><thead><tr><th>Sink</th><th>Status</th><th>Used by</th></tr></thead><tbody>' + sinkRows + '</tbody></table></div>' +
         '</div>' +
         '<div class="diag-card diag-jump-target" id="diag-ma-groups-card">' +
-            '<div class="diag-card-header"><div><div class="diag-card-title">Music Assistant groups</div><div class="diag-card-subtitle">' + escHtml(ma.url || 'No MA URL configured') + '</div></div></div>' +
+            '<div class="diag-card-header"><div><div class="diag-card-title">Music Assistant groups</div><div class="diag-card-subtitle">' + escHtml(ma.url || 'No MA URL configured') + '</div></div><div class="diag-card-header-actions">' + _renderDiagCopyButton('diag-ma-groups-card', 'Music Assistant groups') + '</div></div>' +
             '<div class="diag-ma-groups">' + groupCards + '</div>' +
         '</div>' +
         '<details class="diag-advanced-section">' +
@@ -8124,8 +8152,8 @@ function renderDiagnostics(d) {
                 '</span>' +
             '</summary>' +
             '<div class="diag-advanced-panel">' +
-                '<div class="diag-card">' +
-                    '<div class="diag-card-header"><div><div class="diag-card-title">Advanced runtime details</div><div class="diag-card-subtitle">Deep runtime details for bridge daemons, audio streams, and local outputs.</div></div></div>' +
+                '<div class="diag-card" id="diag-advanced-runtime">' +
+                    '<div class="diag-card-header"><div><div class="diag-card-title">Advanced runtime details</div><div class="diag-card-subtitle">Deep runtime details for bridge daemons, audio streams, and local outputs.</div></div><div class="diag-card-header-actions">' + _renderDiagCopyButton('diag-advanced-runtime', 'Advanced runtime details') + '</div></div>' +
                     '<div class="diag-devices">' + subprocessInfo + '</div>' +
                     '<div class="diag-grid diag-runtime-grid">' + advancedOverview + '</div>' +
                     '<div class="diag-subsection">' +
