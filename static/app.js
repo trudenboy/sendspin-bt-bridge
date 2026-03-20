@@ -227,6 +227,7 @@ var lastGroups = [];
 var lastMaUiUrl = '';
 var lastMaWebUrl = '';
 var _backendServiceState = null;
+var _backendServiceReleaseTimer = null;
 var _statusHasEverSucceeded = false;
 var VIEW_MODE_STORAGE_KEY = 'sendspin-ui:view-mode';
 var _viewModeStorageScope = 'default';
@@ -2535,6 +2536,17 @@ function renderStatusPayload(status) {
     var zeroDeviceRuntimeState = _deriveZeroDeviceRuntimeState(status, devices);
     var grid = document.getElementById('status-grid');
     var emptyEl = document.getElementById('no-devices-hint');
+    var lockoutPendingRelease = !!(_backendServiceState && _backendServiceReleaseTimer && !zeroDeviceRuntimeState);
+    if (lockoutPendingRelease) {
+        lastDevices = [];
+        lastGroups = [];
+        _hideOperatorGuidance();
+        _renderBackendServicePlaceholder(_backendServiceState);
+        _updateGroupPanel();
+        updateHealthIndicator([], status.operator_guidance || null);
+        _syncRestartBanner(status, null);
+        return;
+    }
     if (devices.length === 0) {
         lastDevices = [];
         if (zeroDeviceRuntimeState) {
@@ -4979,10 +4991,28 @@ function _setBackendServiceBanner(state) {
     _syncNoticeStack();
 }
 
-function _applyBackendServiceState(state) {
+function _commitBackendServiceState(state) {
     _backendServiceState = state || null;
     document.body.classList.toggle('backend-ui-locked', !!_backendServiceState);
     _setBackendServiceBanner(_backendServiceState);
+}
+
+function _applyBackendServiceState(state) {
+    if (state) {
+        if (_backendServiceReleaseTimer) {
+            clearTimeout(_backendServiceReleaseTimer);
+            _backendServiceReleaseTimer = null;
+        }
+        _commitBackendServiceState(state);
+        return;
+    }
+    if (!_backendServiceState) return;
+    if (_backendServiceReleaseTimer) return;
+    _backendServiceReleaseTimer = setTimeout(function() {
+        _backendServiceReleaseTimer = null;
+        _commitBackendServiceState(null);
+        updateStatus();
+    }, 5000);
 }
 
 function _isZeroClientStatusError(errorValue) {
