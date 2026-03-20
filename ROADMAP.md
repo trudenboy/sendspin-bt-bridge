@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This roadmap reflects the **current `main` branch after PR #81 and tag `v2.41.0-rc.2`**.
+This roadmap reflects the **current `main` branch after the `v2.41.0-rc.2` release line and the subsequent bridge-identity safeguards on `main`**.
 
 Its job is no longer to describe an aspirational Phase 1 / Phase 2 foundation that has not shipped yet. That foundation is now largely in the repository and on the release track. The roadmap should therefore answer a different question:
 
@@ -29,15 +29,18 @@ The former Phase 1 and Phase 2 foundation work shipped in `v2.41.0-rc.1`, and th
 - route modules now read bridge / MA / async-job / adapter state through dedicated services instead of direct `state.py` imports
 - `state.py` is now a compatibility facade over explicit runtime-state owners (`bridge_runtime_state`, `ma_runtime_state`, `async_job_state`, `adapter_names`)
 - lifecycle startup/shutdown contracts are integration-tested and documented as operator-facing runtime guarantees
+- Music Assistant long-lived tokens can now be named and tracked per physical bridge host instead of only as anonymous bridge credentials
+- config validation now warns when a newly added Bluetooth MAC already appears in Music Assistant under the same stable player identity
 
 ### What is still unfinished
 
 The remaining gaps are now narrower and more specific:
 
 - `state.py` is still the compatibility home for some shared runtime surfaces (event bus, client publication, device-event history), even though it is no longer the route-level ownership center
-- onboarding exists as a guidance snapshot, but not yet as guided operator flows
-- there is still no explicit device / bridge capability model
-- latency tuning, recovery tooling, and timeline-style diagnostics are still shallow
+- onboarding exists as snapshot-based guidance and next-step hints, but not yet as guided operator flows with remediation actions
+- there is still no explicit device / bridge capability model; the UI/API expose useful status fields, but not a first-class capability schema
+- latency tuning, recovery tooling, and timeline-style diagnostics are still shallow; the code has sink verification, event history, and playback-health groundwork, but operators still lack stronger recovery guidance
+- Music Assistant bridge-identity safeguards now exist at config/auth time, but they are not yet integrated into onboarding or capability-aware UX
 - backend abstraction should remain deferred until the v2 runtime is cleaner and more boring
 
 ## Recently Completed Foundations
@@ -79,6 +82,18 @@ Completed in `v2.41.0-rc.1`:
 7. **Telemetry and hook surfaces**
    - `/api/bridge/telemetry` and `/api/hooks` are real runtime surfaces
    - diagnostics and bugreport paths were tightened after PR review follow-up
+
+### Post-`v2.41.0-rc.2` safeguards and operator hardening
+
+Completed on `main` after the `rc.2` tag:
+
+8. **Music Assistant bridge identity safeguards**
+   - long-lived MA tokens are now named from the current hostname and tracked with instance metadata
+   - silent auth distinguishes current-instance tokens from copied/foreign-instance credentials while remaining backward compatible with legacy metadata-free tokens
+
+9. **Duplicate-device protection across bridges**
+   - config validate/save/upload flows now check MA `players/all` using the stable MAC-derived `player_id`
+   - newly added devices warn when they appear to belong to another bridge instead of silently creating a conflict-prone configuration
 
 ## Guiding Principles
 
@@ -145,6 +160,7 @@ The architecture is materially better than it was before `v2.41.0-rc.1`: route-l
 
 - shared compatibility state still mixes event publication, client snapshots, and device-event history
 - future features still need to avoid sliding back into direct mutable shared-state coupling
+- newer operational safeguards should keep building on explicit service seams instead of adding special-case stateful shortcuts
 
 ## Phase 1: Finish v2 Integration Cleanup — Completed
 
@@ -196,6 +212,8 @@ Phase 1 should not be re-planned. The only remaining Phase 1-shaped work is mino
 ### Status
 
 This is now the **current** roadmap phase.
+
+Recent work on `main` after `v2.41.0-rc.2` improved operator safety (bridge-instance token identity, duplicate-device warnings), but it did **not** start the main Phase 2 epics yet. The current focus is still to turn existing snapshots and diagnostics into guided onboarding, explicit capabilities, and stronger recovery UX.
 
 ### Goal
 
