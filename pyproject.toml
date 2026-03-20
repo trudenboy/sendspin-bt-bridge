@@ -31,6 +31,7 @@ ignore = [
     "RUF006", # dangling asyncio task (intentional fire-and-forget)
     "RUF046", # unnecessary int cast (explicit int() on round() is intentional)
     "UP007",  # use X | Y for unions (keep Optional for clarity)
+    "UP042",  # StrEnum rewrite conflicts with compatibility paths and current enum usage
     "B904",   # raise from in except (too disruptive to retrofit)
 ]
 

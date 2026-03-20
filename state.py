@@ -308,7 +308,23 @@ def get_main_loop() -> asyncio.AbstractEventLoop | None:
 
 
 _notify_lock: threading.Lock = threading.Lock()
-_notify_timer: threading.Timer | None = None
+_NotifyThreadBase = threading.Thread
+
+
+class _NotifyTimer(_NotifyThreadBase):
+    """Small timer thread resilient to monkeypatches of `threading.Thread`."""
+
+    def __init__(self, interval: float, callback):
+        super().__init__(daemon=True)
+        self._interval = interval
+        self._callback = callback
+
+    def run(self) -> None:
+        _time.sleep(self._interval)
+        self._callback()
+
+
+_notify_timer: _NotifyTimer | None = None
 
 
 def notify_status_changed() -> None:
@@ -323,8 +339,7 @@ def notify_status_changed() -> None:
         # Race between is_alive() and start() is benign: worst case two timers
         # fire, producing two increments + notify_all() calls which is harmless.
         if _notify_timer is None or not _notify_timer.is_alive():
-            _notify_timer = threading.Timer(0.1, _flush_notify)
-            _notify_timer.daemon = True
+            _notify_timer = _NotifyTimer(0.1, _flush_notify)
             _notify_timer.start()
 
 
