@@ -7586,6 +7586,34 @@ function _diagRecoveryDotTone(tone) {
     return tone === 'error' ? 'err' : (tone === 'warning' || tone === 'warn' ? 'warn' : 'ok');
 }
 
+function _diagCodePill(value) {
+    var text = value == null || value === '' ? '—' : String(value);
+    return '<code class="diag-code-pill">' + escHtml(text) + '</code>';
+}
+
+function _renderDiagMetaRow(label, value, options) {
+    if (value == null || value === '') return '';
+    var opts = options || {};
+    var rowClasses = ['diag-meta-row'];
+    if (opts.stack) rowClasses.push('diag-meta-row--stack');
+    return '<div class="' + rowClasses.join(' ') + '">' +
+        '<span class="diag-meta-label">' + escHtml(label) + '</span>' +
+        '<span class="diag-meta-value">' + (opts.code ? _diagCodePill(String(value)) : escHtml(String(value))) + '</span>' +
+    '</div>';
+}
+
+function _renderDiagInfoItem(label, value, options) {
+    var opts = options || {};
+    var itemClasses = ['diag-item'];
+    if (opts.stack) itemClasses.push('diag-item--stacked');
+    var text = value == null || value === '' ? '—' : String(value);
+    var valueHtml = opts.code ? _diagCodePill(text) : escHtml(text);
+    return '<div class="' + itemClasses.join(' ') + '">' +
+        '<span class="diag-label">' + escHtml(label) + '</span>' +
+        '<span class="diag-value">' + valueHtml + '</span>' +
+    '</div>';
+}
+
 function _renderRecoveryActionButton(action, options) {
     if (!action || !action.key) return '';
     var opts = options || {};
@@ -7765,16 +7793,16 @@ function renderDiagnostics(d) {
     }).join('');
 
     var overview = [
-        ['Version', d.version || 'Unknown'],
-        ['Build date', d.build_date || 'Unknown'],
-        ['Uptime', d.uptime || 'Unknown'],
-        ['Runtime', d.runtime || 'Unknown'],
-        ['Platform', env.platform ? env.platform + (env.arch ? ' (' + env.arch + ')' : '') : 'Unknown'],
-        ['Python', env.python ? env.python.split('\n')[0] : 'Unknown'],
-        ['BlueZ', env.bluez || 'Unknown'],
-        ['D-Bus', d.dbus_available ? 'Available' : 'Missing'],
+        {label: 'Version', value: d.version || 'Unknown', code: true},
+        {label: 'Build date', value: d.build_date || 'Unknown'},
+        {label: 'Uptime', value: d.uptime || 'Unknown'},
+        {label: 'Runtime', value: d.runtime || 'Unknown', code: true},
+        {label: 'Platform', value: env.platform ? env.platform + (env.arch ? ' (' + env.arch + ')' : '') : 'Unknown', stack: true},
+        {label: 'Python', value: env.python ? env.python.split('\n')[0] : 'Unknown', code: true, stack: true},
+        {label: 'BlueZ', value: env.bluez || 'Unknown', code: true},
+        {label: 'D-Bus', value: d.dbus_available ? 'Available' : 'Missing'},
     ].map(function(item) {
-        return '<div class="diag-item"><span class="diag-label">' + escHtml(item[0]) + '</span><span class="diag-value">' + escHtml(item[1]) + '</span></div>';
+        return _renderDiagInfoItem(item.label, item.value, item);
     }).join('');
 
     var adapterCards = adapters.length
@@ -7783,10 +7811,10 @@ function renderDiagnostics(d) {
             return '<div class="diag-mini-card">' +
                 '<div class="diag-mini-title">' + dot(tone) + '<span>' + escHtml(adapter.id || ('hci' + idx)) + '</span></div>' +
                 '<div class="diag-mini-meta">' +
-                    (adapter.mac ? '<div>' + escHtml(adapter.mac) + '</div>' : '') +
-                    (adapter.default ? '<div>Default adapter</div>' : '') +
-                    (!adapter.error && !daemonActive ? '<div>Bluetooth daemon: ' + escHtml(daemonState) + '</div>' : '') +
-                    (adapter.error ? '<div>' + escHtml(adapter.error) + '</div>' : '') +
+                    _renderDiagMetaRow('MAC', adapter.mac, {code: true, stack: true}) +
+                    (adapter.default ? _renderDiagMetaRow('Role', 'Default adapter') : '') +
+                    (!adapter.error && !daemonActive ? _renderDiagMetaRow('Daemon', daemonState) : '') +
+                    (adapter.error ? _renderDiagMetaRow('Issue', adapter.error, {stack: true}) : '') +
                 '</div>' +
             '</div>';
         }).join('')
@@ -7801,10 +7829,10 @@ function renderDiagnostics(d) {
             return '<div class="diag-mini-card">' +
                 '<div class="diag-mini-title">' + dot(deviceTone) + '<span>' + escHtml(dev.name || dev.mac || 'Unknown') + '</span></div>' +
                 '<div class="diag-mini-meta">' +
-                    '<div>' + escHtml(deviceStatus) + '</div>' +
-                    (dev.mac ? '<div>' + escHtml(dev.mac) + '</div>' : '') +
-                    (dev.sink ? '<div>Sink: <code>' + escHtml(dev.sink) + '</code></div>' : '<div>Sink: not attached</div>') +
-                    (dev.last_error ? '<div>' + escHtml(dev.last_error) + '</div>' : '') +
+                    _renderDiagMetaRow('Status', deviceStatus, {stack: true}) +
+                    _renderDiagMetaRow('MAC', dev.mac, {code: true, stack: true}) +
+                    (dev.sink ? _renderDiagMetaRow('Sink', dev.sink, {code: true, stack: true}) : _renderDiagMetaRow('Sink', 'Not attached')) +
+                    (dev.last_error ? _renderDiagMetaRow('Issue', dev.last_error, {stack: true}) : '') +
                 '</div>' +
             '</div>';
         }).join('')
@@ -7876,8 +7904,8 @@ function renderDiagnostics(d) {
             return '<div class="diag-mini-card">' +
                 '<div class="diag-mini-title">' + dot(groupTone) + '<span>' + escHtml(group.name || group.id || 'Unnamed group') + '</span></div>' +
                 '<div class="diag-mini-meta">' +
-                    '<div>' + escHtml(groupStatus.join(' · ')) + '</div>' +
-                    '<div>' + escHtml(nowPlaying) + '</div>' +
+                    _renderDiagMetaRow('Group health', groupStatus.join(' · '), {stack: true}) +
+                    _renderDiagMetaRow('Now playing', nowPlaying, {stack: true}) +
                 '</div>' +
             '</div>';
         }).join('')
@@ -7889,25 +7917,27 @@ function renderDiagnostics(d) {
             if (proc.pid) parts.push('pid ' + proc.pid);
             if (proc.running) parts.push('running');
             if (proc.zombie_restarts > 0) parts.push('zombies ' + proc.zombie_restarts);
-            if (proc.last_error) parts.push(proc.last_error);
             var procTone = !proc.alive ? 'err' : (proc.last_error ? 'warn' : 'ok');
             return '<div class="diag-mini-card">' +
                 '<div class="diag-mini-title">' + dot(procTone) + '<span>' + escHtml(proc.name || 'Subprocess') + '</span></div>' +
-                '<div class="diag-mini-meta">' + escHtml(parts.join(' · ') || 'No extra details') + '</div>' +
+                '<div class="diag-mini-meta">' +
+                    _renderDiagMetaRow('State', parts.join(' · ') || 'No extra details', {stack: true}) +
+                    (proc.last_error ? _renderDiagMetaRow('Issue', proc.last_error, {stack: true}) : '') +
+                '</div>' +
             '</div>';
         }).join('')
         : '<div class="diag-mini-card"><div class="diag-mini-meta">No advanced runtime details are available.</div></div>';
 
     var advancedOverview = [
-        ['Audio server', audioServerLabel],
-        ['Bluetooth daemon', daemonState],
-        ['Memory (RSS)', env.process_rss_mb != null ? env.process_rss_mb + ' MB' : 'Unknown'],
-        ['MA connection', ma.connected ? 'Connected' : (ma.configured ? 'Configured' : 'Offline')],
-        ['Sink inputs', sinkInputError ? 'Error' : String(visibleSinkInputs.length)],
-        ['Local audio outputs', portAudioError ? 'Error' : String(visiblePortAudioDevices.length)],
-        ['MA URL', ma.url || 'Not configured'],
+        {label: 'Audio server', value: audioServerLabel, code: true, stack: true},
+        {label: 'Bluetooth daemon', value: daemonState},
+        {label: 'Memory (RSS)', value: env.process_rss_mb != null ? env.process_rss_mb + ' MB' : 'Unknown'},
+        {label: 'MA connection', value: ma.connected ? 'Connected' : (ma.configured ? 'Configured' : 'Offline')},
+        {label: 'Sink inputs', value: sinkInputError ? 'Error' : String(visibleSinkInputs.length)},
+        {label: 'Local audio outputs', value: portAudioError ? 'Error' : String(visiblePortAudioDevices.length)},
+        {label: 'MA URL', value: ma.url || 'Not configured', code: true, stack: true},
     ].map(function(item) {
-        return '<div class="diag-item"><span class="diag-label">' + escHtml(item[0]) + '</span><span class="diag-value">' + escHtml(item[1]) + '</span></div>';
+        return _renderDiagInfoItem(item.label, item.value, item);
     }).join('');
 
     var sinkInputCards = sinkInputError
@@ -7919,10 +7949,10 @@ function renderDiagnostics(d) {
                 return '<div class="diag-mini-card">' +
                     '<div class="diag-mini-title">' + dot(inputTone) + '<span>' + escHtml(inputTitle) + '</span></div>' +
                     '<div class="diag-mini-meta">' +
-                        (input.id ? '<div>ID: ' + escHtml(input.id) + '</div>' : '') +
-                        (input.sink ? '<div>Sink: <code>' + escHtml(input.sink) + '</code></div>' : '') +
-                        (input.state ? '<div>State: ' + escHtml(input.state) + '</div>' : '') +
-                        (input.media_name && input.application_name !== input.media_name ? '<div>Media: ' + escHtml(input.media_name) + '</div>' : '') +
+                        _renderDiagMetaRow('ID', input.id, {code: true}) +
+                        _renderDiagMetaRow('Sink', input.sink, {code: true, stack: true}) +
+                        _renderDiagMetaRow('State', input.state) +
+                        (input.media_name && input.application_name !== input.media_name ? _renderDiagMetaRow('Media', input.media_name, {stack: true}) : '') +
                     '</div>' +
                 '</div>';
             }).join('')
@@ -7935,8 +7965,8 @@ function renderDiagnostics(d) {
                 return '<div class="diag-mini-card">' +
                     '<div class="diag-mini-title">' + dot(device.is_default ? 'ok' : 'warn') + '<span>' + escHtml(device.name || 'Audio output') + '</span></div>' +
                     '<div class="diag-mini-meta">' +
-                        (device.index != null ? '<div>Index: ' + escHtml(String(device.index)) + '</div>' : '') +
-                        '<div>' + escHtml(device.is_default ? 'Default output device' : 'Available output device') + '</div>' +
+                        _renderDiagMetaRow('Index', device.index, {code: true}) +
+                        _renderDiagMetaRow('Role', device.is_default ? 'Default output device' : 'Available output device', {stack: true}) +
                     '</div>' +
                 '</div>';
             }).join('')
@@ -7977,7 +8007,7 @@ function renderDiagnostics(d) {
         '</div>' +
     '</div>';
     var latencyHints = (recoveryLatency.hints || []).map(function(hint) {
-        return '<div class="diag-item"><span class="diag-label">Hint</span><span class="diag-value">' + escHtml(hint) + '</span></div>';
+        return _renderDiagInfoItem('Hint', hint, {stack: true});
     }).join('');
 
     return '<div class="diag-panel">' +
