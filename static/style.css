@@ -674,10 +674,7 @@ body {
         .notice-stack[hidden] {
             display: none !important;
         }
-        body.backend-ui-locked .container > :not(.header):not(#notice-stack) {
-            display: none !important;
-        }
-        body.backend-ui-locked #notice-stack > :not(#backend-service-banner) {
+        body.backend-ui-locked .container > :not(.header) {
             display: none !important;
         }
         .notice-card {

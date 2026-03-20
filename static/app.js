@@ -2523,9 +2523,16 @@ function renderStatusPayload(status) {
     var grid = document.getElementById('status-grid');
     var emptyEl = document.getElementById('no-devices-hint');
     if (devices.length === 0) {
+        lastDevices = [];
         if (zeroDeviceRuntimeState) {
+            _applyBackendServiceState(zeroDeviceRuntimeState);
             _hideOperatorGuidance();
-            _renderBackendServicePlaceholder(zeroDeviceRuntimeState);
+            if (grid) {
+                grid.classList.remove('list-view');
+                grid.innerHTML = '';
+            } else if (emptyEl) {
+                emptyEl.remove();
+            }
         } else if (grid) {
             _applyOperatorGuidance(status.operator_guidance || null);
             grid.classList.remove('list-view');
@@ -4962,6 +4969,8 @@ function _deriveZeroDeviceRuntimeState(status, devices) {
     var guidance = status && status.operator_guidance ? status.operator_guidance : null;
     var headerStatus = guidance && guidance.header_status ? guidance.header_status : null;
     var startup = status && status.startup_progress ? status.startup_progress : null;
+    var startupStatus = startup && startup.status ? String(startup.status) : '';
+    var startupRunning = startupStatus === 'running' || startupStatus === 'starting';
     if (status && status.error && !_isZeroClientStatusError(status.error)) {
         return {
             kind: 'unavailable',
@@ -4974,12 +4983,17 @@ function _deriveZeroDeviceRuntimeState(status, devices) {
     }
     if (!devices || devices.length !== 0) return null;
     if (!guidance || guidance.mode === 'empty_state') return null;
+    var title = startupRunning ? 'Bridge is starting' : 'Restoring bridge state';
+    var label = startupRunning ? 'Starting bridge' : 'Restoring bridge state';
+    var summary = startupRunning
+        ? ((startup && startup.message) || 'Waiting for bridge startup checks to finish.')
+        : ((startup && startup.message) || (headerStatus && headerStatus.summary) || 'Configured bridge devices are still reconnecting after restart.');
     return {
-        kind: startup && (startup.status === 'running' || startup.status === 'starting') ? 'starting' : 'restoring',
+        kind: startupRunning ? 'starting' : 'restoring',
         tone: _backendServiceToneClass((headerStatus && headerStatus.tone) || 'info'),
-        label: (headerStatus && headerStatus.label) || 'Restoring bridge state',
-        title: (headerStatus && headerStatus.label) || 'Restoring bridge state',
-        summary: (headerStatus && headerStatus.summary) || (startup && startup.message) || 'Configured bridge state is still loading.',
+        label: label,
+        title: title,
+        summary: summary,
         action: guidance && guidance.banner && guidance.banner.primary_action ? guidance.banner.primary_action : {key: 'refresh_diagnostics', label: 'Retry now'},
     };
 }
