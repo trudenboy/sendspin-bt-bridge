@@ -122,6 +122,18 @@
         </div>
         {% endif %}
 
+        <div id="config-dirty-banner" class="notice-card notice-card--warning config-dirty-banner" hidden>
+            <span class="notice-card-icon ui-icon-slot" data-ui-icon="warning" aria-hidden="true"></span>
+            <div class="notice-card-copy">
+                <div class="notice-card-title">Configuration has unsaved changes</div>
+                <div class="notice-card-text">Save to persist updates now, or use Save &amp; Restart for runtime-sensitive changes such as Bluetooth devices, adapters, Music Assistant settings, ports, or latency.</div>
+            </div>
+            <div class="notice-card-actions">
+                <a href="#" class="notice-card-action notice-card-action--primary" onclick="document.getElementById('config-form').dispatchEvent(new Event('submit',{cancelable:true}));return false;">Save</a>
+                <a href="#" class="notice-card-action" onclick="_openConfigPanel('devices');return false;">Review changes</a>
+            </div>
+        </div>
+
         <div id="ma-integration-banner" class="notice-card notice-card--warning" hidden>
             <span class="notice-card-icon ui-icon-slot" data-ui-icon="ma" aria-hidden="true"></span>
             <div class="notice-card-copy">
@@ -204,10 +216,10 @@
                 <span class="vol-pct" id="group-vol-pct">50</span>
             </div>
             <div class="toolbar-sep"></div>
-            <button type="button" class="icon-btn" id="group-mute-btn" onclick="onGroupMute()" title="Mute All">
+            <button type="button" class="media-btn media-btn--toolbar" id="group-mute-btn" onclick="onGroupMute()" title="Mute All">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>
             </button>
-            <button type="button" class="icon-btn" id="group-pause-btn" onclick="onPauseAll()" title="Pause All">
+            <button type="button" class="media-btn media-btn--toolbar" id="group-pause-btn" onclick="onPauseAll()" title="Pause All">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
             </button>
             <button type="button" class="action-btn accent" onclick="onGroupAction('reconnect')">
@@ -361,7 +373,7 @@
                                     <span class="form-hint">Bring back onboarding and recovery guidance that was hidden with “Don’t show again”.</span>
                                 </span>
                                 <span class="config-setting-control">
-                                    <button type="button" class="btn btn-sm" id="guidance-reset-dismissed" data-config-transient="true">Reset</button>
+                                    <button type="button" class="btn btn-sm btn-secondary" id="guidance-reset-dismissed" data-config-transient="true">Reset</button>
                                 </span>
                             </div>
 
@@ -426,7 +438,7 @@
                                     <p class="devices-card-subtitle">Main routing table for daily speaker management. Advanced options remain available per row.</p>
                                 </div>
                                 <div class="devices-card-actions">
-                                    <button type="button" id="add-dev-btn" onclick="addBtDeviceRow()" class="btn btn-sm">+ Add device</button>
+                                    <button type="button" id="add-dev-btn" onclick="addBtDeviceRow()" class="btn btn-sm btn-secondary">+ Add device</button>
                                 </div>
                             </div>
                             <div class="bt-table-wrap">
@@ -444,7 +456,7 @@
                                     <p class="devices-card-subtitle">Scan nearby speakers or add devices from the paired list without pushing this secondary flow into the main fleet table.</p>
                                 </div>
                                 <div class="devices-card-actions">
-                                    <button type="button" onclick="startBtScan()" class="btn btn-sm btn-scan" id="scan-btn">
+                                    <button type="button" onclick="startBtScan()" class="btn btn-sm btn-secondary" id="scan-btn">
                                         <span class="btn-icon-slot ui-icon-slot" data-ui-icon="search" aria-hidden="true"></span><span>Scan</span>
                                     </button>
                                     <span id="scan-status" class="scan-badge"></span>
@@ -491,7 +503,7 @@
                             </div>
                             <div class="bt-toolbar">
                                 <button type="button" class="btn btn-sm btn-secondary" id="add-adapter-btn" onclick="addManualAdapterRow('','','')">+ Add adapter</button>
-                                <button type="button" class="btn btn-sm btn-refresh" onclick="loadBtAdapters()"><span class="btn-icon-slot ui-icon-slot" data-ui-icon="refresh" aria-hidden="true"></span><span>Refresh</span></button>
+                                <button type="button" class="btn btn-sm btn-secondary" onclick="loadBtAdapters()"><span class="btn-icon-slot ui-icon-slot" data-ui-icon="refresh" aria-hidden="true"></span><span>Refresh</span></button>
                             </div>
                         </div>
 
@@ -581,7 +593,7 @@
                                 </div>
 
                                 <div id="ma-addon-hint" class="ma-addon-hint" hidden>
-                                    <button type="button" class="btn btn-sm btn-block" onclick="maHaConnect()" id="ma-ha-login-btn">
+                                    <button type="button" class="btn btn-sm btn-primary btn-block" onclick="maHaConnect()" id="ma-ha-login-btn">
                                         <span class="btn-icon-slot ui-icon-slot" data-ui-icon="key" aria-hidden="true"></span><span>Get token automatically</span>
                                     </button>
                                     <span id="ma-ha-login-msg" class="inline-status config-status-message config-status-message--center"></span>
@@ -780,8 +792,10 @@
                             <div class="config-card-title">Managed by Home Assistant</div>
                             <p class="config-card-subtitle">Use your HA account and profile settings for access control.</p>
                         </div>
-                        <div class="config-empty-state">
-                            Home Assistant manages authentication for this deployment. Use your HA account and profile settings for access control.
+                        <div class="config-empty-state ui-empty-state ui-empty-state--compact">
+                            <span class="ui-empty-state-icon ui-icon-slot" data-ui-icon="lock" aria-hidden="true"></span>
+                            <div class="ui-empty-state-title">Managed by Home Assistant</div>
+                            <div class="ui-empty-state-copy">Home Assistant manages authentication for this deployment. Use your HA account and profile settings for access control.</div>
                         </div>
                     </div>
                 </div>
@@ -796,13 +810,13 @@
             </div>
             <div class="config-footer-actions">
                 <div class="config-btn-group">
-                    <button type="button" class="btn btn-sm btn-restart config-action-btn" onclick="saveAndRestart()">Save &amp; Restart</button>
-                    <button type="button" class="btn btn-sm btn-secondary config-action-btn" onclick="document.getElementById('config-form').dispatchEvent(new Event('submit',{cancelable:true}))">Save</button>
-                    <button type="button" class="btn btn-sm btn-ghost config-action-btn" id="config-cancel-btn" onclick="cancelConfigChanges()" disabled>Cancel</button>
+                    <button type="button" class="btn btn-sm btn-warning config-action-btn" onclick="saveAndRestart()">Save &amp; Restart</button>
+                    <button type="button" class="btn btn-sm btn-primary config-action-btn" onclick="document.getElementById('config-form').dispatchEvent(new Event('submit',{cancelable:true}))">Save</button>
+                    <button type="button" class="btn btn-sm btn-secondary config-action-btn" id="config-cancel-btn" onclick="cancelConfigChanges()" disabled>Cancel</button>
                 </div>
                 <div class="config-btn-group config-btn-group--utility">
-                    <button type="button" class="btn btn-sm btn-ghost config-action-btn btn-download" onclick="window.location.href='/api/config/download'"><span class="btn-icon-slot ui-icon-slot" data-ui-icon="download" aria-hidden="true"></span><span>Download</span></button>
-                    <button type="button" class="btn btn-sm btn-ghost config-action-btn btn-upload" onclick="document.getElementById('config-upload-input').click()"><span class="btn-icon-slot ui-icon-slot" data-ui-icon="upload" aria-hidden="true"></span><span>Upload</span></button>
+                    <button type="button" class="btn btn-sm btn-secondary config-action-btn btn-download" onclick="window.location.href='/api/config/download'"><span class="btn-icon-slot ui-icon-slot" data-ui-icon="download" aria-hidden="true"></span><span>Download</span></button>
+                    <button type="button" class="btn btn-sm btn-secondary config-action-btn btn-upload" onclick="document.getElementById('config-upload-input').click()"><span class="btn-icon-slot ui-icon-slot" data-ui-icon="upload" aria-hidden="true"></span><span>Upload</span></button>
                 </div>
             </div>
         </div>
@@ -820,7 +834,7 @@
         <summary><span class="summary-title-icon ui-icon-slot" data-ui-icon="notes" aria-hidden="true"></span><span>Logs</span></summary>
         <div class="logs-toolbar">
             <div class="logs-toolbar-left">
-                <button onclick="refreshLogs()" class="btn btn-sm btn-refresh"><span class="btn-icon-slot ui-icon-slot" data-ui-icon="refresh" aria-hidden="true"></span><span>Refresh</span></button>
+                <button onclick="refreshLogs()" class="btn btn-sm btn-secondary"><span class="btn-icon-slot ui-icon-slot" data-ui-icon="refresh" aria-hidden="true"></span><span>Refresh</span></button>
                 <select id="logs-filter-select" class="logs-filter-select" onchange="setLogLevel(this.value)" aria-label="Filter log levels">
                     <option value="all">All</option>
                     <option value="error">Errors</option>
@@ -843,7 +857,7 @@
                     <button type="button" class="btn btn-sm btn-secondary" onclick="applyLogLevel()">Apply</button>
                     <span id="log-level-msg" class="inline-status logs-inline-status"></span>
                 </div>
-                <button onclick="downloadLogs()" class="btn btn-sm"><span class="btn-icon-slot ui-icon-slot" data-ui-icon="download" aria-hidden="true"></span><span>Download</span></button>
+                <button onclick="downloadLogs()" class="btn btn-sm btn-secondary"><span class="btn-icon-slot ui-icon-slot" data-ui-icon="download" aria-hidden="true"></span><span>Download</span></button>
             </div>
         </div>
         <div class="logs-container log-viewer" id="logs"></div>
