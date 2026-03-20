@@ -674,6 +674,12 @@ body {
         .notice-stack[hidden] {
             display: none !important;
         }
+        body.backend-ui-locked .container > :not(.header):not(#notice-stack) {
+            display: none !important;
+        }
+        body.backend-ui-locked #notice-stack > :not(#backend-service-banner) {
+            display: none !important;
+        }
         .notice-card {
             --notice-accent: var(--warning-color, #f59e0b);
             --notice-border: rgba(245, 158, 11, 0.2);

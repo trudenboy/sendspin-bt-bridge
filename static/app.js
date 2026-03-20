@@ -2499,7 +2499,6 @@ function renderStatusPayload(status) {
     if (resolvedMaUiUrl) lastMaUiUrl = resolvedMaUiUrl;
     var resolvedMaWebUrl = _normalizeExternalUrlBase(status.ma_web_url || lastMaWebUrl || '');
     if (resolvedMaWebUrl) lastMaWebUrl = resolvedMaWebUrl;
-    _applyOperatorGuidance(status.operator_guidance || null);
 
     var userLink = document.getElementById('header-user-link');
     if (userLink) {
@@ -2525,17 +2524,21 @@ function renderStatusPayload(status) {
     var emptyEl = document.getElementById('no-devices-hint');
     if (devices.length === 0) {
         if (zeroDeviceRuntimeState) {
+            _hideOperatorGuidance();
             _renderBackendServicePlaceholder(zeroDeviceRuntimeState);
         } else if (grid) {
+            _applyOperatorGuidance(status.operator_guidance || null);
             grid.classList.remove('list-view');
             grid.innerHTML = '<div id="no-devices-hint" class="no-devices-hint">' + _buildEmptyStateHTML() + '</div>';
         } else if (emptyEl) {
+            _applyOperatorGuidance(status.operator_guidance || null);
             emptyEl.innerHTML = _buildEmptyStateHTML();
         }
         _updateGroupPanel();
         updateHealthIndicator([], status.operator_guidance || null);
         return;
     }
+    _applyOperatorGuidance(status.operator_guidance || null);
     if (emptyEl) emptyEl.remove();
 
     var sorted = _sortDevicesForStatus(devices);
@@ -2596,6 +2599,7 @@ async function updateStatus() {
             action: {key: 'refresh_diagnostics', label: 'Retry now'},
         };
         _applyBackendServiceState(unavailableState);
+        _hideOperatorGuidance();
         if (!_statusHasEverSucceeded || !lastDevices.length) {
             _renderBackendServicePlaceholder(unavailableState);
         }
@@ -4945,6 +4949,7 @@ function _setBackendServiceBanner(state) {
 
 function _applyBackendServiceState(state) {
     _backendServiceState = state || null;
+    document.body.classList.toggle('backend-ui-locked', !!_backendServiceState);
     _setBackendServiceBanner(_backendServiceState);
 }
 
@@ -5542,6 +5547,11 @@ function _applyOperatorGuidance(guidance) {
     _syncGuidancePreferenceControls(guidance && guidance.visibility_keys);
     _setOnboardingAssistantBanner(guidance && guidance.onboarding_card ? guidance.onboarding_card : null);
     _setRecoveryAssistantBanner(guidance || null);
+}
+
+function _hideOperatorGuidance() {
+    _setOnboardingAssistantBanner(null);
+    _setRecoveryAssistantBanner(null);
 }
 
 function openMaTokenSettings() {

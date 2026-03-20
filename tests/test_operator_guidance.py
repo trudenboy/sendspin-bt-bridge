@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 from services.operator_guidance import build_operator_guidance_snapshot
@@ -166,6 +167,35 @@ def test_operator_guidance_prefers_repair_for_unpaired_reconnecting_device():
     assert data["issue_groups"][0]["secondary_actions"][1]["key"] == "open_diagnostics"
     assert "3/5" in data["issue_groups"][0]["summary"]
     assert "2 attempts remain" in data["issue_groups"][0]["summary"]
+
+
+def test_operator_guidance_suppresses_problem_banner_during_startup_grace_period():
+    completed_at = datetime.now(tz=timezone.utc).isoformat()
+    snapshot = build_operator_guidance_snapshot(
+        config={"BLUETOOTH_ADAPTERS": [{"id": "hci0"}], "BLUETOOTH_DEVICES": [{"mac": "AA"}]},
+        onboarding_assistant={
+            "checklist": {"overall_status": "ok", "progress_percent": 100},
+            "counts": {"configured_devices": 1, "connected_devices": 0, "sink_ready_devices": 0},
+        },
+        recovery_assistant={"summary": {"summary": "Devices need reconnection."}},
+        startup_progress={"status": "ready", "message": "Startup complete.", "completed_at": completed_at},
+        devices=[
+            SimpleNamespace(
+                player_name="Kitchen",
+                bt_management_enabled=True,
+                bluetooth_connected=False,
+                has_sink=False,
+                server_connected=False,
+            )
+        ],
+    )
+
+    data = snapshot.to_dict()
+    assert data["mode"] == "progress"
+    assert "banner" not in data
+    assert data["header_status"]["tone"] == "info"
+    assert data["header_status"]["label"] == "Finalizing startup"
+    assert data["issue_groups"][0]["key"] == "disconnected"
 
 
 def test_operator_guidance_uses_shared_recovery_actions_for_auto_released_issue():

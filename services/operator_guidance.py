@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from services.recovery_assistant import RecoveryAction, build_recovery_issue_actions
@@ -12,6 +12,7 @@ UTC = timezone.utc
 
 _ONBOARDING_VISIBILITY_KEY = "sendspin-ui:show-onboarding-guidance"
 _RECOVERY_VISIBILITY_KEY = "sendspin-ui:show-recovery-guidance"
+_STARTUP_BANNER_GRACE_SECONDS = 15
 
 
 @dataclass
@@ -149,6 +150,32 @@ def _count_config_entries(config: dict[str, Any], key: str) -> int:
 def _device_extra(device: Any) -> dict[str, Any]:
     extra = getattr(device, "extra", None)
     return extra if isinstance(extra, dict) else {}
+
+
+def _parse_timestamp(value: Any) -> datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value))
+    except (TypeError, ValueError):
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
+
+
+def _startup_banner_cooldown_active(startup_progress: dict[str, Any]) -> bool:
+    startup_status = str(startup_progress.get("status") or "idle")
+    if startup_status in {"running", "starting"}:
+        return True
+    if startup_status not in {"ready", "complete", "error"}:
+        return False
+    completed_at = _parse_timestamp(
+        startup_progress.get("completed_at") or startup_progress.get("updated_at") or startup_progress.get("started_at")
+    )
+    if completed_at is None:
+        return False
+    return (datetime.now(tz=UTC) - completed_at) < timedelta(seconds=_STARTUP_BANNER_GRACE_SECONDS)
 
 
 def _reconnect_attempt_summary(device: Any) -> str:
@@ -507,6 +534,15 @@ def _build_header_status(
             label=f"Startup {percent}%",
             summary=str(startup_progress.get("message") or "Bridge startup checks are still running."),
         )
+    if _startup_banner_cooldown_active(startup_progress):
+        return GuidanceHeaderStatus(
+            tone="info",
+            label="Finalizing startup",
+            summary=(
+                str(startup_progress.get("message") or "").strip()
+                or "Initial device checks just completed. Waiting briefly before surfacing recovery issues."
+            ),
+        )
     if mode == "empty_state":
         return GuidanceHeaderStatus(
             tone="info",
@@ -587,12 +623,15 @@ def build_operator_guidance_snapshot(
     checklist = onboarding_assistant.get("checklist") or {}
     issue_groups = _build_issue_groups(devices, onboarding_assistant, recovery_assistant)
     startup_status = str(startup_progress.get("status") or "idle")
+    startup_banner_cooldown_active = _startup_banner_cooldown_active(startup_progress)
     active_devices = [device for device in devices if getattr(device, "bt_management_enabled", True)]
     released_devices = [device for device in devices if getattr(device, "bt_management_enabled", True) is False]
 
     empty_state = configured_devices == 0
     if empty_state:
         mode = "empty_state"
+    elif startup_banner_cooldown_active:
+        mode = "progress"
     elif issue_groups:
         mode = "attention"
     elif not active_devices and released_devices:
