@@ -428,14 +428,14 @@
                 <div class="config-group config-group--flush">
                     <div class="config-group-heading">
                         <h4 class="config-group-title"><span class="cg-icon ui-icon-slot" data-ui-icon="speaker" aria-hidden="true"></span> Devices</h4>
-                        <p class="config-group-subtitle">Keep the speaker fleet table primary, with discovery and import treated as a secondary workflow.</p>
+                        <p class="config-group-subtitle">Keep the speaker fleet table primary, while paired inventory and scan workflows live in the Bluetooth tab.</p>
                     </div>
                     <div class="devices-stack">
                         <div class="config-settings-card devices-primary-card">
                             <div class="devices-card-header">
                                 <div class="devices-card-copy">
                                     <div class="config-card-title">Device fleet</div>
-                                    <p class="devices-card-subtitle">Main routing table for daily speaker management. Advanced options remain available per row.</p>
+                                    <p class="devices-card-subtitle">Main routing table for daily speaker management. Bluetooth stack tools stay available per row, while paired inventory stays owned by the Bluetooth tab.</p>
                                 </div>
                                 <div class="devices-card-actions">
                                     <button type="button" id="add-dev-btn" onclick="addBtDeviceRow()" class="btn btn-sm btn-secondary">+ Add device</button>
@@ -444,41 +444,9 @@
                             <div class="bt-table-wrap">
                                 <div class="bt-header">
                                     <span>Enabled</span><span>Player name</span><span>MAC</span>
-                                    <span>Adapter</span><span>Port</span><span>Delay</span><span>Live</span><span>Remove</span>
+                                    <span>Adapter</span><span>Port</span><span>Delay</span><span>Live</span><span>Actions</span>
                                 </div>
                                 <div id="bt-devices-table"></div>
-                            </div>
-                        </div>
-                        <div class="config-settings-card devices-secondary-card config-settings-card--muted" id="config-devices-discovery-card">
-                            <div class="devices-card-header">
-                                <div class="devices-card-copy">
-                                    <div class="config-card-title">Discovery &amp; import</div>
-                                    <p class="devices-card-subtitle">Scan nearby speakers or add devices from the paired list without pushing this secondary flow into the main fleet table.</p>
-                                </div>
-                                <div class="devices-card-actions">
-                                    <button type="button" onclick="startBtScan()" class="btn btn-sm btn-secondary" id="scan-btn">
-                                        <span class="btn-icon-slot ui-icon-slot" data-ui-icon="search" aria-hidden="true"></span><span>Scan</span>
-                                    </button>
-                                    <span id="scan-status" class="scan-badge"></span>
-                                </div>
-                            </div>
-                            <div id="paired-box" class="paired-box" hidden>
-                                <div class="paired-box-title" role="button" tabindex="0" onclick="togglePairedList(this)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();togglePairedList(this);}">
-                                    <span class="paired-arrow expanded" aria-hidden="true"></span>
-                                    <span class="paired-box-copy">Already paired &#8212; click to add:</span>
-                                    <label class="paired-show-all" onclick="event.stopPropagation()">
-                                        <span>Show all</span>
-                                        <span class="config-switch compact">
-                                            <input type="checkbox" id="paired-show-all" onchange="loadPairedDevices()">
-                                            <span class="config-switch-track"></span>
-                                        </span>
-                                    </label>
-                                </div>
-                                <div id="paired-list"></div>
-                            </div>
-                            <div id="scan-results-box" class="scan-results-box" hidden>
-                                <div class="scan-results-title">Discovered devices &#8212; click to add:</div>
-                                <div id="scan-results-list"></div>
                             </div>
                         </div>
                     </div>
@@ -504,6 +472,34 @@
                             <div class="bt-toolbar">
                                 <button type="button" class="btn btn-sm btn-secondary" id="add-adapter-btn" onclick="addManualAdapterRow('','','')">+ Add adapter</button>
                                 <button type="button" class="btn btn-sm btn-secondary" onclick="loadBtAdapters()"><span class="btn-icon-slot ui-icon-slot" data-ui-icon="refresh" aria-hidden="true"></span><span>Refresh</span></button>
+                            </div>
+                        </div>
+
+                        <div class="config-settings-card config-settings-card--span" id="config-bluetooth-paired-card">
+                            <div class="config-card-header config-card-header--split">
+                                <div>
+                                    <div class="config-card-title">Paired devices</div>
+                                    <p class="config-card-subtitle">Bluetooth inventory, repair tools, and import actions now live here. Discovery runs in a dedicated modal from this tab.</p>
+                                </div>
+                                <div class="devices-card-actions bt-paired-header-actions">
+                                    <label class="paired-show-all bt-paired-show-all">
+                                        <span>Show all</span>
+                                        <span class="config-switch compact">
+                                            <input type="checkbox" id="paired-show-all" onchange="loadPairedDevices()">
+                                            <span class="config-switch-track"></span>
+                                        </span>
+                                    </label>
+                                    <button type="button" onclick="openBtScanModal()" class="btn btn-sm btn-secondary" id="scan-btn">
+                                        <span class="btn-icon-slot ui-icon-slot" data-ui-icon="search" aria-hidden="true"></span><span>Scan nearby</span>
+                                    </button>
+                                </div>
+                            </div>
+                            <div id="paired-box" class="paired-box paired-box--static">
+                                <div class="paired-box-title paired-box-title--static">
+                                    <span class="paired-box-copy">Already paired devices</span>
+                                    <span id="paired-box-count" class="scan-badge"></span>
+                                </div>
+                                <div id="paired-list"></div>
                             </div>
                         </div>
 
@@ -546,6 +542,28 @@
                                     </span>
                                 </span>
                             </label>
+                        </div>
+                    </div>
+
+                    <div id="bt-scan-modal-overlay" class="bugreport-overlay bt-scan-modal-overlay" hidden>
+                        <div class="bugreport-modal bt-scan-modal" role="dialog" aria-modal="true" aria-labelledby="bt-scan-modal-title">
+                            <div class="bugreport-header bt-scan-modal-header">
+                                <span class="bugreport-header-title" id="bt-scan-modal-title">Scan nearby devices</span>
+                                <button type="button" class="bugreport-close" title="Close" aria-label="Close scan modal" onclick="closeBtScanModal()">&times;</button>
+                            </div>
+                            <div class="bugreport-body bt-scan-modal-body">
+                                <div class="bt-scan-modal-copy">
+                                    Discover nearby speakers from the Bluetooth tab without turning temporary discovery results into a permanent Devices-page block.
+                                </div>
+                                <div id="scan-status" class="bt-scan-status-panel"></div>
+                                <div id="scan-results-box" class="scan-results-box bt-scan-results-box" hidden>
+                                    <div class="scan-results-title">Discovered devices &mdash; add to fleet or pair first</div>
+                                    <div id="scan-results-list"></div>
+                                </div>
+                            </div>
+                            <div class="bugreport-footer bt-scan-modal-footer">
+                                <button type="button" class="bugreport-btn secondary" onclick="closeBtScanModal()">Close</button>
+                            </div>
                         </div>
                     </div>
                 </div>

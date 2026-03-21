@@ -3430,7 +3430,7 @@ body {
         }
         /* BT device table */
         .bt-header {
-            display: grid; grid-template-columns: 56px minmax(200px, 1.2fr) minmax(156px, 1.1fr) minmax(96px, 0.8fr) 84px 86px minmax(120px, 0.95fr) 52px;
+            display: grid; grid-template-columns: 56px minmax(200px, 1.2fr) minmax(156px, 1.1fr) minmax(96px, 0.8fr) 84px 86px minmax(120px, 0.95fr) minmax(168px, 1.15fr);
             gap: 8px; margin-bottom: 8px; padding: 0 4px 8px;
             font-size: 12px; font-weight: 700; color: var(--secondary-text-color);
             border-bottom: 1px solid var(--divider-color);
@@ -3459,7 +3459,7 @@ body {
             100% { transform: translateY(0); box-shadow: 0 0 0 3px rgba(79,70,229,.18); }
         }
         .bt-device-row {
-            display: grid; grid-template-columns: 56px minmax(200px, 1.2fr) minmax(156px, 1.1fr) minmax(96px, 0.8fr) 84px 86px minmax(120px, 0.95fr) 52px;
+            display: grid; grid-template-columns: 56px minmax(200px, 1.2fr) minmax(156px, 1.1fr) minmax(96px, 0.8fr) 84px 86px minmax(120px, 0.95fr) minmax(168px, 1.15fr);
             gap: 8px; align-items: center; margin-bottom: 0;
         }
         .bt-device-row input:not([type="checkbox"]), .bt-device-row select {
@@ -3549,12 +3549,106 @@ body {
             height: 16px;
             fill: currentColor;
         }
+        .bt-row-actions {
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 8px;
+            min-width: 0;
+        }
+        .bt-device-action-menu {
+            position: relative;
+        }
+        .bt-device-action-menu > summary {
+            list-style: none;
+        }
+        .bt-device-action-menu > summary::-webkit-details-marker {
+            display: none;
+        }
+        .bt-device-action-toggle::after {
+            content: "▾";
+            margin-left: 8px;
+            font-size: 11px;
+        }
+        .bt-device-action-menu[open] .bt-device-action-toggle::after {
+            content: "▴";
+        }
+        .bt-device-action-menu-list {
+            position: absolute;
+            right: 0;
+            top: calc(100% + 8px);
+            min-width: 220px;
+            display: grid;
+            gap: 6px;
+            padding: 8px;
+            border-radius: 14px;
+            border: 1px solid var(--divider-color);
+            background: var(--card-background-color);
+            box-shadow: var(--ui-floating-shadow, var(--ha-card-box-shadow));
+            z-index: 20;
+        }
+        .bt-device-action-item {
+            width: 100%;
+            justify-content: flex-start;
+        }
         .bt-toolbar {
             display: flex;
             align-items: center;
             gap: 8px;
             margin-top: 10px;
             flex-wrap: wrap;
+        }
+        .bt-paired-header-actions {
+            justify-content: flex-end;
+        }
+        .bt-paired-show-all {
+            margin-left: 0;
+        }
+        .paired-box--static {
+            margin-top: 0;
+        }
+        .paired-box-title--static {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            margin-bottom: 8px;
+            cursor: default;
+        }
+        .paired-box-title--static:hover {
+            background: transparent;
+        }
+        .paired-box-title--static .paired-box-copy {
+            overflow: visible;
+            white-space: normal;
+        }
+        .paired-device-highlight {
+            box-shadow: 0 0 0 3px rgba(3,169,244,.18);
+            animation: bt-settings-highlight 1.4s ease;
+        }
+        .bt-scan-modal {
+            width: min(90vw, 780px);
+            max-width: 780px;
+        }
+        .bt-scan-modal-body {
+            display: grid;
+            gap: 12px;
+        }
+        .bt-scan-modal-copy {
+            font-size: 13px;
+            line-height: 1.55;
+            color: var(--secondary-text-color);
+        }
+        .bt-scan-status-panel {
+            display: grid;
+            gap: 8px;
+        }
+        .bt-scan-results-box {
+            margin-top: 0;
+        }
+        .bt-scan-modal-footer {
+            justify-content: flex-end;
         }
         .bt-runtime {
             display: flex;
@@ -5138,7 +5232,7 @@ body {
             .bt-header,
             .bt-device-row {
                 min-width: 0;
-                grid-template-columns: 42px minmax(132px, 1.15fr) minmax(116px, 1fr) minmax(76px, 0.82fr) 56px 64px minmax(74px, 0.7fr) 34px;
+                grid-template-columns: 42px minmax(132px, 1.15fr) minmax(116px, 1fr) minmax(76px, 0.82fr) 56px 64px minmax(74px, 0.7fr) minmax(148px, 1fr);
                 gap: 6px;
             }
             .bt-header {
@@ -5156,6 +5250,9 @@ body {
             .btn-remove-dev {
                 width: 28px;
                 height: 28px;
+            }
+            .bt-row-actions {
+                gap: 6px;
             }
 
             .paired-box-title {
@@ -5208,6 +5305,11 @@ body {
                 flex-wrap: wrap;
                 gap: 6px;
                 width: 100%;
+            }
+            .paired-box-title--static {
+                display: flex;
+                align-items: flex-start;
+                justify-content: space-between;
             }
         }
 
@@ -5328,7 +5430,7 @@ body {
             }
             .bt-table-wrap::-webkit-scrollbar { height: 4px; }
             .bt-table-wrap::-webkit-scrollbar-thumb { background: var(--secondary-text-color); border-radius: 2px; }
-            .bt-header, .bt-device-row { min-width: 900px; }
+            .bt-header, .bt-device-row { min-width: 1040px; }
             .adapter-row { min-width: 380px; }
 
             .btn-bt-action { padding: 8px 12px; }
@@ -5593,7 +5695,7 @@ body {
             }
             .bt-header,
             .bt-device-row {
-                min-width: 520px;
+                min-width: 640px;
             }
         }
 
@@ -6600,6 +6702,36 @@ body {
         .paired-box-title {
             margin-bottom: 6px;
             padding: 6px 6px;
+        }
+        .paired-box-title--static {
+            padding: 0;
+            margin-bottom: 10px;
+        }
+        .bt-device-action-toggle,
+        .bt-device-action-item {
+            border-radius: var(--ui-control-radius);
+        }
+        .bt-device-action-item {
+            background: var(--button-secondary-bg);
+            border-color: var(--button-secondary-border);
+            color: var(--button-secondary-color);
+        }
+        .bt-device-action-item:hover {
+            border-color: var(--button-secondary-hover-border);
+            background: var(--button-secondary-hover-bg);
+            color: var(--button-secondary-hover-color);
+        }
+        .bt-scan-modal {
+            border-radius: max(var(--ha-card-border-radius), 16px);
+            box-shadow: var(--ui-overlay-shadow);
+        }
+        .bt-scan-modal-header,
+        .bt-scan-modal-footer {
+            background: var(--card-background-color);
+        }
+        .bt-scan-modal-body .scan-status-card,
+        .bt-scan-modal-body .ui-empty-state {
+            margin: 0;
         }
 
         .diag-item {
