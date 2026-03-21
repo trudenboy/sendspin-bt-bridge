@@ -495,7 +495,7 @@
                                 </div>
                             </div>
                             <div id="paired-box" class="paired-box paired-box--static">
-                                <div class="paired-box-title paired-box-title--static">
+                                <div class="paired-box-header paired-box-header--static">
                                     <span class="paired-box-copy">Already paired devices</span>
                                     <span id="paired-box-count" class="scan-badge"></span>
                                 </div>
@@ -545,16 +545,16 @@
                         </div>
                     </div>
 
-                    <div id="bt-scan-modal-overlay" class="bugreport-overlay bt-scan-modal-overlay" hidden>
-                        <div class="bugreport-modal bt-scan-modal" role="dialog" aria-modal="true" aria-labelledby="bt-scan-modal-title">
-                            <div class="bugreport-header bt-scan-modal-header">
-                                <span class="bugreport-header-title" id="bt-scan-modal-title">Scan nearby devices</span>
-                                <button type="button" class="bugreport-close" title="Close" aria-label="Close scan modal" onclick="closeBtScanModal()">&times;</button>
-                            </div>
-                            <div class="bugreport-body bt-scan-modal-body">
-                                <div class="bt-scan-modal-copy">
-                                    Discover nearby speakers from the Bluetooth tab without turning temporary discovery results into a permanent Devices-page block.
+                    <div id="bt-scan-modal-overlay" class="bugreport-overlay bt-scan-modal-overlay ui-modal-overlay" hidden>
+                        <div class="bugreport-modal bt-scan-modal ui-modal" role="dialog" aria-modal="true" aria-labelledby="bt-scan-modal-title">
+                            <div class="bugreport-header bt-scan-modal-header ui-modal-header ui-modal-header--accent">
+                                <div class="bt-scan-modal-title-block ui-stack ui-stack--xs">
+                                    <span class="ui-modal-title" id="bt-scan-modal-title"><span class="ui-icon-slot" data-ui-icon="bt" aria-hidden="true"></span><span>Scan nearby devices</span></span>
+                                    <p class="ui-modal-subtitle">Choose an adapter, scan for nearby Bluetooth devices, then add speakers to your fleet or pair them before importing them.</p>
                                 </div>
+                                <button type="button" class="bugreport-close bt-scan-modal-close ui-modal-close" title="Close" aria-label="Close scan modal" onclick="closeBtScanModal()">&times;</button>
+                            </div>
+                            <div class="bugreport-body bt-scan-modal-body ui-stack ui-stack--sm">
                                 <div class="bt-scan-toolbar">
                                     <label class="bt-scan-field">
                                         <span class="bt-scan-field-label">Adapter</span>
@@ -586,13 +586,13 @@
                                     </div>
                                 </div>
                                 <div id="scan-status" class="bt-scan-status-panel"></div>
-                                <div id="scan-results-box" class="scan-results-box bt-scan-results-box" hidden>
+                                <div id="scan-results-box" class="scan-results-box bt-scan-results-box ui-stack ui-stack--xs" hidden>
                                     <div class="scan-results-title">Discovered devices &mdash; add to fleet or pair first</div>
                                     <div id="scan-results-list"></div>
                                 </div>
                             </div>
-                            <div class="bugreport-footer bt-scan-modal-footer">
-                                <button type="button" class="bugreport-btn secondary" onclick="closeBtScanModal()">Close</button>
+                            <div class="bugreport-footer bt-scan-modal-footer ui-modal-footer">
+                                <button type="button" class="btn btn-sm btn-secondary ui-modal-footer-action" onclick="closeBtScanModal()">Done</button>
                             </div>
                         </div>
                     </div>

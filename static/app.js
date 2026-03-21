@@ -4395,7 +4395,7 @@ function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabl
         '<div class="bt-runtime" aria-live="polite"></div>' +
         '<div class="bt-row-actions">' +
             '<details class="bt-device-action-menu ui-action-menu">' +
-                '<summary class="btn btn-sm btn-secondary bt-device-action-toggle ui-action-menu-toggle">BT tools</summary>' +
+                '<summary class="btn btn-sm btn-secondary bt-device-action-toggle ui-action-menu-toggle">' + _bluetoothIconSvg('scan-action-icon') + '<span>Tools</span></summary>' +
                 '<div class="bt-device-action-menu-list ui-action-menu-list">' +
                     '<button type="button" class="btn btn-sm btn-secondary bt-device-action-item ui-action-menu-item bt-device-action-info">Bluetooth info</button>' +
                     '<button type="button" class="btn btn-sm btn-secondary bt-device-action-item ui-action-menu-item bt-device-action-reset">Reset & reconnect</button>' +

@@ -3581,7 +3581,7 @@ body {
         .paired-box--static {
             margin-top: 0;
         }
-        .paired-box-title--static {
+        .paired-box-header--static {
             display: flex;
             align-items: center;
             justify-content: space-between;
@@ -3589,10 +3589,10 @@ body {
             margin-bottom: 8px;
             cursor: default;
         }
-        .paired-box-title--static:hover {
+        .paired-box-header--static:hover {
             background: transparent;
         }
-        .paired-box-title--static .paired-box-copy {
+        .paired-box-header--static .paired-box-copy {
             overflow: visible;
             white-space: normal;
         }
@@ -3601,76 +3601,88 @@ body {
             animation: bt-settings-highlight 1.4s ease;
         }
         .bt-scan-modal {
-            width: min(90vw, 780px);
+            width: min(92vw, 780px);
             max-width: 780px;
         }
         .bt-scan-modal-body {
             display: grid;
-            gap: 12px;
-        }
-        .bt-scan-modal-copy {
-            font-size: 13px;
-            line-height: 1.55;
-            color: var(--secondary-text-color);
+            gap: var(--ui-space-150);
         }
         .bt-scan-toolbar {
             display: flex;
             align-items: flex-end;
-            gap: 10px;
+            gap: var(--ui-space-100);
             flex-wrap: wrap;
+            padding: var(--ui-space-150);
+            border: 1px solid var(--ui-data-surface-border, var(--divider-color));
+            border-radius: var(--ha-card-border-radius);
+            background: var(--ui-data-surface-bg, var(--primary-background-color));
         }
         .bt-scan-field {
             display: grid;
-            gap: 6px;
+            gap: var(--ui-space-075);
             min-width: min(100%, 220px);
             flex: 1 1 220px;
         }
         .bt-scan-field-label,
-        .bt-scan-progress-detail {
-            font-size: 12px;
-            color: var(--secondary-text-color);
+        .bt-scan-progress-detail,
+        .scan-results-title {
+            font-size: var(--ui-type-meta-size);
+            line-height: var(--ui-type-meta-line-height);
+            font-weight: var(--ui-type-meta-weight);
+            letter-spacing: var(--ui-type-meta-letter-spacing);
+            text-transform: uppercase;
+            color: var(--ui-data-header-color, var(--secondary-text-color));
         }
         .bt-scan-select {
             width: 100%;
-            min-height: 34px;
-            padding: 7px 10px;
-            border: 1px solid var(--divider-color);
-            border-radius: 8px;
-            font-size: 13px;
-            background: var(--card-background-color);
-            color: var(--primary-text-color);
+            min-height: var(--ui-field-height);
+            padding: 0 var(--ui-field-padding-x);
+            border: 1px solid var(--ui-field-border);
+            border-radius: var(--ui-field-radius);
+            font-size: var(--ui-field-font-size);
+            background: var(--ui-field-bg);
+            color: var(--ui-field-color);
+        }
+        .bt-scan-select:focus,
+        .bt-scan-select:focus-visible {
+            outline: none;
+            border-color: var(--ui-field-focus-border);
+            box-shadow: var(--ui-field-focus-ring);
         }
         .bt-scan-toggle {
             display: inline-flex;
             align-items: center;
-            gap: 10px;
-            min-height: 34px;
+            gap: var(--ui-space-100);
+            min-height: var(--ui-field-height);
             padding: 0 2px;
-            font-size: 13px;
+            font-size: var(--ui-type-body-size);
+            line-height: var(--ui-type-body-line-height);
             font-weight: 600;
             color: var(--primary-text-color);
         }
         .bt-scan-progress {
             display: grid;
-            gap: 10px;
-            padding: 12px;
-            border: 1px solid var(--divider-color);
-            border-radius: 12px;
-            background: var(--card-background-color);
+            gap: var(--ui-space-100);
+            padding: var(--ui-space-150);
+            border: 1px solid var(--ui-data-surface-border, var(--divider-color));
+            border-radius: var(--ha-card-border-radius);
+            background: var(--ui-data-surface-bg, var(--primary-background-color));
         }
         .bt-scan-progress-copy {
             display: grid;
-            gap: 6px;
+            gap: var(--ui-space-075);
         }
         .bt-scan-progress-head {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            gap: 10px;
+            gap: var(--ui-space-100);
             flex-wrap: wrap;
         }
         .bt-scan-progress-remaining {
-            font-size: 12px;
+            font-size: var(--ui-type-body-size);
+            line-height: var(--ui-type-body-line-height);
             font-weight: 700;
             color: var(--secondary-text-color);
         }
@@ -3691,7 +3703,7 @@ body {
         }
         .bt-scan-status-panel {
             display: grid;
-            gap: 8px;
+            gap: var(--ui-space-100);
         }
         .bt-scan-results-box {
             margin-top: 0;
@@ -3730,10 +3742,16 @@ body {
             -webkit-user-select: none;
         }
         .scan-results-box {
-            margin-top: 12px; border: 1px solid var(--divider-color); border-radius: 12px;
-            padding: 12px; background: var(--card-background-color);
+            margin-top: var(--ui-space-150);
+            border: 1px solid var(--ui-data-surface-border, var(--divider-color));
+            border-radius: var(--ha-card-border-radius);
+            padding: var(--ui-space-100);
+            background: var(--card-background-color);
         }
-        .scan-results-title { font-size: 12px; color: var(--secondary-text-color); margin-bottom: 8px; }
+        .scan-results-title {
+            margin: 0;
+            padding: 0 var(--ui-space-050);
+        }
         .scan-result-item {
             display: flex; align-items: center; gap: 10px;
             padding: 8px 4px; border-bottom: 1px solid var(--divider-color); font-size: 13px;
@@ -3802,7 +3820,14 @@ body {
             flex-shrink: 0;
         }
         .scan-result-item:last-child { border-bottom: none; }
-        .scan-result-mac { font-family: monospace; color: var(--secondary-text-color); font-size: 12px; width: 132px; flex-shrink: 0; }
+        .scan-result-mac {
+            font-family: monospace;
+            color: var(--secondary-text-color);
+            font-size: var(--ui-type-meta-size);
+            line-height: var(--ui-type-meta-line-height);
+            width: 132px;
+            flex-shrink: 0;
+        }
         .scan-result-name {
             display: flex;
             flex-direction: column;
@@ -3812,6 +3837,9 @@ body {
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: normal;
+            font-size: var(--ui-type-body-size);
+            line-height: var(--ui-type-body-line-height);
+            font-weight: 600;
         }
         .scan-result-meta {
             display: flex;
@@ -3858,7 +3886,7 @@ body {
             margin-top: 12px; border: 1px solid var(--divider-color); border-radius: 12px;
             padding: 12px; background: var(--card-background-color);
         }
-        .paired-box-title {
+        .paired-box-header {
             display: flex;
             align-items: center;
             gap: 10px;
@@ -3866,7 +3894,7 @@ body {
             padding: 4px 2px;
             font-size: 12px;
             color: var(--secondary-text-color);
-            cursor: pointer;
+            cursor: default;
         }
         .paired-box-copy {
             flex: 1;
@@ -5370,7 +5398,7 @@ body {
                 gap: 6px;
             }
 
-            .paired-box-title {
+            .paired-box-header {
                 display: grid;
                 grid-template-columns: auto minmax(0, 1fr);
                 align-items: start;
@@ -5421,7 +5449,7 @@ body {
                 gap: 6px;
                 width: 100%;
             }
-            .paired-box-title--static {
+            .paired-box-header--static {
                 display: flex;
                 align-items: flex-start;
                 justify-content: space-between;
@@ -6062,7 +6090,8 @@ body {
         }
 
         .update-modal,
-        .bugreport-modal {
+        .bugreport-modal,
+        .ui-modal {
             box-shadow: var(--ui-overlay-shadow);
         }
 
@@ -6084,6 +6113,116 @@ body {
 
         .diag-target-highlight {
             box-shadow: var(--ui-highlight-shadow);
+        }
+
+        .ui-modal-overlay {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: var(--ui-space-150);
+            background: rgba(15, 23, 42, 0.42);
+            z-index: 9999;
+            animation: bugreport-fade-in 0.15s ease;
+        }
+
+        .ui-modal {
+            background: var(--card-background-color);
+            color: var(--primary-text-color);
+            border: 1px solid var(--ui-data-surface-border, var(--divider-color));
+            border-radius: max(var(--ha-card-border-radius), 16px);
+            width: min(92vw, 720px);
+            max-height: min(88vh, 880px);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            animation: bugreport-slide-up 0.2s ease;
+        }
+
+        .ui-modal-header {
+            display: flex;
+            align-items: flex-start;
+            gap: var(--ui-space-150);
+            padding: var(--ui-space-200);
+            border-bottom: 1px solid var(--ui-data-row-divider);
+            background: var(--card-background-color);
+        }
+
+        .ui-modal-header--accent {
+            background: linear-gradient(180deg, rgba(3, 169, 244, 0.16), rgba(3, 169, 244, 0.06));
+            border-bottom-color: rgba(3, 169, 244, 0.18);
+        }
+
+        .ui-modal-title {
+            display: inline-flex;
+            align-items: center;
+            gap: var(--ui-space-100);
+            font-size: var(--ui-type-section-title-size);
+            line-height: var(--ui-type-section-title-line-height);
+            font-weight: var(--ui-type-section-title-weight);
+            color: var(--primary-text-color);
+        }
+
+        .ui-modal-title .ui-icon-slot {
+            width: 18px;
+            height: 18px;
+            color: var(--primary-color);
+        }
+
+        .ui-modal-subtitle {
+            margin: 0;
+            max-width: 64ch;
+            font-size: var(--ui-type-body-size);
+            line-height: var(--ui-type-body-line-height);
+            color: var(--secondary-text-color);
+        }
+
+        .ui-modal-body {
+            padding: var(--ui-space-200);
+            overflow-y: auto;
+            flex: 1;
+            min-height: 0;
+            background: var(--card-background-color);
+        }
+
+        .ui-modal-footer {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: var(--ui-space-100);
+            padding: var(--ui-space-150) var(--ui-space-200);
+            border-top: 1px solid var(--ui-data-row-divider);
+            background: var(--primary-background-color);
+        }
+
+        .ui-modal-close {
+            width: 32px;
+            height: 32px;
+            margin-left: auto;
+            border-radius: var(--ui-control-radius);
+            border: 1px solid var(--button-secondary-border);
+            background: var(--button-secondary-bg);
+            color: var(--button-secondary-color);
+            cursor: pointer;
+            font-size: 16px;
+            line-height: 1;
+            transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
+        }
+
+        .ui-modal-close:hover {
+            border-color: var(--button-secondary-hover-border);
+            background: var(--button-secondary-hover-bg);
+            color: var(--button-secondary-hover-color);
+        }
+
+        .ui-modal-close:focus-visible {
+            outline: none;
+            box-shadow: var(--ui-focus-ring);
+        }
+
+        .ui-modal-footer-action {
+            min-width: 88px;
         }
 
         .header {
@@ -6964,11 +7103,11 @@ body {
             border-radius: var(--ui-data-row-radius);
         }
 
-        .paired-box-title {
+        .paired-box-header {
             margin-bottom: 6px;
             padding: 6px 6px;
         }
-        .paired-box-title--static {
+        .paired-box-header--static {
             padding: 0;
             margin-bottom: 10px;
         }
@@ -7023,12 +7162,15 @@ body {
             color: var(--button-secondary-hover-color);
         }
         .bt-scan-modal {
-            border-radius: max(var(--ha-card-border-radius), 16px);
-            box-shadow: var(--ui-overlay-shadow);
+            width: min(92vw, 780px);
+            max-width: 780px;
         }
         .bt-scan-modal-header,
         .bt-scan-modal-footer {
             background: var(--card-background-color);
+        }
+        .bt-scan-modal-close {
+            flex-shrink: 0;
         }
         .bt-scan-modal-body .scan-status-card,
         .bt-scan-modal-body .ui-empty-state {
@@ -7288,7 +7430,6 @@ body {
         .diag-section > summary,
         .diag-advanced-section > summary,
         #ma-token-details summary,
-        .paired-box-title,
         .onboarding-step-toggle {
             border-radius: var(--ui-control-radius);
             background: var(--ui-disclosure-row-bg);
@@ -7300,7 +7441,6 @@ body {
         .diag-section > summary:hover,
         .diag-advanced-section > summary:hover,
         #ma-token-details summary:hover,
-        .paired-box-title:hover,
         .onboarding-step-toggle:hover {
             background: var(--ui-disclosure-row-hover-bg);
         }
