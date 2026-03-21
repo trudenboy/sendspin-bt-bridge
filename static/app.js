@@ -905,7 +905,7 @@ function _getServiceBadgeStateMeta(dev) {
 function _getGroupBadgeStateMeta(dev, groupMeta) {
     var meta = groupMeta || _getGroupBadgeMeta(dev);
     if (!meta || meta.isEmpty) return _buildBadgeStateMeta('neutral', false, 'No Music Assistant group');
-    return _buildBadgeStateMeta('info', false, 'Music Assistant group assigned');
+    return _buildBadgeStateMeta('neutral', false, 'Music Assistant group assigned');
 }
 
 function getDeviceReleaseMeta(dev) {
@@ -1713,49 +1713,161 @@ function _getAdapterBadgeRenderData(dev, i, className) {
     };
 }
 
+function _getServiceBadgeRenderData(dev, className) {
+    var stateMeta = _getServiceBadgeStateMeta(dev);
+    var maConnected = !!((dev && dev.ma_now_playing) || {}).connected;
+    return {
+        stateMeta: stateMeta,
+        className: _joinClassNames([
+            className,
+            'meta-badge',
+            'meta-badge-service',
+            'service-chip-badge',
+            'ma-service-badge',
+            stateMeta.toneClass,
+        ]),
+        title: stateMeta.summary || 'Music Assistant service',
+        innerHtml: _renderBadgeIndicatorHtml('ma', stateMeta) +
+            (maConnected ? '<span class="ma-chip-tag">API</span>' : ''),
+    };
+}
+
+function _renderServiceBadgeHtml(dev, className, id) {
+    var renderData = _getServiceBadgeRenderData(dev, className);
+    return '<span class="' + renderData.className + '"' +
+        (id ? ' id="' + id + '"' : '') +
+        ' title="' + escHtmlAttr(renderData.title) + '">' +
+        renderData.innerHtml +
+    '</span>';
+}
+
+function _getSyncBadgeRenderData(dev, i, className, detailClassName) {
+    var syncMeta = _getSyncStatusMeta(dev, i);
+    return {
+        meta: syncMeta,
+        className: _joinClassNames([className, 'meta-badge', 'meta-badge-status', syncMeta.toneClass]),
+        title: syncMeta.title || 'Synchronization status',
+        innerHtml: _renderBadgeIndicatorHtml(syncMeta.indicatorKind || 'chain', syncMeta) +
+            '<span class="meta-badge-label">' + escHtml(syncMeta.text || '') + '</span>',
+        visible: !!syncMeta.visible,
+        detailClassName: _joinClassNames([detailClassName, 'meta-badge', 'meta-badge-status', syncMeta.detailToneClass]),
+        detailTitle: syncMeta.detailTitle || 'Sync details',
+        detailInnerHtml: _getSyncDetailBadgeInnerHtml(syncMeta),
+        detailVisible: !!syncMeta.visible && !!syncMeta.detailText,
+    };
+}
+
+function _renderSyncBadgeHtml(dev, i, className, id) {
+    var renderData = _getSyncBadgeRenderData(dev, i, className, '');
+    if (!renderData.visible) return '';
+    return '<span class="' + renderData.className + '"' +
+        (id ? ' id="' + id + '"' : '') +
+        ' title="' + escHtmlAttr(renderData.title) + '">' +
+        renderData.innerHtml +
+    '</span>';
+}
+
+function _renderSyncDetailBadgeHtml(dev, i, className, id) {
+    var renderData = _getSyncBadgeRenderData(dev, i, '', className);
+    if (!renderData.detailVisible) return '';
+    return '<span class="' + renderData.detailClassName + '"' +
+        (id ? ' id="' + id + '"' : '') +
+        ' title="' + escHtmlAttr(renderData.detailTitle) + '">' +
+        renderData.detailInnerHtml +
+    '</span>';
+}
+
+function _getBatteryBadgeRenderData(level, className) {
+    var batteryMeta = _getBatteryBadgeMeta(level);
+    return {
+        meta: batteryMeta,
+        className: _joinClassNames([className, 'meta-badge', 'meta-badge-status', batteryMeta.toneClass]),
+        title: batteryMeta.title || '',
+        innerHtml: batteryMeta.html || '',
+        visible: !!batteryMeta.visible,
+    };
+}
+
+function _renderBatteryBadgeHtml(level, className, id) {
+    var renderData = _getBatteryBadgeRenderData(level, className);
+    if (!renderData.visible) return '';
+    return '<span class="' + renderData.className + '"' +
+        (id ? ' id="' + id + '"' : '') +
+        ' title="' + escHtmlAttr(renderData.title) + '">' +
+        renderData.innerHtml +
+    '</span>';
+}
+
+function _normalizeBadgeToneClass(tone) {
+    if (!tone) return _deviceStatusToneClass('neutral');
+    return tone.indexOf('is-') === 0 ? tone : _deviceStatusToneClass(tone);
+}
+
+function _renderMetaStatusBadgeHtml(options) {
+    var opts = options || {};
+    var parts = [];
+    if (opts.leadingHtml) {
+        parts.push(opts.leadingHtml);
+    } else if (opts.indicatorKind) {
+        parts.push(_renderBadgeIndicatorHtml(opts.indicatorKind, opts.stateMeta || {pulse: !!opts.pulse}));
+    }
+    if (opts.label) {
+        parts.push('<span class="' + escHtmlAttr(opts.labelClassName || 'meta-badge-label') + '">' + escHtml(opts.label) + '</span>');
+    }
+    if (opts.hint) {
+        parts.push('<span class="' + escHtmlAttr(opts.hintClassName || 'scan-status-hint') + '">' + escHtml(opts.hint) + '</span>');
+    }
+    return '<span class="' + _joinClassNames([
+        opts.className,
+        'meta-badge',
+        'meta-badge-status',
+        _normalizeBadgeToneClass(opts.tone),
+    ]) + '"' +
+        (opts.id ? ' id="' + opts.id + '"' : '') +
+        (opts.title ? ' title="' + escHtmlAttr(opts.title) + '"' : '') +
+        '>' +
+        parts.join('') +
+    '</span>';
+}
+
+function _renderBtRuntimeBadgeHtml(runtime, className) {
+    var meta = runtime ? getDeviceDisplayStatusMeta(runtime) : {
+        key: 'not-seen',
+        label: 'Not seen',
+        summary: 'Device has not been seen in runtime status yet',
+        badgeToneClass: _deviceStatusToneClass('neutral'),
+        pulse: false,
+    };
+    return _renderMetaStatusBadgeHtml({
+        className: className,
+        tone: meta.badgeToneClass,
+        title: meta.summary ? 'Runtime status — ' + meta.summary : 'Runtime status',
+        indicatorKind: 'status',
+        stateMeta: meta,
+        label: meta.label,
+    });
+}
+
+function _renderScanStatusBadgeHtml(label, tone, hint) {
+    return _renderMetaStatusBadgeHtml({
+        className: 'scan-status-pill',
+        tone: tone || 'neutral',
+        label: label,
+        hint: hint || '',
+        title: hint ? label + ' · ' + hint : label,
+    });
+}
+
 function _getListCollapsedBadgesHtml(dev, i) {
     var badges = [];
     var releaseMeta = getDeviceReleaseMeta(dev);
     if (releaseMeta.visible) {
         badges.push(_renderReleaseBadgeHtml(releaseMeta, 'chip list-inline-badge'));
     }
-    var serviceState = _getServiceBadgeStateMeta(dev);
-    var maConnected = !!((dev.ma_now_playing || {}).connected);
-    badges.push(
-        '<span class="chip meta-badge meta-badge-service service-chip-badge ma-service-badge list-inline-badge ' + serviceState.toneClass + '"' +
-            ' title="' + escHtmlAttr(serviceState.summary || 'Music Assistant service') + '">' +
-            _renderBadgeIndicatorHtml('ma', serviceState) +
-            (maConnected ? '<span class="ma-chip-tag">API</span>' : '') +
-        '</span>'
-    );
-
-    var syncMeta = _getSyncStatusMeta(dev, i);
-    if (syncMeta.visible) {
-        badges.push(
-            '<span class="chip meta-badge meta-badge-status list-inline-badge list-sync-chip ' + syncMeta.toneClass + '"' +
-                ' title="' + escHtmlAttr(syncMeta.title || 'Synchronization status') + '">' +
-                _renderBadgeIndicatorHtml(syncMeta.indicatorKind || 'chain', syncMeta) +
-                '<span class="meta-badge-label">' + escHtml(syncMeta.text) + '</span>' +
-            '</span>'
-            );
-    }
-    if (syncMeta.visible && syncMeta.detailText) {
-        badges.push(
-            '<span class="chip meta-badge meta-badge-status list-inline-badge list-sync-detail-chip ' + syncMeta.detailToneClass + '"' +
-                ' title="' + escHtmlAttr(syncMeta.detailTitle || 'Sync details') + '">' +
-                _getSyncDetailBadgeInnerHtml(syncMeta) +
-            '</span>'
-        );
-    }
-
-    var batteryMeta = _getBatteryBadgeMeta(dev.battery_level);
-    if (batteryMeta.visible) {
-        badges.push(
-            '<span class="chip meta-badge meta-badge-status list-inline-badge list-battery-chip ' + batteryMeta.toneClass + '" title="' + escHtmlAttr(batteryMeta.title) + '">' +
-                batteryMeta.html +
-            '</span>'
-        );
-    }
+    badges.push(_renderServiceBadgeHtml(dev, 'chip list-inline-badge'));
+    badges.push(_renderSyncBadgeHtml(dev, i, 'chip list-inline-badge list-sync-chip'));
+    badges.push(_renderSyncDetailBadgeHtml(dev, i, 'chip list-inline-badge list-sync-detail-chip'));
+    badges.push(_renderBatteryBadgeHtml(dev.battery_level, 'chip list-inline-badge list-battery-chip'));
 
     return badges.length ? '<span class="list-inline-badges">' + badges.join('') + '</span>' : '';
 }
@@ -2852,21 +2964,16 @@ function buildDeviceCard(i) {
               _getEqualizerHtml({}, 'list-name-eq card-name-eq', 'deq-' + i) +
             '</div>' +
           '</div>' +
-          '<span class="card-badge meta-badge meta-badge-status is-neutral" id="dreleased-badge-' + i + '" style="display:none"></span>' +
-          '<button type="button" class="card-badge group-badge meta-badge meta-badge-link group-badge-unified meta-badge-interactive" id="dgroup-' + i + '" style="display:none"></button>' +
+          '<span class="chip meta-badge meta-badge-status is-neutral" id="dreleased-badge-' + i + '" style="display:none"></span>' +
+          '<button type="button" class="chip meta-badge meta-badge-link group-badge-unified meta-badge-interactive device-card-group-badge" id="dgroup-' + i + '" style="display:none"></button>' +
         '</div>' +
         '<div class="card-chips">' +
           '<button type="button" class="chip meta-badge meta-badge-link meta-badge-interactive adapter-link-badge is-neutral" id="dchip-bt-' + i + '" title="Open Bluetooth adapter settings"></button>' +
-          '<span class="chip meta-badge meta-badge-service service-chip-badge ma-service-badge is-neutral" id="dchip-ma-' + i + '">' +
-            '<span class="meta-badge-indicator" id="dsrv-ind-' + i + '">' + _maIconSvg('meta-badge-indicator-icon') + '</span>' +
-            ' <span class="ma-chip-tag" id="dma-api-' + i + '" style="display:none">API</span>' +
-          '</span>' +
-          _renderDeviceStatusBadgeHtml(null, 'chip', 'meta-badge-label', 'dplay-chip-' + i) +
-          '<span class="chip meta-badge meta-badge-status sync-chip is-success" id="dsync-' + i + '" title="Synchronization healthy">' +
-            '<span class="meta-badge-indicator" id="dsync-ind-' + i + '">' + _checkIconSvg('meta-badge-indicator-icon') + '</span><span class="meta-badge-label" id="dsync-text-' + i + '">Sync</span>' +
-          '</span>' +
-          '<span class="chip meta-badge meta-badge-status sync-detail-chip is-neutral" id="dsync-detail-' + i + '" style="display:none"></span>' +
-          '<span class="chip meta-badge meta-badge-status battery-chip" id="dbattery-' + i + '" style="display:none"></span>' +
+          '<span id="dchip-ma-' + i + '"></span>' +
+          '<span id="dplay-chip-' + i + '"></span>' +
+          '<span id="dsync-' + i + '" style="display:none"></span>' +
+          '<span id="dsync-detail-' + i + '" style="display:none"></span>' +
+          '<span id="dbattery-' + i + '" style="display:none"></span>' +
         '</div>' +
         '<div class="card-controls">' +
           _renderPlaybackTransportButtonsHtml(i, placeholderTransport, {
@@ -2935,7 +3042,7 @@ function populateDeviceCard(i, dev) {
 
     var releasedBadge = document.getElementById('dreleased-badge-' + i);
     if (releasedBadge) {
-        var releaseRenderData = _getReleaseBadgeRenderData(releaseMeta, 'card-badge');
+        var releaseRenderData = _getReleaseBadgeRenderData(releaseMeta, 'chip');
         releasedBadge.style.display = releaseRenderData ? '' : 'none';
         if (releaseRenderData) {
             releasedBadge.innerHTML = releaseRenderData.innerHtml;
@@ -2946,14 +3053,14 @@ function populateDeviceCard(i, dev) {
 
     var batteryEl = document.getElementById('dbattery-' + i);
     if (batteryEl) {
-        var batteryMeta = _getBatteryBadgeMeta(dev.battery_level);
-        if (batteryMeta.visible) {
-            batteryEl.className = 'chip meta-badge meta-badge-status battery-chip ' + batteryMeta.toneClass;
-            batteryEl.innerHTML = batteryMeta.html;
-            batteryEl.title = batteryMeta.title;
+        var batteryRenderData = _getBatteryBadgeRenderData(dev.battery_level, 'chip battery-chip');
+        if (batteryRenderData.visible) {
+            batteryEl.className = batteryRenderData.className;
+            batteryEl.innerHTML = batteryRenderData.innerHtml;
+            batteryEl.title = batteryRenderData.title;
             batteryEl.style.display = '';
         } else {
-            batteryEl.className = 'chip meta-badge meta-badge-status battery-chip';
+            batteryEl.className = '';
             batteryEl.innerHTML = '';
             batteryEl.title = '';
             batteryEl.style.display = 'none';
@@ -2991,7 +3098,7 @@ function populateDeviceCard(i, dev) {
 
     var groupBadge = document.getElementById('dgroup-' + i);
     if (groupBadge) {
-        var groupRenderData = _getGroupBadgeRenderData(dev, i, 'card-badge group-badge');
+        var groupRenderData = _getGroupBadgeRenderData(dev, i, 'chip device-card-group-badge');
         var groupMeta = groupRenderData.meta;
         groupBadge.className = groupRenderData.className;
         groupBadge.innerHTML = groupRenderData.innerHtml;
@@ -3021,16 +3128,13 @@ function populateDeviceCard(i, dev) {
         btChipEl.onclick = (adapterRenderData.disabled || _isDeviceDisabled(dev)) ? null : function() { openDeviceAdapterSettings(i); };
     }
 
-    var srvInd = document.getElementById('dsrv-ind-' + i);
     var maChip = document.getElementById('dchip-ma-' + i);
-    var maApiBadge = document.getElementById('dma-api-' + i);
-    var serviceStateMeta = _getServiceBadgeStateMeta(dev);
-    if (maChip) maChip.className = 'chip meta-badge meta-badge-service service-chip-badge ma-service-badge ' + serviceStateMeta.toneClass;
-    if (srvInd) {
-        srvInd.className = _getBadgeIndicatorClassName(serviceStateMeta, '', 'ma');
-        srvInd.innerHTML = _getBadgeIndicatorInnerHtml('ma', serviceStateMeta);
+    if (maChip) {
+        var serviceRenderData = _getServiceBadgeRenderData(dev, 'chip');
+        maChip.className = serviceRenderData.className;
+        maChip.innerHTML = serviceRenderData.innerHtml;
+        maChip.title = serviceRenderData.title;
     }
-    if (maApiBadge) maApiBadge.style.display = (dev.ma_now_playing && dev.ma_now_playing.connected) ? '' : 'none';
 
     var playChip = document.getElementById('dplay-chip-' + i);
     var fmtEl = document.getElementById('daudiofmt-' + i);
@@ -3138,24 +3242,18 @@ function populateDeviceCard(i, dev) {
     }
 
     var syncEl = document.getElementById('dsync-' + i);
-    var syncInd = document.getElementById('dsync-ind-' + i);
-    var syncTxt = document.getElementById('dsync-text-' + i);
     var syncDetail = document.getElementById('dsync-detail-' + i);
     if (syncEl) {
-        var syncMeta = _getSyncStatusMeta(dev, i);
-        syncEl.className = 'chip meta-badge meta-badge-status sync-chip ' + syncMeta.toneClass;
-        syncEl.title = syncMeta.title || 'Synchronization status';
-        if (syncTxt) syncTxt.textContent = syncMeta.text;
-        if (syncInd) {
-            syncInd.className = _getBadgeIndicatorClassName(syncMeta, '', syncMeta.indicatorKind || 'chain');
-            syncInd.innerHTML = _getBadgeIndicatorInnerHtml(syncMeta.indicatorKind || 'chain', syncMeta);
-        }
-        syncEl.style.display = syncMeta.visible ? '' : 'none';
+        var syncRenderData = _getSyncBadgeRenderData(dev, i, 'chip sync-chip', 'chip sync-detail-chip');
+        syncEl.className = syncRenderData.className;
+        syncEl.title = syncRenderData.title;
+        syncEl.innerHTML = syncRenderData.innerHtml;
+        syncEl.style.display = syncRenderData.visible ? '' : 'none';
         if (syncDetail) {
-            syncDetail.innerHTML = _getSyncDetailBadgeInnerHtml(syncMeta);
-            syncDetail.className = 'chip meta-badge meta-badge-status sync-detail-chip ' + syncMeta.detailToneClass;
-            syncDetail.title = syncMeta.detailTitle || 'Sync details';
-            syncDetail.style.display = (syncMeta.visible && syncMeta.detailText) ? '' : 'none';
+            syncDetail.innerHTML = syncRenderData.detailInnerHtml;
+            syncDetail.className = syncRenderData.detailClassName;
+            syncDetail.title = syncRenderData.detailTitle;
+            syncDetail.style.display = syncRenderData.detailVisible ? '' : 'none';
         }
     }
 
@@ -4070,12 +4168,14 @@ function renderAdaptersTable() {
     el.innerHTML = '';
     btAdapters.forEach(function(a) {
         if (a.manual) {
-            el.appendChild(buildManualRow(a.id, a.mac, a.name));
+            el.appendChild(buildManualRow(a.id, a.mac, a.name, a._configDirtyKey || ''));
         } else {
             var row = document.createElement('div');
             row.className = 'adapter-row detected';
             row.dataset.adapterId = a.id || '';
             row.dataset.adapterMac = a.mac || '';
+            row.dataset.configDirtyKey = a._configDirtyKey || _nextConfigDirtyKey('adapter');
+            a._configDirtyKey = row.dataset.configDirtyKey;
             var customName = a.customName || '';
             var placeholderName = a.detectedName || a.name || a.id || '';
             row.innerHTML =
@@ -4094,11 +4194,12 @@ function renderAdaptersTable() {
     });
 }
 
-function buildManualRow(id, mac, name) {
+function buildManualRow(id, mac, name, dirtyKey) {
     var row = document.createElement('div');
     row.className = 'adapter-row manual';
     row.dataset.adapterId = id || '';
     row.dataset.adapterMac = mac || '';
+    row.dataset.configDirtyKey = dirtyKey || _nextConfigDirtyKey('adapter');
     row.innerHTML =
         '<input type="text" class="adp-id" placeholder="hci2" value="' + escHtmlAttr(id) + '">' +
         '<input type="text" class="adp-mac mono" placeholder="AA:BB:CC:DD:EE:FF" value="' + escHtmlAttr(mac) + '">' +
@@ -4115,10 +4216,10 @@ function buildManualRow(id, mac, name) {
     return row;
 }
 
-function addManualAdapterRow(id, mac, name) {
+function addManualAdapterRow(id, mac, name, dirtyKey) {
     var el = document.getElementById('adapters-table');
     if (!el) return;
-    el.appendChild(buildManualRow(id || '', mac || '', name || ''));
+    el.appendChild(buildManualRow(id || '', mac || '', name || '', dirtyKey || ''));
 }
 
 function _ensureEmptyManualAdapterRow() {
@@ -4211,6 +4312,30 @@ function syncManualAdapters() {
     renderDevicesView();
 }
 
+function _collectPersistedAdaptersFromDom() {
+    var savedAdapters = [];
+    document.querySelectorAll('#adapters-table .adapter-row').forEach(function(row) {
+        var isManual = row.classList.contains('manual');
+        var id = isManual ? ((row.querySelector('.adp-id') || {}).value || '').trim() : (row.dataset.adapterId || '').trim();
+        var mac = isManual ? ((row.querySelector('.adp-mac') || {}).value || '').trim() : (row.dataset.adapterMac || '').trim();
+        var name = ((row.querySelector('.adp-name') || {}).value || '').trim();
+        if (isManual) {
+            if (id || mac) {
+                var manualEntry = {id: id, mac: mac};
+                if (name) manualEntry.name = name;
+                savedAdapters.push(manualEntry);
+            }
+            return;
+        }
+        if (id && name) {
+            var detectedEntry = {id: id, mac: mac};
+            detectedEntry.name = name;
+            savedAdapters.push(detectedEntry);
+        }
+    });
+    return savedAdapters;
+}
+
 function rebuildAdapterDropdowns() {
     document.querySelectorAll('#bt-devices-table .bt-adapter').forEach(function(sel) {
         var current = sel.value;
@@ -4237,6 +4362,7 @@ function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabl
     var tbody = document.getElementById('bt-devices-table');
     var wrap = document.createElement('div');
     wrap.className = 'bt-device-wrap';
+    wrap.dataset.configDirtyKey = _nextConfigDirtyKey('bt-device');
     var isEnabled = enabled !== false;
 
     var row = document.createElement('div');
@@ -4308,7 +4434,7 @@ function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabl
 
     row.querySelector('.btn-remove-dev').addEventListener('click', function() {
         wrap.remove();
-        _setConfigDirty(true);
+        _recomputeConfigDirtyState();
     });
     row.querySelector('.bt-device-action-info').addEventListener('click', function(event) {
         event.preventDefault();
@@ -4345,7 +4471,7 @@ function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabl
     });
     enabledCb.addEventListener('change', function() {
         syncBtRowState();
-        _setConfigDirty(true);
+        _recomputeConfigDirtyState();
     });
     row.querySelector('.bt-mac').addEventListener('input', function() {
         var v = this.value.trim();
@@ -4375,7 +4501,7 @@ function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabl
     syncBtRowIdentity();
     syncBtRowState();
     refreshBtDeviceRowsRuntime();
-    _setConfigDirty(true);
+    _recomputeConfigDirtyState();
 }
 
 function collectBtDevices() {
@@ -4418,13 +4544,7 @@ function refreshBtDeviceRowsRuntime() {
         var name = row.querySelector('.bt-name') ? row.querySelector('.bt-name').value.trim() : '';
         var mac = row.querySelector('.bt-mac') ? row.querySelector('.bt-mac').value.trim() : '';
         var runtime = _findRuntimeDevice(name, mac);
-        if (!runtime) {
-            runtimeEl.innerHTML =
-                '<span class="bt-live-badge muted">Not seen</span>';
-            return;
-        }
-        runtimeEl.innerHTML =
-            '<span class="bt-live-badge ' + getDeviceStatusClass(runtime) + '">' + escHtml(getDeviceStatusLabel(runtime)) + '</span>';
+        runtimeEl.innerHTML = _renderBtRuntimeBadgeHtml(runtime, 'chip bt-runtime-badge');
     });
 }
 
@@ -4567,8 +4687,14 @@ function _renderBtScanAdapterOptions() {
 function _setBtScanProgressPill(variant, label) {
     var stateEl = document.getElementById('scan-progress-state');
     if (!stateEl) return;
-    stateEl.className = 'scan-status-pill' + (variant ? ' ' + variant : '');
-    stateEl.textContent = label;
+    var tone = variant === 'is-scanning' ? 'info' : variant ? variant.replace(/^is-/, '') : 'neutral';
+    stateEl.outerHTML = _renderMetaStatusBadgeHtml({
+        id: 'scan-progress-state',
+        className: 'scan-status-pill',
+        tone: tone,
+        label: label,
+        title: label,
+    });
 }
 
 function _clearBtScanProgressTimer() {
@@ -4867,10 +4993,7 @@ async function startBtScan() {
             _renderBtScanProgress();
             _startScanCooldown(btn, data.retry_after);
             if (status) {
-                status.innerHTML = '<span class="scan-status-pill">' +
-                    '<span class="scan-status-label">Scan cooldown active</span>' +
-                    '<span class="scan-status-hint">' + String(data.retry_after) + 's remaining</span>' +
-                '</span>';
+                status.innerHTML = _renderScanStatusBadgeHtml('Scan cooldown active', 'neutral', String(data.retry_after) + 's remaining');
             }
             return false;
         }
@@ -4925,11 +5048,10 @@ async function startBtScan() {
         } else {
             if (status) {
                 var foundCount = (_btScanModalState.lastStats && _btScanModalState.lastStats.returned_candidates) || _btScanModalState.lastDevices.length;
-                status.innerHTML = '<span class="scan-status-pill is-success">' +
-                    '<span class="scan-status-label">Found ' + String(foundCount) + ' ' +
-                        (_btScanModalState.audioOnly ? 'device' : 'candidate') + (foundCount === 1 ? '' : 's') +
-                    '</span>' +
-                '</span>';
+                status.innerHTML = _renderScanStatusBadgeHtml(
+                    'Found ' + String(foundCount) + ' ' + (_btScanModalState.audioOnly ? 'device' : 'candidate') + (foundCount === 1 ? '' : 's'),
+                    'success'
+                );
             }
             _renderBtScanResults(_btScanModalState.lastDevices);
         }
@@ -4940,9 +5062,7 @@ async function startBtScan() {
         _clearBtScanProgressTimer();
         _renderBtScanProgress();
         if (status) {
-            status.innerHTML = '<span class="scan-status-pill is-error">' +
-                '<span class="scan-status-label">Scan failed: ' + escHtml(_btScanModalState.lastError) + '</span>' +
-            '</span>';
+            status.innerHTML = _renderScanStatusBadgeHtml('Scan failed', 'error', _btScanModalState.lastError);
         }
     } finally {
         _syncBtScanControls();
@@ -5317,14 +5437,21 @@ function _onUpdateChannelChange() {
     _syncUpdateChannelState();
 }
 
-async function saveConfig() {
+function readOptionalNumberField(name) {
+    var input = document.querySelector('[name="' + name + '"]');
+    if (!input) return null;
+    var raw = (input.value || '').trim();
+    if (!raw) return null;
+    var value = parseInt(raw, 10);
+    return Number.isFinite(value) ? value : raw;
+}
+
+function _buildConfigPayload(options) {
+    options = options || {};
     var formData = new FormData(document.getElementById('config-form'));
     var config = Object.fromEntries(formData);
 
-    // Collect BT devices from table rows (overrides anything from formData)
     config.BLUETOOTH_DEVICES = collectBtDevices();
-    syncManualAdapters();
-    // Checkbox → bool (FormData only includes it when checked, with value "on")
     config.PREFER_SBC_CODEC = !!(document.getElementById('prefer-sbc-codec') || {}).checked;
     config.AUTH_ENABLED = !!(document.getElementById('auth-enabled') || {}).checked;
     config.BRUTE_FORCE_PROTECTION = !!(document.getElementById('brute-force-protection') || {}).checked;
@@ -5333,24 +5460,19 @@ async function saveConfig() {
     config.VOLUME_VIA_MA = !!(document.getElementById('volume-via-ma') || {}).checked;
     config.MUTE_VIA_MA = !!(document.getElementById('mute-via-ma') || {}).checked;
     config.SMOOTH_RESTART = !!(document.getElementById('smooth-restart') || {}).checked;
+    config.AUTO_UPDATE = !!(document.getElementById('auto-update') || {}).checked;
+    config.CHECK_UPDATES = !!(document.getElementById('check-updates') || {}).checked;
+
     var updateChannelSelect = document.getElementById('update-channel');
     if (updateChannelSelect) {
         config.UPDATE_CHANNEL = (updateChannelSelect.value || 'stable').toLowerCase();
     }
-    config.AUTO_UPDATE = !!(document.getElementById('auto-update') || {}).checked;
-    config.CHECK_UPDATES = !!(document.getElementById('check-updates') || {}).checked;
-    // Log level lives outside the config form (in Logs section)
-    var logSel = document.getElementById('log-level-select');
-    if (logSel) config.LOG_LEVEL = logSel.value;
-    function readOptionalNumberField(name) {
-        var input = document.querySelector('[name="' + name + '"]');
-        if (!input) return null;
-        var raw = (input.value || '').trim();
-        if (!raw) return null;
-        var value = parseInt(raw, 10);
-        return Number.isFinite(value) ? value : raw;
+
+    if (options.includeExternal !== false) {
+        var logSel = document.getElementById('log-level-select');
+        if (logSel) config.LOG_LEVEL = logSel.value;
     }
-    // Cast numeric BT settings to integers
+
     config.BT_CHECK_INTERVAL = parseInt(config.BT_CHECK_INTERVAL, 10) || 10;
     config.BT_MAX_RECONNECT_FAILS = parseInt(config.BT_MAX_RECONNECT_FAILS, 10) || 0;
     config.WEB_PORT = readOptionalNumberField('WEB_PORT');
@@ -5359,19 +5481,20 @@ async function saveConfig() {
     config.BRUTE_FORCE_MAX_ATTEMPTS = parseInt(((document.querySelector('[name="BRUTE_FORCE_MAX_ATTEMPTS"]') || {}).value), 10) || 5;
     config.BRUTE_FORCE_WINDOW_MINUTES = parseInt(((document.querySelector('[name="BRUTE_FORCE_WINDOW_MINUTES"]') || {}).value), 10) || 1;
     config.BRUTE_FORCE_LOCKOUT_MINUTES = parseInt(((document.querySelector('[name="BRUTE_FORCE_LOCKOUT_MINUTES"]') || {}).value), 10) || 5;
-    // Pass current group slider value so backend can init volume for new devices
-    var groupSlider = document.getElementById('group-vol-slider');
-    config._new_device_default_volume = groupSlider ? parseInt(groupSlider.value, 10) : 100;
-    // Save all adapters (auto-detected + manual) so native HA Config tab shows them
-    config.BLUETOOTH_ADAPTERS = btManualAdapters
-        .filter(function(a) { return a.id; })
-        .map(function(a) {
-            var entry = {id: a.id, mac: a.mac || ''};
-            if (a.name) entry.name = a.name;
-            return entry;
-        });
 
-    // Require password before enabling auth (HA addon uses HA login instead)
+    if (options.includeRuntime !== false) {
+        var groupSlider = document.getElementById('group-vol-slider');
+        config._new_device_default_volume = groupSlider ? parseInt(groupSlider.value, 10) : 100;
+    }
+
+    config.BLUETOOTH_ADAPTERS = _collectPersistedAdaptersFromDom();
+    return config;
+}
+
+async function saveConfig() {
+    syncManualAdapters();
+    var config = _buildConfigPayload();
+
     if (config.AUTH_ENABLED && !window._passwordSet) {
         showToast('Set a password before enabling authentication', 'error');
         var fields = document.getElementById('auth-password-fields');
@@ -6265,7 +6388,7 @@ function _renderOnboardingSteps(steps) {
     if (!steps || !steps.length) return '';
     return steps.map(function(step, index) {
         var interactive = _hasInteractiveOnboardingContent(step);
-        var badgeTone = step.status === 'error' ? 'error' : step.status === 'warning' ? 'warning' : 'ok';
+        var badgeTone = step.status === 'error' ? 'error' : step.status === 'warning' ? 'warning' : 'success';
         var indicator = step.stage === 'complete'
             ? '<span class="onboarding-step-indicator-icon">' + _uiIconSvg('check', 'ui-icon-svg') + '</span>'
             : '<span class="onboarding-step-indicator-number">' + escHtml(String(index + 1)) + '</span>';
@@ -6274,7 +6397,12 @@ function _renderOnboardingSteps(steps) {
             '<div class="onboarding-step-main">' +
                 '<div class="onboarding-step-title-row">' +
                     '<div class="onboarding-step-title">' + escHtml(step.title || step.key || 'Step') + '</div>' +
-                    '<span class="onboarding-step-badge is-' + badgeTone + '">' + escHtml(_onboardingStageLabel(step)) + '</span>' +
+                    _renderMetaStatusBadgeHtml({
+                        className: 'onboarding-step-badge',
+                        tone: badgeTone,
+                        label: _onboardingStageLabel(step),
+                        title: step.summary || _onboardingStageLabel(step),
+                    }) +
                 '</div>' +
                 (!interactive ? '<div class="onboarding-step-summary">' + escHtml(step.summary || '') + '</div>' : '') +
             '</div>' +
@@ -6357,12 +6485,15 @@ function _renderRecoveryIssuePills(issues) {
     if (!issues || !issues.length) return '';
     return issues.slice(0, 3).map(function(issue) {
         var tone = issue.severity === 'error' ? 'error' : 'warning';
-        return '<div class="recovery-issue-pill is-' + tone + '">' +
-            '<span class="recovery-issue-pill-icon">' +
+        return _renderMetaStatusBadgeHtml({
+            className: 'recovery-issue-pill',
+            tone: tone,
+            title: issue.title || 'Issue',
+            leadingHtml: '<span class="recovery-issue-pill-icon">' +
                 (tone === 'error' ? _uiIconSvg('warning', 'ui-icon-svg') : _uiIconSvg('info', 'ui-icon-svg')) +
-            '</span>' +
-            '<span>' + escHtml(issue.title || 'Issue') + '</span>' +
-        '</div>';
+            '</span>',
+            label: issue.title || 'Issue',
+        });
     }).join('');
 }
 
@@ -6467,7 +6598,7 @@ function maHaAuthPopup() {
             if (urlField) urlField.value = ev.data.url;
             _setStatusText(msgEl, '\u2714 ' + (ev.data.message || 'Connected'), 'success');
             showToast('\u2714 Connected to Music Assistant via HA', 'success');
-            loadConfig().then(function() { _setConfigDirty(true); });
+            loadConfig({preserveDirtyBaseline: true});
         }
     }
     window.addEventListener('message', onMessage);
@@ -6505,8 +6636,7 @@ async function maLogin() {
             showToast('\u2714 Connected to Music Assistant', 'success');
             // Reload config so hidden MA_API_TOKEN field is up to date
             // (backend already saved the new token to config.json)
-            await loadConfig();
-            _setConfigDirty(true);
+            await loadConfig({preserveDirtyBaseline: true});
         } else if (resp.status === 401) {
             // Builtin login failed — try HA OAuth with same credentials
             _setStatusText(msgEl, 'Trying Home Assistant login...', 'muted');
@@ -6590,8 +6720,7 @@ async function _maHaLoginWithCreds(maUrl, username, password, msgEl) {
             _setMaStatus(true, data.username, data.url);
             _setStatusText(msgEl, '\u2714 ' + (data.message || 'Connected via HA'), 'success');
             showToast('\u2714 Connected to Music Assistant via HA', 'success');
-            await loadConfig();
-            _setConfigDirty(true);
+            await loadConfig({preserveDirtyBaseline: true});
             return true;
         }
         if (data.step === 'mfa') {
@@ -6612,8 +6741,7 @@ async function _maHaLoginWithCreds(maUrl, username, password, msgEl) {
                 _setMaStatus(true, data2.username, data2.url);
                 _setStatusText(msgEl, '\u2714 ' + (data2.message || 'Connected via HA'), 'success');
                 showToast('\u2714 Connected to Music Assistant via HA', 'success');
-                await loadConfig();
-                _setConfigDirty(true);
+                await loadConfig({preserveDirtyBaseline: true});
                 return true;
             }
             _setStatusText(msgEl, '\u2716 ' + (data2.error || 'MFA failed'), 'error');
@@ -6677,8 +6805,7 @@ async function _maSilentAuth(maUrl) {
             _maAutoSilentAuthFailed = false;
             _setMaStatus(true, data.username || '', data.url || maUrl);
             showToast('\u2714 Connected to Music Assistant', 'success');
-            await loadConfig();
-            _setConfigDirty(true);
+            await loadConfig({preserveDirtyBaseline: true});
             _setStatusText(msgEl, '\u2714 Connected', 'success');
             return true;
         }
@@ -6781,7 +6908,7 @@ document.getElementById('config-form').addEventListener('submit', async function
     try {
         var result = await saveConfig();
         if (result && result.ok) {
-            _setConfigDirty(false);
+            _markConfigSnapshotClean();
             showToast('\u2713 Configuration saved \u2014 restart to apply', 'success');
         } else {
             showToast('\u2717 ' + (result && result.error || 'Failed to save configuration'), 'error');
@@ -6797,44 +6924,402 @@ document.getElementById('config-form').addEventListener('submit', async function
 // ---- Config dirty-state tracking ----
 var _configDirty = false;
 var _configLoading = false;
+var _configCleanSnapshot = null;
+var _configDirtyKeySeq = 0;
+var _configTabOrder = ['general', 'devices', 'bluetooth', 'ma', 'security'];
+
+function _nextConfigDirtyKey(prefix) {
+    _configDirtyKeySeq += 1;
+    return (prefix || 'config') + '-' + _configDirtyKeySeq;
+}
+
+function _ensureConfigDirtyKey(node, prefix) {
+    if (!node) return '';
+    if (!node.dataset.configDirtyKey) {
+        node.dataset.configDirtyKey = _nextConfigDirtyKey(prefix);
+    }
+    return node.dataset.configDirtyKey;
+}
+
 function _syncConfigFooterActions() {
     var cancelBtn = document.getElementById('config-cancel-btn');
     if (cancelBtn) cancelBtn.disabled = !_configDirty || _configLoading;
 }
-function _setConfigDirty(dirty) {
-    if (_configLoading) return;
-    _configDirty = dirty;
-    var summary = document.querySelector('.config-section summary');
-    if (summary) {
-        var dot = summary.querySelector('.config-dirty-dot');
-        if (dirty) {
-            if (!dot) {
-                dot = document.createElement('span');
-                dot.className = 'config-dirty-dot';
-                dot.title = 'Unsaved changes';
-                summary.appendChild(dot);
-            }
-        } else {
-            if (dot) dot.remove();
-        }
+
+function _configDirtyFieldLabel(count) {
+    return count === 1 ? '1 unsaved change' : count + ' unsaved changes';
+}
+
+function _configValuesEqual(a, b) {
+    return JSON.stringify(a) === JSON.stringify(b);
+}
+
+function _getTrackableStaticConfigControls() {
+    var controls = [];
+    document.querySelectorAll('#config-form [name]').forEach(function(control) {
+        if (control.closest('[data-config-transient="true"]')) return;
+        if (control.closest('#bt-devices-table')) return;
+        if (control.closest('#adapters-table')) return;
+        controls.push(control);
+    });
+    return controls;
+}
+
+function _getConfigControlTab(control) {
+    var panel = control && control.closest('[data-config-panel]');
+    return (panel && panel.dataset.configPanel) || 'general';
+}
+
+function _getConfigFieldSurface(control) {
+    if (!control) return null;
+    return control.closest('.config-setting-row, .form-group, .config-inline-field, .config-inline-row, .config-subsection, .config-switch, label') || control;
+}
+
+function _normalizeBtDeviceDirtyFields(fields) {
+    var keepalive = fields.keepalive_interval;
+    if (keepalive == null || keepalive === '') keepalive = 0;
+    keepalive = parseInt(keepalive, 10);
+    if (!Number.isFinite(keepalive) || keepalive < 0) keepalive = 0;
+    if (keepalive > 0 && keepalive < 30) keepalive = 30;
+    var listenPort = fields.listen_port;
+    if (listenPort == null || listenPort === '') {
+        listenPort = null;
+    } else {
+        var listenPortValue = parseInt(listenPort, 10);
+        listenPort = Number.isFinite(listenPortValue) ? listenPortValue : String(listenPort).trim();
     }
+    var delay = parseFloat(fields.static_delay_ms);
+    if (Number.isNaN(delay)) delay = 0;
+    return {
+        enabled: fields.enabled !== false,
+        player_name: (fields.player_name || '').trim(),
+        mac: ((fields.mac || '').trim()).toUpperCase(),
+        adapter: (fields.adapter || '').trim(),
+        static_delay_ms: delay,
+        listen_host: (fields.listen_host || '').trim(),
+        listen_port: listenPort,
+        preferred_format: (fields.preferred_format || 'flac:44100:16:2').trim() || 'flac:44100:16:2',
+        keepalive_interval: keepalive,
+    };
+}
+
+function _defaultBtDeviceDirtyFields() {
+    return _normalizeBtDeviceDirtyFields({
+        enabled: true,
+        player_name: '',
+        mac: '',
+        adapter: '',
+        static_delay_ms: 0,
+        listen_host: '',
+        listen_port: null,
+        preferred_format: 'flac:44100:16:2',
+        keepalive_interval: 0,
+    });
+}
+
+function _readBtDeviceDirtyFields(wrap) {
+    var row = wrap.querySelector('.bt-device-row');
+    var detail = wrap.querySelector('.bt-detail-row');
+    return _normalizeBtDeviceDirtyFields({
+        enabled: !!((row.querySelector('.bt-enabled') || {}).checked),
+        player_name: ((row.querySelector('.bt-name') || {}).value || ''),
+        mac: ((row.querySelector('.bt-mac') || {}).value || ''),
+        adapter: ((row.querySelector('.bt-adapter') || {}).value || ''),
+        static_delay_ms: ((row.querySelector('.bt-delay') || {}).value || 0),
+        listen_host: detail ? (((detail.querySelector('.bt-listen-host') || {}).value) || '') : '',
+        listen_port: ((row.querySelector('.bt-listen-port') || {}).value || ''),
+        preferred_format: detail ? (((detail.querySelector('.bt-preferred-format') || {}).value) || 'flac:44100:16:2') : 'flac:44100:16:2',
+        keepalive_interval: detail ? (((detail.querySelector('.bt-keepalive-interval') || {}).value) || 0) : 0,
+    });
+}
+
+function _btDeviceShouldPersist(fields) {
+    return !!fields.mac;
+}
+
+function _getBtDeviceControlByField(wrap, fieldName) {
+    var selectors = {
+        enabled: '.bt-enabled',
+        player_name: '.bt-name',
+        mac: '.bt-mac',
+        adapter: '.bt-adapter',
+        static_delay_ms: '.bt-delay',
+        listen_host: '.bt-listen-host',
+        listen_port: '.bt-listen-port',
+        preferred_format: '.bt-preferred-format',
+        keepalive_interval: '.bt-keepalive-interval',
+    };
+    return wrap.querySelector(selectors[fieldName] || '');
+}
+
+function _normalizeAdapterDirtyFields(fields) {
+    return {
+        _type: fields._type === 'detected' ? 'detected' : 'manual',
+        id: (fields.id || '').trim(),
+        mac: ((fields.mac || '').trim()).toUpperCase(),
+        name: (fields.name || '').trim(),
+    };
+}
+
+function _defaultAdapterDirtyFields(fields) {
+    var normalized = _normalizeAdapterDirtyFields(fields || {});
+    if (normalized._type === 'detected') {
+        return {
+            _type: 'detected',
+            id: normalized.id,
+            mac: normalized.mac,
+            name: '',
+        };
+    }
+    return {
+        _type: 'manual',
+        id: '',
+        mac: '',
+        name: '',
+    };
+}
+
+function _readAdapterDirtyFields(row) {
+    return _normalizeAdapterDirtyFields({
+        _type: row.classList.contains('detected') ? 'detected' : 'manual',
+        id: row.classList.contains('manual')
+            ? ((((row.querySelector('.adp-id') || {}).value) || ''))
+            : (row.dataset.adapterId || ''),
+        mac: row.classList.contains('manual')
+            ? ((((row.querySelector('.adp-mac') || {}).value) || ''))
+            : (row.dataset.adapterMac || ''),
+        name: (((row.querySelector('.adp-name') || {}).value) || ''),
+    });
+}
+
+function _adapterShouldPersist(fields) {
+    if (fields._type === 'detected') return !!(fields.id && fields.name);
+    return !!(fields.id || fields.mac);
+}
+
+function _getAdapterControlByField(row, fieldName) {
+    var selectors = {
+        id: '.adp-id',
+        mac: '.adp-mac',
+        name: '.adp-name',
+    };
+    return row.querySelector(selectors[fieldName] || '');
+}
+
+function _captureConfigDirtySnapshot() {
+    var payload = _buildConfigPayload({includeExternal: false, includeRuntime: false});
+    var snapshot = {
+        staticValues: {},
+        btDevicesByKey: {},
+        btDeviceKeys: [],
+        btAdaptersByKey: {},
+        btAdapterKeys: [],
+    };
+
+    _getTrackableStaticConfigControls().forEach(function(control) {
+        snapshot.staticValues[control.name] = payload[control.name];
+    });
+
+    document.querySelectorAll('#bt-devices-table .bt-device-wrap').forEach(function(wrap) {
+        var key = _ensureConfigDirtyKey(wrap, 'bt-device');
+        var fields = _readBtDeviceDirtyFields(wrap);
+        if (!_btDeviceShouldPersist(fields)) return;
+        snapshot.btDevicesByKey[key] = fields;
+        snapshot.btDeviceKeys.push(key);
+    });
+
+    document.querySelectorAll('#adapters-table .adapter-row').forEach(function(row) {
+        var key = _ensureConfigDirtyKey(row, 'adapter');
+        var fields = _readAdapterDirtyFields(row);
+        if (!_adapterShouldPersist(fields)) return;
+        snapshot.btAdaptersByKey[key] = fields;
+        snapshot.btAdapterKeys.push(key);
+    });
+
+    return snapshot;
+}
+
+function _clearConfigDirtyClasses() {
+    document.querySelectorAll('.config-input-dirty').forEach(function(node) { node.classList.remove('config-input-dirty'); });
+    document.querySelectorAll('.config-field-dirty').forEach(function(node) { node.classList.remove('config-field-dirty'); });
+    document.querySelectorAll('.config-dirty-row').forEach(function(node) { node.classList.remove('config-dirty-row'); });
+    document.querySelectorAll('.config-panel-has-dirty').forEach(function(node) { node.classList.remove('config-panel-has-dirty'); });
+}
+
+function _applyConfigDirtyState(state) {
+    _configDirty = state.totalCount > 0;
+    _clearConfigDirtyClasses();
+
+    state.controls.forEach(function(control) { control.classList.add('config-input-dirty'); });
+    state.surfaces.forEach(function(surface) { surface.classList.add('config-field-dirty'); });
+    state.rows.forEach(function(row) { row.classList.add('config-dirty-row'); });
+    state.panels.forEach(function(panel) { panel.classList.add('config-panel-has-dirty'); });
+
+    var summaryCount = document.getElementById('config-summary-dirty-count');
+    if (summaryCount) {
+        summaryCount.hidden = !_configDirty;
+        summaryCount.textContent = String(state.totalCount);
+        summaryCount.title = _configDirty ? _configDirtyFieldLabel(state.totalCount) : '';
+    }
+
+    _configTabOrder.forEach(function(tabName) {
+        var tabButton = document.querySelector('.config-tab[data-config-tab="' + tabName + '"]');
+        if (!tabButton) return;
+        var count = state.tabCounts[tabName] || 0;
+        tabButton.classList.toggle('has-dirty', count > 0);
+        var badge = tabButton.querySelector('.config-tab-dirty-count');
+        if (!badge) return;
+        badge.hidden = count <= 0;
+        badge.textContent = String(count);
+        badge.title = count > 0 ? _configDirtyFieldLabel(count) : '';
+    });
+
     var footer = document.getElementById('config-footer');
-    if (footer) footer.classList.toggle('is-dirty', dirty);
+    if (footer) footer.classList.toggle('is-dirty', _configDirty);
+
     var banner = document.getElementById('config-dirty-banner');
     if (banner) {
-        banner.hidden = !dirty;
+        banner.hidden = !_configDirty;
         _syncNoticeStack();
     }
+
+    var bannerTitle = document.getElementById('config-dirty-banner-title');
+    if (bannerTitle) bannerTitle.textContent = _configDirty ? 'Configuration has ' + _configDirtyFieldLabel(state.totalCount) : 'Configuration has unsaved changes';
+
+    var dirtyLabelText = document.getElementById('config-dirty-label-text');
+    if (dirtyLabelText) dirtyLabelText.textContent = _configDirty ? _configDirtyFieldLabel(state.totalCount) : 'Unsaved changes';
+
     _syncConfigFooterActions();
 }
+
+function _recomputeConfigDirtyState() {
+    if (_configLoading) return;
+    if (!_configCleanSnapshot) {
+        _configCleanSnapshot = _captureConfigDirtySnapshot();
+    }
+
+    var clean = _configCleanSnapshot;
+    var payload = _buildConfigPayload({includeExternal: false, includeRuntime: false});
+    var state = {
+        totalCount: 0,
+        tabCounts: {general: 0, devices: 0, bluetooth: 0, ma: 0, security: 0},
+        controls: new Set(),
+        surfaces: new Set(),
+        rows: new Set(),
+        panels: new Set(),
+    };
+
+    function markDirty(tabName, control, surface, row, panel) {
+        var tab = _configTabOrder.indexOf(tabName) >= 0 ? tabName : 'general';
+        state.totalCount += 1;
+        state.tabCounts[tab] = (state.tabCounts[tab] || 0) + 1;
+        if (control) state.controls.add(control);
+        if (surface) state.surfaces.add(surface);
+        if (row) state.rows.add(row);
+        if (panel) state.panels.add(panel);
+    }
+
+    _getTrackableStaticConfigControls().forEach(function(control) {
+        var currentValue = payload[control.name];
+        var cleanValue = Object.prototype.hasOwnProperty.call(clean.staticValues, control.name)
+            ? clean.staticValues[control.name]
+            : undefined;
+        if (_configValuesEqual(currentValue, cleanValue)) return;
+        markDirty(
+            _getConfigControlTab(control),
+            control,
+            _getConfigFieldSurface(control),
+            null,
+            control.closest('[data-config-panel]')
+        );
+    });
+
+    var seenBtDeviceKeys = new Set();
+    document.querySelectorAll('#bt-devices-table .bt-device-wrap').forEach(function(wrap) {
+        var key = _ensureConfigDirtyKey(wrap, 'bt-device');
+        var currentFields = _readBtDeviceDirtyFields(wrap);
+        var cleanFields = clean.btDevicesByKey[key] || null;
+        if (!_btDeviceShouldPersist(currentFields) && !cleanFields) return;
+        seenBtDeviceKeys.add(key);
+        var baseline = cleanFields || _defaultBtDeviceDirtyFields();
+        var panel = document.querySelector('[data-config-panel="devices"]');
+        Object.keys(baseline).forEach(function(fieldName) {
+            if (_configValuesEqual(currentFields[fieldName], baseline[fieldName])) return;
+            var control = _getBtDeviceControlByField(wrap, fieldName);
+            markDirty('devices', control, _getConfigFieldSurface(control), wrap, panel);
+        });
+    });
+
+    clean.btDeviceKeys.forEach(function(key) {
+        if (seenBtDeviceKeys.has(key)) return;
+        var baseline = _defaultBtDeviceDirtyFields();
+        var cleanFields = clean.btDevicesByKey[key];
+        var panel = document.querySelector('[data-config-panel="devices"]');
+        Object.keys(baseline).forEach(function(fieldName) {
+            if (_configValuesEqual(cleanFields[fieldName], baseline[fieldName])) return;
+            markDirty('devices', null, null, document.getElementById('bt-devices-table'), panel);
+        });
+    });
+
+    var seenAdapterKeys = new Set();
+    document.querySelectorAll('#adapters-table .adapter-row').forEach(function(row) {
+        var key = _ensureConfigDirtyKey(row, 'adapter');
+        var currentFields = _readAdapterDirtyFields(row);
+        var cleanFields = clean.btAdaptersByKey[key] || null;
+        if (!_adapterShouldPersist(currentFields) && !cleanFields) return;
+        seenAdapterKeys.add(key);
+        var baseline = cleanFields || _defaultAdapterDirtyFields(currentFields);
+        var panel = document.querySelector('[data-config-panel="bluetooth"]');
+        ['id', 'mac', 'name'].forEach(function(fieldName) {
+            if (_configValuesEqual(currentFields[fieldName], baseline[fieldName])) return;
+            var control = _getAdapterControlByField(row, fieldName);
+            markDirty('bluetooth', control, _getConfigFieldSurface(control), row, panel);
+        });
+    });
+
+    clean.btAdapterKeys.forEach(function(key) {
+        if (seenAdapterKeys.has(key)) return;
+        var cleanFields = clean.btAdaptersByKey[key];
+        var baseline = _defaultAdapterDirtyFields(cleanFields);
+        var panel = document.querySelector('[data-config-panel="bluetooth"]');
+        ['id', 'mac', 'name'].forEach(function(fieldName) {
+            if (_configValuesEqual(cleanFields[fieldName], baseline[fieldName])) return;
+            markDirty('bluetooth', null, null, document.getElementById('adapters-table'), panel);
+        });
+    });
+
+    _applyConfigDirtyState(state);
+}
+
+function _markConfigSnapshotClean() {
+    _configCleanSnapshot = _captureConfigDirtySnapshot();
+    _applyConfigDirtyState({
+        totalCount: 0,
+        tabCounts: {general: 0, devices: 0, bluetooth: 0, ma: 0, security: 0},
+        controls: new Set(),
+        surfaces: new Set(),
+        rows: new Set(),
+        panels: new Set(),
+    });
+}
+
+function _setConfigDirty(dirty) {
+    if (_configLoading) return;
+    if (dirty) {
+        _recomputeConfigDirtyState();
+        return;
+    }
+    _markConfigSnapshotClean();
+}
+
 // Watch config form for any change
 document.getElementById('config-form').addEventListener('input', function(event) {
     if (event && event.target && event.target.closest('[data-config-transient="true"]')) return;
-    _setConfigDirty(true);
+    _recomputeConfigDirtyState();
 });
 document.getElementById('config-form').addEventListener('change', function(event) {
     if (event && event.target && event.target.closest('[data-config-transient="true"]')) return;
-    _setConfigDirty(true);
+    _recomputeConfigDirtyState();
 });
 window.addEventListener('beforeunload', function(e) {
     if (_configDirty) {
@@ -6958,7 +7443,6 @@ async function cancelConfigChanges() {
             return;
         }
         _clearConfigTransientStatus();
-        _setConfigDirty(false);
         showToast('Unsaved changes discarded', 'info');
     } catch (err) {
         console.error('Cancel config changes error:', err);
@@ -6969,7 +7453,8 @@ async function cancelConfigChanges() {
     }
 }
 
-async function loadConfig() {
+async function loadConfig(options) {
+    options = options || {};
     _configLoading = true;
     _syncConfigFooterActions();
     try {
@@ -7054,7 +7539,11 @@ async function loadConfig() {
         await _maAutoConnect();
 
         _configLoading = false;
-        _setConfigDirty(false);
+        if (options.preserveDirtyBaseline) {
+            _recomputeConfigDirtyState();
+        } else {
+            _markConfigSnapshotClean();
+        }
         return config;
     } catch (err) {
         _configLoading = false;
@@ -7262,7 +7751,7 @@ async function saveAndRestart() {
             _clearRestartMonitorAfter(3000);
             return;
         }
-        _setConfigDirty(false);
+        _markConfigSnapshotClean();
 
         if (smooth) {
             _setRestartBannerState({percent: 8, message: 'Muting speakers…', elapsedSeconds: 0});

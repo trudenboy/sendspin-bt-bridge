@@ -125,7 +125,7 @@
         <div id="config-dirty-banner" class="notice-card notice-card--warning config-dirty-banner" hidden>
             <span class="notice-card-icon ui-icon-slot" data-ui-icon="warning" aria-hidden="true"></span>
             <div class="notice-card-copy">
-                <div class="notice-card-title">Configuration has unsaved changes</div>
+                <div class="notice-card-title" id="config-dirty-banner-title">Configuration has unsaved changes</div>
                 <div class="notice-card-text">Save to persist updates now, or use Save &amp; Restart for runtime-sensitive changes such as Bluetooth devices, adapters, Music Assistant settings, ports, or latency.</div>
             </div>
             <div class="notice-card-actions">
@@ -249,14 +249,14 @@
 
     <!-- Configuration -->
     <details class="config-section">
-        <summary><span class="summary-title-icon ui-icon-slot" data-ui-icon="settings" aria-hidden="true"></span><span>Configuration</span></summary>
+        <summary><span class="summary-title-icon ui-icon-slot" data-ui-icon="settings" aria-hidden="true"></span><span>Configuration</span><span id="config-summary-dirty-count" class="config-summary-dirty-count" hidden>0</span></summary>
         <form id="config-form">
             <div class="config-tabs" role="tablist" aria-label="Configuration sections">
-                <button type="button" class="config-tab active" data-config-tab="general">General</button>
-                <button type="button" class="config-tab" data-config-tab="devices">Devices</button>
-                <button type="button" class="config-tab" data-config-tab="bluetooth">Bluetooth</button>
-                <button type="button" class="config-tab" data-config-tab="ma">Music Assistant</button>
-                <button type="button" class="config-tab" data-config-tab="security">Security</button>
+                <button type="button" class="config-tab active" data-config-tab="general"><span class="config-tab-label">General</span><span class="config-tab-dirty-count" hidden>0</span></button>
+                <button type="button" class="config-tab" data-config-tab="devices"><span class="config-tab-label">Devices</span><span class="config-tab-dirty-count" hidden>0</span></button>
+                <button type="button" class="config-tab" data-config-tab="bluetooth"><span class="config-tab-label">Bluetooth</span><span class="config-tab-dirty-count" hidden>0</span></button>
+                <button type="button" class="config-tab" data-config-tab="ma"><span class="config-tab-label">Music Assistant</span><span class="config-tab-dirty-count" hidden>0</span></button>
+                <button type="button" class="config-tab" data-config-tab="security"><span class="config-tab-label">Security</span><span class="config-tab-dirty-count" hidden>0</span></button>
             </div>
 
             <section class="config-tab-panel active" id="config-panel-general" data-config-panel="general">
@@ -576,7 +576,7 @@
                                 <div id="scan-progress" class="bt-scan-progress" hidden>
                                     <div class="bt-scan-progress-copy">
                                         <div class="bt-scan-progress-head">
-                                            <span id="scan-progress-state" class="scan-status-pill">Ready to scan</span>
+                                            <span id="scan-progress-state" class="scan-status-pill meta-badge meta-badge-status is-neutral">Ready to scan</span>
                                             <span id="scan-progress-remaining" class="bt-scan-progress-remaining">15 s</span>
                                         </div>
                                         <div id="scan-progress-detail" class="bt-scan-progress-detail">All adapters · Audio devices only</div>
@@ -853,7 +853,7 @@
 
         <div class="config-footer" id="config-footer">
             <div class="config-footer-meta">
-                <span class="config-dirty-label" id="config-dirty-label"><span class="btn-icon-slot ui-icon-slot" data-ui-icon="warning" aria-hidden="true"></span><span>Unsaved changes</span></span>
+                <span class="config-dirty-label" id="config-dirty-label"><span class="btn-icon-slot ui-icon-slot" data-ui-icon="warning" aria-hidden="true"></span><span id="config-dirty-label-text">Unsaved changes</span></span>
                 <span class="config-footer-hint">Save updates the configuration now. Cancel restores the last saved values. Use Save &amp; Restart for runtime-sensitive changes such as Bluetooth devices, adapters, MA settings, ports, or latency.</span>
             </div>
             <div class="config-footer-actions">
