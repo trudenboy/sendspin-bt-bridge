@@ -34,7 +34,7 @@
             <div class="header-title">
                 <div class="header-brand">
                     <h1><svg class="header-logo" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M14.88 16.29 13 14.41V17.59L14.88 16.29ZM13 6.41V9.59L14.88 8.29 13 6.41ZM17.71 7.71 12 2H11V9.59L6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 11 14.41V22H12L17.71 16.29 13.41 12 17.71 7.71ZM15.29 16.29 13 18.17V14.41L15.29 16.29ZM13 9.59V5.83L15.29 7.71 13 9.59Z"/></svg><span>Sendspin Bluetooth Bridge</span></h1>
-                    <div class="header-meta">
+                    <div class="header-meta ui-inline ui-inline--xs ui-inline--center">
                         <a class="header-version" id="version-display" title="{{ BUILD_DATE }}"
                            href="https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v{{ VERSION }}"
                            target="_blank" rel="noopener">v{{ DISPLAY_VERSION }}</a>
@@ -99,7 +99,7 @@
         {% if not auth_enabled and not demo_mode %}
         <div class="notice-card notice-card--danger" id="auth-warning-notice">
             <span class="notice-card-icon ui-icon-slot" data-ui-icon="lock" aria-hidden="true"></span>
-            <div class="notice-card-copy">
+            <div class="notice-card-copy ui-stack ui-stack--xs">
                 <div class="notice-card-title">Web UI is publicly accessible</div>
                 <div class="notice-card-text">Authentication is disabled, so anyone on your network can open and change this bridge.</div>
             </div>
@@ -112,7 +112,7 @@
         {% if demo_mode %}
         <div class="notice-card notice-card--warning" id="demo-ma-token-notice">
             <span class="notice-card-icon ui-icon-slot" data-ui-icon="ma" aria-hidden="true"></span>
-            <div class="notice-card-copy">
+            <div class="notice-card-copy ui-stack ui-stack--xs">
                 <div class="notice-card-title">Music Assistant token needs attention</div>
                 <div class="notice-card-text">Music Assistant was found, but the bridge needs a long-lived token. Open Configuration → Music Assistant to get one.</div>
             </div>
@@ -124,7 +124,7 @@
 
         <div id="config-dirty-banner" class="notice-card notice-card--warning config-dirty-banner" hidden>
             <span class="notice-card-icon ui-icon-slot" data-ui-icon="warning" aria-hidden="true"></span>
-            <div class="notice-card-copy">
+            <div class="notice-card-copy ui-stack ui-stack--xs">
                 <div class="notice-card-title" id="config-dirty-banner-title">Configuration has unsaved changes</div>
                 <div class="notice-card-text">Save to persist updates now, or use Save &amp; Restart for runtime-sensitive changes such as Bluetooth devices, adapters, Music Assistant settings, ports, or latency.</div>
             </div>
@@ -136,7 +136,7 @@
 
         <div id="ma-integration-banner" class="notice-card notice-card--warning" hidden>
             <span class="notice-card-icon ui-icon-slot" data-ui-icon="ma" aria-hidden="true"></span>
-            <div class="notice-card-copy">
+            <div class="notice-card-copy ui-stack ui-stack--xs">
                 <div id="ma-integration-banner-title" class="notice-card-title">Music Assistant needs attention</div>
                 <div id="ma-integration-banner-text" class="notice-card-text">Music Assistant was found, but the bridge is not connected yet.</div>
             </div>
@@ -147,7 +147,7 @@
 
         <div id="backend-service-banner" class="notice-card notice-card--info" hidden>
             <span class="notice-card-icon ui-icon-slot" data-ui-icon="refresh" aria-hidden="true"></span>
-            <div class="notice-card-copy">
+            <div class="notice-card-copy ui-stack ui-stack--xs">
                 <div id="backend-service-banner-title" class="notice-card-title">Connecting to bridge</div>
                 <div id="backend-service-banner-text" class="notice-card-text">Waiting for the backend to respond. This page will refresh automatically when the service is ready.</div>
             </div>
@@ -156,7 +156,7 @@
 
         <div id="onboarding-assistant-banner" class="notice-card notice-card--info onboarding-card" hidden>
             <span class="notice-card-icon ui-icon-slot" data-ui-icon="info" aria-hidden="true"></span>
-            <div class="notice-card-copy">
+            <div class="notice-card-copy ui-stack ui-stack--xs">
                 <div id="onboarding-assistant-title" class="notice-card-title">Setup checklist</div>
                 <div id="onboarding-assistant-text" class="notice-card-text">Loading setup guidance…</div>
                 <div id="onboarding-assistant-progress" class="onboarding-progress" hidden></div>
@@ -168,7 +168,7 @@
 
         <div id="recovery-assistant-banner" class="notice-card notice-card--warning recovery-card" hidden>
             <span class="notice-card-icon ui-icon-slot" data-ui-icon="warning" aria-hidden="true"></span>
-            <div class="notice-card-copy">
+            <div class="notice-card-copy ui-stack ui-stack--xs">
                 <div id="recovery-assistant-title" class="notice-card-title">Recovery guidance</div>
                 <div id="recovery-assistant-text" class="notice-card-text">Loading recovery guidance…</div>
                 <div id="recovery-assistant-issues" class="recovery-issue-list" hidden></div>
@@ -249,25 +249,25 @@
 
     <!-- Configuration -->
     <details class="config-section">
-        <summary><span class="summary-title-icon ui-icon-slot" data-ui-icon="settings" aria-hidden="true"></span><span>Configuration</span><span id="config-summary-dirty-count" class="config-summary-dirty-count" hidden>0</span></summary>
+        <summary><span class="summary-title-icon ui-icon-slot" data-ui-icon="settings" aria-hidden="true"></span><span>Configuration</span><span id="config-summary-dirty-count" class="config-summary-dirty-count ui-count-badge ui-count-badge--warning" hidden>0</span></summary>
         <form id="config-form">
             <div class="config-tabs" role="tablist" aria-label="Configuration sections">
-                <button type="button" class="config-tab active" data-config-tab="general"><span class="config-tab-label">General</span><span class="config-tab-dirty-count" hidden>0</span></button>
-                <button type="button" class="config-tab" data-config-tab="devices"><span class="config-tab-label">Devices</span><span class="config-tab-dirty-count" hidden>0</span></button>
-                <button type="button" class="config-tab" data-config-tab="bluetooth"><span class="config-tab-label">Bluetooth</span><span class="config-tab-dirty-count" hidden>0</span></button>
-                <button type="button" class="config-tab" data-config-tab="ma"><span class="config-tab-label">Music Assistant</span><span class="config-tab-dirty-count" hidden>0</span></button>
-                <button type="button" class="config-tab" data-config-tab="security"><span class="config-tab-label">Security</span><span class="config-tab-dirty-count" hidden>0</span></button>
+                <button type="button" class="config-tab active" data-config-tab="general"><span class="config-tab-label">General</span><span class="config-tab-dirty-count ui-count-badge ui-count-badge--warning" hidden>0</span></button>
+                <button type="button" class="config-tab" data-config-tab="devices"><span class="config-tab-label">Devices</span><span class="config-tab-dirty-count ui-count-badge ui-count-badge--warning" hidden>0</span></button>
+                <button type="button" class="config-tab" data-config-tab="bluetooth"><span class="config-tab-label">Bluetooth</span><span class="config-tab-dirty-count ui-count-badge ui-count-badge--warning" hidden>0</span></button>
+                <button type="button" class="config-tab" data-config-tab="ma"><span class="config-tab-label">Music Assistant</span><span class="config-tab-dirty-count ui-count-badge ui-count-badge--warning" hidden>0</span></button>
+                <button type="button" class="config-tab" data-config-tab="security"><span class="config-tab-label">Security</span><span class="config-tab-dirty-count ui-count-badge ui-count-badge--warning" hidden>0</span></button>
             </div>
 
             <section class="config-tab-panel active" id="config-panel-general" data-config-panel="general">
                 <div class="config-group">
-                    <div class="config-group-heading">
+                    <div class="config-group-heading ui-stack ui-stack--xs">
                         <h4 class="config-group-title"><span class="cg-icon ui-icon-slot" data-ui-icon="tag" aria-hidden="true"></span> General</h4>
                         <p class="config-group-subtitle">Core bridge identity, restart defaults, update policy, and runtime-only controls.</p>
                     </div>
                     <div class="config-settings-grid">
                         <div class="config-settings-card">
-                            <div class="config-card-header">
+                            <div class="config-card-header ui-stack ui-stack--sm">
                                 <div class="config-card-title">Core settings</div>
                                 <p class="config-card-subtitle">Persistent values stored in <code>config.json</code> and reused after restart.</p>
                             </div>
@@ -324,12 +324,12 @@
                         </div>
 
                         <div class="config-settings-card">
-                            <div class="config-card-header">
+                            <div class="config-card-header ui-stack ui-stack--sm">
                                 <div class="config-card-title">Behavior</div>
                                 <p class="config-card-subtitle">Default restart and update behavior for this bridge instance.</p>
                             </div>
                             <label class="config-setting-row">
-                                <span class="config-setting-copy">
+                                <span class="config-setting-copy ui-stack ui-stack--xs">
                                     <strong>Smooth restart</strong>
                                     <span class="form-hint">Mute before restart, show progress, and wait for reconnect.</span>
                                 </span>
@@ -342,7 +342,7 @@
                             </label>
 
                             <label class="config-setting-row">
-                                <span class="config-setting-copy">
+                                <span class="config-setting-copy ui-stack ui-stack--xs">
                                     <strong>Show empty-state onboarding guidance</strong>
                                     <span class="form-hint">Controls whether the full first-run checklist stays visible when no adapters or devices are configured.</span>
                                 </span>
@@ -355,7 +355,7 @@
                             </label>
 
                             <label class="config-setting-row">
-                                <span class="config-setting-copy">
+                                <span class="config-setting-copy ui-stack ui-stack--xs">
                                     <strong>Show recovery banners</strong>
                                     <span class="form-hint">Keep top-level recovery and attention banners visible when grouped issues need action.</span>
                                 </span>
@@ -368,7 +368,7 @@
                             </label>
 
                             <div class="config-setting-row">
-                                <span class="config-setting-copy">
+                                <span class="config-setting-copy ui-stack ui-stack--xs">
                                     <strong>Restore dismissed guidance</strong>
                                     <span class="form-hint">Bring back onboarding and recovery guidance that was hidden with “Don’t show again”.</span>
                                 </span>
@@ -379,7 +379,7 @@
 
                             {% if not ha_mode %}
                             <label class="config-setting-row">
-                                <span class="config-setting-copy">
+                                <span class="config-setting-copy ui-stack ui-stack--xs">
                                     <strong>Check for updates</strong>
                                     <span class="form-hint">Poll GitHub for new versions every hour.</span>
                                 </span>
@@ -392,7 +392,7 @@
                             </label>
 
                             <label class="config-setting-row" for="update-channel">
-                                <span class="config-setting-copy">
+                                <span class="config-setting-copy ui-stack ui-stack--xs">
                                     <strong>Update channel</strong>
                                     <span class="form-hint">Stable is recommended. RC and beta may contain unfinished or unstable changes.</span>
                                 </span>
@@ -407,7 +407,7 @@
                             <div class="config-channel-warning" id="update-channel-warning" hidden></div>
 
                             <label class="config-setting-row">
-                                <span class="config-setting-copy">
+                                <span class="config-setting-copy ui-stack ui-stack--xs">
                                     <strong>Auto-update</strong>
                                     <span class="form-hint">Automatically apply updates when available (LXC only).</span>
                                 </span>
@@ -426,7 +426,7 @@
 
             <section class="config-tab-panel" id="config-panel-devices" data-config-panel="devices">
                 <div class="config-group config-group--flush">
-                    <div class="config-group-heading">
+                    <div class="config-group-heading ui-stack ui-stack--xs">
                         <h4 class="config-group-title"><span class="cg-icon ui-icon-slot" data-ui-icon="speaker" aria-hidden="true"></span> Devices</h4>
                         <p class="config-group-subtitle">Keep the speaker fleet table primary, while paired inventory and scan workflows live in the Bluetooth tab.</p>
                     </div>
@@ -455,13 +455,13 @@
 
             <section class="config-tab-panel" id="config-panel-bluetooth" data-config-panel="bluetooth">
                 <div class="config-group">
-                    <div class="config-group-heading">
+                    <div class="config-group-heading ui-stack ui-stack--xs">
                         <h4 class="config-group-title"><span class="cg-icon ui-icon-slot" data-ui-icon="bt" aria-hidden="true"></span> Bluetooth</h4>
                         <p class="config-group-subtitle">Adapter inventory, reconnection policy, and codec preference for slower hardware.</p>
                     </div>
                     <div class="config-settings-grid">
                         <div class="config-settings-card config-settings-card--span" id="config-bluetooth-adapters-card">
-                            <div class="config-card-header">
+                            <div class="config-card-header ui-stack ui-stack--sm">
                                 <div class="config-card-title">Adapters</div>
                                 <p class="config-card-subtitle">Rename adapters, verify detection, and add manual adapter entries when needed.</p>
                                 <p class="config-card-subtitle">These must be local Bluetooth controllers visible inside this runtime (for example USB passthrough adapters or the host's onboard controller). Do not enter MAC addresses of remote ESPHome Bluetooth Proxy nodes here.</p>
@@ -476,7 +476,7 @@
                         </div>
 
                         <div class="config-settings-card config-settings-card--span" id="config-bluetooth-paired-card">
-                            <div class="config-card-header config-card-header--split">
+                            <div class="config-card-header config-card-header--split ui-split">
                                 <div>
                                     <div class="config-card-title">Paired devices</div>
                                     <p class="config-card-subtitle">Bluetooth inventory, repair tools, and import actions now live here. Discovery runs in a dedicated modal from this tab.</p>
@@ -504,7 +504,7 @@
                         </div>
 
                         <div class="config-settings-card">
-                            <div class="config-card-header">
+                            <div class="config-card-header ui-stack ui-stack--sm">
                                 <div class="config-card-title">Connection recovery</div>
                                 <p class="config-card-subtitle">Controls how aggressively the bridge rechecks and auto-disables unstable devices.</p>
                             </div>
@@ -526,12 +526,12 @@
                         </div>
 
                         <div class="config-settings-card">
-                            <div class="config-card-header">
+                            <div class="config-card-header ui-stack ui-stack--sm">
                                 <div class="config-card-title">Audio policy</div>
                                 <p class="config-card-subtitle">Prefer lower CPU usage when running on constrained hardware.</p>
                             </div>
                             <label class="config-setting-row config-setting-row--compact">
-                                <span class="config-setting-copy">
+                                <span class="config-setting-copy ui-stack ui-stack--xs">
                                     <strong>Prefer SBC codec</strong>
                                     <span class="form-hint">Reduces CPU load on slower hardware (PulseAudio 15+).</span>
                                 </span>
@@ -601,14 +601,14 @@
 
             <section class="config-tab-panel" id="config-panel-ma" data-config-panel="ma">
                 <div class="config-group config-group--flush" id="config-group-ma">
-                    <div class="config-group-heading">
+                    <div class="config-group-heading ui-stack ui-stack--xs">
                         <h4 class="config-group-title"><span class="cg-icon ui-icon-slot" data-ui-icon="ma" aria-hidden="true"></span> Music Assistant</h4>
                         <p class="config-group-subtitle">Connection, token, and live sync settings for the Music Assistant integration.</p>
                     </div>
 
                     <div class="config-card-stack">
                         <div id="ma-connect-panel" class="config-settings-card">
-                            <div class="config-card-header config-card-header--split">
+                            <div class="config-card-header config-card-header--split ui-split">
                                 <div>
                                     <div class="config-card-title">Connection status</div>
                                     <p class="config-card-subtitle">Current Music Assistant auth state for this bridge, with quick access to reconfigure login.</p>
@@ -624,7 +624,7 @@
                         </div>
 
                         <div class="config-settings-card">
-                            <div class="config-card-header">
+                            <div class="config-card-header ui-stack ui-stack--sm">
                                 <div class="config-card-title">Sign in &amp; token</div>
                                 <p class="config-card-subtitle">Discover a server, request a token, or paste one manually.</p>
                             </div>
@@ -664,7 +664,7 @@
                             </div>
 
                             <label class="config-setting-row config-setting-row--compact" id="ma-auto-silent-auth-row">
-                                <span class="config-setting-copy">
+                                <span class="config-setting-copy ui-stack ui-stack--xs">
                                     <strong>Auto-get token on UI open</strong>
                                     <span class="form-hint">Enabled by default. In Home Assistant ingress mode, the UI will try to create a long-lived MA token automatically when this page opens.</span>
                                 </span>
@@ -678,7 +678,7 @@
                         </div>
 
                         <div class="config-settings-card">
-                            <div class="config-card-header">
+                            <div class="config-card-header ui-stack ui-stack--sm">
                                 <div class="config-card-title">Bridge integration</div>
                                 <p class="config-card-subtitle">Connection endpoint and bridge-side sync behavior.</p>
                             </div>
@@ -699,7 +699,7 @@
                             </div>
 
                             <label class="config-setting-row">
-                                <span class="config-setting-copy">
+                                <span class="config-setting-copy ui-stack ui-stack--xs">
                                     <strong>WebSocket monitor</strong>
                                     <span class="form-hint">Live now-playing and queue sync.</span>
                                 </span>
@@ -712,7 +712,7 @@
                             </label>
 
                             <label class="config-setting-row">
-                                <span class="config-setting-copy">
+                                <span class="config-setting-copy ui-stack ui-stack--xs">
                                     <strong>Route volume through MA</strong>
                                     <span class="form-hint">Keeps Music Assistant UI sliders in sync.</span>
                                 </span>
@@ -725,7 +725,7 @@
                             </label>
 
                             <label class="config-setting-row config-setting-row--compact">
-                                <span class="config-setting-copy">
+                                <span class="config-setting-copy ui-stack ui-stack--xs">
                                     <strong>Route mute through MA</strong>
                                     <span class="form-hint">Syncs mute state with the Music Assistant UI.</span>
                                 </span>
@@ -744,18 +744,18 @@
             <section class="config-tab-panel" id="config-panel-security" data-config-panel="security">
                 {% if not ha_mode %}
                 <div class="config-group config-group--flush">
-                    <div class="config-group-heading">
+                    <div class="config-group-heading ui-stack ui-stack--xs">
                         <h4 class="config-group-title"><span class="cg-icon ui-icon-slot" data-ui-icon="lock" aria-hidden="true"></span> Security</h4>
                         <p class="config-group-subtitle">Protect the web UI with local authentication while still allowing Music Assistant sign-in when configured.</p>
                     </div>
                     <div class="config-settings-grid">
                         <div class="config-settings-card">
-                            <div class="config-card-header">
+                            <div class="config-card-header ui-stack ui-stack--sm">
                                 <div class="config-card-title">Access control</div>
                                 <p class="config-card-subtitle">Local sign-in, session lifetime, and lockout policy for this web interface.</p>
                             </div>
                             <label class="config-setting-row">
-                                <span class="config-setting-copy">
+                                <span class="config-setting-copy ui-stack ui-stack--xs">
                                     <strong>Enable web UI authentication</strong>
                                     <span class="form-hint">Protect access to this page with local sign-in.</span>
                                 </span>
@@ -767,7 +767,7 @@
                                 </span>
                             </label>
                             <label class="config-setting-row">
-                                <span class="config-setting-copy">
+                                <span class="config-setting-copy ui-stack ui-stack--xs">
                                     <strong>Session timeout</strong>
                                     <span class="form-hint">How long users stay signed in before the browser must authenticate again.</span>
                                 </span>
@@ -779,7 +779,7 @@
                                 </span>
                             </label>
                             <label class="config-setting-row config-setting-row--compact">
-                                <span class="config-setting-copy">
+                                <span class="config-setting-copy ui-stack ui-stack--xs">
                                     <strong>Brute-force protection</strong>
                                     <span class="form-hint">Temporary lockout after repeated failed sign-in attempts.</span>
                                 </span>
@@ -812,7 +812,7 @@
                         </div>
 
                         <div id="auth-password-fields" class="config-settings-card" hidden>
-                            <div class="config-card-header">
+                            <div class="config-card-header ui-stack ui-stack--sm">
                                 <div class="config-card-title">Local password</div>
                                 <p class="config-card-subtitle">Optional if Music Assistant is connected, because MA credentials can also be used to sign in.</p>
                             </div>
@@ -831,12 +831,12 @@
                 </div>
                 {% else %}
                 <div class="config-group config-group--flush">
-                    <div class="config-group-heading">
+                    <div class="config-group-heading ui-stack ui-stack--xs">
                         <h4 class="config-group-title"><span class="cg-icon ui-icon-slot" data-ui-icon="lock" aria-hidden="true"></span> Security</h4>
                         <p class="config-group-subtitle">Home Assistant owns access control for this deployment, so bridge-level auth settings stay read-only.</p>
                     </div>
                     <div class="config-settings-card">
-                        <div class="config-card-header">
+                        <div class="config-card-header ui-stack ui-stack--sm">
                             <div class="config-card-title">Managed by Home Assistant</div>
                             <p class="config-card-subtitle">Use your HA account and profile settings for access control.</p>
                         </div>

@@ -495,13 +495,16 @@ def _build_onboarding_card(
     *,
     empty_state: bool,
     all_devices_globally_disabled: bool,
+    all_devices_user_released: bool,
     disabled_devices: list[dict[str, Any]] | None,
+    released_devices: list[Any] | None,
     onboarding_assistant: dict[str, Any],
 ) -> GuidanceOnboardingCard | None:
     checklist = onboarding_assistant.get("checklist") or {}
     if not checklist:
         return None
     card_checklist = checklist
+    secondary_actions = [GuidanceAction(key="open_diagnostics", label="Open diagnostics")]
     if all_devices_globally_disabled:
         disabled_count = len(disabled_devices or [])
         card_checklist = deepcopy(checklist)
@@ -543,8 +546,60 @@ def _build_onboarding_card(
                     adapted_step["stage"] = "upcoming"
                 adapted_steps.append(adapted_step)
             card_checklist["steps"] = adapted_steps
+    elif all_devices_user_released:
+        released_names = [str(getattr(device, "player_name", None) or "Unknown") for device in (released_devices or [])]
+        released_count = len(released_names)
+        action_key = "toggle_bt_management" if released_count == 1 else "toggle_bt_management_devices"
+        action_label = "Reclaim speaker" if released_count == 1 else f"Reclaim {released_count} devices"
+        card_checklist = deepcopy(checklist)
+        card_checklist["headline"] = "Reclaim a speaker to resume playback"
+        card_checklist["summary"] = (
+            "All configured Bluetooth devices are currently released from bridge management. "
+            "Reclaim at least one speaker so the bridge can resume playback."
+        )
+        card_checklist["primary_action"] = {
+            "key": action_key,
+            "label": action_label,
+            "device_names": released_names,
+        }
+        card_checklist["current_step_key"] = "sink_verification"
+        card_checklist["current_step_title"] = "Reclaim a speaker"
+        steps = card_checklist.get("steps")
+        if isinstance(steps, list):
+            adapted_steps = []
+            for step in steps:
+                if not isinstance(step, dict):
+                    adapted_steps.append(step)
+                    continue
+                adapted_step = dict(step)
+                if adapted_step.get("key") == "sink_verification":
+                    adapted_step.update(
+                        {
+                            "title": "Reclaim a speaker",
+                            "status": "warning",
+                            "stage": "current",
+                            "summary": "All configured speakers are currently released from bridge management.",
+                            "details": {"configured_devices": released_count},
+                            "actions": [
+                                "Use Reclaim to hand at least one speaker back to the bridge.",
+                                "If reclaim does not restore playback, open diagnostics or Configuration → Devices to inspect the speaker state.",
+                            ],
+                            "recommended_action": {
+                                "key": action_key,
+                                "label": action_label,
+                                "device_names": released_names,
+                            },
+                        }
+                    )
+                elif adapted_step.get("stage") == "current":
+                    adapted_step["stage"] = "upcoming"
+                adapted_steps.append(adapted_step)
+            card_checklist["steps"] = adapted_steps
+        secondary_actions = [
+            GuidanceAction(key="open_devices_settings", label="Open device settings"),
+            GuidanceAction(key="open_diagnostics", label="Open diagnostics"),
+        ]
     primary_action = _guidance_action_from_dict(card_checklist.get("primary_action"))
-    secondary_actions = [GuidanceAction(key="open_diagnostics", label="Open diagnostics")]
     return GuidanceOnboardingCard(
         headline=str(card_checklist.get("headline") or "Get started"),
         summary=str(card_checklist.get("summary") or "Finish the first-run checklist."),
@@ -553,7 +608,7 @@ def _build_onboarding_card(
         preference_key=_ONBOARDING_VISIBILITY_KEY,
         primary_action=primary_action,
         secondary_actions=secondary_actions,
-        show_by_default=empty_state or all_devices_globally_disabled,
+        show_by_default=empty_state or all_devices_globally_disabled or all_devices_user_released,
     )
 
 
@@ -679,8 +734,14 @@ def build_operator_guidance_snapshot(
     startup_banner_cooldown_active = _startup_banner_cooldown_active(startup_progress)
     active_devices = [device for device in devices if getattr(device, "bt_management_enabled", True)]
     released_devices = [device for device in devices if getattr(device, "bt_management_enabled", True) is False]
+    user_released_devices = [
+        device for device in released_devices if _device_extra(device).get("bt_released_by") != "auto"
+    ]
     disabled_count = len(disabled_devices or [])
     all_devices_globally_disabled = configured_devices > 0 and not devices and disabled_count >= configured_devices
+    all_devices_user_released = (
+        configured_devices > 0 and not active_devices and len(user_released_devices) >= configured_devices
+    )
 
     empty_state = configured_devices == 0
     if empty_state:
@@ -719,7 +780,9 @@ def build_operator_guidance_snapshot(
         onboarding_card=_build_onboarding_card(
             empty_state=empty_state,
             all_devices_globally_disabled=all_devices_globally_disabled,
+            all_devices_user_released=all_devices_user_released,
             disabled_devices=disabled_devices,
+            released_devices=user_released_devices,
             onboarding_assistant=onboarding_assistant,
         ),
         issue_groups=issue_groups,

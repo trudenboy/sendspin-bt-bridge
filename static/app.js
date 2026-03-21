@@ -4394,12 +4394,12 @@ function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabl
             escHtmlAttr(String(delayVal)) + '" step="50">' +
         '<div class="bt-runtime" aria-live="polite"></div>' +
         '<div class="bt-row-actions">' +
-            '<details class="bt-device-action-menu">' +
-                '<summary class="btn btn-sm btn-secondary bt-device-action-toggle">BT tools</summary>' +
-                '<div class="bt-device-action-menu-list">' +
-                    '<button type="button" class="btn btn-sm btn-secondary bt-device-action-item bt-device-action-info">Bluetooth info</button>' +
-                    '<button type="button" class="btn btn-sm btn-secondary bt-device-action-item bt-device-action-reset">Reset & reconnect</button>' +
-                    '<button type="button" class="btn btn-sm btn-secondary bt-device-action-item bt-device-action-open">Open in Bluetooth tab</button>' +
+            '<details class="bt-device-action-menu ui-action-menu">' +
+                '<summary class="btn btn-sm btn-secondary bt-device-action-toggle ui-action-menu-toggle">BT tools</summary>' +
+                '<div class="bt-device-action-menu-list ui-action-menu-list">' +
+                    '<button type="button" class="btn btn-sm btn-secondary bt-device-action-item ui-action-menu-item bt-device-action-info">Bluetooth info</button>' +
+                    '<button type="button" class="btn btn-sm btn-secondary bt-device-action-item ui-action-menu-item bt-device-action-reset">Reset & reconnect</button>' +
+                    '<button type="button" class="btn btn-sm btn-secondary bt-device-action-item ui-action-menu-item bt-device-action-open">Open in Bluetooth tab</button>' +
                 '</div>' +
             '</details>' +
             '<button type="button" class="btn-remove-dev" title="Remove device" aria-label="Remove device">' +
@@ -6028,7 +6028,7 @@ function _renderGuidanceActionLink(action, options) {
     var opts = options || {};
     var classes = ['notice-card-action'];
     if (opts.primary) classes.push('notice-card-action--primary');
-    if (opts.menuItem) classes.push('notice-card-action--menu-item');
+    if (opts.menuItem) classes.push('notice-card-action--menu-item', 'ui-action-menu-item');
     return '<a href="#" class="' + classes.join(' ') + '" onclick="return _runEncodedOperatorGuidanceAction(\'' +
         _encodeGuidanceAction(action) +
     '\')">' + escHtml(action.label || 'Open diagnostics') + '</a>';
@@ -6044,9 +6044,9 @@ function _renderGuidanceActionMenu(actions, dismissHtml) {
         return _renderGuidanceActionLink(action, {menuItem: true});
     }).join('');
     if (dismissHtml) itemsHtml += dismissHtml;
-    return '<details class="notice-action-menu">' +
-        '<summary class="notice-card-action notice-action-menu-toggle">More actions</summary>' +
-        '<div class="notice-action-menu-list">' + itemsHtml + '</div>' +
+    return '<details class="notice-action-menu ui-action-menu">' +
+        '<summary class="notice-card-action notice-action-menu-toggle ui-action-menu-toggle">More actions</summary>' +
+        '<div class="notice-action-menu-list ui-action-menu-list">' + itemsHtml + '</div>' +
     '</details>';
 }
 
@@ -8691,7 +8691,7 @@ function _renderRecoveryActionButton(action, options) {
     var opts = options || {};
     var classes = ['btn', 'btn-sm', 'diag-recovery-action'];
     if (opts.primary) classes.push('diag-recovery-action--primary');
-    if (opts.menuItem) classes.push('diag-recovery-action--menu-item');
+    if (opts.menuItem) classes.push('diag-recovery-action--menu-item', 'ui-action-menu-item');
     return '<button type="button" class="' + classes.join(' ') + '" onclick="return _runEncodedOperatorGuidanceAction(\'' +
         _encodeGuidanceAction({
             key: String(action.key || ''),
@@ -8703,9 +8703,9 @@ function _renderRecoveryActionButton(action, options) {
 function _renderRecoveryActionMenu(actions) {
     var visibleActions = (actions || []).filter(function(action) { return action && action.key; });
     if (!visibleActions.length) return '';
-    return '<details class="diag-action-menu">' +
-        '<summary class="btn btn-sm diag-recovery-action diag-action-menu-toggle">More actions</summary>' +
-        '<div class="diag-action-menu-list">' +
+    return '<details class="diag-action-menu ui-action-menu">' +
+        '<summary class="btn btn-sm diag-recovery-action diag-action-menu-toggle ui-action-menu-toggle">More actions</summary>' +
+        '<div class="diag-action-menu-list ui-action-menu-list">' +
             visibleActions.map(function(action) {
                 return _renderRecoveryActionButton(action, {menuItem: true});
             }).join('') +
@@ -9231,7 +9231,7 @@ function updateHealthIndicator(devices, guidance) {
         var headerTitle = headerStatus.summary || '';
         if (togglesOnboarding) {
             var onboardingShown = _isOnboardingAssistantShown(onboardingCard, {
-                showByDefault: !!(guidance && guidance.mode === 'empty_state'),
+                showByDefault: _onboardingShowByDefault(guidance),
             });
             headerTitle = headerTitle
                 ? headerTitle + (onboardingShown ? ' Click to hide the setup checklist.' : ' Click to open the setup checklist.')

@@ -298,6 +298,7 @@ def test_operator_guidance_uses_shared_recovery_actions_for_auto_released_issue(
     assert data["issue_groups"][0]["key"] == "auto_released"
     assert data["issue_groups"][0]["primary_action"]["key"] == "toggle_bt_management"
     assert data["issue_groups"][0]["secondary_actions"][0]["key"] == "open_diagnostics"
+    assert data["onboarding_card"]["show_by_default"] is False
 
 
 def test_operator_guidance_treats_user_released_devices_as_neutral():
@@ -326,6 +327,82 @@ def test_operator_guidance_treats_user_released_devices_as_neutral():
     assert data["issue_groups"] == []
     assert data["header_status"]["tone"] == "neutral"
     assert data["header_status"]["label"] == "Bluetooth released"
+    assert data["onboarding_card"]["show_by_default"] is True
+    assert data["onboarding_card"]["headline"] == "Reclaim a speaker to resume playback"
+    assert data["onboarding_card"]["summary"].startswith(
+        "All configured Bluetooth devices are currently released from bridge management."
+    )
+    assert data["onboarding_card"]["primary_action"]["key"] == "toggle_bt_management"
+    assert data["onboarding_card"]["primary_action"]["device_names"] == ["Kitchen"]
+    assert data["onboarding_card"]["secondary_actions"][0]["key"] == "open_devices_settings"
+
+
+def test_operator_guidance_uses_bulk_reclaim_onboarding_when_all_devices_are_released():
+    snapshot = build_operator_guidance_snapshot(
+        config={"BLUETOOTH_ADAPTERS": [{"id": "hci0"}], "BLUETOOTH_DEVICES": [{"mac": "AA"}, {"mac": "BB"}]},
+        onboarding_assistant={
+            "checklist": {
+                "overall_status": "warning",
+                "progress_percent": 60,
+                "completed_steps": 2,
+                "total_steps": 5,
+                "headline": "Next recommended step: Attach your first speaker",
+                "summary": "Devices are configured, but none are currently connected over Bluetooth.",
+                "current_step_key": "sink_verification",
+                "current_step_title": "Attach your first speaker",
+                "primary_action": {"key": "open_devices_settings", "label": "Open device settings"},
+                "checkpoints": [],
+                "steps": [
+                    {"key": "bluetooth", "title": "Check Bluetooth access", "status": "ok", "stage": "complete"},
+                    {"key": "audio", "title": "Verify audio backend", "status": "ok", "stage": "complete"},
+                    {
+                        "key": "sink_verification",
+                        "title": "Attach your first speaker",
+                        "status": "warning",
+                        "stage": "current",
+                        "summary": "Devices are configured, but none are currently connected over Bluetooth.",
+                        "details": {"configured_devices": 2},
+                        "actions": ["Power on a configured speaker."],
+                        "recommended_action": {"key": "open_devices_settings", "label": "Open device settings"},
+                    },
+                ],
+            },
+            "counts": {"configured_devices": 2, "connected_devices": 0, "sink_ready_devices": 0},
+        },
+        recovery_assistant={"summary": {"summary": "No active recovery issues."}},
+        startup_progress={"status": "complete"},
+        devices=[
+            SimpleNamespace(
+                player_name="Kitchen",
+                bt_management_enabled=False,
+                bluetooth_connected=False,
+                has_sink=False,
+                server_connected=False,
+                extra={"bt_released_by": "user"},
+            ),
+            SimpleNamespace(
+                player_name="Office",
+                bt_management_enabled=False,
+                bluetooth_connected=False,
+                has_sink=False,
+                server_connected=False,
+                extra={"bt_released_by": "user"},
+            ),
+        ],
+    )
+
+    data = snapshot.to_dict()
+    assert data["mode"] == "healthy"
+    assert data["issue_groups"] == []
+    assert data["onboarding_card"]["show_by_default"] is True
+    assert data["onboarding_card"]["primary_action"]["key"] == "toggle_bt_management_devices"
+    assert data["onboarding_card"]["primary_action"]["device_names"] == ["Kitchen", "Office"]
+    assert data["onboarding_card"]["checklist"]["current_step_title"] == "Reclaim a speaker"
+    step = data["onboarding_card"]["checklist"]["steps"][2]
+    assert step["title"] == "Reclaim a speaker"
+    assert step["stage"] == "current"
+    assert step["recommended_action"]["key"] == "toggle_bt_management_devices"
+    assert step["recommended_action"]["device_names"] == ["Kitchen", "Office"]
 
 
 def test_operator_guidance_reports_all_devices_disabled_as_neutral():
