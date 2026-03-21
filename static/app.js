@@ -1135,7 +1135,7 @@ function onArtworkPreviewKeydown(event, el) {
 }
 
 function _closeActionMenus(eventTarget) {
-    var openMenus = document.querySelectorAll('.notice-action-menu[open], .diag-action-menu[open]');
+    var openMenus = document.querySelectorAll('.notice-action-menu[open], .diag-action-menu[open], .bt-device-action-menu[open]');
     openMenus.forEach(function(menu) {
         if (eventTarget && menu.contains(eventTarget)) return;
         menu.open = false;
@@ -1286,14 +1286,6 @@ function _applyDemoScreenshotDefaults() {
 
     var logsSection = document.querySelector('.logs-section');
     if (logsSection) logsSection.open = false;
-
-    var pairedBox = document.getElementById('paired-box');
-    var pairedList = document.getElementById('paired-list');
-    if (pairedBox && pairedList && !pairedBox.hidden) {
-        pairedList.hidden = false;
-        var pairedArrow = pairedBox.querySelector('.paired-arrow');
-        if (pairedArrow) pairedArrow.classList.add('expanded');
-    }
 }
 
 function _getAutomaticViewMode(deviceCount) {
@@ -1371,6 +1363,40 @@ function _highlightBtConfigWrap(wrap) {
     _deviceSettingsHighlightTimer = setTimeout(function() {
         wrap.classList.remove('settings-highlight');
     }, 2600);
+}
+
+function _closeBtDeviceActionMenu(node) {
+    var menu = node && node.closest ? node.closest('.bt-device-action-menu') : null;
+    if (menu) menu.open = false;
+}
+
+function _highlightPairedDeviceRowByMac(mac) {
+    var targetMac = _normalizeDeviceMac(mac);
+    if (!targetMac) return;
+    document.querySelectorAll('#paired-list .scan-result-item.paired-device-highlight').forEach(function(node) {
+        node.classList.remove('paired-device-highlight');
+    });
+    var row = document.querySelector('#paired-list .scan-result-item[data-paired-mac="' + targetMac + '"]');
+    if (!row) return;
+    row.classList.add('paired-device-highlight');
+    row.scrollIntoView({behavior: 'smooth', block: 'center'});
+    setTimeout(function() {
+        row.classList.remove('paired-device-highlight');
+    }, 2600);
+}
+
+function _afterBluetoothAddToFleet(name, mac) {
+    showToast('Added to Device fleet', 'success');
+    _openConfigPanel('devices', 'config-panel-devices', 'start');
+    setTimeout(function() {
+        var wrap = _findBtConfigWrapByIdentity(name, mac);
+        if (wrap) {
+            _highlightBtConfigWrap(wrap);
+            return;
+        }
+        var panel = document.getElementById('config-panel-devices');
+        if (panel) _highlightConfigTarget(panel);
+    }, 180);
 }
 
 function openDeviceSettings(i) {
@@ -4030,6 +4056,8 @@ async function loadBtAdapters() {
     });
     renderAdaptersTable();
     rebuildAdapterDropdowns();
+    _renderBtScanAdapterOptions();
+    _syncBtScanControls();
 }
 
 // ---- Adapter panel ----
@@ -4239,9 +4267,19 @@ function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabl
         '<input type="number" class="bt-delay" title="Static delay. Negative = compensate latency" placeholder="0" value="' +
             escHtmlAttr(String(delayVal)) + '" step="50">' +
         '<div class="bt-runtime" aria-live="polite"></div>' +
-        '<button type="button" class="btn-remove-dev" title="Remove device" aria-label="Remove device">' +
-            _trashIconSvg() +
-        '</button>';
+        '<div class="bt-row-actions">' +
+            '<details class="bt-device-action-menu">' +
+                '<summary class="btn btn-sm btn-secondary bt-device-action-toggle">BT tools</summary>' +
+                '<div class="bt-device-action-menu-list">' +
+                    '<button type="button" class="btn btn-sm btn-secondary bt-device-action-item bt-device-action-info">Bluetooth info</button>' +
+                    '<button type="button" class="btn btn-sm btn-secondary bt-device-action-item bt-device-action-reset">Reset & reconnect</button>' +
+                    '<button type="button" class="btn btn-sm btn-secondary bt-device-action-item bt-device-action-open">Open in Bluetooth tab</button>' +
+                '</div>' +
+            '</details>' +
+            '<button type="button" class="btn-remove-dev" title="Remove device" aria-label="Remove device">' +
+                _trashIconSvg() +
+            '</button>' +
+        '</div>';
 
     // Detail sub-row with advanced fields
     var detail = document.createElement('div');
@@ -4271,6 +4309,39 @@ function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabl
     row.querySelector('.btn-remove-dev').addEventListener('click', function() {
         wrap.remove();
         _setConfigDirty(true);
+    });
+    row.querySelector('.bt-device-action-info').addEventListener('click', function(event) {
+        event.preventDefault();
+        event.stopPropagation();
+        var rowMac = row.querySelector('.bt-mac').value.trim().toUpperCase();
+        if (!rowMac) {
+            showToast('Set a device MAC address first', 'error');
+            return;
+        }
+        _closeBtDeviceActionMenu(this);
+        showBtDeviceInfo(rowMac);
+    });
+    row.querySelector('.bt-device-action-reset').addEventListener('click', function(event) {
+        event.preventDefault();
+        event.stopPropagation();
+        var rowMac = row.querySelector('.bt-mac').value.trim().toUpperCase();
+        var rowName = row.querySelector('.bt-name').value.trim();
+        if (!rowMac) {
+            showToast('Set a device MAC address first', 'error');
+            return;
+        }
+        resetAndReconnect(rowMac, rowName, this);
+    });
+    row.querySelector('.bt-device-action-open').addEventListener('click', function(event) {
+        event.preventDefault();
+        event.stopPropagation();
+        var rowMac = row.querySelector('.bt-mac').value.trim().toUpperCase();
+        if (!rowMac) {
+            showToast('Set a device MAC address first', 'error');
+            return;
+        }
+        _closeBtDeviceActionMenu(this);
+        _openBluetoothInventory({highlightMac: rowMac});
     });
     enabledCb.addEventListener('change', function() {
         syncBtRowState();
@@ -4418,19 +4489,245 @@ function _goToAdapters() {
     }, 180);
 }
 
-function _goToDevicesAndScan(options) {
+function _openBluetoothInventory(options) {
+    var opts = options || {};
+    var opened = _openConfigPanel('bluetooth', 'config-bluetooth-paired-card', 'start');
+    setTimeout(function() {
+        loadPairedDevices({highlightMac: opts.highlightMac});
+        var target = (opened && opened.target) || document.getElementById('config-bluetooth-paired-card');
+        if (target) _highlightConfigTarget(target);
+    }, 180);
+    return false;
+}
+
+var _btScanModalEscHandler = null;
+var _btScanModalState = {
+    adapter: '',
+    audioOnly: true,
+    activeJobId: '',
+    isRunning: false,
+    expectedDuration: 15,
+    startedAtMs: 0,
+    progressTimer: null,
+    lastDevices: [],
+    lastStats: null,
+    lastError: '',
+};
+var _scanCooldownTimer = null;
+var _scanCooldownRemaining = 0;
+
+function _getBtScanAdapters() {
+    return btAdapters.filter(function(adapter) {
+        return adapter && !adapter.manual && (adapter.id || adapter.mac);
+    });
+}
+
+function _getBtScanAdapterValue(adapter) {
+    return adapter && (adapter.id || adapter.mac) ? (adapter.id || adapter.mac) : '';
+}
+
+function _getBtScanAdapterLabel(adapterValue) {
+    if (!adapterValue) return 'All adapters';
+    var adapter = _findAdapterRecord(adapterValue, adapterValue);
+    if (!adapter) return adapterValue;
+    return adapter.customName || adapter.detectedName || adapter.name || adapter.id || adapter.mac || adapterValue;
+}
+
+function _estimateBtScanDurationForSelection(adapterValue) {
+    var adapterCount = adapterValue ? 1 : _getBtScanAdapters().length;
+    return 15 + Math.max(adapterCount - 1, 0) * 2;
+}
+
+function _renderBtScanAdapterOptions() {
+    var select = document.getElementById('scan-adapter-select');
+    if (!select) return;
+    var adapters = _getBtScanAdapters();
+    var currentValue = _btScanModalState.adapter || '';
+    var options = ['<option value="">All adapters</option>'];
+    adapters.forEach(function(adapter) {
+        var value = _getBtScanAdapterValue(adapter);
+        var label = adapter.customName || adapter.detectedName || adapter.name || value;
+        var meta = [];
+        if (adapter.id && label !== adapter.id) meta.push(adapter.id);
+        if (adapter.mac) meta.push(adapter.mac);
+        options.push(
+            '<option value="' + escHtmlAttr(value) + '">' +
+                escHtml(label + (meta.length ? ' · ' + meta.join(' · ') : '')) +
+            '</option>'
+        );
+    });
+    select.innerHTML = options.join('');
+    var isAvailable = !currentValue || adapters.some(function(adapter) {
+        return _getBtScanAdapterValue(adapter) === currentValue;
+    });
+    _btScanModalState.adapter = isAvailable ? currentValue : '';
+    select.value = _btScanModalState.adapter || '';
+}
+
+function _setBtScanProgressPill(variant, label) {
+    var stateEl = document.getElementById('scan-progress-state');
+    if (!stateEl) return;
+    stateEl.className = 'scan-status-pill' + (variant ? ' ' + variant : '');
+    stateEl.textContent = label;
+}
+
+function _clearBtScanProgressTimer() {
+    if (_btScanModalState.progressTimer) {
+        clearInterval(_btScanModalState.progressTimer);
+        _btScanModalState.progressTimer = null;
+    }
+}
+
+function _renderBtScanProgress() {
+    var progress = document.getElementById('scan-progress');
+    var detail = document.getElementById('scan-progress-detail');
+    var remaining = document.getElementById('scan-progress-remaining');
+    var fill = document.getElementById('scan-progress-bar-fill');
+    if (!progress || !detail || !remaining || !fill) return;
+    if (!_btScanModalState.startedAtMs && !_btScanModalState.isRunning && !_btScanModalState.lastError && !_btScanModalState.lastDevices.length) {
+        progress.hidden = true;
+        return;
+    }
+
+    var ratio = 1;
+    if (_btScanModalState.isRunning) {
+        var totalMs = Math.max(_btScanModalState.expectedDuration, 1) * 1000;
+        var elapsedMs = Math.max(Date.now() - _btScanModalState.startedAtMs, 0);
+        ratio = Math.min(elapsedMs / totalMs, 0.96);
+        _setBtScanProgressPill('is-scanning', 'Scanning nearby devices');
+        detail.textContent = _getBtScanAdapterLabel(_btScanModalState.adapter) + ' · ' +
+            (_btScanModalState.audioOnly ? 'Audio devices only' : 'All Bluetooth devices');
+        remaining.textContent = Math.max(0, Math.ceil((totalMs - elapsedMs) / 1000)) + ' s';
+    } else if (_btScanModalState.lastError) {
+        ratio = 1;
+        _setBtScanProgressPill('is-error', 'Scan failed');
+        detail.textContent = _btScanModalState.lastError;
+        remaining.textContent = 'Error';
+    } else {
+        var foundCount = (_btScanModalState.lastStats && _btScanModalState.lastStats.returned_candidates) || _btScanModalState.lastDevices.length;
+        ratio = 1;
+        _setBtScanProgressPill('is-success', 'Scan complete');
+        detail.textContent = 'Found ' + String(foundCount) + ' ' +
+            (_btScanModalState.audioOnly ? 'device' : 'candidate') +
+            (foundCount === 1 ? '' : 's');
+        remaining.textContent = 'Done';
+    }
+    fill.style.width = Math.max(0, Math.min(ratio, 1)) * 100 + '%';
+    progress.hidden = false;
+}
+
+function _startBtScanProgressTimer(expectedDuration, startedAtMs) {
+    _clearBtScanProgressTimer();
+    _btScanModalState.expectedDuration = expectedDuration || _btScanModalState.expectedDuration || 15;
+    _btScanModalState.startedAtMs = startedAtMs || Date.now();
+    _renderBtScanProgress();
+    _btScanModalState.progressTimer = setInterval(function() {
+        if (!_btScanModalState.isRunning) {
+            _clearBtScanProgressTimer();
+            return;
+        }
+        _renderBtScanProgress();
+    }, 250);
+}
+
+function _syncBtScanControls() {
+    var select = document.getElementById('scan-adapter-select');
+    var audioOnly = document.getElementById('scan-audio-only');
+    var rescanBtn = document.getElementById('scan-rescan-btn');
+    if (select) {
+        select.value = _btScanModalState.adapter || '';
+        select.disabled = _btScanModalState.isRunning;
+    }
+    if (audioOnly) {
+        audioOnly.checked = _btScanModalState.audioOnly !== false;
+        audioOnly.disabled = _btScanModalState.isRunning;
+    }
+    if (rescanBtn) {
+        rescanBtn.disabled = _btScanModalState.isRunning || _scanCooldownRemaining > 0;
+        if (_btScanModalState.isRunning) {
+            rescanBtn.innerHTML = _buttonLabelWithIconHtml('refresh', 'Scanning...');
+        } else if (_scanCooldownRemaining > 0) {
+            rescanBtn.innerHTML = _buttonLabelWithIconHtml('refresh', 'Rescan (' + _scanCooldownRemaining + 's)');
+        } else {
+            rescanBtn.innerHTML = _buttonLabelWithIconHtml('refresh', 'Rescan');
+        }
+    }
+}
+
+function _onBtScanOptionChange() {
+    var select = document.getElementById('scan-adapter-select');
+    var audioOnly = document.getElementById('scan-audio-only');
+    _btScanModalState.adapter = select ? (select.value || '') : '';
+    _btScanModalState.audioOnly = audioOnly ? !!audioOnly.checked : true;
+    if (!_btScanModalState.isRunning) _renderBtScanProgress();
+}
+
+function _applyBtScanCooldownUi() {
+    var btn = document.getElementById('scan-btn');
+    if (btn) {
+        btn.disabled = _scanCooldownRemaining > 0;
+        btn.innerHTML = _buttonLabelWithIconHtml(
+            'search',
+            _scanCooldownRemaining > 0 ? 'Scan nearby (' + _scanCooldownRemaining + 's)' : 'Scan nearby'
+        );
+    }
+    _syncBtScanControls();
+}
+
+function closeBtScanModal() {
+    var overlay = document.getElementById('bt-scan-modal-overlay');
+    if (overlay) overlay.hidden = true;
+    if (_btScanModalEscHandler) {
+        document.removeEventListener('keydown', _btScanModalEscHandler);
+        _btScanModalEscHandler = null;
+    }
+    return false;
+}
+
+function openBtScanModal(options) {
+    if (!_hasDetectedAdapter()) {
+        _goToAdapters();
+        return false;
+    }
+    var opts = options || {};
+    _openConfigPanel('bluetooth', 'config-bluetooth-paired-card', 'start');
+    _renderBtScanAdapterOptions();
+    _syncBtScanControls();
+    _renderBtScanProgress();
+    var overlay = document.getElementById('bt-scan-modal-overlay');
+    if (!overlay) return false;
+    overlay.hidden = false;
+    overlay.onclick = function(event) {
+        if (event.target === overlay) closeBtScanModal();
+    };
+    if (_btScanModalEscHandler) {
+        document.removeEventListener('keydown', _btScanModalEscHandler);
+    }
+    _btScanModalEscHandler = function(event) {
+        if (event.key === 'Escape') closeBtScanModal();
+    };
+    document.addEventListener('keydown', _btScanModalEscHandler);
+    if (opts.autoStart !== false) startBtScan();
+    return false;
+}
+
+function _goToBluetoothAndScan(options) {
     var opts = options || {};
     if (!_hasDetectedAdapter()) {
         _goToAdapters();
-        return;
+        return false;
     }
-    _openConfigPanel('devices', 'config-devices-discovery-card', 'start');
+    _openBluetoothInventory(opts);
     setTimeout(function() {
         var scanBtn = document.getElementById('scan-btn');
         if (scanBtn) scanBtn.focus({preventScroll: true});
-        if (opts.expandPaired) loadPairedDevices({forceExpand: true});
-        startBtScan();
+        openBtScanModal({autoStart: true});
     }, 180);
+    return false;
+}
+
+function _goToDevicesAndScan(options) {
+    return _goToBluetoothAndScan(options);
 }
 
 function _isOnboardingCardVisible(guidance) {
@@ -4457,124 +4754,214 @@ function openConfigAndAddDevice(options) {
     if (!_hasDetectedAdapter()) {
         _goToAdapters();
     } else {
-        _goToDevicesAndScan(options);
+        _goToBluetoothAndScan(options);
     }
+}
+
+function _renderBtScanResults(devices) {
+    var box = document.getElementById('scan-results-box');
+    var listDiv = document.getElementById('scan-results-list');
+    if (!box || !listDiv) return;
+    listDiv.innerHTML = devices.map(function(d, i) {
+        var addable = d.supports_import !== false && d.audio_capable !== false;
+        var chips = [
+            '<span class="scan-result-chip ' + (d.audio_capable === false ? 'is-other' : 'is-audio') + '">' +
+                (d.audio_capable === false ? 'Other Bluetooth device' : 'Audio device') +
+            '</span>'
+        ];
+        if (d.adapter) {
+            chips.push('<span class="scan-result-chip">' + escHtml(_getBtScanAdapterLabel(d.adapter)) + '</span>');
+        }
+        return '<div class="scan-result-item" data-scan-idx="' + i + '">' +
+            '<span class="scan-result-actions">' +
+                (addable
+                    ? '<button type="button" class="scan-action-btn scan-action-btn--primary scan-add-btn" title="Add to config without pairing now">Add to fleet</button>' +
+                      '<button type="button" class="scan-action-btn scan-action-btn--pair scan-pair-btn" data-pair-idx="' + i + '" title="Pair, trust, and add to config">Add & pair</button>'
+                    : '<span class="scan-result-passive">Audio import unavailable</span>') +
+            '</span>' +
+            '<span class="scan-result-mac">' + escHtml(d.mac) + '</span>' +
+            '<span class="scan-result-name">' + escHtml(d.name) +
+                '<span class="scan-result-meta">' + chips.join('') + '</span>' +
+            '</span>' +
+            '</div>';
+    }).join('');
+
+    listDiv.querySelectorAll('[data-scan-idx]').forEach(function(row) {
+        var scanAddBtn = row.querySelector('.scan-add-btn');
+        if (scanAddBtn) {
+            scanAddBtn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                var d = devices[parseInt(row.dataset.scanIdx, 10)];
+                addFromScan(d.mac, d.name, d.adapter);
+            });
+        }
+    });
+    listDiv.querySelectorAll('.scan-pair-btn').forEach(function(scanPairBtn) {
+        scanPairBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            var d = devices[parseInt(this.dataset.pairIdx, 10)];
+            pairAndAdd(d.mac, d.name, d.adapter, this);
+        });
+    });
+    box.hidden = !devices.length;
+}
+
+async function _pollBtScanResult(jobId) {
+    for (var attempt = 0; attempt < 30; attempt++) {
+        await new Promise(function(resolve) { setTimeout(resolve, 2000); });
+        var pollResp = await fetch(API_BASE + '/api/bt/scan/result/' + jobId);
+        var pollData = await pollResp.json();
+        if (!pollResp.ok) {
+            throw new Error(pollData.error || 'Scan polling failed');
+        }
+        if (pollData.scan_options) {
+            _btScanModalState.adapter = pollData.scan_options.adapter || '';
+            _btScanModalState.audioOnly = pollData.scan_options.audio_only !== false;
+        }
+        if (pollData.expected_duration) _btScanModalState.expectedDuration = pollData.expected_duration;
+        if (pollData.started_at) _btScanModalState.startedAtMs = pollData.started_at * 1000;
+        if (pollData.status === 'done') return pollData;
+        _renderBtScanProgress();
+    }
+    throw new Error('Scan timed out');
 }
 
 // ---- BT Scan ----
 
 async function startBtScan() {
-    var btn     = document.getElementById('scan-btn');
-    var status  = document.getElementById('scan-status');
-    var box     = document.getElementById('scan-results-box');
+    var btn = document.getElementById('scan-btn');
+    var status = document.getElementById('scan-status');
+    var box = document.getElementById('scan-results-box');
     var listDiv = document.getElementById('scan-results-list');
+    if (_btScanModalState.isRunning) return false;
+    _onBtScanOptionChange();
 
-    btn.disabled = true;
-    status.innerHTML = '<span class="scan-status-pill is-scanning">' +
-        '<span class="scan-spinner"></span>' +
-        '<span class="scan-status-label">Scanning nearby devices</span>' +
-        '<span class="scan-status-hint">~15 s</span>' +
-    '</span>';
-    box.hidden = true;
+    _btScanModalState.activeJobId = '';
+    _btScanModalState.isRunning = true;
+    _btScanModalState.lastDevices = [];
+    _btScanModalState.lastStats = null;
+    _btScanModalState.lastError = '';
+    _btScanModalState.expectedDuration = _estimateBtScanDurationForSelection(_btScanModalState.adapter);
+    _btScanModalState.startedAtMs = Date.now();
+    if (status) status.innerHTML = '';
+    if (listDiv) listDiv.innerHTML = '';
+    if (box) box.hidden = true;
+    _syncBtScanControls();
+    _startBtScanProgressTimer(_btScanModalState.expectedDuration, _btScanModalState.startedAtMs);
 
     try {
-        var resp = await fetch(API_BASE + '/api/bt/scan', { method: 'POST' });
+        var resp = await fetch(API_BASE + '/api/bt/scan', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                adapter: _btScanModalState.adapter || '',
+                audio_only: _btScanModalState.audioOnly !== false,
+            })
+        });
         var data = await resp.json();
 
         if (resp.status === 429 && data.retry_after) {
+            _btScanModalState.isRunning = false;
+            _btScanModalState.startedAtMs = 0;
+            _clearBtScanProgressTimer();
+            _renderBtScanProgress();
             _startScanCooldown(btn, data.retry_after);
-            status.textContent = '';
-            return;
-        }
-
-        var jobId = data.job_id;
-        if (!jobId) { throw new Error(data.error || 'No job_id returned'); }
-
-        // Poll for result every 2 s
-        var devices = null;
-        for (var attempt = 0; attempt < 30; attempt++) {
-            await new Promise(function(resolve) { setTimeout(resolve, 2000); });
-            var pollResp = await fetch(API_BASE + '/api/bt/scan/result/' + jobId);
-            var pollData = await pollResp.json();
-            if (pollData.status === 'done') {
-                if (pollData.error) { throw new Error(pollData.error); }
-                devices = pollData.devices || [];
-                break;
+            if (status) {
+                status.innerHTML = '<span class="scan-status-pill">' +
+                    '<span class="scan-status-label">Scan cooldown active</span>' +
+                    '<span class="scan-status-hint">' + String(data.retry_after) + 's remaining</span>' +
+                '</span>';
             }
+            return false;
         }
-        if (devices === null) { throw new Error('Scan timed out'); }
+        if (!resp.ok) {
+            throw new Error(data.error || 'Bluetooth scan failed');
+        }
 
-        if (devices.length === 0) {
-            status.innerHTML = _renderEmptyStateHtml({
-                className: 'scan-status-card is-empty',
-                icon: 'search',
-                title: 'No devices found',
-                copyHtml: '<ul class="ui-empty-state-list">' +
-                    '<li>Make sure your speaker is in <strong>pairing mode</strong> (usually hold the Bluetooth button for 3–5 s)</li>' +
-                    '<li>Move the device closer to the Bluetooth adapter</li>' +
-                    '<li>Some devices need to be <strong>unpaired</strong> from other sources first</li>' +
-                    '<li>Try scanning again — some speakers advertise intermittently</li>' +
-                '</ul>',
-                compact: true,
-                inline: true,
-            });
+        _btScanModalState.activeJobId = data.job_id || '';
+        _btScanModalState.expectedDuration = data.expected_duration || _btScanModalState.expectedDuration;
+        if (data.scan_options) {
+            _btScanModalState.adapter = data.scan_options.adapter || '';
+            _btScanModalState.audioOnly = data.scan_options.audio_only !== false;
+        }
+        _btScanModalState.startedAtMs = data.started_at ? data.started_at * 1000 : _btScanModalState.startedAtMs;
+        _syncBtScanControls();
+        _startBtScanProgressTimer(_btScanModalState.expectedDuration, _btScanModalState.startedAtMs);
+
+        var result = await _pollBtScanResult(_btScanModalState.activeJobId);
+        _btScanModalState.isRunning = false;
+        _btScanModalState.lastDevices = result.devices || [];
+        _btScanModalState.lastStats = result.stats || null;
+        _btScanModalState.lastError = result.error || '';
+        if (result.scan_options) {
+            _btScanModalState.adapter = result.scan_options.adapter || '';
+            _btScanModalState.audioOnly = result.scan_options.audio_only !== false;
+        }
+        _clearBtScanProgressTimer();
+        _renderBtScanProgress();
+
+        if (_btScanModalState.lastError) {
+            throw new Error(_btScanModalState.lastError);
+        }
+
+        if (!_btScanModalState.lastDevices.length) {
+            if (status) {
+                status.innerHTML = _renderEmptyStateHtml({
+                    className: 'scan-status-card is-empty',
+                    icon: 'search',
+                    title: _btScanModalState.audioOnly ? 'No audio devices found' : 'No Bluetooth devices found',
+                    copyHtml: _btScanModalState.audioOnly
+                        ? '<ul class="ui-empty-state-list">' +
+                            '<li>Make sure your speaker is in <strong>pairing mode</strong> (usually hold the Bluetooth button for 3-5 s)</li>' +
+                            '<li>Move the device closer to the Bluetooth adapter</li>' +
+                            '<li>Some devices need to be <strong>unpaired</strong> from other sources first</li>' +
+                            '<li>Try scanning again — some speakers advertise intermittently</li>' +
+                        '</ul>'
+                        : 'No nearby Bluetooth devices were reported during this timed scan.',
+                    compact: true,
+                    inline: true,
+                });
+            }
         } else {
-            status.innerHTML = '<span class="scan-status-pill is-success">' +
-                '<span class="scan-status-label">Found ' + String(devices.length) + ' device(s)</span>' +
-            '</span>';
-            listDiv.innerHTML = devices.map(function(d, i) {
-                return '<div class="scan-result-item" data-scan-idx="' + i + '">' +
-                    '<span class="scan-result-actions">' +
-                    '<button type="button" class="scan-action-btn scan-action-btn--primary scan-add-btn" title="Add to config without pairing now">Add</button>' +
-                    '<button type="button" class="scan-action-btn scan-action-btn--pair scan-pair-btn" data-pair-idx="' + i + '" title="Pair, trust, and add to config">Add & Pair</button>' +
+            if (status) {
+                var foundCount = (_btScanModalState.lastStats && _btScanModalState.lastStats.returned_candidates) || _btScanModalState.lastDevices.length;
+                status.innerHTML = '<span class="scan-status-pill is-success">' +
+                    '<span class="scan-status-label">Found ' + String(foundCount) + ' ' +
+                        (_btScanModalState.audioOnly ? 'device' : 'candidate') + (foundCount === 1 ? '' : 's') +
                     '</span>' +
-                    '<span class="scan-result-mac">' + escHtml(d.mac) + '</span>' +
-                    '<span class="scan-result-name">' + escHtml(d.name) + '</span>' +
-                    '</div>';
-            }).join('');
-            // "Add" button
-            listDiv.querySelectorAll('[data-scan-idx]').forEach(function(row) {
-                row.querySelector('.scan-add-btn').addEventListener('click', function(e) {
-                    e.stopPropagation();
-                    var d = devices[parseInt(row.dataset.scanIdx)];
-                    addFromScan(d.mac, d.name, d.adapter);
-                });
-            });
-            // "Add & Pair" button
-            listDiv.querySelectorAll('.scan-pair-btn').forEach(function(btn) {
-                btn.addEventListener('click', function(e) {
-                    e.stopPropagation();
-                    var d = devices[parseInt(this.dataset.pairIdx)];
-                    pairAndAdd(d.mac, d.name, d.adapter, this);
-                });
-            });
-            box.hidden = false;
+                '</span>';
+            }
+            _renderBtScanResults(_btScanModalState.lastDevices);
         }
         _startScanCooldown(btn, 10);
     } catch (err) {
-        status.innerHTML = '<span class="scan-status-pill is-error">' +
-            '<span class="scan-status-label">Scan failed: ' + escHtml(err.message || 'Unknown error') + '</span>' +
-        '</span>';
-        btn.disabled = false;
+        _btScanModalState.isRunning = false;
+        _btScanModalState.lastError = err && err.message ? err.message : 'Unknown error';
+        _clearBtScanProgressTimer();
+        _renderBtScanProgress();
+        if (status) {
+            status.innerHTML = '<span class="scan-status-pill is-error">' +
+                '<span class="scan-status-label">Scan failed: ' + escHtml(_btScanModalState.lastError) + '</span>' +
+            '</span>';
+        }
+    } finally {
+        _syncBtScanControls();
     }
+    return false;
 }
 
-var _scanCooldownTimer = null;
 function _startScanCooldown(btn, seconds) {
     if (_scanCooldownTimer) clearInterval(_scanCooldownTimer);
-    var remaining = seconds;
-    btn.disabled = true;
-    btn.innerHTML = _buttonLabelWithIconHtml('search', 'Scan (' + remaining + 's)');
+    _scanCooldownRemaining = seconds;
+    _applyBtScanCooldownUi();
     _scanCooldownTimer = setInterval(function() {
-        remaining--;
-        if (remaining <= 0) {
+        _scanCooldownRemaining--;
+        if (_scanCooldownRemaining <= 0) {
             clearInterval(_scanCooldownTimer);
             _scanCooldownTimer = null;
-            btn.disabled = false;
-            btn.innerHTML = _buttonLabelWithIconHtml('search', 'Scan');
-        } else {
-            btn.innerHTML = _buttonLabelWithIconHtml('search', 'Scan (' + remaining + 's)');
+            _scanCooldownRemaining = 0;
         }
+        _applyBtScanCooldownUi();
     }, 1000);
 }
 
@@ -4635,13 +5022,17 @@ function autoAdapter() {
 
 function addFromScan(mac, name, adapter) {
     addBtDeviceRow(name, mac, adapter || autoAdapter());
-    document.getElementById('scan-results-box').hidden = true;
-    document.getElementById('scan-status').textContent = '';
+    var box = document.getElementById('scan-results-box');
+    var status = document.getElementById('scan-status');
+    if (box) box.hidden = true;
+    if (status) status.textContent = '';
+    closeBtScanModal();
+    _afterBluetoothAddToFleet(name, mac);
 }
 
 function addFromPaired(mac, name) {
     addBtDeviceRow(name, mac, autoAdapter());
-    document.getElementById('paired-box').hidden = true;
+    _afterBluetoothAddToFleet(name, mac);
 }
 
 async function removePairedDevice(mac, name, rowEl) {
@@ -4790,50 +5181,49 @@ async function loadPairedDevices(options) {
         var allCount = data.total_count || devices.length;
         var box = document.getElementById('paired-box');
         var listDiv = document.getElementById('paired-list');
-        if (devices.length === 0 && !showAllChecked) { box.hidden = true; return; }
-        box.hidden = false;
+        var countEl = document.getElementById('paired-box-count');
+        if (box) box.hidden = false;
 
-        // Update title with count hint
         var titleEl = box.querySelector('.paired-box-copy');
         if (titleEl) {
-            var countHint = '';
-            if (!showAllChecked && allCount > devices.length) {
-                countHint = ' (' + devices.length + ' audio · ' + allCount + ' total)';
+            titleEl.textContent = 'Already paired devices';
+        }
+        if (countEl) {
+            if (!devices.length) {
+                countEl.textContent = showAllChecked ? '0 devices' : 'No audio devices';
+            } else if (!showAllChecked && allCount > devices.length) {
+                countEl.textContent = devices.length + ' audio · ' + allCount + ' total';
             } else {
-                countHint = ' (' + devices.length + ')';
+                countEl.textContent = devices.length + ' device' + (devices.length === 1 ? '' : 's');
             }
-            titleEl.textContent = 'Already paired \u2014 click to add:' + countHint;
         }
 
-        // Auto-collapse list when more than 5 devices, except in demo mode where
-        // the screenshot stand keeps the import drawer open by default.
-        var arrow = box.querySelector('.paired-arrow');
-        if (opts.forceExpand) {
-            listDiv.hidden = false;
-            if (arrow) arrow.classList.add('expanded');
-        } else if (_runtimeMode === 'demo') {
-            listDiv.hidden = false;
-            if (arrow) arrow.classList.add('expanded');
-        } else if (devices.length > 5) {
-            listDiv.hidden = true;
-            if (arrow) arrow.classList.remove('expanded');
-        } else {
-            listDiv.hidden = false;
-            if (arrow) arrow.classList.add('expanded');
+        if (!devices.length) {
+            listDiv.innerHTML = _renderEmptyStateHtml({
+                className: 'list-empty-state',
+                icon: 'bt',
+                title: 'No paired devices',
+                copy: showAllChecked
+                    ? 'No paired Bluetooth devices were found in the local stack.'
+                    : 'No paired audio devices are available right now. Enable Show all to inspect the full Bluetooth stack.',
+                compact: true,
+                inline: true,
+            });
+            _applyDemoScreenshotDefaults();
+            return;
         }
 
         listDiv.innerHTML = devices.map(function(d, idx) {
-            // Replace raw RSSI-only strings with a friendlier label
             var displayName = /^RSSI:/i.test(d.name) ? 'Unknown device' : d.name;
             var btInfoIcon = _bluetoothIconSvg('scan-action-icon');
-            return '<div class="scan-result-item" data-paired-idx="' + idx + '">' +
+            return '<div class="scan-result-item" data-paired-idx="' + idx + '" data-paired-mac="' + escHtmlAttr(_normalizeDeviceMac(d.mac)) + '">' +
                 '<span class="scan-result-actions">' +
-                '<button type="button" class="scan-action-btn scan-action-btn--primary paired-add-btn">Add</button>' +
+                '<button type="button" class="scan-action-btn scan-action-btn--primary paired-add-btn">Add to fleet</button>' +
                 '</span>' +
                 '<span class="scan-result-mac">' + escHtml(d.mac) + '</span>' +
                 '<span class="scan-result-name">' + escHtml(displayName) + '</span>' +
                 '<span class="paired-actions" onclick="event.stopPropagation()">' +
-                '<button type="button" class="scan-action-btn paired-info-btn" title="Show Bluetooth device info">' + btInfoIcon + '<span>Info</span></button>' +
+                    '<button type="button" class="scan-action-btn paired-info-btn" title="Show Bluetooth device info">' + btInfoIcon + '<span>Info</span></button>' +
                 '<button type="button" class="scan-action-btn scan-action-btn--warning paired-reset-btn" title="Remove, re-pair and connect from scratch">Reset & Reconnect</button>' +
                 '<button type="button" class="paired-remove-btn btn-remove-dev" title="Remove from BT stack" aria-label="Remove from BT stack">' + _trashIconSvg() + '</button>' +
                 '</span>' +
@@ -4859,17 +5249,12 @@ async function loadPairedDevices(options) {
             });
         });
         _applyDemoScreenshotDefaults();
+        _highlightPairedDeviceRowByMac(opts.highlightMac);
     } catch (_) {}
 }
 
 function togglePairedList(node) {
-    var container = node && node.closest ? node.closest('.paired-box') : null;
-    if (!container) return;
-    var list = container.querySelector('#paired-list');
-    var arrow = container.querySelector('.paired-arrow');
-    if (!list) return;
-    list.hidden = !list.hidden;
-    if (arrow) arrow.classList.toggle('expanded', !list.hidden);
+    return;
 }
 
 // ---- Config ----

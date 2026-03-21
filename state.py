@@ -427,9 +427,9 @@ def get_async_job(job_id: str) -> dict | None:
     return _async_job_state.get_async_job(job_id)
 
 
-def create_scan_job(job_id: str) -> None:
+def create_scan_job(job_id: str, initial_data: dict | None = None) -> None:
     """Register a new in-progress scan job."""
-    _async_job_state.create_scan_job(job_id)
+    _async_job_state.create_scan_job(job_id, initial_data)
 
 
 def finish_scan_job(job_id: str, result: dict) -> None:

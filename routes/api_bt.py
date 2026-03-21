@@ -485,14 +485,37 @@ def api_bt_scan():
     """Start an async BT device scan; returns a job_id immediately."""
     if is_scan_running():
         return jsonify({"error": "A scan is already in progress"}), 409
+    data = request.get_json(silent=True) or {}
+    raw_adapter = (data.get("adapter") or "").strip()
+    adapter_value = "" if raw_adapter.lower() == "all" else raw_adapter
+    try:
+        adapter = validate_adapter(adapter_value)
+        audio_only = _coerce_scan_audio_only(data.get("audio_only"))
+        adapter_macs = _resolve_scan_adapter_macs(adapter)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
     if time.monotonic() - _last_scan_completed < _SCAN_COOLDOWN:
         remaining = int(_SCAN_COOLDOWN - (time.monotonic() - _last_scan_completed)) + 1
         return jsonify({"error": "Scan cooldown active", "retry_after": remaining}), 429
     job_id = str(uuid.uuid4())
-    create_scan_job(job_id)
-    t = threading.Thread(target=_run_bt_scan, args=(job_id,), daemon=True, name=f"bt-scan-{job_id[:8]}")
+    scan_options = _build_scan_options(adapter, audio_only, adapter_macs)
+    expected_duration = _estimate_scan_duration(adapter_macs)
+    create_scan_job(
+        job_id,
+        {
+            "scan_options": scan_options,
+            "expected_duration": expected_duration,
+            "started_at": time.time(),
+        },
+    )
+    t = threading.Thread(
+        target=_run_bt_scan,
+        args=(job_id, adapter, audio_only),
+        daemon=True,
+        name=f"bt-scan-{job_id[:8]}",
+    )
     t.start()
-    return jsonify({"job_id": job_id})
+    return jsonify({"job_id": job_id, "scan_options": scan_options, "expected_duration": expected_duration})
 
 
 @bt_bp.route("/api/bt/scan/result/<job_id>", methods=["GET"])
@@ -502,8 +525,25 @@ def api_bt_scan_result(job_id: str):
     if job is None:
         return jsonify({"error": "Job not found"}), 404
     if job["status"] == "running":
-        return jsonify({"status": "running"})
-    return jsonify({"status": "done", "devices": job.get("devices", []), "error": job.get("error")})
+        return jsonify(
+            {
+                "status": "running",
+                "scan_options": job.get("scan_options", {}),
+                "expected_duration": job.get("expected_duration"),
+                "started_at": job.get("started_at"),
+            }
+        )
+    return jsonify(
+        {
+            "status": "done",
+            "devices": job.get("devices", []),
+            "error": job.get("error"),
+            "scan_options": job.get("scan_options", {}),
+            "expected_duration": job.get("expected_duration"),
+            "started_at": job.get("started_at"),
+            "stats": job.get("stats", {}),
+        }
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -514,6 +554,78 @@ _MAX_SCAN_RESULTS = 50
 
 _last_scan_completed: float = 0.0
 _SCAN_COOLDOWN = 10.0  # seconds between scans
+_SCAN_BASE_DURATION = 15
+_SCAN_ADAPTER_OVERHEAD = 2
+
+
+def _coerce_scan_audio_only(value) -> bool:
+    """Return a normalized audio-only flag from request JSON."""
+    if value is None:
+        return True
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off"}:
+            return False
+    raise ValueError("Invalid audio_only flag")
+
+
+def _resolve_scan_adapter_macs(adapter: str) -> "list[str]":
+    """Resolve a selected adapter identifier into bluetoothctl adapter MACs."""
+    adapter_macs = list_bt_adapters()
+    if not adapter:
+        return adapter_macs
+    normalized = adapter.strip()
+    if not normalized:
+        return adapter_macs
+    if normalized.lower() == "all":
+        return adapter_macs
+    if normalized.lower().startswith("hci"):
+        try:
+            idx = int(normalized[3:])
+        except ValueError as exc:
+            raise ValueError("Invalid adapter identifier") from exc
+        if idx < 0 or idx >= len(adapter_macs):
+            raise ValueError("Selected adapter is not available")
+        return [adapter_macs[idx].upper()]
+    normalized = normalized.upper()
+    if normalized not in {mac.upper() for mac in adapter_macs}:
+        raise ValueError("Selected adapter is not available")
+    return [normalized]
+
+
+def _build_scan_options(adapter: str, audio_only: bool, adapter_macs: "list[str]") -> dict:
+    """Build the public scan-options payload returned to the UI."""
+    return {
+        "adapter": adapter,
+        "audio_only": audio_only,
+        "adapter_scope": "all" if not adapter else "selected",
+        "adapter_count": max(len(adapter_macs), 1 if adapter else 0),
+    }
+
+
+def _estimate_scan_duration(adapter_macs: "list[str]") -> int:
+    """Return a client-facing timed-scan duration hint in seconds."""
+    return _SCAN_BASE_DURATION + max(len(adapter_macs) - 1, 0) * _SCAN_ADAPTER_OVERHEAD
+
+
+def _classify_audio_capability(out: str) -> bool:
+    """Return True when bluetoothctl info suggests the device is audio-capable."""
+    out_lower = out.lower()
+    class_m = re.search(r"\bClass:\s+(0x[0-9A-Fa-f]+)", out)
+    if class_m:
+        cls = int(class_m.group(1), 16)
+        return ((cls >> 8) & 0x1F) == 4
+    if any(u in out_lower for u in _AUDIO_UUIDS):
+        return True
+    if "UUID:" in out:
+        return False
+    return True
 
 
 def _run_bluetoothctl_scan(adapter_macs: "list[str]") -> str:
@@ -615,10 +727,10 @@ def _resolve_unnamed_devices(all_macs: "set[str]", names: "dict[str, str]") -> N
                 names[mac] = name
 
 
-def _enrich_audio_device(mac: str, names: "dict[str, str]") -> "dict | None":
-    """Return device info dict if the device is audio-capable, else None."""
+def _enrich_scan_device(mac: str, names: "dict[str, str]", audio_only: bool = True) -> "dict | None":
+    """Return scan device info, optionally filtering out non-audio rows."""
     if not validate_mac(mac):
-        return {"mac": mac, "name": mac}
+        return {"mac": mac, "name": mac, "audio_capable": True}
     try:
         r = subprocess.run(
             ["bluetoothctl", "info", mac],
@@ -627,34 +739,27 @@ def _enrich_audio_device(mac: str, names: "dict[str, str]") -> "dict | None":
             timeout=4,
         )
         out = r.stdout
-        out_lower = out.lower()
     except Exception:
-        return {"mac": mac, "name": names.get(mac, mac)}
+        return {"mac": mac, "name": names.get(mac, mac), "audio_capable": True}
     if mac not in names:
         nm = re.search(r"\bName:\s+(.*)", out)
         if nm:
             n = nm.group(1).strip()
             if n and not re.match(r"^[0-9A-Fa-f]{2}[-:]", n):
                 names[mac] = n
-    class_m = re.search(r"Class:\s+(0x[0-9A-Fa-f]+)", out)
-    if class_m:
-        cls = int(class_m.group(1), 16)
-        if (cls >> 8) & 0x1F != 4:
-            return None
-    elif any(u in out_lower for u in _AUDIO_UUIDS):
-        pass
-    elif "UUID:" in out:
+    audio_capable = _classify_audio_capability(out)
+    if audio_only and not audio_capable:
         return None
-    return {"mac": mac, "name": names.get(mac, mac)}
+    return {"mac": mac, "name": names.get(mac, mac), "audio_capable": audio_capable}
 
 
-def _run_bt_scan(job_id: str) -> None:
+def _run_bt_scan(job_id: str, adapter: str = "", audio_only: bool = True) -> None:
     """Perform BT scan in a background thread and store result in state."""
     global _last_scan_completed
     # Apply cooldown to every scan attempt, even if later enrichment fails.
     _last_scan_completed = time.monotonic()
     try:
-        adapter_macs = list_bt_adapters()
+        adapter_macs = _resolve_scan_adapter_macs(adapter)
 
         result_stdout = _run_bluetoothctl_scan(adapter_macs)
         seen, names, device_adapter, active_macs = _parse_scan_output(result_stdout)
@@ -669,7 +774,7 @@ def _run_bt_scan(job_id: str) -> None:
         devices = []
         if all_macs:
             with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
-                futures = {pool.submit(_enrich_audio_device, mac, names): mac for mac in all_macs}
+                futures = {pool.submit(_enrich_scan_device, mac, names, audio_only): mac for mac in all_macs}
                 for fut in concurrent.futures.as_completed(futures):
                     result = fut.result()
                     if result is not None:
@@ -677,9 +782,22 @@ def _run_bt_scan(job_id: str) -> None:
 
         for d in devices:
             d["adapter"] = device_adapter.get(d["mac"], "")
+            d["supports_import"] = bool(d.get("audio_capable", True))
+            d["kind"] = "audio" if d.get("audio_capable", True) else "other"
 
         devices.sort(key=lambda d: (d["name"] == d["mac"], d["name"]))
-        finish_scan_job(job_id, {"devices": devices})
+        finish_scan_job(
+            job_id,
+            {
+                "devices": devices,
+                "stats": {
+                    "total_candidates": len(all_macs),
+                    "returned_candidates": len(devices),
+                    "audio_candidates": sum(1 for d in devices if d.get("audio_capable", True)),
+                    "audio_only": audio_only,
+                },
+            },
+        )
     except Exception:
         logger.exception("BT scan failed")
         finish_scan_job(job_id, {"devices": [], "error": "Bluetooth scan failed"})

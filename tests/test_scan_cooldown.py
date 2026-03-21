@@ -82,6 +82,7 @@ def test_scan_allowed_after_cooldown_expires(client):
     with (
         patch("routes.api_bt.is_scan_running", return_value=False),
         patch("routes.api_bt.time") as mock_time,
+        patch("routes.api_bt.list_bt_adapters", return_value=["AA:BB:CC:DD:EE:01", "AA:BB:CC:DD:EE:02"]),
         patch("routes.api_bt.threading.Thread") as mock_thread,
     ):
         mock_time.monotonic.return_value = 100.0
@@ -95,6 +96,9 @@ def test_scan_allowed_after_cooldown_expires(client):
         assert resp.status_code == 200
         data = resp.get_json()
         assert "job_id" in data
+        assert data["scan_options"]["audio_only"] is True
+        assert data["scan_options"]["adapter_scope"] == "all"
+        assert data["expected_duration"] == 17
 
 
 def test_concurrent_scan_returns_409(client):
@@ -103,6 +107,62 @@ def test_concurrent_scan_returns_409(client):
         resp = client.post("/api/bt/scan")
         assert resp.status_code == 409
         assert "already in progress" in resp.get_json()["error"].lower()
+
+
+def test_scan_accepts_selected_adapter_and_audio_filter(client):
+    """POST /api/bt/scan forwards selected adapter and audio-only options."""
+    with (
+        patch("routes.api_bt.is_scan_running", return_value=False),
+        patch("routes.api_bt.time") as mock_time,
+        patch("routes.api_bt.list_bt_adapters", return_value=["AA:BB:CC:DD:EE:01", "AA:BB:CC:DD:EE:02"]),
+        patch("routes.api_bt.threading.Thread") as mock_thread,
+    ):
+        mock_time.monotonic.return_value = 100.0
+        _mod = importlib.import_module("routes.api_bt")
+        _mod._last_scan_completed = 80.0
+        mock_thread.return_value.start = lambda: None
+
+        resp = client.post("/api/bt/scan", json={"adapter": "hci1", "audio_only": False})
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["scan_options"] == {
+            "adapter": "hci1",
+            "audio_only": False,
+            "adapter_scope": "selected",
+            "adapter_count": 1,
+        }
+        assert data["expected_duration"] == 15
+        assert mock_thread.call_args.kwargs["target"] is _mod._run_bt_scan
+        assert mock_thread.call_args.kwargs["args"][1:] == ("hci1", False)
+
+
+def test_scan_rejects_invalid_adapter_identifier(client):
+    """POST /api/bt/scan rejects malformed adapter values."""
+    with patch("routes.api_bt.is_scan_running", return_value=False):
+        resp = client.post("/api/bt/scan", json={"adapter": "hciX"})
+        assert resp.status_code == 400
+        assert "invalid adapter" in resp.get_json()["error"].lower()
+
+
+def test_scan_result_running_includes_metadata(client):
+    """GET /api/bt/scan/result exposes running scan metadata for the modal."""
+    with patch(
+        "routes.api_bt.get_scan_job",
+        return_value={
+            "status": "running",
+            "scan_options": {"adapter": "", "audio_only": True, "adapter_scope": "all", "adapter_count": 2},
+            "expected_duration": 17,
+            "started_at": 123.0,
+        },
+    ):
+        resp = client.get("/api/bt/scan/result/test-job")
+        assert resp.status_code == 200
+        assert resp.get_json() == {
+            "status": "running",
+            "scan_options": {"adapter": "", "audio_only": True, "adapter_scope": "all", "adapter_count": 2},
+            "expected_duration": 17,
+            "started_at": 123.0,
+        }
 
 
 def test_cooldown_timestamp_updated_after_scan(client):
