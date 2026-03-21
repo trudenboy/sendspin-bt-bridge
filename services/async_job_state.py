@@ -48,11 +48,13 @@ def get_async_job(job_id: str) -> dict[str, Any] | None:
         return dict(job) if job else None
 
 
-def create_scan_job(job_id: str) -> None:
+def create_scan_job(job_id: str, initial_data: dict[str, Any] | None = None) -> None:
     """Register a new in-progress scan job."""
     with _scan_jobs_lock:
         _evict_expired_jobs(_scan_jobs, _SCAN_JOB_TTL)
         _scan_jobs[job_id] = {"status": "running", "created": _time.time()}
+        if initial_data:
+            _scan_jobs[job_id].update(initial_data)
 
 
 def finish_scan_job(job_id: str, result: dict[str, Any]) -> None:

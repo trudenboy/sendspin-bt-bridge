@@ -555,6 +555,36 @@
                                 <div class="bt-scan-modal-copy">
                                     Discover nearby speakers from the Bluetooth tab without turning temporary discovery results into a permanent Devices-page block.
                                 </div>
+                                <div class="bt-scan-toolbar">
+                                    <label class="bt-scan-field">
+                                        <span class="bt-scan-field-label">Adapter</span>
+                                        <select id="scan-adapter-select" class="bt-scan-select" onchange="_onBtScanOptionChange()">
+                                            <option value="">All adapters</option>
+                                        </select>
+                                    </label>
+                                    <label class="bt-scan-toggle">
+                                        <span>Audio devices only</span>
+                                        <span class="config-switch compact">
+                                            <input type="checkbox" id="scan-audio-only" onchange="_onBtScanOptionChange()" checked>
+                                            <span class="config-switch-track"></span>
+                                        </span>
+                                    </label>
+                                    <button type="button" class="btn btn-sm btn-secondary" id="scan-rescan-btn" onclick="startBtScan()">
+                                        <span class="btn-icon-slot ui-icon-slot" data-ui-icon="refresh" aria-hidden="true"></span><span>Rescan</span>
+                                    </button>
+                                </div>
+                                <div id="scan-progress" class="bt-scan-progress" hidden>
+                                    <div class="bt-scan-progress-copy">
+                                        <div class="bt-scan-progress-head">
+                                            <span id="scan-progress-state" class="scan-status-pill">Ready to scan</span>
+                                            <span id="scan-progress-remaining" class="bt-scan-progress-remaining">15 s</span>
+                                        </div>
+                                        <div id="scan-progress-detail" class="bt-scan-progress-detail">All adapters · Audio devices only</div>
+                                    </div>
+                                    <div class="bt-scan-progress-bar" aria-hidden="true">
+                                        <span id="scan-progress-bar-fill" class="bt-scan-progress-bar-fill"></span>
+                                    </div>
+                                </div>
                                 <div id="scan-status" class="bt-scan-status-panel"></div>
                                 <div id="scan-results-box" class="scan-results-box bt-scan-results-box" hidden>
                                     <div class="scan-results-title">Discovered devices &mdash; add to fleet or pair first</div>

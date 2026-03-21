@@ -53,6 +53,14 @@ def test_create_scan_job():
     assert "created" in job
 
 
+def test_create_scan_job_with_metadata():
+    job_id = str(uuid.uuid4())
+    state.create_scan_job(job_id, {"scan_options": {"adapter": "", "audio_only": True}})
+    job = state.get_scan_job(job_id)
+    assert job is not None
+    assert job["scan_options"]["audio_only"] is True
+
+
 def test_create_async_job():
     job_id = str(uuid.uuid4())
     state.create_async_job(job_id, "update-check")
