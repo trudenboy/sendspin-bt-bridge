@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.42.2-rc.1] - 2026-03-20
+
+### Changed
+- The compact UI system is now much more consistent across the live app: primary/secondary/icon actions, media transport controls, table-like rows, and empty states now follow a shared visual language instead of mixing several older styles.
+- Configuration, diagnostics, discovery, and device list surfaces now use denser data-row and placeholder treatments, keeping the current information architecture while making the interface feel more coherent and Home Assistant-aligned.
+- The login screen now follows the same refreshed compact styling as the main application, reducing the visual jump between authentication and the dashboard.
+
+### Fixed
+- Demo mode regains compatibility with the refreshed UI preview workflow, so local demo validation continues to work against the current Bluetooth manager behavior.
+
 ## [2.42.0-rc.23] - 2026-03-20
 
 ### Added
