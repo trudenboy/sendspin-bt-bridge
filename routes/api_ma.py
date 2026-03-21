@@ -474,12 +474,12 @@ def _save_ma_token_and_rediscover(ma_url: str, ma_token: str, username: str = ""
 # ── MA ↔ HA OAuth helpers (shared by ha-login and ha-silent-auth) ─────────
 
 
-def _get_ma_oauth_params(ma_url: str):
+def _get_ma_oauth_bootstrap(ma_url: str) -> tuple[tuple[str, str, str, str] | None, str]:
     """Resolve HA OAuth parameters from Music Assistant auth endpoints.
 
-    Supports legacy JSON responses plus newer redirect-based `/auth/authorize`
-    and JSON-RPC `auth/authorization_url` response shapes used by recent MA
-    stable/beta builds.
+    Returns a ``(oauth_params, error_message)`` tuple so callers can surface a
+    precise MA-side failure instead of falling back to a generic unsupported
+    message when the server exposes a reason.
     """
 
     def _parse_auth_url(auth_url: str):
@@ -503,6 +503,22 @@ def _get_ma_oauth_params(ma_url: str):
                 return _extract_auth_url(nested)
         return ""
 
+    def _extract_error(payload: object, fallback: str = "") -> str:
+        if isinstance(payload, str):
+            return payload.strip()
+        if isinstance(payload, dict):
+            for key in ("error", "message", "detail"):
+                value = payload.get(key)
+                if isinstance(value, str) and value.strip():
+                    return value.strip()
+                nested = _extract_error(value)
+                if nested:
+                    return nested
+            result_payload = payload.get("result")
+            if result_payload is not None:
+                return _extract_error(result_payload)
+        return str(fallback or "").strip()
+
     def _parse_response_auth_url(location: str = "", payload: object = None) -> tuple[str, str, str, str] | None:
         auth_url = _extract_auth_url(payload) or str(location or "").strip()
         if not auth_url:
@@ -512,6 +528,29 @@ def _get_ma_oauth_params(ma_url: str):
             return parsed
         return None
 
+    def _body_to_payload(body: bytes) -> tuple[object | None, str]:
+        if not body:
+            return None, ""
+        with contextlib.suppress(UnicodeDecodeError):
+            text = body.decode("utf-8").strip()
+            with contextlib.suppress(json.JSONDecodeError):
+                return json.loads(text), text
+            return None, text
+        return None, ""
+
+    def _surface_error(message: str) -> str:
+        detail = str(message or "").strip()
+        if not detail:
+            return (
+                "Music Assistant did not provide Home Assistant authentication details. "
+                "If Home Assistant login is not configured in Music Assistant, switch to Music Assistant authentication."
+            )
+        return (
+            f"Music Assistant Home Assistant auth is unavailable: {detail}. "
+            "If Home Assistant login is not configured in Music Assistant, switch to Music Assistant authentication."
+        )
+
+    errors: list[str] = []
     return_url = ma_url or "/"
 
     # 1) Current/legacy MA: GET /auth/authorize?provider_id=homeassistant[&return_url=...]
@@ -526,25 +565,25 @@ def _get_ma_oauth_params(ma_url: str):
         opener = _ur.build_opener(_NoRedirectHandler)
         with opener.open(req, timeout=10) as resp:
             body = resp.read()
-            payload = None
-            if body:
-                with contextlib.suppress(json.JSONDecodeError, UnicodeDecodeError):
-                    payload = json.loads(body.decode("utf-8"))
+            payload, text = _body_to_payload(body)
             parsed = _parse_response_auth_url(
                 location=resp.headers.get("Location", "") or getattr(resp, "geturl", lambda: "")(),
                 payload=payload,
             )
             if parsed:
-                return parsed
+                return parsed, ""
+            err = _extract_error(payload, text)
+            if err:
+                errors.append(err)
     except _ue.HTTPError as exc:
         body = exc.read()
-        payload = None
-        if body:
-            with contextlib.suppress(json.JSONDecodeError, UnicodeDecodeError):
-                payload = json.loads(body.decode("utf-8"))
+        payload, text = _body_to_payload(body)
         parsed = _parse_response_auth_url(location=exc.headers.get("Location", ""), payload=payload)
         if parsed:
-            return parsed
+            return parsed, ""
+        err = _extract_error(payload, text or exc.reason)
+        if err:
+            errors.append(err)
     except Exception as exc:
         logger.debug("MA /auth/authorize bootstrap failed: %s", exc)
 
@@ -563,12 +602,28 @@ def _get_ma_oauth_params(ma_url: str):
             data = json.loads(resp.read())
             parsed = _parse_response_auth_url(payload=data)
             if parsed:
-                return parsed
+                return parsed, ""
+            err = _extract_error(data)
+            if err:
+                errors.append(err)
+    except _ue.HTTPError as exc:
+        body = exc.read()
+        payload, text = _body_to_payload(body)
+        err = _extract_error(payload, text or exc.reason)
+        if err:
+            errors.append(err)
     except Exception as exc:
         logger.debug("MA JSON-RPC auth/authorization_url failed: %s", exc)
 
-    logger.warning("MA OAuth params unavailable (HTTP authorize and JSON-RPC methods failed)")
-    return None
+    error_message = _surface_error(next((msg for msg in errors if msg), ""))
+    logger.warning("MA OAuth params unavailable (HTTP authorize and JSON-RPC methods failed): %s", error_message)
+    return None, error_message
+
+
+def _get_ma_oauth_params(ma_url: str):
+    """Backward-compatible wrapper returning only parsed OAuth parameters."""
+    oauth_info, _error = _get_ma_oauth_bootstrap(ma_url)
+    return oauth_info
 
 
 def _ha_login_flow_start(ha_url: str, client_id: str, redirect_uri: str):
@@ -1452,9 +1507,9 @@ def api_ma_ha_login():
             return jsonify({"success": False, "error": "Username and password are required"}), 400
 
         # Get OAuth state from MA
-        oauth_info = _get_ma_oauth_params(ma_url)
+        oauth_info, oauth_error = _get_ma_oauth_bootstrap(ma_url)
         if not oauth_info:
-            return jsonify({"success": False, "error": "MA does not support HA authentication"}), 400
+            return jsonify({"success": False, "error": oauth_error}), 400
         ha_url, client_id, redirect_uri, oauth_state = oauth_info
 
         # Start HA login flow

@@ -323,6 +323,31 @@ class TestGetMaOauthParams:
         assert json.loads(req.data.decode())["args"]["return_url"] == "http://ma.local:8095"
 
 
+@patch(
+    "routes.api_ma._get_ma_oauth_bootstrap",
+    return_value=(
+        None,
+        "Music Assistant Home Assistant auth is unavailable: Provider does not support OAuth or is not configured. "
+        "If Home Assistant login is not configured in Music Assistant, switch to Music Assistant authentication.",
+    ),
+)
+def test_ha_login_returns_specific_ma_oauth_error(_mock_oauth, client):
+    resp = client.post(
+        "/api/ma/ha-login",
+        json={
+            "step": "init",
+            "ma_url": "http://localhost:8095",
+            "username": "user",
+            "password": "pass",
+        },
+    )
+    assert resp.status_code == 400
+    data = resp.get_json()
+    assert data["success"] is False
+    assert "Provider does not support OAuth or is not configured" in data["error"]
+    assert "switch to Music Assistant authentication" in data["error"]
+
+
 def _http_error_with_location(url: str, location: str):
     headers = Message()
     if location:
