@@ -28,7 +28,7 @@ from routes.api_config import _detect_runtime
 from services.async_job_state import create_async_job, finish_async_job, get_async_job
 from services.bridge_runtime_state import get_main_loop
 from services.device_registry import get_device_registry_snapshot
-from services.ha_addon import get_ma_addon_internal_ingress_url
+from services.ha_addon import KNOWN_MA_ADDON_SLUGS, get_ma_addon_internal_ingress_url
 from services.ma_artwork import has_valid_artwork_signature
 from services.ma_monitor import solo_queue_candidates
 from services.ma_runtime_state import (
@@ -626,6 +626,65 @@ def _get_ma_oauth_params(ma_url: str):
     return oauth_info
 
 
+def _get_ma_server_info(ma_url: str) -> dict[str, object]:
+    """Return parsed ``/info`` payload from MA, or an empty dict on failure."""
+    try:
+        with _ur.urlopen(f"{ma_url.rstrip('/')}/info", timeout=10) as resp:
+            data = json.loads(resp.read())
+        return data if isinstance(data, dict) else {}
+    except Exception as exc:
+        logger.debug("MA /info lookup failed for %s: %s", ma_url, exc)
+        return {}
+
+
+def _ma_reports_homeassistant_addon(ma_url: str) -> bool:
+    """Return True when the MA server reports HA add-on mode."""
+    return bool(_get_ma_server_info(ma_url).get("homeassistant_addon"))
+
+
+def _derive_ha_urls_from_ma(ma_url: str) -> list[str]:
+    """Derive likely HA Core base URLs from an MA add-on URL."""
+    parsed = _up.urlparse(str(ma_url or "").strip())
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+        return []
+
+    candidates: list[str] = []
+
+    def _add(url: str) -> None:
+        normalized = str(url or "").rstrip("/")
+        if normalized and normalized not in candidates:
+            candidates.append(normalized)
+
+    if parsed.scheme == "https":
+        _add(f"https://{parsed.hostname}")
+    _add(f"{parsed.scheme}://{parsed.hostname}:8123")
+    return candidates
+
+
+def _exchange_ha_auth_code(ha_url: str, code: str, client_id: str) -> dict[str, object] | None:
+    """Exchange a Home Assistant OAuth authorization code for tokens."""
+    body = _up.urlencode(
+        {
+            "grant_type": "authorization_code",
+            "code": code,
+            "client_id": client_id,
+        }
+    ).encode()
+    req = _ur.Request(
+        f"{ha_url.rstrip('/')}/auth/token",
+        data=body,
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        method="POST",
+    )
+    try:
+        with _ur.urlopen(req, timeout=15) as resp:
+            payload = json.loads(resp.read())
+        return payload if isinstance(payload, dict) else None
+    except Exception as exc:
+        logger.warning("HA auth/token exchange failed: %s", exc)
+        return None
+
+
 def _ha_login_flow_start(ha_url: str, client_id: str, redirect_uri: str):
     """Start HA login_flow for the MA OAuth flow."""
 
@@ -716,11 +775,12 @@ def _ma_callback_exchange(ma_url: str, code: str, oauth_state: str):
         return None
 
 
-def _get_ha_user_via_ws(ha_token: str):
+def _get_ha_user_via_ws(ha_token: str, ha_url: str | None = None):
     """Connect to HA WebSocket with an access token and return user info.
 
     Returns dict with keys: id, name, is_admin (or None on failure).
-    Uses the internal Supervisor DNS name in addon mode.
+    Uses the internal Supervisor DNS name in addon mode unless a remote HA URL
+    is supplied explicitly.
     """
     try:
         from websockets.sync.client import connect as ws_connect  # noqa: F401 — availability check
@@ -728,7 +788,14 @@ def _get_ha_user_via_ws(ha_token: str):
         logger.warning("websockets.sync.client not available")
         return None
 
-    ha_ws_url = "ws://homeassistant:8123/api/websocket"
+    if ha_url:
+        parsed = _up.urlparse(ha_url.rstrip("/"))
+        if parsed.scheme == "https":
+            ha_ws_url = f"wss://{parsed.netloc}/api/websocket"
+        else:
+            ha_ws_url = f"ws://{parsed.netloc}/api/websocket"
+    else:
+        ha_ws_url = "ws://homeassistant:8123/api/websocket"
     try:
         with _ws_connect(ha_ws_url, close_timeout=5) as ws:
             hello = json.loads(ws.recv(timeout=5))
@@ -756,6 +823,122 @@ def _get_ha_user_via_ws(ha_token: str):
             }
     except Exception as exc:
         logger.warning("HA WS user lookup failed: %s", exc)
+        return None
+
+
+def _get_ha_supervisor_addon_info_via_ws(ha_token: str, slug: str, ha_url: str | None = None):
+    """Fetch HA Supervisor addon info over the HA WebSocket API."""
+    try:
+        from websockets.sync.client import connect as ws_connect  # noqa: F401 — availability check
+    except ImportError:
+        logger.warning("websockets.sync.client not available")
+        return None
+
+    if ha_url:
+        parsed = _up.urlparse(ha_url.rstrip("/"))
+        if parsed.scheme == "https":
+            ha_ws_url = f"wss://{parsed.netloc}/api/websocket"
+        else:
+            ha_ws_url = f"ws://{parsed.netloc}/api/websocket"
+    else:
+        ha_ws_url = "ws://homeassistant:8123/api/websocket"
+
+    try:
+        with _ws_connect(ha_ws_url, close_timeout=5) as ws:
+            hello = json.loads(ws.recv(timeout=5))
+            if hello.get("type") != "auth_required":
+                logger.warning("HA WS unexpected hello: %s", hello.get("type"))
+                return None
+
+            ws.send(json.dumps({"type": "auth", "access_token": ha_token}))
+            auth_resp = json.loads(ws.recv(timeout=5))
+            if auth_resp.get("type") != "auth_ok":
+                logger.warning("HA WS auth failed: %s", auth_resp.get("message", ""))
+                return None
+
+            ws.send(
+                json.dumps(
+                    {
+                        "id": 1,
+                        "type": "supervisor/api",
+                        "endpoint": f"/addons/{slug}/info",
+                        "method": "get",
+                    }
+                )
+            )
+            addon_resp = json.loads(ws.recv(timeout=10))
+            if addon_resp.get("type") != "result":
+                logger.debug("HA supervisor/api for %s returned unexpected packet: %r", slug, addon_resp)
+                return None
+            if addon_resp.get("success") is False:
+                logger.debug("HA supervisor/api lookup failed for %s: %r", slug, addon_resp.get("error"))
+                return None
+            result = addon_resp.get("result")
+            if isinstance(result, dict) and result.get("slug"):
+                return result
+            logger.debug("HA supervisor/api for %s returned non-addon result: %r", slug, result)
+            return None
+    except Exception as exc:
+        logger.debug("HA supervisor/api lookup failed for %s over WS: %s", slug, exc)
+        return None
+
+
+def _create_ha_ingress_session_via_ws(ha_token: str, ha_url: str | None = None) -> str | None:
+    """Create an HA ingress session over the HA WebSocket API."""
+    try:
+        from websockets.sync.client import connect as ws_connect  # noqa: F401 — availability check
+    except ImportError:
+        logger.warning("websockets.sync.client not available")
+        return None
+
+    if ha_url:
+        parsed = _up.urlparse(ha_url.rstrip("/"))
+        if parsed.scheme == "https":
+            ha_ws_url = f"wss://{parsed.netloc}/api/websocket"
+        else:
+            ha_ws_url = f"ws://{parsed.netloc}/api/websocket"
+    else:
+        ha_ws_url = "ws://homeassistant:8123/api/websocket"
+
+    try:
+        with _ws_connect(ha_ws_url, close_timeout=5) as ws:
+            hello = json.loads(ws.recv(timeout=5))
+            if hello.get("type") != "auth_required":
+                logger.warning("HA WS unexpected hello: %s", hello.get("type"))
+                return None
+
+            ws.send(json.dumps({"type": "auth", "access_token": ha_token}))
+            auth_resp = json.loads(ws.recv(timeout=5))
+            if auth_resp.get("type") != "auth_ok":
+                logger.warning("HA WS auth failed: %s", auth_resp.get("message", ""))
+                return None
+
+            ws.send(
+                json.dumps(
+                    {
+                        "id": 1,
+                        "type": "supervisor/api",
+                        "endpoint": "/ingress/session",
+                        "method": "post",
+                    }
+                )
+            )
+            session_resp = json.loads(ws.recv(timeout=10))
+            if session_resp.get("type") != "result":
+                logger.debug("HA ingress session returned unexpected packet: %r", session_resp)
+                return None
+            if session_resp.get("success") is False:
+                logger.debug("HA ingress session creation failed: %r", session_resp.get("error"))
+                return None
+            result = session_resp.get("result")
+            if isinstance(result, dict):
+                session = str(result.get("session") or "").strip()
+                if session:
+                    return session
+            logger.debug("HA ingress session creation returned unexpected result: %r", result)
+            return None
+    except Exception as exc:
+        logger.debug("HA ingress session creation failed over WS: %s", exc)
         return None
 
 
@@ -818,6 +1001,119 @@ def _create_ma_token_via_ingress(ha_user_id: str, ha_username: str, ha_display_n
     except Exception as exc:
         logger.warning("MA Ingress JSONRPC failed (%s): %s", url, exc)
         return None
+
+
+def _find_ma_ingress_url_via_ha(ha_url: str, ha_token: str) -> str:
+    """Resolve the MA add-on ingress URL via Home Assistant's hassio proxy."""
+    headers = {"Authorization": f"Bearer {ha_token}"}
+    for slug in KNOWN_MA_ADDON_SLUGS:
+        data = _get_ha_supervisor_addon_info_via_ws(ha_token, slug, ha_url=ha_url)
+        try:
+            if not isinstance(data, dict):
+                req = _ur.Request(f"{ha_url.rstrip('/')}/api/hassio/addons/{slug}/info", headers=headers, method="GET")
+                with _ur.urlopen(req, timeout=10) as resp:
+                    payload = json.loads(resp.read())
+                data = payload.get("data") if isinstance(payload, dict) else None
+                if not isinstance(data, dict) and isinstance(payload, dict) and payload.get("slug"):
+                    data = payload
+                if not isinstance(data, dict):
+                    logger.debug("HA hassio addon lookup for %s returned non-addon payload: %r", slug, payload)
+                    continue
+            if data.get("state") != "started":
+                continue
+            ingress_path = str(data.get("ingress_url") or data.get("ingress_entry") or data.get("webui") or "").rstrip(
+                "/"
+            )
+            if ingress_path:
+                if ingress_path.startswith("http://") or ingress_path.startswith("https://"):
+                    return ingress_path
+                return f"{ha_url.rstrip('/')}{ingress_path}"
+        except Exception as exc:
+            logger.debug("HA hassio addon lookup failed for %s: %s", slug, exc)
+    return ""
+
+
+def _create_ma_token_via_ha_proxy(ha_url: str, ha_token: str) -> str | None:
+    """Create a long-lived MA token through the HA ingress proxy."""
+    base_url = _find_ma_ingress_url_via_ha(ha_url, ha_token)
+    if not base_url:
+        logger.warning("MA ingress URL unavailable via Home Assistant proxy")
+        return None
+    ingress_session = _create_ha_ingress_session_via_ws(ha_token, ha_url=ha_url)
+    if not ingress_session:
+        logger.warning("HA ingress session unavailable for MA token creation")
+        return None
+
+    payload = json.dumps(
+        {
+            "command": "auth/token/create",
+            "args": {"name": _ma_token_name()},
+            "message_id": "1",
+        }
+    ).encode()
+    req = _ur.Request(
+        f"{base_url}/api",
+        data=payload,
+        headers={
+            "Content-Type": "application/json",
+            "Cookie": f"ingress_session={ingress_session}",
+        },
+        method="POST",
+    )
+    try:
+        with _ur.urlopen(req, timeout=15) as resp:
+            raw = resp.read().decode()
+            data = json.loads(raw)
+    except Exception as exc:
+        logger.warning("MA token creation via HA ingress failed: %s", exc)
+        return None
+
+    if isinstance(data, str):
+        return data
+    if isinstance(data, dict):
+        if data.get("error"):
+            logger.warning("MA ingress proxy token/create error: %s", data.get("error"))
+            return None
+        token = data.get("result")
+        if isinstance(token, str) and token:
+            return token
+    logger.warning("MA ingress proxy token/create unexpected result: %s", data)
+    return None
+
+
+def _complete_ma_login_via_ha_token(
+    ha_url: str, ha_token: str, ma_url: str
+) -> tuple[dict[str, object] | None, str | None]:
+    """Turn a Home Assistant access token into a validated MA long-lived token."""
+    ha_user = _get_ha_user_via_ws(ha_token, ha_url=ha_url)
+    if not ha_user:
+        return None, "Could not verify Home Assistant user"
+
+    ma_token = _create_ma_token_via_ha_proxy(ha_url, ha_token)
+    if not ma_token:
+        return None, "Could not create Music Assistant token via Home Assistant ingress"
+
+    if not _validate_ma_token(ma_url, ma_token):
+        return None, "Music Assistant token created but validation failed"
+
+    result = dict(ha_user)
+    result["ma_token"] = ma_token
+    return result, None
+
+
+def _complete_ma_login_via_ha_code(
+    ha_url: str, code: str, client_id: str, ma_url: str
+) -> tuple[dict[str, object] | None, str | None]:
+    """Exchange an HA auth code and mint a validated MA token."""
+    token_payload = _exchange_ha_auth_code(ha_url, code, client_id)
+    if not token_payload:
+        return None, "Could not exchange Home Assistant authorization code"
+
+    access_token = str(token_payload.get("access_token") or "").strip()
+    if not access_token:
+        return None, "Home Assistant did not return an access token"
+
+    return _complete_ma_login_via_ha_token(ha_url, access_token, ma_url)
 
 
 _HA_AUTH_PAGE_HTML = """\
@@ -939,10 +1235,10 @@ async function submitCreds(e) {
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({step: 'init', username: user, password: pass, ma_url: MA_URL}),
     });
-    var data = await resp.json();
-    if (data.success && data.step === 'mfa') {
-      haState = data;
-      haState.username = user;
+      var data = await resp.json();
+      if (data.success && data.step === 'mfa') {
+        haState = data;
+        haState.username = user;
       var label = document.getElementById('mfa-label');
       label.textContent = 'Enter code from ' + (data.mfa_module_name || 'authenticator app');
       showStep('mfa');
@@ -966,15 +1262,15 @@ async function submitMfa(e) {
   setLoading('mfa-btn', true);
   setMsg('mfa-msg', '', false);
   try {
-    var resp = await fetch(API_BASE + '/api/ma/ha-login', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({
-        step: 'mfa', flow_id: haState.flow_id, ha_url: haState.ha_url,
-        client_id: haState.client_id, state: haState.state,
-        code: code, username: haState.username, ma_url: MA_URL,
-      }),
-    });
+      var resp = await fetch(API_BASE + '/api/ma/ha-login', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          step: 'mfa', flow_id: haState.flow_id, ha_url: haState.ha_url,
+          client_id: haState.client_id, state: haState.state, auth_mode: haState.auth_mode,
+          code: code, username: haState.username, ma_url: MA_URL,
+        }),
+      });
     var data = await resp.json();
     if (data.success && data.step === 'done') {
       onSuccess(data);
@@ -1508,38 +1804,106 @@ def api_ma_ha_login():
 
         # Get OAuth state from MA
         oauth_info, oauth_error = _get_ma_oauth_bootstrap(ma_url)
-        if not oauth_info:
-            return jsonify({"success": False, "error": oauth_error}), 400
-        ha_url, client_id, redirect_uri, oauth_state = oauth_info
+        if oauth_info:
+            ha_url, client_id, redirect_uri, oauth_state = oauth_info
 
-        # Start HA login flow
-        flow = _ha_login_flow_start(ha_url, client_id, redirect_uri)
+            # Start HA login flow
+            flow = _ha_login_flow_start(ha_url, client_id, redirect_uri)
+            if not flow or not flow.get("flow_id"):
+                return jsonify({"success": False, "error": "Could not start HA authentication"}), 502
+
+            flow_id = flow["flow_id"]
+
+            # Submit credentials
+            result = _ha_login_flow_step(ha_url, flow_id, {"username": username, "password": password}, client_id)
+            if not result:
+                return jsonify({"success": False, "error": "Authentication service unavailable"}), 502
+
+            if result.get("type") == "create_entry":
+                # No MFA — got auth code directly
+                ha_code = result.get("result", "")
+                ma_session_token = _ma_callback_exchange(ma_url, ha_code, oauth_state)
+                if not ma_session_token:
+                    return jsonify({"success": False, "error": "Failed to exchange HA code for MA token"}), 500
+
+                ma_token = _exchange_for_long_lived_token(ma_url, ma_session_token)
+                _save_ma_token_and_rediscover(ma_url, ma_token, username, auth_provider="ha")
+
+                return jsonify(
+                    {
+                        "success": True,
+                        "step": "done",
+                        "url": ma_url,
+                        "username": username,
+                        "message": "Connected to Music Assistant via Home Assistant.",
+                    }
+                )
+
+            if result.get("type") == "form" and result.get("step_id") == "mfa":
+                placeholders = result.get("description_placeholders") or {}
+                return jsonify(
+                    {
+                        "success": True,
+                        "step": "mfa",
+                        "auth_mode": "ma_oauth",
+                        "flow_id": flow_id,
+                        "ha_url": ha_url,
+                        "client_id": client_id,
+                        "state": oauth_state,
+                        "mfa_module_id": placeholders.get("mfa_module_id", "totp"),
+                        "mfa_module_name": placeholders.get("mfa_module_name", "Authenticator app"),
+                    }
+                )
+
+            # Credential error
+            errors = result.get("errors", {})
+            err_msg = "Invalid credentials" if errors.get("base") == "invalid_auth" else "Authentication failed"
+            return jsonify({"success": False, "error": err_msg}), 401
+
+        if not _ma_reports_homeassistant_addon(ma_url):
+            return jsonify({"success": False, "error": oauth_error}), 400
+
+        ha_urls = _derive_ha_urls_from_ma(ma_url)
+        if not ha_urls:
+            return jsonify({"success": False, "error": oauth_error}), 400
+
+        flow = None
+        ha_url = ""
+        client_id = ""
+        for candidate in ha_urls:
+            candidate_client_id = f"{candidate}/"
+            candidate_redirect_uri = candidate_client_id
+            started = _ha_login_flow_start(candidate, candidate_client_id, candidate_redirect_uri)
+            if started and started.get("flow_id"):
+                flow = started
+                ha_url = candidate
+                client_id = candidate_client_id
+                break
+
         if not flow or not flow.get("flow_id"):
-            return jsonify({"success": False, "error": "Could not start HA authentication"}), 502
+            return jsonify({"success": False, "error": oauth_error}), 400
 
         flow_id = flow["flow_id"]
-
-        # Submit credentials
         result = _ha_login_flow_step(ha_url, flow_id, {"username": username, "password": password}, client_id)
         if not result:
             return jsonify({"success": False, "error": "Authentication service unavailable"}), 502
 
         if result.get("type") == "create_entry":
-            # No MFA — got auth code directly
-            ha_code = result.get("result", "")
-            ma_session_token = _ma_callback_exchange(ma_url, ha_code, oauth_state)
-            if not ma_session_token:
-                return jsonify({"success": False, "error": "Failed to exchange HA code for MA token"}), 500
+            ha_code = str(result.get("result", "") or "")
+            auth_result, auth_error = _complete_ma_login_via_ha_code(ha_url, ha_code, client_id, ma_url)
+            if not auth_result:
+                return jsonify({"success": False, "error": auth_error or "Authentication failed"}), 502
 
-            ma_token = _exchange_for_long_lived_token(ma_url, ma_session_token)
-            _save_ma_token_and_rediscover(ma_url, ma_token, username, auth_provider="ha")
+            ma_token = str(auth_result.get("ma_token") or "")
+            ha_username = str(auth_result.get("name") or username)
+            _save_ma_token_and_rediscover(ma_url, ma_token, ha_username, auth_provider="ha")
 
             return jsonify(
                 {
                     "success": True,
                     "step": "done",
                     "url": ma_url,
-                    "username": username,
+                    "username": ha_username,
                     "message": "Connected to Music Assistant via Home Assistant.",
                 }
             )
@@ -1550,16 +1914,16 @@ def api_ma_ha_login():
                 {
                     "success": True,
                     "step": "mfa",
+                    "auth_mode": "ha_direct",
                     "flow_id": flow_id,
                     "ha_url": ha_url,
                     "client_id": client_id,
-                    "state": oauth_state,
+                    "state": "",
                     "mfa_module_id": placeholders.get("mfa_module_id", "totp"),
                     "mfa_module_name": placeholders.get("mfa_module_name", "Authenticator app"),
                 }
             )
 
-        # Credential error
         errors = result.get("errors", {})
         err_msg = "Invalid credentials" if errors.get("base") == "invalid_auth" else "Authentication failed"
         return jsonify({"success": False, "error": err_msg}), 401
@@ -1569,10 +1933,11 @@ def api_ma_ha_login():
         ha_url = (data.get("ha_url") or "").strip().rstrip("/")
         client_id = (data.get("client_id") or "").strip()
         oauth_state = (data.get("state") or "").strip()
+        auth_mode = (data.get("auth_mode") or "ma_oauth").strip()
         code = (data.get("code") or "").replace(" ", "").replace("-", "")
         username = (data.get("username") or "").strip()
 
-        if not flow_id or not ha_url or not oauth_state or not code:
+        if not flow_id or not ha_url or not code or (auth_mode != "ha_direct" and not oauth_state):
             return jsonify({"success": False, "error": "Missing required fields"}), 400
 
         result = _ha_login_flow_step(ha_url, flow_id, {"code": code}, client_id)
@@ -1581,19 +1946,27 @@ def api_ma_ha_login():
 
         if result.get("type") == "create_entry":
             ha_code = result.get("result", "")
-            ma_session_token = _ma_callback_exchange(ma_url, ha_code, oauth_state)
-            if not ma_session_token:
-                return jsonify({"success": False, "error": "Failed to exchange HA code for MA token"}), 500
+            if auth_mode == "ha_direct":
+                auth_result, auth_error = _complete_ma_login_via_ha_code(ha_url, ha_code, client_id, ma_url)
+                if not auth_result:
+                    return jsonify({"success": False, "error": auth_error or "Authentication failed"}), 502
+                ma_token = str(auth_result.get("ma_token") or "")
+                saved_username = str(auth_result.get("name") or username or "HA user")
+            else:
+                ma_session_token = _ma_callback_exchange(ma_url, ha_code, oauth_state)
+                if not ma_session_token:
+                    return jsonify({"success": False, "error": "Failed to exchange HA code for MA token"}), 500
+                ma_token = _exchange_for_long_lived_token(ma_url, ma_session_token)
+                saved_username = username or "HA user"
 
-            ma_token = _exchange_for_long_lived_token(ma_url, ma_session_token)
-            _save_ma_token_and_rediscover(ma_url, ma_token, username, auth_provider="ha")
+            _save_ma_token_and_rediscover(ma_url, ma_token, saved_username, auth_provider="ha")
 
             return jsonify(
                 {
                     "success": True,
                     "step": "done",
                     "url": ma_url,
-                    "username": username or "HA user",
+                    "username": saved_username,
                     "message": "Connected to Music Assistant via Home Assistant.",
                 }
             )

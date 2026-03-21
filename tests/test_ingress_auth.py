@@ -111,6 +111,90 @@ class TestGetHaUserViaWs:
         assert _get_ha_user_via_ws("any_token") is None
 
 
+class TestGetHaSupervisorAddonInfoViaWs:
+    @patch("websockets.sync.client.connect")
+    def test_success_returns_addon_info(self, mock_connect):
+        ws = MagicMock()
+        ws.recv = MagicMock(
+            side_effect=[
+                json.dumps({"type": "auth_required"}),
+                json.dumps({"type": "auth_ok"}),
+                json.dumps(
+                    {
+                        "id": 1,
+                        "type": "result",
+                        "success": True,
+                        "result": {
+                            "slug": "d5369777_music_assistant_beta",
+                            "state": "started",
+                            "ingress_url": "/api/hassio_ingress/ma-token/",
+                        },
+                    }
+                ),
+            ]
+        )
+        ws.__enter__ = MagicMock(return_value=ws)
+        ws.__exit__ = MagicMock(return_value=False)
+        mock_connect.return_value = ws
+
+        from routes.api_ma import _get_ha_supervisor_addon_info_via_ws
+
+        result = _get_ha_supervisor_addon_info_via_ws(
+            "ha-token",
+            "d5369777_music_assistant_beta",
+            ha_url="http://ha.local:8123",
+        )
+
+        assert result is not None
+        assert result["slug"] == "d5369777_music_assistant_beta"
+        sent = json.loads(ws.send.call_args_list[1][0][0])
+        assert sent["type"] == "supervisor/api"
+        assert sent["endpoint"] == "/addons/d5369777_music_assistant_beta/info"
+
+    @patch("websockets.sync.client.connect", side_effect=ConnectionError("no HA"))
+    def test_connection_error_returns_none(self, _mock_connect):
+        from routes.api_ma import _get_ha_supervisor_addon_info_via_ws
+
+        assert _get_ha_supervisor_addon_info_via_ws("ha-token", "slug", ha_url="http://ha.local:8123") is None
+
+
+class TestCreateHaIngressSessionViaWs:
+    @patch("websockets.sync.client.connect")
+    def test_success_returns_session(self, mock_connect):
+        ws = MagicMock()
+        ws.recv = MagicMock(
+            side_effect=[
+                json.dumps({"type": "auth_required"}),
+                json.dumps({"type": "auth_ok"}),
+                json.dumps(
+                    {
+                        "id": 1,
+                        "type": "result",
+                        "success": True,
+                        "result": {"session": "ingress-session-token"},
+                    }
+                ),
+            ]
+        )
+        ws.__enter__ = MagicMock(return_value=ws)
+        ws.__exit__ = MagicMock(return_value=False)
+        mock_connect.return_value = ws
+
+        from routes.api_ma import _create_ha_ingress_session_via_ws
+
+        result = _create_ha_ingress_session_via_ws("ha-token", ha_url="http://ha.local:8123")
+        assert result == "ingress-session-token"
+        sent = json.loads(ws.send.call_args_list[1][0][0])
+        assert sent["type"] == "supervisor/api"
+        assert sent["endpoint"] == "/ingress/session"
+
+    @patch("websockets.sync.client.connect", side_effect=ConnectionError("no HA"))
+    def test_connection_error_returns_none(self, _mock_connect):
+        from routes.api_ma import _create_ha_ingress_session_via_ws
+
+        assert _create_ha_ingress_session_via_ws("ha-token", ha_url="http://ha.local:8123") is None
+
+
 # ---------------------------------------------------------------------------
 # _create_ma_token_via_ingress
 # ---------------------------------------------------------------------------
@@ -158,6 +242,99 @@ class TestCreateMaTokenViaIngress:
         from routes.api_ma import _create_ma_token_via_ingress
 
         assert _create_ma_token_via_ingress("user123", "user") is None
+
+
+class TestCreateMaTokenViaHaProxy:
+    @patch("routes.api_ma._get_ha_supervisor_addon_info_via_ws", return_value=None)
+    @patch("routes.api_ma._create_ha_ingress_session_via_ws", return_value="ingress-session-token")
+    @patch("urllib.request.urlopen")
+    def test_success_returns_token_for_nested_addon_payload(self, mock_urlopen, _mock_session, _mock_ws_lookup):
+        addon_resp = MagicMock()
+        addon_resp.read.return_value = json.dumps(
+            {
+                "data": {
+                    "state": "started",
+                    "ingress_url": "/api/hassio_ingress/ma-token",
+                }
+            }
+        ).encode()
+        addon_resp.__enter__ = MagicMock(return_value=addon_resp)
+        addon_resp.__exit__ = MagicMock(return_value=False)
+
+        token_resp = MagicMock()
+        token_resp.read.return_value = json.dumps({"result": "ma_long_lived_token"}).encode()
+        token_resp.__enter__ = MagicMock(return_value=token_resp)
+        token_resp.__exit__ = MagicMock(return_value=False)
+
+        mock_urlopen.side_effect = [addon_resp, token_resp]
+
+        from routes.api_ma import _create_ma_token_via_ha_proxy
+
+        result = _create_ma_token_via_ha_proxy("http://ha.local:8123", "ha-access-token")
+        assert result == "ma_long_lived_token"
+
+        info_req = mock_urlopen.call_args_list[0][0][0]
+        assert info_req.full_url == "http://ha.local:8123/api/hassio/addons/d5369777_music_assistant/info"
+        assert info_req.get_header("Authorization") == "Bearer ha-access-token"
+
+        token_req = mock_urlopen.call_args_list[1][0][0]
+        assert token_req.full_url == "http://ha.local:8123/api/hassio_ingress/ma-token/api"
+        assert token_req.get_header("Cookie") == "ingress_session=ingress-session-token"
+
+    @patch(
+        "routes.api_ma._get_ha_supervisor_addon_info_via_ws",
+        return_value={
+            "slug": "d5369777_music_assistant_beta",
+            "state": "started",
+            "ingress_url": "/api/hassio_ingress/ma-token/",
+        },
+    )
+    @patch("routes.api_ma._create_ha_ingress_session_via_ws", return_value="ingress-session-token")
+    @patch("urllib.request.urlopen")
+    def test_success_returns_token_for_ws_supervisor_payload(self, mock_urlopen, _mock_session, _mock_ws_lookup):
+        token_resp = MagicMock()
+        token_resp.read.return_value = json.dumps({"result": "ma_long_lived_token"}).encode()
+        token_resp.__enter__ = MagicMock(return_value=token_resp)
+        token_resp.__exit__ = MagicMock(return_value=False)
+
+        mock_urlopen.return_value = token_resp
+
+        from routes.api_ma import _create_ma_token_via_ha_proxy
+
+        result = _create_ma_token_via_ha_proxy("http://ha.local:8123", "ha-access-token")
+        assert result == "ma_long_lived_token"
+
+        token_req = mock_urlopen.call_args_list[0][0][0]
+        assert token_req.full_url == "http://ha.local:8123/api/hassio_ingress/ma-token/api"
+        assert token_req.get_header("Cookie") == "ingress_session=ingress-session-token"
+
+    @patch("routes.api_ma._get_ha_supervisor_addon_info_via_ws", return_value=None)
+    @patch("routes.api_ma._create_ha_ingress_session_via_ws", return_value="ingress-session-token")
+    @patch("urllib.request.urlopen")
+    def test_returns_none_when_ingress_url_missing(self, mock_urlopen, _mock_session, _mock_ws_lookup):
+        addon_resp = MagicMock()
+        addon_resp.read.return_value = json.dumps({"data": {"state": "stopped"}}).encode()
+        addon_resp.__enter__ = MagicMock(return_value=addon_resp)
+        addon_resp.__exit__ = MagicMock(return_value=False)
+        mock_urlopen.return_value = addon_resp
+
+        from routes.api_ma import _create_ma_token_via_ha_proxy
+
+        assert _create_ma_token_via_ha_proxy("http://ha.local:8123", "ha-access-token") is None
+
+    @patch(
+        "routes.api_ma._get_ha_supervisor_addon_info_via_ws",
+        return_value={
+            "slug": "d5369777_music_assistant_beta",
+            "state": "started",
+            "ingress_url": "/api/hassio_ingress/ma-token/",
+        },
+    )
+    @patch("routes.api_ma._create_ha_ingress_session_via_ws", return_value=None)
+    def test_returns_none_when_ingress_session_unavailable(self, _mock_session, _mock_ws_lookup):
+        from routes.api_ma import _create_ma_token_via_ha_proxy
+
+        assert _create_ma_token_via_ha_proxy("http://ha.local:8123", "ha-access-token") is None
 
 
 # ---------------------------------------------------------------------------
@@ -331,7 +508,8 @@ class TestGetMaOauthParams:
         "If Home Assistant login is not configured in Music Assistant, switch to Music Assistant authentication.",
     ),
 )
-def test_ha_login_returns_specific_ma_oauth_error(_mock_oauth, client):
+@patch("routes.api_ma._ma_reports_homeassistant_addon", return_value=False)
+def test_ha_login_returns_specific_ma_oauth_error(_mock_addon, _mock_oauth, client):
     resp = client.post(
         "/api/ma/ha-login",
         json={
@@ -346,6 +524,53 @@ def test_ha_login_returns_specific_ma_oauth_error(_mock_oauth, client):
     assert data["success"] is False
     assert "Provider does not support OAuth or is not configured" in data["error"]
     assert "switch to Music Assistant authentication" in data["error"]
+
+
+@patch("routes.api_ma._save_ma_token_and_rediscover")
+@patch("routes.api_ma._validate_ma_token", return_value=True)
+@patch("routes.api_ma._create_ma_token_via_ha_proxy", return_value="ma-token")
+@patch("routes.api_ma._get_ha_user_via_ws", return_value={"id": "u1", "name": "admin", "is_admin": True})
+@patch("routes.api_ma._exchange_ha_auth_code", return_value={"access_token": "ha-access"})
+@patch(
+    "routes.api_ma._ha_login_flow_step",
+    return_value={"type": "create_entry", "result": "ha-auth-code"},
+)
+@patch("routes.api_ma._ha_login_flow_start", return_value={"flow_id": "flow123"})
+@patch("routes.api_ma._derive_ha_urls_from_ma", return_value=["http://ha.local:8123"])
+@patch("routes.api_ma._ma_reports_homeassistant_addon", return_value=True)
+@patch(
+    "routes.api_ma._get_ma_oauth_bootstrap",
+    return_value=(None, "Music Assistant Home Assistant auth is unavailable"),
+)
+def test_ha_login_falls_back_to_direct_ha_flow_for_addon_ma(
+    _mock_oauth,
+    _mock_addon,
+    _mock_urls,
+    _mock_flow_start,
+    _mock_flow_step,
+    _mock_exchange,
+    _mock_ws_user,
+    _mock_create,
+    _mock_validate,
+    _mock_save,
+    client,
+):
+    resp = client.post(
+        "/api/ma/ha-login",
+        json={
+            "step": "init",
+            "ma_url": "http://localhost:8095",
+            "username": "user",
+            "password": "pass",
+        },
+    )
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["success"] is True
+    assert data["step"] == "done"
+    assert data["username"] == "admin"
+    assert "Connected to Music Assistant via Home Assistant." in data["message"]
+    _mock_save.assert_called_once_with("http://localhost:8095", "ma-token", "admin", auth_provider="ha")
 
 
 def _http_error_with_location(url: str, location: str):
