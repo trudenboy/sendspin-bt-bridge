@@ -6332,6 +6332,29 @@ function _renderOnboardingStepDetails(details) {
     return '<div class="onboarding-step-detail-list">' + items.join('') + '</div>';
 }
 
+function _getOnboardingStepFacts(details, limit) {
+    if (!details || typeof details !== 'object') return [];
+    return Object.keys(details).filter(function(key) {
+        return _hasOnboardingStepDetailValue(details[key]);
+    }).slice(0, limit || 2).map(function(key) {
+        return {
+            label: _onboardingStepDetailLabel(key),
+            value: _onboardingStepDetailValue(details[key]),
+        };
+    });
+}
+
+function _renderOnboardingStepFacts(details, limit) {
+    var facts = _getOnboardingStepFacts(details, limit);
+    if (!facts.length) return '';
+    return '<div class="onboarding-step-facts">' + facts.map(function(fact) {
+        return '<span class="onboarding-step-fact">' +
+            '<span class="onboarding-step-fact-label">' + escHtml(fact.label) + ':</span>' +
+            '<span class="onboarding-step-fact-value">' + escHtml(fact.value) + '</span>' +
+        '</span>';
+    }).join('') + '</div>';
+}
+
 function _renderOnboardingStepGuidance(actions) {
     if (!actions || !actions.length) return '';
     return '<ul class="onboarding-step-guidance">' + actions.map(function(action) {
@@ -6388,35 +6411,61 @@ function _renderOnboardingCheckpoints(checkpoints) {
 function _renderOnboardingSteps(steps) {
     if (!steps || !steps.length) return '';
     return steps.map(function(step, index) {
-        var interactive = _hasInteractiveOnboardingContent(step);
         var badgeTone = step.status === 'error' ? 'error' : step.status === 'warning' ? 'warning' : 'success';
+        var showSummary = step.stage === 'current' && !!step.summary;
+        var summaryHtml = showSummary
+            ? '<div class="onboarding-step-summary">' + escHtml(step.summary || '') + '</div>'
+            : '';
+        var factsHtml = step.stage === 'current'
+            ? _renderOnboardingStepFacts(step.details || {}, 2)
+            : '';
+        var noteHtml = step.stage === 'current' && step.actions && step.actions.length
+            ? '<div class="onboarding-step-note">' + escHtml(step.actions[0] || '') + '</div>'
+            : '';
+        var actionHtml = step.stage === 'current' && _stepHasOnboardingAction(step)
+            ? '<div class="onboarding-step-actions">' +
+                _renderGuidanceActionLink(step.recommended_action, {primary: true}) +
+            '</div>'
+            : '';
         var indicator = step.stage === 'complete'
             ? '<span class="onboarding-step-indicator-icon">' + _uiIconSvg('check', 'ui-icon-svg') + '</span>'
             : '<span class="onboarding-step-indicator-number">' + escHtml(String(index + 1)) + '</span>';
         var indicatorLabel = step.stage === 'complete' ? 'Completed step' : 'Step ' + String(index + 1);
-        var headerHtml = '<div class="onboarding-step-indicator" aria-label="' + escHtmlAttr(indicatorLabel) + '">' + indicator + '</div>' +
+        return '<div class="onboarding-step is-' + escHtml(step.stage || 'upcoming') + '">' +
+            '<div class="onboarding-step-indicator" aria-label="' + escHtmlAttr(indicatorLabel) + '">' + indicator + '</div>' +
             '<div class="onboarding-step-main">' +
-                '<div class="onboarding-step-title-row">' +
-                    '<div class="onboarding-step-title">' + escHtml(step.title || step.key || 'Step') + '</div>' +
-                    _renderMetaStatusBadgeHtml({
-                        className: 'onboarding-step-badge',
-                        tone: badgeTone,
-                        label: _onboardingStageLabel(step),
-                        title: step.summary || _onboardingStageLabel(step),
-                    }) +
-                '</div>' +
-                (!interactive ? '<div class="onboarding-step-summary">' + escHtml(step.summary || '') + '</div>' : '') +
+                '<div class="onboarding-step-title">' + escHtml(step.title || step.key || 'Step') + '</div>' +
+                summaryHtml +
+                factsHtml +
+                noteHtml +
+                actionHtml +
             '</div>' +
-            (interactive ? '<span class="onboarding-step-expander" aria-hidden="true"></span>' : '');
-        if (!interactive) {
-            return '<div class="onboarding-step is-' + escHtml(step.stage || 'upcoming') + '">' + headerHtml + '</div>';
-        }
-        return '<details class="onboarding-step onboarding-step--interactive is-' + escHtml(step.stage || 'upcoming') + '"' +
-            (step.stage === 'current' ? ' open' : '') + '>' +
-            '<summary class="onboarding-step-toggle">' + headerHtml + '</summary>' +
-            '<div class="onboarding-step-body">' + _renderOnboardingStepBody(step) + '</div>' +
-        '</details>';
+            _renderMetaStatusBadgeHtml({
+                className: 'onboarding-step-badge',
+                tone: badgeTone,
+                label: _onboardingStageLabel(step),
+                title: step.summary || _onboardingStageLabel(step),
+            }) +
+        '</div>';
     }).join('');
+}
+
+function _renderOnboardingProgressSummary(checklist) {
+    if (!checklist) return '';
+    var totalSteps = Number(checklist.total_steps || 0);
+    var completedSteps = Number(checklist.completed_steps || 0);
+    var parts = [];
+    if (totalSteps > 0) {
+        parts.push('<span class="onboarding-progress-pill onboarding-progress-pill--strong">' +
+            escHtml(String(completedSteps)) + '/' + escHtml(String(totalSteps)) + ' complete' +
+        '</span>');
+    }
+    if (checklist.current_step_title) {
+        parts.push('<span class="onboarding-progress-pill">Next: ' + escHtml(checklist.current_step_title) + '</span>');
+    } else if ((checklist.progress_percent || 0) >= 100) {
+        parts.push('<span class="onboarding-progress-pill">Setup complete</span>');
+    }
+    return parts.join('');
 }
 
 function _setOnboardingAssistantBanner(card, options) {
@@ -6450,17 +6499,11 @@ function _setOnboardingAssistantBanner(card, options) {
     var checklist = card.checklist || {};
     titleEl.textContent = card.headline || checklist.headline || 'Setup checklist';
     textEl.textContent = card.summary || checklist.summary || 'Review the bridge setup checklist.';
-    progressEl.hidden = false;
-    progressEl.innerHTML =
-        '<div class="onboarding-progress-bar">' +
-            '<div class="onboarding-progress-fill" style="width:' + Math.max(0, Math.min(100, checklist.progress_percent || 0)) + '%"></div>' +
-        '</div>' +
-        '<div class="onboarding-progress-text">' +
-            escHtml(String(checklist.completed_steps || 0)) + '/' + escHtml(String(checklist.total_steps || 0)) +
-            ' complete · ' + escHtml(String(checklist.progress_percent || 0)) + '%' +
-        '</div>';
-    checkpointsEl.hidden = !(checklist.checkpoints && checklist.checkpoints.length);
-    checkpointsEl.innerHTML = _renderOnboardingCheckpoints(checklist.checkpoints || []);
+    var progressHtml = _renderOnboardingProgressSummary(checklist);
+    progressEl.hidden = !progressHtml;
+    progressEl.innerHTML = progressHtml;
+    checkpointsEl.hidden = true;
+    checkpointsEl.innerHTML = '';
     stepsEl.innerHTML = _renderOnboardingSteps((checklist.steps || []).slice(0, 5));
 
     var secondaryActions = card.secondary_actions || [];

@@ -837,27 +837,26 @@ body {
             margin-top: 10px;
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 8px;
             flex-wrap: wrap;
         }
-        .onboarding-progress-bar {
-            position: relative;
-            width: min(280px, 100%);
-            height: 8px;
-            border-radius: 999px;
-            overflow: hidden;
-            background: rgba(148, 163, 184, 0.22);
+        .onboarding-progress-pill {
+            display: inline-flex;
+            align-items: center;
+            min-height: var(--badge-min-height);
+            padding: var(--badge-padding-y) var(--badge-padding-x);
+            border-radius: var(--badge-radius);
+            border: 1px solid rgba(128, 145, 171, 0.18);
+            background: rgba(148, 163, 184, 0.08);
+            font-size: var(--badge-font-size);
+            font-weight: var(--badge-font-weight);
+            line-height: var(--badge-line-height);
+            color: var(--secondary-text-color);
         }
-        .onboarding-progress-fill {
-            height: 100%;
-            border-radius: inherit;
-            background: var(--notice-accent);
-            transition: width 0.2s ease;
-        }
-        .onboarding-progress-text {
-            font-size: 12px;
-            font-weight: 700;
-            color: var(--primary-text-color);
+        .onboarding-progress-pill--strong {
+            background: rgba(3, 155, 229, 0.1);
+            border-color: rgba(3, 155, 229, 0.16);
+            color: var(--info-color, #039be5);
         }
         .onboarding-checkpoints {
             display: flex;
@@ -894,16 +893,16 @@ body {
         }
         .onboarding-step-list {
             display: grid;
-            gap: 8px;
-            margin-top: 12px;
+            gap: 6px;
+            margin-top: 10px;
         }
         .onboarding-step {
             display: grid;
-            grid-template-columns: auto minmax(0, 1fr);
-            gap: 10px;
+            grid-template-columns: 24px minmax(0, 1fr) auto;
+            gap: 8px;
             align-items: start;
-            padding: 10px 12px;
-            border-radius: 10px;
+            padding: 8px 10px;
+            border-radius: var(--ui-control-radius);
             background: rgba(148, 163, 184, 0.08);
             border: 1px solid rgba(148, 163, 184, 0.16);
         }
@@ -919,6 +918,8 @@ body {
             opacity: 0.92;
         }
         .onboarding-step-main {
+            display: grid;
+            gap: 4px;
             min-width: 0;
         }
         .onboarding-step-indicator {
@@ -966,17 +967,50 @@ body {
         .onboarding-step-title {
             font-size: 12px;
             font-weight: 700;
+            line-height: 1.35;
             color: var(--primary-text-color);
         }
         .onboarding-step-badge {
+            align-self: start;
+            justify-self: end;
             letter-spacing: 0.01em;
             text-transform: uppercase;
         }
         .onboarding-step-summary {
-            margin-top: 4px;
+            margin-top: 0;
             font-size: 12px;
             line-height: 1.45;
             color: var(--secondary-text-color);
+        }
+        .onboarding-step-note {
+            font-size: 12px;
+            line-height: 1.45;
+            color: var(--secondary-text-color);
+        }
+        .onboarding-step-facts {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+        .onboarding-step-fact {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            min-width: 0;
+            padding: 2px 8px;
+            border-radius: 999px;
+            border: 1px solid rgba(128, 145, 171, 0.18);
+            background: rgba(148, 163, 184, 0.07);
+            font-size: 11px;
+            line-height: 1.35;
+            color: var(--secondary-text-color);
+        }
+        .onboarding-step-fact-label {
+            font-weight: 700;
+            color: var(--primary-text-color);
+        }
+        .onboarding-step-fact-value {
+            min-width: 0;
         }
         .onboarding-step--interactive {
             display: block;
@@ -6638,7 +6672,8 @@ body {
 
         .onboarding-step-summary,
         .onboarding-step-guidance,
-        .onboarding-step-detail-value {
+        .onboarding-step-detail-value,
+        .onboarding-step-note {
             font-size: 12px;
         }
 
@@ -7744,6 +7779,15 @@ body {
             .notice-card-actions {
                 grid-column: 1 / -1;
                 justify-content: flex-start;
+            }
+
+            .onboarding-step {
+                grid-template-columns: 24px minmax(0, 1fr);
+            }
+
+            .onboarding-step-badge {
+                grid-column: 2;
+                justify-self: start;
             }
 
             .filter-bar,
