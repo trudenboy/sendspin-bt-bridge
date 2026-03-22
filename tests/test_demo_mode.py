@@ -435,6 +435,7 @@ async def test_demo_install_exposes_demo_logs_diagnostics_and_bugreport(monkeypa
     assert [device["name"] for device in report["bt_device_info"]] == [device["name"] for device in DEMO_BT_DEVICE_INFO]
     assert "BUG REPORT — FULL DIAGNOSTICS" in bugreport_data["text_full"]
     assert "ONBOARDING ASSISTANT" in bugreport_data["text_full"]
+    assert "### Diagnostics summary" in bugreport_data["suggested_description"]
 
 
 def test_demo_index_shows_demo_user_and_ma_token_notice_by_default(monkeypatch):

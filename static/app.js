@@ -8223,6 +8223,10 @@ function _openBugReport(e) {
             reportShort = data.markdown_short || '';
             reportFull = data.text_full || '';
             reportData = data.report || {};
+            var suggestedDescription = (data.suggested_description || '').trim();
+            if (suggestedDescription && !descInput.value.trim()) {
+                descInput.value = suggestedDescription;
+            }
             previewBox.textContent = reportFull || 'No data available';
             submitBtn.innerHTML = '<span class="bugreport-btn-icon">' + _BR_ICON_GITHUB + '</span> Submit to GitHub';
             dataReady = true;

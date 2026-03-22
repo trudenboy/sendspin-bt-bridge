@@ -1033,6 +1033,104 @@ def _collect_bt_device_info() -> list[dict]:
     return results
 
 
+def _bugreport_log_message(line: str) -> str:
+    text = (line or "").strip()
+    parts = text.split(" - ", 3)
+    if len(parts) == 4:
+        return parts[3].strip()
+    return text
+
+
+def _build_bugreport_suggested_description(masked: dict) -> str:
+    """Generate a short editable issue description from masked diagnostics."""
+    diag = masked.get("diagnostics", {})
+    devices = diag.get("devices", [])
+    subprocs = masked.get("subprocesses", [])
+    ma_info = diag.get("ma_integration", {})
+    recovery = diag.get("recovery_assistant", {})
+    recent_issue_logs = masked.get("recent_issue_logs", [])
+
+    issues: list[str] = []
+
+    def add_issue(text: str) -> None:
+        text = (text or "").strip()
+        if not text or text in issues:
+            return
+        issues.append(text)
+
+    recent_messages: list[str] = []
+    for line in recent_issue_logs[-2:]:
+        message = _bugreport_log_message(line)
+        if message and message not in recent_messages:
+            recent_messages.append(message)
+    if recent_messages:
+        add_issue(f"Recent logs show: {'; '.join(recent_messages)}.")
+
+    if devices:
+        bt_total = len(devices)
+        bt_connected = sum(1 for device in devices if device.get("connected"))
+        if bt_connected < bt_total:
+            add_issue(f"Bluetooth health is degraded: {bt_connected}/{bt_total} configured devices are connected.")
+        errored_devices = [
+            device.get("name") or device.get("mac") or "Unknown device"
+            for device in devices
+            if device.get("last_error")
+        ]
+        if errored_devices:
+            add_issue(f"Devices reporting recent errors: {', '.join(errored_devices[:3])}.")
+
+    if subprocs:
+        alive_count = sum(1 for proc in subprocs if proc.get("alive"))
+        if alive_count < len(subprocs):
+            add_issue(f"Bridge subprocess health is degraded: {alive_count}/{len(subprocs)} device daemons are alive.")
+        reconnecting = [proc.get("name") or "Unknown device" for proc in subprocs if proc.get("reconnecting")]
+        if reconnecting:
+            add_issue(f"Devices currently reconnecting: {', '.join(reconnecting[:3])}.")
+
+    if not diag.get("dbus_available", True):
+        add_issue("D-Bus is unavailable, so Bluetooth control may not be working correctly.")
+
+    bluetooth_daemon = str(diag.get("bluetooth_daemon") or "").strip().lower()
+    if bluetooth_daemon and bluetooth_daemon not in {"active", "unknown"}:
+        add_issue(f"The bluetooth daemon reports status `{bluetooth_daemon}`.")
+
+    if ma_info.get("configured") and not ma_info.get("connected"):
+        add_issue("Music Assistant is configured but not currently connected.")
+
+    recovery_issues = recovery.get("issues") or recovery.get("issue_groups") or []
+    if recovery_issues:
+        first_issue = recovery_issues[0] if isinstance(recovery_issues[0], dict) else {}
+        title = first_issue.get("title") or first_issue.get("headline") or first_issue.get("summary")
+        if title:
+            add_issue(f"Recovery guidance highlights: {title}.")
+    elif isinstance(recovery.get("summary"), dict):
+        summary_headline = recovery["summary"].get("headline")
+        if summary_headline:
+            add_issue(f"Recovery guidance highlights: {summary_headline}.")
+
+    if not issues:
+        issues.append("No obvious failures were extracted from the attached diagnostics yet.")
+
+    lines = [
+        "Auto-generated from the attached diagnostics. Please review and edit before submitting.",
+        "",
+        "### Diagnostics summary",
+    ]
+    lines.extend(f"- {issue}" for issue in issues)
+    lines.extend(
+        [
+            "",
+            "### What I was doing",
+            "",
+            "### What I expected",
+            "",
+            "### What happened",
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
 @status_bp.route("/api/bugreport")
 def api_bugreport():
     """Assemble a bug report: short summary for URL + full file for download."""
@@ -1131,11 +1229,13 @@ def api_bugreport():
 
         # --- Full plain-text report (for downloadable file) ---
         text_full = _build_full_text_report(masked, title="BUG REPORT — FULL DIAGNOSTICS")
+        suggested_description = _build_bugreport_suggested_description(masked)
 
         return jsonify(
             {
                 "markdown_short": markdown_short,
                 "text_full": text_full,
+                "suggested_description": suggested_description,
                 "report": masked,
             }
         )

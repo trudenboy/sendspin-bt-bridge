@@ -611,6 +611,96 @@ def test_api_bugreport_uses_issue_worthy_logs_in_summary(client, monkeypatch):
         "2026-03-17 18:00:01,000 - root - WARNING - daemon stderr: ALSA setup failed",
         "2026-03-17 18:00:02,000 - root - ERROR - daemon crashed",
     ]
+    assert "### Diagnostics summary" in data["suggested_description"]
+    assert "Recent logs show: daemon stderr: ALSA setup failed; daemon crashed." in data["suggested_description"]
+    assert "Music Assistant is configured but not currently connected." not in data["suggested_description"]
+
+
+def test_api_bugreport_suggested_description_uses_runtime_health_signals(client, monkeypatch):
+    import routes.api_status as api_status_mod
+
+    monkeypatch.setattr(
+        api_status_mod,
+        "api_diagnostics",
+        lambda: SimpleNamespace(
+            get_json=lambda: {
+                "devices": [
+                    {
+                        "name": "Kitchen",
+                        "mac": "AA:BB:CC:DD:EE:FF",
+                        "connected": False,
+                        "last_error": "sink missing",
+                    },
+                    {
+                        "name": "Office",
+                        "mac": "11:22:33:44:55:66",
+                        "connected": True,
+                        "last_error": None,
+                    },
+                ],
+                "ma_integration": {
+                    "configured": True,
+                    "connected": False,
+                    "version": "2.7.0",
+                    "syncgroups": [],
+                },
+                "sinks": [],
+                "sink_inputs": [],
+                "dbus_available": False,
+                "bluetooth_daemon": "inactive",
+                "onboarding_assistant": {},
+                "recovery_assistant": {
+                    "issues": [
+                        {
+                            "severity": "warning",
+                            "title": "Kitchen is disconnected",
+                        }
+                    ]
+                },
+            }
+        ),
+    )
+    monkeypatch.setattr(
+        api_status_mod,
+        "_collect_environment",
+        lambda: {
+            "python": "3.12.0 test",
+            "platform": "Linux-test",
+            "arch": "x86_64",
+            "bluez": "5.72",
+            "audio_server": "PulseAudio",
+            "process_rss_mb": 42,
+        },
+    )
+    monkeypatch.setattr(
+        api_status_mod,
+        "_collect_subprocess_info",
+        lambda: [
+            {"name": "Kitchen", "alive": False, "reconnecting": True},
+            {"name": "Office", "alive": True, "reconnecting": False},
+        ],
+    )
+    monkeypatch.setattr(api_status_mod, "_sanitized_config", lambda: {})
+    monkeypatch.setattr(api_status_mod, "_collect_bt_device_info", lambda: [])
+    monkeypatch.setattr(
+        api_status_mod,
+        "_collect_recent_logs",
+        lambda n=100: [
+            "2026-03-17 18:00:02,000 - root - ERROR - daemon crashed",
+        ],
+    )
+
+    resp = client.get("/api/bugreport")
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert "Bluetooth health is degraded: 1/2 configured devices are connected." in data["suggested_description"]
+    assert "Bridge subprocess health is degraded: 1/2 device daemons are alive." in data["suggested_description"]
+    assert "Devices currently reconnecting: Kitchen." in data["suggested_description"]
+    assert "D-Bus is unavailable" in data["suggested_description"]
+    assert "bluetooth daemon reports status `inactive`." in data["suggested_description"]
+    assert "Music Assistant is configured but not currently connected." in data["suggested_description"]
+    assert "Recovery guidance highlights: Kitchen is disconnected." in data["suggested_description"]
 
 
 def test_api_bugreport_redacts_oauth_tokens_and_runtime_state(client, monkeypatch):
