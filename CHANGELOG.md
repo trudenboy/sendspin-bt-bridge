@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.42.2] - 2026-03-22
+
+### Added
+- The Bluetooth scan modal now exposes adapter selection, an explicit audio-only filter, and a dedicated rescan action so multi-adapter discovery is easier to control.
+- Onboarding now recognizes when every configured speaker has been manually released and offers direct reclaim actions so playback can be resumed without hunting through the configuration screens first.
+
+### Changed
+- The compact UI system is now much more consistent across the live app, including the login screen: primary/secondary/icon actions, media transport controls, table-like rows, empty states, badges, chips, and guidance surfaces now follow a clearer shared design language instead of mixing several older styles.
+- Shared design-system foundations are now more explicit across notices, configuration, toolbars, and guidance surfaces: spacing, typography, focus-ring, layout, count-badge, action-menu, configuration-header, and notice-copy shells are reused instead of being defined as scattered local overrides.
+- Bluetooth discovery and management surfaces now present richer scan metadata and a more coherent workflow, with the scan dialog and paired-device actions aligned to the shared compact modal/action system used elsewhere in the interface.
+
+### Fixed
+- Scan results now stay aligned with the selected discovery scope, non-audio Bluetooth candidates are surfaced more honestly when the audio-only filter is disabled, and the modal copy now explains the real operator workflow more clearly.
+- Guidance cards that opt into `show_by_default` now auto-open consistently from the header entry point, and interactive/passive badges now use more consistent borders, hover feedback, cursor behavior, and compact control typography.
+- Demo mode regains compatibility with the refreshed UI preview workflow, so local demo validation continues to work against the current Bluetooth manager behavior.
+- Home Assistant login failures against Music Assistant now return the actual MA-side bootstrap reason when HA OAuth is unavailable, and the UI guidance now tells operators to switch to direct Music Assistant authentication when HA login is not configured there.
+- Standalone Home Assistant login against Music Assistant add-ons now completes again after TOTP by falling back to direct HA login flow, resolving MA ingress through HA Supervisor APIs, and creating the final MA token with an `ingress_session` cookie instead of a plain HA bearer token.
+
 ## [2.42.2-rc.7] - 2026-03-21
 
 ### Fixed
