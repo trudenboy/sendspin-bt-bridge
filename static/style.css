@@ -644,6 +644,53 @@ body {
             min-width: 0;
             white-space: nowrap;
         }
+        .health-indicator .guidance-health-action {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            min-height: 28px;
+            padding: 0 10px;
+            border-radius: 9px;
+            border: 1px solid rgba(255,255,255,.22);
+            background: rgba(255,255,255,.08);
+            color: rgba(255,255,255,.94);
+            cursor: pointer;
+            font: inherit;
+            font-size: 12px;
+            font-weight: 600;
+            line-height: 1;
+            white-space: nowrap;
+            transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+        }
+        .health-indicator .guidance-health-action:hover:not(:disabled) {
+            background: rgba(255,255,255,.16);
+            border-color: rgba(255,255,255,.28);
+            transform: translateY(-1px);
+        }
+        .health-indicator .guidance-health-action[aria-expanded="true"] {
+            background: rgba(255,255,255,.18);
+            border-color: rgba(255,255,255,.3);
+        }
+        .health-indicator .guidance-health-action:focus-visible {
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(255,255,255,.18);
+        }
+        .health-indicator .guidance-health-action-label {
+            display: inline-flex;
+            align-items: center;
+        }
+        .health-indicator .guidance-health-action-icon {
+            width: 14px;
+            height: 14px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0.9;
+        }
+        .health-indicator .guidance-health-action-icon .ui-icon-svg {
+            width: 14px;
+            height: 14px;
+        }
         .version-info { text-align: right; font-size: 12px; color: var(--app-header-text-color); opacity: 0.95; }
         #system-info { color: rgba(255,255,255,0.8) !important; }
 
@@ -828,6 +875,20 @@ body {
         .onboarding-card {
             grid-template-columns: auto minmax(0, 1fr) auto;
             align-items: start;
+        }
+        .onboarding-card.is-collapsed {
+            align-items: center;
+        }
+        .onboarding-card.is-collapsed .notice-card-copy {
+            gap: 2px;
+        }
+        .onboarding-card.is-collapsed .notice-card-text {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .onboarding-card.is-collapsed .notice-card-actions {
+            align-self: center;
         }
         .recovery-card {
             grid-template-columns: auto minmax(0, 1fr) auto;
@@ -5109,6 +5170,7 @@ body {
             display: flex;
             align-items: center;
             gap: 10px;
+            flex-wrap: wrap;
             padding: 12px 14px;
             border-radius: 10px;
             border: 1px solid var(--divider-color);
@@ -5130,6 +5192,12 @@ body {
         .panel-status-text {
             font-size: 13px;
             line-height: 1.5;
+            flex: 1 1 220px;
+            min-width: 0;
+        }
+        .panel-status-action {
+            margin-left: auto;
+            flex-shrink: 0;
         }
         .ma-auth-stack {
             display: flex;
@@ -5632,6 +5700,9 @@ body {
             .onboarding-card {
                 grid-template-columns: 1fr;
             }
+            .onboarding-card.is-collapsed .notice-card-text {
+                white-space: normal;
+            }
             .onboarding-progress-bar {
                 width: 100%;
             }
@@ -5697,6 +5768,9 @@ body {
             .config-footer {
                 flex-direction: column;
                 align-items: stretch;
+            }
+            .panel-status-action {
+                margin-left: 0;
             }
             .config-footer-actions {
                 width: 100%;
@@ -6445,6 +6519,10 @@ body {
 
         .notice-card-actions {
             gap: var(--ui-message-action-gap);
+        }
+
+        .onboarding-toggle-action {
+            flex-shrink: 0;
         }
 
         .notice-card-action,
@@ -7783,6 +7861,9 @@ body {
 
             .onboarding-step {
                 grid-template-columns: 24px minmax(0, 1fr);
+            }
+            .onboarding-card.is-collapsed .notice-card-text {
+                white-space: normal;
             }
 
             .onboarding-step-badge {

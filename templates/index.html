@@ -608,25 +608,24 @@
 
                     <div class="config-card-stack">
                         <div id="ma-connect-panel" class="config-settings-card">
-                            <div class="config-card-header config-card-header--split ui-split">
+                            <div class="config-card-header ui-stack ui-stack--sm">
                                 <div>
                                     <div class="config-card-title">Connection status</div>
-                                    <p class="config-card-subtitle">Current Music Assistant auth state for this bridge, with quick access to reconfigure login.</p>
+                                    <p class="config-card-subtitle">Current Music Assistant auth state for this bridge, with quick access to reconfigure credentials when needed.</p>
                                 </div>
-                                <a href="#" id="ma-reconfigure" class="config-inline-link" hidden
-                                   onclick="event.preventDefault();toggleMaForm(true)">Reconfigure</a>
                             </div>
 
                             <div id="ma-status-bar" class="panel-status panel-status--neutral">
                                 <span id="ma-status-icon" class="panel-status-icon ui-icon-slot" data-ui-icon="status-neutral" aria-hidden="true"></span>
                                 <span id="ma-status-text" class="panel-status-text">Not connected</span>
+                                <button type="button" id="ma-reconfigure" class="btn btn-sm btn-secondary panel-status-action" hidden onclick="return openMaTokenSettings()">Reconfigure</button>
                             </div>
                         </div>
 
-                        <div class="config-settings-card">
+                        <div id="ma-auth-card" class="config-settings-card">
                             <div class="config-card-header ui-stack ui-stack--sm">
                                 <div class="config-card-title">Sign in &amp; token</div>
-                                <p class="config-card-subtitle">Discover a server, request a token, or paste one manually.</p>
+                                <p class="config-card-subtitle">Discover a server, request a token, or paste one manually when you need to connect or reconfigure credentials.</p>
                             </div>
 
                             <div id="ma-conn-form" class="ma-auth-stack">

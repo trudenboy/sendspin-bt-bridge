@@ -805,6 +805,16 @@ function _uiIconSvg(kind, className) {
             '<circle cx="12" cy="12" r="7"/><path d="M12 11.5v4"/><circle cx="12" cy="8" r="1" fill="currentColor" stroke="none"/>' +
         '</svg>';
     }
+    if (kind === 'chevron-down') {
+        return '<svg' + cls + ' viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+            '<path d="m6 9 6 6 6-6"/>' +
+        '</svg>';
+    }
+    if (kind === 'chevron-up') {
+        return '<svg' + cls + ' viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+            '<path d="m6 15 6-6 6 6"/>' +
+        '</svg>';
+    }
     if (kind === 'report' || kind === 'warning') {
         return '<svg' + cls + ' viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
             '<path d="M12 3.5 3.5 19h17L12 3.5Z"></path><path d="M12 9v4.75"></path><circle cx="12" cy="17.1" r="1" fill="currentColor" stroke="none"></circle>' +
@@ -5555,6 +5565,8 @@ async function setPassword() {
 
 var _maAutoSilentAuthAttempted = false;
 var _maAutoSilentAuthFailed = false;
+var _maConnected = false;
+var _maReconfigureRequested = false;
 
 async function _pollBackgroundJob(resultUrl, options) {
     options = options || {};
@@ -6003,6 +6015,7 @@ function _dismissGuidance(preferenceKey) {
     _setGuidanceVisible(preferenceKey, false);
     _syncGuidancePreferenceControls(_lastOperatorGuidance && _lastOperatorGuidance.visibility_keys);
     _applyOperatorGuidance(_lastOperatorGuidance);
+    updateHealthIndicator(lastDevices || [], _lastOperatorGuidance || null);
     showToast('Guidance hidden. Restore it anytime in Configuration → General.', 'info');
     return false;
 }
@@ -6058,6 +6071,7 @@ function _resetGuidancePreferences() {
     _setGuidanceVisible(keys.recovery, true);
     _syncGuidancePreferenceControls(_lastOperatorGuidance && _lastOperatorGuidance.visibility_keys);
     _applyOperatorGuidance(_lastOperatorGuidance);
+    updateHealthIndicator(lastDevices || [], _lastOperatorGuidance || null);
     showToast('Guidance visibility reset', 'success');
     return false;
 }
@@ -6075,8 +6089,12 @@ function _hasOnboardingChecklist(card) {
     return !!(card && card.checklist);
 }
 
-function _isOnboardingAssistantShown(card, options) {
-    if (!_hasOnboardingChecklist(card) || !_isGuidanceVisible(card.preference_key)) return false;
+function _canRenderOnboardingAssistant(card) {
+    return _hasOnboardingChecklist(card) && _isGuidanceVisible(card.preference_key);
+}
+
+function _isOnboardingAssistantExpanded(card, options) {
+    if (!_canRenderOnboardingAssistant(card)) return false;
     var opts = options || {};
     if (_onboardingAssistantExpanded === null) return !!opts.showByDefault;
     return !!_onboardingAssistantExpanded;
@@ -6092,18 +6110,53 @@ function _toggleOnboardingAssistant() {
     var card = guidance && guidance.onboarding_card ? guidance.onboarding_card : null;
     if (!card || !card.checklist) return false;
     var showByDefault = _onboardingShowByDefault(guidance);
-    var currentlyShown = _isOnboardingAssistantShown(card, {showByDefault: showByDefault});
-    _onboardingAssistantExpanded = !currentlyShown;
+    var currentlyExpanded = _isOnboardingAssistantExpanded(card, {showByDefault: showByDefault});
+    _onboardingAssistantExpanded = !currentlyExpanded;
     if (_onboardingAssistantExpanded && card.preference_key) _setGuidanceVisible(card.preference_key, true);
     _syncGuidancePreferenceControls(guidance && guidance.visibility_keys);
     _applyOperatorGuidance(guidance);
-    if (!currentlyShown) {
+    updateHealthIndicator(lastDevices || [], guidance || null);
+    if (!currentlyExpanded) {
         var banner = document.getElementById('onboarding-assistant-banner');
         if (banner && !banner.hidden) {
             banner.scrollIntoView({behavior: 'smooth', block: 'start'});
         }
     }
     return false;
+}
+
+function _onboardingAssistantToggleLabel(expanded) {
+    return expanded ? 'Hide checklist' : 'Show checklist';
+}
+
+function _onboardingAssistantToggleTitle(expanded) {
+    return expanded ? 'Hide the setup checklist.' : 'Show the setup checklist.';
+}
+
+function _renderOnboardingAssistantToggle(expanded, options) {
+    var opts = options || {};
+    var classes = ['notice-card-action', 'onboarding-toggle-action'];
+    if (opts.primary) classes.push('notice-card-action--primary');
+    return '<button type="button" class="' + classes.join(' ') + '"' +
+        ' aria-controls="onboarding-assistant-banner"' +
+        ' aria-expanded="' + (expanded ? 'true' : 'false') + '"' +
+        ' title="' + escHtmlAttr(_onboardingAssistantToggleTitle(expanded)) + '"' +
+        ' onclick="return _toggleOnboardingAssistant()">' +
+        escHtml(_onboardingAssistantToggleLabel(expanded)) +
+    '</button>';
+}
+
+function _renderOnboardingHeaderToggle(expanded) {
+    return '<button type="button" class="guidance-health-action"' +
+        ' aria-controls="onboarding-assistant-banner"' +
+        ' aria-expanded="' + (expanded ? 'true' : 'false') + '"' +
+        ' title="' + escHtmlAttr(_onboardingAssistantToggleTitle(expanded)) + '"' +
+        ' onclick="return _toggleOnboardingAssistant()">' +
+        '<span class="guidance-health-action-label">' + escHtml(_onboardingAssistantToggleLabel(expanded)) + '</span>' +
+        '<span class="guidance-health-action-icon" aria-hidden="true">' +
+            _uiIconSvg(expanded ? 'chevron-up' : 'chevron-down', 'ui-icon-svg') +
+        '</span>' +
+    '</button>';
 }
 
 function _findDeviceIndexByName(deviceName) {
@@ -6468,6 +6521,22 @@ function _renderOnboardingProgressSummary(checklist) {
     return parts.join('');
 }
 
+function _renderCollapsedOnboardingSummary(checklist, fallbackSummary) {
+    if (!checklist) return fallbackSummary || '';
+    var totalSteps = Number(checklist.total_steps || 0);
+    var completedSteps = Number(checklist.completed_steps || 0);
+    var parts = [];
+    if (totalSteps > 0) {
+        parts.push(String(completedSteps) + '/' + String(totalSteps) + ' complete');
+    } else if ((checklist.progress_percent || 0) >= 100) {
+        parts.push('Setup complete');
+    }
+    if (checklist.current_step_title) {
+        parts.push('Next: ' + String(checklist.current_step_title));
+    }
+    return parts.length ? parts.join(' - ') : (fallbackSummary || 'Review the bridge setup checklist.');
+}
+
 function _setOnboardingAssistantBanner(card, options) {
     var banner = document.getElementById('onboarding-assistant-banner');
     var titleEl = document.getElementById('onboarding-assistant-title');
@@ -6478,12 +6547,9 @@ function _setOnboardingAssistantBanner(card, options) {
     var actionsEl = document.getElementById('onboarding-assistant-actions');
     var opts = options || {};
     if (!banner || !titleEl || !textEl || !progressEl || !checkpointsEl || !stepsEl || !actionsEl) return;
-    if (
-        !card ||
-        !card.checklist ||
-        !_isOnboardingAssistantShown(card, opts)
-    ) {
+    if (!card || !card.checklist || !_canRenderOnboardingAssistant(card)) {
         banner.hidden = true;
+        banner.className = 'notice-card notice-card--info onboarding-card';
         titleEl.textContent = '';
         textEl.textContent = '';
         progressEl.hidden = true;
@@ -6497,14 +6563,19 @@ function _setOnboardingAssistantBanner(card, options) {
     }
 
     var checklist = card.checklist || {};
+    var isExpanded = _isOnboardingAssistantExpanded(card, opts);
+    banner.className = 'notice-card notice-card--info onboarding-card' + (isExpanded ? '' : ' is-collapsed');
     titleEl.textContent = card.headline || checklist.headline || 'Setup checklist';
-    textEl.textContent = card.summary || checklist.summary || 'Review the bridge setup checklist.';
+    textEl.textContent = isExpanded
+        ? (card.summary || checklist.summary || 'Review the bridge setup checklist.')
+        : _renderCollapsedOnboardingSummary(checklist, card.summary || checklist.summary || '');
     var progressHtml = _renderOnboardingProgressSummary(checklist);
-    progressEl.hidden = !progressHtml;
-    progressEl.innerHTML = progressHtml;
+    progressEl.hidden = !isExpanded || !progressHtml;
+    progressEl.innerHTML = isExpanded ? progressHtml : '';
     checkpointsEl.hidden = true;
     checkpointsEl.innerHTML = '';
-    stepsEl.innerHTML = _renderOnboardingSteps((checklist.steps || []).slice(0, 5));
+    stepsEl.hidden = !isExpanded;
+    stepsEl.innerHTML = isExpanded ? _renderOnboardingSteps((checklist.steps || []).slice(0, 5)) : '';
 
     var secondaryActions = card.secondary_actions || [];
     var dismissHtml = '';
@@ -6513,7 +6584,8 @@ function _setOnboardingAssistantBanner(card, options) {
             escHtml(card.preference_key) +
         '\')">Don’t show again</a>';
     }
-    actionsEl.innerHTML = _renderGuidanceActionMenu(secondaryActions, dismissHtml);
+    actionsEl.innerHTML = _renderOnboardingAssistantToggle(isExpanded, {primary: !isExpanded}) +
+        _renderGuidanceActionMenu(secondaryActions, dismissHtml);
 
     banner.hidden = false;
     _syncNoticeStack();
@@ -6603,16 +6675,21 @@ function _hideOperatorGuidance() {
 
 function openMaTokenSettings() {
     var opened = _openConfigPanel('ma', 'ma-connect-panel', 'start');
-    var target = document.getElementById('ma-ha-login-btn');
-    if (!target || target.hidden || target.offsetParent === null) {
-        target = document.getElementById('ma-login-btn');
+    toggleMaForm(true);
+    var highlightTarget = document.getElementById('ma-auth-card') || document.getElementById('ma-conn-form') || (opened && opened.target);
+    _highlightConfigTarget(highlightTarget);
+    var focusTarget = document.getElementById('ma-ha-login-btn');
+    if (!focusTarget || focusTarget.hidden || focusTarget.offsetParent === null) {
+        focusTarget = document.getElementById('ma-login-btn');
     }
-    if (!target || target.hidden || target.offsetParent === null) {
-        target = document.getElementById('ma-conn-form') || (opened && opened.target);
+    if (!focusTarget || focusTarget.hidden || focusTarget.offsetParent === null) {
+        focusTarget = document.getElementById('ma-login-url');
     }
-    _highlightConfigTarget(target);
-    if (target && typeof target.focus === 'function') {
-        target.focus({preventScroll: true});
+    if (!focusTarget || focusTarget.hidden || focusTarget.offsetParent === null) {
+        focusTarget = highlightTarget;
+    }
+    if (focusTarget && typeof focusTarget.focus === 'function') {
+        focusTarget.focus({preventScroll: true});
     }
     return false;
 }
@@ -6702,6 +6779,8 @@ function _setMaStatus(connected, username, url) {
     var bar = document.getElementById('ma-status-bar');
     var icon = document.getElementById('ma-status-icon');
     var text = document.getElementById('ma-status-text');
+    _maConnected = !!connected;
+    if (!_maConnected) _maReconfigureRequested = false;
     if (connected) {
         _maAutoSilentAuthFailed = false;
         _setMaIntegrationBanner('');
@@ -6719,19 +6798,24 @@ function _setMaStatus(connected, username, url) {
         _setUiIconSlot(icon, 'status-neutral');
         if (text) text.textContent = 'Not connected';
     }
-    var form = document.getElementById('ma-conn-form');
     var reconf = document.getElementById('ma-reconfigure');
-    var apiFields = document.getElementById('ma-api-fields');
-    if (form) form.hidden = connected;
     if (reconf) reconf.hidden = !connected;
-    if (apiFields) apiFields.hidden = true;
+    _syncMaAuthCardVisibility();
+}
+
+function _syncMaAuthCardVisibility() {
+    var formCard = document.getElementById('ma-auth-card');
+    var form = document.getElementById('ma-conn-form');
+    var apiFields = document.getElementById('ma-api-fields');
+    var showAuthCard = !_maConnected || _maReconfigureRequested;
+    if (formCard) formCard.hidden = !showAuthCard;
+    if (form) form.hidden = !showAuthCard;
+    if (apiFields) apiFields.hidden = !showAuthCard;
 }
 
 function toggleMaForm(show) {
-    var form = document.getElementById('ma-conn-form');
-    var apiFields = document.getElementById('ma-api-fields');
-    if (form) form.hidden = !show;
-    if (apiFields) apiFields.hidden = !show;
+    _maReconfigureRequested = !!show;
+    _syncMaAuthCardVisibility();
     if (show) _detectMaAddonMode();
 }
 
@@ -9271,28 +9355,19 @@ function updateHealthIndicator(devices, guidance) {
     if (headerStatus && headerStatus.label) {
         var headerToneClass = _guidanceHeaderToneClass(headerStatus.tone);
         var onboardingCard = guidance && guidance.onboarding_card ? guidance.onboarding_card : null;
-        var togglesOnboarding = _hasOnboardingChecklist(onboardingCard);
+        var togglesOnboarding = _canRenderOnboardingAssistant(onboardingCard);
         var headerTitle = headerStatus.summary || '';
+        parts.push(
+            '<span class="health-pill meta-badge meta-badge-status guidance-health-pill is-' + headerToneClass +
+            '" title="' + escHtmlAttr(headerTitle) + '">' +
+                '<span class="health-pill-text">' + escHtml(headerStatus.label || '') + '</span>' +
+            '</span>'
+        );
         if (togglesOnboarding) {
-            var onboardingShown = _isOnboardingAssistantShown(onboardingCard, {
+            var onboardingExpanded = _isOnboardingAssistantExpanded(onboardingCard, {
                 showByDefault: _onboardingShowByDefault(guidance),
             });
-            headerTitle = headerTitle
-                ? headerTitle + (onboardingShown ? ' Click to hide the setup checklist.' : ' Click to open the setup checklist.')
-                : (onboardingShown ? 'Click to hide the setup checklist.' : 'Click to open the setup checklist.');
-            parts.push(
-                '<button type="button" class="health-pill meta-badge meta-badge-link meta-badge-interactive guidance-health-pill is-' + headerToneClass +
-                '" title="' + escHtmlAttr(headerTitle) + '" onclick="return _toggleOnboardingAssistant()">' +
-                    '<span class="health-pill-text">' + escHtml(headerStatus.label || '') + '</span>' +
-                '</button>'
-            );
-        } else {
-            parts.push(
-                '<span class="health-pill meta-badge meta-badge-status guidance-health-pill is-' + headerToneClass +
-                '" title="' + escHtmlAttr(headerTitle) + '">' +
-                    '<span class="health-pill-text">' + escHtml(headerStatus.label || '') + '</span>' +
-                '</span>'
-            );
+            parts.push(_renderOnboardingHeaderToggle(onboardingExpanded));
         }
     }
     if (!devices || !devices.length) {
