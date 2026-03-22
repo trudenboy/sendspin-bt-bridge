@@ -3,6 +3,19 @@ title: Устранение неполадок
 description: Решение частых проблем Sendspin Bluetooth Bridge с учётом текущего UI и deployment model
 ---
 
+## Сначала посмотрите operator guidance, а потом уже SSH
+
+Прежде чем идти в shell и логи, проверьте встроенные operator-facing поверхности:
+
+- **health/status в шапке** и переключатель checklist
+- **onboarding checklist** для пропущенных шагов настройки
+- **recovery guidance** для actionable runtime-проблем вроде disconnect, missing sink или released devices
+- **Diagnostics**, если нужен более глубокий runtime view за этими подсказками
+
+Эти поверхности опираются на те же данные, что и `/api/diagnostics`, `/api/onboarding/assistant`, `/api/recovery/assistant` и `/api/operator/guidance`.
+
+![Recovery guidance banner с actionable operator recommendations](/sendspin-bt-bridge/screenshots/screenshot-recovery-guidance.png)
+
 ## После переподключения звук идёт только на одну колонку
 
 После Bluetooth reconnect PulseAudio может увести активные потоки на sink по умолчанию. Bridge умеет исправлять это автоматически на следующем старте воспроизведения, но если проблема повторяется:
@@ -69,10 +82,12 @@ description: Решение частых проблем Sendspin Bluetooth Bridg
 Если **Get token automatically** или **Get token** не завершается успешно:
 
 1. Убедитесь, что URL MA указан правильно и доступен.
-2. В HA Ingress обновите страницу из Home Assistant, чтобы у браузера был актуальный HA session/token.
-3. Разрешите popup-окна для страницы bridge — fallback HA auth flow открывает popup, когда silent auth недостаточно.
-4. Если MA работает поверх HA и встроенный MA-login отклоняет credentials, повторите попытку и завершите шаг HA MFA, а не ожидайте чистый MA-password flow.
-5. Помните, что bridge сохраняет long-lived MA token, но не сохраняет введённый пароль.
+2. Если bridge уже подключён, сначала нажмите **Reconfigure** в **Configuration → Music Assistant**, чтобы снова открыть auth-секцию.
+3. В HA Ingress обновите страницу из Home Assistant, чтобы у браузера был актуальный HA session/token.
+4. Помните, что **Get token automatically** доступен только в addon/Ingress flow. Вне него используйте прямой MA login или вставьте token вручную.
+5. Разрешите popup-окна для страницы bridge — fallback HA auth flow открывает popup, когда silent auth недостаточно.
+6. Если MA работает поверх HA и встроенный MA-login отклоняет credentials, повторите попытку и завершите шаг HA MFA, а не ожидайте чистый MA-password flow.
+7. Помните, что bridge сохраняет long-lived MA token, но не сохраняет введённый пароль.
 
 ## Empty state ведёт не туда
 
@@ -133,6 +148,8 @@ description: Решение частых проблем Sendspin Bluetooth Bridg
 - в каком состоянии subprocess и runtime окружение.
 
 Кнопки **Download diagnostics** и **Submit bug report** помогают собрать актуальные данные перед созданием GitHub issue.
+
+Bug-report dialog теперь заранее подставляет редактируемое suggested description из замаскированной диагностики. Перед отправкой дополните его точными шагами воспроизведения и ожидаемым/фактическим поведением.
 
 ## В Home Assistant Supervisor нет интернета или не работают update checks на HAOS в Proxmox
 

@@ -256,11 +256,11 @@ graph TB
     SP13["🔊 JBL Xtreme 3"]
   end
 
-  %% MA → Bridges (each bridge = independent MA player)
-  MA -->|"Player: Living Room"| BR1
-  MA -->|"Player: Kitchen"| BR2
-  MA -->|"Player: Conference"| BR3
-  MA -->|"Player: Terrace"| BR4
+  %% MA → Bridges (each bridge hosts multiple per-device players)
+  MA -->|"Sendspin + per-device players"| BR1
+  MA -->|"Sendspin + per-device players"| BR2
+  MA -->|"Sendspin + per-device players"| BR3
+  MA -->|"Sendspin + per-device players"| BR4
 
   %% Bridge → Adapters
   BR1 --> A1H0

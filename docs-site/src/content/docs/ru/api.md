@@ -375,6 +375,19 @@ CORS preflight эндпоинт. Возвращает `204 No Content` с соо
 
 Список спаренных устройств по каждому адаптеру.
 
+### `GET /api/bugreport`
+
+Сгенерировать диагностический пакет для bug report. Возвращает JSON-объект с замаскированной системной информацией, состоянием устройств, последними логами, Bluetooth/audio-диагностикой и helper-текстом для GitHub issue.
+
+Текущий ответ включает:
+
+- `markdown_short` — компактное Markdown summary для issue body
+- `text_full` — полный скачиваемый plain-text report
+- `suggested_description` — редактируемое описание, собранное на основе диагностики
+- `report` — замаскированный structured payload с диагностикой
+
+Поле `suggested_description` предназначено для bug-report dialog в web UI. Оно кратко суммирует recent issue-worthy logs, состояние Bluetooth/устройств, здоровье subprocess/daemon, D-Bus/bluetoothd и статус MA connectivity без раскрытия секретов.
+
 ## Сервис
 
 ### `GET /api/logs`

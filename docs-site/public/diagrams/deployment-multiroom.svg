@@ -64,7 +64,7 @@
   <circle cx="204" cy="193.5" r="3.5" fill="#facc15"/>
   <!-- label -->
   <text x="148" y="235" text-anchor="middle" font-size="12" font-weight="700" fill="#1e40af">Music Assistant</text>
-  <text x="148" y="249" text-anchor="middle" font-size="10" fill="#64748b">Home Automation Server</text>
+  <text x="148" y="249" text-anchor="middle" font-size="10" fill="#64748b">Shared Music Assistant host</text>
 
   <!-- ══════════════ BRIDGE 1 (Living Room / HA) ══════════════ -->
   <rect x="72" y="268" width="152" height="52" rx="7" fill="#14532d" filter="url(#shadow)"/>

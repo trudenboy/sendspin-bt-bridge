@@ -1,6 +1,6 @@
 ---
 title: Configuration
-description: Current configuration reference for the redesigned Sendspin Bluetooth Bridge setup flows
+description: Current configuration reference for the Sendspin Bluetooth Bridge setup, Bluetooth inventory flow, Music Assistant reconfigure flow, and saved device fields
 ---
 
 Sendspin Bluetooth Bridge stores persistent settings in `config.json` inside the `/config` directory. You can manage those values through the web UI, through the Home Assistant addon options, or by editing the file directly.
@@ -11,22 +11,22 @@ There are two main ways to manage settings:
 
 | Surface | Best for | Notes |
 |---|---|---|
-| **Web UI** | Day-to-day management of devices, adapters, auth, and runtime behavior | Works for Docker, LXC, and addon installs |
-| **HA addon Configuration tab** | Supervisor-managed addon options | Useful when you prefer HA-native YAML-style editing |
+| **Web UI** | Day-to-day management of devices, adapters, Bluetooth inventory, auth, and runtime behavior | Works for Docker, LXC, and addon installs |
+| **HA addon Configuration tab** | Supervisor-managed addon options | Useful when you prefer HA-native editing or need to seed addon options outside the web UI |
 
 ## Web UI configuration
 
 ![General tab of the redesigned Configuration section](/sendspin-bt-bridge/screenshots/screenshot-config.png)
 
-The redesigned configuration area is organized into five tabs instead of one long form.
+The configuration area is organized into five tabs instead of one long form.
 
 | Tab | What lives there |
 |---|---|
-| **General** | Bridge name, timezone, latency, web/UI ports, smooth restart, update policy |
-| **Devices** | Speaker fleet table, scanning, paired-device import |
-| **Bluetooth** | Adapter naming, reconnect policy, codec preference |
-| **Music Assistant** | Token flows, MA endpoint, monitor, volume/mute routing |
-| **Security** | Local auth, session timeout, brute-force protection |
+| **General** | Bridge name, timezone, latency, ports, restart behavior, update policy, and guidance visibility |
+| **Devices** | Saved speaker fleet table and advanced per-device fields |
+| **Bluetooth** | Adapter naming, paired-device inventory, scan modal, reconnect policy, codec preference |
+| **Music Assistant** | Connection status, reconfigure flow, token helpers, MA endpoint, monitor, volume/mute routing |
+| **Security** | Local auth, session timeout, and brute-force protection |
 
 ### General tab
 
@@ -38,30 +38,30 @@ The **General** tab contains settings that apply to the whole bridge instance:
 - **Web UI port** — direct browser port for standalone installs, or an optional extra direct port in HA addon mode.
 - **Base player listen port** — starting port for automatically assigned per-device sendspin listeners.
 - **Smooth restart** — mutes before restart and shows restart progress.
-- **Check for updates / Auto-update** — available outside HA addon mode.
+- **Show empty-state onboarding guidance** — controls whether the first-run checklist stays visible when setup is incomplete.
+- **Show recovery banners** — controls whether top-level operator/recovery notices stay visible.
+- **Check for updates / Update channel / Auto-update** — available outside HA addon mode, with auto-update limited to supported runtimes.
 
 If you leave the port fields empty, standalone installs default to **8080** for the web UI and **8928** for player listeners. In Home Assistant addon mode, the primary channel defaults stay fixed at **8080 / 8928** for stable, **8081 / 9028** for rc, and **8082 / 9128** for beta. Setting `WEB_PORT` to a different value in addon mode opens an **additional direct listener**; HA Ingress keeps using the fixed addon port.
 
 ### Devices tab
 
-![Devices tab with fleet table and discovery workflow](/sendspin-bt-bridge/screenshots/screenshot-config-devices.png)
+![Devices tab with the saved fleet table](/sendspin-bt-bridge/screenshots/screenshot-config-devices.png)
 
-The **Devices** tab is split into two responsibilities:
-
-- **Device fleet** — the main table for daily edits.
-- **Discovery & import** — scanning nearby speakers or importing already paired devices.
+The **Devices** tab is now the canonical saved fleet table.
 
 Each device row can store:
 
 | Field | Purpose |
 |---|---|
-| **Enabled** | Skip a device on startup without deleting it |
+| **Enabled** | Skip a device in the saved fleet without deleting it |
 | **Player name** | Display name in Music Assistant |
 | **MAC** | Speaker Bluetooth address |
 | **Adapter** | Specific adapter binding, if needed |
 | **Port** | Optional custom `listen_port`; otherwise the bridge uses `BASE_LISTEN_PORT + device index` |
 | **Delay** | `static_delay_ms` latency compensation |
 | **Live** | Runtime badge such as Playing, Connected, Released, or Not seen |
+| **Actions** | Remove the row or act on the saved configuration |
 
 Advanced row details expose:
 
@@ -75,29 +75,53 @@ Current runtime behavior is interval-based: any positive `keepalive_interval` en
 
 ![Bluetooth tab with adapter inventory and recovery policy](/sendspin-bt-bridge/screenshots/screenshot-config-adapters.png)
 
-The **Bluetooth** tab combines inventory and policy:
+The **Bluetooth** tab combines inventory, discovery, and policy:
 
 - Rename adapters for clearer dashboard labels.
 - Add manual adapter entries when auto-detect is incomplete.
 - Refresh detection without leaving the page.
+- Work from the **Paired devices** inventory for import, repair, or cleanup.
+- Open the dedicated **Scan nearby** modal from this tab.
 - Set **BT check interval** for reconnect probing.
 - Set **Auto-disable threshold** for unstable devices. When the threshold is reached, the device is persisted as disabled until you re-enable it.
 - Toggle **Prefer SBC codec** to reduce CPU load.
 
+#### Scan nearby modal
+
+The Bluetooth scan flow is now its own modal rather than an inline card:
+
+- choose **All adapters** or a specific adapter;
+- leave **Audio devices only** enabled for normal speaker discovery;
+- watch the **countdown and progress bar** while the scan runs;
+- use **Add** or **Add & Pair** directly from the results;
+- use **Rescan** after the cooldown without reopening the modal.
+
+If the host already knows the speaker, the **Already paired devices** list is usually faster than scanning again.
+
 ### Music Assistant tab
+
+![Music Assistant connection status card with Reconfigure action and current bridge integration state](/sendspin-bt-bridge/screenshots/screenshot-ma-connection-status.png)
 
 ![Music Assistant tab with token actions and bridge integration settings](/sendspin-bt-bridge/screenshots/screenshot-advanced-settings.png)
 
 The **Music Assistant** tab includes both connection state and auth helpers:
 
-- **Connection status** summary.
+- **Connection status** card showing whether the bridge is connected and which account/token last authenticated it.
+- **Reconfigure** button on that status card once a working token already exists.
 - **Discover** nearby MA servers or reuse a known URL.
 - **Get token** with MA credentials. On success the bridge stores `MA_API_URL`, a long-lived `MA_API_TOKEN`, and `MA_USERNAME`; the password is **not** stored.
 - **Home Assistant fallback** when the MA instance is HA-backed and direct MA login needs HA OAuth / MFA.
-- **Get token automatically** for HA-backed MA targets. In HA Ingress the UI first attempts silent auth with the current HA browser token, then falls back to a popup-based HA login flow if needed.
+- **Get token automatically** for HA-backed MA targets.
 - Manual **MA API token** field.
 - **MA server** and **MA WebSocket port** for the sendspin endpoint.
 - **WebSocket monitor**, **Route volume through MA**, and **Route mute through MA** toggles.
+
+A few behaviors matter when documenting or operating the MA flow:
+
+- The **Sign in & token** card hides itself when the connection is healthy, then reappears when you click **Reconfigure** or when the bridge is not connected.
+- **Get token automatically** is relevant only for **HA-backed Music Assistant** targets.
+- **Auto-get token on UI open** is an addon-oriented convenience setting. It works only when the page is running under **HA Ingress** and the browser already has a valid Home Assistant session/token.
+- If silent auth cannot complete, the UI falls back to the visible HA-assisted or manual token flow.
 
 ### Security tab
 
@@ -116,7 +140,7 @@ Standalone login uses CSRF-protected forms plus a `SameSite=Lax`, `HttpOnly` ses
 The footer is shared across tabs:
 
 - **Save** writes `config.json` now.
-- **Save & Restart** saves and restarts immediately. Use this for port changes, auth/session changes, or anything else that must be applied at startup.
+- **Save & Restart** saves and restarts immediately. Use this for port changes, auth/session changes, Bluetooth topology changes, or anything else that must be applied at startup.
 - **Cancel** restores the last saved values in the form.
 - **Download** exports a share-safe timestamped JSON file with secrets such as `MA_API_TOKEN`, password hash, and secret key removed.
 - **Upload** imports a previously exported config and preserves the existing password hash, secret key, and stored MA token on the server.
@@ -143,8 +167,9 @@ Core addon options include:
 | **prefer_sbc_codec** | Lower-CPU codec preference |
 | **bt_check_interval** | Reconnect polling interval |
 | **bt_max_reconnect_fails** | Auto-disable threshold |
-| **auth_enabled** | Standalone-style auth toggle for direct access; HA addon mode still enforces HA auth regardless |
+| **auth_enabled** | Direct-listener auth toggle; HA addon mode still enforces HA auth regardless |
 | **ma_api_url / ma_api_token** | Music Assistant REST integration |
+| **ma_auto_silent_auth** | Allow addon/Ingress pages to try silent HA-backed MA token creation on open |
 | **volume_via_ma / mute_via_ma** | Route controls through MA to keep UI state aligned |
 | **update_channel** | In-app release-lane preference for update checks and warnings |
 | **log_level** | Base logging verbosity |
@@ -159,7 +184,7 @@ The addon form also exposes the full **Bluetooth devices** and **Bluetooth adapt
 
 ### Top-level web and listen ports
 
-The bridge now supports two optional top-level port overrides:
+The bridge supports two optional top-level port overrides:
 
 | Key | Applies to | Default | Notes |
 |---|---|---|---|
@@ -215,6 +240,7 @@ Use device-level overrides when:
 | `MA_API_URL` | string | Music Assistant REST URL |
 | `MA_API_TOKEN` | string | Music Assistant API token |
 | `MA_USERNAME` | string | Username last used for a successful MA connection flow |
+| `MA_AUTO_SILENT_AUTH` | boolean | Allow addon/Ingress pages to try silent HA-backed MA token creation on open |
 | `MA_WEBSOCKET_MONITOR` | boolean | Live queue/now-playing monitor |
 | `VOLUME_VIA_MA` | boolean | Route volume changes through MA |
 | `MUTE_VIA_MA` | boolean | Route mute changes through MA |

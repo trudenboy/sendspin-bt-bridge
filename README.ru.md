@@ -15,8 +15,9 @@ Sendspin Bluetooth Bridge — это local-first мост для headless-сце
 ## Что делает проект
 
 - Превращает обычные Bluetooth-колонки и наушники в плееры Music Assistant.
-- Подключает несколько устройств одновременно, с отдельным изолированным playback-процессом на каждую колонку.
+- Подключает несколько устройств одновременно: BridgeOrchestrator координирует отдельный изолированный playback-подпроцесс на каждую колонку.
 - Даёт веб-интерфейс для настройки, Bluetooth pairing flow, диагностики, логов и бэкапа конфигурации.
+- Подсказывает следующие шаги через onboarding checklist, recovery guidance и action-oriented диагностику.
 - Поддерживает развёртывание как Home Assistant addon, Docker, Raspberry Pi, Proxmox VE LXC и OpenWrt LXC.
 - Позволяет масштабироваться на несколько комнат через несколько bridge-экземпляров против одного MA-сервера.
 
@@ -30,6 +31,21 @@ Sendspin Bluetooth Bridge — это local-first мост для headless-сце
 
 Командная строка не нужна. Веб-интерфейс полностью берёт на себя поиск Bluetooth-устройств, сопряжение и настройку Music Assistant.
 
+## Режимы работы
+
+У проекта теперь есть два практических режима:
+
+- **Production mode** — реальный Bluetooth, PulseAudio/PipeWire и интеграция с Music Assistant.
+- **Demo mode** — детерминированный UI/test stand для документации, скриншотов и UX-проверок без железа.
+
+Локальный demo запускается из корня репозитория:
+
+```bash
+DEMO_MODE=true python sendspin_client.py
+```
+
+После запуска откройте `http://127.0.0.1:8080/`. Demo mode поднимает стабильный стенд с девятью устройствами, преднастроенными diagnostics/logs, group state и данными Music Assistant, поэтому UI можно изучать и документировать без живого Bluetooth-окружения.
+
 ## Быстрый старт: Home Assistant
 
 Самый быстрый путь — установить Home Assistant addon.
@@ -39,7 +55,7 @@ Sendspin Bluetooth Bridge — это local-first мост для headless-сце
 1. Добавьте репозиторий в Home Assistant.
 2. Установите **Sendspin Bluetooth Bridge** через Add-on Store.
 3. Запустите аддон и откройте веб-интерфейс из боковой панели HA.
-4. Добавьте Bluetooth-колонки и подключите функции Music Assistant в **Configuration → Music Assistant**.
+4. Добавьте Bluetooth-колонки, затем откройте **Configuration → Music Assistant**, чтобы подключить или перенастроить Music Assistant. Dashboard сам подскажет следующий безопасный шаг через onboarding checklist и recovery guidance.
 
 Полный гайд по Home Assistant: <https://trudenboy.github.io/sendspin-bt-bridge/ru/installation/ha-addon/>
 
@@ -59,6 +75,8 @@ Sendspin Bluetooth Bridge — это local-first мост для headless-сце
 - **Глубокая интеграция с Music Assistant** — текущий трек, обложка, управление воспроизведением, групповая громкость, shuffle и repeat — всё синхронизируется в реальном времени через постоянное соединение с сервером MA.
 - **Автоматизации Home Assistant** — каждая Bluetooth-колонка становится плеером Music Assistant, видимым в HA. Используйте в автоматизациях, скриптах, сценах, дашбордах и с голосовыми ассистентами.
 - **Надёжный Bluetooth** — автоматическое переподключение, детекция отключений и мониторинг состояния устройств поддерживают связь с колонками без ручного вмешательства.
+- **Подсказки по настройке и восстановлению** — встроенные onboarding/recovery-поверхности и bug report с автоподсказкой по диагностике ускоряют настройку и разбор проблем.
+- **Стабильный demo-стенд** — публичное live demo и `DEMO_MODE=true python sendspin_client.py` дают повторяемую среду для UI-проверок, скриншотов и демонстраций без Bluetooth-железа.
 - **Мультирум** — один bridge на комнату или один bridge на несколько колонок. Несколько bridge-экземпляров работают с одним сервером Music Assistant для озвучки всего дома.
 - **Пять вариантов развёртывания** — Home Assistant addon, Docker, Raspberry Pi, Proxmox VE LXC и OpenWrt LXC — один и тот же bridge, один веб-интерфейс, одни и те же функции везде.
 - **REST API и live-обновления** — 60+ эндпоинтов для автоматизации и поток статусов в реальном времени через SSE для кастомных дашбордов и интеграций.
@@ -67,12 +85,26 @@ Sendspin Bluetooth Bridge — это local-first мост для headless-сце
 
 Дорожная карта теперь синхронизирована с **реальным состоянием кода**, а не со старым списком планируемых рефакторингов.
 
-- **Сейчас:** довести до конца уже начатый v2 refactor — snapshot-first чтение, явное владение реестром устройств и уменьшение роли `state.py`.
-- **Дальше:** формализовать IPC-контракты, event history, диагностику, telemetry и lifecycle конфигурации.
-- **Потом:** усилить onboarding, recovery UX, подсказки по latency и capability-aware поведение UI/API.
-- **После этого:** переходить к backend abstraction для v3 и только затем аккуратно добавлять соседние backend'ы вроде local sink или ALSA.
+- **Сейчас:** базовая cleanup-фаза runtime уже завершена; свежие доработки добавили safeguards вокруг identity bridge-инстанса, а основной фокус сместился на guided onboarding, явные capability-модели и action-oriented recovery UX поверх shipped v2 runtime.
+- **Дальше:** углублять staged onboarding flow, делать bridge/device capabilities ещё более явными и усиливать latency/recovery guidance trace-style диагностикой и безопасными retry actions.
+- **Потом:** продолжать расширять operator-facing UX и диагностику, не возвращаясь к `state.py`-centric coupling.
+- **После этого:** переходить к backend abstraction для v3 только после стабилизации Bluetooth core и затем точечно добавлять соседние backend'ы вроде local sink или ALSA.
 
 Полная англоязычная версия находится в [`ROADMAP.md`](ROADMAP.md), а краткая русская — в [`ROADMAP.ru.md`](ROADMAP.ru.md).
+
+## Контракты runtime
+
+Bridge уже рассматривает несколько runtime-поверхностей как операторские контракты:
+
+- **Lifecycle publication** — startup и shutdown проходят через явные события `bridge.startup.started`, `bridge.startup.failed`, `bridge.startup.completed`, `bridge.shutdown.started` и `bridge.shutdown.completed`. Те же фазы отражаются в `startup_progress` и `runtime_info`.
+- **Diagnostics и telemetry** — `/api/diagnostics` и `/api/bridge/telemetry` являются каноническими endpoint'ами для runtime inspection. Они публикуют `startup_progress`, `runtime_info`, состояние hook delivery и `contract_versions` для config schema и subprocess IPC protocol.
+- **Runtime hooks** — `/api/hooks` отдает те же bridge/device events, что питают diagnostics, поэтому автоматики могут подписываться на стабильный event stream, а не парсить логи.
+
+## Операторский UX
+
+- **Onboarding и recovery** — header guidance показывает пятишаговый setup checklist, recovery notices и безопасные действия вроде reconnect speaker или reclaim Bluetooth management после release.
+- **Повторная настройка Music Assistant** — раздел **Configuration → Music Assistant** можно открыть в любой момент, чтобы переподключиться к MA или перевести bridge на другой MA-инстанс. В Home Assistant addon кнопка **Sign in with Home Assistant** умеет по возможности тихо получить или переиспользовать MA token через Ingress, а при необходимости откатывается к обычному HA login flow.
+- **Диагностика для support-flow** — **Submit bug report** скачивает masked diagnostics и открывает GitHub issue с предложенным описанием, уже собранным из текущей диагностики, recovery guidance и свежих issue logs.
 
 ## Карта документации
 

@@ -148,13 +148,39 @@ sequenceDiagram
 
 ### Bridge-wide orchestration and service seams
 
-A few explicit service seams now keep the runtime easier to evolve without changing the device contract:
+`BridgeOrchestrator` is now the runtime seam between bootstrap and the long-lived bridge. `sendspin_client.py` builds the orchestrator, calls `initialize_runtime()`, then hands the returned `RuntimeBootstrap` into `run_bridge_lifecycle()`.
 
-- `BridgeOrchestrator` owns bridge-wide bootstrap, signal handling, task assembly, and channel-aware defaults.
-- `BridgeLifecycleState` publishes startup/runtime progress into `state.py` for `/api/startup-progress`, diagnostics, and the UI.
-- `BridgeMaIntegrationService` resolves MA API credentials, preloads sync groups, and decides whether the `MaMonitor` task should run.
-- `SendspinClient` keeps per-speaker lifecycle ownership but delegates focused subprocess concerns to `SubprocessCommandService`, `SubprocessIpcService`, `SubprocessStderrService`, and `SubprocessStopService`.
-- `PlaybackHealthMonitor` and `StatusEventBuilder` keep watchdog/error/event derivation logic out of the transport code path.
+| Seam | Responsibility | Operator-visible contract |
+|---|---|---|
+| `RuntimeBootstrap` | Normalized config, delivery channel, effective ports, latency, log level, and bridge-wide toggles | Feeds `/api/config`, `/api/startup-progress`, and channel-aware startup logging |
+| `DeviceBootstrap` | Active clients plus `disabled_devices` filtered out of runtime startup | Explains why disabled devices appear in UI/diagnostics but do not get a daemon or listen port |
+| `MaBootstrap` | Resolved MA URL/token plus optional `MaMonitor` task | Determines whether MA groups, now-playing, and queue control can go live |
+| `BridgeLifecycleState` | Publishes startup/shutdown milestones into shared state | Drives `/api/startup-progress`, `/api/runtime-info`, diagnostics, and the dashboard progress banner |
+| `EventHookRegistry` | Holds runtime-scoped webhook subscriptions and recent deliveries | Powers `/api/hooks` and the `event_hooks` block inside `/api/bridge/telemetry` and `/api/diagnostics` |
+
+Lifecycle methods run in this order during a normal startup:
+
+1. `initialize_runtime()` → loads config, resolves add-on track defaults, sets timezone/log level, and calls `begin_startup()`.
+2. `initialize_devices()` → filters configured devices, creates `SendspinClient` / `BluetoothManager` pairs, and publishes runtime/device inventory.
+3. `start_web_server()` + `configure_executor()` → publishes clients, starts Waitress, publishes the main loop, and marks the web phase ready.
+4. `install_signal_handlers()` → wires `SIGTERM` / `SIGINT` to `graceful_shutdown()`.
+5. `initialize_ma_integration()` → resolves MA credentials, preloads groups, and optionally starts `MaMonitor`.
+6. `assemble_runtime_tasks()` / `complete_startup()` → starts long-running tasks and marks startup complete.
+
+The startup-progress contract exposed to operators is intentionally fixed at **6 steps**:
+
+| Step | Phase | Published by | Message |
+|---|---|---|---|
+| 1 | `config` | `begin_startup()` | `Loading configuration` |
+| 2 | `runtime` | `publish_runtime_prepared()` | `Runtime configuration prepared` |
+| 3 | `devices` | `publish_device_registry()` | `Device registry prepared` |
+| 4 | `web` | `publish_main_loop()` | `Web interface and event loop ready` |
+| 5 | `integrations` | `publish_ma_integration()` | `Music Assistant integrations initialized` |
+| 6 | `ready` / `shutdown` | `complete_startup()` or shutdown publishers | `Startup complete`, `Shutdown in progress`, or `Shutdown complete` |
+
+If any bootstrap phase raises, `publish_startup_failure()` marks `/api/startup-progress` with `status: error` plus a `startup_phase` detail. On shutdown, the same final step is reused with `status: stopping` and then `status: stopped`.
+
+`/api/bridge/telemetry` is deliberately narrower than `/api/diagnostics`: it returns bridge environment details (`uptime_seconds`, RSS, Python/platform/audio/BlueZ info), the current `startup_progress`, `runtime_info`, live subprocess health, and the current hook registry snapshot. `/api/hooks` registrations are **runtime-only** (not persisted in config) and deliveries are filtered by optional `categories` / `event_types`.
 
 ### Per-Device Subprocess
 
@@ -402,53 +428,62 @@ graph LR
 
 ### MA REST API Integration (MaMonitor)
 
-When `MA_API_URL` and `MA_API_TOKEN` are configured (auto-created via "Sign in with Home Assistant" in addon mode, or set manually), the main process runs a `MaMonitor` task that maintains a persistent **WebSocket connection to MA's `/ws` endpoint** for real-time event subscription.
+When `MA_API_URL` and `MA_API_TOKEN` are configured, `BridgeMaIntegrationService.initialize()` resolves credentials, preloads sync groups, and starts `MaMonitor` when `MA_WEBSOCKET_MONITOR` is enabled. In add-on mode, the service can auto-target the local MA add-on URL (`http://localhost:8095`) before falling back to saved config.
 
-**Supported MA auth providers:**
-
-| Method | Endpoint | Use case |
-|---|---|---|
-| Direct MA credentials | `POST /api/ma/login` | Standalone installs — username + password sent to MA |
-| HA OAuth (browser-based) | `GET /api/ma/ha-auth-page` → callback | "Sign in with Home Assistant" button in the UI |
-| HA credentials via MA | `POST /api/ma/ha-login` | Username + password forwarded to HA `login_flow` through MA |
-| Silent HA auth (addon mode) | `POST /api/ma/ha-silent-auth` | Automatic — uses Ingress headers, no user interaction |
+`MaMonitor` keeps a persistent connection to MA's `/ws` endpoint and updates shared MA runtime state (`groups`, now-playing, queue metadata) without polling the Sendspin transport path.
 
 ```mermaid
 sequenceDiagram
+    participant MIS as BridgeMaIntegrationService
     participant MM as MaMonitor
     participant MA as MA WebSocket /ws
     participant ST as state.py
 
+    MIS->>MIS: resolve MA URL/token
+    MIS->>ST: preload groups cache if credentials work
+    MIS->>MM: create task when monitor enabled
     MM->>MA: connect + authenticate (token)
-    MM->>MA: subscribe player_queue_updated
-    MM->>MA: subscribe player_updated
+    MM->>MA: subscribe player_queue_updated / player_updated
     MM->>MA: player_queues/all (initial fetch)
-    MA-->>MM: queue snapshots
-    MM->>ST: set_now_playing(syncgroup_id, metadata)
-    MM->>ST: set_ma_groups(groups)
-    loop real-time events
-        MA-->>MM: player_queue_updated event
-        MM->>ST: update now-playing cache
-    end
-    Note over MM: Falls back to polling every 15s if events unavailable
-    Note over MM: Exponential backoff reconnect (2s → 60s max)
+    MA-->>MM: queue snapshots + real-time events
+    MM->>ST: set_ma_groups(...)
+    MM->>ST: set_ma_now_playing_for_group(...)
 ```
+
+### MA auth, reconfigure, and add-on constraints
+
+The operator-facing auth flows are intentionally split by runtime context:
+
+| Flow | Endpoint(s) | Contract |
+|---|---|---|
+| Direct MA credentials | `POST /api/ma/login` | Accepts `url`, `username`, `password`; if `url` is omitted the bridge tries saved config, `SENDSPIN_SERVER`, connected Sendspin hosts, then mDNS |
+| HA popup flow | `GET /api/ma/ha-auth-page` | Returns a self-contained HTML popup page, not JSON; the popup handles HA login/MFA and posts the result back to the opener |
+| HA credentials flow | `POST /api/ma/ha-login` | MFA-aware two-step contract with `step: init` and `step: mfa`; a successful `done` response saves the MA token and triggers rediscovery |
+| Silent add-on auth | `POST /api/ma/ha-silent-auth` | Requires add-on runtime plus `{ha_token, ma_url}`; reuses an existing MA token when it already matches the same MA instance |
+| Reconfigure after auth | `POST /api/ma/rediscover` + result endpoint | Re-runs syncgroup discovery asynchronously; there is no separate “disconnect MA” endpoint |
+
+Add-on mode has two important constraints:
+
+- `ha-silent-auth` is only meaningful when the bridge is running inside Home Assistant with `SUPERVISOR_TOKEN` and MA is reachable through add-on ingress.
+- The installed add-on track (`stable`, `rc`, `beta`) is derived from runtime environment/hostname, not from `UPDATE_CHANNEL`; changing update preferences does not switch the installed add-on variant.
 
 ### Group Resume Flow
 
-When MA resumes a syncgroup (e.g., after device reconnect), the bridge can trigger group playback via the REST API:
+When MA resumes a syncgroup (for example after a device reconnect), the bridge can trigger group playback through the MA control plane. Queue commands are asynchronous at the HTTP layer: the API returns a `job_id` plus an optimistic now-playing prediction, and final confirmation arrives through `MaMonitor` / async job state.
 
 ```
 POST /api/ma/queue/cmd
-  {"syncgroup_id": "syncgroup_uwkgkafx", "command": "play"}
+  {"action": "next", "syncgroup_id": "ma-syncgroup-abc123"}
 
-→ ma_client.ma_group_play(url, token, syncgroup_id)
-→ POST {MA_API_URL}/api/players/cmd/play?player_id={syncgroup_id}
+→ resolve queue target from syncgroup_id / player_id / group_id
+→ optimistic now-playing patch stored under op_id
+→ background job sends MA command
+→ monitor confirmation updates shared now-playing cache
 ```
 
 ### Passwordless MA Auth (Addon Mode)
 
-In HA addon mode, the bridge creates an MA API token automatically via MA's Ingress JSONRPC — no manual token setup needed.
+In HA addon mode, the bridge can mint an MA API token through MA's Ingress JSONRPC when the UI supplies a valid HA token, so operators do not have to paste a long-lived MA token manually.
 
 ```mermaid
 sequenceDiagram
@@ -520,42 +555,61 @@ def api_status_stream():
 
 Events are batched with a **100 ms debounce window** — `notify_status_changed()` coalesces rapid-fire updates (e.g., volume slider drag, multiple devices reconnecting) into a single SSE push to prevent event storms.
 
-The initial SSE response includes a **2 KB padding comment** (`<!-- ... -->`) to flush HA Ingress proxy buffers, ensuring the first real event is delivered immediately rather than being buffered by the reverse proxy.
+The initial SSE response includes a **2 KB padding SSE comment block** before the first `data:` event so HA Ingress and similar proxies flush the stream immediately instead of buffering the first payload.
 
 ---
 
 ## Web API
 
-The Flask app created in `web_interface.py` is served by **Waitress** and split across **5 API blueprints plus views/auth routes**. The route surfaces are grouped by ownership instead of by UI screen so orchestration, Bluetooth, Music Assistant, config, and status concerns can evolve independently.
+The Flask app created in `web_interface.py` is served by **Waitress** and split across API blueprints so playback, Bluetooth, MA integration, configuration, and status/diagnostics can evolve independently.
 
 ```mermaid
 graph TD
-    CLIENT[Browser / Home Assistant] -->|HTTP| WAITRESS[Waitress :8080]
+    CLIENT[Browser / Home Assistant] -->|HTTP| WAITRESS[Waitress / Ingress]
     WAITRESS --> FLASK[Flask app]
     FLASK --> AUTH[routes/auth.py<br/>login / logout]
     AUTH --> VIEW[routes/views.py<br/>HTML shell]
-    AUTH --> API_MOD[5 API blueprints]
+    AUTH --> API_MOD[API blueprints]
 
-    subgraph "routes/api.py — Playback Control (6)"
+    subgraph "routes/api.py"
         API_MOD --> CTRL[restart · volume · mute · pause_all · group_pause · pause/play]
     end
 
-    subgraph "routes/api_bt.py — Bluetooth (16)"
-        API_MOD --> BT[reconnect · pair · pair_new jobs · management · enabled · adapters · paired · remove · info · disconnect · adapter power · reset reconnect · scan jobs]
+    subgraph "routes/api_bt.py"
+        API_MOD --> BT[reconnect · pair/pair_new jobs · management · enabled · adapters · paired · remove · info · disconnect · scan jobs]
     end
 
-    subgraph "routes/api_ma.py — MA Integration (11)"
-        API_MOD --> MAAPI[discover · login · HA auth flows · groups · rediscover · nowplaying · artwork · queue cmd · debug]
+    subgraph "routes/api_ma.py"
+        API_MOD --> MAAPI[discover jobs · direct login · HA auth popup/silent auth/login · groups · rediscover jobs · nowplaying/artwork · queue cmd jobs · debug]
     end
 
-    subgraph "routes/api_config.py — Configuration & Updates (12)"
-        API_MOD --> CFG[config get/post · download/upload/validate · set-password · log level · logs/download · version · update check/info/apply]
+    subgraph "routes/api_config.py"
+        API_MOD --> CFG[config get/post/validate · download/upload · set-password · log level · logs · version · update jobs]
     end
 
-    subgraph "routes/api_status.py — Status & Diagnostics (11)"
-        API_MOD --> STATUS[status · groups · startup-progress · runtime-info · SSE stream · diagnostics · bugreport · diagnostics download · health · onboarding assistant · preflight]
+    subgraph "routes/api_status.py"
+        API_MOD --> STATUS[status · groups · startup-progress · runtime-info · bridge telemetry · hooks · SSE stream · diagnostics · bugreport · onboarding · recovery · operator guidance · health · preflight]
     end
 ```
+
+### Operator guidance surfaces
+
+The dashboard's setup and recovery UI is driven by three read-only API surfaces built from current config, preflight checks, startup progress, and live device health:
+
+- `/api/onboarding/assistant` returns first-run setup checks plus a five-step checklist ordered as `bluetooth`, `audio`, `sink_verification`, `ma_auth`, `latency`.
+- `/api/recovery/assistant` returns actionable issues, per-device traces, safe actions, a latency assistant, and a known-good test path summary.
+- `/api/operator/guidance` merges onboarding + recovery into the top banner/header contract: `header_status`, optional `banner`, optional `onboarding_card`, and grouped issues.
+
+`/api/status` embeds the same operator-guidance payload so the live dashboard can render one bridge snapshot without fanning out to extra calls.
+
+### Diagnostics, bug reports, telemetry, and hooks
+
+The diagnostics surface is layered on purpose:
+
+- `/api/diagnostics` is the comprehensive masked read model: environment, contract versions, devices, MA integration, sink inputs, subprocesses, assistants, telemetry, and hook state.
+- `/api/bridge/telemetry` is the lighter bridge-health view used for runtime resource inspection.
+- `/api/bugreport` packages diagnostics into `markdown_short`, `text_full`, the masked `report`, and an editable `suggested_description` seeded from recent issue logs, Bluetooth health, subprocess state, D-Bus / bluetoothd health, MA connectivity, and recovery guidance.
+- `/api/hooks` manages runtime-scoped outgoing webhooks. Hooks are validated to allow only absolute public `http(s)` targets; loopback, `.local`, and private-network destinations are rejected.
 
 ### Async BT Scan
 
@@ -579,6 +633,17 @@ sequenceDiagram
         API-->>UI: {"status": "running"} or {"status": "done", "devices": […]}
     end
 ```
+
+### Operator guidance and bug-report assembly
+
+`routes/api_status.py` now does more than expose raw status snapshots:
+
+- **Onboarding assistant** turns runtime/config state into step-by-step setup guidance.
+- **Recovery assistant** groups actionable runtime issues such as disconnected speakers, released devices, and missing sinks.
+- **Operator guidance** is the top-level UI contract used by the header and notice stack to decide what to surface first.
+- **Bug report assembly** packages masked diagnostics and recent issue-worthy logs into both machine-readable data and an editable `suggested_description` for the GitHub issue flow.
+
+This means the UI guidance, diagnostics download, and bug-report dialog all share the same runtime truth instead of deriving their own heuristics independently in the browser.
 
 ---
 
@@ -620,17 +685,22 @@ graph TD
 
 ### Channel-aware defaults and add-on semantics
 
-In Home Assistant add-on mode, `detect_ha_addon_channel()` infers the **installed addon track** from the container hostname suffix (`-rc`, `-beta`) and then resolves per-track defaults:
+In Home Assistant add-on mode, `detect_ha_addon_channel()` infers the installed add-on track from the container hostname suffix and resolves fixed per-track defaults:
 
-| Track | Default ingress port | Default player port base |
+| Track | Effective web port | Default player port base |
 |---|---|---|
 | `stable` | `8080` | `8928` |
 | `rc` | `8081` | `9028` |
 | `beta` | `8082` | `9128` |
 
-`UPDATE_CHANNEL` is separate: it only controls prerelease lookup / warning surfaces for the update checker. Changing `UPDATE_CHANNEL` does **not** switch the installed HA add-on variant.
+`UPDATE_CHANNEL` is separate: it only controls release polling and operator messaging for updates. It does **not** change the installed HA add-on track.
 
-When `WEB_PORT` is explicitly set in add-on mode and differs from the track default, `resolve_additional_web_port()` opens a second direct host-network listener while HA ingress continues to use the fixed per-track port.
+Two operator-facing details matter here:
+
+- `GET /api/config` reports `_delivery_channel`, `_effective_web_port`, and `_effective_base_listen_port`; in add-on mode it intentionally returns `WEB_PORT: null` because ingress owns the external port contract.
+- `resolve_additional_web_port()` currently returns `None`, so the bridge does **not** expose a second direct listener in add-on mode today.
+
+Per-device defaults are also resolved here: when a Bluetooth device omits `listen_port`, the bridge uses `BASE_LISTEN_PORT + device_index`, and when it omits `preferred_format`, the device daemon starts with `flac:44100:16:2`.
 
 ### Config Load → Device Spawn
 
@@ -656,52 +726,44 @@ flowchart TD
 
 ## Startup Sequence
 
+The coarse startup diagram below is still accurate, but the operator-visible lifecycle contract is now defined by `BridgeOrchestrator` + `BridgeLifecycleState`, not by ad-hoc logging inside `sendspin_client.py`.
+
 ```mermaid
 sequenceDiagram
     participant SH as entrypoint.sh
     participant HA as HA Supervisor
     participant TR as translate_ha_config.py
-    participant PY as sendspin_client.py main()
-    participant DB as D-Bus session
-    participant PA as PulseAudio
-    participant BM as BluetoothManager
-    participant SC as SendspinClient
+    participant BO as BridgeOrchestrator
+    participant LS as BridgeLifecycleState
+    participant WS as Waitress thread
+    participant MM as MaMonitor
+    participant RT as Runtime tasks
 
     alt HA Addon mode
         HA->>SH: write /data/options.json
-        SH->>TR: python3 translate_ha_config.py
-        TR->>TR: detect adapters via bluetoothctl list
-        TR->>TR: merge user options + detected adapters
+        SH->>TR: translate_ha_config.py
         TR-->>SH: /data/config.json written
     end
 
-    SH->>SH: link D-Bus socket
-    SH->>SH: detect PA / PipeWire socket → export PULSE_SERVER
-    SH->>DB: dbus-daemon --session → DBUS_SESSION_BUS_ADDRESS
-
-    SH->>PY: exec python3 sendspin_client.py
-    PY->>PY: load_config()
-    PY->>PY: configure logging (LOG_LEVEL)
-
-    loop per device
-        PY->>BM: BluetoothManager.__init__()
-        BM->>BM: _resolve_adapter_select() → adapter MAC
-        BM->>BM: _resolve_adapter_hci_name() → hciN
-        PY->>SC: SendspinClient.__init__()
-        PY->>SC: state.register_client(SC)
-    end
-
-    PY->>PY: threading.Thread → waitress.serve(app, port=8080)
-    PY->>PY: asyncio.gather(SC.run()×N, BM.monitor_and_reconnect()×N, MaMonitor.run())
-
-    loop per device — concurrent
-        BM->>BM: dbus-fast subscribe PropertiesChanged
-        BM->>BM: poll is_device_connected()
-        BM->>PA: configure_bluetooth_audio() → bluez_sink name
-        SC->>SC: _start_sendspin_inner()
-        SC->>SC: asyncio.create_subprocess_exec(daemon_process.py, env={PULSE_SINK})
-    end
+    SH->>BO: exec python3 sendspin_client.py
+    BO->>LS: begin_startup()
+    BO->>BO: initialize_runtime()
+    BO->>BO: initialize_devices()
+    BO->>WS: start_web_server()
+    BO->>LS: publish_main_loop()
+    BO->>BO: install_signal_handlers()
+    BO->>MM: initialize_ma_integration()
+    BO->>LS: publish_ma_integration()
+    BO->>RT: assemble_runtime_tasks()
+    BO->>LS: complete_startup()
 ```
+
+The runtime and operator contracts to rely on are:
+
+- `/api/startup-progress` is the canonical machine-readable startup state. It exposes `status`, `phase`, `current_step`, `total_steps`, `percent`, `message`, timestamps, and a `details` object carrying phase-specific metadata.
+- `/api/runtime-info` explains whether the bridge is running in production or demo/mock mode and which runtime layers are mocked.
+- Startup failures are surfaced through `publish_startup_failure()` with `status: error` and a `details.startup_phase` marker.
+- `graceful_shutdown()` mutes active sinks, stops clients, clears the published main loop, and updates startup progress to `stopping` / `stopped` so the UI can distinguish shutdown from a crash.
 
 ---
 

@@ -552,8 +552,8 @@ graph TD
         API_MOD --> CFG[config get/post · download/upload/validate · set-password · log level · logs/download · version · update check/info/apply]
     end
 
-    subgraph "routes/api_status.py — Статус и диагностика (11)"
-        API_MOD --> STATUS[status · groups · startup-progress · runtime-info · SSE stream · diagnostics · bugreport · diagnostics download · health · onboarding assistant · preflight]
+    subgraph "routes/api_status.py — Статус и диагностика (13)"
+        API_MOD --> STATUS[status · groups · startup-progress · runtime-info · SSE stream · diagnostics · bugreport · diagnostics download · health · onboarding assistant · recovery assistant · operator guidance · preflight]
     end
 ```
 
@@ -579,6 +579,17 @@ sequenceDiagram
         API-->>UI: {"status": "running"} or {"status": "done", "devices": […]}
     end
 ```
+
+### Operator guidance и сборка bug-report
+
+`routes/api_status.py` теперь делает больше, чем просто отдаёт сырой status snapshot:
+
+- **Onboarding assistant** превращает runtime/config состояние в пошаговые setup-рекомендации.
+- **Recovery assistant** группирует actionable runtime-проблемы вроде disconnected speakers, released devices и missing sinks.
+- **Operator guidance** — верхнеуровневый UI-контракт для шапки и notice stack, который решает, что показать оператору в первую очередь.
+- **Bug report assembly** собирает masked diagnostics и recent issue-worthy logs в machine-readable payload и в редактируемое `suggested_description` для GitHub issue flow.
+
+За счёт этого UI guidance, diagnostics download и bug-report dialog используют одну и ту же runtime truth, а не строят независимые эвристики в браузере.
 
 ---
 

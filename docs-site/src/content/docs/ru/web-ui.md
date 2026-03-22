@@ -52,7 +52,23 @@ description: Актуальное руководство по панели Sends
 - **Runtime chip** вроде `LXC` или `systemd`.
 - **Hostname, IP и uptime**.
 - **Health pills** с краткой сводкой по Bluetooth, MA и активному воспроизведению.
+- **Переключатель чеклиста**, который явно показывает или скрывает onboarding checklist. Health/status pills при этом остаются пассивными индикаторами, а не disclosure-кнопками.
 - **Баннер прогресса перезапуска** во время **Save & Restart**.
+
+## Operator guidance, onboarding и recovery
+
+![Onboarding checklist с явным show-hide control, progress summary и guided actions](/sendspin-bt-bridge/screenshots/screenshot-onboarding-checklist.png)
+
+Шапка и notice stack теперь работают как единая operator-facing поверхность, а не как просто статусная панель.
+
+- **Onboarding checklist** проводит через Bluetooth access, audio backend, добавление speakers, MA auth и latency tuning.
+- **Show checklist / Hide checklist** — отдельный disclosure control. Если скрыть checklist, bridge оставляет компактную summary-card вместо полного исчезновения guidance.
+- **Recovery guidance** показывает issue groups вроде disconnected speakers, missing sinks или released devices и предлагает прямые действия: reconnect, re-pair, reclaim или переход в нужную конфигурационную вкладку.
+- **Deep links из guidance** используют те же точки входа, что empty states и dashboard quick actions, поэтому рекомендованные действия сразу открывают правильную строку/вкладку.
+
+Если все настроенные колонки сейчас находятся в состоянии release, onboarding/recovery stack может показать действия **Reclaim**, чтобы быстро вернуть управление bridge без ручной правки конфига.
+
+![Recovery guidance banner с actionable operator recommendations](/sendspin-bt-bridge/screenshots/screenshot-recovery-guidance.png)
 
 ## Фильтры, групповые действия и режимы просмотра
 
@@ -99,6 +115,8 @@ description: Актуальное руководство по панели Sends
 - **Шестерёнка settings**, которая переводит прямо в соответствующую строку **Configuration → Devices**.
 
 Бейдж группы Music Assistant тоже кликабелен — он открывает настройки этой sync group в MA.
+
+**Release** здесь намеренно временный: bridge перестаёт активно перехватывать колонку, чтобы ею мог воспользоваться телефон или ПК. **Disable** исключает устройство из bridge startup, а **Unpair** меняет Bluetooth trust state на уровне хоста.
 
 ## Панель Configuration
 
@@ -157,12 +175,15 @@ description: Актуальное руководство по панели Sends
 **Music Assistant** объединяет статус подключения и инструменты авторизации:
 
 - Карточка **Connection status**.
+- Действие **Reconfigure** прямо в карточке статуса соединения. Используйте его, когда нужно сменить MA server, обновить токен или осознанно вернуть auth-flow после первичной настройки.
 - **Discover** находит или подтверждает URL MA.
 - **Get token** входит через MA credentials, сохраняет long-lived `MA_API_TOKEN` и не сохраняет пароль.
 - Если прямой MA login получает auth-ошибку на HA-backed экземпляре MA, UI может продолжить через **Home Assistant OAuth / MFA**.
-- **Get token automatically** показывается для HA-backed MA. Под HA Ingress сначала пробуется silent auth через browser HA token, а при неудаче используется popup-flow.
+- **Get token automatically** показывается только в addon/Ingress-flow, где silent bootstrap токена Home Assistant действительно возможен. Под HA Ingress сначала пробуется silent auth через browser HA token, а при неудаче используется popup-flow.
 - Ручное поле **MA API token**.
 - Переключатели **WebSocket monitor**, **Route volume through MA**, **Route mute through MA**.
+
+Если guidance-banner или onboarding action отправляет вас исправлять MA auth, эта вкладка открывается сразу в **режиме reconfigure**, чтобы auth-секция была видна без лишних кликов.
 
 ## Empty states и deep links
 
@@ -221,3 +242,9 @@ Empty-state действия были приведены в соответств
 - runtime-specific действия вроде **Update Now**, **Release Notes** или manual update hint.
 
 Ссылка **Report** в шапке и действие в Diagnostics открывают flow bug-report, который добавляет diagnostics и помогает подготовить GitHub issue.
+
+Теперь bug-report dialog также заранее заполняет **редактируемое suggested description** на основе замаскированной диагностики. В нём кратко собираются recent issue-worthy logs, состояние Bluetooth/устройств, здоровье daemon/subprocess и статус Music Assistant, чтобы issue не начинался с пустого поля.
+
+![Bug report dialog с diagnostics-driven suggested description и auto-attached preview](/sendspin-bt-bridge/screenshots/screenshot-bug-report-dialog.png)
+
+![Bug report dialog с diagnostics-driven suggested description и auto-attached preview](/sendspin-bt-bridge/screenshots/screenshot-bug-report-dialog.png)

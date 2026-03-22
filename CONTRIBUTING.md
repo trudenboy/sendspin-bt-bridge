@@ -35,7 +35,7 @@ python sendspin_client.py
 
 ## Manual Test Checklist
 
-Run `pytest` for the automated test suite and use `cd docs-site && npm run build` when changing the Starlight docs. The Python suite currently validates the v2.40.5 runtime, while the docs build catches broken Starlight routes, content, and screenshots.
+Run `python3 -m pytest -q` for the automated runtime suite and use `cd docs-site && npm run build` when changing the Starlight docs. The test suite and docs should be treated as separate validation surfaces: Python catches runtime regressions, while the docs build catches broken Starlight routes, content, screenshot references, and frontmatter/schema issues.
 
 ### Linting
 
@@ -56,8 +56,38 @@ Additionally, use this manual checklist when testing changes:
 - [ ] Config changes via the web UI persist after container restart
 - [ ] `/api/status` returns valid JSON
 - [ ] `/api/config` GET returns current config; POST with valid payload saves it
+- [ ] Onboarding guidance points to the next unmet setup step in a fresh or demo environment
+- [ ] Recovery guidance and release/reclaim actions appear for disconnected or released speakers
+- [ ] The bug-report flow downloads diagnostics and opens a prefilled GitHub issue description
 
-For HA addon changes, additionally test via the HA Addon Store dev workflow (local repository). For documentation changes that include screenshots, prefer the built-in demo stack (`DEMO_MODE=true python sendspin_client.py`) as the repeatable local capture environment before resorting to live HA-only screenshots.
+For HA addon changes, additionally test via the HA Addon Store dev workflow (local repository). For documentation changes that include screenshots, prefer the built-in demo stack (`DEMO_MODE=true python sendspin_client.py`) as the repeatable local capture environment and stable screenshot/test stand for onboarding, recovery, diagnostics, and bug-report UX before resorting to live HA-only screenshots.
+
+## Demo mode for docs, screenshots, and UX review
+
+The built-in demo mode is the canonical no-hardware environment for documentation work and most UI validation:
+
+```bash
+DEMO_MODE=true python sendspin_client.py
+```
+
+Open `http://127.0.0.1:8080/` after startup. Demo mode ships a stable nine-player stand with:
+
+- mixed playing / idle / disconnected states
+- MA-connected metadata and album art
+- realistic diagnostics and logs
+- deterministic onboarding/recovery surfaces for repeatable captures
+
+Use it for:
+
+- dashboard and configuration screenshots
+- onboarding / recovery / bug-report UI review
+- docs-site screenshot refreshes tracked in `docs-site/src/assets/SCREENSHOTS_TO_RETAKE.md`
+
+Still use a non-demo environment for:
+
+- auth/login screenshots
+- HA-only addon configuration captures
+- anything that depends on real Ingress or Supervisor behavior
 
 ---
 
@@ -85,7 +115,9 @@ Keep the current runtime layering in mind when making code or docs changes:
 - `BridgeOrchestrator` owns runtime bootstrap, channel-aware port defaults, lifecycle publication, web startup, Music Assistant bootstrap, and long-running task assembly.
 - `SendspinClient` still owns one speaker lifecycle, but focused subprocess concerns live in `services.subprocess_command`, `services.subprocess_ipc`, `services.subprocess_stderr`, and `services.subprocess_stop`.
 - `services/daemon_process.py` + `services/bridge_daemon.py` run one isolated Sendspin daemon per speaker with `PULSE_SINK` preselected before audio starts.
-- `state.py` plus the newer lifecycle/read-side services publish startup progress, snapshots, update info, onboarding guidance, and SSE payloads to the UI/API.
+- `state.py` plus the newer lifecycle/read-side services publish startup progress, snapshots, update info, onboarding guidance, recovery guidance, operator guidance, and SSE payloads to the UI/API.
+- Treat `/api/diagnostics`, `/api/bridge/telemetry`, `/api/hooks`, `/api/onboarding/assistant`, `/api/recovery/assistant`, and `/api/operator/guidance` as operator-facing contracts when updating docs, support flows, or dashboard UI.
+- `DEMO_MODE=true` swaps the hardware/runtime layers for deterministic mocks; use it when you need repeatable screenshot states or to exercise guidance/diagnostics flows without Bluetooth hardware.
 
 ---
 
@@ -122,6 +154,7 @@ Open a new issue using one of the structured templates:
 | [💡 Feature Request](https://github.com/trudenboy/sendspin-bt-bridge/issues/new?template=feature_request.yml) | Suggest a new feature or enhancement |
 
 **Tips for good bug reports:**
+- Prefer the web UI **Submit bug report** flow when possible; it downloads masked diagnostics and pre-fills the GitHub issue body from the current diagnostics and recovery state.
 - Include your deployment method (Docker / HA Addon / Proxmox LXC / OpenWrt LXC)
 - Paste log output: `docker logs sendspin-client --tail 100` or `journalctl -u sendspin-client`
 - For BT/audio issues: include `bluetoothctl info <MAC>` and `pactl list sinks short` output

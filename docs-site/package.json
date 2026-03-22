@@ -4,7 +4,7 @@
   "version": "0.0.1",
   "scripts": {
     "dev": "astro dev",
-    "build": "astro build",
+    "build": "rm -rf .astro node_modules/.astro && node -e \"require('fs').mkdirSync('dist/chunks', { recursive: true })\" && astro build",
     "preview": "astro preview"
   },
   "dependencies": {
@@ -12,6 +12,7 @@
     "astro": "^5.6.1",
     "mermaid": "^11.12.3",
     "sharp": "^0.34.2",
-    "unist-util-visit": "^5.1.0"
+    "unist-util-visit": "^5.1.0",
+    "zod": "3.25.76"
   }
 }

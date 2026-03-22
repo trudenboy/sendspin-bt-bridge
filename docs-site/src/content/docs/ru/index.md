@@ -73,7 +73,7 @@ import { Aside } from '@astrojs/starlight/components';
 
 Запустите несколько bridge-инстансов против одного сервера Music Assistant, чтобы покрыть все комнаты — каждый bridge обслуживает колонки в своей Bluetooth-зоне.
 
-[![Схема развёртывания: план этажа с зонами и адаптерами](/sendspin-bt-bridge/diagrams/multiroom-diagram.png)](/sendspin-bt-bridge/diagrams/multiroom-diagram/)
+[![Схема многомостового развёртывания с зонами, адаптерами и плеерами на уровне устройств](/sendspin-bt-bridge/diagrams/deployment-multiroom.svg)](/sendspin-bt-bridge/diagrams/multiroom-diagram/)
 
 ## С чего начать
 

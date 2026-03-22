@@ -15,8 +15,9 @@ Sendspin Bluetooth Bridge is a local-first, headless-friendly bridge for Home As
 ## What it does
 
 - Turns ordinary Bluetooth speakers and headphones into Music Assistant players.
-- Bridges multiple devices at once, with one isolated playback subprocess per speaker.
+- Bridges multiple devices at once, with BridgeOrchestrator coordinating one isolated playback subprocess per speaker.
 - Adds a web UI for setup, Bluetooth pairing workflows, diagnostics, logs, and config backup.
+- Guides setup and recovery with an onboarding checklist, operator guidance banners, and action-oriented troubleshooting.
 - Supports Home Assistant addon, Docker, Raspberry Pi, Proxmox VE LXC, and OpenWrt LXC deployments.
 - Helps you scale beyond one room by running multiple bridge instances against the same MA server.
 
@@ -30,6 +31,21 @@ Sendspin Bluetooth Bridge is a local-first, headless-friendly bridge for Home As
 
 No command-line setup required. The web UI handles Bluetooth scanning, pairing, and Music Assistant configuration entirely from the browser.
 
+## Runtime modes
+
+The project now has two practical runtime modes:
+
+- **Production mode** — real Bluetooth, PulseAudio/PipeWire, and Music Assistant integration.
+- **Demo mode** — deterministic UI/test stand for docs, screenshots, and offline UX review.
+
+Run the local demo from the repository root:
+
+```bash
+DEMO_MODE=true python sendspin_client.py
+```
+
+Then open `http://127.0.0.1:8080/`. Demo mode ships a stable nine-player fixture with onboarding, diagnostics, logs, group state, and MA metadata preloaded, so contributors can document and review the UI without live hardware.
+
 ## Quick start: Home Assistant
 
 The fastest path is the Home Assistant addon.
@@ -39,7 +55,7 @@ The fastest path is the Home Assistant addon.
 1. Add the repository to Home Assistant.
 2. Install **Sendspin Bluetooth Bridge** from the Add-on Store.
 3. Start the addon and open the web UI from the HA sidebar.
-4. Add your Bluetooth speakers and connect Music Assistant features from **Configuration → Music Assistant**.
+4. Add your Bluetooth speakers, then use **Configuration → Music Assistant** to connect or reconfigure Music Assistant. The dashboard onboarding checklist and recovery hints point to the next safe step.
 
 Full Home Assistant guide: <https://trudenboy.github.io/sendspin-bt-bridge/installation/ha-addon/>
 
@@ -59,6 +75,8 @@ Full Home Assistant guide: <https://trudenboy.github.io/sendspin-bt-bridge/insta
 - **Deep Music Assistant integration** — now playing, album art, transport controls, group volume, shuffle and repeat — all synced in real time through a persistent connection to the MA server.
 - **Home Assistant automations** — every Bluetooth speaker becomes a Music Assistant player entity visible in HA. Use it in automations, scripts, scenes, dashboards, and with voice assistants.
 - **Reliable Bluetooth** — automatic reconnection, disconnect detection, and device health monitoring keep your speakers connected without manual intervention.
+- **Guided setup and recovery** — built-in onboarding, recovery guidance, and diagnostics-driven bug reporting reduce the amount of trial-and-error during setup and troubleshooting.
+- **Stable demo stand** — the public live demo and `DEMO_MODE=true python sendspin_client.py` provide a repeatable UI, screenshot, and test environment without Bluetooth hardware.
 - **Multi-room ready** — run one bridge per room or one bridge with many speakers. Multiple bridges share the same Music Assistant server for whole-home audio.
 - **Five deployment options** — Home Assistant addon, Docker, Raspberry Pi, Proxmox VE LXC, and OpenWrt LXC — same bridge, same web UI, same features everywhere.
 - **REST API and live updates** — 60+ automation-friendly endpoints with real-time SSE status stream for custom dashboards and integrations.
@@ -82,6 +100,12 @@ The bridge now treats a few runtime surfaces as operator-facing contracts:
 - **Diagnostics and telemetry** — `/api/diagnostics` and `/api/bridge/telemetry` are the canonical runtime inspection endpoints. They include `startup_progress`, `runtime_info`, hook delivery status, and `contract_versions` for the config schema and subprocess IPC protocol.
 - **Subprocess IPC** — parent/daemon JSON-line envelopes always carry `protocol_version` from `services/ipc_protocol.py`. Compatibility checks happen at the envelope layer instead of silently reshaping messages.
 - **Runtime hooks** — `/api/hooks` delivers the same internal bridge and device events that power diagnostics, so lifecycle automations can subscribe to a stable event stream instead of scraping logs.
+
+## Operator UX
+
+- **Onboarding and recovery** — the header guidance surfaces a five-step setup checklist, recovery notices, and safe next actions such as reconnecting a speaker or reclaiming Bluetooth management after a release.
+- **Music Assistant reconfigure flow** — reopen **Configuration → Music Assistant** at any time to reconnect or move to another MA instance. In the Home Assistant addon, **Sign in with Home Assistant** can silently mint or reuse the MA token through Ingress when available, then falls back to the regular HA login flow.
+- **Support-first diagnostics** — **Submit bug report** downloads masked diagnostics and opens GitHub with a suggested description prefilled from current diagnostics, recovery guidance, and recent issue logs.
 
 ## Documentation map
 

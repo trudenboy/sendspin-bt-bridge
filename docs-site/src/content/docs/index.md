@@ -46,11 +46,11 @@ Each configured Bluetooth device shows up as its own player in Music Assistant. 
   <Card title="HA addon tracks" icon="seti:flag">
     Stable, RC, and beta addons use separate ingress and player-port defaults so they are easier to distinguish and safer to test side by side.
   </Card>
-  <Card title="Reconnect + diagnostics" icon="refresh">
-    D-Bus disconnect detection, fallback polling, runtime diagnostics, and SSE status updates keep headless deployments manageable.
+  <Card title="Guidance + diagnostics" icon="refresh">
+    Onboarding checklists, recovery guidance, diagnostics, and SSE status updates keep headless deployments manageable.
   </Card>
   <Card title="Web UI + API" icon="laptop">
-    Use the dashboard for pairing, diagnostics, logs, update checks, config backup/restore, and Music Assistant integration — or automate it through the REST API.
+    Use the dashboard for scan/import, release or reclaim, Music Assistant reconfigure, bug reports, diagnostics, logs, and config backup/restore — or automate it through the REST API.
   </Card>
 </CardGrid>
 
@@ -73,7 +73,7 @@ Each configured Bluetooth device shows up as its own player in Music Assistant. 
 
 Run multiple bridge instances against the same Music Assistant server to cover every room — each bridge handles the speakers within its Bluetooth range.
 
-[![Deployment diagram: multiroom floorplan with zones and adapters](/sendspin-bt-bridge/diagrams/multiroom-diagram.png)](/sendspin-bt-bridge/diagrams/multiroom-diagram/)
+[![Multi-bridge deployment diagram with zones, adapters, and per-device players](/sendspin-bt-bridge/diagrams/deployment-multiroom.svg)](/sendspin-bt-bridge/diagrams/multiroom-diagram/)
 
 ## Start here
 
@@ -85,7 +85,7 @@ Run multiple bridge instances against the same Music Assistant server to cover e
   <LinkCard title="Configuration" href="/sendspin-bt-bridge/configuration/" description="Bridge settings, device fields, adapters, auth, and update behavior" />
   <LinkCard title="Architecture" href="/sendspin-bt-bridge/architecture/" description="Process model, IPC, audio routing, Bluetooth lifecycle, and HA ingress behavior" />
   <LinkCard title="API Reference" href="/sendspin-bt-bridge/api/" description="REST endpoints for status, diagnostics, Bluetooth, Music Assistant, and updates" />
-  <LinkCard title="Release history" href="https://github.com/trudenboy/sendspin-bt-bridge/blob/main/CHANGELOG.md" description="Current release notes, including the v2.40.5 port and HA-track changes" />
+  <LinkCard title="Release history" href="https://github.com/trudenboy/sendspin-bt-bridge/blob/main/CHANGELOG.md" description="Current release notes, including recent UI guidance, MA auth, and Bluetooth workflow changes" />
 </CardGrid>
 
 ## Community

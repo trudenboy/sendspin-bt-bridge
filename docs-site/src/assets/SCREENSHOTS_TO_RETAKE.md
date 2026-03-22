@@ -1,8 +1,8 @@
 # Screenshots to Retake
 
-Use the built-in local demo mode as the **primary screenshot source** for bridge/web UI documentation. It now boots into a canonical six-player stand that is stable enough for repeatable captures and rich enough for cards, diagnostics, logs, and config screenshots.
+Use the built-in local demo mode as the **primary screenshot source** for bridge/web UI documentation.
 
-## Primary workflow: local demo screenshot stand
+## Primary workflow: canonical demo screenshot stand
 
 From the repository root:
 
@@ -12,14 +12,14 @@ DEMO_MODE=true python sendspin_client.py
 
 Then open `http://127.0.0.1:8080/`.
 
-### What demo mode now guarantees
+### What demo mode guarantees for docs work
 
 - six configured demo players on every run
 - one real sync group plus multiple solo players
 - mixed playing / idle / disconnected states from first render
-- Music Assistant connected with representative now-playing metadata and embedded artwork
+- seeded Music Assistant metadata, artwork, diagnostics, and logs
 - no Bluetooth, PulseAudio, or MA hardware required
-- canonical fixtures override the runtime device list for that process, so local configs do not affect screenshot composition
+- a stable layout that is safe to use as the canonical docs capture stand
 
 ### Canonical six-player layout
 
@@ -32,201 +32,107 @@ Then open `http://127.0.0.1:8080/`.
 | Patio | Solo player | Idle / connected / muted | Useful for muted + paused UI states |
 | Bedroom | Solo player | Disconnected | Canonical disconnected card |
 
-Use this stand for dashboard, header, player cards, group controls, config, diagnostics, logs, and most other docs/web UI screenshots. The remaining special-case captures are:
+Use this stand for dashboard, header, guidance banners, config, diagnostics, logs, bug-report dialog, Music Assistant reconfigure, Bluetooth scan modal, and most other docs/web UI screenshots.
 
-- HA addon configuration screenshots (require a Home Assistant environment)
-- login/auth screenshots (require a dedicated auth-enabled setup; demo mode still forces auth off)
+Special-case captures that still need non-demo environments:
 
-### Capture tips
-
-- Use a 1400×900 browser window for full-page/dashboard captures.
-- Use 800×600 or DevTools node screenshots for individual cards/sections.
-- Collapse config/diagnostics/logs sections unless the target screenshot needs them open.
-- The simulator only advances track progress and slow battery drift; it does **not** randomize device roles, so you can re-open the demo and get the same composition.
+- HA addon configuration screenshots
+- login/auth screenshots (demo mode forces auth off)
+- any screenshot that specifically needs real HA Ingress chrome
 
 ---
 
-## Audit snapshot — 2026-03-19
+## Audit snapshot — 2026-03-22
 
-Canonical published assets live in `docs-site/public/screenshots/`. Current docs references were audited against that directory.
+Canonical published assets live in `docs-site/public/screenshots/`.
+
+### Published core assets
 
 | Asset | Docs usage | Status | Notes |
 | --- | --- | --- | --- |
-| `screenshot-dashboard-full.png` | `index.md`, `web-ui.md`, root `README.md` | ✅ refreshed | Re-captured from the canonical six-player demo stand with the current default **list view** and an expanded now-playing row. |
-| `screenshot-header.png` | `web-ui.md` | ✅ refreshed | Re-captured from the canonical six-player demo stand with the live version/update badges from the current demo runtime. |
-| `screenshot-group-controls.png` | `web-ui.md` | ✅ refreshed | Re-captured from the canonical six-player demo stand with the current list-view toggle state. |
-| `screenshot-device-card-playing.png` | `web-ui.md` | ✅ refreshed | Re-captured from the canonical six-player demo stand. |
-| `screenshot-device-card-hover.png` | `web-ui.md` | ✅ refreshed | Re-captured from the canonical six-player demo stand. |
-| `screenshot-config.png` | `configuration.md`, `web-ui.md` | ✅ refreshed | Re-captured from the canonical six-player demo stand. |
-| `screenshot-config-devices.png` | `devices.md`, `configuration.md`, `web-ui.md` | ✅ refreshed | Re-captured from the canonical six-player demo stand with all six rows visible and the current multi-adapter fixture data. |
-| `screenshot-config-adapters.png` | `devices.md`, `configuration.md`, `web-ui.md` | ✅ refreshed | Re-captured from the canonical six-player demo stand with the current named adapters: `Living Room USB Adapter`, `Kitchen & Patio Controller`, and `Office Desk Bluetooth`. |
-| `screenshot-advanced-settings.png` | `configuration.md`, `web-ui.md` | ✅ refreshed | Re-captured from the canonical six-player demo stand. |
-| `screenshot-diagnostics.png` | `web-ui.md` | ✅ refreshed | Re-captured from the canonical six-player demo stand with deterministic injected diagnostics payload matching the demo fixture state. |
-| `screenshot-logs.png` | `web-ui.md` | ✅ refreshed | Re-captured from the canonical six-player demo stand with deterministic injected demo log lines. |
-| `screenshot-empty-no-devices.png` | `devices.md`, `web-ui.md` | ✅ refreshed | Re-captured from a separate empty-config local run. |
-| `screenshot-login.png` | `web-ui.md` | ⚠️ retained | Existing asset retained. This is **not** HA-only, but it still needs a dedicated auth-enabled capture path; demo mode forces auth off, and the current real auth flows do not surface the older three-tab composition from one live state. |
-| `screenshot-update-modal.png` | `web-ui.md` | ✅ refreshed | Re-captured from the canonical six-player demo stand with the current demo release notes body visible. |
-| `screenshot-ha-addon-config.png` | `configuration.md` | ℹ️ retained | HA-only asset; left unchanged. |
-| `screenshot-ha-addon-config-bottom.png` | `configuration.md` | ℹ️ retained | HA-only asset; left unchanged. |
-| `screenshot-ha-addon-device-edit.png` | `configuration.md` | ℹ️ retained | HA-only asset; left unchanged. |
-| `sbb_infographic_en.png` / `sbb_infographic_ru.png` | `index.md` / `ru/index.md` | ℹ️ retained | Not part of this screenshot retake pass. |
+| `screenshot-dashboard-full.png` | `index.md`, `web-ui.md`, root `README.md` | ✅ current | Canonical demo stand, list view, representative active row expanded. |
+| `screenshot-header.png` | `web-ui.md` | ✅ current | Demo stand with live version/update pills. |
+| `screenshot-group-controls.png` | `web-ui.md` | ✅ current | Demo stand in list view with current toolbar controls. |
+| `screenshot-device-card-playing.png` | `web-ui.md` | ✅ current | Playing demo device card. |
+| `screenshot-device-card-hover.png` | `web-ui.md` | ✅ current | Hover/details state with routing metadata and quick actions. |
+| `screenshot-config.png` | `configuration.md`, `web-ui.md` | ✅ current | General tab from demo stand. |
+| `screenshot-config-devices.png` | `devices.md`, `configuration.md`, `web-ui.md` | ✅ current | Devices tab focused on saved fleet table. |
+| `screenshot-config-adapters.png` | `devices.md`, `configuration.md`, `web-ui.md` | ✅ usable | Bluetooth tab asset remains valid, but future retakes should include clearer paired-device context. |
+| `screenshot-advanced-settings.png` | `configuration.md`, `web-ui.md` | ✅ usable | Music Assistant tab asset remains valid for current connection/token settings. |
+| `screenshot-diagnostics.png` | `web-ui.md` | ✅ current | Demo diagnostics payload aligned with current fixture state. |
+| `screenshot-logs.png` | `web-ui.md` | ✅ current | Demo logs with deterministic lines. |
+| `screenshot-empty-no-devices.png` | `devices.md`, `web-ui.md` | ✅ usable | Still valid for empty-state CTA behavior. |
+| `screenshot-update-modal.png` | `web-ui.md` | ✅ current | Update modal from demo stand. |
+| `screenshot-login.png` | `web-ui.md` | ⚠️ retained | Still requires a dedicated auth-enabled capture path; demo mode cannot produce it. |
+| `screenshot-ha-addon-config.png` | `configuration.md` | ℹ️ retained | HA-only asset; intentionally untouched in this pass. |
+| `screenshot-ha-addon-config-bottom.png` | `configuration.md` | ℹ️ retained | HA-only asset; intentionally untouched in this pass. |
+| `screenshot-ha-addon-device-edit.png` | `configuration.md` | ℹ️ retained | HA-only asset; intentionally untouched in this pass. |
 
-Docs refs were re-audited after the recapture pass:
+### New capture specs for current UI surfaces
 
-- no docs page points at a missing screenshot filename
-- no filename/reference changes were required during this pass
-- `screenshot-device-card.png` and `screenshot-full-dark.png` currently remain canonical-but-unused assets in `docs-site/public/screenshots/`
+These surfaces track the current UI screenshot queue, mixing already captured assets with the remaining demo states we still want to publish.
+
+| Proposed asset | Status | Primary doc target | Capture source | Spec |
+| --- | --- | --- | --- | --- |
+| `screenshot-onboarding-checklist.png` | ✅ captured | `web-ui.md` | Demo | Expanded setup checklist showing explicit **Show/Hide** control, progress summary, and at least one recommended action. |
+| `screenshot-onboarding-checklist-collapsed.png` | ✅ captured | `devices.md` | Demo | Collapsed setup checklist from the demo showing the compact progress summary and explicit **Show checklist** control. |
+| `screenshot-recovery-guidance.png` | ✅ captured | `web-ui.md`, `troubleshooting.md` | Demo | Recovery banner with at least one actionable item and one jump action. |
+| `screenshot-ma-connection-status.png` | ✅ captured | `configuration.md`, `web-ui.md` | Demo | Music Assistant **Connection status** card with **Reconfigure** visible. |
+| `screenshot-bt-scan-modal.png` | ✅ captured | `devices.md`, `troubleshooting.md` | Demo | Bluetooth scan modal showing adapter selector, **Audio devices only**, progress, and import workflow. |
+| `screenshot-bug-report-dialog.png` | ✅ captured | `web-ui.md`, `troubleshooting.md` | Demo | Bug report dialog with diagnostics-generated suggested description and preview section visible. |
+| `screenshot-device-released.png` | ✅ captured | `devices.md` | Demo | Released device row showing reclaim-ready runtime state. |
+| `screenshot-paired-devices-card.png` | ✅ captured | `configuration.md`, `devices.md` | Demo | Bluetooth tab **Paired devices** card with count badge and import/repair affordances visible. |
+
+### Capture notes for the new queue
+
+- Prefer **1400×900** browser captures for page-level surfaces.
+- Prefer **800×600** or node-level captures for individual cards/modals.
+- Keep the UI in **list view** unless the screenshot specifically needs a card-style grid example.
+- Use demo mode for every non-HA screenshot unless the asset explicitly depends on HA Ingress or addon configuration pages.
+- Do **not** replace HA-only addon screenshots during general docs refreshes unless the task explicitly calls for it.
 
 ---
 
-## 1. `screenshot-dashboard-full.png`
+## Existing asset specs
+
+### `screenshot-dashboard-full.png`
 
 **Used in:** `web-ui.md`, `index.md`, `README.md`
 
-**State:** Full dashboard in the current default **list view** with all **six** demo players visible: three `Main Floor` members, `Office`, `Patio`, and disconnected `Bedroom`.
-- keep one active row expanded so artwork plus previous/next queue items are visible
+**State:** Full dashboard in list view with all six demo players visible and one active row expanded.
 
-**Capture:** Full-page screenshot at 1400px wide. Collapse config/diagnostics/logs sections.
-
----
-
-## 2. `screenshot-header.png`
+### `screenshot-header.png`
 
 **Used in:** `web-ui.md`
 
-**State:** Top header bar only. Use the local demo run so the health pills reflect the six-player stand and the update badge shows the seeded release target.
+**State:** Header bar only, with version/update pills and runtime health indicators.
 
-**Capture:** Crop to header bar only.
-
----
-
-## 3. `screenshot-device-card-playing.png`
+### `screenshot-device-card-playing.png`
 
 **Used in:** `web-ui.md`
 
-**State:** Single device card for `Living Room` (preferred) or `Office` while actively playing.
-- artwork thumbnail visible
-- EQ bars visible next to player name
-- group badge visible for `Living Room`, solo layout visible for `Office`
-- transport row, progress bar, volume slider, and audio format visible
+**State:** Single active player with artwork, transport, progress bar, and volume.
 
-**Capture:** Single card, no hover state.
-
----
-
-## 4. `screenshot-device-card-hover.png`
+### `screenshot-device-card-hover.png`
 
 **Used in:** `web-ui.md`
 
-**State:** Hovered `Living Room` card.
-- hover details visible: MAC, WebSocket URL, adapter, MA host, sink name
-- artwork preview popover open
-- action buttons visible: reconnect / re-pair / release
-- group/delay metadata visible
+**State:** Hover/details state with routing metadata and quick actions, including release/reclaim-capable controls.
 
-**Capture:** Card in hover state (force `:hover` in DevTools if needed).
-
----
-
-## 5. `screenshot-group-controls.png`
+### `screenshot-group-controls.png`
 
 **Used in:** `web-ui.md`
 
-**State:** Controls bar in list-view mode with `Main Floor` available in the filter.
-- player count visible
-- all checkbox visible
-- volume slider around 50%
-- mute / pause buttons visible
-- list toggle active
+**State:** Toolbar area with group filter, adapter filter, selection tools, and list/grid toggle.
 
-**Capture:** Controls bar area only.
+### `screenshot-config-devices.png`
 
----
+**Used in:** `web-ui.md`, `configuration.md`, `devices.md`
 
-## 6. `screenshot-config-adapters.png`
+**State:** Devices tab focused on the saved fleet table. Scan/import controls no longer need to be visible here.
 
-**Used in:** `web-ui.md`
+### `screenshot-config-adapters.png`
 
-**State:** Configuration section expanded, showing the named demo adapters.
-- `Living Room USB Adapter`
-- `Kitchen & Patio Controller`
-- `Office Desk Bluetooth`
-- refresh and add controls visible
+**Used in:** `web-ui.md`, `configuration.md`, `devices.md`
 
-**Capture:** Config section from top through adapters table.
-
----
-
-## 7. `screenshot-config-devices.png`
-
-**Used in:** `web-ui.md`
-
-**State:** Devices table in config section.
-- all **six** demo rows visible
-- adapter column reflects the current multi-adapter fixture (`hci0` / `hci1` / `hci2`)
-- preferred formats and ports are populated
-- add device / scan / already paired controls visible
-
-**Capture:** Devices table area.
-
----
-
-## 8. `screenshot-diagnostics.png`
-
-**Used in:** `web-ui.md`
-
-**State:** Diagnostics section expanded.
-- health summary cards visible
-- named adapter rows visible
-- per-device rows show a mix of green/amber/red states matching the canonical six-player stand
-
-**Capture:** Full diagnostics section.
-
----
-
-## 9. `screenshot-logs.png`
-
-**Used in:** `web-ui.md`
-
-**State:** Logs section expanded.
-- ~15 lines of output visible
-- include a mix of INFO and WARNING lines if possible
-- filter buttons visible
-
-**Capture:** Full logs section.
-
----
-
-## 10. `screenshot-ha-addon-config.png`
-
-**Used in:** `configuration.md` (EN + RU)
-
-**State:** HA addon Configuration tab, Options section.
-- fields visible: Music Assistant server, Sendspin port, bridge_name, timezone, PULSE_LATENCY_MSEC, PREFER_SBC_CODEC, BT_CHECK_INTERVAL, BT_MAX_RECONNECT_FAILS, auth_enabled
-- `ma_api_url` and `ma_api_token` visible
-
-**Capture:** HA addon Options panel, full height.
-
----
-
-## 11. `screenshot-ha-addon-config-bottom.png`
-
-**Used in:** `configuration.md` (EN + RU)
-
-**State:** HA addon config — Bluetooth devices list section.
-- at least 2 device entries visible with edit/delete buttons
-- add button visible
-
-**Capture:** Devices section of HA addon config.
-
----
-
-## 12. `screenshot-ha-addon-device-edit.png`
-
-**Used in:** `configuration.md` (EN + RU)
-
-**State:** Device edit dialog open in HA addon config.
-- fields visible: mac, player_name, adapter, static_delay_ms, listen_host, listen_port, enabled
-- `keepalive_silence` and `keepalive_interval` visible
-
-**Capture:** Dialog box / modal, full height.
+**State:** Bluetooth tab showing adapter inventory. Future retakes should try to include enough surrounding context to make it obvious that paired-device tools live in the same tab.

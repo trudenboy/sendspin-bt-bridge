@@ -51,8 +51,12 @@ simultaneously.
    `bluetooth_devices` with the speaker's MAC address and a player name.
 3. **Set `sendspin_server`** to the IP of your Music Assistant instance, or
    leave `auto` to discover it via mDNS (recommended).
-4. **Start the addon.** Check the Log tab for connection status.
-5. The speaker now appears as a player in Music Assistant—stream away!
+4. **Start the addon** and open the sidebar UI. The header onboarding checklist
+   points to the next safe setup step.
+5. **Open Configuration → Music Assistant** to connect or reconfigure MA. In
+   addon mode, "Sign in with Home Assistant" can create or reuse the token for
+   you.
+6. The speaker now appears as a player in Music Assistant—stream away!
 
 ## Update channels in Home Assistant
 
@@ -75,6 +79,7 @@ Important:
 
 - this checked-in `ha-addon/` directory is the **stable** source surface; prerelease variants are generated into `ha-addon-rc/` and `ha-addon-beta/`
 - stable / RC / Beta variants can run side by side on one HAOS host because they use different default HA ingress ports and different default player listen-port ranges
+- stable starts automatically after host boot; RC/Beta default to manual start so prerelease builds stay opt-in
 - do **not** configure the same Bluetooth speaker in more than one variant at the same time
 - do **not** let multiple variants manage the same Bluetooth adapter unless you intentionally isolate devices and ports
 - if you set a manual `base_listen_port` override, keep it unique across variants
@@ -94,15 +99,20 @@ Important:
 | `prefer_sbc_codec` | bool | `false` | Force the SBC Bluetooth codec after each connection. SBC uses less CPU than AAC/LDAC—useful on low-power hardware with multiple speakers. Enable alongside PCM 44.1 kHz / 16-bit in MA for maximum CPU savings. |
 | `bt_check_interval` | int | `10` | Bluetooth reconnect check interval in seconds. Lower values detect disconnects faster. |
 | `bt_max_reconnect_fails` | int | `0` | Maximum consecutive reconnect attempts before giving up. `0` means unlimited (keep retrying forever). |
-| `auth_enabled` | bool | `false` | Enable password protection for the web UI. Set the password through the web interface after enabling. |
 | `log_level` | list | `info` | Logging verbosity: `info` or `debug`. Use `debug` when troubleshooting. |
 ### Music Assistant API options
 
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `ma_api_url` | string | _(empty)_ | Music Assistant REST API URL (e.g. `http://192.168.1.100:8095`). Auto-detected in addon mode. |
-| `ma_api_token` | string | _(empty)_ | MA API token. **In addon mode** — click "Sign in with Home Assistant" in the web UI to create one automatically (no manual setup needed). For Docker/LXC — create a token in MA → Settings → API Tokens and paste it here. |
+| `ma_api_token` | string | _(empty)_ | MA API token. **In addon mode** — open **Configuration → Music Assistant** and use "Sign in with Home Assistant" to create or refresh it automatically (no manual setup needed). For Docker/LXC — create a token in MA → Settings → API Tokens and paste it here. |
+| `ma_auto_silent_auth` | bool | `true` | Addon/Ingress only. When enabled, the bridge first tries silent token creation or reuse via Home Assistant Ingress before falling back to the regular HA login popup. |
 | `volume_via_ma` | bool | `true` | Route volume commands through the MA API instead of controlling PulseAudio directly. Keeps MA and the speaker in sync. |
+
+The Music Assistant panel is reconfigurable: you can return to
+**Configuration → Music Assistant** at any time to reconnect the bridge, point
+it at a different MA instance, or refresh a stale token without rebuilding your
+Bluetooth device list.
 
 ### Bluetooth devices
 
@@ -165,7 +175,7 @@ When multiple addon variants are installed on the same HAOS host, they use diffe
 
 ### Manual port overrides
 
-- The Home Assistant Ingress web UI port is fixed by the installed addon track: `8080` (stable), `8081` (RC), `8082` (beta).
+- The Home Assistant Ingress web UI port is fixed by the installed addon track: `8080` (stable), `8081` (RC), `8082` (beta). You cannot remap the Ingress port from addon config.
 - Leave `base_listen_port` empty unless you need to shift the whole device-port range for this addon instance.
 - Use per-device `listen_port` only for targeted exceptions.
 
@@ -210,12 +220,35 @@ The web interface provides:
 - **Configuration** — edit settings without restarting (some changes require a
   restart to take effect).
 - **Music Assistant integration** — connect to MA with one click via
-  "Sign in with Home Assistant" (Configuration → Advanced settings). The bridge
-  creates a long-lived MA API token automatically — no manual token setup needed.
-- **Diagnostics** — system info, adapter status, and log viewer.
+  "Sign in with Home Assistant" (Configuration → Music Assistant). The status
+  card now owns the **Reconfigure** action, so reconnecting to a new MA server
+  or refreshing the token uses the same surface as the original setup flow. The
+  bridge creates a long-lived MA API token automatically — no manual token
+  setup needed.
+- **Guided onboarding and recovery** — the UI surfaces onboarding checklists,
+  recovery actions, and diagnostics-based hints when adapters, sinks, speakers,
+  or MA auth are not ready yet.
+- **Diagnostics** — system info, adapter status, log viewer, bridge telemetry,
+  and a bug-report flow that downloads masked diagnostics and suggests an issue
+  description from the current runtime state.
 
-If `auth_enabled` is set to `true`, the web UI is protected by a password.
-Set the password on first access through the web interface.
+In addon mode, Home Assistant / Ingress authentication is always enforced. The
+standalone-only **Auto-get token on UI open** helper is intentionally hidden
+outside the addon/Ingress path because silent token bootstrap depends on a live
+Home Assistant browser session.
+
+## Onboarding, recovery, and support
+
+- The onboarding checklist walks through Bluetooth access, audio backend
+  readiness, first-sink verification, Music Assistant auth, and latency review.
+- Recovery guidance highlights safe next actions such as reconnect, re-pair, or
+  reclaim Bluetooth management after an auto-release threshold is hit.
+- **Release Bluetooth** temporarily hands the adapter back to the host/HA
+  without deleting the device entry. **Reclaim Bluetooth** resumes bridge
+  management, and the released state persists across restarts.
+- **Submit bug report** downloads masked diagnostics and opens GitHub with a
+  suggested description prefilled from diagnostics, recovery hints, and recent
+  issue logs.
 
 ## Troubleshooting
 
@@ -256,8 +289,9 @@ Set the password on first access through the web interface.
 1. Lower `bt_check_interval` (e.g. `5`) for faster reconnect detection.
 2. Move the speaker closer to the Bluetooth adapter or reduce interference
    from Wi-Fi / USB 3.0 devices.
-3. Enable `keepalive_silence: true` on the device to prevent the speaker from
-   entering standby during silence.
+3. Set a positive `keepalive_interval` on the device to prevent the speaker
+   from entering standby during silence. Values below 30 seconds are raised to
+   30 seconds.
 4. If using a USB Bluetooth dongle, try a different USB port (avoid USB 3.0
    ports that share the 2.4 GHz band).
 

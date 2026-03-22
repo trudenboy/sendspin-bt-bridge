@@ -1,59 +1,89 @@
 ---
 title: Devices & Adapters
-description: Adding speakers, binding adapters, and navigating the redesigned device management flows
+description: Adding speakers, importing paired devices, and understanding release, reclaim, disable, and repair workflows in the current UI
 ---
 
-## Empty state and first-run flow
+## First-run guidance and empty states
 
 ![Empty dashboard state with Scan for devices action](/sendspin-bt-bridge/screenshots/screenshot-empty-no-devices.png)
 
-If the bridge already sees an adapter but no configured speakers, the dashboard shows **Scan for devices**. That shortcut now jumps straight to **Configuration → Devices → Discovery & import** and starts a scan automatically.
+The bridge now guides first-run setup from the top of the dashboard before you ever open logs.
 
-If no adapter is detected at all, the empty state instead offers **Add adapter**, which opens **Configuration → Bluetooth**, inserts a manual adapter row, and focuses the first field.
+### Setup checklist
+
+When the bridge is missing key setup steps, the page can show a **Setup checklist** card with explicit **Show checklist** / **Hide checklist** controls.
+
+- Expanded mode shows the next steps and one-click actions.
+- Collapsed mode keeps a compact summary such as **`2/5 complete - Next: Scan nearby devices`**.
+- **Don’t show again** hides it until you re-enable **Show empty-state onboarding guidance** in **Configuration → General**.
+
+![Collapsed setup checklist with compact progress summary and Show checklist action](/sendspin-bt-bridge/screenshots/screenshot-onboarding-checklist-collapsed.png)
+
+### Empty-state shortcuts
+
+When the checklist is not taking over the page, the empty state gives you the fastest next action:
+
+- If no adapter is detected, **Add adapter** opens **Configuration → Bluetooth**, inserts a manual adapter row, and focuses the first field.
+- If adapters exist but no speakers are configured, **Scan for devices** opens **Configuration → Bluetooth** and launches the **Scan nearby** modal automatically.
 
 ## Adding a speaker
 
-![Devices tab with the speaker fleet table and discovery workflow](/sendspin-bt-bridge/screenshots/screenshot-config-devices.png)
+The recommended flow is now split between the **Bluetooth** and **Devices** tabs:
 
-The recommended flow is:
+1. Open **Configuration → Bluetooth**.
+2. Click **Scan nearby**.
+3. Choose **All adapters** or a specific adapter.
+4. Leave **Audio devices only** enabled unless you are debugging non-audio candidates.
+5. Use **Add** or **Add & Pair** on a discovered speaker.
+6. Open **Configuration → Devices** to fine-tune player name, adapter binding, ports, delay, and advanced fields.
+7. Save the config, then restart if required for your change.
 
-1. Open **Configuration → Devices**.
-2. Use **Scan** in **Discovery & import**.
-3. Click **Add** or **Add & Pair** on a discovered device.
-4. Fill in the player name and any advanced settings.
-5. Save the config, then restart if required for your change.
+### Scan modal behavior
 
-### Scan behavior
+The Bluetooth scan flow is now a dedicated modal instead of an inline card.
 
-- The scan runs in the background and polls for results.
-- Results can be added directly to the device fleet table.
-- **Add & Pair** performs pairing/trust/connect before inserting the config row.
-- After a scan finishes, the button enters a cooldown instead of allowing immediate repeated scans.
+- The scan runs in the background and shows a live **countdown/progress bar**.
+- **Rescan** is available from inside the modal after the cooldown expires.
+- **Add & Pair** performs pairing/trust/connect before importing the device.
+- You can narrow the scan to one adapter or broaden it to **All adapters**.
+- Turning off **Audio devices only** is useful when you need to inspect non-speaker Bluetooth candidates.
 
-### Already paired list
+![Bluetooth scan modal with adapter selection, audio-only filter, progress, and import actions](/sendspin-bt-bridge/screenshots/screenshot-bt-scan-modal.png)
 
-The **Already paired** box lets you import devices the host already knows about without scanning again.
+### Already paired devices
+
+The **Already paired devices** list in **Configuration → Bluetooth** lets you import speakers the host already knows about without scanning again.
+
+![Paired devices card with import and repair actions](/sendspin-bt-bridge/screenshots/screenshot-paired-devices-card.png)
+
+Use it when:
+
+- the speaker is already paired from a previous setup;
+- a scan is not finding it but the host-level pairing still exists;
+- you want repair/reset tools without touching the saved device fleet first.
 
 ## Device fleet table
 
-The **Device fleet** table is the canonical place for speaker configuration.
+![Devices tab with the speaker fleet table](/sendspin-bt-bridge/screenshots/screenshot-config-devices.png)
+
+The **Device fleet** table is the canonical place for saved speaker configuration.
 
 | Column | What it controls |
 |---|---|
-| **Enabled** | Temporarily exclude a device from startup |
+| **Enabled** | Whether the device should remain part of the saved bridge fleet |
 | **Player name** | Friendly MA-visible name |
 | **MAC** | Bluetooth address |
 | **Adapter** | Specific controller binding |
 | **Port** | Custom sendspin listener port |
 | **Delay** | `static_delay_ms` sync offset |
 | **Live** | Runtime state badge from the currently running bridge |
-| **Remove** | Delete the config row |
+| **Actions** | Remove the row or act on the saved configuration |
 
 Expanding a row reveals advanced fields such as **preferred format**, **listen host**, and **keepalive interval**.
 
 ## Per-device ports, hosts, and keepalive
 
-The current v2.40.5 device flow uses these network/runtime fields:
+The current device flow uses these network/runtime fields:
 
 | Field | Current behavior |
 |---|---|
@@ -75,6 +105,7 @@ The **Bluetooth** tab is where adapter-level management lives:
 - Friendly adapter names for clearer dashboard badges.
 - Manual adapter entries for unusual environments.
 - Refreshing detection without leaving the page.
+- Paired-device inventory, scan tools, and repair actions.
 - Connection recovery policy and codec preference.
 
 ### Binding a speaker to an adapter
@@ -88,7 +119,7 @@ Using the adapter MAC is especially helpful in some LXC environments where `hciN
 
 ## Dashboard deep links
 
-The dashboard now links back into configuration instead of sending you to a generic section:
+The dashboard links back into configuration instead of sending you to a generic section:
 
 - **Device gear** → highlights the matching row in **Configuration → Devices**.
 - **Adapter gear / adapter shortcut** → highlights the matching row in **Configuration → Bluetooth**.
@@ -98,23 +129,32 @@ The dashboard now links back into configuration instead of sending you to a gene
 
 The same fleet can be viewed in two layouts:
 
-- **Grid view** for smaller setups.
-- **List view** for larger fleets, with sortable columns and expandable rows.
+- **List view** is the current default and works best for larger or more active fleets.
+- **Grid view** is still available when you want card-style browsing.
 
-The bridge automatically defaults to **list view when more than 6 devices are visible**, but your manual choice is remembered in the browser and reused on the next visit.
+Your manual choice is remembered in the browser and reused on the next visit.
 
-## Re-pair, release, and reclaim
+## Release, reclaim, disable, and repair
 
-Device actions exposed from the dashboard include:
+![Released device row with reclaim-ready runtime state](/sendspin-bt-bridge/screenshots/screenshot-device-released.png)
 
-| Action | Use it when |
-|---|---|
-| **Reconnect** | You want to force a Bluetooth reconnect without changing config |
-| **Re-pair** | The host pairing/trust state is stale or broken |
-| **Release** | You want to temporarily give the speaker back to another source |
-| **Reclaim** | You want the bridge to take Bluetooth management back |
+The current UI exposes several device-management actions that solve different problems.
 
-**Release** keeps the device in the config but stops the bridge from actively reconnecting it until you reclaim it.
+| Action | Where | Use it when |
+|---|---|---|
+| **Reconnect** | Dashboard action | You want to force a Bluetooth reconnect without changing config |
+| **Re-pair** | Dashboard action | The host pairing/trust state is stale or broken |
+| **Release** | Dashboard action | You want to temporarily give the speaker back to another source |
+| **Reclaim** | Dashboard action | You want the bridge to take Bluetooth management back |
+| **Disable** | Configuration → Devices | The speaker should stay in the saved fleet but not be used by the bridge until you re-enable it |
+| **Remove** | Configuration → Devices | You no longer want this saved device row at all |
+| **Paired-device reset/remove** | Configuration → Bluetooth | You need to clear broken host-level pairing or cleanup stale Bluetooth records |
+
+The important distinction:
+
+- **Release / Reclaim** is an immediate live-runtime handoff. The device stays configured, but the bridge stops trying to own the Bluetooth connection until you reclaim it.
+- **Disable / Enable** is a saved fleet decision. Use it when the bridge should stop treating that device as part of the active configuration.
+- **Re-pair** or paired-device reset/remove is for broken host pairing, trust, or stale Bluetooth records.
 
 ## Reconnect policy and auto-disable
 

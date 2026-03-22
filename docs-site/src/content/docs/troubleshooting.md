@@ -1,7 +1,23 @@
 ---
 title: Troubleshooting
-description: Solving common Sendspin Bluetooth Bridge problems in the current UI and deployment model
+description: Solving common Sendspin Bluetooth Bridge problems in the current UI, including guidance banners, Bluetooth scan modal behavior, Music Assistant token flows, and bug reports
 ---
+
+## Onboarding or recovery banners keep appearing
+
+The bridge now has two top-level guidance surfaces:
+
+- **Setup checklist** for first-run / empty-state onboarding.
+- **Recovery guidance** for operator-facing issues that need action.
+
+If you want less guidance noise:
+
+1. Use **Hide checklist** to collapse the setup checklist into a compact progress summary.
+2. Use **Don’t show again** if you do not want that onboarding card to return automatically.
+3. Go to **Configuration → General** and turn off **Show empty-state onboarding guidance** or **Show recovery banners**.
+4. If a recovery banner keeps coming back, treat that as a signal that the underlying issue is still present.
+
+![Recovery guidance banner with actionable operator recommendations](/sendspin-bt-bridge/screenshots/screenshot-recovery-guidance.png)
 
 ## Audio plays from one speaker only after reconnect
 
@@ -35,11 +51,14 @@ If a direct port does not respond, check for another service already bound to th
 1. Confirm the speaker is paired at the host level.
 2. Confirm D-Bus is available to the bridge.
 3. Confirm the adapter is powered.
-4. Try **Re-pair** from the dashboard action menu.
+4. Try **Reconnect** first, then **Re-pair** if the host pairing looks stale.
+5. If the device shows **Released**, click **Reclaim** before assuming pairing is broken.
 
 If you use multiple adapters, double-check that the device row is bound to the correct adapter ID or MAC.
 
 If the bridge repeatedly fails to reconnect the same speaker, the configured **Auto-disable threshold** can persist that device as disabled. Re-enable it in **Configuration → Devices** after you fix the pairing, signal, or adapter problem.
+
+If the host-level record itself is broken, use the repair/reset tools from **Configuration → Bluetooth → Paired devices** and then import or pair the speaker again.
 
 ## "No sink" or silent playback
 
@@ -56,29 +75,35 @@ On slower systems, raise **PulseAudio latency (ms)** and consider **Prefer SBC c
 
 ## Scan finds nothing
 
-If **Scan** returns no results:
+If **Scan nearby** returns no useful results:
 
-1. Put the speaker into pairing mode before starting the scan.
-2. Wait for the full background scan to finish.
-3. Check the on-screen error text in the discovery card.
-4. Retry only after the cooldown expires.
-5. Use the **Already paired** list if the host already knows the speaker.
+1. Open **Configuration → Bluetooth** and make sure you are scanning from the correct bridge instance.
+2. Put the speaker into pairing mode before starting the scan.
+3. Pick the right adapter in the scan modal, or switch to **All adapters**.
+4. Leave **Audio devices only** enabled for normal speaker discovery.
+5. Wait for the full timed scan to finish instead of closing the modal early.
+6. Retry only after the cooldown expires and **Rescan** becomes available again.
+7. Use the **Already paired devices** list if the host already knows the speaker.
+8. Turn off **Audio devices only** only when you specifically need to inspect non-audio Bluetooth candidates.
 
 ## Music Assistant token flow fails
 
 If **Get token automatically** or **Get token** does not complete:
 
-1. Confirm the MA URL is correct and reachable.
-2. In HA Ingress, refresh the page from Home Assistant so the browser has a valid HA session/token.
-3. Allow popups for the bridge page; the fallback HA auth flow opens a popup when silent auth is not enough.
-4. If MA is HA-backed and builtin MA login rejects the credentials, retry and complete the HA MFA step instead of expecting a pure MA-password flow.
-5. Remember that the bridge stores the long-lived MA token, but not the password you entered.
+1. Open **Configuration → Music Assistant**.
+2. If the bridge already shows **Connected**, click **Reconfigure** first so the auth card reopens.
+3. Confirm the MA URL is correct and reachable.
+4. In HA Ingress, refresh the page from Home Assistant so the browser has a valid HA session/token.
+5. Remember that **Auto-get token on UI open** only works for the **HA addon UI under HA Ingress**. Direct-port sessions and standalone installs should use the visible token flow instead.
+6. Allow popups for the bridge page; the fallback HA auth flow opens a popup or MFA step when silent auth is not enough.
+7. If MA is HA-backed and built-in MA login rejects the credentials, retry and complete the HA MFA step instead of expecting a pure MA-password flow.
+8. Remember that the bridge stores the long-lived MA token, but not the password you entered.
 
-## Empty state goes to the wrong place
+## Empty-state shortcut goes to the wrong place
 
-The redesigned empty states should now jump directly to the correct configuration surface:
+The current empty states should now jump directly to the correct configuration surface:
 
-- **Scan for devices** → **Configuration → Devices → Discovery & import**.
+- **Scan for devices** → **Configuration → Bluetooth** with the **Scan nearby** modal opened.
 - **Add adapter** → **Configuration → Bluetooth** with a blank adapter row ready.
 
 If this does not happen, verify the web UI is updated to the latest release.
@@ -132,7 +157,9 @@ Use **Diagnostics** when you need a quick answer about:
 - per-device runtime state,
 - subprocess and platform details.
 
-Use **Download diagnostics** or **Submit bug report** before opening a GitHub issue so you have current data attached.
+Use **Submit bug report** when you want the bridge to prefill the issue description for you. The dialog now opens with a **diagnostics-generated suggested description**, plus the full auto-attached diagnostics payload in an expandable preview. Edit the summary before submitting if it needs more real-world context.
+
+Use **Download diagnostics** when you want a file without opening the GitHub issue flow.
 
 ## Home Assistant Supervisor shows no internet or update checks fail on HAOS in Proxmox
 
