@@ -3816,6 +3816,18 @@ body {
             color: var(--error-color);
         }
         .paired-actions { display: flex; gap: 6px; flex-shrink: 0; }
+        .paired-result-item {
+            display: grid;
+            grid-template-columns: auto 132px minmax(0, 1fr) auto;
+            align-items: center;
+            column-gap: 10px;
+        }
+        .paired-result-item .paired-actions {
+            justify-self: end;
+            margin-left: auto;
+            flex-wrap: nowrap;
+            width: auto;
+        }
         .paired-remove-btn {
             flex-shrink: 0;
         }
@@ -3845,6 +3857,10 @@ body {
             font-size: var(--ui-type-body-size);
             line-height: var(--ui-type-body-line-height);
             font-weight: 600;
+        }
+        .paired-result-item .scan-result-name {
+            display: block;
+            max-width: 100%;
         }
         .scan-result-meta {
             display: flex;
@@ -4921,6 +4937,12 @@ body {
             color: var(--secondary-text-color);
             max-width: 84ch;
         }
+        #config-bluetooth-paired-card .config-card-subtitle {
+            max-width: none;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
         .config-form-grid {
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -5456,6 +5478,32 @@ body {
                 flex-wrap: wrap;
                 gap: 6px;
                 width: 100%;
+            }
+            .paired-result-item {
+                display: grid;
+                grid-template-columns: auto 112px minmax(0, 1fr) auto;
+                grid-template-areas: none;
+                align-items: center;
+                column-gap: 10px;
+                row-gap: 8px;
+            }
+            .paired-result-item .scan-result-actions,
+            .paired-result-item .scan-result-mac,
+            .paired-result-item .scan-result-name,
+            .paired-result-item .paired-actions {
+                grid-area: auto;
+            }
+            .paired-result-item .scan-result-actions {
+                flex-wrap: nowrap;
+            }
+            .paired-result-item .scan-result-mac {
+                width: 112px;
+            }
+            .paired-result-item .paired-actions {
+                width: auto;
+                margin-left: auto;
+                flex-wrap: nowrap;
+                justify-content: flex-end;
             }
             .paired-box-header--static {
                 display: flex;

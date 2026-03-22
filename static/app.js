@@ -5337,7 +5337,7 @@ async function loadPairedDevices(options) {
         listDiv.innerHTML = devices.map(function(d, idx) {
             var displayName = /^RSSI:/i.test(d.name) ? 'Unknown device' : d.name;
             var btInfoIcon = _bluetoothIconSvg('scan-action-icon');
-            return '<div class="scan-result-item" data-paired-idx="' + idx + '" data-paired-mac="' + escHtmlAttr(_normalizeDeviceMac(d.mac)) + '">' +
+            return '<div class="scan-result-item paired-result-item" data-paired-idx="' + idx + '" data-paired-mac="' + escHtmlAttr(_normalizeDeviceMac(d.mac)) + '">' +
                 '<span class="scan-result-actions">' +
                 '<button type="button" class="scan-action-btn scan-action-btn--primary paired-add-btn">Add to fleet</button>' +
                 '</span>' +
