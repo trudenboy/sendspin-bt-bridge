@@ -12,6 +12,8 @@ Turn Bluetooth speakers and headphones into native [Music Assistant](https://www
 
 Sendspin Bluetooth Bridge is a local-first, headless-friendly bridge for Home Assistant, Docker, Raspberry Pi, and LXC deployments. Each Bluetooth device appears in Music Assistant as its own player, with web UI management, diagnostics, and multi-room-friendly deployment options.
 
+![Sendspin Bluetooth Bridge dashboard screenshot](docs-site/public/screenshots/screenshot-dashboard-full.png)
+
 ## What it does
 
 - Turns ordinary Bluetooth speakers and headphones into Music Assistant players.
