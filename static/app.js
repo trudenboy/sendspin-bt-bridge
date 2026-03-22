@@ -4906,7 +4906,8 @@ function _renderBtScanResults(devices) {
                     : '<span class="scan-result-passive">Audio import unavailable</span>') +
             '</span>' +
             '<span class="scan-result-mac">' + escHtml(d.mac) + '</span>' +
-            '<span class="scan-result-name">' + escHtml(d.name) +
+            '<span class="scan-result-summary">' +
+                '<span class="scan-result-name">' + escHtml(d.name) + '</span>' +
                 '<span class="scan-result-meta">' + chips.join('') + '</span>' +
             '</span>' +
             '</div>';

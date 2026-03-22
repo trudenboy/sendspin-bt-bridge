@@ -3828,15 +3828,20 @@ body {
             width: 132px;
             flex-shrink: 0;
         }
-        .scan-result-name {
+        .scan-result-summary {
             display: flex;
-            flex-direction: column;
-            gap: 4px;
+            align-items: center;
+            gap: 8px;
             flex: 1;
+            flex-wrap: wrap;
+            min-width: 0;
+        }
+        .scan-result-name {
+            display: inline-block;
             min-width: 0;
             overflow: hidden;
             text-overflow: ellipsis;
-            white-space: normal;
+            white-space: nowrap;
             font-size: var(--ui-type-body-size);
             line-height: var(--ui-type-body-line-height);
             font-weight: 600;
@@ -5434,9 +5439,12 @@ body {
                 grid-area: primary;
                 flex-wrap: wrap;
             }
-            .scan-result-name {
+            .scan-result-summary {
                 grid-area: name;
                 align-self: center;
+            }
+            .scan-result-name {
+                max-width: 100%;
             }
             .scan-result-mac {
                 grid-area: mac;
@@ -7517,6 +7525,16 @@ body {
             align-items: flex-start;
             gap: 6px;
             font-size: var(--badge-font-size);
+        }
+
+        #paired-box-count.scan-badge {
+            flex: 0 0 auto;
+            display: inline-flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 4px;
+            white-space: nowrap;
+            min-width: fit-content;
         }
 
         .scan-badge:empty {
