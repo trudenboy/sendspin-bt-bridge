@@ -5628,14 +5628,17 @@ function _setMaAddonMode(isAddon) {
     var creds = document.getElementById('ma-login-creds');
     var hint = document.getElementById('ma-addon-hint');
     var loginBtn = document.getElementById('ma-login-btn');
+    var autoSilentAuthRow = document.getElementById('ma-auto-silent-auth-row');
     if (isAddon) {
         if (creds) creds.hidden = true;
         if (hint) hint.hidden = false;
         if (loginBtn) loginBtn.hidden = true;
+        if (autoSilentAuthRow) autoSilentAuthRow.hidden = false;
     } else {
         if (creds) creds.hidden = false;
         if (hint) hint.hidden = true;
         if (loginBtn) loginBtn.hidden = false;
+        if (autoSilentAuthRow) autoSilentAuthRow.hidden = true;
     }
 }
 
