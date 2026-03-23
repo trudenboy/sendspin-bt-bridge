@@ -85,14 +85,14 @@ Full Home Assistant guide: <https://trudenboy.github.io/sendspin-bt-bridge/insta
 
 ## Roadmap at a glance
 
-The roadmap is now aligned with the **current runtime**, not an older refactor wishlist.
+The roadmap is now aligned with the **v3 wave**, starting from the shipped `v2.46.x` runtime instead of an older refactor wishlist.
 
-- **Now:** Phase 1 runtime cleanup is complete, and recent follow-up work added bridge-identity safeguards such as hostname-bound MA tokens and duplicate-device warnings. The current focus is guided checklist-based onboarding, explicit capability modeling, and action-oriented recovery UX on top of the shipped v2 runtime.
-- **Next:** deepen staged onboarding flows, make bridge/device capabilities explicit, and improve latency/recovery guidance with trace-style diagnostics and safe retry actions.
-- **Then:** keep expanding operator-facing UX and diagnostics without reintroducing `state.py`-centric coupling.
-- **Later:** introduce backend abstraction for v3 only after the Bluetooth core is explicit and stable, then selectively add adjacent backends such as local sinks or ALSA outputs.
+- **Now:** finish the last pre-v3 operator UX gaps - calmer non-empty guidance, better grouped recovery previews, and tighter blocked-state explanations.
+- **Next:** add AI-assisted diagnostics and deployment planning as an optional operator copilot, built on structured diagnostics bundles and explicit redaction/approval boundaries.
+- **Then:** reduce manual sync tuning with delay telemetry, guided calibration, and bounded optional auto-tuning.
+- **After that:** add centralized multi-bridge management and only then move into backend abstraction plus the first adjacent non-Bluetooth backend.
 
-See [`ROADMAP.md`](ROADMAP.md) for the full phased plan, epics, PR sequence, and guardrails.
+See [`ROADMAP.md`](ROADMAP.md) for the full phased v3 plan and guardrails.
 
 ## Runtime contracts
 

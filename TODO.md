@@ -1,80 +1,66 @@
-# TODO
+# TODO (v3 baseline)
 
-Roadmap for HA addon standards compliance and improvements.
+This TODO now tracks the **v3 wave**, starting from the shipped `v2.46.x` runtime instead of old pre-foundation backlog.
 
-## Done (v2.15.0–v2.28.2)
+## Current baseline already shipped
 
-- [x] **35 unit tests, diagnostics enrichment, TOCTOU fix, MA WS response matching** (v2.15.0)
-- [x] **Multi-arch Docker builds** — amd64/arm64/armv7 (v2.15.2)
-- [x] **Fix re-anchor loop on stream start** — sendspin-cli 5.1.4 preserves cooldown timer across `clear()` calls (v2.15.3)
-- [x] **Split armv7 CI into separate workflow** — amd64/arm64 publish immediately; armv7 builds independently via QEMU (v2.15.4)
-- [x] **Fix AppArmor profile** — temporarily disabled (`apparmor: false`), was blocking Python imports on HAOS (v2.15.5)
-- [x] **Auto-unmute BT sink, switched to PyPI sendspin** (v2.15.6)
-- [x] **Security audit** — 42 issues fixed, 65 new tests (107 total), `SYS_ADMIN` capability removed (v2.16.0)
-- [x] **PyAV armv7l compatibility fix** (v2.16.1)
-- [x] **RPi preflight script, `/api/preflight`, startup diagnostics, RPi & Docker docs** (v2.16.2)
-- [x] **Add Hadolint config** — `.hadolint.yaml` + Dockerfile linting in CI (v2.16.3)
-- [x] **Create `ha-addon/logo.png`** — wide-format logo for HA store listing (v2.16.3)
-- [x] **One-liner RPi installer** — `scripts/rpi-install.sh`: install Docker, generate compose, pair BT, start (v2.16.3)
-- [x] **MA auto-discovery & auto-login** — mDNS discovery of MA servers + passwordless auth via Ingress JSONRPC in addon mode (v2.17.0–v2.18.3)
-- [x] **API modularization** — split `routes/api.py` into 5 modules (`api.py`, `api_bt.py`, `api_ma.py`, `api_config.py`, `api_status.py`) (v2.20.3)
-- [x] **Thread-safety audit** — added locks, fixed race conditions (v2.20.3)
-- [x] **Remove dead endpoint** — removed unused `/api/set_volume_device` (v2.20.3)
-- [x] **Fix postMessage origin** — corrected HA Ingress iframe communication (v2.20.3)
-- [x] **Fix JWT folding marker CSS** — corrected ▶/▼ display (v2.20.4)
-- [x] **Fix MA API token hint text** — updated to "Create in MA → Settings → Profile → Long-lived access tokens" (v2.20.4)
-- [x] **Deprecate `BLUETOOTH_MAC`** — removed legacy single-device env var, all configs use `BLUETOOTH_DEVICES[]` array (v2.21.0)
-- [x] **TWS earbuds support** — D-Bus UUID filtering for audio-only profiles, automatic TWS detection and pairing flow (v2.21.0–v2.22.3)
-- [x] **Music Assistant live monitor** — persistent WebSocket connection for real-time now-playing, queue state, transport controls (prev/next/shuffle/repeat), album art tooltips (v2.22.0–v2.23.0)
-- [x] **Background update checker** — GitHub API version polling, update notification badge, one-click update (HA addon), manual update modal with changelog (v2.23.0–v2.24.0)
-- [x] **Demo mode** — `DEMO_MODE=true` runs bridge with fully emulated hardware for screenshots and testing (v2.23.0)
-- [x] **Bug report modal** — one-click diagnostic bundle with SVG icons, auto-collected system info, GitHub issue pre-fill (v2.24.0–v2.28.0)
-- [x] **Connection column compaction** — 85px dots-only layout for BT/MA status, identity column restructured to 2-row layout (v2.26.0–v2.28.0)
-- [x] **Two-tier enabled/disabled** — global `enabled` (requires restart, fully skips device) vs hot `bt_management_enabled` release/reclaim (v2.27.0–v2.28.0)
-- [x] **Release state persistence** — `persist_device_released()` saves release state to config.json, restored on startup; `_match_player_name()` handles bridge name suffix matching (v2.28.1–v2.28.2)
-- [x] **UI polish** — column labels removed, sink name removed from volume column, shuffle/repeat always visible when MA connected, progress time inline with progress bar, update modal redesign (v2.28.0–v2.28.2)
+The following are considered part of the baseline, not open roadmap items:
 
-## Done since v2.41.x
+- lifecycle/orchestration foundation, typed snapshots, explicit IPC envelopes
+- normalized onboarding, recovery guidance, diagnostics, and bugreport tooling
+- Home Assistant and Music Assistant integration hardening
+- room metadata, transfer readiness, fast-handoff support for room-aware scenarios
+- stronger Docker/RPi diagnostics for user-scoped PipeWire/PulseAudio issues
 
-- [x] **Unified operator guidance + onboarding hierarchy** — normalized bridge/device state now drives checklist onboarding, operator guidance, blocked-action explanations, and recovery summaries from one shared model.
-- [x] **Standalone/LXC update flow** — version check, release-ref persistence, RC tracking, and one-click standalone update flow are implemented; the old “LXC auto-update system” item is no longer open work.
-- [x] **Recovery center tooling** — rerunnable safe checks, latency recommendations/presets, chronological recovery timeline JSON/CSV export, and the known-good verification path are available in diagnostics.
-- [x] **Staged onboarding flow** — onboarding now exposes a foundation → first speaker → Music Assistant → tuning journey instead of only a flat checklist.
+## Now (finish before broad v3 expansion)
 
-## Next
+- [ ] **Consolidate guidance ownership for non-empty installs** - keep full onboarding dominant only for the true empty state and let mature installs rely on calmer header/banner guidance.
+- [ ] **Add grouped recovery action previews** - preview affected devices and confirm bulk recovery intent before multi-device actions run.
+- [ ] **Polish compact/mobile recovery density** - reduce noisy issue pills and keep compact actions readable on small screens.
+- [ ] **Align blocked-state hints with top-level guidance** - let one visible owner explain root causes instead of duplicating row-level microcopy.
 
-- [ ] **Consolidate guidance ownership for non-empty installs** — keep the large onboarding checklist dominant only for the true empty state and let mature installs rely on calmer header/banner guidance with one clear next-best action owner.
-- [ ] **Add grouped recovery action previews** — grouped issue detection and batch actions already exist, but the UI should preview affected devices and confirm bulk recovery intent before running multi-device actions.
-- [ ] **Polish compact/mobile recovery density** — add calmer `top issue + N more` issue pills and keep recovery actions readable when multiple warnings/actions compete for space.
-- [ ] **Sync roadmap/TODO narrative to the shipped v2 state before v3** — these docs now lag the real feature set and should remain aligned with the RC line.
+## V3-1: AI-assisted diagnostics and deployment planning
 
-## Assessed ideas (2026-03-20)
+- [ ] **Define the AI boundary** - local/manual vs external providers, redaction rules, operator approval model, and explicit no-secrets-by-default policy.
+- [ ] **Create a canonical diagnostics bundle** - machine-readable export combining runtime state, device snapshots, recovery timeline, deployment facts, and preflight output.
+- [ ] **Add deployment planner foundations** - recommend install path (HA add-on / Docker / RPi / LXC), ports, mounts, `AUDIO_UID`, adapter mapping, and initial latency guidance.
+- [ ] **Add AI diagnostics summaries** - turn diagnostics bundles into plain-language likely causes, safe next steps, and support-ready summaries.
+- [ ] **Add support bundle / prompt export** - let operators export a sanitized context bundle for AI-assisted troubleshooting without manual copy-paste.
 
-- [x] **Warn when a BT device may already belong to another bridge** — completed. Config validation/save/upload now checks Music Assistant `players/all` using the stable MAC-derived `player_id` and shows a non-blocking warning for newly added MACs that already appear to belong to another bridge.
-- [x] **Bind MA long-lived token identity to the physical bridge instance (hostname-based)** — completed. Long-lived MA tokens are now named from the current hostname, non-sensitive instance metadata is persisted, preserved across config save/upload flows, and silent auth reuse now distinguishes current-instance tokens from foreign-instance copies.
-- [x] **Sync Home Assistant area name to `BRIDGE_NAME`** — completed. HA ingress sessions can now fetch Home Assistant area/device registry data, offer `BRIDGE_NAME` suggestions, and persist adapter-area mappings keyed by adapter MAC for one-click adapter naming.
+## V3-2: Automatic delay tuning and sync intelligence
 
-## Deferred UX ideas (captured for later review, 2026-03-20)
+- [ ] **Add delay telemetry foundations** - collect drift/timing data that can support per-device delay decisions.
+- [ ] **Expose sync health explicitly** - diagnostics/operator surfaces should show drift, measurement quality, and tuning confidence.
+- [ ] **Add a guided delay calibration flow** - measure and suggest `static_delay_ms` instead of forcing raw manual trial-and-error.
+- [ ] **Add approve/apply/rollback UX for delay suggestions** - recommendations must be visible and reversible.
+- [ ] **Add bounded optional auto-tuning** - conservative automatic delay refinement only where confidence is high enough.
 
-- [ ] **Align blocked compact hints with top-level guidance** — keep the visible blocked markers, but reduce duplicate row-level warning copy once banner/header guidance owns the root-cause explanation.
-- [ ] **Compact recovery pills on mobile** — collapse multiple issue pills into “top issue + N more” to reduce wrapping and improve small-screen scannability.
-- [ ] **Make the known-good test path interactive** — let each step expand into concrete checks/actions instead of being read-only status guidance.
-- [ ] **Group safe actions into a progressive-disclosure action menu** — reduce button crowding by keeping one primary action and tucking secondary recovery actions behind a “More options” affordance, especially for grouped recovery banners.
-- [ ] **Expose latency guidance as a standalone dashboard card** when latency is the main active problem, instead of only inside diagnostics/banner summaries.
-- [ ] **Add adaptive explanation depth for novice vs advanced users** — short default explanations with optional deeper technical detail for power users.
-- [ ] **Show hierarchical blocking explanations** — explain not only that an action is blocked, but the dependency chain causing it.
-- [x] **Expose advanced recovery views for power users** — diagnostics recovery timeline now keeps a longer retained window and exposes advanced severity/scope/source/window filters plus source-density summary chips for power-user trace review.
-- [x] **Show current vs recommended latency values together** — diagnostics now surfaces current Pulse latency, recommendation, presets, and safe next-step hints.
-- [x] **Allow inline latency editing from onboarding guidance** — onboarding/operator guidance can now surface the recommended latency action directly instead of forcing a detour into wider diagnostics/settings.
+## V3-3: Centralized multi-bridge management
 
-## Future
+- [ ] **Define stable bridge instance identity** - registry semantics for bridge host/version/room/adapter ownership.
+- [ ] **Add fleet overview** - aggregate bridge health, device inventory, room coverage, and update status.
+- [ ] **Detect cross-bridge conflicts** - duplicate speakers, overlapping rooms, inconsistent naming, and stale bridge identities.
+- [ ] **Add fleet bulk operations** - restart, diagnostics rerun, compare/export/import configuration sets, and version/channel checks.
+- [ ] **Add fleet event timeline** - centralize recovery and health events across bridges.
 
-- [ ] **IPC: add ack, heartbeat, ready signal** — evolve JSON Lines protocol: message IDs + ack/nack for critical commands (`stop`, `set_volume`), `{"type": "ready"}` signal at subprocess start, heartbeat every 10s, move logs from stdout JSON to stderr
-- [ ] **IPC: Unix Domain Sockets transport** — replace stdin/stdout with per-device UDS (`/tmp/sendspin-{mac}.sock`), full duplex, asyncio `open_unix_connection()`, socket cleanup on crash *(depends on: IPC ack/heartbeat)*
-- [ ] **Migrate to HA Debian base images** — switch from `python:3.12-slim` to `ghcr.io/home-assistant/{arch}-base-debian:bookworm`
-- [ ] **Adopt `rootfs/` overlay pattern** — move entrypoint scripts into `rootfs/etc/` structure *(depends on: base images)*
-- [ ] **Merge into single Dockerfile** — eliminate two-image chain, single `ha-addon/Dockerfile` with `ARG BUILD_FROM` *(depends on: base images)*
-- [ ] **Adopt S6 Overlay** — `s6-rc.d` service structure for process supervision *(depends on: base images, rootfs)*
-- [ ] **Implement proper signal handling** — S6 SIGTERM handling, clean subprocess shutdown *(depends on: S6 overlay)*
-- [ ] **Write proper AppArmor profile** — complain mode → audit log → tested whitelist *(depends on: S6 overlay)*
-- [ ] **Web UI setup wizard** — first-run wizard: detect speakers, pair, configure MA — all from the browser
+## V3-4: Backend abstraction and config schema v2
+
+- [ ] **Define `AudioBackend` contract** - lifecycle, capability, health, and diagnostics semantics for backends.
+- [ ] **Wrap Bluetooth behind the backend contract** - keep Bluetooth as backend #1 and preserve current behavior.
+- [ ] **Introduce config schema v2** - player/backend-oriented config instead of Bluetooth-only assumptions.
+- [ ] **Add migration tooling and compatibility loading** - safe transition from the current config schema.
+- [ ] **Prove the first adjacent backend** - `LocalSinkBackend` first, then optionally `ALSADirectBackend`.
+
+## V3-5: Selective expansion after stability
+
+- [ ] **USB audio auto-discovery**
+- [ ] **Richer sync/drift telemetry across bridges and groups**
+- [ ] **Snapcast/VBAN strategy track**
+- [ ] **Home Assistant custom component / HACS strategy**
+- [ ] **Plugin or extension surface**
+
+## Explicitly not a v3 goal
+
+- [ ] **Do not turn v3 into a giant rewrite** - migrations must stay incremental.
+- [ ] **Do not make AI mandatory** - all diagnostics and deployment flows must remain usable without AI.
+- [ ] **Do not let backend expansion outrun Bluetooth reliability** - new backends are optional proof points, not the core product.

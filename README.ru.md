@@ -83,14 +83,14 @@ DEMO_MODE=true python sendspin_client.py
 
 ## Коротко о roadmap
 
-Дорожная карта теперь синхронизирована с **реальным состоянием кода**, а не со старым списком планируемых рефакторингов.
+Дорожная карта теперь синхронизирована с **v3-волной**, которая стартует от уже shipped `v2.46.x` runtime, а не от старого списка рефакторингов.
 
-- **Сейчас:** базовая cleanup-фаза runtime уже завершена; свежие доработки добавили safeguards вокруг identity bridge-инстанса, а основной фокус сместился на guided onboarding, явные capability-модели и action-oriented recovery UX поверх shipped v2 runtime.
-- **Дальше:** углублять staged onboarding flow, делать bridge/device capabilities ещё более явными и усиливать latency/recovery guidance trace-style диагностикой и безопасными retry actions.
-- **Потом:** продолжать расширять operator-facing UX и диагностику, не возвращаясь к `state.py`-centric coupling.
-- **После этого:** переходить к backend abstraction для v3 только после стабилизации Bluetooth core и затем точечно добавлять соседние backend'ы вроде local sink или ALSA.
+- **Сейчас:** закрыть последние pre-v3 UX-пробелы - calmer guidance для non-empty installs, preview grouped recovery actions и tighter blocked-state explanations.
+- **Дальше:** добавить AI-assisted diagnostics и planning развёртывания как optional operator copilot на базе structured diagnostics bundles, redaction и explicit approval boundaries.
+- **Потом:** уменьшить ручной подбор sync delay через delay telemetry, guided calibration и bounded optional auto-tuning.
+- **После этого:** добавить централизованное управление несколькими bridge и только затем идти в backend abstraction и первые соседние non-Bluetooth backend'ы.
 
-Полная англоязычная версия находится в [`ROADMAP.md`](ROADMAP.md), а краткая русская — в [`ROADMAP.ru.md`](ROADMAP.ru.md).
+Полная англоязычная версия находится в [`ROADMAP.md`](ROADMAP.md), а краткая русская - в [`ROADMAP.ru.md`](ROADMAP.ru.md).
 
 ## Контракты runtime
 

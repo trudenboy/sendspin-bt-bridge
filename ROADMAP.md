@@ -2,638 +2,281 @@
 
 ## Purpose
 
-This roadmap reflects the **current `main` branch after the `v2.43.0-rc.2` state-model/operator-guidance line and the follow-up pre-v3 v2 UX hardening work on top of it**.
+This roadmap is now written for the **v3 wave**, starting from the reality already shipped in `v2.46.x`.
 
-Its job is no longer to describe an aspirational Phase 1 / Phase 2 foundation that has not shipped yet. That foundation is now largely in the repository and on the release track. The roadmap should therefore answer a different question:
+v3 is **not** a from-scratch rewrite. The project already has:
 
-- what was already completed in the recent runtime/contract push
-- what architectural cleanup is still genuinely unfinished
-- what the next practical product and UX phases should be
-- when backend expansion is actually safe to start
+- explicit bridge lifecycle and orchestration seams
+- typed status/diagnostics read models
+- normalized recovery and operator-guidance surfaces
+- config migration/validation flows
+- room/readiness/handoff foundations for room-aware Music Assistant scenarios
+- stronger Docker/Raspberry Pi diagnostics for real deployment environments
 
-The project remains Bluetooth-first. Reliability on real Home Assistant, Docker, Raspberry Pi, and LXC deployments still matters more than architectural novelty.
+The roadmap should therefore answer a different question:
 
-## Current Status
+- what must be finished before the runtime is stable enough for v3 expansion
+- which new product bets are valuable enough to define v3
+- how to add those bets without regressing Bluetooth reliability
 
-### What is already shipped
+## Product thesis for v3
 
-The former Phase 1 and Phase 2 foundation work shipped in `v2.41.0-rc.1`, and the follow-up **Phase 1 integration cleanup shipped in `v2.41.0-rc.2`**:
+Sendspin BT Bridge v3 should become a **Bluetooth-first, room-aware, fleet-manageable player runtime** for Music Assistant.
 
-- snapshot-first read models are the default path across the main status and diagnostics surfaces
-- `DeviceRegistry` is a real canonical inventory service instead of only a read helper
-- `BridgeOrchestrator` / `BridgeLifecycleState` own more explicit startup and shutdown publication
-- parent/subprocess IPC uses explicit status / log / error / command envelopes
-- device event history and health explanations are normalized enough to drive richer diagnostics
-- config lifecycle handling is schema-aware across load / save / import / validation / HA translation paths
-- bridge telemetry and runtime event hooks exist and are operator-visible
-- route modules now read bridge / MA / async-job / adapter state through dedicated services instead of direct `state.py` imports
-- `state.py` is now a compatibility facade over explicit runtime-state owners (`bridge_runtime_state`, `ma_runtime_state`, `async_job_state`, `adapter_names`)
-- lifecycle startup/shutdown contracts are integration-tested and documented as operator-facing runtime guarantees
-- Music Assistant long-lived tokens can now be named and tracked per physical bridge host instead of only as anonymous bridge credentials
-- config validation now warns when a newly added Bluetooth MAC already appears in Music Assistant under the same stable player identity
-- normalized bridge/device state now drives onboarding, recovery, operator guidance, and blocked-action explanations through shared health/state layers
-- onboarding is checklist-driven and dependency-aware, with staged journey metadata for foundation, first-speaker setup, Music Assistant linking, and latency tuning
-- recovery tooling now includes rerunnable safe checks, richer latency guidance/presets, a known-good verification path, and chronological recovery timeline export
+That means keeping Bluetooth reliability as the core product while adding four major capabilities on top:
 
-### What is still unfinished
+1. **AI-assisted diagnostics and deployment planning**
+2. **Automatic delay tuning and sync intelligence**
+3. **Centralized management of multiple bridge instances**
+4. **A backend abstraction layer for selective non-Bluetooth expansion**
 
-The remaining gaps are now narrower and more specific:
+## Starting baseline from v2
 
-- the roadmap/TODO narrative now needs to stay synced with the shipped RC line so v3 planning does not rely on stale pre-`2.45.0-rc.1` backlog text
-- grouped issue detection and batch actions exist, but multi-device recovery still needs a clearer affected-device preview/confirmation step in the UI
-- compact/mobile attention states can still get noisy when several grouped issues/actions compete for the same notice area
-- blocked-action explanations are materially better, but the next pass should align row-level blocked hints more tightly with the top-level guidance owner instead of duplicating root-cause copy
-- backend abstraction should remain deferred until the v2 runtime is cleaner and more boring
+The roadmap treats the following as already established foundations:
 
-## Recently Completed Foundations
+- Bluetooth remains the primary and most battle-tested runtime
+- onboarding, recovery guidance, diagnostics, and bugreport tooling are real operator-facing surfaces
+- bridge/device health, recent events, and blocked-action reasoning are explicit enough to build on
+- room metadata, transfer readiness, and fast-handoff profiles now exist for room-following scenarios
+- Home Assistant and Music Assistant integration are part of the normal product path, not an afterthought
+- Docker/RPi startup diagnostics now surface runtime UID, audio socket path, socket ownership, and live `pactl` probe status
 
-The roadmap should treat the following work as **done**, not as future backlog:
+## North-star outcomes
 
-### Former Phase 1 — runtime foundation
+v3 is successful when the project can do all of the following without becoming fragile or opaque:
 
-Completed in `v2.41.0-rc.1`:
+1. A single bridge is boring and reliable in HA, Docker, Raspberry Pi, and LXC environments.
+2. Operators can ask the system for a deployment plan or a diagnostics explanation and get a useful answer quickly.
+3. Speaker delay tuning becomes much less manual.
+4. Multiple bridge instances can be understood and managed as one fleet instead of isolated boxes.
+5. Bluetooth is still the best-supported backend while one adjacent backend proves the abstraction layer.
 
-1. **Read-side migration**
-   - snapshots and normalized read helpers now drive the main status surfaces
-   - cross-route enrichment moved closer to snapshot builders and health summaries
-
-2. **Canonical device registry**
-   - device inventory and lookups now flow through `DeviceRegistry`
-   - active / disabled / released inventory semantics are explicit
-
-3. **Orchestration boundaries**
-   - startup / shutdown publication is more explicit around `BridgeOrchestrator`
-   - lifecycle state and runtime publication gained stronger seams and regression coverage
-
-### Former Phase 2 — contracts, diagnostics, config lifecycle
-
-Completed in `v2.41.0-rc.1`:
-
-4. **Explicit IPC contract**
-   - structured envelopes exist for command / status / log / error traffic
-   - compatibility behavior is centralized around protocol helpers
-
-5. **Normalized event history and health explanations**
-   - canonical device event types exist
-   - recent event history is used to explain degraded and recovering devices
-
-6. **Config lifecycle hardening**
-   - schema-aware migration / validation / persistence flows are in place
-   - config-sensitive keys and runtime-state handling are better normalized
-
-7. **Telemetry and hook surfaces**
-   - `/api/bridge/telemetry` and `/api/hooks` are real runtime surfaces
-   - diagnostics and bugreport paths were tightened after PR review follow-up
-
-### Post-`v2.41.0-rc.2` safeguards and operator hardening
-
-Completed on `main` after the `rc.2` tag:
-
-8. **Music Assistant bridge identity safeguards**
-   - long-lived MA tokens are now named from the current hostname and tracked with instance metadata
-   - silent auth distinguishes current-instance tokens from copied/foreign-instance credentials while remaining backward compatible with legacy metadata-free tokens
-
-9. **Duplicate-device protection across bridges**
-   - config validate/save/upload flows now check MA `players/all` using the stable MAC-derived `player_id`
-   - newly added devices warn when they appear to belong to another bridge instead of silently creating a conflict-prone configuration
-
-## Guiding Principles
-
-### 1. Stay Bluetooth-first
-
-Every phase must preserve the realities of A2DP output:
-
-- unstable connectivity
-- sink identity churn
-- delayed post-reconnect availability
-- hardware-specific latency behavior
-
-### 2. Keep integration cleanup finished before starting new abstractions
-
-The biggest risk is no longer “missing architecture”. It is regressing back into **two architectural styles in parallel**:
-
-- the newer registry / snapshot / lifecycle / runtime-state seams
-- ad hoc `state.py`-centric access patterns reintroduced by later feature work
-
-The next phase should preserve the completed cleanup while moving on to onboarding, capability modeling, and recovery UX.
-
-### 3. Keep migrations incremental
-
-Do not replace working surfaces wholesale. Add new seams, migrate callers, validate behavior, then remove legacy access only when the new path is proven.
-
-### 4. Prefer operational clarity over theoretical purity
-
-This bridge runs in hardware-heavy, failure-prone environments. Diagnostics, recovery visibility, and safe config evolution still outrank elegant abstractions.
-
-### 5. Expand only after the runtime becomes boring
-
-Backend abstraction, local audio outputs, and broader platform expansion are still reasonable directions, but they should be built on a runtime that is explicit, observable, and mostly free of compatibility-era coupling.
-
-## Current Architecture Baseline
-
-### Runtime layer
-
-- `BridgeOrchestrator`
-- `BridgeLifecycleState`
-- `SendspinClient`
-- `BluetoothManager`
-- MA integration service / monitor helpers
-- subprocess command / IPC / stderr / stop services
-
-### Read layer
-
-- `DeviceSnapshot`
-- `BridgeSnapshot`
-- `StartupProgressSnapshot`
-- `DeviceHealthSummary`
-- onboarding assistant snapshot builders
-
-### Contract / diagnostics layer
-
-- explicit IPC envelopes
-- normalized internal device events
-- telemetry payload builders
-- runtime webhook registry with delivery history
-- schema-aware config migration / validation helpers
-
-### Remaining architectural hotspot
-
-The architecture is materially better than it was before `v2.41.0-rc.1`: route-level cleanup is complete, lifecycle contracts are documented, and `state.py` is no longer the practical ownership center for bridge / MA / job / adapter state. The remaining hotspot is narrower:
-
-- shared compatibility state still mixes event publication, client snapshots, and device-event history
-- future features still need to avoid sliding back into direct mutable shared-state coupling
-- newer operational safeguards should keep building on explicit service seams instead of adding special-case stateful shortcuts
-
-## Phase 1: Finish v2 Integration Cleanup — Completed
-
-### Delivery summary
-
-Phase 1 was completed across PR `#81` and tag `v2.41.0-rc.2`.
-
-#### Epic 1. De-centered route and service reads from `state.py` ✓
-
-Delivered:
-
-1. Route modules now read bridge / MA / async-job / adapter state through dedicated services
-2. Route knowledge of shared mutable internals was reduced substantially
-3. Compatibility tests were updated to patch the new route-facing seams instead of old `state` imports
-
-#### Epic 2. Clarified write-side ownership and shared-state boundaries ✓
-
-Delivered:
-
-1. `bridge_runtime_state`, `ma_runtime_state`, `async_job_state`, and `adapter_names` now own their respective runtime domains
-2. `state.py` delegates to those owners as a compatibility facade instead of remaining the practical center of runtime ownership
-3. Lifecycle publication, MA state, jobs, and adapter cache responsibilities are now materially more explicit
-
-#### Epic 3. Added lifecycle integration tests and contract documentation ✓
-
-Delivered:
-
-1. Lifecycle integration coverage now locks down startup/shutdown publication ordering and failure publication
-2. README-level runtime contract documentation now describes lifecycle events, diagnostics/telemetry, IPC, and runtime hook guarantees
-3. Release-facing runtime contracts are aligned with tests and the changelog
-
-### Exit Criteria Verification
-
-- ✓ routes no longer depend heavily on direct `state.py` reads
-- ✓ `state.py` is a compatibility facade, not the architectural center for route/runtime ownership
-- ✓ lifecycle and IPC guarantees are documented and integration-tested
-- ✓ the v2 runtime foundation is clearly finished, not merely shipped
-
-### Follow-through, not a new phase
-
-Phase 1 should not be re-planned. The only remaining Phase 1-shaped work is minor guardrail follow-through:
-
-1. keep new features on the explicit runtime-state seams instead of reintroducing direct mutable shared-state access
-2. continue trimming compatibility-only responsibilities from `state.py` when adjacent feature work makes that safe
-3. treat future cleanup as opportunistic maintenance, not as a standalone roadmap phase
-
-## Phase 2: Onboarding, Capability Model, and Recovery UX
-
-### Status
-
-This phase is now **substantially complete**.
-
-The current `main` branch already ships checklist onboarding, explicit blocked-action metadata, unified operator guidance, grouped recovery actions, HA-assisted MA discovery, MA runtime hot-reload, and a normalized bridge/device state model. The remaining work is no longer “build Phase 2”; it is the smaller operator-facing polish tracked in Phase 2.1.
+## Phase V3-0: Finish pre-v3 operator polish
 
 ### Goal
 
-Reduce setup friction and make operational recovery more actionable.
+Close the last major v2 UX gaps so v3 starts from a calmer and more explicit operator surface.
 
-### Why this phase exists
+### Scope
 
-The project already has onboarding snapshots, diagnostics, startup progress, and event history. The next step is to turn those into **guided operator flows**, not just passive status outputs.
+- keep full onboarding dominant only for the true empty state
+- preview and confirm grouped recovery actions before multi-device operations run
+- reduce compact/mobile recovery noise (`top issue + N more`, less duplicate copy)
+- align blocked row-level hints with one top-level guidance owner
+- keep diagnostics and recovery detail available even when top-level guidance is compact
 
-### Design principles for Phase 2
+### Exit criteria
 
-Phase 2 should follow a few proven UI/UX patterns instead of growing ad hoc status screens:
+- mature installs are calm by default
+- grouped recovery actions feel deliberate and understandable
+- top-level guidance owns the main explanation instead of duplicated microcopy
 
-1. **Checklist first, advanced details second**
-   - show the shortest path to first successful playback up front
-   - progressively disclose advanced diagnostics and tuning only when the operator needs them
-
-2. **Use staged flows for linear setup tasks**
-   - pairing, assigning, authenticating, and testing are better represented as a short sequence than as a large static configuration screen
-   - keep exploratory diagnostics outside the main setup path so operators do not have to scan everything at once
-
-3. **Make diagnostics action-oriented**
-   - every important warning should answer three questions:
-     - what is wrong
-     - what probably caused it
-     - what the safest next action is
-
-4. **Separate capability from current health**
-   - the UI should distinguish:
-     - what a bridge/device supports in principle
-     - what is currently available right now
-     - what is blocked and why
-
-5. **Prefer traceable recovery over opaque automation**
-   - automatic reconnects and self-healing still matter, but operators should be able to inspect the recent path, rerun checks, and understand what the bridge just attempted
-
-6. **Keep operator UX mobile-safe and low-friction**
-   - primary actions should stay obvious, touch-safe, and readable in Home Assistant/mobile contexts
-   - auth/setup forms should favor clear labels, inline validation, and minimal dead-end states
-
-7. **Teach the system model, not just the settings**
-   - the UI should make it obvious how the operator should think about the bridge:
-     - adapter / speaker / bridge device / MA player / zone
-   - first-run UX should reinforce that mental model instead of only exposing raw config fields
-
-### Epics
-
-#### Epic 4. Expand onboarding assistant into guided setup flows
-
-Outcome:
-
-- install-to-first-playback becomes shorter and more explicit
-
-Backlog:
-
-1. Turn current onboarding checks into guided flows for adapters, devices, sinks, and MA auth
-2. Add remediation actions and stronger UI entry points
-3. Reuse the same guidance model across dashboard, diagnostics, and bugreport outputs
-4. Align onboarding state with live lifecycle and telemetry data
-5. Add a persistent setup checklist with completion state, current blocker, and explicit “next best action”
-6. Split first-run setup from advanced diagnostics via progressive disclosure instead of one large mixed surface
-7. Turn MA sign-in and device-attachment steps into staged flows with inline validation, duplicate-device warnings, and explicit success/failure checkpoints
-8. Add context-aware empty states that explain why a section is empty and what action unlocks it
-9. Introduce a simple operator IA that makes “Get started”, “Operate”, and “Recover” feel like distinct jobs instead of one flat admin page
-10. Add a “first room / first speaker” golden path that explicitly walks through naming, assignment, and first successful playback instead of dropping the operator into the full admin surface
-11. Confirm successful player creation with live status updates (for example: bridge device created, BT connected, sink attached, MA player visible) so operators do not have to infer success from scattered status widgets
-
-Progress on this epic:
-
-- checklist onboarding, dependency ordering, and unified next-step actions are already shipped
-- onboarding now exposes staged “foundation / first speaker / MA / tuning” journey metadata
-- duplicate-device warnings and MA identity safeguards already flow into the setup path
-- HA-aware discovery and area-assisted naming now reduce setup friction further in ingress/add-on environments
-- the remaining UX gap is mostly about calmer non-empty-state guidance and compact/mobile recovery polish
-
-Suggested PRs:
-
-- PR 7: checklist-driven onboarding backend and step model
-- PR 8: staged onboarding UI, empty states, and remediation actions
-
-#### Epic 5. Introduce an explicit capability model
-
-Outcome:
-
-- device and bridge differences become first-class instead of implicit
-
-Backlog:
-
-1. Define explicit device / bridge capability surfaces
-2. Model battery support, release/reclaim support, routing modes, sink presence, and recovery affordances
-3. Expose capabilities in API payloads and diagnostics
-4. Render capability-aware UI controls and messaging
-5. Distinguish `supported`, `currently_available`, and `blocked_reason` so UI controls can explain themselves
-6. Expose recommended actions / safe actions per runtime state instead of deriving them ad hoc in the frontend
-7. Group capabilities into operator-facing domains such as connectivity, playback/control, Music Assistant integration, recovery, and diagnostics
-8. Use the capability model to decide which onboarding and recovery steps are relevant on a given device/runtime
-
-Suggested PRs:
-
-- PR 9: capability schema, action affordances, and API exposure
-- PR 10: capability-aware UI states, onboarding, and diagnostics
-
-#### Epic 6. Improve latency and recovery tooling
-
-Outcome:
-
-- multi-device deployments become easier to tune and debug
-
-Backlog:
-
-1. Add latency guidance for multi-device setups
-2. Improve sink verification and sink recovery explainability
-3. Add structured timeline/export surfaces for event history and recovery paths
-4. Expose sync-related hints in diagnostics and onboarding
-5. Add an issue/recovery center that groups active problems by severity, recommended action, and affected devices
-6. Add trace-style recovery timelines for startup, reconnect, sink attach, MA auth, and playback-health transitions
-7. Let operators rerun safe checks/actions from the UI (for example: rerun preflight, retry MA auth validation, retry sink verification, reconnect a device)
-8. Add a latency calibration assistant for multi-device setups with presets, comparison hints, and safe default recommendations
-9. Attach trace/timeline context directly to diagnostics download and bugreport generation so support flows start with actionable evidence
-10. Add a known-good test path for recovery (“test this speaker / test this routing path / confirm MA visibility”) so operators can separate wiring/config issues from playback/content issues
-
-Progress on this epic:
-
-- issue/recovery center, grouped issue actions, rerunnable safe checks, latency recommendations, preset apply actions, known-good path, and timeline JSON/CSV export are already implemented
-- diagnostics download and bugreport text now include plain-text recovery timeline context
-- the main remaining follow-through is grouped-action UX preview/confirmation and continuing compact/mobile attention polish
-
-Suggested PRs:
-
-- PR 11: issue center, rerunnable checks, and sink recovery guidance
-- PR 12: trace timelines, latency assistant, and richer recovery tooling
-
-### Exit Criteria
-
-- new users can identify setup blockers with less guesswork
-- operators can see which actions are possible on a given device/runtime
-- multi-device recovery and tuning are practical without deep code familiarity
-- onboarding feels like a checklist-driven workflow instead of a passive status dump
-- operators can trace and retry the most important recovery paths without leaving the UI
-
-## Phase 2.1: Guidance Consolidation and Operator Control
+## Phase V3-1: AI-assisted diagnostics and deployment planning
 
 ### Goal
 
-Consolidate the Phase 2 onboarding + capability + recovery surfaces into one calmer, more operator-controlled guidance layer without losing the detailed diagnostics that now exist.
+Use AI as an **operator copilot**, not as a hidden control plane.
 
-### Why this phase exists
+### Scope
 
-Phase 2 successfully added:
+#### Epic 1. Structured diagnostics bundles for AI consumption
 
-- guided onboarding
-- explicit capability-aware controls
-- recovery banners and a diagnostics recovery center
+- define a canonical machine-readable diagnostics bundle that combines:
+  - bridge/runtime state
+  - device snapshots
+  - recovery timeline
+  - deployment environment facts
+  - preflight results
+- make the bundle stable enough for support tooling, bug reports, and AI consumers
 
-The next UX step is not “add even more surfaces”, but to **reduce overlap** between them:
+#### Epic 2. Deployment planner
 
-- full onboarding should dominate only in the real first-run empty state
-- ongoing readiness should move into compact header/status guidance
-- recovery guidance should stay actionable without permanently taking over the dashboard
-- repeated multi-device problems should be recoverable in fewer clicks
-- disabled controls should be explained by one visible top-level guidance surface instead of scattered microcopy
+- add a planner that can inspect environment facts and suggest:
+  - recommended install path (HA add-on / Docker / RPi / LXC)
+  - required mounts/capabilities
+  - likely `AUDIO_UID`, port, and adapter configuration
+  - initial latency/delay guidance
+  - safe next steps for first deployment
+- keep the planner operator-facing: generate plans and config suggestions, not silent changes
 
-### Epics
+#### Epic 3. AI diagnostics summarizer
 
-#### Epic 6A. Unify guidance and reduce dashboard noise
+- summarize failures in plain language from diagnostics data
+- rank likely root causes and safe next actions
+- produce support-ready summaries for GitHub/forum issues
+- allow prompt export / support bundle export for external or local AI analysis
 
-Outcome:
+#### Epic 4. AI safety and privacy boundaries
 
-- onboarding and recovery stop competing for the same attention slot
-- first-run installs stay guided, while existing installs regain dashboard space
+- redact secrets before any external AI handoff
+- support pluggable providers and a local/manual mode
+- require explicit operator approval before applying suggested changes
+- keep non-AI diagnostics fully usable on their own
 
-Backlog:
+### Exit criteria
 
-1. Add a unified operator-guidance model that resolves current state into `empty_state`, `progress`, `attention`, or `healthy`
-2. Use onboarding, recovery, capability, and startup-progress data as inputs to that unified model instead of keeping multiple unrelated top-level guidance surfaces
-3. Keep the full onboarding checklist only for the true empty state (no configured adapters and no configured devices)
-4. Move non-empty-state setup/readiness guidance into compact header/runtime progress and status messaging
-5. Ensure one primary banner/headline owns the “next best action” at any given time
-6. Preserve the richer diagnostics detail behind that summary layer instead of deleting it
+- diagnostics bundles are stable and structured
+- deployment planning is useful for real users, especially Docker/RPi and HA installs
+- AI-generated explanations improve support without becoming required for normal operation
 
-Suggested PRs:
-
-- PR 13: unified guidance contract and API exposure
-- PR 14: empty-state onboarding and header-progress UI refactor
-
-#### Epic 6B. Make guidance operator-controlled
-
-Outcome:
-
-- operators can reduce noise without losing access to help and diagnostics
-
-Backlog:
-
-1. Add “Don’t show again” dismissal for onboarding guidance
-2. Add “Don’t show again” dismissal for recovery banners
-3. Persist those visibility preferences as UI/operator preferences
-4. Add explicit settings to restore onboarding guidance, recovery banners, and dismissed guidance state
-5. Always keep `Open Diagnostics` as a stable secondary action on guidance/attention banners
-6. Keep diagnostics and bugreport detail available even when top-level banners are hidden
-
-Suggested PRs:
-
-- PR 15: dismissible guidance banners and preference persistence
-- PR 16: guidance visibility settings and diagnostics fallback polish
-
-Progress on this epic:
-
-- dismissible onboarding/recovery guidance is already shipped
-- visibility preferences are already persisted in UI settings/local storage
-- diagnostics remain available as a stable fallback action
-- the remaining work is reducing overlap/noise, not adding first-time dismissal plumbing
-
-#### Epic 6C. Improve recovery efficiency and blocked-state clarity
-
-Outcome:
-
-- multi-device attention states become easier to understand and recover from
-
-Backlog:
-
-1. Detect repeated issue groups such as:
-   - multiple disconnected devices
-   - multiple released devices
-   - multiple missing sinks
-   - repeated Music Assistant-related failures
-2. Expose bulk actions for repeated issues, such as:
-   - reconnect all affected
-   - reclaim all affected
-   - rerun checks
-   - retry MA discovery
-3. Show the affected count and affected device list before a bulk action runs
-4. Align capability-blocked controls with the unified guidance layer so important disabled states always have a matching visible explanation
-5. Keep compact inline controls visually clean; prefer banner/header-level explanation over extra inline warning chrome
-6. Ensure diagnostics still provide the deeper per-device breakdown after the top-level guidance has explained the root cause
-
-Suggested PRs:
-
-- PR 17: grouped issue detection and bulk recovery actions
-- PR 18: blocked-state explanation alignment and compact control UX cleanup
-
-Progress on this epic:
-
-- grouped issue detection and grouped action payloads are already implemented
-- the remaining gap is improving grouped-action UX (affected-device preview/confirmation) and tightening compact/mobile rendering plus blocked-state alignment
-
-### Exit Criteria
-
-- only true empty-state installs show the full onboarding card as the dominant guidance surface
-- existing installs see readiness/progress in the header/status layer instead of persistent large onboarding chrome
-- operators can dismiss onboarding/recovery banners and restore them later from settings
-- repeated multi-device issues can be recovered with grouped actions instead of only one-by-one clicks
-- important disabled states are explained by the unified top-level guidance surface
-
-## Phase 3: Backend Abstraction for v3
+## Phase V3-2: Automatic delay tuning and sync intelligence
 
 ### Goal
 
-Prepare the bridge for selective non-Bluetooth expansion without destabilizing the current runtime.
+Reduce manual `static_delay_ms` guesswork and make sync health more measurable.
 
-### Why this phase exists
+### Scope
 
-Backend abstraction is still a valid long-term direction, but it should happen **after**:
+#### Epic 5. Delay telemetry foundation
 
-- v2 runtime cleanup is complete
-- capabilities are explicit
-- operational diagnostics are strong enough to compare backends safely
+- capture timing/drift telemetry that can support per-device delay decisions
+- expose sync health, drift, and confidence at the diagnostics/operator level
+- distinguish between measurement quality and tuning recommendation quality
 
-### Epics
+#### Epic 6. Guided delay calibration
 
-#### Epic 7. Introduce a backend abstraction layer
+- add a manual calibration flow that can measure and suggest `static_delay_ms`
+- show recommended value, confidence, and before/after comparison
+- allow approve/apply/rollback instead of forcing raw manual edits
 
-Outcome:
+#### Epic 7. Bounded auto-tuning
 
-- Bluetooth becomes one backend under an explicit contract
+- add optional conservative automatic adjustment for devices with stable measurement quality
+- keep adjustments bounded, visible, and reversible
+- surface when auto-tuning is disabled, uncertain, or recently rolled back
 
-Backlog:
+### Exit criteria
 
-1. Define `AudioBackend`-style abstraction and capability/status contracts
-2. Wrap the existing Bluetooth runtime behind that contract
-3. Keep subprocess behavior backend-agnostic where practical
-4. Preserve current behavior while introducing abstraction seams
+- most users can reach a good delay value without trial-and-error editing
+- delay recommendations are visible and explainable
+- any automatic tuning is conservative and operator-traceable
 
-Suggested PRs:
-
-- PR 13: backend abstraction contract
-- PR 14: Bluetooth backend wrapper and compatibility path
-
-#### Epic 8. Introduce a backend-oriented config schema
-
-Outcome:
-
-- configuration is ready for multiple backend types
-
-Backlog:
-
-1. Define config schema v2 around player/backend configuration
-2. Add migration tooling from the current Bluetooth-device model
-3. Preserve compatibility loading during transition
-4. Document migration behavior and downgrade assumptions
-
-Suggested PRs:
-
-- PR 15: config schema v2
-- PR 16: migration tooling and compatibility loading
-
-#### Epic 9. Add the first non-Bluetooth backends
-
-Outcome:
-
-- backend abstraction is proven on real adjacent use cases
-
-Backlog:
-
-1. Add `LocalSinkBackend` for PulseAudio/PipeWire
-2. Add `ALSADirectBackend` for minimal environments
-3. Validate capability reporting and subprocess startup behavior across backend types
-4. Keep diagnostics and config UX coherent across backend types
-
-Suggested PRs:
-
-- PR 17: local sink backend
-- PR 18: ALSA direct backend
-
-### Exit Criteria
-
-- Bluetooth remains the primary and most stable backend
-- abstraction is proven without regressing the shipped bridge
-- config and diagnostics remain coherent across backend types
-
-## Phase 4: Selective Expansion After Core Stability
+## Phase V3-3: Centralized multi-bridge control plane
 
 ### Goal
 
-Expand only where the project gains clear product value without diluting its focus.
+Turn multiple bridge instances into a manageable fleet.
 
-### Candidate Areas
+### Scope
 
-#### Epic 10. High-value adjacent expansion
+#### Epic 8. Bridge registry and fleet identity
 
-Possible backlog:
+- define stable bridge instance identity and registration semantics
+- aggregate version, host, adapter, room, and health metadata across bridges
+- detect duplicate speakers, overlapping rooms, and inconsistent bridge naming
 
-1. USB audio auto-discovery
-2. virtual sink / testing-oriented backend
-3. richer sync telemetry and drift reporting
-4. stronger Sendspin-aligned capability reporting
+#### Epic 9. Fleet overview and bulk operations
 
-Suggested PRs:
+- build a centralized overview for:
+  - bridge health
+  - device inventory
+  - room coverage
+  - recovery attention
+  - update status
+- add safe bulk actions such as:
+  - restart selected bridges
+  - re-run diagnostics on selected bridges
+  - export/import configuration sets
+  - compare configs and versions across the fleet
 
-- PR 19: one adjacent backend or USB-discovery feature
-- PR 20: sync telemetry and diagnostics integration
+#### Epic 10. Fleet event timeline and policy surfaces
 
-#### Epic 11. Strategic optional work
+- centralize event/recovery timelines across bridges
+- add fleet-level webhooks/telemetry views
+- allow higher-level policies such as room ownership or update-channel consistency
 
-Only pursue if the earlier phases are stable and demand is proven:
+### Exit criteria
 
-1. Snapcast client backend
-2. VBAN backend
-3. multi-bridge federation
-4. HACS / custom component strategy
-5. plugin SDK or extension surface
-6. OpenHome or similar ecosystem alignment
+- operators can reason about multiple bridges as one system
+- duplicate/conflicting configuration becomes easier to spot before it causes runtime issues
+- fleet operations do not replace single-bridge simplicity; they extend it
 
-Suggested PRs:
+## Phase V3-4: Backend abstraction and config schema v2
 
-- PR 21+: only as separate strategy tracks, not as default assumptions
+### Goal
 
-### Exit Criteria
+Prepare the bridge for selective non-Bluetooth expansion without destabilizing the shipped Bluetooth runtime.
 
-- expansion does not weaken Bluetooth reliability
-- the architecture stays understandable
-- new backends or platforms prove practical value, not just conceptual neatness
+### Scope
 
-## Recommended Sequence
+#### Epic 11. Backend contract
 
-The safest sequence from the current codebase is now:
+- define an `AudioBackend`-style contract for lifecycle, capabilities, health, and diagnostics
+- wrap the existing Bluetooth runtime behind that contract first
+- keep subprocess and control-plane contracts backend-agnostic where practical
 
-1. expand onboarding into guided flows
-2. introduce the capability model
-3. improve latency and recovery tooling
-4. only then start backend abstraction
-5. add backend-oriented config schema
-6. prove one or two non-Bluetooth backends
-7. only then consider broader expansion
+#### Epic 12. Config schema v2
 
-## Dependency Summary
+- move from a Bluetooth-device-only model to player/backend-oriented configuration
+- add compatibility loading and migration tooling from the current schema
+- keep downgrade assumptions explicit and documented
 
-- guided onboarding should build on the shipped snapshot / registry / lifecycle seams instead of bypassing them
-- capability modeling should precede most UX branching so the UI/API can describe real bridge/device constraints
-- backend abstraction should come after onboarding, capability modeling, and recovery semantics are clearer
-- config schema v2 should come after the current config lifecycle is fully settled
-- speculative platform work should remain downstream from proven backend and diagnostics work
+#### Epic 13. First adjacent backend
 
-## Definition of Done
+- prove the abstraction with one high-value adjacent backend:
+  - `LocalSinkBackend` for PipeWire/PulseAudio
+  - optionally `ALSADirectBackend` for minimal environments
+- keep diagnostics and operator UX coherent across backend types
 
-This roadmap is successfully executed when:
+### Exit criteria
 
-- the shipped v2 runtime foundation is also the canonical architectural path
-- routes and UI read from normalized models and capability surfaces by default
-- device inventory and lifecycle ownership are explicit
-- subprocess and telemetry contracts are documented, tested, and stable to evolve
-- onboarding and recovery flows reduce setup friction and recovery guesswork
-- the project can expand selectively without compromising Bluetooth reliability
+- Bluetooth remains the most stable backend
+- config migration is incremental and safe
+- one adjacent backend proves the abstraction with real product value
 
-## Guardrails
+## Phase V3-5: Selective expansion after core stability
 
-Do not:
+### Candidate work
 
-- re-plan already completed Phase 1 / Phase 2 work as if it still has to be implemented
-- reintroduce direct `state.py` coupling in new feature work now that Phase 1 cleanup is complete
-- start backend abstraction before onboarding, capability, and recovery semantics are clearer
-- treat hooks, telemetry, or diagnostics as substitutes for fixing ownership boundaries
-- expand to speculative backends before guided onboarding and capability clarity exist
-- turn backend abstraction into a rewrite excuse
+Only start these once earlier phases are stable and demand is proven:
 
-Do:
+- USB audio auto-discovery
+- richer sync/drift telemetry across groups and bridges
+- Snapcast/VBAN/backend strategy tracks
+- multi-bridge federation beyond a single control plane
+- Home Assistant custom component / HACS strategy
+- plugin or extension surfaces
 
-- treat `v2.41.0-rc.1` as the baseline for future roadmap decisions
-- reduce overlapping architectural styles instead of adding a third one
-- keep diagnostics, docs, and contract surfaces aligned with runtime behavior
-- preserve Bluetooth recovery reliability as the highest priority
-- use incremental migrations with compatibility layers only as long as they are still needed
+## Cross-cutting guardrails
+
+### 1. Bluetooth reliability stays first
+
+No v3 theme should regress real Bluetooth deployments in HA, Docker, Raspberry Pi, or LXC.
+
+### 2. AI must be optional and operator-controlled
+
+- no mandatory cloud dependency
+- no silent external sharing of sensitive config/state
+- no hidden auto-remediation without explicit approval
+
+### 3. Delay automation must be bounded and explainable
+
+The system may suggest or conservatively auto-apply delay changes, but never as opaque magic.
+
+### 4. Fleet management must stay additive
+
+A single bridge should remain simple to deploy and operate. Fleet management should not become a requirement for basic use.
+
+### 5. Migrations must stay incremental
+
+v3 should add compatibility layers, migrate callers/config gradually, and remove legacy paths only after the new path is proven.
+
+## Out of scope for early v3
+
+- a giant all-at-once rewrite
+- direct app-specific protocols for MassDroid or other clients
+- speculative backends before the backend contract exists
+- AI-driven silent configuration edits
+- replacing operator diagnostics with AI instead of complementing them
+
+## Likely first v3 milestone
+
+A realistic `v3.0.0-rc.1` should include:
+
+- finished V3-0 guidance/recovery polish
+- structured diagnostics bundle foundations
+- a first operator-facing deployment planner draft
+- delay telemetry foundations and a manual calibration path
+- the first fleet identity/inventory surfaces
+
+That is enough to make v3 feel materially different without forcing the entire backend-expansion story into the first RC.
