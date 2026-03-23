@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.43.0-rc.4] - 2026-03-23
+
+### Fixed
+- The expanded onboarding banner now renders the full checklist instead of truncating it to five visible items, so the step list matches the seven-step progress indicator shown to operators.
+
 ## [2.43.0-rc.3] - 2026-03-23
 
 ### Changed

@@ -6913,7 +6913,7 @@ function _setOnboardingAssistantBanner(card, options) {
     checkpointsEl.hidden = true;
     checkpointsEl.innerHTML = '';
     stepsEl.hidden = !isExpanded;
-    stepsEl.innerHTML = isExpanded ? _renderOnboardingSteps((checklist.steps || []).slice(0, 5)) : '';
+    stepsEl.innerHTML = isExpanded ? _renderOnboardingSteps(checklist.steps || []) : '';
 
     var secondaryActions = card.secondary_actions || [];
     var dismissHtml = '';
