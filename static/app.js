@@ -5895,6 +5895,7 @@ function _buildConfigPayload(options) {
 async function saveConfig() {
     syncManualAdapters();
     var config = _buildConfigPayload();
+    var shouldReloadMaRuntime = _configShouldReloadMaRuntime(config);
 
     if (config.AUTH_ENABLED && !window._passwordSet) {
         showToast('Set a password before enabling authentication', 'error');
@@ -5915,10 +5916,42 @@ async function saveConfig() {
             var errData = await resp.json().catch(function() { return {}; });
             return { ok: false, error: errData.error || 'Save failed (HTTP ' + resp.status + ')' };
         }
+        if (shouldReloadMaRuntime && config.MA_API_URL && config.MA_API_TOKEN) {
+            var maReload = await _reloadMaRuntimeAfterConfigSave();
+            return {
+                ok: true,
+                maReloaded: !!maReload.ok,
+                maReloadError: maReload.error || '',
+            };
+        }
         return { ok: true };
     } catch (err) {
         console.error('Save config error:', err);
         return { ok: false, error: 'Network error: ' + err.message };
+    }
+}
+
+function _configShouldReloadMaRuntime(config) {
+    var clean = (_configCleanSnapshot && _configCleanSnapshot.staticValues) || {};
+    return !_configValuesEqual(clean.MA_API_URL, config.MA_API_URL)
+        || !_configValuesEqual(clean.MA_API_TOKEN, config.MA_API_TOKEN);
+}
+
+async function _reloadMaRuntimeAfterConfigSave() {
+    try {
+        var resp = await fetch(API_BASE + '/api/ma/reload', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+        });
+        if (resp.status === 401) { _handleUnauthorized(); return { ok: false, error: 'Unauthorized' }; }
+        var data = await resp.json().catch(function() { return {}; });
+        if (!resp.ok) {
+            return { ok: false, error: data.error || 'Music Assistant reload failed' };
+        }
+        return { ok: true, jobId: data.job_id, monitorReloaded: !!data.monitor_reloaded };
+    } catch (err) {
+        console.error('MA runtime reload error:', err);
+        return { ok: false, error: 'Music Assistant reload failed: ' + err.message };
     }
 }
 
@@ -7530,7 +7563,13 @@ document.getElementById('config-form').addEventListener('submit', async function
         var result = await saveConfig();
         if (result && result.ok) {
             _markConfigSnapshotClean();
-            showToast('\u2713 Configuration saved \u2014 restart to apply', 'success');
+            if (result.maReloaded) {
+                showToast('\u2713 Configuration saved \u2014 Music Assistant reloaded without full restart', 'success');
+            } else if (result.maReloadError) {
+                showToast('\u2713 Configuration saved \u2014 MA reload failed, restart to apply: ' + result.maReloadError, 'warning');
+            } else {
+                showToast('\u2713 Configuration saved \u2014 restart to apply', 'success');
+            }
         } else {
             showToast('\u2717 ' + (result && result.error || 'Failed to save configuration'), 'error');
         }

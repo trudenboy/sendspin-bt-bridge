@@ -30,7 +30,7 @@ from services.bridge_runtime_state import get_main_loop
 from services.device_registry import get_device_registry_snapshot
 from services.ha_addon import KNOWN_MA_ADDON_SLUGS, get_ma_addon_discovery_candidates, get_ma_addon_internal_ingress_url
 from services.ma_artwork import has_valid_artwork_signature
-from services.ma_monitor import solo_queue_candidates
+from services.ma_monitor import reload_monitor_credentials, solo_queue_candidates
 from services.ma_runtime_state import (
     apply_ma_now_playing_prediction,
     fail_ma_pending_op,
@@ -87,6 +87,19 @@ def _bridge_players_snapshot() -> list[dict[str, str]]:
         for client in get_device_registry_snapshot().active_clients
         if getattr(client, "player_id", None)
     ]
+
+
+def _schedule_ma_rediscover_job(loop, ma_url: str, ma_token: str) -> str:
+    """Start async MA group rediscovery using the current bridge player snapshot."""
+    job_id = str(uuid.uuid4())
+    create_async_job(job_id, "ma-rediscover")
+    threading.Thread(
+        target=_run_ma_rediscover_job,
+        args=(job_id, loop, ma_url, ma_token, _bridge_players_snapshot()),
+        daemon=True,
+        name=f"ma-rediscover-{job_id[:8]}",
+    ).start()
+    return job_id
 
 
 def _debug_clients_snapshot() -> list[dict[str, str | None]]:
@@ -463,6 +476,7 @@ def _save_ma_token_and_rediscover(ma_url: str, ma_token: str, username: str = ""
 
     loop = get_main_loop()
     if loop:
+        reload_monitor_credentials(loop, ma_url, ma_token)
         try:
             asyncio.run_coroutine_threadsafe(
                 _rediscover_after_login(ma_url, ma_token, _bridge_players_snapshot()), loop
@@ -2071,14 +2085,7 @@ def api_ma_rediscover():
     if not loop:
         return jsonify({"success": False, "error": "Event loop not available"}), 503
 
-    job_id = str(uuid.uuid4())
-    create_async_job(job_id, "ma-rediscover")
-    threading.Thread(
-        target=_run_ma_rediscover_job,
-        args=(job_id, loop, ma_url, ma_token, _bridge_players_snapshot()),
-        daemon=True,
-        name=f"ma-rediscover-{job_id[:8]}",
-    ).start()
+    job_id = _schedule_ma_rediscover_job(loop, ma_url, ma_token)
     return jsonify({"success": True, "job_id": job_id, "status": "running"}), 202
 
 
@@ -2091,6 +2098,35 @@ def api_ma_rediscover_result(job_id: str):
     if job.get("status") == "running":
         return jsonify({"status": "running"})
     return jsonify(job)
+
+
+@ma_bp.route("/api/ma/reload", methods=["POST"])
+def api_ma_reload():
+    """Reload MA runtime pieces without restarting the full bridge service."""
+    cfg = load_config()
+    ma_url = str(cfg.get("MA_API_URL") or "").strip()
+    ma_token = str(cfg.get("MA_API_TOKEN") or "").strip()
+    if not ma_url or not ma_token:
+        return jsonify({"success": False, "error": "MA_API_URL or MA_API_TOKEN not configured"}), 400
+
+    loop = get_main_loop()
+    if not loop:
+        return jsonify({"success": False, "error": "Event loop not available"}), 503
+
+    set_ma_api_credentials(ma_url, ma_token)
+    monitor_reloaded = reload_monitor_credentials(loop, ma_url, ma_token)
+    job_id = _schedule_ma_rediscover_job(loop, ma_url, ma_token)
+    return (
+        jsonify(
+            {
+                "success": True,
+                "job_id": job_id,
+                "status": "running",
+                "monitor_reloaded": monitor_reloaded,
+            }
+        ),
+        202,
+    )
 
 
 @ma_bp.route("/api/ma/nowplaying", methods=["GET"])

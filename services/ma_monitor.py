@@ -12,6 +12,7 @@ Auto-reconnects with exponential backoff on connection loss.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import itertools
 import json
 import logging
@@ -231,14 +232,10 @@ class MaMonitor:
     """Persistent MA WebSocket monitor task."""
 
     def __init__(self, ma_url: str, ma_token: str) -> None:
-        self._url = ma_url
-        self._token = ma_token
-        # Ensure URL has scheme before building WS URL
-        _url = ma_url.strip()
-        if _url and "://" not in _url:
-            _url = f"http://{_url}"
-        self._url = _url
-        self._ws_url = _url.replace("http://", "ws://").replace("https://", "wss://") + "/ws"
+        self._url = ""
+        self._token = ""
+        self._ws_url = "/ws"
+        self._apply_credentials(ma_url, ma_token)
         self._running = False
         self._msg_id = itertools.count(1)
         self._cmd_queue: asyncio.Queue[tuple[str, dict, asyncio.Future]] = asyncio.Queue()
@@ -251,9 +248,29 @@ class MaMonitor:
     def _next_id(self) -> int:
         return next(self._msg_id)
 
+    def _apply_credentials(self, ma_url: str, ma_token: str) -> None:
+        normalized_url = str(ma_url or "").strip()
+        if normalized_url and "://" not in normalized_url:
+            normalized_url = f"http://{normalized_url}"
+        self._url = normalized_url
+        self._token = str(ma_token or "").strip()
+        self._ws_url = normalized_url.replace("http://", "ws://").replace("https://", "wss://") + "/ws"
+
     def is_connected(self) -> bool:
         """Return True when the persistent MA monitor WS is available."""
         return self._running and self._ws is not None
+
+    async def reload_credentials(self, ma_url: str, ma_token: str) -> None:
+        """Reconnect the active monitor with new MA credentials without restarting the bridge."""
+        self._apply_credentials(ma_url, ma_token)
+        self._pending_queue_refresh = True
+        self._pending_groups_refresh = True
+        self._wake_event.set()
+        ws = self._ws
+        self._ws = None
+        if ws is not None:
+            with contextlib.suppress(Exception):
+                await ws.close()
 
     def _defer_incoming_event(self, event: str) -> None:
         """Remember interleaved MA events so they can be processed after command ack."""
@@ -772,6 +789,22 @@ def start_monitor(ma_url: str, ma_token: str) -> MaMonitor:
     global _monitor_instance
     _monitor_instance = MaMonitor(ma_url, ma_token)
     return _monitor_instance
+
+
+def reload_monitor_credentials(loop: asyncio.AbstractEventLoop | None, ma_url: str, ma_token: str) -> bool:
+    """Schedule a credential reload on the active MA monitor, if one exists."""
+    monitor = get_monitor()
+    if monitor is None:
+        return False
+    target_loop = loop or monitor._loop
+    if target_loop is None:
+        return False
+    try:
+        asyncio.run_coroutine_threadsafe(monitor.reload_credentials(ma_url, ma_token), target_loop)
+    except Exception:
+        logger.debug("Could not schedule MA monitor credential reload", exc_info=True)
+        return False
+    return True
 
 
 async def send_queue_cmd(

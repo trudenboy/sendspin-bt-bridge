@@ -3185,6 +3185,84 @@ def test_api_ma_rediscover_uses_registry_snapshot_player_payload(client, tmp_pat
         state.set_ma_groups({}, [])
 
 
+def test_api_ma_reload_restarts_monitor_and_rediscover(client, tmp_path, monkeypatch):
+    import routes.api_ma as api_ma
+    import services.ma_client as ma_client
+    import state
+    from services.device_registry import DeviceRegistrySnapshot
+
+    (tmp_path / "config.json").write_text(json.dumps({"MA_API_URL": "http://ma.local:8095", "MA_API_TOKEN": "token"}))
+    captured = {}
+
+    class _ImmediateThread:
+        def __init__(self, target, args=(), kwargs=None, daemon=None, name=None):
+            self._target = target
+            self._args = args
+            self._kwargs = kwargs or {}
+
+        def start(self):
+            self._target(*self._args, **self._kwargs)
+
+    async def _fake_discover(ma_url, ma_token, player_info):
+        captured["ma_url"] = ma_url
+        captured["ma_token"] = ma_token
+        captured["player_info"] = player_info
+        return (
+            {"sendspin-kitchen": {"id": "syncgroup_1", "name": "Kitchen"}},
+            [{"id": "syncgroup_1", "name": "Kitchen"}],
+        )
+
+    class _DoneFuture:
+        def __init__(self, result):
+            self._result = result
+
+        def result(self, timeout=None):
+            return self._result
+
+    def _run_coroutine_threadsafe(coro, loop):
+        tmp_loop = asyncio.new_event_loop()
+        try:
+            return _DoneFuture(tmp_loop.run_until_complete(coro))
+        finally:
+            tmp_loop.close()
+
+    monkeypatch.setattr(api_ma, "load_config", lambda: {"MA_API_URL": "http://ma.local:8095", "MA_API_TOKEN": "token"})
+    monkeypatch.setattr(api_ma, "get_main_loop", lambda: object())
+    monkeypatch.setattr(
+        api_ma,
+        "reload_monitor_credentials",
+        lambda loop, ma_url, ma_token: captured.update({"reloaded": (ma_url, ma_token)}) or True,
+    )
+    monkeypatch.setattr(ma_client, "discover_ma_groups", _fake_discover)
+    monkeypatch.setattr(api_ma.asyncio, "run_coroutine_threadsafe", _run_coroutine_threadsafe)
+    monkeypatch.setattr(api_ma.threading, "Thread", _ImmediateThread)
+    monkeypatch.setattr(
+        api_ma,
+        "get_device_registry_snapshot",
+        lambda: DeviceRegistrySnapshot(
+            active_clients=[SimpleNamespace(player_id="sendspin-kitchen", player_name="Kitchen", status={})]
+        ),
+    )
+
+    try:
+        resp = client.post("/api/ma/reload")
+
+        assert resp.status_code == 202
+        payload = resp.get_json()
+        assert payload["monitor_reloaded"] is True
+        job_id = payload["job_id"]
+        result = client.get(f"/api/ma/rediscover/result/{job_id}")
+        assert result.status_code == 200
+        assert result.get_json()["success"] is True
+        assert captured["reloaded"] == ("http://ma.local:8095", "token")
+        assert captured["ma_url"] == "http://ma.local:8095"
+        assert captured["ma_token"] == "token"
+        assert captured["player_info"] == [{"player_id": "sendspin-kitchen", "player_name": "Kitchen"}]
+    finally:
+        state.set_ma_api_credentials("", "")
+        state.set_ma_groups({}, [])
+
+
 def test_api_debug_ma_uses_registry_snapshot(client, monkeypatch):
     import routes.api_ma as api_ma
     import state
