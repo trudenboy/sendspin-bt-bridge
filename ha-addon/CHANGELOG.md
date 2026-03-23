@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.45.0] - 2026-03-23
+
+### Added
+- Home Assistant ingress sessions can now fetch the HA area registry into the config UI, so `Bridge name` offers one-click room suggestions and Bluetooth adapters can surface exact area matches from the HA device registry.
+- Diagnostics recovery tooling now includes a deeper retained recovery timeline with advanced severity, scope, source, and window filters for power-user trace review.
+
+### Changed
+- Music Assistant runtime can now reload after URL or token changes without forcing a full bridge restart, so MA auth refreshes and rediscovery can be applied in place.
+- Operator guidance is calmer and more actionable: onboarding stays out of the notice stack on non-empty installs by default, grouped actions preview affected devices before execution, and dense recovery issue pills collapse into `+N more`.
+- Home Assistant area-based naming suggestions for `Bridge name` and Bluetooth adapter names are now configurable and stay enabled by default in HA add-on mode.
+
 ## [2.42.3] - 2026-03-22
 
 ### Added
