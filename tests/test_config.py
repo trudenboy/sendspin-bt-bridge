@@ -219,6 +219,62 @@ def test_load_config_normalizes_types_and_prunes_orphan_volumes(tmp_path):
     assert loaded["LAST_VOLUMES"] == {"AA:BB:CC:DD:EE:FF": 55}
 
 
+def test_load_config_normalizes_room_metadata_and_handoff_mode(tmp_path):
+    _write_config(
+        tmp_path,
+        {
+            "BLUETOOTH_DEVICES": [
+                {
+                    "mac": "aa:bb:cc:dd:ee:ff",
+                    "player_name": "Kitchen",
+                    "room_name": "  Living Room  ",
+                    "room_id": " living-room ",
+                    "handoff_mode": " FAST_HANDOFF ",
+                }
+            ]
+        },
+    )
+    from config import load_config
+
+    loaded = load_config()
+
+    assert loaded["BLUETOOTH_DEVICES"][0]["mac"] == "AA:BB:CC:DD:EE:FF"
+    assert loaded["BLUETOOTH_DEVICES"][0]["room_name"] == "Living Room"
+    assert loaded["BLUETOOTH_DEVICES"][0]["room_id"] == "living-room"
+    assert loaded["BLUETOOTH_DEVICES"][0]["handoff_mode"] == "fast_handoff"
+
+
+def test_resolve_device_room_context_prefers_manual_room_metadata_over_ha_area():
+    from config import resolve_device_room_context
+
+    resolved = resolve_device_room_context(
+        {
+            "BLUETOOTH_DEVICES": [
+                {
+                    "mac": "AA:BB:CC:DD:EE:FF",
+                    "player_name": "Kitchen",
+                    "room_id": "kitchen",
+                    "room_name": "Kitchen",
+                    "handoff_mode": "fast_handoff",
+                }
+            ],
+            "HA_AREA_NAME_ASSIST_ENABLED": True,
+            "HA_ADAPTER_AREA_MAP": {"11:22:33:44:55:66": {"area_id": "living-room", "area_name": "Living Room"}},
+        },
+        player_name="Kitchen @ Bridge",
+        device_mac="AA:BB:CC:DD:EE:FF",
+        adapter_mac="11:22:33:44:55:66",
+    )
+
+    assert resolved == {
+        "room_id": "kitchen",
+        "room_name": "Kitchen",
+        "room_source": "manual",
+        "room_confidence": "operator",
+        "handoff_mode": "fast_handoff",
+    }
+
+
 def test_runtime_version_prefers_persisted_install_ref(tmp_path, monkeypatch):
     from config import get_installed_version_ref, get_runtime_version
 

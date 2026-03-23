@@ -192,7 +192,7 @@ def main() -> None:
         for dev in config["BLUETOOTH_DEVICES"]:
             mac = dev.get("mac") if isinstance(dev, dict) else None
             if mac and mac in existing_devs:
-                for field in ("keepalive_silence", "keepalive_interval"):
+                for field in ("keepalive_silence", "keepalive_interval", "room_id", "room_name", "handoff_mode"):
                     if field not in dev and field in existing_devs[mac]:
                         dev[field] = existing_devs[mac][field]
     except (FileNotFoundError, json.JSONDecodeError) as exc:

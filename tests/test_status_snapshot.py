@@ -113,6 +113,36 @@ def test_build_device_snapshot_includes_global_enabled_flag(monkeypatch):
     assert snapshot.enabled is False
 
 
+def test_build_device_snapshot_includes_room_context_and_transfer_readiness(monkeypatch):
+    client = _make_client()
+    client.status.update({"reconnecting": True})
+    monkeypatch.setattr(
+        "services.status_snapshot.load_config",
+        lambda: {
+            "BLUETOOTH_DEVICES": [
+                {
+                    "player_name": "Kitchen",
+                    "room_id": "living-room",
+                    "room_name": "Living Room",
+                    "handoff_mode": "fast_handoff",
+                }
+            ]
+        },
+    )
+
+    snapshot = build_device_snapshot(client)
+    data = snapshot.to_dict()
+
+    assert data["room_id"] == "living-room"
+    assert data["room_name"] == "Living Room"
+    assert data["room_source"] == "manual"
+    assert data["room_confidence"] == "operator"
+    assert data["handoff_mode"] == "fast_handoff"
+    assert data["transfer_readiness"]["ready"] is False
+    assert data["transfer_readiness"]["reason"] == "reconnecting"
+    assert data["transfer_readiness"]["latency_profile"] == "fast_handoff"
+
+
 def test_build_device_snapshot_includes_capability_payload():
     client = _make_client()
     client.status.update({"server_connected": False, "bluetooth_connected": False, "reconnecting": True})

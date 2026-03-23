@@ -13,7 +13,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import state
-from config import BUILD_DATE, get_runtime_version, load_config
+from config import BUILD_DATE, HANDOFF_MODES, get_runtime_version, load_config, resolve_device_room_context
 from services.bluetooth import _match_player_name
 from services.bridge_state_model import build_normalized_device_state
 from services.device_health_state import build_device_capabilities, compute_device_health_state
@@ -47,6 +47,12 @@ class DeviceSnapshot:
     enabled: bool = True
     bt_management_enabled: bool = True
     battery_level: int | None = None
+    room_id: str | None = None
+    room_name: str | None = None
+    room_source: str | None = None
+    room_confidence: str | None = None
+    handoff_mode: str = HANDOFF_MODES[0]
+    transfer_readiness: dict[str, Any] | None = None
     runtime: str | None = None
     uptime: str | None = None
     ma_syncgroup_id: str | None = None
@@ -310,6 +316,71 @@ def _resolve_global_enabled(player_name: str | None, configured_enabled: dict[st
     return True
 
 
+def _resolve_room_context(client, *, config: dict[str, Any]) -> dict[str, str]:
+    bt_mgr = getattr(client, "bt_manager", None)
+    return resolve_device_room_context(
+        config,
+        player_name=str(getattr(client, "player_name", None) or "").strip(),
+        device_mac=str(getattr(bt_mgr, "mac_address", None) or "").strip(),
+        adapter_mac=str(
+            getattr(bt_mgr, "effective_adapter_mac", None) or getattr(bt_mgr, "adapter", None) or ""
+        ).strip(),
+    )
+
+
+def _build_transfer_readiness(
+    *,
+    device: DeviceSnapshot,
+    status: dict[str, Any],
+    recent_events: list[dict[str, Any]],
+) -> dict[str, Any]:
+    reason = "ready"
+    severity = "info"
+    if not device.enabled:
+        reason = "disabled"
+        severity = "warning"
+    elif not device.bt_management_enabled:
+        reason = "bt_management_disabled"
+        severity = "warning"
+    elif bool(status.get("stopping")):
+        reason = "stopping"
+        severity = "warning"
+    elif bool(status.get("reconnecting")):
+        reason = "reconnecting"
+        severity = "warning"
+    elif bool(status.get("reanchoring")):
+        reason = "reanchoring"
+        severity = "warning"
+    elif not device.connected:
+        reason = "daemon_unavailable"
+        severity = "error"
+    elif not device.bluetooth_connected:
+        reason = "bluetooth_disconnected"
+        severity = "error"
+    elif not device.server_connected:
+        reason = "music_assistant_disconnected"
+        severity = "error"
+    elif not device.has_sink:
+        reason = "sink_missing"
+        severity = "error"
+
+    recent_types = [str(event.get("event_type") or "") for event in recent_events if isinstance(event, dict)]
+    return {
+        "ready": reason == "ready",
+        "reason": reason,
+        "severity": severity,
+        "bluetooth_ready": bool(device.bluetooth_connected),
+        "daemon_ready": bool(device.connected),
+        "sink_ready": bool(device.has_sink),
+        "music_assistant_ready": bool(device.server_connected),
+        "latency_profile": str(device.handoff_mode or HANDOFF_MODES[0]),
+        "recent_recovery_activity": {
+            "active": bool(status.get("reconnecting")) or bool(status.get("reanchoring")) or bool(recent_types),
+            "event_types": recent_types[:5],
+        },
+    }
+
+
 def build_device_snapshot_pairs(
     clients: list[Any],
     *,
@@ -334,6 +405,7 @@ def build_device_snapshot(client, *, configured_enabled: dict[str, bool] | None 
     else:
         status = client.status.copy()
     resolved_enabled = configured_enabled if configured_enabled is not None else _configured_enabled_by_player_name()
+    current_config = load_config()
 
     uptime = None
     if "uptime_start" in status:
@@ -362,6 +434,7 @@ def build_device_snapshot(client, *, configured_enabled: dict[str, bool] | None 
             or status.get("bluetooth_connected", False)
         )
 
+    room_context = _resolve_room_context(client, config=current_config)
     device = DeviceSnapshot(
         connected=connected,
         server_connected=bool(status.get("server_connected", False)),
@@ -387,6 +460,11 @@ def build_device_snapshot(client, *, configured_enabled: dict[str, bool] | None 
         enabled=_resolve_global_enabled(getattr(client, "player_name", None), resolved_enabled),
         bt_management_enabled=bool(getattr(client, "bt_management_enabled", True)),
         battery_level=getattr(bt_mgr, "battery_level", None) if bt_mgr else None,
+        room_id=room_context["room_id"] or None,
+        room_name=room_context["room_name"] or None,
+        room_source=room_context["room_source"] or None,
+        room_confidence=room_context["room_confidence"] or None,
+        handoff_mode=room_context["handoff_mode"] or HANDOFF_MODES[0],
         runtime=state._detect_runtime_type(),
         uptime=uptime,
         extra=dict(status),
@@ -410,6 +488,15 @@ def build_device_snapshot(client, *, configured_enabled: dict[str, bool] | None 
     device.extra["enabled"] = device.enabled
     device.extra["bt_management_enabled"] = device.bt_management_enabled
     device.extra["battery_level"] = device.battery_level
+    if device.room_id:
+        device.extra["room_id"] = device.room_id
+    if device.room_name:
+        device.extra["room_name"] = device.room_name
+    if device.room_source:
+        device.extra["room_source"] = device.room_source
+    if device.room_confidence:
+        device.extra["room_confidence"] = device.room_confidence
+    device.extra["handoff_mode"] = device.handoff_mode
     device.extra["bluetooth_paired"] = getattr(bt_mgr, "paired", None) if bt_mgr else None
     if bt_mgr:
         device.extra["max_reconnect_fails"] = int(getattr(bt_mgr, "max_reconnect_fails", 0) or 0)
@@ -421,6 +508,9 @@ def build_device_snapshot(client, *, configured_enabled: dict[str, bool] | None 
         device.extra["uptime"] = uptime
     _enrich_device_snapshot_with_ma(device, client)
     device.recent_events = state.get_device_events(_get_device_event_id(client, device), limit=5)
+    device.transfer_readiness = _build_transfer_readiness(
+        device=device, status=status, recent_events=device.recent_events
+    )
     device.health_summary = _build_health_summary(device).to_dict()
     if device.ma_syncgroup_id:
         device.extra["ma_syncgroup_id"] = device.ma_syncgroup_id
@@ -430,6 +520,8 @@ def build_device_snapshot(client, *, configured_enabled: dict[str, bool] | None 
         device.extra["recent_events"] = device.recent_events
     if device.health_summary is not None:
         device.extra["health_summary"] = device.health_summary
+    if device.transfer_readiness is not None:
+        device.extra["transfer_readiness"] = device.transfer_readiness
     device.capabilities = _build_device_capabilities(device)
     device.state_model = build_normalized_device_state(device).to_dict()
     device.extra["state_model"] = device.state_model

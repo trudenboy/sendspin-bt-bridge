@@ -28,11 +28,12 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-VERSION = "2.45.0"
+VERSION = "2.46.0-rc.1"
 BUILD_DATE = "2026-03-23"
 CONFIG_SCHEMA_VERSION = 1
 UPDATE_CHANNELS = ("stable", "rc", "beta")
 DEFAULT_UPDATE_CHANNEL = "stable"
+HANDOFF_MODES = ("default", "fast_handoff")
 DEFAULT_WEB_PORT = 8080
 DEFAULT_LISTEN_PORT_BASE = 8928
 HA_ADDON_CHANNEL_DEFAULTS = {
@@ -52,6 +53,7 @@ __all__ = [
     "DEFAULT_LISTEN_PORT_BASE",
     "DEFAULT_UPDATE_CHANNEL",
     "DEFAULT_WEB_PORT",
+    "HANDOFF_MODES",
     "RUNTIME_STATE_CONFIG_KEYS",
     "SENSITIVE_CONFIG_KEYS",
     "UPDATE_CHANNELS",
@@ -70,9 +72,11 @@ __all__ = [
     "is_ha_addon_runtime",
     "load_config",
     "migrate_config_payload",
+    "normalize_handoff_mode",
     "normalize_update_channel",
     "resolve_additional_web_port",
     "resolve_base_listen_port",
+    "resolve_device_room_context",
     "resolve_web_port",
     "save_device_sink",
     "save_device_volume",
@@ -269,6 +273,16 @@ def normalize_update_channel(raw_channel: object) -> str:
     return DEFAULT_UPDATE_CHANNEL
 
 
+def normalize_handoff_mode(raw_mode: object) -> str:
+    """Return a supported handoff mode for a Bluetooth device."""
+    if not isinstance(raw_mode, str):
+        return HANDOFF_MODES[0]
+    normalized = raw_mode.strip().lower()
+    if normalized in HANDOFF_MODES:
+        return normalized
+    return HANDOFF_MODES[0]
+
+
 def _runtime_version_ref_path() -> Path:
     return Path(os.environ.get("SENDSPIN_VERSION_REF_FILE") or "/opt/sendspin-client/.release-ref")
 
@@ -393,6 +407,21 @@ def _normalize_bluetooth_devices(config: dict) -> list[dict]:
         mac = normalized.get("mac")
         if isinstance(mac, str):
             normalized["mac"] = mac.strip().upper()
+        room_id = str(normalized.get("room_id") or "").strip()
+        room_name = str(normalized.get("room_name") or "").strip()
+        handoff_mode = normalize_handoff_mode(normalized.get("handoff_mode"))
+        if room_id:
+            normalized["room_id"] = room_id
+        else:
+            normalized.pop("room_id", None)
+        if room_name:
+            normalized["room_name"] = room_name
+        else:
+            normalized.pop("room_name", None)
+        if normalized.get("handoff_mode") not in (None, "") or handoff_mode != HANDOFF_MODES[0]:
+            normalized["handoff_mode"] = handoff_mode
+        else:
+            normalized.pop("handoff_mode", None)
         normalized_devices.append(normalized)
     return normalized_devices
 
@@ -546,6 +575,79 @@ def _normalize_loaded_config(config: dict) -> None:
         if not isinstance(value, list):
             logger.warning("Invalid %s value %r in config; using default []", key, value)
             config[key] = []
+
+
+def _configured_device_matches(
+    device_config: dict[str, Any],
+    *,
+    player_name: str = "",
+    device_mac: str = "",
+) -> bool:
+    configured_mac = _normalize_mac_key(device_config.get("mac"))
+    if device_mac and configured_mac and configured_mac == device_mac:
+        return True
+    configured_name = str(device_config.get("player_name") or "").strip()
+    if player_name and configured_name:
+        from services.bluetooth import _match_player_name
+
+        return bool(_match_player_name(configured_name, player_name))
+    return False
+
+
+def resolve_device_room_context(
+    config: dict[str, Any] | None,
+    *,
+    player_name: str = "",
+    device_mac: str = "",
+    adapter_mac: str = "",
+) -> dict[str, str]:
+    """Resolve room metadata and handoff mode for a configured Bluetooth device."""
+    resolved = {
+        "room_id": "",
+        "room_name": "",
+        "room_source": "unknown",
+        "room_confidence": "",
+        "handoff_mode": HANDOFF_MODES[0],
+    }
+    if not isinstance(config, dict):
+        return resolved
+
+    normalized_device_mac = _normalize_mac_key(device_mac)
+    normalized_adapter_mac = _normalize_mac_key(adapter_mac)
+    configured_device = None
+    for device in config.get("BLUETOOTH_DEVICES", []) or []:
+        if isinstance(device, dict) and _configured_device_matches(
+            device,
+            player_name=str(player_name or "").strip(),
+            device_mac=normalized_device_mac,
+        ):
+            configured_device = device
+            break
+
+    if isinstance(configured_device, dict):
+        resolved["handoff_mode"] = normalize_handoff_mode(configured_device.get("handoff_mode"))
+        room_id = str(configured_device.get("room_id") or "").strip()
+        room_name = str(configured_device.get("room_name") or "").strip()
+        if room_id or room_name:
+            resolved["room_id"] = room_id
+            resolved["room_name"] = room_name
+            resolved["room_source"] = "manual"
+            resolved["room_confidence"] = "operator"
+            return resolved
+
+    if bool(config.get("HA_AREA_NAME_ASSIST_ENABLED")) and normalized_adapter_mac:
+        adapter_map = config.get("HA_ADAPTER_AREA_MAP") or {}
+        if isinstance(adapter_map, dict):
+            area_entry = adapter_map.get(normalized_adapter_mac) or {}
+            if isinstance(area_entry, dict):
+                area_id = str(area_entry.get("area_id") or "").strip()
+                area_name = str(area_entry.get("area_name") or "").strip()
+                if area_id or area_name:
+                    resolved["room_id"] = area_id
+                    resolved["room_name"] = area_name
+                    resolved["room_source"] = "ha_area"
+                    resolved["room_confidence"] = "adapter_mac"
+    return resolved
 
 
 def migrate_config_payload(config: dict[str, Any]) -> ConfigMigrationResult:

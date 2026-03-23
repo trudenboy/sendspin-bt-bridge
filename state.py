@@ -260,6 +260,48 @@ def get_disabled_devices() -> list[dict]:
     return _get_registry_disabled_devices_snapshot()
 
 
+def _find_client_for_device_event(device_id: str):
+    normalized_id = str(device_id or "").strip()
+    if not normalized_id:
+        return None
+    for client in _get_registry_active_clients_snapshot():
+        if str(getattr(client, "player_id", "") or "").strip() == normalized_id:
+            return client
+        if str(getattr(client, "player_name", "") or "").strip() == normalized_id:
+            return client
+        bt_mgr = getattr(client, "bt_manager", None)
+        if str(getattr(bt_mgr, "mac_address", "") or "").strip().upper() == normalized_id.upper():
+            return client
+    return None
+
+
+def _build_device_event_context(device_id: str) -> dict[str, Any]:
+    client = _find_client_for_device_event(device_id)
+    if client is None:
+        return {}
+    try:
+        from services.status_snapshot import build_device_snapshot
+
+        snapshot = build_device_snapshot(client)
+    except Exception as exc:
+        logger.debug("Could not build device event context for %s: %s", device_id, exc)
+        return {}
+
+    context: dict[str, Any] = {
+        "handoff_mode": str(getattr(snapshot, "handoff_mode", "") or ""),
+        "transfer_readiness": dict(getattr(snapshot, "transfer_readiness", {}) or {}),
+    }
+    if getattr(snapshot, "room_id", None):
+        context["room_id"] = snapshot.room_id
+    if getattr(snapshot, "room_name", None):
+        context["room_name"] = snapshot.room_name
+    if getattr(snapshot, "room_source", None):
+        context["room_source"] = snapshot.room_source
+    if getattr(snapshot, "room_confidence", None):
+        context["room_confidence"] = snapshot.room_confidence
+    return {key: value for key, value in context.items() if value not in (None, "", {}, [])}
+
+
 # ---------------------------------------------------------------------------
 # Per-device event history — in-memory ring buffer for diagnostics/read models
 # ---------------------------------------------------------------------------
@@ -336,7 +378,11 @@ def publish_device_event(
     details: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     """Publish a per-device operational event through the internal event bus."""
-    normalized = normalize_device_event(event_type, level=level, message=message, details=details)
+    payload_details = dict(details or {})
+    payload_details.update(
+        {k: v for k, v in _build_device_event_context(device_id).items() if k not in payload_details}
+    )
+    normalized = normalize_device_event(event_type, level=level, message=message, details=payload_details)
     if normalized is None:
         return None
     event = publish_internal_event(

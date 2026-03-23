@@ -9,8 +9,10 @@ from config import (
     CONFIG_SCHEMA_VERSION,
     DEFAULT_LISTEN_PORT_BASE,
     DEFAULT_UPDATE_CHANNEL,
+    HANDOFF_MODES,
     UPDATE_CHANNELS,
     migrate_config_payload,
+    normalize_handoff_mode,
     normalize_update_channel,
 )
 from services.bluetooth import _MAC_RE
@@ -224,6 +226,30 @@ def validate_uploaded_config(
                     )
                 else:
                     seen_macs.add(mac)
+            room_id = str(dev.get("room_id") or "").strip()
+            room_name = str(dev.get("room_name") or "").strip()
+            if room_id:
+                normalized["BLUETOOTH_DEVICES"][index]["room_id"] = room_id
+            else:
+                normalized["BLUETOOTH_DEVICES"][index].pop("room_id", None)
+            if room_name:
+                normalized["BLUETOOTH_DEVICES"][index]["room_name"] = room_name
+            else:
+                normalized["BLUETOOTH_DEVICES"][index].pop("room_name", None)
+            raw_handoff_mode = dev.get("handoff_mode")
+            handoff_mode = normalize_handoff_mode(raw_handoff_mode)
+            if raw_handoff_mode not in (None, ""):
+                if handoff_mode != str(raw_handoff_mode).strip().lower():
+                    result.errors.append(
+                        ConfigValidationIssue(
+                            field=f"{field_prefix}.handoff_mode",
+                            message=f"Invalid handoff_mode: {raw_handoff_mode} (must be one of {', '.join(HANDOFF_MODES)})",
+                        )
+                    )
+                else:
+                    normalized["BLUETOOTH_DEVICES"][index]["handoff_mode"] = handoff_mode
+            else:
+                normalized["BLUETOOTH_DEVICES"][index].pop("handoff_mode", None)
             keepalive_interval_raw = dev.get("keepalive_interval")
             keepalive_interval = _normalize_optional_field_int(
                 normalized["BLUETOOTH_DEVICES"][index],

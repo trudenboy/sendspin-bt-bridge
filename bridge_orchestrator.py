@@ -308,7 +308,10 @@ class BridgeOrchestrator:
             if static_delay_ms is not None:
                 static_delay_ms = float(static_delay_ms)
             preferred_format = device.get("preferred_format", "flac:44100:16:2")
+            handoff_mode = str(device.get("handoff_mode") or "default").strip().lower() or "default"
             keepalive_interval = int(device.get("keepalive_interval") or 0)
+            if handoff_mode == "fast_handoff" and keepalive_interval <= 0:
+                keepalive_interval = 45
             keepalive_enabled = keepalive_interval > 0
             keepalive_interval = max(30, keepalive_interval) if keepalive_enabled else 30
 

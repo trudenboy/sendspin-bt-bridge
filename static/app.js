@@ -2007,6 +2007,61 @@ function _renderSyncDetailBadgeHtml(dev, i, className, id) {
     '</span>';
 }
 
+function _getRoomBadgeRenderData(dev, className) {
+    var roomName = String((dev && dev.room_name) || '').trim();
+    var roomId = String((dev && dev.room_id) || '').trim();
+    if (!roomName && !roomId) return null;
+    var label = roomName || roomId;
+    var source = String((dev && dev.room_source) || '').trim();
+    var toneClass = source === 'ha_area' ? _deviceStatusToneClass('info') : _deviceStatusToneClass('neutral');
+    return {
+        className: _joinClassNames([className, 'meta-badge', 'meta-badge-status', 'room-chip-badge', toneClass]),
+        title: source === 'ha_area'
+            ? 'Room mapped from Home Assistant area' + (roomId ? ' · ' + roomId : '')
+            : 'Room assignment' + (roomId ? ' · ' + roomId : ''),
+        innerHtml: _renderBadgeIndicatorHtml('tag', {key: 'room', level: label, pulse: false}) +
+            '<span class="meta-badge-label">' + escHtml(label) + '</span>',
+    };
+}
+
+function _renderRoomBadgeHtml(dev, className, id) {
+    var renderData = _getRoomBadgeRenderData(dev, className);
+    if (!renderData) return '';
+    return '<span class="' + renderData.className + '"' +
+        (id ? ' id="' + id + '"' : '') +
+        ' title="' + escHtmlAttr(renderData.title) + '">' +
+        renderData.innerHtml +
+    '</span>';
+}
+
+function _getTransferReadinessBadgeRenderData(dev, className) {
+    var readiness = (dev && dev.transfer_readiness) || {};
+    if (!readiness || typeof readiness !== 'object') return null;
+    var ready = !!readiness.ready;
+    var reason = String(readiness.reason || '').trim();
+    var label = ready ? 'Transfer ready' : 'Not ready';
+    var toneClass = ready ? _deviceStatusToneClass('success') : _deviceStatusToneClass(readiness.severity || 'warning');
+    var title = ready
+        ? 'Ready for room handoff'
+        : 'Room handoff not ready' + (reason ? ' · ' + reason.replace(/_/g, ' ') : '');
+    return {
+        className: _joinClassNames([className, 'meta-badge', 'meta-badge-status', 'transfer-chip-badge', toneClass]),
+        title: title,
+        innerHtml: _renderBadgeIndicatorHtml('status', {key: ready ? 'ready' : 'blocked', level: ready ? 'ok' : reason, pulse: false}) +
+            '<span class="meta-badge-label">' + escHtml(label) + '</span>',
+    };
+}
+
+function _renderTransferReadinessBadgeHtml(dev, className, id) {
+    var renderData = _getTransferReadinessBadgeRenderData(dev, className);
+    if (!renderData) return '';
+    return '<span class="' + renderData.className + '"' +
+        (id ? ' id="' + id + '"' : '') +
+        ' title="' + escHtmlAttr(renderData.title) + '">' +
+        renderData.innerHtml +
+    '</span>';
+}
+
 function _getBatteryBadgeRenderData(level, className) {
     var batteryMeta = _getBatteryBadgeMeta(level);
     return {
@@ -3203,6 +3258,8 @@ function buildDeviceCard(i) {
           '<button type="button" class="chip meta-badge meta-badge-link meta-badge-interactive adapter-link-badge is-neutral" id="dchip-bt-' + i + '" title="Open Bluetooth adapter settings"></button>' +
           '<span id="dchip-ma-' + i + '"></span>' +
           '<span id="dplay-chip-' + i + '"></span>' +
+          '<span id="droom-chip-' + i + '" style="display:none"></span>' +
+          '<span id="dtransfer-chip-' + i + '" style="display:none"></span>' +
           '<span id="dsync-' + i + '" style="display:none"></span>' +
           '<span id="dsync-detail-' + i + '" style="display:none"></span>' +
           '<span id="dbattery-' + i + '" style="display:none"></span>' +
@@ -3376,6 +3433,24 @@ function populateDeviceCard(i, dev) {
         playChip.className = statusRenderData.className;
         playChip.innerHTML = statusRenderData.innerHtml;
         playChip.title = statusRenderData.title;
+    }
+
+    var roomChip = document.getElementById('droom-chip-' + i);
+    if (roomChip) {
+        var roomRenderData = _getRoomBadgeRenderData(dev, 'chip');
+        roomChip.style.display = roomRenderData ? '' : 'none';
+        roomChip.className = roomRenderData ? roomRenderData.className : '';
+        roomChip.innerHTML = roomRenderData ? roomRenderData.innerHtml : '';
+        roomChip.title = roomRenderData ? roomRenderData.title : '';
+    }
+
+    var transferChip = document.getElementById('dtransfer-chip-' + i);
+    if (transferChip) {
+        var transferRenderData = _getTransferReadinessBadgeRenderData(dev, 'chip');
+        transferChip.style.display = transferRenderData ? '' : 'none';
+        transferChip.className = transferRenderData ? transferRenderData.className : '';
+        transferChip.innerHTML = transferRenderData ? transferRenderData.innerHtml : '';
+        transferChip.title = transferRenderData ? transferRenderData.title : '';
     }
 
     var progWrap = document.getElementById('dprog-wrap-' + i);
@@ -5005,7 +5080,7 @@ function btAdapterOptions(selected) {
     return opts;
 }
 
-function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabled, preferredFormat, keepaliveInterval) {
+function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabled, preferredFormat, keepaliveInterval, roomName, roomId, handoffMode) {
     var tbody = document.getElementById('bt-devices-table');
     var wrap = document.createElement('div');
     wrap.className = 'bt-device-wrap';
@@ -5019,6 +5094,10 @@ function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabl
     var fmtVal   = (preferredFormat !== undefined && preferredFormat !== null) ? preferredFormat : 'flac:44100:16:2';
     var kaVal = (keepaliveInterval !== undefined && keepaliveInterval !== null && keepaliveInterval !== '') ? parseInt(keepaliveInterval, 10) : 0;
     if (kaVal > 0 && kaVal < 30) kaVal = 30;
+    var roomNameVal = String(roomName || '').trim();
+    var roomIdVal = String(roomId || '').trim();
+    var handoffModeVal = String(handoffMode || 'default').trim().toLowerCase();
+    if (handoffModeVal !== 'fast_handoff') handoffModeVal = 'default';
     row.innerHTML =
         '<div class="bt-enabled-cell bt-cell" data-label="Enabled"><label class="bt-switch" title="Enable or disable device">' +
             '<input type="checkbox" class="bt-enabled"' + (isEnabled ? ' checked' : '') + '>' +
@@ -5078,7 +5157,18 @@ function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabl
         '<div><label>Keep-alive (s)</label>' +
             '<input type="number" class="bt-keepalive-interval" min="0" placeholder="0" ' +
             'title="0 = disabled, min 30 when enabled" value="' +
-            escHtmlAttr(String(kaVal)) + '"></div>';
+            escHtmlAttr(String(kaVal)) + '"></div>' +
+        '<div><label>Room name</label>' +
+            '<input type="text" class="bt-room-name" placeholder="e.g. Living Room" title="Stable room label for MA/HA/MassDroid interoperability" value="' +
+            escHtmlAttr(roomNameVal) + '"></div>' +
+        '<div><label>Room ID</label>' +
+            '<input type="text" class="bt-room-id" placeholder="living-room" title="Stable machine-readable room identifier" value="' +
+            escHtmlAttr(roomIdVal) + '"></div>' +
+        '<div><label>Handoff mode</label>' +
+            '<select class="bt-handoff-mode" title="Optimize speaker readiness for room handoff scenarios">' +
+                '<option value="default"' + (handoffModeVal === 'default' ? ' selected' : '') + '>Default</option>' +
+                '<option value="fast_handoff"' + (handoffModeVal === 'fast_handoff' ? ' selected' : '') + '>Fast handoff</option>' +
+            '</select></div>';
 
     var enabledCb = row.querySelector('.bt-enabled');
     function syncBtRowIdentity() {
@@ -5180,12 +5270,21 @@ function collectBtDevices() {
         var listenPort = portEl && portEl.value.trim() ? parseInt(portEl.value, 10) : null;
         var kaIntEl    = detail ? detail.querySelector('.bt-keepalive-interval') : null;
         var kaVal      = kaIntEl ? parseInt(kaIntEl.value, 10) : 0;
+        var roomNameEl = detail ? detail.querySelector('.bt-room-name') : null;
+        var roomIdEl   = detail ? detail.querySelector('.bt-room-id') : null;
+        var handoffEl  = detail ? detail.querySelector('.bt-handoff-mode') : null;
         if (isNaN(kaVal) || kaVal < 0) kaVal = 0;
         if (kaVal > 0 && kaVal < 30) kaVal = 30;
         var dev = { mac: mac, adapter: adapter, player_name: name, static_delay_ms: delay, preferred_format: preferredFormat || 'flac:44100:16:2' };
         if (listenHost) dev.listen_host = listenHost;
         if (listenPort) dev.listen_port = listenPort;
         dev.keepalive_interval = kaVal;
+        var roomName = roomNameEl ? String(roomNameEl.value || '').trim() : '';
+        var roomId = roomIdEl ? String(roomIdEl.value || '').trim() : '';
+        var handoffMode = handoffEl ? String(handoffEl.value || 'default').trim().toLowerCase() : 'default';
+        if (roomName) dev.room_name = roomName;
+        if (roomId) dev.room_id = roomId;
+        if (handoffMode && handoffMode !== 'default') dev.handoff_mode = handoffMode;
         // Read enabled state from checkbox
         var enabledCb = row.querySelector('.bt-enabled');
         if (enabledCb && !enabledCb.checked) dev.enabled = false;
@@ -5210,7 +5309,7 @@ function populateBtDeviceRows(devices) {
     devices.forEach(function(d) {
         addBtDeviceRow(d.player_name || '', d.mac || '', d.adapter || '',
                        d.static_delay_ms, d.listen_host, d.listen_port, d.enabled,
-                       d.preferred_format, d.keepalive_interval);
+                       d.preferred_format, d.keepalive_interval, d.room_name, d.room_id, d.handoff_mode);
     });
     refreshBtDeviceRowsRuntime();
 }
@@ -8167,6 +8266,8 @@ function _normalizeBtDeviceDirtyFields(fields) {
     }
     var delay = parseFloat(fields.static_delay_ms);
     if (Number.isNaN(delay)) delay = 0;
+    var handoffMode = String(fields.handoff_mode || 'default').trim().toLowerCase();
+    if (handoffMode !== 'fast_handoff') handoffMode = 'default';
     return {
         enabled: fields.enabled !== false,
         player_name: (fields.player_name || '').trim(),
@@ -8177,6 +8278,9 @@ function _normalizeBtDeviceDirtyFields(fields) {
         listen_port: listenPort,
         preferred_format: (fields.preferred_format || 'flac:44100:16:2').trim() || 'flac:44100:16:2',
         keepalive_interval: keepalive,
+        room_name: (fields.room_name || '').trim(),
+        room_id: (fields.room_id || '').trim(),
+        handoff_mode: handoffMode,
     };
 }
 
@@ -8191,6 +8295,9 @@ function _defaultBtDeviceDirtyFields() {
         listen_port: null,
         preferred_format: 'flac:44100:16:2',
         keepalive_interval: 0,
+        room_name: '',
+        room_id: '',
+        handoff_mode: 'default',
     });
 }
 
@@ -8207,6 +8314,9 @@ function _readBtDeviceDirtyFields(wrap) {
         listen_port: ((row.querySelector('.bt-listen-port') || {}).value || ''),
         preferred_format: detail ? (((detail.querySelector('.bt-preferred-format') || {}).value) || 'flac:44100:16:2') : 'flac:44100:16:2',
         keepalive_interval: detail ? (((detail.querySelector('.bt-keepalive-interval') || {}).value) || 0) : 0,
+        room_name: detail ? (((detail.querySelector('.bt-room-name') || {}).value) || '') : '',
+        room_id: detail ? (((detail.querySelector('.bt-room-id') || {}).value) || '') : '',
+        handoff_mode: detail ? (((detail.querySelector('.bt-handoff-mode') || {}).value) || 'default') : 'default',
     });
 }
 
@@ -8225,6 +8335,9 @@ function _getBtDeviceControlByField(wrap, fieldName) {
         listen_port: '.bt-listen-port',
         preferred_format: '.bt-preferred-format',
         keepalive_interval: '.bt-keepalive-interval',
+        room_name: '.bt-room-name',
+        room_id: '.bt-room-id',
+        handoff_mode: '.bt-handoff-mode',
     };
     return wrap.querySelector(selectors[fieldName] || '');
 }
