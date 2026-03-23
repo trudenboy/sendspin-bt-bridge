@@ -7,10 +7,12 @@ from datetime import datetime, timezone
 from typing import Any
 
 UTC = timezone.utc
-_CHECKLIST_ORDER = ("bluetooth", "audio", "sink_verification", "ma_auth", "latency")
+_CHECKLIST_ORDER = ("runtime_access", "bluetooth", "audio", "bridge_control", "sink_verification", "ma_auth", "latency")
 _CHECKLIST_TITLES = {
+    "runtime_access": "Verify runtime host access",
     "bluetooth": "Check Bluetooth access",
     "audio": "Verify audio backend",
+    "bridge_control": "Make a speaker available",
     "sink_verification": "Attach your first speaker",
     "ma_auth": "Connect Music Assistant",
     "latency": "Review latency tuning",
@@ -145,6 +147,8 @@ def _status_rank(status: str) -> int:
 
 
 def _recommended_action_for_check(check: OnboardingCheck) -> OnboardingChecklistAction | None:
+    if check.key == "runtime_access":
+        return OnboardingChecklistAction(key="open_diagnostics", label="Open runtime diagnostics")
     if check.key == "bluetooth":
         if check.status == "error":
             return OnboardingChecklistAction(key="open_bluetooth_settings", label="Open adapter settings")
@@ -153,6 +157,8 @@ def _recommended_action_for_check(check: OnboardingCheck) -> OnboardingChecklist
         return OnboardingChecklistAction(key="open_bluetooth_settings", label="Open Bluetooth settings")
     if check.key == "audio":
         return OnboardingChecklistAction(key="open_diagnostics", label="Open audio diagnostics")
+    if check.key == "bridge_control":
+        return OnboardingChecklistAction(key="open_devices_settings", label="Open device settings")
     if check.key == "sink_verification":
         if int(check.details.get("configured_devices") or 0) == 0:
             return OnboardingChecklistAction(key="scan_devices", label="Open device scan")
@@ -298,30 +304,69 @@ def build_onboarding_assistant_snapshot(
     """Build operator guidance from preflight, config, and runtime device state."""
     configured_devices = config.get("BLUETOOTH_DEVICES", [])
     configured_count = len(configured_devices) if isinstance(configured_devices, list) else 0
-    connected_devices = sum(1 for device in devices if getattr(device, "bluetooth_connected", False))
+    active_devices = [device for device in devices if getattr(device, "bt_management_enabled", True)]
+    released_devices = [device for device in devices if getattr(device, "bt_management_enabled", True) is False]
+    connected_devices = sum(1 for device in active_devices if getattr(device, "bluetooth_connected", False))
     sink_ready_devices = sum(
-        1 for device in devices if getattr(device, "bluetooth_connected", False) and getattr(device, "has_sink", False)
+        1
+        for device in active_devices
+        if getattr(device, "bluetooth_connected", False) and getattr(device, "has_sink", False)
     )
     missing_sink_devices = [
         getattr(device, "player_name", "Unknown")
-        for device in devices
+        for device in active_devices
         if getattr(device, "bluetooth_connected", False) and not getattr(device, "has_sink", False)
     ]
 
     bluetooth = preflight.get("bluetooth", {})
     audio = preflight.get("audio", {})
+    dbus_available = bool(preflight.get("dbus", True))
     audio_system = str(audio.get("system") or "unknown")
     audio_sinks = int(audio.get("sinks") or 0)
     paired_devices = int(bluetooth.get("paired_devices") or 0)
     controller_present = bool(bluetooth.get("controller", False))
+    disabled_configured_count = sum(
+        1 for device in configured_devices if isinstance(device, dict) and device.get("enabled", True) is False
+    )
+    user_released_devices = [
+        device for device in released_devices if str(getattr(device, "bt_released_by", "") or "") != "auto"
+    ]
+    auto_released_devices = [
+        device for device in released_devices if str(getattr(device, "bt_released_by", "") or "") == "auto"
+    ]
 
     ma_url = str(config.get("MA_API_URL") or "").strip()
     ma_token = str(config.get("MA_API_TOKEN") or "").strip()
     ma_username = str(config.get("MA_USERNAME") or "").strip()
     pulse_latency = int(config.get("PULSE_LATENCY_MSEC") or 0)
-    custom_delays = sum(1 for device in devices if getattr(device, "static_delay_ms", None) not in (None, 0, 0.0))
+    custom_delays = sum(
+        1 for device in active_devices if getattr(device, "static_delay_ms", None) not in (None, 0, 0.0)
+    )
 
     checks: list[OnboardingCheck] = []
+
+    if not dbus_available:
+        checks.append(
+            OnboardingCheck(
+                key="runtime_access",
+                status="error",
+                summary="The bridge runtime cannot reach the host D-Bus services required for Bluetooth control.",
+                details={"dbus": False},
+                actions=[
+                    "Open diagnostics and confirm D-Bus is reachable from this runtime.",
+                    "For Docker or LXC, verify the host D-Bus socket/mounts and required privileges are present.",
+                ],
+            )
+        )
+    else:
+        checks.append(
+            OnboardingCheck(
+                key="runtime_access",
+                status="ok",
+                summary="The bridge runtime can reach the host services it needs for Bluetooth and audio control.",
+                details={"dbus": True},
+            )
+        )
 
     if not controller_present:
         checks.append(
@@ -389,6 +434,64 @@ def build_onboarding_assistant_snapshot(
                 status="ok",
                 summary="The audio server is reachable and exposes sinks.",
                 details={"system": audio_system, "sinks": audio_sinks},
+            )
+        )
+
+    if configured_count == 0:
+        checks.append(
+            OnboardingCheck(
+                key="bridge_control",
+                status="ok",
+                summary="No Bluetooth speakers are configured yet, so the bridge is ready for your first device.",
+                details={"configured_devices": 0, "active_devices": 0},
+            )
+        )
+    elif disabled_configured_count >= configured_count:
+        checks.append(
+            OnboardingCheck(
+                key="bridge_control",
+                status="warning",
+                summary="All configured Bluetooth speakers are globally disabled right now.",
+                details={
+                    "configured_devices": configured_count,
+                    "disabled_devices": disabled_configured_count,
+                    "active_devices": len(active_devices),
+                },
+                actions=[
+                    "Open Configuration → Devices and re-enable at least one speaker.",
+                    "Save and restart the bridge so it reloads the enabled device set.",
+                ],
+            )
+        )
+    elif not active_devices and released_devices:
+        checks.append(
+            OnboardingCheck(
+                key="bridge_control",
+                status="warning",
+                summary=(
+                    "All configured speakers were auto-released from bridge management after connection failures."
+                    if auto_released_devices and len(auto_released_devices) >= configured_count
+                    else "All configured speakers are currently released from bridge management."
+                ),
+                details={
+                    "configured_devices": configured_count,
+                    "released_devices": len(released_devices),
+                    "user_released_devices": len(user_released_devices),
+                    "auto_released_devices": len(auto_released_devices),
+                },
+                actions=[
+                    "Open device settings and reclaim at least one speaker for bridge management.",
+                    "If reclaim does not stick, open diagnostics and confirm Bluetooth access is healthy first.",
+                ],
+            )
+        )
+    else:
+        checks.append(
+            OnboardingCheck(
+                key="bridge_control",
+                status="ok",
+                summary="At least one configured speaker is available to the bridge.",
+                details={"configured_devices": configured_count, "active_devices": len(active_devices)},
             )
         )
 
@@ -539,7 +642,7 @@ def build_onboarding_assistant_snapshot(
 
     counts = {
         "configured_devices": configured_count,
-        "active_devices": len(devices),
+        "active_devices": len(active_devices),
         "connected_devices": connected_devices,
         "sink_ready_devices": sink_ready_devices,
     }

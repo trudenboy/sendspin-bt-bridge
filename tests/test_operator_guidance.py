@@ -305,7 +305,39 @@ def test_operator_guidance_treats_user_released_devices_as_neutral():
     snapshot = build_operator_guidance_snapshot(
         config={"BLUETOOTH_ADAPTERS": [{"id": "hci0"}], "BLUETOOTH_DEVICES": [{"mac": "AA"}]},
         onboarding_assistant={
-            "checklist": {"overall_status": "warning", "progress_percent": 0, "summary": "No active devices."},
+            "checklist": {
+                "overall_status": "warning",
+                "progress_percent": 43,
+                "headline": "Next recommended step: Make a speaker available",
+                "summary": "All configured speakers are currently released from bridge management.",
+                "current_step_key": "bridge_control",
+                "current_step_title": "Make a speaker available",
+                "primary_action": {"key": "open_devices_settings", "label": "Open device settings"},
+                "checkpoints": [],
+                "steps": [
+                    {
+                        "key": "runtime_access",
+                        "title": "Verify runtime host access",
+                        "status": "ok",
+                        "stage": "complete",
+                    },
+                    {"key": "bluetooth", "title": "Check Bluetooth access", "status": "ok", "stage": "complete"},
+                    {"key": "audio", "title": "Verify audio backend", "status": "ok", "stage": "complete"},
+                    {
+                        "key": "bridge_control",
+                        "title": "Make a speaker available",
+                        "status": "warning",
+                        "stage": "current",
+                        "summary": "All configured speakers are currently released from bridge management.",
+                    },
+                    {
+                        "key": "sink_verification",
+                        "title": "Attach your first speaker",
+                        "status": "warning",
+                        "stage": "upcoming",
+                    },
+                ],
+            },
             "counts": {"configured_devices": 1, "connected_devices": 0, "sink_ready_devices": 0},
         },
         recovery_assistant={"summary": {"summary": "No active recovery issues."}},
@@ -343,27 +375,39 @@ def test_operator_guidance_uses_bulk_reclaim_onboarding_when_all_devices_are_rel
         onboarding_assistant={
             "checklist": {
                 "overall_status": "warning",
-                "progress_percent": 60,
-                "completed_steps": 2,
-                "total_steps": 5,
-                "headline": "Next recommended step: Attach your first speaker",
-                "summary": "Devices are configured, but none are currently connected over Bluetooth.",
-                "current_step_key": "sink_verification",
-                "current_step_title": "Attach your first speaker",
+                "progress_percent": 43,
+                "completed_steps": 3,
+                "total_steps": 7,
+                "headline": "Next recommended step: Make a speaker available",
+                "summary": "All configured speakers are currently released from bridge management.",
+                "current_step_key": "bridge_control",
+                "current_step_title": "Make a speaker available",
                 "primary_action": {"key": "open_devices_settings", "label": "Open device settings"},
                 "checkpoints": [],
                 "steps": [
+                    {
+                        "key": "runtime_access",
+                        "title": "Verify runtime host access",
+                        "status": "ok",
+                        "stage": "complete",
+                    },
                     {"key": "bluetooth", "title": "Check Bluetooth access", "status": "ok", "stage": "complete"},
                     {"key": "audio", "title": "Verify audio backend", "status": "ok", "stage": "complete"},
+                    {
+                        "key": "bridge_control",
+                        "title": "Make a speaker available",
+                        "status": "warning",
+                        "stage": "current",
+                        "summary": "All configured speakers are currently released from bridge management.",
+                        "details": {"configured_devices": 2},
+                        "actions": ["Use Reclaim to hand at least one speaker back to the bridge."],
+                        "recommended_action": {"key": "open_devices_settings", "label": "Open device settings"},
+                    },
                     {
                         "key": "sink_verification",
                         "title": "Attach your first speaker",
                         "status": "warning",
-                        "stage": "current",
-                        "summary": "Devices are configured, but none are currently connected over Bluetooth.",
-                        "details": {"configured_devices": 2},
-                        "actions": ["Power on a configured speaker."],
-                        "recommended_action": {"key": "open_devices_settings", "label": "Open device settings"},
+                        "stage": "upcoming",
                     },
                 ],
             },
@@ -398,7 +442,7 @@ def test_operator_guidance_uses_bulk_reclaim_onboarding_when_all_devices_are_rel
     assert data["onboarding_card"]["primary_action"]["key"] == "toggle_bt_management_devices"
     assert data["onboarding_card"]["primary_action"]["device_names"] == ["Kitchen", "Office"]
     assert data["onboarding_card"]["checklist"]["current_step_title"] == "Reclaim a speaker"
-    step = data["onboarding_card"]["checklist"]["steps"][2]
+    step = data["onboarding_card"]["checklist"]["steps"][3]
     assert step["title"] == "Reclaim a speaker"
     assert step["stage"] == "current"
     assert step["recommended_action"]["key"] == "toggle_bt_management_devices"
@@ -411,27 +455,39 @@ def test_operator_guidance_reports_all_devices_disabled_as_neutral():
         onboarding_assistant={
             "checklist": {
                 "overall_status": "warning",
-                "progress_percent": 60,
+                "progress_percent": 43,
                 "completed_steps": 3,
-                "total_steps": 5,
-                "headline": "Next recommended step: Attach your first speaker",
-                "summary": "Devices are configured, but none are currently connected over Bluetooth.",
-                "current_step_key": "sink_verification",
-                "current_step_title": "Attach your first speaker",
+                "total_steps": 7,
+                "headline": "Next recommended step: Make a speaker available",
+                "summary": "All configured Bluetooth speakers are globally disabled right now.",
+                "current_step_key": "bridge_control",
+                "current_step_title": "Make a speaker available",
                 "primary_action": {"key": "open_devices_settings", "label": "Open device settings"},
                 "checkpoints": [],
                 "steps": [
+                    {
+                        "key": "runtime_access",
+                        "title": "Verify runtime host access",
+                        "status": "ok",
+                        "stage": "complete",
+                    },
                     {"key": "bluetooth", "title": "Check Bluetooth access", "status": "ok", "stage": "complete"},
                     {"key": "audio", "title": "Verify audio backend", "status": "ok", "stage": "complete"},
+                    {
+                        "key": "bridge_control",
+                        "title": "Make a speaker available",
+                        "status": "warning",
+                        "stage": "current",
+                        "summary": "All configured Bluetooth speakers are globally disabled right now.",
+                        "details": {"configured_devices": 2},
+                        "actions": ["Open Configuration → Devices and re-enable at least one speaker."],
+                        "recommended_action": {"key": "open_devices_settings", "label": "Open device settings"},
+                    },
                     {
                         "key": "sink_verification",
                         "title": "Attach your first speaker",
                         "status": "warning",
-                        "stage": "current",
-                        "summary": "Devices are configured, but none are currently connected over Bluetooth.",
-                        "details": {"configured_devices": 2},
-                        "actions": ["Power on a configured speaker."],
-                        "recommended_action": {"key": "open_devices_settings", "label": "Open device settings"},
+                        "stage": "upcoming",
                     },
                 ],
             },
@@ -456,7 +512,7 @@ def test_operator_guidance_reports_all_devices_disabled_as_neutral():
     assert data["onboarding_card"]["summary"].startswith("All configured Bluetooth devices are currently disabled.")
     assert data["onboarding_card"]["primary_action"]["key"] == "open_devices_settings"
     assert data["onboarding_card"]["checklist"]["current_step_title"] == "Re-enable a speaker"
-    step = data["onboarding_card"]["checklist"]["steps"][2]
+    step = data["onboarding_card"]["checklist"]["steps"][3]
     assert step["title"] == "Re-enable a speaker"
     assert step["stage"] == "current"
     assert step["summary"] == "All configured speakers are globally disabled right now."
@@ -477,7 +533,7 @@ def test_operator_guidance_prioritizes_bluetooth_adapter_failure_over_disabled_d
             ],
             "checklist": {
                 "overall_status": "error",
-                "progress_percent": 20,
+                "progress_percent": 14,
                 "headline": "Next recommended step: Check Bluetooth access",
                 "summary": "No Bluetooth controller detected by preflight checks.",
                 "current_step_key": "bluetooth",
@@ -485,6 +541,12 @@ def test_operator_guidance_prioritizes_bluetooth_adapter_failure_over_disabled_d
                 "primary_action": {"key": "open_bluetooth_settings", "label": "Open Bluetooth settings"},
                 "checkpoints": [],
                 "steps": [
+                    {
+                        "key": "runtime_access",
+                        "title": "Verify runtime host access",
+                        "status": "ok",
+                        "stage": "complete",
+                    },
                     {
                         "key": "bluetooth",
                         "title": "Check Bluetooth access",
@@ -499,6 +561,12 @@ def test_operator_guidance_prioritizes_bluetooth_adapter_failure_over_disabled_d
                         },
                     },
                     {"key": "audio", "title": "Verify audio backend", "status": "ok", "stage": "complete"},
+                    {
+                        "key": "bridge_control",
+                        "title": "Make a speaker available",
+                        "status": "warning",
+                        "stage": "upcoming",
+                    },
                     {
                         "key": "sink_verification",
                         "title": "Attach your first speaker",
@@ -527,7 +595,7 @@ def test_operator_guidance_prioritizes_bluetooth_adapter_failure_over_disabled_d
     assert data["onboarding_card"]["primary_action"]["key"] == "open_bluetooth_settings"
     assert data["onboarding_card"]["secondary_actions"][0]["key"] == "open_devices_settings"
     assert data["onboarding_card"]["checklist"]["current_step_key"] == "bluetooth"
-    step = data["onboarding_card"]["checklist"]["steps"][0]
+    step = data["onboarding_card"]["checklist"]["steps"][1]
     assert step["stage"] == "current"
     assert step["status"] == "error"
     assert "re-enable at least one speaker" in step["actions"][-1]
@@ -546,22 +614,34 @@ def test_operator_guidance_keeps_disabled_devices_neutral_when_bluetooth_check_i
             ],
             "checklist": {
                 "overall_status": "warning",
-                "progress_percent": 60,
-                "headline": "Next recommended step: Attach your first speaker",
-                "summary": "Devices are configured, but none are currently connected over Bluetooth.",
-                "current_step_key": "sink_verification",
-                "current_step_title": "Attach your first speaker",
+                "progress_percent": 43,
+                "headline": "Next recommended step: Make a speaker available",
+                "summary": "All configured Bluetooth speakers are globally disabled right now.",
+                "current_step_key": "bridge_control",
+                "current_step_title": "Make a speaker available",
                 "primary_action": {"key": "open_devices_settings", "label": "Open device settings"},
                 "checkpoints": [],
                 "steps": [
+                    {
+                        "key": "runtime_access",
+                        "title": "Verify runtime host access",
+                        "status": "ok",
+                        "stage": "complete",
+                    },
                     {"key": "bluetooth", "title": "Check Bluetooth access", "status": "ok", "stage": "complete"},
                     {"key": "audio", "title": "Verify audio backend", "status": "ok", "stage": "complete"},
+                    {
+                        "key": "bridge_control",
+                        "title": "Make a speaker available",
+                        "status": "warning",
+                        "stage": "current",
+                        "summary": "All configured Bluetooth speakers are globally disabled right now.",
+                    },
                     {
                         "key": "sink_verification",
                         "title": "Attach your first speaker",
                         "status": "warning",
-                        "stage": "current",
-                        "summary": "Devices are configured, but none are currently connected over Bluetooth.",
+                        "stage": "upcoming",
                     },
                 ],
             },
@@ -578,3 +658,62 @@ def test_operator_guidance_keeps_disabled_devices_neutral_when_bluetooth_check_i
     assert data["issue_groups"] == []
     assert data["header_status"]["label"] == "All devices disabled"
     assert data["onboarding_card"]["headline"] == "Re-enable a speaker to resume playback"
+
+
+def test_operator_guidance_prioritizes_runtime_access_over_disabled_devices():
+    snapshot = build_operator_guidance_snapshot(
+        config={"BLUETOOTH_ADAPTERS": [{"id": "hci0"}], "BLUETOOTH_DEVICES": [{"mac": "AA"}]},
+        onboarding_assistant={
+            "checks": [
+                {
+                    "key": "runtime_access",
+                    "status": "error",
+                    "summary": "The bridge runtime cannot reach the host D-Bus services required for Bluetooth control.",
+                    "details": {"dbus": False},
+                    "actions": ["Open diagnostics and confirm D-Bus is reachable from this runtime."],
+                }
+            ],
+            "checklist": {
+                "overall_status": "error",
+                "progress_percent": 0,
+                "headline": "Finish setup: Verify runtime host access",
+                "summary": "The bridge runtime cannot reach the host D-Bus services required for Bluetooth control.",
+                "current_step_key": "runtime_access",
+                "current_step_title": "Verify runtime host access",
+                "primary_action": {"key": "open_diagnostics", "label": "Open diagnostics"},
+                "checkpoints": [],
+                "steps": [
+                    {
+                        "key": "runtime_access",
+                        "title": "Verify runtime host access",
+                        "status": "error",
+                        "stage": "current",
+                        "summary": "The bridge runtime cannot reach the host D-Bus services required for Bluetooth control.",
+                        "details": {"dbus": False},
+                        "actions": ["Open diagnostics and confirm D-Bus is reachable from this runtime."],
+                        "recommended_action": {"key": "open_diagnostics", "label": "Open diagnostics"},
+                    },
+                    {"key": "bluetooth", "title": "Check Bluetooth access", "status": "warning", "stage": "upcoming"},
+                    {"key": "audio", "title": "Verify audio backend", "status": "warning", "stage": "upcoming"},
+                    {
+                        "key": "bridge_control",
+                        "title": "Make a speaker available",
+                        "status": "warning",
+                        "stage": "upcoming",
+                    },
+                ],
+            },
+            "counts": {"configured_devices": 1, "connected_devices": 0, "sink_ready_devices": 0},
+        },
+        recovery_assistant={"summary": {"summary": "No active recovery issues."}},
+        startup_progress={"status": "complete"},
+        devices=[],
+        disabled_devices=[{"player_name": "Kitchen", "enabled": False}],
+    )
+
+    data = snapshot.to_dict()
+    assert data["mode"] == "attention"
+    assert data["header_status"]["label"] == "Host service access unavailable"
+    assert data["issue_groups"][0]["key"] == "runtime_access"
+    assert data["onboarding_card"]["headline"] == "Restore host service access first"
+    assert data["onboarding_card"]["checklist"]["current_step_key"] == "runtime_access"

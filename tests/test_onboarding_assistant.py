@@ -18,8 +18,10 @@ def test_onboarding_assistant_reports_missing_prerequisites():
     )
 
     checks = {check.key: check for check in snapshot.checks}
+    assert checks["runtime_access"].status == "ok"
     assert checks["bluetooth"].status == "error"
     assert checks["audio"].status == "error"
+    assert checks["bridge_control"].status == "ok"
     assert checks["sink_verification"].status == "warning"
     assert checks["ma_auth"].status == "warning"
     assert snapshot.next_steps
@@ -27,10 +29,37 @@ def test_onboarding_assistant_reports_missing_prerequisites():
     assert snapshot.checklist.current_step_key == "bluetooth"
     assert snapshot.checklist.primary_action is not None
     assert snapshot.checklist.primary_action.key == "open_bluetooth_settings"
-    assert snapshot.checklist.progress_percent == 0
+    assert snapshot.checklist.progress_percent == 14
     assert snapshot.checklist.checkpoints[0].reached is False
-    assert snapshot.checklist.steps[0].stage == "current"
+    assert snapshot.checklist.steps[0].key == "runtime_access"
+    assert snapshot.checklist.steps[0].stage == "complete"
+    assert snapshot.checklist.steps[1].key == "bluetooth"
+    assert snapshot.checklist.steps[1].stage == "current"
+    assert snapshot.checklist.steps[2].stage == "upcoming"
+
+
+def test_onboarding_assistant_blocks_lower_layers_when_runtime_access_fails():
+    snapshot = build_onboarding_assistant_snapshot(
+        config={"BLUETOOTH_DEVICES": [{"mac": "AA"}], "PULSE_LATENCY_MSEC": 200},
+        preflight={
+            "dbus": False,
+            "audio": {"system": "pulseaudio", "sinks": 1},
+            "bluetooth": {"controller": True, "paired_devices": 1},
+        },
+        devices=[],
+        ma_connected=False,
+        runtime_mode="production",
+    )
+
+    assert snapshot.checklist is not None
+    assert snapshot.checklist.current_step_key == "runtime_access"
+    runtime_step = snapshot.checklist.steps[0]
+    assert runtime_step.key == "runtime_access"
+    assert runtime_step.stage == "current"
+    assert runtime_step.recommended_action is not None
+    assert runtime_step.recommended_action.key == "open_diagnostics"
     assert snapshot.checklist.steps[1].stage == "upcoming"
+    assert snapshot.checklist.steps[2].stage == "upcoming"
 
 
 def test_onboarding_assistant_reports_connected_bridge_readiness():
@@ -66,8 +95,10 @@ def test_onboarding_assistant_reports_connected_bridge_readiness():
     )
 
     checks = {check.key: check for check in snapshot.checks}
+    assert checks["runtime_access"].status == "ok"
     assert checks["bluetooth"].status == "ok"
     assert checks["audio"].status == "ok"
+    assert checks["bridge_control"].status == "ok"
     assert checks["sink_verification"].status == "ok"
     assert checks["ma_auth"].status == "ok"
     assert checks["latency"].status == "ok"
@@ -116,6 +147,28 @@ def test_onboarding_assistant_recommends_device_scan_when_no_devices_configured(
     assert sink_step.recommended_action is not None
     assert sink_step.recommended_action.key == "scan_devices"
     assert "pairing mode" in sink_step.actions[0].lower()
+
+
+def test_onboarding_assistant_surfaces_bridge_control_before_sink_checks_for_disabled_devices():
+    snapshot = build_onboarding_assistant_snapshot(
+        config={"BLUETOOTH_DEVICES": [{"mac": "AA", "enabled": False}], "PULSE_LATENCY_MSEC": 200},
+        preflight={
+            "audio": {"system": "pulseaudio", "sinks": 1},
+            "bluetooth": {"controller": True, "paired_devices": 1},
+        },
+        devices=[],
+        ma_connected=False,
+        runtime_mode="production",
+    )
+
+    assert snapshot.checklist is not None
+    assert snapshot.checklist.current_step_key == "bridge_control"
+    bridge_step = next(step for step in snapshot.checklist.steps if step.key == "bridge_control")
+    sink_step = next(step for step in snapshot.checklist.steps if step.key == "sink_verification")
+    assert bridge_step.stage == "current"
+    assert bridge_step.recommended_action is not None
+    assert bridge_step.recommended_action.key == "open_devices_settings"
+    assert sink_step.stage == "upcoming"
 
 
 def test_onboarding_assistant_points_latency_step_to_general_latency_setting():
