@@ -497,6 +497,16 @@ def _build_latency_assistant(config: dict[str, Any], devices: list[Any]) -> dict
         }
     if custom_delays == 0:
         recommended = max(pulse_latency, 300)
+        safe_actions = [RecoveryAction(key="open_devices_settings", label="Tune device delays").to_dict()]
+        if recommended != pulse_latency:
+            safe_actions.insert(
+                0,
+                RecoveryAction(
+                    key="apply_latency_recommended",
+                    label=f"Apply {recommended} ms latency",
+                    value=recommended,
+                ).to_dict(),
+            )
         return {
             "tone": "warning",
             "summary": "Multi-device setup detected without per-device static delays.",
@@ -508,11 +518,21 @@ def _build_latency_assistant(config: dict[str, Any], devices: list[Any]) -> dict
                 "Play the same short track in both rooms and listen for drift.",
                 "Set `static_delay_ms` per device only after the Bluetooth sink is stable.",
             ],
-            "safe_actions": [RecoveryAction(key="open_devices_settings", label="Tune device delays").to_dict()],
+            "safe_actions": safe_actions,
             "presets": presets,
         }
     if pulse_latency >= 800:
         recommended = 600
+        safe_actions = [RecoveryAction(key="open_devices_settings", label="Review latency settings").to_dict()]
+        if recommended != pulse_latency:
+            safe_actions.insert(
+                0,
+                RecoveryAction(
+                    key="apply_latency_recommended",
+                    label=f"Apply {recommended} ms latency",
+                    value=recommended,
+                ).to_dict(),
+            )
         return {
             "tone": "warning",
             "summary": "Per-device delay tuning exists, but the global PulseAudio latency is still high.",
@@ -524,7 +544,7 @@ def _build_latency_assistant(config: dict[str, Any], devices: list[Any]) -> dict
                 "Keep the high latency if virtualization needs it, but lower it when playback reacts too slowly.",
                 "Re-test one room at a time after every latency change.",
             ],
-            "safe_actions": [RecoveryAction(key="open_devices_settings", label="Review latency settings").to_dict()],
+            "safe_actions": safe_actions,
             "presets": presets,
         }
     return {

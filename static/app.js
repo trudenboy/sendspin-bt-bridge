@@ -617,6 +617,149 @@ function _capabilityBlockedReason(capability, fallback) {
     return fallback || '';
 }
 
+function _capabilityRecommendedActionKey(capability) {
+    if (capability && capability.recommended_action) return String(capability.recommended_action || '').trim();
+    var safeActions = (capability && capability.safe_actions) || [];
+    return safeActions.length ? String(safeActions[0] || '').trim() : '';
+}
+
+function _capabilityDependencyLabels(dependsOn) {
+    var labels = {
+        bt_management_enabled: 'Bluetooth management enabled',
+        bluetooth_paired: 'Bluetooth pairing',
+        reconnect_idle: 'Reconnect to finish',
+        device_not_stopping: 'Device stop to finish',
+        sendspin_connected: 'Sendspin transport',
+        audio_sink: 'Resolved audio sink',
+        ma_connected: 'Music Assistant link',
+    };
+    return (dependsOn || []).map(function(key) {
+        var normalized = String(key || '').trim();
+        return labels[normalized] || normalized.replace(/_/g, ' ');
+    }).filter(function(label) { return !!label; });
+}
+
+function _capabilityActionLabel(actionKey, dev) {
+    if (actionKey === 'reconnect' || actionKey === 'reconnect_device') return 'Reconnect speaker';
+    if (actionKey === 'pair_device') return 'Re-pair speaker';
+    if (actionKey === 'toggle_bt_management') {
+        return dev && dev.bt_management_enabled === false ? 'Reclaim Bluetooth' : 'Release Bluetooth';
+    }
+    if (actionKey === 'open_diagnostics') return 'Open diagnostics';
+    if (actionKey === 'open_ma_settings') return 'Open Music Assistant settings';
+    if (actionKey === 'scan_devices') return 'Scan for speakers';
+    if (actionKey === 'retry_ma_discovery') return 'Retry discovery';
+    if (actionKey === 'apply_latency_recommended') return 'Apply recommended latency';
+    if (actionKey === 'open_devices_settings') return 'Open device settings';
+    return 'Open details';
+}
+
+function _capabilityActionPayload(actionKey, dev, value) {
+    var normalized = String(actionKey || '').trim();
+    if (!normalized) return null;
+    var deviceNames = dev && dev.player_name ? [String(dev.player_name)] : [];
+    if (normalized === 'reconnect') normalized = 'reconnect_device';
+    if (normalized === 'download_diagnostics') normalized = 'open_diagnostics';
+    var payload = {
+        key: normalized,
+        label: _capabilityActionLabel(normalized, dev),
+    };
+    if (deviceNames.length && (
+        normalized === 'reconnect_device' ||
+        normalized === 'pair_device' ||
+        normalized === 'toggle_bt_management'
+    )) {
+        payload.device_names = deviceNames;
+    }
+    if (value !== undefined) payload.value = value;
+    return payload;
+}
+
+function _pushBlockedControlHint(hints, hint) {
+    if (!hint || !hint.message) return;
+    var marker = [hint.title || '', hint.message || '', (hint.dependsOn || []).join(','), (hint.action || {}).key || ''].join('|');
+    if (hints.some(function(item) { return item._marker === marker; })) return;
+    hint._marker = marker;
+    hints.push(hint);
+}
+
+function _collectDeviceBlockedControlHints(dev, transportState) {
+    if (!dev || _isDeviceDisabled(dev)) return [];
+    var hints = [];
+    var reconnectCapability = _getDeviceActionCapability(dev, 'reconnect');
+    var toggleManagementCapability = _getDeviceActionCapability(dev, 'toggle_bt_management');
+    var playPauseCapability = _getDeviceActionCapability(dev, 'play_pause');
+    var volumeCapability = _getDeviceActionCapability(dev, 'volume');
+    var queueCapability = _getDeviceActionCapability(dev, 'queue_control');
+    var reconnectAvailable = _capabilityAvailable(reconnectCapability, dev.bt_management_enabled !== false);
+    var managementAvailable = _capabilityAvailable(toggleManagementCapability, true);
+    var transportAvailable = !!(transportState && transportState.canTransport);
+    var sinkAvailable = !!(transportState && transportState.hasSink);
+    var queueAvailable = !!(transportState && transportState.hasQueueControls);
+
+    if (!reconnectAvailable) {
+        _pushBlockedControlHint(hints, {
+            title: 'Reconnect unavailable',
+            message: _capabilityBlockedReason(reconnectCapability, 'Reconnect is unavailable right now.'),
+            dependsOn: ((reconnectCapability || {}).depends_on) || (((reconnectCapability || {}).blocked_reason_detail || {}).depends_on) || [],
+            action: _capabilityActionPayload(_capabilityRecommendedActionKey(reconnectCapability), dev),
+        });
+    }
+    if (!managementAvailable) {
+        _pushBlockedControlHint(hints, {
+            title: 'Bluetooth management unavailable',
+            message: _capabilityBlockedReason(toggleManagementCapability, 'Bluetooth management action is unavailable right now.'),
+            dependsOn: ((toggleManagementCapability || {}).depends_on) || (((toggleManagementCapability || {}).blocked_reason_detail || {}).depends_on) || [],
+            action: _capabilityActionPayload(_capabilityRecommendedActionKey(toggleManagementCapability), dev),
+        });
+    }
+    if (!transportAvailable) {
+        _pushBlockedControlHint(hints, {
+            title: 'Playback unavailable',
+            message: _capabilityBlockedReason(playPauseCapability, (transportState && transportState.transportUnavailableTitle) || 'Playback transport is unavailable right now.'),
+            dependsOn: ((playPauseCapability || {}).depends_on) || (((playPauseCapability || {}).blocked_reason_detail || {}).depends_on) || [],
+            action: _capabilityActionPayload(_capabilityRecommendedActionKey(playPauseCapability), dev),
+        });
+    }
+    if (!sinkAvailable) {
+        _pushBlockedControlHint(hints, {
+            title: 'Volume unavailable',
+            message: _capabilityBlockedReason(volumeCapability, 'Audio sink is not configured.'),
+            dependsOn: ((volumeCapability || {}).depends_on) || (((volumeCapability || {}).blocked_reason_detail || {}).depends_on) || [],
+            action: _capabilityActionPayload(_capabilityRecommendedActionKey(volumeCapability), dev),
+        });
+    }
+    if (!queueAvailable && !(transportState && transportState.queueActionPending)) {
+        _pushBlockedControlHint(hints, {
+            title: 'Queue controls unavailable',
+            message: _capabilityBlockedReason(queueCapability, (transportState && transportState.queueUnavailableTitle) || 'Queue controls are unavailable right now.'),
+            dependsOn: ((queueCapability || {}).depends_on) || (((queueCapability || {}).blocked_reason_detail || {}).depends_on) || [],
+            action: _capabilityActionPayload(_capabilityRecommendedActionKey(queueCapability), dev),
+        });
+    }
+    return hints.slice(0, 2).map(function(hint) {
+        delete hint._marker;
+        return hint;
+    });
+}
+
+function _renderBlockedControlHints(hints, options) {
+    if (!hints || !hints.length) return '';
+    var opts = options || {};
+    return '<div class="device-blocked-hints' + (opts.compact ? ' is-compact' : '') + '">' + hints.map(function(hint) {
+        var dependencyLabels = _capabilityDependencyLabels(hint.dependsOn || []);
+        var actionHtml = hint.action ? '<div class="device-blocked-hint-actions">' + _renderGuidanceActionLink(hint.action) + '</div>' : '';
+        return '<div class="device-blocked-hint">' +
+            '<div class="device-blocked-hint-title">' + escHtml(hint.title || 'Control unavailable') + '</div>' +
+            '<div class="device-blocked-hint-message">' + escHtml(hint.message || '') + '</div>' +
+            (dependencyLabels.length
+                ? '<div class="device-blocked-hint-deps">Needs: ' + escHtml(dependencyLabels.join(' • ')) + '</div>'
+                : '') +
+            actionHtml +
+        '</div>';
+    }).join('') + '</div>';
+}
+
 function getDeviceSinkLabel(dev) {
     var sinkName = getDeviceSinkName(dev);
     if (sinkName) return sinkName;
@@ -2671,6 +2814,7 @@ function buildListView(entries, hiddenCount) {
             '<button type="button" class="list-action-btn ' + releaseActionClass + '" id="dbtn-release-' + i + '" onclick="btToggleManagement(' + i + ')" title="' + escHtmlAttr(releaseTitle) + '"' + (releaseAvailable && !cardDisabled ? '' : ' disabled') + '>' + _actionButtonInnerHtml('release', mgmtEnabled ? 'Release' : 'Reclaim') + '</button>' +
             '<button type="button" class="list-action-btn danger" onclick="confirmDisableDevice(' + i + ')"' + (cardDisabled ? ' disabled' : '') + '>' + _actionButtonInnerHtml('disable', 'Disable') + '</button>' +
         '</div>';
+        var detailBlockedHints = _renderBlockedControlHints(_collectDeviceBlockedControlHints(dev, transportState), {compact: true});
         var routeSummary = _getListRoutingSummary(dev);
         var detailFooter = '<div class="list-detail-footer">' +
             (routeSummary ? '<div class="list-route-summary">' + escHtml(routeSummary) + '</div>' : '<div class="list-route-summary-spacer"></div>') +
@@ -2758,6 +2902,7 @@ function buildListView(entries, hiddenCount) {
                             '</div>' +
                         '</div>' +
                         detailActions +
+                        detailBlockedHints +
                     '</div>' +
                     detailFooter +
                 '</div>' +
@@ -3065,7 +3210,8 @@ function buildDeviceCard(i) {
             '<button type="button" class="action-btn danger" id="dbtn-disable-' + i + '" onclick="confirmDisableDevice(' + i + ')">' + _actionButtonInnerHtml('disable', 'Disable') + '</button>' +
             '<button type="button" class="icon-btn device-settings-btn card-corner-settings-btn" onclick="openDeviceSettings(' + i + ')" title="Device settings">' + _settingsIconHtml() + '</button>' +
           '</div>' +
-        '</div>';
+        '</div>' +
+        '<div class="device-blocked-hints-wrap" id="dblocked-hints-' + i + '" style="display:none"></div>';
     var muteBtn = card.querySelector('#dmute-' + i);
     if (muteBtn) {
         muteBtn.onclick = function() {
@@ -3357,6 +3503,13 @@ function populateDeviceCard(i, dev) {
                 ? 'Reconnect Bluetooth and refresh sink routing'
                 : _capabilityBlockedReason(reconnectCapability, 'Reconnect unavailable');
         }
+    }
+
+    var blockedHintsEl = document.getElementById('dblocked-hints-' + i);
+    if (blockedHintsEl) {
+        var blockedHintsHtml = _renderBlockedControlHints(_collectDeviceBlockedControlHints(dev, transportState), {compact: true});
+        blockedHintsEl.innerHTML = blockedHintsHtml;
+        blockedHintsEl.style.display = blockedHintsHtml ? '' : 'none';
     }
 }
 
@@ -5845,7 +5998,9 @@ async function maDiscover() {
         if (data.success && data.servers && data.servers.length > 0) {
             var s = data.servers[0];
             if (urlInput) urlInput.value = s.url;
-            _setStatusText(msgEl, '\u2714 Found: MA v' + (s.version || '?') + ' at ' + s.url, 'success');
+            var foundMessage = '\u2714 Found: MA v' + (s.version || '?') + ' at ' + s.url;
+            if (s.discovery_summary) foundMessage += ' — ' + s.discovery_summary;
+            _setStatusText(msgEl, foundMessage, 'success');
             // Detect HA addon mode — check both bridge flag and MA server flag
             _setMaAddonMode(!!(data.is_addon || s.homeassistant_addon));
             return data;

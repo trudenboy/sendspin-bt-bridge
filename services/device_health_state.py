@@ -45,6 +45,8 @@ class BlockReason:
     code: str
     message: str
     remediation: list[str] = field(default_factory=list)
+    depends_on: list[str] = field(default_factory=list)
+    recommended_action: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -185,8 +187,16 @@ def _block_reason_payload(
     code: str,
     message: str,
     remediation: list[str] | None = None,
+    depends_on: list[str] | None = None,
+    recommended_action: str | None = None,
 ) -> BlockReason:
-    return BlockReason(code=code, message=message, remediation=list(remediation or []))
+    return BlockReason(
+        code=code,
+        message=message,
+        remediation=list(remediation or []),
+        depends_on=list(depends_on or []),
+        recommended_action=str(recommended_action or "").strip() or None,
+    )
 
 
 def _capability_payload(
@@ -196,12 +206,20 @@ def _capability_payload(
     blocked_reason: BlockReason | None = None,
     safe_actions: list[str] | None = None,
 ) -> dict[str, Any]:
+    actions = list(safe_actions or [])
+    recommended_action = (
+        blocked_reason.recommended_action
+        if blocked_reason and blocked_reason.recommended_action
+        else (actions[0] if actions else None)
+    )
     return {
         "supported": supported,
         "currently_available": currently_available,
         "blocked_reason": blocked_reason.message if blocked_reason else None,
         "blocked_reason_detail": blocked_reason.to_dict() if blocked_reason else None,
-        "safe_actions": list(safe_actions or []),
+        "safe_actions": actions,
+        "recommended_action": recommended_action,
+        "depends_on": list(blocked_reason.depends_on) if blocked_reason else [],
     }
 
 
@@ -230,6 +248,8 @@ def _capability_domain_payload(*capabilities: dict[str, Any]) -> dict[str, Any]:
             code=str((blocked_reason_detail or {}).get("code") or "blocked"),
             message=str(blocked_reason),
             remediation=list((blocked_reason_detail or {}).get("remediation") or []),
+            depends_on=list((blocked_reason_detail or {}).get("depends_on") or []),
+            recommended_action=str((blocked_reason_detail or {}).get("recommended_action") or "").strip() or None,
         ),
         safe_actions=safe_actions,
     )
@@ -253,24 +273,32 @@ def build_device_capabilities(device: Any) -> dict[str, Any]:
             code="released",
             message="Bluetooth management is released; reclaim it before reconnecting.",
             remediation=["toggle_bt_management", "open_diagnostics"],
+            depends_on=["bt_management_enabled"],
+            recommended_action="toggle_bt_management",
         )
     elif bluetooth_paired is False:
         reconnect_blocked_reason = _block_reason_payload(
             code="not_paired",
             message="Device is no longer paired; put it in pairing mode and run re-pair.",
             remediation=["pair_device", "open_diagnostics"],
+            depends_on=["bluetooth_paired"],
+            recommended_action="pair_device",
         )
     elif reconnecting:
         reconnect_blocked_reason = _block_reason_payload(
             code="reconnecting",
             message="Reconnect is already in progress.",
             remediation=["toggle_bt_management", "open_diagnostics"],
+            depends_on=["reconnect_idle"],
+            recommended_action="toggle_bt_management",
         )
     elif stopping:
         reconnect_blocked_reason = _block_reason_payload(
             code="stopping",
             message="Device is stopping.",
             remediation=["open_diagnostics"],
+            depends_on=["device_not_stopping"],
+            recommended_action="open_diagnostics",
         )
 
     reconnect = _capability_payload(
@@ -291,6 +319,8 @@ def build_device_capabilities(device: Any) -> dict[str, Any]:
             code="stopping",
             message="Device is stopping.",
             remediation=["open_diagnostics"],
+            depends_on=["device_not_stopping"],
+            recommended_action="open_diagnostics",
         )
         if stopping
         else None
@@ -309,6 +339,8 @@ def build_device_capabilities(device: Any) -> dict[str, Any]:
             code="daemon_disconnected",
             message="Sendspin is not connected.",
             remediation=["reconnect", "open_diagnostics"],
+            depends_on=["sendspin_connected"],
+            recommended_action="reconnect",
         )
     )
     play_pause = _capability_payload(
@@ -325,19 +357,33 @@ def build_device_capabilities(device: Any) -> dict[str, Any]:
         volume_blocked_reason = _block_reason_payload(
             code="released" if released else "no_sink",
             message="Bluetooth management is released." if released else "Audio sink is not configured.",
-            remediation=["reconnect", "open_diagnostics"],
+            remediation=["toggle_bt_management", "open_diagnostics"] if released else ["reconnect", "open_diagnostics"],
+            depends_on=["bt_management_enabled", "audio_sink"] if released else ["audio_sink"],
+            recommended_action="toggle_bt_management" if released else "reconnect",
         )
     volume = _capability_payload(
         supported=True,
         currently_available=has_sink,
         blocked_reason=volume_blocked_reason,
-        safe_actions=["reconnect", "open_diagnostics"] if not has_sink else ["volume"],
+        safe_actions=(
+            ["toggle_bt_management", "open_diagnostics"]
+            if released and not has_sink
+            else ["reconnect", "open_diagnostics"]
+            if not has_sink
+            else ["volume"]
+        ),
     )
     mute = _capability_payload(
         supported=True,
         currently_available=has_sink,
         blocked_reason=volume_blocked_reason,
-        safe_actions=["reconnect", "open_diagnostics"] if not has_sink else ["mute"],
+        safe_actions=(
+            ["toggle_bt_management", "open_diagnostics"]
+            if released and not has_sink
+            else ["reconnect", "open_diagnostics"]
+            if not has_sink
+            else ["mute"]
+        ),
     )
 
     queue_blocked_reason = None
@@ -346,12 +392,16 @@ def build_device_capabilities(device: Any) -> dict[str, Any]:
             code="daemon_disconnected",
             message="Sendspin is not connected.",
             remediation=["reconnect", "open_diagnostics"],
+            depends_on=["sendspin_connected"],
+            recommended_action="reconnect",
         )
     elif not ma_connected:
         queue_blocked_reason = _block_reason_payload(
             code="ma_disconnected",
             message="Music Assistant API is not connected.",
             remediation=["open_ma_settings", "open_diagnostics"],
+            depends_on=["ma_connected"],
+            recommended_action="open_ma_settings",
         )
     queue_control = _capability_payload(
         supported=bool(getattr(device, "server_connected", False)),

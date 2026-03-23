@@ -110,3 +110,37 @@ def get_ma_addon_internal_ingress_url() -> str:
 
     port = int(data.get("ingress_port") or 8094)
     return f"http://{hostname}:{port}"
+
+
+def get_ma_addon_discovery_candidates() -> list[dict[str, str]]:
+    """Return prioritized MA API discovery candidates for HA-aware runtimes."""
+    candidates: list[dict[str, str]] = []
+    seen: set[str] = set()
+
+    def _append(url: str, source: str, summary: str) -> None:
+        normalized = str(url or "").strip().rstrip("/")
+        if not normalized or normalized in seen:
+            return
+        seen.add(normalized)
+        candidates.append({"url": normalized, "source": source, "summary": summary})
+
+    addon = find_started_ma_addon_info()
+    hostname = str((addon or {}).get("hostname") or (addon or {}).get("slug") or "").strip()
+    if hostname:
+        _append(
+            f"http://{hostname}:8095",
+            "ha_addon_hostname",
+            "Home Assistant Supervisor reported a running Music Assistant add-on.",
+        )
+
+    _append(
+        "http://homeassistant.local:8095",
+        "ha_supervisor_dns",
+        "Home Assistant local hostname is the next MA discovery fallback.",
+    )
+    _append(
+        "http://localhost:8095",
+        "local_fallback",
+        "Localhost is the final HA add-on Music Assistant fallback.",
+    )
+    return candidates

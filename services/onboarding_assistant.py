@@ -31,9 +31,19 @@ _CHECKLIST_TITLES = {
 class OnboardingChecklistAction:
     key: str
     label: str
+    device_names: list[str] = field(default_factory=list)
+    check_key: str | None = None
+    value: Any | None = None
 
-    def to_dict(self) -> dict[str, str]:
-        return {"key": self.key, "label": self.label}
+    def to_dict(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {"key": self.key, "label": self.label}
+        if self.device_names:
+            payload["device_names"] = [name for name in self.device_names if name]
+        if self.check_key:
+            payload["check_key"] = self.check_key
+        if self.value is not None:
+            payload["value"] = self.value
+        return payload
 
 
 @dataclass
@@ -211,8 +221,18 @@ def _recommended_action_for_check(check: OnboardingCheck) -> OnboardingChecklist
             return OnboardingChecklistAction(key="open_diagnostics", label="Open sink diagnostics")
         return OnboardingChecklistAction(key="open_devices_settings", label="Open device settings")
     if check.key == "ma_auth":
+        if not str(check.details.get("configured_url") or "").strip():
+            return OnboardingChecklistAction(key="retry_ma_discovery", label="Discover Music Assistant")
         return OnboardingChecklistAction(key="open_ma_settings", label="Open Music Assistant settings")
     if check.key == "latency":
+        recommended_latency = int(check.details.get("recommended_pulse_latency_msec") or 0)
+        current_latency = int(check.details.get("pulse_latency_msec") or 0)
+        if check.status in {"warning", "error"} and recommended_latency > 0 and recommended_latency != current_latency:
+            return OnboardingChecklistAction(
+                key="apply_latency_recommended",
+                label=f"Apply {recommended_latency} ms latency",
+                value=recommended_latency,
+            )
         return OnboardingChecklistAction(key="open_latency_settings", label="Review Pulse latency")
     return None
 
@@ -668,7 +688,11 @@ def build_onboarding_assistant_snapshot(
                 key="ma_auth",
                 status="warning",
                 summary="Music Assistant API URL is not configured.",
-                actions=["Open Music Assistant settings and set the server URL before continuing."],
+                details={"configured_url": "", "auto_discovery_available": True},
+                actions=[
+                    "Run discovery first so the bridge can try to find Music Assistant automatically.",
+                    "If discovery still finds nothing, open Music Assistant settings and set the server URL manually.",
+                ],
             )
         )
     elif not ma_token and not ma_username:
@@ -710,26 +734,40 @@ def build_onboarding_assistant_snapshot(
                 key="latency",
                 status="ok",
                 summary="Single-device setups usually do not require extra latency calibration.",
-                details={"pulse_latency_msec": pulse_latency, "custom_device_delays": custom_delays},
+                details={
+                    "pulse_latency_msec": pulse_latency,
+                    "custom_device_delays": custom_delays,
+                    "recommended_pulse_latency_msec": pulse_latency or 300,
+                },
             )
         )
     elif custom_delays == 0:
+        recommended_latency = max(pulse_latency, 300)
         checks.append(
             OnboardingCheck(
                 key="latency",
                 status="warning",
                 summary="Multi-device setup detected without per-device static delay tuning.",
-                details={"pulse_latency_msec": pulse_latency, "configured_devices": configured_count},
+                details={
+                    "pulse_latency_msec": pulse_latency,
+                    "configured_devices": configured_count,
+                    "recommended_pulse_latency_msec": recommended_latency,
+                },
                 actions=["Open device settings and set `static_delay_ms` after both rooms stay connected reliably."],
             )
         )
     elif pulse_latency >= 800:
+        recommended_latency = 600
         checks.append(
             OnboardingCheck(
                 key="latency",
                 status="warning",
                 summary="Latency tuning is present, but the global PulseAudio latency is quite high.",
-                details={"pulse_latency_msec": pulse_latency, "custom_device_delays": custom_delays},
+                details={
+                    "pulse_latency_msec": pulse_latency,
+                    "custom_device_delays": custom_delays,
+                    "recommended_pulse_latency_msec": recommended_latency,
+                },
                 actions=[
                     "Review device settings after playback stabilizes and lower latency if reaction feels too sluggish."
                 ],
@@ -741,7 +779,11 @@ def build_onboarding_assistant_snapshot(
                 key="latency",
                 status="ok",
                 summary="Latency tuning is configured for a multi-device setup.",
-                details={"pulse_latency_msec": pulse_latency, "custom_device_delays": custom_delays},
+                details={
+                    "pulse_latency_msec": pulse_latency,
+                    "custom_device_delays": custom_delays,
+                    "recommended_pulse_latency_msec": pulse_latency,
+                },
             )
         )
 

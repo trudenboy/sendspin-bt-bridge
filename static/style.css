@@ -1283,6 +1283,44 @@ body {
             justify-content: center;
             color: inherit;
         }
+        .device-blocked-hints-wrap {
+            margin-top: 10px;
+        }
+        .device-blocked-hints {
+            display: grid;
+            gap: 8px;
+        }
+        .device-blocked-hints.is-compact {
+            gap: 6px;
+        }
+        .device-blocked-hint {
+            padding: 8px 10px;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 183, 77, 0.22);
+            background: rgba(255, 183, 77, 0.1);
+            color: var(--secondary-text-color);
+        }
+        .device-blocked-hint-title {
+            font-size: 11px;
+            font-weight: 700;
+            line-height: 1.3;
+            color: var(--primary-text-color);
+        }
+        .device-blocked-hint-message,
+        .device-blocked-hint-deps {
+            margin-top: 4px;
+            font-size: 11px;
+            line-height: 1.45;
+        }
+        .device-blocked-hint-actions {
+            margin-top: 8px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .list-detail-body .device-blocked-hints {
+            margin-top: 10px;
+        }
 
         /* Status grid — responsive card grid */
         .status-grid {

@@ -1,4 +1,4 @@
-"""Shared recovery timeline builders for diagnostics and export."""
+"""Shared recovery timeline builders for diagnostics, text reports, and export."""
 
 from __future__ import annotations
 
@@ -110,3 +110,51 @@ def build_recovery_timeline_csv(timeline: dict[str, Any]) -> str:
             ]
         )
     return buffer.getvalue()
+
+
+def _format_timeline_entry_text(entry: dict[str, Any]) -> str:
+    timestamp = str(entry.get("at") or "").strip() or "Unknown time"
+    level = str(entry.get("level") or "info").strip().upper()
+    source = str(entry.get("source") or "Unknown source").strip()
+    label = str(entry.get("label") or "event").strip()
+    summary = str(entry.get("summary") or "Recovery event").strip()
+    return f"- {timestamp} [{level}] {source} / {label}: {summary}"
+
+
+def build_recovery_timeline_text(timeline: dict[str, Any], *, max_entries: int = 8) -> str:
+    """Render a recovery timeline payload as operator-readable plain text."""
+    summary = (timeline or {}).get("summary") or {}
+    entries = list((timeline or {}).get("entries") or [])
+    if not entries:
+        return "No recovery timeline entries were recorded."
+
+    visible_entries = entries[-max_entries:] if max_entries > 0 else entries
+    lines = [
+        (
+            "Recent recovery activity: "
+            f"{int(summary.get('entry_count') or len(entries))} entries"
+            f" · {int(summary.get('error_count') or 0)} errors"
+            f" · {int(summary.get('warning_count') or 0)} warnings"
+        )
+    ]
+    latest_at = str(summary.get("latest_at") or "").strip()
+    if latest_at:
+        lines.append(f"Latest activity: {latest_at}")
+    lines.append("")
+    lines.extend(_format_timeline_entry_text(entry) for entry in visible_entries)
+    return "\n".join(lines)
+
+
+def build_recovery_timeline_excerpt(timeline: dict[str, Any], *, max_entries: int = 2) -> str:
+    """Return a short single-line recovery timeline summary for support text."""
+    entries = list((timeline or {}).get("entries") or [])
+    if not entries:
+        return ""
+
+    parts: list[str] = []
+    for entry in entries[-max_entries:]:
+        source = str(entry.get("source") or "Unknown source").strip()
+        summary = str(entry.get("summary") or "Recovery event").strip()
+        level = str(entry.get("level") or "info").strip()
+        parts.append(f"{level} from {source}: {summary}")
+    return "; ".join(parts)

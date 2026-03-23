@@ -28,7 +28,7 @@ from routes.api_config import _detect_runtime
 from services.async_job_state import create_async_job, finish_async_job, get_async_job
 from services.bridge_runtime_state import get_main_loop
 from services.device_registry import get_device_registry_snapshot
-from services.ha_addon import KNOWN_MA_ADDON_SLUGS, get_ma_addon_internal_ingress_url
+from services.ha_addon import KNOWN_MA_ADDON_SLUGS, get_ma_addon_discovery_candidates, get_ma_addon_internal_ingress_url
 from services.ma_artwork import has_valid_artwork_signature
 from services.ma_monitor import solo_queue_candidates
 from services.ma_runtime_state import (
@@ -1319,6 +1319,14 @@ def _run_ma_discover_job(job_id: str, loop, is_addon: bool) -> None:
     """Resolve Music Assistant discovery in a background thread and store the result."""
     from services.ma_discovery import discover_ma_servers, validate_ma_url
 
+    def _annotate_server(server: dict[str, object] | None, *, source: str, summary: str) -> dict[str, object] | None:
+        if not isinstance(server, dict):
+            return None
+        annotated = dict(server)
+        annotated["discovery_source"] = source
+        annotated["discovery_summary"] = summary
+        return annotated
+
     def _finish_success(servers: list[dict]) -> None:
         discovered_url = ""
         if servers and isinstance(servers[0], dict):
@@ -1333,17 +1341,43 @@ def _run_ma_discover_job(job_id: str, loop, is_addon: bool) -> None:
             },
         )
 
-    for candidate in ("http://localhost:8095", "http://homeassistant.local:8095") if is_addon else ():
-        info = _await_loop_result(loop, validate_ma_url(candidate), timeout=5.0, description=f"validate {candidate}")
+    addon_candidates = get_ma_addon_discovery_candidates() if is_addon else []
+    for candidate in addon_candidates:
+        candidate_url = str(candidate.get("url") or "").strip()
+        if not candidate_url:
+            continue
+        info = _await_loop_result(
+            loop, validate_ma_url(candidate_url), timeout=5.0, description=f"validate {candidate_url}"
+        )
         if info:
-            _finish_success([info])
+            _finish_success(
+                [
+                    _annotate_server(
+                        info,
+                        source=str(candidate.get("source") or "ha_addon_candidate"),
+                        summary=str(
+                            candidate.get("summary") or "Music Assistant candidate discovered from Home Assistant."
+                        ),
+                    )
+                    or info
+                ]
+            )
             return
 
     ma_url, _ = get_ma_api_credentials()
     if ma_url:
         info = _await_loop_result(loop, validate_ma_url(ma_url), timeout=5.0, description=f"validate {ma_url}")
         if info:
-            _finish_success([info])
+            _finish_success(
+                [
+                    _annotate_server(
+                        info,
+                        source="saved_config",
+                        summary="Music Assistant was loaded from the saved bridge configuration.",
+                    )
+                    or info
+                ]
+            )
             return
 
     if is_addon:
@@ -1353,24 +1387,55 @@ def _run_ma_discover_job(job_id: str, loop, is_addon: bool) -> None:
     cfg = load_config()
     sendspin_host = (cfg.get("SENDSPIN_SERVER") or "").strip()
     if sendspin_host and sendspin_host.lower() not in ("auto", "discover", ""):
-        candidate = f"http://{sendspin_host}:8095"
-        info = _await_loop_result(loop, validate_ma_url(candidate), timeout=5.0, description=f"validate {candidate}")
+        candidate_url = f"http://{sendspin_host}:8095"
+        info = _await_loop_result(
+            loop, validate_ma_url(candidate_url), timeout=5.0, description=f"validate {candidate_url}"
+        )
         if info:
-            _finish_success([info])
+            _finish_success(
+                [
+                    _annotate_server(
+                        info,
+                        source="sendspin_server_host",
+                        summary="Music Assistant was inferred from the configured Sendspin server host.",
+                    )
+                    or info
+                ]
+            )
             return
 
     sendspin_ma_host = _ma_host_from_sendspin_clients()
     if sendspin_ma_host:
-        candidate = f"http://{sendspin_ma_host}:8095"
-        info = _await_loop_result(loop, validate_ma_url(candidate), timeout=5.0, description=f"validate {candidate}")
+        candidate_url = f"http://{sendspin_ma_host}:8095"
+        info = _await_loop_result(
+            loop, validate_ma_url(candidate_url), timeout=5.0, description=f"validate {candidate_url}"
+        )
         if info:
-            _finish_success([info])
+            _finish_success(
+                [
+                    _annotate_server(
+                        info,
+                        source="connected_runtime_host",
+                        summary="Music Assistant was inferred from the current runtime connection host.",
+                    )
+                    or info
+                ]
+            )
             return
 
     try:
         servers = _await_loop_result(loop, discover_ma_servers(timeout=5.0), timeout=10.0, description="mDNS discover")
         if servers is None:
             raise RuntimeError("Discovery failed")
+        servers = [
+            _annotate_server(
+                server,
+                source="mdns",
+                summary="Music Assistant was discovered via mDNS on the local network.",
+            )
+            or server
+            for server in servers
+        ]
         _finish_success(servers)
     except Exception:
         logger.exception("MA mDNS discovery failed")

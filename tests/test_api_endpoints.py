@@ -618,6 +618,30 @@ def test_api_bugreport_uses_issue_worthy_logs_in_summary(client, monkeypatch):
                     ],
                     "traces": [{"label": "Bridge startup", "summary": "Waiting for devices to stabilize."}],
                     "latency_assistant": {"summary": "Multi-device setup detected without per-device static delays."},
+                    "timeline": {
+                        "summary": {
+                            "entry_count": 2,
+                            "error_count": 1,
+                            "warning_count": 1,
+                            "latest_at": "2026-03-17T18:00:02+00:00",
+                        },
+                        "entries": [
+                            {
+                                "at": "2026-03-17T18:00:01+00:00",
+                                "level": "warning",
+                                "source": "Kitchen",
+                                "label": "reconnect",
+                                "summary": "Bridge requested a reconnect after sink loss.",
+                            },
+                            {
+                                "at": "2026-03-17T18:00:02+00:00",
+                                "level": "error",
+                                "source": "Kitchen",
+                                "label": "daemon_crash",
+                                "summary": "Device daemon exited unexpectedly.",
+                            },
+                        ],
+                    },
                 },
             }
         ),
@@ -657,6 +681,8 @@ def test_api_bugreport_uses_issue_worthy_logs_in_summary(client, monkeypatch):
     assert "reconnecting to bluetooth speaker" not in data["markdown_short"]
     assert "ONBOARDING ASSISTANT" in data["text_full"]
     assert "RECOVERY ASSISTANT" in data["text_full"]
+    assert "RECOVERY TIMELINE" in data["text_full"]
+    assert "Device daemon exited unexpectedly." in data["text_full"]
     assert "Configure MA_API_URL before using MA sync features." in data["text_full"]
     assert "Kitchen is disconnected" in data["text_full"]
     assert data["report"]["recent_issue_logs"] == [
@@ -665,6 +691,7 @@ def test_api_bugreport_uses_issue_worthy_logs_in_summary(client, monkeypatch):
     ]
     assert "### Diagnostics summary" in data["suggested_description"]
     assert "Recent logs show: daemon stderr: ALSA setup failed; daemon crashed." in data["suggested_description"]
+    assert "error from Kitchen: Device daemon exited unexpectedly." in data["suggested_description"]
     assert "Music Assistant is configured but not currently connected." not in data["suggested_description"]
 
 
@@ -707,7 +734,19 @@ def test_api_bugreport_suggested_description_uses_runtime_health_signals(client,
                             "severity": "warning",
                             "title": "Kitchen is disconnected",
                         }
-                    ]
+                    ],
+                    "timeline": {
+                        "summary": {"entry_count": 1, "error_count": 0, "warning_count": 1},
+                        "entries": [
+                            {
+                                "at": "2026-03-17T18:00:03+00:00",
+                                "level": "warning",
+                                "source": "Kitchen",
+                                "label": "sink_missing",
+                                "summary": "Sink is still missing after reconnect.",
+                            }
+                        ],
+                    },
                 },
             }
         ),
@@ -753,6 +792,10 @@ def test_api_bugreport_suggested_description_uses_runtime_health_signals(client,
     assert "bluetooth daemon reports status `inactive`." in data["suggested_description"]
     assert "Music Assistant is configured but not currently connected." in data["suggested_description"]
     assert "Recovery guidance highlights: Kitchen is disconnected." in data["suggested_description"]
+    assert (
+        "Recovery timeline shows: warning from Kitchen: Sink is still missing after reconnect."
+        in data["suggested_description"]
+    )
 
 
 def test_api_bugreport_redacts_oauth_tokens_and_runtime_state(client, monkeypatch):
@@ -1233,6 +1276,17 @@ def test_api_ma_discover_reports_invalid_saved_token(client, monkeypatch):
 
     monkeypatch.setattr(api_ma, "get_main_loop", lambda: object())
     monkeypatch.setattr(api_ma, "_detect_runtime", lambda: "ha_addon")
+    monkeypatch.setattr(
+        api_ma,
+        "get_ma_addon_discovery_candidates",
+        lambda: [
+            {
+                "url": "http://ma-addon:8095",
+                "source": "ha_addon_hostname",
+                "summary": "Home Assistant Supervisor reported a running Music Assistant add-on.",
+            }
+        ],
+    )
     monkeypatch.setattr(api_ma.asyncio, "run_coroutine_threadsafe", _run_coroutine_threadsafe)
     monkeypatch.setattr(api_ma.threading, "Thread", _ImmediateThread)
     monkeypatch.setattr(ma_discovery, "validate_ma_url", _fake_validate_ma_url)
@@ -1256,6 +1310,8 @@ def test_api_ma_discover_reports_invalid_saved_token(client, monkeypatch):
     assert result.status_code == 200
     data = result.get_json()
     assert data["servers"][0]["url"] == "http://localhost:8095"
+    assert data["servers"][0]["discovery_source"] == "ha_addon_hostname"
+    assert "Supervisor" in data["servers"][0]["discovery_summary"]
     assert data["integration"]["token_configured"] is True
     assert data["integration"]["token_valid"] is False
     assert data["integration"]["connected"] is False
@@ -1299,6 +1355,7 @@ def test_api_ma_discover_reports_connected_runtime_when_saved_token_validation_f
     monkeypatch.setattr(api_ma, "get_main_loop", lambda: object())
     monkeypatch.setattr(api_ma, "is_ma_connected", lambda: True)
     monkeypatch.setattr(api_ma, "_detect_runtime", lambda: "docker")
+    monkeypatch.setattr(api_ma, "get_ma_api_credentials", lambda: ("http://localhost:8095", "working-token"))
     monkeypatch.setattr(api_ma.asyncio, "run_coroutine_threadsafe", _run_coroutine_threadsafe)
     monkeypatch.setattr(api_ma.threading, "Thread", _ImmediateThread)
     monkeypatch.setattr(ma_discovery, "validate_ma_url", _fake_validate_ma_url)
@@ -1321,6 +1378,8 @@ def test_api_ma_discover_reports_connected_runtime_when_saved_token_validation_f
     result = client.get(f"/api/ma/discover/result/{job_id}")
     assert result.status_code == 200
     data = result.get_json()
+    assert data["servers"][0]["discovery_source"] == "saved_config"
+    assert "saved bridge configuration" in data["servers"][0]["discovery_summary"]
     assert data["integration"]["token_configured"] is True
     assert data["integration"]["token_valid"] is False
     assert data["integration"]["connected"] is True
@@ -2393,10 +2452,11 @@ def test_onboarding_assistant_endpoint_returns_guidance(client, monkeypatch):
     checks = {check["key"]: check for check in data["checks"]}
     assert checks["sink_verification"]["status"] == "ok"
     assert checks["ma_auth"]["status"] == "warning"
+    assert checks["ma_auth"]["details"]["auto_discovery_available"] is True
     assert data["checklist"]["current_step_key"] == "ma_auth"
-    assert data["checklist"]["primary_action"]["key"] == "open_ma_settings"
+    assert data["checklist"]["primary_action"]["key"] == "retry_ma_discovery"
     ma_step = next(step for step in data["checklist"]["steps"] if step["key"] == "ma_auth")
-    assert ma_step["recommended_action"]["key"] == "open_ma_settings"
+    assert ma_step["recommended_action"]["key"] == "retry_ma_discovery"
     assert data["checklist"]["checkpoints"][2]["reached"] is True
     assert data["next_steps"]
 

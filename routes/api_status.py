@@ -66,7 +66,11 @@ from services.preflight_status import (
 )
 from services.pulse import get_server_name, list_sinks
 from services.recovery_assistant import build_recovery_assistant_snapshot
-from services.recovery_timeline import build_recovery_timeline_csv
+from services.recovery_timeline import (
+    build_recovery_timeline_csv,
+    build_recovery_timeline_excerpt,
+    build_recovery_timeline_text,
+)
 from services.sendspin_compat import get_runtime_dependency_versions
 from services.status_snapshot import (
     build_bridge_snapshot,
@@ -1228,6 +1232,7 @@ def _build_bugreport_suggested_description(masked: dict) -> str:
     ma_info = diag.get("ma_integration", {})
     recovery = diag.get("recovery_assistant", {})
     recent_issue_logs = masked.get("recent_issue_logs", [])
+    recovery_timeline = recovery.get("timeline") or {}
 
     issues: list[str] = []
 
@@ -1286,6 +1291,10 @@ def _build_bugreport_suggested_description(masked: dict) -> str:
         summary_headline = recovery["summary"].get("headline")
         if summary_headline:
             add_issue(f"Recovery guidance highlights: {summary_headline}.")
+
+    timeline_excerpt = build_recovery_timeline_excerpt(recovery_timeline)
+    if timeline_excerpt:
+        add_issue(f"Recovery timeline shows: {timeline_excerpt}.")
 
     if not issues:
         issues.append("No obvious failures were extracted from the attached diagnostics yet.")
@@ -1449,6 +1458,7 @@ def _build_full_text_report(
     assistant = diag.get("onboarding_assistant", {})
     recovery = diag.get("recovery_assistant", {})
     guidance = diag.get("operator_guidance", {})
+    recovery_timeline = recovery.get("timeline") or {}
 
     # Environment
     if env:
@@ -1534,6 +1544,13 @@ def _build_full_text_report(
         latency = recovery.get("latency_assistant", {})
         if latency:
             full.append(f"  Latency: {latency.get('summary', '')}")
+        full.append("")
+
+    if recovery_timeline:
+        full.append("--- RECOVERY TIMELINE ---")
+        timeline_text = build_recovery_timeline_text(recovery_timeline, max_entries=8)
+        for line in timeline_text.splitlines():
+            full.append(f"  {line}" if line else "")
         full.append("")
 
     if guidance:

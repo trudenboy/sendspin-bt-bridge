@@ -22,11 +22,17 @@ class GuidanceAction:
     key: str
     label: str
     device_names: list[str] = field(default_factory=list)
+    check_key: str | None = None
+    value: Any | None = None
 
     def to_dict(self) -> dict[str, Any]:
         payload: dict[str, Any] = {"key": self.key, "label": self.label}
         if self.device_names:
             payload["device_names"] = list(self.device_names)
+        if self.check_key:
+            payload["check_key"] = self.check_key
+        if self.value is not None:
+            payload["value"] = self.value
         return payload
 
 
@@ -208,6 +214,8 @@ def _guidance_action_from_dict(payload: dict[str, Any] | None) -> GuidanceAction
         key=key,
         label=label,
         device_names=[str(name) for name in device_names if str(name).strip()],
+        check_key=str(payload.get("check_key") or "").strip() or None,
+        value=payload.get("value"),
     )
 
 
@@ -234,6 +242,8 @@ def _guidance_actions_from_recovery(
                 label=action.label,
                 device_name=action.device_names[0] if len(action.device_names) == 1 else None,
                 device_names=list(action.device_names) if len(action.device_names) > 1 else [],
+                check_key=action.check_key,
+                value=action.value,
             )
         )
     primary_action, secondary_actions = build_recovery_issue_actions(
@@ -702,6 +712,37 @@ def _build_issue_groups(
             severity="error" if overall_status == "error" else "warning",
             title="Music Assistant needs attention",
             summary=str(checklist.get("summary") or "Music Assistant integration is not ready yet."),
+            primary_action=primary_action,
+            secondary_actions=secondary,
+        )
+
+    if current_step_key == "latency" and overall_status in {"warning", "error"}:
+        latency_assistant = recovery_assistant.get("latency_assistant") or {}
+        latency_actions = [_guidance_action_from_dict(item) for item in latency_assistant.get("safe_actions") or []]
+        valid_latency_actions = [item for item in latency_actions if item is not None]
+        primary_action = _guidance_action_from_dict(checklist.get("primary_action")) or (
+            valid_latency_actions[0]
+            if valid_latency_actions
+            else GuidanceAction(key="open_latency_settings", label="Review latency settings")
+        )
+        secondary = [
+            action
+            for action in valid_latency_actions
+            if action.key != primary_action.key
+            or action.device_names != primary_action.device_names
+            or action.check_key != primary_action.check_key
+            or action.value != primary_action.value
+        ]
+        _append_group(
+            groups,
+            key="latency",
+            severity="warning",
+            title="Latency tuning needs attention",
+            summary=str(
+                latency_assistant.get("summary")
+                or checklist.get("summary")
+                or "Latency guidance recommends another tuning pass."
+            ),
             primary_action=primary_action,
             secondary_actions=secondary,
         )
