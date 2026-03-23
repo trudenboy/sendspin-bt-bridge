@@ -219,6 +219,28 @@ def test_load_config_normalizes_types_and_prunes_orphan_volumes(tmp_path):
     assert loaded["LAST_VOLUMES"] == {"AA:BB:CC:DD:EE:FF": 55}
 
 
+def test_runtime_version_prefers_persisted_install_ref(tmp_path, monkeypatch):
+    from config import get_installed_version_ref, get_runtime_version
+
+    ref_file = tmp_path / ".release-ref"
+    ref_file.write_text("v2.42.4-rc.2\n")
+    monkeypatch.setenv("SENDSPIN_VERSION_REF_FILE", str(ref_file))
+
+    assert get_installed_version_ref() == "v2.42.4-rc.2"
+    assert get_runtime_version() == "2.42.4-rc.2"
+
+
+def test_runtime_version_ignores_non_semver_install_ref(tmp_path, monkeypatch):
+    from config import VERSION, get_installed_version_ref, get_runtime_version
+
+    ref_file = tmp_path / ".release-ref"
+    ref_file.write_text("main\n")
+    monkeypatch.setenv("SENDSPIN_VERSION_REF_FILE", str(ref_file))
+
+    assert get_installed_version_ref() is None
+    assert get_runtime_version() == VERSION
+
+
 def test_load_config_normalizes_optional_port_overrides(tmp_path):
     _write_config(tmp_path, {"WEB_PORT": "18080", "BASE_LISTEN_PORT": "19000"})
     from config import load_config

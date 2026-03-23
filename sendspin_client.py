@@ -24,9 +24,9 @@ from bridge_orchestrator import BridgeOrchestrator
 from config import (
     CONFIG_FILE,
     CONFIG_SCHEMA_VERSION,
-    VERSION,
     _player_id_from_mac,
     config_lock,
+    get_runtime_version,
     save_device_volume,
 )
 from services.ipc_protocol import (
@@ -843,7 +843,7 @@ async def main():
 
     await orchestrator.run_bridge_lifecycle(
         bootstrap,
-        version=VERSION,
+        version=get_runtime_version(),
         client_factory=SendspinClient,
         bt_manager_factory=BluetoothManager,
         filter_devices_fn=_filter_duplicate_bluetooth_devices,

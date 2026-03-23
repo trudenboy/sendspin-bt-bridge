@@ -25,8 +25,11 @@ from config import (
     CONFIG_SCHEMA_VERSION,
     RUNTIME_STATE_CONFIG_KEYS,
     SENSITIVE_CONFIG_KEYS,
-    VERSION,
+    get_runtime_version,
     load_config,
+)
+from config import (
+    VERSION as _CONFIG_VERSION,
 )
 from services.bridge_runtime_state import (
     get_bridge_uptime,
@@ -65,6 +68,7 @@ UTC = timezone.utc
 logger = logging.getLogger(__name__)
 
 status_bp = Blueprint("api_status", __name__)
+VERSION = _CONFIG_VERSION
 
 # ---------------------------------------------------------------------------
 # SSE connection limiting — prevent resource exhaustion
@@ -189,7 +193,7 @@ def _collect_preflight_status() -> dict:
         "bluetooth": bt_info,
         "dbus": dbus_ok,
         "memory_mb": mem_mb,
-        "version": VERSION,
+        "version": get_runtime_version(),
     }
 
 
@@ -460,7 +464,7 @@ def get_client_status_for(client):
             "bluetooth_available": False,
             "playing": False,
             "error": "Failed to retrieve status",
-            "version": VERSION,
+            "version": get_runtime_version(),
             "build_date": BUILD_DATE,
             "bluetooth_mac": None,
         }
@@ -660,7 +664,7 @@ def api_diagnostics():
         uptime_str = get_bridge_uptime_text()
 
         diag: dict = {
-            "version": VERSION,
+            "version": get_runtime_version(),
             "build_date": BUILD_DATE,
             "runtime": runtime,
             "uptime": uptime_str,
@@ -1369,7 +1373,7 @@ def api_bugreport():
 
         # Build structured report
         report = {
-            "version": VERSION,
+            "version": get_runtime_version(),
             "build_date": BUILD_DATE,
             "runtime": runtime,
             "uptime": uptime_str,
@@ -1676,7 +1680,7 @@ def api_diagnostics_download():
         issue_summary = summarize_issue_logs(log_lines, max_lines=3)
 
         report = {
-            "version": VERSION,
+            "version": get_runtime_version(),
             "build_date": BUILD_DATE,
             "runtime": runtime,
             "uptime": uptime_str,

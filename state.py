@@ -108,7 +108,7 @@ def _detect_runtime_type() -> str:
 
 def get_bridge_system_info() -> dict:
     """Return hostname, IP, uptime and version — always available."""
-    from config import BUILD_DATE, CONFIG_SCHEMA_VERSION, VERSION
+    from config import BUILD_DATE, CONFIG_SCHEMA_VERSION, get_runtime_version
     from services.ipc_protocol import IPC_PROTOCOL_VERSION
 
     uptime = datetime.now(tz=timezone.utc) - bridge_start_time
@@ -116,7 +116,7 @@ def get_bridge_system_info() -> dict:
 
     ip = get_local_ip()
     return {
-        "version": VERSION,
+        "version": get_runtime_version(),
         "build_date": BUILD_DATE,
         "hostname": socket.gethostname(),
         "ip_address": ip,

@@ -13,6 +13,7 @@ import hmac as _hmac
 import json
 import logging
 import os
+import re
 import secrets as _secrets
 import shutil
 import socket as _socket
@@ -39,6 +40,7 @@ HA_ADDON_CHANNEL_DEFAULTS = {
     "rc": {"web_port": 8081, "base_listen_port": 9028},
     "beta": {"web_port": 8082, "base_listen_port": 9128},
 }
+_RUNTIME_VERSION_REF_RE = re.compile(r"^v?\d+\.\d+\.\d+(?:-(?:rc|beta)\.\d+)?$")
 
 __all__ = [
     "BUILD_DATE",
@@ -61,7 +63,9 @@ __all__ = [
     "detect_ha_addon_channel",
     "ensure_bridge_name",
     "ensure_secret_key",
+    "get_installed_version_ref",
     "get_local_ip",
+    "get_runtime_version",
     "hash_password",
     "is_ha_addon_runtime",
     "load_config",
@@ -261,6 +265,29 @@ def normalize_update_channel(raw_channel: object) -> str:
     if normalized in UPDATE_CHANNELS:
         return normalized
     return DEFAULT_UPDATE_CHANNEL
+
+
+def _runtime_version_ref_path() -> Path:
+    return Path(os.environ.get("SENDSPIN_VERSION_REF_FILE") or "/opt/sendspin-client/.release-ref")
+
+
+def get_installed_version_ref() -> str | None:
+    """Return the persisted install/update ref when it is an exact semver tag."""
+    try:
+        raw_ref = _runtime_version_ref_path().read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    if not raw_ref or not _RUNTIME_VERSION_REF_RE.match(raw_ref):
+        return None
+    return raw_ref
+
+
+def get_runtime_version() -> str:
+    """Return the runtime version exposed to the UI and update checker."""
+    installed_ref = get_installed_version_ref()
+    if installed_ref:
+        return installed_ref[1:] if installed_ref.startswith("v") else installed_ref
+    return VERSION
 
 
 def _coerce_port(raw_value: object, default: int) -> int:

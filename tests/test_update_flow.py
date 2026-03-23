@@ -243,6 +243,54 @@ def test_api_update_check_uses_selected_channel(config_client, monkeypatch):
     assert result.get_json()["channel"] == "rc"
 
 
+def test_api_update_check_uses_runtime_version_ref_for_rc_updates(config_client, monkeypatch):
+    import routes.api_config as api_config
+
+    monkeypatch.setattr(api_config, "get_main_loop", lambda: object())
+    monkeypatch.setattr(api_config, "load_config", lambda: {"UPDATE_CHANNEL": "rc"})
+    monkeypatch.setattr(api_config, "get_runtime_version", lambda: "2.41.0-rc.1")
+
+    async def fake_check_latest_version(channel=None):
+        assert channel == "rc"
+        return {
+            "version": "2.41.0-rc.2",
+            "tag": "v2.41.0-rc.2",
+            "url": "https://example.invalid/rc",
+            "published_at": "",
+            "body": "",
+            "channel": "rc",
+            "target_ref": "v2.41.0-rc.2",
+            "prerelease": True,
+        }
+
+    class _ImmediateThread:
+        def __init__(self, target, args=(), kwargs=None, daemon=None, name=None):
+            self._target = target
+            self._args = args
+            self._kwargs = kwargs or {}
+
+        def start(self):
+            self._target(*self._args, **self._kwargs)
+
+    def fake_run_coroutine_threadsafe(coro, loop):
+        return SimpleNamespace(result=lambda timeout=None: asyncio.run(coro))
+
+    monkeypatch.setattr(api_config, "check_latest_version", fake_check_latest_version)
+    monkeypatch.setattr(api_config.asyncio, "run_coroutine_threadsafe", fake_run_coroutine_threadsafe)
+    monkeypatch.setattr(api_config.threading, "Thread", _ImmediateThread)
+
+    resp = config_client.post("/api/update/check")
+
+    assert resp.status_code == 202
+    job_id = resp.get_json()["job_id"]
+    result = config_client.get(f"/api/update/check/result/{job_id}")
+    assert result.status_code == 200
+    payload = result.get_json()
+    assert payload["update_available"] is True
+    assert payload["current_version"] == "2.41.0-rc.1"
+    assert payload["version"] == "2.41.0-rc.2"
+
+
 def test_api_update_info_reports_beta_channel_warning(config_client, monkeypatch):
     import routes.api_config as api_config
     import state
@@ -354,3 +402,5 @@ def test_lxc_scripts_sync_repo_snapshot_recursively():
         assert "download_repo_snapshot()" in text
         assert 'find "${src_root}" -maxdepth 1 -type f' in text
         assert "for dir in services routes demo templates static lxc scripts; do" in text
+        assert "record_release_ref()" in text
+        assert ".release-ref" in text

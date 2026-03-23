@@ -2,7 +2,7 @@ import os
 
 from flask import Blueprint, current_app, render_template, session
 
-from config import BUILD_DATE, VERSION, detect_ha_addon_channel, resolve_web_port
+from config import BUILD_DATE, detect_ha_addon_channel, get_runtime_version, resolve_web_port
 from services.ha_addon import get_ma_addon_ui_url
 
 views_bp = Blueprint("views", __name__)
@@ -14,13 +14,14 @@ def index():
     auth_enabled = current_app.config.get("AUTH_ENABLED", False)
     is_ha_addon = current_app.config.get("IS_HA_ADDON", False)
     demo_mode = os.environ.get("DEMO_MODE", "").lower() == "true"
-    display_version = f"{VERSION}-demo" if demo_mode else VERSION
+    runtime_version = get_runtime_version()
+    display_version = f"{runtime_version}-demo" if demo_mode else runtime_version
     ma_ui_url = get_ma_addon_ui_url()
     ma_profile_url = f"{ma_ui_url}/#/settings/profile" if ma_ui_url else ""
     ha_mode = bool(os.environ.get("SUPERVISOR_TOKEN"))
     return render_template(
         "index.html",
-        VERSION=VERSION,
+        VERSION=runtime_version,
         DISPLAY_VERSION=display_version,
         BUILD_DATE=BUILD_DATE,
         auth_enabled=auth_enabled,

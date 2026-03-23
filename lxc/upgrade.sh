@@ -67,6 +67,11 @@ sync_app_tree() {
   chmod +x "${dest_root}/sendspin_client.py"
 }
 
+record_release_ref() {
+  local dest_root="$1"
+  printf '%s\n' "${GITHUB_BRANCH}" > "${dest_root}/.release-ref"
+}
+
 update_python_dependencies() {
   local requirements_file="$1"
   local arch
@@ -190,6 +195,7 @@ SNAPSHOT_ROOT=$(download_repo_snapshot "${SCRIPT_TMP_DIR}")
 # ─── 1. Download application files ───────────────────────────────────────────
 msg "Downloading application files..."
 sync_app_tree "${SNAPSHOT_ROOT}" "${STAGE_APP}"
+record_release_ref "${STAGE_APP}"
 ok "Application files downloaded"
 
 NEW_VERSION=$(python3 -c "

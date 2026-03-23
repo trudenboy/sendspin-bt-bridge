@@ -19,7 +19,7 @@ from pathlib import Path
 from flask import Flask, jsonify, redirect, request, send_from_directory, session, url_for
 from waitress import serve  # type: ignore[import-untyped]
 
-from config import VERSION, ensure_secret_key, load_config, resolve_additional_web_port, resolve_web_port
+from config import ensure_secret_key, get_runtime_version, load_config, resolve_additional_web_port, resolve_web_port
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -122,15 +122,16 @@ app.register_blueprint(auth_bp)
 @app.context_processor
 def inject_version():
     """Make asset versions available in all templates for cache-busting."""
+    runtime_version = get_runtime_version()
 
     def asset_version(filename: str) -> str:
         try:
             mtime = int(Path(app.static_folder, filename).stat().st_mtime)
         except OSError:
             mtime = 0
-        return f"{VERSION}-{mtime}"
+        return f"{runtime_version}-{mtime}"
 
-    return {"VERSION": VERSION, "asset_version": asset_version}
+    return {"VERSION": runtime_version, "asset_version": asset_version}
 
 
 @app.route("/static/v<version>/<path:filename>")

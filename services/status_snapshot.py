@@ -13,7 +13,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import state
-from config import BUILD_DATE, VERSION, load_config
+from config import BUILD_DATE, get_runtime_version, load_config
 from services.bluetooth import _match_player_name
 from state import get_adapter_name, get_ma_group_for_player_id, get_ma_now_playing_for_group
 
@@ -28,7 +28,7 @@ class DeviceSnapshot:
     bluetooth_available: bool = False
     playing: bool = False
     error: str | None = None
-    version: str = VERSION
+    version: str = field(default_factory=get_runtime_version)
     build_date: str = BUILD_DATE
     bluetooth_mac: str | None = None
     player_name: str | None = None
@@ -643,7 +643,7 @@ def build_device_snapshot(client, *, configured_enabled: dict[str, bool] | None 
         bluetooth_connected=bool(status.get("bluetooth_connected", False)),
         bluetooth_available=bool(status.get("bluetooth_available", False)),
         playing=bool(status.get("playing", False)),
-        version=VERSION,
+        version=get_runtime_version(),
         build_date=BUILD_DATE,
         bluetooth_mac=bt_mgr.mac_address if bt_mgr else None,
         player_name=getattr(client, "player_name", None),
@@ -666,7 +666,7 @@ def build_device_snapshot(client, *, configured_enabled: dict[str, bool] | None 
         uptime=uptime,
         extra=dict(status),
     )
-    device.extra["version"] = VERSION
+    device.extra["version"] = get_runtime_version()
     device.extra["build_date"] = BUILD_DATE
     device.extra["runtime"] = device.runtime
     device.extra["connected"] = device.connected

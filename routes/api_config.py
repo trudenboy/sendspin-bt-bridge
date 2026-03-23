@@ -26,10 +26,10 @@ from config import (
     CONFIG_SCHEMA_VERSION,
     DEFAULT_UPDATE_CHANNEL,
     SENSITIVE_CONFIG_KEYS,
-    VERSION,
     _player_id_from_mac,
     config_lock,
     detect_ha_addon_channel,
+    get_runtime_version,
     load_config,
     normalize_update_channel,
     resolve_base_listen_port,
@@ -943,7 +943,7 @@ def api_version():
         ).stdout.strip()
         return jsonify(
             {
-                "version": git_desc or VERSION,
+                "version": git_desc or get_runtime_version(),
                 "git_sha": git_sha or "unknown",
                 "built_at": (git_date.split(" ")[0] if git_date else BUILD_DATE),
                 "config_schema_version": CONFIG_SCHEMA_VERSION,
@@ -954,7 +954,7 @@ def api_version():
     except Exception:
         return jsonify(
             {
-                "version": VERSION,
+                "version": get_runtime_version(),
                 "git_sha": "unknown",
                 "built_at": BUILD_DATE,
                 "config_schema_version": CONFIG_SCHEMA_VERSION,
@@ -974,11 +974,12 @@ def _run_update_check_job(job_id: str, channel: str, loop) -> None:
     try:
         fut = asyncio.run_coroutine_threadsafe(check_latest_version(channel), loop)
         latest = fut.result(timeout=20)
+        runtime_version = get_runtime_version()
         if not latest:
             finish_async_job(job_id, {"success": False, "error": "Could not reach GitHub API"})
             return
-        if _is_newer_version(latest["tag"], VERSION):
-            latest["current_version"] = VERSION
+        if _is_newer_version(latest["tag"], runtime_version):
+            latest["current_version"] = runtime_version
             set_update_available(latest)
             finish_async_job(job_id, {"success": True, "update_available": True, **latest})
             return

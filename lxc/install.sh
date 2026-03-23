@@ -62,6 +62,11 @@ sync_app_tree() {
   chmod +x "${dest_root}/sendspin_client.py"
 }
 
+record_release_ref() {
+  local dest_root="$1"
+  printf '%s\n' "${GITHUB_BRANCH}" > "${dest_root}/.release-ref"
+}
+
 # ─── Pre-flight ───────────────────────────────────────────────────────────────
 [[ $EUID -eq 0 ]] || die "Must be run as root"
 
@@ -91,6 +96,7 @@ ok "System packages installed"
 msg "Downloading application files from GitHub..."
 mkdir -p /opt/sendspin-client
 sync_app_tree "${SNAPSHOT_ROOT}" /opt/sendspin-client
+record_release_ref /opt/sendspin-client
 ok "Application files downloaded"
 
 # ─── 3. Python dependencies ───────────────────────────────────────────────────
