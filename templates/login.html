@@ -27,75 +27,116 @@
     <link rel="icon" type="image/svg+xml" href="{{ url_for('vstatic', version=VERSION, filename='favicon.svg') }}">
     <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('vstatic', version=VERSION, filename='favicon.png') }}">
     <style>
+        body.auth-page {
+            padding:
+                max(20px, env(safe-area-inset-top))
+                max(16px, env(safe-area-inset-right))
+                max(20px, env(safe-area-inset-bottom))
+                max(16px, env(safe-area-inset-left));
+        }
         .login-wrap {
-            min-height: 100vh;
+            min-height: calc(100vh - 40px);
+            min-height: calc(100dvh - 40px);
             display: flex;
             align-items: center;
             justify-content: center;
+            padding: clamp(12px, 3vh, 28px) 0;
         }
         .login-card {
-            background: var(--card-background-color);
-            border-radius: var(--ha-card-border-radius);
-            box-shadow: var(--ha-card-box-shadow);
-            padding: 36px 32px;
+            display: grid;
+            gap: 20px;
             width: 100%;
-            max-width: 380px;
+            max-width: 440px;
+            padding: clamp(24px, 4vw, 36px);
+            background: var(--card-background-color);
+            border: 1px solid var(--divider-color, rgba(0, 0, 0, 0.12));
+            border-radius: var(--ha-card-border-radius);
+            box-shadow: var(--ui-surface-shadow-raised, var(--ha-card-box-shadow));
         }
         .login-header {
+            display: grid;
+            gap: 8px;
             text-align: center;
-            margin-bottom: 28px;
         }
         .login-header h1 {
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            gap: 8px;
+            gap: 10px;
             color: var(--primary-color);
-            font-size: 20px;
+            font-size: clamp(1.125rem, 2vw, 1.375rem);
             font-weight: 700;
-            margin-bottom: 6px;
+            line-height: 1.25;
+            margin: 0;
+            flex-wrap: wrap;
         }
         .login-logo-icon {
-            width: 20px;
-            height: 20px;
+            width: 24px;
+            height: 24px;
             flex-shrink: 0;
         }
         .login-header p {
+            margin: 0 auto;
+            max-width: 30ch;
             color: var(--secondary-text-color);
-            font-size: 13px;
+            font-size: 14px;
+            line-height: 1.5;
         }
         .login-error {
             background: #fee2e2;
             color: #991b1b;
             border: 1px solid #fca5a5;
-            border-radius: 6px;
-            padding: 10px 14px;
+            border-radius: var(--ui-control-radius, 10px);
+            padding: 12px 14px;
             font-size: 13px;
+            line-height: 1.45;
+            word-break: break-word;
+        }
+        .login-form {
+            display: grid;
+            gap: 2px;
+        }
+        .login-card .form-group {
             margin-bottom: 16px;
+        }
+        .login-card .form-group:last-of-type {
+            margin-bottom: 0;
+        }
+        .login-card .form-group label {
+            margin-bottom: 6px;
+            line-height: 1.35;
+        }
+        .login-card .form-group input:not([type="checkbox"]):not([type="hidden"]):not([type="range"]):not([type="file"]) {
+            font-size: 16px;
         }
         .login-submit {
             width: 100%;
-            padding: 11px;
+            min-height: max(44px, var(--ui-control-height, 32px));
+            padding: 0 16px;
             font-size: 15px;
             font-weight: 600;
-            margin-top: 8px;
+            margin-top: 10px;
         }
         .login-tabs {
-            display: inline-flex;
-            align-items: center;
-            gap: 0;
-            margin-bottom: 20px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+            gap: 6px;
+            width: 100%;
             background: var(--ui-segmented-bg, var(--secondary-background-color, #f0f0f0));
             border: 1px solid var(--ui-segmented-border, var(--divider-color, #e0e0e0));
-            border-radius: 9px;
+            border-radius: calc(var(--ui-control-radius, 10px) + 1px);
             padding: var(--ui-segmented-padding, 3px);
         }
         .login-tab {
-            flex: 1;
-            min-height: var(--ui-control-height, 32px);
-            padding: 0 10px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            min-height: max(44px, var(--ui-control-height, 32px));
+            padding: 10px 12px;
             font-size: 12px;
             font-weight: 700;
+            line-height: 1.3;
             text-align: center;
             border: none;
             background: transparent;
@@ -103,41 +144,70 @@
             border-radius: 6px;
             cursor: pointer;
             transition: background-color 0.15s, color 0.15s, box-shadow 0.15s;
+            white-space: normal;
         }
         .login-tab:hover {
             background: var(--ui-segmented-hover-bg, rgba(0,0,0,0.05));
             color: var(--primary-text-color);
+        }
+        .login-tab:focus-visible {
+            outline: none;
+            box-shadow: var(--ui-focus-ring, 0 0 0 3px rgba(3, 169, 244, 0.14));
         }
         .login-tab.active {
             background: var(--ui-segmented-active-bg, var(--card-background-color));
             color: var(--ui-segmented-active-color, var(--primary-text-color));
             box-shadow: inset 0 0 0 1px var(--ui-segmented-active-border, rgba(128, 145, 171, 0.22));
         }
-        .login-method { display: none; }
-        .login-method.active { display: block; }
-        .login-divider {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            margin: 16px 0;
-            color: var(--secondary-text-color);
-            font-size: 12px;
+        .login-method {
+            display: none;
         }
-        .login-divider::before, .login-divider::after {
-            content: "";
-            flex: 1;
-            border-top: 1px solid var(--divider-color, #e0e0e0);
+        .login-method.active {
+            display: grid;
+        }
+        .login-code-input {
+            text-align: center;
+            font-size: 17px;
+            font-weight: 600;
+            letter-spacing: 0.22em;
         }
         .login-no-methods {
             text-align: center;
             color: var(--secondary-text-color);
             font-size: 13px;
-            padding: 20px 0;
-            line-height: 1.5;
+            padding: 4px 4px 0;
+            line-height: 1.6;
+        }
+        @media (max-width: 640px) {
+            body.auth-page {
+                padding:
+                    max(12px, env(safe-area-inset-top))
+                    max(12px, env(safe-area-inset-right))
+                    max(14px, env(safe-area-inset-bottom))
+                    max(12px, env(safe-area-inset-left));
+            }
+            .login-wrap {
+                align-items: flex-start;
+                min-height: auto;
+            }
+            .login-card {
+                gap: 18px;
+            }
+        }
+        @media (max-width: 420px) {
+            .login-card {
+                padding: 20px 16px;
+            }
+            .login-tabs {
+                grid-template-columns: 1fr;
+            }
+            .login-header h1 {
+                font-size: 18px;
+            }
         }
     </style>
 </head>
-<body>
+<body class="auth-page">
 <div class="login-wrap">
     <div class="login-card">
         <div class="login-header">
@@ -150,12 +220,12 @@
         </div>
 
         {% if error %}
-        <div class="login-error">{{ error }}</div>
+        <div class="login-error" role="alert" aria-live="polite">{{ error }}</div>
         {% endif %}
 
         {% if mfa_step %}
         {# ── MFA step (HA login_flow — local or remote) ── #}
-        <form method="post" autocomplete="on">
+        <form method="post" autocomplete="on" class="login-form">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <input type="hidden" name="method" value="{{ mfa_method|default('ha') }}">
             <input type="hidden" name="step" value="mfa">
@@ -164,8 +234,8 @@
             <div class="form-group">
                 <label>Authentication code</label>
                 <input type="text" name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6"
-                    autocomplete="one-time-code" required autofocus
-                    placeholder="6-digit code" style="letter-spacing: 0.15em;">
+                    class="login-code-input" autocomplete="one-time-code" required autofocus
+                    placeholder="6-digit code">
             </div>
             <button type="submit" class="btn login-submit">Verify</button>
         </form>
@@ -181,29 +251,45 @@
         {% else %}
         {# ── Method selection ── #}
         {% if auth_methods|length > 1 %}
-        <div class="login-tabs">
+        <div class="login-tabs" role="tablist" aria-label="Authentication methods">
             {% if "ha_via_ma" in auth_methods %}
-            <button class="login-tab{% if auth_methods[0] == 'ha_via_ma' %} active{% endif %}"
-                    onclick="switchMethod('ha_via_ma')">Home Assistant</button>
+            <button type="button" id="login-tab-ha_via_ma"
+                    class="login-tab{% if auth_methods[0] == 'ha_via_ma' %} active{% endif %}"
+                    data-method="ha_via_ma" role="tab"
+                    aria-selected="{{ 'true' if auth_methods[0] == 'ha_via_ma' else 'false' }}"
+                    aria-controls="method-ha_via_ma" title="Home Assistant via Music Assistant"
+                    onclick="return switchMethod(event, 'ha_via_ma')">HA via MA</button>
             {% endif %}
             {% if "ma" in auth_methods %}
-            <button class="login-tab{% if auth_methods[0] == 'ma' %} active{% endif %}"
-                    onclick="switchMethod('ma')">Music Assistant</button>
+            <button type="button" id="login-tab-ma"
+                    class="login-tab{% if auth_methods[0] == 'ma' %} active{% endif %}"
+                    data-method="ma" role="tab"
+                    aria-selected="{{ 'true' if auth_methods[0] == 'ma' else 'false' }}"
+                    aria-controls="method-ma"
+                    onclick="return switchMethod(event, 'ma')">Music Assistant</button>
             {% endif %}
             {% if "ha" in auth_methods %}
-            <button class="login-tab{% if auth_methods[0] == 'ha' %} active{% endif %}"
-                    onclick="switchMethod('ha')">Home Assistant</button>
+            <button type="button" id="login-tab-ha"
+                    class="login-tab{% if auth_methods[0] == 'ha' %} active{% endif %}"
+                    data-method="ha" role="tab"
+                    aria-selected="{{ 'true' if auth_methods[0] == 'ha' else 'false' }}"
+                    aria-controls="method-ha"
+                    onclick="return switchMethod(event, 'ha')">Home Assistant</button>
             {% endif %}
             {% if "password" in auth_methods %}
-            <button class="login-tab{% if auth_methods[0] == 'password' %} active{% endif %}"
-                    onclick="switchMethod('password')">Password</button>
+            <button type="button" id="login-tab-password"
+                    class="login-tab{% if auth_methods[0] == 'password' %} active{% endif %}"
+                    data-method="password" role="tab"
+                    aria-selected="{{ 'true' if auth_methods[0] == 'password' else 'false' }}"
+                    aria-controls="method-password"
+                    onclick="return switchMethod(event, 'password')">Password</button>
             {% endif %}
         </div>
         {% endif %}
 
         {# ── HA via MA login form (remote HA Core login_flow) ── #}
         {% if "ha_via_ma" in auth_methods %}
-        <form method="post" autocomplete="on" class="login-method{% if auth_methods[0] == 'ha_via_ma' %} active{% endif %}" id="method-ha_via_ma">
+        <form method="post" autocomplete="on" class="login-form login-method{% if auth_methods[0] == 'ha_via_ma' %} active{% endif %}" id="method-ha_via_ma" role="tabpanel" aria-labelledby="login-tab-ha_via_ma" {% if auth_methods[0] != 'ha_via_ma' %}hidden{% endif %}>
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <input type="hidden" name="method" value="ha_via_ma">
             <input type="hidden" name="step" value="credentials">
@@ -222,7 +308,7 @@
 
         {# ── MA login form ── #}
         {% if "ma" in auth_methods %}
-        <form method="post" autocomplete="on" class="login-method{% if auth_methods[0] == 'ma' %} active{% endif %}" id="method-ma">
+        <form method="post" autocomplete="on" class="login-form login-method{% if auth_methods[0] == 'ma' %} active{% endif %}" id="method-ma" role="tabpanel" aria-labelledby="login-tab-ma" {% if auth_methods[0] != 'ma' %}hidden{% endif %}>
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <input type="hidden" name="method" value="ma">
             <input type="hidden" name="step" value="credentials">
@@ -241,7 +327,7 @@
 
         {# ── HA login form ── #}
         {% if "ha" in auth_methods %}
-        <form method="post" autocomplete="on" class="login-method{% if auth_methods[0] == 'ha' %} active{% endif %}" id="method-ha">
+        <form method="post" autocomplete="on" class="login-form login-method{% if auth_methods[0] == 'ha' %} active{% endif %}" id="method-ha" role="tabpanel" aria-labelledby="login-tab-ha" {% if auth_methods[0] != 'ha' %}hidden{% endif %}>
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <input type="hidden" name="method" value="ha">
             <input type="hidden" name="step" value="credentials">
@@ -260,7 +346,7 @@
 
         {# ── Local password form ── #}
         {% if "password" in auth_methods %}
-        <form method="post" autocomplete="on" class="login-method{% if auth_methods[0] == 'password' %} active{% endif %}" id="method-password">
+        <form method="post" autocomplete="on" class="login-form login-method{% if auth_methods[0] == 'password' %} active{% endif %}" id="method-password" role="tabpanel" aria-labelledby="login-tab-password" {% if auth_methods[0] != 'password' %}hidden{% endif %}>
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <input type="hidden" name="method" value="password">
             <input type="hidden" name="step" value="credentials">
@@ -277,16 +363,26 @@
     </div>
 </div>
 <script>
-function switchMethod(m) {
-    document.querySelectorAll('.login-method').forEach(function(el) { el.classList.remove('active'); });
-    document.querySelectorAll('.login-tab').forEach(function(el) { el.classList.remove('active'); });
-    var form = document.getElementById('method-' + m);
+function switchMethod(event, method) {
+    document.querySelectorAll('.login-method').forEach(function(el) {
+        var active = el.id === 'method-' + method;
+        el.classList.toggle('active', active);
+        el.hidden = !active;
+    });
+    document.querySelectorAll('.login-tab').forEach(function(el) {
+        var active = el.getAttribute('data-method') === method;
+        el.classList.toggle('active', active);
+        el.setAttribute('aria-selected', active ? 'true' : 'false');
+    });
+    var form = document.getElementById('method-' + method);
     if (form) {
-        form.classList.add('active');
         var inp = form.querySelector('input[type="text"], input[type="password"]');
-        if (inp) inp.focus();
+        if (inp) {
+            inp.focus();
+            return false;
+        }
     }
-    event.target.classList.add('active');
+    return false;
 }
 </script>
 </body>

@@ -230,9 +230,11 @@ var lastMaWebUrl = '';
 var _backendServiceState = null;
 var _statusHasEverSucceeded = false;
 var VIEW_MODE_STORAGE_KEY = 'sendspin-ui:view-mode';
+var MOBILE_LIST_VIEW_MAX_WIDTH = 640;
 var _viewModeStorageScope = 'default';
 var _runtimeMode = 'production';
 var _demoScreenshotDefaultsApplied = false;
+var _viewModeMediaQuery = null;
 var userPreferredViewMode = _loadSavedViewMode();
 var currentViewMode = userPreferredViewMode || 'list';
 var listSortState = {column: 'status', direction: 'desc'};
@@ -1274,12 +1276,27 @@ function _persistViewMode(mode) {
     }
 }
 
+function _getViewModeMediaQuery() {
+    if (!window.matchMedia) return null;
+    if (!_viewModeMediaQuery) {
+        _viewModeMediaQuery = window.matchMedia('(max-width: ' + MOBILE_LIST_VIEW_MAX_WIDTH + 'px)');
+    }
+    return _viewModeMediaQuery;
+}
+
+function _isMobileListViewForced() {
+    var media = _getViewModeMediaQuery();
+    if (media) return !!media.matches;
+    if (typeof window.innerWidth === 'number') return window.innerWidth <= MOBILE_LIST_VIEW_MAX_WIDTH;
+    return false;
+}
+
 function _setViewModeStorageScope(runtimeMode) {
     var nextScope = runtimeMode === 'demo' ? 'demo' : 'default';
     if (_viewModeStorageScope === nextScope) return;
     _viewModeStorageScope = nextScope;
     userPreferredViewMode = _loadSavedViewMode();
-    currentViewMode = userPreferredViewMode || 'list';
+    currentViewMode = _resolveViewMode(lastDevices.length);
     _applyViewModeButtons(currentViewMode);
 }
 
@@ -1303,15 +1320,20 @@ function _getAutomaticViewMode(deviceCount) {
 }
 
 function _resolveViewMode(deviceCount) {
+    if (_isMobileListViewForced()) return 'list';
     return userPreferredViewMode || _getAutomaticViewMode(deviceCount);
 }
 
 function _applyViewModeButtons(mode) {
     var gridBtn = document.getElementById('view-grid-btn');
     var listBtn = document.getElementById('view-list-btn');
+    var mobileForced = _isMobileListViewForced();
     if (gridBtn) {
-        gridBtn.classList.toggle('active', mode !== 'list');
-        gridBtn.setAttribute('aria-pressed', mode !== 'list' ? 'true' : 'false');
+        var gridActive = !mobileForced && mode !== 'list';
+        gridBtn.disabled = mobileForced;
+        gridBtn.classList.toggle('active', gridActive);
+        gridBtn.setAttribute('aria-pressed', gridActive ? 'true' : 'false');
+        gridBtn.setAttribute('aria-disabled', mobileForced ? 'true' : 'false');
     }
     if (listBtn) {
         listBtn.classList.toggle('active', mode === 'list');
@@ -1322,6 +1344,14 @@ function _applyViewModeButtons(mode) {
 function _syncViewModeForDeviceCount(deviceCount) {
     currentViewMode = _resolveViewMode(deviceCount);
     _applyViewModeButtons(currentViewMode);
+}
+
+function _syncViewModeForViewport() {
+    var nextMode = _resolveViewMode(lastDevices.length);
+    var changed = nextMode !== currentViewMode;
+    currentViewMode = nextMode;
+    _applyViewModeButtons(currentViewMode);
+    if (changed && lastDevices.length) renderDevicesView();
 }
 
 function _settingsIconHtml() {
@@ -3789,6 +3819,10 @@ function filterDeviceCards() {
 }
 
 function setViewMode(mode) {
+    if (mode !== 'list' && _isMobileListViewForced()) {
+        _syncViewModeForViewport();
+        return;
+    }
     currentViewMode = mode === 'list' ? 'list' : 'grid';
     userPreferredViewMode = currentViewMode;
     _persistViewMode(currentViewMode);
@@ -4383,27 +4417,37 @@ function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabl
     var kaVal = (keepaliveInterval !== undefined && keepaliveInterval !== null && keepaliveInterval !== '') ? parseInt(keepaliveInterval, 10) : 0;
     if (kaVal > 0 && kaVal < 30) kaVal = 30;
     row.innerHTML =
-        '<div class="bt-enabled-cell"><label class="bt-switch" title="Enable or disable device">' +
+        '<div class="bt-enabled-cell bt-cell" data-label="Enabled"><label class="bt-switch" title="Enable or disable device">' +
             '<input type="checkbox" class="bt-enabled"' + (isEnabled ? ' checked' : '') + '>' +
             '<span class="bt-switch-track"></span>' +
         '</label></div>' +
-        '<div class="bt-name-field">' +
+        '<div class="bt-name-field bt-cell" data-label="Player name">' +
+            '<input type="text" placeholder="Player Name" class="bt-name" aria-label="Player name" value="' +
+                escHtmlAttr(name || '') + '">' +
             '<button type="button" class="bt-expand-btn" title="Show advanced settings" aria-label="Show advanced settings" aria-expanded="false">' +
                 '<span class="bt-expand-btn-label">Details</span>' +
                 '<span class="bt-expand-btn-icon" aria-hidden="true">▾</span>' +
             '</button>' +
-            '<input type="text" placeholder="Player Name" class="bt-name" value="' +
-                escHtmlAttr(name || '') + '">' +
         '</div>' +
-        '<input type="text" placeholder="AA:BB:CC:DD:EE:FF" class="bt-mac" value="' +
-            escHtmlAttr(mac || '') + '">' +
-        '<select class="bt-adapter">' + btAdapterOptions(adapter || '') + '</select>' +
-        '<input type="number" class="bt-listen-port" placeholder="8928" min="1024" max="65535" value="' +
-            escHtmlAttr(String(portVal)) + '">' +
-        '<input type="number" class="bt-delay" title="Static delay. Negative = compensate latency" placeholder="0" value="' +
-            escHtmlAttr(String(delayVal)) + '" step="50">' +
-        '<div class="bt-runtime" aria-live="polite"></div>' +
-        '<div class="bt-row-actions">' +
+        '<div class="bt-cell bt-cell--mac" data-label="MAC">' +
+            '<input type="text" placeholder="AA:BB:CC:DD:EE:FF" class="bt-mac" aria-label="Bluetooth MAC address" value="' +
+                escHtmlAttr(mac || '') + '">' +
+        '</div>' +
+        '<div class="bt-cell bt-cell--adapter" data-label="Adapter">' +
+            '<select class="bt-adapter" aria-label="Bluetooth adapter">' + btAdapterOptions(adapter || '') + '</select>' +
+        '</div>' +
+        '<div class="bt-cell bt-cell--port" data-label="Port">' +
+            '<input type="number" class="bt-listen-port" placeholder="8928" aria-label="Listen port" min="1024" max="65535" value="' +
+                escHtmlAttr(String(portVal)) + '">' +
+        '</div>' +
+        '<div class="bt-cell bt-cell--delay" data-label="Delay">' +
+            '<input type="number" class="bt-delay" title="Static delay. Negative = compensate latency" aria-label="Static delay in milliseconds" placeholder="0" value="' +
+                escHtmlAttr(String(delayVal)) + '" step="50">' +
+        '</div>' +
+        '<div class="bt-cell bt-cell--runtime" data-label="Live">' +
+            '<div class="bt-runtime" aria-live="polite"></div>' +
+        '</div>' +
+        '<div class="bt-row-actions bt-cell" data-label="Actions">' +
             '<details class="bt-device-action-menu ui-action-menu">' +
                 '<summary class="btn btn-sm btn-secondary bt-device-action-toggle ui-action-menu-toggle">' + _bluetoothIconSvg('scan-action-icon') + '<span>Tools</span></summary>' +
                 '<div class="bt-device-action-menu-list ui-action-menu-list">' +
@@ -9452,6 +9496,16 @@ _applyBackendServiceState({
 });
 _renderBackendServicePlaceholder(_backendServiceState);
 loadConfig();   // calls loadBtAdapters() internally after restoring btManualAdapters
+var _viewModeMedia = _getViewModeMediaQuery();
+if (_viewModeMedia) {
+    if (typeof _viewModeMedia.addEventListener === 'function') {
+        _viewModeMedia.addEventListener('change', _syncViewModeForViewport);
+    } else if (typeof _viewModeMedia.addListener === 'function') {
+        _viewModeMedia.addListener(_syncViewModeForViewport);
+    }
+}
+window.addEventListener('resize', _syncViewModeForViewport);
+_syncViewModeForViewport();
 updateStatus();
 
 // Use SSE for real-time status push; fall back to polling if not supported

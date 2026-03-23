@@ -441,6 +441,7 @@ body {
             align-items: center;
             gap: 8px;
             min-height: 32px;
+            min-width: 0;
             margin-left: 4px;
             padding-left: 12px;
             border-left: 1px solid rgba(255,255,255,.2);
@@ -512,9 +513,20 @@ body {
             font-size: 13px;
             font-weight: 500;
             min-height: 32px;
+            min-width: 0;
+            max-width: min(100%, 240px);
             position: relative;
             margin-left: 2px;
             padding-left: 12px;
+            white-space: nowrap;
+        }
+        .header-user-name a {
+            display: inline-block;
+            min-width: 0;
+            max-width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
         .header-utility-block .header-user-name::before {
             content: "";
@@ -538,14 +550,24 @@ body {
             display: inline-flex;
             align-items: center;
             justify-content: center;
+            gap: 6px;
             min-width: 32px;
             min-height: 32px;
+            padding: 0 10px;
             border: none;
             border-radius: 8px;
             background: transparent;
             color: rgba(255,255,255,.88);
             opacity: .85;
+            cursor: pointer;
+            text-decoration: none;
             transition: opacity 150ms, background 150ms;
+        }
+        .header-btn-signout-label {
+            display: none;
+            font-size: 12px;
+            font-weight: 600;
+            white-space: nowrap;
         }
         .header-btn-signout:hover { opacity: 1; background: rgba(255,255,255,.12); }
         .health-icon {
@@ -5663,8 +5685,7 @@ body {
             }
             .header-row2 { flex-direction: column; align-items: flex-start; gap: 2px; }
             .header-link,
-            .header-theme-btn,
-            .header-user-name {
+            .header-theme-btn {
                 font-size: 0;
                 min-width: 40px;
                 min-height: 40px;
@@ -5676,10 +5697,25 @@ body {
                 min-height: 40px;
                 margin-left: 0;
                 padding-left: 10px;
+                flex-wrap: nowrap;
+                max-width: 100%;
             }
-            .header-user-name a { font-size: 0; }
+            .header-user-name {
+                font-size: 12px;
+                min-height: 40px;
+                max-width: min(100%, 18ch);
+                padding-right: 0;
+            }
+            .header-user-name a { font-size: 12px; }
             .header-utility-block .header-user-name::before {
                 height: 20px;
+            }
+            .header-btn-signout {
+                min-height: 40px;
+                padding-inline: 12px;
+            }
+            .header-btn-signout-label {
+                display: inline;
             }
             .health-indicator {
                 font-size: 0;
@@ -5988,11 +6024,17 @@ body {
             }
             .header-link,
             .header-theme-btn,
-            .header-user-name,
             .header-btn-signout {
                 min-width: 36px;
                 min-height: 36px;
                 padding-inline: 8px;
+            }
+            .header-user-name {
+                max-width: 14ch;
+                min-height: 36px;
+            }
+            .header-btn-signout-label {
+                display: none;
             }
             .action-bar { padding-bottom: 6px; }
             .config-section,
@@ -7883,3 +7925,575 @@ body {
                 margin-bottom: 2px;
             }
         }
+
+
+/* Mobile refinement pass */
+.action-bar-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.action-bar-group--selection {
+    flex: 0 1 auto;
+}
+
+.action-bar-volume {
+    flex: 1 1 240px;
+    min-width: 220px;
+    margin-right: auto;
+}
+
+.action-bar-group--transport,
+.action-bar-group--bulk {
+    flex-wrap: wrap;
+}
+
+.action-bar-group--bulk {
+    margin-left: auto;
+}
+
+.bt-device-row .bt-cell {
+    min-width: 0;
+}
+
+@media (max-width: 640px) {
+    .header-row1 {
+        gap: 12px;
+    }
+
+    .config-settings-card,
+    .config-settings-card--span,
+    .config-form-grid,
+    .config-settings-grid,
+    .devices-stack,
+    .adapters-box,
+    .paired-box,
+    .bt-table-wrap {
+        min-width: 0;
+        width: 100%;
+        max-width: 100%;
+    }
+
+    .header-actions {
+        width: 100%;
+        justify-content: flex-start;
+        gap: 6px;
+    }
+
+    .header-link,
+    .header-theme-btn,
+    .header-btn-signout {
+        font-size: 12px;
+        min-width: 0;
+        min-height: 40px;
+        padding-inline: 12px;
+    }
+
+    .header-theme-btn {
+        justify-content: center;
+    }
+
+    .header-utility-block {
+        width: 100%;
+        border-left: none;
+        padding-left: 0;
+        margin-left: 0;
+        flex-wrap: wrap;
+        justify-content: space-between;
+    }
+
+    .header-user-name {
+        max-width: min(100%, 24ch);
+        padding-left: 0;
+    }
+
+    .header-utility-block .header-user-name::before {
+        display: none;
+    }
+
+    .health-indicator {
+        font-size: 12px;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .filter-bar {
+        display: grid;
+        grid-template-columns: 1fr;
+        align-items: stretch;
+        gap: 8px;
+    }
+
+    .filter-icon {
+        display: none;
+    }
+
+    .filter-bar select {
+        width: 100%;
+        min-width: 0;
+        flex: 1 1 auto;
+    }
+
+    .action-bar {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 10px;
+        overflow: clip;
+        padding: 12px;
+        align-items: stretch;
+    }
+
+    .action-bar-group,
+    .action-bar-volume {
+        min-width: 0;
+        width: 100%;
+    }
+
+    .action-bar-group--selection,
+    .action-bar-volume {
+        grid-column: 1 / -1;
+    }
+
+    .action-bar-group--selection {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        align-items: center;
+        gap: 10px;
+    }
+
+    .action-bar-group--selection .toolbar-count {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .action-bar-volume {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        margin-right: 0;
+        width: 100%;
+        min-width: 0;
+    }
+
+    .action-bar-volume input[type="range"] {
+        min-width: 0;
+        width: 100%;
+    }
+
+    .action-bar-group--transport,
+    .action-bar-group--bulk {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+        margin-left: 0;
+        width: 100%;
+    }
+
+    .action-bar-group--transport .media-btn,
+    .action-bar-group--bulk .action-btn {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .config-tabs {
+        display: flex;
+        width: 100%;
+        gap: 4px;
+        padding: 4px;
+        overflow-x: auto;
+        overflow-y: hidden;
+        justify-content: flex-start;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        scroll-snap-type: x proximity;
+    }
+
+    .config-tabs::-webkit-scrollbar {
+        display: none;
+    }
+
+    .config-tab {
+        flex: 0 0 auto;
+        min-width: max-content;
+        padding: 10px 14px;
+        scroll-snap-align: start;
+    }
+
+    .list-view-shell {
+        overflow: visible;
+    }
+
+    .list-header {
+        display: none;
+    }
+
+    .list-row-main {
+        grid-template-columns: 32px minmax(0, 1fr) auto;
+        grid-template-areas:
+            'select name actions'
+            'select status actions'
+            'select adapter actions'
+            'select group actions'
+            'select volume volume';
+        gap: 8px 10px;
+        align-items: start;
+    }
+
+    .list-select-cell {
+        grid-area: select;
+        justify-content: flex-start;
+        padding-top: 4px;
+    }
+
+    .list-cell-name {
+        grid-area: name;
+        align-items: flex-start;
+    }
+
+    .list-status-cell {
+        grid-area: status;
+    }
+
+    .list-adapter-cell {
+        grid-area: adapter;
+    }
+
+    .list-group-cell {
+        grid-area: group;
+    }
+
+    .list-vol-wrap {
+        grid-area: volume;
+    }
+
+    .list-actions {
+        grid-area: actions;
+        display: grid;
+        grid-auto-flow: row;
+        gap: 6px;
+        align-self: start;
+        justify-items: stretch;
+    }
+
+    .list-status-cell,
+    .list-adapter-cell,
+    .list-group-cell,
+    .list-vol-wrap,
+    .list-actions {
+        padding-left: 0;
+    }
+
+    .list-status-cell::before,
+    .list-adapter-cell::before,
+    .list-group-cell::before,
+    .list-vol-wrap::before,
+    .list-actions::before {
+        display: none;
+    }
+
+    .list-inline-badges,
+    .list-name-meta-row {
+        flex-wrap: wrap;
+    }
+
+    .list-name-title-row {
+        display: grid;
+        gap: 4px;
+        align-items: start;
+    }
+
+    .list-inline-badges {
+        min-width: 0;
+        margin-left: 0;
+        width: 100%;
+    }
+
+    .list-actions .list-inline-btn,
+    .list-actions .list-settings-btn {
+        min-width: 40px;
+        min-height: 40px;
+    }
+
+    .list-row-detail {
+        padding: 0 12px 12px;
+    }
+
+    .list-detail-actions {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+        width: 100%;
+    }
+
+    .list-detail-actions .list-action-btn {
+        padding: 8px 10px;
+        font-size: 11px;
+    }
+
+    .list-detail-playback-rail {
+        --playback-center-width: 100%;
+        gap: 8px;
+    }
+
+    .list-player-media-lane,
+    .list-player-media-lane.is-solo {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+    }
+
+    .list-player-media-lane:not(.is-solo) .list-player-transport {
+        margin-top: 0;
+    }
+
+    .list-player-transport,
+    .list-detail-progress-wrap {
+        width: 100%;
+        max-width: 100%;
+        grid-column: auto;
+        grid-row: auto;
+    }
+
+    .list-player-transport {
+        justify-content: flex-start;
+        flex-wrap: wrap;
+    }
+
+    .list-queue-neighbor,
+    .list-queue-neighbor.is-prev,
+    .list-queue-neighbor.is-next {
+        width: 100%;
+        max-width: none;
+        justify-self: stretch;
+        grid-row: auto;
+        align-items: flex-start;
+        text-align: left;
+    }
+
+    .list-queue-neighbor-label {
+        margin-top: 0;
+    }
+
+    .bt-table-wrap {
+        overflow: visible;
+        background: none;
+        -webkit-mask-image: none;
+        mask-image: none;
+    }
+
+    .bt-header {
+        display: none;
+    }
+
+    .bt-device-wrap {
+        margin-bottom: 12px;
+        padding: 12px;
+        border: 1px solid var(--divider-color);
+        border-radius: 12px;
+        background: var(--primary-background-color);
+    }
+
+    .bt-device-row {
+        min-width: 0 !important;
+        width: 100%;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-areas:
+            'enabled name'
+            'mac mac'
+            'adapter port'
+            'delay live'
+            'actions actions';
+        gap: 10px;
+    }
+
+    .bt-device-row > * {
+        min-width: 0;
+        width: auto;
+    }
+
+    .bt-enabled-cell {
+        grid-area: enabled;
+        display: grid;
+        justify-content: flex-start;
+        align-content: start;
+        gap: 4px;
+    }
+
+    .bt-name-field {
+        grid-area: name;
+        display: grid;
+        align-content: start;
+        gap: 6px;
+    }
+
+    .bt-name-field .bt-name {
+        order: 1;
+    }
+
+    .bt-name-field .bt-expand-btn {
+        order: 2;
+        justify-self: start;
+    }
+
+    .bt-cell--mac {
+        grid-area: mac;
+    }
+
+    .bt-cell--adapter {
+        grid-area: adapter;
+    }
+
+    .bt-cell--port {
+        grid-area: port;
+    }
+
+    .bt-cell--delay {
+        grid-area: delay;
+    }
+
+    .bt-cell--runtime {
+        grid-area: live;
+    }
+
+    .bt-row-actions {
+        grid-area: actions;
+        justify-content: stretch;
+        flex-wrap: wrap;
+    }
+
+    .bt-device-row .bt-cell::before,
+    .bt-enabled-cell::before,
+    .bt-name-field::before {
+        content: attr(data-label);
+        display: block;
+        margin-bottom: 4px;
+        font-size: 11px;
+        font-weight: 700;
+        line-height: 1.3;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--secondary-text-color);
+    }
+
+    .bt-runtime {
+        min-height: 40px;
+        align-items: flex-start;
+    }
+
+    .bt-device-action-menu {
+        flex: 1 1 180px;
+        min-width: 0;
+    }
+
+    .bt-device-action-toggle {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .bt-device-action-menu-list,
+    .ui-action-menu-list {
+        max-width: min(280px, calc(100vw - 32px));
+    }
+
+    .btn-remove-dev {
+        min-width: 40px;
+        min-height: 40px;
+    }
+
+    .bt-detail-row {
+        grid-template-columns: 1fr;
+        margin: 10px 0 0;
+        padding: 12px;
+        border: 1px dashed rgba(128, 145, 171, 0.28);
+        border-radius: 10px;
+        background: var(--card-background-color);
+    }
+
+    .adapter-row {
+        grid-template-columns: 1fr;
+        gap: 10px;
+        min-width: 0;
+        width: 100%;
+        padding: 10px 0;
+    }
+
+    .adapter-power-btns,
+    .paired-actions,
+    .bt-toolbar {
+        flex-wrap: wrap;
+    }
+
+    .paired-box-header--static,
+    .config-card-header--split {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .scan-result-item,
+    .paired-result-item {
+        grid-template-columns: 1fr;
+        width: 100%;
+    }
+
+    .scan-result-mac,
+    .paired-result-item .scan-result-mac {
+        width: auto;
+    }
+
+    .paired-result-item .paired-actions,
+    .paired-actions {
+        width: 100%;
+        margin-left: 0;
+        justify-content: flex-start;
+        flex-wrap: wrap;
+    }
+
+    .bt-scan-modal,
+    .bugreport-modal,
+    .ui-modal {
+        width: min(calc(100vw - 20px), 780px);
+        max-height: calc(100dvh - 20px);
+    }
+}
+
+@media (max-width: 480px) {
+    .action-bar {
+        grid-template-columns: 1fr;
+    }
+
+    .action-bar-group,
+    .action-bar-group--transport,
+    .action-bar-group--bulk,
+    .action-bar-volume {
+        display: grid;
+        grid-template-columns: 1fr;
+        grid-column: 1 / -1;
+        width: 100%;
+    }
+
+    .action-bar-group--transport,
+    .action-bar-group--bulk {
+        grid-column: 1 / -1;
+    }
+
+    .list-detail-actions {
+        grid-template-columns: 1fr;
+    }
+
+    .bt-device-row {
+        grid-template-columns: 1fr;
+        grid-template-areas:
+            'enabled'
+            'name'
+            'mac'
+            'adapter'
+            'port'
+            'delay'
+            'live'
+            'actions';
+    }
+}
