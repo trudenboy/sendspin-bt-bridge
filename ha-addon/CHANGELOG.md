@@ -44,20 +44,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [2.42.1] - 2026-03-20
 
 ### Added
-- The bridge now ships a fuller operator-assistance layer: a structured onboarding checklist, a recovery assistant, unified operator guidance payloads, and richer diagnostics tools including per-section copy helpers and expandable raw payload details for expert troubleshooting.
-- New runtime API surfaces now expose the operator-assistance model directly, including `/api/onboarding/assistant`, `/api/recovery/assistant`, `/api/operator/guidance`, `/api/bridge/telemetry`, and `/api/hooks`.
+- The bridge now ships a fuller operator-assistance layer: onboarding checklist guidance, a recovery assistant, and richer diagnostics tools including per-section copy helpers and expandable raw payload details for expert troubleshooting.
 
 ### Changed
 - The dashboard guidance flow is now much clearer across setup, recovery, and diagnostics: onboarding stays available from the header, diagnostics is split into a simpler `Overview` plus `Advanced diagnostics`, and key sections jump directly into the relevant configuration panels.
-- Device action availability now comes from backend capability snapshots instead of frontend guesswork, so reconnect, release, playback, volume, queue, and Bluetooth-management controls explain themselves more consistently when blocked.
-- Runtime state ownership has been pushed into dedicated services for bridge lifecycle, Music Assistant state, device registry snapshots, async jobs, and event hooks, reducing the old `state.py` monolith and enabling the new guidance/recovery model.
-- Config handling is now schema-aware and migration-friendly, with normalized legacy fields, newer MA/runtime keys such as `LAST_SINKS` and `MA_TOKEN_INSTANCE_HOSTNAME`, and safer config upload/validation feedback.
 - Grid view playback cards now use larger album-art thumbnails so artwork fills the media block more effectively.
 
 ### Fixed
 - Restart, startup, and update flows now stay locked to live backend progress more reliably, including the full finalizing phase and LXC update/restart cycles, with a cache-busting refresh after updates so the browser loads the new UI immediately.
 - Disabled-device handling is now consistent across the dashboard and configuration flows: disabling a live device persists instantly, keeps the disabled visuals intact, and survives `Save and restart` without requiring a page refresh first.
-- Bluetooth release is more responsive because in-flight reconnect work can now be cancelled instead of waiting for long reconnect sleeps and retry loops to finish.
 - Guidance edge cases are corrected for `All devices disabled` installs and latency review actions, so operators are sent to the correct settings and shown copy that matches the real system state.
 
 ## [2.40.6] - 2026-03-19
