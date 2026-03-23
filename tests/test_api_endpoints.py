@@ -139,6 +139,35 @@ def test_config_upload_returns_structured_validation_errors(client):
     assert data["errors"][0]["field"] == "BLUETOOTH_DEVICES[1].mac"
 
 
+def test_config_upload_rejects_duplicate_effective_listen_ports(client):
+    resp = client.post(
+        "/api/config/upload",
+        data={
+            "file": (
+                io.BytesIO(
+                    json.dumps(
+                        {
+                            "CONFIG_SCHEMA_VERSION": 1,
+                            "BASE_LISTEN_PORT": 8928,
+                            "BLUETOOTH_DEVICES": [
+                                {"mac": "AA:BB:CC:DD:EE:01", "player_name": "Kitchen"},
+                                {"mac": "AA:BB:CC:DD:EE:02", "player_name": "Office", "listen_port": 8928},
+                            ],
+                        }
+                    ).encode()
+                ),
+                "config.json",
+            )
+        },
+        content_type="multipart/form-data",
+    )
+
+    assert resp.status_code == 400
+    data = resp.get_json()
+    assert data["error"].startswith("Duplicate effective listen_port 8928")
+    assert data["errors"][0]["field"] == "BLUETOOTH_DEVICES[1].listen_port"
+
+
 def test_config_upload_returns_validation_warnings_on_success(client, tmp_path, monkeypatch):
     import routes.api_config as api_config_mod
 
@@ -266,6 +295,29 @@ def test_config_validate_returns_errors_for_invalid_payload(client):
     data = resp.get_json()
     assert data["valid"] is False
     assert data["errors"][0]["field"] == "BLUETOOTH_DEVICES[0].mac"
+
+
+def test_config_validate_rejects_duplicate_effective_listen_ports(client):
+    resp = client.post(
+        "/api/config/validate",
+        data=json.dumps(
+            {
+                "CONFIG_SCHEMA_VERSION": 1,
+                "BASE_LISTEN_PORT": 8928,
+                "BLUETOOTH_DEVICES": [
+                    {"mac": "AA:BB:CC:DD:EE:01", "player_name": "Kitchen"},
+                    {"mac": "AA:BB:CC:DD:EE:02", "player_name": "Office", "listen_port": 8928},
+                ],
+            }
+        ),
+        content_type="application/json",
+    )
+
+    assert resp.status_code == 400
+    data = resp.get_json()
+    assert data["valid"] is False
+    assert data["errors"][0]["field"] == "BLUETOOTH_DEVICES[1].listen_port"
+    assert "Duplicate effective listen_port 8928" in data["errors"][0]["message"]
 
 
 def test_config_validate_rejects_future_schema_version(client):
@@ -1288,6 +1340,50 @@ def test_api_config_post_returns_structured_validation_errors(client):
     data = resp.get_json()
     assert data["error"] == "Duplicate MAC address: AA:BB:CC:DD:EE:FF"
     assert data["errors"][0]["field"] == "BLUETOOTH_DEVICES[1].mac"
+
+
+def test_api_config_post_rejects_duplicate_effective_listen_ports(client):
+    payload = {
+        "CONFIG_SCHEMA_VERSION": 1,
+        "SENDSPIN_SERVER": "auto",
+        "SENDSPIN_PORT": 9000,
+        "WEB_PORT": 18080,
+        "BASE_LISTEN_PORT": 8928,
+        "BRIDGE_NAME": "Bridge",
+        "BLUETOOTH_DEVICES": [
+            {"mac": "AA:BB:CC:DD:EE:01", "player_name": "Kitchen"},
+            {"mac": "AA:BB:CC:DD:EE:02", "player_name": "Office", "listen_port": 8928},
+        ],
+        "BLUETOOTH_ADAPTERS": [],
+        "TZ": "UTC",
+        "PULSE_LATENCY_MSEC": 250,
+        "PREFER_SBC_CODEC": False,
+        "BT_CHECK_INTERVAL": 15,
+        "BT_MAX_RECONNECT_FAILS": 3,
+        "AUTH_ENABLED": False,
+        "SESSION_TIMEOUT_HOURS": 12,
+        "BRUTE_FORCE_PROTECTION": True,
+        "BRUTE_FORCE_MAX_ATTEMPTS": 4,
+        "BRUTE_FORCE_WINDOW_MINUTES": 2,
+        "BRUTE_FORCE_LOCKOUT_MINUTES": 10,
+        "LOG_LEVEL": "INFO",
+        "MA_API_URL": "",
+        "MA_API_TOKEN": "",
+        "MA_USERNAME": "",
+        "MA_WEBSOCKET_MONITOR": False,
+        "VOLUME_VIA_MA": True,
+        "MUTE_VIA_MA": False,
+        "SMOOTH_RESTART": True,
+        "AUTO_UPDATE": False,
+        "CHECK_UPDATES": True,
+    }
+
+    resp = client.post("/api/config", data=json.dumps(payload), content_type="application/json")
+
+    assert resp.status_code == 400
+    data = resp.get_json()
+    assert data["error"].startswith("Duplicate effective listen_port 8928")
+    assert data["errors"][0]["field"] == "BLUETOOTH_DEVICES[1].listen_port"
 
 
 def test_api_config_post_uses_registry_snapshot_for_adapter_removal(client, tmp_path, monkeypatch):
@@ -2441,6 +2537,7 @@ def test_api_diagnostics_includes_playing_and_sink_input_metadata(client, monkey
     )
     monkeypatch.setattr(api_status, "_collect_environment", lambda: {"audio_server": "pulseaudio 16.1"})
     monkeypatch.setattr(api_status, "_collect_subprocess_info", lambda: [])
+    monkeypatch.setattr(api_status, "_collect_portaudio_device_diagnostics", lambda: [])
     monkeypatch.setattr(
         api_status,
         "_build_onboarding_assistant_payload",
@@ -2487,6 +2584,9 @@ def test_api_diagnostics_includes_playing_and_sink_input_metadata(client, monkey
         resp = client.get("/api/diagnostics")
         assert resp.status_code == 200
         data = resp.get_json()
+        assert data["status"] == "ok"
+        assert data["failed_collections"] == []
+        assert data["collections_status"]["sink_inputs"]["status"] == "ok"
         assert data["contract_versions"]["config_schema_version"] == CONFIG_SCHEMA_VERSION
         assert data["contract_versions"]["ipc_protocol_version"] == IPC_PROTOCOL_VERSION
         assert data["devices"][0]["playing"] is True
@@ -2507,6 +2607,88 @@ def test_api_diagnostics_includes_playing_and_sink_input_metadata(client, monkey
         state.set_ma_groups({}, [])
         state.set_ma_api_credentials("", "")
         hook_registry.clear()
+
+
+def test_collect_preflight_status_surfaces_audio_probe_failure(monkeypatch):
+    import subprocess
+
+    import routes.api_status as api_status
+
+    monkeypatch.setattr(
+        api_status,
+        "get_server_name",
+        lambda: (_ for _ in ()).throw(subprocess.TimeoutExpired("pactl info", 5)),
+    )
+    monkeypatch.setattr(api_status, "list_sinks", lambda: [{"name": "bluez_sink.demo"}])
+    monkeypatch.setattr(
+        api_status.subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(returncode=0, stdout="", stderr=""),
+    )
+
+    payload = api_status._collect_preflight_status()
+
+    assert payload["status"] == "degraded"
+    assert "audio" in payload["failed_collections"]
+    assert payload["collections_status"]["audio"]["status"] == "error"
+    assert payload["collections_status"]["audio"]["error"]["code"] == "timeout"
+    assert payload["audio"]["system"] == "unknown"
+
+
+def test_api_diagnostics_reports_failed_collections_for_sink_input_timeout(client, monkeypatch):
+    import subprocess
+
+    import routes.api_status as api_status
+    import state
+    from services.device_registry import DeviceRegistrySnapshot
+
+    fake_client = SimpleNamespace(
+        player_name="Kitchen",
+        status={"bluetooth_connected": True, "playing": False, "server_connected": True},
+        bt_management_enabled=True,
+        bluetooth_sink_name="bluez_sink.AA_BB_CC_DD_EE_FF.a2dp_sink",
+        bt_manager=SimpleNamespace(mac_address="AA:BB:CC:DD:EE:FF"),
+        player_id="sendspin-kitchen",
+    )
+
+    def fake_run(cmd, capture_output=True, text=True, timeout=5):
+        if cmd == ["bluetoothctl", "list"]:
+            return SimpleNamespace(returncode=0, stdout="Controller AA:BB:CC:DD:EE:FF Test [default]\n", stderr="")
+        if cmd == ["systemctl", "is-active", "bluetooth"]:
+            return SimpleNamespace(returncode=0, stdout="active\n", stderr="")
+        if cmd == ["pactl", "list", "sink-inputs"]:
+            raise subprocess.TimeoutExpired(cmd, timeout)
+        pytest.fail(f"Unexpected subprocess call: {cmd}")
+
+    monkeypatch.setattr(
+        api_status,
+        "get_device_registry_snapshot",
+        lambda: DeviceRegistrySnapshot(active_clients=[fake_client]),
+    )
+    monkeypatch.setattr(api_status, "get_server_name", lambda: "pulseaudio 16.1")
+    monkeypatch.setattr(api_status, "list_sinks", lambda: [{"name": "bluez_sink.AA_BB_CC_DD_EE_FF.a2dp_sink"}])
+    monkeypatch.setattr(api_status, "_collect_environment", lambda: {"audio_server": "pulseaudio 16.1"})
+    monkeypatch.setattr(api_status, "_collect_subprocess_info", lambda: [])
+    monkeypatch.setattr(api_status, "_collect_portaudio_device_diagnostics", lambda: [])
+    monkeypatch.setattr(api_status, "_build_onboarding_assistant_payload", lambda **kwargs: {"checks": []})
+    monkeypatch.setattr(
+        api_status, "_build_recovery_assistant_payload", lambda **kwargs: {"summary": {"headline": "OK"}}
+    )
+    monkeypatch.setattr(api_status, "_build_operator_guidance_payload", lambda **kwargs: {"mode": "healthy"})
+    monkeypatch.setattr(api_status.subprocess, "run", fake_run)
+
+    state.set_ma_api_credentials("", "")
+    state.set_ma_groups({}, [])
+
+    resp = client.get("/api/diagnostics")
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["status"] == "degraded"
+    assert "sink_inputs" in data["failed_collections"]
+    assert data["collections_status"]["sink_inputs"]["status"] == "error"
+    assert data["collections_status"]["sink_inputs"]["error"]["code"] == "timeout"
+    assert data["sink_inputs"][0]["error"] == "Failed to list sink inputs"
 
 
 def test_device_enabled_toggle(client, tmp_path, monkeypatch):

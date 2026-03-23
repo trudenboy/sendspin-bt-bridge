@@ -492,7 +492,7 @@ def api_config_upload():
 
     if not isinstance(uploaded, dict):
         return _error_response("Config must be a JSON object")
-    validation = validate_uploaded_config(uploaded)
+    validation = validate_uploaded_config(uploaded, default_base_listen_port=resolve_base_listen_port())
     warnings = [{"field": issue.field, "message": issue.message} for issue in validation.warnings]
     if not validation.is_valid:
         errors = [{"field": issue.field, "message": issue.message} for issue in validation.errors]
@@ -535,7 +535,7 @@ def api_config_validate():
     if not isinstance(config, dict):
         return _error_response("Invalid JSON body")
 
-    validation = validate_uploaded_config(config)
+    validation = validate_uploaded_config(config, default_base_listen_port=resolve_base_listen_port())
     errors = [{"field": issue.field, "message": issue.message} for issue in validation.errors]
     warnings = [{"field": issue.field, "message": issue.message} for issue in validation.warnings]
     if validation.is_valid:
@@ -565,7 +565,7 @@ def api_config():
     if not isinstance(config, dict):
         return _error_response("Invalid JSON body")
 
-    validation = validate_uploaded_config(config)
+    validation = validate_uploaded_config(config, default_base_listen_port=resolve_base_listen_port())
     warnings = [{"field": issue.field, "message": issue.message} for issue in validation.warnings]
     if not validation.is_valid:
         errors = [{"field": issue.field, "message": issue.message} for issue in validation.errors]
@@ -612,21 +612,6 @@ def api_config():
             dev["mac"] = mac
         if mac and not _MAC_RE.match(mac):
             return _error_response(f"Invalid MAC address: {mac}")
-        try:
-            listen_port = _parse_optional_int(dev.get("listen_port"), "listen_port", min_value=1024, max_value=65535)
-            if listen_port is not None:
-                dev["listen_port"] = listen_port
-            keepalive_interval = _parse_optional_int(
-                dev.get("keepalive_interval"), "keepalive_interval", min_value=0, max_value=3600
-            )
-            if keepalive_interval is not None:
-                if keepalive_interval != 0 and keepalive_interval < 30:
-                    raise ValueError(
-                        f"Invalid keepalive_interval: {dev.get('keepalive_interval')} (must be 0 or 30-3600)"
-                    )
-                dev["keepalive_interval"] = keepalive_interval
-        except ValueError as exc:
-            return _error_response(str(exc))
 
     # Validate BLUETOOTH_ADAPTERS entries
     bt_adapters = config.get("BLUETOOTH_ADAPTERS", [])

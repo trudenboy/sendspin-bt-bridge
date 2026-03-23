@@ -7,6 +7,7 @@ from typing import Any
 
 from config import (
     CONFIG_SCHEMA_VERSION,
+    DEFAULT_LISTEN_PORT_BASE,
     DEFAULT_UPDATE_CHANNEL,
     UPDATE_CHANNELS,
     migrate_config_payload,
@@ -48,7 +49,87 @@ def _normalize_optional_port(normalized: dict[str, Any], result: ConfigValidatio
     normalized[field] = value
 
 
-def validate_uploaded_config(uploaded: dict[str, Any]) -> ConfigValidationResult:
+def _normalize_optional_field_int(
+    payload: dict[str, Any],
+    result: ConfigValidationResult,
+    field: str,
+    *,
+    issue_field: str,
+    min_value: int,
+    max_value: int,
+) -> int | None:
+    raw_value = payload.get(field)
+    if raw_value in (None, ""):
+        payload.pop(field, None)
+        return None
+    try:
+        value = int(str(raw_value))
+    except (ValueError, TypeError):
+        result.errors.append(ConfigValidationIssue(field=issue_field, message=f"Invalid {field}: {raw_value}"))
+        return None
+    if not (min_value <= value <= max_value):
+        result.errors.append(ConfigValidationIssue(field=issue_field, message=f"Invalid {field}: {raw_value}"))
+        return None
+    payload[field] = value
+    return value
+
+
+def _validate_effective_listen_ports(
+    normalized: dict[str, Any],
+    result: ConfigValidationResult,
+    *,
+    default_base_listen_port: int,
+) -> None:
+    bt_devices = normalized.get("BLUETOOTH_DEVICES", [])
+    if not isinstance(bt_devices, list) or len(bt_devices) <= 1:
+        return
+
+    base_listen_port_raw = normalized.get("BASE_LISTEN_PORT")
+    try:
+        if isinstance(base_listen_port_raw, bool) or (
+            isinstance(base_listen_port_raw, (int, str)) and base_listen_port_raw != ""
+        ):
+            base_listen_port = int(base_listen_port_raw)
+        else:
+            base_listen_port = int(default_base_listen_port)
+    except (ValueError, TypeError):
+        base_listen_port = int(default_base_listen_port)
+
+    seen_ports: dict[int, str] = {}
+    for index, dev in enumerate(bt_devices):
+        if not isinstance(dev, dict) or dev.get("enabled", True) is False:
+            continue
+
+        raw_listen_port = dev.get("listen_port")
+        if raw_listen_port in (None, ""):
+            effective_port = base_listen_port + index
+        else:
+            try:
+                if isinstance(raw_listen_port, bool | int | str):
+                    effective_port = int(raw_listen_port)
+                else:
+                    continue
+            except (ValueError, TypeError):
+                continue
+
+        if not (1 <= effective_port <= 65535):
+            continue
+
+        owner = str(dev.get("player_name") or dev.get("mac") or f"device {index + 1}")
+        if effective_port in seen_ports:
+            result.errors.append(
+                ConfigValidationIssue(
+                    field=f"BLUETOOTH_DEVICES[{index}].listen_port",
+                    message=f"Duplicate effective listen_port {effective_port}: also used by {seen_ports[effective_port]}",
+                )
+            )
+            continue
+        seen_ports[effective_port] = owner
+
+
+def validate_uploaded_config(
+    uploaded: dict[str, Any], *, default_base_listen_port: int = DEFAULT_LISTEN_PORT_BASE
+) -> ConfigValidationResult:
     """Validate an uploaded config payload and normalize additive defaults."""
     migration = migrate_config_payload(uploaded)
     normalized = migration.normalized_config
@@ -143,6 +224,30 @@ def validate_uploaded_config(uploaded: dict[str, Any]) -> ConfigValidationResult
                     )
                 else:
                     seen_macs.add(mac)
+            keepalive_interval_raw = dev.get("keepalive_interval")
+            keepalive_interval = _normalize_optional_field_int(
+                normalized["BLUETOOTH_DEVICES"][index],
+                result,
+                "keepalive_interval",
+                issue_field=f"{field_prefix}.keepalive_interval",
+                min_value=0,
+                max_value=3600,
+            )
+            _normalize_optional_field_int(
+                normalized["BLUETOOTH_DEVICES"][index],
+                result,
+                "listen_port",
+                issue_field=f"{field_prefix}.listen_port",
+                min_value=1024,
+                max_value=65535,
+            )
+            if keepalive_interval is not None and keepalive_interval != 0 and keepalive_interval < 30:
+                result.errors.append(
+                    ConfigValidationIssue(
+                        field=f"{field_prefix}.keepalive_interval",
+                        message=(f"Invalid keepalive_interval: {keepalive_interval_raw} (must be 0 or 30-3600)"),
+                    )
+                )
 
     bt_adapters = normalized.get("BLUETOOTH_ADAPTERS", [])
     if not isinstance(bt_adapters, list):
@@ -192,5 +297,11 @@ def validate_uploaded_config(uploaded: dict[str, Any]) -> ConfigValidationResult
 
     for port_field in ("WEB_PORT", "BASE_LISTEN_PORT"):
         _normalize_optional_port(normalized, result, port_field)
+
+    _validate_effective_listen_ports(
+        normalized,
+        result,
+        default_base_listen_port=default_base_listen_port,
+    )
 
     return result

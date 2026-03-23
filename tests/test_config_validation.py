@@ -34,6 +34,57 @@ def test_validate_uploaded_config_reports_duplicate_device_macs():
     assert result.errors[0].message == "Duplicate MAC address: AA:BB:CC:DD:EE:FF"
 
 
+def test_validate_uploaded_config_normalizes_device_listen_port_and_keepalive_interval():
+    result = validate_uploaded_config(
+        {
+            "CONFIG_SCHEMA_VERSION": 1,
+            "BLUETOOTH_DEVICES": [
+                {
+                    "mac": "AA:BB:CC:DD:EE:FF",
+                    "listen_port": "8930",
+                    "keepalive_interval": "60",
+                }
+            ],
+        }
+    )
+
+    assert result.is_valid is True
+    assert result.normalized_config["BLUETOOTH_DEVICES"][0]["listen_port"] == 8930
+    assert result.normalized_config["BLUETOOTH_DEVICES"][0]["keepalive_interval"] == 60
+
+
+def test_validate_uploaded_config_rejects_duplicate_effective_listen_ports():
+    result = validate_uploaded_config(
+        {
+            "CONFIG_SCHEMA_VERSION": 1,
+            "BASE_LISTEN_PORT": 8928,
+            "BLUETOOTH_DEVICES": [
+                {"mac": "AA:BB:CC:DD:EE:01", "player_name": "Kitchen"},
+                {"mac": "AA:BB:CC:DD:EE:02", "player_name": "Office", "listen_port": 8928},
+            ],
+        }
+    )
+
+    assert result.is_valid is False
+    assert result.errors[-1].field == "BLUETOOTH_DEVICES[1].listen_port"
+    assert "Duplicate effective listen_port 8928" in result.errors[-1].message
+
+
+def test_validate_uploaded_config_allows_unique_effective_listen_ports():
+    result = validate_uploaded_config(
+        {
+            "CONFIG_SCHEMA_VERSION": 1,
+            "BASE_LISTEN_PORT": 8928,
+            "BLUETOOTH_DEVICES": [
+                {"mac": "AA:BB:CC:DD:EE:01", "player_name": "Kitchen"},
+                {"mac": "AA:BB:CC:DD:EE:02", "player_name": "Office", "listen_port": 8930},
+            ],
+        }
+    )
+
+    assert result.is_valid is True
+
+
 def test_validate_uploaded_config_normalizes_update_channel():
     result = validate_uploaded_config(
         {

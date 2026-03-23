@@ -284,6 +284,7 @@ class SendspinClient:
         self._monitor_task: asyncio.Task | None = None
         self._restart_delay: float = 1.0  # exponential backoff for unexpected daemon restarts
         self._start_sendspin_lock: asyncio.Lock | None = None  # set in run(), guards concurrent starts
+        self._start_sendspin_pending = False
         self._playback_health = PlaybackHealthMonitor()
         self._ipc_service = SubprocessIpcService(
             player_name=player_name,
@@ -467,11 +468,14 @@ class SendspinClient:
         if lock is None:
             await self._start_sendspin_inner()
             return
+        self._start_sendspin_pending = True
         if lock.locked():
-            logger.debug("[%s] start_sendspin already in progress, skipping duplicate", self.player_name)
+            logger.debug("[%s] start_sendspin already in progress, queueing follow-up run", self.player_name)
             return
         async with lock:
-            await self._start_sendspin_inner()
+            while self._start_sendspin_pending:
+                self._start_sendspin_pending = False
+                await self._start_sendspin_inner()
 
     async def _start_sendspin_inner(self) -> None:
         """Spawn daemon_process.py subprocess with PULSE_SINK in its environment."""
@@ -699,6 +703,7 @@ class SendspinClient:
         """Main run loop — connects BT, starts subprocess, monitors health."""
         self.running = True
         self._start_sendspin_lock = asyncio.Lock()
+        self._start_sendspin_pending = False
 
         # Start Sendspin player: immediately if no BT device, deferred if BT configured
         if not self.bt_management_enabled:

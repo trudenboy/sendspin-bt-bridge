@@ -108,6 +108,51 @@ async def test_stop_sendspin_delegates_to_stop_service():
     assert client._daemon_proc is None
 
 
+@pytest.mark.asyncio
+async def test_start_sendspin_queues_followup_when_request_arrives_during_start():
+    client = SendspinClient("Test Player", "localhost", 9000)
+    client._start_sendspin_lock = asyncio.Lock()
+    calls: list[str] = []
+
+    async def _fake_start_inner():
+        calls.append("start")
+        if len(calls) == 1:
+            queued = asyncio.create_task(client.start_sendspin())
+            await asyncio.sleep(0)
+            await queued
+
+    client._start_sendspin_inner = _fake_start_inner
+
+    await client.start_sendspin()
+
+    assert calls == ["start", "start"]
+
+
+@pytest.mark.asyncio
+async def test_start_sendspin_coalesces_multiple_overlapping_requests():
+    client = SendspinClient("Test Player", "localhost", 9000)
+    client._start_sendspin_lock = asyncio.Lock()
+    calls: list[int] = []
+    release = asyncio.Event()
+
+    async def _fake_start_inner():
+        calls.append(len(calls) + 1)
+        if len(calls) == 1:
+            await release.wait()
+
+    client._start_sendspin_inner = _fake_start_inner
+
+    first = asyncio.create_task(client.start_sendspin())
+    await asyncio.sleep(0)
+    queued = [asyncio.create_task(client.start_sendspin()) for _ in range(3)]
+    await asyncio.sleep(0)
+    release.set()
+    await first
+    await asyncio.gather(*queued)
+
+    assert calls == [1, 2]
+
+
 def test_set_bt_management_enabled_cancels_reconnect_before_release():
     client = SendspinClient("Test Player", "localhost", 9000)
     bt_manager = SimpleNamespace(
