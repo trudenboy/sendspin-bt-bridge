@@ -175,6 +175,33 @@ def test_operator_guidance_groups_disconnected_devices_into_bulk_reconnect():
     assert data["issue_groups"][0]["primary_action"]["device_names"] == ["Kitchen", "Office"]
 
 
+def test_operator_guidance_issue_groups_include_machine_readable_context():
+    snapshot = build_operator_guidance_snapshot(
+        config={"BLUETOOTH_ADAPTERS": [{"id": "hci0"}], "BLUETOOTH_DEVICES": [{"mac": "AA"}]},
+        onboarding_assistant={
+            "checklist": {"overall_status": "ok", "progress_percent": 100},
+            "counts": {"configured_devices": 1, "connected_devices": 0, "sink_ready_devices": 0},
+        },
+        recovery_assistant={"summary": {"summary": "Devices need reconnection."}},
+        startup_progress={"status": "complete"},
+        devices=[
+            SimpleNamespace(
+                player_name="Kitchen",
+                bt_management_enabled=True,
+                bluetooth_connected=False,
+                has_sink=False,
+                server_connected=False,
+            )
+        ],
+    )
+
+    group = snapshot.to_dict()["issue_groups"][0]
+    assert group["context"]["layer"] == "sink_verification"
+    assert group["context"]["priority"] >= 0
+    assert "bluetooth_disconnected" in group["context"]["reason_codes"]
+    assert group["context"]["device_names"] == ["Kitchen"]
+
+
 def test_operator_guidance_promotes_ma_auth_attention():
     snapshot = build_operator_guidance_snapshot(
         config={"BLUETOOTH_ADAPTERS": [{"id": "hci0"}], "BLUETOOTH_DEVICES": [{"mac": "AA"}]},

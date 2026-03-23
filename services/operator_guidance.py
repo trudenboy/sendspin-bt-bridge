@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from services.guidance_issue_registry import build_issue_context, issue_sort_priority
 from services.recovery_assistant import RecoveryAction, build_recovery_issue_actions
 
 UTC = timezone.utc
@@ -39,6 +40,7 @@ class GuidanceIssueGroup:
     device_names: list[str] = field(default_factory=list)
     primary_action: GuidanceAction | None = None
     secondary_actions: list[GuidanceAction] = field(default_factory=list)
+    context: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         payload = {
@@ -49,6 +51,7 @@ class GuidanceIssueGroup:
             "count": self.count,
             "device_names": list(self.device_names),
             "secondary_actions": [action.to_dict() for action in self.secondary_actions],
+            "context": dict(self.context),
         }
         if self.primary_action:
             payload["primary_action"] = self.primary_action.to_dict()
@@ -277,6 +280,8 @@ def _append_group(
     device_names: list[str] | None = None,
     primary_action: GuidanceAction | None = None,
     secondary_actions: list[GuidanceAction] | None = None,
+    reason_codes: list[str] | None = None,
+    all_devices_affected: bool | None = None,
 ) -> None:
     names = [name for name in (device_names or []) if name]
     groups.append(
@@ -289,6 +294,13 @@ def _append_group(
             device_names=names,
             primary_action=primary_action,
             secondary_actions=_always_open_diagnostics(primary_action, list(secondary_actions or [])),
+            context=build_issue_context(
+                key,
+                severity=severity,
+                device_names=names,
+                reason_codes=reason_codes,
+                all_devices_affected=all_devices_affected,
+            ),
         )
     )
 
@@ -450,17 +462,7 @@ def _disabled_unpaired_bluetooth_guidance(
 
 def _issue_group_sort_key(item: GuidanceIssueGroup) -> tuple[int, int, int, str]:
     severity_rank = 0 if item.severity == "error" else 1
-    priority = {
-        "runtime_access": 0,
-        "bluetooth_unavailable": 1,
-        "audio_unavailable": 2,
-        "missing_sink": 3,
-        "transport_down": 4,
-        "repair_required": 5,
-        "ma_auth": 6,
-        "disconnected": 7,
-        "auto_released": 8,
-    }.get(item.key, 99)
+    priority = issue_sort_priority(item.key)
     return (severity_rank, priority, -item.count, item.title)
 
 

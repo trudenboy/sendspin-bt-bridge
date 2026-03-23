@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from services.bridge_state_model import BridgeStateModel
 
 UTC = timezone.utc
 
@@ -14,12 +17,23 @@ def _device_extra(device: Any) -> dict[str, Any]:
     return extra if isinstance(extra, dict) else {}
 
 
+def _device_state_model(device: Any) -> dict[str, Any]:
+    state_model = getattr(device, "state_model", None)
+    return state_model if isinstance(state_model, dict) else {}
+
+
 def _reconnect_attempt_summary(device: Any) -> str:
-    extra = _device_extra(device)
-    attempt = int(extra.get("reconnect_attempt") or 0)
+    state_model = _device_state_model(device)
+    bluetooth = state_model.get("bluetooth") or {}
+    if bluetooth:
+        attempt = int(bluetooth.get("reconnect_attempt") or 0)
+        threshold = int(bluetooth.get("max_reconnect_fails") or 0)
+    else:
+        extra = _device_extra(device)
+        attempt = int(extra.get("reconnect_attempt") or 0)
+        threshold = int(extra.get("max_reconnect_fails") or 0)
     if attempt <= 0:
         return ""
-    threshold = int(extra.get("max_reconnect_fails") or 0)
     if threshold > 0:
         remaining = max(threshold - attempt, 0)
         return f"Reconnect attempt {attempt}/{threshold}. {remaining} attempts remain before auto-release."
@@ -210,8 +224,22 @@ def _build_device_issues(devices: list[Any]) -> list[RecoveryIssue]:
         device_names = [name]
         health = getattr(device, "health_summary", None) or {}
         summary = str(health.get("summary") or "")
-        if getattr(device, "bt_management_enabled", True) is False:
-            if _device_extra(device).get("bt_released_by") != "auto":
+        state_model = _device_state_model(device)
+        management = state_model.get("management") or {}
+        bluetooth = state_model.get("bluetooth") or {}
+        audio = state_model.get("audio") or {}
+        transport = state_model.get("transport") or {}
+        released = management.get("released") if management else getattr(device, "bt_management_enabled", True) is False
+        release_reason = management.get("release_reason") if management else _device_extra(device).get("bt_released_by")
+        bluetooth_connected = (
+            bool(bluetooth.get("connected")) if bluetooth else bool(getattr(device, "bluetooth_connected", False))
+        )
+        has_sink = bool(audio.get("has_sink")) if audio else bool(getattr(device, "has_sink", False))
+        daemon_connected = (
+            bool(transport.get("daemon_connected")) if transport else bool(getattr(device, "server_connected", False))
+        )
+        if released:
+            if release_reason != "auto":
                 continue
             primary_action, secondary_actions = build_recovery_issue_actions("auto_released", device_names)
             issues.append(
@@ -227,7 +255,7 @@ def _build_device_issues(devices: list[Any]) -> list[RecoveryIssue]:
                 )
             )
             continue
-        if getattr(device, "bluetooth_connected", False) and not getattr(device, "has_sink", False):
+        if bluetooth_connected and not has_sink:
             primary_action, secondary_actions = build_recovery_issue_actions("missing_sink", device_names)
             issues.append(
                 RecoveryIssue(
@@ -241,9 +269,9 @@ def _build_device_issues(devices: list[Any]) -> list[RecoveryIssue]:
                 )
             )
             continue
-        if not getattr(device, "bluetooth_connected", False):
+        if not bluetooth_connected:
             attempt_summary = _reconnect_attempt_summary(device)
-            bluetooth_paired = _device_extra(device).get("bluetooth_paired")
+            bluetooth_paired = bluetooth.get("paired") if bluetooth else _device_extra(device).get("bluetooth_paired")
             issue_key = "repair_required" if bluetooth_paired is False else "disconnected"
             primary_action, secondary_actions = build_recovery_issue_actions(issue_key, device_names)
             issues.append(
@@ -266,7 +294,7 @@ def _build_device_issues(devices: list[Any]) -> list[RecoveryIssue]:
                 )
             )
             continue
-        if not getattr(device, "server_connected", False):
+        if not daemon_connected:
             primary_action, secondary_actions = build_recovery_issue_actions("transport_down", device_names)
             issues.append(
                 RecoveryIssue(
@@ -471,7 +499,22 @@ def build_recovery_assistant_snapshot(
     devices: list[Any],
     onboarding_assistant: dict[str, Any],
     startup_progress: dict[str, Any],
+    bridge_state: BridgeStateModel | None = None,
 ) -> RecoveryAssistantSnapshot:
+    if bridge_state is not None:
+        devices = [
+            type(
+                "NormalizedRecoveryDevice",
+                (),
+                {
+                    "player_name": state.player_name,
+                    "state_model": state.to_dict(),
+                    "health_summary": state.health,
+                    "recent_events": state.recent_events,
+                },
+            )()
+            for state in bridge_state.devices
+        ]
     issues = _build_device_issues(devices)
     onboarding_issue = _build_onboarding_issue(onboarding_assistant)
     if onboarding_issue:

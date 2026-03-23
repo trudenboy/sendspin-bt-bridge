@@ -17,6 +17,7 @@ import sys
 import threading
 import time
 from datetime import datetime, timezone
+from typing import Any
 
 from flask import Blueprint, Response, jsonify, request
 
@@ -38,6 +39,7 @@ from services.bridge_runtime_state import (
     get_status_version,
     wait_for_status_change,
 )
+from services.bridge_state_model import build_bridge_state_model
 from services.device_registry import get_device_registry_snapshot
 from services.event_hooks import get_event_hook_registry
 from services.ipc_protocol import IPC_PROTOCOL_VERSION
@@ -312,6 +314,7 @@ def _build_onboarding_assistant_payload(
     devices: list | None = None,
     runtime_mode: str | None = None,
     ma_connected: bool | None = None,
+    bridge_state: Any = None,
 ) -> dict:
     """Build the operator-facing onboarding assistant payload."""
     if preflight is None:
@@ -325,12 +328,24 @@ def _build_onboarding_assistant_payload(
         runtime_mode = build_mock_runtime_snapshot().mode
     if ma_connected is None:
         ma_connected = is_ma_connected()
+    normalized_bridge_state = (
+        bridge_state
+        if bridge_state is not None
+        else build_bridge_state_model(
+            config=config,
+            preflight=preflight,
+            devices=devices,
+            ma_connected=ma_connected,
+            runtime_mode=runtime_mode,
+        )
+    )
     assistant = build_onboarding_assistant_snapshot(
         config=config,
         preflight=preflight,
         devices=devices,
         ma_connected=ma_connected,
         runtime_mode=runtime_mode,
+        bridge_state=normalized_bridge_state,
     )
     return assistant.to_dict()
 
@@ -342,6 +357,7 @@ def _build_recovery_assistant_payload(
     devices: list | None = None,
     onboarding_assistant: dict | None = None,
     startup_progress: dict | None = None,
+    bridge_state: Any = None,
 ) -> dict:
     """Build the recovery/latency guidance payload used by diagnostics and the UI."""
     if config is None:
@@ -350,7 +366,12 @@ def _build_recovery_assistant_payload(
         registry = get_device_registry_snapshot()
         devices = [build_device_snapshot(client) for client in registry.active_clients]
     if onboarding_assistant is None:
-        onboarding_assistant = _build_onboarding_assistant_payload(preflight=preflight, config=config, devices=devices)
+        onboarding_assistant = _build_onboarding_assistant_payload(
+            preflight=preflight,
+            config=config,
+            devices=devices,
+            bridge_state=bridge_state,
+        )
     if startup_progress is None:
         startup_progress = build_startup_progress_snapshot().to_dict()
     recovery = build_recovery_assistant_snapshot(
@@ -358,6 +379,7 @@ def _build_recovery_assistant_payload(
         devices=devices,
         onboarding_assistant=onboarding_assistant,
         startup_progress=startup_progress,
+        bridge_state=bridge_state,
     )
     return recovery.to_dict()
 
@@ -373,6 +395,7 @@ def _build_operator_guidance_payload(
     preflight: dict | None = None,
     runtime_mode: str | None = None,
     ma_connected: bool | None = None,
+    bridge_state: Any = None,
 ) -> dict:
     """Build the unified top-level operator guidance payload."""
     if config is None:
@@ -393,6 +416,7 @@ def _build_operator_guidance_payload(
             devices=devices,
             runtime_mode=runtime_mode,
             ma_connected=ma_connected,
+            bridge_state=bridge_state,
         )
     if recovery_assistant is None:
         recovery_assistant = _build_recovery_assistant_payload(
@@ -401,6 +425,7 @@ def _build_operator_guidance_payload(
             devices=devices,
             onboarding_assistant=onboarding_assistant,
             startup_progress=startup_progress,
+            bridge_state=bridge_state,
         )
     return build_operator_guidance_snapshot(
         config=config,
@@ -420,12 +445,23 @@ def _build_status_payload() -> dict:
     config = load_config()
     preflight = _collect_preflight_status()
     startup_progress = bridge_snapshot.startup_progress.to_dict() if bridge_snapshot.startup_progress else {}
+    bridge_state = build_bridge_state_model(
+        config=config,
+        preflight=preflight,
+        devices=bridge_snapshot.devices,
+        ma_connected=bridge_snapshot.ma_connected,
+        runtime_mode=bridge_snapshot.runtime_mode,
+        startup_progress=startup_progress,
+        update_available=bool(bridge_snapshot.update_available),
+        disabled_devices=bridge_snapshot.disabled_devices,
+    )
     onboarding_assistant = _build_onboarding_assistant_payload(
         preflight=preflight,
         config=config,
         devices=bridge_snapshot.devices,
         runtime_mode=bridge_snapshot.runtime_mode,
         ma_connected=bridge_snapshot.ma_connected,
+        bridge_state=bridge_state,
     )
     recovery_assistant = _build_recovery_assistant_payload(
         preflight=preflight,
@@ -433,7 +469,12 @@ def _build_status_payload() -> dict:
         devices=bridge_snapshot.devices,
         onboarding_assistant=onboarding_assistant,
         startup_progress=startup_progress,
+        bridge_state=bridge_state,
     )
+    payload["preflight"] = preflight
+    payload["state_model"] = bridge_state.to_dict()
+    payload["onboarding_assistant"] = onboarding_assistant
+    payload["recovery_assistant"] = recovery_assistant
     payload["operator_guidance"] = _build_operator_guidance_payload(
         config=config,
         devices=bridge_snapshot.devices,
@@ -444,6 +485,7 @@ def _build_status_payload() -> dict:
         preflight=preflight,
         runtime_mode=bridge_snapshot.runtime_mode,
         ma_connected=bridge_snapshot.ma_connected,
+        bridge_state=bridge_state,
     )
     return payload
 

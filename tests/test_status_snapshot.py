@@ -151,6 +151,21 @@ def test_build_device_snapshot_prefers_repair_when_device_is_unpaired():
     assert data["capabilities"]["actions"]["toggle_bt_management"]["safe_actions"][0] == "toggle_bt_management"
 
 
+def test_build_device_snapshot_exposes_normalized_state_model_and_reason_details():
+    client = _make_client()
+    client.status.update({"server_connected": False, "bluetooth_connected": False, "reconnecting": True})
+
+    snapshot = build_device_snapshot(client)
+    data = snapshot.to_dict()
+
+    assert data["state_model"]["management"]["bridge_managed"] is True
+    assert data["state_model"]["bluetooth"]["connected"] is False
+    assert data["state_model"]["transport"]["daemon_connected"] is False
+    assert data["state_model"]["health"]["state"] == data["health_summary"]["state"]
+    assert data["capabilities"]["actions"]["reconnect"]["blocked_reason_detail"]["code"] == "reconnecting"
+    assert "toggle_bt_management" in data["capabilities"]["domains"]["connectivity"]["safe_actions"]
+
+
 def test_build_device_snapshot_reports_stopping_transition():
     client = _make_client()
     client.status.update(

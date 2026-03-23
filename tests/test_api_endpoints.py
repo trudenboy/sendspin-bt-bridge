@@ -2181,6 +2181,19 @@ def test_status_includes_operator_guidance(client):
     assert "header_status" in data["operator_guidance"]
 
 
+def test_status_includes_normalized_state_model_and_assistant_payloads(client):
+    resp = client.get("/api/status")
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert "preflight" in data
+    assert "state_model" in data
+    assert "onboarding_assistant" in data
+    assert "recovery_assistant" in data
+    assert "runtime_substrate" in data["state_model"]
+    assert "configuration" in data["state_model"]
+    assert isinstance(data["state_model"]["devices"], list)
+
+
 def test_runtime_info_endpoint_and_status_include_mock_runtime(client):
     """Runtime explainability is exposed directly and via the status payload."""
     import state

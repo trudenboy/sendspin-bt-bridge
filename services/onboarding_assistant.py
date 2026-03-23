@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
+from services.bridge_state_model import BridgeStateModel, build_bridge_state_model
+
 UTC = timezone.utc
 _CHECKLIST_ORDER = ("runtime_access", "bluetooth", "audio", "bridge_control", "sink_verification", "ma_auth", "latency")
 _CHECKLIST_TITLES = {
@@ -311,39 +313,46 @@ def build_onboarding_assistant_snapshot(
     devices: list[Any],
     ma_connected: bool,
     runtime_mode: str,
+    bridge_state: BridgeStateModel | None = None,
 ) -> OnboardingAssistantSnapshot:
     """Build operator guidance from preflight, config, and runtime device state."""
-    configured_devices = config.get("BLUETOOTH_DEVICES", [])
-    configured_count = len(configured_devices) if isinstance(configured_devices, list) else 0
-    active_devices = [device for device in devices if getattr(device, "bt_management_enabled", True)]
-    released_devices = [device for device in devices if getattr(device, "bt_management_enabled", True) is False]
-    connected_devices = sum(1 for device in active_devices if getattr(device, "bluetooth_connected", False))
+    bridge_state = bridge_state or build_bridge_state_model(
+        config=config,
+        preflight=preflight,
+        devices=devices,
+        ma_connected=ma_connected,
+        runtime_mode=runtime_mode,
+    )
+    normalized_devices = bridge_state.devices
+    configured_count = int(bridge_state.configuration.configured_device_count)
+    active_devices = [device for device in normalized_devices if device.management.get("bridge_managed", True)]
+    released_devices = [device for device in normalized_devices if device.management.get("released")]
+    connected_devices = sum(1 for device in active_devices if device.bluetooth.get("connected"))
     sink_ready_devices = sum(
-        1
-        for device in active_devices
-        if getattr(device, "bluetooth_connected", False) and getattr(device, "has_sink", False)
+        1 for device in active_devices if device.bluetooth.get("connected") and device.audio.get("has_sink")
     )
     missing_sink_devices = [
-        getattr(device, "player_name", "Unknown")
+        device.player_name or "Unknown"
         for device in active_devices
-        if getattr(device, "bluetooth_connected", False) and not getattr(device, "has_sink", False)
+        if device.bluetooth.get("connected") and not device.audio.get("has_sink")
     ]
 
-    bluetooth = preflight.get("bluetooth", {})
-    audio = preflight.get("audio", {})
-    dbus_available = bool(preflight.get("dbus", True))
+    bluetooth = bridge_state.runtime_substrate.bluetooth
+    audio = bridge_state.runtime_substrate.audio
+    if "dbus" in preflight:
+        dbus_available = bool(bridge_state.runtime_substrate.dbus_available)
+    else:
+        dbus_available = True
     audio_system = str(audio.get("system") or "unknown")
     audio_sinks = int(audio.get("sinks") or 0)
     paired_devices = int(bluetooth.get("paired_devices") or 0)
     controller_present = bool(bluetooth.get("controller", False))
-    disabled_configured_count = sum(
-        1 for device in configured_devices if isinstance(device, dict) and device.get("enabled", True) is False
-    )
+    disabled_configured_count = int(bridge_state.configuration.disabled_device_count)
     user_released_devices = [
-        device for device in released_devices if str(getattr(device, "bt_released_by", "") or "") != "auto"
+        device for device in released_devices if str(device.management.get("release_reason") or "") != "auto"
     ]
     auto_released_devices = [
-        device for device in released_devices if str(getattr(device, "bt_released_by", "") or "") == "auto"
+        device for device in released_devices if str(device.management.get("release_reason") or "") == "auto"
     ]
 
     ma_url = str(config.get("MA_API_URL") or "").strip()
@@ -351,7 +360,10 @@ def build_onboarding_assistant_snapshot(
     ma_username = str(config.get("MA_USERNAME") or "").strip()
     pulse_latency = int(config.get("PULSE_LATENCY_MSEC") or 0)
     custom_delays = sum(
-        1 for device in active_devices if getattr(device, "static_delay_ms", None) not in (None, 0, 0.0)
+        1
+        for device in devices
+        if getattr(device, "bt_management_enabled", True)
+        and getattr(device, "static_delay_ms", None) not in (None, 0, 0.0)
     )
 
     checks: list[OnboardingCheck] = []
