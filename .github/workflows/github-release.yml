@@ -125,15 +125,39 @@ jobs:
         id: release_body
         env:
           VERSION: ${{ steps.resolve.outputs.version }}
+          TAG: ${{ steps.resolve.outputs.tag }}
+          PREVIOUS_TAG: ${{ steps.previous_release.outputs.tag }}
         run: |
           set -euo pipefail
           cat > /tmp/generated-notes.md <<'EOF_GENERATED_NOTES'
           ${{ steps.notes.outputs.body }}
           EOF_GENERATED_NOTES
+          python3 - <<'PY' > /tmp/code-change-notes.md
+          import os
+          import subprocess
+
+          tag = os.environ.get("TAG", "").strip()
+          previous_tag = os.environ.get("PREVIOUS_TAG", "").strip()
+          if not tag or not previous_tag:
+              raise SystemExit(0)
+
+          log_output = subprocess.check_output(
+              ["git", "log", "--reverse", "--pretty=format:%h%x09%s", f"{previous_tag}..{tag}"],
+              text=True,
+          ).strip()
+          if not log_output:
+              raise SystemExit(0)
+
+          for line in log_output.splitlines():
+              short_sha, subject = line.split("\t", 1)
+              print(f"* `{short_sha}` {subject}")
+          PY
           python3 scripts/release_notes.py \
             --version "${VERSION}" \
             --changelog CHANGELOG.md \
             --generated-notes-file /tmp/generated-notes.md \
+            --code-change-notes-file /tmp/code-change-notes.md \
+            --previous-tag "${PREVIOUS_TAG}" \
             --output /tmp/release-body.md
           {
             echo "body<<EOF_RELEASE_BODY"
