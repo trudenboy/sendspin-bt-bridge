@@ -2426,6 +2426,7 @@ def test_recovery_assistant_endpoint_returns_guidance(client, monkeypatch):
                 }
             ],
             "safe_actions": [{"key": "refresh_diagnostics", "label": "Rerun checks"}],
+            "timeline": {"summary": {"entry_count": 1}, "entries": [{"source": "Bridge startup"}]},
         },
     )
 
@@ -2438,6 +2439,86 @@ def test_recovery_assistant_endpoint_returns_guidance(client, monkeypatch):
     assert data["issues"][0]["recommended_action"]["key"] == "reconnect_device"
     assert data["issues"][0]["secondary_actions"][0]["key"] == "open_diagnostics"
     assert data["safe_actions"][0]["key"] == "refresh_diagnostics"
+    assert data["timeline"]["summary"]["entry_count"] == 1
+
+
+def test_rerun_safe_check_endpoint_returns_runner_payload(client, monkeypatch):
+    import routes.api_status as api_status
+
+    monkeypatch.setattr(
+        api_status,
+        "run_safe_check",
+        lambda check_key, device_names=None, config=None: {
+            "status": "ok",
+            "check_key": check_key,
+            "summary": "Bluetooth sinks verified.",
+            "device_results": [{"device_name": "Kitchen", "status": "ok"}],
+        },
+    )
+    monkeypatch.setattr(api_status, "load_config", lambda: {"BLUETOOTH_DEVICES": []})
+
+    resp = client.post("/api/checks/rerun", json={"check_key": "sink_verification", "device_names": ["Kitchen"]})
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["status"] == "ok"
+    assert data["check_key"] == "sink_verification"
+    assert data["device_results"][0]["device_name"] == "Kitchen"
+
+
+def test_recovery_timeline_download_returns_csv(client, monkeypatch):
+    import routes.api_status as api_status
+
+    monkeypatch.setattr(
+        api_status,
+        "_build_recovery_assistant_payload",
+        lambda **kwargs: {
+            "timeline": {
+                "summary": {"entry_count": 1},
+                "entries": [
+                    {
+                        "at": "2026-03-20T10:00:00+00:00",
+                        "level": "warning",
+                        "source_type": "device",
+                        "source": "Kitchen",
+                        "label": "sink_missing",
+                        "summary": "No sink after reconnect",
+                    }
+                ],
+            }
+        },
+    )
+
+    resp = client.get("/api/recovery/timeline/download")
+
+    assert resp.status_code == 200
+    assert resp.headers["Content-Type"].startswith("text/csv")
+    assert "Kitchen" in resp.get_data(as_text=True)
+    assert "sink_missing" in resp.get_data(as_text=True)
+
+
+def test_latency_apply_persists_config(client, tmp_path, monkeypatch):
+    import config
+    import routes.api_status as api_status
+
+    config_path = tmp_path / "config.json"
+    config_path.write_text(json.dumps({"PULSE_LATENCY_MSEC": 300}))
+    monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(config, "CONFIG_FILE", config_path)
+    monkeypatch.setattr(api_status, "load_config", lambda: json.loads(config_path.read_text()))
+    monkeypatch.setattr(
+        api_status,
+        "_build_recovery_assistant_payload",
+        lambda **kwargs: {"latency_assistant": {"recommended_pulse_latency_msec": 600}},
+    )
+
+    resp = client.post("/api/latency/apply", json={"pulse_latency_msec": 600})
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["success"] is True
+    assert data["restart_required"] is True
+    assert data["pulse_latency_msec"] == 600
 
 
 def test_operator_guidance_endpoint_returns_unified_payload(client, monkeypatch):

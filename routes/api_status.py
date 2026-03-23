@@ -28,6 +28,7 @@ from config import (
     SENSITIVE_CONFIG_KEYS,
     get_runtime_version,
     load_config,
+    update_config,
 )
 from config import (
     VERSION as _CONFIG_VERSION,
@@ -52,9 +53,20 @@ from services.ma_runtime_state import (
     is_ma_connected,
 )
 from services.onboarding_assistant import build_onboarding_assistant_snapshot
+from services.operator_check_runner import run_safe_check
 from services.operator_guidance import build_operator_guidance_snapshot
+from services.preflight_status import (
+    collect_preflight_status as _shared_collect_preflight_status,
+)
+from services.preflight_status import (
+    collection_error_payload as _shared_collection_error_payload,
+)
+from services.preflight_status import (
+    collection_status_payload as _shared_collection_status_payload,
+)
 from services.pulse import get_server_name, list_sinks
 from services.recovery_assistant import build_recovery_assistant_snapshot
+from services.recovery_timeline import build_recovery_timeline_csv
 from services.sendspin_compat import get_runtime_dependency_versions
 from services.status_snapshot import (
     build_bridge_snapshot,
@@ -126,112 +138,25 @@ def _parse_memtotal_mb(line: str) -> int | None:
 
 def _collect_preflight_status() -> dict:
     """Collect preflight runtime checks for reuse across helper routes."""
-    arch = _platform.machine()
-    collections_status: dict[str, dict] = {}
-    failed_collections: list[str] = []
-
-    audio_info: dict = {"system": "unknown", "socket": None, "sinks": 0}
-    try:
-        srv = get_server_name()
-        if srv and "pipewire" in srv.lower():
-            audio_info["system"] = "pipewire"
-        elif srv:
-            audio_info["system"] = "pulseaudio"
-        pulse_sock = os.environ.get("PULSE_SERVER", "")
-        if pulse_sock:
-            audio_info["socket"] = pulse_sock
-        sinks = list_sinks()
-        audio_info["sinks"] = len(sinks) if sinks else 0
-        collections_status["audio"] = _collection_status_payload("ok", count=audio_info["sinks"])
-    except Exception as exc:
-        failed_collections.append("audio")
-        collections_status["audio"] = _collection_status_payload("error", error=_collection_error_payload(exc))
-
-    bt_info: dict = {"controller": False, "adapter": None, "paired_devices": 0}
-    try:
-        result = subprocess.run(
-            ["bluetoothctl", "list"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        if "Controller" in result.stdout:
-            bt_info["controller"] = True
-            bt_info["adapter"] = _parse_bluetoothctl_adapter(result.stdout)
-        paired = subprocess.run(
-            ["bluetoothctl", "devices", "Paired"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        bt_info["paired_devices"] = paired.stdout.strip().count("Device")
-        collections_status["bluetooth"] = _collection_status_payload("ok", count=bt_info["paired_devices"])
-    except Exception as exc:
-        failed_collections.append("bluetooth")
-        collections_status["bluetooth"] = _collection_status_payload("error", error=_collection_error_payload(exc))
-
-    dbus_ok = os.path.exists("/var/run/dbus/system_bus_socket") or os.path.exists("/run/dbus/system_bus_socket")
-
-    mem_mb = 0
-    try:
-        with open("/proc/meminfo") as f:
-            for line in f:
-                if line.startswith("MemTotal:"):
-                    parsed_mem = _parse_memtotal_mb(line)
-                    if parsed_mem is not None:
-                        mem_mb = parsed_mem
-                    break
-        collections_status["memory"] = _collection_status_payload("ok")
-    except Exception as exc:
-        failed_collections.append("memory")
-        collections_status["memory"] = _collection_status_payload("error", error=_collection_error_payload(exc))
-
-    return {
-        "status": "degraded" if failed_collections else "ok",
-        "failed_collections": failed_collections,
-        "collections_status": collections_status,
-        "platform": arch,
-        "audio": audio_info,
-        "bluetooth": bt_info,
-        "dbus": dbus_ok,
-        "memory_mb": mem_mb,
-        "version": get_runtime_version(),
-    }
+    return _shared_collect_preflight_status(
+        get_server_name_fn=get_server_name,
+        list_sinks_fn=list_sinks,
+        subprocess_module=subprocess,
+        runtime_version_fn=get_runtime_version,
+        machine_fn=_platform.machine,
+        exists_fn=os.path.exists,
+        open_fn=open,
+    )
 
 
 def _collection_error_payload(exc: Exception) -> dict[str, str]:
     """Return a structured diagnostics error payload."""
-    if isinstance(exc, subprocess.TimeoutExpired):
-        cmd = exc.cmd if isinstance(exc.cmd, str) else " ".join(str(part) for part in exc.cmd or ())
-        message = f"{cmd or 'command'} timed out after {exc.timeout}s"
-        code = "timeout"
-    elif isinstance(exc, PermissionError):
-        message = str(exc) or "permission denied"
-        code = "permission_denied"
-    elif isinstance(exc, FileNotFoundError):
-        message = str(exc) or "command not found"
-        code = "not_found"
-    elif isinstance(exc, (ValueError, json.JSONDecodeError)):
-        message = str(exc) or "failed to parse diagnostic data"
-        code = "parse_error"
-    else:
-        message = str(exc) or "diagnostic collection failed"
-        code = "unknown"
-    return {
-        "code": code,
-        "message": message,
-        "exception_type": type(exc).__name__,
-    }
+    return _shared_collection_error_payload(exc)
 
 
 def _collection_status_payload(status: str, *, count: int | None = None, error: dict[str, str] | None = None) -> dict:
     """Build a compact diagnostics collection status payload."""
-    payload: dict[str, object] = {"status": status}
-    if count is not None:
-        payload["count"] = count
-    if error is not None:
-        payload["error"] = error
-    return payload
+    return _shared_collection_status_payload(status, count=count, error=error)
 
 
 def _collect_bluetooth_daemon_status() -> str:
@@ -1766,10 +1691,85 @@ def api_recovery_assistant():
     return jsonify(_build_recovery_assistant_payload())
 
 
+@status_bp.route("/api/recovery/timeline")
+def api_recovery_timeline():
+    """Return the structured chronological recovery timeline."""
+    recovery = _build_recovery_assistant_payload()
+    return jsonify(recovery.get("timeline") or {"summary": {"entry_count": 0}, "entries": []})
+
+
+@status_bp.route("/api/recovery/timeline/download")
+def api_recovery_timeline_download():
+    """Download the current recovery timeline as CSV."""
+    recovery = _build_recovery_assistant_payload()
+    timeline = recovery.get("timeline") or {"entries": []}
+    payload = build_recovery_timeline_csv(timeline)
+    timestamp = datetime.now(tz=UTC).strftime("%Y%m%d-%H%M%S")
+    headers = {
+        "Content-Disposition": f'attachment; filename="sendspin-recovery-timeline-{timestamp}.csv"',
+        "Content-Type": "text/csv; charset=utf-8",
+    }
+    return Response(payload, headers=headers)
+
+
 @status_bp.route("/api/operator/guidance")
 def api_operator_guidance():
     """Return the unified operator guidance surface used by the dashboard header and banners."""
     return jsonify(_build_operator_guidance_payload())
+
+
+@status_bp.route("/api/checks/rerun", methods=["POST"])
+def api_rerun_safe_check():
+    """Rerun one safe, non-destructive operator check."""
+    payload = request.get_json(silent=True) or {}
+    if not isinstance(payload, dict):
+        return jsonify({"error": "Invalid JSON body"}), 400
+    check_key = str(payload.get("check_key") or "").strip()
+    if not check_key:
+        return jsonify({"error": "check_key is required"}), 400
+    device_names = payload.get("device_names")
+    if device_names is not None and not isinstance(device_names, list):
+        return jsonify({"error": "device_names must be an array"}), 400
+    result = run_safe_check(check_key, device_names=device_names, config=load_config())
+    http_status = 400 if result.get("summary") == "Unknown safe check requested." else 200
+    return jsonify(result), http_status
+
+
+@status_bp.route("/api/latency/recommendations")
+def api_latency_recommendations():
+    """Return the current latency assistant payload."""
+    recovery = _build_recovery_assistant_payload()
+    return jsonify(recovery.get("latency_assistant") or {})
+
+
+@status_bp.route("/api/latency/apply", methods=["POST"])
+def api_latency_apply():
+    """Persist a recommended Pulse latency value."""
+    payload = request.get_json(silent=True) or {}
+    if not isinstance(payload, dict):
+        return jsonify({"error": "Invalid JSON body"}), 400
+    raw_value = payload.get("pulse_latency_msec")
+    try:
+        pulse_latency = int(raw_value)
+    except (TypeError, ValueError):
+        return jsonify({"error": "pulse_latency_msec must be an integer"}), 400
+    if pulse_latency < 1 or pulse_latency > 5000:
+        return jsonify({"error": "pulse_latency_msec must be between 1 and 5000"}), 400
+
+    def _mutate(cfg: dict[str, Any]) -> None:
+        cfg["PULSE_LATENCY_MSEC"] = pulse_latency
+
+    update_config(_mutate)
+    latency = _build_recovery_assistant_payload(config=load_config()).get("latency_assistant") or {}
+    return jsonify(
+        {
+            "success": True,
+            "pulse_latency_msec": pulse_latency,
+            "restart_required": True,
+            "summary": f"Saved Pulse latency {pulse_latency} ms. Restart the bridge to apply the new buffer.",
+            "latency_assistant": latency,
+        }
+    )
 
 
 @status_bp.route("/api/preflight")

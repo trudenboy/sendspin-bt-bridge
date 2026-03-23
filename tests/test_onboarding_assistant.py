@@ -30,6 +30,9 @@ def test_onboarding_assistant_reports_missing_prerequisites():
     assert snapshot.checklist.primary_action is not None
     assert snapshot.checklist.primary_action.key == "open_bluetooth_settings"
     assert snapshot.checklist.progress_percent == 14
+    assert snapshot.checklist.journey_key == "first_speaker"
+    assert snapshot.checklist.phases[0].key == "foundation"
+    assert snapshot.checklist.phases[0].status == "current"
     assert snapshot.checklist.checkpoints[0].reached is False
     assert snapshot.checklist.steps[0].key == "runtime_access"
     assert snapshot.checklist.steps[0].stage == "complete"
@@ -107,6 +110,8 @@ def test_onboarding_assistant_reports_connected_bridge_readiness():
     assert snapshot.checklist.overall_status == "ok"
     assert snapshot.checklist.current_step_key is None
     assert snapshot.checklist.progress_percent == 100
+    assert snapshot.checklist.journey_key == "multi_room"
+    assert all(phase.status == "complete" for phase in snapshot.checklist.phases)
     assert all(step.stage == "complete" for step in snapshot.checklist.steps)
     assert all(checkpoint.reached for checkpoint in snapshot.checklist.checkpoints)
 

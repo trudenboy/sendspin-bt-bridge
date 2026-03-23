@@ -923,6 +923,12 @@ body {
             gap: 8px;
             flex-wrap: wrap;
         }
+        .onboarding-progress-pills {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            width: 100%;
+        }
         .onboarding-progress-pill {
             display: inline-flex;
             align-items: center;
@@ -940,6 +946,65 @@ body {
             background: rgba(3, 155, 229, 0.1);
             border-color: rgba(3, 155, 229, 0.16);
             color: var(--info-color, #039be5);
+        }
+        .onboarding-progress-pill--journey {
+            background: rgba(99, 102, 241, 0.1);
+            border-color: rgba(99, 102, 241, 0.16);
+            color: var(--primary-text-color);
+        }
+        .onboarding-phase-rail {
+            width: 100%;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 10px;
+            margin-top: 2px;
+        }
+        .onboarding-phase {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            padding: 10px 12px;
+            border-radius: 12px;
+            border: 1px solid var(--divider-color);
+            background: rgba(148, 163, 184, 0.06);
+        }
+        .onboarding-phase.is-complete {
+            border-color: rgba(67, 160, 71, 0.26);
+            background: rgba(67, 160, 71, 0.08);
+        }
+        .onboarding-phase.is-current {
+            border-color: rgba(33, 150, 243, 0.24);
+            background: rgba(33, 150, 243, 0.08);
+        }
+        .onboarding-phase-marker {
+            width: 24px;
+            height: 24px;
+            border-radius: 999px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--primary-text-color);
+            background: var(--card-background-color);
+            border: 1px solid rgba(127, 137, 154, 0.22);
+            flex: 0 0 auto;
+        }
+        .onboarding-phase-copy {
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+        .onboarding-phase-title {
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--primary-text-color);
+        }
+        .onboarding-phase-summary {
+            font-size: 11px;
+            line-height: 1.4;
+            color: var(--secondary-text-color);
         }
         .onboarding-checkpoints {
             display: flex;
@@ -4775,6 +4840,9 @@ body {
             gap: 8px;
             margin-top: 10px;
         }
+        .diag-recovery-actions--wrap {
+            margin-top: 14px;
+        }
         .diag-recovery-action {
             min-height: 32px;
         }
@@ -4851,6 +4919,40 @@ body {
         .diag-test-path {
             display: grid;
             gap: 8px;
+        }
+        .diag-timeline {
+            display: grid;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .diag-timeline-entry {
+            display: grid;
+            grid-template-columns: auto minmax(0, 1fr);
+            gap: 10px;
+            align-items: flex-start;
+            padding: 10px 0;
+            border-top: 1px solid var(--divider-color);
+        }
+        .diag-timeline-entry:first-child {
+            border-top: 0;
+            padding-top: 0;
+        }
+        .diag-timeline-copy {
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .diag-timeline-title {
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--primary-text-color);
+        }
+        .diag-timeline-summary,
+        .diag-timeline-meta {
+            font-size: 12px;
+            line-height: 1.5;
+            color: var(--secondary-text-color);
         }
         .diag-test-step {
             display: flex;

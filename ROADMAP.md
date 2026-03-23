@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This roadmap reflects the **current `main` branch after the `v2.41.0-rc.2` release line and the subsequent bridge-identity safeguards on `main`**.
+This roadmap reflects the **current `main` branch after the `v2.43.0-rc.2` state-model/operator-guidance line and the follow-up pre-v3 v2 UX hardening work on top of it**.
 
 Its job is no longer to describe an aspirational Phase 1 / Phase 2 foundation that has not shipped yet. That foundation is now largely in the repository and on the release track. The roadmap should therefore answer a different question:
 
@@ -31,16 +31,17 @@ The former Phase 1 and Phase 2 foundation work shipped in `v2.41.0-rc.1`, and th
 - lifecycle startup/shutdown contracts are integration-tested and documented as operator-facing runtime guarantees
 - Music Assistant long-lived tokens can now be named and tracked per physical bridge host instead of only as anonymous bridge credentials
 - config validation now warns when a newly added Bluetooth MAC already appears in Music Assistant under the same stable player identity
+- normalized bridge/device state now drives onboarding, recovery, operator guidance, and blocked-action explanations through shared health/state layers
+- onboarding is checklist-driven and dependency-aware, with staged journey metadata for foundation, first-speaker setup, Music Assistant linking, and latency tuning
+- recovery tooling now includes rerunnable safe checks, richer latency guidance/presets, a known-good verification path, and chronological recovery timeline export
 
 ### What is still unfinished
 
 The remaining gaps are now narrower and more specific:
 
 - `state.py` is still the compatibility home for some shared runtime surfaces (event bus, client publication, device-event history), even though it is no longer the route-level ownership center
-- onboarding exists as snapshot-based guidance and next-step hints, but not yet as guided operator flows with remediation actions
-- there is still no explicit device / bridge capability model; the UI/API expose useful status fields, but not a first-class capability schema
-- latency tuning, recovery tooling, and timeline-style diagnostics are still shallow; the code has sink verification, event history, and playback-health groundwork, but operators still lack stronger recovery guidance
-- Music Assistant bridge-identity safeguards now exist at config/auth time, but they are not yet integrated into onboarding or capability-aware UX
+- blocked-action explanations are materially better, but touch/mobile users still rely on some hover-first affordances in the compact dashboard controls
+- recovery timeline evidence is available in diagnostics and CSV export, but diagnostics download / bugreport text can still surface that context more directly
 - backend abstraction should remain deferred until the v2 runtime is cleaner and more boring
 
 ## Recently Completed Foundations
@@ -213,7 +214,7 @@ Phase 1 should not be re-planned. The only remaining Phase 1-shaped work is mino
 
 This is now the **current** roadmap phase.
 
-Recent work on `main` after `v2.41.0-rc.2` improved operator safety (bridge-instance token identity, duplicate-device warnings), but it did **not** start the main Phase 2 epics yet. The current focus is still to turn existing snapshots and diagnostics into guided onboarding, explicit capabilities, and stronger recovery UX.
+Phase 2 is now well underway. The current `main` branch already ships checklist onboarding, explicit blocked-action metadata, unified operator guidance, grouped recovery actions, and a normalized bridge/device state model. The remaining work is less about inventing the phase and more about finishing the last operator-facing polish on top of that foundation.
 
 ### Goal
 
@@ -281,6 +282,13 @@ Backlog:
 10. Add a “first room / first speaker” golden path that explicitly walks through naming, assignment, and first successful playback instead of dropping the operator into the full admin surface
 11. Confirm successful player creation with live status updates (for example: bridge device created, BT connected, sink attached, MA player visible) so operators do not have to infer success from scattered status widgets
 
+Progress on this epic:
+
+- checklist onboarding, dependency ordering, and unified next-step actions are already shipped
+- onboarding now exposes staged “foundation / first speaker / MA / tuning” journey metadata
+- duplicate-device warnings and MA identity safeguards already flow into the setup path
+- the main remaining UX gap is making some blocked/unavailable states more touch-visible outside diagnostics
+
 Suggested PRs:
 
 - PR 7: checklist-driven onboarding backend and step model
@@ -326,6 +334,11 @@ Backlog:
 8. Add a latency calibration assistant for multi-device setups with presets, comparison hints, and safe default recommendations
 9. Attach trace/timeline context directly to diagnostics download and bugreport generation so support flows start with actionable evidence
 10. Add a known-good test path for recovery (“test this speaker / test this routing path / confirm MA visibility”) so operators can separate wiring/config issues from playback/content issues
+
+Progress on this epic:
+
+- issue/recovery center, grouped issue actions, rerunnable safe checks, latency recommendations, preset apply actions, known-good path, and timeline JSON/CSV export are already implemented
+- the main remaining follow-through is threading that richer timeline context into the plain-text support bundle and continuing to polish compact/mobile visibility
 
 Suggested PRs:
 

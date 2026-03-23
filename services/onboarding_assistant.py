@@ -10,6 +10,12 @@ from services.bridge_state_model import BridgeStateModel, build_bridge_state_mod
 
 UTC = timezone.utc
 _CHECKLIST_ORDER = ("runtime_access", "bluetooth", "audio", "bridge_control", "sink_verification", "ma_auth", "latency")
+_CHECKLIST_PHASES = (
+    ("foundation", "Foundation", ("runtime_access", "bluetooth", "audio")),
+    ("first_speaker", "First speaker", ("bridge_control", "sink_verification")),
+    ("music", "Music Assistant", ("ma_auth",)),
+    ("tuning", "Fine-tuning", ("latency",)),
+)
 _CHECKLIST_TITLES = {
     "runtime_access": "Verify runtime host access",
     "bluetooth": "Check Bluetooth access",
@@ -73,6 +79,24 @@ class OnboardingChecklistStep:
 
 
 @dataclass
+class OnboardingChecklistPhase:
+    key: str
+    title: str
+    status: str
+    summary: str
+    step_keys: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "key": self.key,
+            "title": self.title,
+            "status": self.status,
+            "summary": self.summary,
+            "step_keys": list(self.step_keys),
+        }
+
+
+@dataclass
 class OnboardingChecklistSnapshot:
     overall_status: str
     headline: str
@@ -82,7 +106,11 @@ class OnboardingChecklistSnapshot:
     total_steps: int
     current_step_key: str | None
     current_step_title: str | None
+    journey_key: str | None = None
+    journey_title: str | None = None
+    journey_summary: str | None = None
     steps: list[OnboardingChecklistStep] = field(default_factory=list)
+    phases: list[OnboardingChecklistPhase] = field(default_factory=list)
     checkpoints: list[OnboardingCheckpoint] = field(default_factory=list)
     primary_action: OnboardingChecklistAction | None = None
 
@@ -96,7 +124,11 @@ class OnboardingChecklistSnapshot:
             "total_steps": self.total_steps,
             "current_step_key": self.current_step_key,
             "current_step_title": self.current_step_title,
+            "journey_key": self.journey_key,
+            "journey_title": self.journey_title,
+            "journey_summary": self.journey_summary,
             "steps": [step.to_dict() for step in self.steps],
+            "phases": [phase.to_dict() for phase in self.phases],
             "checkpoints": [checkpoint.to_dict() for checkpoint in self.checkpoints],
         }
         if self.primary_action:
@@ -183,6 +215,36 @@ def _recommended_action_for_check(check: OnboardingCheck) -> OnboardingChecklist
     if check.key == "latency":
         return OnboardingChecklistAction(key="open_latency_settings", label="Review Pulse latency")
     return None
+
+
+def _build_checklist_phases(steps: list[OnboardingChecklistStep]) -> list[OnboardingChecklistPhase]:
+    steps_by_key = {step.key: step for step in steps}
+    phases: list[OnboardingChecklistPhase] = []
+    for key, title, step_keys in _CHECKLIST_PHASES:
+        phase_steps = [steps_by_key[step_key] for step_key in step_keys if step_key in steps_by_key]
+        if not phase_steps:
+            continue
+        if any(step.stage == "current" for step in phase_steps):
+            status = "current"
+            current_step = next(step for step in phase_steps if step.stage == "current")
+            summary = current_step.title
+        elif all(step.stage == "complete" for step in phase_steps):
+            status = "complete"
+            summary = "All checks complete."
+        else:
+            status = "upcoming"
+            pending_titles = [step.title for step in phase_steps if step.stage != "complete"]
+            summary = pending_titles[0] if pending_titles else "Waiting for earlier setup steps."
+        phases.append(
+            OnboardingChecklistPhase(
+                key=key,
+                title=title,
+                status=status,
+                summary=summary,
+                step_keys=list(step_keys),
+            )
+        )
+    return phases
 
 
 def _build_checkpoints(counts: dict[str, int], checks_by_key: dict[str, OnboardingCheck]) -> list[OnboardingCheckpoint]:
@@ -290,6 +352,15 @@ def _build_onboarding_checklist(checks: list[OnboardingCheck], counts: dict[str,
             )
         )
     progress_percent = int(round((completed_steps / total_steps) * 100)) if total_steps else 0
+    phases = _build_checklist_phases(steps)
+    configured_devices = int(counts.get("configured_devices") or 0)
+    journey_key = "first_speaker" if configured_devices <= 1 else "multi_room"
+    journey_title = "First speaker setup" if configured_devices <= 1 else "Expand the bridge room by room"
+    journey_summary = (
+        "Stabilize bridge access first, bring one speaker online, then link Music Assistant."
+        if configured_devices <= 1
+        else "Get the bridge foundation green, bring speakers online, then finish latency tuning."
+    )
 
     return OnboardingChecklistSnapshot(
         overall_status=overall_status,
@@ -300,7 +371,11 @@ def _build_onboarding_checklist(checks: list[OnboardingCheck], counts: dict[str,
         total_steps=total_steps,
         current_step_key=current_step_key,
         current_step_title=current_step_title,
+        journey_key=journey_key,
+        journey_title=journey_title,
+        journey_summary=journey_summary,
         steps=steps,
+        phases=phases,
         checkpoints=_build_checkpoints(counts, checks_by_key),
         primary_action=primary_action,
     )

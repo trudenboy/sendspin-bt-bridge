@@ -9,6 +9,8 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from services.bridge_state_model import BridgeStateModel
 
+from services.recovery_timeline import build_recovery_timeline
+
 UTC = timezone.utc
 
 
@@ -46,6 +48,8 @@ class RecoveryAction:
     label: str
     device_name: str | None = None
     device_names: list[str] = field(default_factory=list)
+    check_key: str | None = None
+    value: Any | None = None
 
     def to_dict(self) -> dict[str, Any]:
         payload: dict[str, Any] = {"key": self.key, "label": self.label}
@@ -53,6 +57,10 @@ class RecoveryAction:
             payload["device_names"] = [name for name in self.device_names if name]
         elif self.device_name:
             payload["device_name"] = self.device_name
+        if self.check_key:
+            payload["check_key"] = self.check_key
+        if self.value is not None:
+            payload["value"] = self.value
         return payload
 
 
@@ -111,6 +119,7 @@ class RecoveryAssistantSnapshot:
     safe_actions: list[RecoveryAction] = field(default_factory=list)
     latency_assistant: dict[str, Any] = field(default_factory=dict)
     known_good_test_path: dict[str, Any] = field(default_factory=dict)
+    timeline: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -121,6 +130,7 @@ class RecoveryAssistantSnapshot:
             "safe_actions": [action.to_dict() for action in self.safe_actions],
             "latency_assistant": dict(self.latency_assistant),
             "known_good_test_path": dict(self.known_good_test_path),
+            "timeline": dict(self.timeline),
         }
 
 
@@ -130,7 +140,12 @@ def _recommended_action_from_onboarding(checklist: dict[str, Any]) -> RecoveryAc
     label = str(action.get("label") or "").strip()
     if not key or not label:
         return None
-    return RecoveryAction(key=key, label=label)
+    return RecoveryAction(
+        key=key,
+        label=label,
+        check_key=str(action.get("check_key") or "").strip() or None,
+        value=action.get("value"),
+    )
 
 
 def _normalize_device_names(device_names: list[str] | None) -> list[str]:
@@ -142,6 +157,8 @@ def _recovery_action(
     label: str,
     *,
     device_names: list[str] | None = None,
+    check_key: str | None = None,
+    value: Any | None = None,
 ) -> RecoveryAction:
     names = _normalize_device_names(device_names)
     return RecoveryAction(
@@ -149,6 +166,8 @@ def _recovery_action(
         label=label,
         device_name=names[0] if len(names) == 1 else None,
         device_names=names if len(names) > 1 else [],
+        check_key=check_key,
+        value=value,
     )
 
 
@@ -158,7 +177,7 @@ def _merge_secondary_actions(
 ) -> list[RecoveryAction]:
     actions = list(secondary_actions or [])
     seen = {
-        (action.key, action.label, tuple(action.device_names), action.device_name)
+        (action.key, action.label, tuple(action.device_names), action.device_name, action.check_key, action.value)
         for action in actions
         if action and action.key
     }
@@ -169,10 +188,19 @@ def _merge_secondary_actions(
                 primary_action.label,
                 tuple(primary_action.device_names),
                 primary_action.device_name,
+                primary_action.check_key,
+                primary_action.value,
             )
         )
     diagnostics = _recovery_action("open_diagnostics", "Open diagnostics")
-    marker = (diagnostics.key, diagnostics.label, tuple(diagnostics.device_names), diagnostics.device_name)
+    marker = (
+        diagnostics.key,
+        diagnostics.label,
+        tuple(diagnostics.device_names),
+        diagnostics.device_name,
+        diagnostics.check_key,
+        diagnostics.value,
+    )
     if marker not in seen:
         actions.append(diagnostics)
     return actions
@@ -188,6 +216,15 @@ def build_recovery_issue_actions(
     primary_action: RecoveryAction | None
     secondary_actions = list(extra_secondary_actions or [])
     if issue_key in {"missing_sink", "disconnected", "transport_down"}:
+        secondary_actions.insert(
+            0,
+            _recovery_action(
+                "rerun_safe_check",
+                "Recheck sinks",
+                device_names=names,
+                check_key="sink_verification",
+            ),
+        )
         primary_action = _recovery_action(
             "reconnect_devices" if len(names) > 1 else "reconnect_device",
             f"Reconnect {len(names)} devices" if len(names) > 1 else "Reconnect speaker",
@@ -346,16 +383,23 @@ def _build_safe_actions(issues: list[RecoveryIssue], onboarding_assistant: dict[
     actions = [
         RecoveryAction(key="refresh_diagnostics", label="Rerun checks"),
         RecoveryAction(key="open_diagnostics", label="Open diagnostics"),
+        RecoveryAction(key="rerun_safe_check", label="Rerun preflight", check_key="runtime_access"),
     ]
+    issue_keys = {issue.key for issue in issues}
+    if issue_keys.intersection({"missing_sink", "disconnected", "transport_down"}):
+        actions.append(
+            RecoveryAction(key="rerun_safe_check", label="Recheck Bluetooth sinks", check_key="sink_verification")
+        )
     if (
         any(issue.recommended_action and issue.recommended_action.key == "open_ma_settings" for issue in issues)
         or str((onboarding_assistant.get("checklist") or {}).get("current_step_key") or "") == "ma_auth"
     ):
         actions.append(RecoveryAction(key="retry_ma_discovery", label="Retry MA discovery"))
+        actions.append(RecoveryAction(key="rerun_safe_check", label="Revalidate MA link", check_key="ma_auth"))
     seen: set[tuple[str, str, str | None]] = set()
     deduped: list[RecoveryAction] = []
     for action in actions:
-        marker = (action.key, action.label, action.device_name)
+        marker = (action.key, action.label, action.check_key or action.device_name)
         if marker in seen:
             continue
         seen.add(marker)
@@ -418,44 +462,83 @@ def _build_latency_assistant(config: dict[str, Any], devices: list[Any]) -> dict
     configured_count = len(configured_devices) if isinstance(configured_devices, list) else 0
     custom_delays = sum(1 for device in devices if getattr(device, "static_delay_ms", None) not in (None, 0, 0.0))
     pulse_latency = int(config.get("PULSE_LATENCY_MSEC") or 0)
+    presets = [
+        {
+            "key": "responsive",
+            "label": "300 ms",
+            "value": 300,
+            "summary": "Balanced responsiveness for most native installs.",
+        },
+        {
+            "key": "stable",
+            "label": "600 ms",
+            "value": 600,
+            "summary": "Safer for multi-room setups or reconnect churn.",
+        },
+        {
+            "key": "virtualized",
+            "label": "800 ms",
+            "value": 800,
+            "summary": "Recommended when virtualization or HAOS needs extra buffer.",
+        },
+    ]
     if configured_count < 2:
+        recommended = pulse_latency or 300
         return {
             "tone": "ok",
             "summary": "Single-device setups usually do not need extra latency tuning.",
-            "recommended_pulse_latency_msec": pulse_latency or 300,
+            "current_pulse_latency_msec": pulse_latency,
+            "recommended_pulse_latency_msec": recommended,
+            "recommended_summary": "Keep the global latency conservative until you add more rooms.",
+            "delta_from_recommendation_msec": recommended - pulse_latency,
             "hints": ["Add a second room before spending time on manual delay calibration."],
             "safe_actions": [RecoveryAction(key="open_devices_settings", label="Open device settings").to_dict()],
+            "presets": presets,
         }
     if custom_delays == 0:
+        recommended = max(pulse_latency, 300)
         return {
             "tone": "warning",
             "summary": "Multi-device setup detected without per-device static delays.",
-            "recommended_pulse_latency_msec": max(pulse_latency, 300),
+            "current_pulse_latency_msec": pulse_latency,
+            "recommended_pulse_latency_msec": recommended,
+            "recommended_summary": "Verify one clean Bluetooth route first, then add per-device delays for room matching.",
+            "delta_from_recommendation_msec": recommended - pulse_latency,
             "hints": [
                 "Play the same short track in both rooms and listen for drift.",
                 "Set `static_delay_ms` per device only after the Bluetooth sink is stable.",
             ],
             "safe_actions": [RecoveryAction(key="open_devices_settings", label="Tune device delays").to_dict()],
+            "presets": presets,
         }
     if pulse_latency >= 800:
+        recommended = 600
         return {
             "tone": "warning",
             "summary": "Per-device delay tuning exists, but the global PulseAudio latency is still high.",
-            "recommended_pulse_latency_msec": 600,
+            "current_pulse_latency_msec": pulse_latency,
+            "recommended_pulse_latency_msec": recommended,
+            "recommended_summary": "Lower the shared latency once routing is stable so transport controls feel snappier again.",
+            "delta_from_recommendation_msec": recommended - pulse_latency,
             "hints": [
                 "Keep the high latency if virtualization needs it, but lower it when playback reacts too slowly.",
                 "Re-test one room at a time after every latency change.",
             ],
             "safe_actions": [RecoveryAction(key="open_devices_settings", label="Review latency settings").to_dict()],
+            "presets": presets,
         }
     return {
         "tone": "ok",
         "summary": "Latency tuning is in a healthy range for a multi-device setup.",
+        "current_pulse_latency_msec": pulse_latency,
         "recommended_pulse_latency_msec": pulse_latency,
+        "recommended_summary": "Keep the current global latency and only revisit it after hardware or runtime changes.",
+        "delta_from_recommendation_msec": 0,
         "hints": [
             "Use the known-good test path after Bluetooth reconnects to confirm the rooms still match.",
         ],
         "safe_actions": [RecoveryAction(key="refresh_diagnostics", label="Rerun checks").to_dict()],
+        "presets": presets,
     }
 
 
@@ -489,7 +572,9 @@ def _build_known_good_test_path(devices: list[Any], onboarding_assistant: dict[s
                 "summary": checkpoints.get("ma_visible", {}).get("summary") or "Music Assistant is still not linked.",
             },
         ],
-        "recommended_action": RecoveryAction(key="refresh_diagnostics", label="Rerun checks").to_dict(),
+        "recommended_action": RecoveryAction(
+            key="rerun_safe_check", label="Rerun preflight", check_key="runtime_access"
+        ).to_dict(),
     }
 
 
@@ -546,4 +631,5 @@ def build_recovery_assistant_snapshot(
         safe_actions=_build_safe_actions(issues, onboarding_assistant),
         latency_assistant=_build_latency_assistant(config, devices),
         known_good_test_path=_build_known_good_test_path(devices, onboarding_assistant),
+        timeline=build_recovery_timeline(devices, startup_progress),
     )

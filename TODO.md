@@ -34,10 +34,18 @@ Roadmap for HA addon standards compliance and improvements.
 - [x] **Release state persistence** — `persist_device_released()` saves release state to config.json, restored on startup; `_match_player_name()` handles bridge name suffix matching (v2.28.1–v2.28.2)
 - [x] **UI polish** — column labels removed, sink name removed from volume column, shuffle/repeat always visible when MA connected, progress time inline with progress bar, update modal redesign (v2.28.0–v2.28.2)
 
+## Done since v2.41.x
+
+- [x] **Unified operator guidance + onboarding hierarchy** — normalized bridge/device state now drives checklist onboarding, operator guidance, blocked-action explanations, and recovery summaries from one shared model.
+- [x] **Standalone/LXC update flow** — version check, release-ref persistence, RC tracking, and one-click standalone update flow are implemented; the old “LXC auto-update system” item is no longer open work.
+- [x] **Recovery center tooling** — rerunnable safe checks, latency recommendations/presets, chronological recovery timeline JSON/CSV export, and the known-good verification path are available in diagnostics.
+- [x] **Staged onboarding flow** — onboarding now exposes a foundation → first speaker → Music Assistant → tuning journey instead of only a flat checklist.
+
 ## Next
 
-- [ ] **LXC auto-update system** — version check via GitHub API + web UI notification badge + one-click update button (see [analysis](https://github.com/trudenboy/sendspin-bt-bridge/blob/main/TODO.md))
 - [ ] **Add HA discovery integration** — support HA discovery protocol for auto-configuring MA connection
+- [ ] **Make blocked-action explanations more touch-visible** — keep mobile users from relying on hover-only `title` text when a control is unavailable.
+- [ ] **Attach recovery timeline context directly to diagnostics download and bugreport text** — the timeline is now available in diagnostics and CSV export, but the plain-text support bundle can still surface it more directly.
 
 ## Assessed ideas (2026-03-20)
 
@@ -55,8 +63,8 @@ Roadmap for HA addon standards compliance and improvements.
 - [ ] **Add adaptive explanation depth for novice vs advanced users** — short default explanations with optional deeper technical detail for power users.
 - [ ] **Show hierarchical blocking explanations** — explain not only that an action is blocked, but the dependency chain causing it.
 - [ ] **Expose advanced recovery views for power users** — e.g. richer trace history, filtering, or longer event timelines in diagnostics.
-- [ ] **Show current vs recommended latency values together** — include current setting, recommendation, and direct config/edit path in the latency assistant.
-- [ ] **Allow inline latency editing from onboarding guidance** — when `Review latency tuning` is the active step, let operators change `PULSE_LATENCY_MSEC` directly from the onboarding card instead of only jumping to General settings.
+- [x] **Show current vs recommended latency values together** — diagnostics now surfaces current Pulse latency, recommendation, presets, and safe next-step hints.
+- [ ] **Allow inline latency editing from onboarding guidance** — diagnostics can now apply preset Pulse latency values directly, but onboarding itself still links out to the wider settings surface.
 
 ## Future
 

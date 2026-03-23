@@ -6272,6 +6272,8 @@ function _encodeGuidanceAction(action) {
     return encodeURIComponent(JSON.stringify({
         key: String((action && action.key) || ''),
         device_names: (action && action.device_names) || [],
+        check_key: String((action && action.check_key) || ''),
+        value: action ? action.value : undefined,
     }));
 }
 
@@ -6526,8 +6528,16 @@ function _runOperatorGuidanceAction(action) {
         showToast('Rerunning bridge checks…', 'info');
         return false;
     }
+    if (actionKey === 'rerun_safe_check') {
+        _rerunSafeCheck(action && action.check_key ? action.check_key : '', deviceNames);
+        return false;
+    }
     if (actionKey === 'retry_ma_discovery') {
         _retryMaDiscoveryFromRecovery();
+        return false;
+    }
+    if (actionKey === 'apply_latency_recommended') {
+        _applyLatencyPreset(action && action.value != null ? action.value : null);
         return false;
     }
     if (actionKey === 'reconnect_device') {
@@ -6575,6 +6585,66 @@ function _runOperatorGuidanceAction(action) {
         );
         return false;
     }
+    return false;
+}
+
+async function _rerunSafeCheck(checkKey, deviceNames) {
+    if (!checkKey) {
+        showToast('No safe check was selected', 'error');
+        return false;
+    }
+    var payload = {check_key: String(checkKey || '')};
+    if (deviceNames && deviceNames.length) payload.device_names = deviceNames;
+    showToast('Rerunning ' + String(checkKey).replace(/_/g, ' ') + '…', 'info');
+    try {
+        var resp = await fetch(API_BASE + '/api/checks/rerun', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload),
+        });
+        var data = await resp.json().catch(function() { return {}; });
+        if (!resp.ok) {
+            throw new Error((data && data.error) || (data && data.summary) || ('Request failed: ' + resp.status));
+        }
+        showToast(
+            (data && data.summary) || 'Safe check finished',
+            data && data.status === 'error' ? 'error' : (data && data.status === 'warning' ? 'warning' : 'success')
+        );
+        if (document.getElementById('diag-details') && document.getElementById('diag-details').open) reloadDiagnostics();
+        updateStatus();
+    } catch (err) {
+        showToast(err && err.message ? err.message : 'Safe check failed', 'error');
+    }
+    return false;
+}
+
+async function _applyLatencyPreset(value) {
+    if (value == null || value === '') {
+        showToast('No latency value was selected', 'error');
+        return false;
+    }
+    showToast('Saving Pulse latency recommendation…', 'info');
+    try {
+        var resp = await fetch(API_BASE + '/api/latency/apply', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({pulse_latency_msec: Number(value)}),
+        });
+        var data = await resp.json().catch(function() { return {}; });
+        if (!resp.ok) {
+            throw new Error((data && data.error) || ('Request failed: ' + resp.status));
+        }
+        showToast(data.summary || 'Latency setting saved', 'success');
+        if (!_configLoading) loadConfig();
+        if (document.getElementById('diag-details') && document.getElementById('diag-details').open) reloadDiagnostics();
+    } catch (err) {
+        showToast(err && err.message ? err.message : 'Could not save latency setting', 'error');
+    }
+    return false;
+}
+
+function _downloadRecoveryTimeline() {
+    window.location.href = API_BASE + '/api/recovery/timeline/download';
     return false;
 }
 
@@ -6756,6 +6826,9 @@ function _renderOnboardingProgressSummary(checklist) {
     var totalSteps = Number(checklist.total_steps || 0);
     var completedSteps = Number(checklist.completed_steps || 0);
     var parts = [];
+    if (checklist.journey_title) {
+        parts.push('<span class="onboarding-progress-pill onboarding-progress-pill--journey">' + escHtml(checklist.journey_title) + '</span>');
+    }
     if (totalSteps > 0) {
         parts.push('<span class="onboarding-progress-pill onboarding-progress-pill--strong">' +
             escHtml(String(completedSteps)) + '/' + escHtml(String(totalSteps)) + ' complete' +
@@ -6766,7 +6839,21 @@ function _renderOnboardingProgressSummary(checklist) {
     } else if ((checklist.progress_percent || 0) >= 100) {
         parts.push('<span class="onboarding-progress-pill">Setup complete</span>');
     }
-    return parts.join('');
+    return '<div class="onboarding-progress-pills">' + parts.join('') + '</div>' +
+        _renderOnboardingPhases(checklist.phases || []);
+}
+
+function _renderOnboardingPhases(phases) {
+    if (!phases || !phases.length) return '';
+    return '<div class="onboarding-phase-rail">' + phases.map(function(phase, index) {
+        return '<div class="onboarding-phase is-' + escHtml(phase.status || 'upcoming') + '">' +
+            '<div class="onboarding-phase-marker">' + escHtml(String(index + 1)) + '</div>' +
+            '<div class="onboarding-phase-copy">' +
+                '<div class="onboarding-phase-title">' + escHtml(phase.title || 'Phase') + '</div>' +
+                '<div class="onboarding-phase-summary">' + escHtml(phase.summary || '') + '</div>' +
+            '</div>' +
+        '</div>';
+    }).join('') + '</div>';
 }
 
 function _renderCollapsedOnboardingSummary(checklist, fallbackSummary) {
@@ -6774,6 +6861,9 @@ function _renderCollapsedOnboardingSummary(checklist, fallbackSummary) {
     var totalSteps = Number(checklist.total_steps || 0);
     var completedSteps = Number(checklist.completed_steps || 0);
     var parts = [];
+    if (checklist.journey_title) {
+        parts.push(String(checklist.journey_title));
+    }
     if (totalSteps > 0) {
         parts.push(String(completedSteps) + '/' + String(totalSteps) + ' complete');
     } else if ((checklist.progress_percent || 0) >= 100) {
@@ -9168,6 +9258,35 @@ function _renderKnownGoodTestPath(testPath) {
         : '');
 }
 
+function _renderRecoveryTimeline(timeline) {
+    var entries = timeline && timeline.entries ? timeline.entries : [];
+    if (!entries.length) {
+        return _renderDiagEmptyCardHtml('No recovery timeline yet', 'The bridge has not recorded any recovery timeline entries yet.', {icon: 'info'});
+    }
+    return '<div class="diag-timeline">' + entries.map(function(entry) {
+        return '<div class="diag-timeline-entry is-' + escHtml(entry.level || 'info') + '">' +
+            '<div class="diag-timeline-dot">' + dot(_diagRecoveryDotTone(entry.level === 'error' ? 'error' : (entry.level === 'warning' ? 'warning' : 'ok'))) + '</div>' +
+            '<div class="diag-timeline-copy">' +
+                '<div class="diag-timeline-title">' + escHtml(entry.source || 'Bridge') + ' · ' + escHtml(entry.label || 'Event') + '</div>' +
+                '<div class="diag-timeline-summary">' + escHtml(entry.summary || '') + '</div>' +
+                '<div class="diag-timeline-meta">' + escHtml(entry.at || 'Latest known state') + '</div>' +
+            '</div>' +
+        '</div>';
+    }).join('') + '</div>';
+}
+
+function _renderLatencyPresetButtons(recoveryLatency) {
+    var presets = recoveryLatency && recoveryLatency.presets ? recoveryLatency.presets : [];
+    if (!presets.length) return '';
+    return '<div class="diag-recovery-actions diag-recovery-actions--wrap">' + presets.map(function(preset) {
+        return '<button type="button" class="btn btn-sm diag-recovery-action' +
+            (preset.value === recoveryLatency.recommended_pulse_latency_msec ? ' diag-recovery-action--primary' : '') +
+            '" onclick="return _applyLatencyPreset(' + JSON.stringify(preset.value) + ')">' +
+            escHtml(preset.label || (String(preset.value) + ' ms')) +
+        '</button>';
+    }).join('') + '</div>';
+}
+
 function renderDiagnostics(d) {
     var env = d.environment || {};
     var ma = d.ma_integration || {};
@@ -9450,6 +9569,7 @@ function renderDiagnostics(d) {
 
     var recoverySummary = recovery.summary || {};
     var recoveryLatency = recovery.latency_assistant || {};
+    var recoveryTimeline = recovery.timeline || {};
     var recoveryOverviewCards = [
         {
             title: 'Needs attention',
@@ -9467,6 +9587,15 @@ function renderDiagnostics(d) {
             tone: _diagRecoveryToneClass(recoveryLatency.tone || 'ok'),
             hint: recoveryLatency.summary || 'No latency guidance available.',
         },
+        {
+            title: 'Timeline',
+            target: 'diag-recovery-timeline',
+            value: String((recoveryTimeline.summary && recoveryTimeline.summary.entry_count) || 0),
+            tone: ((recoveryTimeline.summary && recoveryTimeline.summary.error_count) || 0) > 0
+                ? 'error'
+                : ((((recoveryTimeline.summary && recoveryTimeline.summary.warning_count) || 0) > 0) ? 'warn' : 'ok'),
+            hint: (recoveryTimeline.summary && recoveryTimeline.summary.latest_at) || 'No timeline entries yet',
+        },
     ].map(_renderDiagSummaryCard).join('');
     var recoverySafeActions = (recovery.safe_actions || []).map(_renderRecoveryActionButton).join('');
     var diagnosticsActions = '<div class="diag-actions diag-actions--hero">' +
@@ -9481,6 +9610,41 @@ function renderDiagnostics(d) {
     var latencyHints = (recoveryLatency.hints || []).map(function(hint) {
         return _renderDiagInfoItem('Hint', hint, {stack: true});
     }).join('');
+    var latencyFacts = [
+        _renderDiagInfoItem(
+            'Current Pulse latency',
+            recoveryLatency.current_pulse_latency_msec != null ? (String(recoveryLatency.current_pulse_latency_msec) + ' ms') : 'Unknown',
+            {stack: true}
+        ),
+        _renderDiagInfoItem(
+            'Recommended Pulse latency',
+            recoveryLatency.recommended_pulse_latency_msec != null ? (String(recoveryLatency.recommended_pulse_latency_msec) + ' ms') : 'Unknown',
+            {stack: true}
+        ),
+        _renderDiagInfoItem('Why', recoveryLatency.recommended_summary || 'No recommendation yet.', {stack: true}),
+    ].join('');
+    var recoveryTimelineTone = ((recoveryTimeline.summary && recoveryTimeline.summary.error_count) || 0) > 0
+        ? 'error'
+        : ((((recoveryTimeline.summary && recoveryTimeline.summary.warning_count) || 0) > 0) ? 'warning' : 'ok');
+    var recoveryLatencyCard = '<div class="diag-jump-target" id="diag-recovery-latency"><div class="diag-subsection-title">Latency review</div><div class="diag-mini-card"><div class="diag-mini-title">' +
+        dot(_diagRecoveryDotTone(recoveryLatency.tone || 'ok')) +
+        '<span>Latency guidance</span></div><div class="diag-mini-meta">' +
+        escHtml(recoveryLatency.summary || 'No latency guidance available.') +
+        '</div><div class="diag-grid diag-runtime-grid">' + latencyFacts + latencyHints + '</div>' +
+        _renderLatencyPresetButtons(recoveryLatency) +
+        '<div class="diag-recovery-actions">' +
+        _renderDiagConfigButton('latency', 'Latency settings') +
+        (((recoveryLatency.safe_actions || []).length) ? (recoveryLatency.safe_actions || []).map(_renderRecoveryActionButton).join('') : '') +
+        '</div></div></div>';
+    var recoveryTimelineCard = '<div class="diag-jump-target" id="diag-recovery-timeline"><div class="diag-subsection-title">Chronological recovery timeline</div><div class="diag-mini-card"><div class="diag-mini-title">' +
+        dot(_diagRecoveryDotTone(recoveryTimelineTone)) +
+        '<span>Recent bridge and speaker events</span></div><div class="diag-mini-meta">' +
+        escHtml(((recoveryTimeline.summary && recoveryTimeline.summary.entry_count) || 0) + ' entries available') +
+        '</div>' +
+        _renderRecoveryTimeline(recoveryTimeline) +
+        '<div class="diag-recovery-actions"><button type="button" class="btn btn-sm diag-recovery-action" onclick="return _downloadRecoveryTimeline()">' +
+        _buttonLabelWithIconHtml('download', 'Export timeline CSV') +
+        '</button></div></div></div>';
     var advancedPreviewBits = [
         subprocesses.length + ' daemon' + (subprocesses.length === 1 ? '' : 's'),
         (sinkInputError ? 'audio stream scan failed' : (visibleSinkInputs.length + ' audio stream' + (visibleSinkInputs.length === 1 ? '' : 's'))),
@@ -9506,8 +9670,12 @@ function renderDiagnostics(d) {
                 '<div><div class="diag-subsection-title">Recent recovery events</div>' + _renderRecoveryTraces(recovery.traces || []) + '</div>' +
             '</div>' +
             '<div class="diag-recovery-grid">' +
-                '<div class="diag-jump-target" id="diag-recovery-latency"><div class="diag-subsection-title">Latency review</div><div class="diag-mini-card"><div class="diag-mini-title">' + dot(_diagRecoveryDotTone(recoveryLatency.tone || 'ok')) + '<span>Latency guidance</span></div><div class="diag-mini-meta">' + escHtml(recoveryLatency.summary || 'No latency guidance available.') + '</div><div class="diag-grid diag-runtime-grid">' + latencyHints + '</div><div class="diag-recovery-actions">' + _renderDiagConfigButton('latency', 'Latency settings') + (((recoveryLatency.safe_actions || []).length) ? (recoveryLatency.safe_actions || []).map(_renderRecoveryActionButton).join('') : '') + '</div></div></div>' +
+                recoveryLatencyCard +
                 '<div><div class="diag-subsection-title">Recommended verification path</div>' + _renderKnownGoodTestPath(recovery.known_good_test_path || {}) + '</div>' +
+            '</div>' +
+            '<div class="diag-recovery-grid">' +
+                recoveryTimelineCard +
+                '<div></div>' +
             '</div>' +
         '</div>' +
         '<div class="diag-card diag-jump-target" id="diag-health-summary">' +

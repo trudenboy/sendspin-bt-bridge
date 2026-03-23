@@ -67,10 +67,14 @@ def test_recovery_assistant_flags_sink_and_disconnect_issues():
     assert data["issues"][0]["title"] == "Kitchen is missing a sink"
     assert data["issues"][0]["primary_action"]["key"] == "reconnect_device"
     assert data["issues"][0]["recommended_action"]["key"] == "reconnect_device"
-    assert data["issues"][0]["secondary_actions"][0]["key"] == "open_diagnostics"
-    assert data["safe_actions"][2]["key"] == "retry_ma_discovery"
+    assert data["issues"][0]["secondary_actions"][0]["key"] == "rerun_safe_check"
+    assert data["issues"][0]["secondary_actions"][0]["check_key"] == "sink_verification"
+    assert data["safe_actions"][2]["key"] == "rerun_safe_check"
+    assert data["safe_actions"][2]["check_key"] == "runtime_access"
     assert data["traces"][0]["label"] == "Bridge startup"
     assert data["latency_assistant"]["tone"] == "warning"
+    assert data["latency_assistant"]["presets"][0]["value"] == 300
+    assert data["timeline"]["summary"]["entry_count"] >= 2
     assert data["known_good_test_path"]["steps"][0]["reached"] is True
     assert data["known_good_test_path"]["steps"][1]["reached"] is False
 
@@ -99,6 +103,7 @@ def test_recovery_assistant_reports_healthy_single_device_setup():
     assert data["issues"] == []
     assert data["latency_assistant"]["tone"] == "ok"
     assert "Single-device" in data["latency_assistant"]["summary"]
+    assert data["timeline"]["summary"]["entry_count"] == 1
 
 
 def test_recovery_assistant_prefers_repair_for_unpaired_device():
