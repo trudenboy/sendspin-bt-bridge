@@ -121,6 +121,8 @@ def _parse_memtotal_mb(line: str) -> int | None:
 def _collect_preflight_status() -> dict:
     """Collect preflight runtime checks for reuse across helper routes."""
     arch = _platform.machine()
+    collections_status: dict[str, dict] = {}
+    failed_collections: list[str] = []
 
     audio_info: dict = {"system": "unknown", "socket": None, "sinks": 0}
     try:
@@ -134,8 +136,10 @@ def _collect_preflight_status() -> dict:
             audio_info["socket"] = pulse_sock
         sinks = list_sinks()
         audio_info["sinks"] = len(sinks) if sinks else 0
-    except Exception:
-        pass
+        collections_status["audio"] = _collection_status_payload("ok", count=audio_info["sinks"])
+    except Exception as exc:
+        failed_collections.append("audio")
+        collections_status["audio"] = _collection_status_payload("error", error=_collection_error_payload(exc))
 
     bt_info: dict = {"controller": False, "adapter": None, "paired_devices": 0}
     try:
@@ -155,8 +159,10 @@ def _collect_preflight_status() -> dict:
             timeout=5,
         )
         bt_info["paired_devices"] = paired.stdout.strip().count("Device")
-    except Exception:
-        pass
+        collections_status["bluetooth"] = _collection_status_payload("ok", count=bt_info["paired_devices"])
+    except Exception as exc:
+        failed_collections.append("bluetooth")
+        collections_status["bluetooth"] = _collection_status_payload("error", error=_collection_error_payload(exc))
 
     dbus_ok = os.path.exists("/var/run/dbus/system_bus_socket") or os.path.exists("/run/dbus/system_bus_socket")
 
@@ -169,10 +175,15 @@ def _collect_preflight_status() -> dict:
                     if parsed_mem is not None:
                         mem_mb = parsed_mem
                     break
-    except Exception:
-        pass
+        collections_status["memory"] = _collection_status_payload("ok")
+    except Exception as exc:
+        failed_collections.append("memory")
+        collections_status["memory"] = _collection_status_payload("error", error=_collection_error_payload(exc))
 
     return {
+        "status": "degraded" if failed_collections else "ok",
+        "failed_collections": failed_collections,
+        "collections_status": collections_status,
         "platform": arch,
         "audio": audio_info,
         "bluetooth": bt_info,
@@ -180,6 +191,114 @@ def _collect_preflight_status() -> dict:
         "memory_mb": mem_mb,
         "version": VERSION,
     }
+
+
+def _collection_error_payload(exc: Exception) -> dict[str, str]:
+    """Return a structured diagnostics error payload."""
+    if isinstance(exc, subprocess.TimeoutExpired):
+        cmd = exc.cmd if isinstance(exc.cmd, str) else " ".join(str(part) for part in exc.cmd or ())
+        message = f"{cmd or 'command'} timed out after {exc.timeout}s"
+        code = "timeout"
+    elif isinstance(exc, PermissionError):
+        message = str(exc) or "permission denied"
+        code = "permission_denied"
+    elif isinstance(exc, FileNotFoundError):
+        message = str(exc) or "command not found"
+        code = "not_found"
+    elif isinstance(exc, (ValueError, json.JSONDecodeError)):
+        message = str(exc) or "failed to parse diagnostic data"
+        code = "parse_error"
+    else:
+        message = str(exc) or "diagnostic collection failed"
+        code = "unknown"
+    return {
+        "code": code,
+        "message": message,
+        "exception_type": type(exc).__name__,
+    }
+
+
+def _collection_status_payload(status: str, *, count: int | None = None, error: dict[str, str] | None = None) -> dict:
+    """Build a compact diagnostics collection status payload."""
+    payload: dict[str, object] = {"status": status}
+    if count is not None:
+        payload["count"] = count
+    if error is not None:
+        payload["error"] = error
+    return payload
+
+
+def _collect_bluetooth_daemon_status() -> str:
+    r = subprocess.run(["bluetoothctl", "list"], capture_output=True, text=True, timeout=5)
+    if r.returncode == 0 and "Controller" in r.stdout:
+        return "active"
+    r2 = subprocess.run(
+        ["systemctl", "is-active", "bluetooth"],
+        capture_output=True,
+        text=True,
+        timeout=3,
+    )
+    return r2.stdout.strip() or "inactive"
+
+
+def _collect_adapter_diagnostics() -> list[dict]:
+    r = subprocess.run(["bluetoothctl", "list"], capture_output=True, text=True, timeout=5)
+    adapters = []
+    for i, line in enumerate(r.stdout.splitlines()):
+        if "Controller" not in line:
+            continue
+        parts = line.split()
+        mac = next((p for p in parts if len(p) == 17 and p.count(":") == 5), "")
+        adapters.append(
+            {
+                "id": f"hci{i}",
+                "mac": mac,
+                "default": "default" in line.lower(),
+            }
+        )
+    return adapters
+
+
+def _collect_sink_input_diagnostics() -> list[dict]:
+    r = subprocess.run(
+        ["pactl", "list", "sink-inputs"],
+        capture_output=True,
+        text=True,
+        timeout=5,
+    )
+    sink_inputs = []
+    current: dict = {}
+    for line in r.stdout.splitlines():
+        line = line.strip()
+        if line.startswith("Sink Input #"):
+            if current:
+                sink_inputs.append(current)
+            sink_input_id = _parse_sink_input_id(line)
+            current = {"id": sink_input_id} if sink_input_id else {}
+        elif ":" in line or "=" in line:
+            separator = ":" if ":" in line else "="
+            key, _, val = line.partition(separator)
+            key = key.strip().lower().replace(" ", "_").replace(".", "_")
+            if key in (
+                "sink",
+                "state",
+                "application_name",
+                "application_process_binary",
+                "media_name",
+                "media_title",
+            ):
+                current[key] = val.strip().strip('"')
+    if current:
+        sink_inputs.append(current)
+    return sink_inputs
+
+
+def _collect_portaudio_device_diagnostics() -> list[dict]:
+    from sendspin.audio import query_devices
+
+    return [
+        {"index": d.index, "name": d.name, "is_default": d.is_default} for d in query_devices() if d.output_channels > 0
+    ]
 
 
 def _build_onboarding_assistant_payload(
@@ -517,6 +636,18 @@ def api_status_stream():
 def api_diagnostics():
     """Return structured health diagnostics."""
     try:
+        collections_status: dict[str, dict] = {}
+        failed_collections: list[str] = []
+
+        def _record_success(name: str, *, count: int | None = None) -> None:
+            collections_status[name] = _collection_status_payload("ok", count=count)
+
+        def _record_failure(name: str, exc: Exception, *, fallback, log_message: str):
+            logger.exception(log_message)
+            failed_collections.append(name)
+            collections_status[name] = _collection_status_payload("error", error=_collection_error_payload(exc))
+            return fallback
+
         # Runtime detection
         runtime = "unknown"
         if os.path.exists("/data/options.json"):
@@ -537,59 +668,91 @@ def api_diagnostics():
                 "config_schema_version": CONFIG_SCHEMA_VERSION,
                 "ipc_protocol_version": IPC_PROTOCOL_VERSION,
             },
-            "environment": _collect_environment(),
-            "startup_progress": build_startup_progress_snapshot().to_dict(),
-            "runtime_info": build_mock_runtime_snapshot().to_dict(),
+            "environment": {},
+            "startup_progress": {},
+            "runtime_info": {},
         }
 
         try:
-            r = subprocess.run(["bluetoothctl", "list"], capture_output=True, text=True, timeout=5)
-            if r.returncode == 0 and "Controller" in r.stdout:
-                diag["bluetooth_daemon"] = "active"
-            else:
-                r2 = subprocess.run(
-                    ["systemctl", "is-active", "bluetooth"],
-                    capture_output=True,
-                    text=True,
-                    timeout=3,
-                )
-                diag["bluetooth_daemon"] = r2.stdout.strip() or "inactive"
-        except Exception:
-            diag["bluetooth_daemon"] = "unknown"
+            diag["environment"] = _collect_environment()
+            _record_success("environment")
+        except Exception as exc:
+            diag["environment"] = _record_failure(
+                "environment",
+                exc,
+                fallback={"error": "Failed to collect environment"},
+                log_message="Failed to collect environment for diagnostics",
+            )
+
+        try:
+            diag["startup_progress"] = build_startup_progress_snapshot().to_dict()
+            _record_success("startup_progress")
+        except Exception as exc:
+            diag["startup_progress"] = _record_failure(
+                "startup_progress",
+                exc,
+                fallback={"error": "Failed to collect startup progress"},
+                log_message="Failed to collect startup progress for diagnostics",
+            )
+
+        try:
+            diag["runtime_info"] = build_mock_runtime_snapshot().to_dict()
+            _record_success("runtime_info")
+        except Exception as exc:
+            diag["runtime_info"] = _record_failure(
+                "runtime_info",
+                exc,
+                fallback={"mode": "unknown"},
+                log_message="Failed to collect runtime info for diagnostics",
+            )
+
+        try:
+            diag["bluetooth_daemon"] = _collect_bluetooth_daemon_status()
+            _record_success("bluetooth_daemon")
+        except Exception as exc:
+            diag["bluetooth_daemon"] = _record_failure(
+                "bluetooth_daemon",
+                exc,
+                fallback="unknown",
+                log_message="Failed to collect bluetooth daemon status for diagnostics",
+            )
 
         dbus_env = os.environ.get("DBUS_SYSTEM_BUS_ADDRESS", "")
         dbus_path = dbus_env.replace("unix:path=", "") if dbus_env else "/run/dbus/system_bus_socket"
         diag["dbus_available"] = os.path.exists(dbus_path)
 
         try:
-            r = subprocess.run(["bluetoothctl", "list"], capture_output=True, text=True, timeout=5)
-            adapters = []
-            for i, line in enumerate(r.stdout.splitlines()):
-                if "Controller" not in line:
-                    continue
-                parts = line.split()
-                mac = next((p for p in parts if len(p) == 17 and p.count(":") == 5), "")
-                adapters.append(
-                    {
-                        "id": f"hci{i}",
-                        "mac": mac,
-                        "default": "default" in line.lower(),
-                    }
-                )
-            diag["adapters"] = adapters
-        except Exception:
-            logger.exception("Failed to enumerate adapters for diagnostics")
-            diag["adapters"] = [{"error": "Failed to enumerate adapters"}]
+            diag["adapters"] = _collect_adapter_diagnostics()
+            _record_success("adapters", count=len(diag["adapters"]))
+        except Exception as exc:
+            diag["adapters"] = _record_failure(
+                "adapters",
+                exc,
+                fallback=[{"error": "Failed to enumerate adapters"}],
+                log_message="Failed to enumerate adapters for diagnostics",
+            )
 
         try:
             diag["pulseaudio"] = get_server_name()
-        except Exception:
-            diag["pulseaudio"] = "not available"
+            _record_success("pulseaudio")
+        except Exception as exc:
+            diag["pulseaudio"] = _record_failure(
+                "pulseaudio",
+                exc,
+                fallback="not available",
+                log_message="Failed to collect PulseAudio server name for diagnostics",
+            )
 
         try:
             diag["sinks"] = [s["name"] for s in list_sinks() if "bluez" in s["name"].lower()]
-        except Exception:
-            diag["sinks"] = []
+            _record_success("sinks", count=len(diag["sinks"]))
+        except Exception as exc:
+            diag["sinks"] = _record_failure(
+                "sinks",
+                exc,
+                fallback=[],
+                log_message="Failed to list sinks for diagnostics",
+            )
 
         device_diag = []
         registry = get_device_registry_snapshot()
@@ -672,90 +835,135 @@ def api_diagnostics():
 
         # PA sink-inputs with properties (for routing diagnostics)
         try:
-            r = subprocess.run(
-                ["pactl", "list", "sink-inputs"],
-                capture_output=True,
-                text=True,
-                timeout=5,
+            diag["sink_inputs"] = _collect_sink_input_diagnostics()
+            _record_success("sink_inputs", count=len(diag["sink_inputs"]))
+        except Exception as exc:
+            diag["sink_inputs"] = _record_failure(
+                "sink_inputs",
+                exc,
+                fallback=[{"error": "Failed to list sink inputs"}],
+                log_message="Failed to list sink inputs for diagnostics",
             )
-            sink_inputs = []
-            current: dict = {}
-            for line in r.stdout.splitlines():
-                line = line.strip()
-                if line.startswith("Sink Input #"):
-                    if current:
-                        sink_inputs.append(current)
-                    sink_input_id = _parse_sink_input_id(line)
-                    current = {"id": sink_input_id} if sink_input_id else {}
-                elif ":" in line or "=" in line:
-                    separator = ":" if ":" in line else "="
-                    key, _, val = line.partition(separator)
-                    key = key.strip().lower().replace(" ", "_").replace(".", "_")
-                    if key in (
-                        "sink",
-                        "state",
-                        "application_name",
-                        "application_process_binary",
-                        "media_name",
-                        "media_title",
-                    ):
-                        current[key] = val.strip().strip('"')
-            if current:
-                sink_inputs.append(current)
-            diag["sink_inputs"] = sink_inputs
-        except Exception:
-            logger.exception("Failed to list sink inputs for diagnostics")
-            diag["sink_inputs"] = [{"error": "Failed to list sink inputs"}]
 
         # PortAudio devices available inside the container
         try:
-            from sendspin.audio import query_devices
+            diag["portaudio_devices"] = _collect_portaudio_device_diagnostics()
+            _record_success("portaudio_devices", count=len(diag["portaudio_devices"]))
+        except Exception as exc:
+            diag["portaudio_devices"] = _record_failure(
+                "portaudio_devices",
+                exc,
+                fallback=[{"error": "Failed to list PortAudio devices"}],
+                log_message="Failed to list PortAudio devices for diagnostics",
+            )
 
-            diag["portaudio_devices"] = [
-                {"index": d.index, "name": d.name, "is_default": d.is_default}
-                for d in query_devices()
-                if d.output_channels > 0
-            ]
-        except Exception:
-            logger.exception("Failed to list PortAudio devices for diagnostics")
-            diag["portaudio_devices"] = [{"error": "Failed to list PortAudio devices"}]
+        try:
+            diag["subprocesses"] = _collect_subprocess_info()
+            _record_success("subprocesses", count=len(diag["subprocesses"]))
+        except Exception as exc:
+            diag["subprocesses"] = _record_failure(
+                "subprocesses",
+                exc,
+                fallback=[{"error": "Failed to collect subprocess info"}],
+                log_message="Failed to collect subprocess info for diagnostics",
+            )
 
-        diag["subprocesses"] = _collect_subprocess_info()
-        diag["event_hooks"] = get_event_hook_registry().snapshot()
-        onboarding_assistant = _build_onboarding_assistant_payload(
-            config=load_config(),
-            devices=[device for _client, device in snapshot_pairs],
-            runtime_mode=diag["runtime_info"]["mode"],
-            ma_connected=is_ma_connected(),
-        )
-        diag["onboarding_assistant"] = onboarding_assistant
-        diag["recovery_assistant"] = _build_recovery_assistant_payload(
-            config=load_config(),
-            devices=[device for _client, device in snapshot_pairs],
-            onboarding_assistant=onboarding_assistant,
-            startup_progress=diag["startup_progress"],
-        )
-        diag["operator_guidance"] = _build_operator_guidance_payload(
-            config=load_config(),
-            devices=[device for _client, device in snapshot_pairs],
-            onboarding_assistant=onboarding_assistant,
-            recovery_assistant=diag["recovery_assistant"],
-            startup_progress=diag["startup_progress"],
-            runtime_mode=diag["runtime_info"]["mode"],
-            ma_connected=is_ma_connected(),
-        )
-        diag["telemetry"] = _build_bridge_telemetry_payload(
-            environment=diag["environment"],
-            subprocesses=diag["subprocesses"],
-            startup_progress=diag["startup_progress"],
-            runtime_info=diag["runtime_info"],
-            event_hooks=diag["event_hooks"],
-        )
+        try:
+            diag["event_hooks"] = get_event_hook_registry().snapshot()
+            _record_success("event_hooks")
+        except Exception as exc:
+            diag["event_hooks"] = _record_failure(
+                "event_hooks",
+                exc,
+                fallback={"error": "Failed to collect event hooks"},
+                log_message="Failed to collect event hooks for diagnostics",
+            )
+        try:
+            onboarding_assistant = _build_onboarding_assistant_payload(
+                config=load_config(),
+                devices=[device for _client, device in snapshot_pairs],
+                runtime_mode=diag["runtime_info"].get("mode", "unknown"),
+                ma_connected=is_ma_connected(),
+            )
+            diag["onboarding_assistant"] = onboarding_assistant
+            _record_success("onboarding_assistant")
+        except Exception as exc:
+            onboarding_assistant = {"error": "Failed to build onboarding assistant"}
+            diag["onboarding_assistant"] = _record_failure(
+                "onboarding_assistant",
+                exc,
+                fallback=onboarding_assistant,
+                log_message="Failed to build onboarding assistant for diagnostics",
+            )
+        try:
+            diag["recovery_assistant"] = _build_recovery_assistant_payload(
+                config=load_config(),
+                devices=[device for _client, device in snapshot_pairs],
+                onboarding_assistant=onboarding_assistant,
+                startup_progress=diag["startup_progress"],
+            )
+            _record_success("recovery_assistant")
+        except Exception as exc:
+            diag["recovery_assistant"] = _record_failure(
+                "recovery_assistant",
+                exc,
+                fallback={"error": "Failed to build recovery assistant"},
+                log_message="Failed to build recovery assistant for diagnostics",
+            )
+        try:
+            diag["operator_guidance"] = _build_operator_guidance_payload(
+                config=load_config(),
+                devices=[device for _client, device in snapshot_pairs],
+                onboarding_assistant=onboarding_assistant,
+                recovery_assistant=diag["recovery_assistant"],
+                startup_progress=diag["startup_progress"],
+                runtime_mode=diag["runtime_info"].get("mode", "unknown"),
+                ma_connected=is_ma_connected(),
+            )
+            _record_success("operator_guidance")
+        except Exception as exc:
+            diag["operator_guidance"] = _record_failure(
+                "operator_guidance",
+                exc,
+                fallback={"error": "Failed to build operator guidance"},
+                log_message="Failed to build operator guidance for diagnostics",
+            )
+        try:
+            diag["telemetry"] = _build_bridge_telemetry_payload(
+                environment=diag["environment"],
+                subprocesses=diag["subprocesses"],
+                startup_progress=diag["startup_progress"],
+                runtime_info=diag["runtime_info"],
+                event_hooks=diag["event_hooks"],
+            )
+            _record_success("telemetry")
+        except Exception as exc:
+            diag["telemetry"] = _record_failure(
+                "telemetry",
+                exc,
+                fallback={"error": "Failed to build telemetry payload"},
+                log_message="Failed to build telemetry payload for diagnostics",
+            )
 
+        diag["status"] = "degraded" if failed_collections else "ok"
+        diag["failed_collections"] = failed_collections
+        diag["collections_status"] = collections_status
         return jsonify(diag)
     except Exception:
         logger.exception("Diagnostics collection failed")
-        return jsonify({"error": "Internal error"}), 500
+        return jsonify(
+            {
+                "error": "Internal error",
+                "status": "failed",
+                "failed_collections": ["diagnostics"],
+                "collections_status": {
+                    "diagnostics": _collection_status_payload(
+                        "error",
+                        error=_collection_error_payload(RuntimeError("diagnostics collection failed")),
+                    )
+                },
+            }
+        ), 500
 
 
 # ---------------------------------------------------------------------------
