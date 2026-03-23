@@ -182,6 +182,9 @@ if [ "$DETECTED_UID" -ne 1000 ]; then
 else
   ok "UID is 1000 (default, no .env override needed)"
 fi
+if [ -S "$PULSE_SOCK" ] || [ -S "$PW_SOCK" ]; then
+  skip "Docker containers still run as root by default — if container logs show 'pactl' connection failures, compare container UID with AUDIO_UID and test a temporary compose user override"
+fi
 echo ""
 
 # ── 7. D-Bus ─────────────────────────────────────────────────────────────────
@@ -236,6 +239,21 @@ echo "  # Save this as .env next to docker-compose.yml"
 # AUDIO_UID
 echo "  AUDIO_UID=$DETECTED_UID"
 
+echo ""
+echo -e "${BOLD}If audio still fails inside the container:${NC}"
+echo ""
+echo "  # 1. Check whether the mounted host audio socket is visible inside the container"
+echo "  docker exec sendspin-client ls -la /run/user/${DETECTED_UID}/pulse/"
+echo ""
+echo "  # 2. Check the audio-related environment variables inside the container"
+echo "  docker exec sendspin-client env | grep -E 'PULSE|XDG'"
+echo ""
+echo "  # 3. Check which UID/GID the container process is actually using"
+echo "  docker exec sendspin-client id"
+echo ""
+echo "  # 4. If the container runs as root but your host audio socket is user-scoped,"
+echo "  #    try this temporary Docker Compose diagnostic override:"
+echo "  #    user: \"${DETECTED_UID}:${DETECTED_UID}\""
 echo ""
 echo -e "${CYAN}  Next: docker compose up -d && docker logs -f sendspin-client${NC}"
 echo ""

@@ -6,6 +6,10 @@ cd /app
 
 echo "=== Starting Sendspin Client Container ==="
 
+RUNTIME_UID=$(id -u 2>/dev/null || echo "?")
+RUNTIME_GID=$(id -g 2>/dev/null || echo "?")
+RUNTIME_USER=$(id -un 2>/dev/null || echo "unknown")
+
 # HA Addon mode: /data/options.json is written by HA Supervisor before start.
 # Translate it to /data/config.json so the rest of the startup is uniform.
 if [ -f /data/options.json ]; then
@@ -36,18 +40,61 @@ fi
 
 # Use host's PipeWire/PulseAudio
 AUDIO_STATUS="✗ no socket found"
+AUDIO_SOCKET_PATH=""
+AUDIO_SOCKET_OWNER=""
+AUDIO_PROBE_STATUS="not attempted"
+AUDIO_PROBE_ERROR=""
+AUDIO_WARNING=""
+AUDIO_HINT=""
 if [ -n "${PULSE_SERVER:-}" ]; then
     AUDIO_STATUS="✓ pre-configured ($PULSE_SERVER)"
+    case "$PULSE_SERVER" in
+        unix:*) AUDIO_SOCKET_PATH="${PULSE_SERVER#unix:}" ;;
+    esac
 elif [ -S /run/audio/pulse.sock ]; then
     export PULSE_SERVER=unix:/run/audio/pulse.sock
     AUDIO_STATUS="✓ HA audio bridge (/run/audio/pulse.sock)"
+    AUDIO_SOCKET_PATH="/run/audio/pulse.sock"
 elif [ -S "/run/user/${AUDIO_UID:-1000}/pulse/native" ]; then
     export PULSE_SERVER="unix:/run/user/${AUDIO_UID:-1000}/pulse/native"
     AUDIO_STATUS="✓ PulseAudio (/run/user/${AUDIO_UID:-1000}/pulse/native)"
+    AUDIO_SOCKET_PATH="/run/user/${AUDIO_UID:-1000}/pulse/native"
 elif [ -S "/run/user/${AUDIO_UID:-1000}/pipewire-0" ]; then
     AUDIO_STATUS="✓ PipeWire (/run/user/${AUDIO_UID:-1000}/pipewire-0)"
+    AUDIO_SOCKET_PATH="/run/user/${AUDIO_UID:-1000}/pipewire-0"
 else
     echo "WARNING: Host audio socket not found"
+fi
+
+if [ -n "$AUDIO_SOCKET_PATH" ] && [ -S "$AUDIO_SOCKET_PATH" ]; then
+    SOCKET_UID=$(stat -c '%u' "$AUDIO_SOCKET_PATH" 2>/dev/null || echo "?")
+    SOCKET_GID=$(stat -c '%g' "$AUDIO_SOCKET_PATH" 2>/dev/null || echo "?")
+    SOCKET_MODE=$(stat -c '%a' "$AUDIO_SOCKET_PATH" 2>/dev/null || echo "?")
+    AUDIO_SOCKET_OWNER="${SOCKET_UID}:${SOCKET_GID} mode ${SOCKET_MODE}"
+    case "$AUDIO_SOCKET_PATH" in
+        /run/user/*)
+            SOCKET_RUNTIME_UID=$(printf '%s' "$AUDIO_SOCKET_PATH" | cut -d/ -f4)
+            if [ -n "$SOCKET_RUNTIME_UID" ] && [ "$SOCKET_RUNTIME_UID" != "$RUNTIME_UID" ]; then
+                AUDIO_WARNING="User-scoped audio socket targets UID ${SOCKET_RUNTIME_UID}, but container runs as UID ${RUNTIME_UID}"
+                AUDIO_HINT='If `pactl` shows "Connection refused", try a diagnostic Docker Compose override: user: "${AUDIO_UID:-1000}:${AUDIO_UID:-1000}"'
+            fi
+            ;;
+    esac
+fi
+
+if command -v pactl >/dev/null 2>&1; then
+    if pactl info >/tmp/sendspin-pactl-info.log 2>&1; then
+        AUDIO_PROBE_STATUS="✓ pactl info ok"
+    else
+        AUDIO_PROBE_STATUS="✗ pactl info failed"
+        AUDIO_PROBE_ERROR=$(head -1 /tmp/sendspin-pactl-info.log 2>/dev/null | sed 's/[[:space:]]\+/ /g; s/^ //; s/ $//')
+        if [ -z "$AUDIO_PROBE_ERROR" ]; then
+            AUDIO_PROBE_ERROR="No response from PulseAudio/PipeWire server"
+        fi
+        if [ -z "$AUDIO_HINT" ] && [ -n "$AUDIO_SOCKET_PATH" ]; then
+            AUDIO_HINT='Check container UID, mounted audio socket path, and `PULSE_SERVER`/`XDG_RUNTIME_DIR` values'
+        fi
+    fi
 fi
 
 # Detect platform
@@ -84,6 +131,8 @@ echo "║  Sendspin Bridge v${VERSION} Diagnostics"
 echo "╠══════════════════════════════════════════════════════╣"
 printf "║  Platform:    %-38s ║\n" "$PLATFORM ($PLATFORM_LABEL)"
 printf "║  Audio:       %-38s ║\n" "$AUDIO_STATUS"
+printf "║  Runtime UID: %-38s ║\n" "$RUNTIME_UID:$RUNTIME_GID ($RUNTIME_USER)"
+printf "║  Audio Probe: %-38s ║\n" "$AUDIO_PROBE_STATUS"
 printf "║  Sinks:       %-38s ║\n" "$SINK_COUNT available"
 printf "║  Bluetooth:   %-38s ║\n" "$BT_STATUS"
 printf "║  Paired:      %-38s ║\n" "$BT_PAIRED devices"
@@ -92,6 +141,25 @@ printf "║  Config:      %-38s ║\n" "$CONFIG_STATUS"
 printf "║  MA Server:   %-38s ║\n" "$MA_SERVER"
 echo "╚══════════════════════════════════════════════════════╝"
 echo ""
+
+if [ -n "$AUDIO_SOCKET_PATH" ]; then
+    echo "Audio socket path: $AUDIO_SOCKET_PATH"
+fi
+if [ -n "$AUDIO_SOCKET_OWNER" ]; then
+    echo "Audio socket owner: $AUDIO_SOCKET_OWNER"
+fi
+if [ -n "$AUDIO_PROBE_ERROR" ]; then
+    echo "Audio probe error: $AUDIO_PROBE_ERROR"
+fi
+if [ -n "$AUDIO_WARNING" ]; then
+    echo "WARNING: $AUDIO_WARNING"
+fi
+if [ -n "$AUDIO_HINT" ]; then
+    echo "Hint: $AUDIO_HINT"
+fi
+if [ -n "$AUDIO_SOCKET_PATH" ] || [ -n "$AUDIO_PROBE_ERROR" ] || [ -n "$AUDIO_WARNING" ]; then
+    echo ""
+fi
 
 # Start the Sendspin client (includes web interface)
 echo "Starting Sendspin client with web interface..."

@@ -46,6 +46,10 @@ The published image supports `linux/amd64`, `linux/arm64`, and `linux/arm/v7`.
      Check `id -u`. If your audio user is not UID `1000`, set `AUDIO_UID` accordingly.
    </Aside>
 
+   <Aside type="tip">
+     `AUDIO_UID` controls which host user-scoped PipeWire/PulseAudio socket path is mounted into the container. On Raspberry Pi and other PipeWire-heavy setups, a wrong UID often looks like `pactl` / PulseAudio `Connection refused` even though the socket path exists.
+   </Aside>
+
 3. **Create `docker-compose.yml`**
 
    ```yaml
@@ -142,6 +146,43 @@ Required capabilities:
 docker logs -f sendspin-client
 curl -s http://localhost:${WEB_PORT:-8080}/api/preflight | python3 -m json.tool
 ```
+
+Recent images also print startup diagnostics for:
+
+- the runtime UID/GID inside the container
+- the selected audio socket path
+- the socket owner/mode
+- a live `pactl info` probe result
+- a warning when the container runs under a different UID than the user-scoped host audio socket
+
+## Troubleshooting user-scoped PipeWire / PulseAudio
+
+If the host audio stack is healthy but the container still shows `Connection refused` or cannot reach `pactl`, check:
+
+```bash
+docker exec sendspin-client ls -la /run/user/${AUDIO_UID:-1000}/pulse/
+docker exec sendspin-client env | grep -E 'PULSE|XDG'
+docker exec sendspin-client id
+docker inspect sendspin-client --format '{{json .Mounts}}'
+```
+
+And on the host:
+
+```bash
+id
+pactl info
+ls -la /run/user/${AUDIO_UID:-1000}/pulse/
+```
+
+If the mounted host audio socket belongs to your normal login user but the container process runs as `root`, try this **temporary diagnostic test** in `docker-compose.yml`:
+
+```yaml
+services:
+  sendspin-client:
+    user: "${AUDIO_UID:-1000}:${AUDIO_UID:-1000}"
+```
+
+Then restart the container and see whether `pactl` starts working. Treat that as a troubleshooting step first: it helps confirm a UID/session mismatch with the host audio socket.
 
 ## Applying configuration changes
 

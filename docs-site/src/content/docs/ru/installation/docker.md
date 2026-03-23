@@ -46,6 +46,10 @@ import { Aside, Steps } from '@astrojs/starlight/components';
      Проверьте `id -u`. Если аудио-пользователь имеет UID не `1000`, укажите правильное значение в `AUDIO_UID`.
    </Aside>
 
+   <Aside type="tip">
+     `AUDIO_UID` определяет, какой user-scoped сокет PipeWire/PulseAudio с хоста будет смонтирован в контейнер. На Raspberry Pi и других системах с PipeWire ошибка в UID часто выглядит как `pactl` / PulseAudio `Connection refused`, даже если путь к сокету существует.
+   </Aside>
+
 3. **Создайте `docker-compose.yml`**
 
    ```yaml
@@ -142,6 +146,43 @@ import { Aside, Steps } from '@astrojs/starlight/components';
 docker logs -f sendspin-client
 curl -s http://localhost:${WEB_PORT:-8080}/api/preflight | python3 -m json.tool
 ```
+
+В новых образах startup diagnostics также показывают:
+
+- runtime UID/GID внутри контейнера
+- выбранный путь к audio socket
+- владельца/права сокета
+- результат живого `pactl info` probe
+- отдельное предупреждение, если контейнер работает под другим UID, чем user-scoped audio socket на хосте
+
+## Troubleshooting для user-scoped PipeWire / PulseAudio
+
+Если на хосте аудио работает нормально, но в контейнере всё ещё видно `Connection refused` или `pactl` не может подключиться, проверьте:
+
+```bash
+docker exec sendspin-client ls -la /run/user/${AUDIO_UID:-1000}/pulse/
+docker exec sendspin-client env | grep -E 'PULSE|XDG'
+docker exec sendspin-client id
+docker inspect sendspin-client --format '{{json .Mounts}}'
+```
+
+И на хосте:
+
+```bash
+id
+pactl info
+ls -la /run/user/${AUDIO_UID:-1000}/pulse/
+```
+
+Если смонтированный host audio socket принадлежит вашему обычному login user, а процесс в контейнере работает как `root`, попробуйте такой **временный диагностический тест** в `docker-compose.yml`:
+
+```yaml
+services:
+  sendspin-client:
+    user: "${AUDIO_UID:-1000}:${AUDIO_UID:-1000}"
+```
+
+После этого перезапустите контейнер и проверьте, начал ли работать `pactl`. Это именно шаг диагностики: он помогает быстро подтвердить проблему несовпадения UID/session при доступе к host audio socket.
 
 ## Применение изменений конфигурации
 
