@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 UTC = timezone.utc
+RECOVERY_TIMELINE_VISIBLE_ENTRIES = 60
 
 
 def _parse_timestamp(value: Any) -> datetime:
@@ -78,16 +79,37 @@ def build_recovery_timeline(devices: list[Any], startup_progress: dict[str, Any]
         )
 
     entries.sort(key=lambda entry: (_parse_timestamp(entry.get("at")), str(entry.get("source") or "")))
-    visible_entries = entries[-30:]
+    total_entry_count = len(entries)
+    visible_entries = entries[-RECOVERY_TIMELINE_VISIBLE_ENTRIES:]
     error_count = sum(1 for entry in visible_entries if entry.get("level") == "error")
     warning_count = sum(1 for entry in visible_entries if entry.get("level") == "warning")
     latest_at = visible_entries[-1].get("at") if visible_entries else None
+    level_counts: dict[str, int] = {}
+    source_type_counts: dict[str, int] = {}
+    source_counts: dict[str, int] = {}
+    for entry in visible_entries:
+        level = str(entry.get("level") or "info")
+        source_type = str(entry.get("source_type") or "unknown")
+        source = str(entry.get("source") or "Unknown source")
+        level_counts[level] = level_counts.get(level, 0) + 1
+        source_type_counts[source_type] = source_type_counts.get(source_type, 0) + 1
+        source_counts[source] = source_counts.get(source, 0) + 1
     return {
         "summary": {
             "entry_count": len(visible_entries),
+            "visible_entry_count": len(visible_entries),
+            "total_entry_count": total_entry_count,
+            "truncated_entry_count": max(0, total_entry_count - len(visible_entries)),
+            "max_visible_entries": RECOVERY_TIMELINE_VISIBLE_ENTRIES,
             "error_count": error_count,
             "warning_count": warning_count,
             "latest_at": latest_at,
+            "level_counts": level_counts,
+            "source_type_counts": source_type_counts,
+            "sources": [
+                {"source": source, "count": count}
+                for source, count in sorted(source_counts.items(), key=lambda item: (-item[1], item[0]))
+            ],
         },
         "entries": visible_entries,
     }

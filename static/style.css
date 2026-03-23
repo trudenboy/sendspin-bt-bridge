@@ -5027,6 +5027,86 @@ body {
             gap: 10px;
             margin-top: 10px;
         }
+        .diag-timeline-overview {
+            display: grid;
+            gap: 8px;
+            padding: 10px 12px;
+            border: 1px solid var(--divider-color);
+            border-radius: 10px;
+            background: rgba(148, 163, 184, 0.08);
+        }
+        .diag-timeline-overview-copy {
+            font-size: 12px;
+            line-height: 1.5;
+            color: var(--secondary-text-color);
+        }
+        .diag-timeline-source-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .diag-timeline-source-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            border-radius: 999px;
+            border: 1px solid var(--divider-color);
+            background: var(--card-background-color);
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--secondary-text-color);
+        }
+        .diag-timeline-advanced {
+            margin: 0;
+            border: 1px solid var(--divider-color);
+            border-radius: 10px;
+            background: var(--primary-background-color);
+        }
+        .diag-timeline-advanced-summary {
+            cursor: pointer;
+            padding: 10px 12px;
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--primary-text-color);
+            list-style: none;
+        }
+        .diag-timeline-advanced-summary::-webkit-details-marker {
+            display: none;
+        }
+        .diag-timeline-advanced-summary::after {
+            content: "▾";
+            float: right;
+            color: var(--secondary-text-color);
+        }
+        .diag-timeline-advanced[open] .diag-timeline-advanced-summary::after {
+            content: "▴";
+        }
+        .diag-timeline-controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 10px;
+            padding: 0 12px 12px;
+        }
+        .diag-timeline-control {
+            display: grid;
+            gap: 6px;
+            font-size: 11px;
+            color: var(--secondary-text-color);
+        }
+        .diag-timeline-control-label {
+            font-weight: 700;
+            color: var(--secondary-text-color);
+        }
+        .diag-timeline-control select {
+            width: 100%;
+            min-height: 34px;
+            border: 1px solid var(--divider-color);
+            border-radius: 8px;
+            padding: 6px 10px;
+            background: var(--card-background-color);
+            color: var(--primary-text-color);
+        }
         .diag-timeline-entry {
             display: grid;
             grid-template-columns: auto minmax(0, 1fr);
@@ -5055,6 +5135,15 @@ body {
             font-size: 12px;
             line-height: 1.5;
             color: var(--secondary-text-color);
+        }
+        .diag-timeline-empty {
+            padding: 12px;
+            border: 1px dashed var(--divider-color);
+            border-radius: 10px;
+            font-size: 12px;
+            line-height: 1.5;
+            color: var(--secondary-text-color);
+            background: rgba(148, 163, 184, 0.05);
         }
         .diag-test-step {
             display: flex;

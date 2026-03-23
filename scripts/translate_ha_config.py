@@ -138,6 +138,7 @@ def main() -> None:
         "WEB_PORT": None,
         "BASE_LISTEN_PORT": _optional_int_opt(opts, "base_listen_port"),
         "BRIDGE_NAME": str(opts.get("bridge_name") or ""),
+        "HA_AREA_NAME_ASSIST_ENABLED": bool(opts.get("ha_area_name_assist_enabled", True)),
         "BLUETOOTH_DEVICES": list(opts.get("bluetooth_devices") or []),
         "BLUETOOTH_ADAPTERS": adapters,
         "TZ": tz,
@@ -166,6 +167,8 @@ def main() -> None:
             config["LAST_VOLUMES"] = existing["LAST_VOLUMES"]
         if "LAST_SINKS" in existing:
             config["LAST_SINKS"] = existing["LAST_SINKS"]
+        if "HA_AREA_NAME_ASSIST_ENABLED" in existing and "ha_area_name_assist_enabled" not in opts:
+            config["HA_AREA_NAME_ASSIST_ENABLED"] = bool(existing["HA_AREA_NAME_ASSIST_ENABLED"])
         if "HA_ADAPTER_AREA_MAP" in existing:
             config["HA_ADAPTER_AREA_MAP"] = existing["HA_ADAPTER_AREA_MAP"]
         for key in ("AUTH_PASSWORD_HASH", "SECRET_KEY"):

@@ -40,6 +40,7 @@ options:
   sendspin_server: "auto"
   sendspin_port: 9000
   bridge_name: ""
+  ha_area_name_assist_enabled: true
   tz: ""
   pulse_latency_msec: 200
   prefer_sbc_codec: false
@@ -58,6 +59,7 @@ schema:
   sendspin_port: port
   base_listen_port: port?
   bridge_name: str?
+  ha_area_name_assist_enabled: bool?
   tz: str?
   pulse_latency_msec: int?
   prefer_sbc_codec: bool?

@@ -35,6 +35,15 @@ var _themeManagedVars = [
 ];
 var _systemThemeMedia = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
 var userThemeMode = _loadSavedThemeMode() || 'auto';
+var _lastDiagnosticsPayload = null;
+var _recoveryTimelineViewState = {
+    level: 'all',
+    sourceType: 'all',
+    source: 'all',
+    limit: '12',
+    advanced: false,
+};
+var _haAreaAssistEnabled = false;
 
 function _normalizeThemeMode(mode) {
     return mode === 'light' || mode === 'dark' || mode === 'auto' ? mode : null;
@@ -4527,12 +4536,32 @@ function _buildHaAreaOptionsHtml(selectedAreaId) {
     return html;
 }
 
+function _isHaAreaAssistEnabled() {
+    return !!_haAreaAssistEnabled;
+}
+
+function _setHaAreaAssistEnabled(enabled) {
+    _haAreaAssistEnabled = !!enabled;
+}
+
+function _onHaAreaAssistToggleChange(enabled) {
+    _setHaAreaAssistEnabled(enabled);
+    _renderBridgeNameHaAssist();
+    _updateAdaptersHaAssistSummary();
+    renderAdaptersTable();
+    if (_haAreaAssistEnabled && _isIngress() && !_haAreaCatalog.loading && !_haAreaCatalog.loaded) {
+        _maybeLoadHaAreaCatalog({silent: true});
+    }
+    _recomputeConfigDirtyState();
+    return false;
+}
+
 function _renderBridgeNameHaAssist() {
     var container = document.getElementById('bridge-name-ha-assist');
     var bridgeInput = document.querySelector('[name="BRIDGE_NAME"]');
     if (!container || !bridgeInput) return;
 
-    if (!_isIngress()) {
+    if (!_isIngress() || !_isHaAreaAssistEnabled()) {
         container.hidden = true;
         container.innerHTML = '';
         return;
@@ -4598,7 +4627,7 @@ function _renderBridgeNameHaAssist() {
 function _updateAdaptersHaAssistSummary() {
     var summary = document.getElementById('adapters-ha-assist-summary');
     if (!summary) return;
-    if (!_isIngress()) {
+    if (!_isIngress() || !_isHaAreaAssistEnabled()) {
         summary.hidden = true;
         summary.innerHTML = '';
         return;
@@ -4629,6 +4658,7 @@ function _updateAdaptersHaAssistSummary() {
 }
 
 function _buildAdapterHaAssistHtml(adapter) {
+    if (!_isHaAreaAssistEnabled()) return '';
     if (!_haAreaCatalog.available || !_haAreaCatalog.areas.length) return '';
     var saved = _getSavedHaAreaMatch(adapter.mac);
     var suggestion = _getSuggestedHaAreaMatch(adapter.mac);
@@ -4713,7 +4743,7 @@ function _bindAdapterHaAssist(row) {
 
 async function _maybeLoadHaAreaCatalog(options) {
     options = options || {};
-    if (!_isIngress()) {
+    if (!_isIngress() || !_isHaAreaAssistEnabled()) {
         _setHaAreaCatalog({loaded: true, error: ''});
         renderAdaptersTable();
         return;
@@ -6272,6 +6302,7 @@ function _buildConfigPayload(options) {
     config.PREFER_SBC_CODEC = !!(document.getElementById('prefer-sbc-codec') || {}).checked;
     config.AUTH_ENABLED = !!(document.getElementById('auth-enabled') || {}).checked;
     config.BRUTE_FORCE_PROTECTION = !!(document.getElementById('brute-force-protection') || {}).checked;
+    config.HA_AREA_NAME_ASSIST_ENABLED = !!(document.getElementById('ha-area-name-assist-enabled') || {}).checked;
     config.MA_AUTO_SILENT_AUTH = !!(document.getElementById('ma-auto-silent-auth') || {}).checked;
     config.MA_WEBSOCKET_MONITOR = !!(document.getElementById('ma-websocket-monitor') || {}).checked;
     config.VOLUME_VIA_MA = !!(document.getElementById('volume-via-ma') || {}).checked;
@@ -6305,7 +6336,9 @@ function _buildConfigPayload(options) {
     }
 
     config.BLUETOOTH_ADAPTERS = _collectPersistedAdaptersFromDom();
-    config.HA_ADAPTER_AREA_MAP = _collectHaAdapterAreaMapFromDom();
+    config.HA_ADAPTER_AREA_MAP = config.HA_AREA_NAME_ASSIST_ENABLED
+        ? _collectHaAdapterAreaMapFromDom()
+        : _normalizeHaAdapterAreaMap(_haAdapterAreaMap);
     return config;
 }
 
@@ -8629,6 +8662,11 @@ async function loadConfig(options) {
         if (sbcCheck) sbcCheck.checked = !!config.PREFER_SBC_CODEC;
         var authCheck = document.getElementById('auth-enabled');
         if (authCheck) authCheck.checked = !!config.AUTH_ENABLED;
+        var haAreaAssistCheck = document.getElementById('ha-area-name-assist-enabled');
+        if (haAreaAssistCheck) {
+            haAreaAssistCheck.checked = config.HA_AREA_NAME_ASSIST_ENABLED !== false;
+            _setHaAreaAssistEnabled(haAreaAssistCheck.checked);
+        }
         var authPw = document.getElementById('auth-password-fields');
         if (authPw && authCheck) authPw.hidden = !authCheck.checked;
         window._passwordSet = !!config._password_set;
@@ -9671,9 +9709,11 @@ async function loadDiagnostics(contentEl) {
     try {
         var resp = await fetch(API_BASE + '/api/diagnostics');
         var data = await resp.json();
+        _lastDiagnosticsPayload = data;
         contentEl.innerHTML = renderDiagnostics(data);
         contentEl.dataset.loaded = '1';
     } catch (err) {
+        _lastDiagnosticsPayload = null;
         contentEl.innerHTML =
             '<span style="color:#ef4444;font-size:13px;">Error: ' + err.message + '</span>';
     }
@@ -9692,6 +9732,206 @@ function _diagRecoveryToneClass(tone) {
 
 function _diagRecoveryDotTone(tone) {
     return tone === 'error' ? 'err' : (tone === 'warning' || tone === 'warn' ? 'warn' : 'ok');
+}
+
+function _recoveryTimelineEntries(timeline) {
+    return timeline && Array.isArray(timeline.entries) ? timeline.entries : [];
+}
+
+function _normalizeRecoveryTimelineLimit(limit) {
+    return limit === '24' || limit === 'all' ? limit : '12';
+}
+
+function _recoveryTimelineSourceOptions(timeline, sourceType) {
+    var counts = {};
+    _recoveryTimelineEntries(timeline).forEach(function(entry) {
+        if (sourceType && sourceType !== 'all' && String(entry.source_type || 'unknown') !== sourceType) return;
+        var source = String((entry && entry.source) || '').trim();
+        if (!source) return;
+        counts[source] = (counts[source] || 0) + 1;
+    });
+    return Object.keys(counts).sort(function(left, right) {
+        if (counts[right] !== counts[left]) return counts[right] - counts[left];
+        return left.localeCompare(right);
+    }).map(function(source) {
+        return {source: source, count: counts[source]};
+    });
+}
+
+function _normalizedRecoveryTimelineView(timeline) {
+    var normalizedSourceType = _recoveryTimelineViewState.sourceType === 'bridge' || _recoveryTimelineViewState.sourceType === 'device'
+        ? _recoveryTimelineViewState.sourceType
+        : 'all';
+    var sourceOptions = _recoveryTimelineSourceOptions(timeline, normalizedSourceType).map(function(item) { return item.source; });
+    var view = {
+        level: _recoveryTimelineViewState.level === 'error' || _recoveryTimelineViewState.level === 'warning' || _recoveryTimelineViewState.level === 'info'
+            ? _recoveryTimelineViewState.level
+            : 'all',
+        sourceType: normalizedSourceType,
+        source: _recoveryTimelineViewState.source || 'all',
+        limit: _normalizeRecoveryTimelineLimit(_recoveryTimelineViewState.limit),
+        advanced: !!_recoveryTimelineViewState.advanced,
+    };
+    if (view.source !== 'all' && sourceOptions.indexOf(view.source) < 0) {
+        view.source = 'all';
+    }
+    _recoveryTimelineViewState = view;
+    return view;
+}
+
+function _recoveryTimelineFilteredView(timeline) {
+    var allEntries = _recoveryTimelineEntries(timeline);
+    var view = _normalizedRecoveryTimelineView(timeline);
+    var matchedEntries = allEntries.filter(function(entry) {
+        if (view.level !== 'all' && String(entry.level || 'info') !== view.level) return false;
+        if (view.sourceType !== 'all' && String(entry.source_type || 'unknown') !== view.sourceType) return false;
+        if (view.source !== 'all' && String(entry.source || '') !== view.source) return false;
+        return true;
+    });
+    var visibleEntries = view.limit === 'all'
+        ? matchedEntries
+        : matchedEntries.slice(-Number(view.limit));
+    return {
+        view: view,
+        allEntries: allEntries,
+        matchedEntries: matchedEntries,
+        visibleEntries: visibleEntries,
+        sourceOptions: _recoveryTimelineSourceOptions(timeline, view.sourceType),
+    };
+}
+
+function _recoveryTimelineHasActiveFilters(view) {
+    return !!(view && (view.level !== 'all' || view.sourceType !== 'all' || view.source !== 'all' || view.limit !== '12'));
+}
+
+function _setRecoveryTimelineViewPatch(patch) {
+    _recoveryTimelineViewState = Object.assign({}, _recoveryTimelineViewState, patch || {});
+    _refreshRecoveryTimelineView();
+    return false;
+}
+
+function _setRecoveryTimelineLevel(level) {
+    return _setRecoveryTimelineViewPatch({level: level || 'all'});
+}
+
+function _setRecoveryTimelineSourceType(sourceType) {
+    return _setRecoveryTimelineViewPatch({sourceType: sourceType || 'all', source: 'all'});
+}
+
+function _setRecoveryTimelineSource(source) {
+    return _setRecoveryTimelineViewPatch({source: source || 'all'});
+}
+
+function _setRecoveryTimelineLimit(limit) {
+    return _setRecoveryTimelineViewPatch({limit: _normalizeRecoveryTimelineLimit(limit)});
+}
+
+function _setRecoveryTimelineAdvanced(open) {
+    _recoveryTimelineViewState = Object.assign({}, _recoveryTimelineViewState, {advanced: !!open});
+    return false;
+}
+
+function _refreshRecoveryTimelineView() {
+    var timelineContainer = document.getElementById('diag-recovery-timeline');
+    var diagnostics = _lastDiagnosticsPayload;
+    if (!timelineContainer || !diagnostics) return;
+    var recovery = diagnostics.recovery_assistant || {};
+    timelineContainer.outerHTML = _renderRecoveryTimelineCard(recovery.timeline || {});
+}
+
+function _renderRecoveryTimelineControlOptions(options, selectedValue) {
+    return options.map(function(option) {
+        return '<option value="' + escHtmlAttr(option.value) + '"' +
+            (option.value === selectedValue ? ' selected' : '') +
+            '>' + escHtml(option.label) + '</option>';
+    }).join('');
+}
+
+function _renderRecoveryTimelineControls(timelineView) {
+    var view = timelineView.view;
+    var sourceOptions = timelineView.sourceOptions || [];
+    var controlsHtml = '<details class="diag-timeline-advanced"' + (view.advanced ? ' open' : '') +
+        ' ontoggle="_setRecoveryTimelineAdvanced(this.open)">' +
+        '<summary class="diag-timeline-advanced-summary">Advanced timeline view</summary>' +
+        '<div class="diag-timeline-controls">' +
+            '<label class="diag-timeline-control">' +
+                '<span class="diag-timeline-control-label">Severity</span>' +
+                '<select onchange="return _setRecoveryTimelineLevel(this.value)">' +
+                    _renderRecoveryTimelineControlOptions([
+                        {value: 'all', label: 'All levels'},
+                        {value: 'error', label: 'Errors only'},
+                        {value: 'warning', label: 'Warnings only'},
+                        {value: 'info', label: 'Info only'},
+                    ], view.level) +
+                '</select>' +
+            '</label>' +
+            '<label class="diag-timeline-control">' +
+                '<span class="diag-timeline-control-label">Scope</span>' +
+                '<select onchange="return _setRecoveryTimelineSourceType(this.value)">' +
+                    _renderRecoveryTimelineControlOptions([
+                        {value: 'all', label: 'Bridge + speakers'},
+                        {value: 'device', label: 'Speakers only'},
+                        {value: 'bridge', label: 'Bridge only'},
+                    ], view.sourceType) +
+                '</select>' +
+            '</label>' +
+            '<label class="diag-timeline-control">' +
+                '<span class="diag-timeline-control-label">Window</span>' +
+                '<select onchange="return _setRecoveryTimelineLimit(this.value)">' +
+                    _renderRecoveryTimelineControlOptions([
+                        {value: '12', label: 'Latest 12 matches'},
+                        {value: '24', label: 'Latest 24 matches'},
+                        {value: 'all', label: 'All retained matches'},
+                    ], view.limit) +
+                '</select>' +
+            '</label>';
+    if (sourceOptions.length > 1) {
+        controlsHtml += '<label class="diag-timeline-control">' +
+            '<span class="diag-timeline-control-label">Source</span>' +
+            '<select onchange="return _setRecoveryTimelineSource(this.value)">' +
+                _renderRecoveryTimelineControlOptions(
+                    [{value: 'all', label: 'All sources'}].concat(sourceOptions.map(function(option) {
+                        return {
+                            value: option.source,
+                            label: option.source + ' (' + option.count + ')',
+                        };
+                    })),
+                    view.source
+                ) +
+            '</select>' +
+        '</label>';
+    }
+    controlsHtml += '</div></details>';
+    return controlsHtml;
+}
+
+function _renderRecoveryTimelineOverview(timeline, timelineView) {
+    var summary = timeline && timeline.summary ? timeline.summary : {};
+    var totalEntries = Number(summary.total_entry_count || timelineView.allEntries.length || 0);
+    var retainedEntries = Number(summary.visible_entry_count || summary.entry_count || timelineView.allEntries.length || 0);
+    var truncatedEntries = Number(summary.truncated_entry_count || Math.max(0, totalEntries - retainedEntries));
+    var matchedEntries = timelineView.matchedEntries.length;
+    var shownEntries = timelineView.visibleEntries.length;
+    var sourcePreview = (timelineView.sourceOptions || []).slice(0, 4).map(function(item) {
+        return '<span class="diag-timeline-source-pill">' + escHtml(item.source) + ' · ' + escHtml(String(item.count)) + '</span>';
+    }).join('');
+    var summaryBits = [
+        shownEntries + ' shown',
+        matchedEntries + ' match filter',
+    ];
+    if (!_recoveryTimelineHasActiveFilters(timelineView.view)) {
+        summaryBits = [shownEntries + ' shown from retained timeline'];
+    }
+    if (retainedEntries !== totalEntries) {
+        summaryBits.push('latest ' + retainedEntries + ' retained');
+    }
+    if (truncatedEntries > 0) {
+        summaryBits.push(truncatedEntries + ' older hidden');
+    }
+    return '<div class="diag-timeline-overview">' +
+        '<div class="diag-timeline-overview-copy">' + escHtml(summaryBits.join(' · ')) + '</div>' +
+        (sourcePreview ? '<div class="diag-timeline-source-list">' + sourcePreview + '</div>' : '') +
+    '</div>';
 }
 
 function _diagCodePill(value) {
@@ -9944,11 +10184,22 @@ function _renderKnownGoodTestPath(testPath) {
 }
 
 function _renderRecoveryTimeline(timeline) {
-    var entries = timeline && timeline.entries ? timeline.entries : [];
-    if (!entries.length) {
+    var timelineView = _recoveryTimelineFilteredView(timeline);
+    var entries = timelineView.visibleEntries;
+    if (!timelineView.allEntries.length) {
         return _renderDiagEmptyCardHtml('No recovery timeline yet', 'The bridge has not recorded any recovery timeline entries yet.', {icon: 'info'});
     }
-    return '<div class="diag-timeline">' + entries.map(function(entry) {
+    if (!entries.length) {
+        return '<div class="diag-timeline">' +
+            _renderRecoveryTimelineOverview(timeline, timelineView) +
+            _renderRecoveryTimelineControls(timelineView) +
+            '<div class="diag-timeline-empty">No retained timeline entries match the current advanced filters.</div>' +
+        '</div>';
+    }
+    return '<div class="diag-timeline">' +
+        _renderRecoveryTimelineOverview(timeline, timelineView) +
+        _renderRecoveryTimelineControls(timelineView) +
+        entries.map(function(entry) {
         return '<div class="diag-timeline-entry is-' + escHtml(entry.level || 'info') + '">' +
             '<div class="diag-timeline-dot">' + dot(_diagRecoveryDotTone(entry.level === 'error' ? 'error' : (entry.level === 'warning' ? 'warning' : 'ok'))) + '</div>' +
             '<div class="diag-timeline-copy">' +
@@ -9958,6 +10209,27 @@ function _renderRecoveryTimeline(timeline) {
             '</div>' +
         '</div>';
     }).join('') + '</div>';
+}
+
+function _renderRecoveryTimelineCard(recoveryTimeline) {
+    var recoveryTimelineTone = ((recoveryTimeline.summary && recoveryTimeline.summary.error_count) || 0) > 0
+        ? 'error'
+        : ((((recoveryTimeline.summary && recoveryTimeline.summary.warning_count) || 0) > 0) ? 'warning' : 'ok');
+    var summary = recoveryTimeline.summary || {};
+    var visibleEntries = Number(summary.visible_entry_count || summary.entry_count || 0);
+    var totalEntries = Number(summary.total_entry_count || visibleEntries);
+    var metaText = visibleEntries === totalEntries
+        ? (visibleEntries + ' entries retained')
+        : ('Showing the latest ' + visibleEntries + ' of ' + totalEntries + ' entries');
+    return '<div class="diag-jump-target" id="diag-recovery-timeline"><div class="diag-subsection-title">Chronological recovery timeline</div><div class="diag-mini-card"><div class="diag-mini-title">' +
+        dot(_diagRecoveryDotTone(recoveryTimelineTone)) +
+        '<span>Recent bridge and speaker events</span></div><div class="diag-mini-meta">' +
+        escHtml(metaText) +
+        '</div>' +
+        _renderRecoveryTimeline(recoveryTimeline) +
+        '<div class="diag-recovery-actions"><button type="button" class="btn btn-sm diag-recovery-action" onclick="return _downloadRecoveryTimeline()">' +
+        _buttonLabelWithIconHtml('download', 'Export timeline CSV') +
+        '</button></div></div></div>';
 }
 
 function _renderLatencyPresetButtons(recoveryLatency) {
@@ -10308,9 +10580,6 @@ function renderDiagnostics(d) {
         ),
         _renderDiagInfoItem('Why', recoveryLatency.recommended_summary || 'No recommendation yet.', {stack: true}),
     ].join('');
-    var recoveryTimelineTone = ((recoveryTimeline.summary && recoveryTimeline.summary.error_count) || 0) > 0
-        ? 'error'
-        : ((((recoveryTimeline.summary && recoveryTimeline.summary.warning_count) || 0) > 0) ? 'warning' : 'ok');
     var recoveryLatencyCard = '<div class="diag-jump-target" id="diag-recovery-latency"><div class="diag-subsection-title">Latency review</div><div class="diag-mini-card"><div class="diag-mini-title">' +
         dot(_diagRecoveryDotTone(recoveryLatency.tone || 'ok')) +
         '<span>Latency guidance</span></div><div class="diag-mini-meta">' +
@@ -10321,15 +10590,7 @@ function renderDiagnostics(d) {
         _renderDiagConfigButton('latency', 'Latency settings') +
         (((recoveryLatency.safe_actions || []).length) ? (recoveryLatency.safe_actions || []).map(_renderRecoveryActionButton).join('') : '') +
         '</div></div></div>';
-    var recoveryTimelineCard = '<div class="diag-jump-target" id="diag-recovery-timeline"><div class="diag-subsection-title">Chronological recovery timeline</div><div class="diag-mini-card"><div class="diag-mini-title">' +
-        dot(_diagRecoveryDotTone(recoveryTimelineTone)) +
-        '<span>Recent bridge and speaker events</span></div><div class="diag-mini-meta">' +
-        escHtml(((recoveryTimeline.summary && recoveryTimeline.summary.entry_count) || 0) + ' entries available') +
-        '</div>' +
-        _renderRecoveryTimeline(recoveryTimeline) +
-        '<div class="diag-recovery-actions"><button type="button" class="btn btn-sm diag-recovery-action" onclick="return _downloadRecoveryTimeline()">' +
-        _buttonLabelWithIconHtml('download', 'Export timeline CSV') +
-        '</button></div></div></div>';
+    var recoveryTimelineCard = _renderRecoveryTimelineCard(recoveryTimeline);
     var advancedPreviewBits = [
         subprocesses.length + ' daemon' + (subprocesses.length === 1 ? '' : 's'),
         (sinkInputError ? 'audio stream scan failed' : (visibleSinkInputs.length + ' audio stream' + (visibleSinkInputs.length === 1 ? '' : 's'))),

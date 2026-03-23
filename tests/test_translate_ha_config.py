@@ -37,6 +37,7 @@ def _minimal_options(**overrides) -> dict:
         "sendspin_server": "192.168.1.10",
         "sendspin_port": 9000,
         "bridge_name": "TestBridge",
+        "ha_area_name_assist_enabled": True,
         "bluetooth_devices": [{"mac": "AA:BB:CC:DD:EE:FF", "name": "Speaker"}],
         "bluetooth_adapters": [],
         "tz": "UTC",
@@ -283,6 +284,7 @@ def test_translation_uses_installed_addon_track(tmp_path):
     assert cfg["MA_API_URL"] == "http://ma:8095"
     assert cfg["MA_API_TOKEN"] == "tok123"
     assert cfg["MA_AUTO_SILENT_AUTH"] is False
+    assert cfg["HA_AREA_NAME_ASSIST_ENABLED"] is True
     # enabled defaults to True for devices without explicit field
     for dev in cfg["BLUETOOTH_DEVICES"]:
         assert dev.get("enabled") is True
@@ -325,6 +327,19 @@ def test_translation_preserves_existing_ha_adapter_area_map(tmp_path):
 
     cfg = _read_json(tmp_path / "config.json")
     assert cfg["HA_ADAPTER_AREA_MAP"] == {"AA:BB:CC:DD:EE:FF": {"area_id": "living-room", "area_name": "Living Room"}}
+
+
+def test_translation_respects_explicit_ha_area_name_assist_setting(tmp_path):
+    _write_json(tmp_path / "options.json", _minimal_options(ha_area_name_assist_enabled=False))
+
+    with (
+        patch("scripts.translate_ha_config._detect_adapters", return_value=[]),
+        patch("scripts.translate_ha_config.get_self_delivery_channel", return_value="stable"),
+    ):
+        main()
+
+    cfg = _read_json(tmp_path / "config.json")
+    assert cfg["HA_AREA_NAME_ASSIST_ENABLED"] is False
 
 
 def test_translate_script_runs_as_direct_file() -> None:

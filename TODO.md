@@ -63,7 +63,7 @@ Roadmap for HA addon standards compliance and improvements.
 - [ ] **Expose latency guidance as a standalone dashboard card** when latency is the main active problem, instead of only inside diagnostics/banner summaries.
 - [ ] **Add adaptive explanation depth for novice vs advanced users** — short default explanations with optional deeper technical detail for power users.
 - [ ] **Show hierarchical blocking explanations** — explain not only that an action is blocked, but the dependency chain causing it.
-- [ ] **Expose advanced recovery views for power users** — e.g. richer trace history, filtering, or longer event timelines in diagnostics.
+- [x] **Expose advanced recovery views for power users** — diagnostics recovery timeline now keeps a longer retained window and exposes advanced severity/scope/source/window filters plus source-density summary chips for power-user trace review.
 - [x] **Show current vs recommended latency values together** — diagnostics now surfaces current Pulse latency, recommendation, presets, and safe next-step hints.
 - [x] **Allow inline latency editing from onboarding guidance** — onboarding/operator guidance can now surface the recommended latency action directly instead of forcing a detour into wider diagnostics/settings.
 

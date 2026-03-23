@@ -328,6 +328,18 @@
                                     <input type="number" name="BASE_LISTEN_PORT" placeholder="8928" min="1" max="65535">
                                 </div>
                             </div>
+                            <label class="config-setting-row config-setting-row--compact">
+                                <span class="config-setting-copy ui-stack ui-stack--xs">
+                                    <strong>Use Home Assistant area suggestions for names</strong>
+                                    <span class="form-hint">Lets bridge and adapter naming pull manual suggestions from HA areas. Enabled by default in HA add-on mode.</span>
+                                </span>
+                                <span class="config-setting-control">
+                                    <span class="config-switch">
+                                        <input type="checkbox" name="HA_AREA_NAME_ASSIST_ENABLED" id="ha-area-name-assist-enabled" onchange="return _onHaAreaAssistToggleChange(this.checked)">
+                                        <span class="config-switch-track"></span>
+                                    </span>
+                                </span>
+                            </label>
                         </div>
 
                         <div class="config-settings-card">

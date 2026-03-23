@@ -1312,6 +1312,7 @@ def test_api_config_post_persists_ha_adapter_area_map(client, tmp_path, monkeypa
         "SENDSPIN_SERVER": "auto",
         "SENDSPIN_PORT": 9000,
         "BRIDGE_NAME": "",
+        "HA_AREA_NAME_ASSIST_ENABLED": False,
         "BLUETOOTH_DEVICES": [],
         "BLUETOOTH_ADAPTERS": [{"id": "hci0", "mac": "AA:BB:CC:DD:EE:FF"}],
         "HA_ADAPTER_AREA_MAP": {"aa:bb:cc:dd:ee:ff": {"area_id": "living-room", "area_name": "Living Room"}},
@@ -1344,6 +1345,7 @@ def test_api_config_post_persists_ha_adapter_area_map(client, tmp_path, monkeypa
 
     assert resp.status_code == 200
     saved = json.loads((tmp_path / "config.json").read_text())
+    assert saved["HA_AREA_NAME_ASSIST_ENABLED"] is False
     assert saved["HA_ADAPTER_AREA_MAP"] == {"AA:BB:CC:DD:EE:FF": {"area_id": "living-room", "area_name": "Living Room"}}
 
 

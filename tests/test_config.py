@@ -299,6 +299,26 @@ def test_load_config_normalizes_ha_adapter_area_map(tmp_path):
     }
 
 
+def test_load_config_defaults_ha_area_name_assist_to_false_outside_addon(tmp_path, monkeypatch):
+    monkeypatch.delenv("SUPERVISOR_TOKEN", raising=False)
+    _write_config(tmp_path, {})
+    from config import load_config
+
+    loaded = load_config()
+
+    assert loaded["HA_AREA_NAME_ASSIST_ENABLED"] is False
+
+
+def test_load_config_defaults_ha_area_name_assist_to_true_in_ha_addon(tmp_path, monkeypatch):
+    monkeypatch.setenv("SUPERVISOR_TOKEN", "token")
+    _write_config(tmp_path, {})
+    from config import load_config
+
+    loaded = load_config()
+
+    assert loaded["HA_AREA_NAME_ASSIST_ENABLED"] is True
+
+
 def test_detect_ha_addon_channel_uses_hostname_suffix():
     from config import detect_ha_addon_channel
 

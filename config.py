@@ -89,6 +89,7 @@ DEFAULT_CONFIG = {
     "BRIDGE_NAME": "",
     "BLUETOOTH_DEVICES": [],
     "BLUETOOTH_ADAPTERS": [],
+    "HA_AREA_NAME_ASSIST_ENABLED": False,
     "HA_ADAPTER_AREA_MAP": {},
     "TZ": "Australia/Melbourne",
     "LAST_VOLUMES": {},
@@ -480,10 +481,26 @@ def _normalize_adapter_area_map(config: dict) -> None:
     config["HA_ADAPTER_AREA_MAP"] = normalized
 
 
+def _normalize_ha_area_name_assist_enabled(config: dict) -> None:
+    default_enabled = is_ha_addon_runtime()
+    raw_value = config.get("HA_AREA_NAME_ASSIST_ENABLED", DEFAULT_CONFIG["HA_AREA_NAME_ASSIST_ENABLED"])
+    if isinstance(raw_value, bool):
+        config["HA_AREA_NAME_ASSIST_ENABLED"] = raw_value
+        return
+    if raw_value not in (None, ""):
+        logger.warning(
+            "Invalid HA_AREA_NAME_ASSIST_ENABLED value %r in config; using runtime default %r",
+            raw_value,
+            default_enabled,
+        )
+    config["HA_AREA_NAME_ASSIST_ENABLED"] = default_enabled
+
+
 def _normalize_loaded_config(config: dict) -> None:
     config["BLUETOOTH_DEVICES"] = _normalize_bluetooth_devices(config)
     _prune_last_volumes(config)
     _prune_last_sinks(config)
+    _normalize_ha_area_name_assist_enabled(config)
     _normalize_adapter_area_map(config)
 
     for key, min_value, max_value in (
@@ -712,6 +729,7 @@ def save_device_sink(mac: str | None, sink_name: str) -> None:
 def load_config() -> dict:
     """Load configuration from file, falling back to defaults."""
     result = copy.deepcopy(DEFAULT_CONFIG)
+    has_explicit_ha_area_name_assist = False
 
     if CONFIG_FILE.exists():
         try:
@@ -719,6 +737,7 @@ def load_config() -> dict:
                 saved_config = _read_raw_config_file()
             migrated = migrate_config_payload(saved_config)
             result.update(migrated.normalized_config)
+            has_explicit_ha_area_name_assist = "HA_AREA_NAME_ASSIST_ENABLED" in migrated.normalized_config
             for issue in migrated.warnings:
                 logger.info("%s", issue.message)
             logger.info("Loaded config from %s", CONFIG_FILE)
@@ -750,6 +769,9 @@ def load_config() -> dict:
                     logger.warning("Could not persist config migration: %s", exc)
     else:
         logger.info("Config file not found at %s, using defaults", CONFIG_FILE)
+
+    if is_ha_addon_runtime() and not has_explicit_ha_area_name_assist:
+        result["HA_AREA_NAME_ASSIST_ENABLED"] = True
 
     _normalize_loaded_config(result)
     if result.get("CONFIG_SCHEMA_VERSION") != CONFIG_SCHEMA_VERSION:
