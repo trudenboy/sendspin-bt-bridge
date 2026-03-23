@@ -410,6 +410,44 @@ def _audio_backend_issue(
     }
 
 
+def _disabled_unpaired_bluetooth_guidance(
+    onboarding_assistant: dict[str, Any],
+    *,
+    all_devices_globally_disabled: bool,
+) -> dict[str, Any] | None:
+    if not all_devices_globally_disabled:
+        return None
+    checklist = onboarding_assistant.get("checklist") or {}
+    if str(checklist.get("current_step_key") or "") != "bluetooth":
+        return None
+    bluetooth_check = _onboarding_check_by_key(onboarding_assistant, "bluetooth")
+    if not isinstance(bluetooth_check, dict) or str(bluetooth_check.get("status") or "") != "warning":
+        return None
+    details = bluetooth_check.get("details") or {}
+    if int(details.get("paired_devices") or 0) != 0:
+        return None
+
+    configured_devices = int(details.get("configured_devices") or 0)
+    device_label = "speaker" if configured_devices == 1 else "speakers"
+    summary = (
+        f"The saved {device_label} is disabled, and no paired Bluetooth {device_label} "
+        "is currently available to the bridge. Pair or rediscover it first, then re-enable it in Configuration → Devices."
+    )
+    return {
+        "title": "No playable speaker available",
+        "summary": summary,
+        "actions": [
+            "Open Bluetooth scan and pair or rediscover the speaker first.",
+            "After it appears again, re-enable it in Configuration → Devices and restart the bridge.",
+        ],
+        "primary_action": GuidanceAction(key="scan_devices", label="Scan for speakers"),
+        "secondary_actions": [
+            GuidanceAction(key="open_devices_settings", label="Open device settings"),
+            GuidanceAction(key="open_diagnostics", label="Open diagnostics"),
+        ],
+    }
+
+
 def _issue_group_sort_key(item: GuidanceIssueGroup) -> tuple[int, int, int, str]:
     severity_rank = 0 if item.severity == "error" else 1
     priority = {
@@ -698,6 +736,10 @@ def _build_onboarding_card(
         onboarding_assistant,
         all_devices_globally_disabled=all_devices_globally_disabled,
     )
+    mixed_bluetooth_guidance = _disabled_unpaired_bluetooth_guidance(
+        onboarding_assistant,
+        all_devices_globally_disabled=all_devices_globally_disabled,
+    )
     if runtime_access_issue and current_step_key == "runtime_access":
         card_checklist = deepcopy(checklist)
         card_checklist["headline"] = "Restore host service access first"
@@ -762,6 +804,37 @@ def _build_onboarding_card(
                 adapted_steps.append(adapted_step)
             card_checklist["steps"] = adapted_steps
         secondary_actions = list(bluetooth_access_issue["secondary_actions"]) + secondary_actions
+    elif mixed_bluetooth_guidance:
+        card_checklist = deepcopy(checklist)
+        card_checklist["headline"] = "Pair or rediscover a speaker first"
+        card_checklist["summary"] = mixed_bluetooth_guidance["summary"]
+        card_checklist["primary_action"] = mixed_bluetooth_guidance["primary_action"].to_dict()
+        card_checklist["current_step_key"] = "bluetooth"
+        card_checklist["current_step_title"] = "Pair or rediscover a speaker"
+        steps = card_checklist.get("steps")
+        if isinstance(steps, list):
+            adapted_steps = []
+            for step in steps:
+                if not isinstance(step, dict):
+                    adapted_steps.append(step)
+                    continue
+                adapted_step = dict(step)
+                if adapted_step.get("key") == "bluetooth":
+                    adapted_step.update(
+                        {
+                            "title": "Pair or rediscover a speaker",
+                            "status": "warning",
+                            "stage": "current",
+                            "summary": mixed_bluetooth_guidance["summary"],
+                            "actions": list(mixed_bluetooth_guidance["actions"]),
+                            "recommended_action": mixed_bluetooth_guidance["primary_action"].to_dict(),
+                        }
+                    )
+                elif adapted_step.get("stage") == "current":
+                    adapted_step["stage"] = "upcoming"
+                adapted_steps.append(adapted_step)
+            card_checklist["steps"] = adapted_steps
+        secondary_actions = list(mixed_bluetooth_guidance["secondary_actions"])
     elif all_devices_globally_disabled and current_step_key == "bridge_control":
         disabled_count = len(disabled_devices or [])
         card_checklist = deepcopy(checklist)
@@ -867,6 +940,7 @@ def _build_onboarding_card(
         secondary_actions=secondary_actions,
         show_by_default=(
             empty_state
+            or mixed_bluetooth_guidance is not None
             or (all_devices_globally_disabled and current_step_key == "bridge_control")
             or (all_devices_user_released and current_step_key == "bridge_control")
             or (runtime_access_issue is not None and current_step_key == "runtime_access")
@@ -895,6 +969,10 @@ def _build_header_status(
     disabled_count = len(disabled_devices or [])
     all_devices_globally_disabled = configured_devices > 0 and not devices and disabled_count >= configured_devices
     lead_issue = issue_groups[0] if issue_groups else None
+    mixed_bluetooth_guidance = _disabled_unpaired_bluetooth_guidance(
+        onboarding_assistant,
+        all_devices_globally_disabled=all_devices_globally_disabled,
+    )
     startup_status = str(startup_progress.get("status") or "idle")
     if startup_status in {"running", "starting"}:
         percent = int(startup_progress.get("percent") or 0)
@@ -914,6 +992,12 @@ def _build_header_status(
             tone=lead_issue.severity,
             label=lead_issue.title,
             summary=lead_issue.summary,
+        )
+    if mixed_bluetooth_guidance:
+        return GuidanceHeaderStatus(
+            tone="warning",
+            label=mixed_bluetooth_guidance["title"],
+            summary=mixed_bluetooth_guidance["summary"],
         )
     if all_devices_globally_disabled:
         return GuidanceHeaderStatus(

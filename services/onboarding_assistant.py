@@ -146,6 +146,17 @@ def _status_rank(status: str) -> int:
     return {"ok": 0, "warning": 1, "error": 2}.get(status, 1)
 
 
+def _title_for_check(check: OnboardingCheck) -> str:
+    if (
+        check.key == "bluetooth"
+        and check.status == "warning"
+        and int(check.details.get("paired_devices") or 0) == 0
+        and int(check.details.get("configured_devices") or 0) > 0
+    ):
+        return "Pair or rediscover a speaker"
+    return _CHECKLIST_TITLES.get(check.key, check.key)
+
+
 def _recommended_action_for_check(check: OnboardingCheck) -> OnboardingChecklistAction | None:
     if check.key == "runtime_access":
         return OnboardingChecklistAction(key="open_diagnostics", label="Open runtime diagnostics")
@@ -234,13 +245,13 @@ def _build_onboarding_checklist(checks: list[OnboardingCheck], counts: dict[str,
 
     if current_check:
         headline = (
-            f"Finish setup: {_CHECKLIST_TITLES.get(current_check.key, current_check.key)}"
+            f"Finish setup: {_title_for_check(current_check)}"
             if current_check.status == "error"
-            else f"Next recommended step: {_CHECKLIST_TITLES.get(current_check.key, current_check.key)}"
+            else f"Next recommended step: {_title_for_check(current_check)}"
         )
         summary = current_check.summary
         current_step_key = current_check.key
-        current_step_title = _CHECKLIST_TITLES.get(current_check.key, current_check.key)
+        current_step_title = _title_for_check(current_check)
         primary_action = _recommended_action_for_check(current_check)
     else:
         headline = "Bridge setup looks ready"
@@ -267,7 +278,7 @@ def _build_onboarding_checklist(checks: list[OnboardingCheck], counts: dict[str,
         steps.append(
             OnboardingChecklistStep(
                 key=check.key,
-                title=_CHECKLIST_TITLES.get(check.key, check.key),
+                title=_title_for_check(check),
                 status=check.status,
                 stage=stage,
                 summary=check.summary,
@@ -382,13 +393,26 @@ def build_onboarding_assistant_snapshot(
             )
         )
     elif configured_count > 0 and paired_devices == 0:
+        bluetooth_summary = "No paired Bluetooth speakers are currently available to the bridge."
+        bluetooth_actions = [
+            "Put a speaker in pairing mode, then open Bluetooth scan to pair or rediscover it.",
+        ]
+        bluetooth_details = {"paired_devices": paired_devices, "configured_devices": configured_count}
+        if disabled_configured_count >= configured_count:
+            bluetooth_summary = (
+                "No paired Bluetooth speakers are currently available, and the saved speaker is disabled."
+            )
+            bluetooth_details["disabled_devices"] = disabled_configured_count
+            bluetooth_actions.append(
+                "After the speaker appears again, re-enable it in Configuration → Devices and restart the bridge."
+            )
         checks.append(
             OnboardingCheck(
                 key="bluetooth",
                 status="warning",
-                summary="Bluetooth controller is available, but no paired devices were found.",
-                details={"paired_devices": paired_devices, "configured_devices": configured_count},
-                actions=["Put a speaker in pairing mode, then open device scan to pair it with the bridge."],
+                summary=bluetooth_summary,
+                details=bluetooth_details,
+                actions=bluetooth_actions,
             )
         )
     else:

@@ -660,6 +660,85 @@ def test_operator_guidance_keeps_disabled_devices_neutral_when_bluetooth_check_i
     assert data["onboarding_card"]["headline"] == "Re-enable a speaker to resume playback"
 
 
+def test_operator_guidance_surfaces_mixed_disabled_and_unpaired_state():
+    snapshot = build_operator_guidance_snapshot(
+        config={"BLUETOOTH_ADAPTERS": [{"id": "hci0"}], "BLUETOOTH_DEVICES": [{"mac": "AA"}]},
+        onboarding_assistant={
+            "checks": [
+                {
+                    "key": "bluetooth",
+                    "status": "warning",
+                    "summary": "No paired Bluetooth speakers are currently available, and the saved speaker is disabled.",
+                    "details": {"paired_devices": 0, "configured_devices": 1, "disabled_devices": 1},
+                    "actions": [
+                        "Put a speaker in pairing mode, then open Bluetooth scan to pair or rediscover it.",
+                        "After the speaker appears again, re-enable it in Configuration → Devices and restart the bridge.",
+                    ],
+                }
+            ],
+            "checklist": {
+                "overall_status": "warning",
+                "progress_percent": 14,
+                "headline": "Next recommended step: Pair or rediscover a speaker",
+                "summary": "No paired Bluetooth speakers are currently available, and the saved speaker is disabled.",
+                "current_step_key": "bluetooth",
+                "current_step_title": "Pair or rediscover a speaker",
+                "primary_action": {"key": "scan_devices", "label": "Scan for speakers"},
+                "checkpoints": [],
+                "steps": [
+                    {
+                        "key": "runtime_access",
+                        "title": "Verify runtime host access",
+                        "status": "ok",
+                        "stage": "complete",
+                    },
+                    {
+                        "key": "bluetooth",
+                        "title": "Pair or rediscover a speaker",
+                        "status": "warning",
+                        "stage": "current",
+                        "summary": "No paired Bluetooth speakers are currently available, and the saved speaker is disabled.",
+                        "details": {"paired_devices": 0, "configured_devices": 1, "disabled_devices": 1},
+                        "actions": [
+                            "Put a speaker in pairing mode, then open Bluetooth scan to pair or rediscover it.",
+                            "After the speaker appears again, re-enable it in Configuration → Devices and restart the bridge.",
+                        ],
+                        "recommended_action": {"key": "scan_devices", "label": "Scan for speakers"},
+                    },
+                    {"key": "audio", "title": "Verify audio backend", "status": "ok", "stage": "upcoming"},
+                    {
+                        "key": "bridge_control",
+                        "title": "Make a speaker available",
+                        "status": "warning",
+                        "stage": "upcoming",
+                    },
+                ],
+            },
+            "counts": {"configured_devices": 1, "connected_devices": 0, "sink_ready_devices": 0},
+        },
+        recovery_assistant={"summary": {"summary": "No active recovery issues."}},
+        startup_progress={"status": "complete"},
+        devices=[],
+        disabled_devices=[{"player_name": "Kitchen", "enabled": False}],
+    )
+
+    data = snapshot.to_dict()
+    assert data["mode"] == "healthy"
+    assert data["issue_groups"] == []
+    assert data["header_status"]["tone"] == "warning"
+    assert data["header_status"]["label"] == "No playable speaker available"
+    assert "re-enable it" in data["header_status"]["summary"]
+    assert data["onboarding_card"]["show_by_default"] is True
+    assert data["onboarding_card"]["headline"] == "Pair or rediscover a speaker first"
+    assert data["onboarding_card"]["primary_action"]["key"] == "scan_devices"
+    assert data["onboarding_card"]["secondary_actions"][0]["key"] == "open_devices_settings"
+    assert data["onboarding_card"]["checklist"]["current_step_title"] == "Pair or rediscover a speaker"
+    step = data["onboarding_card"]["checklist"]["steps"][1]
+    assert step["title"] == "Pair or rediscover a speaker"
+    assert step["stage"] == "current"
+    assert "re-enable it" in step["actions"][-1].lower()
+
+
 def test_operator_guidance_prioritizes_runtime_access_over_disabled_devices():
     snapshot = build_operator_guidance_snapshot(
         config={"BLUETOOTH_ADAPTERS": [{"id": "hci0"}], "BLUETOOTH_DEVICES": [{"mac": "AA"}]},

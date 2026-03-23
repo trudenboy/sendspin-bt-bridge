@@ -125,6 +125,7 @@ def test_onboarding_assistant_recommends_scanning_for_unpaired_speakers():
 
     assert snapshot.checklist is not None
     bluetooth_step = next(step for step in snapshot.checklist.steps if step.key == "bluetooth")
+    assert bluetooth_step.title == "Pair or rediscover a speaker"
     assert bluetooth_step.recommended_action is not None
     assert bluetooth_step.recommended_action.key == "scan_devices"
     assert "pairing mode" in bluetooth_step.actions[0].lower()
@@ -169,6 +170,32 @@ def test_onboarding_assistant_surfaces_bridge_control_before_sink_checks_for_dis
     assert bridge_step.recommended_action is not None
     assert bridge_step.recommended_action.key == "open_devices_settings"
     assert sink_step.stage == "upcoming"
+
+
+def test_onboarding_assistant_explains_disabled_plus_unpaired_mixed_state():
+    snapshot = build_onboarding_assistant_snapshot(
+        config={"BLUETOOTH_DEVICES": [{"mac": "AA", "enabled": False}], "PULSE_LATENCY_MSEC": 200},
+        preflight={
+            "audio": {"system": "pulseaudio", "sinks": 1},
+            "bluetooth": {"controller": True, "paired_devices": 0},
+        },
+        devices=[],
+        ma_connected=False,
+        runtime_mode="production",
+    )
+
+    assert snapshot.checklist is not None
+    assert snapshot.checklist.current_step_key == "bluetooth"
+    assert snapshot.checklist.current_step_title == "Pair or rediscover a speaker"
+    assert snapshot.checklist.primary_action is not None
+    assert snapshot.checklist.primary_action.key == "scan_devices"
+    bluetooth_step = next(step for step in snapshot.checklist.steps if step.key == "bluetooth")
+    bridge_step = next(step for step in snapshot.checklist.steps if step.key == "bridge_control")
+    assert bluetooth_step.stage == "current"
+    assert bluetooth_step.title == "Pair or rediscover a speaker"
+    assert "saved speaker is disabled" in bluetooth_step.summary.lower()
+    assert "re-enable it" in bluetooth_step.actions[-1].lower()
+    assert bridge_step.stage == "upcoming"
 
 
 def test_onboarding_assistant_points_latency_step_to_general_latency_setting():
