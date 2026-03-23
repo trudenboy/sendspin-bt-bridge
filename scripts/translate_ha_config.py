@@ -166,6 +166,8 @@ def main() -> None:
             config["LAST_VOLUMES"] = existing["LAST_VOLUMES"]
         if "LAST_SINKS" in existing:
             config["LAST_SINKS"] = existing["LAST_SINKS"]
+        if "HA_ADAPTER_AREA_MAP" in existing:
+            config["HA_ADAPTER_AREA_MAP"] = existing["HA_ADAPTER_AREA_MAP"]
         for key in ("AUTH_PASSWORD_HASH", "SECRET_KEY"):
             if key in existing:
                 config[key] = existing[key]

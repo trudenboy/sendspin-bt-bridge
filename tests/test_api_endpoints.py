@@ -1240,6 +1240,113 @@ def test_sync_ha_options_includes_manual_ports_when_set(monkeypatch):
     assert options["ma_auto_silent_auth"] is False
 
 
+def test_api_ha_areas_returns_bridge_suggestions_and_adapter_matches(client, monkeypatch):
+    import routes.api_config as api_config_mod
+
+    monkeypatch.setattr(
+        api_config_mod,
+        "fetch_ha_area_catalog",
+        lambda ha_token, include_devices, adapters: {
+            "source": "ingress_token",
+            "areas": [{"area_id": "living-room", "name": "Living Room"}],
+            "bridge_name_suggestions": [{"area_id": "living-room", "label": "Living Room", "value": "Living Room"}],
+            "adapter_matches": [
+                {
+                    "adapter_id": "hci0",
+                    "adapter_mac": "AA:BB:CC:DD:EE:FF",
+                    "matched_area_id": "living-room",
+                    "matched_area_name": "Living Room",
+                    "match_source": "device_registry_mac",
+                    "match_confidence": "high",
+                }
+            ],
+        },
+    )
+
+    resp = client.post(
+        "/api/ha/areas",
+        data=json.dumps(
+            {
+                "ha_token": "token",
+                "include_devices": True,
+                "adapters": [{"id": "hci0", "mac": "AA:BB:CC:DD:EE:FF"}],
+            }
+        ),
+        content_type="application/json",
+    )
+
+    assert resp.status_code == 200
+    payload = resp.get_json()
+    assert payload["success"] is True
+    assert payload["bridge_name_suggestions"][0]["value"] == "Living Room"
+    assert payload["adapter_matches"][0]["matched_area_id"] == "living-room"
+
+
+def test_api_ha_areas_returns_helper_error(client, monkeypatch):
+    import routes.api_config as api_config_mod
+    from services.ha_core_api import HaCoreApiError
+
+    monkeypatch.setattr(
+        api_config_mod,
+        "fetch_ha_area_catalog",
+        lambda ha_token, include_devices, adapters: (_ for _ in ()).throw(HaCoreApiError("HA unavailable")),
+    )
+
+    resp = client.post(
+        "/api/ha/areas",
+        data=json.dumps({"ha_token": "token", "include_devices": True, "adapters": []}),
+        content_type="application/json",
+    )
+
+    assert resp.status_code == 502
+    payload = resp.get_json()
+    assert payload["success"] is False
+    assert payload["error"] == "HA unavailable"
+
+
+def test_api_config_post_persists_ha_adapter_area_map(client, tmp_path, monkeypatch):
+    import routes.api_config as api_config_mod
+
+    monkeypatch.setattr(api_config_mod, "CONFIG_FILE", tmp_path / "config.json")
+    payload = {
+        "SENDSPIN_SERVER": "auto",
+        "SENDSPIN_PORT": 9000,
+        "BRIDGE_NAME": "",
+        "BLUETOOTH_DEVICES": [],
+        "BLUETOOTH_ADAPTERS": [{"id": "hci0", "mac": "AA:BB:CC:DD:EE:FF"}],
+        "HA_ADAPTER_AREA_MAP": {"aa:bb:cc:dd:ee:ff": {"area_id": "living-room", "area_name": "Living Room"}},
+        "TZ": "UTC",
+        "PULSE_LATENCY_MSEC": 200,
+        "PREFER_SBC_CODEC": False,
+        "BT_CHECK_INTERVAL": 10,
+        "BT_MAX_RECONNECT_FAILS": 0,
+        "AUTH_ENABLED": False,
+        "SESSION_TIMEOUT_HOURS": 12,
+        "BRUTE_FORCE_PROTECTION": True,
+        "BRUTE_FORCE_MAX_ATTEMPTS": 4,
+        "BRUTE_FORCE_WINDOW_MINUTES": 2,
+        "BRUTE_FORCE_LOCKOUT_MINUTES": 10,
+        "LOG_LEVEL": "INFO",
+        "MA_API_URL": "",
+        "MA_API_TOKEN": "",
+        "MA_USERNAME": "",
+        "MA_AUTO_SILENT_AUTH": False,
+        "MA_WEBSOCKET_MONITOR": False,
+        "VOLUME_VIA_MA": True,
+        "MUTE_VIA_MA": False,
+        "SMOOTH_RESTART": True,
+        "UPDATE_CHANNEL": "stable",
+        "AUTO_UPDATE": False,
+        "CHECK_UPDATES": True,
+    }
+
+    resp = client.post("/api/config", data=json.dumps(payload), content_type="application/json")
+
+    assert resp.status_code == 200
+    saved = json.loads((tmp_path / "config.json").read_text())
+    assert saved["HA_ADAPTER_AREA_MAP"] == {"AA:BB:CC:DD:EE:FF": {"area_id": "living-room", "area_name": "Living Room"}}
+
+
 def test_api_ma_discover_reports_invalid_saved_token(client, monkeypatch):
     import routes.api_ma as api_ma
     import services.ma_discovery as ma_discovery

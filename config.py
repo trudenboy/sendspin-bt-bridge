@@ -28,7 +28,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-VERSION = "2.44.0"
+VERSION = "2.45.0"
 BUILD_DATE = "2026-03-23"
 CONFIG_SCHEMA_VERSION = 1
 UPDATE_CHANNELS = ("stable", "rc", "beta")
@@ -89,6 +89,7 @@ DEFAULT_CONFIG = {
     "BRIDGE_NAME": "",
     "BLUETOOTH_DEVICES": [],
     "BLUETOOTH_ADAPTERS": [],
+    "HA_ADAPTER_AREA_MAP": {},
     "TZ": "Australia/Melbourne",
     "LAST_VOLUMES": {},
     "LAST_SINKS": {},
@@ -451,10 +452,39 @@ def _prune_last_sinks(config: dict) -> None:
     config["LAST_SINKS"] = sanitized
 
 
+def _normalize_adapter_area_map(config: dict) -> None:
+    raw_mapping = config.get("HA_ADAPTER_AREA_MAP", DEFAULT_CONFIG["HA_ADAPTER_AREA_MAP"])
+    if not isinstance(raw_mapping, dict):
+        logger.warning("Invalid HA_ADAPTER_AREA_MAP value %r in config; using default {}", raw_mapping)
+        config["HA_ADAPTER_AREA_MAP"] = {}
+        return
+
+    normalized: dict[str, dict[str, str]] = {}
+    for raw_mac, raw_entry in raw_mapping.items():
+        mac = _normalize_mac_key(raw_mac)
+        if not mac:
+            logger.warning("Ignoring invalid HA adapter area key %r", raw_mac)
+            continue
+        if not isinstance(raw_entry, dict):
+            logger.warning("Ignoring invalid HA adapter area entry for %s: %r", mac, raw_entry)
+            continue
+        area_id = str(raw_entry.get("area_id") or "").strip()
+        area_name = str(raw_entry.get("area_name") or "").strip()
+        if not area_id:
+            logger.warning("Ignoring HA adapter area entry without area_id for %s", mac)
+            continue
+        normalized_entry = {"area_id": area_id}
+        if area_name:
+            normalized_entry["area_name"] = area_name
+        normalized[mac] = normalized_entry
+    config["HA_ADAPTER_AREA_MAP"] = normalized
+
+
 def _normalize_loaded_config(config: dict) -> None:
     config["BLUETOOTH_DEVICES"] = _normalize_bluetooth_devices(config)
     _prune_last_volumes(config)
     _prune_last_sinks(config)
+    _normalize_adapter_area_map(config)
 
     for key, min_value, max_value in (
         ("SENDSPIN_PORT", 1, 65535),

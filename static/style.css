@@ -4183,6 +4183,38 @@ body {
             border: 1px solid var(--divider-color); border-radius: 12px;
             padding: 6px 10px; background: var(--card-background-color);
         }
+        .ha-assist {
+            margin-top: 8px;
+            padding: 10px 12px;
+            border-radius: 10px;
+            border: 1px solid rgba(3, 169, 244, 0.18);
+            background: rgba(3, 169, 244, 0.07);
+            color: var(--primary-text-color);
+        }
+        .ha-assist--muted {
+            background: rgba(158, 158, 158, 0.08);
+            border-color: rgba(158, 158, 158, 0.18);
+        }
+        .ha-assist-copy {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 12px;
+            color: var(--secondary-text-color);
+        }
+        .ha-assist-controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+        }
+        .ha-assist-controls select {
+            min-width: 200px;
+            max-width: 100%;
+        }
+        .ha-assist-note {
+            font-size: 12px;
+            color: var(--secondary-text-color);
+        }
         .adapter-row {
             display: grid;
             grid-template-columns: 5rem 1fr 1.4fr 2.5rem auto;
@@ -4202,6 +4234,38 @@ body {
             min-width: 0;
         }
         .adapter-row input:focus { outline: none; border-color: var(--primary-color); }
+        .adapter-ha-assist {
+            grid-column: 1 / -1;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            padding-top: 2px;
+        }
+        .adapter-ha-assist-copy {
+            font-size: 11px;
+            color: var(--secondary-text-color);
+        }
+        .adapter-ha-controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+        }
+        .adapter-ha-controls select {
+            flex: 1 1 220px;
+            min-width: 180px;
+            max-width: 100%;
+            padding: 5px 8px;
+            border: 1px solid var(--divider-color);
+            border-radius: 4px;
+            font-size: 13px;
+            background: var(--card-background-color);
+            color: var(--primary-text-color);
+        }
+        .adapter-ha-meta {
+            font-size: 11px;
+            color: var(--secondary-text-color);
+        }
         .dot { font-size: 16px; text-align: center; }
         .dot.green { color: var(--success-color); }
         .dot.grey  { color: var(--secondary-text-color); }
@@ -8591,6 +8655,21 @@ body {
         min-width: 0;
         width: 100%;
         padding: 10px 0;
+    }
+
+    .adapter-ha-assist {
+        padding-top: 0;
+    }
+
+    .ha-assist-controls,
+    .adapter-ha-controls {
+        align-items: stretch;
+    }
+
+    .ha-assist-controls select,
+    .adapter-ha-controls select {
+        min-width: 0;
+        width: 100%;
     }
 
     .adapter-power-btns,

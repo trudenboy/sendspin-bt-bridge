@@ -310,6 +310,23 @@ def test_translation_preserves_saved_port_overrides_when_options_omit_them(tmp_p
     assert cfg["BASE_LISTEN_PORT"] == 19000
 
 
+def test_translation_preserves_existing_ha_adapter_area_map(tmp_path):
+    _write_json(
+        tmp_path / "config.json",
+        {"HA_ADAPTER_AREA_MAP": {"AA:BB:CC:DD:EE:FF": {"area_id": "living-room", "area_name": "Living Room"}}},
+    )
+    _write_json(tmp_path / "options.json", _minimal_options())
+
+    with (
+        patch("scripts.translate_ha_config._detect_adapters", return_value=[]),
+        patch("scripts.translate_ha_config.get_self_delivery_channel", return_value="stable"),
+    ):
+        main()
+
+    cfg = _read_json(tmp_path / "config.json")
+    assert cfg["HA_ADAPTER_AREA_MAP"] == {"AA:BB:CC:DD:EE:FF": {"area_id": "living-room", "area_name": "Living Room"}}
+
+
 def test_translate_script_runs_as_direct_file() -> None:
     script_path = Path(__file__).resolve().parents[1] / "scripts" / "translate_ha_config.py"
     result = subprocess.run(

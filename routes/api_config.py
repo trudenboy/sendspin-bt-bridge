@@ -53,6 +53,7 @@ from services.bridge_runtime_state import get_main_loop
 from services.config_validation import validate_uploaded_config
 from services.device_registry import get_device_registry_snapshot
 from services.ha_addon import detect_delivery_channel_from_slug, get_self_addon_info, get_self_delivery_channel
+from services.ha_core_api import HaCoreApiError, fetch_ha_area_catalog
 from services.ipc_protocol import IPC_PROTOCOL_VERSION
 from services.log_analysis import summarize_issue_logs
 from services.ma_client import fetch_all_players_snapshot
@@ -222,6 +223,29 @@ def _sanitize_last_volumes(last_volumes, valid_macs: set[str]) -> dict[str, int]
         for mac, volume in last_volumes.items()
         if mac in valid_macs and isinstance(volume, int) and 0 <= volume <= 100
     }
+
+
+def _normalize_ha_adapter_area_map(raw_mapping) -> dict[str, dict[str, str]]:
+    if raw_mapping in (None, ""):
+        return {}
+    if not isinstance(raw_mapping, dict):
+        raise ValueError("HA_ADAPTER_AREA_MAP must be an object")
+
+    normalized: dict[str, dict[str, str]] = {}
+    for raw_mac, raw_entry in raw_mapping.items():
+        mac = _normalize_device_mac(raw_mac)
+        if not mac or not _MAC_RE.match(mac):
+            raise ValueError(f"Invalid adapter MAC address in HA_ADAPTER_AREA_MAP: {raw_mac}")
+        if not isinstance(raw_entry, dict):
+            raise ValueError(f"Invalid HA_ADAPTER_AREA_MAP entry for {mac}")
+        area_id = str(raw_entry.get("area_id") or "").strip()
+        area_name = str(raw_entry.get("area_name") or "").strip()
+        if not area_id:
+            raise ValueError(f"HA_ADAPTER_AREA_MAP entry for {mac} must include area_id")
+        normalized[mac] = {"area_id": area_id}
+        if area_name:
+            normalized[mac]["area_name"] = area_name
+    return normalized
 
 
 def _load_existing_config_for_validation() -> dict:
@@ -625,6 +649,11 @@ def api_config():
             return _error_response(f"Invalid adapter MAC address: {amac}")
 
     try:
+        config["HA_ADAPTER_AREA_MAP"] = _normalize_ha_adapter_area_map(config.get("HA_ADAPTER_AREA_MAP", {}))
+    except ValueError as exc:
+        return _error_response(str(exc))
+
+    try:
         sendspin_port = _parse_optional_int(config.get("SENDSPIN_PORT"), "SENDSPIN_PORT", min_value=1, max_value=65535)
         if sendspin_port is not None:
             config["SENDSPIN_PORT"] = sendspin_port
@@ -691,6 +720,7 @@ def api_config():
                 for key in (
                     "LAST_VOLUMES",
                     "LAST_SINKS",
+                    "HA_ADAPTER_AREA_MAP",
                     "AUTH_PASSWORD_HASH",
                     "SECRET_KEY",
                     "MA_AUTH_PROVIDER",
@@ -752,6 +782,34 @@ def api_config():
     payload: dict[str, object] = {"success": True}
     if warnings:
         payload["validation"] = {"warnings": warnings}
+    return jsonify(payload)
+
+
+@config_bp.route("/api/ha/areas", methods=["POST"])
+def api_ha_areas():
+    """Fetch HA area suggestions using a transient Home Assistant token."""
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return _error_response("Invalid JSON body")
+
+    ha_token = str(data.get("ha_token") or "").strip()
+    if not ha_token:
+        return _error_response("ha_token is required")
+
+    adapters = data.get("adapters") or []
+    if not isinstance(adapters, list):
+        return _error_response("adapters must be an array")
+
+    try:
+        payload = fetch_ha_area_catalog(
+            ha_token,
+            include_devices=bool(data.get("include_devices")),
+            adapters=adapters,
+        )
+    except HaCoreApiError as exc:
+        return jsonify({"success": False, "error": str(exc), "areas": [], "bridge_name_suggestions": []}), 502
+
+    payload["success"] = True
     return jsonify(payload)
 
 

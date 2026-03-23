@@ -222,6 +222,8 @@ var recentLogIssueState = { hasMeta: false, hasIssues: false, level: '', count: 
 var currentLogLevel = 'all';
 var btAdapters = [];
 var btManualAdapters = [];
+var _haAreaCatalog = null;
+var _haAdapterAreaMap = {};
 var lastDevices = [];
 var lastGroups = [];
 var _lastDisabledDevices = [];
@@ -4321,7 +4323,8 @@ function toggleAutoRefresh(forceState) {
 
 // ---- BT Device Table ----
 
-async function loadBtAdapters() {
+async function loadBtAdapters(options) {
+    options = options || {};
     try {
         var resp = await fetch(API_BASE + '/api/bt/adapters');
         var data = await resp.json();
@@ -4357,11 +4360,370 @@ async function loadBtAdapters() {
     rebuildAdapterDropdowns();
     _renderBtScanAdapterOptions();
     _syncBtScanControls();
+    if (!options.skipHaAreaRefresh && _isIngress()) {
+        await _maybeLoadHaAreaCatalog({silent: true});
+    }
 }
 
 // ---- Adapter panel ----
 
 function escHtmlAttr(s) { return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+
+function _createEmptyHaAreaCatalog() {
+    return {
+        loaded: false,
+        loading: false,
+        available: false,
+        error: '',
+        areas: [],
+        bridgeSuggestions: [],
+        adapterMatchesByMac: {},
+    };
+}
+
+_haAreaCatalog = _createEmptyHaAreaCatalog();
+
+function _normalizeHaAreaId(rawAreaId) {
+    return String(rawAreaId || '').trim();
+}
+
+function _normalizeHaAdapterAreaMap(rawMap) {
+    var normalized = {};
+    if (!rawMap || typeof rawMap !== 'object') return normalized;
+    Object.keys(rawMap).forEach(function(rawMac) {
+        var mac = _normalizeDeviceMac(rawMac);
+        var entry = rawMap[rawMac];
+        if (!mac || !entry || typeof entry !== 'object') return;
+        var areaId = _normalizeHaAreaId(entry.area_id);
+        if (!areaId) return;
+        var areaName = String(entry.area_name || '').trim();
+        normalized[mac] = {area_id: areaId, area_name: areaName};
+    });
+    return normalized;
+}
+
+function _setHaAreaCatalog(rawCatalog) {
+    var catalog = _createEmptyHaAreaCatalog();
+    var source = rawCatalog || {};
+    catalog.loaded = !!source.loaded;
+    catalog.loading = !!source.loading;
+    catalog.error = String(source.error || '').trim();
+    catalog.areas = Array.isArray(source.areas) ? source.areas.filter(function(area) {
+        return area && _normalizeHaAreaId(area.area_id) && String(area.name || '').trim();
+    }).map(function(area) {
+        return {area_id: _normalizeHaAreaId(area.area_id), name: String(area.name || '').trim()};
+    }) : [];
+    catalog.bridgeSuggestions = Array.isArray(source.bridge_name_suggestions)
+        ? source.bridge_name_suggestions.filter(function(suggestion) {
+            return suggestion && String(suggestion.value || '').trim();
+        }).map(function(suggestion) {
+            return {
+                area_id: _normalizeHaAreaId(suggestion.area_id),
+                label: String(suggestion.label || suggestion.value || '').trim(),
+                value: String(suggestion.value || '').trim(),
+            };
+        })
+        : catalog.areas.map(function(area) {
+            return {area_id: area.area_id, label: area.name, value: area.name};
+        });
+    if (!catalog.bridgeSuggestions.length) {
+        catalog.bridgeSuggestions = catalog.areas.map(function(area) {
+            return {area_id: area.area_id, label: area.name, value: area.name};
+        });
+    }
+    if (Array.isArray(source.adapter_matches)) {
+        source.adapter_matches.forEach(function(match) {
+            var mac = _normalizeDeviceMac(match && match.adapter_mac);
+            if (!mac) return;
+            catalog.adapterMatchesByMac[mac] = {
+                adapter_id: String(match.adapter_id || '').trim(),
+                adapter_mac: mac,
+                matched_area_id: _normalizeHaAreaId(match.matched_area_id),
+                matched_area_name: String(match.matched_area_name || '').trim(),
+                match_source: String(match.match_source || '').trim(),
+                match_confidence: String(match.match_confidence || '').trim(),
+                matched_device_name: String(match.matched_device_name || '').trim(),
+                suggested_name: String(match.suggested_name || match.matched_area_name || '').trim(),
+            };
+        });
+    }
+    catalog.available = catalog.areas.length > 0;
+    _haAreaCatalog = catalog;
+    _renderBridgeNameHaAssist();
+    _updateAdaptersHaAssistSummary();
+}
+
+function _serializeAdaptersForHaAreaLookup() {
+    return btAdapters.map(function(adapter) {
+        return {
+            id: adapter.id || '',
+            mac: _normalizeDeviceMac(adapter.mac),
+            name: adapter.customName || adapter.name || adapter.detectedName || '',
+        };
+    }).filter(function(adapter) {
+        return adapter.id || adapter.mac || adapter.name;
+    });
+}
+
+function _getHaAreaName(areaId) {
+    var target = _normalizeHaAreaId(areaId);
+    if (!target || !_haAreaCatalog || !Array.isArray(_haAreaCatalog.areas)) return '';
+    for (var i = 0; i < _haAreaCatalog.areas.length; i++) {
+        if (_normalizeHaAreaId(_haAreaCatalog.areas[i].area_id) === target) return _haAreaCatalog.areas[i].name || '';
+    }
+    return '';
+}
+
+function _getSavedHaAreaMatch(adapterMac) {
+    var mac = _normalizeDeviceMac(adapterMac);
+    return mac ? (_haAdapterAreaMap[mac] || null) : null;
+}
+
+function _getSuggestedHaAreaMatch(adapterMac) {
+    var mac = _normalizeDeviceMac(adapterMac);
+    return mac ? ((_haAreaCatalog.adapterMatchesByMac || {})[mac] || null) : null;
+}
+
+function _buildHaAreaOptionsHtml(selectedAreaId) {
+    var target = _normalizeHaAreaId(selectedAreaId);
+    var html = '<option value="">No HA area</option>';
+    (_haAreaCatalog.areas || []).forEach(function(area) {
+        var areaId = _normalizeHaAreaId(area.area_id);
+        html += '<option value="' + escHtmlAttr(areaId) + '"' + (areaId === target ? ' selected' : '') + '>' +
+            escHtml(area.name || areaId) + '</option>';
+    });
+    return html;
+}
+
+function _renderBridgeNameHaAssist() {
+    var container = document.getElementById('bridge-name-ha-assist');
+    var bridgeInput = document.querySelector('[name="BRIDGE_NAME"]');
+    if (!container || !bridgeInput) return;
+
+    if (!_isIngress()) {
+        container.hidden = true;
+        container.innerHTML = '';
+        return;
+    }
+
+    if (_haAreaCatalog.loading) {
+        container.hidden = false;
+        container.className = 'ha-assist ha-assist--muted';
+        container.innerHTML = '<span class="ha-assist-copy">Home Assistant areas</span><div class="ha-assist-note">Loading area suggestions…</div>';
+        return;
+    }
+
+    if (!_haAreaCatalog.available || !_haAreaCatalog.bridgeSuggestions.length) {
+        if (!_haAreaCatalog.loaded) {
+            container.hidden = true;
+            container.innerHTML = '';
+            return;
+        }
+        container.hidden = false;
+        container.className = 'ha-assist ha-assist--muted';
+        container.innerHTML = '<span class="ha-assist-copy">Home Assistant areas</span><div class="ha-assist-note">' +
+            escHtml(_haAreaCatalog.error || 'HA area suggestions are unavailable right now.') + '</div>';
+        return;
+    }
+
+    var hasBridgeName = !!String(bridgeInput.value || '').trim();
+    var optionsHtml = '<option value="">Choose Home Assistant area…</option>';
+    _haAreaCatalog.bridgeSuggestions.forEach(function(suggestion) {
+        optionsHtml += '<option value="' + escHtmlAttr(suggestion.value) + '">' +
+            escHtml(suggestion.label || suggestion.value) + '</option>';
+    });
+    container.hidden = false;
+    container.className = 'ha-assist';
+    container.innerHTML =
+        '<span class="ha-assist-copy">Home Assistant areas</span>' +
+        '<div class="ha-assist-controls">' +
+            '<select id="bridge-name-ha-select">' + optionsHtml + '</select>' +
+            '<button type="button" class="btn btn-sm btn-secondary" id="bridge-name-ha-apply" disabled>Use area name</button>' +
+        '</div>' +
+        '<div class="ha-assist-note">' +
+            (hasBridgeName
+                ? 'Suggestions stay manual — nothing overwrites the current bridge name until you apply it.'
+                : 'The bridge name is empty — you can import an HA area name with one click.') +
+        '</div>';
+
+    var select = document.getElementById('bridge-name-ha-select');
+    var applyBtn = document.getElementById('bridge-name-ha-apply');
+    if (!select || !applyBtn) return;
+    select.addEventListener('change', function() {
+        applyBtn.disabled = !String(select.value || '').trim();
+    });
+    applyBtn.addEventListener('click', function() {
+        var value = String(select.value || '').trim();
+        if (!value) return;
+        bridgeInput.value = value;
+        bridgeInput.dispatchEvent(new Event('input', {bubbles: true}));
+        bridgeInput.dispatchEvent(new Event('change', {bubbles: true}));
+        _recomputeConfigDirtyState();
+        _renderBridgeNameHaAssist();
+    });
+}
+
+function _updateAdaptersHaAssistSummary() {
+    var summary = document.getElementById('adapters-ha-assist-summary');
+    if (!summary) return;
+    if (!_isIngress()) {
+        summary.hidden = true;
+        summary.innerHTML = '';
+        return;
+    }
+    if (_haAreaCatalog.loading) {
+        summary.hidden = false;
+        summary.className = 'ha-assist ha-assist--muted';
+        summary.innerHTML = 'Loading Home Assistant area suggestions…';
+        return;
+    }
+    if (!_haAreaCatalog.loaded) {
+        summary.hidden = true;
+        summary.innerHTML = '';
+        return;
+    }
+    if (!_haAreaCatalog.available) {
+        summary.hidden = false;
+        summary.className = 'ha-assist ha-assist--muted';
+        summary.innerHTML = escHtml(_haAreaCatalog.error || 'HA area suggestions are unavailable right now.');
+        return;
+    }
+    var matchCount = Object.keys(_haAreaCatalog.adapterMatchesByMac || {}).length;
+    summary.hidden = false;
+    summary.className = 'ha-assist';
+    summary.innerHTML = 'Loaded ' + _haAreaCatalog.areas.length + ' Home Assistant area' +
+        (_haAreaCatalog.areas.length === 1 ? '' : 's') +
+        (matchCount ? ' with exact adapter MAC suggestions for ' + matchCount + ' adapter' + (matchCount === 1 ? '' : 's') + '.' : '.');
+}
+
+function _buildAdapterHaAssistHtml(adapter) {
+    if (!_haAreaCatalog.available || !_haAreaCatalog.areas.length) return '';
+    var saved = _getSavedHaAreaMatch(adapter.mac);
+    var suggestion = _getSuggestedHaAreaMatch(adapter.mac);
+    var selectedAreaId = _normalizeHaAreaId(saved && saved.area_id);
+    var selectedAreaName = _getHaAreaName(selectedAreaId) || String((saved && saved.area_name) || '').trim();
+    var suggestionAreaId = _normalizeHaAreaId(suggestion && suggestion.matched_area_id);
+    var suggestionAreaName = String((suggestion && suggestion.matched_area_name) || '').trim();
+    var meta = '';
+    if (suggestionAreaId && suggestionAreaName) {
+        meta = 'Suggested by HA device registry: ' + suggestionAreaName;
+        if (suggestion && suggestion.matched_device_name) meta += ' (' + suggestion.matched_device_name + ')';
+    } else if (selectedAreaId && selectedAreaName) {
+        meta = 'Saved HA area: ' + selectedAreaName;
+    }
+    return '<div class="adapter-ha-assist">' +
+        '<span class="adapter-ha-assist-copy">Home Assistant area</span>' +
+        '<div class="adapter-ha-controls">' +
+            '<select class="adp-ha-area">' + _buildHaAreaOptionsHtml(selectedAreaId) + '</select>' +
+            '<button type="button" class="btn btn-sm btn-secondary adp-ha-apply-name"' +
+                (selectedAreaId ? '' : ' disabled') + '>Use area name</button>' +
+            (suggestionAreaId && suggestionAreaId !== selectedAreaId
+                ? '<button type="button" class="btn btn-sm btn-ghost adp-ha-use-suggestion" data-area-id="' +
+                    escHtmlAttr(suggestionAreaId) + '">Use suggested area</button>'
+                : '') +
+        '</div>' +
+        '<div class="adapter-ha-meta adp-ha-area-meta">' + escHtml(meta) + '</div>' +
+    '</div>';
+}
+
+function _updateAdapterHaAssistState(row) {
+    var select = row.querySelector('.adp-ha-area');
+    var applyNameBtn = row.querySelector('.adp-ha-apply-name');
+    var meta = row.querySelector('.adp-ha-area-meta');
+    if (!select) return;
+    var areaId = _normalizeHaAreaId(select.value);
+    var areaName = _getHaAreaName(areaId);
+    if (applyNameBtn) applyNameBtn.disabled = !areaId || !areaName;
+    if (meta) {
+        var suggestion = _getSuggestedHaAreaMatch(row.classList.contains('manual')
+            ? (((row.querySelector('.adp-mac') || {}).value) || '')
+            : (row.dataset.adapterMac || ''));
+        if (areaId && areaName) {
+            meta.textContent = 'Selected area: ' + areaName;
+        } else if (suggestion && suggestion.matched_area_name) {
+            meta.textContent = suggestion.matched_device_name
+                ? 'Suggested by HA device registry: ' + suggestion.matched_area_name + ' (' + suggestion.matched_device_name + ')'
+                : 'Suggested by HA device registry: ' + suggestion.matched_area_name;
+        } else {
+            meta.textContent = '';
+        }
+    }
+}
+
+function _bindAdapterHaAssist(row) {
+    var select = row.querySelector('.adp-ha-area');
+    if (!select) return;
+    select.addEventListener('change', function() {
+        _updateAdapterHaAssistState(row);
+        syncManualAdapters();
+        _recomputeConfigDirtyState();
+    });
+    var applyNameBtn = row.querySelector('.adp-ha-apply-name');
+    if (applyNameBtn) {
+        applyNameBtn.addEventListener('click', function() {
+            var areaName = _getHaAreaName(select.value);
+            var nameInput = row.querySelector('.adp-name');
+            if (!areaName || !nameInput) return;
+            nameInput.value = areaName;
+            syncManualAdapters();
+            _recomputeConfigDirtyState();
+        });
+    }
+    var useSuggestionBtn = row.querySelector('.adp-ha-use-suggestion');
+    if (useSuggestionBtn) {
+        useSuggestionBtn.addEventListener('click', function() {
+            select.value = useSuggestionBtn.dataset.areaId || '';
+            select.dispatchEvent(new Event('change', {bubbles: true}));
+        });
+    }
+    _updateAdapterHaAssistState(row);
+}
+
+async function _maybeLoadHaAreaCatalog(options) {
+    options = options || {};
+    if (!_isIngress()) {
+        _setHaAreaCatalog({loaded: true, error: ''});
+        renderAdaptersTable();
+        return;
+    }
+    if (_haAreaCatalog.loading) return;
+
+    _setHaAreaCatalog({loaded: _haAreaCatalog.loaded, loading: true, error: ''});
+    renderAdaptersTable();
+
+    var haToken = await _getHaAccessToken();
+    if (!haToken) {
+        _setHaAreaCatalog({loaded: true, error: 'Home Assistant access token unavailable in this session.'});
+        renderAdaptersTable();
+        return;
+    }
+
+    try {
+        var resp = await fetch(API_BASE + '/api/ha/areas', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                ha_token: haToken,
+                include_devices: true,
+                adapters: _serializeAdaptersForHaAreaLookup(),
+            }),
+        });
+        var data = await resp.json().catch(function() { return {}; });
+        if (!resp.ok || !data.success) {
+            _setHaAreaCatalog({
+                loaded: true,
+                error: String(data.error || 'Could not load Home Assistant areas right now.'),
+            });
+            renderAdaptersTable();
+            return;
+        }
+        _setHaAreaCatalog(Object.assign({}, data, {loaded: true}));
+    } catch (err) {
+        console.warn('HA area lookup failed:', err);
+        _setHaAreaCatalog({loaded: true, error: 'Could not reach Home Assistant area registry right now.'});
+    }
+    renderAdaptersTable();
+}
 
 function renderAdaptersTable() {
     var el = document.getElementById('adapters-table');
@@ -4387,12 +4749,15 @@ function renderAdaptersTable() {
                 '<span class="dot ' + (a.powered ? 'green' : 'grey') + '" title="' + (a.powered ? 'Powered on' : 'Powered off') + '">\u25cf</span>' +
                 '<span class="adapter-power-btns">' +
                   '<button type="button" class="btn-bt-action btn-adp-reboot" title="Reboot adapter" data-adapter="' + escHtmlAttr(a.mac) + '">\u21bb Reboot</button>' +
-                '</span>';
+                '</span>' +
+                _buildAdapterHaAssistHtml(a);
             row.querySelector('.adp-name').addEventListener('blur', syncManualAdapters);
             row.querySelector('.btn-adp-reboot').addEventListener('click', function() { rebootAdapter(a.mac); });
+            _bindAdapterHaAssist(row);
             el.appendChild(row);
         }
     });
+    _updateAdaptersHaAssistSummary();
 }
 
 function buildManualRow(id, mac, name, dirtyKey) {
@@ -4406,7 +4771,8 @@ function buildManualRow(id, mac, name, dirtyKey) {
         '<input type="text" class="adp-mac mono" placeholder="AA:BB:CC:DD:EE:FF" value="' + escHtmlAttr(mac) + '">' +
         '<input type="text" class="adp-name" placeholder="Display name" value="' + escHtmlAttr(name) + '">' +
         '<span class="dot grey">\u25cf</span>' +
-        '<button type="button" class="btn-remove-adapter">\u00d7</button>';
+        '<button type="button" class="btn-remove-adapter">\u00d7</button>' +
+        _buildAdapterHaAssistHtml({id: id || '', mac: mac || ''});
     ['adp-id', 'adp-mac', 'adp-name'].forEach(function(cls) {
         row.querySelector('.' + cls).addEventListener('blur', syncManualAdapters);
     });
@@ -4414,6 +4780,7 @@ function buildManualRow(id, mac, name, dirtyKey) {
         row.remove();
         syncManualAdapters();
     });
+    _bindAdapterHaAssist(row);
     return row;
 }
 
@@ -4535,6 +4902,23 @@ function _collectPersistedAdaptersFromDom() {
         }
     });
     return savedAdapters;
+}
+
+function _collectHaAdapterAreaMapFromDom() {
+    var savedMap = {};
+    document.querySelectorAll('#adapters-table .adapter-row').forEach(function(row) {
+        var areaSelect = row.querySelector('.adp-ha-area');
+        if (!areaSelect) return;
+        var areaId = _normalizeHaAreaId(areaSelect.value);
+        var mac = row.classList.contains('manual')
+            ? _normalizeDeviceMac((((row.querySelector('.adp-mac') || {}).value) || ''))
+            : _normalizeDeviceMac(row.dataset.adapterMac || '');
+        if (!mac || !areaId) return;
+        var areaName = _getHaAreaName(areaId) || String((areaSelect.options[areaSelect.selectedIndex] || {}).text || '').trim();
+        savedMap[mac] = {area_id: areaId};
+        if (areaName) savedMap[mac].area_name = areaName;
+    });
+    return savedMap;
 }
 
 function rebuildAdapterDropdowns() {
@@ -5889,6 +6273,7 @@ function _buildConfigPayload(options) {
     }
 
     config.BLUETOOTH_ADAPTERS = _collectPersistedAdaptersFromDom();
+    config.HA_ADAPTER_AREA_MAP = _collectHaAdapterAreaMapFromDom();
     return config;
 }
 
@@ -7718,6 +8103,7 @@ function _normalizeAdapterDirtyFields(fields) {
         id: (fields.id || '').trim(),
         mac: ((fields.mac || '').trim()).toUpperCase(),
         name: (fields.name || '').trim(),
+        area_id: _normalizeHaAreaId(fields.area_id),
     };
 }
 
@@ -7729,6 +8115,7 @@ function _defaultAdapterDirtyFields(fields) {
             id: normalized.id,
             mac: normalized.mac,
             name: '',
+            area_id: '',
         };
     }
     return {
@@ -7736,6 +8123,7 @@ function _defaultAdapterDirtyFields(fields) {
         id: '',
         mac: '',
         name: '',
+        area_id: '',
     };
 }
 
@@ -7749,11 +8137,12 @@ function _readAdapterDirtyFields(row) {
             ? ((((row.querySelector('.adp-mac') || {}).value) || ''))
             : (row.dataset.adapterMac || ''),
         name: (((row.querySelector('.adp-name') || {}).value) || ''),
+        area_id: (((row.querySelector('.adp-ha-area') || {}).value) || ''),
     });
 }
 
 function _adapterShouldPersist(fields) {
-    if (fields._type === 'detected') return !!(fields.id && fields.name);
+    if (fields._type === 'detected') return !!(fields.id && (fields.name || fields.area_id));
     return !!(fields.id || fields.mac);
 }
 
@@ -7762,6 +8151,7 @@ function _getAdapterControlByField(row, fieldName) {
         id: '.adp-id',
         mac: '.adp-mac',
         name: '.adp-name',
+        area_id: '.adp-ha-area',
     };
     return row.querySelector(selectors[fieldName] || '');
 }
@@ -8179,7 +8569,9 @@ async function loadConfig(options) {
 
         // Restore manual adapters before re-running loadBtAdapters so merging picks them up
         btManualAdapters = config.BLUETOOTH_ADAPTERS || [];
-        await loadBtAdapters();
+        _haAdapterAreaMap = _normalizeHaAdapterAreaMap(config.HA_ADAPTER_AREA_MAP);
+        await loadBtAdapters({skipHaAreaRefresh: true});
+        await _maybeLoadHaAreaCatalog();
         _refreshEmptyState();
         loadPairedDevices();
 

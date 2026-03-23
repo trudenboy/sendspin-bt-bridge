@@ -279,6 +279,26 @@ def test_load_config_falls_back_to_stable_for_invalid_update_channel(tmp_path):
     assert loaded["UPDATE_CHANNEL"] == DEFAULT_UPDATE_CHANNEL
 
 
+def test_load_config_normalizes_ha_adapter_area_map(tmp_path):
+    _write_config(
+        tmp_path,
+        {
+            "HA_ADAPTER_AREA_MAP": {
+                " aa:bb:cc:dd:ee:ff ": {"area_id": "living-room", "area_name": "Living Room"},
+                "11:22:33:44:55:66": {"area_name": "Missing area id"},
+                "bad": "invalid",
+            }
+        },
+    )
+    from config import load_config
+
+    loaded = load_config()
+
+    assert loaded["HA_ADAPTER_AREA_MAP"] == {
+        "AA:BB:CC:DD:EE:FF": {"area_id": "living-room", "area_name": "Living Room"}
+    }
+
+
 def test_detect_ha_addon_channel_uses_hostname_suffix():
     from config import detect_ha_addon_channel
 
