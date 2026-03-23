@@ -31,6 +31,10 @@ services:
       - TZ=Australia/Melbourne
       - WEB_PORT=8080
       - CONFIG_DIR=/config
+      # Keep container init as root; entrypoint will auto-run the bridge process
+      # as AUDIO_UID for user-scoped host audio sockets on Docker/Raspberry Pi.
+      - AUDIO_UID=${AUDIO_UID:-1000}
+      - AUDIO_GID=${AUDIO_GID:-1000}
       # Audio configuration - use host's PipeWire/PulseAudio
       - PULSE_SERVER=unix:/run/user/${AUDIO_UID:-1000}/pulse/native
       - XDG_RUNTIME_DIR=/run/user/${AUDIO_UID:-1000}

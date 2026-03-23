@@ -77,6 +77,7 @@ RUN apt-get update && apt-get install -y \
     bluez \
     bluez-tools \
     alsa-utils \
+    gosu \
     pulseaudio \
     pulseaudio-module-bluetooth \
     libportaudio2 \

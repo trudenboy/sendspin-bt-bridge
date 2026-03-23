@@ -79,6 +79,7 @@ AI должен быть operator copilot, а не скрытым control plane.
 Только после стабильных предыдущих фаз:
 
 - USB audio auto-discovery
+- system-wide audio runtime / non-user-scoped socket support для Raspberry Pi и других embedded-host сценариев, где user-scoped PulseAudio/PipeWire слишком хрупок
 - richer sync/drift telemetry
 - Snapcast/VBAN tracks
 - более широкая federation / plugin / HA component strategy

@@ -231,6 +231,7 @@ Prepare the bridge for selective non-Bluetooth expansion without destabilizing t
 Only start these once earlier phases are stable and demand is proven:
 
 - USB audio auto-discovery
+- system-wide audio runtime / non-user-scoped socket support for Raspberry Pi and other embedded hosts that struggle with per-user PulseAudio or PipeWire sessions
 - richer sync/drift telemetry across groups and bridges
 - Snapcast/VBAN/backend strategy tracks
 - multi-bridge federation beyond a single control plane

@@ -9,6 +9,55 @@ echo "=== Starting Sendspin Client Container ==="
 RUNTIME_UID=$(id -u 2>/dev/null || echo "?")
 RUNTIME_GID=$(id -g 2>/dev/null || echo "?")
 RUNTIME_USER=$(id -un 2>/dev/null || echo "unknown")
+APP_RUNTIME_UID="$RUNTIME_UID"
+APP_RUNTIME_GID="$RUNTIME_GID"
+APP_RUNTIME_USER="$RUNTIME_USER"
+APP_RUNTIME_SPEC=""
+APP_RUNTIME_HOME=""
+AUDIO_SOCKET_UID=""
+AUDIO_SOCKET_GID=""
+AUDIO_WAIT_STATUS=""
+
+_probe_pactl_as_runtime() {
+    if ! command -v pactl >/dev/null 2>&1; then
+        return 1
+    fi
+    if [ -n "$APP_RUNTIME_SPEC" ] && command -v gosu >/dev/null 2>&1; then
+        gosu "$APP_RUNTIME_SPEC" pactl info >/tmp/sendspin-pactl-info.log 2>&1
+        return $?
+    fi
+    pactl info >/tmp/sendspin-pactl-info.log 2>&1
+}
+
+_prepare_runtime_paths() {
+    if [ -z "$APP_RUNTIME_SPEC" ] || [ "$APP_RUNTIME_UID" = "$RUNTIME_UID" ]; then
+        return 0
+    fi
+
+    APP_RUNTIME_HOME="/tmp/sendspin-runtime-${APP_RUNTIME_UID}"
+    mkdir -p "$APP_RUNTIME_HOME"
+    chown "$APP_RUNTIME_UID:$APP_RUNTIME_GID" "$APP_RUNTIME_HOME" 2>/dev/null || true
+
+    CONFIG_RUNTIME_DIR="${CONFIG_DIR:-/config}"
+    if [ -e "$CONFIG_RUNTIME_DIR" ]; then
+        echo "Preparing ${CONFIG_RUNTIME_DIR} for runtime UID ${APP_RUNTIME_UID}:${APP_RUNTIME_GID}"
+        if ! chown -R "$APP_RUNTIME_UID:$APP_RUNTIME_GID" "$CONFIG_RUNTIME_DIR" 2>/dev/null; then
+            echo "WARNING: Could not update ownership for ${CONFIG_RUNTIME_DIR}; config writes may fail"
+        fi
+    fi
+}
+
+_exec_sendspin_client() {
+    if [ -n "$APP_RUNTIME_SPEC" ] && command -v gosu >/dev/null 2>&1; then
+        export HOME="${APP_RUNTIME_HOME:-/tmp/sendspin-runtime-${APP_RUNTIME_UID}}"
+        export USER="$APP_RUNTIME_USER"
+        echo "Starting Sendspin client with web interface as UID ${APP_RUNTIME_UID}:${APP_RUNTIME_GID}..."
+        exec gosu "$APP_RUNTIME_SPEC" env HOME="$HOME" USER="$USER" python3 /app/sendspin_client.py
+    fi
+
+    echo "Starting Sendspin client with web interface..."
+    exec python3 /app/sendspin_client.py
+}
 
 # HA Addon mode: /data/options.json is written by HA Supervisor before start.
 # Translate it to /data/config.json so the rest of the startup is uniform.
@@ -70,21 +119,65 @@ if [ -n "$AUDIO_SOCKET_PATH" ] && [ -S "$AUDIO_SOCKET_PATH" ]; then
     SOCKET_UID=$(stat -c '%u' "$AUDIO_SOCKET_PATH" 2>/dev/null || echo "?")
     SOCKET_GID=$(stat -c '%g' "$AUDIO_SOCKET_PATH" 2>/dev/null || echo "?")
     SOCKET_MODE=$(stat -c '%a' "$AUDIO_SOCKET_PATH" 2>/dev/null || echo "?")
+    if [ "$SOCKET_UID" != "?" ]; then
+        AUDIO_SOCKET_UID="$SOCKET_UID"
+    fi
+    if [ "$SOCKET_GID" != "?" ]; then
+        AUDIO_SOCKET_GID="$SOCKET_GID"
+    fi
     AUDIO_SOCKET_OWNER="${SOCKET_UID}:${SOCKET_GID} mode ${SOCKET_MODE}"
-    case "$AUDIO_SOCKET_PATH" in
-        /run/user/*)
-            SOCKET_RUNTIME_UID=$(printf '%s' "$AUDIO_SOCKET_PATH" | cut -d/ -f4)
-            if [ -n "$SOCKET_RUNTIME_UID" ] && [ "$SOCKET_RUNTIME_UID" != "$RUNTIME_UID" ]; then
-                AUDIO_WARNING="User-scoped audio socket targets UID ${SOCKET_RUNTIME_UID}, but container runs as UID ${RUNTIME_UID}"
-                AUDIO_HINT='If `pactl` shows "Connection refused", try a diagnostic Docker Compose override: user: "${AUDIO_UID:-1000}:${AUDIO_UID:-1000}"'
-            fi
-            ;;
-    esac
+fi
+
+case "$AUDIO_SOCKET_PATH" in
+    /run/user/*)
+        SOCKET_RUNTIME_UID=$(printf '%s' "$AUDIO_SOCKET_PATH" | cut -d/ -f4)
+        if [ -n "$SOCKET_RUNTIME_UID" ] && [ "$RUNTIME_UID" = "0" ] && [ "$SOCKET_RUNTIME_UID" != "0" ]; then
+            APP_RUNTIME_UID="${AUDIO_UID:-$SOCKET_RUNTIME_UID}"
+            APP_RUNTIME_GID="${AUDIO_GID:-${AUDIO_SOCKET_GID:-$APP_RUNTIME_UID}}"
+            APP_RUNTIME_USER="audio-runtime-${APP_RUNTIME_UID}"
+            APP_RUNTIME_SPEC="${APP_RUNTIME_UID}:${APP_RUNTIME_GID}"
+            AUDIO_WARNING="User-scoped audio socket targets UID ${APP_RUNTIME_UID}; container init stays root but the bridge process will drop to UID ${APP_RUNTIME_UID}"
+            AUDIO_HINT='Recent images auto-run the bridge process as AUDIO_UID for user-scoped audio sockets; a global Docker Compose `user:` override should only be a temporary diagnostic step on older images'
+        elif [ -n "$SOCKET_RUNTIME_UID" ] && [ "$SOCKET_RUNTIME_UID" != "$RUNTIME_UID" ]; then
+            AUDIO_WARNING="User-scoped audio socket targets UID ${SOCKET_RUNTIME_UID}, but container runs as UID ${RUNTIME_UID}"
+            AUDIO_HINT='Check that the bridge process is running as the same UID as the mounted user-scoped audio socket'
+        fi
+        ;;
+esac
+
+if [ -n "$APP_RUNTIME_SPEC" ] && ! command -v gosu >/dev/null 2>&1; then
+    AUDIO_WARNING="User-scoped audio socket detected but gosu is unavailable"
+    AUDIO_HINT="Update to a newer image that includes automatic AUDIO_UID privilege drop"
+    APP_RUNTIME_UID="$RUNTIME_UID"
+    APP_RUNTIME_GID="$RUNTIME_GID"
+    APP_RUNTIME_USER="$RUNTIME_USER"
+    APP_RUNTIME_SPEC=""
 fi
 
 if command -v pactl >/dev/null 2>&1; then
-    if pactl info >/tmp/sendspin-pactl-info.log 2>&1; then
+    if [ -n "$APP_RUNTIME_SPEC" ]; then
+        WAIT_ATTEMPTS="${AUDIO_RUNTIME_WAIT_ATTEMPTS:-15}"
+        WAIT_DELAY="${AUDIO_RUNTIME_WAIT_DELAY_SECONDS:-1}"
+        ATTEMPT=1
+        while [ "$ATTEMPT" -le "$WAIT_ATTEMPTS" ]; do
+            if _probe_pactl_as_runtime; then
+                if [ "$ATTEMPT" -gt 1 ]; then
+                    AUDIO_WAIT_STATUS="after ${ATTEMPT} checks"
+                fi
+                break
+            fi
+            if [ "$ATTEMPT" -lt "$WAIT_ATTEMPTS" ]; then
+                sleep "$WAIT_DELAY"
+            fi
+            ATTEMPT=$((ATTEMPT + 1))
+        done
+    fi
+
+    if _probe_pactl_as_runtime; then
         AUDIO_PROBE_STATUS="✓ pactl info ok"
+        if [ -n "$AUDIO_WAIT_STATUS" ]; then
+            AUDIO_PROBE_STATUS="${AUDIO_PROBE_STATUS} ${AUDIO_WAIT_STATUS}"
+        fi
     else
         AUDIO_PROBE_STATUS="✗ pactl info failed"
         AUDIO_PROBE_ERROR=$(head -1 /tmp/sendspin-pactl-info.log 2>/dev/null | sed 's/[[:space:]]\+/ /g; s/^ //; s/ $//')
@@ -92,7 +185,7 @@ if command -v pactl >/dev/null 2>&1; then
             AUDIO_PROBE_ERROR="No response from PulseAudio/PipeWire server"
         fi
         if [ -z "$AUDIO_HINT" ] && [ -n "$AUDIO_SOCKET_PATH" ]; then
-            AUDIO_HINT='Check container UID, mounted audio socket path, and `PULSE_SERVER`/`XDG_RUNTIME_DIR` values'
+            AUDIO_HINT='Check the bridge process UID, mounted audio socket path, and `PULSE_SERVER`/`XDG_RUNTIME_DIR` values'
         fi
     fi
 fi
@@ -122,7 +215,11 @@ fi
 MA_SERVER="${SENDSPIN_SERVER:-auto}"
 
 # Sink count
-SINK_COUNT=$(pactl list short sinks 2>/dev/null | wc -l | tr -d ' ' || echo "0")
+if [ -n "$APP_RUNTIME_SPEC" ] && command -v gosu >/dev/null 2>&1; then
+    SINK_COUNT=$(gosu "$APP_RUNTIME_SPEC" pactl list short sinks 2>/dev/null | wc -l | tr -d ' ' || echo "0")
+else
+    SINK_COUNT=$(pactl list short sinks 2>/dev/null | wc -l | tr -d ' ' || echo "0")
+fi
 
 # ── Structured diagnostics ──────────────────────────────────────────────────
 echo ""
@@ -131,7 +228,8 @@ echo "║  Sendspin Bridge v${VERSION} Diagnostics"
 echo "╠══════════════════════════════════════════════════════╣"
 printf "║  Platform:    %-38s ║\n" "$PLATFORM ($PLATFORM_LABEL)"
 printf "║  Audio:       %-38s ║\n" "$AUDIO_STATUS"
-printf "║  Runtime UID: %-38s ║\n" "$RUNTIME_UID:$RUNTIME_GID ($RUNTIME_USER)"
+printf "║  Init UID:    %-38s ║\n" "$RUNTIME_UID:$RUNTIME_GID ($RUNTIME_USER)"
+printf "║  App UID:     %-38s ║\n" "$APP_RUNTIME_UID:$APP_RUNTIME_GID ($APP_RUNTIME_USER)"
 printf "║  Audio Probe: %-38s ║\n" "$AUDIO_PROBE_STATUS"
 printf "║  Sinks:       %-38s ║\n" "$SINK_COUNT available"
 printf "║  Bluetooth:   %-38s ║\n" "$BT_STATUS"
@@ -161,6 +259,5 @@ if [ -n "$AUDIO_SOCKET_PATH" ] || [ -n "$AUDIO_PROBE_ERROR" ] || [ -n "$AUDIO_WA
     echo ""
 fi
 
-# Start the Sendspin client (includes web interface)
-echo "Starting Sendspin client with web interface..."
-exec python3 /app/sendspin_client.py
+_prepare_runtime_paths
+_exec_sendspin_client

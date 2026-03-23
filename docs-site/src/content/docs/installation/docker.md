@@ -37,17 +37,22 @@ The published image supports `linux/amd64`, `linux/arm64`, and `linux/arm/v7`.
 
    ```env
    AUDIO_UID=1000
+   AUDIO_GID=1000
    TZ=Europe/London
    WEB_PORT=8080
    BASE_LISTEN_PORT=8928
    ```
 
    <Aside type="caution">
-     Check `id -u`. If your audio user is not UID `1000`, set `AUDIO_UID` accordingly.
+     Check `id -u` and `id -g`. If your audio user is not UID/GID `1000`, set `AUDIO_UID` and `AUDIO_GID` accordingly.
    </Aside>
 
    <Aside type="tip">
      `AUDIO_UID` controls which host user-scoped PipeWire/PulseAudio socket path is mounted into the container. On Raspberry Pi and other PipeWire-heavy setups, a wrong UID often looks like `pactl` / PulseAudio `Connection refused` even though the socket path exists.
+   </Aside>
+
+   <Aside type="tip">
+     Recent images keep container init as `root`, but automatically re-exec the bridge process as `AUDIO_UID` for user-scoped host audio sockets. This avoids the common Raspberry Pi problem where a root container cannot talk to `/run/user/<uid>/pulse/native`, without requiring a global Compose `user:` override.
    </Aside>
 
 3. **Create `docker-compose.yml`**
@@ -64,14 +69,16 @@ The published image supports `linux/amd64`, `linux/arm64`, and `linux/arm/v7`.
          - /run/user/${AUDIO_UID:-1000}/pulse:/run/user/${AUDIO_UID:-1000}/pulse
          - /run/user/${AUDIO_UID:-1000}/pipewire-0:/run/user/${AUDIO_UID:-1000}/pipewire-0
          - /etc/docker/Sendspin:/config
-       environment:
-         - SENDSPIN_SERVER=auto
-         - TZ=${TZ:-UTC}
-         - WEB_PORT=${WEB_PORT:-8080}
-         - BASE_LISTEN_PORT=${BASE_LISTEN_PORT:-8928}
-         - CONFIG_DIR=/config
-         - PULSE_SERVER=unix:/run/user/${AUDIO_UID:-1000}/pulse/native
-         - XDG_RUNTIME_DIR=/run/user/${AUDIO_UID:-1000}
+        environment:
+          - SENDSPIN_SERVER=auto
+          - TZ=${TZ:-UTC}
+          - WEB_PORT=${WEB_PORT:-8080}
+          - BASE_LISTEN_PORT=${BASE_LISTEN_PORT:-8928}
+          - CONFIG_DIR=/config
+          - AUDIO_UID=${AUDIO_UID:-1000}
+          - AUDIO_GID=${AUDIO_GID:-1000}
+          - PULSE_SERVER=unix:/run/user/${AUDIO_UID:-1000}/pulse/native
+          - XDG_RUNTIME_DIR=/run/user/${AUDIO_UID:-1000}
        devices:
          - /dev/bus/usb:/dev/bus/usb
        cap_add:
@@ -149,11 +156,12 @@ curl -s http://localhost:${WEB_PORT:-8080}/api/preflight | python3 -m json.tool
 
 Recent images also print startup diagnostics for:
 
-- the runtime UID/GID inside the container
+- the init UID/GID inside the container
+- the app UID/GID used for the running bridge process
 - the selected audio socket path
 - the socket owner/mode
 - a live `pactl info` probe result
-- a warning when the container runs under a different UID than the user-scoped host audio socket
+- a warning when the running bridge process does not match the user-scoped host audio socket
 
 ## Troubleshooting user-scoped PipeWire / PulseAudio
 
@@ -162,7 +170,7 @@ If the host audio stack is healthy but the container still shows `Connection ref
 ```bash
 docker exec sendspin-client ls -la /run/user/${AUDIO_UID:-1000}/pulse/
 docker exec sendspin-client env | grep -E 'PULSE|XDG'
-docker exec sendspin-client id
+docker exec sendspin-client ps -o user:20,pid,command -C python3
 docker inspect sendspin-client --format '{{json .Mounts}}'
 ```
 
@@ -174,7 +182,7 @@ pactl info
 ls -la /run/user/${AUDIO_UID:-1000}/pulse/
 ```
 
-If the mounted host audio socket belongs to your normal login user but the container process runs as `root`, try this **temporary diagnostic test** in `docker-compose.yml`:
+If audio still fails, first confirm that the startup diagnostics show an `App UID` matching your host audio user. The old global Compose `user:` override is now only a **temporary diagnostic test for older images**:
 
 ```yaml
 services:

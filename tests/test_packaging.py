@@ -19,14 +19,29 @@ def test_entrypoint_reports_audio_uid_mismatch_diagnostics():
     entrypoint = (Path(__file__).resolve().parents[1] / "entrypoint.sh").read_text()
 
     assert "RUNTIME_UID=$(id -u" in entrypoint
+    assert 'APP_RUNTIME_SPEC="${APP_RUNTIME_UID}:${APP_RUNTIME_GID}"' in entrypoint
+    assert "gosu" in entrypoint
     assert "AUDIO_PROBE_STATUS" in entrypoint
     assert "User-scoped audio socket targets UID" in entrypoint
-    assert 'user: "${AUDIO_UID:-1000}:${AUDIO_UID:-1000}"' in entrypoint
+    assert "App UID:" in entrypoint
+
+
+def test_dockerfile_installs_gosu_for_runtime_uid_switch():
+    dockerfile = (Path(__file__).resolve().parents[1] / "Dockerfile").read_text()
+
+    assert "gosu" in dockerfile
+
+
+def test_docker_compose_passes_audio_uid_to_container():
+    compose = (Path(__file__).resolve().parents[1] / "docker-compose.yml").read_text()
+
+    assert "- AUDIO_UID=${AUDIO_UID:-1000}" in compose
+    assert "- AUDIO_GID=${AUDIO_GID:-1000}" in compose
 
 
 def test_rpi_check_mentions_container_uid_audio_troubleshooting():
     script = (Path(__file__).resolve().parents[1] / "scripts" / "rpi-check.sh").read_text()
 
-    assert "Docker containers still run as root by default" in script
-    assert "docker exec sendspin-client id" in script
-    assert 'user: \\"${DETECTED_UID}:${DETECTED_UID}\\"' in script
+    assert "auto-run the bridge process as AUDIO_UID" in script
+    assert "docker exec sendspin-client ps -o user:20,pid,command -C python3" in script
+    assert "docker logs --tail 80 sendspin-client" in script

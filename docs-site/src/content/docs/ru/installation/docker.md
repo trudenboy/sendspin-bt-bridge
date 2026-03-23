@@ -37,17 +37,22 @@ import { Aside, Steps } from '@astrojs/starlight/components';
 
    ```env
    AUDIO_UID=1000
+   AUDIO_GID=1000
    TZ=Europe/Moscow
    WEB_PORT=8080
    BASE_LISTEN_PORT=8928
    ```
 
    <Aside type="caution">
-     Проверьте `id -u`. Если аудио-пользователь имеет UID не `1000`, укажите правильное значение в `AUDIO_UID`.
+     Проверьте `id -u` и `id -g`. Если аудио-пользователь имеет UID/GID не `1000`, укажите правильные значения в `AUDIO_UID` и `AUDIO_GID`.
    </Aside>
 
    <Aside type="tip">
      `AUDIO_UID` определяет, какой user-scoped сокет PipeWire/PulseAudio с хоста будет смонтирован в контейнер. На Raspberry Pi и других системах с PipeWire ошибка в UID часто выглядит как `pactl` / PulseAudio `Connection refused`, даже если путь к сокету существует.
+   </Aside>
+
+   <Aside type="tip">
+     В новых образах init контейнера остаётся под `root`, но сам bridge-процесс автоматически перезапускается под `AUDIO_UID`, если используется user-scoped host audio socket. Это снимает типичную проблему Raspberry Pi, когда root-контейнер не может работать с `/run/user/<uid>/pulse/native`, и обычно устраняет необходимость в глобальном Compose `user:` override.
    </Aside>
 
 3. **Создайте `docker-compose.yml`**
@@ -64,14 +69,16 @@ import { Aside, Steps } from '@astrojs/starlight/components';
          - /run/user/${AUDIO_UID:-1000}/pulse:/run/user/${AUDIO_UID:-1000}/pulse
          - /run/user/${AUDIO_UID:-1000}/pipewire-0:/run/user/${AUDIO_UID:-1000}/pipewire-0
          - /etc/docker/Sendspin:/config
-       environment:
-         - SENDSPIN_SERVER=auto
-         - TZ=${TZ:-UTC}
-         - WEB_PORT=${WEB_PORT:-8080}
-         - BASE_LISTEN_PORT=${BASE_LISTEN_PORT:-8928}
-         - CONFIG_DIR=/config
-         - PULSE_SERVER=unix:/run/user/${AUDIO_UID:-1000}/pulse/native
-         - XDG_RUNTIME_DIR=/run/user/${AUDIO_UID:-1000}
+        environment:
+          - SENDSPIN_SERVER=auto
+          - TZ=${TZ:-UTC}
+          - WEB_PORT=${WEB_PORT:-8080}
+          - BASE_LISTEN_PORT=${BASE_LISTEN_PORT:-8928}
+          - CONFIG_DIR=/config
+          - AUDIO_UID=${AUDIO_UID:-1000}
+          - AUDIO_GID=${AUDIO_GID:-1000}
+          - PULSE_SERVER=unix:/run/user/${AUDIO_UID:-1000}/pulse/native
+          - XDG_RUNTIME_DIR=/run/user/${AUDIO_UID:-1000}
        devices:
          - /dev/bus/usb:/dev/bus/usb
        cap_add:
@@ -149,11 +156,12 @@ curl -s http://localhost:${WEB_PORT:-8080}/api/preflight | python3 -m json.tool
 
 В новых образах startup diagnostics также показывают:
 
-- runtime UID/GID внутри контейнера
+- init UID/GID внутри контейнера
+- app UID/GID запущенного bridge-процесса
 - выбранный путь к audio socket
 - владельца/права сокета
 - результат живого `pactl info` probe
-- отдельное предупреждение, если контейнер работает под другим UID, чем user-scoped audio socket на хосте
+- отдельное предупреждение, если bridge-процесс работает под другим UID, чем user-scoped audio socket на хосте
 
 ## Troubleshooting для user-scoped PipeWire / PulseAudio
 
@@ -162,7 +170,7 @@ curl -s http://localhost:${WEB_PORT:-8080}/api/preflight | python3 -m json.tool
 ```bash
 docker exec sendspin-client ls -la /run/user/${AUDIO_UID:-1000}/pulse/
 docker exec sendspin-client env | grep -E 'PULSE|XDG'
-docker exec sendspin-client id
+docker exec sendspin-client ps -o user:20,pid,command -C python3
 docker inspect sendspin-client --format '{{json .Mounts}}'
 ```
 
@@ -174,7 +182,7 @@ pactl info
 ls -la /run/user/${AUDIO_UID:-1000}/pulse/
 ```
 
-Если смонтированный host audio socket принадлежит вашему обычному login user, а процесс в контейнере работает как `root`, попробуйте такой **временный диагностический тест** в `docker-compose.yml`:
+Если аудио всё ещё не работает, сначала убедитесь по startup diagnostics, что `App UID` совпадает с UID вашего host audio user. Старый глобальный Compose `user:` override теперь нужен только как **временный диагностический тест для старых образов**:
 
 ```yaml
 services:

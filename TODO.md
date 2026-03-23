@@ -54,6 +54,7 @@ The following are considered part of the baseline, not open roadmap items:
 ## V3-5: Selective expansion after stability
 
 - [ ] **USB audio auto-discovery**
+- [ ] **System-wide audio runtime option for RPi/embedded hosts** - support a non-user-scoped PulseAudio/PipeWire deployment mode so Bluetooth containers are not coupled to per-user login sessions.
 - [ ] **Richer sync/drift telemetry across bridges and groups**
 - [ ] **Snapcast/VBAN strategy track**
 - [ ] **Home Assistant custom component / HACS strategy**

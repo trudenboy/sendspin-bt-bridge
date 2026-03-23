@@ -28,7 +28,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-VERSION = "2.46.0-rc.2"
+VERSION = "2.46.0-rc.3"
 BUILD_DATE = "2026-03-23"
 CONFIG_SCHEMA_VERSION = 1
 UPDATE_CHANNELS = ("stable", "rc", "beta")
