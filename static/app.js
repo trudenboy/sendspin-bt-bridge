@@ -254,6 +254,10 @@ function _normalizeBridgeVersion(version) {
     return String(version || '').trim().replace(/^v/i, '').toLowerCase();
 }
 
+function _bridgeVersionReleaseLine(version) {
+    return _normalizeBridgeVersion(version).replace(/[-+].*$/, '');
+}
+
 function _currentDisplayedBridgeVersion() {
     var el = document.getElementById('version-display');
     return _normalizeBridgeVersion(el ? el.textContent : '');
@@ -6019,10 +6023,14 @@ function _renderLockedBackendState(state) {
 
 function _startUpdateMonitor(version, channel, options) {
     var opts = options || {};
+    var targetVersion = _normalizeBridgeVersion(version);
+    var initialVersion = _currentDisplayedBridgeVersion();
     _updateMonitor = {
         startedAt: Date.now(),
-        targetVersion: _normalizeBridgeVersion(version),
-        initialVersion: _currentDisplayedBridgeVersion(),
+        targetVersion: targetVersion,
+        targetReleaseLine: _bridgeVersionReleaseLine(targetVersion),
+        initialVersion: initialVersion,
+        initialReleaseLine: _bridgeVersionReleaseLine(initialVersion),
         channel: (channel || 'stable').toLowerCase(),
         alreadyRunning: !!opts.alreadyRunning,
         sawBackendUnavailable: false,
@@ -6059,11 +6067,15 @@ function _deriveUpdateRuntimeState(status, options) {
     }
 
     var currentVersion = _normalizeBridgeVersion(status && status.version);
+    var currentReleaseLine = _bridgeVersionReleaseLine(currentVersion);
     if (
-        monitor.targetVersion &&
-        currentVersion &&
-        currentVersion === monitor.targetVersion &&
-        ((monitor.initialVersion && monitor.initialVersion !== monitor.targetVersion) || monitor.sawRestartTransition) &&
+        monitor.targetReleaseLine &&
+        currentReleaseLine &&
+        currentReleaseLine === monitor.targetReleaseLine &&
+        (
+            (monitor.initialReleaseLine && monitor.initialReleaseLine !== monitor.targetReleaseLine) ||
+            monitor.sawRestartTransition
+        ) &&
         !backendUnavailable &&
         startupStatus !== 'stopping' &&
         startupStatus !== 'stopped' &&
