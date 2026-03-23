@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.43.0-rc.2] - 2026-03-23
+
+### Changed
+- Refined the onboarding checklist flow connector so the line cleanly links step indicators, feels closer to the rest of the UI chrome, and no longer shows through the step indicator itself.
+
 ## [2.43.0-rc.1] - 2026-03-23
 
 ### Changed

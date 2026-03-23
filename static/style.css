@@ -980,22 +980,47 @@ body {
             margin-top: 10px;
         }
         .onboarding-step {
+            --onboarding-step-surface: rgba(148, 163, 184, 0.08);
+            --onboarding-step-rail-color: rgba(128, 145, 171, 0.18);
             display: grid;
             grid-template-columns: 24px minmax(0, 1fr) auto;
             gap: 8px;
             align-items: start;
+            position: relative;
             padding: 8px 10px;
             border-radius: var(--ui-control-radius);
-            background: rgba(148, 163, 184, 0.08);
+            background: var(--onboarding-step-surface);
             border: 1px solid rgba(148, 163, 184, 0.16);
         }
+        .onboarding-step::before {
+            content: "";
+            position: absolute;
+            left: 20px;
+            top: 20px;
+            bottom: -26px;
+            width: 3px;
+            border-radius: 999px;
+            background: var(--onboarding-step-rail-color);
+            pointer-events: none;
+        }
+        .onboarding-step:last-child::before {
+            display: none;
+        }
+        .onboarding-step > * {
+            position: relative;
+            z-index: 1;
+        }
         .onboarding-step.is-complete {
+            --onboarding-step-surface: rgba(67, 160, 71, 0.08);
+            --onboarding-step-rail-color: rgba(67, 160, 71, 0.24);
             border-color: rgba(67, 160, 71, 0.22);
-            background: rgba(67, 160, 71, 0.08);
+            background: var(--onboarding-step-surface);
         }
         .onboarding-step.is-current {
+            --onboarding-step-surface: rgba(3, 155, 229, 0.08);
+            --onboarding-step-rail-color: rgba(3, 155, 229, 0.24);
             border-color: rgba(3, 155, 229, 0.24);
-            background: rgba(3, 155, 229, 0.08);
+            background: var(--onboarding-step-surface);
         }
         .onboarding-step.is-upcoming {
             opacity: 0.92;
@@ -1012,9 +1037,11 @@ body {
             align-items: center;
             justify-content: center;
             border-radius: 999px;
+            border: 1px solid rgba(128, 145, 171, 0.2);
             font-size: 12px;
             font-weight: 700;
-            background: rgba(148, 163, 184, 0.18);
+            background: var(--card-background-color);
+            box-shadow: 0 0 0 4px var(--onboarding-step-surface);
             color: var(--secondary-text-color);
         }
         .onboarding-step-indicator-icon,
@@ -1035,10 +1062,12 @@ body {
         }
         .onboarding-step.is-complete .onboarding-step-indicator {
             background: var(--success-color, #43a047);
+            border-color: rgba(67, 160, 71, 0.32);
             color: #fff;
         }
         .onboarding-step.is-current .onboarding-step-indicator {
-            background: rgba(3, 155, 229, 0.18);
+            background: var(--card-background-color);
+            border-color: rgba(3, 155, 229, 0.28);
             color: var(--info-color, #039be5);
         }
         .onboarding-step-title-row {
