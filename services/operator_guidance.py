@@ -293,12 +293,86 @@ def _append_group(
     )
 
 
+def _bluetooth_access_issue(
+    onboarding_assistant: dict[str, Any],
+    *,
+    all_devices_globally_disabled: bool,
+    disabled_devices: list[dict[str, Any]] | None = None,
+) -> dict[str, Any] | None:
+    checks = onboarding_assistant.get("checks") or []
+    bluetooth_check = next(
+        (check for check in checks if isinstance(check, dict) and str(check.get("key") or "") == "bluetooth"),
+        None,
+    )
+    if not isinstance(bluetooth_check, dict) or str(bluetooth_check.get("status") or "") != "error":
+        return None
+
+    disabled_count = len(disabled_devices or [])
+    details = bluetooth_check.get("details") or {}
+    paired_devices = int(details.get("paired_devices") or 0)
+    summary = str(bluetooth_check.get("summary") or "No Bluetooth controller detected by preflight checks.")
+    if all_devices_globally_disabled:
+        summary = (
+            "The bridge cannot access a Bluetooth adapter right now. "
+            "Restore adapter access before re-enabling speakers or playback will stay unavailable."
+        )
+
+    actions = [str(item) for item in (bluetooth_check.get("actions") or []) if str(item).strip()]
+    if all_devices_globally_disabled:
+        actions.append("After the adapter is visible again, re-enable at least one speaker and restart the bridge.")
+
+    secondary_actions = []
+    if all_devices_globally_disabled:
+        secondary_actions.append(GuidanceAction(key="open_devices_settings", label="Open device settings"))
+
+    return {
+        "title": "Bluetooth adapter unavailable",
+        "summary": summary,
+        "details": {"paired_devices": paired_devices, "disabled_devices": disabled_count},
+        "actions": actions,
+        "primary_action": GuidanceAction(key="open_bluetooth_settings", label="Open adapter settings"),
+        "secondary_actions": secondary_actions,
+    }
+
+
+def _issue_group_sort_key(item: GuidanceIssueGroup) -> tuple[int, int, int, str]:
+    severity_rank = 0 if item.severity == "error" else 1
+    priority = {
+        "bluetooth_unavailable": 0,
+        "missing_sink": 1,
+        "transport_down": 2,
+        "repair_required": 3,
+        "ma_auth": 4,
+        "disconnected": 5,
+        "auto_released": 6,
+    }.get(item.key, 99)
+    return (severity_rank, priority, -item.count, item.title)
+
+
 def _build_issue_groups(
     devices: list[Any],
     onboarding_assistant: dict[str, Any],
     recovery_assistant: dict[str, Any],
+    *,
+    all_devices_globally_disabled: bool = False,
+    disabled_devices: list[dict[str, Any]] | None = None,
 ) -> list[GuidanceIssueGroup]:
     groups: list[GuidanceIssueGroup] = []
+    bluetooth_access_issue = _bluetooth_access_issue(
+        onboarding_assistant,
+        all_devices_globally_disabled=all_devices_globally_disabled,
+        disabled_devices=disabled_devices,
+    )
+    if bluetooth_access_issue:
+        _append_group(
+            groups,
+            key="bluetooth_unavailable",
+            severity="error",
+            title=bluetooth_access_issue["title"],
+            summary=bluetooth_access_issue["summary"],
+            primary_action=bluetooth_access_issue["primary_action"],
+            secondary_actions=bluetooth_access_issue["secondary_actions"],
+        )
     repair_needed = [
         device
         for device in devices
@@ -487,7 +561,7 @@ def _build_issue_groups(
             secondary_actions=secondary,
         )
 
-    groups.sort(key=lambda item: (0 if item.severity == "error" else 1, -item.count, item.title))
+    groups.sort(key=_issue_group_sort_key)
     return groups
 
 
@@ -505,7 +579,44 @@ def _build_onboarding_card(
         return None
     card_checklist = checklist
     secondary_actions = [GuidanceAction(key="open_diagnostics", label="Open diagnostics")]
-    if all_devices_globally_disabled:
+    bluetooth_access_issue = _bluetooth_access_issue(
+        onboarding_assistant,
+        all_devices_globally_disabled=all_devices_globally_disabled,
+        disabled_devices=disabled_devices,
+    )
+    if bluetooth_access_issue:
+        card_checklist = deepcopy(checklist)
+        card_checklist["headline"] = "Restore Bluetooth adapter access first"
+        card_checklist["summary"] = bluetooth_access_issue["summary"]
+        card_checklist["primary_action"] = bluetooth_access_issue["primary_action"].to_dict()
+        card_checklist["current_step_key"] = "bluetooth"
+        card_checklist["current_step_title"] = "Check Bluetooth access"
+        steps = card_checklist.get("steps")
+        if isinstance(steps, list):
+            adapted_steps = []
+            for step in steps:
+                if not isinstance(step, dict):
+                    adapted_steps.append(step)
+                    continue
+                adapted_step = dict(step)
+                if adapted_step.get("key") == "bluetooth":
+                    adapted_step.update(
+                        {
+                            "title": "Check Bluetooth access",
+                            "status": "error",
+                            "stage": "current",
+                            "summary": bluetooth_access_issue["summary"],
+                            "details": bluetooth_access_issue["details"],
+                            "actions": list(bluetooth_access_issue["actions"]),
+                            "recommended_action": bluetooth_access_issue["primary_action"].to_dict(),
+                        }
+                    )
+                elif adapted_step.get("stage") == "current":
+                    adapted_step["stage"] = "upcoming"
+                adapted_steps.append(adapted_step)
+            card_checklist["steps"] = adapted_steps
+        secondary_actions = list(bluetooth_access_issue["secondary_actions"]) + secondary_actions
+    elif all_devices_globally_disabled:
         disabled_count = len(disabled_devices or [])
         card_checklist = deepcopy(checklist)
         card_checklist["headline"] = "Re-enable a speaker to resume playback"
@@ -608,7 +719,12 @@ def _build_onboarding_card(
         preference_key=_ONBOARDING_VISIBILITY_KEY,
         primary_action=primary_action,
         secondary_actions=secondary_actions,
-        show_by_default=empty_state or all_devices_globally_disabled or all_devices_user_released,
+        show_by_default=(
+            empty_state
+            or all_devices_globally_disabled
+            or all_devices_user_released
+            or bluetooth_access_issue is not None
+        ),
     )
 
 
@@ -630,6 +746,11 @@ def _build_header_status(
     released_devices = [device for device in devices if getattr(device, "bt_management_enabled", True) is False]
     disabled_count = len(disabled_devices or [])
     all_devices_globally_disabled = configured_devices > 0 and not devices and disabled_count >= configured_devices
+    bluetooth_access_issue = _bluetooth_access_issue(
+        onboarding_assistant,
+        all_devices_globally_disabled=all_devices_globally_disabled,
+        disabled_devices=disabled_devices,
+    )
     startup_status = str(startup_progress.get("status") or "idle")
     if startup_status in {"running", "starting"}:
         percent = int(startup_progress.get("percent") or 0)
@@ -643,6 +764,12 @@ def _build_header_status(
             tone="info",
             label="Startup 90%",
             summary="Finalizing Startup",
+        )
+    if bluetooth_access_issue:
+        return GuidanceHeaderStatus(
+            tone="error",
+            label=bluetooth_access_issue["title"],
+            summary=bluetooth_access_issue["summary"],
         )
     if all_devices_globally_disabled:
         return GuidanceHeaderStatus(
@@ -729,7 +856,15 @@ def build_operator_guidance_snapshot(
 ) -> OperatorGuidanceSnapshot:
     configured_devices = _count_config_entries(config, "BLUETOOTH_DEVICES")
     checklist = onboarding_assistant.get("checklist") or {}
-    issue_groups = _build_issue_groups(devices, onboarding_assistant, recovery_assistant)
+    disabled_count = len(disabled_devices or [])
+    all_devices_globally_disabled = configured_devices > 0 and not devices and disabled_count >= configured_devices
+    issue_groups = _build_issue_groups(
+        devices,
+        onboarding_assistant,
+        recovery_assistant,
+        all_devices_globally_disabled=all_devices_globally_disabled,
+        disabled_devices=disabled_devices,
+    )
     startup_status = str(startup_progress.get("status") or "idle")
     startup_banner_cooldown_active = _startup_banner_cooldown_active(startup_progress)
     active_devices = [device for device in devices if getattr(device, "bt_management_enabled", True)]
@@ -737,8 +872,6 @@ def build_operator_guidance_snapshot(
     user_released_devices = [
         device for device in released_devices if _device_extra(device).get("bt_released_by") != "auto"
     ]
-    disabled_count = len(disabled_devices or [])
-    all_devices_globally_disabled = configured_devices > 0 and not devices and disabled_count >= configured_devices
     all_devices_user_released = (
         configured_devices > 0 and not active_devices and len(user_released_devices) >= configured_devices
     )
@@ -748,11 +881,9 @@ def build_operator_guidance_snapshot(
         mode = "empty_state"
     elif startup_banner_cooldown_active:
         mode = "progress"
-    elif all_devices_globally_disabled:
-        mode = "healthy"
     elif issue_groups:
         mode = "attention"
-    elif not active_devices and released_devices:
+    elif all_devices_globally_disabled or (not active_devices and released_devices):
         mode = "healthy"
     elif startup_status in {"running", "starting"} or str(checklist.get("overall_status") or "") != "ok":
         mode = "progress"

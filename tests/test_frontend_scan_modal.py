@@ -264,6 +264,73 @@ run().catch((error) => {
 """
 )
 
+_OUTCOME_SCRIPT = (
+    _COMMON_JS
+    + r"""
+const bootstrap = [
+  extractFunction('_renderBtScanOutcome'),
+].join('\n\n');
+
+vm.runInThisContext(bootstrap);
+
+const status = {innerHTML: ''};
+const box = {hidden: false};
+let badgeCalls = [];
+let renderedDevices = null;
+
+global._btScanModalState = {
+  isRunning: false,
+  lastError: 'Scan failed hard',
+  startedAtMs: 123,
+  lastDevices: [],
+  lastStats: null,
+  audioOnly: true,
+};
+global._isBtScanModalVisible = () => true;
+global._clearBtScanStatusPanels = () => {
+  status.innerHTML = '';
+  box.hidden = true;
+};
+global._renderBtScanEmptyStateHtml = () => 'EMPTY';
+global._renderBtScanResults = (devices) => {
+  renderedDevices = devices;
+};
+global._renderScanStatusBadgeHtml = (label, tone, hint) => {
+  badgeCalls.push({label, tone, hint: hint || null});
+  return `BADGE:${label}:${tone}:${hint || ''}`;
+};
+global.document = {
+  getElementById(id) {
+    return {
+      'scan-results-box': box,
+      'scan-status': status,
+    }[id] || null;
+  },
+};
+
+_renderBtScanOutcome();
+const errorState = {html: status.innerHTML, boxHidden: box.hidden, badgeCalls: badgeCalls.slice()};
+
+badgeCalls = [];
+status.innerHTML = '';
+box.hidden = false;
+_btScanModalState.lastError = '';
+_btScanModalState.lastDevices = [{mac: 'AA:BB', name: 'Speaker', supports_import: true, audio_capable: true}];
+_btScanModalState.lastStats = {returned_candidates: 1};
+_renderBtScanOutcome();
+
+process.stdout.write(JSON.stringify({
+  errorState,
+  successState: {
+    html: status.innerHTML,
+    boxHidden: box.hidden,
+    badgeCalls,
+    renderedDevices,
+  },
+}));
+"""
+)
+
 
 def _run_frontend_script(script: str) -> dict[str, Any]:
     node = shutil.which("node")
@@ -325,4 +392,20 @@ def test_scan_modal_shared_polling_helper_completes_and_respects_stale_guard() -
         "fetchCalls": 2,
         "stale": None,
         "staleFetchCalls": 0,
+    }
+
+
+def test_scan_modal_outcome_uses_scan_badge_helper_for_error_and_success_states() -> None:
+    result = _run_frontend_script(_OUTCOME_SCRIPT)
+
+    assert result["errorState"] == {
+        "html": "BADGE:Scan failed:error:Scan failed hard",
+        "boxHidden": True,
+        "badgeCalls": [{"label": "Scan failed", "tone": "error", "hint": "Scan failed hard"}],
+    }
+    assert result["successState"] == {
+        "html": "BADGE:Found 1 device:success:",
+        "boxHidden": False,
+        "badgeCalls": [{"label": "Found 1 device", "tone": "success", "hint": None}],
+        "renderedDevices": [{"mac": "AA:BB", "name": "Speaker", "supports_import": True, "audio_capable": True}],
     }

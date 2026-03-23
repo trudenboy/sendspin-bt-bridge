@@ -5033,7 +5033,7 @@ function _renderBtScanOutcome() {
     }
     if (_btScanModalState.lastError) {
         if (box) box.hidden = true;
-        status.innerHTML = _renderStatusBadgeHtml('Scan failed', 'error', _btScanModalState.lastError);
+        status.innerHTML = _renderScanStatusBadgeHtml('Scan failed', 'error', _btScanModalState.lastError);
         return;
     }
     if (!_btScanModalState.startedAtMs && !_btScanModalState.lastDevices.length) {
@@ -5046,7 +5046,7 @@ function _renderBtScanOutcome() {
         status.innerHTML = _renderBtScanEmptyStateHtml();
         return;
     }
-    status.innerHTML = _renderStatusBadgeHtml(
+    status.innerHTML = _renderScanStatusBadgeHtml(
         'Found ' + String(foundCount) + ' ' + (_btScanModalState.audioOnly ? 'device' : 'candidate') + (foundCount === 1 ? '' : 's'),
         'success'
     );

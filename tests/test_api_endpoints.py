@@ -1998,6 +1998,35 @@ def test_status_reports_all_devices_disabled_header_status(client, monkeypatch):
             ],
         },
     )
+    monkeypatch.setattr(
+        api_status,
+        "_build_onboarding_assistant_payload",
+        lambda **_: {
+            "checks": [{"key": "bluetooth", "status": "ok", "summary": "Bluetooth access is ready."}],
+            "checklist": {
+                "overall_status": "warning",
+                "progress_percent": 60,
+                "headline": "Next recommended step: Attach your first speaker",
+                "summary": "Devices are configured, but none are currently connected over Bluetooth.",
+                "current_step_key": "sink_verification",
+                "current_step_title": "Attach your first speaker",
+                "primary_action": {"key": "open_devices_settings", "label": "Open device settings"},
+                "checkpoints": [],
+                "steps": [
+                    {"key": "bluetooth", "title": "Check Bluetooth access", "status": "ok", "stage": "complete"},
+                    {"key": "audio", "title": "Verify audio backend", "status": "ok", "stage": "complete"},
+                    {
+                        "key": "sink_verification",
+                        "title": "Attach your first speaker",
+                        "status": "warning",
+                        "stage": "current",
+                        "summary": "Devices are configured, but none are currently connected over Bluetooth.",
+                    },
+                ],
+            },
+            "counts": {"configured_devices": 2, "connected_devices": 0, "sink_ready_devices": 0},
+        },
+    )
     state.set_disabled_devices(
         [
             {"player_name": "Kitchen", "mac": "AA", "enabled": False},

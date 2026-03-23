@@ -460,3 +460,121 @@ def test_operator_guidance_reports_all_devices_disabled_as_neutral():
     assert step["title"] == "Re-enable a speaker"
     assert step["stage"] == "current"
     assert step["summary"] == "All configured speakers are globally disabled right now."
+
+
+def test_operator_guidance_prioritizes_bluetooth_adapter_failure_over_disabled_devices():
+    snapshot = build_operator_guidance_snapshot(
+        config={"BLUETOOTH_ADAPTERS": [], "BLUETOOTH_DEVICES": [{"mac": "AA"}]},
+        onboarding_assistant={
+            "checks": [
+                {
+                    "key": "bluetooth",
+                    "status": "error",
+                    "summary": "No Bluetooth controller detected by preflight checks.",
+                    "details": {"paired_devices": 1},
+                    "actions": ["Open Configuration → Bluetooth and confirm an adapter is available to the bridge."],
+                }
+            ],
+            "checklist": {
+                "overall_status": "error",
+                "progress_percent": 20,
+                "headline": "Next recommended step: Check Bluetooth access",
+                "summary": "No Bluetooth controller detected by preflight checks.",
+                "current_step_key": "bluetooth",
+                "current_step_title": "Check Bluetooth access",
+                "primary_action": {"key": "open_bluetooth_settings", "label": "Open Bluetooth settings"},
+                "checkpoints": [],
+                "steps": [
+                    {
+                        "key": "bluetooth",
+                        "title": "Check Bluetooth access",
+                        "status": "error",
+                        "stage": "current",
+                        "summary": "No Bluetooth controller detected by preflight checks.",
+                        "details": {"paired_devices": 1},
+                        "actions": ["Restore adapter access to the bridge."],
+                        "recommended_action": {
+                            "key": "open_bluetooth_settings",
+                            "label": "Open Bluetooth settings",
+                        },
+                    },
+                    {"key": "audio", "title": "Verify audio backend", "status": "ok", "stage": "complete"},
+                    {
+                        "key": "sink_verification",
+                        "title": "Attach your first speaker",
+                        "status": "warning",
+                        "stage": "upcoming",
+                    },
+                ],
+            },
+            "counts": {"configured_devices": 1, "connected_devices": 0, "sink_ready_devices": 0},
+        },
+        recovery_assistant={"summary": {"summary": "No active recovery issues."}},
+        startup_progress={"status": "complete"},
+        devices=[],
+        disabled_devices=[{"player_name": "Kitchen", "enabled": False}],
+    )
+
+    data = snapshot.to_dict()
+    assert data["mode"] == "attention"
+    assert data["header_status"]["tone"] == "error"
+    assert data["header_status"]["label"] == "Bluetooth adapter unavailable"
+    assert data["banner"]["headline"] == "Bluetooth adapter unavailable"
+    assert data["issue_groups"][0]["key"] == "bluetooth_unavailable"
+    assert data["issue_groups"][0]["primary_action"]["key"] == "open_bluetooth_settings"
+    assert data["onboarding_card"]["show_by_default"] is True
+    assert data["onboarding_card"]["headline"] == "Restore Bluetooth adapter access first"
+    assert data["onboarding_card"]["primary_action"]["key"] == "open_bluetooth_settings"
+    assert data["onboarding_card"]["secondary_actions"][0]["key"] == "open_devices_settings"
+    assert data["onboarding_card"]["checklist"]["current_step_key"] == "bluetooth"
+    step = data["onboarding_card"]["checklist"]["steps"][0]
+    assert step["stage"] == "current"
+    assert step["status"] == "error"
+    assert "re-enable at least one speaker" in step["actions"][-1]
+
+
+def test_operator_guidance_keeps_disabled_devices_neutral_when_bluetooth_check_is_healthy():
+    snapshot = build_operator_guidance_snapshot(
+        config={"BLUETOOTH_ADAPTERS": [{"id": "hci0"}], "BLUETOOTH_DEVICES": [{"mac": "AA"}]},
+        onboarding_assistant={
+            "checks": [
+                {
+                    "key": "bluetooth",
+                    "status": "ok",
+                    "summary": "Bluetooth access is ready.",
+                }
+            ],
+            "checklist": {
+                "overall_status": "warning",
+                "progress_percent": 60,
+                "headline": "Next recommended step: Attach your first speaker",
+                "summary": "Devices are configured, but none are currently connected over Bluetooth.",
+                "current_step_key": "sink_verification",
+                "current_step_title": "Attach your first speaker",
+                "primary_action": {"key": "open_devices_settings", "label": "Open device settings"},
+                "checkpoints": [],
+                "steps": [
+                    {"key": "bluetooth", "title": "Check Bluetooth access", "status": "ok", "stage": "complete"},
+                    {"key": "audio", "title": "Verify audio backend", "status": "ok", "stage": "complete"},
+                    {
+                        "key": "sink_verification",
+                        "title": "Attach your first speaker",
+                        "status": "warning",
+                        "stage": "current",
+                        "summary": "Devices are configured, but none are currently connected over Bluetooth.",
+                    },
+                ],
+            },
+            "counts": {"configured_devices": 1, "connected_devices": 0, "sink_ready_devices": 0},
+        },
+        recovery_assistant={"summary": {"summary": "No active recovery issues."}},
+        startup_progress={"status": "complete"},
+        devices=[],
+        disabled_devices=[{"player_name": "Kitchen", "enabled": False}],
+    )
+
+    data = snapshot.to_dict()
+    assert data["mode"] == "healthy"
+    assert data["issue_groups"] == []
+    assert data["header_status"]["label"] == "All devices disabled"
+    assert data["onboarding_card"]["headline"] == "Re-enable a speaker to resume playback"
