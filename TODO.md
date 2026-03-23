@@ -43,28 +43,29 @@ Roadmap for HA addon standards compliance and improvements.
 
 ## Next
 
-- [ ] **Add HA discovery integration** — support HA discovery protocol for auto-configuring MA connection
-- [ ] **Make blocked-action explanations more touch-visible** — keep mobile users from relying on hover-only `title` text when a control is unavailable.
-- [ ] **Attach recovery timeline context directly to diagnostics download and bugreport text** — the timeline is now available in diagnostics and CSV export, but the plain-text support bundle can still surface it more directly.
+- [ ] **Consolidate guidance ownership for non-empty installs** — keep the large onboarding checklist dominant only for the true empty state and let mature installs rely on calmer header/banner guidance with one clear next-best action owner.
+- [ ] **Add grouped recovery action previews** — grouped issue detection and batch actions already exist, but the UI should preview affected devices and confirm bulk recovery intent before running multi-device actions.
+- [ ] **Polish compact/mobile recovery density** — add calmer `top issue + N more` issue pills and keep recovery actions readable when multiple warnings/actions compete for space.
+- [ ] **Sync roadmap/TODO narrative to the shipped v2 state before v3** — these docs now lag the real feature set and should remain aligned with the RC line.
 
 ## Assessed ideas (2026-03-20)
 
 - [x] **Warn when a BT device may already belong to another bridge** — completed. Config validation/save/upload now checks Music Assistant `players/all` using the stable MAC-derived `player_id` and shows a non-blocking warning for newly added MACs that already appear to belong to another bridge.
 - [x] **Bind MA long-lived token identity to the physical bridge instance (hostname-based)** — completed. Long-lived MA tokens are now named from the current hostname, non-sensitive instance metadata is persisted, preserved across config save/upload flows, and silent auth reuse now distinguishes current-instance tokens from foreign-instance copies.
-- [ ] **Sync Home Assistant area name to `BRIDGE_NAME`** — useful later, but not the next priority. Feasibility: medium/high. The bridge currently has Supervisor/addon integration, but no direct HA device/entity/area registry lookup, so it needs either an explicit HA mapping source or new HA registry API integration before area-based bridge naming can be made reliable.
+- [x] **Sync Home Assistant area name to `BRIDGE_NAME`** — completed. HA ingress sessions can now fetch Home Assistant area/device registry data, offer `BRIDGE_NAME` suggestions, and persist adapter-area mappings keyed by adapter MAC for one-click adapter naming.
 
 ## Deferred UX ideas (captured for later review, 2026-03-20)
 
-- [ ] **Add stronger inline affordances for disabled compact controls** — e.g. visible blocked markers or inline badges in list/grid controls instead of relying only on banner-level explanation and hover `title`.
+- [ ] **Align blocked compact hints with top-level guidance** — keep the visible blocked markers, but reduce duplicate row-level warning copy once banner/header guidance owns the root-cause explanation.
 - [ ] **Compact recovery pills on mobile** — collapse multiple issue pills into “top issue + N more” to reduce wrapping and improve small-screen scannability.
 - [ ] **Make the known-good test path interactive** — let each step expand into concrete checks/actions instead of being read-only status guidance.
-- [ ] **Group safe actions into a progressive-disclosure action menu** — reduce button crowding by keeping one primary action and tucking secondary recovery actions behind a “More options” affordance.
+- [ ] **Group safe actions into a progressive-disclosure action menu** — reduce button crowding by keeping one primary action and tucking secondary recovery actions behind a “More options” affordance, especially for grouped recovery banners.
 - [ ] **Expose latency guidance as a standalone dashboard card** when latency is the main active problem, instead of only inside diagnostics/banner summaries.
 - [ ] **Add adaptive explanation depth for novice vs advanced users** — short default explanations with optional deeper technical detail for power users.
 - [ ] **Show hierarchical blocking explanations** — explain not only that an action is blocked, but the dependency chain causing it.
 - [ ] **Expose advanced recovery views for power users** — e.g. richer trace history, filtering, or longer event timelines in diagnostics.
 - [x] **Show current vs recommended latency values together** — diagnostics now surfaces current Pulse latency, recommendation, presets, and safe next-step hints.
-- [ ] **Allow inline latency editing from onboarding guidance** — diagnostics can now apply preset Pulse latency values directly, but onboarding itself still links out to the wider settings surface.
+- [x] **Allow inline latency editing from onboarding guidance** — onboarding/operator guidance can now surface the recommended latency action directly instead of forcing a detour into wider diagnostics/settings.
 
 ## Future
 

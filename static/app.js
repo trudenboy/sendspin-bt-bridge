@@ -685,7 +685,35 @@ function _pushBlockedControlHint(hints, hint) {
     hints.push(hint);
 }
 
-function _collectDeviceBlockedControlHints(dev, transportState) {
+function _normalizeGuidanceActionKey(actionKey) {
+    if (actionKey === 'reconnect_devices') return 'reconnect_device';
+    if (actionKey === 'toggle_bt_management_devices') return 'toggle_bt_management';
+    return actionKey || '';
+}
+
+function _guidanceActionAppliesToDevice(issue, deviceName) {
+    if (!issue || !deviceName) return false;
+    var issueDeviceNames = [];
+    if (Array.isArray(issue.device_names)) issueDeviceNames = issue.device_names;
+    else if (issue.context && Array.isArray(issue.context.device_names)) issueDeviceNames = issue.context.device_names;
+    return issueDeviceNames.indexOf(deviceName) >= 0;
+}
+
+function _guidedActionKeysForDevice(dev, guidance) {
+    if (!dev || !guidance || !guidance.issue_groups || !guidance.issue_groups.length) return {};
+    var deviceName = dev.player_name || '';
+    if (!deviceName) return {};
+    return guidance.issue_groups.reduce(function(keys, issue) {
+        if (!_guidanceActionAppliesToDevice(issue, deviceName)) return keys;
+        [issue.primary_action].concat(issue.secondary_actions || []).forEach(function(action) {
+            var actionKey = _normalizeGuidanceActionKey(action && action.key);
+            if (actionKey) keys[actionKey] = true;
+        });
+        return keys;
+    }, {});
+}
+
+function _collectDeviceBlockedControlHints(dev, transportState, guidance) {
     if (!dev || _isDeviceDisabled(dev)) return [];
     var hints = [];
     var reconnectCapability = _getDeviceActionCapability(dev, 'reconnect');
@@ -739,7 +767,11 @@ function _collectDeviceBlockedControlHints(dev, transportState) {
             action: _capabilityActionPayload(_capabilityRecommendedActionKey(queueCapability), dev),
         });
     }
-    return hints.slice(0, 2).map(function(hint) {
+    var guidedActionKeys = _guidedActionKeysForDevice(dev, guidance);
+    return hints.filter(function(hint) {
+        var actionKey = _normalizeGuidanceActionKey(hint && hint.action && hint.action.key);
+        return !actionKey || !guidedActionKeys[actionKey];
+    }).slice(0, 2).map(function(hint) {
         delete hint._marker;
         return hint;
     });
@@ -2816,7 +2848,7 @@ function buildListView(entries, hiddenCount) {
             '<button type="button" class="list-action-btn ' + releaseActionClass + '" id="dbtn-release-' + i + '" onclick="btToggleManagement(' + i + ')" title="' + escHtmlAttr(releaseTitle) + '"' + (releaseAvailable && !cardDisabled ? '' : ' disabled') + '>' + _actionButtonInnerHtml('release', mgmtEnabled ? 'Release' : 'Reclaim') + '</button>' +
             '<button type="button" class="list-action-btn danger" onclick="confirmDisableDevice(' + i + ')"' + (cardDisabled ? ' disabled' : '') + '>' + _actionButtonInnerHtml('disable', 'Disable') + '</button>' +
         '</div>';
-        var detailBlockedHints = _renderBlockedControlHints(_collectDeviceBlockedControlHints(dev, transportState), {compact: true});
+        var detailBlockedHints = _renderBlockedControlHints(_collectDeviceBlockedControlHints(dev, transportState, _lastOperatorGuidance), {compact: true});
         var routeSummary = _getListRoutingSummary(dev);
         var detailFooter = '<div class="list-detail-footer">' +
             (routeSummary ? '<div class="list-route-summary">' + escHtml(routeSummary) + '</div>' : '<div class="list-route-summary-spacer"></div>') +
@@ -3509,7 +3541,7 @@ function populateDeviceCard(i, dev) {
 
     var blockedHintsEl = document.getElementById('dblocked-hints-' + i);
     if (blockedHintsEl) {
-        var blockedHintsHtml = _renderBlockedControlHints(_collectDeviceBlockedControlHints(dev, transportState), {compact: true});
+        var blockedHintsHtml = _renderBlockedControlHints(_collectDeviceBlockedControlHints(dev, transportState, _lastOperatorGuidance), {compact: true});
         blockedHintsEl.innerHTML = blockedHintsHtml;
         blockedHintsEl.style.display = blockedHintsHtml ? '' : 'none';
     }
@@ -5673,7 +5705,7 @@ function _goToDevicesAndScan(options) {
 
 function _isOnboardingCardVisible(guidance) {
     var card = guidance && guidance.onboarding_card ? guidance.onboarding_card : null;
-    return !!(card && card.checklist && _isGuidanceVisible(card.preference_key));
+    return _shouldShowOnboardingAssistantBanner(card, {showByDefault: _onboardingShowByDefault(guidance)});
 }
 
 function _syncEmptyStatePlaceholder(guidance) {
@@ -6916,6 +6948,11 @@ function _canRenderOnboardingAssistant(card) {
     return _hasOnboardingChecklist(card) && _isGuidanceVisible(card.preference_key);
 }
 
+function _shouldShowOnboardingAssistantBanner(card, options) {
+    if (!_canRenderOnboardingAssistant(card)) return false;
+    return _isOnboardingAssistantExpanded(card, options) || !!card.show_by_default;
+}
+
 function _isOnboardingAssistantExpanded(card, options) {
     if (!_canRenderOnboardingAssistant(card)) return false;
     var opts = options || {};
@@ -6998,6 +7035,27 @@ function _findDeviceIndicesByNames(deviceNames) {
         .filter(function(index, position, values) { return index >= 0 && values.indexOf(index) === position; });
 }
 
+function _summarizeGuidanceDeviceNames(deviceNames, limit) {
+    var names = Array.isArray(deviceNames) ? deviceNames.filter(Boolean) : [];
+    var maxItems = limit || 5;
+    var visibleNames = names.slice(0, maxItems);
+    var lines = visibleNames.map(function(name) { return '• ' + String(name); });
+    if (names.length > visibleNames.length) {
+        lines.push('• +' + String(names.length - visibleNames.length) + ' more');
+    }
+    return lines;
+}
+
+function _confirmGuidanceDeviceBatch(actionLabel, deviceNames, summary) {
+    var names = Array.isArray(deviceNames) ? deviceNames.filter(Boolean) : [];
+    if (names.length <= 1) return true;
+    var messageLines = [
+        summary || ('Apply ' + String(actionLabel || 'this action') + ' to ' + String(names.length) + ' devices?'),
+        '',
+    ].concat(_summarizeGuidanceDeviceNames(names, 6));
+    return window.confirm(messageLines.join('\n'));
+}
+
 function _runOnboardingAssistantAction(actionKey) {
     if (!actionKey) return false;
     if (actionKey === 'open_bluetooth_settings') {
@@ -7050,10 +7108,22 @@ async function _retryMaDiscoveryFromRecovery() {
     }
 }
 
-async function _runGuidanceDeviceBatch(deviceNames, runner, pendingMessage, successLabel) {
+async function _runGuidanceDeviceBatch(deviceNames, runner, pendingMessage, successLabel, options) {
+    var opts = options || {};
     var indices = _findDeviceIndicesByNames(deviceNames || []);
     if (!indices.length) {
         showToast('Affected devices are no longer present in the current bridge status', 'error');
+        return false;
+    }
+    var resolvedDeviceNames = indices.map(function(index) {
+        var dev = lastDevices && lastDevices[index];
+        return (dev && dev.player_name) || (deviceNames && deviceNames[index]) || ('Device ' + String(index + 1));
+    });
+    if (!_confirmGuidanceDeviceBatch(
+        opts.actionLabel || successLabel || pendingMessage || 'this bulk action',
+        resolvedDeviceNames,
+        opts.confirmSummary
+    )) {
         return false;
     }
     if (pendingMessage) showToast(pendingMessage, 'info');
@@ -7102,7 +7172,9 @@ function _runOperatorGuidanceAction(action) {
         return false;
     }
     if (actionKey === 'rerun_safe_check') {
-        _rerunSafeCheck(action && action.check_key ? action.check_key : '', deviceNames);
+        _rerunSafeCheck(action && action.check_key ? action.check_key : '', deviceNames, {
+            actionLabel: action && action.label ? action.label : 'Rerun safe check',
+        });
         return false;
     }
     if (actionKey === 'retry_ma_discovery') {
@@ -7136,7 +7208,11 @@ function _runOperatorGuidanceAction(action) {
             deviceNames,
             btReconnect,
             'Reconnecting affected devices…',
-            'Reconnect queued for ' + deviceNames.length + ' devices'
+            'Reconnect queued for ' + deviceNames.length + ' devices',
+            {
+                actionLabel: action && action.label ? action.label : 'Reconnect affected devices',
+                confirmSummary: 'Reconnect these devices now?',
+            }
         );
         return false;
     }
@@ -7154,16 +7230,28 @@ function _runOperatorGuidanceAction(action) {
             deviceNames,
             btToggleManagement,
             'Updating Bluetooth management for affected devices…',
-            'Bluetooth management updated for ' + deviceNames.length + ' devices'
+            'Bluetooth management updated for ' + deviceNames.length + ' devices',
+            {
+                actionLabel: action && action.label ? action.label : 'Update Bluetooth management',
+                confirmSummary: 'Apply this Bluetooth management action to these devices?',
+            }
         );
         return false;
     }
     return false;
 }
 
-async function _rerunSafeCheck(checkKey, deviceNames) {
+async function _rerunSafeCheck(checkKey, deviceNames, options) {
     if (!checkKey) {
         showToast('No safe check was selected', 'error');
+        return false;
+    }
+    var opts = options || {};
+    if (!_confirmGuidanceDeviceBatch(
+        opts.actionLabel || ('Rerun ' + String(checkKey).replace(/_/g, ' ')),
+        deviceNames || [],
+        'Rerun this bridge check for these devices?'
+    )) {
         return false;
     }
     var payload = {check_key: String(checkKey || '')};
@@ -7458,7 +7546,7 @@ function _setOnboardingAssistantBanner(card, options) {
     var actionsEl = document.getElementById('onboarding-assistant-actions');
     var opts = options || {};
     if (!banner || !titleEl || !textEl || !progressEl || !checkpointsEl || !stepsEl || !actionsEl) return;
-    if (!card || !card.checklist || !_canRenderOnboardingAssistant(card)) {
+    if (!card || !card.checklist || !_shouldShowOnboardingAssistantBanner(card, opts)) {
         banner.hidden = true;
         banner.className = 'notice-card notice-card--info onboarding-card';
         titleEl.textContent = '';
@@ -7510,7 +7598,9 @@ function _recoveryNoticeToneClass(tone) {
 
 function _renderRecoveryIssuePills(issues) {
     if (!issues || !issues.length) return '';
-    return issues.slice(0, 3).map(function(issue) {
+    var visibleIssues = issues.length > 2 ? issues.slice(0, 2) : issues;
+    var extraCount = Math.max(0, issues.length - visibleIssues.length);
+    var pillsHtml = visibleIssues.map(function(issue) {
         var tone = issue.severity === 'error' ? 'error' : 'warning';
         return _renderMetaStatusBadgeHtml({
             className: 'recovery-issue-pill',
@@ -7522,6 +7612,15 @@ function _renderRecoveryIssuePills(issues) {
             label: issue.title || 'Issue',
         });
     }).join('');
+    if (extraCount > 0) {
+        pillsHtml += _renderMetaStatusBadgeHtml({
+            className: 'recovery-issue-pill recovery-issue-pill-more',
+            tone: 'neutral',
+            title: extraCount === 1 ? '1 more issue needs attention' : String(extraCount) + ' more issues need attention',
+            label: '+' + String(extraCount) + ' more',
+        });
+    }
+    return pillsHtml;
 }
 
 function _setRecoveryAssistantBanner(guidance) {

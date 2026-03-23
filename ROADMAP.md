@@ -39,9 +39,10 @@ The former Phase 1 and Phase 2 foundation work shipped in `v2.41.0-rc.1`, and th
 
 The remaining gaps are now narrower and more specific:
 
-- `state.py` is still the compatibility home for some shared runtime surfaces (event bus, client publication, device-event history), even though it is no longer the route-level ownership center
-- blocked-action explanations are materially better, but touch/mobile users still rely on some hover-first affordances in the compact dashboard controls
-- recovery timeline evidence is available in diagnostics and CSV export, but diagnostics download / bugreport text can still surface that context more directly
+- the roadmap/TODO narrative now needs to stay synced with the shipped RC line so v3 planning does not rely on stale pre-`2.45.0-rc.1` backlog text
+- grouped issue detection and batch actions exist, but multi-device recovery still needs a clearer affected-device preview/confirmation step in the UI
+- compact/mobile attention states can still get noisy when several grouped issues/actions compete for the same notice area
+- blocked-action explanations are materially better, but the next pass should align row-level blocked hints more tightly with the top-level guidance owner instead of duplicating root-cause copy
 - backend abstraction should remain deferred until the v2 runtime is cleaner and more boring
 
 ## Recently Completed Foundations
@@ -212,9 +213,9 @@ Phase 1 should not be re-planned. The only remaining Phase 1-shaped work is mino
 
 ### Status
 
-This is now the **current** roadmap phase.
+This phase is now **substantially complete**.
 
-Phase 2 is now well underway. The current `main` branch already ships checklist onboarding, explicit blocked-action metadata, unified operator guidance, grouped recovery actions, and a normalized bridge/device state model. The remaining work is less about inventing the phase and more about finishing the last operator-facing polish on top of that foundation.
+The current `main` branch already ships checklist onboarding, explicit blocked-action metadata, unified operator guidance, grouped recovery actions, HA-assisted MA discovery, MA runtime hot-reload, and a normalized bridge/device state model. The remaining work is no longer “build Phase 2”; it is the smaller operator-facing polish tracked in Phase 2.1.
 
 ### Goal
 
@@ -287,7 +288,8 @@ Progress on this epic:
 - checklist onboarding, dependency ordering, and unified next-step actions are already shipped
 - onboarding now exposes staged “foundation / first speaker / MA / tuning” journey metadata
 - duplicate-device warnings and MA identity safeguards already flow into the setup path
-- the main remaining UX gap is making some blocked/unavailable states more touch-visible outside diagnostics
+- HA-aware discovery and area-assisted naming now reduce setup friction further in ingress/add-on environments
+- the remaining UX gap is mostly about calmer non-empty-state guidance and compact/mobile recovery polish
 
 Suggested PRs:
 
@@ -338,7 +340,8 @@ Backlog:
 Progress on this epic:
 
 - issue/recovery center, grouped issue actions, rerunnable safe checks, latency recommendations, preset apply actions, known-good path, and timeline JSON/CSV export are already implemented
-- the main remaining follow-through is threading that richer timeline context into the plain-text support bundle and continuing to polish compact/mobile visibility
+- diagnostics download and bugreport text now include plain-text recovery timeline context
+- the main remaining follow-through is grouped-action UX preview/confirmation and continuing compact/mobile attention polish
 
 Suggested PRs:
 
@@ -418,6 +421,13 @@ Suggested PRs:
 - PR 15: dismissible guidance banners and preference persistence
 - PR 16: guidance visibility settings and diagnostics fallback polish
 
+Progress on this epic:
+
+- dismissible onboarding/recovery guidance is already shipped
+- visibility preferences are already persisted in UI settings/local storage
+- diagnostics remain available as a stable fallback action
+- the remaining work is reducing overlap/noise, not adding first-time dismissal plumbing
+
 #### Epic 6C. Improve recovery efficiency and blocked-state clarity
 
 Outcome:
@@ -445,6 +455,11 @@ Suggested PRs:
 
 - PR 17: grouped issue detection and bulk recovery actions
 - PR 18: blocked-state explanation alignment and compact control UX cleanup
+
+Progress on this epic:
+
+- grouped issue detection and grouped action payloads are already implemented
+- the remaining gap is improving grouped-action UX (affected-device preview/confirmation) and tightening compact/mobile rendering plus blocked-state alignment
 
 ### Exit Criteria
 
