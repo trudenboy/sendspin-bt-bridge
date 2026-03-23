@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.42.4-rc.3] - 2026-03-23
+
+### Fixed
+- Standalone/LXC installs now persist the exact installed release ref and expose it as the runtime version, so RC-channel deployments continue to see newer RC builds instead of collapsing to the stable release line after an update.
+
 ## [2.42.4-rc.2] - 2026-03-23
 
 ### Changed
