@@ -552,11 +552,11 @@
                     </div>
 
                     <div id="bt-scan-modal-overlay" class="bugreport-overlay bt-scan-modal-overlay ui-modal-overlay" hidden>
-                        <div class="bugreport-modal bt-scan-modal ui-modal" role="dialog" aria-modal="true" aria-labelledby="bt-scan-modal-title">
+                        <div class="bugreport-modal bt-scan-modal ui-modal" role="dialog" aria-modal="true" aria-labelledby="bt-scan-modal-title" aria-describedby="bt-scan-modal-description">
                             <div class="bugreport-header bt-scan-modal-header ui-modal-header ui-modal-header--accent">
                                 <div class="bt-scan-modal-title-block ui-stack ui-stack--xs">
                                     <span class="ui-modal-title" id="bt-scan-modal-title"><span class="ui-icon-slot" data-ui-icon="bt" aria-hidden="true"></span><span>Scan nearby devices</span></span>
-                                    <p class="ui-modal-subtitle">Choose an adapter, scan for nearby Bluetooth devices, then add speakers to your fleet or pair them before importing them.</p>
+                                    <p class="ui-modal-subtitle" id="bt-scan-modal-description">Choose an adapter, scan for nearby Bluetooth devices, then add speakers to your fleet or pair them before importing them.</p>
                                 </div>
                                 <button type="button" class="bugreport-close bt-scan-modal-close ui-modal-close" title="Close" aria-label="Close scan modal" onclick="closeBtScanModal()">&times;</button>
                             </div>
@@ -585,13 +585,13 @@
                                             <span id="scan-progress-state" class="scan-status-pill meta-badge meta-badge-status is-neutral">Ready to scan</span>
                                             <span id="scan-progress-remaining" class="bt-scan-progress-remaining">15 s</span>
                                         </div>
-                                        <div id="scan-progress-detail" class="bt-scan-progress-detail">All adapters · Audio devices only</div>
+                                        <div id="scan-progress-detail" class="bt-scan-progress-detail" aria-live="polite">All adapters · Audio devices only</div>
                                     </div>
                                     <div class="bt-scan-progress-bar" aria-hidden="true">
                                         <span id="scan-progress-bar-fill" class="bt-scan-progress-bar-fill"></span>
                                     </div>
                                 </div>
-                                <div id="scan-status" class="bt-scan-status-panel"></div>
+                                <div id="scan-status" class="bt-scan-status-panel" aria-live="polite"></div>
                                 <div id="scan-results-box" class="scan-results-box bt-scan-results-box ui-stack ui-stack--xs" hidden>
                                     <div class="scan-results-title">Discovered devices &mdash; add to fleet or pair first</div>
                                     <div id="scan-results-list"></div>

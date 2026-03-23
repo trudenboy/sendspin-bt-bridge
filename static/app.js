@@ -4674,21 +4674,155 @@ function _openBluetoothInventory(options) {
     return false;
 }
 
-var _btScanModalEscHandler = null;
+var _btScanModalKeydownHandler = null;
 var _btScanModalState = {
     adapter: '',
     audioOnly: true,
     activeJobId: '',
     isRunning: false,
+    isVisible: false,
     expectedDuration: 15,
     startedAtMs: 0,
     progressTimer: null,
     lastDevices: [],
     lastStats: null,
     lastError: '',
+    lastFocusedElement: null,
+    requestToken: 0,
+    backgroundNoticeShown: false,
 };
 var _scanCooldownTimer = null;
 var _scanCooldownRemaining = 0;
+
+function _sleep(delayMs) {
+    return new Promise(function(resolve) { setTimeout(resolve, delayMs); });
+}
+
+function _getBtScanOverlay() {
+    return document.getElementById('bt-scan-modal-overlay');
+}
+
+function _getBtScanDialog() {
+    var overlay = _getBtScanOverlay();
+    return overlay && typeof overlay.querySelector === 'function' ? overlay.querySelector('.bt-scan-modal') : null;
+}
+
+function _isBtScanModalVisible() {
+    var overlay = _getBtScanOverlay();
+    return !!(overlay && !overlay.hidden);
+}
+
+function _getFocusableElementsWithin(container) {
+    if (!container || typeof container.querySelectorAll !== 'function') return [];
+    return Array.from(
+        container.querySelectorAll(
+            'button:not([disabled]), [href], input:not([disabled]):not([type="hidden"]), ' +
+            'select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        )
+    ).filter(function(el) {
+        return !!(el && typeof el.focus === 'function' && !el.hidden && (!el.getAttribute || el.getAttribute('aria-hidden') !== 'true'));
+    });
+}
+
+function _getBtScanModalTrapTarget(focusableElements, activeElement, shiftKey) {
+    if (!focusableElements || !focusableElements.length) return null;
+    var currentIndex = focusableElements.indexOf(activeElement);
+    if (currentIndex === -1) {
+        return shiftKey ? focusableElements[focusableElements.length - 1] : focusableElements[0];
+    }
+    if (shiftKey && currentIndex === 0) {
+        return focusableElements[focusableElements.length - 1];
+    }
+    if (!shiftKey && currentIndex === focusableElements.length - 1) {
+        return focusableElements[0];
+    }
+    return null;
+}
+
+function _focusBtScanModalTarget() {
+    var dialog = _getBtScanDialog();
+    if (!dialog) return;
+    var closeBtn = dialog.querySelector('.bt-scan-modal-close');
+    var focusables = _getFocusableElementsWithin(dialog);
+    var target = closeBtn && !closeBtn.disabled ? closeBtn : (focusables[0] || null);
+    if (target && typeof target.focus === 'function') {
+        target.focus({preventScroll: true});
+    }
+}
+
+function _restoreBtScanModalFocus() {
+    var target = _btScanModalState.lastFocusedElement;
+    if (
+        !target ||
+        typeof target.focus !== 'function' ||
+        (document.body && typeof document.body.contains === 'function' && target !== document.body && !document.body.contains(target))
+    ) {
+        target = document.getElementById('scan-btn');
+    }
+    if (target && typeof target.focus === 'function') {
+        target.focus({preventScroll: true});
+    }
+}
+
+function _showBtScanBackgroundNotice() {
+    if (_btScanModalState.backgroundNoticeShown) return;
+    _btScanModalState.backgroundNoticeShown = true;
+    showToast('Bluetooth scan continues in the background. Reopen Scan nearby to review progress.', 'info');
+}
+
+function _getBtScanLauncherState(isRunning, isVisible, cooldownRemaining) {
+    if (isRunning) {
+        return {
+            disabled: false,
+            icon: 'search',
+            label: isVisible ? 'Scan in progress...' : 'Open active scan',
+        };
+    }
+    if (cooldownRemaining > 0) {
+        return {
+            disabled: true,
+            icon: 'search',
+            label: 'Scan nearby (' + cooldownRemaining + 's)',
+        };
+    }
+    return {
+        disabled: false,
+        icon: 'search',
+        label: 'Scan nearby',
+    };
+}
+
+async function _fetchJsonOrThrow(url, options, fallbackMessage) {
+    var resp = await fetch(url, options);
+    var data = await resp.json();
+    if (!resp.ok) {
+        throw new Error((data && data.error) || fallbackMessage || ('HTTP ' + resp.status));
+    }
+    return {resp: resp, data: data};
+}
+
+async function _pollBtAsyncJobResult(jobId, path, options) {
+    var opts = options || {};
+    var attempts = opts.maxAttempts || 30;
+    var delayMs = opts.delayMs || 2000;
+    for (var attempt = 0; attempt < attempts; attempt++) {
+        if (opts.isStale && opts.isStale()) return null;
+        await _sleep(delayMs);
+        if (opts.isStale && opts.isStale()) return null;
+        var poll = await _fetchJsonOrThrow(
+            API_BASE + path + jobId,
+            undefined,
+            opts.failureMessage || 'Bluetooth job polling failed'
+        );
+        if (opts.onProgress) {
+            opts.onProgress(poll.data);
+        }
+        if (poll.data && poll.data.status === 'done') {
+            return poll.data;
+        }
+    }
+    throw new Error(opts.timeoutMessage || 'Bluetooth job timed out');
+}
 
 function _getBtScanAdapters() {
     return btAdapters.filter(function(adapter) {
@@ -4759,6 +4893,7 @@ function _clearBtScanProgressTimer() {
 }
 
 function _renderBtScanProgress() {
+    if (!_isBtScanModalVisible()) return;
     var progress = document.getElementById('scan-progress');
     var detail = document.getElementById('scan-progress-detail');
     var remaining = document.getElementById('scan-progress-remaining');
@@ -4845,22 +4980,88 @@ function _onBtScanOptionChange() {
 function _applyBtScanCooldownUi() {
     var btn = document.getElementById('scan-btn');
     if (btn) {
-        btn.disabled = _scanCooldownRemaining > 0;
-        btn.innerHTML = _buttonLabelWithIconHtml(
-            'search',
-            _scanCooldownRemaining > 0 ? 'Scan nearby (' + _scanCooldownRemaining + 's)' : 'Scan nearby'
+        var launcherState = _getBtScanLauncherState(
+            _btScanModalState.isRunning,
+            _isBtScanModalVisible(),
+            _scanCooldownRemaining
         );
+        btn.disabled = !!launcherState.disabled;
+        btn.innerHTML = _buttonLabelWithIconHtml(launcherState.icon, launcherState.label);
     }
     _syncBtScanControls();
 }
 
-function closeBtScanModal() {
-    var overlay = document.getElementById('bt-scan-modal-overlay');
-    if (overlay) overlay.hidden = true;
-    if (_btScanModalEscHandler) {
-        document.removeEventListener('keydown', _btScanModalEscHandler);
-        _btScanModalEscHandler = null;
+function _clearBtScanStatusPanels() {
+    var box = document.getElementById('scan-results-box');
+    var listDiv = document.getElementById('scan-results-list');
+    var status = document.getElementById('scan-status');
+    if (listDiv) listDiv.innerHTML = '';
+    if (box) box.hidden = true;
+    if (status) status.innerHTML = '';
+}
+
+function _renderBtScanEmptyStateHtml() {
+    return _renderEmptyStateHtml({
+        className: 'scan-status-card is-empty',
+        icon: 'search',
+        title: _btScanModalState.audioOnly ? 'No audio devices found' : 'No Bluetooth devices found',
+        copyHtml: _btScanModalState.audioOnly
+            ? '<ul class="ui-empty-state-list">' +
+                '<li>Make sure your speaker is in <strong>pairing mode</strong> (usually hold the Bluetooth button for 3-5 s)</li>' +
+                '<li>Move the device closer to the Bluetooth adapter</li>' +
+                '<li>Some devices need to be <strong>unpaired</strong> from other sources first</li>' +
+                '<li>Try scanning again — some speakers advertise intermittently</li>' +
+            '</ul>'
+            : 'No nearby Bluetooth devices were reported during this timed scan.',
+        compact: true,
+        inline: true,
+    });
+}
+
+function _renderBtScanOutcome() {
+    if (!_isBtScanModalVisible()) return;
+    var box = document.getElementById('scan-results-box');
+    var status = document.getElementById('scan-status');
+    if (!status) return;
+    if (_btScanModalState.isRunning) {
+        _clearBtScanStatusPanels();
+        return;
     }
+    if (_btScanModalState.lastError) {
+        if (box) box.hidden = true;
+        status.innerHTML = _renderStatusBadgeHtml('Scan failed', 'error', _btScanModalState.lastError);
+        return;
+    }
+    if (!_btScanModalState.startedAtMs && !_btScanModalState.lastDevices.length) {
+        _clearBtScanStatusPanels();
+        return;
+    }
+    var foundCount = (_btScanModalState.lastStats && _btScanModalState.lastStats.returned_candidates) || _btScanModalState.lastDevices.length;
+    if (!_btScanModalState.lastDevices.length) {
+        if (box) box.hidden = true;
+        status.innerHTML = _renderBtScanEmptyStateHtml();
+        return;
+    }
+    status.innerHTML = _renderStatusBadgeHtml(
+        'Found ' + String(foundCount) + ' ' + (_btScanModalState.audioOnly ? 'device' : 'candidate') + (foundCount === 1 ? '' : 's'),
+        'success'
+    );
+    _renderBtScanResults(_btScanModalState.lastDevices);
+}
+
+function closeBtScanModal() {
+    var overlay = _getBtScanOverlay();
+    if (overlay) overlay.hidden = true;
+    _btScanModalState.isVisible = false;
+    if (_btScanModalKeydownHandler) {
+        document.removeEventListener('keydown', _btScanModalKeydownHandler);
+        _btScanModalKeydownHandler = null;
+    }
+    if (_btScanModalState.isRunning) {
+        _showBtScanBackgroundNotice();
+    }
+    _applyBtScanCooldownUi();
+    _restoreBtScanModalFocus();
     return false;
 }
 
@@ -4871,23 +5072,42 @@ function openBtScanModal(options) {
     }
     var opts = options || {};
     _openConfigPanel('bluetooth', 'config-bluetooth-paired-card', 'start');
+    _btScanModalState.lastFocusedElement = opts.triggerEl && typeof opts.triggerEl.focus === 'function'
+        ? opts.triggerEl
+        : document.activeElement;
     _renderBtScanAdapterOptions();
     _syncBtScanControls();
-    _renderBtScanProgress();
-    var overlay = document.getElementById('bt-scan-modal-overlay');
+    var overlay = _getBtScanOverlay();
     if (!overlay) return false;
     overlay.hidden = false;
+    _btScanModalState.isVisible = true;
+    _btScanModalState.backgroundNoticeShown = false;
     overlay.onclick = function(event) {
         if (event.target === overlay) closeBtScanModal();
     };
-    if (_btScanModalEscHandler) {
-        document.removeEventListener('keydown', _btScanModalEscHandler);
+    if (_btScanModalKeydownHandler) {
+        document.removeEventListener('keydown', _btScanModalKeydownHandler);
     }
-    _btScanModalEscHandler = function(event) {
-        if (event.key === 'Escape') closeBtScanModal();
+    _btScanModalKeydownHandler = function(event) {
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            closeBtScanModal();
+            return;
+        }
+        if (event.key !== 'Tab') return;
+        var dialog = _getBtScanDialog();
+        var focusable = _getFocusableElementsWithin(dialog);
+        var trapTarget = _getBtScanModalTrapTarget(focusable, document.activeElement, !!event.shiftKey);
+        if (!trapTarget) return;
+        event.preventDefault();
+        trapTarget.focus({preventScroll: true});
     };
-    document.addEventListener('keydown', _btScanModalEscHandler);
-    if (opts.autoStart !== false) startBtScan();
+    document.addEventListener('keydown', _btScanModalKeydownHandler);
+    _renderBtScanProgress();
+    _renderBtScanOutcome();
+    _applyBtScanCooldownUi();
+    _focusBtScanModalTarget();
+    if (opts.autoStart !== false && !_btScanModalState.isRunning) startBtScan();
     return false;
 }
 
@@ -4952,7 +5172,7 @@ function _renderBtScanResults(devices) {
         if (d.adapter) {
             chips.push('<span class="scan-result-chip">' + escHtml(_getBtScanAdapterLabel(d.adapter)) + '</span>');
         }
-        return '<div class="scan-result-item" data-scan-idx="' + i + '">' +
+        return '<div class="scan-result-item' + (addable ? '' : ' scan-result-item--passive') + '" data-scan-idx="' + i + '">' +
             '<span class="scan-result-actions">' +
                 (addable
                     ? '<button type="button" class="scan-action-btn scan-action-btn--primary scan-add-btn" title="Add to config without pairing now">Add to fleet</button>' +
@@ -4987,35 +5207,13 @@ function _renderBtScanResults(devices) {
     box.hidden = !devices.length;
 }
 
-async function _pollBtScanResult(jobId) {
-    for (var attempt = 0; attempt < 30; attempt++) {
-        await new Promise(function(resolve) { setTimeout(resolve, 2000); });
-        var pollResp = await fetch(API_BASE + '/api/bt/scan/result/' + jobId);
-        var pollData = await pollResp.json();
-        if (!pollResp.ok) {
-            throw new Error(pollData.error || 'Scan polling failed');
-        }
-        if (pollData.scan_options) {
-            _btScanModalState.adapter = pollData.scan_options.adapter || '';
-            _btScanModalState.audioOnly = pollData.scan_options.audio_only !== false;
-        }
-        if (pollData.expected_duration) _btScanModalState.expectedDuration = pollData.expected_duration;
-        if (pollData.started_at) _btScanModalState.startedAtMs = pollData.started_at * 1000;
-        if (pollData.status === 'done') return pollData;
-        _renderBtScanProgress();
-    }
-    throw new Error('Scan timed out');
-}
-
 // ---- BT Scan ----
 
 async function startBtScan() {
-    var btn = document.getElementById('scan-btn');
-    var status = document.getElementById('scan-status');
-    var box = document.getElementById('scan-results-box');
-    var listDiv = document.getElementById('scan-results-list');
     if (_btScanModalState.isRunning) return false;
     _onBtScanOptionChange();
+    var btn = document.getElementById('scan-btn');
+    var requestToken = ++_btScanModalState.requestToken;
 
     _btScanModalState.activeJobId = '';
     _btScanModalState.isRunning = true;
@@ -5024,14 +5222,14 @@ async function startBtScan() {
     _btScanModalState.lastError = '';
     _btScanModalState.expectedDuration = _estimateBtScanDurationForSelection(_btScanModalState.adapter);
     _btScanModalState.startedAtMs = Date.now();
-    if (status) status.innerHTML = '';
-    if (listDiv) listDiv.innerHTML = '';
-    if (box) box.hidden = true;
+    _btScanModalState.backgroundNoticeShown = false;
+    _clearBtScanStatusPanels();
     _syncBtScanControls();
+    _applyBtScanCooldownUi();
     _startBtScanProgressTimer(_btScanModalState.expectedDuration, _btScanModalState.startedAtMs);
 
     try {
-        var resp = await fetch(API_BASE + '/api/bt/scan', {
+        var startedScanResp = await fetch(API_BASE + '/api/bt/scan', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
@@ -5039,20 +5237,24 @@ async function startBtScan() {
                 audio_only: _btScanModalState.audioOnly !== false,
             })
         });
-        var data = await resp.json();
+        var data = await startedScanResp.json();
 
-        if (resp.status === 429 && data.retry_after) {
+        if (startedScanResp.status === 429 && data.retry_after) {
             _btScanModalState.isRunning = false;
             _btScanModalState.startedAtMs = 0;
+            _btScanModalState.activeJobId = '';
             _clearBtScanProgressTimer();
             _renderBtScanProgress();
             _startScanCooldown(btn, data.retry_after);
-            if (status) {
-                status.innerHTML = _renderScanStatusBadgeHtml('Scan cooldown active', 'neutral', String(data.retry_after) + 's remaining');
+            if (_isBtScanModalVisible()) {
+                var status = document.getElementById('scan-status');
+                if (status) {
+                    status.innerHTML = _renderScanStatusBadgeHtml('Scan cooldown active', 'neutral', String(data.retry_after) + 's remaining');
+                }
             }
             return false;
         }
-        if (!resp.ok) {
+        if (!startedScanResp.ok) {
             throw new Error(data.error || 'Bluetooth scan failed');
         }
 
@@ -5064,10 +5266,28 @@ async function startBtScan() {
         }
         _btScanModalState.startedAtMs = data.started_at ? data.started_at * 1000 : _btScanModalState.startedAtMs;
         _syncBtScanControls();
+        _applyBtScanCooldownUi();
         _startBtScanProgressTimer(_btScanModalState.expectedDuration, _btScanModalState.startedAtMs);
 
-        var result = await _pollBtScanResult(_btScanModalState.activeJobId);
+        var result = await _pollBtAsyncJobResult(_btScanModalState.activeJobId, '/api/bt/scan/result/', {
+            timeoutMessage: 'Scan timed out',
+            failureMessage: 'Scan polling failed',
+            isStale: function() {
+                return requestToken !== _btScanModalState.requestToken;
+            },
+            onProgress: function(pollData) {
+                if (pollData.scan_options) {
+                    _btScanModalState.adapter = pollData.scan_options.adapter || '';
+                    _btScanModalState.audioOnly = pollData.scan_options.audio_only !== false;
+                }
+                if (pollData.expected_duration) _btScanModalState.expectedDuration = pollData.expected_duration;
+                if (pollData.started_at) _btScanModalState.startedAtMs = pollData.started_at * 1000;
+                _renderBtScanProgress();
+            },
+        });
+        if (!result) return false;
         _btScanModalState.isRunning = false;
+        _btScanModalState.activeJobId = '';
         _btScanModalState.lastDevices = result.devices || [];
         _btScanModalState.lastStats = result.stats || null;
         _btScanModalState.lastError = result.error || '';
@@ -5081,46 +5301,18 @@ async function startBtScan() {
         if (_btScanModalState.lastError) {
             throw new Error(_btScanModalState.lastError);
         }
-
-        if (!_btScanModalState.lastDevices.length) {
-            if (status) {
-                status.innerHTML = _renderEmptyStateHtml({
-                    className: 'scan-status-card is-empty',
-                    icon: 'search',
-                    title: _btScanModalState.audioOnly ? 'No audio devices found' : 'No Bluetooth devices found',
-                    copyHtml: _btScanModalState.audioOnly
-                        ? '<ul class="ui-empty-state-list">' +
-                            '<li>Make sure your speaker is in <strong>pairing mode</strong> (usually hold the Bluetooth button for 3-5 s)</li>' +
-                            '<li>Move the device closer to the Bluetooth adapter</li>' +
-                            '<li>Some devices need to be <strong>unpaired</strong> from other sources first</li>' +
-                            '<li>Try scanning again — some speakers advertise intermittently</li>' +
-                        '</ul>'
-                        : 'No nearby Bluetooth devices were reported during this timed scan.',
-                    compact: true,
-                    inline: true,
-                });
-            }
-        } else {
-            if (status) {
-                var foundCount = (_btScanModalState.lastStats && _btScanModalState.lastStats.returned_candidates) || _btScanModalState.lastDevices.length;
-                status.innerHTML = _renderScanStatusBadgeHtml(
-                    'Found ' + String(foundCount) + ' ' + (_btScanModalState.audioOnly ? 'device' : 'candidate') + (foundCount === 1 ? '' : 's'),
-                    'success'
-                );
-            }
-            _renderBtScanResults(_btScanModalState.lastDevices);
-        }
+        _renderBtScanOutcome();
         _startScanCooldown(btn, 10);
     } catch (err) {
         _btScanModalState.isRunning = false;
+        _btScanModalState.activeJobId = '';
         _btScanModalState.lastError = err && err.message ? err.message : 'Unknown error';
         _clearBtScanProgressTimer();
         _renderBtScanProgress();
-        if (status) {
-            status.innerHTML = _renderScanStatusBadgeHtml('Scan failed', 'error', _btScanModalState.lastError);
-        }
+        _renderBtScanOutcome();
     } finally {
         _syncBtScanControls();
+        _applyBtScanCooldownUi();
     }
     return false;
 }
@@ -5159,22 +5351,18 @@ async function pairAndAdd(mac, name, adapter, btnEl) {
     if (!confirm('Put "' + (name || mac) + '" into pairing mode, then click OK.\n\nThis will pair, trust, and add the device (~25 s).')) return;
     _setScanActionState(btnEl, 'pairing', 'Pairing\u2026');
     try {
-        var resp = await fetch(API_BASE + '/api/bt/pair_new', {
+        var startedPair = await _fetchJsonOrThrow(API_BASE + '/api/bt/pair_new', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({mac: mac, adapter: adapter || autoAdapter()})
-        });
-        var data = await resp.json();
+        }, 'Bluetooth pairing failed');
+        var data = startedPair.data;
         if (!data.job_id) throw new Error(data.error || 'No job_id');
 
-        // Poll for result
-        var result = null;
-        for (var i = 0; i < 30; i++) {
-            await new Promise(function(r) { setTimeout(r, 2000); });
-            var pr = await fetch(API_BASE + '/api/bt/pair_new/result/' + data.job_id);
-            var pd = await pr.json();
-            if (pd.status === 'done') { result = pd; break; }
-        }
+        var result = await _pollBtAsyncJobResult(data.job_id, '/api/bt/pair_new/result/', {
+            timeoutMessage: 'Pairing timed out',
+            failureMessage: 'Pairing status check failed',
+        });
         if (!result) throw new Error('Pairing timed out');
         if (result.error) throw new Error(result.error);
         if (result.success) {
@@ -5183,11 +5371,12 @@ async function pairAndAdd(mac, name, adapter, btnEl) {
         } else {
             _setScanActionState(btnEl, 'error', '\u2717 Failed');
             setTimeout(function() { _setScanActionState(btnEl, '', 'Add & Pair'); }, 3000);
+            showToast('Pair failed for ' + (name || mac) + '.', 'error');
         }
     } catch (err) {
         _setScanActionState(btnEl, 'error', 'Error');
         setTimeout(function() { _setScanActionState(btnEl, '', 'Add & Pair'); }, 3000);
-        alert('Pair failed: ' + err.message);
+        showToast('Pair failed: ' + (err && err.message ? err.message : 'Unknown error'), 'error');
     }
 }
 
