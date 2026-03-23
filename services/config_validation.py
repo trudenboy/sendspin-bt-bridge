@@ -86,9 +86,9 @@ def _validate_effective_listen_ports(
 
     base_listen_port_raw = normalized.get("BASE_LISTEN_PORT")
     try:
-        if isinstance(base_listen_port_raw, bool) or (
-            isinstance(base_listen_port_raw, (int, str)) and base_listen_port_raw != ""
-        ):
+        if isinstance(base_listen_port_raw, bool):
+            base_listen_port = int(default_base_listen_port)
+        elif isinstance(base_listen_port_raw, (int, str)) and base_listen_port_raw != "":
             base_listen_port = int(base_listen_port_raw)
         else:
             base_listen_port = int(default_base_listen_port)
@@ -105,7 +105,7 @@ def _validate_effective_listen_ports(
             effective_port = base_listen_port + index
         else:
             try:
-                if isinstance(raw_listen_port, bool | int | str):
+                if isinstance(raw_listen_port, (int, str)) and not isinstance(raw_listen_port, bool):
                     effective_port = int(raw_listen_port)
                 else:
                     continue

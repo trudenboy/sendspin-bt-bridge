@@ -85,6 +85,40 @@ def test_validate_uploaded_config_allows_unique_effective_listen_ports():
     assert result.is_valid is True
 
 
+def test_validate_uploaded_config_ignores_boolean_base_listen_port_for_effective_port_checks():
+    result = validate_uploaded_config(
+        {
+            "CONFIG_SCHEMA_VERSION": 1,
+            "BASE_LISTEN_PORT": True,
+            "BLUETOOTH_DEVICES": [
+                {"mac": "AA:BB:CC:DD:EE:01", "player_name": "Kitchen"},
+                {"mac": "AA:BB:CC:DD:EE:02", "player_name": "Office", "listen_port": 8929},
+            ],
+        }
+    )
+
+    assert result.is_valid is False
+    assert any(issue.field == "BASE_LISTEN_PORT" for issue in result.errors)
+    assert not any("Duplicate effective listen_port" in issue.message for issue in result.errors)
+
+
+def test_validate_uploaded_config_skips_boolean_listen_port_in_effective_port_checks():
+    result = validate_uploaded_config(
+        {
+            "CONFIG_SCHEMA_VERSION": 1,
+            "BLUETOOTH_DEVICES": [
+                {"mac": "AA:BB:CC:DD:EE:01", "player_name": "Kitchen", "listen_port": 1},
+                {"mac": "AA:BB:CC:DD:EE:02", "player_name": "Office", "listen_port": True},
+            ],
+        }
+    )
+
+    assert result.is_valid is False
+    assert any(issue.field == "BLUETOOTH_DEVICES[0].listen_port" for issue in result.errors)
+    assert any(issue.field == "BLUETOOTH_DEVICES[1].listen_port" for issue in result.errors)
+    assert not any("Duplicate effective listen_port" in issue.message for issue in result.errors)
+
+
 def test_validate_uploaded_config_normalizes_update_channel():
     result = validate_uploaded_config(
         {

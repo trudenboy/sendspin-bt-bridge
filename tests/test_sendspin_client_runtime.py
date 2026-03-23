@@ -37,6 +37,30 @@ class _FakeProc:
         self.returncode = None
 
 
+class _YieldingLock:
+    """Lock wrapper that yields before acquire to exercise pre-acquire races."""
+
+    def __init__(self):
+        self._lock = asyncio.Lock()
+        self._allow_acquire = asyncio.Event()
+
+    def locked(self) -> bool:
+        return self._lock.locked()
+
+    def release_acquire(self) -> None:
+        self._allow_acquire.set()
+
+    async def __aenter__(self):
+        await asyncio.sleep(0)
+        await self._allow_acquire.wait()
+        await self._lock.acquire()
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        self._lock.release()
+        return False
+
+
 @pytest.mark.asyncio
 async def test_send_subprocess_command_uses_snapshot_when_proc_changes():
     """Command send should survive proc mutation between guard and drain()."""
@@ -151,6 +175,27 @@ async def test_start_sendspin_coalesces_multiple_overlapping_requests():
     await asyncio.gather(*queued)
 
     assert calls == [1, 2]
+
+
+@pytest.mark.asyncio
+async def test_start_sendspin_coalesces_requests_before_lock_acquire():
+    client = SendspinClient("Test Player", "localhost", 9000)
+    yielding_lock = _YieldingLock()
+    client._start_sendspin_lock = yielding_lock
+    calls: list[int] = []
+
+    async def _fake_start_inner():
+        calls.append(len(calls) + 1)
+
+    client._start_sendspin_inner = _fake_start_inner
+
+    first = asyncio.create_task(client.start_sendspin())
+    second = asyncio.create_task(client.start_sendspin())
+    await asyncio.sleep(0)
+    yielding_lock.release_acquire()
+    await asyncio.gather(first, second)
+
+    assert calls == [1]
 
 
 def test_set_bt_management_enabled_cancels_reconnect_before_release():
