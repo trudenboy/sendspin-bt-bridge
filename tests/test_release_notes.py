@@ -48,44 +48,50 @@ def test_build_release_notes_includes_full_change_range_before_curated_highlight
 
             ### Added
             - Previous stable release
-            """
+             """
         ).strip(),
-        "## What's Changed\n* Add fallback body",
-        "* `abc1234` Ship real code",
         previous_tag="v2.40.5",
+        compare_url="https://github.com/example/repo/compare/v2.40.5...v2.40.6",
     )
 
-    assert "## Full code change range since `v2.40.5`" in body
-    assert "## What's Changed" in body
-    assert "### Commits in range" in body
-    assert "* `abc1234` Ship real code" in body
-    assert "## Curated highlights" in body
-    assert "### 2.40.6-rc.1" in body
+    assert "## Cumulative changes since `v2.40.5`" in body
+    assert "### Added" in body
     assert "RC user-facing summary" in body
-    assert "### 2.40.6" in body
+    assert "### Changed" in body
     assert "Stable wrap-up" in body
     assert "Previous stable release" not in body
+    assert "### 2.40.6-rc.1" not in body
+    assert "Commits in range" not in body
+    assert "**Full Changelog**: https://github.com/example/repo/compare/v2.40.5...v2.40.6" in body
 
 
 def test_build_release_notes_falls_back_to_generated_notes_when_changelog_missing():
     body = build_release_notes("2.40.6", "## [Unreleased]", "## What's Changed\n* Add fallback body")
 
-    assert body.startswith("## Full code change range")
+    assert body.startswith("## What's Changed")
     assert "## What's Changed" in body
 
 
-def test_build_release_notes_uses_commit_range_notes_when_generated_notes_are_empty():
+def test_build_release_notes_deduplicates_near_duplicate_cumulative_bullets():
     body = build_release_notes(
         "2.40.6",
-        "## [2.40.6] - 2026-03-18\n\n### Changed\n- Curated note",
-        "",
-        "* `def5678` Add direct commit coverage",
+        textwrap.dedent(
+            """
+            ## [2.40.6] - 2026-03-18
+
+            ### Added
+            - Diagnostics recovery tooling now includes a deeper retained recovery timeline with advanced severity, scope, source, and window filters for power-user trace review.
+
+            ## [2.40.6-rc.1] - 2026-03-18
+
+            ### Added
+            - Diagnostics recovery timeline now retains a deeper event window and exposes advanced severity, scope, source, and window filters for power-user trace review.
+            """
+        ).strip(),
         previous_tag="v2.40.5",
     )
 
-    assert "## Full code change range since `v2.40.5`" in body
-    assert "* `def5678` Add direct commit coverage" in body
-    assert "## Curated highlights" in body
+    assert body.count("power-user trace review") == 1
 
 
 def test_extract_changelog_range_aggregates_entries_since_previous_stable():
@@ -114,8 +120,10 @@ def test_extract_changelog_range_aggregates_entries_since_previous_stable():
         "v2.40.5",
     )
 
-    assert "### 2.40.6" in section
-    assert "### 2.40.6-rc.1" in section
+    assert "### Changed" in section
+    assert "### Added" in section
+    assert "### 2.40.6" not in section
+    assert "### 2.40.6-rc.1" not in section
     assert "Previous stable release" not in section
 
 

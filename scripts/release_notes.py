@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Compose GitHub release notes from code-range notes plus curated changelog highlights."""
+"""Compose cumulative GitHub release notes from curated changelog highlights."""
 
 from __future__ import annotations
 
 import argparse
 import re
+import string
 from pathlib import Path
 
 _CHANGELOG_HEADER_RE = re.compile(r"^## \[(?P<version>[^\]]+)\](?:\s+-\s+.+)?$", flags=re.MULTILINE)
@@ -54,13 +55,14 @@ def extract_changelog_section(changelog_text: str, version: str) -> str:
     return section.strip()
 
 
-def extract_changelog_range(changelog_text: str, version: str, previous_tag: str = "") -> str:
-    """Return aggregated human-written changelog content since the previous stable tag."""
+def _select_changelog_range(changelog_text: str, version: str, previous_tag: str = "") -> list[tuple[str, str]]:
+    """Return all changelog sections that fall within the requested stable release range."""
     target_key = _parse_release_version(version)
     previous_version = previous_tag[1:] if previous_tag.startswith("v") else previous_tag
     previous_key = _parse_release_version(previous_version) if previous_version else None
     if not target_key:
-        return extract_changelog_section(changelog_text, version)
+        section = extract_changelog_section(changelog_text, version)
+        return [(version, section)] if section else []
 
     sections: list[tuple[str, str]] = []
     for section_version, section_body in _iter_changelog_sections(changelog_text):
@@ -71,12 +73,99 @@ def extract_changelog_range(changelog_text: str, version: str, previous_tag: str
             continue
         sections.append((section_version, section_body))
 
+    if sections:
+        return sections
+
+    section = extract_changelog_section(changelog_text, version)
+    return [(version, section)] if section else []
+
+
+def _iter_section_categories(section_body: str) -> list[tuple[str, list[str]]]:
+    """Return ``(category, bullets)`` groups parsed from a changelog section body."""
+    categories: list[tuple[str, list[str]]] = []
+    current_category = ""
+    current_bullets: list[str] = []
+
+    def flush() -> None:
+        nonlocal current_category, current_bullets
+        if current_category and current_bullets:
+            categories.append((current_category, current_bullets))
+        current_category = ""
+        current_bullets = []
+
+    for raw_line in str(section_body or "").splitlines():
+        line = raw_line.strip()
+        if line.startswith("### "):
+            flush()
+            current_category = line[4:].strip()
+            continue
+        if line.startswith("- "):
+            current_bullets.append(line[2:].strip())
+            continue
+        if current_bullets and line:
+            current_bullets[-1] = f"{current_bullets[-1]} {line}".strip()
+    flush()
+    return categories
+
+
+def _normalize_bullet_key(text: str) -> str:
+    """Return a normalized representation for exact bullet deduplication."""
+    return " ".join(
+        str(text or "").lower().translate(str.maketrans("", "", string.punctuation.replace("`", ""))).split()
+    )
+
+
+def _bullet_token_set(text: str) -> set[str]:
+    """Return a token set for fuzzy duplicate detection."""
+    return {token for token in re.findall(r"[a-z0-9]+", str(text or "").lower()) if len(token) >= 3 or token.isdigit()}
+
+
+def _bullets_equivalent(left: str, right: str) -> bool:
+    """Return True when two changelog bullets describe the same user-facing change."""
+    left_key = _normalize_bullet_key(left)
+    right_key = _normalize_bullet_key(right)
+    if not left_key or not right_key:
+        return False
+    if left_key == right_key:
+        return True
+    if len(left_key) >= 48 and len(right_key) >= 48 and (left_key in right_key or right_key in left_key):
+        return True
+
+    left_tokens = _bullet_token_set(left)
+    right_tokens = _bullet_token_set(right)
+    if not left_tokens or not right_tokens:
+        return False
+
+    overlap = len(left_tokens & right_tokens)
+    smaller = min(len(left_tokens), len(right_tokens))
+    return smaller > 0 and (overlap / smaller) >= 0.8
+
+
+def extract_changelog_range(changelog_text: str, version: str, previous_tag: str = "") -> str:
+    """Return cumulative changelog highlights grouped by Keep a Changelog category."""
+    sections = _select_changelog_range(changelog_text, version, previous_tag)
     if not sections:
-        return extract_changelog_section(changelog_text, version)
-    if len(sections) == 1 and not previous_tag and sections[0][0] == version:
+        return ""
+    if len(sections) == 1 and sections[0][0] == version and not previous_tag:
         return sections[0][1]
+
+    category_order = ["Added", "Changed", "Fixed", "Removed", "Deprecated", "Security"]
+    grouped: dict[str, list[str]] = {}
+    for _, section_body in sections:
+        for category, bullets in _iter_section_categories(section_body):
+            category_bucket = grouped.setdefault(category, [])
+            for bullet in bullets:
+                if any(_bullets_equivalent(existing, bullet) for existing in category_bucket):
+                    continue
+                category_bucket.append(bullet)
+
+    ordered_categories = [category for category in category_order if grouped.get(category)]
+    ordered_categories.extend(
+        category for category in grouped if category not in category_order and grouped.get(category)
+    )
     return "\n\n".join(
-        f"### {section_version}\n\n{section_body}".strip() for section_version, section_body in sections if section_body
+        f"### {category}\n" + "\n".join(f"- {bullet}" for bullet in grouped[category])
+        for category in ordered_categories
     ).strip()
 
 
@@ -100,34 +189,25 @@ def build_release_notes(
     version: str,
     changelog_text: str,
     generated_notes: str = "",
-    code_change_notes: str = "",
     *,
     previous_tag: str = "",
+    compare_url: str = "",
 ) -> str:
     """Compose the final release body for *version*."""
     changelog_section = extract_changelog_range(changelog_text, version, previous_tag)
     generated_section = normalize_generated_notes(generated_notes)
-    code_change_section = normalize_code_change_notes(code_change_notes)
 
     parts: list[str] = []
-    full_change_parts: list[str] = []
-    if generated_section:
-        full_change_parts.append(generated_section)
-    if code_change_section:
-        full_change_parts.append(f"### Commits in range\n\n{code_change_section}")
-
-    if full_change_parts:
-        heading = "## Full code change range"
+    if changelog_section:
+        heading = "## Cumulative changes"
         if previous_tag:
             heading += f" since `{previous_tag}`"
-        parts.append(f"{heading}\n\n" + "\n\n".join(full_change_parts))
+        parts.append(f"{heading}\n\n{changelog_section}")
+    elif generated_section:
+        parts.append(generated_section)
 
-    if changelog_section:
-        if full_change_parts:
-            parts.append(f"## Curated highlights\n\n{changelog_section}")
-        else:
-            parts.append(changelog_section)
-
+    if compare_url:
+        parts.append(f"**Full Changelog**: {compare_url}")
     if not parts:
         raise ValueError(f"Could not build release notes for version {version}")
     return "\n\n".join(parts).strip() + "\n"
@@ -138,20 +218,19 @@ def main() -> None:
     parser.add_argument("--version", required=True)
     parser.add_argument("--changelog", type=Path, required=True)
     parser.add_argument("--generated-notes-file", type=Path)
-    parser.add_argument("--code-change-notes-file", type=Path)
     parser.add_argument("--previous-tag", default="")
+    parser.add_argument("--compare-url", default="")
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
 
     changelog_text = args.changelog.read_text()
     generated_notes = args.generated_notes_file.read_text() if args.generated_notes_file else ""
-    code_change_notes = args.code_change_notes_file.read_text() if args.code_change_notes_file else ""
     body = build_release_notes(
         args.version,
         changelog_text,
         generated_notes,
-        code_change_notes,
         previous_tag=args.previous_tag,
+        compare_url=args.compare_url,
     )
 
     if args.output:
