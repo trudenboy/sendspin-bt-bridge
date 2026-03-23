@@ -6907,7 +6907,7 @@ body {
         .onboarding-step-indicator {
             width: 24px;
             height: 24px;
-            border-radius: 7px;
+            border-radius: 999px;
             background: var(--card-background-color);
             border: 1px solid rgba(128, 145, 171, 0.2);
         }

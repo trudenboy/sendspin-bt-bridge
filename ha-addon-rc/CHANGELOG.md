@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.43.0-rc.5] - 2026-03-23
+
+### Fixed
+- Onboarding step indicators now stay circular in the responsive/mobile layout too, instead of reverting to rounded-square markers under the compact CSS override.
+
 ## [2.43.0-rc.4] - 2026-03-23
 
 ### Fixed
