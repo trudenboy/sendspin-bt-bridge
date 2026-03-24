@@ -9,6 +9,63 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+
+class _FakeStdout:
+    def __init__(self, lines):
+        self._lines = list(lines)
+
+    def readline(self):
+        if self._lines:
+            return self._lines.pop(0)
+        return ""
+
+
+class _FakeStdin:
+    def __init__(self):
+        self.writes = []
+
+    def write(self, data):
+        self.writes.append(data)
+
+    def flush(self):
+        return None
+
+
+class _FakeProc:
+    def __init__(self, stdout_lines, tail=""):
+        self.stdin = _FakeStdin()
+        self.stdout = _FakeStdout(stdout_lines)
+        self._tail = tail
+        self._returncode = None
+
+    def poll(self):
+        return self._returncode
+
+    def communicate(self, timeout=None):
+        self._returncode = 0
+        return self._tail, ""
+
+    def kill(self):
+        self._returncode = -9
+
+    def wait(self, timeout=None):
+        return 0
+
+
+class _FakeSelector:
+    def __init__(self, stdout):
+        self._stdout = stdout
+
+    def register(self, *_args, **_kwargs):
+        return None
+
+    def select(self, timeout=None):
+        return [object()] if self._stdout._lines else []
+
+    def close(self):
+        return None
+
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -206,3 +263,23 @@ def test_connect_device_aborts_when_release_cancels_active_reconnect(bt_manager)
         assert bt_manager.connect_device() is False
 
     disconnect_device.assert_called_once()
+
+
+def test_pair_device_trusts_only_after_pair_success(bt_manager):
+    fake_proc = _FakeProc(
+        stdout_lines=["Confirm passkey 123456 (yes/no):\n", "Pairing successful\n"],
+        tail="Trusted: yes\nPaired: yes\n",
+    )
+
+    with (
+        patch("bluetooth_manager.subprocess.Popen", return_value=fake_proc),
+        patch("selectors.DefaultSelector", side_effect=lambda: _FakeSelector(fake_proc.stdout)),
+        patch.object(bt_manager, "_wait_with_cancel", return_value=True),
+    ):
+        assert bt_manager.pair_device() is True
+
+    assert fake_proc.stdin.writes[0].endswith("scan on\n")
+    assert fake_proc.stdin.writes[1] == f"pair {bt_manager.mac_address}\n"
+    assert fake_proc.stdin.writes[2] == "yes\n"
+    assert fake_proc.stdin.writes[3].startswith(f"trust {bt_manager.mac_address}\n")
+    assert "trust" not in fake_proc.stdin.writes[1]

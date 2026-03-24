@@ -11,8 +11,66 @@ import json
 import sys
 import threading
 from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
 
 import pytest
+
+
+class _FakeStdout:
+    def __init__(self, lines):
+        self._lines = list(lines)
+
+    def readline(self):
+        if self._lines:
+            return self._lines.pop(0)
+        return ""
+
+
+class _FakeStdin:
+    def __init__(self):
+        self.writes = []
+
+    def write(self, data):
+        self.writes.append(data)
+
+    def flush(self):
+        return None
+
+
+class _FakeProc:
+    def __init__(self, stdout_lines, tail=""):
+        self.stdin = _FakeStdin()
+        self.stdout = _FakeStdout(stdout_lines)
+        self._tail = tail
+        self._returncode = None
+
+    def poll(self):
+        return self._returncode
+
+    def communicate(self, timeout=None):
+        self._returncode = 0
+        return self._tail, ""
+
+    def kill(self):
+        self._returncode = -9
+
+    def wait(self, timeout=None):
+        return 0
+
+
+class _FakeSelector:
+    def __init__(self, stdout):
+        self._stdout = stdout
+
+    def register(self, *_args, **_kwargs):
+        return None
+
+    def select(self, timeout=None):
+        return [object()] if self._stdout._lines else []
+
+    def close(self):
+        return None
+
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -282,6 +340,54 @@ def test_config_validate_does_not_warn_for_existing_mac_on_same_bridge(client, t
     data = resp.get_json()
     messages = [warning["message"] for warning in data["warnings"]]
     assert not any("may belong to another bridge" in message for message in messages)
+
+
+def test_run_standalone_pair_cleans_stale_device_before_trusting(monkeypatch):
+    import routes.api_bt as api_bt_mod
+
+    fake_proc = _FakeProc(stdout_lines=["Pairing successful\n"], tail="Paired: yes\nTrusted: yes\n")
+    cleanup_run = MagicMock()
+    finish_job = MagicMock()
+
+    monkeypatch.setattr(api_bt_mod.subprocess, "run", cleanup_run)
+    monkeypatch.setattr(api_bt_mod.subprocess, "Popen", lambda *args, **kwargs: fake_proc)
+    monkeypatch.setattr(api_bt_mod, "finish_scan_job", finish_job)
+    monkeypatch.setattr(api_bt_mod.time, "sleep", lambda _seconds: None)
+
+    with patch("selectors.DefaultSelector", side_effect=lambda: _FakeSelector(fake_proc.stdout)):
+        api_bt_mod._run_standalone_pair("job-1", "AA:BB:CC:DD:EE:FF", "hci1")
+
+    cleanup_input = cleanup_run.call_args.kwargs["input"]
+    assert cleanup_input == "select hci1\nremove AA:BB:CC:DD:EE:FF\n"
+    assert fake_proc.stdin.writes[0].endswith("scan on\n")
+    assert fake_proc.stdin.writes[1] == "pair AA:BB:CC:DD:EE:FF\n"
+    assert fake_proc.stdin.writes[2].startswith("trust AA:BB:CC:DD:EE:FF\n")
+    finish_job.assert_called_once_with("job-1", {"success": True, "mac": "AA:BB:CC:DD:EE:FF"})
+
+
+def test_bt_pair_new_returns_409_when_bt_operation_busy(client, monkeypatch):
+    import routes.api_bt as api_bt_mod
+
+    monkeypatch.setattr(api_bt_mod, "_try_acquire_bt_operation", lambda: False)
+
+    resp = client.post("/api/bt/pair_new", json={"mac": "AA:BB:CC:DD:EE:FF"})
+
+    assert resp.status_code == 409
+    assert resp.get_json()["error"] == "Another Bluetooth operation is already in progress"
+
+
+def test_bt_scan_returns_409_when_bt_operation_busy(client, monkeypatch):
+    import routes.api_bt as api_bt_mod
+
+    monkeypatch.setattr(api_bt_mod, "is_scan_running", lambda: False)
+    monkeypatch.setattr(api_bt_mod, "_try_acquire_bt_operation", lambda: False)
+    monkeypatch.setattr(api_bt_mod, "_last_scan_completed", 0.0)
+    monkeypatch.setattr(api_bt_mod.time, "monotonic", lambda: 1000.0)
+
+    resp = client.post("/api/bt/scan", json={})
+
+    assert resp.status_code == 409
+    assert resp.get_json()["error"] == "Another Bluetooth operation is already in progress"
 
 
 def test_config_validate_returns_errors_for_invalid_payload(client):

@@ -38,6 +38,22 @@ _CHG_NAME_PAT = re.compile(r"\[CHG\]\s+Device\s+([0-9A-Fa-f:]{17})\s+Name:\s+(.*
 _CHG_RSSI_PAT = re.compile(r"\[CHG\]\s+Device\s+([0-9A-Fa-f:]{17})\s+RSSI:")
 _SHOW_CTRL_PAT = re.compile(r"^Controller\s+([0-9A-Fa-f:]{17})")
 _SHOW_DEV_PAT = re.compile(r"^Device\s+([0-9A-Fa-f:]{17})")
+_bt_operation_lock = threading.Lock()
+
+
+def _bt_operation_conflict_response():
+    return jsonify({"success": False, "error": "Another Bluetooth operation is already in progress"}), 409
+
+
+def _try_acquire_bt_operation() -> bool:
+    return _bt_operation_lock.acquire(blocking=False)
+
+
+def _release_bt_operation() -> None:
+    try:
+        _bt_operation_lock.release()
+    except RuntimeError:
+        logger.debug("BT operation lock release skipped; lock was not held")
 
 
 # ---------------------------------------------------------------------------
@@ -87,6 +103,8 @@ def api_bt_pair():
             return jsonify({"success": False, "error": "No BT manager for this player"}), 503
 
         bt = client.bt_manager
+        if not _try_acquire_bt_operation():
+            return _bt_operation_conflict_response()
 
         def _do_pair():
             try:
@@ -94,6 +112,8 @@ def api_bt_pair():
                 bt.connect_device()
             except Exception as e:
                 logger.error("Force pair failed: %s", e)
+            finally:
+                _release_bt_operation()
 
         threading.Thread(target=_do_pair, daemon=True).start()
         return jsonify({"success": True, "message": "Pairing started (~25s)"})
@@ -345,11 +365,19 @@ def api_bt_reset_reconnect():
         return jsonify({"success": False, "error": "Invalid adapter identifier"}), 400
     if not validate_mac(mac):
         return jsonify({"success": False, "error": "Invalid MAC"}), 400
+    if not _try_acquire_bt_operation():
+        return _bt_operation_conflict_response()
     job_id = str(uuid.uuid4())
     create_scan_job(job_id)
+
+    def _run_job():
+        try:
+            _run_reset_reconnect(job_id, mac, adapter)
+        finally:
+            _release_bt_operation()
+
     t = threading.Thread(
-        target=_run_reset_reconnect,
-        args=(job_id, mac, adapter),
+        target=_run_job,
         daemon=True,
         name=f"bt-reset-{job_id[:8]}",
     )
@@ -371,7 +399,17 @@ def _run_reset_reconnect(job_id: str, mac: str, adapter: str) -> None:
     try:
         # Step 1: Remove existing pairing
         logger.info("Reset & Reconnect %s: removing…", mac)
-        _bt_remove_device(mac)
+        remove_cmds: list[str] = []
+        if adapter:
+            remove_cmds.append(f"select {adapter}")
+        remove_cmds.append(f"remove {mac}")
+        subprocess.run(
+            ["bluetoothctl"],
+            input="\n".join(remove_cmds) + "\n",
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
         time.sleep(1)
 
         # Step 2: Power cycle adapter
@@ -388,14 +426,13 @@ def _run_reset_reconnect(job_id: str, mac: str, adapter: str) -> None:
         )
         time.sleep(2)
 
-        # Step 3: Pair from scratch (power on + scan + pair + trust)
+        # Step 3: Pair from scratch (power on + scan + pair, trust only after success)
         logger.info("Reset & Reconnect %s: pairing…", mac)
         initial_cmds: list[str] = []
         if adapter:
             initial_cmds.append(f"select {adapter}")
         initial_cmds.extend(["power on", "agent on", "default-agent", "scan on"])
-        pair_cmds = [f"pair {mac}", f"trust {mac}", "scan off"]
-        connect_cmds = [f"connect {mac}"]
+        pair_cmds = [f"pair {mac}"]
 
         proc = subprocess.Popen(
             ["bluetoothctl"],
@@ -446,10 +483,11 @@ def _run_reset_reconnect(job_id: str, mac: str, adapter: str) -> None:
             finally:
                 sel.close()
 
-            # Step 4: Connect
-            if paired_ok or any("paired: yes" in c.lower() for c in collected):
-                proc.stdin.write("\n".join(connect_cmds) + "\n")
-                proc.stdin.flush()
+            if paired_ok:
+                proc.stdin.write(f"trust {mac}\nconnect {mac}\n")
+            proc.stdin.write(f"info {mac}\nscan off\nquit\n")
+            proc.stdin.flush()
+            if paired_ok:
                 time.sleep(5)
 
             try:
@@ -459,8 +497,8 @@ def _run_reset_reconnect(job_id: str, mac: str, adapter: str) -> None:
                 pass
 
             out = "".join(collected)
-            ok = any(s in out.lower() for s in ("pairing successful", "already paired", "paired: yes"))
-            connected = "connection successful" in out.lower()
+            ok = paired_ok or any(s in out.lower() for s in ("pairing successful", "already paired", "paired: yes"))
+            connected = "connection successful" in out.lower() or "connected: yes" in out.lower()
             logger.info(
                 "Reset & Reconnect %s: paired=%s connected=%s (last 400: %s)",
                 mac,
@@ -497,6 +535,8 @@ def api_bt_scan():
     if time.monotonic() - _last_scan_completed < _SCAN_COOLDOWN:
         remaining = int(_SCAN_COOLDOWN - (time.monotonic() - _last_scan_completed)) + 1
         return jsonify({"error": "Scan cooldown active", "retry_after": remaining}), 429
+    if not _try_acquire_bt_operation():
+        return _bt_operation_conflict_response()
     job_id = str(uuid.uuid4())
     scan_options = _build_scan_options(adapter, audio_only, adapter_macs)
     expected_duration = _estimate_scan_duration(adapter_macs)
@@ -508,9 +548,15 @@ def api_bt_scan():
             "started_at": time.time(),
         },
     )
+
+    def _run_job():
+        try:
+            _run_bt_scan(job_id, adapter, audio_only)
+        finally:
+            _release_bt_operation()
+
     t = threading.Thread(
-        target=_run_bt_scan,
-        args=(job_id, adapter, audio_only),
+        target=_run_job,
         daemon=True,
         name=f"bt-scan-{job_id[:8]}",
     )
@@ -826,11 +872,19 @@ def api_bt_pair_new():
         return jsonify({"success": False, "error": "Invalid adapter identifier"}), 400
     if not validate_mac(mac):
         return jsonify({"success": False, "error": "Invalid MAC"}), 400
+    if not _try_acquire_bt_operation():
+        return _bt_operation_conflict_response()
     job_id = str(uuid.uuid4())
     create_scan_job(job_id)
+
+    def _run_job():
+        try:
+            _run_standalone_pair(job_id, mac, adapter)
+        finally:
+            _release_bt_operation()
+
     t = threading.Thread(
-        target=_run_standalone_pair,
-        args=(job_id, mac, adapter),
+        target=_run_job,
         daemon=True,
         name=f"bt-pair-{job_id[:8]}",
     )
@@ -850,12 +904,25 @@ def api_bt_pair_new_result(job_id: str):
 def _run_standalone_pair(job_id: str, mac: str, adapter: str) -> None:
     """Run pair + trust via bluetoothctl for a device not yet in config."""
     try:
+        cleanup_cmds: list[str] = []
+        if adapter:
+            cleanup_cmds.append(f"select {adapter}")
+        cleanup_cmds.append(f"remove {mac}")
+        subprocess.run(
+            ["bluetoothctl"],
+            input="\n".join(cleanup_cmds) + "\n",
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        time.sleep(1)
+
         initial_cmds: list[str] = []
         if adapter:
             initial_cmds.append(f"select {adapter}")
         initial_cmds.extend(["power on", "agent on", "default-agent", "scan on"])
 
-        pair_cmds = [f"pair {mac}", f"trust {mac}", "scan off"]
+        pair_cmds = [f"pair {mac}"]
 
         proc = subprocess.Popen(
             ["bluetoothctl"],
@@ -879,6 +946,7 @@ def _run_standalone_pair(job_id: str, mac: str, adapter: str) -> None:
             import selectors
 
             collected: list[str] = []
+            paired_ok = False
             deadline = time.monotonic() + _PAIR_WAIT_DURATION
             sel = selectors.DefaultSelector()
             sel.register(proc.stdout, selectors.EVENT_READ)  # type: ignore[arg-type]
@@ -900,10 +968,15 @@ def _run_standalone_pair(job_id: str, mac: str, adapter: str) -> None:
                         proc.stdin.write("yes\n")
                         proc.stdin.flush()
                     if "pairing successful" in stripped or "already paired" in stripped:
-                        time.sleep(1)
+                        paired_ok = True
                         break
             finally:
                 sel.close()
+
+            if paired_ok:
+                proc.stdin.write(f"trust {mac}\n")
+            proc.stdin.write(f"info {mac}\nscan off\nquit\n")
+            proc.stdin.flush()
 
             try:
                 tail, _ = proc.communicate(timeout=3)
@@ -912,7 +985,7 @@ def _run_standalone_pair(job_id: str, mac: str, adapter: str) -> None:
                 pass
 
             out = "".join(collected)
-            ok = any(s in out.lower() for s in ("pairing successful", "already paired", "paired: yes"))
+            ok = paired_ok or any(s in out.lower() for s in ("pairing successful", "already paired", "paired: yes"))
             if ok:
                 logger.info("Standalone pair %s: OK", mac)
             else:

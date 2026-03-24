@@ -115,6 +115,8 @@ def test_scan_accepts_selected_adapter_and_audio_filter(client):
         patch("routes.api_bt.is_scan_running", return_value=False),
         patch("routes.api_bt.time") as mock_time,
         patch("routes.api_bt.list_bt_adapters", return_value=["AA:BB:CC:DD:EE:01", "AA:BB:CC:DD:EE:02"]),
+        patch("routes.api_bt._run_bt_scan") as run_bt_scan,
+        patch("routes.api_bt._release_bt_operation") as release_bt_operation,
         patch("routes.api_bt.threading.Thread") as mock_thread,
     ):
         mock_time.monotonic.return_value = 100.0
@@ -132,8 +134,11 @@ def test_scan_accepts_selected_adapter_and_audio_filter(client):
             "adapter_count": 1,
         }
         assert data["expected_duration"] == 15
-        assert mock_thread.call_args.kwargs["target"] is _mod._run_bt_scan
-        assert mock_thread.call_args.kwargs["args"][1:] == ("hci1", False)
+        target = mock_thread.call_args.kwargs["target"]
+        assert callable(target)
+        target()
+        run_bt_scan.assert_called_once_with(data["job_id"], "hci1", False)
+        release_bt_operation.assert_called_once()
 
 
 def test_scan_rejects_invalid_adapter_identifier(client):

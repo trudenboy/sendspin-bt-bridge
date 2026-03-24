@@ -440,7 +440,7 @@ class BluetoothManager:
             initial_cmds.append(f"select {self._adapter_select}")
         initial_cmds.extend(["power on", "agent on", "default-agent", "scan on"])
 
-        pair_cmds = [f"pair {mac}", f"trust {mac}", "scan off"]
+        pair_cmds = [f"pair {mac}"]
 
         proc = None
         try:
@@ -462,8 +462,11 @@ class BluetoothManager:
             proc.stdin.write("\n".join(pair_cmds) + "\n")
             proc.stdin.flush()
 
-            # Read stdout in real-time to detect and answer SSP passkey prompts
+            # Read stdout in real-time to detect and answer SSP passkey prompts.
+            # Only trust the device after pair succeeded; trusting too early can
+            # leave BlueZ with a stale Trusted=yes, Paired=no entry.
             collected: list[str] = []
+            paired_ok = False
             deadline = time.monotonic() + _PAIRING_WAIT_DURATION
             import selectors
 
@@ -491,12 +494,15 @@ class BluetoothManager:
                         proc.stdin.flush()
                     # Early exit on success
                     if "pairing successful" in stripped.lower() or "already paired" in stripped.lower():
-                        # Give trust command time to complete
-                        if not self._wait_with_cancel(1):
-                            return False
+                        paired_ok = True
                         break
             finally:
                 sel.close()
+
+            if paired_ok:
+                proc.stdin.write(f"trust {mac}\n")
+            proc.stdin.write(f"info {mac}\nscan off\nquit\n")
+            proc.stdin.flush()
 
             # Drain remaining output
             try:
@@ -506,7 +512,12 @@ class BluetoothManager:
                 pass
 
             out = "".join(collected)
-            ok = "pairing successful" in out.lower() or "already paired" in out.lower() or "paired: yes" in out.lower()
+            ok = (
+                paired_ok
+                or "pairing successful" in out.lower()
+                or "already paired" in out.lower()
+                or "paired: yes" in out.lower()
+            )
             self.paired = ok
             if ok:
                 logger.info("Pairing successful")
