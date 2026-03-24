@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.47.0-rc.1] - 2026-03-24
+
+### Changed
+- **Split `bluetooth_manager.py`** (1 226 → 669 lines): extracted `bt_audio.py` (audio sink discovery), `bt_monitor.py` (polling & D-Bus monitor loops), `bt_dbus.py` (D-Bus helpers).
+- **Split `routes/api_ma.py`** (2 343 → 150 lines): extracted `routes/ma_auth.py` (OAuth / HA auth), `routes/ma_playback.py` (queue & now-playing), `routes/ma_groups.py` (discovery & groups).
+- **Split `config.py`** (999 → 449 lines): extracted `config_auth.py` (password hashing), `config_migration.py` (schema migration & normalization), `config_network.py` (port resolution & HA detection).
+- **Decoupled `BluetoothManager` from `SendspinClient`**: introduced `bt_types.BluetoothManagerHost` Protocol; `BluetoothManager` now depends on the protocol, not the concrete class.
+- All public APIs and re-exports preserved for backward compatibility.
+
 ## [2.46.3-rc.1] - 2026-03-24
 
 ### Security
