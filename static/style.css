@@ -2999,6 +2999,10 @@ body {
             gap: 5px;
             text-align: left;
         }
+        .list-detail-playback-rail.is-solo {
+            width: 100%;
+            align-items: center;
+        }
         .list-player-transport {
             display: flex;
             align-items: center;
@@ -3066,7 +3070,7 @@ body {
         .list-player-media-lane.is-solo {
             grid-template-columns: var(--playback-center-width);
             grid-template-rows: auto auto;
-            justify-content: flex-start;
+            justify-content: center;
         }
         .list-detail-current-copy {
             min-width: 0;
@@ -3154,6 +3158,13 @@ body {
         .list-player-media-lane.is-solo .list-player-transport,
         .list-player-media-lane.is-solo .list-detail-progress-wrap {
             grid-column: 1;
+        }
+        .list-player-media-lane.is-solo .list-player-transport {
+            justify-content: center;
+        }
+        .list-player-media-lane.is-solo .list-detail-progress-wrap {
+            margin-left: auto;
+            margin-right: auto;
         }
         .list-queue-neighbor.is-prev,
         .list-queue-neighbor.is-next {

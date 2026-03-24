@@ -2897,16 +2897,19 @@ function buildListView(entries, hiddenCount) {
         var rowMuteBtnId = 'drow-mute-' + i;
         var releaseActionClass = mgmtEnabled ? 'warn' : 'success';
         var cardDisabled = _isDeviceDisabled(dev);
-        var detailTransport = '<div class="list-player-transport" onclick="event.stopPropagation()">' +
-            _renderPlaybackTransportButtonsHtml(i, transportState, {
-                buttonBaseClass: 'media-btn list-player-transport-btn',
-                primaryButtonClass: 'media-btn list-player-transport-btn is-primary',
-                modeButtonClass: 'media-btn list-player-transport-btn is-mode',
-                modeFirst: true,
-                prevTitle: 'Previous track',
-                nextTitle: 'Next track',
-            }) +
-        '</div>';
+        var showDetailTransport = !!transportState.canTransport;
+        var detailTransport = showDetailTransport
+            ? '<div class="list-player-transport" onclick="event.stopPropagation()">' +
+                _renderPlaybackTransportButtonsHtml(i, transportState, {
+                    buttonBaseClass: 'media-btn list-player-transport-btn',
+                    primaryButtonClass: 'media-btn list-player-transport-btn is-primary',
+                    modeButtonClass: 'media-btn list-player-transport-btn is-mode',
+                    modeFirst: true,
+                    prevTitle: 'Previous track',
+                    nextTitle: 'Next track',
+                }) +
+              '</div>'
+            : '';
         var detailActions = '<div class="list-detail-actions" onclick="event.stopPropagation()">' +
             '<button type="button" class="action-btn list-action-btn accent" id="dbtn-reconnect-' + i + '" onclick="btReconnect(' + i + ')" title="' + escHtmlAttr(reconnectTitle) + '"' + (reconnectAvailable && !cardDisabled ? '' : ' disabled') + '>' + _actionButtonInnerHtml('reconnect', 'Reconnect') + '</button>' +
             '<button type="button" class="action-btn list-action-btn ' + releaseActionClass + '" id="dbtn-release-' + i + '" onclick="btToggleManagement(' + i + ')" title="' + escHtmlAttr(releaseTitle) + '"' + (releaseAvailable && !cardDisabled ? '' : ' disabled') + '>' + _actionButtonInnerHtml('release', mgmtEnabled ? 'Release' : 'Reclaim') + '</button>' +
@@ -2945,11 +2948,14 @@ function buildListView(entries, hiddenCount) {
                 detailProgressHtml +
               '</div>'
             : '<div class="list-player-media-lane is-solo">' + detailTransport + detailProgressHtml + '</div>';
-        var detailPlaybackRail = '<div class="list-detail-playback-rail' + (hasQueueNeighbors ? '' : ' is-solo') + '">' +
-            detailMediaLane +
-        '</div>';
+        var showPlaybackRail = hasQueueNeighbors || showDetailTransport || progress.visible;
+        var detailPlaybackRail = showPlaybackRail
+            ? '<div class="list-detail-playback-rail' + (hasQueueNeighbors ? '' : ' is-solo') + '">' +
+                detailMediaLane +
+              '</div>'
+            : '';
         var quickActions = '<div class="list-actions" onclick="event.stopPropagation()">' +
-            '<button type="button" class="media-btn list-inline-btn' + (dev.playing ? '' : ' paused') + '" id="' + rowPauseBtnId + '" onclick="event.stopPropagation();onDevicePause(' + i + ', \'' + rowPauseBtnId + '\')" title="' + escHtmlAttr(pauseTitle) + '"' + (canTransport && !cardDisabled ? '' : ' disabled') + '>' + _playPauseIconHtml(dev.playing) + '</button>' +
+            '<button type="button" class="media-btn list-inline-btn' + (dev.playing ? '' : ' paused') + '" id="' + rowPauseBtnId + '" onclick="event.stopPropagation();onDevicePause(' + i + ', \'' + rowPauseBtnId + '\')" title="' + escHtmlAttr(pauseTitle) + '"' + (canTransport && !cardDisabled ? '' : ' disabled') + (canTransport ? '' : ' style="display:none"') + '>' + _playPauseIconHtml(dev.playing) + '</button>' +
             '<button type="button" class="media-btn list-inline-btn' + (effectiveMuted ? ' muted' : '') + '" id="' + rowMuteBtnId + '" onclick="event.stopPropagation();onMuteClick(' + i + ', \'' + rowMuteBtnId + '\')" title="' + escHtmlAttr(muteTitle) + '"' + (canMute && !cardDisabled ? '' : ' disabled') + '>' + _muteIconHtml(effectiveMuted) + '</button>' +
             '<button type="button" class="icon-btn list-inline-btn list-settings-btn" onclick="event.stopPropagation();openDeviceSettings(' + i + ')" title="Device settings"' + (cardDisabled ? ' disabled' : '') + '>' + _settingsIconHtml() + '</button>' +
         '</div>';
@@ -3479,7 +3485,7 @@ function populateDeviceCard(i, dev) {
             pauseBtn.title = transportState.canTransport ? 'Play' : transportState.transportUnavailableTitle;
         }
         pauseBtn.disabled = !transportState.canTransport || _isDeviceDisabled(dev);
-        pauseBtn.style.display = '';
+        pauseBtn.style.display = transportState.canTransport ? '' : 'none';
         pauseBtn.style.opacity = transportState.canTransport ? '' : '0.35';
     }
 
