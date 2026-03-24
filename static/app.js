@@ -6438,6 +6438,13 @@ function _buildConfigPayload(options) {
     config.BRUTE_FORCE_MAX_ATTEMPTS = parseInt(((document.querySelector('[name="BRUTE_FORCE_MAX_ATTEMPTS"]') || {}).value), 10) || 5;
     config.BRUTE_FORCE_WINDOW_MINUTES = parseInt(((document.querySelector('[name="BRUTE_FORCE_WINDOW_MINUTES"]') || {}).value), 10) || 1;
     config.BRUTE_FORCE_LOCKOUT_MINUTES = parseInt(((document.querySelector('[name="BRUTE_FORCE_LOCKOUT_MINUTES"]') || {}).value), 10) || 5;
+    config.STARTUP_BANNER_GRACE_SECONDS = parseInt(
+        ((document.querySelector('[name="STARTUP_BANNER_GRACE_SECONDS"]') || {}).value),
+        10
+    );
+    if (!Number.isFinite(config.STARTUP_BANNER_GRACE_SECONDS)) {
+        config.STARTUP_BANNER_GRACE_SECONDS = 10;
+    }
 
     if (options.includeRuntime !== false) {
         var groupSlider = document.getElementById('group-vol-slider');
@@ -8835,7 +8842,7 @@ async function loadConfig(options) {
         ['SENDSPIN_SERVER', 'SENDSPIN_PORT', 'WEB_PORT', 'BASE_LISTEN_PORT', 'BRIDGE_NAME', 'TZ', 'PULSE_LATENCY_MSEC',
          'BT_CHECK_INTERVAL', 'BT_MAX_RECONNECT_FAILS', 'MA_API_URL', 'MA_API_TOKEN',
          'SESSION_TIMEOUT_HOURS', 'BRUTE_FORCE_MAX_ATTEMPTS', 'BRUTE_FORCE_WINDOW_MINUTES',
-         'BRUTE_FORCE_LOCKOUT_MINUTES'].forEach(function(key) {
+         'BRUTE_FORCE_LOCKOUT_MINUTES', 'STARTUP_BANNER_GRACE_SECONDS'].forEach(function(key) {
             var input = document.querySelector('[name="' + key + '"]');
             if (input && config[key] !== undefined) input.value = config[key] == null ? '' : config[key];
         });

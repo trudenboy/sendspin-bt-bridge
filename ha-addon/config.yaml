@@ -43,6 +43,7 @@ options:
   ha_area_name_assist_enabled: true
   tz: ""
   pulse_latency_msec: 200
+  startup_banner_grace_seconds: 10
   prefer_sbc_codec: false
   bt_check_interval: 10
   bt_max_reconnect_fails: 0
@@ -62,6 +63,7 @@ schema:
   ha_area_name_assist_enabled: bool?
   tz: str?
   pulse_latency_msec: int?
+  startup_banner_grace_seconds: int?
   prefer_sbc_codec: bool?
   bt_check_interval: int?
   bt_max_reconnect_fails: int?

@@ -28,7 +28,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-VERSION = "2.46.1-rc.5"
+VERSION = "2.46.1-rc.6"
 BUILD_DATE = "2026-03-24"
 CONFIG_SCHEMA_VERSION = 1
 UPDATE_CHANNELS = ("stable", "rc", "beta")
@@ -110,6 +110,7 @@ DEFAULT_CONFIG = {
     "BRUTE_FORCE_MAX_ATTEMPTS": 5,
     "BRUTE_FORCE_WINDOW_MINUTES": 1,
     "BRUTE_FORCE_LOCKOUT_MINUTES": 5,
+    "STARTUP_BANNER_GRACE_SECONDS": 10,
     "AUTH_PASSWORD_HASH": "",
     "SECRET_KEY": "",
     "LOG_LEVEL": "INFO",
@@ -558,6 +559,7 @@ def _normalize_loaded_config(config: dict) -> None:
         ("BRUTE_FORCE_MAX_ATTEMPTS", 1, 50),
         ("BRUTE_FORCE_WINDOW_MINUTES", 1, 1440),
         ("BRUTE_FORCE_LOCKOUT_MINUTES", 1, 1440),
+        ("STARTUP_BANNER_GRACE_SECONDS", 0, 300),
     ):
         _normalize_int_setting(config, key, min_value=min_value, max_value=max_value)
 

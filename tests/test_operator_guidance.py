@@ -401,7 +401,11 @@ def test_operator_guidance_prefers_release_for_active_auto_reconnect_device():
 def test_operator_guidance_suppresses_problem_banner_during_startup_grace_period():
     completed_at = datetime.now(tz=timezone.utc).isoformat()
     snapshot = build_operator_guidance_snapshot(
-        config={"BLUETOOTH_ADAPTERS": [{"id": "hci0"}], "BLUETOOTH_DEVICES": [{"mac": "AA"}]},
+        config={
+            "BLUETOOTH_ADAPTERS": [{"id": "hci0"}],
+            "BLUETOOTH_DEVICES": [{"mac": "AA"}],
+            "STARTUP_BANNER_GRACE_SECONDS": 10,
+        },
         onboarding_assistant={
             "checklist": {"overall_status": "ok", "progress_percent": 100},
             "counts": {"configured_devices": 1, "connected_devices": 0, "sink_ready_devices": 0},
@@ -426,6 +430,37 @@ def test_operator_guidance_suppresses_problem_banner_during_startup_grace_period
     assert data["header_status"]["label"] == "Startup 90%"
     assert data["header_status"]["summary"] == "Finalizing Startup"
     assert data["issue_groups"][0]["key"] == "disconnected"
+
+
+def test_operator_guidance_can_disable_startup_grace_period():
+    completed_at = datetime.now(tz=timezone.utc).isoformat()
+    snapshot = build_operator_guidance_snapshot(
+        config={
+            "BLUETOOTH_ADAPTERS": [{"id": "hci0"}],
+            "BLUETOOTH_DEVICES": [{"mac": "AA"}],
+            "STARTUP_BANNER_GRACE_SECONDS": 0,
+        },
+        onboarding_assistant={
+            "checklist": {"overall_status": "ok", "progress_percent": 100},
+            "counts": {"configured_devices": 1, "connected_devices": 0, "sink_ready_devices": 0},
+        },
+        recovery_assistant={"summary": {"summary": "Devices need reconnection."}},
+        startup_progress={"status": "ready", "message": "Startup complete.", "completed_at": completed_at},
+        devices=[
+            SimpleNamespace(
+                player_name="Kitchen",
+                bt_management_enabled=True,
+                bluetooth_connected=False,
+                has_sink=False,
+                server_connected=False,
+            )
+        ],
+    )
+
+    data = snapshot.to_dict()
+    assert data["mode"] == "attention"
+    assert data["banner"]["primary_action"]["key"] == "reconnect_device"
+    assert data["header_status"]["label"] == "Kitchen is disconnected"
 
 
 def test_operator_guidance_uses_shared_recovery_actions_for_auto_released_issue():

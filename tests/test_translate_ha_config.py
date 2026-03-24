@@ -222,6 +222,7 @@ def test_basic_translation(tmp_path):
         volume_via_ma=False,
         prefer_sbc_codec=True,
         pulse_latency_msec=100,
+        startup_banner_grace_seconds=7,
         bt_check_interval=30,
         bt_max_reconnect_fails=5,
         ma_api_url="http://ma:8095",
@@ -247,6 +248,7 @@ def test_basic_translation(tmp_path):
     assert cfg["BLUETOOTH_DEVICES"][0]["mac"] == "AA:BB:CC:DD:EE:FF"
     assert cfg["BLUETOOTH_DEVICES"][1]["name"] == "Bedroom"
     assert cfg["TZ"] == "Europe/London"
+    assert cfg["STARTUP_BANNER_GRACE_SECONDS"] == 7
     assert cfg["UPDATE_CHANNEL"] == "stable"
 
 
@@ -340,6 +342,20 @@ def test_translation_respects_explicit_ha_area_name_assist_setting(tmp_path):
 
     cfg = _read_json(tmp_path / "config.json")
     assert cfg["HA_AREA_NAME_ASSIST_ENABLED"] is False
+
+
+def test_translation_preserves_existing_startup_banner_grace_when_option_omitted(tmp_path):
+    _write_json(tmp_path / "config.json", {"STARTUP_BANNER_GRACE_SECONDS": 4})
+    _write_json(tmp_path / "options.json", _minimal_options())
+
+    with (
+        patch("scripts.translate_ha_config._detect_adapters", return_value=[]),
+        patch("scripts.translate_ha_config.get_self_delivery_channel", return_value="stable"),
+    ):
+        main()
+
+    cfg = _read_json(tmp_path / "config.json")
+    assert cfg["STARTUP_BANNER_GRACE_SECONDS"] == 4
 
 
 def test_translate_script_runs_as_direct_file() -> None:

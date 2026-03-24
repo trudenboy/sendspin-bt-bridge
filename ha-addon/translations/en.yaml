@@ -33,6 +33,12 @@ configuration:
       Requested PulseAudio buffer latency in milliseconds. Larger values reduce
       audio dropouts on slow hardware at the cost of slightly higher latency.
       Default is 200 ms; try 400–600 ms if dropouts persist.
+  startup_banner_grace_seconds:
+    name: "Startup finalizing grace period (sec)"
+    description: >-
+      How long the web UI keeps the restart page in the finalizing state after
+      the backend reports ready. Lower this if Save & Restart feels stuck near
+      "Startup 90%". Set to 0 to unlock immediately.
   prefer_sbc_codec:
     name: "Prefer SBC codec"
     description: >-

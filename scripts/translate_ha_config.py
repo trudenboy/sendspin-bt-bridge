@@ -143,6 +143,7 @@ def main() -> None:
         "BLUETOOTH_ADAPTERS": adapters,
         "TZ": tz,
         "PULSE_LATENCY_MSEC": _int_opt(opts, "pulse_latency_msec", 200),
+        "STARTUP_BANNER_GRACE_SECONDS": _int_opt(opts, "startup_banner_grace_seconds", 10),
         "PREFER_SBC_CODEC": bool(opts.get("prefer_sbc_codec", False)),
         "BT_CHECK_INTERVAL": _int_opt(opts, "bt_check_interval", 10),
         "BT_MAX_RECONNECT_FAILS": _int_opt(opts, "bt_max_reconnect_fails", 0),
@@ -181,8 +182,11 @@ def main() -> None:
         for key in ("MA_API_URL", "MA_API_TOKEN"):
             if not config.get(key) and existing.get(key):
                 config[key] = existing[key]
-        for key in ("BASE_LISTEN_PORT",):
-            option_name = key.lower()
+        preserved_optional_int_fields = {
+            "BASE_LISTEN_PORT": "base_listen_port",
+            "STARTUP_BANNER_GRACE_SECONDS": "startup_banner_grace_seconds",
+        }
+        for key, option_name in preserved_optional_int_fields.items():
             if opts.get(option_name) in (None, "") and existing.get(key) not in (None, ""):
                 config[key] = int(existing[key])
         # Preserve per-device web UI settings (e.g. keepalive) not present in options.json

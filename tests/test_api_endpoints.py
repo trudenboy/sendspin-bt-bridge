@@ -964,6 +964,7 @@ def test_api_config_get_includes_security_and_monitor_defaults(client):
     assert data["BRUTE_FORCE_MAX_ATTEMPTS"] == 5
     assert data["BRUTE_FORCE_WINDOW_MINUTES"] == 1
     assert data["BRUTE_FORCE_LOCKOUT_MINUTES"] == 5
+    assert data["STARTUP_BANNER_GRACE_SECONDS"] == 10
     assert data["MA_AUTO_SILENT_AUTH"] is True
     assert data["MA_WEBSOCKET_MONITOR"] is True
 
@@ -1087,6 +1088,7 @@ def test_api_config_post_accepts_security_and_monitor_settings(client, tmp_path,
         "BRUTE_FORCE_MAX_ATTEMPTS": 4,
         "BRUTE_FORCE_WINDOW_MINUTES": 2,
         "BRUTE_FORCE_LOCKOUT_MINUTES": 10,
+        "STARTUP_BANNER_GRACE_SECONDS": 7,
         "LOG_LEVEL": "INFO",
         "MA_API_URL": "",
         "MA_API_TOKEN": "",
@@ -1112,6 +1114,7 @@ def test_api_config_post_accepts_security_and_monitor_settings(client, tmp_path,
     assert saved["BRUTE_FORCE_MAX_ATTEMPTS"] == 4
     assert saved["BRUTE_FORCE_WINDOW_MINUTES"] == 2
     assert saved["BRUTE_FORCE_LOCKOUT_MINUTES"] == 10
+    assert saved["STARTUP_BANNER_GRACE_SECONDS"] == 7
     assert saved["MA_AUTO_SILENT_AUTH"] is False
     assert saved["MA_WEBSOCKET_MONITOR"] is False
     assert saved["UPDATE_CHANNEL"] == "beta"
@@ -1197,6 +1200,7 @@ def test_api_config_post_normalizes_numeric_strings(client, tmp_path, monkeypatc
         "BRUTE_FORCE_MAX_ATTEMPTS": "4",
         "BRUTE_FORCE_WINDOW_MINUTES": "2",
         "BRUTE_FORCE_LOCKOUT_MINUTES": "10",
+        "STARTUP_BANNER_GRACE_SECONDS": "0",
         "LOG_LEVEL": "INFO",
         "MA_API_URL": "",
         "MA_API_TOKEN": "",
@@ -1221,6 +1225,7 @@ def test_api_config_post_normalizes_numeric_strings(client, tmp_path, monkeypatc
     assert saved["BT_MAX_RECONNECT_FAILS"] == 3
     assert saved["SESSION_TIMEOUT_HOURS"] == 12
     assert saved["BRUTE_FORCE_MAX_ATTEMPTS"] == 4
+    assert saved["STARTUP_BANNER_GRACE_SECONDS"] == 0
     assert saved["CONFIG_SCHEMA_VERSION"] == 1
     assert saved["BLUETOOTH_DEVICES"][0]["listen_port"] == 8930
     assert saved["BLUETOOTH_DEVICES"][0]["keepalive_interval"] == 60
@@ -1300,6 +1305,7 @@ def test_sync_ha_options_omits_manual_ports_when_unset(monkeypatch):
             "WEB_PORT": None,
             "BASE_LISTEN_PORT": None,
             "MA_AUTO_SILENT_AUTH": True,
+            "STARTUP_BANNER_GRACE_SECONDS": 10,
             "BLUETOOTH_DEVICES": [],
             "BLUETOOTH_ADAPTERS": [],
         }
@@ -1310,6 +1316,7 @@ def test_sync_ha_options_omits_manual_ports_when_unset(monkeypatch):
     assert "base_listen_port" not in options
     assert "update_channel" not in options
     assert options["ma_auto_silent_auth"] is True
+    assert options["startup_banner_grace_seconds"] == 10
 
 
 def test_sync_ha_options_includes_manual_ports_when_set(monkeypatch):
@@ -1340,6 +1347,7 @@ def test_sync_ha_options_includes_manual_ports_when_set(monkeypatch):
             "WEB_PORT": 18080,
             "BASE_LISTEN_PORT": 19000,
             "MA_AUTO_SILENT_AUTH": False,
+            "STARTUP_BANNER_GRACE_SECONDS": 0,
             "BLUETOOTH_DEVICES": [],
             "BLUETOOTH_ADAPTERS": [],
         }
@@ -1350,6 +1358,7 @@ def test_sync_ha_options_includes_manual_ports_when_set(monkeypatch):
     assert options["base_listen_port"] == 19000
     assert "update_channel" not in options
     assert options["ma_auto_silent_auth"] is False
+    assert options["startup_banner_grace_seconds"] == 0
 
 
 def test_api_ha_areas_returns_bridge_suggestions_and_adapter_matches(client, monkeypatch):

@@ -14,7 +14,7 @@ UTC = timezone.utc
 
 _ONBOARDING_VISIBILITY_KEY = "sendspin-ui:show-onboarding-guidance"
 _RECOVERY_VISIBILITY_KEY = "sendspin-ui:show-recovery-guidance"
-_STARTUP_BANNER_GRACE_SECONDS = 15
+_DEFAULT_STARTUP_BANNER_GRACE_SECONDS = 10
 
 
 @dataclass
@@ -176,18 +176,32 @@ def _parse_timestamp(value: Any) -> datetime | None:
     return parsed.astimezone(UTC)
 
 
-def _startup_banner_cooldown_active(startup_progress: dict[str, Any]) -> bool:
+def _startup_banner_grace_seconds(config: dict[str, Any] | None) -> int:
+    if not isinstance(config, dict):
+        return _DEFAULT_STARTUP_BANNER_GRACE_SECONDS
+    raw_value = config.get("STARTUP_BANNER_GRACE_SECONDS", _DEFAULT_STARTUP_BANNER_GRACE_SECONDS)
+    try:
+        grace_seconds = int(raw_value)
+    except (TypeError, ValueError):
+        return _DEFAULT_STARTUP_BANNER_GRACE_SECONDS
+    return max(0, min(grace_seconds, 300))
+
+
+def _startup_banner_cooldown_active(startup_progress: dict[str, Any], config: dict[str, Any] | None = None) -> bool:
     startup_status = str(startup_progress.get("status") or "idle")
     if startup_status in {"running", "starting"}:
         return True
     if startup_status not in {"ready", "complete", "error"}:
+        return False
+    grace_seconds = _startup_banner_grace_seconds(config)
+    if grace_seconds <= 0:
         return False
     completed_at = _parse_timestamp(
         startup_progress.get("completed_at") or startup_progress.get("updated_at") or startup_progress.get("started_at")
     )
     if completed_at is None:
         return False
-    return (datetime.now(tz=UTC) - completed_at) < timedelta(seconds=_STARTUP_BANNER_GRACE_SECONDS)
+    return (datetime.now(tz=UTC) - completed_at) < timedelta(seconds=grace_seconds)
 
 
 def _reconnect_attempt_summary(device: Any) -> str:
@@ -1044,7 +1058,7 @@ def _build_header_status(
             label=f"Startup {percent}%",
             summary=str(startup_progress.get("message") or "Bridge startup checks are still running."),
         )
-    if _startup_banner_cooldown_active(startup_progress):
+    if _startup_banner_cooldown_active(startup_progress, config):
         return GuidanceHeaderStatus(
             tone="info",
             label="Startup 90%",
@@ -1157,7 +1171,7 @@ def build_operator_guidance_snapshot(
         disabled_devices=disabled_devices,
     )
     startup_status = str(startup_progress.get("status") or "idle")
-    startup_banner_cooldown_active = _startup_banner_cooldown_active(startup_progress)
+    startup_banner_cooldown_active = _startup_banner_cooldown_active(startup_progress, config)
     active_devices = [device for device in devices if getattr(device, "bt_management_enabled", True)]
     released_devices = [device for device in devices if getattr(device, "bt_management_enabled", True) is False]
     user_released_devices = [

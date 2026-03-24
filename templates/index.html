@@ -362,6 +362,19 @@
 
                             <label class="config-setting-row">
                                 <span class="config-setting-copy ui-stack ui-stack--xs">
+                                    <strong>Startup finalizing grace period</strong>
+                                    <span class="form-hint">How long the UI keeps the restart page locked after the backend reports ready. Lower this if Save &amp; Restart feels stuck near “Startup 90%”.</span>
+                                </span>
+                                <span class="config-setting-control config-setting-control--field">
+                                    <span class="config-inline-field">
+                                        <input type="number" name="STARTUP_BANNER_GRACE_SECONDS" id="startup-banner-grace-seconds" min="0" max="300" step="1">
+                                        <span class="config-inline-unit">sec</span>
+                                    </span>
+                                </span>
+                            </label>
+
+                            <label class="config-setting-row">
+                                <span class="config-setting-copy ui-stack ui-stack--xs">
                                     <strong>Show empty-state onboarding guidance</strong>
                                     <span class="form-hint">Controls whether the full first-run checklist stays visible when no adapters or devices are configured.</span>
                                 </span>
