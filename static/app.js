@@ -5719,8 +5719,12 @@ function _renderBtScanEmptyStateHtml() {
                 '<li>Move the device closer to the Bluetooth adapter</li>' +
                 '<li>Some devices need to be <strong>unpaired</strong> from other sources first</li>' +
                 '<li>Try scanning again — some speakers advertise intermittently</li>' +
+                '<li>If the device still does not appear, try another scan, then reboot the Bluetooth adapter, and finally reboot the host if needed</li>' +
             '</ul>'
-            : 'No nearby Bluetooth devices were reported during this timed scan.',
+            : '<ul class="ui-empty-state-list">' +
+                '<li>No nearby Bluetooth devices were reported during this timed scan</li>' +
+                '<li>If the device still does not appear, try another scan, then reboot the Bluetooth adapter, and finally reboot the host if needed</li>' +
+            '</ul>',
         compact: true,
         inline: true,
     });

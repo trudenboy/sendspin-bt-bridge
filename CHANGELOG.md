@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.46.1-rc.4] - 2026-03-24
+
+### Changed
+- Bluetooth scan empty states now suggest a practical recovery path when the target device does not appear: retry the scan, reboot the Bluetooth adapter, and finally reboot the host if needed.
+
 ## [2.46.1-rc.3] - 2026-03-24
 
 ### Changed
