@@ -389,6 +389,13 @@ class SendspinClient:
         """Send command to daemon stdin (BluetoothManagerHost protocol)."""
         await self._send_subprocess_command(cmd)
 
+    def get_subprocess_pid(self) -> int | None:
+        """Return daemon subprocess PID if alive (BluetoothManagerHost protocol)."""
+        proc = self._daemon_proc
+        if proc is not None and proc.returncode is None:
+            return proc.pid
+        return None
+
     def get_ip_address(self) -> str:
         """Get the primary IP address of this machine"""
         from config import get_local_ip

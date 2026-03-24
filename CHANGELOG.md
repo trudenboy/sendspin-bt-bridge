@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.47.3] - 2026-03-24
+
+### Fixed
+- Auto-correct PulseAudio sink routing when a new BT device connects. PulseAudio's `module-rescue-streams` can silently move an existing stream to a newly-appeared sink; the bridge now detects this and moves streams back to their correct sinks within 3 seconds.
+
+### Added
+- `get_subprocess_pid()` method on `BluetoothManagerHost` protocol and `SendspinClient` for safe PID access.
+
 ## [2.47.2] - 2026-03-24
 
 ### Fixed

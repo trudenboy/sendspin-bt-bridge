@@ -23,6 +23,43 @@ UTC = timezone.utc
 
 logger = logging.getLogger(__name__)
 
+# Delay (seconds) after a BT device connects before correcting sink routing.
+# Gives PulseAudio time to create the new sink and module-rescue-streams to act.
+_SINK_CORRECTION_DELAY = 3
+
+
+async def _correct_other_devices_routing(triggering_mgr: BluetoothManager) -> None:
+    """After a BT device connects, correct PA sink routing for all OTHER running players.
+
+    PulseAudio's ``module-rescue-streams`` may silently move an existing
+    stream to a newly-appeared sink.  We wait briefly for PA to settle,
+    then verify each running subprocess is still on its expected sink.
+    """
+    await asyncio.sleep(_SINK_CORRECTION_DELAY)
+
+    from services.device_registry import get_active_clients_snapshot
+    from services.pulse import amove_pid_sink_inputs
+
+    clients = get_active_clients_snapshot()
+    for client in clients:
+        if getattr(client, "bt_manager", None) is triggering_mgr:
+            continue
+        pid = client.get_subprocess_pid()
+        sink = client.bluetooth_sink_name
+        if pid is None or not sink:
+            continue
+        try:
+            moved = await amove_pid_sink_inputs(pid, sink)
+            if moved:
+                logger.info(
+                    "[%s] Sink routing corrected: %d stream(s) moved back → %s",
+                    client.player_name,
+                    moved,
+                    sink,
+                )
+        except Exception as exc:
+            logger.debug("[%s] Sink routing correction failed: %s", client.player_name, exc)
+
 
 async def monitor_and_reconnect(mgr: BluetoothManager) -> None:
     """Continuously monitor BT connection and reconnect if needed.
@@ -119,6 +156,7 @@ async def _monitor_polling(mgr: BluetoothManager) -> None:
                         )
                         logger.info("BT reconnected for %s, starting sendspin...", mgr.device_name)
                         await mgr.host.start_subprocess()
+                        asyncio.ensure_future(_correct_other_devices_routing(mgr))
                     else:
                         delay = mgr._reconnect_delay(reconnect_attempt)
                         mgr._publish_client_event(
@@ -145,6 +183,7 @@ async def _monitor_polling(mgr: BluetoothManager) -> None:
                         if mgr.host.bluetooth_sink_name:
                             logger.info("[%s] Auto-reconnect: starting player", mgr.device_name)
                             await mgr.host.start_subprocess()
+                            asyncio.ensure_future(_correct_other_devices_routing(mgr))
 
                     # Read battery level (None if device doesn't support it)
                     mgr.battery_level = _dbus_get_battery_level(mgr._dbus_device_path)
@@ -243,6 +282,12 @@ async def _monitor_dbus(mgr: BluetoothManager, MessageBus, BusType) -> None:
                         logger.warning("[%s] PropertiesChanged: Disconnected!", mgr.device_name)
                     else:
                         logger.info("[%s] PropertiesChanged: Connected!", mgr.device_name)
+                        # Correct sink routing for other devices that may have been
+                        # disrupted by module-rescue-streams when this sink appeared.
+                        loop.call_soon_threadsafe(
+                            asyncio.ensure_future,
+                            _correct_other_devices_routing(mgr),
+                        )
 
                 return on_props_changed
 
@@ -359,6 +404,7 @@ async def _inner_dbus_monitor(mgr: BluetoothManager, device_iface, disconnect_ev
                 if mgr.host:
                     logger.info("BT reconnected for %s, starting sendspin...", mgr.device_name)
                     await mgr.host.start_subprocess()
+                asyncio.ensure_future(_correct_other_devices_routing(mgr))
                 return
             else:
                 # Failed — back off proportional to failure count
@@ -386,4 +432,5 @@ async def _inner_dbus_monitor(mgr: BluetoothManager, device_iface, disconnect_ev
                         )
                         logger.info("BT reconnected for %s, starting sendspin...", mgr.device_name)
                         await mgr.host.start_subprocess()
+                    asyncio.ensure_future(_correct_other_devices_routing(mgr))
                     return

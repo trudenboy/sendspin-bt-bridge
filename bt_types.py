@@ -40,3 +40,7 @@ class BluetoothManagerHost(Protocol):
     async def send_subprocess_command(self, cmd: dict[str, Any]) -> None:
         """Send a JSON command dict to the daemon subprocess stdin."""
         ...
+
+    def get_subprocess_pid(self) -> int | None:
+        """Return the PID of the running daemon subprocess, or None."""
+        ...
