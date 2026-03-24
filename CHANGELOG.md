@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Docker/standalone cold starts with configured speakers now wait briefly for late D-Bus, Bluetooth controller, and audio-server readiness before launching the bridge process, reducing the common “works after one manual container restart” startup race on host boots.
+
 ## [2.46.1-rc.7] - 2026-03-24
 
 ### Fixed

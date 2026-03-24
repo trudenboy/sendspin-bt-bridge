@@ -161,7 +161,18 @@ curl -s http://localhost:${WEB_PORT:-8080}/api/preflight | python3 -m json.tool
 - выбранный путь к audio socket
 - владельца/права сокета
 - результат живого `pactl info` probe
+- пришлось ли контейнеру подождать позднюю готовность D-Bus / Bluetooth / audio при холодном старте хоста
 - отдельное предупреждение, если bridge-процесс работает под другим UID, чем user-scoped audio socket на хосте
+
+Если у вас уже настроены Bluetooth-устройства, новые образы также недолго ждут позднего появления host-зависимостей перед запуском bridge-процесса. Это убирает частый race, когда после перезагрузки хоста контейнеру нужен ещё один ручной restart.
+
+Если хост стартует особенно медленно, ожидание можно подстроить:
+
+```yaml
+environment:
+  - STARTUP_DEPENDENCY_WAIT_ATTEMPTS=60
+  - STARTUP_DEPENDENCY_WAIT_DELAY_SECONDS=1
+```
 
 ## Troubleshooting для user-scoped PipeWire / PulseAudio
 

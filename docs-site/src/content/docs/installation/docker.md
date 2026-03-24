@@ -161,7 +161,18 @@ Recent images also print startup diagnostics for:
 - the selected audio socket path
 - the socket owner/mode
 - a live `pactl info` probe result
+- whether the container had to wait for late D-Bus / Bluetooth / audio readiness on a cold host boot
 - a warning when the running bridge process does not match the user-scoped host audio socket
+
+If you have configured Bluetooth devices, recent images also wait briefly for late host startup dependencies before launching the bridge process. This reduces the common “first boot after host restart needs one extra container restart” race.
+
+If your host comes up especially slowly, you can tune the wait with:
+
+```yaml
+environment:
+  - STARTUP_DEPENDENCY_WAIT_ATTEMPTS=60
+  - STARTUP_DEPENDENCY_WAIT_DELAY_SECONDS=1
+```
 
 ## Troubleshooting user-scoped PipeWire / PulseAudio
 

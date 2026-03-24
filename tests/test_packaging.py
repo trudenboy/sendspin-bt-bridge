@@ -25,9 +25,7 @@ def test_dockerfile_installs_ffmpeg_runtime_libraries():
 def test_entrypoint_sets_ha_config_dir_before_config_diagnostics():
     entrypoint = (Path(__file__).resolve().parents[1] / "entrypoint.sh").read_text()
 
-    assert entrypoint.index("export CONFIG_DIR=/data") < entrypoint.index(
-        'CONFIG_PATH="${CONFIG_DIR:-/config}/config.json"'
-    )
+    assert entrypoint.index("export CONFIG_DIR=/data") < entrypoint.rindex("_refresh_config_diagnostics")
 
 
 def test_entrypoint_reports_audio_uid_mismatch_diagnostics():
@@ -39,6 +37,16 @@ def test_entrypoint_reports_audio_uid_mismatch_diagnostics():
     assert "AUDIO_PROBE_STATUS" in entrypoint
     assert "User-scoped audio socket targets UID" in entrypoint
     assert "App UID:" in entrypoint
+
+
+def test_entrypoint_waits_for_cold_boot_dependencies_before_launch():
+    entrypoint = (Path(__file__).resolve().parents[1] / "entrypoint.sh").read_text()
+
+    assert "STARTUP_DEPENDENCY_WAIT_ATTEMPTS" in entrypoint
+    assert "STARTUP_DEPENDENCY_WAIT_DELAY_SECONDS" in entrypoint
+    assert "Waiting for startup dependencies before launching bridge" in entrypoint
+    assert "Startup Wait:" in entrypoint
+    assert "_configured_devices_present" in entrypoint
 
 
 def test_dockerfile_installs_gosu_for_runtime_uid_switch():
