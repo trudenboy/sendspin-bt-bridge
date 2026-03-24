@@ -7,29 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [2.47.0-rc.2] - 2026-03-24
-
-### Changed
-- **Upgrade sendspin 5.3.2 → 5.7.1**: Updated `requirements.txt` to `sendspin>=5.7.0,<6.0.0`. Includes upstream bugfixes for volume reset on reconnect, pitch shift on format change, and server/hello ordering.
-- **Adapt to new volume controller protocol**: `DaemonArgs` now uses `volume_controller` kwarg (sendspin 5.5.0+) with runtime compat filter that falls back to `use_hardware_volume` on older versions.
-- **BridgeDaemon skips manual sink sync when upstream handles volume**: `_has_upstream_volume_controller()` check prevents double volume commands.
-
-### Added
-- **PulseVolumeController** (`services/pa_volume_controller.py`): Implements the sendspin `VolumeController` protocol for PulseAudio/PipeWire sinks — atomic volume/mute control via `pulsectl`.
-- **Artwork role support**: `BridgeDaemon._create_client()` requests `ARTWORK` role with graceful fallback; monkey-patches `_handle_binary_message` to forward artwork frames as base64 in status dict.
-- **Visualizer role support**: `BridgeDaemon._create_client()` requests `VISUALIZER` role with graceful fallback; `_on_visualizer_frames()` callback logs frame counts at debug level.
-- New test files: `test_pa_volume_controller.py` (5 tests), `test_bridge_daemon_features.py` (10 tests).
-
-## [2.47.0-rc.1] - 2026-03-24
-
-### Changed
-- **Split `bluetooth_manager.py`** (1 226 → 669 lines): extracted `bt_audio.py` (audio sink discovery), `bt_monitor.py` (polling & D-Bus monitor loops), `bt_dbus.py` (D-Bus helpers).
-- **Split `routes/api_ma.py`** (2 343 → 150 lines): extracted `routes/ma_auth.py` (OAuth / HA auth), `routes/ma_playback.py` (queue & now-playing), `routes/ma_groups.py` (discovery & groups).
-- **Split `config.py`** (999 → 449 lines): extracted `config_auth.py` (password hashing), `config_migration.py` (schema migration & normalization), `config_network.py` (port resolution & HA detection).
-- **Decoupled `BluetoothManager` from `SendspinClient`**: introduced `bt_types.BluetoothManagerHost` Protocol; `BluetoothManager` now depends on the protocol, not the concrete class.
-- All public APIs and re-exports preserved for backward compatibility.
-
-## [2.46.3-rc.1] - 2026-03-24
+## [2.47.0] - 2026-03-24
 
 ### Security
 - Validate `action` parameter in pause/play endpoints before IPC dispatch (whitelist `pause`/`play`).
@@ -40,6 +18,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add character whitelist validation on update tag refs.
 - Guard `ha_url` parameter in HA Core API against SSRF.
 - Add `auth_enabled` flag and warning to diagnostics endpoints when auth is disabled.
+
+### Changed
+- **Upgrade sendspin 5.3.2 → 5.7.1**: Updated `requirements.txt` to `sendspin>=5.7.0,<6.0.0`. Includes upstream bugfixes for volume reset on reconnect, pitch shift on format change, and server/hello ordering.
+- **Adapt to new volume controller protocol**: `DaemonArgs` now uses `volume_controller` kwarg (sendspin 5.5.0+) with runtime compat filter that falls back to `use_hardware_volume` on older versions.
+- **BridgeDaemon skips manual sink sync when upstream handles volume**: `_has_upstream_volume_controller()` check prevents double volume commands.
+- **Split `bluetooth_manager.py`** (1 226 → 669 lines): extracted `bt_audio.py` (audio sink discovery), `bt_monitor.py` (polling & D-Bus monitor loops), `bt_dbus.py` (D-Bus helpers).
+- **Split `routes/api_ma.py`** (2 343 → 150 lines): extracted `routes/ma_auth.py` (OAuth / HA auth), `routes/ma_playback.py` (queue & now-playing), `routes/ma_groups.py` (discovery & groups).
+- **Split `config.py`** (999 → 449 lines): extracted `config_auth.py` (password hashing), `config_migration.py` (schema migration & normalization), `config_network.py` (port resolution & HA detection).
+- **Decoupled `BluetoothManager` from `SendspinClient`**: introduced `bt_types.BluetoothManagerHost` Protocol; `BluetoothManager` now depends on the protocol, not the concrete class.
+- All public APIs and re-exports preserved for backward compatibility.
+
+### Added
+- **PulseVolumeController** (`services/pa_volume_controller.py`): Implements the sendspin `VolumeController` protocol for PulseAudio/PipeWire sinks — atomic volume/mute control via `pulsectl`.
+- **Artwork role support**: `BridgeDaemon._create_client()` requests `ARTWORK` role with graceful fallback; monkey-patches `_handle_binary_message` to forward artwork frames as base64 in status dict.
+- **Visualizer role support**: `BridgeDaemon._create_client()` requests `VISUALIZER` role with graceful fallback; `_on_visualizer_frames()` callback logs frame counts at debug level.
 
 ### Fixed
 - Docker/standalone cold starts with configured speakers now wait briefly for late D-Bus, Bluetooth controller, and audio-server readiness before launching the bridge process, reducing the common “works after one manual container restart” startup race on host boots.
@@ -90,6 +83,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add error-path tests for malformed IPC, invalid MAC, invalid action, ProcessLookupError (12 tests).
 - Add IPC protocol integration tests — roundtrip envelope correctness (13 tests).
 - Strengthen weak assertions in API endpoint tests (9 tests improved).
+- New test files: `test_pa_volume_controller.py` (5 tests), `test_bridge_daemon_features.py` (10 tests).
 
 ## [2.46.1-rc.7] - 2026-03-24
 
