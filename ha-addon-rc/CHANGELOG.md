@@ -7,6 +7,68 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.46.3-rc.1] - 2026-03-24
+
+### Security
+- Validate `action` parameter in pause/play endpoints before IPC dispatch (whitelist `pause`/`play`).
+- Prevent session fixation by clearing session before setting authenticated state.
+- Validate MAC address format in `BluetoothManager.__init__` to block bluetoothctl injection.
+- Add 10 MB size cap to artwork proxy reads to prevent OOM from malicious upstream.
+- Reject artwork proxy requests for non-MA-origin URLs (SSRF protection).
+- Add character whitelist validation on update tag refs.
+- Guard `ha_url` parameter in HA Core API against SSRF.
+- Add `auth_enabled` flag and warning to diagnostics endpoints when auth is disabled.
+
+### Fixed
+- Docker/standalone cold starts with configured speakers now wait briefly for late D-Bus, Bluetooth controller, and audio-server readiness before launching the bridge process, reducing the common “works after one manual container restart” startup race on host boots.
+- Fix dropped WebSocket messages when `recv_task` and `wake_task` complete simultaneously in MA monitor.
+- Validate auth response in `send_player_cmd` fallback WebSocket path.
+- Defer interleaved MA events in `_poll_queues`, `_refresh_groups_via_ws`, and `_refresh_stale_player_metadata` (matching `_drain_cmd_queue` pattern).
+- Log warning when `_request_command` exhausts retries without finding a matching response.
+- Fix task leak on `CancelledError` in MA monitor event loop — pending tasks now cancelled in `finally` block.
+- Track consecutive MA auth failures; log ERROR after 5 failures suggesting token reconfiguration.
+- Fix race in `reload_credentials` — close WebSocket before clearing reference.
+- Fix race condition in volume tracking — atomic read-compare-update under single lock.
+- Fix TOCTOU race in `build_device_snapshot` — new atomic `snapshot()` method on `SendspinClient`.
+- Fix `status["playing"] = False` bypassing `_update_status`, skipping SSE notification.
+- Fix non-atomic list swap in `state.py` — use slice assignment instead of `clear()` + `extend()`.
+- Wrap event publisher subscriber callbacks in `try/except` to prevent cascading failures.
+- Track fire-and-forget async tasks in daemon process; cancel all on shutdown.
+- Fix reader task cancellation order — send stop command before cancelling readers.
+- Handle `ProcessLookupError` in subprocess stop when process exits between timeout and kill.
+- Fix `parse_status_envelope` dropping all keys when `allowed_keys` is `None`.
+- Replace `asyncio.run()` in WSGI threads with `ThreadPoolExecutor` + timeout.
+- Add exception handling for blocking BT operations in HTTP check handler.
+- Prevent `finish_async_job` from overwriting internal bookkeeping keys.
+- Catch `ValueError` for non-numeric `ingress_port` in HA addon.
+- Guard `int()` on HTTP rate-limit headers against `ValueError`/`TypeError`.
+- Fix recovery assistant always reporting 0 custom delays (missing `static_delay_ms`).
+
+### Improved
+- Upgrade `config_lock` from `Lock` to `RLock` to prevent potential self-deadlock.
+- Reduce `config_lock` scope during file I/O — parse JSON outside the lock.
+- Fix migration persist to write only deltas instead of full replace (preserves concurrent writes).
+- Add `shutdown()` method to `EventHookRegistry` for proper executor cleanup.
+- Add `clear_subscribers()` to event publisher for shutdown cleanup.
+- Add IPC message size limit (1 MB) to prevent truncated JSON from oversized metadata.
+- Add threading lock for shared status dict in daemon subprocess.
+- Pre-compute operator guidance checks once per snapshot instead of 3×.
+- Replace `deepcopy(checklist)` with shallow copy on guidance hot path.
+- Replace dynamic `type()` class creation with `@dataclass` in recovery assistant.
+- Deduplicate `_device_extra()` and `_parse_timestamp()` helpers into shared `services/_helpers.py`.
+- Extract `_auto_release_device()` method in Bluetooth manager to remove duplication.
+- Cache config during snapshot build — single read instead of per-device.
+- Use `deque(maxlen=...)` in log analysis instead of eager list materialization.
+- Narrow 20 bare `except Exception:` catches to specific exception types across 10 files.
+
+### Tests
+- Add thread-safety tests for concurrent status, config, and notification operations (7 tests).
+- Add auth enforcement regression tests for protected endpoints (12 tests).
+- Replace timing-dependent `time.sleep()` in tests with `threading.Event` synchronization.
+- Add error-path tests for malformed IPC, invalid MAC, invalid action, ProcessLookupError (12 tests).
+- Add IPC protocol integration tests — roundtrip envelope correctness (13 tests).
+- Strengthen weak assertions in API endpoint tests (9 tests improved).
+
 ## [2.46.1-rc.7] - 2026-03-24
 
 ### Fixed
