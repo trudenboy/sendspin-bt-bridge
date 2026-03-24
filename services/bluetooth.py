@@ -21,6 +21,7 @@ _OPTIONS_FILE = Path("/data/options.json")
 
 __all__ = [
     "bt_remove_device",
+    "extract_pair_failure_reason",
     "is_audio_device",
     "list_bt_adapters",
     "persist_device_enabled",
@@ -37,6 +38,7 @@ _AUDIO_UUIDS = {
 
 _ADAPTER_RE = re.compile(r"Controller\s+([\dA-F:]{17})\s", re.IGNORECASE)
 _MAC_RE = re.compile(r"^[\dA-Fa-f]{2}(:[\dA-Fa-f]{2}){5}$")
+_BLUEZ_ERROR_RE = re.compile(r"org\.bluez\.Error\.[A-Za-z]+")
 
 
 def is_valid_mac(mac: str) -> bool:
@@ -56,6 +58,37 @@ def list_bt_adapters(timeout: int = 5) -> list[str]:
         return _ADAPTER_RE.findall(result.stdout)
     except Exception:
         return []
+
+
+def extract_pair_failure_reason(output: str, *, tail_chars: int = 400) -> str:
+    """Extract the most useful bluetoothctl pairing failure reason from output."""
+    text = str(output or "")
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+
+    for line in reversed(lines):
+        if "failed to pair:" in line.lower():
+            return line
+
+    for line in reversed(lines):
+        match = _BLUEZ_ERROR_RE.search(line)
+        if match:
+            return match.group(0)
+
+    failure_tokens = (
+        "error",
+        "failed",
+        "timed out",
+        "authentication",
+        "rejected",
+        "canceled",
+        "not available",
+    )
+    for line in reversed(lines):
+        lowered = line.lower()
+        if any(token in lowered for token in failure_tokens):
+            return line
+
+    return text[-tail_chars:].strip()
 
 
 def bt_remove_device(mac: str, adapter_mac: str = "") -> None:

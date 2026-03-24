@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING
 
 from config import CONFIG_FILE, save_device_sink
 from config import config_lock as config_lock
+from services.bluetooth import extract_pair_failure_reason
 from services.internal_events import DeviceEventType
 from services.pulse import get_sink_volume, list_sinks, set_sink_mute, set_sink_volume
 
@@ -505,13 +506,17 @@ class BluetoothManager:
                 pass
 
             out = "".join(collected)
-            logger.info("Pair output (last 600 chars): %s", out[-600:])
             ok = "pairing successful" in out.lower() or "already paired" in out.lower() or "paired: yes" in out.lower()
             self.paired = ok
             if ok:
                 logger.info("Pairing successful")
+                logger.debug("Pair output tail: %s", out[-600:])
             else:
-                logger.warning("Pairing may have failed. Output: %s", out[-200:])
+                failure_reason = (
+                    extract_pair_failure_reason(out, tail_chars=200) or "no explicit bluetoothctl reason captured"
+                )
+                logger.warning("Pairing may have failed: %s", failure_reason)
+                logger.debug("Pair output tail: %s", out[-600:])
             return ok
         except (OSError, subprocess.SubprocessError) as e:
             logger.error("Pair error: %s", e)

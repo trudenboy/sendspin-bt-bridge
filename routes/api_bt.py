@@ -19,7 +19,7 @@ from config import CONFIG_FILE, config_lock, load_config
 from routes._helpers import get_client_or_error, validate_adapter, validate_mac
 from services import persist_device_enabled as _persist_device_enabled
 from services.async_job_state import create_scan_job, finish_scan_job, get_scan_job, is_scan_running
-from services.bluetooth import _AUDIO_UUIDS, list_bt_adapters
+from services.bluetooth import _AUDIO_UUIDS, extract_pair_failure_reason, list_bt_adapters
 from services.bluetooth import bt_remove_device as _bt_remove_device
 from services.bluetooth import persist_device_released as _persist_device_released
 
@@ -913,7 +913,14 @@ def _run_standalone_pair(job_id: str, mac: str, adapter: str) -> None:
 
             out = "".join(collected)
             ok = any(s in out.lower() for s in ("pairing successful", "already paired", "paired: yes"))
-            logger.info("Standalone pair %s: %s (last 400 chars: %s)", mac, "OK" if ok else "FAIL", out[-400:])
+            if ok:
+                logger.info("Standalone pair %s: OK", mac)
+            else:
+                failure_reason = (
+                    extract_pair_failure_reason(out, tail_chars=400) or "no explicit bluetoothctl reason captured"
+                )
+                logger.warning("Standalone pair %s: FAIL (%s)", mac, failure_reason)
+                logger.debug("Standalone pair %s output tail: %s", mac, out[-800:])
             finish_scan_job(job_id, {"success": ok, "mac": mac})
         finally:
             try:

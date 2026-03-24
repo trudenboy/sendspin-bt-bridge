@@ -3,7 +3,13 @@
 import json
 from unittest.mock import MagicMock, patch
 
-from services.bluetooth import bt_remove_device, is_audio_device, persist_device_enabled, persist_device_released
+from services.bluetooth import (
+    bt_remove_device,
+    extract_pair_failure_reason,
+    is_audio_device,
+    persist_device_enabled,
+    persist_device_released,
+)
 
 # ---------------------------------------------------------------------------
 # bt_remove_device
@@ -73,6 +79,26 @@ def test_is_audio_device_not_audio():
     with patch("services.bluetooth.subprocess.run") as mock_run:
         mock_run.return_value = MagicMock(stdout=bt_output)
         assert is_audio_device("AA:BB:CC:DD:EE:FF") is False
+
+
+def test_extract_pair_failure_reason_prefers_failed_to_pair_line():
+    output = """
+    [CHG] Device BC:7F:7B:C4:C2:56 Connected: yes
+    Failed to pair: org.bluez.Error.ConnectionAttemptFailed
+    [bluetooth]#
+    """
+
+    assert extract_pair_failure_reason(output) == "Failed to pair: org.bluez.Error.ConnectionAttemptFailed"
+
+
+def test_extract_pair_failure_reason_falls_back_to_last_errorish_line():
+    output = """
+    [CHG] Device BC:7F:7B:C4:C2:56 Connected: yes
+    AuthenticationFailed
+    [bluetooth]#
+    """
+
+    assert extract_pair_failure_reason(output) == "AuthenticationFailed"
 
 
 # ---------------------------------------------------------------------------
