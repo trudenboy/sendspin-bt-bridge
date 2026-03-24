@@ -124,10 +124,10 @@ def test_configure_bluetooth_audio_pipewire_pattern(bt_manager):
 
     fake_sinks = [{"name": sink_name, "description": "BT Speaker"}]
     with (
-        patch("bluetooth_manager.list_sinks", return_value=fake_sinks),
-        patch("bluetooth_manager.get_sink_volume", return_value=50),
-        patch("bluetooth_manager.set_sink_mute", return_value=True),
-        patch("bluetooth_manager.set_sink_volume", return_value=True),
+        patch("bt_audio.list_sinks", return_value=fake_sinks),
+        patch("bt_audio.get_sink_volume", return_value=50),
+        patch("bt_audio.set_sink_mute", return_value=True),
+        patch("bt_audio.set_sink_volume", return_value=True),
         patch("time.sleep"),
     ):
         result = bt_manager.configure_bluetooth_audio()
@@ -142,10 +142,10 @@ def test_configure_bluetooth_audio_pulseaudio_pattern(bt_manager):
 
     fake_sinks = [{"name": sink_name, "description": "BT Speaker"}]
     with (
-        patch("bluetooth_manager.list_sinks", return_value=fake_sinks),
-        patch("bluetooth_manager.get_sink_volume", return_value=50),
-        patch("bluetooth_manager.set_sink_mute", return_value=True),
-        patch("bluetooth_manager.set_sink_volume", return_value=True),
+        patch("bt_audio.list_sinks", return_value=fake_sinks),
+        patch("bt_audio.get_sink_volume", return_value=50),
+        patch("bt_audio.set_sink_mute", return_value=True),
+        patch("bt_audio.set_sink_volume", return_value=True),
         patch("time.sleep"),
     ):
         result = bt_manager.configure_bluetooth_audio()
@@ -156,9 +156,9 @@ def test_configure_bluetooth_audio_pulseaudio_pattern(bt_manager):
 def test_configure_bluetooth_audio_no_sink(bt_manager):
     """Returns False when no matching sink is found."""
     with (
-        patch("bluetooth_manager.list_sinks", return_value=[]),
-        patch("bluetooth_manager.get_sink_volume", return_value=None),
-        patch("bluetooth_manager.set_sink_mute", return_value=True),
+        patch("bt_audio.list_sinks", return_value=[]),
+        patch("bt_audio.get_sink_volume", return_value=None),
+        patch("bt_audio.set_sink_mute", return_value=True),
         patch("time.sleep"),
     ):
         result = bt_manager.configure_bluetooth_audio()
@@ -199,8 +199,10 @@ def test_unresolved_adapter_disables_dbus_path():
 async def test_monitor_dbus_raises_when_device_path_unavailable(bt_manager):
     bt_manager._dbus_device_path = None
 
+    from bt_monitor import _monitor_dbus
+
     with pytest.raises(RuntimeError, match="adapter resolution failed"):
-        await bt_manager._monitor_dbus(None, None)
+        await _monitor_dbus(bt_manager, None, None)
 
 
 def test_record_reconnect_prunes_old_entries(bt_manager):
@@ -214,12 +216,12 @@ def test_record_reconnect_prunes_old_entries(bt_manager):
 
 
 def test_check_reconnect_churn_disables_management(bt_manager):
-    """Churn threshold should auto-disable management and update client status."""
+    """Churn threshold should auto-disable management and update host status."""
     bt_manager._CHURN_THRESHOLD = 2
     bt_manager._CHURN_WINDOW = 30
     bt_manager._reconnect_timestamps = [90.0, 99.0]
-    bt_manager.client = MagicMock()
-    bt_manager.client.bt_management_enabled = True
+    bt_manager.host = MagicMock()
+    bt_manager.host.bt_management_enabled = True
 
     with (
         patch("bluetooth_manager.time.monotonic", return_value=100.0),
@@ -228,20 +230,21 @@ def test_check_reconnect_churn_disables_management(bt_manager):
         assert bt_manager._check_reconnect_churn() is True
 
     assert bt_manager.management_enabled is False
-    assert bt_manager.client.bt_management_enabled is False
-    bt_manager.client._update_status.assert_called_once()
+    assert bt_manager.host.bt_management_enabled is False
+    bt_manager.host.update_status.assert_called_once()
     persist_released.assert_called_once_with("TestSpeaker", True)
 
 
 def test_cancel_reconnect_clears_runtime_reconnect_status(bt_manager):
-    bt_manager.client = MagicMock()
-    bt_manager.client.status = {"reconnecting": True}
+    mock_host = MagicMock()
+    mock_host.get_status_value = MagicMock(return_value=True)
+    bt_manager.host = mock_host
 
     bt_manager.cancel_reconnect()
 
     assert bt_manager.management_enabled is False
     assert bt_manager._cancel_reconnect.is_set() is True
-    bt_manager.client._update_status.assert_called_once_with({"reconnecting": False, "reconnect_attempt": 0})
+    bt_manager.host.update_status.assert_called_once_with({"reconnecting": False, "reconnect_attempt": 0})
 
 
 def test_connect_device_aborts_when_release_cancels_active_reconnect(bt_manager):

@@ -340,7 +340,7 @@ class BridgeOrchestrator:
                     mac,
                     adapter=adapter,
                     device_name=player_name,
-                    client=client,
+                    host=client,
                     prefer_sbc=bootstrap.prefer_sbc,
                     check_interval=bootstrap.bt_check_interval,
                     max_reconnect_fails=bootstrap.bt_max_reconnect_fails,

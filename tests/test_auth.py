@@ -272,7 +272,7 @@ def test_ma_validate_success():
     cfg = {"MA_API_URL": "http://ma:8095"}
     with (
         patch("routes.auth.load_config", return_value=cfg),
-        patch("routes.api_ma._ma_http_login", return_value="token123"),
+        patch("routes.ma_auth._ma_http_login", return_value="token123"),
     ):
         ok, msg = _ma_validate_credentials("user", "pass")
     assert ok
@@ -284,7 +284,7 @@ def test_ma_validate_bad_credentials():
     cfg = {"MA_API_URL": "http://ma:8095"}
     with (
         patch("routes.auth.load_config", return_value=cfg),
-        patch("routes.api_ma._ma_http_login", side_effect=RuntimeError("Invalid username or password")),
+        patch("routes.ma_auth._ma_http_login", side_effect=RuntimeError("Invalid username or password")),
     ):
         ok, msg = _ma_validate_credentials("user", "wrong")
     assert not ok
@@ -296,7 +296,7 @@ def test_ma_validate_unreachable():
     cfg = {"MA_API_URL": "http://ma:8095"}
     with (
         patch("routes.auth.load_config", return_value=cfg),
-        patch("routes.api_ma._ma_http_login", side_effect=ConnectionError("refused")),
+        patch("routes.ma_auth._ma_http_login", side_effect=ConnectionError("refused")),
     ):
         ok, msg = _ma_validate_credentials("user", "pass")
     assert not ok

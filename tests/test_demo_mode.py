@@ -61,8 +61,10 @@ def _install_demo_runtime(monkeypatch, request):
             self._daemon_task = None
             self._stderr_task = None
 
-        def _update_status(self, updates: dict) -> None:
+        def update_status(self, updates: dict) -> None:
             self.status.update(updates)
+
+        _update_status = update_status
 
     monkeypatch.setattr(sys.modules["__main__"], "SendspinClient", StubSendspinClient, raising=False)
     monkeypatch.setattr(sys.modules["__main__"], "BluetoothManager", object, raising=False)
@@ -107,11 +109,11 @@ def test_demo_bluetooth_manager_supports_reconnect_cancellation_api():
         def __init__(self):
             self.status = {"reconnecting": True, "reconnect_attempt": 3}
 
-        def _update_status(self, updates: dict) -> None:
+        def update_status(self, updates: dict) -> None:
             self.status.update(updates)
 
     client = StubClient()
-    manager = DemoBluetoothManager("AA:BB:CC:DD:EE:05", device_name="Patio", client=client)
+    manager = DemoBluetoothManager("AA:BB:CC:DD:EE:05", device_name="Patio", host=client)
 
     manager.cancel_reconnect()
 
@@ -145,31 +147,31 @@ def test_demo_bluetooth_manager_seeds_reanchor_buffering_and_group_reconnecting_
         def __init__(self):
             self.status = {}
 
-        def _update_status(self, updates: dict) -> None:
+        def update_status(self, updates: dict) -> None:
             self.status.update(updates)
 
     reanchor_client = StubClient()
-    DemoBluetoothManager("AA:BB:CC:DD:EE:02", device_name="Kitchen", client=reanchor_client)
+    DemoBluetoothManager("AA:BB:CC:DD:EE:02", device_name="Kitchen", host=reanchor_client)
     assert reanchor_client.status["reanchoring"] is True
     assert reanchor_client.status["reanchor_count"] == DEMO_DEVICE_STATUS["AA:BB:CC:DD:EE:02"]["reanchor_count"]
     assert reanchor_client.status["last_sync_error_ms"] == DEMO_DEVICE_STATUS["AA:BB:CC:DD:EE:02"]["last_sync_error_ms"]
 
     low_reanchor_client = StubClient()
-    DemoBluetoothManager("AA:BB:CC:DD:EE:01", device_name="Living Room", client=low_reanchor_client)
+    DemoBluetoothManager("AA:BB:CC:DD:EE:01", device_name="Living Room", host=low_reanchor_client)
     assert low_reanchor_client.status["reanchor_count"] == 5
 
     medium_reanchor_client = StubClient()
-    DemoBluetoothManager("AA:BB:CC:DD:EE:03", device_name="Studio", client=medium_reanchor_client)
+    DemoBluetoothManager("AA:BB:CC:DD:EE:03", device_name="Studio", host=medium_reanchor_client)
     assert medium_reanchor_client.status["reanchor_count"] == 15
 
     reconnecting_client = StubClient()
-    reconnecting_manager = DemoBluetoothManager("AA:BB:CC:DD:EE:05", device_name="Patio", client=reconnecting_client)
+    reconnecting_manager = DemoBluetoothManager("AA:BB:CC:DD:EE:05", device_name="Patio", host=reconnecting_client)
     assert reconnecting_client.status["group_name"] == "Focus Zone"
     assert reconnecting_client.status["reconnecting"] is True
     assert reconnecting_manager.connect_device() is False
 
     buffering_client = StubClient()
-    DemoBluetoothManager("AA:BB:CC:DD:EE:06", device_name="Bedroom", client=buffering_client)
+    DemoBluetoothManager("AA:BB:CC:DD:EE:06", device_name="Bedroom", host=buffering_client)
     assert buffering_client.status["buffering"] is True
     assert buffering_client.status["muted"] is True
 
@@ -193,10 +195,12 @@ async def test_demo_simulator_advances_track_progress(monkeypatch):
                 "current_artist": "Demo Artist",
             }
 
-        def _update_status(self, updates: dict) -> None:
+        def update_status(self, updates: dict) -> None:
             self.status.update(updates)
             if self.status.get("track_progress_ms", 0) > 0:
                 progress_updated.set()
+
+        _update_status = update_status
 
     client = FakeClient()
     real_sleep = asyncio.sleep
@@ -235,7 +239,7 @@ async def test_demo_simulator_keeps_group_members_on_same_track(monkeypatch):
                 "current_artist": artist,
             }
 
-        def _update_status(self, updates: dict) -> None:
+        def update_status(self, updates: dict) -> None:
             self.status.update(updates)
             if (
                 living.status.get("current_track") == kitchen.status.get("current_track")
@@ -245,6 +249,8 @@ async def test_demo_simulator_keeps_group_members_on_same_track(monkeypatch):
                 and living.status.get("track_progress_ms", 0) > 0
             ):
                 group_aligned.set()
+
+        _update_status = update_status
 
     living = FakeClient(
         "Living Room",
@@ -297,8 +303,10 @@ async def test_demo_install_seeds_connected_ma_state_and_named_adapters(monkeypa
             self._daemon_task = None
             self._stderr_task = None
 
-        def _update_status(self, updates: dict) -> None:
+        def update_status(self, updates: dict) -> None:
             self.status.update(updates)
+
+        _update_status = update_status
 
     monkeypatch.setattr(sys.modules["__main__"], "SendspinClient", StubSendspinClient, raising=False)
     monkeypatch.setattr(sys.modules["__main__"], "BluetoothManager", object, raising=False)
@@ -367,23 +375,23 @@ def test_demo_bt_manager_seeds_released_ready_and_stopping_states():
         def __init__(self):
             self.status = {}
 
-        def _update_status(self, updates: dict) -> None:
+        def update_status(self, updates: dict) -> None:
             self.status.update(updates)
 
     released_client = StubClient()
-    DemoBluetoothManager("AA:BB:CC:DD:EE:07", device_name="Guest Room", client=released_client)
+    DemoBluetoothManager("AA:BB:CC:DD:EE:07", device_name="Guest Room", host=released_client)
     assert released_client.status["bt_management_enabled"] is False
     assert released_client.status["bt_released_by"] == "user"
 
     ready_client = StubClient()
-    ready_manager = DemoBluetoothManager("AA:BB:CC:DD:EE:08", device_name="Bathroom", client=ready_client)
+    ready_manager = DemoBluetoothManager("AA:BB:CC:DD:EE:08", device_name="Bathroom", host=ready_client)
     assert ready_client.status["muted"] is True
     assert ready_client.status["battery_level"] is None
     assert ready_manager.connect_device() is True
     assert ready_client.status["reconnecting"] is False
 
     stopping_client = StubClient()
-    DemoBluetoothManager("AA:BB:CC:DD:EE:09", device_name="Balcony", client=stopping_client)
+    DemoBluetoothManager("AA:BB:CC:DD:EE:09", device_name="Balcony", host=stopping_client)
     assert stopping_client.status["stopping"] is True
 
 
@@ -525,8 +533,10 @@ async def test_demo_install_patches_bridge_orchestrator_load_config(monkeypatch,
             self.bt_manager = SimpleNamespace(mac_address="AA:BB:CC:DD:EE:04")
             self.status = {}
 
-        def _update_status(self, updates: dict) -> None:
+        def update_status(self, updates: dict) -> None:
             self.status.update(updates)
+
+        _update_status = update_status
 
     monkeypatch.setattr(sys.modules["__main__"], "SendspinClient", StubSendspinClient, raising=False)
     monkeypatch.setattr(sys.modules["__main__"], "BluetoothManager", object, raising=False)
@@ -562,8 +572,10 @@ async def test_demo_install_exposes_demo_logs_diagnostics_and_bugreport(monkeypa
             self._zombie_restart_count = 0
             self.bt_management_enabled = True
 
-        def _update_status(self, updates: dict) -> None:
+        def update_status(self, updates: dict) -> None:
             self.status.update(updates)
+
+        _update_status = update_status
 
         def is_running(self) -> bool:
             proc = getattr(self, "_daemon_proc", None)

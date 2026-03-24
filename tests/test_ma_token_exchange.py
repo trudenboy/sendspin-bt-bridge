@@ -80,7 +80,7 @@ class TestValidateMaToken:
         mock_mod.connect = MagicMock(return_value=ws)
 
         with patch.dict(sys.modules, {"websockets.sync.client": mock_mod}):
-            from routes.api_ma import _validate_ma_token
+            from routes.ma_auth import _validate_ma_token
 
             assert _validate_ma_token("http://ma:8095", "good_token") is True
 
@@ -94,7 +94,7 @@ class TestValidateMaToken:
         mock_mod.connect = MagicMock(return_value=ws)
 
         with patch.dict(sys.modules, {"websockets.sync.client": mock_mod}):
-            from routes.api_ma import _validate_ma_token
+            from routes.ma_auth import _validate_ma_token
 
             assert _validate_ma_token("http://ma:8095", "bad_token") is False
 
@@ -103,7 +103,7 @@ class TestValidateMaToken:
         mock_mod.connect = MagicMock(side_effect=ConnectionRefusedError("refused"))
 
         with patch.dict(sys.modules, {"websockets.sync.client": mock_mod}):
-            from routes.api_ma import _validate_ma_token
+            from routes.ma_auth import _validate_ma_token
 
             assert _validate_ma_token("http://ma:8095", "any") is False
 
@@ -125,7 +125,7 @@ class TestExchangeForLongLivedToken:
         ws.recv.side_effect = responses
         return ws
 
-    @patch("routes.api_ma.socket.gethostname", return_value="bridge-host")
+    @patch("routes.ma_auth.socket.gethostname", return_value="bridge-host")
     def test_success_returns_long_lived(self, _mock_hostname):
         long_jwt = "eyJ_long_lived_token"
         ws = self._make_ws_mock(True, long_jwt)
@@ -133,7 +133,7 @@ class TestExchangeForLongLivedToken:
         mock_mod.connect = MagicMock(return_value=ws)
 
         with patch.dict(sys.modules, {"websockets.sync.client": mock_mod}):
-            from routes.api_ma import _exchange_for_long_lived_token
+            from routes.ma_auth import _exchange_for_long_lived_token
 
             result = _exchange_for_long_lived_token("http://ma:8095", "session_tok")
 
@@ -149,7 +149,7 @@ class TestExchangeForLongLivedToken:
         mock_mod.connect = MagicMock(return_value=ws)
 
         with patch.dict(sys.modules, {"websockets.sync.client": mock_mod}):
-            from routes.api_ma import _exchange_for_long_lived_token
+            from routes.ma_auth import _exchange_for_long_lived_token
 
             result = _exchange_for_long_lived_token("http://ma:8095", "session_tok")
 
@@ -160,7 +160,7 @@ class TestExchangeForLongLivedToken:
         mock_mod.connect = MagicMock(side_effect=OSError("connection failed"))
 
         with patch.dict(sys.modules, {"websockets.sync.client": mock_mod}):
-            from routes.api_ma import _exchange_for_long_lived_token
+            from routes.ma_auth import _exchange_for_long_lived_token
 
             result = _exchange_for_long_lived_token("http://ma:8095", "session_tok")
 
@@ -173,7 +173,7 @@ class TestExchangeForLongLivedToken:
         mock_mod.connect = MagicMock(return_value=ws)
 
         with patch.dict(sys.modules, {"websockets.sync.client": mock_mod}):
-            from routes.api_ma import _exchange_for_long_lived_token
+            from routes.ma_auth import _exchange_for_long_lived_token
 
             result = _exchange_for_long_lived_token("http://ma:8095", "session_tok")
 

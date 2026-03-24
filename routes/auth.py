@@ -327,7 +327,7 @@ def _ma_validate_credentials(username: str, password: str) -> tuple[bool, str]:
     if not ma_url:
         return False, "Music Assistant is not connected"
 
-    from routes.api_ma import _ma_http_login
+    from routes.ma_auth import _ma_http_login
 
     try:
         _ma_http_login(ma_url, username, password)

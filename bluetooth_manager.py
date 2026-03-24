@@ -8,8 +8,6 @@ via PropertiesChanged signals; falls back to bluetoothctl polling if unavailable
 
 from __future__ import annotations
 
-import asyncio
-import json
 import logging
 import os
 import re
@@ -21,16 +19,16 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from config import CONFIG_FILE, save_device_sink
-from config import config_lock as config_lock
+import bt_audio
+import bt_monitor
+from bt_dbus import _dbus_call_device_method, _dbus_get_device_property
 from services.bluetooth import extract_pair_failure_reason
-from services.internal_events import DeviceEventType
-from services.pulse import get_sink_volume, list_sinks, set_sink_mute, set_sink_volume
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from sendspin_client import SendspinClient
+    from bt_types import BluetoothManagerHost
+    from services.internal_events import DeviceEventType
 
 UTC = timezone.utc
 
@@ -41,102 +39,8 @@ _bt_executor = ThreadPoolExecutor(max_workers=min(4, os.cpu_count() or 4), threa
 # Timing constants for BT operations
 _PAIRING_SCAN_DURATION = 12  # seconds to scan before pairing
 _PAIRING_WAIT_DURATION = 10  # seconds to wait for pairing to complete
-_A2DP_PROFILE_DELAY = 3.0  # seconds to wait for A2DP profile after BT connect
-_SINK_RETRY_DELAY = 3.0  # seconds between sink discovery retries
-_SINK_RETRY_COUNT = 3  # max retries for sink discovery
 _MAX_RECONNECT_DELAY_S = 300.0  # max backoff for reconnect attempts (5 min)
 _CONNECT_CHECK_RETRIES = 5  # status checks after connect before giving up
-
-
-def _force_sbc_codec(pa_mac: str) -> None:
-    """Attempt to force SBC codec on the BlueZ card for this device.
-
-    SBC is the simplest mandatory A2DP codec — least CPU for the PA encoder.
-    Silently ignores failures (older PA, device already on SBC, or PA 14 that
-    lacks the send-message routing).
-    """
-    card_prefix = f"bluez_card.{pa_mac}"
-    try:
-        cards = subprocess.check_output(["pactl", "list", "short", "cards"], text=True, timeout=5)
-        for line in cards.splitlines():
-            if card_prefix in line:
-                card_name = line.split()[1]
-                result = subprocess.run(
-                    [
-                        "pactl",
-                        "send-message",
-                        f"/card/{card_name}/bluez5/set_codec",
-                        "a2dp_sink",
-                        "SBC",
-                    ],
-                    timeout=5,
-                    check=False,
-                    capture_output=True,
-                    text=True,
-                )
-                if result.returncode == 0:
-                    logger.info("✓ Forced SBC codec on %s", card_name)
-                else:
-                    logger.debug("SBC force failed for %s: %s", card_name, result.stderr.strip())
-                return
-    except (OSError, subprocess.SubprocessError) as e:
-        logger.debug("SBC codec force skipped: %s", e)
-
-
-def _dbus_get_device_property(device_path: str | None, property_name: str, adapter_hci: str = "hci0"):
-    """Read a single BlueZ Device1 property synchronously via dbus-python.
-
-    Falls back to None on any error (D-Bus unavailable, device not registered, etc.).
-    This is ~10× faster than spawning a bluetoothctl subprocess.
-    """
-    if not device_path:
-        return None
-    try:
-        import dbus as _dbus
-
-        bus = _dbus.SystemBus()
-        device = bus.get_object("org.bluez", device_path)
-        props = _dbus.Interface(device, "org.freedesktop.DBus.Properties")
-        return props.Get("org.bluez.Device1", property_name)
-    except Exception as exc:
-        logger.debug("D-Bus property read failed for %s: %s", property_name, exc)
-        return None
-
-
-def _dbus_get_battery_level(device_path: str | None) -> int | None:
-    """Read battery percentage via org.bluez.Battery1, or None if unsupported."""
-    if not device_path:
-        return None
-    try:
-        import dbus as _dbus
-
-        bus = _dbus.SystemBus()
-        device = bus.get_object("org.bluez", device_path)
-        props = _dbus.Interface(device, "org.freedesktop.DBus.Properties")
-        return int(props.Get("org.bluez.Battery1", "Percentage"))
-    except Exception as exc:
-        logger.debug("D-Bus battery read failed: %s", exc)
-        return None
-
-
-def _dbus_call_device_method(device_path: str | None, method_name: str) -> bool:
-    """Call a BlueZ Device1 method synchronously via dbus-python.
-
-    Returns True on success, False on error.
-    """
-    if not device_path:
-        return False
-    try:
-        import dbus as _dbus
-
-        bus = _dbus.SystemBus()
-        device = bus.get_object("org.bluez", device_path)
-        iface = _dbus.Interface(device, "org.bluez.Device1")
-        getattr(iface, method_name)()
-        return True
-    except Exception as e:
-        logger.debug("D-Bus %s failed: %s", method_name, e)
-        return False
 
 
 class BluetoothManager:
@@ -150,8 +54,8 @@ class BluetoothManager:
     - Churn isolation: auto-disabling a device after too many reconnects in a window
 
     Thread-safety: BT operations are dispatched via ``run_in_executor()`` to avoid
-    blocking the asyncio event loop.  The ``_status_lock`` on the parent
-    ``SendspinClient`` protects shared status mutations.
+    blocking the asyncio event loop.  The ``BluetoothManagerHost`` protocol methods
+    handle thread-safe status mutations internally.
     """
 
     def __init__(
@@ -159,7 +63,7 @@ class BluetoothManager:
         mac_address: str,
         adapter: str = "",
         device_name: str = "",
-        client: SendspinClient | None = None,
+        host: BluetoothManagerHost | None = None,
         prefer_sbc: bool = False,
         check_interval: int = 10,
         max_reconnect_fails: int = 0,
@@ -170,11 +74,11 @@ class BluetoothManager:
         self.mac_address = mac_address
         self.adapter = adapter  # "hci0", "hci1", etc. — empty = use default
         self.device_name = device_name or mac_address
-        self.client = client
+        self.host = host
         self.on_sink_found = on_sink_found
         self.prefer_sbc = prefer_sbc
         self.connected = False  # GIL-atomic bool; safe for cross-thread reads without lock
-        self.last_check = 0
+        self.last_check: float = 0
         self.check_interval = check_interval
         self.max_reconnect_fails = max_reconnect_fails
 
@@ -225,8 +129,8 @@ class BluetoothManager:
         """Request cancellation of any in-flight reconnect attempt."""
         self.management_enabled = False
         self._cancel_reconnect.set()
-        if self.client and self.client.status.get("reconnecting"):
-            self.client._update_status({"reconnecting": False, "reconnect_attempt": 0})
+        if self.host and self.host.get_status_value("reconnecting"):
+            self.host.update_status({"reconnecting": False, "reconnect_attempt": 0})
 
     def allow_reconnect(self) -> None:
         """Clear reconnect cancellation so monitor loops may reconnect again."""
@@ -549,117 +453,16 @@ class BluetoothManager:
 
     def configure_bluetooth_audio(self) -> bool:
         """Configure host's PipeWire/PulseAudio to use the Bluetooth device as audio output"""
-        try:
-            if self._reconnect_cancelled():
-                return False
-            pa_mac = self.mac_address.replace(":", "_")
-
-            # Try cached sink name first — avoids 3s A2DP delay on service restart
-            cached_sink = None
-            try:
-                if CONFIG_FILE.exists():
-                    with config_lock, open(CONFIG_FILE) as f:
-                        cfg = json.load(f)
-                    cached_sink = cfg.get("LAST_SINKS", {}).get(self.mac_address)
-            except (OSError, json.JSONDecodeError, ValueError):
-                pass
-
-            if cached_sink and get_sink_volume(cached_sink) is not None:
-                logger.info("✓ Using cached sink: %s (skipped A2DP delay)", cached_sink)
-                configured_sink = cached_sink
-                success = True
-            else:
-                if cached_sink:
-                    logger.debug("Cached sink %s not available, falling back to discovery", cached_sink)
-                # Wait for PipeWire/PulseAudio to register the device.
-                # A2DP profile takes a few seconds to appear after BT connects.
-                if not self._wait_with_cancel(_A2DP_PROFILE_DELAY):
-                    return False
-
-                # Log available sinks for diagnostics
-                sinks = list_sinks()
-                logger.info("Available audio sinks: %s", [s["name"] for s in sinks])
-
-                # Find the Bluetooth sink (do NOT change system default — PULSE_SINK handles per-process routing)
-                sink_names = [
-                    f"bluez_output.{pa_mac}.1",  # PipeWire format
-                    f"bluez_output.{pa_mac}.a2dp-sink",
-                    f"bluez_sink.{pa_mac}.a2dp_sink",  # Legacy PulseAudio format
-                    f"bluez_sink.{pa_mac}",
-                ]
-                known_names = {s["name"] for s in sinks}
-
-                success = False
-                configured_sink = None
-                # Retry up to _SINK_RETRY_COUNT times — A2DP sink may take a few extra seconds to appear
-                for attempt in range(_SINK_RETRY_COUNT):
-                    for sink_name in sink_names:
-                        if sink_name in known_names or get_sink_volume(sink_name) is not None:
-                            logger.info("✓ Found audio sink: %s", sink_name)
-                            configured_sink = sink_name
-                            success = True
-                            break
-                        else:
-                            logger.debug("Sink %s not found, trying next...", sink_name)
-                    if success:
-                        break
-                    if attempt < _SINK_RETRY_COUNT - 1:
-                        logger.info(
-                            "Sink not yet available, retrying in 3s... (attempt %s/%s)",
-                            attempt + 1,
-                            _SINK_RETRY_COUNT,
-                        )
-                        if not self._wait_with_cancel(_SINK_RETRY_DELAY):
-                            return False
-                        sinks = list_sinks()
-                        known_names = {s["name"] for s in sinks}
-
-            if success and configured_sink:
-                # Try to force SBC codec (lowest CPU A2DP codec) if requested
-                if self.prefer_sbc:
-                    _force_sbc_codec(pa_mac)
-
-                # Ensure sink is unmuted (PulseAudio may mute on BT reconnect)
-                set_sink_mute(configured_sink, False)
-
-                # Resolve last saved volume for this device
-                restored_volume = None
-                try:
-                    if CONFIG_FILE.exists():
-                        with config_lock, open(CONFIG_FILE) as f:
-                            cfg = json.load(f)
-                        volumes = cfg.get("LAST_VOLUMES", {})
-                        last_volume = volumes.get(self.mac_address)
-                        if last_volume is not None and isinstance(last_volume, int) and 0 <= last_volume <= 100:
-                            if set_sink_volume(configured_sink, last_volume):
-                                logger.info("✓ Restored volume to %s%% for %s", last_volume, self.mac_address)
-                                restored_volume = last_volume
-                except (OSError, json.JSONDecodeError, ValueError) as e:
-                    logger.warning("Could not restore volume: %s", e)
-
-                if restored_volume is None:
-                    logger.info("No saved volume to restore, will use current volume")
-
-                # Notify caller via callback (decoupled) or fall back to direct client mutation
-                if self.on_sink_found:
-                    self.on_sink_found(configured_sink, restored_volume)
-                elif self.client:
-                    self.client.bluetooth_sink_name = configured_sink
-                    logger.info("Stored Bluetooth sink for volume sync: %s", configured_sink)
-                    if restored_volume is not None:
-                        self.client._update_status({"volume": restored_volume})
-
-                # Cache sink name for faster restart
-                save_device_sink(self.mac_address, configured_sink)
-            elif not success:
-                logger.warning("Could not find Bluetooth sink for %s", self.mac_address)
-                logger.warning("Audio may play from default device instead of Bluetooth")
-
-            return success
-
-        except (OSError, subprocess.SubprocessError, json.JSONDecodeError) as e:
-            logger.error("Error configuring Bluetooth audio: %s", e)
+        if self._reconnect_cancelled():
             return False
+        return bt_audio.configure_bluetooth_audio(
+            mac_address=self.mac_address,
+            prefer_sbc=self.prefer_sbc,
+            on_sink_found=self.on_sink_found,
+            host=self.host,
+            wait_with_cancel=self._wait_with_cancel,
+            logger=logger,
+        )
 
     def connect_device(self) -> bool:
         """Connect to the Bluetooth device"""
@@ -782,9 +585,9 @@ class BluetoothManager:
             self._CHURN_WINDOW,
         )
         self.management_enabled = False
-        if self.client:
-            self.client.bt_management_enabled = False
-            self.client._update_status(
+        if self.host:
+            self.host.bt_management_enabled = False
+            self.host.update_status(
                 {
                     "bt_management_enabled": False,
                     "bt_released_by": "auto",
@@ -820,9 +623,9 @@ class BluetoothManager:
             self.max_reconnect_fails,
         )
         self.management_enabled = False
-        if self.client:
-            self.client.bt_management_enabled = False
-            self.client._update_status(
+        if self.host:
+            self.host.bt_management_enabled = False
+            self.host.update_status(
                 {
                     "bt_management_enabled": False,
                     "bt_released_by": "auto",
@@ -847,12 +650,12 @@ class BluetoothManager:
         message: str | None = None,
         details: dict[str, object] | None = None,
     ) -> None:
-        if not self.client:
+        if not self.host:
             return
         import state as _state
 
         _state.publish_device_event(
-            getattr(self.client, "player_id", "") or self.device_name,
+            getattr(self.host, "player_id", "") or self.device_name,
             event_type,
             level=level,
             message=message,
@@ -862,368 +665,6 @@ class BluetoothManager:
     async def monitor_and_reconnect(self):
         """Continuously monitor BT connection and reconnect if needed.
 
-        Tries D-Bus PropertiesChanged signals (dbus-fast) for instant disconnect
-        detection; falls back to bluetoothctl polling if dbus-fast is unavailable
-        or if the D-Bus environment doesn't support signal subscriptions.
+        Delegates to ``bt_monitor.monitor_and_reconnect()``.
         """
-        logger.info("[%s] monitor_and_reconnect task started", self.device_name)
-        try:
-            from dbus_fast import BusType
-            from dbus_fast.aio import MessageBus
-
-            await self._monitor_dbus(MessageBus, BusType)
-        except (ImportError, RuntimeError) as e:
-            logger.info("[%s] D-Bus monitor unavailable (%s) — using bluetoothctl polling", self.device_name, e)
-            await self._monitor_polling()
-
-    async def _monitor_polling(self):
-        """Legacy bluetoothctl polling-based monitor (fallback)."""
-        loop = asyncio.get_running_loop()
-        iteration = 0
-        reconnect_attempt = 0
-        while self._running:
-            iteration += 1
-            try:
-                if not self.management_enabled:
-                    await asyncio.sleep(5)
-                    continue
-
-                current_time = time.time()
-                if current_time - self.last_check >= self.check_interval:
-                    self.last_check = current_time
-                    logger.debug("[%s] BT poll #%s", self.device_name, iteration)
-
-                    connected = await loop.run_in_executor(_bt_executor, self.is_device_connected)
-                    logger.debug("[%s] BT connected=%s", self.device_name, connected)
-
-                    if self.client:
-                        if connected != self.client.status.get("bluetooth_connected"):
-                            self.client._update_status(
-                                {
-                                    "bluetooth_connected": connected,
-                                    "bluetooth_connected_at": datetime.now(tz=UTC).isoformat(),
-                                }
-                            )
-
-                    if not connected:
-                        self.battery_level = None
-                        paired = await loop.run_in_executor(_bt_executor, self.is_device_paired)
-                        self.paired = paired
-                        reconnect_attempt += 1
-                        if self.client:
-                            self.client._update_status(
-                                {
-                                    "reconnecting": True,
-                                    "reconnect_attempt": reconnect_attempt,
-                                }
-                            )
-
-                        if self._handle_reconnect_failure(reconnect_attempt):
-                            reconnect_attempt = 0
-                            continue
-
-                        if self.client and self.client.is_running():
-                            logger.info("BT disconnected for %s, stopping sendspin daemon...", self.device_name)
-                            with self.client._status_lock:
-                                is_grouped = bool(self.client.status.get("group_id"))
-                            if not is_grouped:
-                                await self.client._send_subprocess_command({"cmd": "pause"})
-                                await asyncio.sleep(0.2)
-                            await self.client.stop_sendspin()
-
-                        logger.warning(
-                            "Bluetooth device %s disconnected, reconnecting... (attempt %s)",
-                            self.device_name,
-                            reconnect_attempt,
-                        )
-                        success = await loop.run_in_executor(_bt_executor, self.connect_device)
-                        if self._reconnect_cancelled():
-                            reconnect_attempt = 0
-                            continue
-                        if success and self.client:
-                            completed_attempt = reconnect_attempt
-                            reconnect_attempt = 0
-                            self._record_reconnect()
-                            self.client._update_status({"reconnecting": False, "reconnect_attempt": 0})
-                            self._publish_client_event(
-                                DeviceEventType.BLUETOOTH_RECONNECTED,
-                                message="Bluetooth reconnect succeeded",
-                                details={"attempt": completed_attempt},
-                            )
-                            logger.info("BT reconnected for %s, starting sendspin...", self.device_name)
-                            await self.client.start_sendspin()
-                        else:
-                            # Back off: delay next check proportional to failure count
-                            delay = self._reconnect_delay(reconnect_attempt)
-                            self._publish_client_event(
-                                DeviceEventType.BLUETOOTH_RECONNECT_FAILED,
-                                level="warning",
-                                message="Bluetooth reconnect attempt failed",
-                                details={"attempt": reconnect_attempt, "next_retry_delay": delay},
-                            )
-                            self.last_check = time.time() + delay - self.check_interval
-                            logger.debug("[%s] Backoff: next attempt in %.0fs", self.device_name, delay)
-                    else:
-                        if self.client and self.client.status.get("reconnecting"):
-                            self.client._update_status({"reconnecting": False, "reconnect_attempt": 0})
-                        reconnect_attempt = 0
-
-                        # Handle auto-reconnect: device connected externally (e.g. TWS
-                        # earbuds taken out of charging case), player not yet running.
-                        if self.client and not self.client.is_running():
-                            logger.info(
-                                "[%s] Device connected but player not running — configuring audio...",
-                                self.device_name,
-                            )
-                            await loop.run_in_executor(_bt_executor, self.configure_bluetooth_audio)
-                            self._record_reconnect()
-                            if self.client.bluetooth_sink_name:
-                                logger.info("[%s] Auto-reconnect: starting player", self.device_name)
-                                await self.client.start_sendspin()
-
-                        # Read battery level (None if device doesn't support it)
-                        self.battery_level = _dbus_get_battery_level(self._dbus_device_path)
-
-                await asyncio.sleep(5)
-            except Exception as e:
-                logger.error("Error in Bluetooth poll monitor: %s", e)
-                await asyncio.sleep(10)
-
-    async def _monitor_dbus(self, MessageBus, BusType):
-        """D-Bus PropertiesChanged signal-based monitor (preferred path).
-
-        Raises RuntimeError after 3 consecutive connection failures so
-        monitor_and_reconnect() can fall back to bluetoothctl polling.
-        """
-        if not self._dbus_device_path:
-            raise RuntimeError("D-Bus device path unavailable because adapter resolution failed")
-        loop = asyncio.get_running_loop()
-        connect_failures = 0
-        _MAX_CONNECT_FAILURES = 3
-        logger.info("[%s] D-Bus monitor started (path=%s)", self.device_name, self._dbus_device_path)
-
-        # Single bus connection reused across BT reconnect iterations.
-        # Recreated only when it becomes unresponsive or on first start.
-        bus = None
-
-        while self._running:
-            bus_needs_reconnect = bus is None or not bus.connected
-            try:
-                if bus_needs_reconnect:
-                    if bus is not None:
-                        try:
-                            bus.disconnect()
-                        except Exception as exc:
-                            logger.debug("D-Bus disconnect before reconnect failed: %s", exc)
-                    bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
-
-                # Introspect the device object (may fail if device not yet registered with BlueZ)
-                try:
-                    introspection = await bus.introspect("org.bluez", self._dbus_device_path)
-                    proxy = bus.get_proxy_object("org.bluez", self._dbus_device_path, introspection)
-                    device_iface = proxy.get_interface("org.bluez.Device1")
-                    props_iface = proxy.get_interface("org.freedesktop.DBus.Properties")
-                except Exception as e:
-                    connect_failures += 1
-                    logger.debug(
-                        "[%s] D-Bus device not available (%s), attempt %s/%s",
-                        self.device_name,
-                        e,
-                        connect_failures,
-                        _MAX_CONNECT_FAILURES,
-                    )
-                    if connect_failures >= _MAX_CONNECT_FAILURES:
-                        raise RuntimeError(f"D-Bus device introspection failed {connect_failures} times: {e}")
-                    await asyncio.sleep(5)
-                    continue
-
-                # Successfully connected — reset failure counter
-                connect_failures = 0
-
-                # Read initial connected state
-                try:
-                    self.connected = bool(await device_iface.get_connected())
-                except Exception as exc:
-                    logger.debug("get_connected() failed: %s", exc)
-                    self.connected = False
-                if self.client:
-                    self.client._update_status(
-                        {
-                            "bluetooth_connected": self.connected,
-                            "bluetooth_connected_at": datetime.now(tz=UTC).isoformat(),
-                        }
-                    )
-
-                # asyncio.Event set from D-Bus signal callback (called in D-Bus reader task thread)
-                disconnect_event = asyncio.Event()
-                if not self.connected:
-                    disconnect_event.set()
-
-                def _make_props_handler(evt):
-                    def on_props_changed(iface_name, changed, _invalidated):
-                        if iface_name != "org.bluez.Device1" or "Connected" not in changed:
-                            return
-                        new_connected = bool(changed["Connected"].value)
-                        if new_connected == self.connected:
-                            return
-                        self.connected = new_connected
-                        ts = datetime.now(tz=UTC).isoformat()
-                        if self.client:
-                            self.client._update_status(
-                                {
-                                    "bluetooth_connected": new_connected,
-                                    "bluetooth_connected_at": ts,
-                                }
-                            )
-                        if not new_connected:
-                            loop.call_soon_threadsafe(evt.set)
-                            logger.warning("[%s] PropertiesChanged: Disconnected!", self.device_name)
-                        else:
-                            logger.info("[%s] PropertiesChanged: Connected!", self.device_name)
-
-                    return on_props_changed
-
-                props_iface.on_properties_changed(_make_props_handler(disconnect_event))
-                logger.info("[%s] D-Bus monitoring active (connected=%s)", self.device_name, self.connected)
-
-                await self._inner_dbus_monitor(device_iface, disconnect_event, loop)
-
-            except RuntimeError:
-                raise  # propagate to monitor_and_reconnect for polling fallback
-            except Exception as e:
-                connect_failures += 1
-                logger.error(
-                    "[%s] D-Bus monitor error (%s/%s): %s", self.device_name, connect_failures, _MAX_CONNECT_FAILURES, e
-                )
-                if connect_failures >= _MAX_CONNECT_FAILURES:
-                    # Bus is likely broken; force reconnect on next iteration
-                    if bus:
-                        try:
-                            bus.disconnect()
-                        except Exception as exc:
-                            logger.debug("D-Bus cleanup on failure failed: %s", exc)
-                        bus = None
-                    raise RuntimeError(f"D-Bus monitor failed {connect_failures} consecutive times: {e}")
-            await asyncio.sleep(10)
-
-    async def _inner_dbus_monitor(self, device_iface, disconnect_event, loop):
-        """Inner D-Bus monitor loop; returns when D-Bus re-subscription is needed."""
-        reconnect_attempt = 0
-        while self._running:
-            if not self.management_enabled:
-                await asyncio.sleep(5)
-                continue
-
-            if self.connected:
-                # Clear reconnect state
-                if self.client and self.client.status.get("reconnecting"):
-                    self.client._update_status({"reconnecting": False, "reconnect_attempt": 0})
-                reconnect_attempt = 0
-
-                # Wait for disconnect signal or heartbeat timeout
-                try:
-                    await asyncio.wait_for(disconnect_event.wait(), timeout=self.check_interval * 3)
-                except TimeoutError:
-                    # Heartbeat — verify state directly
-                    try:
-                        current_val = bool(await device_iface.get_connected())
-                        if not current_val and self.connected:
-                            logger.warning("[%s] Heartbeat: missed disconnect signal", self.device_name)
-                            self.connected = False
-                            if self.client:
-                                self.client._update_status(
-                                    {
-                                        "bluetooth_connected": False,
-                                        "bluetooth_connected_at": datetime.now(tz=UTC).isoformat(),
-                                    }
-                                )
-                            disconnect_event.set()
-                    except Exception as exc:
-                        logger.debug("heartbeat connected-state check failed: %s", exc)
-                    # Read battery level during heartbeat (None if unsupported)
-                    self.battery_level = await loop.run_in_executor(
-                        None, _dbus_get_battery_level, self._dbus_device_path
-                    )
-            else:
-                # Device is disconnected — attempt reconnect
-                self.battery_level = None
-                disconnect_event.clear()
-                paired = await loop.run_in_executor(_bt_executor, self.is_device_paired)
-                self.paired = paired
-                reconnect_attempt += 1
-                if self.client:
-                    self.client._update_status(
-                        {
-                            "reconnecting": True,
-                            "reconnect_attempt": reconnect_attempt,
-                        }
-                    )
-
-                # Auto-disable after too many failures
-                if self._handle_reconnect_failure(reconnect_attempt):
-                    return
-
-                # Stop sendspin (BT sink is gone — would flood PortAudioErrors)
-                if self.client and self.client.is_running():
-                    logger.info("BT disconnected for %s, stopping sendspin daemon...", self.device_name)
-                    with self.client._status_lock:
-                        is_grouped = bool(self.client.status.get("group_id"))
-                    if not is_grouped:
-                        await self.client._send_subprocess_command({"cmd": "pause"})
-                        await asyncio.sleep(0.2)
-                    await self.client.stop_sendspin()
-
-                logger.warning("[%s] Disconnected, reconnecting... (attempt %s)", self.device_name, reconnect_attempt)
-                success = await loop.run_in_executor(_bt_executor, self.connect_device)
-                if self._reconnect_cancelled():
-                    reconnect_attempt = 0
-                    continue
-
-                if success:
-                    reconnect_attempt = 0
-                    self._record_reconnect()
-                    self.connected = True
-                    if self.client:
-                        self.client._update_status(
-                            {
-                                "reconnecting": False,
-                                "reconnect_attempt": 0,
-                                "bluetooth_connected": True,
-                                "bluetooth_connected_at": datetime.now(tz=UTC).isoformat(),
-                            }
-                        )
-                    # Re-subscribe signals — device object may have changed
-                    logger.info("[%s] Reconnected, restarting D-Bus subscription...", self.device_name)
-                    if self.client:
-                        logger.info("BT reconnected for %s, starting sendspin...", self.device_name)
-                        await self.client.start_sendspin()
-                    return
-                else:
-                    # Failed — back off proportional to failure count
-                    delay = self._reconnect_delay(reconnect_attempt)
-                    logger.debug("[%s] Backoff: next attempt in %.0fs", self.device_name, delay)
-                    await asyncio.sleep(delay)
-                    # Re-read state in case external reconnect happened
-                    try:
-                        self.connected = bool(await device_iface.get_connected())
-                    except Exception as exc:
-                        logger.debug("re-read connected state failed: %s", exc)
-                    if self.connected:
-                        # Device reconnected on its own while we were sleeping —
-                        # configure audio and start sendspin, then restart D-Bus subscription
-                        logger.info("[%s] External reconnect detected, configuring audio...", self.device_name)
-                        await loop.run_in_executor(_bt_executor, self.configure_bluetooth_audio)
-                        reconnect_attempt = 0
-                        self._record_reconnect()
-                        if self.client:
-                            self.client._update_status(
-                                {
-                                    "reconnecting": False,
-                                    "reconnect_attempt": 0,
-                                    "bluetooth_connected": True,
-                                    "bluetooth_connected_at": datetime.now(tz=UTC).isoformat(),
-                                }
-                            )
-                            logger.info("BT reconnected for %s, starting sendspin...", self.device_name)
-                            await self.client.start_sendspin()
-                        return
+        await bt_monitor.monitor_and_reconnect(self)

@@ -1475,6 +1475,7 @@ def test_api_config_post_persists_ha_adapter_area_map(client, tmp_path, monkeypa
 
 def test_api_ma_discover_reports_invalid_saved_token(client, monkeypatch):
     import routes.api_ma as api_ma
+    import routes.ma_groups as ma_groups
     import services.ma_discovery as ma_discovery
 
     class _ImmediateThread:
@@ -1507,10 +1508,10 @@ def test_api_ma_discover_reports_invalid_saved_token(client, monkeypatch):
         finally:
             tmp_loop.close()
 
-    monkeypatch.setattr(api_ma, "get_main_loop", lambda: object())
-    monkeypatch.setattr(api_ma, "_detect_runtime", lambda: "ha_addon")
+    monkeypatch.setattr(ma_groups, "get_main_loop", lambda: object())
+    monkeypatch.setattr(ma_groups, "_detect_runtime", lambda: "ha_addon")
     monkeypatch.setattr(
-        api_ma,
+        ma_groups,
         "get_ma_addon_discovery_candidates",
         lambda: [
             {
@@ -1521,7 +1522,7 @@ def test_api_ma_discover_reports_invalid_saved_token(client, monkeypatch):
         ],
     )
     monkeypatch.setattr(api_ma.asyncio, "run_coroutine_threadsafe", _run_coroutine_threadsafe)
-    monkeypatch.setattr(api_ma.threading, "Thread", _ImmediateThread)
+    monkeypatch.setattr(ma_groups.threading, "Thread", _ImmediateThread)
     monkeypatch.setattr(ma_discovery, "validate_ma_url", _fake_validate_ma_url)
     monkeypatch.setattr(
         api_ma,
@@ -1553,6 +1554,7 @@ def test_api_ma_discover_reports_invalid_saved_token(client, monkeypatch):
 
 def test_api_ma_discover_reports_connected_runtime_when_saved_token_validation_fails(client, monkeypatch):
     import routes.api_ma as api_ma
+    import routes.ma_groups as ma_groups
     import services.ma_discovery as ma_discovery
 
     class _ImmediateThread:
@@ -1585,12 +1587,12 @@ def test_api_ma_discover_reports_connected_runtime_when_saved_token_validation_f
         finally:
             tmp_loop.close()
 
-    monkeypatch.setattr(api_ma, "get_main_loop", lambda: object())
+    monkeypatch.setattr(ma_groups, "get_main_loop", lambda: object())
     monkeypatch.setattr(api_ma, "is_ma_connected", lambda: True)
-    monkeypatch.setattr(api_ma, "_detect_runtime", lambda: "docker")
-    monkeypatch.setattr(api_ma, "get_ma_api_credentials", lambda: ("http://localhost:8095", "working-token"))
+    monkeypatch.setattr(ma_groups, "_detect_runtime", lambda: "docker")
+    monkeypatch.setattr(ma_groups, "get_ma_api_credentials", lambda: ("http://localhost:8095", "working-token"))
     monkeypatch.setattr(api_ma.asyncio, "run_coroutine_threadsafe", _run_coroutine_threadsafe)
-    monkeypatch.setattr(api_ma.threading, "Thread", _ImmediateThread)
+    monkeypatch.setattr(ma_groups.threading, "Thread", _ImmediateThread)
     monkeypatch.setattr(ma_discovery, "validate_ma_url", _fake_validate_ma_url)
     monkeypatch.setattr(
         api_ma,
@@ -3217,7 +3219,7 @@ def test_ma_artwork_proxy_fetches_same_origin_ma_artwork(client):
     state.set_ma_api_credentials("http://ma:8095", "token123")
     try:
         with pytest.MonkeyPatch.context() as mp:
-            import routes.api_ma as api_ma_mod
+            import routes.ma_playback as ma_playback_mod
 
             opened = {}
             raw_url = "/api/image/123"
@@ -3230,7 +3232,7 @@ def test_ma_artwork_proxy_fetches_same_origin_ma_artwork(client):
                 opened["timeout"] = timeout
                 return _FakeResponse()
 
-            mp.setattr(api_ma_mod._ur, "urlopen", _fake_urlopen)
+            mp.setattr(ma_playback_mod._ur, "urlopen", _fake_urlopen)
             resp = client.get(f"/api/ma/artwork?url=%2Fapi%2Fimage%2F123&sig={signature}")
 
         assert resp.status_code == 200
@@ -3321,6 +3323,7 @@ def test_ma_host_from_sendspin_clients_uses_registry_snapshot(monkeypatch):
 
 def test_api_ma_rediscover_uses_registry_snapshot_player_payload(client, tmp_path, monkeypatch):
     import routes.api_ma as api_ma
+    import routes.ma_groups as ma_groups
     import services.ma_client as ma_client
     import state
     from services.device_registry import DeviceRegistrySnapshot
@@ -3360,10 +3363,10 @@ def test_api_ma_rediscover_uses_registry_snapshot_player_payload(client, tmp_pat
         finally:
             tmp_loop.close()
 
-    monkeypatch.setattr(api_ma, "get_main_loop", lambda: object())
+    monkeypatch.setattr(ma_groups, "get_main_loop", lambda: object())
     monkeypatch.setattr(ma_client, "discover_ma_groups", _fake_discover)
     monkeypatch.setattr(api_ma.asyncio, "run_coroutine_threadsafe", _run_coroutine_threadsafe)
-    monkeypatch.setattr(api_ma.threading, "Thread", _ImmediateThread)
+    monkeypatch.setattr(ma_groups.threading, "Thread", _ImmediateThread)
     monkeypatch.setattr(
         api_ma,
         "get_device_registry_snapshot",
@@ -3390,6 +3393,7 @@ def test_api_ma_rediscover_uses_registry_snapshot_player_payload(client, tmp_pat
 
 def test_api_ma_reload_restarts_monitor_and_rediscover(client, tmp_path, monkeypatch):
     import routes.api_ma as api_ma
+    import routes.ma_groups as ma_groups
     import services.ma_client as ma_client
     import state
     from services.device_registry import DeviceRegistrySnapshot
@@ -3429,16 +3433,18 @@ def test_api_ma_reload_restarts_monitor_and_rediscover(client, tmp_path, monkeyp
         finally:
             tmp_loop.close()
 
-    monkeypatch.setattr(api_ma, "load_config", lambda: {"MA_API_URL": "http://ma.local:8095", "MA_API_TOKEN": "token"})
-    monkeypatch.setattr(api_ma, "get_main_loop", lambda: object())
     monkeypatch.setattr(
-        api_ma,
+        ma_groups, "load_config", lambda: {"MA_API_URL": "http://ma.local:8095", "MA_API_TOKEN": "token"}
+    )
+    monkeypatch.setattr(ma_groups, "get_main_loop", lambda: object())
+    monkeypatch.setattr(
+        ma_groups,
         "reload_monitor_credentials",
         lambda loop, ma_url, ma_token: captured.update({"reloaded": (ma_url, ma_token)}) or True,
     )
     monkeypatch.setattr(ma_client, "discover_ma_groups", _fake_discover)
     monkeypatch.setattr(api_ma.asyncio, "run_coroutine_threadsafe", _run_coroutine_threadsafe)
-    monkeypatch.setattr(api_ma.threading, "Thread", _ImmediateThread)
+    monkeypatch.setattr(ma_groups.threading, "Thread", _ImmediateThread)
     monkeypatch.setattr(
         api_ma,
         "get_device_registry_snapshot",
@@ -3504,6 +3510,7 @@ def test_api_debug_ma_uses_registry_snapshot(client, monkeypatch):
 
 def test_ma_queue_cmd_returns_structured_predicted_state(client, monkeypatch):
     import routes.api_ma as api_ma
+    import routes.ma_playback as ma_playback
     import services.ma_monitor as ma_monitor
     import state
 
@@ -3552,12 +3559,12 @@ def test_ma_queue_cmd_returns_structured_predicted_state(client, monkeypatch):
         {"syncgroup_id": "syncgroup_1", "shuffle": False, "connected": True},
     )
     try:
-        monkeypatch.setattr(api_ma, "get_main_loop", lambda: object())
+        monkeypatch.setattr(ma_playback, "get_main_loop", lambda: object())
         monkeypatch.setattr(ma_monitor, "send_queue_cmd", _fake_send_queue_cmd)
         monkeypatch.setattr(ma_monitor, "request_queue_refresh", _fake_request_queue_refresh)
         monkeypatch.setattr(ma_monitor, "get_monitor", lambda: _FakeMonitor())
         monkeypatch.setattr(api_ma.asyncio, "run_coroutine_threadsafe", _fake_run_coroutine_threadsafe)
-        monkeypatch.setattr(api_ma.threading, "Thread", _ImmediateThread)
+        monkeypatch.setattr(ma_playback.threading, "Thread", _ImmediateThread)
 
         resp = client.post(
             "/api/ma/queue/cmd",
@@ -3596,6 +3603,7 @@ def test_ma_queue_cmd_returns_structured_predicted_state(client, monkeypatch):
 
 def test_ma_queue_cmd_prefers_player_queue_over_stale_group_id(client, monkeypatch):
     import routes.api_ma as api_ma
+    import routes.ma_playback as ma_playback
     import services.ma_monitor as ma_monitor
     import state
 
@@ -3653,12 +3661,12 @@ def test_ma_queue_cmd_prefers_player_queue_over_stale_group_id(client, monkeypat
         {"syncgroup_id": "4fd07f70-5da7-4bbb-8d0a-d6fb1478e798", "shuffle": False, "connected": True},
     )
     try:
-        monkeypatch.setattr(api_ma, "get_main_loop", lambda: object())
+        monkeypatch.setattr(ma_playback, "get_main_loop", lambda: object())
         monkeypatch.setattr(ma_monitor, "send_queue_cmd", _fake_send_queue_cmd)
         monkeypatch.setattr(ma_monitor, "request_queue_refresh", _fake_request_queue_refresh)
         monkeypatch.setattr(ma_monitor, "get_monitor", lambda: _FakeMonitor())
         monkeypatch.setattr(api_ma.asyncio, "run_coroutine_threadsafe", _fake_run_coroutine_threadsafe)
-        monkeypatch.setattr(api_ma.threading, "Thread", _ImmediateThread)
+        monkeypatch.setattr(ma_playback.threading, "Thread", _ImmediateThread)
 
         resp = client.post(
             "/api/ma/queue/cmd",
@@ -3692,6 +3700,7 @@ def test_ma_queue_cmd_prefers_player_queue_over_stale_group_id(client, monkeypat
 
 def test_ma_queue_cmd_refreshes_actual_accepted_solo_queue(client, monkeypatch):
     import routes.api_ma as api_ma
+    import routes.ma_playback as ma_playback
     import services.ma_monitor as ma_monitor
     import state
 
@@ -3749,12 +3758,12 @@ def test_ma_queue_cmd_refreshes_actual_accepted_solo_queue(client, monkeypatch):
         {"syncgroup_id": "sendspin-yandex-mini-2---lxc", "shuffle": False, "connected": True},
     )
     try:
-        monkeypatch.setattr(api_ma, "get_main_loop", lambda: object())
+        monkeypatch.setattr(ma_playback, "get_main_loop", lambda: object())
         monkeypatch.setattr(ma_monitor, "send_queue_cmd", _fake_send_queue_cmd)
         monkeypatch.setattr(ma_monitor, "request_queue_refresh", _fake_request_queue_refresh)
         monkeypatch.setattr(ma_monitor, "get_monitor", lambda: _FakeMonitor())
         monkeypatch.setattr(api_ma.asyncio, "run_coroutine_threadsafe", _fake_run_coroutine_threadsafe)
-        monkeypatch.setattr(api_ma.threading, "Thread", _ImmediateThread)
+        monkeypatch.setattr(ma_playback.threading, "Thread", _ImmediateThread)
 
         resp = client.post(
             "/api/ma/queue/cmd",
@@ -3854,6 +3863,7 @@ def test_resolve_target_queue_ignores_stale_syncgroup_id_for_solo_player():
 
 def test_resolve_target_queue_infers_single_active_player_for_stale_page(monkeypatch):
     import routes.api_ma as api_ma
+    import routes.ma_playback as ma_playback
     import state
     from services.device_registry import DeviceRegistrySnapshot
 
@@ -3874,7 +3884,7 @@ def test_resolve_target_queue_infers_single_active_player_for_stale_page(monkeyp
         ],
     )
     monkeypatch.setattr(
-        api_ma, "get_device_registry_snapshot", lambda: DeviceRegistrySnapshot(active_clients=[fake_client])
+        ma_playback, "get_device_registry_snapshot", lambda: DeviceRegistrySnapshot(active_clients=[fake_client])
     )
     try:
         state_key, queue_id = api_ma._resolve_target_queue("syncgroup_5zr8ss8g", None, None)
@@ -3904,7 +3914,7 @@ def test_resolve_target_queue_keeps_legacy_universal_queue_for_uuid_player_id():
 
 
 def test_ma_queue_cmd_returns_503_when_monitor_unavailable(client, monkeypatch):
-    import routes.api_ma as api_ma
+    import routes.ma_playback as ma_playback
     import services.ma_monitor as ma_monitor
     import state
 
@@ -3915,7 +3925,7 @@ def test_ma_queue_cmd_returns_503_when_monitor_unavailable(client, monkeypatch):
     state.set_ma_connected(True)
     state.set_ma_groups({}, [{"id": "syncgroup_1", "name": "Kitchen", "members": []}])
     try:
-        monkeypatch.setattr(api_ma, "get_main_loop", lambda: object())
+        monkeypatch.setattr(ma_playback, "get_main_loop", lambda: object())
         monkeypatch.setattr(ma_monitor, "get_monitor", lambda: _FakeMonitor())
         resp = client.post(
             "/api/ma/queue/cmd",

@@ -12,7 +12,7 @@ from demo.fixtures import DEMO_DEVICE_STATUS, get_demo_adapter
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from sendspin_client import SendspinClient
+    from bt_types import BluetoothManagerHost
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +25,7 @@ class DemoBluetoothManager:
         mac_address: str,
         adapter: str = "",
         device_name: str = "",
-        client: SendspinClient | None = None,
+        host: BluetoothManagerHost | None = None,
         prefer_sbc: bool = False,
         check_interval: int = 10,
         max_reconnect_fails: int = 0,
@@ -37,7 +37,7 @@ class DemoBluetoothManager:
         adapter_info = get_demo_adapter(adapter)
         self.adapter = str(adapter_info["id"])
         self.device_name = device_name
-        self.client = client
+        self.host = host
         self.on_sink_found = on_sink_found
         self.management_enabled = True
         self.effective_adapter_mac = str(adapter_info["mac"])
@@ -47,8 +47,8 @@ class DemoBluetoothManager:
         self.connected: bool = initial.get("bluetooth_connected", False)
         self.battery_level: int | None = initial.get("battery_level")
         self._battery_start = time.monotonic()
-        if self.client and hasattr(self.client, "_update_status"):
-            self.client._update_status(
+        if self.host and hasattr(self.host, "update_status"):
+            self.host.update_status(
                 {
                     "bluetooth_available": True,
                     "bluetooth_connected": self.connected,
@@ -112,8 +112,8 @@ class DemoBluetoothManager:
         if initial.get("reconnecting"):
             logger.info("[demo] Reconnect still pending for %s", self.device_name or self.mac_address)
             self.connected = False
-            if self.client and hasattr(self.client, "_update_status"):
-                self.client._update_status(
+            if self.host and hasattr(self.host, "update_status"):
+                self.host.update_status(
                     {
                         "bluetooth_connected": False,
                         "connected": False,
@@ -158,8 +158,8 @@ class DemoBluetoothManager:
     def cancel_reconnect(self) -> None:
         """Mirror runtime API so release flows can stop demo reconnect loops."""
         self.management_enabled = False
-        if self.client and hasattr(self.client, "_update_status"):
-            self.client._update_status({"reconnecting": False, "reconnect_attempt": 0})
+        if self.host and hasattr(self.host, "update_status"):
+            self.host.update_status({"reconnecting": False, "reconnect_attempt": 0})
 
     def allow_reconnect(self) -> None:
         """Mirror runtime API so reclaim flows can re-enable demo reconnects."""

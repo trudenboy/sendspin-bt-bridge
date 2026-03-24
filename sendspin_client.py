@@ -362,6 +362,33 @@ class SendspinClient:
             )
         _state.notify_status_changed()
 
+    # ── BluetoothManagerHost protocol implementation ──────────────────
+
+    def update_status(self, updates: dict) -> None:
+        """Public status update entry point (BluetoothManagerHost protocol)."""
+        self._update_status(updates)
+
+    def get_status_value(self, key: str, default=None):
+        """Thread-safe single-value read (BluetoothManagerHost protocol)."""
+        with self._status_lock:
+            return self.status.get(key, default)
+
+    def is_subprocess_running(self) -> bool:
+        """Check if daemon subprocess is alive (BluetoothManagerHost protocol)."""
+        return self.is_running()
+
+    async def stop_subprocess(self) -> None:
+        """Stop the daemon subprocess (BluetoothManagerHost protocol)."""
+        await self.stop_sendspin()
+
+    async def start_subprocess(self) -> None:
+        """Start the daemon subprocess (BluetoothManagerHost protocol)."""
+        await self.start_sendspin()
+
+    async def send_subprocess_command(self, cmd: dict) -> None:
+        """Send command to daemon stdin (BluetoothManagerHost protocol)."""
+        await self._send_subprocess_command(cmd)
+
     def get_ip_address(self) -> str:
         """Get the primary IP address of this machine"""
         from config import get_local_ip

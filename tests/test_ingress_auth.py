@@ -79,7 +79,7 @@ class TestGetHaUserViaWs:
         ws.__exit__ = MagicMock(return_value=False)
         mock_connect.return_value = ws
 
-        from routes.api_ma import _get_ha_user_via_ws
+        from routes.ma_auth import _get_ha_user_via_ws
 
         result = _get_ha_user_via_ws("test_token")
         assert result is not None
@@ -100,13 +100,13 @@ class TestGetHaUserViaWs:
         ws.__exit__ = MagicMock(return_value=False)
         mock_connect.return_value = ws
 
-        from routes.api_ma import _get_ha_user_via_ws
+        from routes.ma_auth import _get_ha_user_via_ws
 
         assert _get_ha_user_via_ws("bad_token") is None
 
     @patch("websockets.sync.client.connect", side_effect=ConnectionError("no HA"))
     def test_connection_error_returns_none(self, _mock_connect):
-        from routes.api_ma import _get_ha_user_via_ws
+        from routes.ma_auth import _get_ha_user_via_ws
 
         assert _get_ha_user_via_ws("any_token") is None
 
@@ -137,7 +137,7 @@ class TestGetHaSupervisorAddonInfoViaWs:
         ws.__exit__ = MagicMock(return_value=False)
         mock_connect.return_value = ws
 
-        from routes.api_ma import _get_ha_supervisor_addon_info_via_ws
+        from routes.ma_auth import _get_ha_supervisor_addon_info_via_ws
 
         result = _get_ha_supervisor_addon_info_via_ws(
             "ha-token",
@@ -153,7 +153,7 @@ class TestGetHaSupervisorAddonInfoViaWs:
 
     @patch("websockets.sync.client.connect", side_effect=ConnectionError("no HA"))
     def test_connection_error_returns_none(self, _mock_connect):
-        from routes.api_ma import _get_ha_supervisor_addon_info_via_ws
+        from routes.ma_auth import _get_ha_supervisor_addon_info_via_ws
 
         assert _get_ha_supervisor_addon_info_via_ws("ha-token", "slug", ha_url="http://ha.local:8123") is None
 
@@ -180,7 +180,7 @@ class TestCreateHaIngressSessionViaWs:
         ws.__exit__ = MagicMock(return_value=False)
         mock_connect.return_value = ws
 
-        from routes.api_ma import _create_ha_ingress_session_via_ws
+        from routes.ma_auth import _create_ha_ingress_session_via_ws
 
         result = _create_ha_ingress_session_via_ws("ha-token", ha_url="http://ha.local:8123")
         assert result == "ingress-session-token"
@@ -190,7 +190,7 @@ class TestCreateHaIngressSessionViaWs:
 
     @patch("websockets.sync.client.connect", side_effect=ConnectionError("no HA"))
     def test_connection_error_returns_none(self, _mock_connect):
-        from routes.api_ma import _create_ha_ingress_session_via_ws
+        from routes.ma_auth import _create_ha_ingress_session_via_ws
 
         assert _create_ha_ingress_session_via_ws("ha-token", ha_url="http://ha.local:8123") is None
 
@@ -201,8 +201,8 @@ class TestCreateHaIngressSessionViaWs:
 
 
 class TestCreateMaTokenViaIngress:
-    @patch("routes.api_ma._find_ma_ingress_url", return_value="http://localhost:8094")
-    @patch("routes.api_ma.socket.gethostname", return_value="bridge-host")
+    @patch("routes.ma_auth._find_ma_ingress_url", return_value="http://localhost:8094")
+    @patch("routes.ma_auth.socket.gethostname", return_value="bridge-host")
     @patch("urllib.request.urlopen")
     def test_success_returns_token(self, mock_urlopen, _mock_hostname, _mock_find):
         resp_body = json.dumps({"result": "long_lived_token_123"}).encode()
@@ -212,7 +212,7 @@ class TestCreateMaTokenViaIngress:
         mock_resp.__exit__ = MagicMock(return_value=False)
         mock_urlopen.return_value = mock_resp
 
-        from routes.api_ma import _create_ma_token_via_ingress
+        from routes.ma_auth import _create_ma_token_via_ingress
 
         result = _create_ma_token_via_ingress("user123", "admin", "Admin User")
         assert result == "long_lived_token_123"
@@ -222,7 +222,7 @@ class TestCreateMaTokenViaIngress:
         assert req.get_header("X-remote-user-name") == "admin"
         assert json.loads(req.data.decode())["args"]["name"] == "Sendspin BT Bridge (bridge-host)"
 
-    @patch("routes.api_ma._find_ma_ingress_url", return_value="http://localhost:8094")
+    @patch("routes.ma_auth._find_ma_ingress_url", return_value="http://localhost:8094")
     @patch("urllib.request.urlopen")
     def test_error_response_returns_none(self, mock_urlopen, _mock_find):
         resp_body = json.dumps({"error": {"code": 403, "message": "Insufficient permissions"}}).encode()
@@ -232,21 +232,21 @@ class TestCreateMaTokenViaIngress:
         mock_resp.__exit__ = MagicMock(return_value=False)
         mock_urlopen.return_value = mock_resp
 
-        from routes.api_ma import _create_ma_token_via_ingress
+        from routes.ma_auth import _create_ma_token_via_ingress
 
         assert _create_ma_token_via_ingress("user123", "user") is None
 
-    @patch("routes.api_ma._find_ma_ingress_url", return_value="http://localhost:8094")
+    @patch("routes.ma_auth._find_ma_ingress_url", return_value="http://localhost:8094")
     @patch("urllib.request.urlopen", side_effect=ConnectionError("refused"))
     def test_connection_error_returns_none(self, _mock, _mock_find):
-        from routes.api_ma import _create_ma_token_via_ingress
+        from routes.ma_auth import _create_ma_token_via_ingress
 
         assert _create_ma_token_via_ingress("user123", "user") is None
 
 
 class TestCreateMaTokenViaHaProxy:
-    @patch("routes.api_ma._get_ha_supervisor_addon_info_via_ws", return_value=None)
-    @patch("routes.api_ma._create_ha_ingress_session_via_ws", return_value="ingress-session-token")
+    @patch("routes.ma_auth._get_ha_supervisor_addon_info_via_ws", return_value=None)
+    @patch("routes.ma_auth._create_ha_ingress_session_via_ws", return_value="ingress-session-token")
     @patch("urllib.request.urlopen")
     def test_success_returns_token_for_nested_addon_payload(self, mock_urlopen, _mock_session, _mock_ws_lookup):
         addon_resp = MagicMock()
@@ -268,7 +268,7 @@ class TestCreateMaTokenViaHaProxy:
 
         mock_urlopen.side_effect = [addon_resp, token_resp]
 
-        from routes.api_ma import _create_ma_token_via_ha_proxy
+        from routes.ma_auth import _create_ma_token_via_ha_proxy
 
         result = _create_ma_token_via_ha_proxy("http://ha.local:8123", "ha-access-token")
         assert result == "ma_long_lived_token"
@@ -282,14 +282,14 @@ class TestCreateMaTokenViaHaProxy:
         assert token_req.get_header("Cookie") == "ingress_session=ingress-session-token"
 
     @patch(
-        "routes.api_ma._get_ha_supervisor_addon_info_via_ws",
+        "routes.ma_auth._get_ha_supervisor_addon_info_via_ws",
         return_value={
             "slug": "d5369777_music_assistant_beta",
             "state": "started",
             "ingress_url": "/api/hassio_ingress/ma-token/",
         },
     )
-    @patch("routes.api_ma._create_ha_ingress_session_via_ws", return_value="ingress-session-token")
+    @patch("routes.ma_auth._create_ha_ingress_session_via_ws", return_value="ingress-session-token")
     @patch("urllib.request.urlopen")
     def test_success_returns_token_for_ws_supervisor_payload(self, mock_urlopen, _mock_session, _mock_ws_lookup):
         token_resp = MagicMock()
@@ -299,7 +299,7 @@ class TestCreateMaTokenViaHaProxy:
 
         mock_urlopen.return_value = token_resp
 
-        from routes.api_ma import _create_ma_token_via_ha_proxy
+        from routes.ma_auth import _create_ma_token_via_ha_proxy
 
         result = _create_ma_token_via_ha_proxy("http://ha.local:8123", "ha-access-token")
         assert result == "ma_long_lived_token"
@@ -308,8 +308,8 @@ class TestCreateMaTokenViaHaProxy:
         assert token_req.full_url == "http://ha.local:8123/api/hassio_ingress/ma-token/api"
         assert token_req.get_header("Cookie") == "ingress_session=ingress-session-token"
 
-    @patch("routes.api_ma._get_ha_supervisor_addon_info_via_ws", return_value=None)
-    @patch("routes.api_ma._create_ha_ingress_session_via_ws", return_value="ingress-session-token")
+    @patch("routes.ma_auth._get_ha_supervisor_addon_info_via_ws", return_value=None)
+    @patch("routes.ma_auth._create_ha_ingress_session_via_ws", return_value="ingress-session-token")
     @patch("urllib.request.urlopen")
     def test_returns_none_when_ingress_url_missing(self, mock_urlopen, _mock_session, _mock_ws_lookup):
         addon_resp = MagicMock()
@@ -318,21 +318,21 @@ class TestCreateMaTokenViaHaProxy:
         addon_resp.__exit__ = MagicMock(return_value=False)
         mock_urlopen.return_value = addon_resp
 
-        from routes.api_ma import _create_ma_token_via_ha_proxy
+        from routes.ma_auth import _create_ma_token_via_ha_proxy
 
         assert _create_ma_token_via_ha_proxy("http://ha.local:8123", "ha-access-token") is None
 
     @patch(
-        "routes.api_ma._get_ha_supervisor_addon_info_via_ws",
+        "routes.ma_auth._get_ha_supervisor_addon_info_via_ws",
         return_value={
             "slug": "d5369777_music_assistant_beta",
             "state": "started",
             "ingress_url": "/api/hassio_ingress/ma-token/",
         },
     )
-    @patch("routes.api_ma._create_ha_ingress_session_via_ws", return_value=None)
+    @patch("routes.ma_auth._create_ha_ingress_session_via_ws", return_value=None)
     def test_returns_none_when_ingress_session_unavailable(self, _mock_session, _mock_ws_lookup):
-        from routes.api_ma import _create_ma_token_via_ha_proxy
+        from routes.ma_auth import _create_ma_token_via_ha_proxy
 
         assert _create_ma_token_via_ha_proxy("http://ha.local:8123", "ha-access-token") is None
 
@@ -350,8 +350,8 @@ def test_missing_params_returns_400(client):
     assert resp.status_code == 400
 
 
-@patch("routes.api_ma.get_ma_api_credentials", return_value=("http://localhost:8095", "existing_token"))
-@patch("routes.api_ma._validate_ma_token", return_value=True)
+@patch("routes.ma_auth.get_ma_api_credentials", return_value=("http://localhost:8095", "existing_token"))
+@patch("routes.ma_auth._validate_ma_token", return_value=True)
 def test_idempotent_reuse(_mock_validate, _mock_get_ma_api_credentials, client):
     resp = client.post(
         "/api/ma/ha-silent-auth",
@@ -362,17 +362,17 @@ def test_idempotent_reuse(_mock_validate, _mock_get_ma_api_credentials, client):
     assert "Already connected" in data["message"]
 
 
-@patch("routes.api_ma.socket.gethostname", return_value="current-host")
-@patch("routes.api_ma.get_ma_api_credentials", return_value=("http://localhost:8095", "existing_token"))
-@patch("routes.api_ma._save_ma_token_and_rediscover")
-@patch("routes.api_ma._validate_ma_token", return_value=True)
-@patch("routes.api_ma._create_ma_token_via_ingress", return_value="new_ma_token")
+@patch("routes.ma_auth.socket.gethostname", return_value="current-host")
+@patch("routes.ma_auth.get_ma_api_credentials", return_value=("http://localhost:8095", "existing_token"))
+@patch("routes.ma_auth._save_ma_token_and_rediscover")
+@patch("routes.ma_auth._validate_ma_token", return_value=True)
+@patch("routes.ma_auth._create_ma_token_via_ingress", return_value="new_ma_token")
 @patch(
-    "routes.api_ma._get_ha_user_via_ws",
+    "routes.ma_auth._get_ha_user_via_ws",
     return_value={"id": "u1", "name": "admin", "is_admin": True},
 )
 @patch(
-    "routes.api_ma.load_config",
+    "routes.ma_auth.load_config",
     return_value={
         "MA_API_URL": "http://localhost:8095",
         "MA_API_TOKEN": "existing_token",
@@ -400,8 +400,8 @@ def test_silent_auth_does_not_reuse_foreign_instance_token(
     _mock_save.assert_called_once_with("http://localhost:8095", "new_ma_token", "admin", auth_provider="ha")
 
 
-@patch("routes.api_ma.get_ma_api_credentials", return_value=("", ""))
-@patch("routes.api_ma._get_ha_user_via_ws", return_value=None)
+@patch("routes.ma_auth.get_ma_api_credentials", return_value=("", ""))
+@patch("routes.ma_auth._get_ha_user_via_ws", return_value=None)
 def test_ha_ws_failure_returns_401(_mock_ws, _mock_get_ma_api_credentials, client):
     resp = client.post(
         "/api/ma/ha-silent-auth",
@@ -410,12 +410,12 @@ def test_ha_ws_failure_returns_401(_mock_ws, _mock_get_ma_api_credentials, clien
     assert resp.status_code == 401
 
 
-@patch("routes.api_ma.get_ma_api_credentials", return_value=("", ""))
-@patch("routes.api_ma._save_ma_token_and_rediscover")
-@patch("routes.api_ma._validate_ma_token", return_value=True)
-@patch("routes.api_ma._create_ma_token_via_ingress", return_value="new_ma_token")
+@patch("routes.ma_auth.get_ma_api_credentials", return_value=("", ""))
+@patch("routes.ma_auth._save_ma_token_and_rediscover")
+@patch("routes.ma_auth._validate_ma_token", return_value=True)
+@patch("routes.ma_auth._create_ma_token_via_ingress", return_value="new_ma_token")
 @patch(
-    "routes.api_ma._get_ha_user_via_ws",
+    "routes.ma_auth._get_ha_user_via_ws",
     return_value={"id": "u1", "name": "admin", "is_admin": True},
 )
 def test_full_flow_success(_ws, _ingress, _validate, _save, _mock_get_ma_api_credentials, client):
@@ -429,10 +429,10 @@ def test_full_flow_success(_ws, _ingress, _validate, _save, _mock_get_ma_api_cre
     _save.assert_called_once()
 
 
-@patch("routes.api_ma.get_ma_api_credentials", return_value=("", ""))
-@patch("routes.api_ma._create_ma_token_via_ingress", return_value=None)
+@patch("routes.ma_auth.get_ma_api_credentials", return_value=("", ""))
+@patch("routes.ma_auth._create_ma_token_via_ingress", return_value=None)
 @patch(
-    "routes.api_ma._get_ha_user_via_ws",
+    "routes.ma_auth._get_ha_user_via_ws",
     return_value={"id": "u1", "name": "user", "is_admin": False},
 )
 def test_ingress_failure_returns_502(_ws, _ingress, _mock_get_ma_api_credentials, client):
@@ -444,8 +444,8 @@ def test_ingress_failure_returns_502(_ws, _ingress, _mock_get_ma_api_credentials
 
 
 class TestGetMaOauthParams:
-    @patch("routes.api_ma._ur.urlopen")
-    @patch("routes.api_ma._ur.build_opener")
+    @patch("routes.ma_auth._ur.urlopen")
+    @patch("routes.ma_auth._ur.build_opener")
     def test_parses_redirect_based_auth_authorize(self, mock_build_opener, mock_urlopen):
         auth_url = (
             "http://ha.local:8123/auth/authorize?"
@@ -457,7 +457,7 @@ class TestGetMaOauthParams:
         opener.open.side_effect = _http_error_with_location("http://ma.local:8095/auth/authorize", auth_url)
         mock_build_opener.return_value = opener
 
-        from routes.api_ma import _get_ma_oauth_params
+        from routes.ma_auth import _get_ma_oauth_params
 
         result = _get_ma_oauth_params("http://ma.local:8095")
         assert result == (
@@ -468,8 +468,8 @@ class TestGetMaOauthParams:
         )
         mock_urlopen.assert_not_called()
 
-    @patch("routes.api_ma._ur.urlopen")
-    @patch("routes.api_ma._ur.build_opener")
+    @patch("routes.ma_auth._ur.urlopen")
+    @patch("routes.ma_auth._ur.build_opener")
     def test_parses_jsonrpc_authorization_url_result_dict(self, mock_build_opener, mock_urlopen):
         opener = MagicMock()
         opener.open.side_effect = _http_error_with_location("http://ma.local:8095/auth/authorize", "")
@@ -487,7 +487,7 @@ class TestGetMaOauthParams:
         mock_resp.__exit__ = MagicMock(return_value=False)
         mock_urlopen.return_value = mock_resp
 
-        from routes.api_ma import _get_ma_oauth_params
+        from routes.ma_auth import _get_ma_oauth_params
 
         result = _get_ma_oauth_params("http://ma.local:8095")
         assert result == (
@@ -501,14 +501,14 @@ class TestGetMaOauthParams:
 
 
 @patch(
-    "routes.api_ma._get_ma_oauth_bootstrap",
+    "routes.ma_auth._get_ma_oauth_bootstrap",
     return_value=(
         None,
         "Music Assistant Home Assistant auth is unavailable: Provider does not support OAuth or is not configured. "
         "If Home Assistant login is not configured in Music Assistant, switch to Music Assistant authentication.",
     ),
 )
-@patch("routes.api_ma._ma_reports_homeassistant_addon", return_value=False)
+@patch("routes.ma_auth._ma_reports_homeassistant_addon", return_value=False)
 def test_ha_login_returns_specific_ma_oauth_error(_mock_addon, _mock_oauth, client):
     resp = client.post(
         "/api/ma/ha-login",
@@ -526,20 +526,20 @@ def test_ha_login_returns_specific_ma_oauth_error(_mock_addon, _mock_oauth, clie
     assert "switch to Music Assistant authentication" in data["error"]
 
 
-@patch("routes.api_ma._save_ma_token_and_rediscover")
-@patch("routes.api_ma._validate_ma_token", return_value=True)
-@patch("routes.api_ma._create_ma_token_via_ha_proxy", return_value="ma-token")
-@patch("routes.api_ma._get_ha_user_via_ws", return_value={"id": "u1", "name": "admin", "is_admin": True})
-@patch("routes.api_ma._exchange_ha_auth_code", return_value={"access_token": "ha-access"})
+@patch("routes.ma_auth._save_ma_token_and_rediscover")
+@patch("routes.ma_auth._validate_ma_token", return_value=True)
+@patch("routes.ma_auth._create_ma_token_via_ha_proxy", return_value="ma-token")
+@patch("routes.ma_auth._get_ha_user_via_ws", return_value={"id": "u1", "name": "admin", "is_admin": True})
+@patch("routes.ma_auth._exchange_ha_auth_code", return_value={"access_token": "ha-access"})
 @patch(
-    "routes.api_ma._ha_login_flow_step",
+    "routes.ma_auth._ha_login_flow_step",
     return_value={"type": "create_entry", "result": "ha-auth-code"},
 )
-@patch("routes.api_ma._ha_login_flow_start", return_value={"flow_id": "flow123"})
-@patch("routes.api_ma._derive_ha_urls_from_ma", return_value=["http://ha.local:8123"])
-@patch("routes.api_ma._ma_reports_homeassistant_addon", return_value=True)
+@patch("routes.ma_auth._ha_login_flow_start", return_value={"flow_id": "flow123"})
+@patch("routes.ma_auth._derive_ha_urls_from_ma", return_value=["http://ha.local:8123"])
+@patch("routes.ma_auth._ma_reports_homeassistant_addon", return_value=True)
 @patch(
-    "routes.api_ma._get_ma_oauth_bootstrap",
+    "routes.ma_auth._get_ma_oauth_bootstrap",
     return_value=(None, "Music Assistant Home Assistant auth is unavailable"),
 )
 def test_ha_login_falls_back_to_direct_ha_flow_for_addon_ma(
