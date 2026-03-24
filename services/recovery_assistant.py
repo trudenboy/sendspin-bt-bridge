@@ -254,6 +254,12 @@ def build_recovery_issue_actions(
             f"Reclaim {len(names)} devices" if len(names) > 1 else "Reclaim Bluetooth",
             device_names=names,
         )
+    elif issue_key == "duplicate_device":
+        primary_action = _recovery_action(
+            "open_devices_settings",
+            "Open device settings",
+            device_names=names,
+        )
     elif issue_key == "setup_step":
         primary_action = None
     else:
@@ -364,6 +370,35 @@ def _build_device_issues(devices: list[Any]) -> list[RecoveryIssue]:
                     device_name=name,
                 )
             )
+    return issues
+
+
+def _build_duplicate_device_issues() -> list[RecoveryIssue]:
+    """Build recovery issues for devices detected on another bridge instance."""
+    from services.ma_runtime_state import get_duplicate_device_warnings
+
+    warnings = get_duplicate_device_warnings()
+    if not warnings:
+        return []
+    issues: list[RecoveryIssue] = []
+    for w in warnings:
+        device_names = [w.device_name]
+        primary_action, secondary_actions = build_recovery_issue_actions("duplicate_device", device_names)
+        issues.append(
+            RecoveryIssue(
+                key="duplicate_device",
+                severity="warning",
+                title=f"{w.device_name} may conflict with another bridge",
+                summary=(
+                    f"This device is also registered as '{w.other_bridge_name}' in Music Assistant. "
+                    "Running on multiple bridges causes disconnect loops. "
+                    "Disable it on one bridge or stop the other instance."
+                ),
+                primary_action=primary_action,
+                secondary_actions=secondary_actions,
+                device_name=w.device_name,
+            )
+        )
     return issues
 
 
@@ -630,6 +665,7 @@ def build_recovery_assistant_snapshot(
             for state in bridge_state.devices
         ]
     issues = _build_device_issues(devices)
+    issues.extend(_build_duplicate_device_issues())
     onboarding_issue = _build_onboarding_issue(onboarding_assistant)
     if onboarding_issue:
         issues.append(onboarding_issue)

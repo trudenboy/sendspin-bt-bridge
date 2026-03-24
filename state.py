@@ -57,6 +57,7 @@ __all__ = [
     "get_bridge_system_info",
     "get_device_events",
     "get_disabled_devices",
+    "get_duplicate_device_warnings",
     "get_ma_api_credentials",
     "get_ma_group_for_player",
     "get_ma_groups",
@@ -80,6 +81,7 @@ __all__ = [
     "reset_startup_progress",
     "set_clients",
     "set_disabled_devices",
+    "set_duplicate_device_warnings",
     "set_ma_api_credentials",
     "set_ma_connected",
     "set_ma_groups",
@@ -524,6 +526,16 @@ def get_ma_group_by_id(syncgroup_id: str) -> dict | None:
 def get_ma_groups() -> list[dict]:
     """Return all MA syncgroup players with their members."""
     return _ma_runtime_state.get_ma_groups()
+
+
+def set_duplicate_device_warnings(warnings: list) -> None:
+    """Store cross-bridge duplicate device warnings from startup check."""
+    _ma_runtime_state.set_duplicate_device_warnings(warnings)
+
+
+def get_duplicate_device_warnings() -> list:
+    """Return stored duplicate device warnings."""
+    return _ma_runtime_state.get_duplicate_device_warnings()
 
 
 def is_ma_connected() -> bool:

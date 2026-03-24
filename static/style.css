@@ -4127,6 +4127,11 @@ body {
             border-color: transparent;
             color: #c77700;
         }
+        .scan-result-chip.is-warning {
+            background: rgba(244, 67, 54, 0.12);
+            border-color: transparent;
+            color: #c62828;
+        }
         .scan-result-passive {
             color: var(--secondary-text-color);
             background: rgba(107, 114, 128, 0.08);

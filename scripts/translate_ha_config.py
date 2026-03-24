@@ -152,6 +152,7 @@ def main() -> None:
         "MA_API_TOKEN": opts.get("ma_api_token") or "",
         "MA_AUTO_SILENT_AUTH": bool(opts.get("ma_auto_silent_auth", True)),
         "VOLUME_VIA_MA": bool(opts.get("volume_via_ma", True)),
+        "DUPLICATE_DEVICE_CHECK": bool(opts.get("duplicate_device_check", True)),
         "UPDATE_CHANNEL": get_self_delivery_channel(),
     }
 

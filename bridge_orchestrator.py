@@ -247,6 +247,26 @@ class BridgeOrchestrator:
             ma_monitor_task=resolved.ma_monitor_task,
         )
 
+    async def _run_duplicate_device_check(self, config: dict[str, Any], loop: asyncio.AbstractEventLoop) -> None:
+        """Check MA API for devices already claimed by another bridge instance."""
+        if not config.get("DUPLICATE_DEVICE_CHECK", True):
+            return
+        bridge_name = str(config.get("BRIDGE_NAME") or "").strip()
+        try:
+            from services.duplicate_device_check import find_duplicate_devices
+            from state import set_duplicate_device_warnings
+
+            warnings = await loop.run_in_executor(None, find_duplicate_devices, config, bridge_name)
+            set_duplicate_device_warnings(warnings)
+            for w in warnings:
+                logger.warning(
+                    "[%s] Also registered in MA as '%s' — may conflict with another bridge instance",
+                    w.device_name,
+                    w.other_bridge_name,
+                )
+        except Exception:
+            logger.debug("Duplicate device check failed", exc_info=True)
+
     def initialize_devices(
         self,
         bootstrap: RuntimeBootstrap,
@@ -490,6 +510,8 @@ class BridgeOrchestrator:
             ma_bootstrap = await self.initialize_ma_integration(
                 bootstrap.config, clients, server_host=bootstrap.server_host
             )
+            # Non-blocking cross-bridge duplicate device check
+            await self._run_duplicate_device_check(bootstrap.config, loop)
         except Exception as exc:
             self.lifecycle_state.publish_startup_failure(
                 f"Startup failed during {startup_phase}: {exc}",

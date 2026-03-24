@@ -5953,6 +5953,9 @@ function _renderBtScanResults(devices) {
         if (d.adapter) {
             chips.push('<span class="scan-result-chip">' + escHtml(_getBtScanAdapterLabel(d.adapter)) + '</span>');
         }
+        if (d.warning) {
+            chips.push('<span class="scan-result-chip is-warning" title="' + escHtmlAttr(d.warning) + '">⚠ Another bridge</span>');
+        }
         return '<div class="scan-result-item' + (addable ? '' : ' scan-result-item--passive') + '" data-scan-idx="' + i + '">' +
             '<span class="scan-result-actions">' +
                 (addable
@@ -5974,6 +5977,7 @@ function _renderBtScanResults(devices) {
             scanAddBtn.addEventListener('click', function(e) {
                 e.stopPropagation();
                 var d = devices[parseInt(row.dataset.scanIdx, 10)];
+                if (d.warning && !confirm(d.warning + '\n\nAdd anyway?')) return;
                 addFromScan(d.mac, d.name, d.adapter);
             });
         }
@@ -5982,6 +5986,7 @@ function _renderBtScanResults(devices) {
         scanPairBtn.addEventListener('click', function(e) {
             e.stopPropagation();
             var d = devices[parseInt(this.dataset.pairIdx, 10)];
+            if (d.warning && !confirm(d.warning + '\n\nPair and add anyway?')) return;
             pairAndAdd(d.mac, d.name, d.adapter, this);
         });
     });

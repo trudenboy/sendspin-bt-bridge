@@ -700,6 +700,36 @@ def _build_issue_groups(
             secondary_actions=secondary_actions,
         )
 
+    # Cross-bridge duplicate device detection
+    from services.ma_runtime_state import get_duplicate_device_warnings
+
+    dup_warnings = get_duplicate_device_warnings()
+    if dup_warnings:
+        dup_names = [w.device_name for w in dup_warnings]
+        if len(dup_warnings) == 1:
+            title = f"{dup_names[0]} may conflict with another bridge"
+            summary = (
+                f"This device is also registered as '{dup_warnings[0].other_bridge_name}' in Music Assistant. "
+                "Disable it on one bridge or stop the other instance to avoid disconnect loops."
+            )
+        else:
+            title = f"{len(dup_warnings)} devices may conflict with another bridge"
+            summary = (
+                f"These devices are also registered on another bridge instance: {_format_device_label(dup_names)}. "
+                "Disable them on one bridge or stop the other instance to avoid disconnect loops."
+            )
+        primary_action, secondary_actions = _guidance_actions_from_recovery("duplicate_device", dup_names)
+        _append_group(
+            groups,
+            key="duplicate_device",
+            severity="warning",
+            title=title,
+            summary=summary,
+            device_names=dup_names,
+            primary_action=primary_action,
+            secondary_actions=secondary_actions,
+        )
+
     if current_step_key == "ma_auth" and overall_status in {"warning", "error"}:
         recovery_actions = [_guidance_action_from_dict(item) for item in recovery_assistant.get("safe_actions") or []]
         valid_recovery_actions = [item for item in recovery_actions if item is not None]

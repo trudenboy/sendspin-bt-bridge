@@ -799,6 +799,31 @@ def _enrich_scan_device(mac: str, names: "dict[str, str]", audio_only: bool = Tr
     return {"mac": mac, "name": names.get(mac, mac), "audio_capable": audio_capable}
 
 
+def _annotate_scan_conflicts(devices: list[dict]) -> None:
+    """Add ``warning`` field to devices that are already registered on another bridge."""
+    try:
+        cfg = load_config()
+        if not cfg.get("DUPLICATE_DEVICE_CHECK", True):
+            return
+        ma_url = str(cfg.get("MA_API_URL") or "").strip()
+        ma_token = str(cfg.get("MA_API_TOKEN") or "").strip()
+        bridge_name = str(cfg.get("BRIDGE_NAME") or "").strip()
+        if not ma_url or not ma_token:
+            return
+        macs = [d["mac"] for d in devices if d.get("mac")]
+        if not macs:
+            return
+        from services.duplicate_device_check import find_scan_device_conflicts
+
+        conflicts = find_scan_device_conflicts(macs, ma_url, ma_token, bridge_name)
+        for d in devices:
+            warning = conflicts.get(str(d.get("mac") or "").strip().upper())
+            if warning:
+                d["warning"] = warning
+    except Exception:
+        logger.debug("Scan conflict annotation failed", exc_info=True)
+
+
 def _run_bt_scan(job_id: str, adapter: str = "", audio_only: bool = True) -> None:
     """Perform BT scan in a background thread and store result in state."""
     global _last_scan_completed
@@ -830,6 +855,9 @@ def _run_bt_scan(job_id: str, adapter: str = "", audio_only: bool = True) -> Non
             d["adapter"] = device_adapter.get(d["mac"], "")
             d["supports_import"] = bool(d.get("audio_capable", True))
             d["kind"] = "audio" if d.get("audio_capable", True) else "other"
+
+        # Annotate with cross-bridge conflict warnings
+        _annotate_scan_conflicts(devices)
 
         devices.sort(key=lambda d: (d["name"] == d["mac"], d["name"]))
         finish_scan_job(

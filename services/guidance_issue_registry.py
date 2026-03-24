@@ -128,6 +128,13 @@ ISSUE_REGISTRY: dict[str, GuidanceIssueDefinition] = {
         severity="warning",
         default_reason_codes=("device_needs_attention",),
     ),
+    "duplicate_device": GuidanceIssueDefinition(
+        key="duplicate_device",
+        layer="bridge_control",
+        priority=35,
+        severity="warning",
+        default_reason_codes=("duplicate_player_id",),
+    ),
     "all-disabled": GuidanceIssueDefinition(
         key="all-disabled",
         layer="bridge_control",

@@ -25,6 +25,22 @@ _ma_now_playing: dict[str, dict[str, Any]] = {}
 _ma_now_playing_lock = threading.Lock()
 _MA_SYNC_META_KEY = "_sync_meta"
 
+_duplicate_device_warnings: list[Any] = []
+_duplicate_device_warnings_lock = threading.Lock()
+
+
+def set_duplicate_device_warnings(warnings: list[Any]) -> None:
+    """Store the latest cross-bridge duplicate device warnings."""
+    with _duplicate_device_warnings_lock:
+        _duplicate_device_warnings.clear()
+        _duplicate_device_warnings.extend(warnings)
+
+
+def get_duplicate_device_warnings() -> list[Any]:
+    """Return a shallow copy of stored duplicate device warnings."""
+    with _duplicate_device_warnings_lock:
+        return list(_duplicate_device_warnings)
+
 
 def set_ma_groups(mapping: dict[str, dict[str, Any]], all_groups: list[dict[str, Any]] | None = None) -> None:
     """Store the MA player_id → syncgroup mapping and full group list."""
