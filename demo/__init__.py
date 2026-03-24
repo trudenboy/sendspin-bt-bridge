@@ -760,7 +760,6 @@ def install() -> None:
             return
         from state import complete_startup_progress, reset_startup_progress, update_startup_progress
 
-        _reset_demo_runtime_state()
         reset_startup_progress(6, message="Demo restart initiated")
         update_startup_progress(
             "shutdown",
@@ -770,6 +769,7 @@ def install() -> None:
             status="stopping",
             details={"demo_mode": True, "emulated_restart": True},
         )
+        _reset_demo_runtime_state()
         time.sleep(0.35)
         reset_startup_progress(6, message="Demo startup initiated")
         update_startup_progress(

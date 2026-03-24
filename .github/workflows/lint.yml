@@ -52,7 +52,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install ruff mypy
+          pip install ruff==0.11.13 mypy
           pip install -r requirements.txt || true
 
       - name: Ruff check

@@ -494,15 +494,17 @@ def test_demo_config_save_is_temporary_and_restart_resets_to_canonical(monkeypat
 
     current = None
     progress = None
-    for _ in range(60):
+    deadline = time.monotonic() + 5.0
+    while time.monotonic() < deadline:
         current = client.get("/api/config").get_json()
         progress = client.get("/api/startup-progress").get_json()
         if (
             not any(device["mac"] == "11:22:33:44:55:03" for device in current["BLUETOOTH_DEVICES"])
             and progress.get("status") == "ready"
+            and progress.get("message") == "Demo restart complete"
         ):
             break
-        time.sleep(0.01)
+        time.sleep(0.02)
 
     assert current is not None
     assert progress is not None
