@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import sys
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -29,6 +30,52 @@ from demo.fixtures import (
 from demo.simulator import run_simulator
 from routes.auth import auth_bp
 from routes.views import views_bp
+
+
+def _reset_demo_shared_state() -> None:
+    import state
+
+    state.set_clients([])
+    state.set_disabled_devices([])
+    state.set_ma_groups({}, [])
+    state.set_ma_api_credentials("", "")
+    state.set_ma_connected(False)
+    state.set_ma_server_version("")
+    state.replace_ma_now_playing({})
+    state.set_runtime_mode_info({})
+    state.reset_startup_progress(0, message="")
+    state.set_update_available(None)
+
+
+def _install_demo_runtime(monkeypatch, request):
+    import demo
+    import routes.api_bt as api_bt_module
+
+    class StubSendspinClient:
+        def __init__(self):
+            self.player_name = "Office @ DEMO"
+            self.bt_manager = SimpleNamespace(mac_address="AA:BB:CC:DD:EE:04")
+            self.status = {}
+            self.bluetooth_sink_name = None
+            self._daemon_proc = None
+            self._daemon_task = None
+            self._stderr_task = None
+
+        def _update_status(self, updates: dict) -> None:
+            self.status.update(updates)
+
+    monkeypatch.setattr(sys.modules["__main__"], "SendspinClient", StubSendspinClient, raising=False)
+    monkeypatch.setattr(sys.modules["__main__"], "BluetoothManager", object, raising=False)
+    monkeypatch.setenv("DEMO_MODE", "true")
+    monkeypatch.setenv("SENDSPIN_DEMO_CONFIG_DIR", str(Path("/tmp") / request.node.name))
+    request.addfinalizer(_reset_demo_shared_state)
+
+    demo.install()
+    monkeypatch.setattr("demo.time.sleep", lambda _delay: None)
+    monkeypatch.setattr("routes.api.time.sleep", lambda _delay: None)
+    monkeypatch.setattr(api_bt_module, "_last_scan_completed", 0.0, raising=False)
+    monkeypatch.setattr(api_bt_module, "_SCAN_COOLDOWN", 0.0, raising=False)
+    return demo
 
 
 def test_demo_bluetooth_manager_connect_device_restores_sink_and_volume():
@@ -235,7 +282,7 @@ async def test_demo_simulator_keeps_group_members_on_same_track(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_demo_install_seeds_connected_ma_state_and_named_adapters(monkeypatch):
+async def test_demo_install_seeds_connected_ma_state_and_named_adapters(monkeypatch, request):
     import config as config_module
     import demo
     import state
@@ -255,6 +302,8 @@ async def test_demo_install_seeds_connected_ma_state_and_named_adapters(monkeypa
 
     monkeypatch.setattr(sys.modules["__main__"], "SendspinClient", StubSendspinClient, raising=False)
     monkeypatch.setattr(sys.modules["__main__"], "BluetoothManager", object, raising=False)
+    monkeypatch.setenv("DEMO_MODE", "true")
+    request.addfinalizer(_reset_demo_shared_state)
 
     demo.install()
 
@@ -338,8 +387,116 @@ def test_demo_bt_manager_seeds_released_ready_and_stopping_states():
     assert stopping_client.status["stopping"] is True
 
 
+def test_demo_bt_scan_pair_and_paired_inventory_are_dynamic(monkeypatch, request):
+    _install_demo_runtime(monkeypatch, request)
+
+    from routes.api_bt import bt_bp
+
+    app = Flask(__name__)
+    app.register_blueprint(bt_bp)
+    client = app.test_client()
+
+    scan_resp = client.post("/api/bt/scan", json={"adapter": "hci1", "audio_only": True})
+    assert scan_resp.status_code == 200
+    scan_job_id = scan_resp.get_json()["job_id"]
+
+    scan_result = None
+    for _ in range(30):
+        payload = client.get(f"/api/bt/scan/result/{scan_job_id}").get_json()
+        if payload.get("status") == "done":
+            scan_result = payload
+            break
+        time.sleep(0.01)
+
+    assert scan_result is not None
+    assert any(device["mac"] == "11:22:33:44:55:03" for device in scan_result["devices"])
+
+    pair_resp = client.post("/api/bt/pair_new", json={"mac": "11:22:33:44:55:03", "adapter": "hci1"})
+    assert pair_resp.status_code == 200
+    pair_job_id = pair_resp.get_json()["job_id"]
+
+    pair_result = None
+    for _ in range(30):
+        payload = client.get(f"/api/bt/pair_new/result/{pair_job_id}").get_json()
+        if payload.get("status") == "done":
+            pair_result = payload
+            break
+        time.sleep(0.01)
+
+    assert pair_result is not None
+    assert pair_result["success"] is True
+
+    paired_resp = client.get("/api/bt/paired")
+    assert paired_resp.status_code == 200
+    assert any(device["mac"] == "11:22:33:44:55:03" for device in paired_resp.get_json()["devices"])
+
+    info_resp = client.post("/api/bt/info", json={"mac": "11:22:33:44:55:03"})
+    assert info_resp.status_code == 200
+    info_payload = info_resp.get_json()
+    assert info_payload["paired"] == "yes"
+    assert info_payload["trusted"] == "yes"
+
+
+def test_demo_config_save_is_temporary_and_restart_resets_to_canonical(monkeypatch, request):
+    _install_demo_runtime(monkeypatch, request)
+
+    from routes.api import api_bp
+    from routes.api_config import config_bp
+    from routes.api_status import status_bp
+
+    app = Flask(__name__)
+    app.register_blueprint(api_bp)
+    app.register_blueprint(config_bp)
+    app.register_blueprint(status_bp)
+    client = app.test_client()
+
+    original = client.get("/api/config").get_json()
+    original_macs = [device["mac"] for device in original["BLUETOOTH_DEVICES"]]
+    original_count = len(original_macs)
+
+    payload = {key: value for key, value in original.items() if not str(key).startswith("_")}
+    payload["BLUETOOTH_DEVICES"] = list(payload["BLUETOOTH_DEVICES"]) + [
+        {
+            "mac": "11:22:33:44:55:03",
+            "player_name": "Portable Boom",
+            "adapter": "hci1",
+            "enabled": True,
+        }
+    ]
+
+    save_resp = client.post("/api/config", json=payload)
+    assert save_resp.status_code == 200
+
+    saved = client.get("/api/config").get_json()
+    assert any(device["mac"] == "11:22:33:44:55:03" for device in saved["BLUETOOTH_DEVICES"])
+
+    restart_resp = client.post("/api/restart")
+    assert restart_resp.status_code == 200
+    assert restart_resp.get_json()["success"] is True
+    assert restart_resp.get_json()["emulated"] is True
+
+    current = None
+    progress = None
+    for _ in range(60):
+        current = client.get("/api/config").get_json()
+        progress = client.get("/api/startup-progress").get_json()
+        if (
+            not any(device["mac"] == "11:22:33:44:55:03" for device in current["BLUETOOTH_DEVICES"])
+            and progress.get("status") == "ready"
+        ):
+            break
+        time.sleep(0.01)
+
+    assert current is not None
+    assert progress is not None
+    assert len(current["BLUETOOTH_DEVICES"]) == original_count
+    assert [device["mac"] for device in current["BLUETOOTH_DEVICES"]] == original_macs
+    assert progress["status"] == "ready"
+    assert progress["message"] == "Demo restart complete"
+
+
 @pytest.mark.asyncio
-async def test_demo_install_patches_bridge_orchestrator_load_config(monkeypatch):
+async def test_demo_install_patches_bridge_orchestrator_load_config(monkeypatch, request):
     import bridge_orchestrator
     import demo
 
@@ -354,6 +511,8 @@ async def test_demo_install_patches_bridge_orchestrator_load_config(monkeypatch)
 
     monkeypatch.setattr(sys.modules["__main__"], "SendspinClient", StubSendspinClient, raising=False)
     monkeypatch.setattr(sys.modules["__main__"], "BluetoothManager", object, raising=False)
+    monkeypatch.setenv("DEMO_MODE", "true")
+    request.addfinalizer(_reset_demo_shared_state)
 
     demo.install()
 
@@ -365,7 +524,7 @@ async def test_demo_install_patches_bridge_orchestrator_load_config(monkeypatch)
 
 
 @pytest.mark.asyncio
-async def test_demo_install_exposes_demo_logs_diagnostics_and_bugreport(monkeypatch):
+async def test_demo_install_exposes_demo_logs_diagnostics_and_bugreport(monkeypatch, request):
     import demo
     import state
     from routes.api_config import config_bp
@@ -393,6 +552,8 @@ async def test_demo_install_exposes_demo_logs_diagnostics_and_bugreport(monkeypa
 
     monkeypatch.setattr(sys.modules["__main__"], "SendspinClient", StubSendspinClient, raising=False)
     monkeypatch.setattr(sys.modules["__main__"], "BluetoothManager", object, raising=False)
+    monkeypatch.setenv("DEMO_MODE", "true")
+    request.addfinalizer(_reset_demo_shared_state)
 
     demo.install()
 

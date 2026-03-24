@@ -322,13 +322,14 @@ def _update_channel_warning(channel: str) -> str | None:
     return None
 
 
-def _docker_update_instructions(channel: str) -> str:
+def _docker_update_command(channel: str) -> str:
     image_tag = channel_image_tag(channel)
-    return (
-        "Pull the matching container tag manually, e.g. "
-        f"`docker pull ghcr.io/trudenboy/sendspin-bt-bridge:{image_tag}` "
-        "and redeploy your container or compose stack."
-    )
+    return f"docker pull ghcr.io/trudenboy/sendspin-bt-bridge:{image_tag}"
+
+
+def _docker_update_instructions(channel: str) -> str:
+    command = _docker_update_command(channel)
+    return f"Pull the matching container tag manually, e.g. `{command}` and redeploy your container or compose stack."
 
 
 # ---------------------------------------------------------------------------
@@ -1125,6 +1126,7 @@ def api_update_info():
         result["instructions"] = _ha_addon_update_instructions(channel, delivery)
     else:
         result["update_method"] = "manual"
+        result["command"] = _docker_update_command(channel)
         result["instructions"] = _docker_update_instructions(channel)
     return jsonify(result)
 

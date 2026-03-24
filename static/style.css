@@ -246,10 +246,42 @@ body {
         .update-modal-version-new { font-weight: 700; color: var(--success-color, #4caf50); }
         .update-modal-body {
             padding: 14px 18px; font-size: 13px; color: var(--secondary-text-color, #666);
-            line-height: 1.6; white-space: pre-line; overflow-y: auto; flex: 1; min-height: 0;
+            line-height: 1.6; overflow-y: auto; flex: 1; min-height: 0;
             background: var(--secondary-background-color, #f5f5f5);
             border-bottom: 1px solid var(--divider-color, #e0e0e0);
         }
+        .update-modal-instructions,
+        .update-modal-release-notes {
+            background: var(--card-background-color, #fff);
+            border: 1px solid var(--divider-color, #e0e0e0);
+            border-radius: 10px;
+            padding: 12px 14px;
+        }
+        .update-modal-release-notes { margin-top: 12px; }
+        .update-modal-section-title {
+            margin: 0 0 8px; font-size: 12px; font-weight: 700; letter-spacing: 0.04em;
+            text-transform: uppercase; color: var(--secondary-text-color, #666);
+        }
+        .update-modal-instructions-copy,
+        .update-modal-release-copy {
+            white-space: pre-line;
+        }
+        .update-modal-command-row {
+            margin-top: 10px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+        }
+        .update-modal-command {
+            flex: 1 1 320px; display: block; padding: 10px 12px; border-radius: 8px;
+            background: rgba(15, 23, 42, 0.06); color: var(--primary-text-color, #333);
+            border: 1px solid var(--divider-color, #d1d5db);
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+            font-size: 12px; line-height: 1.5; word-break: break-all;
+        }
+        .update-modal-copy-btn {
+            padding: 8px 12px; border-radius: 8px; border: 1px solid var(--divider-color, #d1d5db);
+            background: var(--card-background-color, #fff); color: var(--primary-text-color, #333);
+            font-size: 12px; font-weight: 600; cursor: pointer; transition: opacity 0.15s, background 0.15s;
+        }
+        .update-modal-copy-btn:hover { opacity: 0.85; }
         .update-modal-footer {
             padding: 14px 18px; display: flex; gap: 8px; justify-content: flex-end;
         }

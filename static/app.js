@@ -9011,6 +9011,12 @@ function _syncRestartBanner(status, overrideServiceState) {
     }
 
     if (_restartMonitor.sawRuntimeRestart && status) {
+        if (_restartMonitor.demoConfigRefreshPending) {
+            _restartMonitor.demoConfigRefreshPending = false;
+            setTimeout(function() {
+                if (_runtimeMode === 'demo' && !_configLoading) loadConfig();
+            }, 0);
+        }
         _setRestartBannerState({
             percent: 100,
             message: 'Restart complete — bridge is ready',
@@ -9080,7 +9086,12 @@ async function saveAndRestart() {
             }
         }
 
-        _restartMonitor = {startedAt: Date.now(), manual: true, sawRuntimeRestart: false};
+        _restartMonitor = {
+            startedAt: Date.now(),
+            manual: true,
+            sawRuntimeRestart: false,
+            demoConfigRefreshPending: _runtimeMode === 'demo',
+        };
         _setRestartBannerState({
             percent: smooth ? 12 : 8,
             message: 'Restart requested… Waiting for the service to restart.',
@@ -9686,18 +9697,63 @@ function _showUpdateDialog(ver, releaseUrl, releaseChannel) {
                 modal.appendChild(warningEl);
             }
 
-            // Release notes body
-            if (info.body) {
+            // Body
+            if ((method === 'manual' && (info.instructions || info.command)) || info.body) {
                 var bodyEl = document.createElement('div');
                 bodyEl.className = 'update-modal-body';
-                var plain = info.body
-                    .replace(/^## .+\n+/, '')
-                    .replace(/^### .+$/gm, '')
-                    .replace(/\*\*(.+?)\*\*/g, '$1')
-                    .replace(/^- /gm, '\u2022 ')
-                    .replace(/\n{3,}/g, '\n\n')
-                    .trim();
-                bodyEl.textContent = plain;
+                if (method === 'manual' && (info.instructions || info.command)) {
+                    var instructionsEl = document.createElement('div');
+                    instructionsEl.className = 'update-modal-instructions';
+                    var instructionText = document.createElement('div');
+                    instructionText.className = 'update-modal-instructions-copy';
+                    instructionText.textContent = info.instructions || 'Pull the new image and redeploy your stack.';
+                    instructionsEl.appendChild(instructionText);
+                    if (info.command) {
+                        var commandRow = document.createElement('div');
+                        commandRow.className = 'update-modal-command-row';
+                        var commandEl = document.createElement('code');
+                        commandEl.className = 'update-modal-command';
+                        commandEl.textContent = info.command;
+                        commandRow.appendChild(commandEl);
+                        var copyBtn = document.createElement('button');
+                        copyBtn.type = 'button';
+                        copyBtn.className = 'update-modal-copy-btn';
+                        copyBtn.textContent = 'Copy command';
+                        copyBtn.onclick = function() {
+                            var btn = this;
+                            _copyToClipboard(info.command).then(function() {
+                                btn.textContent = 'Copied';
+                                showToast('Update command copied', 'info');
+                                setTimeout(function() { btn.textContent = 'Copy command'; }, 1600);
+                            }).catch(function() {
+                                showToast('Could not copy update command', 'error');
+                            });
+                        };
+                        commandRow.appendChild(copyBtn);
+                        instructionsEl.appendChild(commandRow);
+                    }
+                    bodyEl.appendChild(instructionsEl);
+                }
+                if (info.body) {
+                    var notesEl = document.createElement('div');
+                    notesEl.className = 'update-modal-release-notes';
+                    var notesTitle = document.createElement('div');
+                    notesTitle.className = 'update-modal-section-title';
+                    notesTitle.textContent = 'Release notes';
+                    notesEl.appendChild(notesTitle);
+                    var notesCopy = document.createElement('div');
+                    notesCopy.className = 'update-modal-release-copy';
+                    var plain = info.body
+                        .replace(/^## .+\n+/, '')
+                        .replace(/^### .+$/gm, '')
+                        .replace(/\*\*(.+?)\*\*/g, '$1')
+                        .replace(/^- /gm, '\u2022 ')
+                        .replace(/\n{3,}/g, '\n\n')
+                        .trim();
+                    notesCopy.textContent = plain;
+                    notesEl.appendChild(notesCopy);
+                    bodyEl.appendChild(notesEl);
+                }
                 modal.appendChild(bodyEl);
             }
 
@@ -9761,14 +9817,11 @@ function _showUpdateDialog(ver, releaseUrl, releaseChannel) {
                 haBtn.onclick = function() { overlay.remove(); };
                 footer.appendChild(haBtn);
             } else {
-                var instrBtn = document.createElement('button');
-                instrBtn.className = 'update-modal-btn primary';
-                instrBtn.innerHTML = _UPD_ICON_NOTES + ' Instructions';
-                instrBtn.onclick = function() {
-                    overlay.remove();
-                    showToast(info.instructions || 'Follow the selected update channel instructions.', 'info');
-                };
-                footer.appendChild(instrBtn);
+                var closeBtn = document.createElement('button');
+                closeBtn.className = 'update-modal-btn primary';
+                closeBtn.innerHTML = _UPD_ICON_NOTES + ' Got it';
+                closeBtn.onclick = function() { overlay.remove(); };
+                footer.appendChild(closeBtn);
             }
 
             modal.appendChild(footer);

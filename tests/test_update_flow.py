@@ -315,6 +315,7 @@ def test_api_update_info_reports_beta_channel_warning(config_client, monkeypatch
     data = resp.get_json()
     assert data["channel"] == "beta"
     assert "Beta channel" in data["channel_warning"]
+    assert data["command"] == "docker pull ghcr.io/trudenboy/sendspin-bt-bridge:beta"
     assert ":beta" in data["instructions"]
 
 

@@ -15,8 +15,10 @@ import logging
 import os
 import subprocess as _real_subprocess
 import sys
+import threading
 import time
 from copy import deepcopy
+from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from typing import Any, cast
 
@@ -62,6 +64,58 @@ def install() -> None:
     )
 
     _adapter_names_by_mac = {str(adapter["mac"]).upper(): str(adapter["name"]) for adapter in DEMO_ADAPTERS}
+    _demo_state_lock = threading.RLock()
+    _demo_runtime_scan_results = deepcopy(DEMO_SCAN_RESULTS)
+    _demo_runtime_paired_devices = deepcopy(DEMO_PAIRED_DEVICES)
+    _demo_runtime_config: dict[str, Any] | None = None
+    _canonical_bt_info_macs = {str(item["mac"]).upper() for item in DEMO_BT_DEVICE_INFO}
+
+    def _demo_enabled() -> bool:
+        return os.getenv("DEMO_MODE", "").lower() in ("1", "true", "yes")
+
+    def _build_demo_bt_device_info(devices: list[dict[str, Any]]) -> list[dict[str, str]]:
+        info: list[dict[str, str]] = []
+        for device in devices:
+            mac = str(device.get("mac") or "").upper()
+            if not mac:
+                continue
+            if mac not in _canonical_bt_info_macs and any(
+                str(item.get("mac") or "").upper() == mac for item in DEMO_PAIRED_DEVICES
+            ):
+                continue
+            name = str(device.get("name") or mac)
+            info.append(
+                {
+                    "mac": mac,
+                    "name": name,
+                    "paired": "yes",
+                    "trusted": "yes",
+                    "connected": "yes" if bool(device.get("connected")) else "no",
+                    "bonded": "yes",
+                    "blocked": "no",
+                    "icon": "audio-card",
+                }
+            )
+        return info
+
+    _demo_runtime_bt_device_info = _build_demo_bt_device_info(_demo_runtime_paired_devices)
+
+    def _current_demo_paired_devices() -> list[dict[str, Any]]:
+        with _demo_state_lock:
+            return deepcopy(_demo_runtime_paired_devices)
+
+    def _current_demo_bt_device_info() -> list[dict[str, str]]:
+        with _demo_state_lock:
+            return deepcopy(_demo_runtime_bt_device_info)
+
+    def _find_demo_device(mac: str) -> dict[str, Any] | None:
+        normalized = str(mac or "").strip().upper()
+        with _demo_state_lock:
+            for collection in (_demo_runtime_scan_results, _demo_runtime_paired_devices):
+                for item in collection:
+                    if str(item.get("mac") or "").upper() == normalized:
+                        return deepcopy(item)
+        return None
 
     _st.set_runtime_mode_info(
         {
@@ -134,10 +188,33 @@ def install() -> None:
     # ------------------------------------------------------------------
     import services.bluetooth as _sbt
 
+    _original_bt_remove_device = _sbt.bt_remove_device
+    _original_list_bt_adapters = _sbt.list_bt_adapters
+    _original_is_audio_device = _sbt.is_audio_device
     _audio_macs = {d["mac"] for d in DEMO_SCAN_RESULTS}
-    _sbt.list_bt_adapters = lambda timeout=5: [str(adapter["mac"]) for adapter in DEMO_ADAPTERS]
-    _sbt.is_audio_device = lambda mac: mac.upper() in _audio_macs
-    _sbt.bt_remove_device = lambda mac, adapter_mac="": None
+    _sbt.list_bt_adapters = (  # type: ignore[assignment]
+        lambda timeout=5: [str(adapter["mac"]) for adapter in DEMO_ADAPTERS]
+        if _demo_enabled()
+        else _original_list_bt_adapters(timeout=timeout)
+    )
+    _sbt.is_audio_device = (  # type: ignore[assignment]
+        lambda mac: mac.upper() in _audio_macs if _demo_enabled() else _original_is_audio_device(mac)
+    )
+
+    def _demo_bt_remove_device(mac: str, adapter_mac: str = "") -> None:
+        if not _demo_enabled():
+            _original_bt_remove_device(mac, adapter_mac)
+            return
+        del adapter_mac
+        nonlocal _demo_runtime_paired_devices, _demo_runtime_bt_device_info
+        normalized = str(mac or "").strip().upper()
+        with _demo_state_lock:
+            _demo_runtime_paired_devices = [
+                item for item in _demo_runtime_paired_devices if str(item.get("mac") or "").upper() != normalized
+            ]
+            _demo_runtime_bt_device_info = _build_demo_bt_device_info(_demo_runtime_paired_devices)
+
+    _sbt.bt_remove_device = _demo_bt_remove_device
 
     # ------------------------------------------------------------------
     # 3. Patch services.pulse (sync wrappers used by routes/api.py)
@@ -323,14 +400,84 @@ def install() -> None:
     # ------------------------------------------------------------------
     import routes.api_bt as _abt
 
-    def _demo_run_bt_scan(job_id: str) -> None:
+    _original_run_bt_scan = _abt._run_bt_scan
+    _original_run_standalone_pair = _abt._run_standalone_pair
+
+    def _demo_run_bt_scan(job_id: str, adapter: str = "", audio_only: bool = True) -> None:
+        if not _demo_enabled():
+            _original_run_bt_scan(job_id, adapter, audio_only)
+            return
         from state import finish_scan_job
 
-        time.sleep(3.0)
-        finish_scan_job(job_id, {"devices": list(DEMO_SCAN_RESULTS)})
+        time.sleep(1.5)
+        selected_adapter = str(get_demo_adapter(adapter)["id"]) if adapter else ""
+        with _demo_state_lock:
+            devices: list[dict[str, Any]] = []
+            for item in _demo_runtime_scan_results:
+                if selected_adapter and str(item.get("adapter") or "") != selected_adapter:
+                    continue
+                entry = deepcopy(item)
+                entry.setdefault("audio_capable", True)
+                if audio_only and entry.get("audio_capable") is False:
+                    continue
+                entry.setdefault("supports_import", entry.get("audio_capable", True))
+                entry.setdefault("kind", "audio" if entry.get("audio_capable", True) else "other")
+                devices.append(entry)
+        finish_scan_job(
+            job_id,
+            {
+                "devices": devices,
+                "stats": {
+                    "total_candidates": len(devices),
+                    "returned_candidates": len(devices),
+                    "audio_candidates": sum(1 for item in devices if item.get("audio_capable", True)),
+                    "audio_only": audio_only,
+                },
+            },
+        )
+
+    def _demo_run_standalone_pair(job_id: str, mac: str, adapter: str) -> None:
+        if not _demo_enabled():
+            _original_run_standalone_pair(job_id, mac, adapter)
+            return
+        from state import finish_scan_job
+
+        del adapter
+        nonlocal _demo_runtime_paired_devices, _demo_runtime_bt_device_info
+        normalized = str(mac or "").strip().upper()
+        time.sleep(2.0)
+        device = _find_demo_device(normalized)
+        if not device:
+            finish_scan_job(job_id, {"success": False, "mac": normalized, "error": "Demo device not found"})
+            return
+        with _demo_state_lock:
+            existing = next(
+                (item for item in _demo_runtime_paired_devices if str(item.get("mac") or "").upper() == normalized),
+                None,
+            )
+            if existing is None:
+                _demo_runtime_paired_devices.append(
+                    {
+                        "mac": normalized,
+                        "name": str(device.get("name") or normalized),
+                        "connected": False,
+                    }
+                )
+                _demo_runtime_paired_devices.sort(
+                    key=lambda item: str(item.get("name") or item.get("mac") or "").lower()
+                )
+            _demo_runtime_bt_device_info = _build_demo_bt_device_info(_demo_runtime_paired_devices)
+        logger.info("[demo] Standalone pair %s: OK", normalized)
+        finish_scan_job(job_id, {"success": True, "mac": normalized})
 
     _abt._run_bt_scan = _demo_run_bt_scan
-    _abt.list_bt_adapters = lambda timeout=5: [str(adapter["mac"]) for adapter in DEMO_ADAPTERS]
+    _abt._run_standalone_pair = _demo_run_standalone_pair
+    _original_api_bt_list_adapters = _abt.list_bt_adapters
+    _abt.list_bt_adapters = (  # type: ignore[assignment]
+        lambda timeout=5: [str(adapter["mac"]) for adapter in DEMO_ADAPTERS]
+        if _demo_enabled()
+        else _original_api_bt_list_adapters(timeout=timeout)
+    )
 
     # Replace subprocess module reference in api_bt so that handlers
     # calling subprocess.run(["bluetoothctl"], ...) get fake output.
@@ -341,6 +488,8 @@ def install() -> None:
             return getattr(_real_subprocess, name)
 
         def run(self, args: Any, *a: Any, **kw: Any) -> _real_subprocess.CompletedProcess:  # type: ignore[type-arg]
+            if not _demo_enabled():
+                return _real_subprocess.run(args, *a, **kw)
             if args == ["bluetoothctl"]:
                 input_text = kw.get("input", "")
                 if "devices" in input_text:
@@ -357,6 +506,9 @@ def install() -> None:
                 return _real_subprocess.CompletedProcess(args, 0, stdout="bluetoothctl: 5.72-demo\n", stderr="")
             if args == ["systemctl", "is-active", "bluetooth"]:
                 return _real_subprocess.CompletedProcess(args, 0, stdout="active\n", stderr="")
+            if args == ["systemctl", "restart", "sendspin-client"]:
+                _simulate_demo_restart()
+                return _real_subprocess.CompletedProcess(args, 0, stdout="demo restart complete\n", stderr="")
             if args == ["pactl", "info"]:
                 return _real_subprocess.CompletedProcess(
                     args,
@@ -374,14 +526,14 @@ def install() -> None:
                 return _real_subprocess.CompletedProcess(args, 0, stdout=f"{DEMO_DISPLAY_VERSION}\n", stderr="")
             return _real_subprocess.run(args, *a, **kw)
 
-        @staticmethod
-        def _paired_output() -> _real_subprocess.CompletedProcess:  # type: ignore[type-arg]
-            lines = [f"Device {d['mac']} {d['name']}" for d in DEMO_PAIRED_DEVICES]
+        def _paired_output(self) -> _real_subprocess.CompletedProcess:  # type: ignore[type-arg]
+            del self
+            lines = [f"Device {d['mac']} {d['name']}" for d in _current_demo_paired_devices()]
             return _real_subprocess.CompletedProcess(["bluetoothctl"], 0, stdout="\n".join(lines), stderr="")
 
-        @staticmethod
-        def _paired_devices_output() -> _real_subprocess.CompletedProcess:  # type: ignore[type-arg]
-            lines = [f"Device {d['mac']} {d['name']}" for d in DEMO_PAIRED_DEVICES]
+        def _paired_devices_output(self) -> _real_subprocess.CompletedProcess:  # type: ignore[type-arg]
+            del self
+            lines = [f"Device {d['mac']} {d['name']}" for d in _current_demo_paired_devices()]
             return _real_subprocess.CompletedProcess(
                 ["bluetoothctl", "devices", "Paired"], 0, stdout="\n".join(lines), stderr=""
             )
@@ -416,15 +568,15 @@ def install() -> None:
             )
             return _real_subprocess.CompletedProcess(["bluetoothctl"], 0, stdout=stdout, stderr="")
 
-        @staticmethod
-        def _info_output(input_text: str) -> _real_subprocess.CompletedProcess:  # type: ignore[type-arg]
+        def _info_output(self, input_text: str) -> _real_subprocess.CompletedProcess:  # type: ignore[type-arg]
+            del self
             selected_mac = ""
             for line in str(input_text).splitlines():
                 if line.startswith("info "):
                     selected_mac = line.split(" ", 1)[1].strip().upper()
                     break
             device = next(
-                (item for item in DEMO_BT_DEVICE_INFO if str(item.get("mac", "")).upper() == selected_mac),
+                (item for item in _current_demo_bt_device_info() if str(item.get("mac", "")).upper() == selected_mac),
                 None,
             )
             if not device:
@@ -470,6 +622,10 @@ def install() -> None:
     _demo_subprocess = _DemoSubprocess()
     _abt.subprocess = _demo_subprocess  # type: ignore[assignment]
     _api_status_mod.subprocess = _demo_subprocess  # type: ignore[assignment]
+    _api_mod.subprocess = _demo_subprocess  # type: ignore[assignment]
+    _original_api_detect_runtime = _api_mod._detect_runtime
+    _api_mod._detect_runtime = lambda: "systemd" if _demo_enabled() else _original_api_detect_runtime()  # type: ignore[assignment]
+    _abt._last_scan_completed = 0.0
 
     # ------------------------------------------------------------------
     # 6. Patch state module
@@ -485,8 +641,10 @@ def install() -> None:
     import config as _config_mod
 
     _original_load = _config_mod.load_config
+    _original_write_config_file = _config_mod.write_config_file
+    _original_update_config = _config_mod.update_config
 
-    def _demo_load_config() -> dict:
+    def _build_demo_base_config() -> dict:
         result = _original_load()
         result["BLUETOOTH_DEVICES"] = deepcopy(DEMO_DEVICES)
         result["BLUETOOTH_ADAPTERS"] = deepcopy(DEMO_ADAPTERS)
@@ -501,15 +659,145 @@ def install() -> None:
         result["MA_API_TOKEN"] = DEMO_MA_TOKEN
         return result
 
+    _demo_canonical_config = _build_demo_base_config()
+    _demo_runtime_config = deepcopy(_demo_canonical_config)
+    _demo_config_dir = Path(os.getenv("SENDSPIN_DEMO_CONFIG_DIR") or "/tmp/sendspin-demo-config")
+    _demo_config_file = _demo_config_dir / "config.json"
+    os.environ["CONFIG_DIR"] = str(_demo_config_dir)
+    _config_mod.CONFIG_DIR = _demo_config_dir
+    _config_mod.CONFIG_FILE = _demo_config_file
+    if hasattr(_sc_mod, "CONFIG_FILE"):
+        _sc_mod.CONFIG_FILE = _demo_config_file  # type: ignore[attr-defined]
+    bluetooth_manager.CONFIG_FILE = _demo_config_file  # type: ignore[attr-defined]
+    _sbt._CONFIG_FILE = _demo_config_file  # type: ignore[attr-defined]
+
+    def _reset_demo_runtime_state() -> None:
+        nonlocal \
+            _demo_runtime_config, \
+            _demo_runtime_scan_results, \
+            _demo_runtime_paired_devices, \
+            _demo_runtime_bt_device_info
+        with _demo_state_lock:
+            _demo_runtime_config = deepcopy(_demo_canonical_config)
+            _demo_runtime_scan_results = deepcopy(DEMO_SCAN_RESULTS)
+            _demo_runtime_paired_devices = deepcopy(DEMO_PAIRED_DEVICES)
+            _demo_runtime_bt_device_info = _build_demo_bt_device_info(_demo_runtime_paired_devices)
+
+    def _demo_load_config() -> dict:
+        if not _demo_enabled():
+            return _original_load()
+        with _demo_state_lock:
+            return deepcopy(_demo_runtime_config if _demo_runtime_config is not None else _demo_canonical_config)
+
+    def _demo_write_config_file(config: dict, *, config_file=None, config_dir=None) -> None:
+        if not _demo_enabled():
+            _original_write_config_file(config, config_file=config_file, config_dir=config_dir)
+            return
+        del config_file, config_dir
+        nonlocal _demo_runtime_config
+        with _demo_state_lock:
+            _demo_runtime_config = deepcopy(config)
+
+    def _demo_update_config(mutator) -> dict:
+        if not _demo_enabled():
+            return _original_update_config(mutator)
+        nonlocal _demo_runtime_config
+        with _demo_state_lock:
+            current = deepcopy(_demo_runtime_config if _demo_runtime_config is not None else _demo_canonical_config)
+            mutator(current)
+            _demo_runtime_config = current
+            return deepcopy(current)
+
     _config_mod.load_config = _demo_load_config
+    _config_mod.write_config_file = _demo_write_config_file  # type: ignore[assignment]
+    _config_mod.update_config = _demo_update_config  # type: ignore[assignment]
     _sc_mod.load_config = _demo_load_config  # type: ignore[attr-defined]
     import bridge_orchestrator as _bridge_orchestrator
     import routes.api_config as _api_config_mod
 
     _bridge_orchestrator.load_config = _demo_load_config
+    if hasattr(_bridge_orchestrator, "CONFIG_FILE"):
+        _bridge_orchestrator.CONFIG_FILE = _demo_config_file  # type: ignore[attr-defined]
     _api_config_mod.load_config = _demo_load_config
-    _api_config_mod._read_log_lines = lambda runtime, lines: list(DEMO_LOG_LINES)[-lines:]
+    _api_config_mod.CONFIG_FILE = _demo_config_file  # type: ignore[assignment]
+    _api_config_mod.write_config_file = _demo_write_config_file  # type: ignore[assignment]
+    _api_config_mod.update_config = _demo_update_config  # type: ignore[assignment]
+    _original_sync_ha_options = _api_config_mod._sync_ha_options
+    _original_read_log_lines = _api_config_mod._read_log_lines
+    _api_config_mod._sync_ha_options = (  # type: ignore[assignment]
+        lambda config: None if _demo_enabled() else _original_sync_ha_options(config)
+    )
+    _abt.load_config = _demo_load_config
+    if hasattr(_abt, "CONFIG_FILE"):
+        _abt.CONFIG_FILE = _demo_config_file  # type: ignore[assignment]
+    _api_config_mod._read_log_lines = (  # type: ignore[assignment]
+        lambda runtime, lines: list(DEMO_LOG_LINES)[-lines:]
+        if _demo_enabled()
+        else _original_read_log_lines(runtime, lines)
+    )
     _api_config_mod.subprocess = _demo_subprocess  # type: ignore[assignment]
+
+    def _simulate_demo_restart() -> None:
+        if not _demo_enabled():
+            return
+        from state import complete_startup_progress, reset_startup_progress, update_startup_progress
+
+        _reset_demo_runtime_state()
+        reset_startup_progress(6, message="Demo restart initiated")
+        update_startup_progress(
+            "shutdown",
+            "Restart in progress…",
+            current_step=6,
+            total_steps=6,
+            status="stopping",
+            details={"demo_mode": True, "emulated_restart": True},
+        )
+        time.sleep(0.35)
+        reset_startup_progress(6, message="Demo startup initiated")
+        update_startup_progress(
+            "config",
+            "Loading demo configuration",
+            current_step=1,
+            details={"demo_mode": True, "emulated_restart": True},
+        )
+        time.sleep(0.2)
+        update_startup_progress(
+            "devices",
+            "Refreshing demo device registry",
+            current_step=3,
+            details={"configured_devices": len(DEMO_DEVICES), "emulated_restart": True},
+        )
+        time.sleep(0.2)
+        update_startup_progress(
+            "integrations",
+            "Restoring demo integrations",
+            current_step=5,
+            details={"ma_configured": True, "ma_monitor_enabled": True, "emulated_restart": True},
+        )
+        time.sleep(0.15)
+        complete_startup_progress(
+            "Demo restart complete",
+            details={
+                "active_clients": len(_st.clients),
+                "ma_monitor_enabled": True,
+                "demo_mode": True,
+                "emulated_restart": True,
+            },
+        )
+
+    def _demo_api_restart():
+        if not _demo_enabled():
+            return None
+        from flask import jsonify
+
+        def _run_demo_restart() -> None:
+            time.sleep(0.1)
+            _simulate_demo_restart()
+
+        threading.Thread(target=_run_demo_restart, daemon=True, name="demo-restart").start()
+        return jsonify({"success": True, "runtime": "systemd", "emulated": True})
+
+    _api_mod._restart_override = _demo_api_restart  # type: ignore[assignment]
 
     # ------------------------------------------------------------------
     # 8. Patch diagnostics / bugreport helpers
@@ -548,16 +836,22 @@ def install() -> None:
             "bluetooth": {
                 "controller": True,
                 "adapter": DEMO_ADAPTERS[0]["mac"],
-                "paired_devices": len(DEMO_PAIRED_DEVICES),
+                "paired_devices": len(_current_demo_paired_devices()),
             },
             "dbus": True,
             "memory_mb": 512,
             "version": _api_status_mod.VERSION,
         }
 
-    _api_status_mod._collect_preflight_status = _demo_collect_preflight_status
+    _original_collect_preflight_status = _api_status_mod._collect_preflight_status
+    _api_status_mod._collect_preflight_status = (  # type: ignore[assignment]
+        lambda: _demo_collect_preflight_status() if _demo_enabled() else _original_collect_preflight_status()
+    )
     _api_status_mod._collect_recent_logs = lambda n=100: list(DEMO_LOG_LINES)[-n:]
-    _api_status_mod._collect_bt_device_info = lambda: deepcopy(DEMO_BT_DEVICE_INFO)
+    _original_collect_bt_device_info = _api_status_mod._collect_bt_device_info
+    _api_status_mod._collect_bt_device_info = (  # type: ignore[assignment]
+        lambda: _current_demo_bt_device_info() if _demo_enabled() else _original_collect_bt_device_info()
+    )
     _api_status_mod._collect_subprocess_info = _demo_collect_subprocess_info
 
     try:

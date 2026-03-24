@@ -31,6 +31,7 @@ from services.status_snapshot import build_device_snapshot_pairs
 logger = logging.getLogger(__name__)
 
 api_bp = Blueprint("api", __name__)
+_restart_override = None
 
 
 # ---------------------------------------------------------------------------
@@ -130,6 +131,10 @@ def _ensure_target_pairs(targets):
 @api_bp.route("/api/restart", methods=["POST"])
 def api_restart():
     """Restart the service (systemd, HA addon, or Docker)."""
+    if _restart_override is not None:
+        override_response = _restart_override()
+        if override_response is not None:
+            return override_response
     runtime = _detect_runtime()
     try:
         if runtime == "systemd":
