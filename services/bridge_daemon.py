@@ -185,6 +185,7 @@ class BridgeDaemon(SendspinDaemon):
 
         client.add_group_update_listener(self._on_group_update)
         client.add_metadata_listener(self._on_metadata_update)
+        client.add_controller_state_listener(self._on_controller_state)
         client.add_disconnect_listener(self._on_server_disconnect)
 
         # Register visualizer listener if available
@@ -344,6 +345,34 @@ class BridgeDaemon(SendspinDaemon):
         if not isinstance(metadata.artist, UndefinedField):
             self._bridge_status["current_artist"] = metadata.artist
             changed = True
+        if not isinstance(getattr(metadata, "album", UndefinedField()), UndefinedField):
+            self._bridge_status["current_album"] = metadata.album
+            changed = True
+        if not isinstance(getattr(metadata, "album_artist", UndefinedField()), UndefinedField):
+            self._bridge_status["current_album_artist"] = metadata.album_artist
+            changed = True
+        if not isinstance(getattr(metadata, "artwork_url", UndefinedField()), UndefinedField):
+            self._bridge_status["artwork_url"] = metadata.artwork_url
+            changed = True
+        if not isinstance(getattr(metadata, "year", UndefinedField()), UndefinedField):
+            self._bridge_status["track_year"] = metadata.year
+            changed = True
+        if not isinstance(getattr(metadata, "track", UndefinedField()), UndefinedField):
+            self._bridge_status["track_number"] = metadata.track
+            changed = True
+        if not isinstance(getattr(metadata, "shuffle", UndefinedField()), UndefinedField):
+            self._bridge_status["shuffle"] = bool(metadata.shuffle) if metadata.shuffle is not None else None
+            changed = True
+        repeat_val = getattr(metadata, "repeat", UndefinedField())
+        if not isinstance(repeat_val, UndefinedField):
+            self._bridge_status["repeat_mode"] = (
+                repeat_val.value
+                if hasattr(repeat_val, "value")
+                else str(repeat_val)
+                if repeat_val is not None
+                else None
+            )
+            changed = True
         progress = getattr(metadata, "progress", None)
         if progress is not None:
             tp = getattr(progress, "track_progress", None)
@@ -358,6 +387,31 @@ class BridgeDaemon(SendspinDaemon):
             if ps is not None:
                 self._bridge_status["playback_speed"] = int(ps)
                 changed = True
+        if changed:
+            self._notify()
+
+    # ── Controller state ─────────────────────────────────────────────────────
+
+    def _on_controller_state(self, payload: ServerStatePayload) -> None:
+        """Callback receives ServerStatePayload; controller info is in payload.controller."""
+        controller = getattr(payload, "controller", None)
+        if controller is None:
+            return
+        changed = False
+        supported = getattr(controller, "supported_commands", None)
+        if supported is not None:
+            self._bridge_status["supported_commands"] = [
+                cmd.value if hasattr(cmd, "value") else str(cmd) for cmd in supported
+            ]
+            changed = True
+        vol = getattr(controller, "volume", None)
+        if vol is not None:
+            self._bridge_status["group_volume"] = int(vol)
+            changed = True
+        muted = getattr(controller, "muted", None)
+        if muted is not None:
+            self._bridge_status["group_muted"] = bool(muted)
+            changed = True
         if changed:
             self._notify()
 

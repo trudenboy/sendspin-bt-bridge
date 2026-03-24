@@ -374,6 +374,37 @@ async def _read_commands(daemon_ref: list, stop_event: asyncio.Event) -> None:
                 logger.warning("Invalid log level requested: %s", level_name)
                 continue
             logging.getLogger().setLevel(getattr(logging, level_name))
+        elif cmd.cmd == "transport":
+            daemon = daemon_ref[0] if daemon_ref else None
+            action = str(cmd.payload.get("action", "")).strip()
+            if not daemon or not daemon._client or not daemon._client.connected:
+                logger.warning("Transport command %r ignored — client not connected", action)
+                continue
+            from aiosendspin.models.types import MediaCommand
+
+            _TRANSPORT_MAP = {mc.value: mc for mc in MediaCommand}
+            mc = _TRANSPORT_MAP.get(action)
+            if mc is None:
+                logger.warning("Unknown transport action: %s", action)
+                continue
+            kwargs: dict = {}
+            value = cmd.payload.get("value")
+            if mc == MediaCommand.VOLUME and value is not None:
+                try:
+                    kwargs["volume"] = max(0, min(100, int(value)))
+                except (ValueError, TypeError):
+                    logger.warning("Invalid volume value for transport: %s", value)
+                    continue
+            elif mc == MediaCommand.MUTE and value is not None:
+                kwargs["mute"] = bool(value)
+            _task = asyncio.ensure_future(daemon._client.send_group_command(mc, **kwargs))
+            _background_tasks.add(_task)
+            _task.add_done_callback(_background_tasks.discard)
+            _task.add_done_callback(
+                lambda t, _a=action: logger.debug("transport %s error: %s", _a, t.exception())
+                if t.exception()
+                else None
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -503,6 +534,17 @@ async def _run(params: dict) -> None:
         "sink_muted": False,
         "track_progress_ms": None,
         "track_duration_ms": None,
+        "playback_speed": None,
+        "current_album": None,
+        "current_album_artist": None,
+        "artwork_url": None,
+        "track_year": None,
+        "track_number": None,
+        "shuffle": None,
+        "repeat_mode": None,
+        "supported_commands": None,
+        "group_volume": None,
+        "group_muted": None,
     }
 
     # Emit initial status so parent knows subprocess is alive

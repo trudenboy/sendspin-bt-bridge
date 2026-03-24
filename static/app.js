@@ -2534,14 +2534,16 @@ function _getDeviceNowPlayingState(dev, i) {
     var deviceMaActive = !!(ma.connected && deviceHasSink(safeDev));
     var artist = _firstOfSlash((deviceMaActive ? (ma.artist || '') : '') || safeDev.current_artist || '');
     var track = _firstOfSlash((deviceMaActive ? (ma.track || '') : '') || safeDev.current_track || '');
-    var album = _firstOfSlash(deviceMaActive ? (ma.album || '') : '');
+    var album = _firstOfSlash((deviceMaActive ? (ma.album || '') : '') || safeDev.current_album || '');
+    var artUrl = deviceMaActive ? (ma.image_url || '') : '';
+    if (!artUrl && safeDev.artwork_url) artUrl = safeDev.artwork_url;
     return {
         ma: ma,
         deviceMaActive: deviceMaActive,
         track: track,
         artist: artist,
         album: album,
-        artUrl: deviceMaActive ? (ma.image_url || '') : '',
+        artUrl: artUrl,
         hasTrack: !!(track || artist),
         titleText: track || 'Nothing playing',
         metaText: [artist, album].filter(Boolean).join(' · '),
@@ -2623,7 +2625,9 @@ function _getDeviceTransportState(dev, mediaState) {
     var queueCapability = _getDeviceActionCapability(safeDev, 'queue_control');
     var hasSink = _capabilityAvailable(volumeCapability, deviceHasSink(safeDev));
     var canTransport = _capabilityAvailable(playPauseCapability, !!safeDev.server_connected);
-    var hasQueueControls = _capabilityAvailable(queueCapability, !!(safeDev.server_connected && ma.connected));
+    var nativeCmds = Array.isArray(safeDev.supported_commands) ? safeDev.supported_commands : [];
+    var hasNativeTransport = nativeCmds.length > 0;
+    var hasQueueControls = _capabilityAvailable(queueCapability, !!(safeDev.server_connected && (ma.connected || hasNativeTransport)));
     var queueUnavailableTitle = _capabilityBlockedReason(
         queueCapability,
         !safeDev.server_connected ? 'Sendspin not connected' : 'Music Assistant API not connected'
@@ -2632,13 +2636,18 @@ function _getDeviceTransportState(dev, mediaState) {
     var queueActionPending = _isQueueTransportActionPending(maMeta);
     var shufflePending = _hasPendingMaAction(maMeta, 'shuffle');
     var repeatPending = _hasPendingMaAction(maMeta, 'repeat');
+    // Use native shuffle/repeat as fallback when MA is unavailable
+    var shuffleState = ma.shuffle != null ? !!ma.shuffle : (safeDev.shuffle != null ? !!safeDev.shuffle : false);
+    var repeatState = ma.repeat || safeDev.repeat_mode || 'off';
     return {
         hasSink: hasSink,
         canTransport: canTransport,
         hasQueueControls: hasQueueControls,
+        hasNativeTransport: hasNativeTransport,
+        nativeCommands: nativeCmds,
         isPlaying: !!safeDev.playing,
-        shuffle: !!ma.shuffle,
-        repeat: ma.repeat || 'off',
+        shuffle: shuffleState,
+        repeat: repeatState,
         transportUnavailableTitle: _capabilityBlockedReason(playPauseCapability, canTransport ? '' : 'Sendspin not connected'),
         queueUnavailableTitle: queueUnavailableTitle,
         muteUnavailableTitle: _capabilityBlockedReason(
@@ -2650,13 +2659,13 @@ function _getDeviceTransportState(dev, mediaState) {
         shufflePending: shufflePending,
         repeatPending: repeatPending,
         shuffleTitle: _buildQueueActionTitle(
-            ma.shuffle ? 'Shuffle on — click to disable' : 'Shuffle off — click to enable',
+            shuffleState ? 'Shuffle on — click to disable' : 'Shuffle off — click to enable',
             queueActionPending,
             hasQueueControls ? '' : queueUnavailableTitle,
             pendingSummary
         ),
         repeatTitle: _buildQueueActionTitle(
-            'Repeat: ' + (ma.repeat || 'off') + ' — click to cycle',
+            'Repeat: ' + repeatState + ' — click to cycle',
             queueActionPending,
             hasQueueControls ? '' : queueUnavailableTitle,
             pendingSummary
@@ -4215,6 +4224,36 @@ async function maQueueCmd(action, value, devIdx) {
     if (btnId && _isLocked(btnId)) return;
     if (btnId) _lockBtn(btnId);
 
+    // Prefer native Sendspin transport when supported
+    var nativeAction = action;
+    if (action === 'shuffle' && value === undefined) {
+        nativeAction = transportState.shuffle ? 'unshuffle' : 'shuffle';
+    } else if (action === 'repeat' && typeof value === 'string' && value.indexOf('repeat_') === 0) {
+        // maCycleRepeat passes value='repeat_off'/'repeat_all'/'repeat_one' as native action
+        nativeAction = value;
+        value = undefined;
+    }
+    if (transportState.hasNativeTransport && transportState.nativeCommands.indexOf(nativeAction) !== -1) {
+        try {
+            var nativeBody = {action: nativeAction, device_index: devIdx};
+            if (value !== undefined) nativeBody.value = value;
+            var resp = await fetch(API_BASE + '/api/transport/cmd', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(nativeBody)
+            });
+            var data = await resp.json();
+            if (!resp.ok || !data.success) {
+                throw new Error((data && data.error) || ('HTTP ' + resp.status));
+            }
+        } catch (e) {
+            showToast('Transport command failed: ' + e.message, 'error');
+        } finally {
+            if (btnId) _unlockBtn(btnId);
+        }
+        return;
+    }
+
     var ma = dev && dev.ma_now_playing ? dev.ma_now_playing : {};
     var body = {action: action};
     if (value !== undefined) body.value = value;
@@ -4271,8 +4310,17 @@ async function maQueueCmd(action, value, devIdx) {
 }
 
 function maCycleRepeat(devIdx) {
-    var ma = (devIdx != null && lastDevices && lastDevices[devIdx] && lastDevices[devIdx].ma_now_playing) || {};
-    var rm = ma.repeat || 'off';
+    var dev = (devIdx != null && lastDevices && lastDevices[devIdx]) || {};
+    var transportState = _getDeviceTransportState(dev);
+    var rm = transportState.repeat;
+    // Native transport uses repeat_off/repeat_all/repeat_one actions
+    if (transportState.hasNativeTransport) {
+        var nativeAction = rm === 'off' ? 'repeat_all' : rm === 'all' ? 'repeat_one' : 'repeat_off';
+        if (transportState.nativeCommands.indexOf(nativeAction) !== -1) {
+            maQueueCmd('repeat', nativeAction, devIdx);
+            return;
+        }
+    }
     var next = rm === 'off' ? 'all' : rm === 'all' ? 'one' : 'off';
     maQueueCmd('repeat', next, devIdx);
 }

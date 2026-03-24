@@ -65,6 +65,17 @@ _IPC_ALLOWED_KEYS = frozenset(
         "last_reanchor_at",
         "current_track",
         "current_artist",
+        "current_album",
+        "current_album_artist",
+        "artwork_url",
+        "track_year",
+        "track_number",
+        "shuffle",
+        "repeat_mode",
+        "playback_speed",
+        "supported_commands",
+        "group_volume",
+        "group_muted",
         "state_changed_at",
         "last_error",
         "last_error_at",
@@ -141,6 +152,17 @@ class DeviceStatus:
     connected_server_url: str | None = None
     track_progress_ms: int | None = None
     track_duration_ms: int | None = None
+    playback_speed: int | None = None
+    current_album: str | None = None
+    current_album_artist: str | None = None
+    artwork_url: str | None = None
+    track_year: int | None = None
+    track_number: int | None = None
+    shuffle: bool | None = None
+    repeat_mode: str | None = None
+    supported_commands: list | None = None
+    group_volume: int | None = None
+    group_muted: bool | None = None
 
     # ── Dict-compatible interface ──────────────────────────────────────────
 
@@ -648,6 +670,19 @@ class SendspinClient:
         of register_or_update() — see music-assistant/support#5049).
         """
         await self._send_subprocess_command({"cmd": "reconnect", "delay": 3.0})
+
+    async def send_transport_command(self, action: str, value: object = None) -> bool:
+        """Send a native Sendspin transport command to the daemon subprocess.
+
+        Returns True if the command was dispatched, False otherwise.
+        """
+        if self._daemon_proc is None or self._daemon_proc.returncode is not None:
+            return False
+        cmd: dict = {"cmd": "transport", "action": action}
+        if value is not None:
+            cmd["value"] = value
+        await self._send_subprocess_command(cmd)
+        return True
 
     async def _keepalive_loop(self) -> None:
         """Periodically send a short silence burst to the BT sink to prevent speaker auto-disconnect."""
