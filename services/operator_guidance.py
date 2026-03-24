@@ -202,6 +202,11 @@ def _reconnect_attempt_summary(device: Any) -> str:
     return f"Reconnect attempt {attempt} is in progress."
 
 
+def _has_active_reconnect_attempt(device: Any) -> bool:
+    extra = _device_extra(device)
+    return int(extra.get("reconnect_attempt") or 0) > 0
+
+
 def _guidance_action_from_dict(payload: dict[str, Any] | None) -> GuidanceAction | None:
     if not isinstance(payload, dict):
         return None
@@ -648,18 +653,33 @@ def _build_issue_groups(
             if len(disconnected) == 1
             else f"Power on or reconnect {_format_device_label(disconnected)}."
         )
+        disconnected_device = None
         if len(disconnected) == 1:
-            attempt_summary = next(
+            disconnected_device = next(
                 (
-                    _reconnect_attempt_summary(device)
+                    device
                     for device in devices
                     if str(getattr(device, "player_name", None) or "Unknown") == disconnected[0]
                 ),
-                "",
+                None,
             )
+            attempt_summary = _reconnect_attempt_summary(disconnected_device) if disconnected_device is not None else ""
             if attempt_summary:
                 summary = f"{summary} {attempt_summary}"
         primary_action, secondary_actions = _guidance_actions_from_recovery("disconnected", disconnected)
+        if (
+            len(disconnected) == 1
+            and disconnected_device is not None
+            and _has_active_reconnect_attempt(disconnected_device)
+        ):
+            reconnect_action = primary_action
+            primary_action = GuidanceAction(
+                key="toggle_bt_management",
+                label="Release Bluetooth",
+                device_names=disconnected,
+            )
+            if reconnect_action is not None:
+                secondary_actions = [reconnect_action, *secondary_actions]
         _append_group(
             groups,
             key="disconnected",
