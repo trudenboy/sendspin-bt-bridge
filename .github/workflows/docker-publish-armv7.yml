@@ -19,9 +19,37 @@ jobs:
   prepare:
     runs-on: ubuntu-latest
     outputs:
+      sendspin_version: ${{ steps.resolve_sendspin.outputs.version }}
       release_channel: ${{ steps.publish_context.outputs.channel }}
       metadata_tags: ${{ steps.publish_context.outputs.metadata_tags }}
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag != '' && inputs.tag || github.ref }}
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev libdbus-glib-1-dev libglib2.0-dev
+
+      - name: Resolve release sendspin version
+        id: resolve_sendspin
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          VERSION=$(python - <<'PY'
+          import importlib.metadata as metadata
+          print(metadata.version("sendspin"))
+          PY
+          )
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Resolved sendspin version: ${VERSION}"
+
       - name: Resolve publish context
         id: publish_context
         env:
@@ -110,6 +138,8 @@ jobs:
           context: .
           platforms: linux/arm/v7
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            SENDSPIN_VERSION=${{ needs.prepare.outputs.sendspin_version }}
           cache-from: type=gha,scope=linux/arm/v7
           cache-to: type=gha,mode=max,scope=linux/arm/v7,ignore-error=true
           outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
@@ -118,6 +148,7 @@ jobs:
         run: |
           image="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}"
           docker pull --platform linux/arm/v7 "${image}"
+          docker run --rm --platform linux/arm/v7 --entrypoint python3 "${image}" scripts/check_sendspin_compat.py
           docker run --rm --platform linux/arm/v7 --entrypoint python3 "${image}" scripts/check_container_runtime.py
 
       - name: Export digest

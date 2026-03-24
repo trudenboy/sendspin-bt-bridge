@@ -7,6 +7,21 @@ def test_dockerfile_copies_all_top_level_python_modules():
     assert "COPY *.py ./" in dockerfile
 
 
+def test_dockerfile_installs_ffmpeg_runtime_libraries():
+    dockerfile = (Path(__file__).resolve().parents[1] / "Dockerfile").read_text()
+
+    for package in (
+        "libavcodec61",
+        "libavdevice61",
+        "libavfilter10",
+        "libavformat61",
+        "libavutil59",
+        "libswresample5",
+        "libswscale8",
+    ):
+        assert package in dockerfile
+
+
 def test_entrypoint_sets_ha_config_dir_before_config_diagnostics():
     entrypoint = (Path(__file__).resolve().parents[1] / "entrypoint.sh").read_text()
 
@@ -45,3 +60,11 @@ def test_rpi_check_mentions_container_uid_audio_troubleshooting():
     assert "auto-run the bridge process as AUDIO_UID" in script
     assert "docker exec sendspin-client ps -o user:20,pid,command -C python3" in script
     assert "docker logs --tail 80 sendspin-client" in script
+
+
+def test_armv7_publish_workflow_builds_pinned_sendspin_and_smoke_tests_import():
+    workflow = (Path(__file__).resolve().parents[1] / ".github" / "workflows" / "docker-publish-armv7.yml").read_text()
+
+    assert "sendspin_version" in workflow
+    assert "SENDSPIN_VERSION=${{ needs.prepare.outputs.sendspin_version }}" in workflow
+    assert "scripts/check_sendspin_compat.py" in workflow

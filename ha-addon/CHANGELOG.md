@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.46.0] - 2026-03-23
+
+### Added
+- Bridge-backed Bluetooth devices can now carry stable room metadata (`room_name`, `room_id`, source/confidence) and expose it through status snapshots, making Music Assistant / Home Assistant / MassDroid room mapping much easier to reason about.
+- Device snapshots now include a compact `transfer_readiness` contract so operators and automations can see whether a speaker is truly ready for a fast room handoff.
+
+### Changed
+- Docker and Raspberry Pi images now keep container init/root setup for Bluetooth and D-Bus, but automatically re-exec the bridge process as `AUDIO_UID` for user-scoped host audio sockets. This removes the common Raspberry Pi root-vs-user PulseAudio/PipeWire mismatch without requiring a global Compose `user:` override.
+- ARMv7 release images now install the FFmpeg runtime libraries needed by PyAV/sendspin and the publish workflow now smoke-tests the actual daemon import path, fixing the `libavformat.so.61` runtime crash seen on older Raspberry Pi hardware.
+- Per-device settings now support an explicit `handoff_mode`, with `fast_handoff` reusing the existing keepalive path to keep selected speakers warmer for transfer-heavy room workflows.
+- Runtime device events are now enriched with room and readiness context, and the web UI surfaces new room / transfer badges plus manual room assignment controls in device settings.
+- Home Assistant add-on config sync/translation now preserves the new room and handoff fields across supervisor round-trips and restarts.
+- Startup diagnostics, the Raspberry Pi pre-flight checker, and Docker docs now distinguish init UID vs app UID, explain the split-privileges model, and make user-scoped PipeWire/PulseAudio failures much easier to diagnose.
+
 ## [2.45.0] - 2026-03-23
 
 ### Added

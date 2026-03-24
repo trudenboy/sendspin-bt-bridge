@@ -80,7 +80,14 @@ RUN apt-get update && apt-get install -y \
     gosu \
     pulseaudio \
     pulseaudio-module-bluetooth \
+    libavcodec61 \
+    libavdevice61 \
+    libavfilter10 \
+    libavformat61 \
+    libavutil59 \
     libportaudio2 \
+    libswresample5 \
+    libswscale8 \
     dbus \
     libdbus-1-3 \
     libdbus-glib-1-2 \
