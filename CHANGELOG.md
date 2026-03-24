@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.47.1] - 2026-03-24
+
+### Fixed
+- Fix `Separator is found, but chunk is longer than limit` crash when artwork binary frames exceed asyncio's default 64 KB readline buffer. Subprocess stdout buffer raised to 1 MB; artwork frames capped at 48 KB raw to stay within IPC line budget.
+
 ## [2.47.0] - 2026-03-24
 
 ### Security

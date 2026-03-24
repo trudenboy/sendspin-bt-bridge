@@ -573,6 +573,7 @@ class SendspinClient:
                 stderr=asyncio.subprocess.PIPE,
                 env=env,
                 cwd=os.path.dirname(os.path.abspath(__file__)),
+                limit=1024 * 1024,  # 1 MB readline buffer (artwork base64 can exceed 64 KB default)
             )
             self._update_status({"playing": False})
 

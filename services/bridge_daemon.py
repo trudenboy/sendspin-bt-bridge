@@ -361,6 +361,11 @@ class BridgeDaemon(SendspinDaemon):
 
     def _on_artwork_frame(self, channel: int, image_data: bytes) -> None:
         """Handle artwork binary frame received from the server."""
+        # Cap artwork at 48 KB raw (64 KB base64) to stay within IPC line limits
+        _MAX_ARTWORK_RAW = 48_000
+        if len(image_data) > _MAX_ARTWORK_RAW:
+            logger.debug("Artwork frame too large for IPC (%d bytes), skipping", len(image_data))
+            return
         encoded = base64.b64encode(image_data).decode("ascii")
         self._bridge_status["artwork_b64"] = encoded
         self._bridge_status["artwork_channel"] = channel
