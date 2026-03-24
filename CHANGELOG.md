@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.47.0-rc.2] - 2026-03-24
+
+### Changed
+- **Upgrade sendspin 5.3.2 → 5.7.1**: Updated `requirements.txt` to `sendspin>=5.7.0,<6.0.0`. Includes upstream bugfixes for volume reset on reconnect, pitch shift on format change, and server/hello ordering.
+- **Adapt to new volume controller protocol**: `DaemonArgs` now uses `volume_controller` kwarg (sendspin 5.5.0+) with runtime compat filter that falls back to `use_hardware_volume` on older versions.
+- **BridgeDaemon skips manual sink sync when upstream handles volume**: `_has_upstream_volume_controller()` check prevents double volume commands.
+
+### Added
+- **PulseVolumeController** (`services/pa_volume_controller.py`): Implements the sendspin `VolumeController` protocol for PulseAudio/PipeWire sinks — atomic volume/mute control via `pulsectl`.
+- **Artwork role support**: `BridgeDaemon._create_client()` requests `ARTWORK` role with graceful fallback; monkey-patches `_handle_binary_message` to forward artwork frames as base64 in status dict.
+- **Visualizer role support**: `BridgeDaemon._create_client()` requests `VISUALIZER` role with graceful fallback; `_on_visualizer_frames()` callback logs frame counts at debug level.
+- New test files: `test_pa_volume_controller.py` (5 tests), `test_bridge_daemon_features.py` (10 tests).
+
 ## [2.47.0-rc.1] - 2026-03-24
 
 ### Changed

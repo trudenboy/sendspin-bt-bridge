@@ -14,6 +14,7 @@ def test_filter_supported_call_kwargs_drops_unknown_fields():
             "audio_device": "default",
             "client_id": "player-1",
             "use_mpris": False,
+            "volume_controller": None,
             "use_hardware_volume": False,
         },
     )
@@ -35,7 +36,7 @@ def test_analyze_daemon_args_compatibility_flags_missing_required_fields():
         {
             "audio_device": "default",
             "client_id": "player-1",
-            "use_hardware_volume": False,
+            "volume_controller": None,
         },
     )
 

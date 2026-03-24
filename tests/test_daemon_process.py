@@ -166,6 +166,7 @@ def test_filter_supported_daemon_args_kwargs_drops_unknown_fields():
             "audio_device": "default",
             "client_id": "player-1",
             "use_mpris": False,
+            "volume_controller": None,
             "use_hardware_volume": False,
         },
     )
@@ -177,7 +178,29 @@ def test_filter_supported_daemon_args_kwargs_drops_unknown_fields():
     }
 
 
-def test_filter_supported_daemon_args_kwargs_preserves_supported_fields():
+def test_filter_supported_daemon_args_kwargs_preserves_volume_controller():
+    """New sendspin >=5.5.0 uses volume_controller kwarg."""
+
+    class FakeDaemonArgs:
+        def __init__(self, audio_device, client_id, use_mpris=False, volume_controller=None):
+            pass
+
+    filtered = _filter_supported_daemon_args_kwargs(
+        FakeDaemonArgs,
+        {
+            "audio_device": "default",
+            "client_id": "player-1",
+            "use_mpris": False,
+            "volume_controller": None,
+        },
+    )
+
+    assert filtered["volume_controller"] is None
+
+
+def test_filter_supported_daemon_args_kwargs_preserves_legacy_hw_volume():
+    """Old sendspin <5.5.0 uses use_hardware_volume kwarg."""
+
     class FakeDaemonArgs:
         def __init__(self, audio_device, client_id, use_mpris=False, use_hardware_volume=False):
             pass

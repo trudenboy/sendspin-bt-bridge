@@ -442,6 +442,17 @@ async def _run(params: dict) -> None:
         except Exception as e:
             logger.warning("[%s] Invalid preferred_format %r: %s", player_name, preferred_format_str, e)
 
+    # Build a PulseVolumeController when we have a BT sink and DaemonArgs accepts it
+    pa_volume_controller = None
+    if bluetooth_sink_name:
+        try:
+            from services.pa_volume_controller import PulseVolumeController
+
+            pa_volume_controller = PulseVolumeController(bluetooth_sink_name)
+            logger.info("[%s] Created PulseVolumeController for sink %s", player_name, bluetooth_sink_name)
+        except Exception as exc:
+            logger.warning("[%s] Could not create PulseVolumeController: %s", player_name, exc)
+
     daemon_kwargs = _filter_supported_daemon_args_kwargs(
         DaemonArgs,
         {
@@ -453,12 +464,18 @@ async def _run(params: dict) -> None:
             "static_delay_ms": static_delay_ms,
             "listen_port": listen_port,
             "use_mpris": False,
+            "volume_controller": pa_volume_controller,
+            # Legacy compat: older sendspin uses use_hardware_volume instead
             "use_hardware_volume": False,
             "preferred_format": preferred_fmt,
         },
     )
-    if "use_hardware_volume" not in daemon_kwargs:
-        logger.info("[%s] Installed sendspin DaemonArgs has no use_hardware_volume; skipping compat kwarg", player_name)
+    # Remove whichever volume kwarg DaemonArgs doesn't accept
+    if "volume_controller" not in daemon_kwargs and "use_hardware_volume" not in daemon_kwargs:
+        logger.info("[%s] DaemonArgs accepts neither volume_controller nor use_hardware_volume", player_name)
+    elif "volume_controller" in daemon_kwargs and "use_hardware_volume" in daemon_kwargs:
+        # Both accepted — shouldn't happen, but prefer new API
+        daemon_kwargs.pop("use_hardware_volume", None)
     args = DaemonArgs(
         **daemon_kwargs,
     )
