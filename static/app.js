@@ -6659,6 +6659,61 @@ function _backendServiceToneClass(tone) {
     return tone === 'error' || tone === 'warning' ? 'warning' : 'info';
 }
 
+function _buildFinalizingStartupSummary(status, devices, fallbackSummary) {
+    var startup = status && status.startup_progress ? status.startup_progress : null;
+    var startupMessage = startup && startup.message ? String(startup.message) : '';
+    var normalizedMessage = startupMessage.trim().toLowerCase();
+    var genericMessages = {
+        '': true,
+        'startup complete': true,
+        'demo restart complete': true,
+        'finalizing startup': true,
+    };
+    var relevantDevices = Array.isArray(devices)
+        ? devices.filter(function(dev) { return dev && dev.bt_management_enabled !== false && dev.enabled !== false; })
+        : [];
+    if (!relevantDevices.length) {
+        return genericMessages[normalizedMessage] ? (fallbackSummary || 'Finalizing startup') : startupMessage;
+    }
+
+    var ready = 0;
+    var reconnecting = 0;
+    var waitingForSink = 0;
+    var waitingForSendspin = 0;
+    var waitingForBluetooth = 0;
+    relevantDevices.forEach(function(dev) {
+        if (dev.reconnecting) {
+            reconnecting += 1;
+            return;
+        }
+        if (!dev.bluetooth_connected) {
+            waitingForBluetooth += 1;
+            return;
+        }
+        if (!(dev.has_sink || getDeviceSinkName(dev))) {
+            waitingForSink += 1;
+            return;
+        }
+        if (!dev.server_connected) {
+            waitingForSendspin += 1;
+            return;
+        }
+        ready += 1;
+    });
+
+    var total = relevantDevices.length;
+    var parts = [String(ready) + '/' + String(total) + ' speakers ready'];
+    if (reconnecting) parts.push(String(reconnecting) + ' reconnecting');
+    if (waitingForSink) parts.push(String(waitingForSink) + ' waiting for sink');
+    if (waitingForSendspin) parts.push(String(waitingForSendspin) + ' waiting for Sendspin');
+    if (waitingForBluetooth) parts.push(String(waitingForBluetooth) + ' waiting for Bluetooth');
+
+    if (!genericMessages[normalizedMessage]) {
+        parts.unshift(startupMessage);
+    }
+    return parts.join(' · ');
+}
+
 function _backendServiceIcon(kind, tone) {
     if (kind === 'unavailable' || tone === 'error' || tone === 'warning') {
         return _uiIconSvg('warning', 'ui-icon-svg');
@@ -6867,7 +6922,11 @@ function _deriveUpdateRuntimeState(status, options) {
     } else if (startupFinalizing) {
         label = 'Startup 90%';
         title = 'Startup 90%';
-        summary = 'Finalizing Startup';
+        summary = _buildFinalizingStartupSummary(
+            status,
+            status && Array.isArray(status.devices) ? status.devices : [],
+            (headerStatus && headerStatus.summary) || 'Finalizing startup'
+        );
     } else if (headerStatus && headerStatus.summary && monitor.sawRestartTransition) {
         summary = headerStatus.summary;
     }
@@ -6916,7 +6975,7 @@ function _deriveZeroDeviceRuntimeState(status, devices) {
         ? 'The bridge is restarting. Waiting for startup to resume.'
         : (startupRunning || startupFinalizing)
         ? (startupFinalizing
-            ? 'Finalizing Startup'
+            ? _buildFinalizingStartupSummary(status, devices, 'Finalizing startup')
             : ((startup && startup.message) || (headerStatus && headerStatus.summary) || 'Waiting for bridge startup checks to finish.'))
         : ((startup && startup.message) || (headerStatus && headerStatus.summary) || 'Configured bridge devices are still reconnecting after restart.');
     if (startupRunning || startupRestarting || startupFinalizing) {
@@ -8928,6 +8987,7 @@ function _syncRestartBanner(status, overrideServiceState) {
     var serviceState = overrideServiceState || _backendServiceState;
     var startup = status && status.startup_progress ? status.startup_progress : null;
     var startupStatus = startup && startup.status ? String(startup.status) : '';
+    var restartDevices = status && Array.isArray(status.devices) ? status.devices : lastDevices;
     if (!_restartMonitor && _isRestartRuntimeState(serviceState)) {
         _restartMonitor = {startedAt: Date.now(), manual: false, sawRuntimeRestart: true};
     }
@@ -9004,7 +9064,9 @@ function _syncRestartBanner(status, overrideServiceState) {
         var finalizingStartup = serviceState.label === 'Startup 90%' || serviceState.title === 'Startup 90%';
         _setRestartBannerState({
             percent: Math.max(finalizingStartup ? 90 : (serviceState.kind === 'restoring' ? 85 : 20), startupPercent || 0),
-            message: finalizingStartup ? 'Finalizing Startup' : (serviceState.summary || serviceState.title || 'Restoring bridge state…'),
+            message: finalizingStartup
+                ? _buildFinalizingStartupSummary(status, restartDevices, serviceState.summary || 'Finalizing startup')
+                : (serviceState.summary || serviceState.title || 'Restoring bridge state…'),
             elapsedSeconds: elapsedSeconds,
         });
         return;

@@ -45,6 +45,8 @@ function extractFunction(name) {
 
 const bootstrap = [
   extractFunction('_backendServiceToneClass'),
+  extractFunction('getDeviceSinkName'),
+  extractFunction('_buildFinalizingStartupSummary'),
   extractFunction('_isZeroClientStatusError'),
   extractFunction('_deriveZeroDeviceRuntimeState'),
 ].join('\n\n');
@@ -90,6 +92,8 @@ function extractFunction(name) {
 }
 
 const bootstrap = [
+  extractFunction('getDeviceSinkName'),
+  extractFunction('_buildFinalizingStartupSummary'),
   extractFunction('_normalizeBridgeVersion'),
   extractFunction('_bridgeVersionReleaseLine'),
   extractFunction('_updateMonitorElapsedSeconds'),
@@ -209,6 +213,62 @@ def test_running_startup_keeps_zero_device_runtime_locked() -> None:
     }
 
 
+def test_finalizing_startup_uses_device_restore_summary() -> None:
+    result = _derive_zero_device_runtime_state(
+        {
+            "startup_progress": {
+                "status": "ready",
+                "message": "Startup complete",
+            },
+            "operator_guidance": {
+                "header_status": {
+                    "tone": "info",
+                    "label": "Startup 90%",
+                    "summary": "Finalizing Startup",
+                }
+            },
+        },
+        [
+            {
+                "player_name": "Living Room",
+                "enabled": True,
+                "bt_management_enabled": True,
+                "bluetooth_connected": True,
+                "has_sink": True,
+                "server_connected": True,
+                "reconnecting": False,
+            },
+            {
+                "player_name": "Kitchen",
+                "enabled": True,
+                "bt_management_enabled": True,
+                "bluetooth_connected": True,
+                "has_sink": False,
+                "server_connected": False,
+                "reconnecting": False,
+            },
+            {
+                "player_name": "Patio",
+                "enabled": True,
+                "bt_management_enabled": True,
+                "bluetooth_connected": False,
+                "has_sink": False,
+                "server_connected": False,
+                "reconnecting": True,
+            },
+        ],
+    )
+
+    assert result == {
+        "kind": "starting",
+        "tone": "info",
+        "label": "Startup 90%",
+        "title": "Startup 90%",
+        "summary": "1/3 speakers ready · 1 reconnecting · 1 waiting for sink",
+        "action": {"key": "refresh_diagnostics", "label": "Retry now"},
+    }
+
+
 def test_update_monitor_treats_rc_target_as_complete_when_backend_reports_release_line() -> None:
     payload = _derive_update_runtime_state(
         {
@@ -269,3 +329,54 @@ def test_update_monitor_does_not_false_complete_when_initial_release_line_alread
     assert result["label"] == "Updating…"
     assert result["title"] == "Update in progress"
     assert result["summary"] == "Preparing update to v2.42.4-rc.1. Waiting for the bridge service to restart."
+
+
+def test_update_monitor_finalizing_startup_uses_device_restore_summary() -> None:
+    payload = _derive_update_runtime_state(
+        {
+            "startedAt": 0,
+            "targetVersion": "2.42.4",
+            "targetReleaseLine": "2.42.4",
+            "initialVersion": "2.42.3",
+            "initialReleaseLine": "2.42.3",
+            "channel": "stable",
+            "alreadyRunning": False,
+            "sawBackendUnavailable": True,
+            "sawRestartTransition": True,
+        },
+        {
+            "version": "2.42.3",
+            "startup_progress": {"status": "ready", "message": "Startup complete"},
+            "operator_guidance": {"header_status": {"label": "Startup 90%", "summary": "Finalizing Startup"}},
+            "devices": [
+                {
+                    "enabled": True,
+                    "bt_management_enabled": True,
+                    "bluetooth_connected": True,
+                    "has_sink": True,
+                    "server_connected": True,
+                    "reconnecting": False,
+                },
+                {
+                    "enabled": True,
+                    "bt_management_enabled": True,
+                    "bluetooth_connected": False,
+                    "has_sink": False,
+                    "server_connected": False,
+                    "reconnecting": True,
+                },
+                {
+                    "enabled": True,
+                    "bt_management_enabled": True,
+                    "bluetooth_connected": True,
+                    "has_sink": True,
+                    "server_connected": False,
+                    "reconnecting": False,
+                },
+            ],
+        },
+    )
+
+    result = cast("dict[str, Any]", payload["result"])
+    assert result["label"] == "Startup 90%"
+    assert result["summary"] == "1/3 speakers ready · 1 reconnecting · 1 waiting for Sendspin"

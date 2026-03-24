@@ -409,6 +409,7 @@ def test_demo_bt_scan_pair_and_paired_inventory_are_dynamic(monkeypatch, request
         time.sleep(0.01)
 
     assert scan_result is not None
+    assert all(not str(device["mac"]).startswith("AA:BB:CC:DD:EE:") for device in scan_result["devices"])
     assert any(device["mac"] == "11:22:33:44:55:03" for device in scan_result["devices"])
 
     pair_resp = client.post("/api/bt/pair_new", json={"mac": "11:22:33:44:55:03", "adapter": "hci1"})
@@ -436,6 +437,21 @@ def test_demo_bt_scan_pair_and_paired_inventory_are_dynamic(monkeypatch, request
     assert info_payload["paired"] == "yes"
     assert info_payload["trusted"] == "yes"
 
+    rescan_resp = client.post("/api/bt/scan", json={"adapter": "hci1", "audio_only": True})
+    assert rescan_resp.status_code == 200
+    rescan_job_id = rescan_resp.get_json()["job_id"]
+
+    rescan_result = None
+    for _ in range(30):
+        payload = client.get(f"/api/bt/scan/result/{rescan_job_id}").get_json()
+        if payload.get("status") == "done":
+            rescan_result = payload
+            break
+        time.sleep(0.01)
+
+    assert rescan_result is not None
+    assert all(device["mac"] != "11:22:33:44:55:03" for device in rescan_result["devices"])
+
 
 def test_demo_config_save_is_temporary_and_restart_resets_to_canonical(monkeypatch, request):
     _install_demo_runtime(monkeypatch, request)
@@ -455,13 +471,14 @@ def test_demo_config_save_is_temporary_and_restart_resets_to_canonical(monkeypat
     original_count = len(original_macs)
 
     payload = {key: value for key, value in original.items() if not str(key).startswith("_")}
-    payload["BLUETOOTH_DEVICES"] = list(payload["BLUETOOTH_DEVICES"]) + [
+    payload["BLUETOOTH_DEVICES"] = [
+        *payload["BLUETOOTH_DEVICES"],
         {
             "mac": "11:22:33:44:55:03",
             "player_name": "Portable Boom",
             "adapter": "hci1",
             "enabled": True,
-        }
+        },
     ]
 
     save_resp = client.post("/api/config", json=payload)

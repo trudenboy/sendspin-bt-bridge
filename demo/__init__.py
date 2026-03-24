@@ -108,6 +108,20 @@ def install() -> None:
         with _demo_state_lock:
             return deepcopy(_demo_runtime_bt_device_info)
 
+    def _current_demo_excluded_scan_macs() -> set[str]:
+        with _demo_state_lock:
+            configured_macs = {
+                str(device.get("mac") or "").upper()
+                for device in (_demo_runtime_config or {}).get("BLUETOOTH_DEVICES", [])
+                if str(device.get("mac") or "").strip()
+            }
+            paired_macs = {
+                str(device.get("mac") or "").upper()
+                for device in _demo_runtime_paired_devices
+                if str(device.get("mac") or "").strip()
+            }
+        return configured_macs | paired_macs
+
     def _find_demo_device(mac: str) -> dict[str, Any] | None:
         normalized = str(mac or "").strip().upper()
         with _demo_state_lock:
@@ -411,12 +425,16 @@ def install() -> None:
 
         time.sleep(1.5)
         selected_adapter = str(get_demo_adapter(adapter)["id"]) if adapter else ""
+        excluded_macs = _current_demo_excluded_scan_macs()
         with _demo_state_lock:
             devices: list[dict[str, Any]] = []
             for item in _demo_runtime_scan_results:
                 if selected_adapter and str(item.get("adapter") or "") != selected_adapter:
                     continue
-                entry = deepcopy(item)
+                entry: dict[str, Any] = deepcopy(item)
+                mac = str(entry.get("mac") or "").upper()
+                if mac in excluded_macs:
+                    continue
                 entry.setdefault("audio_capable", True)
                 if audio_only and entry.get("audio_capable") is False:
                     continue
@@ -698,7 +716,7 @@ def install() -> None:
         with _demo_state_lock:
             _demo_runtime_config = deepcopy(config)
 
-    def _demo_update_config(mutator) -> dict:
+    def _demo_update_config(mutator) -> dict[str, Any] | None:
         if not _demo_enabled():
             return _original_update_config(mutator)
         nonlocal _demo_runtime_config
