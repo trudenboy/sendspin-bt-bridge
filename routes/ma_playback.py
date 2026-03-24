@@ -291,10 +291,8 @@ def api_ma_artwork():
     except ValueError as exc:
         return Response(str(exc), status=400)
 
-    # C8: Only proxy artwork from the known MA server — reject external URLs
-    if not is_ma_origin:
-        return Response("Artwork proxy restricted to MA server origin", status=403)
-
+    # HMAC signature (checked above) prevents arbitrary-URL SSRF.
+    # Only attach MA bearer token when the URL targets the MA server itself.
     _ma_url, ma_token = get_ma_api_credentials()
     req = _ur.Request(artwork_url, headers={"Accept": "image/*"})
     if is_ma_origin and ma_token:

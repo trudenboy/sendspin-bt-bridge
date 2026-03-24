@@ -3276,20 +3276,25 @@ def test_ma_artwork_proxy_rejects_unsigned_external_provider_artwork(client):
 
 
 def test_ma_artwork_proxy_fetches_signed_external_provider_artwork_without_ma_token(client):
-    """External (non-MA-origin) artwork URLs are rejected with 403 (C8 restriction)."""
+    """External (non-MA-origin) artwork URLs with valid sig are proxied without Bearer token."""
     import state
     from services.ma_artwork import sign_artwork_url
 
     raw_url = "https://avatars.yandex.net/get-music-content/49876/ab027f9c.a.37173-2/1000x1000"
     state.set_ma_api_credentials("http://ma:8095", "token123")
     try:
-        resp = client.get(
-            "/api/ma/artwork?url="
-            "https%3A%2F%2Favatars.yandex.net%2Fget-music-content%2F49876%2Fab027f9c.a.37173-2%2F1000x1000"
-            f"&sig={sign_artwork_url(raw_url)}"
-        )
-        assert resp.status_code == 403
-        assert "restricted to MA server origin" in resp.get_data(as_text=True)
+        fake_resp = io.BytesIO(b"\x89PNG\r\n\x1a\n")
+        fake_resp.headers = {"Content-Type": "image/png", "Content-Length": "8"}
+        with patch("routes.ma_playback._ur.urlopen", return_value=fake_resp) as mock_open:
+            resp = client.get(
+                "/api/ma/artwork?url="
+                "https%3A%2F%2Favatars.yandex.net%2Fget-music-content%2F49876%2Fab027f9c.a.37173-2%2F1000x1000"
+                f"&sig={sign_artwork_url(raw_url)}"
+            )
+            assert resp.status_code == 200
+            # Should NOT include Authorization header for external URLs
+            called_req = mock_open.call_args[0][0]
+            assert "Authorization" not in called_req.headers
     finally:
         state.set_ma_api_credentials("", "")
 
