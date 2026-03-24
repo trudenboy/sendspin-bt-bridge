@@ -100,6 +100,7 @@ Important:
 | `bridge_name` | string | _(empty)_ | Custom name for this bridge instance. When empty the system hostname is used automatically. |
 | `tz` | string | _(empty)_ | IANA timezone (e.g. `Europe/London`, `America/New_York`). Leave empty to inherit the Home Assistant system timezone. |
 | `pulse_latency_msec` | int | `200` | PulseAudio buffer latency in milliseconds. Higher values (400–600) reduce audio dropouts on slow hardware at the cost of slightly higher latency. |
+| `startup_banner_grace_seconds` | int | `10` | How long the UI keeps the restart screen in its finalizing state after the backend reports ready. Set `0` to unlock immediately. |
 | `prefer_sbc_codec` | bool | `false` | Force the SBC Bluetooth codec after each connection. SBC uses less CPU than AAC/LDAC—useful on low-power hardware with multiple speakers. Enable alongside PCM 44.1 kHz / 16-bit in MA for maximum CPU savings. |
 | `bt_check_interval` | int | `10` | Bluetooth reconnect check interval in seconds. Lower values detect disconnects faster. |
 | `bt_max_reconnect_fails` | int | `0` | Maximum consecutive reconnect attempts before giving up. `0` means unlimited (keep retrying forever). |
