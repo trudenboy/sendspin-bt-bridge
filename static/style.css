@@ -151,29 +151,14 @@ body {
             gap: 8px;
             flex-wrap: wrap;
         }
-        .header-version {
-            display: inline-flex;
-            align-items: center;
-            min-height: 24px;
-            padding: 2px 8px;
-            border-radius: 10px;
-            background: rgba(255,255,255,.2);
-            color: var(--app-header-text-color);
-            font-size: 11px;
-            font-weight: 700;
-            text-decoration: none;
-            cursor: pointer;
-            white-space: nowrap;
-        }
-        .header-version:hover { background: rgba(255,255,255,.28); }
         .header-version.channel-rc {
-            color: #ffe066;
+            --header-version-color: #ffe066;
         }
         .header-version.channel-beta {
-            color: #ffb4b4;
+            --header-version-color: #ffb4b4;
         }
         .header-version.channel-demo {
-            color: #b8f5ff;
+            --header-version-color: #b8f5ff;
         }
         .update-badge-link {
             display: inline-flex;
@@ -590,23 +575,9 @@ body {
             color: rgba(255,255,255,0.82);
         }
         .runtime-badge {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            background: rgba(255,255,255,0.18);
-            color: #fff;
-            font-size: var(--badge-font-size);
-            font-weight: var(--badge-font-weight);
-            line-height: var(--badge-line-height);
-            min-height: var(--badge-min-height);
-            letter-spacing: 0.01em;
-            padding: var(--badge-padding-y) var(--badge-padding-x);
-            border-radius: var(--badge-radius);
             vertical-align: middle;
             margin-right: 6px;
-            cursor: default;
-            user-select: none;
-            -webkit-user-select: none;
+            letter-spacing: 0.01em;
         }
         .health-indicator {
             display: flex;
@@ -6784,8 +6755,6 @@ body {
             padding-left: 10px;
         }
 
-        .header-version,
-        .runtime-badge,
         .header-user-name,
         .header-btn-signout,
         .header-link,
@@ -6795,10 +6764,53 @@ body {
             font-size: var(--ui-control-font-size);
         }
 
-        .header-version {
-            padding: 0 var(--ui-control-padding-x);
-            border: 1px solid rgba(255,255,255,0.18);
+        .header-version,
+        .runtime-badge {
+            min-height: var(--badge-min-height);
+            border-radius: var(--badge-radius);
+            font-size: var(--badge-font-size);
+        }
+
+        .header .header-version.meta-badge.meta-badge-link {
+            --header-version-color: rgba(255,255,255,0.96);
+            align-items: center;
+            justify-content: center;
+            padding: var(--badge-padding-y) var(--badge-padding-x);
+            color: var(--header-version-color);
+            border-color: rgba(255,255,255,0.18);
             background: rgba(255,255,255,0.12);
+            box-shadow: none;
+        }
+
+        .header .header-version.meta-badge.meta-badge-link.channel-rc {
+            --header-version-color: #ffe066;
+        }
+
+        .header .header-version.meta-badge.meta-badge-link.channel-beta {
+            --header-version-color: #ffb4b4;
+        }
+
+        .header .header-version.meta-badge.meta-badge-link.channel-demo {
+            --header-version-color: #b8f5ff;
+        }
+
+        .header .header-version.meta-badge.meta-badge-link:hover:not(:disabled) {
+            border-color: rgba(255,255,255,0.30);
+            background: rgba(255,255,255,0.18);
+            box-shadow: 0 0 0 2px rgba(255,255,255,0.10);
+            transform: none;
+        }
+
+        .header .header-version.meta-badge.meta-badge-link:focus-visible {
+            box-shadow: 0 0 0 2px rgba(255,255,255,0.14);
+        }
+
+        .header .runtime-badge.meta-badge {
+            justify-content: center;
+            color: rgba(255,255,255,0.88);
+            border-color: transparent;
+            background: rgba(255,255,255,0.10);
+            box-shadow: none;
         }
 
         .header-link,

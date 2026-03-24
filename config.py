@@ -137,6 +137,8 @@ logger = logging.getLogger(__name__)
 CONFIG_DIR = Path(os.getenv("CONFIG_DIR", "/config"))
 CONFIG_FILE = CONFIG_DIR / "config.json"
 config_lock = threading.Lock()  # serializes all config.json read-modify-write ops
+_config_load_log_lock = threading.Lock()
+_config_load_logged_once = False
 CONFIG_ALLOWED_KEYS = frozenset(DEFAULT_CONFIG)
 RUNTIME_STATE_CONFIG_KEYS = frozenset(("LAST_VOLUMES", "LAST_SINKS"))
 SENSITIVE_CONFIG_KEYS = frozenset(
@@ -187,6 +189,20 @@ def _read_raw_config_file() -> dict[str, Any]:
 
 def _filter_allowed_config_keys(config: dict[str, Any]) -> dict[str, Any]:
     return {key: copy.deepcopy(value) for key, value in config.items() if key in CONFIG_ALLOWED_KEYS}
+
+
+def _log_config_load(message: str, *args: Any) -> None:
+    global _config_load_logged_once
+
+    with _config_load_log_lock:
+        level = logging.INFO if not _config_load_logged_once else logging.DEBUG
+        _config_load_logged_once = True
+
+    logger.log(level, message, *args)
+
+
+def _changed_config_keys(before: Mapping[str, Any], after: Mapping[str, Any]) -> list[str]:
+    return sorted(key for key in set(before) | set(after) if before.get(key) != after.get(key))
 
 
 def _normalize_int_setting(
@@ -776,9 +792,19 @@ def update_config(mutator) -> None:
         existing: dict = {}
         if CONFIG_FILE.exists():
             existing = _read_raw_config_file()
+        before = copy.deepcopy(existing)
         mutator(existing)
         existing.setdefault("CONFIG_SCHEMA_VERSION", CONFIG_SCHEMA_VERSION)
+        changed_keys = _changed_config_keys(before, existing)
+        if not changed_keys:
+            logger.debug("Config update made no changes for %s", CONFIG_FILE)
+            return
         write_config_file(existing)
+        changed_key_list = ", ".join(changed_keys)
+        if set(changed_keys).issubset(RUNTIME_STATE_CONFIG_KEYS):
+            logger.debug("Updated runtime config state in %s (%s)", CONFIG_FILE, changed_key_list)
+        else:
+            logger.info("Updated config at %s (%s)", CONFIG_FILE, changed_key_list)
 
 
 def _player_id_from_mac(mac: str) -> str:
@@ -842,7 +868,7 @@ def load_config() -> dict:
             has_explicit_ha_area_name_assist = "HA_AREA_NAME_ASSIST_ENABLED" in migrated.normalized_config
             for issue in migrated.warnings:
                 logger.info("%s", issue.message)
-            logger.info("Loaded config from %s", CONFIG_FILE)
+            _log_config_load("Loaded config from %s", CONFIG_FILE)
         except json.JSONDecodeError as e:
             backup_path = _backup_corrupt_config()
             if backup_path is not None:
@@ -870,7 +896,7 @@ def load_config() -> dict:
                 except (OSError, json.JSONDecodeError) as exc:
                     logger.warning("Could not persist config migration: %s", exc)
     else:
-        logger.info("Config file not found at %s, using defaults", CONFIG_FILE)
+        _log_config_load("Config file not found at %s, using defaults", CONFIG_FILE)
 
     if is_ha_addon_runtime() and not has_explicit_ha_area_name_assist:
         result["HA_AREA_NAME_ASSIST_ENABLED"] = True

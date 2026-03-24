@@ -12,6 +12,7 @@ def _isolated_config(tmp_path, monkeypatch):
 
     monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
     monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.json")
+    monkeypatch.setattr(config, "_config_load_logged_once", False, raising=False)
 
 
 def _write_config(tmp_path, data):
@@ -471,6 +472,43 @@ def test_update_config(tmp_path):
     update_config(lambda cfg: cfg.__setitem__("SENDSPIN_PORT", 1234))
     with open(tmp_path / "config.json") as f:
         assert json.load(f)["SENDSPIN_PORT"] == 1234
+
+
+def test_load_config_logs_info_only_once_then_debug(tmp_path, caplog):
+    _write_config(tmp_path, {"SENDSPIN_SERVER": "10.0.0.1"})
+    import config
+
+    with caplog.at_level("DEBUG", logger="config"):
+        config.load_config()
+        config.load_config()
+
+    records = [record for record in caplog.records if "Loaded config from" in record.getMessage()]
+    assert [record.levelname for record in records] == ["INFO", "DEBUG"]
+
+
+def test_update_config_logs_info_for_real_config_change(tmp_path, caplog):
+    _write_config(tmp_path, {"SENDSPIN_PORT": 9000})
+    from config import update_config
+
+    with caplog.at_level("DEBUG", logger="config"):
+        update_config(lambda cfg: cfg.__setitem__("SENDSPIN_PORT", 1234))
+
+    assert "Updated config at" in caplog.text
+    assert "SENDSPIN_PORT" in caplog.text
+
+
+def test_update_config_logs_debug_for_runtime_state_only_change(tmp_path, caplog):
+    from config import CONFIG_SCHEMA_VERSION, update_config
+
+    _write_config(tmp_path, {"CONFIG_SCHEMA_VERSION": CONFIG_SCHEMA_VERSION, "LAST_VOLUMES": {}})
+
+    with caplog.at_level("DEBUG", logger="config"):
+        update_config(lambda cfg: cfg.__setitem__("LAST_VOLUMES", {"AA:BB:CC:DD:EE:FF": 55}))
+
+    records = [record for record in caplog.records if "Updated runtime config state in" in record.getMessage()]
+    assert len(records) == 1
+    assert records[0].levelname == "DEBUG"
+    assert "LAST_VOLUMES" in records[0].getMessage()
 
 
 def test_update_config_creates_dir(tmp_path, monkeypatch):

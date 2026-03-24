@@ -3068,7 +3068,7 @@ function renderStatusPayload(status) {
         sysEl.innerHTML = '';
         if (status.runtime) {
             var badge = document.createElement('span');
-            badge.className = 'runtime-badge';
+            badge.className = 'runtime-badge meta-badge';
             badge.textContent = status.runtime.toUpperCase();
             sysEl.appendChild(badge);
         }
