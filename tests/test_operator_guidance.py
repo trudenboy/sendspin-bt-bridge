@@ -288,6 +288,55 @@ def test_operator_guidance_surfaces_latency_issue_group_with_apply_action():
     assert latency_group["secondary_actions"][0]["key"] == "open_devices_settings"
 
 
+def test_operator_guidance_prefers_device_settings_for_multi_device_latency_without_static_delays():
+    snapshot = build_operator_guidance_snapshot(
+        config={"BLUETOOTH_ADAPTERS": [{"id": "hci0"}], "BLUETOOTH_DEVICES": [{"mac": "AA"}, {"mac": "BB"}]},
+        onboarding_assistant={
+            "checklist": {
+                "overall_status": "warning",
+                "current_step_key": "latency",
+                "summary": "Latency tuning still needs attention.",
+                "progress_percent": 86,
+                "primary_action": {"key": "open_devices_settings", "label": "Open device settings"},
+            },
+            "counts": {"configured_devices": 2, "connected_devices": 2, "sink_ready_devices": 2},
+        },
+        recovery_assistant={
+            "summary": {"summary": "Latency guidance recommends another pass."},
+            "latency_assistant": {
+                "summary": "Multi-device setup detected without per-device static delays.",
+                "safe_actions": [
+                    {"key": "open_devices_settings", "label": "Tune device delays"},
+                    {"key": "apply_latency_recommended", "label": "Apply 600 ms latency", "value": 600},
+                ],
+            },
+        },
+        startup_progress={"status": "complete"},
+        devices=[
+            SimpleNamespace(
+                player_name="Kitchen",
+                bt_management_enabled=True,
+                bluetooth_connected=True,
+                has_sink=True,
+                server_connected=True,
+            ),
+            SimpleNamespace(
+                player_name="Office",
+                bt_management_enabled=True,
+                bluetooth_connected=True,
+                has_sink=True,
+                server_connected=True,
+            ),
+        ],
+    )
+
+    data = snapshot.to_dict()
+    latency_group = next(group for group in data["issue_groups"] if group["key"] == "latency")
+    assert latency_group["summary"] == "Multi-device setup detected without per-device static delays."
+    assert latency_group["primary_action"]["key"] == "open_devices_settings"
+    assert latency_group["secondary_actions"][0]["key"] == "apply_latency_recommended"
+
+
 def test_operator_guidance_prefers_repair_for_unpaired_reconnecting_device():
     snapshot = build_operator_guidance_snapshot(
         config={"BLUETOOTH_ADAPTERS": [{"id": "hci0"}], "BLUETOOTH_DEVICES": [{"mac": "AA"}]},

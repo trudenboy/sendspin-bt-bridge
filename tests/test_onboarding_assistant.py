@@ -244,6 +244,45 @@ def test_onboarding_assistant_points_latency_step_to_general_latency_setting():
     assert latency_step.recommended_action.value == 600
 
 
+def test_onboarding_assistant_points_multi_device_latency_step_to_device_settings_without_static_delays():
+    devices = [
+        SimpleNamespace(
+            player_name="Kitchen",
+            bluetooth_connected=True,
+            has_sink=True,
+            static_delay_ms=0.0,
+        ),
+        SimpleNamespace(
+            player_name="Office",
+            bluetooth_connected=True,
+            has_sink=True,
+            static_delay_ms=0.0,
+        ),
+    ]
+
+    snapshot = build_onboarding_assistant_snapshot(
+        config={
+            "BLUETOOTH_DEVICES": [{"mac": "AA"}, {"mac": "BB"}],
+            "PULSE_LATENCY_MSEC": 1000,
+            "MA_API_URL": "http://ma.local",
+            "MA_API_TOKEN": "token",
+        },
+        preflight={
+            "audio": {"system": "pulseaudio", "sinks": 2},
+            "bluetooth": {"controller": True, "paired_devices": 2},
+        },
+        devices=devices,
+        ma_connected=True,
+        runtime_mode="production",
+    )
+
+    assert snapshot.checklist is not None
+    latency_step = next(step for step in snapshot.checklist.steps if step.key == "latency")
+    assert latency_step.recommended_action is not None
+    assert latency_step.recommended_action.key == "open_devices_settings"
+    assert latency_step.recommended_action.label == "Open device settings"
+
+
 def test_onboarding_assistant_recommends_discovery_when_ma_url_missing():
     snapshot = build_onboarding_assistant_snapshot(
         config={"BLUETOOTH_DEVICES": [{"mac": "AA"}], "PULSE_LATENCY_MSEC": 200},

@@ -225,6 +225,10 @@ def _recommended_action_for_check(check: OnboardingCheck) -> OnboardingChecklist
             return OnboardingChecklistAction(key="retry_ma_discovery", label="Discover Music Assistant")
         return OnboardingChecklistAction(key="open_ma_settings", label="Open Music Assistant settings")
     if check.key == "latency":
+        if check.status in {"warning", "error"} and int(check.details.get("configured_devices") or 0) >= 2:
+            custom_delays = int(check.details.get("custom_device_delays") or 0)
+            if custom_delays == 0:
+                return OnboardingChecklistAction(key="open_devices_settings", label="Open device settings")
         recommended_latency = int(check.details.get("recommended_pulse_latency_msec") or 0)
         current_latency = int(check.details.get("pulse_latency_msec") or 0)
         if check.status in {"warning", "error"} and recommended_latency > 0 and recommended_latency != current_latency:
