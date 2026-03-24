@@ -348,11 +348,15 @@ class BridgeDaemon(SendspinDaemon):
         if progress is not None:
             tp = getattr(progress, "track_progress", None)
             td = getattr(progress, "track_duration", None)
+            ps = getattr(progress, "playback_speed", None)
             if tp is not None:
                 self._bridge_status["track_progress_ms"] = int(tp)
                 changed = True
             if td is not None:
                 self._bridge_status["track_duration_ms"] = int(td)
+                changed = True
+            if ps is not None:
+                self._bridge_status["playback_speed"] = int(ps)
                 changed = True
         if changed:
             self._notify()

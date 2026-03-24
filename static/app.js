@@ -318,7 +318,7 @@ var reanchorShownAt = {};   // deviceIndex -> timestamp(ms) when last re-anchor 
 var lastReanchorCount = {}; // deviceIndex -> reanchor_count at last render (to detect new events)
 var lastReanchorAt = {};    // deviceIndex -> last_reanchor_at string seen (catches count resets on stream restart)
 var _progSnapshots = {};    // deviceIndex -> {pos, dur, t} for Sendspin native progress interpolation
-var _maProgSnapshots = {};  // deviceIndex -> {elapsed, duration, t} for MA progress interpolation
+var _maProgSnapshots = {};  // deviceIndex -> {elapsed, duration, t, paused} for MA progress interpolation
 
 // ---- Utility ----
 
@@ -351,6 +351,7 @@ function _getMaSnapshotElapsedNow(snapshot, now) {
     if (!snapshot) return 0;
     var duration = Math.max(0, Number(snapshot.duration) || 0);
     var elapsed = Math.max(0, Math.min(Number(snapshot.elapsed) || 0, duration || Number(snapshot.elapsed) || 0));
+    if (snapshot.paused) return elapsed;
     var startedAt = Number(snapshot.t) || now;
     return Math.max(0, Math.min(elapsed + Math.max(0, now - startedAt) / 1000, duration || elapsed));
 }
@@ -391,15 +392,34 @@ function _getDevicePlaybackProgressState(dev, idx, nowMs) {
     var ma = dev.ma_now_playing || {};
     var deviceMaActive = !!(ma.connected && deviceHasSink(dev));
     var maHasProg = deviceMaActive && ma.state === 'playing' && ma.duration > 0 && ma.elapsed != null;
-    if (maHasProg) {
-        var maSnapshot = idx != null
-            ? _buildMergedMaProgressSnapshot(idx, ma, now)
-            : {
-                elapsed: Math.max(0, Math.min(Number(ma.elapsed) || 0, Number(ma.duration) || 0)),
+    var maPausedProg = deviceMaActive && ma.state === 'paused' && ma.duration > 0 && ma.elapsed != null;
+    if (maHasProg || maPausedProg) {
+        var maSnapshot;
+        if (maHasProg) {
+            maSnapshot = idx != null
+                ? _buildMergedMaProgressSnapshot(idx, ma, now)
+                : {
+                    elapsed: Math.max(0, Math.min(Number(ma.elapsed) || 0, Number(ma.duration) || 0)),
+                    duration: Math.max(0, Number(ma.duration) || 0),
+                    t: now,
+                    key: _getMaProgressTrackKey(ma),
+                };
+            maSnapshot.paused = false;
+        } else {
+            // Paused — freeze at current elapsed position
+            var existing = idx != null ? _maProgSnapshots[idx] : null;
+            var frozenElapsed = Math.max(0, Math.min(Number(ma.elapsed) || 0, Number(ma.duration) || 0));
+            if (existing && existing.key === _getMaProgressTrackKey(ma) && !existing.paused) {
+                frozenElapsed = _getMaSnapshotElapsedNow(existing, now);
+            }
+            maSnapshot = {
+                elapsed: frozenElapsed,
                 duration: Math.max(0, Number(ma.duration) || 0),
                 t: now,
                 key: _getMaProgressTrackKey(ma),
+                paused: true,
             };
+        }
         var maElapsedSec = _getMaSnapshotElapsedNow(maSnapshot, now);
         if (idx != null) {
             _maProgSnapshots[idx] = maSnapshot;
@@ -414,12 +434,13 @@ function _getDevicePlaybackProgressState(dev, idx, nowMs) {
 
     if (idx != null) delete _maProgSnapshots[idx];
 
-    var nativeHasProg = dev.playing && dev.track_duration_ms > 0 && dev.track_progress_ms != null;
-    if (nativeHasProg) {
+    var nativeHasProg = dev.track_duration_ms > 0 && dev.track_progress_ms != null;
+    var nativePaused = Number(dev.playback_speed) === 0;
+    if (nativeHasProg && (dev.playing || nativePaused)) {
         var nativeDuration = Math.max(0, Number(dev.track_duration_ms) || 0);
         var nativeProgress = Math.max(0, Math.min(Number(dev.track_progress_ms) || 0, nativeDuration));
         if (idx != null) {
-            _progSnapshots[idx] = {pos: nativeProgress, dur: nativeDuration, t: now};
+            _progSnapshots[idx] = {pos: nativeProgress, dur: nativeDuration, t: now, paused: nativePaused};
         }
         return {
             visible: true,
@@ -3230,7 +3251,7 @@ setInterval(function() {
     Object.keys(_progSnapshots).forEach(function(idx) {
         var snap = _progSnapshots[idx];
         if (!snap) return;
-        var pos = Math.min(snap.pos + (now - snap.t), snap.dur);
+        var pos = snap.paused ? snap.pos : Math.min(snap.pos + (now - snap.t), snap.dur);
         _applyPlaybackProgressForIndex(idx, {
             visible: true,
             pct: Math.min(100, (pos / snap.dur) * 100),
