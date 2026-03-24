@@ -29,13 +29,18 @@ _MA_SYNC_META_KEY = "_sync_meta"
 def set_ma_groups(mapping: dict[str, dict[str, Any]], all_groups: list[dict[str, Any]] | None = None) -> None:
     """Store the MA player_id → syncgroup mapping and full group list."""
     with _ma_groups_lock:
+        changed = _ma_groups != mapping
+        if all_groups is not None:
+            changed = changed or _ma_all_groups != all_groups
         _ma_groups.clear()
         _ma_groups.update(mapping)
         if all_groups is not None:
             _ma_all_groups.clear()
             _ma_all_groups.extend(copy.deepcopy(all_groups))
         total_groups = len(_ma_all_groups)
-    logger.info("MA syncgroup cache updated: %d mapped, %d total group(s)", len(mapping), total_groups)
+    log_fn = logger.info if changed else logger.debug
+    status = "updated" if changed else "unchanged"
+    log_fn("MA syncgroup cache %s: %d mapped, %d total group(s)", status, len(mapping), total_groups)
 
 
 def set_ma_api_credentials(url: str, token: str) -> None:
