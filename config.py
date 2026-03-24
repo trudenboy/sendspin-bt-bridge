@@ -49,7 +49,7 @@ from config_network import (  # noqa: F401
     resolve_web_port,
 )
 
-VERSION = "2.47.3"
+VERSION = "2.47.3-rc.1"
 BUILD_DATE = "2026-03-24"
 _RUNTIME_VERSION_REF_RE = re.compile(r"^v?\d+\.\d+\.\d+(?:-(?:rc|beta)\.\d+)?$")
 
