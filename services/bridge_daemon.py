@@ -367,15 +367,22 @@ class BridgeDaemon(SendspinDaemon):
             logger.debug("Artwork frame too large for IPC (%d bytes), skipping", len(image_data))
             return
         encoded = base64.b64encode(image_data).decode("ascii")
+        prev = self._bridge_status.get("artwork_b64")
         self._bridge_status["artwork_b64"] = encoded
         self._bridge_status["artwork_channel"] = channel
         logger.debug("Artwork frame: channel=%d size=%d bytes", channel, len(image_data))
-        self._notify()
+        if encoded != prev:
+            self._notify()
 
     # ── Visualizer (loudness / spectrum) ─────────────────────────────────────
 
     def _on_visualizer_frames(self, frames) -> None:
-        """Handle visualizer frames (loudness, f_peak, spectrum)."""
+        """Handle visualizer frames (loudness, f_peak, spectrum).
+
+        Visualizer data is stored in status but does NOT trigger a status
+        notification — it arrives many times per second and would cause
+        constant SSE re-renders that close modals/popups in the web UI.
+        """
         if not frames:
             return
         latest = frames[-1]
@@ -388,4 +395,3 @@ class BridgeDaemon(SendspinDaemon):
             viz["spectrum"] = latest.spectrum
         if viz:
             self._bridge_status["visualizer"] = viz
-            self._notify()

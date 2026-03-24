@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.47.2] - 2026-03-24
+
+### Fixed
+- Fix constant SSE re-renders closing modals/popups during playback. Visualizer frames no longer trigger status notifications (arrive many times per second). Artwork frames only notify when the image actually changes.
+
 ## [2.47.1] - 2026-03-24
 
 ### Fixed

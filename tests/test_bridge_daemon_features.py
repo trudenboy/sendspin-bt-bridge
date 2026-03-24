@@ -126,7 +126,8 @@ class TestVisualizerCallback:
 
         assert daemon._bridge_status["visualizer"]["loudness"] == 4200
         assert "f_peak" not in daemon._bridge_status["visualizer"]
-        assert len(daemon._notified) == 1
+        # Visualizer does NOT trigger notify (too frequent, would cause SSE storms)
+        assert len(daemon._notified) == 0
 
     def test_visualizer_with_spectrum(self):
         daemon = _make_bridge_daemon()
