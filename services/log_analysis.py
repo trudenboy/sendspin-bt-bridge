@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections import deque
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -105,9 +106,7 @@ def summarize_issue_logs(
     max_lines: int | None = None,
 ) -> dict[str, object]:
     """Summarize issue-worthy lines from a log sequence."""
-    source = list(lines)
-    if tail_lines is not None:
-        source = source[-tail_lines:]
+    source = deque(lines, maxlen=tail_lines) if tail_lines else list(lines)
     issue_lines = [line for line in source if is_issue_worthy_log_line(line)]
     highest_level = None
     for line in issue_lines:

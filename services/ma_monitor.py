@@ -244,6 +244,7 @@ class MaMonitor:
         self._pending_queue_refresh = False
         self._pending_groups_refresh = False
         self._wake_event = asyncio.Event()
+        self._consecutive_auth_failures = 0
 
     def _next_id(self) -> int:
         return next(self._msg_id)
@@ -267,7 +268,6 @@ class MaMonitor:
         self._pending_groups_refresh = True
         self._wake_event.set()
         ws = self._ws
-        self._ws = None
         if ws is not None:
             with contextlib.suppress(Exception):
                 await ws.close()
@@ -381,6 +381,7 @@ class MaMonitor:
                 self._defer_incoming_event(evt)
             else:
                 logger.debug("MA monitor: non-matching msg (id=%s) during queue cmd", resp.get("message_id"))
+        logger.warning("No matching response for command %s after %d messages", command, 10)
         await self._flush_deferred_updates(ws)
         return {}
 
@@ -425,6 +426,7 @@ class MaMonitor:
             evt = resp.get("event")
             if evt:
                 logger.debug("MA monitor: interleaved event '%s' during metadata refresh", evt)
+                self._defer_incoming_event(evt)
             else:
                 logger.debug("MA monitor: non-matching msg (id=%s) during metadata refresh", resp.get("message_id"))
 
@@ -485,6 +487,9 @@ class MaMonitor:
                 if str(resp.get("message_id")) == str(mid):
                     players = resp.get("result") or []
                     break
+                evt = resp.get("event")
+                if evt:
+                    self._defer_incoming_event(evt)
             else:
                 return
 
@@ -585,6 +590,7 @@ class MaMonitor:
                 raise _AuthFailed("check MA_API_TOKEN")
 
             logger.info("MA monitor: connected and authenticated")
+            self._consecutive_auth_failures = 0
             _state.set_ma_connected(True)
             self._ws = ws
 
@@ -623,29 +629,33 @@ class MaMonitor:
             await _send(ws, mid, "player_queues/all", {})
             for _ in range(20):
                 resp = await _recv(ws, timeout=10.0)
-                if str(resp.get("message_id")) == str(mid):
-                    queues = resp.get("result") or []
-                    fresh: dict[str, dict] = {}
+                if str(resp.get("message_id")) != str(mid):
+                    evt = resp.get("event")
+                    if evt:
+                        self._defer_incoming_event(evt)
+                    continue
+                queues = resp.get("result") or []
+                fresh: dict[str, dict] = {}
 
-                    async def fetch_items(queue_id: str, limit: int = 1, offset: int = 0) -> list[dict]:
-                        return await self._fetch_queue_items(ws, queue_id, limit=limit, offset=offset)
+                async def fetch_items(queue_id: str, limit: int = 1, offset: int = 0) -> list[dict]:
+                    return await self._fetch_queue_items(ws, queue_id, limit=limit, offset=offset)
 
-                    # Syncgroup players
-                    syncgroup_queues = await _find_syncgroup_queues(queues)
-                    for q in syncgroup_queues:
-                        np = _build_now_playing(q)
-                        await _hydrate_missing_queue_neighbors(fetch_items, q, np)
-                        fresh[np["syncgroup_id"]] = np
-                    # Solo (ungrouped) players — keyed by their own player_id
-                    for player_id, q in _find_solo_player_queues(queues):
-                        np = _build_now_playing(q)
-                        await _hydrate_missing_queue_neighbors(fetch_items, q, np)
-                        np["syncgroup_id"] = player_id
-                        fresh[player_id] = np
-                    # Atomically replace to clear stale entries
-                    if fresh:
-                        _state.replace_ma_now_playing(fresh)
-                    return
+                # Syncgroup players
+                syncgroup_queues = await _find_syncgroup_queues(queues)
+                for q in syncgroup_queues:
+                    np = _build_now_playing(q)
+                    await _hydrate_missing_queue_neighbors(fetch_items, q, np)
+                    fresh[np["syncgroup_id"]] = np
+                # Solo (ungrouped) players — keyed by their own player_id
+                for player_id, q in _find_solo_player_queues(queues):
+                    np = _build_now_playing(q)
+                    await _hydrate_missing_queue_neighbors(fetch_items, q, np)
+                    np["syncgroup_id"] = player_id
+                    fresh[player_id] = np
+                # Atomically replace to clear stale entries
+                if fresh:
+                    _state.replace_ma_now_playing(fresh)
+                return
         except Exception as exc:
             logger.debug("MA monitor poll error: %s", exc)
 
@@ -664,20 +674,40 @@ class MaMonitor:
                 recv_task = asyncio.create_task(ws.recv())
                 wake_task = asyncio.create_task(self._wake_event.wait())
                 timer_task = asyncio.create_task(asyncio.sleep(timeout))
-                done, pending = await asyncio.wait(
-                    {recv_task, wake_task, timer_task},
-                    return_when=asyncio.FIRST_COMPLETED,
-                )
+                all_tasks = {recv_task, wake_task, timer_task}
+                try:
+                    done, pending = await asyncio.wait(
+                        all_tasks,
+                        return_when=asyncio.FIRST_COMPLETED,
+                    )
+                    for task in pending:
+                        task.cancel()
+                    if pending:
+                        await asyncio.gather(*pending, return_exceptions=True)
+                except BaseException:
+                    for t in all_tasks:
+                        t.cancel()
+                    await asyncio.gather(*all_tasks, return_exceptions=True)
+                    raise
 
-                for task in pending:
-                    task.cancel()
-                if pending:
-                    await asyncio.gather(*pending, return_exceptions=True)
+                # C1: Check recv_task first to avoid dropping messages
+                # when both recv_task and wake_task complete simultaneously
+                if recv_task in done:
+                    msg = recv_task.result()
+                    data = json.loads(msg)
+                    event = data.get("event")
+                    if event == "player_queue_updated":
+                        self._defer_incoming_event(event)
+                        await self._flush_deferred_updates(ws)
+                        _poll_deadline = time.monotonic() + _POLL_INTERVAL
+                    elif event == "player_updated":
+                        self._defer_incoming_event(event)
+                        await self._flush_deferred_updates(ws)
+                        _groups_deadline = time.monotonic() + _GROUPS_REFRESH_INTERVAL
 
                 if wake_task in done:
                     self._wake_event.clear()
                     await self._process_local_work(ws)
-                    continue
 
                 if timer_task in done:
                     now = time.monotonic()
@@ -687,19 +717,6 @@ class MaMonitor:
                     if now >= _groups_deadline:
                         await self._refresh_groups_via_ws(ws)
                         _groups_deadline = time.monotonic() + _GROUPS_REFRESH_INTERVAL
-                    continue
-
-                msg = recv_task.result()
-                data = json.loads(msg)
-                event = data.get("event")
-                if event == "player_queue_updated":
-                    self._defer_incoming_event(event)
-                    await self._flush_deferred_updates(ws)
-                    _poll_deadline = time.monotonic() + _POLL_INTERVAL
-                elif event == "player_updated":
-                    self._defer_incoming_event(event)
-                    await self._flush_deferred_updates(ws)
-                    _groups_deadline = time.monotonic() + _GROUPS_REFRESH_INTERVAL
             except Exception as exc:
                 logger.debug("MA monitor event error: %s", exc)
                 raise  # bubble up to reconnect loop
@@ -727,6 +744,20 @@ class MaMonitor:
             try:
                 await self._connect_and_run()
                 delay = _RECONNECT_BASE  # reset on successful connection
+            except _AuthFailed:
+                self._consecutive_auth_failures += 1
+                disconnect_error = "auth failed"
+                if self._consecutive_auth_failures >= 5:
+                    logger.error(
+                        "MA monitor: %d consecutive auth failures — please reconfigure MA token via web UI",
+                        self._consecutive_auth_failures,
+                    )
+                else:
+                    logger.warning(
+                        "MA monitor: auth failed (%d consecutive) — reconnecting in %ds",
+                        self._consecutive_auth_failures,
+                        delay,
+                    )
             except Exception as exc:
                 disconnect_error = str(exc)
                 logger.warning("MA monitor disconnected: %s — reconnecting in %ds", exc, delay)
@@ -770,8 +801,8 @@ class MaMonitor:
             if loop:
                 try:
                     asyncio.run_coroutine_threadsafe(ws.close(), loop)
-                except Exception:
-                    pass
+                except (RuntimeError, OSError) as exc:
+                    logger.debug("MA monitor ws.close() failed: %s", exc)
 
 
 # ---------------------------------------------------------------------------
@@ -959,7 +990,10 @@ async def send_player_cmd(command: str, args: dict) -> bool:
         async with websockets.connect(ws_url, **_ws_kw) as ws:
             await _recv(ws, timeout=5.0)  # server info
             await _send(ws, 1, "auth", {"token": ma_token})
-            await _recv(ws, timeout=5.0)  # auth result
+            auth_resp = await _recv(ws, timeout=5.0)
+            if not auth_resp.get("result", {}).get("authenticated"):
+                logger.warning("MA player cmd: fallback WS auth failed")
+                return False
             await _send(ws, 2, command, args)
             await _recv(ws, timeout=5.0)  # ack
         logger.info("MA player cmd: %s args=%s", command, args)

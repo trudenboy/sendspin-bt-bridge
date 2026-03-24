@@ -212,8 +212,10 @@ class BridgeSnapshot:
         return payload
 
 
-def _enrich_device_snapshot_with_ma(device: DeviceSnapshot, client) -> None:
-    player_id = device.extra.get("player_id") or getattr(client, "player_id", "")
+def _enrich_device_snapshot_with_ma(device: DeviceSnapshot, client_or_player_id="") -> None:
+    player_id = device.extra.get("player_id") or (
+        client_or_player_id if isinstance(client_or_player_id, str) else getattr(client_or_player_id, "player_id", "")
+    )
     if not player_id:
         return
     ma_group = get_ma_group_for_player_id(player_id)
@@ -232,8 +234,16 @@ def _enrich_device_snapshot_with_ma(device: DeviceSnapshot, client) -> None:
         device.ma_now_playing = get_ma_now_playing_for_group(group_id) or get_ma_now_playing_for_group(player_id) or {}
 
 
-def _get_device_event_id(client, device: DeviceSnapshot) -> str:
-    player_id = str(device.extra.get("player_id") or getattr(client, "player_id", "") or "").strip()
+def _get_device_event_id(client_or_player_id, device: DeviceSnapshot) -> str:
+    player_id = str(
+        device.extra.get("player_id")
+        or (
+            client_or_player_id
+            if isinstance(client_or_player_id, str)
+            else getattr(client_or_player_id, "player_id", "")
+        )
+        or ""
+    ).strip()
     if player_id:
         return player_id
     if device.bluetooth_mac:
@@ -399,11 +409,55 @@ def build_device_snapshot(client, *, configured_enabled: dict[str, bool] | None 
     if not hasattr(client, "status"):
         return DeviceSnapshot(error="Client initializing")
 
-    if hasattr(client, "_status_lock"):
-        with client._status_lock:
-            status = client.status.copy()
+    # Prefer atomic snapshot() to avoid TOCTOU across separate lock acquisitions.
+    # Check type(client) to avoid false positives with MagicMock in tests.
+    _snap = client.snapshot() if hasattr(type(client), "snapshot") else None
+    if _snap is not None:
+        status = _snap["status"]
+        _snap_bt_mgr = _snap["bt_manager"]
+        _snap_sink = _snap["bluetooth_sink_name"]
+        _snap_bt_mgmt = _snap["bt_management_enabled"]
+        _snap_server_url = _snap["connected_server_url"]
+        _snap_is_running = _snap["is_running"]
+        _snap_player_name = _snap["player_name"]
+        _snap_player_id = _snap["player_id"]
+        _snap_listen_port = _snap["listen_port"]
+        _snap_server_host = _snap["server_host"]
+        _snap_server_port = _snap["server_port"]
+        _snap_delay = _snap["static_delay_ms"]
+        _snap_mac = _snap["bluetooth_mac"]
+        _snap_eff_adapter = _snap["effective_adapter_mac"]
+        _snap_adapter = _snap["adapter"]
+        _snap_hci = _snap["adapter_hci_name"]
+        _snap_battery = _snap["battery_level"]
+        _snap_paired = _snap["paired"]
+        _snap_max_reconn = _snap["max_reconnect_fails"]
     else:
-        status = client.status.copy()
+        if hasattr(client, "_status_lock"):
+            with client._status_lock:
+                status = client.status.copy()
+        else:
+            status = client.status.copy()
+        _snap_bt_mgr = getattr(client, "bt_manager", None)
+        _snap_sink = getattr(client, "bluetooth_sink_name", None)
+        _snap_bt_mgmt = getattr(client, "bt_management_enabled", True)
+        _snap_server_url = getattr(client, "connected_server_url", "")
+        _snap_is_running = client.is_running() if hasattr(client, "is_running") else None
+        _snap_player_name = getattr(client, "player_name", None)
+        _snap_player_id = getattr(client, "player_id", "")
+        _snap_listen_port = getattr(client, "listen_port", None)
+        _snap_server_host = getattr(client, "server_host", None)
+        _snap_server_port = getattr(client, "server_port", None)
+        _snap_delay = getattr(client, "static_delay_ms", None)
+        _snap_mac = _snap_bt_mgr.mac_address if _snap_bt_mgr else None
+        _snap_eff_adapter = getattr(_snap_bt_mgr, "effective_adapter_mac", None) if _snap_bt_mgr else None
+        _snap_adapter = getattr(_snap_bt_mgr, "adapter", None) if _snap_bt_mgr else None
+        _snap_hci = getattr(_snap_bt_mgr, "adapter_hci_name", "") if _snap_bt_mgr else ""
+        _snap_battery = getattr(_snap_bt_mgr, "battery_level", None) if _snap_bt_mgr else None
+        _snap_paired = getattr(_snap_bt_mgr, "paired", None) if _snap_bt_mgr else None
+        _snap_max_reconn = int(getattr(_snap_bt_mgr, "max_reconnect_fails", 0) or 0) if _snap_bt_mgr else 0
+
+    bt_mgr = _snap_bt_mgr
     resolved_enabled = configured_enabled if configured_enabled is not None else _configured_enabled_by_player_name()
     current_config = load_config()
 
@@ -413,20 +467,18 @@ def build_device_snapshot(client, *, configured_enabled: dict[str, bool] | None 
         uptime = str(timedelta(seconds=int(uptime_value.total_seconds())))
         del status["uptime_start"]
 
-    bt_mgr = getattr(client, "bt_manager", None)
     adapter_name = None
-    if bt_mgr:
-        lookup_mac = getattr(bt_mgr, "effective_adapter_mac", None) or getattr(bt_mgr, "adapter", None)
-        if lookup_mac:
-            adapter_name = get_adapter_name(lookup_mac.upper())
+    lookup_mac = _snap_eff_adapter or _snap_adapter
+    if lookup_mac:
+        adapter_name = get_adapter_name(lookup_mac.upper())
 
-    connected_server_url = getattr(client, "connected_server_url", "") or (
-        f"ws://{client.server_host}:{client.server_port}/sendspin"
-        if getattr(client, "server_host", None) and client.server_host.lower() not in ("auto", "discover", "")
+    connected_server_url = _snap_server_url or (
+        f"ws://{_snap_server_host}:{_snap_server_port}/sendspin"
+        if _snap_server_host and str(_snap_server_host).lower() not in ("auto", "discover", "")
         else ""
     )
-    if hasattr(client, "is_running"):
-        connected = bool(client.is_running())
+    if _snap_is_running is not None:
+        connected = bool(_snap_is_running)
     else:
         connected = bool(
             status.get("connected", False)
@@ -434,7 +486,12 @@ def build_device_snapshot(client, *, configured_enabled: dict[str, bool] | None 
             or status.get("bluetooth_connected", False)
         )
 
-    room_context = _resolve_room_context(client, config=current_config)
+    room_context = resolve_device_room_context(
+        current_config,
+        player_name=str(_snap_player_name or "").strip(),
+        device_mac=str(_snap_mac or "").strip(),
+        adapter_mac=str(_snap_eff_adapter or _snap_adapter or "").strip(),
+    )
     device = DeviceSnapshot(
         connected=connected,
         server_connected=bool(status.get("server_connected", False)),
@@ -443,23 +500,21 @@ def build_device_snapshot(client, *, configured_enabled: dict[str, bool] | None 
         playing=bool(status.get("playing", False)),
         version=get_runtime_version(),
         build_date=BUILD_DATE,
-        bluetooth_mac=bt_mgr.mac_address if bt_mgr else None,
-        player_name=getattr(client, "player_name", None),
-        listen_port=getattr(client, "listen_port", None),
-        server_host=getattr(client, "server_host", None),
-        server_port=getattr(client, "server_port", None),
-        static_delay_ms=getattr(client, "static_delay_ms", None),
+        bluetooth_mac=_snap_mac,
+        player_name=_snap_player_name,
+        listen_port=_snap_listen_port,
+        server_host=_snap_server_host,
+        server_port=_snap_server_port,
+        static_delay_ms=_snap_delay,
         connected_server_url=connected_server_url,
-        bluetooth_adapter=(getattr(bt_mgr, "effective_adapter_mac", None) or getattr(bt_mgr, "adapter", None))
-        if bt_mgr
-        else None,
+        bluetooth_adapter=(_snap_eff_adapter or _snap_adapter) if bt_mgr else None,
         bluetooth_adapter_name=adapter_name,
-        bluetooth_adapter_hci=getattr(bt_mgr, "adapter_hci_name", "") if bt_mgr else "",
-        has_sink=bool(getattr(client, "bluetooth_sink_name", None)),
-        sink_name=getattr(client, "bluetooth_sink_name", None),
-        enabled=_resolve_global_enabled(getattr(client, "player_name", None), resolved_enabled),
-        bt_management_enabled=bool(getattr(client, "bt_management_enabled", True)),
-        battery_level=getattr(bt_mgr, "battery_level", None) if bt_mgr else None,
+        bluetooth_adapter_hci=_snap_hci,
+        has_sink=bool(_snap_sink),
+        sink_name=_snap_sink,
+        enabled=_resolve_global_enabled(_snap_player_name, resolved_enabled),
+        bt_management_enabled=bool(_snap_bt_mgmt),
+        battery_level=_snap_battery,
         room_id=room_context["room_id"] or None,
         room_name=room_context["room_name"] or None,
         room_source=room_context["room_source"] or None,
@@ -497,17 +552,17 @@ def build_device_snapshot(client, *, configured_enabled: dict[str, bool] | None 
     if device.room_confidence:
         device.extra["room_confidence"] = device.room_confidence
     device.extra["handoff_mode"] = device.handoff_mode
-    device.extra["bluetooth_paired"] = getattr(bt_mgr, "paired", None) if bt_mgr else None
+    device.extra["bluetooth_paired"] = _snap_paired
     if bt_mgr:
-        device.extra["max_reconnect_fails"] = int(getattr(bt_mgr, "max_reconnect_fails", 0) or 0)
-        threshold = int(getattr(bt_mgr, "max_reconnect_fails", 0) or 0)
+        device.extra["max_reconnect_fails"] = _snap_max_reconn
+        threshold = _snap_max_reconn
         reconnect_attempt = int(status.get("reconnect_attempt") or 0)
         if threshold > 0:
             device.extra["reconnect_attempts_remaining"] = max(threshold - reconnect_attempt, 0)
     if uptime is not None:
         device.extra["uptime"] = uptime
-    _enrich_device_snapshot_with_ma(device, client)
-    device.recent_events = state.get_device_events(_get_device_event_id(client, device), limit=5)
+    _enrich_device_snapshot_with_ma(device, _snap_player_id)
+    device.recent_events = state.get_device_events(_get_device_event_id(_snap_player_id, device), limit=5)
     device.transfer_readiness = _build_transfer_readiness(
         device=device, status=status, recent_events=device.recent_events
     )

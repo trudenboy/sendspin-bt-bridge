@@ -116,8 +116,13 @@ async def test_stop_sendspin_delegates_to_stop_service():
                     task.cancel()
             return {"_daemon_task": None, "_stderr_task": None}
 
-        async def stop_process(self, current_proc, *, send_stop, player_name):
-            self.stop_calls.append((current_proc, send_stop, player_name))
+        async def stop_process(self, current_proc, *, send_stop, player_name, reader_tasks=None):
+            self.stop_calls.append((current_proc, send_stop, player_name, reader_tasks))
+            if reader_tasks:
+                for task in reader_tasks.values():
+                    if task:
+                        task.cancel()
+            return {"_daemon_task": None, "_stderr_task": None} if reader_tasks else None
 
     fake_service = _FakeService()
     client._stop_service = fake_service
@@ -125,8 +130,12 @@ async def test_stop_sendspin_delegates_to_stop_service():
     with patch("sendspin_client._state.notify_status_changed"):
         await client.stop_sendspin()
 
-    assert fake_service.cancel_calls == [{"_daemon_task": daemon_task, "_stderr_task": stderr_task}]
-    assert fake_service.stop_calls == [(proc, client._send_subprocess_command, "Test Player")]
+    assert len(fake_service.stop_calls) == 1
+    call = fake_service.stop_calls[0]
+    assert call[0] is proc
+    assert call[1].__func__ is client._send_subprocess_command.__func__
+    assert call[2] == "Test Player"
+    assert call[3] == {"_daemon_task": daemon_task, "_stderr_task": stderr_task}
     assert client._daemon_task is None
     assert client._stderr_task is None
     assert client._daemon_proc is None

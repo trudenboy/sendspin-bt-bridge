@@ -7,24 +7,16 @@ import io
 from datetime import datetime, timezone
 from typing import Any
 
+from services._helpers import _parse_timestamp
+
 UTC = timezone.utc
 RECOVERY_TIMELINE_VISIBLE_ENTRIES = 60
 
+_EPOCH_MIN = datetime.min.replace(tzinfo=UTC)
 
-def _parse_timestamp(value: Any) -> datetime:
-    if not value:
-        return datetime.min.replace(tzinfo=UTC)
-    text = str(value).strip()
-    if not text:
-        return datetime.min.replace(tzinfo=UTC)
-    normalized = text.replace("Z", "+00:00")
-    try:
-        parsed = datetime.fromisoformat(normalized)
-    except ValueError:
-        return datetime.min.replace(tzinfo=UTC)
-    if parsed.tzinfo is None:
-        return parsed.replace(tzinfo=UTC)
-    return parsed.astimezone(UTC)
+
+def _parse_timestamp_or_min(value: Any) -> datetime:
+    return _parse_timestamp(value) or _EPOCH_MIN
 
 
 def build_recovery_timeline(devices: list[Any], startup_progress: dict[str, Any]) -> dict[str, Any]:
@@ -78,7 +70,7 @@ def build_recovery_timeline(devices: list[Any], startup_progress: dict[str, Any]
             }
         )
 
-    entries.sort(key=lambda entry: (_parse_timestamp(entry.get("at")), str(entry.get("source") or "")))
+    entries.sort(key=lambda entry: (_parse_timestamp_or_min(entry.get("at")), str(entry.get("source") or "")))
     total_entry_count = len(entries)
     visible_entries = entries[-RECOVERY_TIMELINE_VISIBLE_ENTRIES:]
     error_count = sum(1 for entry in visible_entries if entry.get("level") == "error")

@@ -465,6 +465,8 @@ def pause_all():
     """
     data = request.get_json() or {}
     action = data.get("action", "pause")
+    if action not in ("pause", "play"):
+        return jsonify({"success": False, "error": "Invalid action"}), 400
     loop = get_main_loop()
     if loop is None:
         return jsonify({"success": False, "error": "Event loop not available"}), 503
@@ -556,6 +558,8 @@ def api_group_pause():
     data = request.get_json() or {}
     group_id = data.get("group_id")
     action = data.get("action", "pause")
+    if action not in ("pause", "play"):
+        return jsonify({"success": False, "error": "Invalid action"}), 400
     if not group_id:
         return jsonify({"success": False, "error": "group_id is required"}), 400
 
@@ -627,6 +631,8 @@ def pause_player():
     data = request.get_json() or {}
     player_name = data.get("player_name", "")
     action = data.get("action", "pause")
+    if action not in ("pause", "play"):
+        return jsonify({"success": False, "error": "Invalid action"}), 400
     snapshot = get_device_registry_snapshot().active_clients
     target = next((c for c in snapshot if getattr(c, "player_name", None) == player_name), None)
     if not target or not target.is_running():

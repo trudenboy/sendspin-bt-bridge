@@ -12,6 +12,7 @@ from services.subprocess_ipc import SubprocessIpcService
 class _FakeStdout:
     def __init__(self, lines):
         self._lines = list(lines)
+        self._index = 0
 
     def __aiter__(self):
         self._iter = iter(self._lines)
@@ -22,6 +23,13 @@ class _FakeStdout:
             return next(self._iter)
         except StopIteration as exc:
             raise StopAsyncIteration from exc
+
+    async def readline(self):
+        if self._index >= len(self._lines):
+            return b""
+        line = self._lines[self._index]
+        self._index += 1
+        return line
 
 
 def test_handle_message_updates_status_and_warns_once_for_mismatched_protocol():

@@ -151,6 +151,13 @@ def _fetch_registry_payloads(
     if not ha_token:
         raise HaCoreApiError("Home Assistant access token is required")
 
+    if ha_url is not None:
+        from urllib.parse import urlparse as _urlparse
+
+        _parsed = _urlparse(ha_url)
+        if _parsed.scheme not in {"http", "https"} or not (_parsed.hostname or "").strip():
+            raise HaCoreApiError("ha_url must be an http:// or https:// URL with a valid host")
+
     target_ha_url = (ha_url or _DEFAULT_HA_URL).rstrip("/")
     ws_url = target_ha_url.replace("http://", "ws://").replace("https://", "wss://") + "/api/websocket"
     request_frames: list[tuple[int, str]] = [(1, "config/area_registry/list")]

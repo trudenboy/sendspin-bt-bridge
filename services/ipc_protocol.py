@@ -131,11 +131,11 @@ def parse_status_envelope(message: object, *, allowed_keys: frozenset[str] | Non
     raw = coerce_message_dict(message)
     if raw is None or raw.get("type") != "status":
         return None
-    updates = {
-        key: value
-        for key, value in raw.items()
-        if key in (allowed_keys or frozenset()) and key not in {"type", IPC_PROTOCOL_VERSION_KEY}
-    }
+    excluded = {"type", IPC_PROTOCOL_VERSION_KEY}
+    if allowed_keys is None:
+        updates = {key: value for key, value in raw.items() if key not in excluded}
+    else:
+        updates = {key: value for key, value in raw.items() if key in allowed_keys and key not in excluded}
     return StatusEnvelope(
         protocol_version=parse_protocol_version(raw.get(IPC_PROTOCOL_VERSION_KEY)),
         updates=updates,

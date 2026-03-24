@@ -108,7 +108,10 @@ def get_ma_addon_internal_ingress_url() -> str:
     if not hostname:
         return "http://localhost:8094"
 
-    port = int(data.get("ingress_port") or 8094)
+    try:
+        port = int(data.get("ingress_port") or 8094)
+    except (ValueError, TypeError):
+        port = 8094
     return f"http://{hostname}:{port}"
 
 

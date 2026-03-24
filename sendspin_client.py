@@ -547,8 +547,7 @@ class SendspinClient:
                 env=env,
                 cwd=os.path.dirname(os.path.abspath(__file__)),
             )
-            with self._status_lock:
-                self.status["playing"] = False
+            self._update_status({"playing": False})
 
             # Start async tasks to consume subprocess stdout and stderr
             self._daemon_task = asyncio.create_task(self._read_subprocess_output())
@@ -575,21 +574,15 @@ class SendspinClient:
             if msg is None:
                 continue
             if msg.get("type") == "status":
-                # Track volume changes for persistence (read both values atomically)
-                volume_changed = False
-                new_volume = None
-                with self._status_lock:
-                    prev_volume = self.status.get("volume")
+                # handle_message applies updates atomically via _update_status;
+                # use the returned updates dict to detect volume changes without
+                # separate lock acquisitions that could race.
                 updates = self._ipc_service.handle_message(msg)
                 if updates:
-                    with self._status_lock:
-                        new_volume = self.status.get("volume")
-                    volume_changed = (
-                        new_volume is not None and isinstance(new_volume, int) and new_volume != prev_volume
-                    )
-                _mac = self.bt_manager.mac_address if self.bt_manager else None
-                if volume_changed and _mac and isinstance(new_volume, int):
-                    save_device_volume(_mac, new_volume)
+                    new_volume = updates.get("volume")
+                    _mac = self.bt_manager.mac_address if self.bt_manager else None
+                    if isinstance(new_volume, int) and _mac:
+                        save_device_volume(_mac, new_volume)
             else:
                 self._ipc_service.handle_message(msg)
 
@@ -665,20 +658,21 @@ class SendspinClient:
 
     async def stop_sendspin(self) -> None:
         """Stop the daemon subprocess gracefully."""
-        cleared_tasks = await self._stop_service.cancel_reader_tasks(
-            {
-                "_daemon_task": self._daemon_task,
-                "_stderr_task": self._stderr_task,
-            }
-        )
-        self._daemon_task = cleared_tasks["_daemon_task"]
-        self._stderr_task = cleared_tasks["_stderr_task"]
-
-        await self._stop_service.stop_process(
+        cleared_tasks = await self._stop_service.stop_process(
             self._daemon_proc,
             send_stop=self._send_subprocess_command,
             player_name=self.player_name,
+            reader_tasks={
+                "_daemon_task": self._daemon_task,
+                "_stderr_task": self._stderr_task,
+            },
         )
+        if cleared_tasks:
+            self._daemon_task = cleared_tasks["_daemon_task"]
+            self._stderr_task = cleared_tasks["_stderr_task"]
+        else:
+            self._daemon_task = None
+            self._stderr_task = None
         self._daemon_proc = None
 
         self._update_status(
@@ -699,6 +693,37 @@ class SendspinClient:
     def is_running(self) -> bool:
         """Return True if the daemon subprocess is alive."""
         return self._daemon_proc is not None and self._daemon_proc.returncode is None
+
+    def snapshot(self) -> dict:
+        """Return all client attributes for status reporting under a single lock.
+
+        Captures mutable state atomically so that ``build_device_snapshot``
+        does not suffer TOCTOU races from reading attributes across multiple
+        lock acquisitions.
+        """
+        bt_mgr = self.bt_manager
+        with self._status_lock:
+            return {
+                "status": self.status.copy(),
+                "bluetooth_sink_name": self.bluetooth_sink_name,
+                "bt_management_enabled": self.bt_management_enabled,
+                "connected_server_url": self.connected_server_url,
+                "is_running": self._daemon_proc is not None and self._daemon_proc.returncode is None,
+                "player_name": self.player_name,
+                "player_id": self.player_id,
+                "listen_port": self.listen_port,
+                "server_host": self.server_host,
+                "server_port": self.server_port,
+                "static_delay_ms": self.static_delay_ms,
+                "bt_manager": bt_mgr,
+                "bluetooth_mac": bt_mgr.mac_address if bt_mgr else None,
+                "effective_adapter_mac": getattr(bt_mgr, "effective_adapter_mac", None) if bt_mgr else None,
+                "adapter": getattr(bt_mgr, "adapter", None) if bt_mgr else None,
+                "adapter_hci_name": getattr(bt_mgr, "adapter_hci_name", "") if bt_mgr else "",
+                "battery_level": getattr(bt_mgr, "battery_level", None) if bt_mgr else None,
+                "paired": getattr(bt_mgr, "paired", None) if bt_mgr else None,
+                "max_reconnect_fails": int(getattr(bt_mgr, "max_reconnect_fails", 0) or 0) if bt_mgr else 0,
+            }
 
     async def run(self) -> None:
         """Main run loop — connects BT, starts subprocess, monitors health."""
@@ -812,8 +837,8 @@ class SendspinClient:
                     fut = asyncio.run_coroutine_threadsafe(self.stop_sendspin(), loop)
                     try:
                         fut.result(timeout=5.0)
-                    except Exception:
-                        logger.debug("[%s] stop_sendspin timed out on BT release", self.player_name)
+                    except (TimeoutError, asyncio.CancelledError, RuntimeError) as exc:
+                        logger.debug("[%s] stop_sendspin timed out on BT release: %s", self.player_name, exc)
                 else:
                     # Fallback: direct os.kill is safe from any thread
                     try:
@@ -838,7 +863,7 @@ async def main():
 
     try:
         from services.bluetooth import persist_device_enabled as _persist_enabled
-    except Exception:
+    except ImportError:
         _persist_enabled = None
 
     await orchestrator.run_bridge_lifecycle(

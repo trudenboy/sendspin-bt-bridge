@@ -15,6 +15,7 @@ import asyncio
 import logging
 import socket
 from datetime import datetime, timezone
+from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _pkg_version
 from typing import TYPE_CHECKING
 
@@ -88,7 +89,7 @@ class BridgeDaemon(SendspinDaemon):
 
         try:
             sw_ver = f"aiosendspin {_pkg_version('aiosendspin')}"
-        except Exception:
+        except PackageNotFoundError:
             sw_ver = "aiosendspin"
 
         device_info = DeviceInfo(

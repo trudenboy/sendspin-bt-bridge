@@ -33,15 +33,30 @@ class SubprocessStopService:
         *,
         send_stop: Callable[[dict[str, Any]], Awaitable[None]],
         player_name: str,
-    ) -> None:
-        """Request graceful subprocess stop, falling back to kill on timeout."""
+        reader_tasks: dict[str, asyncio.Task[Any] | None] | None = None,
+    ) -> dict[str, None] | None:
+        """Request graceful subprocess stop, falling back to kill on timeout.
+
+        If *reader_tasks* is provided, they are cancelled AFTER the stop
+        command has been sent and the process has had a brief moment to
+        drain its output.  Returns the cleared reader-task dict (or None
+        if no reader_tasks were supplied).
+        """
         if proc and proc.returncode is None:
             try:
                 await send_stop({"cmd": "stop"})
                 await asyncio.wait_for(proc.wait(), timeout=3.0)
             except TimeoutError:
                 self._logger.warning("[%s] Daemon subprocess did not exit, killing", player_name)
-                proc.kill()
+                try:
+                    proc.kill()
+                except ProcessLookupError:
+                    self._logger.debug("[%s] Process already exited before kill", player_name)
                 await proc.wait()
             except Exception as exc:
                 self._logger.debug("stop_sendspin: %s", exc)
+
+        cleared: dict[str, None] | None = None
+        if reader_tasks is not None:
+            cleared = await self.cancel_reader_tasks(reader_tasks)
+        return cleared

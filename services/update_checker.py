@@ -122,13 +122,21 @@ async def _fetch_json(url: str) -> Any | None:
 
     resp_text, headers = response
     remaining = headers.get("x-ratelimit-remaining")
-    if remaining is not None and int(remaining) <= 1:
-        import time
+    if remaining is not None:
+        try:
+            remaining_int = int(remaining)
+        except (ValueError, TypeError):
+            remaining_int = 10
+        if remaining_int <= 1:
+            import time
 
-        reset_at = int(headers.get("x-ratelimit-reset", "0"))
-        wait = max(reset_at - int(time.time()), 60)
-        logger.warning("GitHub API rate limit nearly exhausted, backing off %ds", wait)
-        await asyncio.sleep(wait)
+            try:
+                reset_at = int(headers.get("x-ratelimit-reset", "0"))
+            except (ValueError, TypeError):
+                reset_at = 0
+            wait = max(reset_at - int(time.time()), 60)
+            logger.warning("GitHub API rate limit nearly exhausted, backing off %ds", wait)
+            await asyncio.sleep(wait)
 
     try:
         return _json.loads(resp_text)
@@ -321,6 +329,8 @@ def _normalize_update_ref(target_ref: str | None) -> str | None:
     normalized = str(target_ref).strip()
     if not normalized:
         return None
+    if not re.fullmatch(r"v?[0-9A-Za-z._\-]+", normalized):
+        raise ValueError(f"Invalid update ref: {normalized!r}")
     if normalized.startswith("v") or normalized.startswith("release/"):
         return normalized
     if normalized[0].isdigit():

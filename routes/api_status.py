@@ -19,7 +19,7 @@ import time
 from datetime import datetime, timezone
 from typing import Any
 
-from flask import Blueprint, Response, jsonify, request
+from flask import Blueprint, Response, current_app, jsonify, request
 
 from config import (
     BUILD_DATE,
@@ -464,7 +464,17 @@ def _build_groups_summary(clients: list) -> list[dict]:
 @status_bp.route("/api/status")
 def api_status():
     """Return status for all client instances."""
-    return jsonify(_build_status_payload())
+    payload = _build_status_payload()
+    auth_enabled = bool(current_app.config.get("AUTH_ENABLED", False))
+    payload["auth_enabled"] = auth_enabled
+    if not auth_enabled:
+        remote = request.remote_addr or ""
+        if remote not in ("127.0.0.1", "::1"):
+            payload["auth_warning"] = (
+                "Authentication is disabled and this endpoint is being accessed "
+                "from a non-loopback IP. Consider enabling auth to protect sensitive data."
+            )
+    return jsonify(payload)
 
 
 @status_bp.route("/api/groups")
@@ -639,6 +649,7 @@ def api_diagnostics():
             "build_date": BUILD_DATE,
             "runtime": runtime,
             "uptime": uptime_str,
+            "auth_enabled": bool(current_app.config.get("AUTH_ENABLED", False)),
             "contract_versions": {
                 "config_schema_version": CONFIG_SCHEMA_VERSION,
                 "ipc_protocol_version": IPC_PROTOCOL_VERSION,

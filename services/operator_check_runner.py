@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
+import logging
 from datetime import datetime, timezone
 from typing import Any
 
@@ -11,6 +13,8 @@ from services.ma_client import discover_ma_groups
 from services.ma_runtime_state import set_ma_groups
 from services.preflight_status import collect_preflight_status
 from services.status_snapshot import build_device_snapshot
+
+logger = logging.getLogger(__name__)
 
 UTC = timezone.utc
 
@@ -135,7 +139,19 @@ def _run_sink_verification(device_names: list[str] | None = None) -> dict[str, A
                 }
             )
             continue
-        success = bool(bt_manager.configure_bluetooth_audio())
+        try:
+            success = bool(bt_manager.configure_bluetooth_audio())
+        except Exception:
+            logger.exception("Sink verification failed for %s", name)
+            error_count += 1
+            device_results.append(
+                {
+                    "device_name": name,
+                    "status": "error",
+                    "summary": "Exception during Bluetooth audio configuration.",
+                }
+            )
+            continue
         snapshot_after = build_device_snapshot(client)
         if success and snapshot_after.sink_name:
             device_results.append(
@@ -174,7 +190,12 @@ def _run_ma_validation(config: dict[str, Any]) -> dict[str, Any]:
         return _result("error", "ma_auth", "Music Assistant is not configured yet.", groups=[])
     registry = get_device_registry_snapshot()
     bridge_players = _bridge_players(list(registry.active_clients))
-    name_map, all_groups = asyncio.run(discover_ma_groups(ma_url, ma_token, bridge_players))
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(asyncio.run, discover_ma_groups(ma_url, ma_token, bridge_players))
+            name_map, all_groups = future.result(timeout=15)
+    except Exception as exc:
+        return _result("error", "ma_auth", f"Music Assistant discovery failed: {exc}", groups=[])
     set_ma_groups(name_map, all_groups)
     if all_groups and name_map:
         return _result(

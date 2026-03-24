@@ -357,7 +357,7 @@ def _fallback_list_sinks() -> list[dict]:
                     }
                 )
         return result
-    except Exception:
+    except (subprocess.SubprocessError, OSError):
         return []
 
 
@@ -388,7 +388,7 @@ def _fallback_set_volume(sink_name: str, volume_pct: int) -> bool:
             timeout=3,
         )
         return r.returncode == 0
-    except Exception:
+    except (subprocess.SubprocessError, OSError):
         return False
 
 
@@ -420,7 +420,7 @@ def _fallback_set_mute(sink_name: str, muted: bool | None) -> bool:
             timeout=3,
         )
         return r.returncode == 0
-    except Exception:
+    except (subprocess.SubprocessError, OSError):
         return False
 
 
@@ -468,7 +468,7 @@ def _fallback_sink_input_ids() -> set[int]:
                 except ValueError as exc:
                     logger.debug("parse sink-input id failed: %s", exc)
         return ids
-    except Exception:
+    except (subprocess.SubprocessError, OSError):
         return set()
 
 
@@ -491,7 +491,7 @@ def _fallback_move_sink_input(sink_input_idx: int, sink_name: str) -> bool:
                 r.stderr.strip(),
             )
         return r.returncode == 0
-    except Exception:
+    except (subprocess.SubprocessError, OSError):
         return False
 
 
@@ -525,7 +525,7 @@ def _fallback_move_pid_sink_inputs(pid: int, sink_name: str) -> int:
                 current_id = None
                 current_pid = None
         return moved
-    except Exception:
+    except (subprocess.SubprocessError, OSError):
         return 0
 
 

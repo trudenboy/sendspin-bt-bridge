@@ -37,7 +37,9 @@ def finish_async_job(job_id: str, result: dict[str, Any]) -> None:
     with _async_jobs_lock:
         if job_id in _async_jobs:
             _async_jobs[job_id]["status"] = "done"
-            _async_jobs[job_id].update(result)
+            protected = {"created", "status", "job_type"}
+            filtered = {k: v for k, v in result.items() if k not in protected}
+            _async_jobs[job_id].update(filtered)
 
 
 def get_async_job(job_id: str) -> dict[str, Any] | None:

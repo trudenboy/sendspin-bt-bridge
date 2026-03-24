@@ -2158,14 +2158,25 @@ def api_ma_artwork():
     except ValueError as exc:
         return Response(str(exc), status=400)
 
+    # C8: Only proxy artwork from the known MA server — reject external URLs
+    if not is_ma_origin:
+        return Response("Artwork proxy restricted to MA server origin", status=403)
+
     _ma_url, ma_token = get_ma_api_credentials()
     req = _ur.Request(artwork_url, headers={"Accept": "image/*"})
     if is_ma_origin and ma_token:
         req.add_header("Authorization", f"Bearer {ma_token}")
 
+    _ARTWORK_MAX_BYTES = 10 * 1024 * 1024  # 10 MB
+
     try:
         with _ur.urlopen(req, timeout=15) as resp:
-            body = resp.read()
+            cl = resp.headers.get("Content-Length")
+            if cl and int(cl) > _ARTWORK_MAX_BYTES:
+                return Response("Artwork too large", status=413)
+            body = resp.read(_ARTWORK_MAX_BYTES + 1)
+            if len(body) > _ARTWORK_MAX_BYTES:
+                return Response("Artwork too large", status=413)
             content_type = resp.headers.get("Content-Type", "application/octet-stream")
             return Response(body, content_type=content_type, headers={"Cache-Control": "private, max-age=60"})
     except _ue.HTTPError as exc:

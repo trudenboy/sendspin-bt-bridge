@@ -9,14 +9,21 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from services.bridge_state_model import BridgeStateModel
 
+from services._helpers import _device_extra
 from services.recovery_timeline import build_recovery_timeline
 
 UTC = timezone.utc
 
 
-def _device_extra(device: Any) -> dict[str, Any]:
-    extra = getattr(device, "extra", None)
-    return extra if isinstance(extra, dict) else {}
+@dataclass
+class NormalizedRecoveryDevice:
+    """Lightweight projection of a NormalizedDeviceState used by the recovery assistant."""
+
+    player_name: str
+    state_model: dict[str, Any]
+    health_summary: dict[str, Any]
+    recent_events: list[dict[str, Any]]
+    static_delay_ms: int | float | None = None
 
 
 def _device_state_model(device: Any) -> dict[str, Any]:
@@ -607,17 +614,19 @@ def build_recovery_assistant_snapshot(
     bridge_state: BridgeStateModel | None = None,
 ) -> RecoveryAssistantSnapshot:
     if bridge_state is not None:
+        delay_by_name: dict[str, Any] = {}
+        for dev_cfg in config.get("BLUETOOTH_DEVICES") or config.get("devices") or []:
+            name = dev_cfg.get("player_name") or ""
+            if name:
+                delay_by_name[name] = dev_cfg.get("static_delay_ms")
         devices = [
-            type(
-                "NormalizedRecoveryDevice",
-                (),
-                {
-                    "player_name": state.player_name,
-                    "state_model": state.to_dict(),
-                    "health_summary": state.health,
-                    "recent_events": state.recent_events,
-                },
-            )()
+            NormalizedRecoveryDevice(
+                player_name=state.player_name,
+                state_model=state.to_dict(),
+                health_summary=state.health,
+                recent_events=state.recent_events,
+                static_delay_ms=delay_by_name.get(state.player_name),
+            )
             for state in bridge_state.devices
         ]
     issues = _build_device_issues(devices)

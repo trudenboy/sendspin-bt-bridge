@@ -1,7 +1,6 @@
 """Unit tests for state.py module."""
 
 import threading
-import time
 import uuid
 
 import state
@@ -14,9 +13,12 @@ def test_get_status_version_initial():
 
 
 def test_wait_times_out():
-    time.sleep(0.15)
+    # Let any pending debounce timers from previous tests settle
+    import time
+
+    time.sleep(0.2)
     version = state.get_status_version()
-    changed, current = state.wait_for_status_change(version, timeout=0.1)
+    changed, current = state.wait_for_status_change(version, timeout=0.15)
     assert changed is False
     assert current == version
 
@@ -24,24 +26,27 @@ def test_wait_times_out():
 def test_notify_increments_version():
     before = state.get_status_version()
     state.notify_status_changed()
-    time.sleep(0.2)
-    after = state.get_status_version()
+    # Use the blocking wait instead of a blind sleep
+    changed, after = state.wait_for_status_change(before, timeout=2.0)
+    assert changed is True
     assert after > before
 
 
 def test_wait_detects_change():
     before = state.get_status_version()
+    ready = threading.Event()
 
     def _notify():
-        time.sleep(0.05)
+        ready.wait(timeout=5)
         state.notify_status_changed()
 
     t = threading.Thread(target=_notify, daemon=True)
     t.start()
-    changed, current = state.wait_for_status_change(before, timeout=1.0)
+    ready.set()
+    changed, current = state.wait_for_status_change(before, timeout=2.0)
     assert changed is True
     assert current > before
-    t.join(timeout=1)
+    t.join(timeout=2)
 
 
 def test_create_scan_job():

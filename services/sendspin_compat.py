@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import inspect
+import logging
 from importlib.metadata import PackageNotFoundError, version
+
+logger = logging.getLogger(__name__)
 
 _RUNTIME_DEPENDENCIES = (
     "sendspin",
@@ -72,8 +75,9 @@ def get_runtime_dependency_versions(names: tuple[str, ...] = _RUNTIME_DEPENDENCI
             resolved[name] = version(name)
         except PackageNotFoundError:
             resolved[name] = "not installed"
-        except Exception:
+        except Exception as exc:
             resolved[name] = "unknown"
+            logger.debug("Failed to get version for %s: %s", name, exc)
     return resolved
 
 

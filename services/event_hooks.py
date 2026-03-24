@@ -71,7 +71,12 @@ class EventHookRegistry:
         self._lock = threading.Lock()
         self._executor = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="event-hooks")
 
+    def shutdown(self) -> None:
+        """Shut down the background delivery thread pool."""
+        self._executor.shutdown(wait=False)
+
     def clear(self) -> None:
+        self.shutdown()
         with self._lock:
             self._hooks.clear()
             self._recent_deliveries.clear()

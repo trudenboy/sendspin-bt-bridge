@@ -449,6 +449,9 @@ def test_set_volume_empty_body(client):
     # With no clients available the response is 503 ("No clients available"),
     # but it must never be an unhandled 500.
     assert resp.status_code != 500
+    data = resp.get_json()
+    assert data is not None
+    assert "success" in data or "error" in data
 
 
 def test_set_volume_with_invalid_player_names(client):
@@ -3144,6 +3147,9 @@ def test_device_enabled_missing_fields(client):
         content_type="application/json",
     )
     assert resp.status_code == 400
+    data = resp.get_json()
+    assert data is not None
+    assert "error" in data
 
 
 # ---------------------------------------------------------------------------
@@ -3167,6 +3173,8 @@ def test_ha_auth_page_rejects_javascript_scheme(client):
     """javascript: scheme in ma_url must be rejected with 400."""
     resp = client.get("/api/ma/ha-auth-page?ma_url=javascript:alert(1)")
     assert resp.status_code == 400
+    body = resp.get_data(as_text=True)
+    assert "Invalid" in body
 
 
 def test_ha_auth_page_accepts_http_url(client):
@@ -3181,6 +3189,7 @@ def test_ha_auth_page_accepts_empty_url(client):
     """Empty ma_url should be accepted."""
     resp = client.get("/api/ma/ha-auth-page?ma_url=")
     assert resp.status_code == 200
+    assert resp.data  # non-empty HTML response
 
 
 def test_ma_artwork_proxy_fetches_same_origin_ma_artwork(client):
@@ -3202,7 +3211,7 @@ def test_ma_artwork_proxy_fetches_same_origin_ma_artwork(client):
         def __exit__(self, exc_type, exc, tb):
             return False
 
-        def read(self):
+        def read(self, size=-1):
             return b"jpeg-bytes"
 
     state.set_ma_api_credentials("http://ma:8095", "token123")
@@ -3265,56 +3274,20 @@ def test_ma_artwork_proxy_rejects_unsigned_external_provider_artwork(client):
 
 
 def test_ma_artwork_proxy_fetches_signed_external_provider_artwork_without_ma_token(client):
+    """External (non-MA-origin) artwork URLs are rejected with 403 (C8 restriction)."""
     import state
     from services.ma_artwork import sign_artwork_url
-
-    class _FakeHeaders:
-        def get(self, key, default=None):
-            if key.lower() == "content-type":
-                return "image/png"
-            return default
-
-    class _FakeResponse:
-        headers = _FakeHeaders()
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc, tb):
-            return False
-
-        def read(self):
-            return b"png-bytes"
 
     raw_url = "https://avatars.yandex.net/get-music-content/49876/ab027f9c.a.37173-2/1000x1000"
     state.set_ma_api_credentials("http://ma:8095", "token123")
     try:
-        with pytest.MonkeyPatch.context() as mp:
-            import routes.api_ma as api_ma_mod
-
-            opened = {}
-
-            def _fake_urlopen(req, timeout=0):
-                opened["url"] = req.full_url
-                opened["auth"] = req.headers.get("Authorization")
-                opened["accept"] = req.headers.get("Accept")
-                opened["timeout"] = timeout
-                return _FakeResponse()
-
-            mp.setattr(api_ma_mod._ur, "urlopen", _fake_urlopen)
-            resp = client.get(
-                "/api/ma/artwork?url="
-                "https%3A%2F%2Favatars.yandex.net%2Fget-music-content%2F49876%2Fab027f9c.a.37173-2%2F1000x1000"
-                f"&sig={sign_artwork_url(raw_url)}"
-            )
-
-        assert resp.status_code == 200
-        assert resp.data == b"png-bytes"
-        assert resp.headers["Content-Type"].startswith("image/png")
-        assert opened["url"] == raw_url
-        assert opened["auth"] is None
-        assert opened["accept"] == "image/*"
-        assert opened["timeout"] == 15
+        resp = client.get(
+            "/api/ma/artwork?url="
+            "https%3A%2F%2Favatars.yandex.net%2Fget-music-content%2F49876%2Fab027f9c.a.37173-2%2F1000x1000"
+            f"&sig={sign_artwork_url(raw_url)}"
+        )
+        assert resp.status_code == 403
+        assert "restricted to MA server origin" in resp.get_data(as_text=True)
     finally:
         state.set_ma_api_credentials("", "")
 

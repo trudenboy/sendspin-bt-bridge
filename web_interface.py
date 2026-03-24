@@ -198,8 +198,8 @@ def _resolve_ingress_user() -> str:
         if username:
             _ingress_user_cache = username
             return _ingress_user_cache
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Failed to load config for ingress user: %s", exc)
 
     _ingress_user_cache = "HA User"
     return _ingress_user_cache

@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
+from services._helpers import _device_extra
 from services.device_health_state import compute_device_health_state
 
 
@@ -12,11 +13,6 @@ def _obj_get(source: Any, name: str, default: Any = None) -> Any:
     if isinstance(source, dict):
         return source.get(name, default)
     return getattr(source, name, default)
-
-
-def _device_extra(device: Any) -> dict[str, Any]:
-    extra = _obj_get(device, "extra", {})
-    return extra if isinstance(extra, dict) else {}
 
 
 @dataclass

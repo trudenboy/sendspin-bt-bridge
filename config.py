@@ -28,7 +28,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-VERSION = "2.46.1-rc.7"
+VERSION = "2.46.3-rc.1"
 BUILD_DATE = "2026-03-24"
 CONFIG_SCHEMA_VERSION = 1
 UPDATE_CHANNELS = ("stable", "rc", "beta")
@@ -137,7 +137,7 @@ logger = logging.getLogger(__name__)
 
 CONFIG_DIR = Path(os.getenv("CONFIG_DIR", "/config"))
 CONFIG_FILE = CONFIG_DIR / "config.json"
-config_lock = threading.Lock()  # serializes all config.json read-modify-write ops
+config_lock = threading.RLock()  # serializes all config.json read-modify-write ops
 _config_load_log_lock = threading.Lock()
 _config_load_logged_once = False
 CONFIG_ALLOWED_KEYS = frozenset(DEFAULT_CONFIG)
@@ -791,22 +791,26 @@ def update_config(mutator) -> None:
     in-place.  The result is written to a temp file and atomically renamed.
     """
     with config_lock:
-        existing: dict = {}
-        if CONFIG_FILE.exists():
-            existing = _read_raw_config_file()
-        before = copy.deepcopy(existing)
-        mutator(existing)
-        existing.setdefault("CONFIG_SCHEMA_VERSION", CONFIG_SCHEMA_VERSION)
-        changed_keys = _changed_config_keys(before, existing)
-        if not changed_keys:
-            logger.debug("Config update made no changes for %s", CONFIG_FILE)
-            return
+        raw = CONFIG_FILE.read_bytes() if CONFIG_FILE.exists() else None
+    existing: dict = {}
+    if raw is not None:
+        existing = json.loads(raw)
+        if not isinstance(existing, dict):
+            raise ValueError("Config file must contain a JSON object")
+    before = copy.deepcopy(existing)
+    mutator(existing)
+    existing.setdefault("CONFIG_SCHEMA_VERSION", CONFIG_SCHEMA_VERSION)
+    changed_keys = _changed_config_keys(before, existing)
+    if not changed_keys:
+        logger.debug("Config update made no changes for %s", CONFIG_FILE)
+        return
+    with config_lock:
         write_config_file(existing)
-        changed_key_list = ", ".join(changed_keys)
-        if set(changed_keys).issubset(RUNTIME_STATE_CONFIG_KEYS):
-            logger.debug("Updated runtime config state in %s (%s)", CONFIG_FILE, changed_key_list)
-        else:
-            logger.info("Updated config at %s (%s)", CONFIG_FILE, changed_key_list)
+    changed_key_list = ", ".join(changed_keys)
+    if set(changed_keys).issubset(RUNTIME_STATE_CONFIG_KEYS):
+        logger.debug("Updated runtime config state in %s (%s)", CONFIG_FILE, changed_key_list)
+    else:
+        logger.info("Updated config at %s (%s)", CONFIG_FILE, changed_key_list)
 
 
 def _player_id_from_mac(mac: str) -> str:
@@ -864,7 +868,10 @@ def load_config() -> dict:
     if CONFIG_FILE.exists():
         try:
             with config_lock:
-                saved_config = _read_raw_config_file()
+                raw = CONFIG_FILE.read_bytes()
+            saved_config = json.loads(raw)
+            if not isinstance(saved_config, dict):
+                raise ValueError("Config file must contain a JSON object")
             migrated = migrate_config_payload(saved_config)
             result.update(migrated.normalized_config)
             has_explicit_ha_area_name_assist = "HA_AREA_NAME_ASSIST_ENABLED" in migrated.normalized_config
@@ -890,8 +897,13 @@ def load_config() -> dict:
                 try:
 
                     def _persist_migration(cfg: dict) -> None:
-                        cfg.clear()
-                        cfg.update(result)
+                        for key, value in migrated.normalized_config.items():
+                            if key not in saved_config or saved_config.get(key) != value:
+                                cfg[key] = copy.deepcopy(value)
+                        # Remove legacy keys consumed by migration
+                        for key in saved_config:
+                            if key not in migrated.normalized_config:
+                                cfg.pop(key, None)
 
                     update_config(_persist_migration)
                     logger.info("Migrated legacy config keys to current format")

@@ -98,7 +98,8 @@ def _dbus_get_device_property(device_path: str | None, property_name: str, adapt
         device = bus.get_object("org.bluez", device_path)
         props = _dbus.Interface(device, "org.freedesktop.DBus.Properties")
         return props.Get("org.bluez.Device1", property_name)
-    except Exception:
+    except Exception as exc:
+        logger.debug("D-Bus property read failed for %s: %s", property_name, exc)
         return None
 
 
@@ -113,7 +114,8 @@ def _dbus_get_battery_level(device_path: str | None) -> int | None:
         device = bus.get_object("org.bluez", device_path)
         props = _dbus.Interface(device, "org.freedesktop.DBus.Properties")
         return int(props.Get("org.bluez.Battery1", "Percentage"))
-    except Exception:
+    except Exception as exc:
+        logger.debug("D-Bus battery read failed: %s", exc)
         return None
 
 
@@ -1041,7 +1043,8 @@ class BluetoothManager:
                 # Read initial connected state
                 try:
                     self.connected = bool(await device_iface.get_connected())
-                except Exception:
+                except Exception as exc:
+                    logger.debug("get_connected() failed: %s", exc)
                     self.connected = False
                 if self.client:
                     self.client._update_status(

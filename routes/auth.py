@@ -457,8 +457,8 @@ def _handle_ma_login(
     ok, err_msg = _ma_validate_credentials(username, password)
     if ok:
         _clear_failures(client_ip)
+        session.clear()
         session["authenticated"] = True
-        session.pop("_ha_login_user", None)
         session["ha_user"] = username
         return None, redirect(_safe_next_url())
     _record_failure(client_ip)
@@ -503,8 +503,10 @@ def _handle_ha_via_ma_login(
         result = _ha_remote_flow_step(ha_url, flow_id, {"code": code})
         if result and result.get("type") == "create_entry":
             _clear_failures(client_ip)
+            ha_user = session.get("_ha_login_user", "")
+            session.clear()
             session["authenticated"] = True
-            session["ha_user"] = session.pop("_ha_login_user", "")
+            session["ha_user"] = ha_user
             return None, redirect(_safe_next_url())
         _record_failure(client_ip)
         if result and result.get("type") == "abort":
@@ -540,8 +542,8 @@ def _handle_ha_via_ma_login(
         return "Authentication service unavailable", None
     if result.get("type") == "create_entry":
         _clear_failures(client_ip)
+        session.clear()
         session["authenticated"] = True
-        session.pop("_ha_login_user", None)
         session["ha_user"] = username
         return None, redirect(_safe_next_url())
     if result.get("type") == "form" and result.get("step_id") == "mfa":
@@ -601,8 +603,10 @@ def _handle_ha_direct_login(
         result = _ha_flow_step(flow_id, {"code": code})
         if result and result.get("type") == "create_entry":
             _clear_failures(client_ip)
+            ha_user = session.get("_ha_login_user", "")
+            session.clear()
             session["authenticated"] = True
-            session["ha_user"] = session.pop("_ha_login_user", "")
+            session["ha_user"] = ha_user
             return None, redirect(_safe_next_url())
         _record_failure(client_ip)
         if result and result.get("type") == "abort":
@@ -633,8 +637,8 @@ def _handle_ha_direct_login(
         logger.warning("HA login flow unavailable, falling back to Supervisor auth")
         if _supervisor_auth(username, password):
             _clear_failures(client_ip)
+            session.clear()
             session["authenticated"] = True
-            session.pop("_ha_login_user", None)
             session["ha_user"] = username
             return None, redirect(_safe_next_url())
         _record_failure(client_ip)
@@ -649,8 +653,8 @@ def _handle_ha_direct_login(
         return "Authentication service unavailable", None
     if result.get("type") == "create_entry":
         _clear_failures(client_ip)
+        session.clear()
         session["authenticated"] = True
-        session.pop("_ha_login_user", None)
         session["ha_user"] = username
         return None, redirect(_safe_next_url())
     if result.get("type") == "form" and result.get("step_id") == "mfa":
@@ -685,8 +689,8 @@ def _handle_local_password_login(
         return "No password configured — set one via the Configuration panel", None
     if check_password(password, stored):
         _clear_failures(client_ip)
+        session.clear()
         session["authenticated"] = True
-        session.pop("_ha_login_user", None)
         return None, redirect(_safe_next_url())
     _record_failure(client_ip)
     return "Invalid password", None

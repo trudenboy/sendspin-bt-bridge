@@ -5,10 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-
-def _device_extra(device: Any) -> dict[str, Any]:
-    extra = getattr(device, "extra", None)
-    return extra if isinstance(extra, dict) else {}
+from services._helpers import _device_extra
 
 
 def _append_reason(reasons: list[str], reason: str) -> None:

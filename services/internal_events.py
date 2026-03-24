@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 from threading import Lock
 from typing import TYPE_CHECKING, Any
+
+logger = logging.getLogger(__name__)
 
 UTC = timezone.utc
 
@@ -126,5 +129,13 @@ class InternalEventPublisher:
         with self._lock:
             subscribers = list(self._subscribers)
         for callback in subscribers:
-            callback(event)
+            try:
+                callback(event)
+            except Exception:
+                logger.exception("Subscriber callback %r failed for event %s", callback, event.event_type)
         return event
+
+    def clear_subscribers(self) -> None:
+        """Remove all subscribers."""
+        with self._lock:
+            self._subscribers.clear()

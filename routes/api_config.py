@@ -541,7 +541,7 @@ def api_config_upload():
             try:
                 with open(CONFIG_FILE) as ef:
                     existing = json.load(ef)
-            except Exception:
+            except (json.JSONDecodeError, OSError):
                 pass
 
         for key in _PRESERVED_KEYS:
@@ -715,7 +715,7 @@ def api_config():
             try:
                 with open(CONFIG_FILE) as f:
                     has_hash = bool(json.load(f).get("AUTH_PASSWORD_HASH"))
-            except Exception:
+            except (json.JSONDecodeError, OSError):
                 pass
         if not has_hash:
             return _error_response("Set a password before enabling authentication")

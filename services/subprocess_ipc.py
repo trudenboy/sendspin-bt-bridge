@@ -20,6 +20,9 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
 
+_IPC_MAX_LINE_BYTES = 1_048_576  # 1 MB
+
+
 class SubprocessIpcService:
     """Own daemon stdout parsing, protocol warnings, and message dispatch."""
 
@@ -49,7 +52,17 @@ class SubprocessIpcService:
         """Parse daemon stdout JSON-line messages until EOF."""
         if stdout is None:
             return
-        async for line in stdout:
+        while True:
+            line = await stdout.readline()
+            if not line:
+                break
+            if len(line) > _IPC_MAX_LINE_BYTES:
+                self._logger.warning(
+                    "[%s] Skipping oversized IPC message (%d bytes)",
+                    self.player_name,
+                    len(line),
+                )
+                continue
             msg = self.parse_line(line)
             if msg is None:
                 continue

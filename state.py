@@ -227,11 +227,9 @@ _disabled_devices_lock = threading.Lock()
 def _sync_legacy_registry_aliases(snapshot) -> None:
     """Mirror canonical registry state onto legacy module-level aliases."""
     with clients_lock:
-        clients.clear()
-        clients.extend(snapshot.active_clients)
+        clients[:] = snapshot.active_clients
     with _disabled_devices_lock:
-        _disabled_devices.clear()
-        _disabled_devices.extend(snapshot.disabled_devices)
+        _disabled_devices[:] = snapshot.disabled_devices
 
 
 _register_registry_listener(_sync_legacy_registry_aliases)

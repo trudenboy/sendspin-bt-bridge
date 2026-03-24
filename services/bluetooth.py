@@ -56,7 +56,7 @@ def list_bt_adapters(timeout: int = 5) -> list[str]:
             timeout=timeout,
         )
         return _ADAPTER_RE.findall(result.stdout)
-    except Exception:
+    except (subprocess.SubprocessError, OSError):
         return []
 
 
@@ -247,5 +247,6 @@ def is_audio_device(mac: str) -> bool:
             return False
         # Name only (no Class, no UUID) — device may be in pairing mode, include cautiously
         return True
-    except Exception:
+    except (subprocess.SubprocessError, OSError, ValueError) as exc:
+        logger.debug("is_audio_device(%s) check failed: %s", mac, exc)
         return True  # on error, include

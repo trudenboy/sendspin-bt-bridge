@@ -27,6 +27,7 @@ import logging
 import os
 import re
 import sys
+import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -83,7 +84,7 @@ try:
             self._append_planar_frame(output, frame, samples_per_channel, channel_count, src_bits)
 
         _sd.FlacDecoder._append_frame_to_pcm = _append_compat  # type: ignore[assignment]
-except Exception:
+except (ImportError, AttributeError):
     pass
 
 # ---------------------------------------------------------------------------
@@ -123,16 +124,17 @@ class _JsonLineHandler(logging.Handler):
             msg = self.format(record)
             # Detect re-anchor log message from sendspin/audio.py
             if self._status is not None and _REANCHOR_MSG in msg:
-                self._status["reanchor_count"] = self._status.get("reanchor_count", 0) + 1
-                self._status["reanchoring"] = True
-                self._status["last_reanchor_at"] = time.monotonic()
-                # Extract sync error value if present: "Sync error 123.4 ms too large; re-anchoring"
-                if _SYNC_ERROR_PREFIX in msg:
-                    try:
-                        after = msg.split(_SYNC_ERROR_PREFIX, 1)[1]
-                        self._status["last_sync_error_ms"] = float(after.split()[0])
-                    except (IndexError, ValueError):
-                        pass  # best-effort parse inside log handler
+                with _status_lock:
+                    self._status["reanchor_count"] = self._status.get("reanchor_count", 0) + 1
+                    self._status["reanchoring"] = True
+                    self._status["last_reanchor_at"] = time.monotonic()
+                    # Extract sync error value if present: "Sync error 123.4 ms too large; re-anchoring"
+                    if _SYNC_ERROR_PREFIX in msg:
+                        try:
+                            after = msg.split(_SYNC_ERROR_PREFIX, 1)[1]
+                            self._status["last_sync_error_ms"] = float(after.split()[0])
+                        except (IndexError, ValueError):
+                            pass  # best-effort parse inside log handler
                 if callable(self._on_status_change):
                     try:
                         self._on_status_change()
@@ -161,6 +163,8 @@ def _setup_logging() -> None:
 # ---------------------------------------------------------------------------
 
 _last_status_json: str = ""
+_status_lock = threading.Lock()
+_background_tasks: set[asyncio.Task] = set()
 
 
 def _filter_supported_daemon_args_kwargs(daemon_args_cls, kwargs: dict[str, object]) -> dict[str, object]:
@@ -180,7 +184,8 @@ def _emit_status(status: dict) -> None:
     the write is skipped to avoid flooding the parent with no-op updates.
     """
     global _last_status_json
-    payload = json.dumps(build_status_envelope(status), default=_str_default, sort_keys=True)
+    with _status_lock:
+        payload = json.dumps(build_status_envelope(status), default=_str_default, sort_keys=True)
     if payload == _last_status_json:
         return
     _last_status_json = payload
@@ -217,7 +222,8 @@ async def _reanchor_watcher(status: dict, on_status_change, stop_event: asyncio.
         if status.get("reanchoring") and status.get("last_reanchor_at") is not None:
             age = time.monotonic() - status["last_reanchor_at"]
             if age >= _REANCHOR_AUTO_CLEAR_S:
-                status["reanchoring"] = False
+                with _status_lock:
+                    status["reanchoring"] = False
                 if callable(on_status_change):
                     try:
                         on_status_change()
@@ -275,7 +281,8 @@ async def _startup_unmute_watcher(
     try:
         if await aset_sink_mute(sink_name, False):
             _logger.info("[%s] Unmuted sink %s (startup complete)", player_name, sink_name)
-            status["sink_muted"] = False
+            with _status_lock:
+                status["sink_muted"] = False
             if on_status_change:
                 on_status_change()
         else:
@@ -321,6 +328,8 @@ async def _read_commands(daemon_ref: list, stop_event: asyncio.Event) -> None:
 
                 mc = MediaCommand.PAUSE if cmd.cmd == "pause" else MediaCommand.PLAY
                 _task = asyncio.ensure_future(daemon._client.send_group_command(mc))
+                _background_tasks.add(_task)
+                _task.add_done_callback(_background_tasks.discard)
                 _task.add_done_callback(
                     lambda t: logger.debug("send_group_command error: %s", t.exception()) if t.exception() else None
                 )
@@ -353,7 +362,10 @@ async def _read_commands(daemon_ref: list, stop_event: asyncio.Event) -> None:
                         # the old player before the auto-reconnect sends a new client_hello
                         await asyncio.sleep(_delay)
 
-                asyncio.ensure_future(_delayed_reconnect()).add_done_callback(
+                _reconnect_task = asyncio.ensure_future(_delayed_reconnect())
+                _background_tasks.add(_reconnect_task)
+                _reconnect_task.add_done_callback(_background_tasks.discard)
+                _reconnect_task.add_done_callback(
                     lambda t: logger.debug("reconnect error: %s", t.exception()) if t.exception() else None
                 )
         elif cmd.cmd == "set_log_level":
@@ -538,6 +550,11 @@ async def _run(params: dict) -> None:
         unmute_task.cancel()
     for t in pending:
         t.cancel()
+
+    # Cancel tracked fire-and-forget tasks
+    for t in list(_background_tasks):
+        t.cancel()
+    _background_tasks.clear()
 
     # Wait for clean shutdown
     try:
