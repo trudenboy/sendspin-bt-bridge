@@ -12,6 +12,7 @@ import logging
 import re
 import sys
 from pathlib import Path
+from types import ModuleType, SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -52,6 +53,7 @@ from services.daemon_process import (  # noqa: E402
     _emit_error,
     _emit_status,
     _filter_supported_daemon_args_kwargs,
+    _patch_sendspin_audio_player_runtime_guards,
     _read_commands,
 )
 from services.ipc_protocol import IPC_PROTOCOL_VERSION  # noqa: E402
@@ -217,6 +219,73 @@ def test_filter_supported_daemon_args_kwargs_preserves_legacy_hw_volume():
     )
 
     assert filtered["use_hardware_volume"] is False
+
+
+def test_patch_sendspin_audio_player_runtime_guards_resets_stale_last_frame(monkeypatch):
+    class FakeAudioPlayer:
+        def __init__(self) -> None:
+            self._format = SimpleNamespace(frame_size=8)
+            self._last_output_frame = b"bad"
+
+        def set_format(self, audio_format, device):
+            return (audio_format, device)
+
+        def _audio_callback(self, outdata, frames, time, status):
+            return self._last_output_frame
+
+    fake_sendspin = ModuleType("sendspin")
+    fake_audio = ModuleType("sendspin.audio")
+    fake_audio.AudioPlayer = FakeAudioPlayer
+    fake_sendspin.audio = fake_audio
+    monkeypatch.setitem(sys.modules, "sendspin", fake_sendspin)
+    monkeypatch.setitem(sys.modules, "sendspin.audio", fake_audio)
+
+    _patch_sendspin_audio_player_runtime_guards()
+
+    player = FakeAudioPlayer()
+    result = player._audio_callback(None, 0, None, None)
+
+    assert result == b"\x00" * 8
+    assert player._last_output_frame == b"\x00" * 8
+
+
+def test_patch_sendspin_audio_player_runtime_guards_resets_correction_state_on_format_change(monkeypatch):
+    class FakeAudioPlayer:
+        def __init__(self) -> None:
+            self._last_output_frame = b"12345678"
+            self._insert_every_n_frames = 4
+            self._drop_every_n_frames = 5
+            self._frames_until_next_insert = 2
+            self._frames_until_next_drop = 3
+            self.seen_state: tuple[bytes, int, int, int, int] | None = None
+
+        def set_format(self, audio_format, device):
+            self.seen_state = (
+                self._last_output_frame,
+                self._insert_every_n_frames,
+                self._drop_every_n_frames,
+                self._frames_until_next_insert,
+                self._frames_until_next_drop,
+            )
+            return (audio_format, device)
+
+        def _audio_callback(self, outdata, frames, time, status):
+            return None
+
+    fake_sendspin = ModuleType("sendspin")
+    fake_audio = ModuleType("sendspin.audio")
+    fake_audio.AudioPlayer = FakeAudioPlayer
+    fake_sendspin.audio = fake_audio
+    monkeypatch.setitem(sys.modules, "sendspin", fake_sendspin)
+    monkeypatch.setitem(sys.modules, "sendspin.audio", fake_audio)
+
+    _patch_sendspin_audio_player_runtime_guards()
+
+    player = FakeAudioPlayer()
+    result = player.set_format("fmt", "device")
+
+    assert player.seen_state == (b"", 0, 0, 0, 0)
+    assert result == ("fmt", "device")
 
 
 # ── _emit_status dedup ──────────────────────────────────────────────────

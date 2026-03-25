@@ -48,12 +48,71 @@ from services.sendspin_compat import (
     resolve_preferred_audio_format,
 )
 
+
+def _patch_sendspin_audio_player_runtime_guards() -> None:
+    """Patch sendspin AudioPlayer to survive stale frame-reuse state.
+
+    After underruns/re-anchor or mid-stream format changes, sendspin's
+    sync-correction path can reuse ``_last_output_frame`` from an older
+    frame size. That later explodes inside the PortAudio callback with
+    ``memoryview assignment: lvalue and rvalue have different structures``.
+    Reset the reusable frame and correction cadence on format changes, and
+    guard the callback against mismatched cached frame lengths.
+    """
+
+    try:
+        import sendspin.audio as _sa
+    except ImportError:
+        return
+
+    player_cls = getattr(_sa, "AudioPlayer", None)
+    if not isinstance(player_cls, type):
+        return
+    if getattr(player_cls, "_sendspin_bt_bridge_runtime_guarded", False):
+        return
+
+    original_set_format = getattr(player_cls, "set_format", None)
+    original_audio_callback = getattr(player_cls, "_audio_callback", None)
+    if not callable(original_set_format) or not callable(original_audio_callback):
+        return
+
+    def _guarded_set_format(self, audio_format, device):  # type: ignore[no-untyped-def]
+        self._last_output_frame = b""
+        self._insert_every_n_frames = 0
+        self._drop_every_n_frames = 0
+        self._frames_until_next_insert = 0
+        self._frames_until_next_drop = 0
+        return original_set_format(self, audio_format, device)
+
+    def _guarded_audio_callback(self, outdata, frames, time, status):  # type: ignore[no-untyped-def]
+        frame_size = getattr(getattr(self, "_format", None), "frame_size", 0) or 0
+        if frame_size > 0:
+            last_output_frame = getattr(self, "_last_output_frame", b"")
+            if last_output_frame and len(last_output_frame) != frame_size:
+                logger.warning(
+                    "Resetting stale AudioPlayer last frame (%d bytes) for frame_size=%d",
+                    len(last_output_frame),
+                    frame_size,
+                )
+                self._last_output_frame = b"\x00" * frame_size
+        return original_audio_callback(self, outdata, frames, time, status)
+
+    for attr_name, value in (
+        ("set_format", _guarded_set_format),
+        ("_audio_callback", _guarded_audio_callback),
+        ("_sendspin_bt_bridge_runtime_guarded", True),
+    ):
+        setattr(player_cls, attr_name, value)
+
+
 # ---------------------------------------------------------------------------
 # PyAV compatibility: older PyAV (<13) has no AudioLayout.nb_channels.
 # The sendspin decoder uses frame.layout.nb_channels, so we monkey-patch
 # the decoder's _append_frame_to_pcm to use len(layout.channels) instead.
 # AudioLayout is a C extension type (immutable), so we replace the method.
 # ---------------------------------------------------------------------------
+_patch_sendspin_audio_player_runtime_guards()
+
 try:
     import av.audio.layout as _av_layout
 
