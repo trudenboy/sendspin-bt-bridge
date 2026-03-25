@@ -287,13 +287,30 @@ class BluetoothManager:
             logger.error("Bluetooth not available: %s", e)
             return False
 
-    def is_device_paired(self) -> bool:
-        """Check if device is paired via D-Bus; falls back to bluetoothctl."""
+    def is_device_paired(self) -> bool | None:
+        """Check if device is paired via D-Bus; falls back to bluetoothctl.
+
+        Returns ``None`` when BlueZ cannot currently resolve the device object.
+        That state is common immediately after disconnect/restart for some
+        speakers and must not be treated as a hard "not paired" signal.
+        """
         val = _dbus_get_device_property(self._dbus_device_path, "Paired")
         if val is not None:
             return bool(val)
         success, output = self._run_bluetoothctl([f"info {self.mac_address}"])
-        return success and "Paired: yes" in output
+        lowered = output.lower()
+        if "paired: yes" in lowered:
+            return True
+        if "paired: no" in lowered:
+            return False
+        if "not available" in lowered:
+            logger.info(
+                "[%s] Pairing state unknown: BlueZ has no current device object for %s",
+                self.device_name,
+                self.mac_address,
+            )
+            return None
+        return None
 
     def is_device_connected(self) -> bool:
         """Check if device is currently connected via D-Bus; falls back to bluetoothctl."""
@@ -500,10 +517,12 @@ class BluetoothManager:
 
         # Ensure paired and trusted (pair_device also runs trust)
         self.paired = self.is_device_paired()
-        if not self.paired:
+        if self.paired is False:
             logger.info("Device not paired, attempting to pair...")
             if not self.pair_device():
                 return False
+        elif self.paired is None:
+            logger.info("Pairing state unknown, trying to reconnect before re-pairing")
         if self._abort_connect_if_cancelled():
             return False
 

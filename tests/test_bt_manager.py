@@ -268,6 +268,29 @@ def test_connect_device_aborts_when_release_cancels_active_reconnect(bt_manager)
     disconnect_device.assert_called_once()
 
 
+def test_is_device_paired_returns_none_when_device_not_available(bt_manager):
+    with (
+        patch("bluetooth_manager._dbus_get_device_property", return_value=None),
+        patch.object(bt_manager, "_run_bluetoothctl", return_value=(False, "Device AA:BB:CC:DD:EE:FF not available")),
+    ):
+        assert bt_manager.is_device_paired() is None
+
+
+def test_connect_device_does_not_repair_when_pairing_state_unknown(bt_manager):
+    with (
+        patch.object(bt_manager, "is_device_connected", side_effect=[False, True]),
+        patch.object(bt_manager, "is_device_paired", return_value=None),
+        patch.object(bt_manager, "pair_device", return_value=True) as pair_device,
+        patch.object(bt_manager, "configure_bluetooth_audio"),
+        patch.object(bt_manager, "_wait_with_cancel", return_value=True),
+    ):
+        bt_manager._run_bluetoothctl = MagicMock(return_value=(True, ""))
+
+        assert bt_manager.connect_device() is True
+
+    pair_device.assert_not_called()
+
+
 def test_pair_device_trusts_only_after_pair_success(bt_manager):
     fake_proc = _FakeProc(
         stdout_lines=["Confirm passkey 123456 (yes/no):\n", "Pairing successful\n"],
