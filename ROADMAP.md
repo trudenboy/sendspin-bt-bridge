@@ -4,7 +4,13 @@
 
 This roadmap is written for the **v3 wave**, starting from the reality already shipped in `v2.46.x+`.
 
-v3 is **not** a from-scratch rewrite. The project already has:
+v3 should be treated as a **compatibility-preserving platform refresh**:
+
+- **not** a from-scratch rewrite
+- **not** a promise to change only tiny islands forever
+- a deliberate chance to modernize architecture, backend contracts, and operator-facing UI without regressing Bluetooth reliability
+
+The project already has:
 
 - explicit bridge lifecycle and orchestration seams
 - typed status and diagnostics read models
@@ -14,37 +20,37 @@ v3 is **not** a from-scratch rewrite. The project already has:
 - stronger Docker and Raspberry Pi diagnostics for real deployment environments
 - versioned subprocess IPC and stable operator-facing diagnostics endpoints
 
-The roadmap should therefore answer a different question:
+The roadmap should therefore answer a sharper question:
 
-- what still needs to be finished before the runtime is stable enough for v3 expansion
-- which product bets are important enough to define v3
-- how to add those bets without regressing Bluetooth reliability
+- which deeper seams should be replaced so v3 is easier to grow
+- how to make wired and USB support feel like a real product wave instead of an experiment
+- how to turn the UI into a modern operator console without discarding the deployment realities that already work
 
 ## Priority adjustment for v3
 
-The first major v3 expansion is now **wired and USB audio support**, not a late-stage optional track.
+The first major v3 expansion is still **wired and USB audio support**, but it should no longer be treated as a backend-only follow-up.
 
-That changes the sequencing:
+The new sequencing is:
 
-1. treat the operator polish wave as baseline, not as a new refactor project
-2. establish backend and config contracts
-3. ship the first adjacent backend for USB DACs and wired outputs
-4. add the observability and tuning needed to run Bluetooth and wired players well
-5. expand into AI-assisted support and multi-bridge fleet management after the single-bridge multi-backend story is real
+1. treat the operator polish wave as shipped baseline, not the primary active phase
+2. launch v3 as a coordinated three-track program across architecture, backend, and frontend
+3. ship the first multi-backend product wave as **shared platform contracts + wired/USB runtime + modern operator console**
+4. make observability, signal path, and delay intelligence first-class before pushing hard into AI or fleet management
+5. expand into AI-assisted support and multi-bridge control only after the single-bridge, multi-backend story feels coherent
 
-Bluetooth still remains the primary and most battle-tested runtime. Wired and USB support should widen the product without displacing that core.
+Bluetooth still remains the primary and most battle-tested runtime. v3 should widen the product around that core, not demote it.
 
 ## Product thesis for v3
 
-Sendspin BT Bridge v3 should become a **Bluetooth-first, room-aware, multi-backend-capable player runtime** for Music Assistant.
+Sendspin BT Bridge v3 should become a **Bluetooth-first, room-aware, multi-backend audio platform with a modern operator console**.
 
 That means keeping Bluetooth reliability as the core product while adding five major capabilities on top:
 
-1. **A backend abstraction layer and config schema that can safely host more than Bluetooth**
-2. **USB DAC and wired audio support as the first adjacent backend**
-3. **Audio health visibility plus delay and sync intelligence**
-4. **AI-assisted diagnostics and deployment planning**
-5. **Centralized management of multiple bridge instances**
+1. **A shared platform layer** with explicit backend contracts, capability modeling, config/runtime separation, and event history
+2. **USB DAC and wired audio support** as the first adjacent backend, followed by virtual sink composition
+3. **Observability-first operations** with signal-path visibility, health summaries, recovery timelines, and delay intelligence
+4. **A modern operator console** for creation, diagnostics, history, and bulk operations
+5. **AI-assisted diagnostics and later fleet management** built on the same typed data model rather than separate one-off logic
 
 ## Starting baseline from v2
 
@@ -58,38 +64,40 @@ The roadmap treats the following as already-established foundations:
 - Docker and Raspberry Pi startup diagnostics already surface runtime UID, audio socket path, socket ownership, and live `pactl` probe status
 - subprocess IPC, config migration, and diagnostics endpoints already behave like versioned product contracts
 
-## Architectural enablement tracks
+## Three coordinated tracks for v3
 
-The roadmap is product-led, but several architectural themes should stay explicit because they make the product phases safer and more testable:
+v3 should not be framed as "backend work with frontend enablement on the side". It should run as three coordinated tracks that land together in each major phase.
 
-- **Shrink `state.py` toward a compatibility and cache layer** rather than letting it remain the architectural center of the runtime.
-- **Keep the read layer normalized and typed**, and let snapshots grow toward richer event history, degraded-mode summaries, and explicit capability surfaces.
-- **Use a lightweight internal event model** to feed diagnostics history, hooks, recovery timelines, and later fleet views instead of inventing separate ad hoc payloads in each layer.
-- **Keep mock runtime and simulator support first-class** so backend, diagnostics, and UI flows can be validated without real Bluetooth hardware.
-- **Separate user-owned config from runtime state and generated metadata** more aggressively as config schema v2 lands.
-- **Treat hooks and webhooks as stable operability contracts**, not as incidental side effects of local diagnostics work.
+### Track A. Architecture and platform contracts
 
-## Frontend architecture direction
+This track gives v3 its long-term shape:
 
-v3 should improve the frontend substantially, but **not** through an all-at-once SPA rewrite.
+- define a real `AudioBackend`-style contract instead of letting Bluetooth remain the implicit model
+- make capability modeling explicit in APIs and snapshots
+- shrink `state.py` toward a compatibility and cache layer instead of the architectural center
+- separate user-owned config, runtime state, and derived metadata more aggressively
+- standardize on typed read models and a lightweight internal event model
+- keep simulator and mock runtime support first-class so backend and UI work stay hardware-light
 
-The preferred direction is a **server-first, progressively enhanced frontend**:
+### Track B. Backend and runtime expansion
 
-- keep Flask-rendered entry points and current SSE/fetch contracts
-- migrate the current monolithic `static/app.js` toward feature-scoped frontend modules
-- adopt **Vue 3 + TypeScript + Vite** for new interactive surfaces and incremental islands/sections rather than replacing the whole UI at once
-- use **headless accessible primitives** (for example Radix Vue-class components) instead of locking the project into a heavy opaque component library
-- keep the existing **CSS variable/token** approach as the design-system backbone; utility CSS can help new surfaces, but should not force a full styling rewrite
-- build typed frontend models/stores around `BridgeSnapshot`, `DeviceSnapshot`, guidance, diagnostics, jobs, and event-history data
-- lazy-load the heaviest operational surfaces such as diagnostics, history, config editors, and future fleet views
+This track turns v3 into a genuine multi-backend runtime:
 
-This direction should optimize for:
+- preserve Bluetooth as the primary runtime and reliability benchmark
+- add wired and USB outputs as first-class player types, not special cases
+- expose virtual sinks and composed zones once the adjacent backend story is real
+- carry route ownership, health, and signal-path visibility across backend types
+- make delay and sync tooling backend-aware instead of Bluetooth-only
 
-- Home Assistant ingress compatibility
-- accessibility and keyboard support
-- maintainable code-splitting
-- mobile-friendly operator workflows
-- richer UI state without abandoning the current server-driven product model
+### Track C. Frontend and operator console
+
+This track turns the current web UI into a clearer operational product:
+
+- evolve from a monolithic runtime script toward typed feature modules and shared UI primitives
+- use **Vue 3 + TypeScript + Vite** for new or replaced high-churn surfaces
+- keep server-driven entry points, ingress compatibility, and fetch/SSE contracts where they still help
+- build a real operator console around creation flows, diagnostics, details drawers, timelines, and bulk actions
+- allow replacement of whole high-churn screens when that produces a cleaner product than endless incremental patching
 
 ## North-star outcomes
 
@@ -97,10 +105,10 @@ v3 is successful when the project can do all of the following without becoming f
 
 1. A single bridge is boring and reliable in HA, Docker, Raspberry Pi, and LXC environments.
 2. The same bridge can host Bluetooth players and at least one wired or USB-backed player type with a coherent operator UX.
-3. Operators can see signal path, health, and sync status instead of inferring them from logs.
-4. Speaker delay tuning becomes much less manual.
-5. Operators can ask the system for a deployment plan or a diagnostics explanation and get a useful answer quickly.
-6. Multiple bridge instances can later be understood and managed as one fleet instead of isolated boxes.
+3. Operators can create, diagnose, tune, and recover players from a modern console instead of stitching together many ad hoc UI surfaces.
+4. Signal path, route ownership, health, and event history are visible enough that problems are discovered by the UI before they are discovered by ear.
+5. Delay tuning becomes guided and explainable rather than trial and error.
+6. AI support and later fleet management can build on the same contracts, diagnostics bundles, and event history rather than inventing separate data models.
 
 ## Phase V3-0: Pre-v3 operator polish baseline
 
@@ -130,182 +138,162 @@ Document the operator polish that now forms the calm starting surface for v3.
 
 These outcomes are already reflected in the shipped operator-guidance and recovery flows. Active roadmap work should therefore start at **V3-1**, not at V3-0.
 
-## Phase V3-1: Backend abstraction and config schema v2
+## Phase V3-1: Platform reset for v3
 
 ### Goal
 
-Prepare the bridge for wired and USB expansion without destabilizing the shipped Bluetooth runtime.
+Create the shared platform model for v3 and ship the first modern operator-console foundations alongside it.
 
 ### Scope
 
-#### Epic 1. Backend contract
+#### Epic 1. Runtime contracts and ownership seams
 
-- define an `AudioBackend`-style contract for lifecycle, capabilities, health, diagnostics, and room metadata
+- define an `AudioBackend`-style contract for lifecycle, capabilities, health, diagnostics, room metadata, and route ownership
 - wrap the existing Bluetooth runtime behind that contract first
 - keep subprocess and control-plane contracts backend-agnostic where practical
+- reduce `state.py` from architectural center toward a compatibility and cache layer as routes and services move to explicit ownership and snapshot reads
 
-#### Epic 2. Config schema v2
+#### Epic 2. Config and runtime model v2
 
 - move from a Bluetooth-device-only model to player and backend-oriented configuration
+- separate user-owned config from runtime-derived state and generated metadata
 - add compatibility loading and migration tooling from the current schema
-- keep downgrade assumptions explicit and documented
+- keep downgrade and partial-migration assumptions explicit and documented
 
-#### Epic 3. Contract guardrails
+#### Epic 3. Event model, read models, and simulator foundation
 
-- extend IPC, status snapshots, diagnostics payloads, and API contracts so new backend fields can land incrementally
-- keep compatibility rules explicit for older configs and deployed subprocesses
-- document the stable contract surfaces needed for future backend work
-- reduce `state.py` from architectural center toward a compatibility/cache layer as routes and services migrate to explicit ownership and snapshot reads
-- surface backend and device capabilities explicitly in snapshots and APIs instead of inferring them ad hoc
-- separate user-owned config from runtime-derived state where practical as config schema v2 evolves
-
-#### Additional enablement in this phase
-
+- standardize on a lightweight internal event model that can feed diagnostics history, hooks, recovery timelines, and later fleet views
+- make per-device and per-bridge event history a first-class typed surface rather than scattered ad hoc payloads
+- broaden typed snapshots and health summaries so degraded-mode reporting is a product surface, not just a debug aid
 - keep the mock runtime and simulator path viable for backend, config, diagnostics, and onboarding flows
-- make hardware-light tests a normal validation path for new contract work, not a later cleanup step
-- introduce the frontend migration foundation:
-  - feature-scoped frontend modules instead of one growing monolith
-  - Vue 3 + TypeScript + Vite for new sections
-  - typed stores/models around status, guidance, diagnostics, and background jobs
-  - headless accessible primitives and shared design tokens for new UI work
+- make hardware-light tests a normal validation path for contract work
+
+#### Epic 4. Operator console foundation
+
+- adopt **Vue 3 + TypeScript + Vite** for new or replaced high-churn surfaces
+- build typed frontend models and stores around `BridgeSnapshot`, `DeviceSnapshot`, guidance, diagnostics, jobs, and event history
+- establish shared design tokens, headless accessible primitives, and reusable drawer/dialog/filter/table patterns
+- keep Flask-rendered entry points and ingress compatibility, but allow replacement of high-churn UI surfaces where a cleaner product benefits
 
 ### Exit criteria
 
-- Bluetooth remains the most stable backend
-- config migration is incremental and safe
-- the runtime can describe backend-neutral players without pretending Bluetooth is the only shape
-- key backend/config flows can be validated without requiring real Bluetooth hardware
-- the frontend has a viable incremental path away from a single monolithic runtime script
+- the runtime can describe backend-neutral players and explicit capabilities
+- config/runtime separation is real enough to support future backends cleanly
+- event history and typed read models are usable by diagnostics and UI layers
+- key backend and UI flows can be validated without requiring real Bluetooth hardware
+- the project has a viable modern-console foundation instead of only one growing runtime script
 
-## Phase V3-2: USB DAC and wired audio backend
+## Phase V3-2: Modern operator console and wired/USB runtime
 
 ### Goal
 
-Support USB DACs and wired sound cards as Sendspin players — the clearest adjacent product win and the first real proof that the backend abstraction is worth having.
+Ship the first clearly multi-backend product wave: wired and USB players plus the new operator workflows needed to manage them well.
 
 ### Scope
 
-#### Epic 4. Wired device enumeration
+#### Epic 5. Wired and USB backend
 
 - detect ALSA and PulseAudio or PipeWire output sinks from `pactl list sinks` and `aplay -l`
-- filter and classify likely outputs: USB DAC, built-in audio, HDMI, virtual
-- present discovered devices in the web UI with hardware details and backend type
+- filter and classify likely outputs such as USB DAC, built-in audio, HDMI, and virtual sinks
+- create a direct-sink player type that can reuse the subprocess model, status reporting, volume control, and diagnostics patterns without Bluetooth pairing lifecycle
+- support per-device volume persistence, mute state, and backend-specific health reporting
 
-#### Epic 5. Direct sink player type
+#### Epic 6. Capability-driven player management UX
 
-- create a player type that spawns a Sendspin daemon subprocess with a non-Bluetooth sink such as `alsa_output.usb-*`
-- avoid Bluetooth pairing and reconnect lifecycle for direct sinks while reusing existing subprocess IPC, volume control, and status reporting
-- support per-device volume persistence and mute state
+- replace the highest-churn device-management flows with a backend-aware creation and edit experience
+- add typed forms, validation, and room or alias mapping for Bluetooth and wired players
+- show discovered hardware with backend type, friendly naming, and capability hints
+- use clearer overview plus details-drawer patterns instead of overloading one monolithic page surface
 
-#### Epic 6. Device aliasing and room mapping
-
-- allow operators to assign friendly room names to raw ALSA and PulseAudio identifiers
-- persist aliases in config and display them consistently across the UI
-- support rename without forcing a full player recreation where practical
-
-#### Epic 7. Hotplug and discovery follow-up
+#### Epic 7. Hotplug and route lifecycle
 
 - watch for wired and USB device appearance or disappearance
-- notify the UI when a new sink becomes available or disappears
+- notify the UI when a new sink becomes available, changes identity, or disappears
 - optionally allow operator-approved player creation for newly detected USB DACs
-- use this phase to establish the first serious frontend migration targets:
-  - a backend-aware device creation flow
-  - typed form/state handling for new player setup
-  - clearer split between server-rendered shell and progressively enhanced device-management surfaces
+- surface route ownership and sink disappearance issues explicitly in the new console instead of burying them in logs
 
 ### Exit criteria
 
-- USB DACs and wired outputs appear in the UI alongside Bluetooth speakers
-- operators can create and manage wired players with the same general workflow as Bluetooth players
-- no regression in Bluetooth reliability
-- the subprocess model cleanly supports both backend types
+- USB DACs and wired outputs appear in the UI alongside Bluetooth speakers as first-class player shapes
+- operators can create and manage wired players through the new operator workflows rather than raw config edits
+- Bluetooth and wired players share one capability-driven model without regressing Bluetooth reliability
+- the modern console is now responsible for the highest-churn player-management paths
 
-## Phase V3-2.5: Custom PulseAudio sinks (combine and remap)
+## Phase V3-2.5: Virtual sinks and composed zones
 
 ### Goal
 
-Expose PulseAudio's virtual sink capabilities via the web UI once wired and USB foundations exist.
-
-This phase is intentionally **parallel-friendly** after V3-2 lands. It should not block the first wired and USB release, but it becomes much more valuable once non-Bluetooth outputs are real product surfaces.
+Turn PulseAudio virtual sinks into real product surfaces once the first multi-backend model is live.
 
 ### Scope
 
 #### Epic 8. Combine sink creation
 
-- add web UI flows to select 2+ sinks and create a `module-combine-sink`
-- target use cases such as party mode and open floor plans
+- add operator flows to select 2+ sinks and create a `module-combine-sink`
+- target party mode, open floor plans, and lightweight multi-room grouping scenarios
 - include a test-tone or route verification action
 
 #### Epic 9. Remap sink creation
 
-- add web UI flows to extract specific channels from multi-channel devices via `module-remap-sink`
-- target use cases such as splitting a 4-channel USB DAC into two stereo zones or creating mono outputs
-- support standard PulseAudio channel-name mapping
+- add operator flows to extract channels from multi-channel devices via `module-remap-sink`
+- target split-zone scenarios such as a 4-channel USB DAC becoming two stereo zones
+- support standard PulseAudio channel-name mapping and clear channel previews
 
-#### Epic 10. Sink lifecycle management
+#### Epic 10. Composed-zone lifecycle management
 
 - persist custom sinks in config and recreate them on restart
-- show state, configuration summary, and delete actions
+- expose state, configuration summary, capability surface, and delete actions
 - validate master and slave sink existence before attempting creation
+- let virtual sinks participate in player creation and room assignment flows
 
 ### Exit criteria
 
 - operators can create combine and remap sinks without touching `pactl` directly
-- custom sinks survive restarts and can appear in the player selection flow
+- composed zones survive restarts and fit naturally into player-management flows
 - failures are explicit when prerequisite sinks are unavailable
 
-## Phase V3-3: Audio health dashboard and signal path visibility
+## Phase V3-3: Observability-first runtime and operations center
 
 ### Goal
 
-Give operators real-time visibility into audio quality, backend state, sync health, and the end-to-end signal path.
+Make health, signal path, and recovery state first-class operator surfaces rather than advanced diagnostics hidden behind logs.
 
 ### Scope
 
-#### Epic 11. Per-device audio telemetry panel
+#### Epic 11. Live telemetry and degraded-mode summaries
 
 - expose current codec, sample rate, buffer and stream state, uptime, reconnect count, and resolved output sink where available
-- pull telemetry from subprocess status lines, bridge state, and backend-specific callbacks
-- update in real time via the existing SSE status stream
-- include structured per-device event history such as reconnects, sink loss/acquisition, route corrections, re-anchor events, and MA sync failures
-- expose compact degraded-mode and health-summary surfaces, not just raw live status
-- add a frontend operation model that can present live state, pending actions, and recovery history without duplicating business logic across cards, list rows, and modals
+- pull telemetry from subprocess status lines, bridge state, backend callbacks, and event history
+- include structured per-device event history such as reconnects, sink loss or acquisition, route corrections, re-anchor events, and MA sync failures
+- publish compact degraded-mode and health-summary surfaces in addition to raw live status
 
-#### Epic 12. Signal path visualization
+#### Epic 12. Signal path and route ownership visibility
 
 - render the end-to-end path for each backend type:
   - MA → Sendspin → subprocess → PulseAudio or PipeWire sink → Bluetooth A2DP → speaker
   - MA → Sendspin → subprocess → PulseAudio or ALSA sink → wired speaker or DAC
 - show measured or estimated latency at each hop where available
-- indicate bottlenecks or degraded hops such as codec fallback, sink mismatch, or missing route ownership
-- favor UI patterns that scale on desktop and mobile:
-  - split-pane or drawer-based details instead of over-expanding rows
-  - progressive disclosure for advanced diagnostics
-  - route and signal-path cards that are reusable across Bluetooth and wired backends
+- indicate route ownership, bottlenecks, or degraded hops such as codec fallback, sink mismatch, or missing route ownership
 
-#### Epic 13. Sync health indicators
+#### Epic 13. Operations center and reusable UI system
 
-- add green, yellow, and red sync badges on dashboard device cards based on drift magnitude or measurement quality
-- surface alerts when sync degrades past configurable thresholds
-- integrate sync-specific issues into operator guidance instead of burying them in logs
-- build these signals on a shared internal event/history model so diagnostics, hooks, and later fleet views stay consistent
-- establish a stronger UI component system for:
-  - badges, notices, toasts, drawers, dialogs, filters, and timeline/event-list views
-  - accessible keyboard/focus behavior
-  - calmer mobile density and bulk-action affordances
+- build a unified diagnostics and recovery center instead of scattering operational detail across many unrelated UI sections
+- add a frontend operation model that can present live state, pending actions, recovery history, and bulk actions without duplicating business logic across cards, rows, dialogs, and modals
+- establish a stronger UI component system for badges, notices, toasts, drawers, dialogs, filters, timeline or event-list views, and calmer mobile density
+- favor split-pane, drawer, and progressive-disclosure patterns that scale on desktop and mobile better than endlessly expanding rows
 
 ### Exit criteria
 
-- operators can see codec, sample rate, sink route, and sync health without reading logs
-- the signal path is understandable at a glance for both Bluetooth and wired players
-- degradation is surfaced proactively instead of discovered by ear
-- the UI has a reusable component vocabulary instead of repeatedly hand-assembling each operational surface
+- operators can see codec, sample rate, sink route, health, and event history without reading logs
+- the signal path is understandable at a glance for Bluetooth, wired, and virtual-sink players
+- degradation is surfaced proactively instead of discovered only after audio sounds wrong
+- the UI has a reusable operations vocabulary instead of repeatedly hand-assembling each diagnostic surface
 
-## Phase V3-4: Automatic delay tuning and sync intelligence
+## Phase V3-4: Delay intelligence and guided tuning
 
 ### Goal
 
-Reduce manual `static_delay_ms` guesswork and make sync decisions more measurable and explainable.
+Reduce manual `static_delay_ms` guesswork and make sync decisions more measurable, guided, and explainable.
 
 ### Scope
 
@@ -317,7 +305,7 @@ Reduce manual `static_delay_ms` guesswork and make sync decisions more measurabl
 
 #### Epic 15. Guided delay calibration
 
-- add a manual calibration flow that can measure and suggest `static_delay_ms`
+- add a calibration flow that can measure and suggest `static_delay_ms`
 - show recommended value, confidence, and before/after comparison
 - allow approve, apply, and rollback instead of forcing raw manual edits
 
@@ -370,7 +358,7 @@ Use AI as an **operator copilot**, not as a hidden control plane.
 - allow prompt export or support bundle export for external or local AI analysis
 - present AI summaries in a way that preserves operator trust:
   - explicit provenance from diagnostics data
-  - visible confidence/uncertainty
+  - visible confidence and uncertainty
   - one-click access to the underlying raw diagnostics and event history
 
 #### Epic 20. AI safety and privacy boundaries
@@ -379,7 +367,7 @@ Use AI as an **operator copilot**, not as a hidden control plane.
 - support pluggable providers and a local or manual mode
 - require explicit operator approval before applying suggested changes
 - keep non-AI diagnostics fully usable on their own
-- keep AI summaries built on the same typed diagnostics, capability, and event-history models used by non-AI tooling
+- keep AI summaries built on the same typed diagnostics, capability, and event-history models used by non-AI tooling and the operator console
 
 ### Exit criteria
 
@@ -391,7 +379,7 @@ Use AI as an **operator copilot**, not as a hidden control plane.
 
 ### Goal
 
-Turn multiple bridge instances into a manageable fleet after the single-bridge multi-backend story is solid.
+Turn multiple bridge instances into a manageable fleet after the single-bridge multi-backend product and modern operator console are solid.
 
 ### Scope
 
@@ -448,64 +436,76 @@ Only start these once earlier phases are stable and demand is proven:
 
 No v3 theme should regress real Bluetooth deployments in HA, Docker, Raspberry Pi, or LXC.
 
-### 2. Wired and USB support must be additive, not a rewrite
+### 2. v3 is a compatibility-preserving platform refresh
 
-The first adjacent backend should reuse proven runtime seams, diagnostics, and subprocess patterns rather than replacing them.
+Preserve operator trust, ingress compatibility, and stable contracts where they already work, but allow deeper replacement of runtime seams and high-churn UI surfaces when that produces a cleaner v3 foundation.
 
-### 3. AI must be optional and operator-controlled
+### 3. Wired and USB support must stay additive
+
+The first adjacent backend should reuse proven runtime seams, diagnostics, and subprocess patterns rather than replacing them wholesale.
+
+### 4. Architecture must stay ahead of product sprawl
+
+Backend expansion, AI summaries, and fleet views should build on explicit services, typed read models, capability modeling, event history, and hardware-light testability rather than bypassing those foundations.
+
+### 5. Frontend modernization may replace high-churn surfaces
+
+New frontend infrastructure should reduce complexity, improve accessibility, and make operational workflows clearer. It does not need to stop at tiny islands if replacing a high-churn screen is the cleaner path.
+
+### 6. AI must be optional and operator-controlled
 
 - no mandatory cloud dependency
 - no silent external sharing of sensitive config or state
 - no hidden auto-remediation without explicit approval
 
-### 4. Delay automation must be bounded and explainable
+### 7. Delay automation must be bounded and explainable
 
 The system may suggest or conservatively auto-apply delay changes, but never as opaque magic.
 
-### 5. Fleet management must stay additive
+### 8. Fleet management must stay additive
 
 A single bridge should remain simple to deploy and operate. Fleet management should not become a requirement for basic use.
 
-### 6. Migrations, docs, and tests must ship with each phase
+### 9. Migrations, docs, and tests must ship with each phase
 
 v3 should add compatibility layers, migrate callers and config gradually, document new contracts as they land, and extend tests alongside each new backend or diagnostics surface.
 
-### 7. Architectural enablement must stay ahead of product sprawl
-
-Backend expansion, AI summaries, and fleet views should build on explicit services, typed read models, event history, and hardware-light testability rather than bypassing those foundations.
-
-### 8. Frontend modernization must stay incremental and operator-focused
-
-New frontend infrastructure should reduce complexity, improve accessibility, and make operational workflows clearer. It should not replace the server-driven shell or ingress compatibility with a fragile SPA rewrite.
-
 ## Execution and dependency notes
 
-The roadmap phases above are product-facing, but the safest implementation order inside them should still respect a few architectural dependencies:
+The roadmap phases above are product-facing, but the safest implementation order inside them should still respect a few program-level dependencies:
 
-- keep shrinking `state.py` and broadening typed snapshots before new runtime surfaces spread across more routes
-- land event history and capability modeling before relying on richer diagnostics, AI summaries, or fleet timelines
-- keep mock runtime improvements close to backend abstraction and wired/USB work so new flows stay testable without hardware
-- evolve hooks and webhooks from the same event contracts used by diagnostics and fleet work
-- use frontend migration first on new v3 surfaces and high-churn operator workflows instead of rewriting already-stable pages for their own sake
+- move the three tracks together in release waves instead of treating frontend as late enablement after backend work is done
+- land backend contracts, event history, and config/runtime separation before AI or fleet features depend on them
+- keep simulator and mock-runtime improvements close to backend and UI changes so new flows stay testable without hardware
+- use the same event contracts for diagnostics, hooks, operator timelines, and future fleet views
+- replace high-churn surfaces first: player creation and editing, details views, diagnostics, and history should move before already-stable pages are rewritten for their own sake
+- let virtual sinks and later fleet views build on the same capability and read-model surfaces used by Bluetooth and wired players
 
 ## Out of scope for early v3
 
-- a giant all-at-once rewrite
-- direct app-specific protocols for MassDroid or other clients
+- a giant all-at-once rewrite of every layer
 - speculative backends before the backend contract exists
 - AI-driven silent configuration edits
-- fleet-first complexity before single-bridge multi-backend value is proven
+- fleet-first complexity before the single-bridge multi-backend story is proven
 - replacing operator diagnostics with AI instead of complementing them
+- abandoning deployment compatibility realities like HA ingress without a demonstrably better operator path
 
 ## Likely first v3 milestone
 
 A realistic `v3.0.0-rc.1` should include:
 
 - V3-0 already-landed guidance and recovery polish as the baseline
-- backend abstraction and config schema v2 as the foundation
-- the first wired and USB backend with manual operator creation flow
-- baseline audio health visibility and signal path publication
+- the core of V3-1:
+  - backend contracts and capability modeling
+  - config and runtime model v2 foundations
+  - event-history and simulator foundations
+  - first operator-console platform pieces
+- the core of V3-2:
+  - the first wired and USB backend
+  - backend-aware player creation and editing flows
+  - the first new diagnostics and details surfaces in the operator console
+- baseline audio health visibility and signal-path publication
 - delay telemetry foundations and a manual calibration path
 - structured diagnostics bundle foundations for future planner and AI work
 
-That is enough to make v3 feel materially different — **"Bluetooth-first multiroom with a real wired/USB expansion path, shared runtime contracts, and much clearer audio visibility"** — without forcing the full AI or fleet story into the first RC.
+That is enough to make v3 feel materially different: **"Bluetooth-first multiroom with a real multi-backend platform, a modern operator console, and much clearer audio visibility"**.
