@@ -71,6 +71,39 @@ Close the last major v2 UX gaps so v3 starts from a calmer and more explicit ope
 - grouped recovery actions feel deliberate and understandable
 - top-level guidance owns the main explanation instead of duplicated microcopy
 
+## Phase V3-0.5: Backend abstraction and config schema v2
+
+### Goal
+
+Prepare the bridge for selective non-Bluetooth expansion without destabilizing the shipped Bluetooth runtime.
+
+### Scope
+
+#### Epic 11. Backend contract
+
+- define an `AudioBackend`-style contract for lifecycle, capabilities, health, and diagnostics
+- wrap the existing Bluetooth runtime behind that contract first
+- keep subprocess and control-plane contracts backend-agnostic where practical
+
+#### Epic 12. Config schema v2
+
+- move from a Bluetooth-device-only model to player/backend-oriented configuration
+- add compatibility loading and migration tooling from the current schema
+- keep downgrade assumptions explicit and documented
+
+#### Epic 13. First adjacent backend
+
+- prove the abstraction with one high-value adjacent backend:
+  - `LocalSinkBackend` for PipeWire/PulseAudio
+  - optionally `ALSADirectBackend` for minimal environments
+- keep diagnostics and operator UX coherent across backend types
+
+### Exit criteria
+
+- Bluetooth remains the most stable backend
+- config migration is incremental and safe
+- one adjacent backend proves the abstraction with real product value
+
 ## Phase V3-1: USB DAC and wired audio backend
 
 ### Goal
@@ -295,39 +328,6 @@ Turn multiple bridge instances into a manageable fleet.
 - duplicate/conflicting configuration becomes easier to spot before it causes runtime issues
 - fleet operations do not replace single-bridge simplicity; they extend it
 
-## Phase V3-4: Backend abstraction and config schema v2
-
-### Goal
-
-Prepare the bridge for selective non-Bluetooth expansion without destabilizing the shipped Bluetooth runtime.
-
-### Scope
-
-#### Epic 11. Backend contract
-
-- define an `AudioBackend`-style contract for lifecycle, capabilities, health, and diagnostics
-- wrap the existing Bluetooth runtime behind that contract first
-- keep subprocess and control-plane contracts backend-agnostic where practical
-
-#### Epic 12. Config schema v2
-
-- move from a Bluetooth-device-only model to player/backend-oriented configuration
-- add compatibility loading and migration tooling from the current schema
-- keep downgrade assumptions explicit and documented
-
-#### Epic 13. First adjacent backend
-
-- prove the abstraction with one high-value adjacent backend:
-  - `LocalSinkBackend` for PipeWire/PulseAudio
-  - optionally `ALSADirectBackend` for minimal environments
-- keep diagnostics and operator UX coherent across backend types
-
-### Exit criteria
-
-- Bluetooth remains the most stable backend
-- config migration is incremental and safe
-- one adjacent backend proves the abstraction with real product value
-
 ## Phase V3-5: Selective expansion after core stability
 
 ### Candidate work
@@ -380,10 +380,11 @@ v3 should add compatibility layers, migrate callers/config gradually, and remove
 A realistic `v3.0.0-rc.1` should include:
 
 - finished V3-0 guidance/recovery polish
+- backend abstraction and config schema v2 as the foundation (V3-0.5)
 - USB DAC / wired audio backend proving the abstraction layer (V3-1)
 - audio health dashboard with sync badges and signal path (V3-1.5)
 - delay telemetry foundations and a manual calibration path
 - structured diagnostics bundle foundations
 - the first fleet identity/inventory surfaces
 
-That is enough to make v3 feel materially different — **"BT + USB DAC multiroom with real-time audio health visibility and guided setup"** — without forcing the entire backend-expansion story into the first RC.
+That is enough to make v3 feel materially different — **"backend-agnostic multiroom with BT + USB DAC, real-time audio health visibility, and guided setup"** — without forcing the entire fleet or AI story into the first RC.
