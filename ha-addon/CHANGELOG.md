@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.48.0] - 2026-03-25
+
+### Added
+- Native Sendspin transport commands via Controller role (`POST /api/transport/cmd`) for play, pause, stop, next, previous, shuffle, repeat, mute, and volume, with transport UI fallback to Music Assistant queue commands when native transport is unavailable.
+- Extended metadata forwarding from the Sendspin protocol, including album, album artist, artwork URL, year, track number, shuffle state, repeat mode, and controller state updates such as `supported_commands`, `group_volume`, and `group_muted`.
+- Cross-bridge duplicate Bluetooth device detection, startup/recovery warnings for conflicts, and BT scan confirmation prompts when another bridge instance already owns the device.
+- Separate `RECOVERY_BANNER_GRACE_SECONDS` setting so recovery banners can remain hidden for a configurable delay after the startup/finalizing lockout ends.
+
+### Changed
+- Startup and audio defaults are now tuned for more reliable first-run behavior: startup grace defaults to `5` seconds, recovery-banner grace defaults to `15` seconds, `PULSE_LATENCY_MSEC` defaults to `600`, and newly added Bluetooth devices default to `static_delay_ms = -300`.
+- Pin direct runtime dependencies, including `sendspin==5.8.0`, to the CI-validated versions so rebuilds do not silently pick up incompatible upstream changes.
+
+### Fixed
+- Restore compatibility with the current Sendspin audio API layout (`sendspin.audio_devices`) while preserving fallback support for legacy `sendspin.audio` installs.
+- Avoid false `repair required` states when BlueZ temporarily reports a Bluetooth speaker as unavailable during restart; the bridge now distinguishes unknown pairing state from explicit `Paired: no`.
+- Persist live Bluetooth sink volume during graceful shutdown so `Save & Restart` restores the previous user volume instead of falling back to the sink default.
+- Avoid false Bluetooth device removal during `Save & Restart` when the default adapter is represented differently in saved config vs. web UI payload.
+- Harden stale `device_info` recovery around startup by deferring automatic reconnects until the player is up, and then holding them back behind an additional startup grace window.
+- Make native Sendspin `shuffle`/`repeat` buttons update immediately in the web UI after a successful command, matching the snappier Music Assistant queue-command UX.
+
 ## [2.47.3] - 2026-03-24
 
 ### Fixed
