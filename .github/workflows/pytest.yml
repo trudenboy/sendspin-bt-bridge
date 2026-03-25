@@ -13,7 +13,17 @@ permissions:
 
 jobs:
   pytest:
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    if: >-
+      ${{
+        github.event_name == 'workflow_dispatch' ||
+        (
+          github.event.workflow_run.conclusion == 'success' &&
+          (
+            github.event.workflow_run.head_branch == 'beta' ||
+            startsWith(github.event.workflow_run.head_branch, 'v')
+          )
+        )
+      }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -33,7 +43,17 @@ jobs:
         run: python -m pytest tests/ -v --tb=short
 
   container-smoke:
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    if: >-
+      ${{
+        github.event_name == 'workflow_dispatch' ||
+        (
+          github.event.workflow_run.conclusion == 'success' &&
+          (
+            github.event.workflow_run.head_branch == 'beta' ||
+            startsWith(github.event.workflow_run.head_branch, 'v')
+          )
+        )
+      }}
     needs: pytest
     runs-on: ubuntu-latest
     steps:

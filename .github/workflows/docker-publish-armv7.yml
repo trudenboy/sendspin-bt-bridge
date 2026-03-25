@@ -19,7 +19,15 @@ env:
 
 jobs:
   prepare:
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    if: >-
+      ${{
+        github.event_name == 'workflow_dispatch' ||
+        (
+          github.event.workflow_run.conclusion == 'success' &&
+          startsWith(github.event.workflow_run.head_branch, 'v') &&
+          !contains(github.event.workflow_run.head_branch, '-')
+        )
+      }}
     runs-on: ubuntu-latest
     outputs:
       sendspin_version: ${{ steps.resolve_sendspin.outputs.version }}
