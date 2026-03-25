@@ -227,12 +227,14 @@ async def test_graceful_shutdown_mutes_sinks_and_stops_clients():
     orchestrator = BridgeOrchestrator(lifecycle_state=lifecycle_state)
     stopped: list[str] = []
     muted: list[tuple[str, bool]] = []
+    saved: list[tuple[str | None, int]] = []
 
     class FakeClient:
         def __init__(self, name: str, sink: str | None):
             self.player_name = name
             self.bluetooth_sink_name = sink
             self.running = True
+            self.bt_manager = SimpleNamespace(mac_address="AA:BB:CC:DD:EE:FF")
 
         async def stop_sendspin(self) -> None:
             stopped.append(self.player_name)
@@ -241,11 +243,20 @@ async def test_graceful_shutdown_mutes_sinks_and_stops_clients():
         muted.append((sink, muted_flag))
         return True
 
+    async def fake_get_sink_volume(_sink: str) -> int | None:
+        return 37
+
     clients = [FakeClient("Kitchen", "sink.one"), FakeClient("Bedroom", None)]
 
-    await orchestrator.graceful_shutdown(clients=clients, mute_sink=fake_mute_sink)
+    await orchestrator.graceful_shutdown(
+        clients=clients,
+        mute_sink=fake_mute_sink,
+        get_sink_volume=fake_get_sink_volume,
+        save_volume=lambda mac, volume: saved.append((mac, volume)),
+    )
 
     assert muted == [("sink.one", True)]
+    assert saved == [("AA:BB:CC:DD:EE:FF", 37)]
     assert stopped == ["Kitchen", "Bedroom"]
     assert all(client.running is False for client in clients)
     assert lifecycle_state.calls[-3:] == [

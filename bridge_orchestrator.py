@@ -180,6 +180,8 @@ class BridgeOrchestrator:
         *,
         clients: list[Any] | None = None,
         mute_sink: Callable[[str, bool], Awaitable[bool]] | None = None,
+        get_sink_volume: Callable[[str], Awaitable[int | None]] | None = None,
+        save_volume: Callable[[str | None, int], None] | None = None,
     ) -> None:
         """Mute active sinks and stop all clients in a controlled order."""
         logger.info("Received shutdown signal — muting sinks before exit...")
@@ -188,12 +190,30 @@ class BridgeOrchestrator:
             from services.pulse import aset_sink_mute as imported_mute_sink
 
             mute_sink_fn = imported_mute_sink
+        get_sink_volume_fn = get_sink_volume
+        if get_sink_volume_fn is None:
+            from services.pulse import aget_sink_volume as imported_get_sink_volume
+
+            get_sink_volume_fn = imported_get_sink_volume
+        save_volume_fn = save_volume
+        if save_volume_fn is None:
+            from config import save_device_volume as imported_save_volume
+
+            save_volume_fn = imported_save_volume
 
         shutdown_clients = list(clients) if clients is not None else get_device_registry_snapshot().active_clients
         self.lifecycle_state.publish_shutdown_started(active_clients=len(shutdown_clients))
         muted: list[str] = []
         for client in shutdown_clients:
             sink = getattr(client, "bluetooth_sink_name", None)
+            mac = getattr(getattr(client, "bt_manager", None), "mac_address", None)
+            if sink and mac:
+                try:
+                    sink_volume = await get_sink_volume_fn(sink)
+                    if isinstance(sink_volume, int) and 0 <= sink_volume <= 100:
+                        save_volume_fn(mac, sink_volume)
+                except Exception as exc:
+                    logger.debug("[%s] Could not persist sink volume during shutdown: %s", client.player_name, exc)
             if sink and await mute_sink_fn(sink, True):
                 muted.append(sink)
         if muted:
