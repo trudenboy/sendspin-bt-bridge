@@ -18,7 +18,7 @@ import socket
 from datetime import datetime, timezone
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _pkg_version
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -217,8 +217,8 @@ class BridgeDaemon(SendspinDaemon):
 
     # ── Connection lifecycle ─────────────────────────────────────────────────
 
-    async def _handle_server_connection(self, ws) -> None:
-        """Mark server connected before passing to parent handler (mDNS mode)."""
+    def _mark_server_connected(self, ws) -> None:
+        """Publish bridge status only after the new server handshake succeeds."""
         if not self._bridge_status.get("server_connected"):
             self._bridge_status["server_connected_at"] = datetime.now(tz=UTC).isoformat()
         self._bridge_status["server_connected"] = True
@@ -237,7 +237,66 @@ class BridgeDaemon(SendspinDaemon):
         except Exception as _exc:
             logger.debug("Could not extract peer address: %s", _exc)
         self._notify()
-        await super()._handle_server_connection(ws)
+
+    async def _handle_server_connection(self, ws) -> None:
+        """Mirror the upstream connect flow without stale disconnect status races."""
+        logger.info("Server connected")
+        assert self._audio_handler is not None
+        assert self._connection_lock is not None
+        assert self._settings is not None
+
+        async with self._connection_lock:
+            previous_client: Any = getattr(self, "_client", None)
+            if previous_client is not None:
+                logger.info("Disconnecting from previous server")
+                await self._handle_disconnect()
+                if previous_client.connected:
+                    try:
+                        from aiosendspin.models.core import ClientGoodbyeMessage, ClientGoodbyePayload
+                        from aiosendspin.models.types import GoodbyeReason
+
+                        await previous_client._send_message(
+                            ClientGoodbyeMessage(
+                                payload=ClientGoodbyePayload(reason=GoodbyeReason.ANOTHER_SERVER)
+                            ).to_json()
+                        )
+                    except Exception:
+                        logger.debug("Failed to send goodbye message", exc_info=True)
+                await previous_client.disconnect()
+
+            client = self._create_client(self._static_delay_ms)
+            self._client = client
+            self._audio_handler.attach_client(client)
+            client.add_server_command_listener(self._handle_server_command)
+
+            try:
+                await client.attach_websocket(ws)
+            except TimeoutError:
+                logger.warning("Handshake with server timed out")
+                await self._handle_disconnect()
+                if self._client is client:
+                    self._client = None
+                return
+            except Exception:
+                logger.exception("Error during server handshake")
+                await self._handle_disconnect()
+                if self._client is client:
+                    self._client = None
+                return
+
+            self._mark_server_connected(ws)
+
+        try:
+            disconnect_event = asyncio.Event()
+            unsubscribe = client.add_disconnect_listener(disconnect_event.set)
+            await disconnect_event.wait()
+            unsubscribe()
+            logger.info("Server disconnected")
+        except Exception:
+            logger.exception("Error waiting for server disconnect")
+        finally:
+            if self._client is client:
+                await self._handle_disconnect()
 
     def _on_server_disconnect(self) -> None:
         """Clear connection + group state on disconnect."""

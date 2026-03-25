@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import sys
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 # Ensure aiosendspin/sendspin stubs are available for import
 _MOCK_MODULES = [
@@ -207,6 +210,57 @@ class TestUpstreamVolumeController:
         handler.uses_external_volume_controller = True
         daemon._audio_handler = handler
         assert daemon._has_upstream_volume_controller() is True
+
+
+class TestConnectionLifecycle:
+    @pytest.mark.asyncio
+    async def test_handle_server_connection_keeps_status_true_after_replacing_previous_client(self):
+        status = {
+            "server_connected": True,
+            "connected": True,
+            "group_id": "old-group",
+            "group_name": "Old Group",
+            "server_port": 9000,
+        }
+        daemon = _make_bridge_daemon(status)
+        daemon._connection_lock = asyncio.Lock()
+        daemon._audio_handler = MagicMock()
+        daemon._handle_disconnect = AsyncMock()
+
+        class OldClient:
+            connected = True
+
+            async def _send_message(self, _payload):
+                return None
+
+            async def disconnect(self):
+                daemon._on_server_disconnect()
+
+        class NewClient:
+            connected = True
+
+            def add_server_command_listener(self, _listener):
+                return None
+
+            async def attach_websocket(self, _ws):
+                return None
+
+            def add_disconnect_listener(self, callback):
+                callback()
+                return lambda: None
+
+        daemon._client = OldClient()
+        daemon._create_client = MagicMock(return_value=NewClient())
+        ws = SimpleNamespace(_req=SimpleNamespace(remote="192.168.10.10"))
+
+        await daemon._handle_server_connection(ws)
+
+        assert daemon._bridge_status["server_connected"] is True
+        assert daemon._bridge_status["connected"] is True
+        assert daemon._bridge_status["group_id"] is None
+        assert daemon._bridge_status["group_name"] is None
+        assert daemon._bridge_status["connected_server_url"] == "192.168.10.10:9000"
+        assert daemon._bridge_status["server_connected_at"]
 
 
 class TestExtendedMetadata:
