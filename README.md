@@ -87,10 +87,10 @@ Full Home Assistant guide: <https://trudenboy.github.io/sendspin-bt-bridge/insta
 
 The roadmap is now aligned with the **v3 wave**, starting from the shipped `v2.46.x` runtime instead of an older refactor wishlist.
 
-- **Now:** finish the last pre-v3 operator UX gaps - calmer non-empty guidance, better grouped recovery previews, and tighter blocked-state explanations.
-- **Next:** add AI-assisted diagnostics and deployment planning as an optional operator copilot, built on structured diagnostics bundles and explicit redaction/approval boundaries.
-- **Then:** reduce manual sync tuning with delay telemetry, guided calibration, and bounded optional auto-tuning.
-- **After that:** add centralized multi-bridge management and only then move into backend abstraction plus the first adjacent non-Bluetooth backend.
+- **Now:** finish the last pre-v3 operator UX gaps and land backend abstraction plus config schema v2 as the foundation for multi-backend work.
+- **Next major product step:** ship USB DAC and wired audio players as the first adjacent backend, with custom PulseAudio sink tooling following where it unlocks real room layouts.
+- **Then:** add audio health visibility, signal-path clarity, and guided delay tuning so Bluetooth and wired players share the same observability story.
+- **After that:** expand into AI-assisted diagnostics and deployment planning, and only later into centralized multi-bridge fleet management.
 
 See [`ROADMAP.md`](ROADMAP.md) for the full phased v3 plan and guardrails.
 
