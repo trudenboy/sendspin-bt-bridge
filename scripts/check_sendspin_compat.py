@@ -9,11 +9,16 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from services.sendspin_compat import analyze_daemon_args_compatibility, get_runtime_dependency_versions
+from services.sendspin_compat import (
+    analyze_audio_api_compatibility,
+    analyze_daemon_args_compatibility,
+    get_runtime_dependency_versions,
+)
 
 
 def main() -> int:
     try:
+        import sendspin.audio as sendspin_audio
         from sendspin.daemon.daemon import DaemonArgs
     except ModuleNotFoundError as exc:
         print(
@@ -46,14 +51,16 @@ def main() -> int:
         "preferred_format": None,
     }
     compatibility = analyze_daemon_args_compatibility(DaemonArgs, candidate_kwargs)
+    audio_compatibility = analyze_audio_api_compatibility(sendspin_audio)
     result = {
         "dependencies": get_runtime_dependency_versions(),
+        "audio_api": audio_compatibility,
         **compatibility,
     }
     print(json.dumps(result, indent=2, sort_keys=True))
-    if compatibility["compatible"]:
+    if compatibility["compatible"] and audio_compatibility["compatible"]:
         return 0
-    print("Installed sendspin DaemonArgs is not compatible with bridge runtime kwargs", file=sys.stderr)
+    print("Installed sendspin runtime is not compatible with bridge startup requirements", file=sys.stderr)
     return 1
 
 

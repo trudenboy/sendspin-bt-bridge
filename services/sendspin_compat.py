@@ -84,3 +84,93 @@ def get_runtime_dependency_versions(names: tuple[str, ...] = _RUNTIME_DEPENDENCI
 def format_dependency_versions(versions_by_name: dict[str, str]) -> str:
     """Format dependency versions for concise logging."""
     return ", ".join(f"{name}={value}" for name, value in versions_by_name.items())
+
+
+def _normalize_audio_format_spec(spec: str) -> str:
+    """Normalize an audio format string for tolerant comparisons."""
+    return "".join(spec.strip().lower().split())
+
+
+def _audio_format_identifier(audio_format: object) -> str:
+    """Best-effort stable identifier for a sendspin audio format object."""
+    rendered = str(audio_format).strip()
+    normalized_rendered = _normalize_audio_format_spec(rendered)
+    if ":" in normalized_rendered and "<" not in normalized_rendered:
+        return normalized_rendered
+
+    codec = None
+    for attr_name in ("codec", "encoding", "format", "format_name", "name"):
+        value = getattr(audio_format, attr_name, None)
+        if value is not None:
+            codec = getattr(value, "value", value)
+            break
+
+    sample_rate = None
+    for attr_name in ("sample_rate", "sample_rate_hz", "samplerate", "rate"):
+        value = getattr(audio_format, attr_name, None)
+        if value is not None:
+            sample_rate = getattr(value, "value", value)
+            break
+
+    bit_depth = None
+    for attr_name in ("bit_depth", "bits_per_sample", "bits", "sample_size"):
+        value = getattr(audio_format, attr_name, None)
+        if value is not None:
+            bit_depth = getattr(value, "value", value)
+            break
+
+    channels = None
+    for attr_name in ("channels", "channel_count", "num_channels", "nchannels"):
+        value = getattr(audio_format, attr_name, None)
+        if value is None:
+            continue
+        channels = len(value) if isinstance(value, (list, tuple, set)) else getattr(value, "value", value)
+        break
+
+    if codec is not None and sample_rate is not None and bit_depth is not None and channels is not None:
+        return _normalize_audio_format_spec(f"{codec}:{sample_rate}:{bit_depth}:{channels}")
+
+    return normalized_rendered
+
+
+def resolve_preferred_audio_format(audio_module, preferred_format: str, audio_device_index: int) -> object:
+    """Resolve a preferred format string across old/new sendspin.audio APIs."""
+    parser = getattr(audio_module, "parse_audio_format", None)
+    if callable(parser):
+        return parser(preferred_format)
+
+    detect_supported = getattr(audio_module, "detect_supported_audio_formats", None)
+    if not callable(detect_supported):
+        raise ValueError("sendspin.audio has no parse_audio_format or detect_supported_audio_formats")
+
+    wanted = _normalize_audio_format_spec(preferred_format)
+    supported_formats = detect_supported(audio_device_index)
+    for candidate in supported_formats:
+        if _audio_format_identifier(candidate) == wanted:
+            return candidate
+
+    raise ValueError(f"Preferred format {preferred_format!r} is not supported by audio device {audio_device_index}")
+
+
+def analyze_audio_api_compatibility(audio_module) -> dict[str, object]:
+    """Inspect whether the installed sendspin.audio module exposes usable APIs."""
+    has_query_devices = callable(getattr(audio_module, "query_devices", None))
+    has_parse_audio_format = callable(getattr(audio_module, "parse_audio_format", None))
+    has_detect_supported_audio_formats = callable(getattr(audio_module, "detect_supported_audio_formats", None))
+    warnings: list[str] = []
+
+    if not has_query_devices:
+        warnings.append("sendspin.audio.query_devices is missing")
+    if not has_parse_audio_format and not has_detect_supported_audio_formats:
+        warnings.append(
+            "sendspin.audio exposes neither parse_audio_format nor detect_supported_audio_formats; "
+            "preferred_format will be ignored"
+        )
+
+    return {
+        "compatible": has_query_devices,
+        "has_query_devices": has_query_devices,
+        "has_parse_audio_format": has_parse_audio_format,
+        "has_detect_supported_audio_formats": has_detect_supported_audio_formats,
+        "warnings": warnings,
+    }

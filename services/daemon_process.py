@@ -42,7 +42,7 @@ from services.ipc_protocol import (
     parse_protocol_version,
     with_protocol_version,
 )
-from services.sendspin_compat import filter_supported_call_kwargs
+from services.sendspin_compat import filter_supported_call_kwargs, resolve_preferred_audio_format
 
 # ---------------------------------------------------------------------------
 # PyAV compatibility: older PyAV (<13) has no AudioLayout.nb_channels.
@@ -413,7 +413,7 @@ async def _read_commands(daemon_ref: list, stop_event: asyncio.Event) -> None:
 
 
 async def _run(params: dict) -> None:
-    from sendspin.audio import parse_audio_format, query_devices
+    import sendspin.audio as sendspin_audio
     from sendspin.daemon.daemon import DaemonArgs
     from sendspin.settings import get_client_settings
 
@@ -446,6 +446,12 @@ async def _run(params: dict) -> None:
         )
 
     # Resolve audio device — use default since PULSE_SINK in env handles routing
+    query_devices = getattr(sendspin_audio, "query_devices", None)
+    if not callable(query_devices):
+        _emit_error("audio_api_missing", "sendspin.audio.query_devices is unavailable")
+        logger.error("sendspin.audio.query_devices is unavailable")
+        sys.exit(1)
+
     devices = query_devices()
     audio_device = next((d for d in devices if d.is_default), None)
     if audio_device is None:
@@ -469,7 +475,7 @@ async def _run(params: dict) -> None:
     preferred_fmt = None
     if preferred_format_str:
         try:
-            preferred_fmt = parse_audio_format(preferred_format_str)
+            preferred_fmt = resolve_preferred_audio_format(sendspin_audio, preferred_format_str, audio_device.index)
         except Exception as e:
             logger.warning("[%s] Invalid preferred_format %r: %s", player_name, preferred_format_str, e)
 
