@@ -26,7 +26,7 @@ The first major v3 expansion is now **wired and USB audio support**, not a late-
 
 That changes the sequencing:
 
-1. finish the last operator polish gaps
+1. treat the operator polish wave as baseline, not as a new refactor project
 2. establish backend and config contracts
 3. ship the first adjacent backend for USB DACs and wired outputs
 4. add the observability and tuning needed to run Bluetooth and wired players well
@@ -69,11 +69,15 @@ v3 is successful when the project can do all of the following without becoming f
 5. Operators can ask the system for a deployment plan or a diagnostics explanation and get a useful answer quickly.
 6. Multiple bridge instances can later be understood and managed as one fleet instead of isolated boxes.
 
-## Phase V3-0: Finish pre-v3 operator polish
+## Phase V3-0: Pre-v3 operator polish baseline
+
+### Status
+
+Effectively complete in the current codebase. Keep this section as baseline context, not as the primary active phase.
 
 ### Goal
 
-Close the last major v2 UX gaps so v3 starts from a calmer and more explicit operator surface.
+Document the operator polish that now forms the calm starting surface for v3.
 
 ### Scope
 
@@ -88,6 +92,10 @@ Close the last major v2 UX gaps so v3 starts from a calmer and more explicit ope
 - mature installs are calm by default
 - grouped recovery actions feel deliberate and understandable
 - top-level guidance owns the main explanation instead of duplicated microcopy
+
+### Current assessment
+
+These outcomes are already reflected in the shipped operator-guidance and recovery flows. Active roadmap work should therefore start at **V3-1**, not at V3-0.
 
 ## Phase V3-1: Backend abstraction and config schema v2
 
@@ -404,7 +412,7 @@ v3 should add compatibility layers, migrate callers and config gradually, docume
 
 A realistic `v3.0.0-rc.1` should include:
 
-- finished V3-0 guidance and recovery polish
+- V3-0 already-landed guidance and recovery polish as the baseline
 - backend abstraction and config schema v2 as the foundation
 - the first wired and USB backend with manual operator creation flow
 - baseline audio health visibility and signal path publication

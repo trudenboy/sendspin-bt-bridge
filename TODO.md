@@ -18,16 +18,14 @@ These items are already part of the baseline and should not be treated as open r
 
 ## V3-0: Finish pre-v3 operator polish
 
-Foundation already present:
+Status: complete enough to treat as baseline, not as active roadmap work.
 
 - [x] Guidance ownership foundation for empty-state vs mature installs
-- [x] Grouped recovery action foundation for multi-device actions
+- [x] Grouped recovery action previews and confirmation for multi-device actions
+- [x] Compact and mobile recovery density foundations (`top issue + N more`, capped compact hints, calmer issue duplication)
+- [x] Blocked-state hints aligned with top-level guidance ownership
 
-Still open:
-
-- [ ] Add grouped recovery action previews and explicit confirmation before bulk actions run
-- [ ] Polish compact and mobile recovery density (`top issue + N more`, calmer issue pills, clearer compact actions)
-- [ ] Finish aligning blocked-state hints with one top-level guidance owner instead of duplicated microcopy
+Practical takeaway: active roadmap work starts at **V3-1**, with V3-0 retained only as shipped context.
 
 ## V3-1: Backend abstraction and config schema v2
 

@@ -85,7 +85,8 @@ DEMO_MODE=true python sendspin_client.py
 
 Дорожная карта теперь синхронизирована с **v3-волной**, которая стартует от уже shipped `v2.46.x` runtime, а не от старого списка рефакторингов.
 
-- **Сейчас:** закрыть последние pre-v3 UX-пробелы и положить foundation в виде backend abstraction плюс config schema v2.
+- **Уже приземлено как baseline:** operator guidance/recovery polish, который сделал mature installs спокойнее, а bulk actions — более осознанными.
+- **Сейчас:** положить foundation в виде backend abstraction плюс config schema v2.
 - **Следующий крупный продуктовый шаг:** выпустить USB DAC и wired audio players как первый adjacent backend, а затем добавить custom PulseAudio sink tooling там, где он реально расширяет room layout.
 - **Потом:** добавить audio health visibility, signal path clarity и guided delay tuning, чтобы Bluetooth и wired players имели одну общую observability story.
 - **После этого:** развивать AI-assisted diagnostics и planning развёртывания, а уже потом — централизованное управление несколькими bridge.
