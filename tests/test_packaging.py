@@ -76,3 +76,15 @@ def test_armv7_publish_workflow_builds_pinned_sendspin_and_smoke_tests_import():
     assert "sendspin_version" in workflow
     assert "SENDSPIN_VERSION=${{ needs.prepare.outputs.sendspin_version }}" in workflow
     assert "scripts/check_sendspin_compat.py" in workflow
+
+
+def test_requirements_pin_aiosendspin_for_all_architectures():
+    requirements = (Path(__file__).resolve().parents[1] / "requirements.txt").read_text()
+
+    assert "aiosendspin==4.3.2" in requirements
+
+
+def test_dockerfile_relies_on_requirements_pin_for_aiosendspin():
+    dockerfile = (Path(__file__).resolve().parents[1] / "Dockerfile").read_text()
+
+    assert '"aiosendspin~=4.3"' not in dockerfile

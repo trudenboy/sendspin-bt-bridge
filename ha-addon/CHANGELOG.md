@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.48.2] - 2026-03-25
+
+### Fixed
+- Restore compatibility with current Music Assistant releases when newer `aiosendspin` builds expose the draft `visualizer@_draft_r1` role. The bridge no longer advertises the visualizer role in `ClientHello`, so Music Assistant no longer rejects the player connection during startup.
+- Pin `aiosendspin==4.3.2` directly in `requirements.txt` so runtime dependency resolution stays consistent across architectures and rebuilds instead of drifting via `sendspin` transitive dependencies.
+
 ## [2.48.1] - 2026-03-25
 
 ### Fixed

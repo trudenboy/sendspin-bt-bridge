@@ -109,20 +109,11 @@ class BridgeDaemon(SendspinDaemon):
 
         from aiosendspin.client import SendspinClient as _AioSendspinClient
 
-        # Build optional role support objects (gracefully skip if imports fail)
-        visualizer_support = None
+        # Build optional role support objects (gracefully skip if imports fail).
+        # Do not advertise the draft visualizer role yet: newer aiosendspin
+        # builds expose `visualizer@_draft_r1`, which current Music Assistant
+        # releases reject during ClientHello parsing.
         artwork_support = None
-        try:
-            from aiosendspin.models.visualizer import ClientHelloVisualizerSupport
-
-            visualizer_support = ClientHelloVisualizerSupport(
-                buffer_capacity=64_000,
-                types=["loudness"],
-                batch_max=4,
-            )
-            client_roles.append(Roles.VISUALIZER)
-        except Exception:
-            logger.debug("Visualizer role not available in this aiosendspin version")
 
         try:
             from aiosendspin.models.artwork import ArtworkChannel, ClientHelloArtworkSupport
@@ -156,7 +147,6 @@ class BridgeDaemon(SendspinDaemon):
                     supported_commands=[PlayerCommand.VOLUME, PlayerCommand.MUTE],
                 ),
                 "artwork_support": artwork_support,
-                "visualizer_support": visualizer_support,
                 "static_delay_ms": static_delay_ms,
                 "initial_volume": self._audio_handler.volume,
                 "initial_muted": self._audio_handler.muted,
@@ -165,16 +155,10 @@ class BridgeDaemon(SendspinDaemon):
         # Remove role-specific support kwargs if the roles were dropped
         if "artwork_support" in client_kwargs and Roles.ARTWORK not in client_roles:
             client_kwargs.pop("artwork_support", None)
-        if "visualizer_support" in client_kwargs and Roles.VISUALIZER not in client_roles:
-            client_kwargs.pop("visualizer_support", None)
         # Remove None support kwargs (avoids validation errors when role is present but support is None)
         if client_kwargs.get("artwork_support") is None:
             client_kwargs.pop("artwork_support", None)
             client_roles = [r for r in client_roles if r != Roles.ARTWORK]
-            client_kwargs["roles"] = client_roles
-        if client_kwargs.get("visualizer_support") is None:
-            client_kwargs.pop("visualizer_support", None)
-            client_roles = [r for r in client_roles if r != Roles.VISUALIZER]
             client_kwargs["roles"] = client_roles
 
         client = _AioSendspinClient(**client_kwargs)

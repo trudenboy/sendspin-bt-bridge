@@ -36,7 +36,6 @@ RUN if [ "${TARGETARCH}${TARGETVARIANT}" = "armv7" ]; then \
         grep -v '^sendspin' /tmp/requirements.txt > /tmp/requirements-armv7.txt && \
         pip install --no-cache-dir --prefix=/install \
             -r /tmp/requirements-armv7.txt \
-            "aiosendspin~=4.3" \
             "aiosendspin-mpris~=2.1.1" \
             "av>=15.0.0,<16.0.0" \
             "numpy>=1.24.0" \

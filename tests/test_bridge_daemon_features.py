@@ -263,6 +263,70 @@ class TestConnectionLifecycle:
         assert daemon._bridge_status["server_connected_at"]
 
 
+class TestClientHelloRoles:
+    def test_create_client_does_not_advertise_visualizer_role(self, monkeypatch):
+        import services.sendspin_compat as compat_mod
+
+        daemon = _make_bridge_daemon()
+        daemon._audio_handler = SimpleNamespace(volume=25, muted=False)
+
+        _types_mod.Roles = type(
+            "Roles",
+            (),
+            {
+                "PLAYER": "player-role",
+                "METADATA": "metadata-role",
+                "CONTROLLER": "controller-role",
+                "ARTWORK": "artwork-role",
+                "VISUALIZER": "visualizer-role",
+            },
+        )
+        _types_mod.ArtworkSource = type("ArtworkSource", (), {"ALBUM": "album"})
+        _types_mod.PictureFormat = type("PictureFormat", (), {"JPEG": "jpeg"})
+
+        player_mod = sys.modules["aiosendspin.models.player"]
+        player_mod.ClientHelloPlayerSupport = lambda **kwargs: SimpleNamespace(**kwargs)  # type: ignore[attr-defined]
+
+        artwork_mod = sys.modules["aiosendspin.models.artwork"]
+        artwork_mod.ArtworkChannel = lambda **kwargs: SimpleNamespace(**kwargs)  # type: ignore[attr-defined]
+        artwork_mod.ClientHelloArtworkSupport = lambda **kwargs: SimpleNamespace(**kwargs)  # type: ignore[attr-defined]
+
+        captured_kwargs: dict[str, object] = {}
+
+        class FakeSendspinClient:
+            def __init__(self, **kwargs):
+                captured_kwargs.update(kwargs)
+                self._handle_binary_message = lambda payload: payload
+
+            def add_group_update_listener(self, _listener):
+                return None
+
+            def add_metadata_listener(self, _listener):
+                return None
+
+            def add_controller_state_listener(self, _listener):
+                return None
+
+            def add_disconnect_listener(self, _listener):
+                return None
+
+        client_mod = sys.modules["aiosendspin.client"]
+        client_mod.SendspinClient = FakeSendspinClient  # type: ignore[attr-defined]
+
+        monkeypatch.setattr(
+            compat_mod,
+            "detect_supported_audio_formats_for_device",
+            lambda _audio_device: [SimpleNamespace(codec="flac", channels=2, sample_rate=44100, bit_depth=16)],
+        )
+        monkeypatch.setattr(compat_mod, "filter_supported_call_kwargs", lambda _callable, kwargs: dict(kwargs))
+
+        daemon._create_client()
+
+        assert captured_kwargs["roles"] == ["player-role", "metadata-role", "controller-role", "artwork-role"]
+        assert "artwork_support" in captured_kwargs
+        assert "visualizer_support" not in captured_kwargs
+
+
 class TestExtendedMetadata:
     """Tests for extended metadata forwarding (album, shuffle, repeat, etc.)."""
 
