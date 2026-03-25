@@ -69,6 +69,28 @@ The roadmap is product-led, but several architectural themes should stay explici
 - **Separate user-owned config from runtime state and generated metadata** more aggressively as config schema v2 lands.
 - **Treat hooks and webhooks as stable operability contracts**, not as incidental side effects of local diagnostics work.
 
+## Frontend architecture direction
+
+v3 should improve the frontend substantially, but **not** through an all-at-once SPA rewrite.
+
+The preferred direction is a **server-first, progressively enhanced frontend**:
+
+- keep Flask-rendered entry points and current SSE/fetch contracts
+- migrate the current monolithic `static/app.js` toward feature-scoped frontend modules
+- adopt **Vue 3 + TypeScript + Vite** for new interactive surfaces and incremental islands/sections rather than replacing the whole UI at once
+- use **headless accessible primitives** (for example Radix Vue-class components) instead of locking the project into a heavy opaque component library
+- keep the existing **CSS variable/token** approach as the design-system backbone; utility CSS can help new surfaces, but should not force a full styling rewrite
+- build typed frontend models/stores around `BridgeSnapshot`, `DeviceSnapshot`, guidance, diagnostics, jobs, and event-history data
+- lazy-load the heaviest operational surfaces such as diagnostics, history, config editors, and future fleet views
+
+This direction should optimize for:
+
+- Home Assistant ingress compatibility
+- accessibility and keyboard support
+- maintainable code-splitting
+- mobile-friendly operator workflows
+- richer UI state without abandoning the current server-driven product model
+
 ## North-star outcomes
 
 v3 is successful when the project can do all of the following without becoming fragile or opaque:
@@ -141,6 +163,11 @@ Prepare the bridge for wired and USB expansion without destabilizing the shipped
 
 - keep the mock runtime and simulator path viable for backend, config, diagnostics, and onboarding flows
 - make hardware-light tests a normal validation path for new contract work, not a later cleanup step
+- introduce the frontend migration foundation:
+  - feature-scoped frontend modules instead of one growing monolith
+  - Vue 3 + TypeScript + Vite for new sections
+  - typed stores/models around status, guidance, diagnostics, and background jobs
+  - headless accessible primitives and shared design tokens for new UI work
 
 ### Exit criteria
 
@@ -148,6 +175,7 @@ Prepare the bridge for wired and USB expansion without destabilizing the shipped
 - config migration is incremental and safe
 - the runtime can describe backend-neutral players without pretending Bluetooth is the only shape
 - key backend/config flows can be validated without requiring real Bluetooth hardware
+- the frontend has a viable incremental path away from a single monolithic runtime script
 
 ## Phase V3-2: USB DAC and wired audio backend
 
@@ -180,6 +208,10 @@ Support USB DACs and wired sound cards as Sendspin players — the clearest adja
 - watch for wired and USB device appearance or disappearance
 - notify the UI when a new sink becomes available or disappears
 - optionally allow operator-approved player creation for newly detected USB DACs
+- use this phase to establish the first serious frontend migration targets:
+  - a backend-aware device creation flow
+  - typed form/state handling for new player setup
+  - clearer split between server-rendered shell and progressively enhanced device-management surfaces
 
 ### Exit criteria
 
@@ -237,6 +269,7 @@ Give operators real-time visibility into audio quality, backend state, sync heal
 - update in real time via the existing SSE status stream
 - include structured per-device event history such as reconnects, sink loss/acquisition, route corrections, re-anchor events, and MA sync failures
 - expose compact degraded-mode and health-summary surfaces, not just raw live status
+- add a frontend operation model that can present live state, pending actions, and recovery history without duplicating business logic across cards, list rows, and modals
 
 #### Epic 12. Signal path visualization
 
@@ -245,6 +278,10 @@ Give operators real-time visibility into audio quality, backend state, sync heal
   - MA → Sendspin → subprocess → PulseAudio or ALSA sink → wired speaker or DAC
 - show measured or estimated latency at each hop where available
 - indicate bottlenecks or degraded hops such as codec fallback, sink mismatch, or missing route ownership
+- favor UI patterns that scale on desktop and mobile:
+  - split-pane or drawer-based details instead of over-expanding rows
+  - progressive disclosure for advanced diagnostics
+  - route and signal-path cards that are reusable across Bluetooth and wired backends
 
 #### Epic 13. Sync health indicators
 
@@ -252,12 +289,17 @@ Give operators real-time visibility into audio quality, backend state, sync heal
 - surface alerts when sync degrades past configurable thresholds
 - integrate sync-specific issues into operator guidance instead of burying them in logs
 - build these signals on a shared internal event/history model so diagnostics, hooks, and later fleet views stay consistent
+- establish a stronger UI component system for:
+  - badges, notices, toasts, drawers, dialogs, filters, and timeline/event-list views
+  - accessible keyboard/focus behavior
+  - calmer mobile density and bulk-action affordances
 
 ### Exit criteria
 
 - operators can see codec, sample rate, sink route, and sync health without reading logs
 - the signal path is understandable at a glance for both Bluetooth and wired players
 - degradation is surfaced proactively instead of discovered by ear
+- the UI has a reusable component vocabulary instead of repeatedly hand-assembling each operational surface
 
 ## Phase V3-4: Automatic delay tuning and sync intelligence
 
@@ -326,6 +368,10 @@ Use AI as an **operator copilot**, not as a hidden control plane.
 - rank likely root causes and safe next actions
 - produce support-ready summaries for GitHub or forum issues
 - allow prompt export or support bundle export for external or local AI analysis
+- present AI summaries in a way that preserves operator trust:
+  - explicit provenance from diagnostics data
+  - visible confidence/uncertainty
+  - one-click access to the underlying raw diagnostics and event history
 
 #### Epic 20. AI safety and privacy boundaries
 
@@ -428,6 +474,10 @@ v3 should add compatibility layers, migrate callers and config gradually, docume
 
 Backend expansion, AI summaries, and fleet views should build on explicit services, typed read models, event history, and hardware-light testability rather than bypassing those foundations.
 
+### 8. Frontend modernization must stay incremental and operator-focused
+
+New frontend infrastructure should reduce complexity, improve accessibility, and make operational workflows clearer. It should not replace the server-driven shell or ingress compatibility with a fragile SPA rewrite.
+
 ## Execution and dependency notes
 
 The roadmap phases above are product-facing, but the safest implementation order inside them should still respect a few architectural dependencies:
@@ -436,6 +486,7 @@ The roadmap phases above are product-facing, but the safest implementation order
 - land event history and capability modeling before relying on richer diagnostics, AI summaries, or fleet timelines
 - keep mock runtime improvements close to backend abstraction and wired/USB work so new flows stay testable without hardware
 - evolve hooks and webhooks from the same event contracts used by diagnostics and fleet work
+- use frontend migration first on new v3 surfaces and high-churn operator workflows instead of rewriting already-stable pages for their own sake
 
 ## Out of scope for early v3
 

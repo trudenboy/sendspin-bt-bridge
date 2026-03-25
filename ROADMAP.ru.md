@@ -52,6 +52,20 @@ Bluetooth при этом остаётся главным и самым battle-t
 - mock runtime / simulator должен оставаться first-class способом тестировать backend и UI flows без реального Bluetooth-железа
 - user-owned config и runtime-derived state нужно дальше разделять по мере прихода config schema v2
 
+## Направление frontend-архитектуры
+
+v3 должен заметно улучшить frontend и UI/UX, но **не** через большой SPA rewrite.
+
+Предпочтительное направление:
+
+- сохранить Flask-rendered shell и текущие SSE/fetch contracts
+- разрезать монолитный `static/app.js` на feature-scoped frontend modules
+- использовать **Vue 3 + TypeScript + Vite** для новых интерактивных секций и incremental islands, а не для мгновенной замены всего UI
+- строить новые компоненты на **headless accessible primitives** вместо тяжёлого opaque UI kit
+- оставить **CSS variables/tokens** основой design system; utility CSS допустим для новых секций, но не как повод переписывать весь styling
+- ввести typed frontend models/store вокруг status, guidance, diagnostics, jobs и event-history surfaces
+- lazy-load тяжёлые operational sections вроде diagnostics, config editors, history и будущих fleet views
+
 ## Фазы v3
 
 ### V3-0. Baseline operator polish перед v3
@@ -78,6 +92,7 @@ Bluetooth при этом остаётся главным и самым battle-t
 - ослабить роль `state.py` как архитектурного центра по мере миграции на более явные ownership/read-model surfaces
 - сделать capability model явным в snapshots и API
 - держать mock runtime/simulator рабочим для backend/config flows, а не откладывать это на потом
+- заложить frontend migration foundation: feature-modules, Vue 3 + TS + Vite для новых секций, typed stores и headless component primitives
 
 ### V3-2. USB DAC и wired audio backend
 
@@ -89,6 +104,7 @@ Bluetooth при этом остаётся главным и самым battle-t
 - создать direct-sink player type без Bluetooth pairing lifecycle
 - добавить aliasing и room mapping для raw audio devices
 - затем добавить hotplug/discovery follow-up для USB devices
+- использовать эту фазу как первый серьёзный фронтенд-плацдарм: backend-aware device creation flow, typed forms/state и более чистое разделение shell vs enhanced device-management UI
 
 ### V3-2.5. Custom PulseAudio sinks
 
@@ -108,6 +124,8 @@ Bluetooth при этом остаётся главным и самым battle-t
 - визуализировать signal path для Bluetooth и wired backend'ов
 - вынести degraded sync и route problems в явные operator surfaces
 - добавить per-device event history: reconnect, sink loss/acquisition, route corrections, re-anchor, MA sync failures
+- перейти к более сильной UI-компонентной системе: badges, notices, dialogs, drawers, timeline/event-list views, calmer mobile density и bulk-action affordances
+- предпочитать split-pane/drawer patterns и progressive disclosure вместо всё более тяжёлых expandable rows
 
 ### V3-4. Automatic delay tuning и sync intelligence
 
@@ -129,6 +147,7 @@ AI должен быть operator copilot, а не скрытым control plane.
 - давать plain-language diagnostics summary и safe next actions
 - добавить redaction, opt-in и provider/local boundaries
 - строить AI-слой поверх тех же typed diagnostics, capability и event-history models, что и обычные non-AI surfaces
+- показывать AI summaries так, чтобы operator trust не терялся: provenance, confidence/uncertainty и быстрый доступ к raw diagnostics
 
 ### V3-6. Fleet control plane для нескольких bridge
 
@@ -169,6 +188,7 @@ AI должен быть operator copilot, а не скрытым control plane.
 - держать fleet management additive, а не обязательным для одиночного bridge
 - выпускать migrations, docs и tests вместе с каждой фазой
 - не пускать продуктовые фазы вперёд архитектурных enablers вроде event history, mock runtime и typed contracts
+- модернизировать frontend инкрементально и operator-first, а не превращать roadmap в UI rewrite ради rewrite
 
 ## Реалистичный первый milestone для v3
 
