@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from services._helpers import _device_extra, _parse_timestamp
+from services._helpers import _device_audio_streaming, _device_extra, _parse_timestamp
 from services.guidance_issue_registry import build_issue_context, issue_sort_priority
 from services.recovery_assistant import RecoveryAction, build_recovery_issue_actions
 
@@ -586,6 +586,7 @@ def _build_issue_groups(
         and getattr(device, "bluetooth_connected", False)
         and getattr(device, "has_sink", False)
         and not getattr(device, "server_connected", False)
+        and not _device_audio_streaming(device)
     ]
     auto_released = [
         str(getattr(device, "player_name", None) or "Unknown")

@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from services.bridge_state_model import BridgeStateModel
 
-from services._helpers import _device_extra
+from services._helpers import _device_audio_streaming, _device_extra
 from services.recovery_timeline import build_recovery_timeline
 
 UTC = timezone.utc
@@ -288,6 +288,7 @@ def _build_device_issues(devices: list[Any]) -> list[RecoveryIssue]:
         daemon_connected = (
             bool(transport.get("daemon_connected")) if transport else bool(getattr(device, "server_connected", False))
         )
+        audio_streaming = _device_audio_streaming(device)
         if released:
             if release_reason != "auto":
                 continue
@@ -344,7 +345,7 @@ def _build_device_issues(devices: list[Any]) -> list[RecoveryIssue]:
                 )
             )
             continue
-        if not daemon_connected:
+        if not daemon_connected and not audio_streaming:
             primary_action, secondary_actions = build_recovery_issue_actions("transport_down", device_names)
             issues.append(
                 RecoveryIssue(

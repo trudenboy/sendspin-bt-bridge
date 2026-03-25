@@ -106,6 +106,32 @@ def test_recovery_assistant_reports_healthy_single_device_setup():
     assert data["timeline"]["summary"]["entry_count"] == 1
 
 
+def test_recovery_assistant_ignores_transport_down_while_audio_is_streaming():
+    snapshot = build_recovery_assistant_snapshot(
+        config={"BLUETOOTH_DEVICES": [{"mac": "AA"}], "PULSE_LATENCY_MSEC": 250},
+        devices=[
+            SimpleNamespace(
+                player_name="Kitchen",
+                bt_management_enabled=True,
+                bluetooth_connected=True,
+                has_sink=True,
+                server_connected=False,
+                playing=True,
+                static_delay_ms=0.0,
+                recent_events=[],
+                health_summary={"state": "streaming", "severity": "info", "summary": "Streaming audio"},
+                extra={"audio_streaming": True},
+            )
+        ],
+        onboarding_assistant={"checklist": {"overall_status": "ok", "checkpoints": []}},
+        startup_progress={"status": "complete", "message": "Startup complete."},
+    )
+
+    data = snapshot.to_dict()
+    assert data["issues"] == []
+    assert data["summary"]["highest_severity"] == "ok"
+
+
 def test_recovery_assistant_prefers_repair_for_unpaired_device():
     snapshot = build_recovery_assistant_snapshot(
         config={"BLUETOOTH_DEVICES": [{"mac": "AA"}], "PULSE_LATENCY_MSEC": 250},

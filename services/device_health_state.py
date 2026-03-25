@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-from services._helpers import _device_extra
+from services._helpers import _device_audio_streaming, _device_extra
 
 
 def _append_reason(reasons: list[str], reason: str) -> None:
@@ -64,6 +64,7 @@ class DeviceHealthState:
 def compute_device_health_state(device: Any) -> DeviceHealthState:
     reasons: list[str] = []
     extra = _device_extra(device)
+    audio_streaming = _device_audio_streaming(device)
     recent_events = list(getattr(device, "recent_events", []) or [])
     event_reasons = derive_event_reasons(recent_events)
     last_event_at = recent_events[0]["at"] if recent_events else None
@@ -137,6 +138,15 @@ def compute_device_health_state(device: Any) -> DeviceHealthState:
             last_event_at=last_event_at,
         )
 
+    if audio_streaming:
+        return DeviceHealthState(
+            state="streaming",
+            severity="info",
+            summary="Streaming audio",
+            reasons=event_reasons,
+            last_event_at=last_event_at,
+        )
+
     if not getattr(device, "server_connected", False):
         _append_reason(reasons, "daemon_disconnected")
         for reason in event_reasons:
@@ -149,7 +159,7 @@ def compute_device_health_state(device: Any) -> DeviceHealthState:
             last_event_at=last_event_at,
         )
 
-    if getattr(device, "playing", False) and not extra.get("audio_streaming", False):
+    if getattr(device, "playing", False) and not audio_streaming:
         _append_reason(reasons, "playback_without_audio")
         for reason in event_reasons:
             _append_reason(reasons, reason)
