@@ -71,53 +71,45 @@ Close the last major v2 UX gaps so v3 starts from a calmer and more explicit ope
 - grouped recovery actions feel deliberate and understandable
 - top-level guidance owns the main explanation instead of duplicated microcopy
 
-## Phase V3-1: AI-assisted diagnostics and deployment planning
+## Phase V3-1: USB DAC and wired audio backend
 
 ### Goal
 
-Use AI as an **operator copilot**, not as a hidden control plane.
+Support USB DACs and wired sound cards as Sendspin players — the single biggest competitive gap versus Multi-SendSpin-Player-Container.  This is also the natural first adjacent backend that proves the V3-4 abstraction layer.
 
 ### Scope
 
-#### Epic 1. Structured diagnostics bundles for AI consumption
+#### Epic 1. USB/wired audio device enumeration
 
-- define a canonical machine-readable diagnostics bundle that combines:
-  - bridge/runtime state
-  - device snapshots
-  - recovery timeline
-  - deployment environment facts
-  - preflight results
-- make the bundle stable enough for support tooling, bug reports, and AI consumers
+- detect ALSA and PulseAudio output sinks from `pactl list sinks` and `aplay -l`
+- filter and classify: USB DAC, built-in audio, HDMI, virtual
+- present discovered devices in the web UI with hardware details
 
-#### Epic 2. Deployment planner
+#### Epic 2. DirectSink player type
 
-- add a planner that can inspect environment facts and suggest:
-  - recommended install path (HA add-on / Docker / RPi / LXC)
-  - required mounts/capabilities
-  - likely `AUDIO_UID`, port, and adapter configuration
-  - initial latency/delay guidance
-  - safe next steps for first deployment
-- keep the planner operator-facing: generate plans and config suggestions, not silent changes
+- create a new player type that spawns a Sendspin daemon subprocess with `PULSE_SINK=<alsa_output.usb-*>` instead of `bluez_sink.*`
+- no Bluetooth pairing/reconnect lifecycle; direct PulseAudio connection
+- reuse existing subprocess IPC, volume control, and status reporting
+- support per-device volume persistence and mute state
 
-#### Epic 3. AI diagnostics summarizer
+#### Epic 3. Device aliasing
 
-- summarize failures in plain language from diagnostics data
-- rank likely root causes and safe next actions
-- produce support-ready summaries for GitHub/forum issues
-- allow prompt export / support bundle export for external or local AI analysis
+- allow operators to assign friendly room names to raw ALSA/PA device identifiers
+- persist aliases in config.json; display alias throughout the UI
+- support rename without player restart
 
-#### Epic 4. AI safety and privacy boundaries
+#### Epic 4. USB device auto-discovery
 
-- redact secrets before any external AI handoff
-- support pluggable providers and a local/manual mode
-- require explicit operator approval before applying suggested changes
-- keep non-AI diagnostics fully usable on their own
+- watch for USB hotplug events (udev or periodic `pactl` poll)
+- notify the UI when a new audio device appears or disappears
+- optionally auto-create a player for newly detected USB DACs
 
 ### Exit criteria
 
-- diagnostics bundles are stable and structured
-- deployment planning is useful for real users, especially Docker/RPi and HA installs
-- AI-generated explanations improve support without becoming required for normal operation
+- USB DACs appear in the UI alongside Bluetooth speakers
+- operators can create and manage wired players with the same UX as Bluetooth players
+- no regression in Bluetooth reliability
+- the subprocess model cleanly supports both backend types
 
 ## Phase V3-1.5: Audio health dashboard and signal path visibility
 
@@ -183,45 +175,53 @@ Reduce manual `static_delay_ms` guesswork and make sync health more measurable.
 - delay recommendations are visible and explainable
 - any automatic tuning is conservative and operator-traceable
 
-## Phase V3-2.5: USB DAC and wired audio backend
+## Phase V3-2.5: AI-assisted diagnostics and deployment planning
 
 ### Goal
 
-Support USB DACs and wired sound cards as Sendspin players — the single biggest competitive gap versus Multi-SendSpin-Player-Container.  This is also the natural first adjacent backend that proves the V3-4 abstraction layer.
+Use AI as an **operator copilot**, not as a hidden control plane.
 
 ### Scope
 
-#### Epic 17. USB/wired audio device enumeration
+#### Epic 17. Structured diagnostics bundles for AI consumption
 
-- detect ALSA and PulseAudio output sinks from `pactl list sinks` and `aplay -l`
-- filter and classify: USB DAC, built-in audio, HDMI, virtual
-- present discovered devices in the web UI with hardware details
+- define a canonical machine-readable diagnostics bundle that combines:
+  - bridge/runtime state
+  - device snapshots
+  - recovery timeline
+  - deployment environment facts
+  - preflight results
+- make the bundle stable enough for support tooling, bug reports, and AI consumers
 
-#### Epic 18. DirectSink player type
+#### Epic 18. Deployment planner
 
-- create a new player type that spawns a Sendspin daemon subprocess with `PULSE_SINK=<alsa_output.usb-*>` instead of `bluez_sink.*`
-- no Bluetooth pairing/reconnect lifecycle; direct PulseAudio connection
-- reuse existing subprocess IPC, volume control, and status reporting
-- support per-device volume persistence and mute state
+- add a planner that can inspect environment facts and suggest:
+  - recommended install path (HA add-on / Docker / RPi / LXC)
+  - required mounts/capabilities
+  - likely `AUDIO_UID`, port, and adapter configuration
+  - initial latency/delay guidance
+  - safe next steps for first deployment
+- keep the planner operator-facing: generate plans and config suggestions, not silent changes
 
-#### Epic 19. Device aliasing
+#### Epic 19. AI diagnostics summarizer
 
-- allow operators to assign friendly room names to raw ALSA/PA device identifiers
-- persist aliases in config.json; display alias throughout the UI
-- support rename without player restart
+- summarize failures in plain language from diagnostics data
+- rank likely root causes and safe next actions
+- produce support-ready summaries for GitHub/forum issues
+- allow prompt export / support bundle export for external or local AI analysis
 
-#### Epic 20. USB device auto-discovery
+#### Epic 20. AI safety and privacy boundaries
 
-- watch for USB hotplug events (udev or periodic `pactl` poll)
-- notify the UI when a new audio device appears or disappears
-- optionally auto-create a player for newly detected USB DACs
+- redact secrets before any external AI handoff
+- support pluggable providers and a local/manual mode
+- require explicit operator approval before applying suggested changes
+- keep non-AI diagnostics fully usable on their own
 
 ### Exit criteria
 
-- USB DACs appear in the UI alongside Bluetooth speakers
-- operators can create and manage wired players with the same UX as Bluetooth players
-- no regression in Bluetooth reliability
-- the subprocess model cleanly supports both backend types
+- diagnostics bundles are stable and structured
+- deployment planning is useful for real users, especially Docker/RPi and HA installs
+- AI-generated explanations improve support without becoming required for normal operation
 
 ## Phase V3-2.7: Custom PulseAudio sinks (combine and remap)
 
@@ -380,11 +380,10 @@ v3 should add compatibility layers, migrate callers/config gradually, and remove
 A realistic `v3.0.0-rc.1` should include:
 
 - finished V3-0 guidance/recovery polish
-- structured diagnostics bundle foundations
-- a first operator-facing deployment planner draft
+- USB DAC / wired audio backend proving the abstraction layer (V3-1)
 - audio health dashboard with sync badges and signal path (V3-1.5)
 - delay telemetry foundations and a manual calibration path
-- USB DAC / wired audio backend proving the abstraction layer (V3-2.5)
+- structured diagnostics bundle foundations
 - the first fleet identity/inventory surfaces
 
 That is enough to make v3 feel materially different — **"BT + USB DAC multiroom with real-time audio health visibility and guided setup"** — without forcing the entire backend-expansion story into the first RC.
