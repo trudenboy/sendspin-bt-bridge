@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.48.0-rc.5] - 2026-03-25
+
+### Fixed
+- Complete sendspin 5.8.0 audio API compatibility. The bridge now resolves `query_devices`, `parse_audio_format`, and `detect_supported_audio_formats` from either `sendspin.audio_devices` (new layout) or legacy `sendspin.audio`, and adapts to the new `detect_supported_audio_formats(audio_device)` signature.
+- Restore diagnostics and demo-mode PortAudio device reporting with the new sendspin audio module layout.
+- Make sendspin compatibility tests order-independent by cleaning up mocked audio modules consistently.
+
+### Changed
+- Pin direct runtime dependencies in `requirements.txt` to the CI-validated versions so future upstream releases do not silently change the runtime API surface on new installs or image rebuilds.
+
 ## [2.48.0-rc.4] - 2026-03-25
 
 ### Fixed

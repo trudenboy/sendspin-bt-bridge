@@ -19,6 +19,7 @@ _MOCK_MODULES = [
     "aiosendspin.models.visualizer",
     "sendspin",
     "sendspin.audio",
+    "sendspin.audio_devices",
     "sendspin.audio_connector",
     "sendspin.daemon",
     "sendspin.daemon.daemon",
@@ -57,6 +58,8 @@ _types_mod.BinaryMessageType = type(  # type: ignore[attr-defined]
 _daemon_mod = sys.modules["sendspin.daemon.daemon"]
 _daemon_mod.DaemonArgs = MagicMock  # type: ignore[attr-defined]
 _daemon_mod.SendspinDaemon = type("SendspinDaemon", (), {"__init__": lambda self, args: None})  # type: ignore[attr-defined]
+
+sys.modules.pop("services.bridge_daemon", None)
 
 from services.bridge_daemon import BridgeDaemon  # noqa: E402
 

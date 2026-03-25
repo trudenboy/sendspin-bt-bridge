@@ -884,6 +884,18 @@ def install() -> None:
         cast("Any", sendspin_pkg).audio = _sendspin_audio
     _sendspin_audio.query_devices = lambda: [SimpleNamespace(**device) for device in DEMO_PORTAUDIO_DEVICES]
 
+    try:
+        import sendspin.audio_devices as _sendspin_audio_devices  # type: ignore[import-not-found]
+    except Exception:
+        sendspin_pkg = sys.modules.get("sendspin")
+        if sendspin_pkg is None:
+            sendspin_pkg = ModuleType("sendspin")
+            sys.modules["sendspin"] = sendspin_pkg
+        _sendspin_audio_devices = ModuleType("sendspin.audio_devices")
+        sys.modules["sendspin.audio_devices"] = _sendspin_audio_devices
+        cast("Any", sendspin_pkg).audio_devices = _sendspin_audio_devices
+    _sendspin_audio_devices.query_devices = lambda: [SimpleNamespace(**device) for device in DEMO_PORTAUDIO_DEVICES]
+
     # ------------------------------------------------------------------
     # 9. Patch MA client (discover_ma_groups)
     # ------------------------------------------------------------------

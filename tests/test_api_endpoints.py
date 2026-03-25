@@ -3031,6 +3031,7 @@ def test_api_diagnostics_includes_playing_and_sink_input_metadata(client, monkey
         assert data["operator_guidance"]["header_status"]["label"] == "1/1 devices ready"
     finally:
         sys.modules.pop("sendspin.audio", None)
+        sys.modules.pop("sendspin.audio_devices", None)
         state.set_ma_groups({}, [])
         state.set_ma_api_credentials("", "")
         hook_registry.clear()

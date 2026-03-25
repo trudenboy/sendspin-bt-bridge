@@ -13,12 +13,12 @@ from services.sendspin_compat import (
     analyze_audio_api_compatibility,
     analyze_daemon_args_compatibility,
     get_runtime_dependency_versions,
+    load_sendspin_audio_api,
 )
 
 
 def main() -> int:
     try:
-        import sendspin.audio as sendspin_audio
         from sendspin.daemon.daemon import DaemonArgs
     except ModuleNotFoundError as exc:
         print(
@@ -51,7 +51,7 @@ def main() -> int:
         "preferred_format": None,
     }
     compatibility = analyze_daemon_args_compatibility(DaemonArgs, candidate_kwargs)
-    audio_compatibility = analyze_audio_api_compatibility(sendspin_audio)
+    audio_compatibility = analyze_audio_api_compatibility(load_sendspin_audio_api())
     result = {
         "dependencies": get_runtime_dependency_versions(),
         "audio_api": audio_compatibility,

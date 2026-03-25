@@ -71,7 +71,7 @@ from services.recovery_timeline import (
     build_recovery_timeline_excerpt,
     build_recovery_timeline_text,
 )
-from services.sendspin_compat import get_runtime_dependency_versions
+from services.sendspin_compat import get_runtime_dependency_versions, query_audio_devices
 from services.status_snapshot import (
     build_bridge_snapshot,
     build_device_snapshot,
@@ -229,10 +229,10 @@ def _collect_sink_input_diagnostics() -> list[dict]:
 
 
 def _collect_portaudio_device_diagnostics() -> list[dict]:
-    from sendspin.audio import query_devices
-
     return [
-        {"index": d.index, "name": d.name, "is_default": d.is_default} for d in query_devices() if d.output_channels > 0
+        {"index": d.index, "name": d.name, "is_default": d.is_default}
+        for d in query_audio_devices()
+        if d.output_channels > 0
     ]
 
 

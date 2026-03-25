@@ -84,9 +84,8 @@ class BridgeDaemon(SendspinDaemon):
         """Create client with bridge-specific DeviceInfo and register all listeners."""
         from aiosendspin.models.player import ClientHelloPlayerSupport
         from aiosendspin.models.types import Roles
-        from sendspin.audio import detect_supported_audio_formats
 
-        from services.sendspin_compat import filter_supported_call_kwargs
+        from services.sendspin_compat import detect_supported_audio_formats_for_device, filter_supported_call_kwargs
 
         try:
             sw_ver = f"aiosendspin {_pkg_version('aiosendspin')}"
@@ -103,7 +102,7 @@ class BridgeDaemon(SendspinDaemon):
             raise RuntimeError("BridgeDaemon: audio handler not initialised")
         client_roles = [Roles.PLAYER, Roles.METADATA, Roles.CONTROLLER]
 
-        supported_formats = detect_supported_audio_formats(self._args.audio_device.index)
+        supported_formats = detect_supported_audio_formats_for_device(self._args.audio_device)
         if self._args.preferred_format is not None:
             supported_formats = [f for f in supported_formats if f != self._args.preferred_format]
             supported_formats.insert(0, self._args.preferred_format)

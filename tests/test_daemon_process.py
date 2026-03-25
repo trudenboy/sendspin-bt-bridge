@@ -22,6 +22,7 @@ import pytest
 _STUB_MODULES = [
     "sendspin",
     "sendspin.audio",
+    "sendspin.audio_devices",
     "sendspin.daemon",
     "sendspin.daemon.daemon",
     "sendspin.settings",

@@ -35,6 +35,8 @@ from routes.views import views_bp
 def _reset_demo_shared_state() -> None:
     import state
 
+    sys.modules.pop("sendspin.audio", None)
+    sys.modules.pop("sendspin.audio_devices", None)
     state.set_clients([])
     state.set_disabled_devices([])
     state.set_ma_groups({}, [])

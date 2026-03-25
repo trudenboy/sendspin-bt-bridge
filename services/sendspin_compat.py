@@ -2,9 +2,15 @@
 
 from __future__ import annotations
 
+import importlib
 import inspect
 import logging
+from dataclasses import dataclass
 from importlib.metadata import PackageNotFoundError, version
+from typing import TYPE_CHECKING, Optional, Protocol, cast
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
 
@@ -14,6 +20,27 @@ _RUNTIME_DEPENDENCIES = (
     "av",
     "music-assistant-client",
 )
+
+_AUDIO_API_MODULE_CANDIDATES = ("sendspin.audio_devices", "sendspin.audio")
+
+
+@dataclass(frozen=True)
+class SendspinAudioApi:
+    """Resolved sendspin audio helpers across legacy and current package layouts."""
+
+    query_devices: Callable[[], list[AudioDeviceLike]] | None
+    detect_supported_audio_formats: Callable[[object], list[object]] | None
+    parse_audio_format: Callable[[str], object] | None
+    sources: dict[str, str]
+
+
+class AudioDeviceLike(Protocol):
+    """Minimal audio-device surface used by the bridge."""
+
+    index: int | None
+    name: str
+    output_channels: int
+    is_default: bool
 
 
 def filter_supported_call_kwargs(callable_obj, kwargs: dict[str, object]) -> dict[str, object]:
@@ -86,6 +113,39 @@ def format_dependency_versions(versions_by_name: dict[str, str]) -> str:
     return ", ".join(f"{name}={value}" for name, value in versions_by_name.items())
 
 
+def load_sendspin_audio_api() -> SendspinAudioApi:
+    """Resolve audio helpers from whichever sendspin module exports them."""
+    modules: list[tuple[str, object]] = []
+    for module_name in _AUDIO_API_MODULE_CANDIDATES:
+        try:
+            modules.append((module_name, importlib.import_module(module_name)))
+        except ModuleNotFoundError:
+            continue
+
+    resolved: dict[str, object | None] = {
+        "query_devices": None,
+        "detect_supported_audio_formats": None,
+        "parse_audio_format": None,
+    }
+    sources: dict[str, str] = {}
+    for func_name in resolved:
+        for module_name, module in modules:
+            candidate = getattr(module, func_name, None)
+            if callable(candidate):
+                resolved[func_name] = candidate
+                sources[func_name] = module_name
+                break
+
+    return SendspinAudioApi(
+        query_devices=cast("Optional[Callable[[], list[AudioDeviceLike]]]", resolved["query_devices"]),
+        detect_supported_audio_formats=cast(
+            "Optional[Callable[[object], list[object]]]", resolved["detect_supported_audio_formats"]
+        ),
+        parse_audio_format=cast("Optional[Callable[[str], object]]", resolved["parse_audio_format"]),
+        sources=sources,
+    )
+
+
 def _normalize_audio_format_spec(spec: str) -> str:
     """Normalize an audio format string for tolerant comparisons."""
     return "".join(spec.strip().lower().split())
@@ -133,44 +193,74 @@ def _audio_format_identifier(audio_format: object) -> str:
     return normalized_rendered
 
 
-def resolve_preferred_audio_format(audio_module, preferred_format: str, audio_device_index: int) -> object:
-    """Resolve a preferred format string across old/new sendspin.audio APIs."""
-    parser = getattr(audio_module, "parse_audio_format", None)
+def query_audio_devices(audio_api: SendspinAudioApi | None = None) -> list[AudioDeviceLike]:
+    """Query audio devices through the resolved sendspin audio API."""
+    api = audio_api or load_sendspin_audio_api()
+    if not callable(api.query_devices):
+        raise RuntimeError("sendspin audio API has no query_devices")
+    return cast("list[AudioDeviceLike]", api.query_devices())
+
+
+def detect_supported_audio_formats_for_device(
+    audio_device: AudioDeviceLike, audio_api: SendspinAudioApi | None = None
+) -> list[object]:
+    """Resolve supported formats across legacy/new detect_supported_audio_formats signatures."""
+    api = audio_api or load_sendspin_audio_api()
+    detector = api.detect_supported_audio_formats
+    if not callable(detector):
+        raise RuntimeError("sendspin audio API has no detect_supported_audio_formats")
+
+    if api.sources.get("detect_supported_audio_formats") == "sendspin.audio_devices":
+        return detector(audio_device)
+
+    legacy_device = getattr(audio_device, "index", audio_device)
+    return detector(legacy_device)
+
+
+def resolve_preferred_audio_format(
+    preferred_format: str, audio_device: AudioDeviceLike, audio_api: SendspinAudioApi | None = None
+) -> object:
+    """Resolve a preferred format string across legacy and current sendspin layouts."""
+    api = audio_api or load_sendspin_audio_api()
+    parser = api.parse_audio_format
     if callable(parser):
         return parser(preferred_format)
 
-    detect_supported = getattr(audio_module, "detect_supported_audio_formats", None)
-    if not callable(detect_supported):
+    if not callable(api.detect_supported_audio_formats):
         raise ValueError("sendspin.audio has no parse_audio_format or detect_supported_audio_formats")
 
     wanted = _normalize_audio_format_spec(preferred_format)
-    supported_formats = detect_supported(audio_device_index)
+    supported_formats = detect_supported_audio_formats_for_device(audio_device, api)
     for candidate in supported_formats:
         if _audio_format_identifier(candidate) == wanted:
             return candidate
 
-    raise ValueError(f"Preferred format {preferred_format!r} is not supported by audio device {audio_device_index}")
+    raise ValueError(f"Preferred format {preferred_format!r} is not supported by the selected audio device")
 
 
-def analyze_audio_api_compatibility(audio_module) -> dict[str, object]:
-    """Inspect whether the installed sendspin.audio module exposes usable APIs."""
-    has_query_devices = callable(getattr(audio_module, "query_devices", None))
-    has_parse_audio_format = callable(getattr(audio_module, "parse_audio_format", None))
-    has_detect_supported_audio_formats = callable(getattr(audio_module, "detect_supported_audio_formats", None))
+def analyze_audio_api_compatibility(audio_api: SendspinAudioApi | None = None) -> dict[str, object]:
+    """Inspect whether the installed sendspin audio helpers meet runtime needs."""
+    api = audio_api or load_sendspin_audio_api()
+    has_query_devices = callable(api.query_devices)
+    has_parse_audio_format = callable(api.parse_audio_format)
+    has_detect_supported_audio_formats = callable(api.detect_supported_audio_formats)
     warnings: list[str] = []
 
     if not has_query_devices:
-        warnings.append("sendspin.audio.query_devices is missing")
+        warnings.append("sendspin audio API is missing query_devices")
     if not has_parse_audio_format and not has_detect_supported_audio_formats:
         warnings.append(
-            "sendspin.audio exposes neither parse_audio_format nor detect_supported_audio_formats; "
+            "sendspin audio API exposes neither parse_audio_format nor detect_supported_audio_formats; "
             "preferred_format will be ignored"
         )
+    if has_query_devices and not has_detect_supported_audio_formats:
+        warnings.append("sendspin audio API is missing detect_supported_audio_formats")
 
     return {
-        "compatible": has_query_devices,
+        "compatible": has_query_devices and has_detect_supported_audio_formats,
         "has_query_devices": has_query_devices,
         "has_parse_audio_format": has_parse_audio_format,
         "has_detect_supported_audio_formats": has_detect_supported_audio_formats,
+        "sources": dict(api.sources),
         "warnings": warnings,
     }
