@@ -35,6 +35,7 @@ _RECONNECT_BASE = 2  # seconds — first reconnect delay
 _RECONNECT_MAX = 60  # seconds — max reconnect delay
 _STALE_RECONNECT_READY_TIMEOUT = 30.0
 _STALE_RECONNECT_READY_POLL_INTERVAL = 0.5
+_STALE_RECONNECT_STARTUP_GRACE = 20.0
 
 
 def _active_bridge_clients() -> list:
@@ -305,6 +306,7 @@ class MaMonitor:
         async def _wait_and_reconnect() -> None:
             try:
                 deadline = time.monotonic() + _STALE_RECONNECT_READY_TIMEOUT
+                ready_since: float | None = None
                 while self._running and time.monotonic() < deadline:
                     if matched_client.status.get("playing"):
                         logger.info(
@@ -313,17 +315,22 @@ class MaMonitor:
                         )
                         return
                     if matched_client.is_running() and matched_client.status.get("server_connected"):
-                        logger.info(
-                            "MA: player '%s' still has stale device_info (product='%s' expected='%s', "
-                            "host='%s' expected='%s') — reconnecting now that the player is ready",
-                            display_name,
-                            product_name,
-                            expected_product,
-                            manufacturer,
-                            expected_host,
-                        )
-                        await matched_client.send_reconnect()
-                        return
+                        if ready_since is None:
+                            ready_since = time.monotonic()
+                        if time.monotonic() - ready_since >= _STALE_RECONNECT_STARTUP_GRACE:
+                            logger.info(
+                                "MA: player '%s' still has stale device_info (product='%s' expected='%s', "
+                                "host='%s' expected='%s') — reconnecting after startup grace",
+                                display_name,
+                                product_name,
+                                expected_product,
+                                manufacturer,
+                                expected_host,
+                            )
+                            await matched_client.send_reconnect()
+                            return
+                    else:
+                        ready_since = None
                     await asyncio.sleep(_STALE_RECONNECT_READY_POLL_INTERVAL)
 
                 logger.info(

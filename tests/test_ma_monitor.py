@@ -456,6 +456,7 @@ async def test_refresh_stale_player_metadata_defers_reconnect_until_player_ready
 
     monkeypatch.setattr(ma_monitor, "_active_bridge_clients", lambda: [client])
     monkeypatch.setattr(ma_monitor, "_STALE_RECONNECT_READY_POLL_INTERVAL", 0.0)
+    monkeypatch.setattr(ma_monitor, "_STALE_RECONNECT_STARTUP_GRACE", 0.0)
     original_sleep = ma_monitor.asyncio.sleep
 
     async def _yielding_sleep(_delay):
