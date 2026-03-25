@@ -44,6 +44,7 @@ UTC = timezone.utc
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
+_MA_RECONNECT_TIMEOUT_S = 15.0
 
 _IPC_ALLOWED_KEYS = frozenset(
     {
@@ -81,6 +82,7 @@ _IPC_ALLOWED_KEYS = frozenset(
         "last_error_at",
         "track_progress_ms",
         "track_duration_ms",
+        "ma_reconnecting",
     }
 )
 
@@ -141,6 +143,7 @@ class DeviceStatus:
     last_error_at: str | None = None
     uptime_start: datetime = field(default_factory=lambda: datetime.now(tz=UTC))
     reconnecting: bool = False
+    ma_reconnecting: bool = False
     reconnect_attempt: int = 0
     buffering: bool = False
     stopping: bool = False
@@ -304,6 +307,7 @@ class SendspinClient:
         self._daemon_task: asyncio.Task | None = None  # stdout reader task
         self._stderr_task: asyncio.Task | None = None  # stderr reader task
         self._monitor_task: asyncio.Task | None = None
+        self._ma_reconnect_task: asyncio.Task | None = None
         self._restart_delay: float = 1.0  # exponential backoff for unexpected daemon restarts
         self._start_sendspin_lock: asyncio.Lock | None = None  # set in run(), guards concurrent starts
         self._start_sendspin_requests = 0
@@ -384,6 +388,35 @@ class SendspinClient:
             )
         _state.notify_status_changed()
 
+    def _cancel_ma_reconnect_task(self) -> None:
+        task = self._ma_reconnect_task
+        if task is not None and not task.done():
+            task.cancel()
+        self._ma_reconnect_task = None
+
+    def _clear_ma_reconnecting(self) -> None:
+        self._cancel_ma_reconnect_task()
+        if self.get_status_value("ma_reconnecting", False):
+            self._update_status({"ma_reconnecting": False})
+
+    def _schedule_ma_reconnect_timeout(self) -> None:
+        self._cancel_ma_reconnect_task()
+
+        async def _timeout_clear() -> None:
+            try:
+                await asyncio.sleep(_MA_RECONNECT_TIMEOUT_S)
+                if self.get_status_value("ma_reconnecting", False):
+                    self._update_status({"ma_reconnecting": False})
+            except asyncio.CancelledError:
+                return
+
+        self._ma_reconnect_task = asyncio.create_task(_timeout_clear())
+
+    def _mark_ma_reconnecting(self) -> None:
+        if not self.get_status_value("ma_reconnecting", False):
+            self._update_status({"ma_reconnecting": True})
+        self._schedule_ma_reconnect_timeout()
+
     # ── BluetoothManagerHost protocol implementation ──────────────────
 
     def update_status(self, updates: dict) -> None:
@@ -454,6 +487,7 @@ class SendspinClient:
                                 "group_id": None,
                             }
                         )
+                        self._clear_ma_reconnecting()
                         self._daemon_proc = None
                         # Don't restart if BT is disconnected — monitor_and_reconnect
                         # will call start_sendspin() once BT reconnects.
@@ -605,6 +639,7 @@ class SendspinClient:
                 limit=1024 * 1024,  # 1 MB readline buffer (artwork base64 can exceed 64 KB default)
             )
             self._update_status({"playing": False})
+            self._clear_ma_reconnecting()
 
             # Start async tasks to consume subprocess stdout and stderr
             self._daemon_task = asyncio.create_task(self._read_subprocess_output())
@@ -636,6 +671,8 @@ class SendspinClient:
                 # separate lock acquisitions that could race.
                 updates = self._ipc_service.handle_message(msg)
                 if updates:
+                    if updates.get("server_connected") is True:
+                        self._clear_ma_reconnecting()
                     new_volume = updates.get("volume")
                     _mac = self.bt_manager.mac_address if self.bt_manager else None
                     if isinstance(new_volume, int) and _mac:
@@ -669,6 +706,10 @@ class SendspinClient:
         new client_hello arrives (workaround for MA using register() instead
         of register_or_update() — see music-assistant/support#5049).
         """
+        proc = self._daemon_proc
+        if proc is None or proc.returncode is not None or not self.status.get("server_connected"):
+            return
+        self._mark_ma_reconnecting()
         await self._send_subprocess_command({"cmd": "reconnect", "delay": 3.0})
 
     async def send_transport_command(self, action: str, value: object = None) -> bool:
@@ -744,6 +785,7 @@ class SendspinClient:
             self._daemon_task = None
             self._stderr_task = None
         self._daemon_proc = None
+        self._clear_ma_reconnecting()
 
         self._update_status(
             {

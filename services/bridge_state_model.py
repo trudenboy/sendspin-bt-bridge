@@ -155,6 +155,7 @@ def build_normalized_device_state(device: Any) -> NormalizedDeviceState:
         },
         async_ops={
             "reconnecting": bool(extra.get("reconnecting")),
+            "ma_reconnecting": bool(extra.get("ma_reconnecting")),
             "stopping": bool(extra.get("stopping")),
             "reanchoring": bool(extra.get("reanchoring")),
         },

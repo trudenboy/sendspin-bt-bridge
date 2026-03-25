@@ -617,7 +617,7 @@ function deviceMatchesFilters(dev) {
     if (statusVal === 'playing') return !!dev.playing;
     if (statusVal === 'idle') return !dev.playing && dev.bluetooth_connected && dev.bt_management_enabled !== false;
     if (statusVal === 'stopping') return !!dev.stopping;
-    if (statusVal === 'reconnecting') return !!dev.reconnecting;
+    if (statusVal === 'reconnecting') return !!(dev.reconnecting || dev.ma_reconnecting);
     if (statusVal === 'released') return dev.bt_management_enabled === false;
     if (statusVal === 'error') return getDeviceStatusKey(dev) === 'no-sink';
     return true;
@@ -1119,6 +1119,9 @@ function _getBtBadgeStateMeta(dev, adapterInfo) {
 
 function _getServiceBadgeStateMeta(dev) {
     var maConnected = !!((dev && dev.ma_now_playing) || {}).connected;
+    if (dev && dev.ma_reconnecting) {
+        return _buildBadgeStateMeta('warning', true, 'Refreshing Music Assistant connection');
+    }
     if (dev && dev.server_connected) {
         return _buildBadgeStateMeta('success', false, maConnected ? 'Music Assistant connected' : 'Bridge service connected');
     }
@@ -1239,11 +1242,11 @@ function getUnifiedDeviceStatusMeta(dev) {
         tone = 'warning';
         summary = 'Stopping playback service';
         pulse = true;
-    } else if (safeDev.reconnecting) {
+    } else if (safeDev.reconnecting || safeDev.ma_reconnecting) {
         key = 'reconnecting';
         label = 'Reconnecting';
         tone = 'warning';
-        summary = 'Trying to reconnect';
+        summary = safeDev.ma_reconnecting ? 'Refreshing Music Assistant connection' : 'Trying to reconnect';
         pulse = true;
     } else if (!safeDev.bluetooth_connected) {
         key = 'disconnected';
@@ -2487,7 +2490,7 @@ function _compareListValues(a, b, column) {
             if (dev.playing) return 4;
             if (dev.bluetooth_connected) return 3;
             if (dev.stopping) return 2.5;
-            if (dev.reconnecting) return 2;
+            if (dev.reconnecting || dev.ma_reconnecting) return 2;
             if (dev.bt_management_enabled === false) return 1;
             return 0;
         };
@@ -6790,7 +6793,7 @@ function _buildFinalizingStartupSummary(status, devices, fallbackSummary) {
     var waitingForSendspin = 0;
     var waitingForBluetooth = 0;
     relevantDevices.forEach(function(dev) {
-        if (dev.reconnecting) {
+        if (dev.reconnecting || dev.ma_reconnecting) {
             reconnecting += 1;
             return;
         }

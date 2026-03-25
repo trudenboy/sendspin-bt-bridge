@@ -95,6 +95,53 @@ async def test_send_subprocess_command_delegates_to_command_service():
 
 
 @pytest.mark.asyncio
+async def test_send_reconnect_marks_expected_ma_reconnect_and_clears_on_server_connect():
+    client = SendspinClient("Test Player", "localhost", 9000)
+    proc = SimpleNamespace(returncode=None, stdin=object())
+    client._daemon_proc = proc
+    client.status.update({"server_connected": True})
+
+    class _FakeService:
+        def __init__(self):
+            self.calls = []
+
+        async def send(self, current_proc, cmd):
+            self.calls.append((current_proc, cmd))
+
+    fake_service = _FakeService()
+    client._command_service = fake_service
+
+    await client.send_reconnect()
+
+    assert client.status.get("ma_reconnecting") is True
+    assert fake_service.calls == [(proc, {"cmd": "reconnect", "delay": 3.0})]
+
+    client._update_status({"server_connected": True})
+    client._clear_ma_reconnecting()
+
+    assert client.status.get("ma_reconnecting") is False
+
+
+@pytest.mark.asyncio
+async def test_send_reconnect_timeout_clears_stuck_ma_reconnect(monkeypatch):
+    client = SendspinClient("Test Player", "localhost", 9000)
+    client._daemon_proc = SimpleNamespace(returncode=None, stdin=object())
+    client.status.update({"server_connected": True})
+
+    async def _fake_send(_proc, _cmd):
+        return None
+
+    monkeypatch.setattr(client._command_service, "send", _fake_send)
+    monkeypatch.setattr("sendspin_client._MA_RECONNECT_TIMEOUT_S", 0.0)
+
+    await client.send_reconnect()
+    assert client._ma_reconnect_task is not None
+    await client._ma_reconnect_task
+
+    assert client.status.get("ma_reconnecting") is False
+
+
+@pytest.mark.asyncio
 async def test_stop_sendspin_delegates_to_stop_service():
     client = SendspinClient("Test Player", "localhost", 9000)
     proc = object()

@@ -38,6 +38,27 @@ def _device_audio_streaming(device: Any) -> bool:
     return bool(getattr(device, "audio_streaming", False))
 
 
+def _device_ma_reconnecting(device: Any) -> bool:
+    """Return whether the device is in an expected MA reconnect window."""
+    if isinstance(device, dict):
+        state_model = device.get("state_model")
+    else:
+        state_model = getattr(device, "state_model", None)
+
+    if isinstance(state_model, dict):
+        async_ops = state_model.get("async_ops")
+        if isinstance(async_ops, dict) and "ma_reconnecting" in async_ops:
+            return bool(async_ops.get("ma_reconnecting"))
+
+    extra = _device_extra(device)
+    if "ma_reconnecting" in extra:
+        return bool(extra.get("ma_reconnecting"))
+
+    if isinstance(device, dict):
+        return bool(device.get("ma_reconnecting", False))
+    return bool(getattr(device, "ma_reconnecting", False))
+
+
 def _parse_timestamp(value: Any) -> datetime | None:
     """Parse an ISO-8601 timestamp string into a tz-aware datetime, or *None*."""
     if not value:

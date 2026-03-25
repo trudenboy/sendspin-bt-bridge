@@ -224,6 +224,26 @@ def test_build_device_snapshot_reports_stopping_transition():
     assert "stopping" in data["health_summary"]["reasons"]
 
 
+def test_build_device_snapshot_reports_planned_ma_reconnect_transition():
+    client = _make_client()
+    client.status.update(
+        {
+            "server_connected": False,
+            "bluetooth_connected": True,
+            "ma_reconnecting": True,
+            "playing": False,
+        }
+    )
+
+    snapshot = build_device_snapshot(client)
+    data = snapshot.to_dict()
+
+    assert data["ma_reconnecting"] is True
+    assert data["health_summary"]["state"] == "recovering"
+    assert data["health_summary"]["summary"] == "Refreshing Music Assistant connection"
+    assert data["transfer_readiness"]["reason"] == "music_assistant_reconnecting"
+
+
 def test_build_device_snapshot_surfaces_recent_event_reasons_when_ready():
     client = _make_client()
     state.clear_device_events(client.player_id)

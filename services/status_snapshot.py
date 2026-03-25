@@ -358,6 +358,9 @@ def _build_transfer_readiness(
     elif bool(status.get("reconnecting")):
         reason = "reconnecting"
         severity = "warning"
+    elif bool(status.get("ma_reconnecting")):
+        reason = "music_assistant_reconnecting"
+        severity = "warning"
     elif bool(status.get("reanchoring")):
         reason = "reanchoring"
         severity = "warning"

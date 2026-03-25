@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-from services._helpers import _device_audio_streaming, _device_extra
+from services._helpers import _device_audio_streaming, _device_extra, _device_ma_reconnecting
 
 
 def _append_reason(reasons: list[str], reason: str) -> None:
@@ -65,6 +65,7 @@ def compute_device_health_state(device: Any) -> DeviceHealthState:
     reasons: list[str] = []
     extra = _device_extra(device)
     audio_streaming = _device_audio_streaming(device)
+    ma_reconnecting = _device_ma_reconnecting(device)
     recent_events = list(getattr(device, "recent_events", []) or [])
     event_reasons = derive_event_reasons(recent_events)
     last_event_at = recent_events[0]["at"] if recent_events else None
@@ -144,6 +145,18 @@ def compute_device_health_state(device: Any) -> DeviceHealthState:
             severity="info",
             summary="Streaming audio",
             reasons=event_reasons,
+            last_event_at=last_event_at,
+        )
+
+    if ma_reconnecting:
+        _append_reason(reasons, "ma_reconnecting")
+        for reason in event_reasons:
+            _append_reason(reasons, reason)
+        return DeviceHealthState(
+            state="recovering",
+            severity="warning",
+            summary="Refreshing Music Assistant connection",
+            reasons=reasons,
             last_event_at=last_event_at,
         )
 
@@ -269,6 +282,7 @@ def build_device_capabilities(device: Any) -> dict[str, Any]:
     ma_connected = bool((getattr(device, "ma_now_playing", None) or {}).get("connected"))
     extra = _device_extra(device)
     reconnecting = bool(extra.get("reconnecting"))
+    ma_reconnecting = _device_ma_reconnecting(device)
     stopping = bool(extra.get("stopping"))
     released = getattr(device, "bt_management_enabled", True) is False
     has_sink = bool(getattr(device, "has_sink", False))
@@ -298,6 +312,14 @@ def build_device_capabilities(device: Any) -> dict[str, Any]:
             remediation=["toggle_bt_management", "open_diagnostics"],
             depends_on=["reconnect_idle"],
             recommended_action="toggle_bt_management",
+        )
+    elif ma_reconnecting:
+        reconnect_blocked_reason = _block_reason_payload(
+            code="ma_reconnecting",
+            message="Music Assistant reconnect is already in progress.",
+            remediation=["open_diagnostics"],
+            depends_on=["sendspin_connected"],
+            recommended_action="open_diagnostics",
         )
     elif stopping:
         reconnect_blocked_reason = _block_reason_payload(
@@ -342,6 +364,14 @@ def build_device_capabilities(device: Any) -> dict[str, Any]:
     play_pause_blocked_reason = (
         None
         if getattr(device, "server_connected", False)
+        else _block_reason_payload(
+            code="ma_reconnecting",
+            message="Music Assistant reconnect is in progress.",
+            remediation=["open_diagnostics"],
+            depends_on=["sendspin_connected"],
+            recommended_action="open_diagnostics",
+        )
+        if ma_reconnecting
         else _block_reason_payload(
             code="daemon_disconnected",
             message="Sendspin is not connected.",
@@ -395,12 +425,22 @@ def build_device_capabilities(device: Any) -> dict[str, Any]:
 
     queue_blocked_reason = None
     if not getattr(device, "server_connected", False):
-        queue_blocked_reason = _block_reason_payload(
-            code="daemon_disconnected",
-            message="Sendspin is not connected.",
-            remediation=["reconnect", "open_diagnostics"],
-            depends_on=["sendspin_connected"],
-            recommended_action="reconnect",
+        queue_blocked_reason = (
+            _block_reason_payload(
+                code="ma_reconnecting",
+                message="Music Assistant reconnect is in progress.",
+                remediation=["open_diagnostics"],
+                depends_on=["sendspin_connected"],
+                recommended_action="open_diagnostics",
+            )
+            if ma_reconnecting
+            else _block_reason_payload(
+                code="daemon_disconnected",
+                message="Sendspin is not connected.",
+                remediation=["reconnect", "open_diagnostics"],
+                depends_on=["sendspin_connected"],
+                recommended_action="reconnect",
+            )
         )
     elif not ma_connected:
         queue_blocked_reason = _block_reason_payload(
