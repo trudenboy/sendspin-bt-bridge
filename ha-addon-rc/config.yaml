@@ -1,6 +1,6 @@
 ---
 name: "Sendspin Bluetooth Bridge (RC)"
-version: "2.48.0-rc.7"
+version: "2.48.0-rc.8"
 slug: "sendspin_bt_bridge_rc"
 description: "Bridge Music Assistant Sendspin protocol to Bluetooth speakers (RC channel)"
 url: "https://github.com/trudenboy/sendspin-bt-bridge"
