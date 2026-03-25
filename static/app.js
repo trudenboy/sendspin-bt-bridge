@@ -1203,6 +1203,24 @@ function _buildQueueActionTitle(baseTitle, pending, queueReadyTitle, pendingSumm
     return baseTitle;
 }
 
+function _applyNativeTransportUiPrediction(dev, action) {
+    if (!dev || !action) return;
+    if (!dev.ma_now_playing || typeof dev.ma_now_playing !== 'object') dev.ma_now_playing = {};
+
+    if (action === 'shuffle' || action === 'unshuffle') {
+        var shuffleEnabled = action === 'shuffle';
+        dev.ma_now_playing.shuffle = shuffleEnabled;
+        dev.shuffle = shuffleEnabled;
+        return;
+    }
+
+    if (action === 'repeat_off' || action === 'repeat_all' || action === 'repeat_one') {
+        var repeatMode = action === 'repeat_all' ? 'all' : action === 'repeat_one' ? 'one' : 'off';
+        dev.ma_now_playing.repeat = repeatMode;
+        dev.repeat_mode = repeatMode;
+    }
+}
+
 function getUnifiedDeviceStatusMeta(dev) {
     var safeDev = dev || {};
     var ma = safeDev.ma_now_playing || {};
@@ -4246,6 +4264,8 @@ async function maQueueCmd(action, value, devIdx) {
             if (!resp.ok || !data.success) {
                 throw new Error((data && data.error) || ('HTTP ' + resp.status));
             }
+            _applyNativeTransportUiPrediction(dev, nativeAction);
+            renderDevicesView();
         } catch (e) {
             showToast('Transport command failed: ' + e.message, 'error');
         } finally {
