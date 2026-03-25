@@ -14,7 +14,8 @@ UTC = timezone.utc
 
 _ONBOARDING_VISIBILITY_KEY = "sendspin-ui:show-onboarding-guidance"
 _RECOVERY_VISIBILITY_KEY = "sendspin-ui:show-recovery-guidance"
-_DEFAULT_STARTUP_BANNER_GRACE_SECONDS = 10
+_DEFAULT_STARTUP_BANNER_GRACE_SECONDS = 5
+_DEFAULT_RECOVERY_BANNER_GRACE_SECONDS = 15
 
 
 @dataclass
@@ -170,6 +171,23 @@ def _startup_banner_grace_seconds(config: dict[str, Any] | None) -> int:
     return max(0, min(grace_seconds, 300))
 
 
+def _recovery_banner_grace_seconds(config: dict[str, Any] | None) -> int:
+    if not isinstance(config, dict):
+        return _DEFAULT_RECOVERY_BANNER_GRACE_SECONDS
+    raw_value = config.get("RECOVERY_BANNER_GRACE_SECONDS", _DEFAULT_RECOVERY_BANNER_GRACE_SECONDS)
+    try:
+        grace_seconds = int(raw_value)
+    except (TypeError, ValueError):
+        return _DEFAULT_RECOVERY_BANNER_GRACE_SECONDS
+    return max(0, min(grace_seconds, 300))
+
+
+def _startup_completed_at(startup_progress: dict[str, Any]) -> datetime | None:
+    return _parse_timestamp(
+        startup_progress.get("completed_at") or startup_progress.get("updated_at") or startup_progress.get("started_at")
+    )
+
+
 def _startup_banner_cooldown_active(startup_progress: dict[str, Any], config: dict[str, Any] | None = None) -> bool:
     startup_status = str(startup_progress.get("status") or "idle")
     if startup_status in {"running", "starting"}:
@@ -179,12 +197,29 @@ def _startup_banner_cooldown_active(startup_progress: dict[str, Any], config: di
     grace_seconds = _startup_banner_grace_seconds(config)
     if grace_seconds <= 0:
         return False
-    completed_at = _parse_timestamp(
-        startup_progress.get("completed_at") or startup_progress.get("updated_at") or startup_progress.get("started_at")
-    )
+    completed_at = _startup_completed_at(startup_progress)
     if completed_at is None:
         return False
     return (datetime.now(tz=UTC) - completed_at) < timedelta(seconds=grace_seconds)
+
+
+def _recovery_banner_cooldown_active(startup_progress: dict[str, Any], config: dict[str, Any] | None = None) -> bool:
+    startup_status = str(startup_progress.get("status") or "idle")
+    if startup_status not in {"ready", "complete", "error"}:
+        return False
+    recovery_grace_seconds = _recovery_banner_grace_seconds(config)
+    if recovery_grace_seconds <= 0 or _startup_banner_cooldown_active(startup_progress, config):
+        return False
+    completed_at = _startup_completed_at(startup_progress)
+    if completed_at is None:
+        return False
+    elapsed = datetime.now(tz=UTC) - completed_at
+    startup_grace_seconds = _startup_banner_grace_seconds(config)
+    return (
+        timedelta(seconds=startup_grace_seconds)
+        <= elapsed
+        < timedelta(seconds=startup_grace_seconds + recovery_grace_seconds)
+    )
 
 
 def _reconnect_attempt_summary(device: Any) -> str:
@@ -1182,6 +1217,7 @@ def build_operator_guidance_snapshot(
     )
     startup_status = str(startup_progress.get("status") or "idle")
     startup_banner_cooldown_active = _startup_banner_cooldown_active(startup_progress, config)
+    recovery_banner_cooldown_active = _recovery_banner_cooldown_active(startup_progress, config)
     active_devices = [device for device in devices if getattr(device, "bt_management_enabled", True)]
     released_devices = [device for device in devices if getattr(device, "bt_management_enabled", True) is False]
     user_released_devices = [
@@ -1223,7 +1259,7 @@ def build_operator_guidance_snapshot(
             disabled_devices=disabled_devices,
             mixed_bluetooth_guidance=mixed_bluetooth_guidance,
         ),
-        banner=_build_banner(mode=mode, issue_groups=issue_groups),
+        banner=None if recovery_banner_cooldown_active else _build_banner(mode=mode, issue_groups=issue_groups),
         onboarding_card=_build_onboarding_card(
             empty_state=empty_state,
             all_devices_globally_disabled=all_devices_globally_disabled,

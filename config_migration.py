@@ -282,6 +282,7 @@ def _normalize_loaded_config(config: dict, *, defaults: Mapping[str, Any]) -> No
         ("BRUTE_FORCE_WINDOW_MINUTES", 1, 1440),
         ("BRUTE_FORCE_LOCKOUT_MINUTES", 1, 1440),
         ("STARTUP_BANNER_GRACE_SECONDS", 0, 300),
+        ("RECOVERY_BANNER_GRACE_SECONDS", 0, 300),
     ):
         _normalize_int_setting(config, key, defaults=defaults, min_value=min_value, max_value=max_value)
 

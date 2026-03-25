@@ -142,8 +142,9 @@ def main() -> None:
         "BLUETOOTH_DEVICES": list(opts.get("bluetooth_devices") or []),
         "BLUETOOTH_ADAPTERS": adapters,
         "TZ": tz,
-        "PULSE_LATENCY_MSEC": _int_opt(opts, "pulse_latency_msec", 200),
-        "STARTUP_BANNER_GRACE_SECONDS": _int_opt(opts, "startup_banner_grace_seconds", 10),
+        "PULSE_LATENCY_MSEC": _int_opt(opts, "pulse_latency_msec", 600),
+        "STARTUP_BANNER_GRACE_SECONDS": _int_opt(opts, "startup_banner_grace_seconds", 5),
+        "RECOVERY_BANNER_GRACE_SECONDS": _int_opt(opts, "recovery_banner_grace_seconds", 15),
         "PREFER_SBC_CODEC": bool(opts.get("prefer_sbc_codec", False)),
         "BT_CHECK_INTERVAL": _int_opt(opts, "bt_check_interval", 10),
         "BT_MAX_RECONNECT_FAILS": _int_opt(opts, "bt_max_reconnect_fails", 0),
@@ -186,6 +187,7 @@ def main() -> None:
         preserved_optional_int_fields = {
             "BASE_LISTEN_PORT": "base_listen_port",
             "STARTUP_BANNER_GRACE_SECONDS": "startup_banner_grace_seconds",
+            "RECOVERY_BANNER_GRACE_SECONDS": "recovery_banner_grace_seconds",
         }
         for key, option_name in preserved_optional_int_fields.items():
             if opts.get(option_name) in (None, "") and existing.get(key) not in (None, ""):

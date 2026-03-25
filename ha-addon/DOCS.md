@@ -95,8 +95,9 @@ Important:
 | `base_listen_port` | port | _(track default)_ | Optional starting port for auto-assigned Sendspin player listeners. Defaults are `8928` (stable), `9028` (RC), and `9128` (beta). |
 | `bridge_name` | string | _(empty)_ | Custom name for this bridge instance. When empty the system hostname is used automatically. |
 | `tz` | string | _(empty)_ | IANA timezone (e.g. `Europe/London`, `America/New_York`). Leave empty to inherit the Home Assistant system timezone. |
-| `pulse_latency_msec` | int | `200` | PulseAudio buffer latency in milliseconds. Higher values (400–600) reduce audio dropouts on slow hardware at the cost of slightly higher latency. |
-| `startup_banner_grace_seconds` | int | `10` | How long the UI keeps the restart screen in its finalizing state after the backend reports ready. Set `0` to unlock immediately. |
+| `pulse_latency_msec` | int | `600` | PulseAudio buffer latency in milliseconds. Higher values reduce audio dropouts on slower or virtualized systems at the cost of slightly higher latency. |
+| `startup_banner_grace_seconds` | int | `5` | How long the UI keeps the restart screen in its finalizing state after the backend reports ready. Set `0` to unlock immediately. |
+| `recovery_banner_grace_seconds` | int | `15` | How long top-level recovery banners stay hidden after the restart screen unlocks. Use this to give devices extra time to reconnect before attention banners appear. |
 | `prefer_sbc_codec` | bool | `false` | Force the SBC Bluetooth codec after each connection. SBC uses less CPU than AAC/LDAC—useful on low-power hardware with multiple speakers. Enable alongside PCM 44.1 kHz / 16-bit in MA for maximum CPU savings. |
 | `bt_check_interval` | int | `10` | Bluetooth reconnect check interval in seconds. Lower values detect disconnects faster. |
 | `bt_max_reconnect_fails` | int | `0` | Maximum consecutive reconnect attempts before giving up. `0` means unlimited (keep retrying forever). |
@@ -130,7 +131,7 @@ Each entry in the `bluetooth_devices` list represents one Bluetooth speaker.
 | `mac` | **yes** | string | Bluetooth MAC address of the speaker (`AA:BB:CC:DD:EE:FF`). Find it with `bluetoothctl devices` after pairing. |
 | `player_name` | **yes** | string | Display name shown in Music Assistant. Must be unique across all devices. |
 | `adapter` | no | string | MAC address of the Bluetooth adapter to use for this device. Leave blank to use the system default adapter. |
-| `static_delay_ms` | no | int | Fixed latency offset in milliseconds. Use negative values (typically `-500`) to compensate for Bluetooth A2DP buffering. `0` for no adjustment. |
+| `static_delay_ms` | no | int | Fixed latency offset in milliseconds. Use negative values (default `-300`) to compensate for Bluetooth A2DP buffering. `0` for no adjustment. |
 | `listen_host` | no | string | Override the listen address for this device's Sendspin server. |
 | `listen_port` | no | port | Override the listen port for this device's Sendspin server. |
 | `enabled` | no | bool | Set to `false` to temporarily disable a device without removing it from the config. |
@@ -194,7 +195,7 @@ bluetooth_devices:
   - mac: "11:22:33:44:55:66"
     player_name: "Bedroom"
     adapter: "00:1A:7D:DA:71:13"
-    static_delay_ms: -500
+    static_delay_ms: -300
 ```
 
 **Tips for multi-speaker setups:**

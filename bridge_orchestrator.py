@@ -102,7 +102,7 @@ class BridgeOrchestrator:
         time.tzset()
         logger.info("Timezone: %s", tz)
 
-        pulse_latency_msec = int(config.get("PULSE_LATENCY_MSEC") or 200)
+        pulse_latency_msec = int(config.get("PULSE_LATENCY_MSEC") or 600)
         os.environ["PULSE_LATENCY_MSEC"] = str(pulse_latency_msec)
         logger.info("PULSE_LATENCY_MSEC: %s ms", pulse_latency_msec)
 

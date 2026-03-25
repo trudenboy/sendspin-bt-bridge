@@ -423,7 +423,7 @@ async def _run(params: dict) -> None:
     client_id: str = params["client_id"]
     listen_port: int = params["listen_port"]
     server_url: str | None = params.get("url")
-    static_delay_ms: float = params.get("static_delay_ms", -500.0)
+    static_delay_ms: float = params.get("static_delay_ms", -300.0)
     bluetooth_sink_name: str | None = params.get("bluetooth_sink_name")
     initial_volume: int = params.get("volume", 100)
     initial_muted: bool = bool(params.get("muted", False))

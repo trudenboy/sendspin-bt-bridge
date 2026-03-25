@@ -552,7 +552,7 @@ class SendspinClient:
             if self.static_delay_ms is not None:
                 static_delay_ms = self.static_delay_ms
             else:
-                static_delay_ms = float(os.environ.get("SENDSPIN_STATIC_DELAY_MS", "-500"))
+                static_delay_ms = float(os.environ.get("SENDSPIN_STATIC_DELAY_MS", "-300"))
 
             server_url: str | None = None
             if self.server_host and self.server_host.lower() not in ("auto", "discover", ""):

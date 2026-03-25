@@ -445,8 +445,9 @@ def _sync_ha_options(config: dict) -> None:
             "bridge_name": config.get("BRIDGE_NAME", ""),
             "ha_area_name_assist_enabled": bool(config.get("HA_AREA_NAME_ASSIST_ENABLED", True)),
             "tz": config.get("TZ", ""),
-            "pulse_latency_msec": int(config.get("PULSE_LATENCY_MSEC") or 200),
-            "startup_banner_grace_seconds": int(config.get("STARTUP_BANNER_GRACE_SECONDS", 10)),
+            "pulse_latency_msec": int(config.get("PULSE_LATENCY_MSEC") or 600),
+            "startup_banner_grace_seconds": int(config.get("STARTUP_BANNER_GRACE_SECONDS", 5)),
+            "recovery_banner_grace_seconds": int(config.get("RECOVERY_BANNER_GRACE_SECONDS", 15)),
             "prefer_sbc_codec": bool(config.get("PREFER_SBC_CODEC", False)),
             "bt_check_interval": int(config.get("BT_CHECK_INTERVAL") or 10),
             "bt_max_reconnect_fails": int(config.get("BT_MAX_RECONNECT_FAILS") or 0),
@@ -694,6 +695,7 @@ def api_config():
             ("BRUTE_FORCE_WINDOW_MINUTES", 1, 1440),
             ("BRUTE_FORCE_LOCKOUT_MINUTES", 1, 1440),
             ("STARTUP_BANNER_GRACE_SECONDS", 0, 300),
+            ("RECOVERY_BANNER_GRACE_SECONDS", 0, 300),
         ):
             value = _parse_optional_int(config.get(int_key), int_key, min_value=min_val, max_value=max_val)
             if value is not None:

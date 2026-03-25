@@ -5198,7 +5198,7 @@ function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabl
                 escHtmlAttr(String(portVal)) + '">' +
         '</div>' +
         '<div class="bt-cell bt-cell--delay" data-label="Delay">' +
-            '<input type="number" class="bt-delay" title="Static delay. Negative = compensate latency" aria-label="Static delay in milliseconds" placeholder="0" value="' +
+            '<input type="number" class="bt-delay" title="Static delay. Negative = compensate latency" aria-label="Static delay in milliseconds" placeholder="-300" value="' +
                 escHtmlAttr(String(delayVal)) + '" step="50">' +
         '</div>' +
         '<div class="bt-cell bt-cell--runtime" data-label="Live">' +
@@ -6517,7 +6517,14 @@ function _buildConfigPayload(options) {
         10
     );
     if (!Number.isFinite(config.STARTUP_BANNER_GRACE_SECONDS)) {
-        config.STARTUP_BANNER_GRACE_SECONDS = 10;
+        config.STARTUP_BANNER_GRACE_SECONDS = 5;
+    }
+    config.RECOVERY_BANNER_GRACE_SECONDS = parseInt(
+        ((document.querySelector('[name="RECOVERY_BANNER_GRACE_SECONDS"]') || {}).value),
+        10
+    );
+    if (!Number.isFinite(config.RECOVERY_BANNER_GRACE_SECONDS)) {
+        config.RECOVERY_BANNER_GRACE_SECONDS = 15;
     }
 
     if (options.includeRuntime !== false) {
@@ -8440,7 +8447,7 @@ function _defaultBtDeviceDirtyFields() {
         player_name: '',
         mac: '',
         adapter: '',
-        static_delay_ms: 0,
+        static_delay_ms: -300,
         listen_host: '',
         listen_port: null,
         preferred_format: 'flac:44100:16:2',
@@ -8916,7 +8923,7 @@ async function loadConfig(options) {
         ['SENDSPIN_SERVER', 'SENDSPIN_PORT', 'WEB_PORT', 'BASE_LISTEN_PORT', 'BRIDGE_NAME', 'TZ', 'PULSE_LATENCY_MSEC',
          'BT_CHECK_INTERVAL', 'BT_MAX_RECONNECT_FAILS', 'MA_API_URL', 'MA_API_TOKEN',
          'SESSION_TIMEOUT_HOURS', 'BRUTE_FORCE_MAX_ATTEMPTS', 'BRUTE_FORCE_WINDOW_MINUTES',
-         'BRUTE_FORCE_LOCKOUT_MINUTES', 'STARTUP_BANNER_GRACE_SECONDS'].forEach(function(key) {
+         'BRUTE_FORCE_LOCKOUT_MINUTES', 'STARTUP_BANNER_GRACE_SECONDS', 'RECOVERY_BANNER_GRACE_SECONDS'].forEach(function(key) {
             var input = document.querySelector('[name="' + key + '"]');
             if (input && config[key] !== undefined) input.value = config[key] == null ? '' : config[key];
         });
