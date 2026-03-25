@@ -33,6 +33,8 @@ _POLL_INTERVAL = 15  # seconds between polling cycles when events unavailable
 _GROUPS_REFRESH_INTERVAL = 60  # seconds between syncgroup cache refreshes
 _RECONNECT_BASE = 2  # seconds — first reconnect delay
 _RECONNECT_MAX = 60  # seconds — max reconnect delay
+_STALE_RECONNECT_READY_TIMEOUT = 30.0
+_STALE_RECONNECT_READY_POLL_INTERVAL = 0.5
 
 
 def _active_bridge_clients() -> list:
@@ -245,6 +247,8 @@ class MaMonitor:
         self._pending_groups_refresh = False
         self._wake_event = asyncio.Event()
         self._consecutive_auth_failures = 0
+        self._background_tasks: set[asyncio.Task] = set()
+        self._pending_stale_reconnects: set[str] = set()
 
     def _next_id(self) -> int:
         return next(self._msg_id)
@@ -256,6 +260,80 @@ class MaMonitor:
         self._url = normalized_url
         self._token = str(ma_token or "").strip()
         self._ws_url = normalized_url.replace("http://", "ws://").replace("https://", "wss://") + "/ws"
+
+    def _track_background_task(self, task: asyncio.Task) -> None:
+        """Keep a strong reference to a background task and log its failures."""
+        self._background_tasks.add(task)
+
+        def _on_done(done: asyncio.Task) -> None:
+            self._background_tasks.discard(done)
+            if done.cancelled():
+                return
+            try:
+                exc = done.exception()
+            except Exception as task_exc:  # pragma: no cover - ultra-defensive
+                logger.debug("MA monitor background task inspection failed: %s", task_exc)
+                return
+            if exc:
+                logger.debug("MA monitor background task failed: %s", exc)
+
+        task.add_done_callback(_on_done)
+
+    def _schedule_stale_player_reconnect(
+        self,
+        matched_client,
+        *,
+        display_name: str,
+        product_name: str,
+        manufacturer: str,
+        expected_product: str,
+        expected_host: str,
+    ) -> None:
+        """Defer reconnect until the player subprocess is actually ready."""
+        player_key = str(
+            getattr(matched_client, "player_id", "")
+            or getattr(matched_client, "player_name", "")
+            or display_name
+            or "unknown"
+        )
+        if player_key in self._pending_stale_reconnects:
+            logger.debug("MA: stale metadata reconnect for '%s' already pending", display_name)
+            return
+
+        self._pending_stale_reconnects.add(player_key)
+
+        async def _wait_and_reconnect() -> None:
+            try:
+                deadline = time.monotonic() + _STALE_RECONNECT_READY_TIMEOUT
+                while self._running and time.monotonic() < deadline:
+                    if matched_client.status.get("playing"):
+                        logger.info(
+                            "MA: player '%s' stale metadata reconnect skipped after startup because playback began",
+                            display_name,
+                        )
+                        return
+                    if matched_client.is_running() and matched_client.status.get("server_connected"):
+                        logger.info(
+                            "MA: player '%s' still has stale device_info (product='%s' expected='%s', "
+                            "host='%s' expected='%s') — reconnecting now that the player is ready",
+                            display_name,
+                            product_name,
+                            expected_product,
+                            manufacturer,
+                            expected_host,
+                        )
+                        await matched_client.send_reconnect()
+                        return
+                    await asyncio.sleep(_STALE_RECONNECT_READY_POLL_INTERVAL)
+
+                logger.info(
+                    "MA: player '%s' stale metadata reconnect timed out waiting for readiness",
+                    display_name,
+                )
+            finally:
+                self._pending_stale_reconnects.discard(player_key)
+
+        self._track_background_task(asyncio.create_task(_wait_and_reconnect()))
 
     def is_connected(self) -> bool:
         """Return True when the persistent MA monitor WS is available."""
@@ -438,6 +516,7 @@ class MaMonitor:
 
         for p in players:
             pname = (p.get("display_name") or p.get("name") or "").lower()
+            display_name = p.get("display_name") or p.get("name") or ""
             matched_client = None
             for bname, c in bridge_clients.items():
                 if bname and (bname in pname or pname in bname):
@@ -457,25 +536,42 @@ class MaMonitor:
             if matched_client.status.get("playing"):
                 logger.info(
                     "MA: player '%s' has stale device_info (product='%s', host='%s') — skipping reconnect (playing)",
-                    p.get("display_name"),
+                    display_name,
                     product_name,
                     manufacturer,
+                )
+                continue
+
+            if not matched_client.is_running() or not matched_client.status.get("server_connected"):
+                logger.info(
+                    "MA: player '%s' has stale device_info (product='%s' expected='%s', "
+                    "host='%s' expected='%s') — deferring reconnect until player startup completes",
+                    display_name,
+                    product_name,
+                    expected_product,
+                    manufacturer,
+                    expected_host,
+                )
+                self._schedule_stale_player_reconnect(
+                    matched_client,
+                    display_name=display_name,
+                    product_name=product_name,
+                    manufacturer=manufacturer,
+                    expected_product=expected_product,
+                    expected_host=expected_host,
                 )
                 continue
 
             logger.info(
                 "MA: player '%s' has stale device_info (product='%s' expected='%s', "
                 "host='%s' expected='%s') — triggering reconnect",
-                p.get("display_name"),
+                display_name,
                 product_name,
                 expected_product,
                 manufacturer,
                 expected_host,
             )
-            _task = asyncio.create_task(matched_client.send_reconnect())
-            _task.add_done_callback(
-                lambda t: logger.debug("MA send_reconnect error: %s", t.exception()) if t.exception() else None
-            )
+            self._track_background_task(asyncio.create_task(matched_client.send_reconnect()))
 
     async def _refresh_groups_via_ws(self, ws) -> None:
         """Fetch players/all via WS and rebuild the syncgroup cache in state."""

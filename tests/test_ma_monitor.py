@@ -1,8 +1,10 @@
 """Tests for Music Assistant now-playing metadata helpers."""
 
+import asyncio
 import importlib
 import json
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 from urllib.parse import parse_qs, urlparse
 
 import pytest
@@ -416,3 +418,61 @@ async def test_send_queue_cmd_falls_back_to_queue_api_for_legacy_universal_queue
 
     assert result["accepted"] is True
     assert result["queue_id"] == "upd3002d0ddb4751e2b3a200f79b7fc683"
+
+
+@pytest.mark.asyncio
+async def test_refresh_stale_player_metadata_defers_reconnect_until_player_ready(monkeypatch):
+    monitor = MaMonitor("http://ma:8095", "token")
+    monitor._running = True
+
+    sent = []
+
+    async def _fake_send(payload: str):
+        sent.append(json.loads(payload))
+
+    players_response = {
+        "message_id": 1,
+        "result": [
+            {
+                "display_name": "Kitchen Speaker",
+                "device_info": {"product_name": "", "manufacturer": ""},
+            }
+        ],
+    }
+    messages = iter([json.dumps(players_response)])
+
+    async def _fake_recv():
+        return next(messages)
+
+    ws = SimpleNamespace(send=_fake_send, recv=_fake_recv)
+    client = SimpleNamespace(
+        player_name="Kitchen Speaker",
+        player_id="sendspin-kitchen",
+        status={"playing": False, "server_connected": False},
+        send_reconnect=AsyncMock(),
+    )
+    client_running = {"value": False}
+    client.is_running = lambda: client_running["value"]
+
+    monkeypatch.setattr(ma_monitor, "_active_bridge_clients", lambda: [client])
+    monkeypatch.setattr(ma_monitor, "_STALE_RECONNECT_READY_POLL_INTERVAL", 0.0)
+    original_sleep = ma_monitor.asyncio.sleep
+
+    async def _yielding_sleep(_delay):
+        await original_sleep(0)
+
+    monkeypatch.setattr(ma_monitor.asyncio, "sleep", _yielding_sleep)
+
+    await monitor._refresh_stale_player_metadata(ws)
+
+    client.send_reconnect.assert_not_awaited()
+    assert monitor._pending_stale_reconnects == {"sendspin-kitchen"}
+
+    client_running["value"] = True
+    client.status["server_connected"] = True
+
+    await asyncio.wait_for(asyncio.gather(*tuple(monitor._background_tasks)), timeout=1)
+
+    client.send_reconnect.assert_awaited_once()
+    assert sent[0]["command"] == "players/all"
+    assert monitor._pending_stale_reconnects == set()
