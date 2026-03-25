@@ -1,0 +1,47 @@
+name: Pytest
+
+on:
+  workflow_run:
+    workflows:
+      - Lint
+    types:
+      - completed
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pytest:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.ref }}
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev libglib2.0-dev libportaudio2
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r dev-requirements.txt
+      - name: Run sendspin compatibility smoke test
+        run: python scripts/check_sendspin_compat.py
+      - name: Run tests
+        run: python -m pytest tests/ -v --tb=short
+
+  container-smoke:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    needs: pytest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.ref }}
+          fetch-depth: 0
+      - name: Build local container image
+        run: docker build -t sendspin-container-smoke .
+      - name: Run packaged runtime smoke test
+        run: docker run --rm --entrypoint python3 sendspin-container-smoke /app/scripts/check_container_runtime.py

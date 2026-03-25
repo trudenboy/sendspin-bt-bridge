@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - main
+      - beta
+    tags:
+      - "v*"
     paths-ignore:
       - "docs-site/**"
       - "*.md"
@@ -63,28 +66,3 @@ jobs:
 
       - name: Mypy
         run: mypy --config-file pyproject.toml *.py routes/ services/
-
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Install system dependencies
-        run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev libglib2.0-dev libportaudio2
-      - name: Install dependencies
-        run: pip install -r requirements.txt -r dev-requirements.txt
-      - name: Run sendspin compatibility smoke test
-        run: python scripts/check_sendspin_compat.py
-      - name: Run tests
-        run: python -m pytest tests/ -v --tb=short
-
-  container-smoke:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Build local container image
-        run: docker build -t sendspin-container-smoke .
-      - name: Run packaged runtime smoke test
-        run: docker run --rm --entrypoint python3 sendspin-container-smoke /app/scripts/check_container_runtime.py

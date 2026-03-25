@@ -1,11 +1,11 @@
 name: Build and Push Docker Image
 
 on:
-  push:
-    tags:
-      - "v*"
-    branches:
-      - beta
+  workflow_run:
+    workflows:
+      - Pytest
+    types:
+      - completed
   workflow_dispatch:
     inputs:
       tag:
@@ -19,6 +19,7 @@ env:
 
 jobs:
   prepare:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -27,11 +28,12 @@ jobs:
       metadata_tags: ${{ steps.publish_context.outputs.metadata_tags }}
       release_channel: ${{ steps.publish_context.outputs.channel }}
       release_version: ${{ steps.publish_context.outputs.version }}
+      should_publish: ${{ steps.publish_context.outputs.should_publish }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag != '' && inputs.tag || github.ref }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag != '' && inputs.tag || github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.ref }}
           fetch-depth: 0
 
       - name: Set up Python
@@ -58,20 +60,38 @@ jobs:
       - name: Resolve publish context
         id: publish_context
         env:
+          EVENT_NAME: ${{ github.event_name }}
           INPUT_TAG: ${{ inputs.tag }}
           REF_NAME: ${{ github.ref_name }}
           GIT_SHA: ${{ github.sha }}
+          WORKFLOW_RUN_HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          WORKFLOW_RUN_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           set -euo pipefail
 
+          target_sha="${GIT_SHA}"
+          if [ "${EVENT_NAME}" = "workflow_run" ] && [ -n "${WORKFLOW_RUN_HEAD_SHA}" ]; then
+            target_sha="${WORKFLOW_RUN_HEAD_SHA}"
+          fi
+
           target_ref="${INPUT_TAG:-}"
           if [ -z "${target_ref}" ]; then
-            target_ref="${REF_NAME}"
+            if [ "${EVENT_NAME}" = "workflow_run" ]; then
+              tag_ref="$(git tag --points-at "${target_sha}" | grep -E '^v' | head -n1 || true)"
+              if [ -n "${tag_ref}" ]; then
+                target_ref="${tag_ref}"
+              else
+                target_ref="${WORKFLOW_RUN_HEAD_BRANCH:-}"
+              fi
+            else
+              target_ref="${REF_NAME}"
+            fi
           fi
 
           channel="stable"
           version=""
           metadata_tags=""
+          should_publish="true"
 
           if [[ "${target_ref}" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
             version="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.${BASH_REMATCH[3]}"
@@ -95,18 +115,24 @@ jobs:
               "type=raw,value=beta"
           elif [[ "${target_ref}" == "beta" ]]; then
             channel="beta"
-            short_sha="${GIT_SHA::7}"
+            short_sha="${target_sha::7}"
             printf -v metadata_tags '%s\n%s' \
               "type=raw,value=beta" \
               "type=raw,value=beta-${short_sha}"
-          else
+          elif [ "${EVENT_NAME}" != "workflow_run" ]; then
+            short_sha="${target_sha::7}"
+            version="${short_sha}"
             printf -v metadata_tags '%s\n%s' \
               "type=raw,value=latest" \
               "type=raw,value=stable"
+          else
+            channel="skip"
+            should_publish="false"
           fi
 
           echo "channel=${channel}" >> "$GITHUB_OUTPUT"
           echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "should_publish=${should_publish}" >> "$GITHUB_OUTPUT"
           {
             echo "metadata_tags<<EOF"
             printf '%s\n' "${metadata_tags}"
@@ -118,14 +144,18 @@ jobs:
             echo ""
             echo "- Ref: \`${target_ref}\`"
             echo "- Channel: \`${channel}\`"
-            echo "- Tags:"
-            while IFS= read -r line; do
-              [ -n "${line}" ] && echo "  - \`${line#type=raw,value=}\`"
-            done <<< "${metadata_tags}"
+            echo "- Publish: \`${should_publish}\`"
+            if [ "${should_publish}" = "true" ]; then
+              echo "- Tags:"
+              while IFS= read -r line; do
+                [ -n "${line}" ] && echo "  - \`${line#type=raw,value=}\`"
+              done <<< "${metadata_tags}"
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
 
   build:
     needs: prepare
+    if: ${{ needs.prepare.outputs.should_publish == 'true' }}
     strategy:
       fail-fast: false
       matrix:
@@ -141,7 +171,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag != '' && inputs.tag || github.ref }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag != '' && inputs.tag || github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.ref }}
           fetch-depth: 0
 
       - name: Set up Docker Buildx
@@ -196,6 +226,7 @@ jobs:
 
   merge:
     needs: [prepare, build]
+    if: ${{ needs.prepare.outputs.should_publish == 'true' }}
     runs-on: ubuntu-latest
     permissions:
       packages: write
