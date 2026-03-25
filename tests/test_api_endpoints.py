@@ -1754,6 +1754,61 @@ def test_api_config_post_uses_registry_snapshot_for_adapter_removal(client, tmp_
     assert removed == [("AA:BB:CC:DD:EE:FF", "C0:FB:F9:62:D6:9D")]
 
 
+def test_api_config_post_does_not_remove_device_for_default_adapter_equivalence(client, tmp_path, monkeypatch):
+    import routes.api_config as api_config_mod
+
+    monkeypatch.setattr(api_config_mod, "CONFIG_FILE", tmp_path / "config.json")
+    (tmp_path / "config.json").write_text(
+        json.dumps(
+            {
+                "BLUETOOTH_DEVICES": [
+                    {
+                        "mac": "AA:BB:CC:DD:EE:FF",
+                        "player_name": "Kitchen",
+                    }
+                ]
+            }
+        )
+    )
+    removed = []
+    monkeypatch.setattr(api_config_mod, "_bt_remove_device", lambda mac, adapter: removed.append((mac, adapter)))
+    payload = {
+        "SENDSPIN_SERVER": "auto",
+        "SENDSPIN_PORT": 9001,
+        "BRIDGE_NAME": "Bridge",
+        "BLUETOOTH_DEVICES": [
+            {"mac": "AA:BB:CC:DD:EE:FF", "player_name": "Kitchen", "adapter": ""},
+        ],
+        "BLUETOOTH_ADAPTERS": [],
+        "TZ": "UTC",
+        "PULSE_LATENCY_MSEC": 250,
+        "PREFER_SBC_CODEC": False,
+        "BT_CHECK_INTERVAL": 15,
+        "BT_MAX_RECONNECT_FAILS": 3,
+        "AUTH_ENABLED": False,
+        "SESSION_TIMEOUT_HOURS": 12,
+        "BRUTE_FORCE_PROTECTION": True,
+        "BRUTE_FORCE_MAX_ATTEMPTS": 4,
+        "BRUTE_FORCE_WINDOW_MINUTES": 2,
+        "BRUTE_FORCE_LOCKOUT_MINUTES": 10,
+        "LOG_LEVEL": "INFO",
+        "MA_API_URL": "",
+        "MA_API_TOKEN": "",
+        "MA_USERNAME": "",
+        "MA_WEBSOCKET_MONITOR": False,
+        "VOLUME_VIA_MA": True,
+        "MUTE_VIA_MA": False,
+        "SMOOTH_RESTART": True,
+        "AUTO_UPDATE": False,
+        "CHECK_UPDATES": True,
+    }
+
+    resp = client.post("/api/config", data=json.dumps(payload), content_type="application/json")
+
+    assert resp.status_code == 200
+    assert removed == []
+
+
 def test_api_config_post_prunes_last_volumes_for_removed_devices(client, tmp_path, monkeypatch):
     import routes.api_config as api_config_mod
 

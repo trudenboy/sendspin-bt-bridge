@@ -214,6 +214,17 @@ def _normalize_device_mac(raw_mac) -> str:
     return str(raw_mac or "").strip().upper()
 
 
+def _normalize_device_adapter(raw_adapter) -> str:
+    """Return a canonical adapter identity for config comparisons.
+
+    Empty, missing, or explicit ``default`` adapter values are equivalent.
+    """
+    adapter = str(raw_adapter or "").strip()
+    if not adapter or adapter.lower() == "default":
+        return ""
+    return adapter.upper() if ":" in adapter else adapter.lower()
+
+
 def _sanitize_last_volumes(last_volumes, valid_macs: set[str]) -> dict[str, int]:
     """Keep saved per-device volumes only for currently configured devices."""
     if not isinstance(last_volumes, dict):
@@ -768,7 +779,9 @@ def api_config():
 
         for mac, old_dev in old_devices.items():
             new_dev = new_devices.get(mac)
-            adapter_changed = new_dev and new_dev.get("adapter") != old_dev.get("adapter")
+            adapter_changed = bool(new_dev) and _normalize_device_adapter(
+                new_dev.get("adapter")
+            ) != _normalize_device_adapter(old_dev.get("adapter"))
             deleted = new_dev is None
             if deleted or adapter_changed:
                 adapter_mac = client_adapter.get(mac) or ""
