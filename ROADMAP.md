@@ -119,6 +119,38 @@ Use AI as an **operator copilot**, not as a hidden control plane.
 - deployment planning is useful for real users, especially Docker/RPi and HA installs
 - AI-generated explanations improve support without becoming required for normal operation
 
+## Phase V3-1.5: Audio health dashboard and signal path visibility
+
+### Goal
+
+Give operators real-time visibility into audio quality, sync health, and the end-to-end signal path — closing the biggest observability gap versus competing solutions.
+
+### Scope
+
+#### Epic 14. Per-device audio telemetry panel
+
+- expose in the device detail modal: current codec, sample rate, buffer fill %, sync error (from aiosendspin), stream uptime, reconnect count, PulseAudio sink name
+- pull telemetry from subprocess status JSON lines and aiosendspin callbacks
+- update in real-time via existing SSE status stream
+
+#### Epic 15. Signal path visualization
+
+- render the end-to-end audio chain: MA → Sendspin WebSocket → subprocess → PA sink → BT A2DP → speaker
+- show measured or estimated latency at each hop where available
+- indicate bottlenecks or degraded hops (e.g. codec fallback, sink mismatch)
+
+#### Epic 16. Sync health indicators
+
+- add green/yellow/red sync badges on dashboard device cards based on drift magnitude
+- surface alerts when sync degrades past configurable thresholds
+- integrate with recovery guidance system (new `sync_degraded` issue type)
+
+### Exit criteria
+
+- operators can see codec, sample rate, buffer, and sync error without reading logs
+- signal path is understandable at a glance
+- sync degradation is surfaced proactively, not discovered by ear
+
 ## Phase V3-2: Automatic delay tuning and sync intelligence
 
 ### Goal
@@ -150,6 +182,78 @@ Reduce manual `static_delay_ms` guesswork and make sync health more measurable.
 - most users can reach a good delay value without trial-and-error editing
 - delay recommendations are visible and explainable
 - any automatic tuning is conservative and operator-traceable
+
+## Phase V3-2.5: USB DAC and wired audio backend
+
+### Goal
+
+Support USB DACs and wired sound cards as Sendspin players — the single biggest competitive gap versus Multi-SendSpin-Player-Container.  This is also the natural first adjacent backend that proves the V3-4 abstraction layer.
+
+### Scope
+
+#### Epic 17. USB/wired audio device enumeration
+
+- detect ALSA and PulseAudio output sinks from `pactl list sinks` and `aplay -l`
+- filter and classify: USB DAC, built-in audio, HDMI, virtual
+- present discovered devices in the web UI with hardware details
+
+#### Epic 18. DirectSink player type
+
+- create a new player type that spawns a Sendspin daemon subprocess with `PULSE_SINK=<alsa_output.usb-*>` instead of `bluez_sink.*`
+- no Bluetooth pairing/reconnect lifecycle; direct PulseAudio connection
+- reuse existing subprocess IPC, volume control, and status reporting
+- support per-device volume persistence and mute state
+
+#### Epic 19. Device aliasing
+
+- allow operators to assign friendly room names to raw ALSA/PA device identifiers
+- persist aliases in config.json; display alias throughout the UI
+- support rename without player restart
+
+#### Epic 20. USB device auto-discovery
+
+- watch for USB hotplug events (udev or periodic `pactl` poll)
+- notify the UI when a new audio device appears or disappears
+- optionally auto-create a player for newly detected USB DACs
+
+### Exit criteria
+
+- USB DACs appear in the UI alongside Bluetooth speakers
+- operators can create and manage wired players with the same UX as Bluetooth players
+- no regression in Bluetooth reliability
+- the subprocess model cleanly supports both backend types
+
+## Phase V3-2.7: Custom PulseAudio sinks (combine and remap)
+
+### Goal
+
+Expose PulseAudio's virtual sink capabilities via the web UI — enabling party mode (combine multiple outputs) and multi-channel DAC splitting (remap channels to zones).
+
+### Scope
+
+#### Epic 21. Combine sink creation
+
+- web UI to select 2+ PA output sinks and create a `module-combine-sink`
+- use cases: party mode (all speakers play together), open floor plans
+- include test-tone button to verify routing
+
+#### Epic 22. Remap sink creation
+
+- web UI to extract specific channels from multi-channel devices via `module-remap-sink`
+- use cases: split 4-channel USB DAC into 2 stereo zones, mono PA system output
+- configurable channel mapping with standard PA channel names
+
+#### Epic 23. Sink lifecycle management
+
+- persist custom sinks in config.json; recreate on container restart
+- show state (loaded/error), configuration summary, and delete action
+- validate master/slave sinks exist before creation
+
+### Exit criteria
+
+- operators can create combine and remap sinks from the web UI without touching `pactl` directly
+- custom sinks survive restarts and appear in the player device dropdown
+- clear error messages when prerequisite sinks are unavailable
 
 ## Phase V3-3: Centralized multi-bridge control plane
 
@@ -237,6 +341,7 @@ Only start these once earlier phases are stable and demand is proven:
 - multi-bridge federation beyond a single control plane
 - Home Assistant custom component / HACS strategy
 - plugin or extension surfaces
+- per-room DSP / EQ: per-device equalizer presets via PulseAudio `module-equalizer-sink`, built-in preset library for common speaker types (small BT, bookshelf, PA system), live EQ adjustment sliders in web UI
 
 ## Cross-cutting guardrails
 
@@ -277,7 +382,9 @@ A realistic `v3.0.0-rc.1` should include:
 - finished V3-0 guidance/recovery polish
 - structured diagnostics bundle foundations
 - a first operator-facing deployment planner draft
+- audio health dashboard with sync badges and signal path (V3-1.5)
 - delay telemetry foundations and a manual calibration path
+- USB DAC / wired audio backend proving the abstraction layer (V3-2.5)
 - the first fleet identity/inventory surfaces
 
-That is enough to make v3 feel materially different without forcing the entire backend-expansion story into the first RC.
+That is enough to make v3 feel materially different — **"BT + USB DAC multiroom with real-time audio health visibility and guided setup"** — without forcing the entire backend-expansion story into the first RC.

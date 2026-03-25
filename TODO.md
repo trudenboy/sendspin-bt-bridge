@@ -60,6 +60,23 @@ The following are considered part of the baseline, not open roadmap items:
 - [ ] **Home Assistant custom component / HACS strategy**
 - [ ] **Plugin or extension surface**
 
+## Future: TTS and announcement support
+
+Priority: medium-high. Top community request for HA users — BT speakers managed by the bridge should be able to receive TTS from HA automations.
+
+- [ ] **TTS injection endpoint** — `POST /api/tts/play` accepting audio URL or raw PCM; plays through specified device's PA sink with volume ducking.
+- [ ] **Priority audio mixing** — when TTS plays, duck current music to configurable level (e.g. 20%), restore after TTS completes.
+- [ ] **HA webhook integration** — expose a webhook that HA automations can call to trigger TTS/announcements on specific devices or groups.
+- [ ] **Announcement queue** — queue multiple TTS messages; play sequentially with configurable gap between items.
+
+## Future: Hardware power control (12V triggers / smart plugs)
+
+Priority: medium. Inspired by Multi-SendSpin-Player v5. Real amplifier setups need auto-power management.
+
+- [ ] **HA entity power binding** — bind a Home Assistant switch/plug entity to a speaker; turn on when playback starts, turn off after configurable idle delay.
+- [ ] **Idle detection** — detect when a speaker has been silent for N minutes; trigger the bound power-off action.
+- [ ] **USB relay support (stretch)** — direct HID/FTDI relay control for setups without Home Assistant (low priority since HA entity binding is more flexible).
+
 ## Explicitly not a v3 goal
 
 - [ ] **Do not turn v3 into a giant rewrite** - migrations must stay incremental.
