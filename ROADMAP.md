@@ -58,6 +58,17 @@ The roadmap treats the following as already-established foundations:
 - Docker and Raspberry Pi startup diagnostics already surface runtime UID, audio socket path, socket ownership, and live `pactl` probe status
 - subprocess IPC, config migration, and diagnostics endpoints already behave like versioned product contracts
 
+## Architectural enablement tracks
+
+The roadmap is product-led, but several architectural themes should stay explicit because they make the product phases safer and more testable:
+
+- **Shrink `state.py` toward a compatibility and cache layer** rather than letting it remain the architectural center of the runtime.
+- **Keep the read layer normalized and typed**, and let snapshots grow toward richer event history, degraded-mode summaries, and explicit capability surfaces.
+- **Use a lightweight internal event model** to feed diagnostics history, hooks, recovery timelines, and later fleet views instead of inventing separate ad hoc payloads in each layer.
+- **Keep mock runtime and simulator support first-class** so backend, diagnostics, and UI flows can be validated without real Bluetooth hardware.
+- **Separate user-owned config from runtime state and generated metadata** more aggressively as config schema v2 lands.
+- **Treat hooks and webhooks as stable operability contracts**, not as incidental side effects of local diagnostics work.
+
 ## North-star outcomes
 
 v3 is successful when the project can do all of the following without becoming fragile or opaque:
@@ -122,12 +133,21 @@ Prepare the bridge for wired and USB expansion without destabilizing the shipped
 - extend IPC, status snapshots, diagnostics payloads, and API contracts so new backend fields can land incrementally
 - keep compatibility rules explicit for older configs and deployed subprocesses
 - document the stable contract surfaces needed for future backend work
+- reduce `state.py` from architectural center toward a compatibility/cache layer as routes and services migrate to explicit ownership and snapshot reads
+- surface backend and device capabilities explicitly in snapshots and APIs instead of inferring them ad hoc
+- separate user-owned config from runtime-derived state where practical as config schema v2 evolves
+
+#### Additional enablement in this phase
+
+- keep the mock runtime and simulator path viable for backend, config, diagnostics, and onboarding flows
+- make hardware-light tests a normal validation path for new contract work, not a later cleanup step
 
 ### Exit criteria
 
 - Bluetooth remains the most stable backend
 - config migration is incremental and safe
 - the runtime can describe backend-neutral players without pretending Bluetooth is the only shape
+- key backend/config flows can be validated without requiring real Bluetooth hardware
 
 ## Phase V3-2: USB DAC and wired audio backend
 
@@ -215,6 +235,8 @@ Give operators real-time visibility into audio quality, backend state, sync heal
 - expose current codec, sample rate, buffer and stream state, uptime, reconnect count, and resolved output sink where available
 - pull telemetry from subprocess status lines, bridge state, and backend-specific callbacks
 - update in real time via the existing SSE status stream
+- include structured per-device event history such as reconnects, sink loss/acquisition, route corrections, re-anchor events, and MA sync failures
+- expose compact degraded-mode and health-summary surfaces, not just raw live status
 
 #### Epic 12. Signal path visualization
 
@@ -229,6 +251,7 @@ Give operators real-time visibility into audio quality, backend state, sync heal
 - add green, yellow, and red sync badges on dashboard device cards based on drift magnitude or measurement quality
 - surface alerts when sync degrades past configurable thresholds
 - integrate sync-specific issues into operator guidance instead of burying them in logs
+- build these signals on a shared internal event/history model so diagnostics, hooks, and later fleet views stay consistent
 
 ### Exit criteria
 
@@ -310,6 +333,7 @@ Use AI as an **operator copilot**, not as a hidden control plane.
 - support pluggable providers and a local or manual mode
 - require explicit operator approval before applying suggested changes
 - keep non-AI diagnostics fully usable on their own
+- keep AI summaries built on the same typed diagnostics, capability, and event-history models used by non-AI tooling
 
 ### Exit criteria
 
@@ -350,6 +374,7 @@ Turn multiple bridge instances into a manageable fleet after the single-bridge m
 - centralize event and recovery timelines across bridges
 - add fleet-level webhook and telemetry views
 - allow higher-level policies such as room ownership or update-channel consistency
+- reuse the same lightweight internal event model and hardened hook/webhook contracts instead of introducing separate fleet-only event semantics
 
 ### Exit criteria
 
@@ -398,6 +423,19 @@ A single bridge should remain simple to deploy and operate. Fleet management sho
 ### 6. Migrations, docs, and tests must ship with each phase
 
 v3 should add compatibility layers, migrate callers and config gradually, document new contracts as they land, and extend tests alongside each new backend or diagnostics surface.
+
+### 7. Architectural enablement must stay ahead of product sprawl
+
+Backend expansion, AI summaries, and fleet views should build on explicit services, typed read models, event history, and hardware-light testability rather than bypassing those foundations.
+
+## Execution and dependency notes
+
+The roadmap phases above are product-facing, but the safest implementation order inside them should still respect a few architectural dependencies:
+
+- keep shrinking `state.py` and broadening typed snapshots before new runtime surfaces spread across more routes
+- land event history and capability modeling before relying on richer diagnostics, AI summaries, or fleet timelines
+- keep mock runtime improvements close to backend abstraction and wired/USB work so new flows stay testable without hardware
+- evolve hooks and webhooks from the same event contracts used by diagnostics and fleet work
 
 ## Out of scope for early v3
 

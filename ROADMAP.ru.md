@@ -42,6 +42,16 @@ Bluetooth при этом остаётся главным и самым battle-t
 4. **AI-assisted diagnostics и planning развёртывания**
 5. **Централизованное управление несколькими bridge**
 
+## Архитектурные идеи, встроенные в roadmap
+
+Помимо продуктовых фаз, roadmap теперь явно держит несколько engineering-tracks, без которых следующие этапы будут слишком хрупкими:
+
+- `state.py` должен сжиматься до compatibility/cache layer, а не оставаться архитектурным центром
+- typed snapshots должны расти в сторону event history, degraded-mode summaries и явного capability model
+- lightweight internal event model должен питать diagnostics, hooks и будущий fleet timeline
+- mock runtime / simulator должен оставаться first-class способом тестировать backend и UI flows без реального Bluetooth-железа
+- user-owned config и runtime-derived state нужно дальше разделять по мере прихода config schema v2
+
 ## Фазы v3
 
 ### V3-0. Baseline operator polish перед v3
@@ -65,6 +75,9 @@ Bluetooth при этом остаётся главным и самым battle-t
 - обернуть текущий Bluetooth runtime в этот contract первым
 - перейти к player/backend config schema
 - расширить IPC, status snapshots и diagnostics contracts так, чтобы новые backend fields добавлялись инкрементально
+- ослабить роль `state.py` как архитектурного центра по мере миграции на более явные ownership/read-model surfaces
+- сделать capability model явным в snapshots и API
+- держать mock runtime/simulator рабочим для backend/config flows, а не откладывать это на потом
 
 ### V3-2. USB DAC и wired audio backend
 
@@ -94,6 +107,7 @@ Bluetooth при этом остаётся главным и самым battle-t
 - показать codec, sample rate, sink route, uptime и sync health в UI
 - визуализировать signal path для Bluetooth и wired backend'ов
 - вынести degraded sync и route problems в явные operator surfaces
+- добавить per-device event history: reconnect, sink loss/acquisition, route corrections, re-anchor, MA sync failures
 
 ### V3-4. Automatic delay tuning и sync intelligence
 
@@ -114,6 +128,7 @@ AI должен быть operator copilot, а не скрытым control plane.
 - сделать planner развёртывания для HA add-on / Docker / RPi / LXC
 - давать plain-language diagnostics summary и safe next actions
 - добавить redaction, opt-in и provider/local boundaries
+- строить AI-слой поверх тех же typed diagnostics, capability и event-history models, что и обычные non-AI surfaces
 
 ### V3-6. Fleet control plane для нескольких bridge
 
@@ -123,6 +138,7 @@ AI должен быть operator copilot, а не скрытым control plane.
 - aggregate health, inventory, room coverage и backend mix
 - duplicate/conflict detection между bridge
 - bulk diagnostics, compare/export/import config и fleet event timeline
+- переиспользовать тот же internal event model и hardened hook/webhook contracts вместо отдельной fleet-only event semantics
 
 ### V3-7. Избирательное расширение после стабилизации
 
@@ -152,6 +168,7 @@ AI должен быть operator copilot, а не скрытым control plane.
 - делать auto delay tuning bounded и explainable
 - держать fleet management additive, а не обязательным для одиночного bridge
 - выпускать migrations, docs и tests вместе с каждой фазой
+- не пускать продуктовые фазы вперёд архитектурных enablers вроде event history, mock runtime и typed contracts
 
 ## Реалистичный первый milestone для v3
 
