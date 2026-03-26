@@ -1249,6 +1249,12 @@ function getUnifiedDeviceStatusMeta(dev) {
         tone = 'warning';
         summary = safeDev.ma_reconnecting ? 'Refreshing Music Assistant connection' : 'Trying to reconnect';
         pulse = true;
+    } else if (safeDev.bt_standby) {
+        key = 'standby';
+        label = 'Standby';
+        tone = 'neutral';
+        var sinceTxt = safeDev.bt_standby_since ? ' (' + _formatDuration(new Date(safeDev.bt_standby_since)) + ')' : '';
+        summary = 'Idle standby — saves speaker battery' + sinceTxt;
     } else if (!safeDev.bluetooth_connected) {
         key = 'disconnected';
         label = 'Disconnected';
@@ -1302,7 +1308,7 @@ function getUnifiedDeviceStatusMeta(dev) {
                 ? 'connected'
                 : key === 'no-sink'
                     ? 'error'
-                    : key === 'disconnected'
+                    : key === 'disconnected' || key === 'standby'
                         ? 'disconnected'
                         : 'warning',
     };
@@ -3310,7 +3316,7 @@ function buildDeviceCard(i) {
             '</div>' +
           '</div>' +
           '<span class="chip meta-badge meta-badge-status is-neutral" id="dreleased-badge-' + i + '" style="display:none"></span>' +
-          '<span class="chip meta-badge meta-badge-status is-warning" id="dstandby-badge-' + i + '" style="display:none" data-experimental></span>' +
+          '<span class="chip meta-badge meta-badge-status is-neutral" id="dstandby-badge-' + i + '" style="display:none"></span>' +
           '<button type="button" class="chip meta-badge meta-badge-link group-badge-unified meta-badge-interactive device-card-group-badge" id="dgroup-' + i + '" style="display:none"></button>' +
         '</div>' +
         '<div class="card-chips">' +
@@ -3365,7 +3371,7 @@ function buildDeviceCard(i) {
           '<span class="bt-action-status" id="dbt-action-status-' + i + '"></span>' +
           '<div class="card-action-buttons">' +
             '<button type="button" class="action-btn accent" id="dbtn-reconnect-' + i + '" onclick="btReconnect(' + i + ')">' + _actionButtonInnerHtml('reconnect', 'Reconnect') + '</button>' +
-            '<button type="button" class="action-btn accent" id="dbtn-wake-' + i + '" onclick="wakeDevice(' + i + ')" style="display:none" data-experimental>' + _actionButtonInnerHtml('reconnect', 'Wake') + '</button>' +
+            '<button type="button" class="action-btn accent" id="dbtn-wake-' + i + '" onclick="wakeDevice(' + i + ')" style="display:none">' + _actionButtonInnerHtml('reconnect', 'Wake') + '</button>' +
             '<button type="button" class="action-btn warn" id="dbtn-release-' + i + '" onclick="btToggleManagement(' + i + ')">' + _actionButtonInnerHtml('release', 'Release') + '</button>' +
             '<button type="button" class="action-btn danger" id="dbtn-disable-' + i + '" onclick="confirmDisableDevice(' + i + ')">' + _actionButtonInnerHtml('disable', 'Disable') + '</button>' +
             '<button type="button" class="icon-btn device-settings-btn card-corner-settings-btn" onclick="openDeviceSettings(' + i + ')" title="Device settings">' + _settingsIconHtml() + '</button>' +
@@ -3404,7 +3410,7 @@ function populateDeviceCard(i, dev) {
     var isStandby = !!dev.bt_standby;
     var standbyBadge = document.getElementById('dstandby-badge-' + i);
     if (standbyBadge) {
-        standbyBadge.style.display = (isStandby && _isExperimentalEnabled()) ? '' : 'none';
+        standbyBadge.style.display = isStandby ? '' : 'none';
         if (isStandby) {
             var since = dev.bt_standby_since ? _formatDuration(new Date(dev.bt_standby_since)) : '';
             standbyBadge.innerHTML = '\uD83D\uDCA4 Standby' + (since ? ' (' + since + ')' : '');
@@ -3412,7 +3418,7 @@ function populateDeviceCard(i, dev) {
         }
     }
     var wakeBtn = document.getElementById('dbtn-wake-' + i);
-    if (wakeBtn) wakeBtn.style.display = (isStandby && _isExperimentalEnabled()) ? '' : 'none';
+    if (wakeBtn) wakeBtn.style.display = isStandby ? '' : 'none';
 
     var batteryEl = document.getElementById('dbattery-' + i);
     if (batteryEl) {

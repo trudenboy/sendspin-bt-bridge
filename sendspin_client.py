@@ -33,6 +33,7 @@ from config import (
     get_runtime_version,
     save_device_volume,
 )
+from services.internal_events import DeviceEventType
 from services.ipc_protocol import (
     with_protocol_version,
 )
@@ -477,7 +478,7 @@ class SendspinClient:
                 logger.warning("[%s] BT disconnect on standby failed: %s", self.player_name, exc)
         _state.publish_device_event(
             self._event_device_id(),
-            "bluetooth_standby_entered",
+            DeviceEventType.BLUETOOTH_STANDBY_ENTERED,
             message="Speaker entered standby after idle timeout",
             details={"idle_minutes": self.idle_disconnect_minutes},
         )
@@ -504,7 +505,7 @@ class SendspinClient:
             self.bt_manager.allow_reconnect()
         _state.publish_device_event(
             self._event_device_id(),
-            "bluetooth_standby_exited",
+            DeviceEventType.BLUETOOTH_STANDBY_EXITED,
             message="Speaker waking from standby",
         )
         logger.info("[%s] Waking from standby — BT reconnect will be handled by monitor", self.player_name)
