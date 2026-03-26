@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.49.0-rc.15] - 2026-03-26
+
+### Fixed
+- **Null-sink leak on restart** — PA hardening created duplicate `sendspin_fallback` sinks on every restart; now checks if sink exists first
+- **Phase 2 standby sink creation failure** — reuse existing `sendspin_fallback` null sink for standby instead of creating a separate one (fixes "Module initialization failed" on systems with many restarts)
+
 ## [2.49.0-rc.14] - 2026-03-26
 
 ### Added
