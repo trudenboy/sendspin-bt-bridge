@@ -7,7 +7,7 @@ import inspect
 import logging
 from dataclasses import dataclass
 from importlib.metadata import PackageNotFoundError, version
-from typing import TYPE_CHECKING, Optional, Protocol, cast
+from typing import TYPE_CHECKING, Protocol, cast
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -137,11 +137,11 @@ def load_sendspin_audio_api() -> SendspinAudioApi:
                 break
 
     return SendspinAudioApi(
-        query_devices=cast("Optional[Callable[[], list[AudioDeviceLike]]]", resolved["query_devices"]),
+        query_devices=cast("Callable[[], list[AudioDeviceLike]] | None", resolved["query_devices"]),
         detect_supported_audio_formats=cast(
-            "Optional[Callable[[object], list[object]]]", resolved["detect_supported_audio_formats"]
+            "Callable[[object], list[object]] | None", resolved["detect_supported_audio_formats"]
         ),
-        parse_audio_format=cast("Optional[Callable[[str], object]]", resolved["parse_audio_format"]),
+        parse_audio_format=cast("Callable[[str], object] | None", resolved["parse_audio_format"]),
         sources=sources,
     )
 

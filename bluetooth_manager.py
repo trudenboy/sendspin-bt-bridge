@@ -297,7 +297,7 @@ class BluetoothManager:
         val = _dbus_get_device_property(self._dbus_device_path, "Paired")
         if val is not None:
             return bool(val)
-        success, output = self._run_bluetoothctl([f"info {self.mac_address}"])
+        _success, output = self._run_bluetoothctl([f"info {self.mac_address}"])
         lowered = output.lower()
         if "paired: yes" in lowered:
             return True
