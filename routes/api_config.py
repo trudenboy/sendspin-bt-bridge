@@ -460,6 +460,7 @@ def _sync_ha_options(config: dict) -> None:
             "startup_banner_grace_seconds": int(config.get("STARTUP_BANNER_GRACE_SECONDS", 5)),
             "recovery_banner_grace_seconds": int(config.get("RECOVERY_BANNER_GRACE_SECONDS", 15)),
             "prefer_sbc_codec": bool(config.get("PREFER_SBC_CODEC", False)),
+            "disable_pa_rescue_streams": bool(config.get("DISABLE_PA_RESCUE_STREAMS", False)),
             "bt_check_interval": int(config.get("BT_CHECK_INTERVAL") or 10),
             "bt_max_reconnect_fails": int(config.get("BT_MAX_RECONNECT_FAILS") or 0),
             "auth_enabled": bool(config.get("AUTH_ENABLED", False)),
@@ -631,6 +632,7 @@ def api_config():
 
     for bool_key in (
         "PREFER_SBC_CODEC",
+        "DISABLE_PA_RESCUE_STREAMS",
         "AUTH_ENABLED",
         "BRUTE_FORCE_PROTECTION",
         "MA_AUTO_SILENT_AUTH",

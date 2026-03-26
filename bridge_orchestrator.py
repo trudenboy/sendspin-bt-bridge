@@ -7,6 +7,7 @@ import logging
 import os
 import signal
 import socket
+import subprocess
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -24,6 +25,75 @@ from services.sendspin_compat import format_dependency_versions, get_runtime_dep
 from services.update_checker import run_update_checker
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# PulseAudio runtime hardening
+# ---------------------------------------------------------------------------
+
+_PA_FALLBACK_SINK = "sendspin_fallback"
+
+
+def _harden_pulseaudio(*, disable_rescue_streams: bool) -> None:
+    """Apply PulseAudio runtime tweaks before any subprocess is spawned.
+
+    1. Ensure a null-sink exists so orphaned streams never land on a real BT device.
+    2. Set that null-sink as the PA default — ``module-rescue-streams`` (if loaded)
+       will move orphans there instead of a random BT sink.
+    3. Optionally unload ``module-rescue-streams`` entirely (config-gated).
+    """
+    try:
+        # 1. Create a null-sink fallback (idempotent — silently fails if exists)
+        r = subprocess.run(
+            [
+                "pactl",
+                "load-module",
+                "module-null-sink",
+                f"sink_name={_PA_FALLBACK_SINK}",
+                "rate=44100",
+                "channels=2",
+                "sink_properties=device.description=Sendspin_Fallback",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if r.returncode == 0:
+            logger.info("PA hardening: loaded null-sink '%s'", _PA_FALLBACK_SINK)
+        else:
+            # Already loaded or PA not available — both are fine
+            logger.debug("PA hardening: null-sink load returned rc=%d: %s", r.returncode, r.stderr.strip())
+
+        # 2. Set the null-sink as default so rescue-streams targets it
+        r = subprocess.run(
+            ["pactl", "set-default-sink", _PA_FALLBACK_SINK],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if r.returncode == 0:
+            logger.info("PA hardening: default sink → %s", _PA_FALLBACK_SINK)
+        else:
+            logger.debug("PA hardening: set-default-sink returned rc=%d: %s", r.returncode, r.stderr.strip())
+
+        # 3. Optionally unload module-rescue-streams
+        if disable_rescue_streams:
+            r = subprocess.run(
+                ["pactl", "unload-module", "module-rescue-streams"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if r.returncode == 0:
+                logger.info("PA hardening: unloaded module-rescue-streams")
+            else:
+                logger.debug(
+                    "PA hardening: module-rescue-streams unload returned rc=%d: %s",
+                    r.returncode,
+                    r.stderr.strip(),
+                )
+    except (OSError, subprocess.SubprocessError) as exc:
+        logger.warning("PA hardening skipped (pactl unavailable): %s", exc)
 
 
 @dataclass
@@ -123,6 +193,9 @@ class BridgeOrchestrator:
         os.environ["LOG_LEVEL"] = log_level
         logger.info("Log level: %s", log_level)
         logger.info("Runtime deps: %s", format_dependency_versions(get_runtime_dependency_versions()))
+
+        # PulseAudio runtime hardening — before any subprocess is spawned
+        _harden_pulseaudio(disable_rescue_streams=bool(config.get("DISABLE_PA_RESCUE_STREAMS", False)))
 
         return RuntimeBootstrap(
             config=config,

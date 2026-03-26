@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.49.0-rc.1] - 2026-03-26
+
+### Added
+- **PulseAudio sink-drift hardening**: on startup the bridge now creates a null-sink (`sendspin_fallback`) and sets it as the PA default sink. Orphaned streams land on the silent fallback instead of a random Bluetooth speaker when `module-rescue-streams` fires.
+- **Disable PA rescue-streams option** (`disable_pa_rescue_streams`): when enabled, the bridge unloads PulseAudio's `module-rescue-streams` at startup, eliminating sink drift entirely. Off by default; toggle via web UI → Audio policy or HA addon config. Requires restart.
+- **Unique PA application name per subprocess**: each daemon subprocess now sets `PULSE_PROP_application.name=sendspin-<player_name>` so PulseAudio's `module-stream-restore` no longer confuses streams across different Bluetooth speakers.
+
 ## [2.48.1-rc.4] - 2026-03-25
 
 ### Fixed

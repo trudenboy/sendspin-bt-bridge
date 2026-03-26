@@ -146,6 +146,7 @@ def main() -> None:
         "STARTUP_BANNER_GRACE_SECONDS": _int_opt(opts, "startup_banner_grace_seconds", 5),
         "RECOVERY_BANNER_GRACE_SECONDS": _int_opt(opts, "recovery_banner_grace_seconds", 15),
         "PREFER_SBC_CODEC": bool(opts.get("prefer_sbc_codec", False)),
+        "DISABLE_PA_RESCUE_STREAMS": bool(opts.get("disable_pa_rescue_streams", False)),
         "BT_CHECK_INTERVAL": _int_opt(opts, "bt_check_interval", 10),
         "BT_MAX_RECONNECT_FAILS": _int_opt(opts, "bt_max_reconnect_fails", 0),
         "LOG_LEVEL": (opts.get("log_level") or "info").upper(),

@@ -49,8 +49,8 @@ from config_network import (  # noqa: F401
     resolve_web_port,
 )
 
-VERSION = "2.48.2"
-BUILD_DATE = "2026-03-25"
+VERSION = "2.49.0-rc.1"
+BUILD_DATE = "2026-03-26"
 _RUNTIME_VERSION_REF_RE = re.compile(r"^v?\d+\.\d+\.\d+(?:-(?:rc|beta)\.\d+)?$")
 
 __all__ = [
@@ -141,6 +141,7 @@ DEFAULT_CONFIG = {
     "UPDATE_CHANNEL": DEFAULT_UPDATE_CHANNEL,
     "AUTO_UPDATE": False,
     "CHECK_UPDATES": True,
+    "DISABLE_PA_RESCUE_STREAMS": False,
     "DUPLICATE_DEVICE_CHECK": True,
     "TRUSTED_PROXIES": [],
 }
