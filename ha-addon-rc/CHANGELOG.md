@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.49.0-rc.11] - 2026-03-26
+
+### Changed
+- **Configuration UX: Audio tab** — promote Audio/PulseAudio settings to a dedicated tab (General → Audio → Devices → Bluetooth → Music Assistant → Security)
+
 ## [2.49.0-rc.10] - 2026-03-26
 
 ### Changed
