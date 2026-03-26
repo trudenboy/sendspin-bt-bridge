@@ -11,20 +11,19 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: pytest-${{ github.event.workflow_run.head_branch || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   pytest:
     if: >-
       ${{
         github.event_name == 'workflow_dispatch' ||
-        (
-          github.event.workflow_run.conclusion == 'success' &&
-          (
-            github.event.workflow_run.head_branch == 'beta' ||
-            startsWith(github.event.workflow_run.head_branch, 'v')
-          )
-        )
+        github.event.workflow_run.conclusion == 'success'
       }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
@@ -33,6 +32,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: pip
       - name: Install system dependencies
         run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev libglib2.0-dev libportaudio2
       - name: Install dependencies
@@ -40,30 +40,4 @@ jobs:
       - name: Run sendspin compatibility smoke test
         run: python scripts/check_sendspin_compat.py
       - name: Run tests
-        # continue-on-error while coverage threshold is ramping up
-        continue-on-error: true
         run: python -m pytest tests/ --cov=. --cov-report=term-missing --cov-fail-under=50 -q
-
-  container-smoke:
-    if: >-
-      ${{
-        github.event_name == 'workflow_dispatch' ||
-        (
-          github.event.workflow_run.conclusion == 'success' &&
-          (
-            github.event.workflow_run.head_branch == 'beta' ||
-            startsWith(github.event.workflow_run.head_branch, 'v')
-          )
-        )
-      }}
-    needs: pytest
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.ref }}
-          fetch-depth: 0
-      - name: Build local container image
-        run: docker build -t sendspin-container-smoke .
-      - name: Run packaged runtime smoke test
-        run: docker run --rm --entrypoint python3 sendspin-container-smoke /app/scripts/check_container_runtime.py

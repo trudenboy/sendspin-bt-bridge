@@ -21,6 +21,7 @@ jobs:
   prepare:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       contents: read
     outputs:
@@ -165,6 +166,7 @@ jobs:
           - platform: linux/arm64
             runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
     permissions:
       packages: write
     steps:
@@ -199,8 +201,10 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             SENDSPIN_VERSION=${{ needs.prepare.outputs.sendspin_version }}
-          cache-from: type=gha,scope=${{ matrix.platform }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.platform }}
+          sbom: true
+          provenance: mode=max
+          cache-from: type=gha,scope=build-${{ matrix.platform }}
+          cache-to: type=gha,mode=max,scope=build-${{ matrix.platform }}
           outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
 
       - name: Smoke test built image
@@ -228,6 +232,7 @@ jobs:
     needs: [prepare, build]
     if: ${{ needs.prepare.outputs.should_publish == 'true' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       packages: write
     steps:

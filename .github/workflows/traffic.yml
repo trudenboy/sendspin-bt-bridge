@@ -11,6 +11,7 @@ permissions:
 jobs:
   archive:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     env:
       TRAFFIC_METRICS_TOKEN: ${{ secrets.TRAFFIC_METRICS_TOKEN }}
     steps:

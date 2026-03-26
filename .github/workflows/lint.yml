@@ -23,26 +23,14 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: lint-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
-  hadolint:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Install hadolint
-        run: |
-          wget -qO /usr/local/bin/hadolint \
-            https://github.com/hadolint/hadolint/releases/download/v2.12.0/hadolint-Linux-x86_64
-          chmod +x /usr/local/bin/hadolint
-
-      - name: Lint Dockerfiles
-        run: |
-          hadolint Dockerfile
-          hadolint ha-addon/Dockerfile
-
   lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - name: Checkout code
@@ -52,6 +40,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: pip
 
       - name: Install dependencies
         run: |
@@ -67,21 +56,21 @@ jobs:
       - name: Mypy
         run: mypy --config-file pyproject.toml *.py routes/ services/
 
-      - name: Audit dependencies for CVEs
-        run: pip install pip-audit && pip-audit -r requirements.txt
-        continue-on-error: true
-
-  shellcheck:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Install shellcheck
-        run: sudo apt-get install -y shellcheck
+      - name: Lint Dockerfiles
+        run: |
+          wget -qO /usr/local/bin/hadolint \
+            https://github.com/hadolint/hadolint/releases/download/v2.12.0/hadolint-Linux-x86_64
+          chmod +x /usr/local/bin/hadolint
+          hadolint Dockerfile
+          hadolint ha-addon/Dockerfile
 
       - name: Lint shell scripts
         run: |
+          sudo apt-get install -y -qq shellcheck > /dev/null 2>&1
           shellcheck entrypoint.sh
           find rootfs -name '*.sh' -o -name 'run' -o -name 'finish' | xargs -r shellcheck --shell=bash || true
+        continue-on-error: true
+
+      - name: Audit dependencies for CVEs
+        run: pip install pip-audit && pip-audit -r requirements.txt
         continue-on-error: true

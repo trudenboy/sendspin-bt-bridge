@@ -29,6 +29,7 @@ jobs:
         )
       }}
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       sendspin_version: ${{ steps.resolve_sendspin.outputs.version }}
       release_channel: ${{ steps.publish_context.outputs.channel }}
@@ -136,6 +137,7 @@ jobs:
     needs: prepare
     if: ${{ needs.prepare.outputs.should_publish == 'true' && needs.prepare.outputs.release_channel == 'stable' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     permissions:
       packages: write
     steps:
@@ -173,8 +175,8 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             SENDSPIN_VERSION=${{ needs.prepare.outputs.sendspin_version }}
-          cache-from: type=gha,scope=linux/arm/v7
-          cache-to: type=gha,mode=max,scope=linux/arm/v7,ignore-error=true
+          cache-from: type=gha,scope=build-linux/arm/v7
+          cache-to: type=gha,mode=max,scope=build-linux/arm/v7,ignore-error=true
           outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
 
       - name: Smoke test built image
