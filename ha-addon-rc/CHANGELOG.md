@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.49.0-rc.9] - 2026-03-26
+
+### Changed
+- **CI/CD: unified release pipeline** — single `VERSION` file triggers `release.yml` which handles lint, test, config.py update, tagging, Docker build (amd64+arm64), HA addon sync, GitHub Release (stable), and armv7 build (stable)
+- **CI: reusable workflows** — `_lint.yml` and `_test.yml` shared between `ci.yml` (dev) and `release.yml` (release)
+- **Developer release flow** reduced from 7 manual steps to 3 (edit VERSION + CHANGELOG, commit, push)
+
+### Removed
+- Replaced 6 separate workflow files with unified pipeline: `lint.yml`, `pytest.yml`, `docker-publish.yml`, `docker-publish-armv7.yml`, `sync-ha-addon-variants.yml`, `github-release.yml`
+
 ## [2.49.0-rc.8] - 2026-03-26
 
 ### Fixed
