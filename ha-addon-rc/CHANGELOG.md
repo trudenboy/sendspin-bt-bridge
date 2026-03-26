@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.49.0-rc.13] - 2026-03-26
+
+### Fixed
+- Idle disconnect timeout not saved to config on Save
+
 ## [2.49.0-rc.12] - 2026-03-26
 
 ### Added
