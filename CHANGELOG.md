@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.49.0-rc.14] - 2026-03-26
+
+### Added
+- **Phase 2: Null-sink standby with auto-wake** — daemon stays alive on a PulseAudio null sink after idle disconnect; MA player remains visible/available so playback auto-resumes when triggered (~5-10 s BT reconnect latency)
+- **Auto-wake on play** — when MA sends play while speaker is in standby, BT reconnects automatically and streams reroute to the speaker
+- **Sync-group auto-wake** — if any member of a sync group starts playing, standby members of the same group are woken automatically
+- **Keepalive suppression** — keepalive bursts are skipped while in standby to avoid waking the null sink
+
 ## [2.49.0-rc.13] - 2026-03-26
 
 ### Fixed
