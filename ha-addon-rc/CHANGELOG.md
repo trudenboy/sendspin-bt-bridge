@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.49.0-rc.7] - 2026-03-26
+
+### Fixed
+- **DISABLE_PA_RESCUE_STREAMS checkbox**: convert to boolean in config payload (was sent as string `"on"`, failing validation)
+- **aiosendspin test**: make version-agnostic — check pin format, not exact version
+
 ## [2.49.0-rc.6] - 2026-03-26
 
 ### Changed
