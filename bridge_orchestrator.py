@@ -43,26 +43,36 @@ def _harden_pulseaudio(*, disable_rescue_streams: bool) -> None:
     3. Optionally unload ``module-rescue-streams`` entirely (config-gated).
     """
     try:
-        # 1. Create a null-sink fallback (idempotent — silently fails if exists)
+        # 1. Create a null-sink fallback (idempotent — skip if already present)
         r = subprocess.run(
-            [
-                "pactl",
-                "load-module",
-                "module-null-sink",
-                f"sink_name={_PA_FALLBACK_SINK}",
-                "rate=44100",
-                "channels=2",
-                "sink_properties=device.description=Sendspin_Fallback",
-            ],
+            ["pactl", "list", "short", "sinks"],
             capture_output=True,
             text=True,
             timeout=5,
         )
-        if r.returncode == 0:
-            logger.info("PA hardening: loaded null-sink '%s'", _PA_FALLBACK_SINK)
+        sink_exists = r.returncode == 0 and _PA_FALLBACK_SINK in r.stdout.split()
+
+        if sink_exists:
+            logger.info("PA hardening: null-sink '%s' already present", _PA_FALLBACK_SINK)
         else:
-            # Already loaded or PA not available — both are fine
-            logger.warning("PA hardening: null-sink load returned rc=%d: %s", r.returncode, r.stderr.strip())
+            r = subprocess.run(
+                [
+                    "pactl",
+                    "load-module",
+                    "module-null-sink",
+                    f"sink_name={_PA_FALLBACK_SINK}",
+                    "rate=44100",
+                    "channels=2",
+                    "sink_properties=device.description=Sendspin_Fallback",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if r.returncode == 0:
+                logger.info("PA hardening: loaded null-sink '%s'", _PA_FALLBACK_SINK)
+            else:
+                logger.warning("PA hardening: null-sink load returned rc=%d: %s", r.returncode, r.stderr.strip())
 
         # 2. Set the null-sink as default so rescue-streams targets it
         r = subprocess.run(

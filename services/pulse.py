@@ -25,7 +25,7 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-STANDBY_SINK_NAME = "sendspin_standby"
+STANDBY_SINK_NAME = "sendspin_fallback"
 
 __all__ = [
     "STANDBY_SINK_NAME",

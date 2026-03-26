@@ -50,7 +50,7 @@ class TestNullSink:
     def test_standby_sink_name_constant(self):
         from services.pulse import STANDBY_SINK_NAME
 
-        assert STANDBY_SINK_NAME == "sendspin_standby"
+        assert STANDBY_SINK_NAME == "sendspin_fallback"
 
     @patch("services.pulse.subprocess")
     def test_fallback_load_creates_sink(self, mock_subprocess):
@@ -109,7 +109,7 @@ class TestStandbyDaemonAlive:
 
             assert client.status["bt_standby"] is True
             ensure_mock.assert_awaited_once()
-            move_mock.assert_awaited_once_with(12345, "sendspin_standby")
+            move_mock.assert_awaited_once_with(12345, "sendspin_fallback")
             client.stop_sendspin.assert_not_awaited()
             client.bt_manager.disconnect_device.assert_called_once()
             state_mock.publish_device_event.assert_called()
