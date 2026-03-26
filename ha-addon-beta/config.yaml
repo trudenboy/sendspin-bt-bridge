@@ -5,7 +5,7 @@ slug: "sendspin_bt_bridge_beta"
 description: "Bridge Music Assistant Sendspin protocol to Bluetooth speakers (Beta channel)"
 url: "https://github.com/trudenboy/sendspin-bt-bridge"
 image: "ghcr.io/trudenboy/sendspin-bt-bridge"
-homeassistant: "2024.1.0"
+homeassistant: "2024.2.0"
 arch:
   - aarch64
   - amd64

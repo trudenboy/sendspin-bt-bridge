@@ -7,10 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [2.49.1] - 2026-03-27
+## [2.50.0] - 2026-03-27
+
+### Changed
+- Bump websockets 13.1 → 16.0 (async API migrated to `websockets.asyncio.client`)
+- Bump waitress 2.1.2 → 3.0.2
+- Bump pytest-asyncio to <2.0.0
+- Bump CI actions: github-script 8, setup-node 6, upload-artifact 7, deploy-pages 5, setup-buildx-action 4
 
 ### Fixed
 - Fix daemon subprocess crash on older x86_64 CPUs without SSE4.2/POPCNT (X86_V2 instruction set). NumPy ≥2.0 wheels require X86_V2 baseline; pinned `numpy<2.0` to restore compatibility with legacy hardware. Fixes #109.
+
+## [2.49.1] - 2026-03-27
+
+### Fixed
+- Fix daemon subprocess crash on older x86_64 CPUs without SSE4.2/POPCNT (X86_V2 instruction set). NumPy ≥2.0 wheels require X86_V2 baseline; pinned `numpy<2.0` to restore compatibility with legacy hardware (Celeron, Pentium, early Core). Fixes #109.
 
 ## [2.49.0] - 2026-03-26
 
