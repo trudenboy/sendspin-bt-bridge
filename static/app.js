@@ -5342,6 +5342,7 @@ function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabl
                     '<button type="button" class="btn btn-sm btn-secondary bt-device-action-item ui-action-menu-item bt-device-action-info">Bluetooth info</button>' +
                     '<button type="button" class="btn btn-sm btn-secondary bt-device-action-item ui-action-menu-item bt-device-action-reset">Reset & reconnect</button>' +
                     '<button type="button" class="btn btn-sm btn-secondary bt-device-action-item ui-action-menu-item bt-device-action-open">Open in Bluetooth tab</button>' +
+                    '<button type="button" class="btn btn-sm btn-secondary bt-device-action-item ui-action-menu-item bt-device-action-release">Release Bluetooth</button>' +
                 '</div>' +
             '</details>' +
             '<button type="button" class="btn-remove-dev" title="Remove device" aria-label="Remove device">' +
@@ -5425,6 +5426,28 @@ function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabl
         }
         _closeBtDeviceActionMenu(this);
         _openBluetoothInventory({highlightMac: rowMac});
+    });
+    var releaseBtn = row.querySelector('.bt-device-action-release');
+    releaseBtn.addEventListener('click', function(event) {
+        event.preventDefault();
+        event.stopPropagation();
+        var rowMac = row.querySelector('.bt-mac').value.trim().toUpperCase();
+        var rowName = row.querySelector('.bt-name').value.trim();
+        if (!rowMac && !rowName) {
+            showToast('Set a device MAC or name first', 'error');
+            return;
+        }
+        _closeBtDeviceActionMenu(this);
+        var idx = (lastDevices || []).findIndex(function(d) {
+            var devMac = (d.bluetooth_mac || d.mac || '').trim().toUpperCase();
+            if (rowMac && devMac === rowMac) return true;
+            return rowName && (d.player_name || '').trim() === rowName;
+        });
+        if (idx < 0) {
+            showToast('Device not found in runtime — is it running?', 'error');
+            return;
+        }
+        btToggleManagement(idx);
     });
     enabledCb.addEventListener('change', function() {
         syncBtRowState();
@@ -5515,6 +5538,11 @@ function refreshBtDeviceRowsRuntime() {
         var mac = row.querySelector('.bt-mac') ? row.querySelector('.bt-mac').value.trim() : '';
         var runtime = _findRuntimeDevice(name, mac);
         runtimeEl.innerHTML = _renderBtRuntimeBadgeHtml(runtime, 'chip bt-runtime-badge');
+        var relBtn = row.querySelector('.bt-device-action-release');
+        if (relBtn && runtime) {
+            var mgmt = runtime.bt_management_enabled !== false;
+            relBtn.textContent = mgmt ? 'Release Bluetooth' : 'Reclaim Bluetooth';
+        }
     });
 }
 
@@ -6516,6 +6544,7 @@ async function loadPairedDevices(options) {
                 '<span class="scan-result-name">' + escHtml(displayName) + '</span>' +
                 '<span class="paired-actions" onclick="event.stopPropagation()">' +
                     '<button type="button" class="scan-action-btn paired-info-btn" title="Show Bluetooth device info">' + btInfoIcon + '<span>Info</span></button>' +
+                '<button type="button" class="scan-action-btn paired-release-btn" title="Release or reclaim BT management">Release</button>' +
                 '<button type="button" class="scan-action-btn scan-action-btn--warning paired-reset-btn" title="Remove, re-pair and connect from scratch">Reset & Reconnect</button>' +
                 '<button type="button" class="paired-remove-btn btn-remove-dev" title="Remove from BT stack" aria-label="Remove from BT stack">' + _trashIconSvg() + '</button>' +
                 '</span>' +
@@ -6539,6 +6568,33 @@ async function loadPairedDevices(options) {
                 e.stopPropagation();
                 showBtDeviceInfo(d.mac);
             });
+            var pairedReleaseBtn = row.querySelector('.paired-release-btn');
+            if (pairedReleaseBtn) {
+                var pMac = (d.mac || '').trim().toUpperCase();
+                var pIdx = (lastDevices || []).findIndex(function(dev) {
+                    return (dev.bluetooth_mac || dev.mac || '').trim().toUpperCase() === pMac;
+                });
+                var pDev = pIdx >= 0 ? lastDevices[pIdx] : null;
+                var pMgmt = pDev ? pDev.bt_management_enabled !== false : true;
+                pairedReleaseBtn.textContent = pMgmt ? 'Release' : 'Reclaim';
+                pairedReleaseBtn.title = pMgmt
+                    ? 'Stop BT management for this device'
+                    : 'Resume BT management and auto-reconnect';
+                if (pIdx < 0) pairedReleaseBtn.disabled = true;
+                pairedReleaseBtn.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    var idx = (lastDevices || []).findIndex(function(dev) {
+                        return (dev.bluetooth_mac || dev.mac || '').trim().toUpperCase() === pMac;
+                    });
+                    if (idx < 0) {
+                        showToast('Device not found in runtime — is it running?', 'error');
+                        return;
+                    }
+                    btToggleManagement(idx).then(function() {
+                        loadPairedDevices();
+                    });
+                });
+            }
         });
         _applyDemoScreenshotDefaults();
         _highlightPairedDeviceRowByMac(opts.highlightMac);
