@@ -168,10 +168,10 @@ def _set_cache_headers(response):
         response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
         response.headers["Pragma"] = "no-cache"
         response.headers["Expires"] = "0"
-        nonce = getattr(g, "csp_nonce", "")
+        nonce = getattr(g, "csp_nonce", "")  # noqa: F841 — kept for future onclick→addEventListener migration
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
-            f"script-src 'self' 'nonce-{nonce}' 'unsafe-inline'; "
+            "script-src 'self' 'unsafe-inline'; "
             "style-src 'self' 'unsafe-inline'; "
             "img-src 'self' data:; "
             "connect-src 'self' ws: wss:; "
