@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.49.0-rc.21] - 2026-03-26
+
+### Changed
+- **Wake time optimization** — three improvements to reduce standby-to-audio latency from ~19s to ~5s:
+  - `asyncio.Event` instantly unblocks bt_monitor's standby sleep (was polling every 5s)
+  - IPC `set_standby` redirects daemon's `PULSE_SINK` to null sink — new streams during standby no longer fail with ALSA errors, PA streams survive for reroute
+  - Direct `connect_device()` via `run_in_executor` from `_wake_from_standby()` — BT reconnect starts immediately without waiting for monitor loop
+
 ## [2.49.0-rc.20] - 2026-03-26
 
 ### Fixed
