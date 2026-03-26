@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.49.0] - 2026-03-26
+
+### Added
+- **Phase 2: Null-sink standby with auto-wake** — daemon stays alive on a PulseAudio null sink after idle disconnect; MA player remains visible so playback auto-resumes when triggered (~5s BT reconnect latency)
+- **Auto-wake on play / sync-group wake** — when MA sends play while speaker is in standby, BT reconnects automatically; sync-group members wake each other
+- **Standby/Wake UI** — device card shows 💤 Standby badge, moon/sun toggle button, "Waking" transition state; standby status filter in toolbar
+- **Idle disconnect standby** — per-device `idle_disconnect_minutes`: disconnect BT after silence timeout to save speaker battery
+- **Mutual exclusion: keep-alive vs idle standby** — UI disables one when the other is set >0; backend skips idle timer when keep-alive is active
+- **Release/Reclaim in BT tools menus** — moved to Device Fleet dropdown and Already Paired list
+- **Experimental features toggle** — browser-local toggle to show/hide experimental features (room name, room ID, handoff mode)
+- **Configuration UX overhaul** — reorganized General tab into focused sections; dedicated Audio tab for PulseAudio settings
+- **PulseAudio sink-drift hardening** — null-sink fallback (`sendspin_fallback`) prevents orphaned streams landing on random BT speakers
+- **Disable PA rescue-streams option** (`DISABLE_PA_RESCUE_STREAMS`) — unloads `module-rescue-streams` at startup to eliminate sink drift
+- **Custom exception hierarchy** — `BridgeError` → `BluetoothError`, `PulseAudioError`, `MusicAssistantError`, `ConfigError`, `IPCError`
+- **125+ new tests** — covering sendspin_client, web_interface, bt_monitor, bt_manager; suite now at 959 tests
+- **POST `/api/bt/standby`** and **POST `/api/bt/wake`** endpoints
+
+### Fixed
+- **Standby wake audio** — multiple fixes for audio routing after BT reconnect: ALSA error recovery, bt_monitor race conditions, reroute fallback to daemon restart
+- **Recovery/guidance banner ignored standby** — standby devices no longer trigger disconnect warnings
+- **upgrade.sh: armv7l pip not upgrading** — added `-U` flag for range-based pip installs
+- **CSP fix** — removed nonce (broke `unsafe-inline`), restored onclick handler compatibility
+- **Race conditions** — TOCTOU in `update_config()`, pair cancel race, lock ordering, status lock, future cleanup
+- **DISABLE_PA_RESCUE_STREAMS checkbox** — convert to boolean in config payload
+- **Idle disconnect not saving** — `collectBtDevices()` now persists `idle_disconnect_minutes`
+- **Null-sink leak** — reuse existing fallback sink instead of creating duplicates
+- **`_handle_disconnect` compat** — fallback for `aiosendspin < 5.x` in standalone LXC deployments
+
+### Changed
+- **Fast standby wake** (~5s) — `asyncio.Event` unblocks bt_monitor instantly, IPC redirects daemon to null sink, direct `connect_device()` starts BT reconnect immediately
+- **Wake fallback** — MA reconnect instead of full daemon restart when PA streams survive
+- **CI/CD: unified release pipeline** — single `VERSION` file triggers lint → test → tag → Docker build → HA addon sync
+- **deps**: sendspin 5.8.0→5.9.0, aiosendspin 4.3.2→4.4.0, dbus-fast 2.46.4→4.0.0
+
+### Security
+- **PBKDF2 upgrade** — 600K iterations with versioned hash format
+- **Config whitelist** — POST `/api/config` filters through allowed keys
+- **Artwork proxy** — Content-Type validation (image/* only)
+- **XSS prevention** — `escHtmlAttr()` for dynamic onclick values
+- Removed `SYS_ADMIN` capability from HA addon configs
+- **Unique PA application name per subprocess**: each daemon subprocess now sets `PULSE_PROP_application.name=sendspin-<player_name>` so PulseAudio's `module-stream-restore` no longer confuses streams across different Bluetooth speakers.
+
 ## [2.48.2] - 2026-03-25
 
 ### Fixed
