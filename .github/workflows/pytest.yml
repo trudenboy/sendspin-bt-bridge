@@ -20,7 +20,10 @@ jobs:
     if: >-
       ${{
         github.event_name == 'workflow_dispatch' ||
-        github.event.workflow_run.conclusion == 'success'
+        (
+          github.event.workflow_run.conclusion == 'success' &&
+          !startsWith(github.event.workflow_run.head_branch, 'v')
+        )
       }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
