@@ -10,10 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [2.49.0-rc.12] - 2026-03-26
 
 ### Added
-- Experimental features toggle (browser-local, Guidance card)
-- Idle disconnect standby: per-device BT disconnect after silence timeout
-- Standby badge + wake button in device card (experimental)
-- `POST /api/bt/wake` endpoint
+- **Experimental features toggle** — browser-local toggle in Configuration > General > Guidance card to show/hide experimental features
+- **Idle disconnect standby (Phase 1)** — per-device `idle_disconnect_minutes` config field: disconnect BT and stop daemon after silence timeout to save speaker battery
+- **Standby badge + wake button** — device card shows "💤 Standby" badge and manual "Wake" button (experimental)
+- `POST /api/bt/wake` endpoint to wake device from standby
+- 21 new tests for idle timer, standby, wake, and API
 
 ## [2.49.0-rc.11] - 2026-03-26
 
