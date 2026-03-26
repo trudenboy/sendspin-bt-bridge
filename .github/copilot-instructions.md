@@ -54,7 +54,7 @@ Tests: `tests/test_config.py` and `tests/test_volume_routing.py` (pytest). Manua
 
 ## Key Conventions
 
-**Version management:** Single `VERSION` in `config.py`. `ha-addon/config.yaml` version is synced by the manual GitHub release workflow, not by tag push.
+**Version management:** Single `VERSION` file in repo root. `release.yml` CI workflow updates `config.py`, creates git tag, builds Docker, syncs `ha-addon*/config.yaml`, and creates GitHub release (stable).
 
 **Config file:** `/config/config.json` (or `/data/config.json` in HA addon). `CONFIG_DIR` env var controls path. Raw JSON with `indent=2`.
 
@@ -66,4 +66,4 @@ Tests: `tests/test_config.py` and `tests/test_volume_routing.py` (pytest). Manua
 
 ## CI/CD
 
-Builds multi-platform images (`linux/amd64`, `linux/arm64`) to `ghcr.io/trudenboy/sendspin-bt-bridge` on `v*` tag push or `workflow_dispatch`. GitHub releases are created by the separate manual `Create GitHub Release` workflow, which defaults to the latest tag and syncs `ha-addon/config.yaml` at release time.
+Single `VERSION` file triggers the unified `release.yml` pipeline: lint → pytest → config.py update + tag → Docker build (amd64/arm64) → HA addon sync → GitHub Release (stable) → armv7 (stable). Regular pushes/PRs use `ci.yml` (lint + test only). Images published to `ghcr.io/trudenboy/sendspin-bt-bridge`.

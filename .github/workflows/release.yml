@@ -1,0 +1,563 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - VERSION
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release (e.g. 2.49.0, 2.49.0-rc.9, 2.50.0-beta.1)"
+        required: true
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+# ---------------------------------------------------------------------
+# Job dependency graph
+# ---------------------------------------------------------------------
+#   prepare
+#     ├── lint  (reusable _lint.yml)
+#     └── test  (reusable _test.yml)
+#           └── release  (commit config.py + create tag)
+#                 └── docker-build  (amd64 + arm64 matrix)
+#                       └── docker-merge  (create manifest)
+#                             ├── addon-sync  (update ha-addon*/ dirs)
+#                             │     └── gh-release  (stable only)
+#                             └── armv7-build  (stable only)
+# ---------------------------------------------------------------------
+
+jobs:
+  # ── 1. Prepare ────────────────────────────────────────────────────
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+      tag: ${{ steps.resolve.outputs.tag }}
+      channel: ${{ steps.resolve.outputs.channel }}
+      is_stable: ${{ steps.resolve.outputs.is_stable }}
+      metadata_tags: ${{ steps.resolve.outputs.metadata_tags }}
+      sendspin_version: ${{ steps.resolve.outputs.sendspin_version }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Resolve version and channel
+        id: resolve
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+
+          # Read version from input or VERSION file
+          if [ -n "${INPUT_VERSION}" ]; then
+            VERSION="${INPUT_VERSION}"
+          else
+            VERSION="$(cat VERSION | tr -d '[:space:]')"
+          fi
+
+          # Validate format
+          if [[ "${VERSION}" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+            CHANNEL="stable"
+            IS_STABLE="true"
+            printf -v METADATA_TAGS '%s\n%s\n%s\n%s\n%s' \
+              "type=raw,value=${VERSION}" \
+              "type=raw,value=${BASH_REMATCH[1]}.${BASH_REMATCH[2]}" \
+              "type=raw,value=${BASH_REMATCH[1]}" \
+              "type=raw,value=latest" \
+              "type=raw,value=stable"
+          elif [[ "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$ ]]; then
+            CHANNEL="rc"
+            IS_STABLE="false"
+            printf -v METADATA_TAGS '%s\n%s' \
+              "type=raw,value=${VERSION}" \
+              "type=raw,value=rc"
+          elif [[ "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+$ ]]; then
+            CHANNEL="beta"
+            IS_STABLE="false"
+            printf -v METADATA_TAGS '%s\n%s' \
+              "type=raw,value=${VERSION}" \
+              "type=raw,value=beta"
+          else
+            echo "::error::Invalid version format: '${VERSION}'. Expected: X.Y.Z, X.Y.Z-rc.N, or X.Y.Z-beta.N"
+            exit 1
+          fi
+
+          TAG="v${VERSION}"
+
+          # Check tag doesn't already exist
+          if git rev-parse "${TAG}" >/dev/null 2>&1; then
+            echo "::error::Tag ${TAG} already exists. Bump the version in VERSION file."
+            exit 1
+          fi
+
+          # Extract sendspin version from requirements.txt
+          SENDSPIN_VERSION="$(grep '^sendspin==' requirements.txt | sed 's/sendspin==//' || echo '')"
+
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "channel=${CHANNEL}" >> "$GITHUB_OUTPUT"
+          echo "is_stable=${IS_STABLE}" >> "$GITHUB_OUTPUT"
+          echo "sendspin_version=${SENDSPIN_VERSION}" >> "$GITHUB_OUTPUT"
+          {
+            echo "metadata_tags<<EOF"
+            printf '%s\n' "${METADATA_TAGS}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### Release prepare"
+            echo ""
+            echo "- Version: \`${VERSION}\`"
+            echo "- Tag: \`${TAG}\`"
+            echo "- Channel: \`${CHANNEL}\`"
+            echo "- Sendspin: \`${SENDSPIN_VERSION}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ── 2. Lint (reusable) ───────────────────────────────────────────
+  lint:
+    needs: prepare
+    uses: ./.github/workflows/_lint.yml
+    with:
+      version: ${{ needs.prepare.outputs.version }}
+
+  # ── 3. Test (reusable) ──────────────────────────────────────────
+  test:
+    needs: prepare
+    uses: ./.github/workflows/_test.yml
+    with:
+      version: ${{ needs.prepare.outputs.version }}
+
+  # ── 4. Release (commit config.py + tag) ──────────────────────────
+  release:
+    needs: [prepare, lint, test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    outputs:
+      release_sha: ${{ steps.push.outputs.sha }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Update config.py
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+          BUILD_DATE="$(date -u +%Y-%m-%d)"
+          sed -i "s/^VERSION = .*/VERSION = \"${VERSION}\"/" config.py
+          sed -i "s/^BUILD_DATE = .*/BUILD_DATE = \"${BUILD_DATE}\"/" config.py
+          echo "Updated config.py: VERSION=${VERSION}, BUILD_DATE=${BUILD_DATE}"
+          grep -E '^(VERSION|BUILD_DATE)' config.py
+
+      - name: Commit, tag, and push
+        id: push
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Pull latest main in case sync-addon committed after our trigger
+          git fetch origin main
+          git rebase origin/main
+
+          git add config.py
+          if git diff --cached --quiet; then
+            echo "config.py already up to date"
+          else
+            git commit -m "release: ${TAG} — update config.py version"
+          fi
+
+          git tag -a "${TAG}" -m "Release ${VERSION}"
+          git push origin HEAD:main --tags
+
+          SHA="$(git rev-parse HEAD)"
+          echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
+          echo "Pushed commit ${SHA} with tag ${TAG}"
+
+  # ── 5. Docker build (amd64 + arm64 matrix) ──────────────────────
+  docker-build:
+    needs: [prepare, release]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-latest
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    permissions:
+      packages: write
+      attestations: write
+      id-token: write
+    steps:
+      - name: Checkout tagged code
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.prepare.outputs.tag }}
+          fetch-depth: 0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: ${{ matrix.platform }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            SENDSPIN_VERSION=${{ needs.prepare.outputs.sendspin_version }}
+          sbom: true
+          provenance: mode=max
+          cache-from: type=gha,scope=build-${{ matrix.platform }}
+          cache-to: type=gha,mode=max,scope=build-${{ matrix.platform }}
+          outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
+
+      - name: Smoke test built image
+        run: |
+          image="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}"
+          docker pull "${image}"
+          docker run --rm --entrypoint python3 "${image}" scripts/check_sendspin_compat.py
+          docker run --rm --entrypoint python3 "${image}" scripts/check_container_runtime.py
+
+      - name: Export digest
+        run: |
+          mkdir -p /tmp/digests
+          digest="${{ steps.build.outputs.digest }}"
+          touch "/tmp/digests/${digest#sha256:}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ strategy.job-index }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  # ── 6. Docker merge (create multi-arch manifest) ─────────────────
+  docker-merge:
+    needs: [prepare, docker-build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      packages: write
+    steps:
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/digests
+          pattern: digests-*
+          merge-multiple: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: ${{ needs.prepare.outputs.metadata_tags }}
+
+      - name: Create manifest list and push
+        working-directory: /tmp/digests
+        run: |
+          docker buildx imagetools create \
+            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@sha256:%s ' *)
+
+  # ── 7. Sync HA addon directories ────────────────────────────────
+  addon-sync:
+    needs: [prepare, docker-merge]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout main (post-release commit)
+        uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Pull latest and fetch tags
+        run: |
+          git fetch origin main --force
+          git fetch --force --tags
+          git reset --hard origin/main
+
+      - name: Sync HA addon directories
+        env:
+          CHANNEL: ${{ needs.prepare.outputs.channel }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          stable_tag="$(git tag --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1 || true)"
+          rc_tag="$(git tag --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$' | head -n 1 || true)"
+          beta_tag="$(git tag --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+$' | head -n 1 || true)"
+
+          case "${CHANNEL}" in
+            stable) stable_tag="v${VERSION}" ;;
+            rc) rc_tag="v${VERSION}" ;;
+            beta) beta_tag="v${VERSION}" ;;
+          esac
+
+          cmd=(python scripts/generate_ha_addon_variants.py sync-current-repo --output-dir .)
+          [ -n "${stable_tag}" ] && cmd+=(--stable-version "${stable_tag#v}")
+          [ -n "${rc_tag}" ] && cmd+=(--rc-version "${rc_tag#v}")
+          [ -n "${beta_tag}" ] && cmd+=(--beta-version "${beta_tag#v}")
+          "${cmd[@]}"
+
+      - name: Commit and push addon changes
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          if [ -z "$(git status --short)" ]; then
+            echo "HA addon directories already up to date"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A .
+          git commit -m "chore: sync HA addon directories for ${VERSION}"
+          git push origin HEAD:main
+
+  # ── 8. GitHub Release (stable only) ─────────────────────────────
+  gh-release:
+    needs: [prepare, addon-sync]
+    if: needs.prepare.outputs.is_stable == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Fetch all tags
+        run: git fetch --force --tags
+
+      - name: Resolve previous stable release
+        id: previous
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const {owner, repo} = context.repo;
+            const targetTag = '${{ needs.prepare.outputs.tag }}';
+
+            function parseStableTag(tag) {
+              const m = String(tag || '').match(/^v(\d+)\.(\d+)\.(\d+)$/);
+              return m ? { major: +m[1], minor: +m[2], patch: +m[3] } : null;
+            }
+            function cmp(a, b) {
+              const pa = parseStableTag(a), pb = parseStableTag(b);
+              if (!pa || !pb) return 0;
+              for (const k of ['major', 'minor', 'patch']) {
+                if (pa[k] !== pb[k]) return pa[k] - pb[k];
+              }
+              return 0;
+            }
+
+            const releases = await github.paginate(github.rest.repos.listReleases, {
+              owner, repo, per_page: 100,
+            });
+            const prev = releases
+              .filter(r => !r.draft && !r.prerelease)
+              .map(r => r.tag_name)
+              .filter(t => parseStableTag(t) && t !== targetTag)
+              .sort(cmp)
+              .filter(t => cmp(t, targetTag) < 0)
+              .pop() || '';
+            core.setOutput('tag', prev);
+
+      - name: Generate release notes
+        id: notes
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const {owner, repo} = context.repo;
+            const tag = '${{ needs.prepare.outputs.tag }}';
+            const previousTag = '${{ steps.previous.outputs.tag }}';
+            const params = { owner, repo, tag_name: tag };
+            if (previousTag) params.previous_tag_name = previousTag;
+            const response = await github.rest.repos.generateReleaseNotes(params);
+            core.setOutput('body', response.data.body);
+
+      - name: Compose release body
+        id: body
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+          PREVIOUS_TAG: ${{ steps.previous.outputs.tag }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          cat > /tmp/generated-notes.md <<'EOF_GENERATED_NOTES'
+          ${{ steps.notes.outputs.body }}
+          EOF_GENERATED_NOTES
+          COMPARE_URL=""
+          if [ -n "${PREVIOUS_TAG}" ]; then
+            COMPARE_URL="https://github.com/${REPOSITORY}/compare/${PREVIOUS_TAG}...${TAG}"
+          fi
+          python3 scripts/release_notes.py \
+            --version "${VERSION}" \
+            --changelog CHANGELOG.md \
+            --generated-notes-file /tmp/generated-notes.md \
+            --previous-tag "${PREVIOUS_TAG}" \
+            --compare-url "${COMPARE_URL}" \
+            --output /tmp/release-body.md
+          {
+            echo "body<<EOF_RELEASE_BODY"
+            cat /tmp/release-body.md
+            echo "EOF_RELEASE_BODY"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create or update GitHub release
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const {owner, repo} = context.repo;
+            const tag = '${{ needs.prepare.outputs.tag }}';
+            const body = ${{ toJSON(steps.body.outputs.body) }};
+            const payload = {
+              owner, repo, tag_name: tag, name: tag, body,
+              draft: false, prerelease: false, make_latest: 'true',
+            };
+            let existing = null;
+            try {
+              existing = (await github.rest.repos.getReleaseByTag({ owner, repo, tag })).data;
+            } catch (e) { if (e.status !== 404) throw e; }
+            if (existing) {
+              await github.rest.repos.updateRelease({ ...payload, release_id: existing.id });
+            } else {
+              await github.rest.repos.createRelease({ ...payload, generate_release_notes: false });
+            }
+
+  # ── 9. ARMv7 build (stable only) ────────────────────────────────
+  armv7-build:
+    needs: [prepare, docker-merge]
+    if: needs.prepare.outputs.is_stable == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      packages: write
+    steps:
+      - name: Checkout tagged code
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.prepare.outputs.tag }}
+          fetch-depth: 0
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/arm/v7
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            SENDSPIN_VERSION=${{ needs.prepare.outputs.sendspin_version }}
+          cache-from: type=gha,scope=build-linux/arm/v7
+          cache-to: type=gha,mode=max,scope=build-linux/arm/v7,ignore-error=true
+          outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
+
+      - name: Smoke test built image
+        run: |
+          image="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}"
+          docker pull --platform linux/arm/v7 "${image}"
+          docker run --rm --platform linux/arm/v7 --entrypoint python3 "${image}" scripts/check_sendspin_compat.py
+          docker run --rm --platform linux/arm/v7 --entrypoint python3 "${image}" scripts/check_container_runtime.py
+
+      - name: Extract metadata for tags
+        id: tags
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: ${{ needs.prepare.outputs.metadata_tags }}
+
+      - name: Append armv7 to manifest
+        run: |
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+          TAG=$(jq -cr '.tags[0]' <<< "$DOCKER_METADATA_OUTPUT_JSON" | sed "s|${IMAGE}:||")
+
+          EXISTING=$(docker buildx imagetools inspect "${IMAGE}:${TAG}" --format '{{range .Manifest.Manifests}}{{.Digest}} {{end}}')
+          echo "Existing digests: ${EXISTING}"
+          echo "ARMv7 digest: ${{ steps.build.outputs.digest }}"
+
+          DIGEST_ARGS=""
+          for d in ${EXISTING}; do
+            DIGEST_ARGS="${DIGEST_ARGS} ${IMAGE}@${d}"
+          done
+          DIGEST_ARGS="${DIGEST_ARGS} ${IMAGE}@${{ steps.build.outputs.digest }}"
+
+          docker buildx imagetools create \
+            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            ${DIGEST_ARGS}
+
+          echo "✅ Manifest updated with armv7"

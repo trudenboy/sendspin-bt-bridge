@@ -72,11 +72,12 @@ def test_rpi_check_mentions_container_uid_audio_troubleshooting():
 
 
 def test_armv7_publish_workflow_builds_pinned_sendspin_and_smoke_tests_import():
-    workflow = (Path(__file__).resolve().parents[1] / ".github" / "workflows" / "docker-publish-armv7.yml").read_text()
+    workflow = (Path(__file__).resolve().parents[1] / ".github" / "workflows" / "release.yml").read_text()
 
     assert "sendspin_version" in workflow
     assert "SENDSPIN_VERSION=${{ needs.prepare.outputs.sendspin_version }}" in workflow
     assert "scripts/check_sendspin_compat.py" in workflow
+    assert "linux/arm/v7" in workflow
 
 
 def test_requirements_pin_aiosendspin_for_all_architectures():

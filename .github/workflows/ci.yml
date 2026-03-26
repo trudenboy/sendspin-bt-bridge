@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - beta
+    paths-ignore:
+      - VERSION
+      - "docs-site/**"
+      - "*.md"
+      - "ha-addon*/CHANGELOG.md"
+  pull_request:
+    branches:
+      - main
+    paths-ignore:
+      - "docs-site/**"
+      - "*.md"
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    uses: ./.github/workflows/_lint.yml
+
+  test:
+    uses: ./.github/workflows/_test.yml

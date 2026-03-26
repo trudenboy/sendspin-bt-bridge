@@ -25,7 +25,7 @@ docker exec -it sendspin-client bluetoothctl
 
 Unit tests: `pytest` (see `tests/`). 187 tests across 18 files. Manual testing via `docker logs` and the web UI at `http://localhost:8080`.
 
-CI/CD builds multi-platform Docker images (`linux/amd64`, `linux/arm64`) to `ghcr.io/trudenboy/sendspin-bt-bridge` on `v*` tag push. GitHub releases are created by the separate manual `Create GitHub Release` workflow, which defaults to the latest tag and syncs `ha-addon/config.yaml` on release instead of on tag push.
+CI/CD: The `VERSION` file is the single source of truth. Pushing a VERSION change to `main` triggers `release.yml` which runs lint+pytest, updates `config.py`, creates the git tag, builds Docker images (amd64+arm64), syncs HA addon directories, creates a GitHub Release (stable only), and builds armv7 (stable only). Regular development pushes and PRs trigger `ci.yml` (lint+test only).
 
 ## Local Demo Workflow
 
@@ -66,7 +66,7 @@ IPC: subprocess→parent via JSON lines on stdout; parent→subprocess via JSON 
 - `CONFIG_FILE: Path` — single source of truth for config path (replaces old `_CONFIG_PATH` string)
 - `_config_lock` (threading.Lock shared across modules)
 - `load_config()`, `_player_id_from_mac()`, `save_device_volume()` (public; `_save_device_volume` alias retained for compatibility)
-- `VERSION = "2.30.7"`, `BUILD_DATE = "2026-03-13"`
+- `VERSION` — read from `VERSION` file at release time; `BUILD_DATE` — set by CI
 
 **`services/` module:**
 - `bridge_daemon.py` — `BridgeDaemon` subclass. Runs inside each subprocess. Handles `on_status_change` callbacks, stream events. `_sink_routed` flag prevents re-anchor feedback loop after PA rescue-streams correction.

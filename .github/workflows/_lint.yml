@@ -1,40 +1,32 @@
-name: Lint
+name: _lint
 
 on:
-  push:
-    branches:
-      - main
-      - beta
-    tags:
-      - "v*"
-    paths-ignore:
-      - "docs-site/**"
-      - "*.md"
-      - "ha-addon/CHANGELOG.md"
-  pull_request:
-    branches:
-      - main
-    paths-ignore:
-      - "docs-site/**"
-      - "*.md"
-      - "ha-addon/CHANGELOG.md"
-  workflow_dispatch:
+  workflow_call:
+    inputs:
+      version:
+        description: "Version to inject into config.py before linting (empty = skip)"
+        required: false
+        type: string
+        default: ""
 
 permissions:
   contents: read
-
-concurrency:
-  group: lint-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   lint:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+
+      - name: Inject version into config.py
+        if: inputs.version != ''
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          sed -i "s/^VERSION = .*/VERSION = \"${VERSION}\"/" config.py
+          sed -i "s/^BUILD_DATE = .*/BUILD_DATE = \"$(date -u +%Y-%m-%d)\"/" config.py
 
       - name: Set up Python
         uses: actions/setup-python@v6

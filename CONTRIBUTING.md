@@ -123,9 +123,14 @@ Keep the current runtime layering in mind when making code or docs changes:
 
 ## Release Workflow & Generated Add-on Variants
 
-- `CHANGELOG.md` is the release source of truth. Put user-facing release notes there first.
-- The manual `Create Stable GitHub Release` workflow only creates GitHub release objects for stable `vX.Y.Z` tags and builds the release body from the matching changelog section.
-- The `Sync HA Addon Variants` workflow runs on every stable/RC/beta tag push to refresh `ha-addon/`, `ha-addon-rc/`, and `ha-addon-beta/` on `main`; prerelease tags stay tag-only and do not create GitHub release objects.
+- `VERSION` file in the repo root is the **single source of truth** for the project version.
+- `CHANGELOG.md` is the release notes source of truth. Put user-facing release notes there first.
+- **To release:** edit `VERSION` (e.g. `2.49.0-rc.9`), update `CHANGELOG.md`, commit and push to `main`. The `release.yml` workflow handles everything else automatically:
+  1. Validates version format, runs lint + pytest
+  2. Updates `config.py` VERSION/BUILD_DATE, commits, creates `v{version}` tag
+  3. Builds Docker images (amd64 + arm64), pushes to ghcr.io
+  4. Syncs `ha-addon*/` directories via `generate_ha_addon_variants.py`
+  5. Creates GitHub Release (stable only), builds armv7 (stable only)
 - `ha-addon/` is the hand-maintained stable source surface. RC/Beta directories are generated/published variants; prefer regenerating them via the script/workflow instead of hand-editing multiple channel copies.
 - `update_channel` in config only controls release lookup/warning surfaces. It does **not** switch the installed Home Assistant add-on variant by itself.
 
@@ -187,8 +192,9 @@ When contributing:
 
 ## Release workflow
 
-- Update `config.py` version and add matching sections to `CHANGELOG.md` and `ha-addon/CHANGELOG.md`.
-- Sync addon variants with `python3 scripts/generate_ha_addon_variants.py sync-current-repo ...`.
-- Validate runtime changes with `python3 -m pytest -q && node --check static/app.js && git --no-pager diff --check`.
+- Edit `VERSION` file with the new version (e.g. `2.49.0`, `2.49.0-rc.9`, `2.50.0-beta.1`).
+- Move entries from `[Unreleased]` to the new version section in `CHANGELOG.md`.
+- Validate locally with `python3 -m pytest -q && node --check static/app.js && git --no-pager diff --check`.
 - Validate docs changes with `cd docs-site && npm run build`.
+- Commit `VERSION` + `CHANGELOG.md` and push to `main`. CI handles: config.py update, tagging, Docker build, addon sync, GitHub Release (stable), armv7 (stable).
 - GitHub Release notes are composed from the matching `CHANGELOG.md` section; GitHub-generated notes are supplemental only.

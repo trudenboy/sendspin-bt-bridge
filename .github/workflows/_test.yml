@@ -1,0 +1,55 @@
+name: _test
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: "Version to inject into config.py before testing (empty = skip)"
+        required: false
+        type: string
+        default: ""
+      ref:
+        description: "Git ref to checkout (empty = default)"
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+          fetch-depth: 0
+
+      - name: Inject version into config.py
+        if: inputs.version != ''
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          sed -i "s/^VERSION = .*/VERSION = \"${VERSION}\"/" config.py
+          sed -i "s/^BUILD_DATE = .*/BUILD_DATE = \"$(date -u +%Y-%m-%d)\"/" config.py
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev libglib2.0-dev libportaudio2
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r dev-requirements.txt pytest-cov
+
+      - name: Run sendspin compatibility smoke test
+        run: python scripts/check_sendspin_compat.py
+
+      - name: Run tests
+        run: python -m pytest tests/ --cov=. --cov-report=term-missing --cov-fail-under=50 -q
