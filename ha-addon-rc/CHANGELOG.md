@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.49.0-rc.6] - 2026-03-26
+
+### Changed
+- **deps**: Bump sendspin 5.8.0→5.9.0, aiosendspin 4.3.2→4.4.0, dbus-fast 2.46.4→4.0.0, pytest <9→<10
+- **ci**: Bump actions/checkout v4→v6, actions/setup-python v5→v6, docker/login-action v3→v4, docker/metadata-action v5→v6, docker/setup-qemu-action v3→v4
+
 ## [2.49.0-rc.5] - 2026-03-26
 
 ### Fixed
