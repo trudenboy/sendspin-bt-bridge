@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.49.0-rc.27] - 2026-03-26
+
+### Added
+- **Standby status filter** — 🌙 Standby option in the device status filter dropdown
+
+### Fixed
+- **Wake button icon** — use ☀️ sun icon instead of ⟳ reconnect to visually distinguish Wake from Reconnect
+
 ## [2.49.0-rc.26] - 2026-03-26
 
 ### Fixed
