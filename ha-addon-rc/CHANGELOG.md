@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [2.49.0-rc.13] - 2026-03-26
 
 ### Fixed
-- Idle disconnect timeout not saved to config on Save
+- **Idle disconnect not saving** — `collectBtDevices()` did not persist `idle_disconnect_minutes` to config.json; timer could never fire
 
 ## [2.49.0-rc.12] - 2026-03-26
 
