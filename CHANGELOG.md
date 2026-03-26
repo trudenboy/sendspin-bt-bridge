@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.49.0-rc.26] - 2026-03-26
+
+### Fixed
+- **Recovery/guidance banner ignored standby state** — `bt_standby` lives on `DeviceStatus.extra`, not as a direct attribute; `getattr(device, "bt_standby")` always returned `False`; now reads from `_device_extra()` and state model bluetooth dict
+
 ## [2.49.0-rc.25] - 2026-03-26
 
 ### Added
