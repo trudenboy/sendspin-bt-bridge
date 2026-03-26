@@ -291,11 +291,7 @@ def _build_device_issues(devices: list[Any]) -> list[RecoveryIssue]:
         audio_streaming = _device_audio_streaming(device)
         ma_reconnecting = _device_ma_reconnecting(device)
         # Devices in standby are intentionally disconnected — not a recovery issue
-        in_standby = bool(
-            bluetooth.get("standby")
-            if bluetooth
-            else getattr(device, "bt_standby", False) or _device_extra(device).get("bt_standby")
-        )
+        in_standby = bool(bluetooth.get("standby") if bluetooth else _device_extra(device).get("bt_standby"))
         if in_standby:
             continue
         if released:
