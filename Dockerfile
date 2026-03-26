@@ -1,4 +1,4 @@
-FROM python:3.12-slim AS builder
+FROM python:3.14-slim AS builder
 
 ENV DEBIAN_FRONTEND=noninteractive
 ARG TARGETARCH
@@ -57,7 +57,7 @@ RUN if [ "${TARGETARCH}${TARGETVARIANT}" = "armv7" ]; then \
     fi
 
 # ──────────────────────────────────────────────────────────────────────────────
-FROM python:3.12-slim
+FROM python:3.14-slim
 
 # S6 overlay version
 ARG S6_OVERLAY_VERSION=3.2.0.2
