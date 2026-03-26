@@ -294,6 +294,12 @@ class SendspinClient:
         self.keepalive_enabled = keepalive_enabled  # send periodic silence to keep BT speaker alive
         self.keepalive_interval = max(30, keepalive_interval)  # seconds between keepalive bursts
         self.idle_disconnect_minutes = idle_disconnect_minutes  # 0 = disabled
+        if keepalive_enabled and idle_disconnect_minutes > 0:
+            logger.warning(
+                "[%s] Keep-alive and idle standby are both enabled — "
+                "idle standby will be suppressed (keep-alive prevents speaker sleep)",
+                player_name,
+            )
 
         # Status tracking
         self.status = DeviceStatus(
@@ -398,8 +404,14 @@ class SendspinClient:
                 details=event["details"] if isinstance(event["details"], dict) else None,
             )
         _state.notify_status_changed()
-        # Check audio_streaming transition for idle disconnect timer
-        if self.idle_disconnect_minutes > 0 and "audio_streaming" in updates:
+        # Check audio_streaming transition for idle disconnect timer.
+        # Skip if keep-alive is enabled — it actively prevents speaker sleep,
+        # which contradicts the purpose of idle standby.
+        if (
+            self.idle_disconnect_minutes > 0
+            and not getattr(self, "keepalive_enabled", False)
+            and "audio_streaming" in updates
+        ):
             was_streaming = previous.get("audio_streaming", False)
             now_streaming = self.status.get("audio_streaming", False)
             if was_streaming and not now_streaming:

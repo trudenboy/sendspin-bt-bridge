@@ -5464,6 +5464,23 @@ function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabl
         syncBtRowIdentity();
         refreshBtDeviceRowsRuntime();
     });
+    // Mutual exclusion: keep-alive and idle standby cannot both be > 0
+    var kaInput = detail.querySelector('.bt-keepalive-interval');
+    var idleInput = detail.querySelector('.bt-idle-disconnect');
+    function _syncKeepaliveIdleExclusion() {
+        var ka = parseInt(kaInput.value, 10) || 0;
+        var idle = parseInt(idleInput.value, 10) || 0;
+        idleInput.disabled = ka > 0;
+        kaInput.disabled = idle > 0;
+        if (ka > 0) idleInput.title = 'Disabled — keep-alive prevents idle standby';
+        else idleInput.title = 'Disconnect BT after this many idle minutes. 0 = always connected. Recommended: 30';
+        if (idle > 0) kaInput.title = 'Disabled — idle standby conflicts with keep-alive';
+        else kaInput.title = '0 = disabled, min 30 when enabled';
+    }
+    kaInput.addEventListener('input', _syncKeepaliveIdleExclusion);
+    idleInput.addEventListener('input', _syncKeepaliveIdleExclusion);
+    _syncKeepaliveIdleExclusion();
+
     row.querySelector('.bt-expand-btn').addEventListener('click', function() {
         var open = detail.style.display !== 'none';
         detail.style.display = open ? 'none' : 'grid';
