@@ -465,6 +465,8 @@ class SendspinClient:
             from services.pulse import STANDBY_SINK_NAME, aensure_null_sink, amove_pid_sink_inputs
 
             if await aensure_null_sink():
+                # Redirect PULSE_SINK so new streams go to null sink (not missing BT sink)
+                await self._send_subprocess_command({"cmd": "set_standby", "sink": STANDBY_SINK_NAME})
                 moved = await amove_pid_sink_inputs(daemon_pid, STANDBY_SINK_NAME)
                 logger.info("[%s] Moved %d stream(s) to null sink", self.player_name, moved)
             else:
@@ -491,6 +493,9 @@ class SendspinClient:
         Sets ``bt_waking=True`` so bt_monitor reconnects BT without killing
         the daemon.  ``bt_standby`` stays True until ``_reroute_to_bt_sink()``
         successfully moves streams to the BT sink.
+
+        Starts BT reconnect directly via ``run_in_executor`` for minimal
+        latency — bt_monitor still handles the post-connect flow.
         """
         if not self.status.get("bt_standby"):
             return
@@ -503,12 +508,16 @@ class SendspinClient:
         )
         if self.bt_manager:
             self.bt_manager.allow_reconnect()
+            self.bt_manager.signal_standby_wake()
+            # Kick off BT connect directly — don't wait for bt_monitor's loop.
+            loop = asyncio.get_running_loop()
+            loop.run_in_executor(None, self.bt_manager.connect_device)
         _state.publish_device_event(
             self._event_device_id(),
             DeviceEventType.BLUETOOTH_STANDBY_EXITED,
             message="Speaker waking from standby",
         )
-        logger.info("[%s] Waking from standby — BT reconnect will be handled by monitor", self.player_name)
+        logger.info("[%s] Waking from standby — direct BT reconnect started", self.player_name)
 
     async def _on_standby_play_detected(self) -> None:
         """Auto-wake: MA started playback while in standby — reconnect BT.
@@ -536,6 +545,8 @@ class SendspinClient:
             return False
         from services.pulse import amove_pid_sink_inputs
 
+        # Restore PULSE_SINK to BT sink before rerouting so future streams target it
+        await self._send_subprocess_command({"cmd": "set_standby"})
         moved = await amove_pid_sink_inputs(daemon_pid, self.bluetooth_sink_name)
         # Clear standby state regardless of streams moved
         self._update_status(

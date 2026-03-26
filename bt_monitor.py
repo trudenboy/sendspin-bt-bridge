@@ -28,6 +28,19 @@ logger = logging.getLogger(__name__)
 _SINK_CORRECTION_DELAY = 3
 
 
+async def _standby_sleep(mgr: BluetoothManager, seconds: float = 5) -> None:
+    """Sleep interruptibly — returns early when ``signal_standby_wake()`` fires."""
+    evt = mgr._standby_wake_event
+    if evt is None:
+        await asyncio.sleep(seconds)
+        return
+    evt.clear()
+    try:
+        await asyncio.wait_for(evt.wait(), timeout=seconds)
+    except TimeoutError:
+        pass
+
+
 async def _correct_other_devices_routing(triggering_mgr: BluetoothManager) -> None:
     """After a BT device connects, correct PA sink routing for all OTHER running players.
 
@@ -69,6 +82,8 @@ async def monitor_and_reconnect(mgr: BluetoothManager) -> None:
     or if the D-Bus environment doesn't support signal subscriptions.
     """
     logger.info("[%s] monitor_and_reconnect task started", mgr.device_name)
+    # Create an asyncio.Event in the running loop for standby-wake signaling.
+    mgr._standby_wake_event = asyncio.Event()
     try:
         from dbus_fast import BusType
         from dbus_fast.aio import MessageBus
@@ -94,7 +109,7 @@ async def _monitor_polling(mgr: BluetoothManager) -> None:
                 continue
 
             if mgr.host and mgr.host.get_status_value("bt_standby") and not mgr.host.get_status_value("bt_waking"):
-                await asyncio.sleep(5)
+                await _standby_sleep(mgr)
                 continue
 
             current_time = time.time()
@@ -329,7 +344,7 @@ async def _inner_dbus_monitor(mgr: BluetoothManager, device_iface, disconnect_ev
             continue
 
         if mgr.host and mgr.host.get_status_value("bt_standby") and not mgr.host.get_status_value("bt_waking"):
-            await asyncio.sleep(5)
+            await _standby_sleep(mgr)
             continue
 
         if mgr.connected:
@@ -370,7 +385,7 @@ async def _inner_dbus_monitor(mgr: BluetoothManager, device_iface, disconnect_ev
             # Exception: bt_waking means auto-wake requested BT reconnect.
             if mgr.host and mgr.host.get_status_value("bt_standby"):
                 if not mgr.host.get_status_value("bt_waking"):
-                    await asyncio.sleep(5)
+                    await _standby_sleep(mgr)
                     continue
                 # bt_waking: reconnect BT but skip daemon kill below
                 logger.info("[%s] Standby wake — reconnecting BT (daemon stays alive)", mgr.device_name)

@@ -354,7 +354,7 @@ async def _startup_unmute_watcher(
         _logger.warning("[%s] Error unmuting sink: %s", player_name, exc)
 
 
-async def _read_commands(daemon_ref: list, stop_event: asyncio.Event) -> None:
+async def _read_commands(daemon_ref: list, stop_event: asyncio.Event, *, bt_sink_name: str | None = None) -> None:
     """Read JSON commands from stdin and dispatch them."""
     loop = asyncio.get_running_loop()
     reader = asyncio.StreamReader()
@@ -470,6 +470,14 @@ async def _read_commands(daemon_ref: list, stop_event: asyncio.Event) -> None:
                 if t.exception()
                 else None
             )
+        elif cmd.cmd == "set_standby":
+            sink = cmd.payload.get("sink")
+            if sink:
+                os.environ["PULSE_SINK"] = sink
+                logger.info("PULSE_SINK redirected to %s (standby)", sink)
+            elif "PULSE_SINK" in os.environ and bt_sink_name:
+                os.environ["PULSE_SINK"] = bt_sink_name
+                logger.info("PULSE_SINK restored to %s (wake)", bt_sink_name)
 
 
 # ---------------------------------------------------------------------------
@@ -651,7 +659,7 @@ async def _run(params: dict) -> None:
         except Exception as exc:
             logger.debug("[%s] Could not mute sink on startup: %s", player_name, exc)
 
-    cmd_task = asyncio.create_task(_read_commands(daemon_ref, stop_event))
+    cmd_task = asyncio.create_task(_read_commands(daemon_ref, stop_event, bt_sink_name=bluetooth_sink_name))
     daemon_task = asyncio.create_task(daemon.run())
     watcher_task = asyncio.create_task(_reanchor_watcher(status, _on_status_change, stop_event))
     unmute_task = None

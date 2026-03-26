@@ -19,6 +19,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+if TYPE_CHECKING:
+    import asyncio
+
 import bt_audio
 import bt_monitor
 from bt_dbus import _dbus_call_device_method, _dbus_get_device_property
@@ -91,6 +94,7 @@ class BluetoothManager:
         self.paired: bool | None = None
         self._connect_lock = threading.Lock()  # prevents concurrent connect_device() calls
         self._cancel_reconnect = threading.Event()
+        self._standby_wake_event: asyncio.Event | None = None  # set by _wake_from_standby to unblock monitor
         self._reconnect_timestamps: list[float] = []  # monotonic timestamps of recent reconnects
         # Guard churn tracking because reconnect decisions can be touched from
         # multiple execution contexts (polling loop, D-Bus reconnect path).
@@ -136,6 +140,12 @@ class BluetoothManager:
         """Clear reconnect cancellation so monitor loops may reconnect again."""
         self._cancel_reconnect.clear()
         self.management_enabled = True
+
+    def signal_standby_wake(self) -> None:
+        """Unblock bt_monitor's standby sleep so it reconnects immediately."""
+        evt = self._standby_wake_event
+        if evt is not None:
+            evt.set()
 
     def _reconnect_cancelled(self) -> bool:
         return self._cancel_reconnect.is_set() or not self.management_enabled

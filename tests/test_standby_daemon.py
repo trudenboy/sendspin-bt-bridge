@@ -29,6 +29,7 @@ def _make_client(idle_disconnect_minutes: int = 30, *, daemon_alive: bool = Fals
     client.stop_sendspin = AsyncMock()  # type: ignore[method-assign]
     client.bluetooth_sink_name = "bluez_sink.AA_BB_CC_DD_EE_FF.a2dp_sink"
     client._command_service = MagicMock()
+    client._command_service.send = AsyncMock()
 
     if daemon_alive:
         proc = MagicMock()
@@ -162,6 +163,9 @@ class TestAutoWake:
             assert client.status["bt_standby"] is True
             assert client.status["bt_waking"] is True
             client.bt_manager.allow_reconnect.assert_called_once()
+            client.bt_manager.signal_standby_wake.assert_called_once()
+            # Direct BT connect kicked off via run_in_executor
+            client.bt_manager.connect_device.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_on_standby_play_noop_if_not_standby(self):
@@ -189,9 +193,11 @@ class TestRerouteToBtSink:
 
             assert result is True
             move_mock.assert_awaited_once_with(12345, client.bluetooth_sink_name)
-            client._send_subprocess_command.assert_awaited_once()
-            cmd = client._send_subprocess_command.call_args[0][0]
-            assert cmd["cmd"] == "reconnect"
+            # Two IPC calls: set_standby (restore PULSE_SINK) + reconnect (reanchor)
+            assert client._send_subprocess_command.await_count == 2
+            cmds = [c[0][0] for c in client._send_subprocess_command.call_args_list]
+            assert cmds[0]["cmd"] == "set_standby"
+            assert cmds[1]["cmd"] == "reconnect"
 
     @pytest.mark.asyncio
     async def test_reroute_no_daemon_noop(self):
@@ -224,8 +230,9 @@ class TestRerouteToBtSink:
             result = await client._reroute_to_bt_sink()
 
             assert result is False
-            # No reanchor when no streams were actually moved
-            client._send_subprocess_command.assert_not_awaited()
+            # set_standby restore is sent before move check
+            assert client._send_subprocess_command.await_count == 1
+            assert client._send_subprocess_command.call_args[0][0]["cmd"] == "set_standby"
 
 
 # ── Start sendspin with daemon already alive (standby wake) ──────────────
