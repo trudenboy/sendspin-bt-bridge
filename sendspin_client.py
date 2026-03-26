@@ -17,6 +17,10 @@ import threading
 import time
 from dataclasses import dataclass, field, fields
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import concurrent.futures
 
 import state as _state
 from bluetooth_manager import BluetoothManager
@@ -166,6 +170,8 @@ class DeviceStatus:
     supported_commands: list | None = None
     group_volume: int | None = None
     group_muted: bool | None = None
+    bt_standby: bool = False
+    bt_standby_since: str | None = None
 
     # ── Dict-compatible interface ──────────────────────────────────────────
 
@@ -272,6 +278,7 @@ class SendspinClient:
         preferred_format: str | None = "flac:44100:16:2",
         keepalive_enabled: bool = False,
         keepalive_interval: int = 30,
+        idle_disconnect_minutes: int = 0,
     ):
         self.player_name = player_name
         self.server_host = server_host
@@ -284,6 +291,7 @@ class SendspinClient:
         self._effective_bridge = effective_bridge  # bridge instance label for MA device info
         self.keepalive_enabled = keepalive_enabled  # send periodic silence to keep BT speaker alive
         self.keepalive_interval = max(30, keepalive_interval)  # seconds between keepalive bursts
+        self.idle_disconnect_minutes = idle_disconnect_minutes  # 0 = disabled
 
         # Status tracking
         self.status = DeviceStatus(
@@ -328,6 +336,7 @@ class SendspinClient:
             logger_=logger,
         )
         self._stop_service = SubprocessStopService(logger_=logger)
+        self._idle_timer_task: asyncio.Task | concurrent.futures.Future | None = None
 
     @property
     def _playing_since(self) -> float | None:
@@ -387,6 +396,96 @@ class SendspinClient:
                 details=event["details"] if isinstance(event["details"], dict) else None,
             )
         _state.notify_status_changed()
+        # Check audio_streaming transition for idle disconnect timer
+        if self.idle_disconnect_minutes > 0 and "audio_streaming" in updates:
+            was_streaming = previous.get("audio_streaming", False)
+            now_streaming = self.status.get("audio_streaming", False)
+            if was_streaming and not now_streaming:
+                self._start_idle_timer()
+            elif not was_streaming and now_streaming:
+                self._cancel_idle_timer()
+
+    # ── Idle disconnect timer ────────────────────────────────────────────
+
+    def _start_idle_timer(self) -> None:
+        """Start (or restart) the idle disconnect timer."""
+        self._cancel_idle_timer()
+        timeout = self.idle_disconnect_minutes * 60
+
+        async def _idle_timeout() -> None:
+            try:
+                await asyncio.sleep(timeout)
+                logger.info(
+                    "[%s] Idle for %d min — entering standby",
+                    self.player_name,
+                    self.idle_disconnect_minutes,
+                )
+                await self._enter_standby()
+            except asyncio.CancelledError:
+                return
+
+        loop = _state.get_main_loop()
+        if loop and loop.is_running():
+            self._idle_timer_task = asyncio.run_coroutine_threadsafe(_idle_timeout(), loop)
+        else:
+            try:
+                self._idle_timer_task = asyncio.ensure_future(_idle_timeout())
+            except RuntimeError:
+                pass
+
+    def _cancel_idle_timer(self) -> None:
+        """Cancel any pending idle disconnect timer."""
+        task = self._idle_timer_task
+        if task is None:
+            return
+        self._idle_timer_task = None
+        if hasattr(task, "cancel"):
+            task.cancel()
+
+    async def _enter_standby(self) -> None:
+        """Disconnect BT and stop daemon to let the speaker save power."""
+        if self.status.get("bt_standby"):
+            return
+        self._update_status(
+            {
+                "bt_standby": True,
+                "bt_standby_since": datetime.now(tz=UTC).isoformat(),
+                "bt_released_by": "idle_timeout",
+            }
+        )
+        await self.stop_sendspin()
+        if self.bt_manager:
+            try:
+                self.bt_manager.disconnect_device()
+            except Exception as exc:
+                logger.warning("[%s] BT disconnect on standby failed: %s", self.player_name, exc)
+        _state.publish_device_event(
+            self._event_device_id(),
+            "bluetooth_standby_entered",
+            message="Speaker entered standby after idle timeout",
+            details={"idle_minutes": self.idle_disconnect_minutes},
+        )
+        logger.info("[%s] Entered standby (BT disconnected, daemon stopped)", self.player_name)
+
+    async def _wake_from_standby(self) -> None:
+        """Reconnect BT and restart daemon after standby."""
+        if not self.status.get("bt_standby"):
+            return
+        self._update_status(
+            {
+                "bt_standby": False,
+                "bt_standby_since": None,
+                "bt_released_by": None,
+            }
+        )
+        if self.bt_manager:
+            self.bt_manager.allow_reconnect()
+        _state.publish_device_event(
+            self._event_device_id(),
+            "bluetooth_standby_exited",
+            message="Speaker woken from standby",
+        )
+        logger.info("[%s] Waking from standby — BT reconnect will be handled by monitor", self.player_name)
 
     def _cancel_ma_reconnect_task(self) -> None:
         task = self._ma_reconnect_task

@@ -800,6 +800,7 @@ def test_initialize_devices_builds_clients_and_registers_disabled_devices():
             preferred_format,
             keepalive_enabled,
             keepalive_interval,
+            idle_disconnect_minutes=0,
         ):
             self.player_name = player_name
             self.server_host = server_host
@@ -811,6 +812,7 @@ def test_initialize_devices_builds_clients_and_registers_disabled_devices():
             self.preferred_format = preferred_format
             self.keepalive_enabled = keepalive_enabled
             self.keepalive_interval = keepalive_interval
+            self.idle_disconnect_minutes = idle_disconnect_minutes
             self.bt_manager = None
             self.bt_management_enabled = True
             self.bluetooth_sink_name = None
@@ -914,6 +916,7 @@ def test_initialize_devices_enables_default_keepalive_for_fast_handoff():
             preferred_format,
             keepalive_enabled,
             keepalive_interval,
+            idle_disconnect_minutes=0,
         ):
             self.player_name = player_name
             self.server_host = server_host
@@ -925,6 +928,7 @@ def test_initialize_devices_enables_default_keepalive_for_fast_handoff():
             self.preferred_format = preferred_format
             self.keepalive_enabled = keepalive_enabled
             self.keepalive_interval = keepalive_interval
+            self.idle_disconnect_minutes = idle_disconnect_minutes
             self.bt_manager = None
             self.bt_management_enabled = True
             self.bluetooth_sink_name = None

@@ -12,6 +12,7 @@ var API_BASE = (function() {
 var THEME_MODE_STORAGE_KEY = 'sendspin-ui:theme-mode';
 var GUIDANCE_ONBOARDING_STORAGE_KEY = 'sendspin-ui:show-onboarding-guidance';
 var GUIDANCE_RECOVERY_STORAGE_KEY = 'sendspin-ui:show-recovery-guidance';
+var EXPERIMENTAL_STORAGE_KEY = 'sendspin-ui:show-experimental';
 var _themeManagedVars = [
     'primary-color',
     'dark-primary-color',
@@ -3309,6 +3310,7 @@ function buildDeviceCard(i) {
             '</div>' +
           '</div>' +
           '<span class="chip meta-badge meta-badge-status is-neutral" id="dreleased-badge-' + i + '" style="display:none"></span>' +
+          '<span class="chip meta-badge meta-badge-status is-warning" id="dstandby-badge-' + i + '" style="display:none" data-experimental></span>' +
           '<button type="button" class="chip meta-badge meta-badge-link group-badge-unified meta-badge-interactive device-card-group-badge" id="dgroup-' + i + '" style="display:none"></button>' +
         '</div>' +
         '<div class="card-chips">' +
@@ -3363,6 +3365,7 @@ function buildDeviceCard(i) {
           '<span class="bt-action-status" id="dbt-action-status-' + i + '"></span>' +
           '<div class="card-action-buttons">' +
             '<button type="button" class="action-btn accent" id="dbtn-reconnect-' + i + '" onclick="btReconnect(' + i + ')">' + _actionButtonInnerHtml('reconnect', 'Reconnect') + '</button>' +
+            '<button type="button" class="action-btn accent" id="dbtn-wake-' + i + '" onclick="wakeDevice(' + i + ')" style="display:none" data-experimental>' + _actionButtonInnerHtml('reconnect', 'Wake') + '</button>' +
             '<button type="button" class="action-btn warn" id="dbtn-release-' + i + '" onclick="btToggleManagement(' + i + ')">' + _actionButtonInnerHtml('release', 'Release') + '</button>' +
             '<button type="button" class="action-btn danger" id="dbtn-disable-' + i + '" onclick="confirmDisableDevice(' + i + ')">' + _actionButtonInnerHtml('disable', 'Disable') + '</button>' +
             '<button type="button" class="icon-btn device-settings-btn card-corner-settings-btn" onclick="openDeviceSettings(' + i + ')" title="Device settings">' + _settingsIconHtml() + '</button>' +
@@ -3397,6 +3400,19 @@ function populateDeviceCard(i, dev) {
             releasedBadge.title = releaseRenderData.title;
         }
     }
+
+    var isStandby = !!dev.bt_standby;
+    var standbyBadge = document.getElementById('dstandby-badge-' + i);
+    if (standbyBadge) {
+        standbyBadge.style.display = (isStandby && _isExperimentalEnabled()) ? '' : 'none';
+        if (isStandby) {
+            var since = dev.bt_standby_since ? _formatDuration(new Date(dev.bt_standby_since)) : '';
+            standbyBadge.innerHTML = '\uD83D\uDCA4 Standby' + (since ? ' (' + since + ')' : '');
+            standbyBadge.title = 'Speaker in standby to save battery. Click Wake to reconnect.';
+        }
+    }
+    var wakeBtn = document.getElementById('dbtn-wake-' + i);
+    if (wakeBtn) wakeBtn.style.display = (isStandby && _isExperimentalEnabled()) ? '' : 'none';
 
     var batteryEl = document.getElementById('dbattery-' + i);
     if (batteryEl) {
@@ -3771,6 +3787,16 @@ function escHtml(s) {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
+}
+
+function _formatDuration(sinceDate) {
+    if (!sinceDate || isNaN(sinceDate.getTime())) return '';
+    var ms = Date.now() - sinceDate.getTime();
+    if (ms < 0) return '';
+    var min = Math.floor(ms / 60000);
+    if (min < 60) return min + 'm';
+    var h = Math.floor(min / 60);
+    return h + 'h ' + (min % 60) + 'm';
 }
 
 function _isErrorLevel(line) {
@@ -4453,6 +4479,29 @@ async function btToggleManagement(i) {
     if (btn) btn.disabled = false;
     setTimeout(function() { if (status) status.textContent = ''; }, 4000);
     return result;
+}
+
+async function wakeDevice(i) {
+    var dev = lastDevices && lastDevices[i];
+    if (!dev) return;
+    var playerName = dev.player_name || null;
+    var btn = document.getElementById('dbtn-wake-' + i);
+    var status = document.getElementById('dbt-action-status-' + i);
+    if (btn) btn.disabled = true;
+    if (status) status.textContent = '\u21BB Waking\u2026';
+    try {
+        var resp = await fetch(API_BASE + '/api/bt/wake', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({player_name: playerName})
+        });
+        var d = await resp.json();
+        if (status) status.textContent = d.success ? '\u2713 ' + d.message : '\u2717 ' + (d.error || 'Failed');
+    } catch (e) {
+        if (status) status.textContent = '\u2717 Error';
+    }
+    if (btn) btn.disabled = false;
+    setTimeout(function() { if (status) status.textContent = ''; }, 4000);
 }
 
 // ---- Device enabled toggle (used by config checkbox and dashboard Disable button) ----
@@ -5178,7 +5227,7 @@ function btAdapterOptions(selected) {
     return opts;
 }
 
-function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabled, preferredFormat, keepaliveInterval, roomName, roomId, handoffMode) {
+function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabled, preferredFormat, keepaliveInterval, roomName, roomId, handoffMode, idleDisconnectMinutes) {
     var tbody = document.getElementById('bt-devices-table');
     var wrap = document.createElement('div');
     wrap.className = 'bt-device-wrap';
@@ -5196,6 +5245,8 @@ function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabl
     var roomIdVal = String(roomId || '').trim();
     var handoffModeVal = String(handoffMode || 'default').trim().toLowerCase();
     if (handoffModeVal !== 'fast_handoff') handoffModeVal = 'default';
+    var idleVal = (idleDisconnectMinutes !== undefined && idleDisconnectMinutes !== null && idleDisconnectMinutes !== '') ? parseInt(idleDisconnectMinutes, 10) : 0;
+    if (idleVal < 0) idleVal = 0;
     row.innerHTML =
         '<div class="bt-enabled-cell bt-cell" data-label="Enabled"><label class="bt-switch" title="Enable or disable device">' +
             '<input type="checkbox" class="bt-enabled"' + (isEnabled ? ' checked' : '') + '>' +
@@ -5256,6 +5307,10 @@ function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabl
             '<input type="number" class="bt-keepalive-interval" min="0" placeholder="0" ' +
             'title="0 = disabled, min 30 when enabled" value="' +
             escHtmlAttr(String(kaVal)) + '"></div>' +
+        '<div data-experimental style="display:none"><label>Idle standby (min)</label>' +
+            '<input type="number" class="bt-idle-disconnect" min="0" placeholder="0" ' +
+            'title="Disconnect BT after this many idle minutes. 0 = always connected. Recommended: 30" value="' +
+            escHtmlAttr(String(idleVal)) + '"></div>' +
         '<div><label>Room name</label>' +
             '<input type="text" class="bt-room-name" placeholder="e.g. Living Room" title="Stable room label for MA/HA/MassDroid interoperability" value="' +
             escHtmlAttr(roomNameVal) + '"></div>' +
@@ -5407,7 +5462,7 @@ function populateBtDeviceRows(devices) {
     devices.forEach(function(d) {
         addBtDeviceRow(d.player_name || '', d.mac || '', d.adapter || '',
                        d.static_delay_ms, d.listen_host, d.listen_port, d.enabled,
-                       d.preferred_format, d.keepalive_interval, d.room_name, d.room_id, d.handoff_mode);
+                       d.preferred_format, d.keepalive_interval, d.room_name, d.room_id, d.handoff_mode, d.idle_disconnect_minutes);
     });
     refreshBtDeviceRowsRuntime();
 }
@@ -7244,6 +7299,35 @@ function _resetGuidancePreferences() {
     return false;
 }
 
+/* ---------- Experimental features toggle ---------- */
+
+function _isExperimentalEnabled() {
+    try {
+        return window.localStorage.getItem(EXPERIMENTAL_STORAGE_KEY) === 'enabled';
+    } catch (_) {
+        return false;
+    }
+}
+
+function _setExperimentalEnabled(enabled) {
+    try {
+        if (enabled) {
+            window.localStorage.setItem(EXPERIMENTAL_STORAGE_KEY, 'enabled');
+        } else {
+            window.localStorage.removeItem(EXPERIMENTAL_STORAGE_KEY);
+        }
+    } catch (_) { /* ignore storage failures */ }
+}
+
+function _applyExperimentalVisibility() {
+    var show = _isExperimentalEnabled();
+    document.querySelectorAll('[data-experimental]').forEach(function(el) {
+        el.style.display = show ? '' : 'none';
+    });
+    var toggle = document.getElementById('guidance-show-experimental');
+    if (toggle && toggle.checked !== show) toggle.checked = show;
+}
+
 function _openDiagnosticsPanel() {
     var details = document.getElementById('diag-details');
     if (!details) return false;
@@ -8449,6 +8533,10 @@ function _normalizeBtDeviceDirtyFields(fields) {
     if (Number.isNaN(delay)) delay = 0;
     var handoffMode = String(fields.handoff_mode || 'default').trim().toLowerCase();
     if (handoffMode !== 'fast_handoff') handoffMode = 'default';
+    var idleDisconnect = fields.idle_disconnect_minutes;
+    if (idleDisconnect == null || idleDisconnect === '') idleDisconnect = 0;
+    idleDisconnect = parseInt(idleDisconnect, 10);
+    if (!Number.isFinite(idleDisconnect) || idleDisconnect < 0) idleDisconnect = 0;
     return {
         enabled: fields.enabled !== false,
         player_name: (fields.player_name || '').trim(),
@@ -8459,6 +8547,7 @@ function _normalizeBtDeviceDirtyFields(fields) {
         listen_port: listenPort,
         preferred_format: (fields.preferred_format || 'flac:44100:16:2').trim() || 'flac:44100:16:2',
         keepalive_interval: keepalive,
+        idle_disconnect_minutes: idleDisconnect,
         room_name: (fields.room_name || '').trim(),
         room_id: (fields.room_id || '').trim(),
         handoff_mode: handoffMode,
@@ -8495,6 +8584,7 @@ function _readBtDeviceDirtyFields(wrap) {
         listen_port: ((row.querySelector('.bt-listen-port') || {}).value || ''),
         preferred_format: detail ? (((detail.querySelector('.bt-preferred-format') || {}).value) || 'flac:44100:16:2') : 'flac:44100:16:2',
         keepalive_interval: detail ? (((detail.querySelector('.bt-keepalive-interval') || {}).value) || 0) : 0,
+        idle_disconnect_minutes: detail ? (((detail.querySelector('.bt-idle-disconnect') || {}).value) || 0) : 0,
         room_name: detail ? (((detail.querySelector('.bt-room-name') || {}).value) || '') : '',
         room_id: detail ? (((detail.querySelector('.bt-room-id') || {}).value) || '') : '',
         handoff_mode: detail ? (((detail.querySelector('.bt-handoff-mode') || {}).value) || 'default') : 'default',
@@ -8516,6 +8606,7 @@ function _getBtDeviceControlByField(wrap, fieldName) {
         listen_port: '.bt-listen-port',
         preferred_format: '.bt-preferred-format',
         keepalive_interval: '.bt-keepalive-interval',
+        idle_disconnect_minutes: '.bt-idle-disconnect',
         room_name: '.bt-room-name',
         room_id: '.bt-room-id',
         handoff_mode: '.bt-handoff-mode',
@@ -8869,6 +8960,15 @@ function _syncSecurityPolicyState() {
         });
     }
     _syncGuidancePreferenceControls(null);
+
+    var experimentalToggle = document.getElementById('guidance-show-experimental');
+    if (experimentalToggle) {
+        experimentalToggle.addEventListener('change', function() {
+            _setExperimentalEnabled(!!this.checked);
+            _applyExperimentalVisibility();
+        });
+    }
+    _applyExperimentalVisibility();
 })();
 
 function _updateAuthMethodsHint() {

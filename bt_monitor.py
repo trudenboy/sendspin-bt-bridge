@@ -93,6 +93,10 @@ async def _monitor_polling(mgr: BluetoothManager) -> None:
                 await asyncio.sleep(5)
                 continue
 
+            if mgr.host and mgr.host.get_status_value("bt_standby"):
+                await asyncio.sleep(5)
+                continue
+
             current_time = time.time()
             if current_time - mgr.last_check >= mgr.check_interval:
                 mgr.last_check = current_time
@@ -321,6 +325,10 @@ async def _inner_dbus_monitor(mgr: BluetoothManager, device_iface, disconnect_ev
     reconnect_attempt = 0
     while mgr._running:
         if not mgr.management_enabled:
+            await asyncio.sleep(5)
+            continue
+
+        if mgr.host and mgr.host.get_status_value("bt_standby"):
             await asyncio.sleep(5)
             continue
 
