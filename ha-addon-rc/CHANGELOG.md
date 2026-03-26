@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.49.0-rc.5] - 2026-03-26
+
+### Fixed
+- **CSP fix**: remove nonce from `script-src` — CSP3 browsers ignore `unsafe-inline` when nonce is present, which blocked all 35+ `onclick` handlers across both templates
+
 ## [2.49.0-rc.4] - 2026-03-26
 
 ### Changed
