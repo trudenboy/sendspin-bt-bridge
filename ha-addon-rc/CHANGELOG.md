@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.49.0-rc.4] - 2026-03-26
+
+### Changed
+- **CI/CD optimization**: merge 3 lint jobs → 1, add pip cache, timeouts, concurrency groups
+- **Pytest on PRs**: fix condition so tests run on ALL pull requests (not just `v*` tags)
+- **SBOM + provenance**: Docker images now include software bill of materials and SLSA provenance
+- **Dependabot**: automated weekly updates for pip, Docker, and GitHub Actions dependencies
+- **Ruff version sync**: pin `ruff==0.11.13` across pyproject.toml, pre-commit, and CI
+- **Cache scope**: namespace GHA build cache per platform for better hit rates
+
 ## [2.49.0-rc.3] - 2026-03-26
 
 ### Fixed
