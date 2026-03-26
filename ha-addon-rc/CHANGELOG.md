@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.49.0-rc.18] - 2026-03-26
+
+### Added
+- **Fast standby wake** — `bt_waking` transition keeps daemon alive during BT reconnect; wake time drops from ~16s to ~5s (BT reconnect only, no daemon restart)
+- **"Waking" UI status** — device card shows pulsing "Waking" badge during standby→play transition
+
 ## [2.49.0-rc.17] - 2026-03-26
 
 ### Added
