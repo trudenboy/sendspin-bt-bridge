@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.50.0-rc.1] - 2026-03-26
+
+### Changed
+- Bump websockets 13.1 → 16.0 (async API migrated to `websockets.asyncio.client`)
+- Bump waitress 2.1.2 → 3.0.2
+- Bump pytest-asyncio to <2.0.0
+- Bump CI actions: github-script 8, setup-node 6, upload-artifact 7, deploy-pages 5, setup-buildx-action 4
+
 ## [2.48.1-rc.4] - 2026-03-25
 
 ### Fixed
