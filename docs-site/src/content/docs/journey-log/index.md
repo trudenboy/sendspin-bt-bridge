@@ -15,10 +15,17 @@ This section captures the narrative behind `CHANGELOG.md` entries:
 
 If you want the latest status first, start with the newest entry below.
 
-## Latest entries
+## Entries
 
 - [2026-03-19 — 2.40.6 release wave, UI polish, and roadmap realignment](./2026-03-19-roadmap-and-docs-realignment/)
 - [2026-03-18 — Stable 2.40.5: manual ports, prerelease channels, and HA fixes](./2026-03-18-stable-2-40-5/)
+- [2026-03-17 — CI convergence and release completion](./2026-03-17-ci-convergence/)
+- [2026-03-16 — MA playback parity and runtime hardening](./2026-03-16-ma-playback-parity/)
+- [2026-03-14 — UI system consolidation](./2026-03-14-ui-consolidation/)
+- [2026-03-12 — Observability, UX polish, and security hardening](./2026-03-12-observability-and-security/)
+- [2026-03-07 — Reliability, multi-bridge, and HA OAuth](./2026-03-07-reliability-and-oauth/)
+- [2026-03-02 — Architectural overhaul and v2 foundation](./2026-03-02-architecture-overhaul/)
+- [January – March 1 — Origins and v1 feature explosion](./2026-01-origins-and-v1/)
 
 ## What belongs here
 
