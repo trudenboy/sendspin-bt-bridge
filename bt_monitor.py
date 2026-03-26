@@ -364,6 +364,13 @@ async def _inner_dbus_monitor(mgr: BluetoothManager, device_iface, disconnect_ev
             # Device is disconnected — attempt reconnect
             mgr.battery_level = None
             disconnect_event.clear()
+
+            # Phase 2: if in standby the daemon is intentionally parked on a
+            # null sink — do NOT kill it or attempt reconnect.
+            if mgr.host and mgr.host.get_status_value("bt_standby"):
+                await asyncio.sleep(5)
+                continue
+
             paired = await loop.run_in_executor(_bt_executor, mgr.is_device_paired)
             mgr.paired = paired
             reconnect_attempt += 1
