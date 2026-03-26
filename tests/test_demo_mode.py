@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import sys
+import threading
 import time
 from pathlib import Path
 from types import SimpleNamespace
@@ -502,9 +503,12 @@ def test_demo_config_save_is_temporary_and_restart_resets_to_canonical(monkeypat
     assert restart_resp.get_json()["success"] is True
     assert restart_resp.get_json()["emulated"] is True
 
+    # monkeypatch patches demo.time.sleep (== global time.sleep), so use
+    # threading.Event().wait() to yield CPU without being affected by the patch.
+    _yield = threading.Event()
     current = None
     progress = None
-    deadline = time.monotonic() + 5.0
+    deadline = time.monotonic() + 10.0
     while time.monotonic() < deadline:
         current = client.get("/api/config").get_json()
         progress = client.get("/api/startup-progress").get_json()
@@ -514,13 +518,13 @@ def test_demo_config_save_is_temporary_and_restart_resets_to_canonical(monkeypat
             and progress.get("message") == "Demo restart complete"
         ):
             break
-        time.sleep(0.02)
+        _yield.wait(0.05)
 
     assert current is not None
     assert progress is not None
     assert len(current["BLUETOOTH_DEVICES"]) == original_count
     assert [device["mac"] for device in current["BLUETOOTH_DEVICES"]] == original_macs
-    assert progress["status"] == "ready"
+    assert progress["status"] == "ready", f"expected 'ready', got {progress!r}"
     assert progress["message"] == "Demo restart complete"
 
 
