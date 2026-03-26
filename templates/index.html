@@ -259,6 +259,7 @@
         <form id="config-form">
             <div class="config-tabs" role="tablist" aria-label="Configuration sections">
                 <button type="button" class="config-tab active" data-config-tab="general"><span class="config-tab-label">General</span><span class="config-tab-dirty-count ui-count-badge ui-count-badge--warning" hidden>0</span></button>
+                <button type="button" class="config-tab" data-config-tab="audio"><span class="config-tab-label">Audio</span><span class="config-tab-dirty-count ui-count-badge ui-count-badge--warning" hidden>0</span></button>
                 <button type="button" class="config-tab" data-config-tab="devices"><span class="config-tab-label">Devices</span><span class="config-tab-dirty-count ui-count-badge ui-count-badge--warning" hidden>0</span></button>
                 <button type="button" class="config-tab" data-config-tab="bluetooth"><span class="config-tab-label">Bluetooth</span><span class="config-tab-dirty-count ui-count-badge ui-count-badge--warning" hidden>0</span></button>
                 <button type="button" class="config-tab" data-config-tab="ma"><span class="config-tab-label">Music Assistant</span><span class="config-tab-dirty-count ui-count-badge ui-count-badge--warning" hidden>0</span></button>
@@ -269,7 +270,7 @@
                 <div class="config-group">
                     <div class="config-group-heading ui-stack ui-stack--xs">
                         <h4 class="config-group-title"><span class="cg-icon ui-icon-slot" data-ui-icon="tag" aria-hidden="true"></span> General</h4>
-                        <p class="config-group-subtitle">Bridge identity, audio configuration, restart behavior, and UI preferences.</p>
+                        <p class="config-group-subtitle">Bridge identity, restart behavior, update policy, and UI preferences.</p>
                     </div>
                     <div class="config-settings-grid">
                         <div class="config-settings-card">
@@ -329,45 +330,6 @@
                                 <span class="config-setting-control">
                                     <span class="config-switch">
                                         <input type="checkbox" name="HA_AREA_NAME_ASSIST_ENABLED" id="ha-area-name-assist-enabled" onchange="return _onHaAreaAssistToggleChange(this.checked)">
-                                        <span class="config-switch-track"></span>
-                                    </span>
-                                </span>
-                            </label>
-                        </div>
-
-                        <div class="config-settings-card">
-                            <div class="config-card-header ui-stack ui-stack--sm">
-                                <div class="config-card-title">Audio / PulseAudio</div>
-                                <p class="config-card-subtitle">Latency, codec, and stream routing for Bluetooth audio via PulseAudio.</p>
-                            </div>
-                            <div class="config-form-grid config-form-grid--single">
-                                <div class="form-group">
-                                    <label>PulseAudio latency (ms)
-                                        <span class="form-hint">Higher values reduce dropouts on slow hardware (default 600)</span>
-                                    </label>
-                                    <input type="number" name="PULSE_LATENCY_MSEC" placeholder="600" min="50" max="2000">
-                                </div>
-                            </div>
-                            <label class="config-setting-row config-setting-row--compact">
-                                <span class="config-setting-copy ui-stack ui-stack--xs">
-                                    <strong>Prefer SBC codec</strong>
-                                    <span class="form-hint">Reduces CPU load on slower hardware (PulseAudio 15+).</span>
-                                </span>
-                                <span class="config-setting-control">
-                                    <span class="config-switch">
-                                        <input type="checkbox" name="PREFER_SBC_CODEC" id="prefer-sbc-codec">
-                                        <span class="config-switch-track"></span>
-                                    </span>
-                                </span>
-                            </label>
-                            <label class="config-setting-row config-setting-row--compact">
-                                <span class="config-setting-copy ui-stack ui-stack--xs">
-                                    <strong>Disable PA rescue-streams</strong>
-                                    <span class="form-hint">Unload PulseAudio module-rescue-streams at startup. Prevents sink drift when BT devices reconnect. Requires restart.</span>
-                                </span>
-                                <span class="config-setting-control">
-                                    <span class="config-switch">
-                                        <input type="checkbox" name="DISABLE_PA_RESCUE_STREAMS" id="disable-pa-rescue-streams">
                                         <span class="config-switch-track"></span>
                                     </span>
                                 </span>
@@ -510,6 +472,55 @@
                             </div>
 
 
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="config-tab-panel" id="config-panel-audio" data-config-panel="audio">
+                <div class="config-group">
+                    <div class="config-group-heading ui-stack ui-stack--xs">
+                        <h4 class="config-group-title"><span class="cg-icon ui-icon-slot" data-ui-icon="speaker" aria-hidden="true"></span> Audio</h4>
+                        <p class="config-group-subtitle">PulseAudio latency, codec, and stream routing for Bluetooth audio.</p>
+                    </div>
+                    <div class="config-settings-grid">
+                        <div class="config-settings-card">
+                            <div class="config-card-header ui-stack ui-stack--sm">
+                                <div class="config-card-title">PulseAudio</div>
+                                <p class="config-card-subtitle">Latency and codec settings for the PulseAudio audio backend.</p>
+                            </div>
+                            <div class="config-form-grid config-form-grid--single">
+                                <div class="form-group">
+                                    <label>PulseAudio latency (ms)
+                                        <span class="form-hint">Higher values reduce dropouts on slow hardware (default 600)</span>
+                                    </label>
+                                    <input type="number" name="PULSE_LATENCY_MSEC" placeholder="600" min="50" max="2000">
+                                </div>
+                            </div>
+                            <label class="config-setting-row config-setting-row--compact">
+                                <span class="config-setting-copy ui-stack ui-stack--xs">
+                                    <strong>Prefer SBC codec</strong>
+                                    <span class="form-hint">Reduces CPU load on slower hardware (PulseAudio 15+).</span>
+                                </span>
+                                <span class="config-setting-control">
+                                    <span class="config-switch">
+                                        <input type="checkbox" name="PREFER_SBC_CODEC" id="prefer-sbc-codec">
+                                        <span class="config-switch-track"></span>
+                                    </span>
+                                </span>
+                            </label>
+                            <label class="config-setting-row config-setting-row--compact">
+                                <span class="config-setting-copy ui-stack ui-stack--xs">
+                                    <strong>Disable PA rescue-streams</strong>
+                                    <span class="form-hint">Unload PulseAudio module-rescue-streams at startup. Prevents sink drift when BT devices reconnect. Requires restart.</span>
+                                </span>
+                                <span class="config-setting-control">
+                                    <span class="config-switch">
+                                        <input type="checkbox" name="DISABLE_PA_RESCUE_STREAMS" id="disable-pa-rescue-streams">
+                                        <span class="config-switch-track"></span>
+                                    </span>
+                                </span>
+                            </label>
                         </div>
                     </div>
                 </div>
