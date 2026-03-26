@@ -620,6 +620,7 @@ function deviceMatchesFilters(dev) {
     if (statusVal === 'stopping') return !!dev.stopping;
     if (statusVal === 'reconnecting') return !!(dev.reconnecting || dev.ma_reconnecting);
     if (statusVal === 'released') return dev.bt_management_enabled === false;
+    if (statusVal === 'standby') return !!dev.bt_standby;
     if (statusVal === 'error') return getDeviceStatusKey(dev) === 'no-sink';
     return true;
 }
