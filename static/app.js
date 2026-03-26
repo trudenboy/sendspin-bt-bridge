@@ -5368,7 +5368,9 @@ function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabl
             escHtmlAttr(String(kaVal)) + '"></div>' +
         '<div><label>Idle standby (min)</label>' +
             '<input type="number" class="bt-idle-disconnect" min="0" placeholder="0" ' +
-            'title="Disconnect BT after this many idle minutes. 0 = always connected. Recommended: 30" value="' +
+            'title="Disconnect BT after this many idle minutes (0 = always connected). ' +
+            'Wake-on-play will reconnect automatically. Note: some speakers/headphones ' +
+            'enter deep sleep after a model-specific timeout and cannot be woken remotely." value="' +
             escHtmlAttr(String(idleVal)) + '"></div>' +
         '<div data-experimental style="display:none"><label>Room name</label>' +
             '<input type="text" class="bt-room-name" placeholder="e.g. Living Room" title="Stable room label for MA/HA/MassDroid interoperability" value="' +
