@@ -158,8 +158,9 @@ class TestAutoWake:
 
             await client._on_standby_play_detected()
 
-            assert client.status["bt_standby"] is False
-            assert client.status["bt_standby_since"] is None
+            # bt_standby stays True until reroute; bt_waking signals reconnect
+            assert client.status["bt_standby"] is True
+            assert client.status["bt_waking"] is True
             client.bt_manager.allow_reconnect.assert_called_once()
 
     @pytest.mark.asyncio

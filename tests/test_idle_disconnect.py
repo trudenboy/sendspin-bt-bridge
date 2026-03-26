@@ -185,8 +185,9 @@ class TestWakeFromStandby:
 
             await client._wake_from_standby()
 
-            assert client.status["bt_standby"] is False
-            assert client.status["bt_standby_since"] is None
+            # bt_standby stays True until reroute completes; bt_waking signals reconnect
+            assert client.status["bt_standby"] is True
+            assert client.status["bt_waking"] is True
             assert client.status.get("bt_released_by") is None
             client.bt_manager.allow_reconnect.assert_called_once()
             state_mock.publish_device_event.assert_called()

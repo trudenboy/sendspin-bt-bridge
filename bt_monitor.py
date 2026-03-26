@@ -367,9 +367,13 @@ async def _inner_dbus_monitor(mgr: BluetoothManager, device_iface, disconnect_ev
 
             # Phase 2: if in standby the daemon is intentionally parked on a
             # null sink — do NOT kill it or attempt reconnect.
+            # Exception: bt_waking means auto-wake requested BT reconnect.
             if mgr.host and mgr.host.get_status_value("bt_standby"):
-                await asyncio.sleep(5)
-                continue
+                if not mgr.host.get_status_value("bt_waking"):
+                    await asyncio.sleep(5)
+                    continue
+                # bt_waking: reconnect BT but skip daemon kill below
+                logger.info("[%s] Standby wake — reconnecting BT (daemon stays alive)", mgr.device_name)
 
             paired = await loop.run_in_executor(_bt_executor, mgr.is_device_paired)
             mgr.paired = paired
@@ -387,7 +391,9 @@ async def _inner_dbus_monitor(mgr: BluetoothManager, device_iface, disconnect_ev
                 return
 
             # Stop sendspin (BT sink is gone — would flood PortAudioErrors)
-            if mgr.host and mgr.host.is_subprocess_running():
+            # Skip when waking from standby — daemon must stay alive for reroute.
+            is_waking = mgr.host and mgr.host.get_status_value("bt_waking")
+            if not is_waking and mgr.host and mgr.host.is_subprocess_running():
                 logger.info("BT disconnected for %s, stopping sendspin daemon...", mgr.device_name)
                 is_grouped = bool(mgr.host.get_status_value("group_id"))
                 if not is_grouped:

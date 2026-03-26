@@ -173,6 +173,7 @@ class DeviceStatus:
     group_muted: bool | None = None
     bt_standby: bool = False
     bt_standby_since: str | None = None
+    bt_waking: bool = False
 
     # ── Dict-compatible interface ──────────────────────────────────────────
 
@@ -485,19 +486,18 @@ class SendspinClient:
         logger.info("[%s] Entered standby (BT disconnected, daemon on null sink)", self.player_name)
 
     async def _wake_from_standby(self) -> None:
-        """Reconnect BT and reroute daemon streams from null sink back to BT.
+        """Begin BT reconnect while keeping daemon alive on null sink.
 
-        Phase 2: daemon is still alive on null sink.  Reconnect BT, find
-        the new sink name, move streams there, and send reanchor so playback
-        restarts cleanly from the current position.
+        Sets ``bt_waking=True`` so bt_monitor reconnects BT without killing
+        the daemon.  ``bt_standby`` stays True until ``_reroute_to_bt_sink()``
+        successfully moves streams to the BT sink.
         """
         if not self.status.get("bt_standby"):
             return
 
         self._update_status(
             {
-                "bt_standby": False,
-                "bt_standby_since": None,
+                "bt_waking": True,
                 "bt_released_by": None,
             }
         )
@@ -525,8 +525,8 @@ class SendspinClient:
     async def _reroute_to_bt_sink(self) -> None:
         """After BT reconnect, move streams from null sink to the BT sink and reanchor.
 
-        Called from ``run()`` after BT connects and ``configure_bluetooth_audio()``
-        discovers the new sink name.
+        Called from ``_start_sendspin_inner()`` when daemon is still alive after
+        standby wake.  Clears ``bt_standby`` / ``bt_waking`` on success.
         """
         daemon_pid = self._daemon_proc.pid if self._daemon_proc else None
         if not daemon_pid or not self.bluetooth_sink_name:
@@ -534,11 +534,20 @@ class SendspinClient:
         from services.pulse import amove_pid_sink_inputs
 
         moved = await amove_pid_sink_inputs(daemon_pid, self.bluetooth_sink_name)
+        # Clear standby state regardless of streams moved
+        self._update_status(
+            {
+                "bt_standby": False,
+                "bt_standby_since": None,
+                "bt_waking": False,
+            }
+        )
         if moved > 0:
             logger.info("[%s] Rerouted %d stream(s) to BT sink %s", self.player_name, moved, self.bluetooth_sink_name)
-            # Reanchor so the stream restarts from the current position
             await self._send_subprocess_command({"cmd": "reconnect", "delay": 1.0})
             logger.info("[%s] Sent reanchor after wake", self.player_name)
+        else:
+            logger.info("[%s] Standby cleared (no active streams to reroute)", self.player_name)
 
     def _cancel_ma_reconnect_task(self) -> None:
         task = self._ma_reconnect_task

@@ -1249,6 +1249,12 @@ function getUnifiedDeviceStatusMeta(dev) {
         tone = 'warning';
         summary = safeDev.ma_reconnecting ? 'Refreshing Music Assistant connection' : 'Trying to reconnect';
         pulse = true;
+    } else if (safeDev.bt_standby && safeDev.bt_waking) {
+        key = 'waking';
+        label = 'Waking';
+        tone = 'warning';
+        summary = 'Reconnecting Bluetooth after standby';
+        pulse = true;
     } else if (safeDev.bt_standby) {
         key = 'standby';
         label = 'Standby';
