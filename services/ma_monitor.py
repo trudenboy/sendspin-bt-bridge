@@ -665,12 +665,17 @@ class MaMonitor:
 
         try:
             import websockets
+
+            try:
+                from websockets.asyncio.client import connect as _ws_connect
+            except ImportError:
+                _ws_connect = websockets.connect  # type: ignore[attr-defined]
         except ImportError:
             logger.warning("websockets not installed — MA monitor disabled")
             return
 
         _ws_kw: dict = {"proxy": None} if int(websockets.__version__.split(".")[0]) >= 15 else {}
-        async with websockets.connect(self._ws_url, **_ws_kw) as ws:
+        async with _ws_connect(self._ws_url, **_ws_kw) as ws:
             # Server info
             server_info = await _recv(ws, timeout=10.0)
             self._detect_ha_addon(server_info)
@@ -1091,10 +1096,15 @@ async def send_player_cmd(command: str, args: dict) -> bool:
     try:
         import websockets
 
+        try:
+            from websockets.asyncio.client import connect as _ws_connect
+        except ImportError:
+            _ws_connect = websockets.connect  # type: ignore[attr-defined]
+
         _ws_kw: dict = {"proxy": None} if int(websockets.__version__.split(".")[0]) >= 15 else {}
         normalized = await _normalize_ma_url(ma_url)
         ws_url = normalized.replace("http://", "ws://").replace("https://", "wss://") + "/ws"
-        async with websockets.connect(ws_url, **_ws_kw) as ws:
+        async with _ws_connect(ws_url, **_ws_kw) as ws:
             await _recv(ws, timeout=5.0)  # server info
             await _send(ws, 1, "auth", {"token": ma_token})
             auth_resp = await _recv(ws, timeout=5.0)
