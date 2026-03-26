@@ -5481,6 +5481,7 @@ function populateBtDeviceRows(devices) {
                        d.preferred_format, d.keepalive_interval, d.room_name, d.room_id, d.handoff_mode, d.idle_disconnect_minutes);
     });
     refreshBtDeviceRowsRuntime();
+    _applyExperimentalVisibility();
 }
 
 function _hasDetectedAdapter() {
@@ -6266,6 +6267,7 @@ function autoAdapter() {
 
 function addFromScan(mac, name, adapter) {
     addBtDeviceRow(name, mac, adapter || autoAdapter());
+    _applyExperimentalVisibility();
     var box = document.getElementById('scan-results-box');
     var status = document.getElementById('scan-status');
     if (box) box.hidden = true;
@@ -6276,6 +6278,7 @@ function addFromScan(mac, name, adapter) {
 
 function addFromPaired(mac, name) {
     addBtDeviceRow(name, mac, autoAdapter());
+    _applyExperimentalVisibility();
     _afterBluetoothAddToFleet(name, mac);
 }
 
