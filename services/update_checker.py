@@ -329,7 +329,7 @@ def _normalize_update_ref(target_ref: str | None) -> str | None:
     normalized = str(target_ref).strip()
     if not normalized:
         return None
-    if not re.fullmatch(r"v?[0-9A-Za-z._\-]+", normalized):
+    if not re.fullmatch(r"v?[0-9A-Za-z][0-9A-Za-z._\-]*", normalized):
         raise ValueError(f"Invalid update ref: {normalized!r}")
     if normalized.startswith("v") or normalized.startswith("release/"):
         return normalized

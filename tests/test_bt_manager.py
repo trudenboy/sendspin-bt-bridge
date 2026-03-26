@@ -45,6 +45,9 @@ class _FakeProc:
         self._returncode = 0
         return self._tail, ""
 
+    def terminate(self):
+        self._returncode = -15
+
     def kill(self):
         self._returncode = -9
 
@@ -309,3 +312,216 @@ def test_pair_device_trusts_only_after_pair_success(bt_manager):
     assert fake_proc.stdin.writes[2] == "yes\n"
     assert fake_proc.stdin.writes[3].startswith(f"trust {bt_manager.mac_address}\n")
     assert "trust" not in fake_proc.stdin.writes[1]
+
+
+# ---------------------------------------------------------------------------
+# pair_device — cancel-after-spawn race protection
+# ---------------------------------------------------------------------------
+
+
+def test_pair_device_cancelled_before_popen(bt_manager):
+    """pair_device returns False immediately if cancelled before Popen."""
+    bt_manager._cancel_reconnect.set()
+
+    with patch("bluetooth_manager.subprocess.Popen") as mock_popen:
+        assert bt_manager.pair_device() is False
+
+    mock_popen.assert_not_called()
+
+
+def test_pair_device_cancelled_after_popen(bt_manager):
+    """pair_device terminates the subprocess if cancelled between Popen and first write."""
+    fake_proc = _FakeProc(stdout_lines=[], tail="")
+
+    def _set_cancelled(*_a, **_kw):
+        bt_manager._cancel_reconnect.set()
+        return fake_proc
+
+    with (
+        patch("bluetooth_manager.subprocess.Popen", side_effect=_set_cancelled),
+        patch("selectors.DefaultSelector", side_effect=lambda: _FakeSelector(fake_proc.stdout)),
+    ):
+        assert bt_manager.pair_device() is False
+
+    # The process should have been terminated (wait sets _returncode)
+    assert fake_proc._returncode is not None
+
+
+# ---------------------------------------------------------------------------
+# _resolve_adapter_hci_name — fallback paths
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_adapter_hci_name_returns_config_adapter_directly():
+    """When adapter is already hciN, _resolve_adapter_hci_name returns it as-is."""
+    from bluetooth_manager import BluetoothManager
+
+    with patch("subprocess.check_output", return_value=""):
+        mgr = BluetoothManager(mac_address="AA:BB:CC:DD:EE:FF", adapter="hci1")
+
+    assert mgr.adapter_hci_name == "hci1"
+
+
+def test_resolve_adapter_hci_name_bluetoothctl_fallback():
+    """When sysfs is unavailable, falls back to bluetoothctl list output."""
+    from bluetooth_manager import BluetoothManager
+
+    bt_list_output = "Controller C0:FB:F9:62:D6:9D MyAdapter1 [default]\nController C0:FB:F9:62:D7:D6 MyAdapter2\n"
+
+    with (
+        patch("subprocess.check_output", return_value=""),
+        patch.object(BluetoothManager, "_detect_default_adapter_mac", return_value="C0:FB:F9:62:D7:D6"),
+        patch("pathlib.Path.iterdir", side_effect=OSError("no sysfs")),
+        patch("subprocess.run") as mock_run,
+    ):
+        mock_run.return_value = MagicMock(stdout=bt_list_output, returncode=0)
+        mgr = BluetoothManager(mac_address="AA:BB:CC:DD:EE:FF")
+
+    assert mgr.adapter_hci_name == "hci1"
+
+
+def test_resolve_adapter_hci_name_empty_when_all_fail():
+    """Returns empty string when both sysfs and bluetoothctl fail."""
+    from bluetooth_manager import BluetoothManager
+
+    with (
+        patch("subprocess.check_output", return_value=""),
+        patch.object(BluetoothManager, "_detect_default_adapter_mac", return_value="FF:FF:FF:FF:FF:FF"),
+        patch("pathlib.Path.iterdir", side_effect=OSError("no sysfs")),
+        patch("subprocess.run") as mock_run,
+    ):
+        mock_run.return_value = MagicMock(stdout="Controller AA:BB:CC:DD:EE:00 Adapter\n", returncode=0)
+        mgr = BluetoothManager(mac_address="AA:BB:CC:DD:EE:FF")
+
+    assert mgr.adapter_hci_name == ""
+    assert mgr._dbus_device_path is None
+
+
+# ---------------------------------------------------------------------------
+# connect_device — timeout and retry behaviour
+# ---------------------------------------------------------------------------
+
+
+def test_connect_device_retries_status_checks(bt_manager):
+    """connect_device polls is_device_connected up to _CONNECT_CHECK_RETRIES times."""
+    check_calls = []
+
+    def _fake_connected():
+        check_calls.append(1)
+        # Succeed on the 4th check
+        return len(check_calls) >= 4
+
+    with (
+        patch.object(bt_manager, "is_device_connected", side_effect=_fake_connected),
+        patch.object(bt_manager, "is_device_paired", return_value=True),
+        patch.object(bt_manager, "configure_bluetooth_audio"),
+        patch.object(bt_manager, "_wait_with_cancel", return_value=True),
+    ):
+        bt_manager._run_bluetoothctl = MagicMock(return_value=(True, ""))
+
+        result = bt_manager.connect_device()
+
+    assert result is True
+    # 1 initial check (returns False) + retries until 4th total check succeeds
+    assert len(check_calls) >= 4
+
+
+def test_connect_device_fails_after_all_retries(bt_manager):
+    """connect_device returns False when all status checks report disconnected."""
+    with (
+        patch.object(bt_manager, "is_device_connected", return_value=False),
+        patch.object(bt_manager, "is_device_paired", return_value=True),
+        patch.object(bt_manager, "_wait_with_cancel", return_value=True),
+    ):
+        bt_manager._run_bluetoothctl = MagicMock(return_value=(True, ""))
+
+        result = bt_manager.connect_device()
+
+    assert result is False
+
+
+# ---------------------------------------------------------------------------
+# is_device_connected — various bluetoothctl output formats
+# ---------------------------------------------------------------------------
+
+
+def test_is_device_connected_dbus_true(bt_manager):
+    """D-Bus returns True — should report connected."""
+    with patch("bluetooth_manager._dbus_get_device_property", return_value=True):
+        assert bt_manager.is_device_connected() is True
+    assert bt_manager.connected is True
+
+
+def test_is_device_connected_dbus_false(bt_manager):
+    """D-Bus returns False — should report disconnected."""
+    bt_manager.connected = True  # was previously connected
+    with patch("bluetooth_manager._dbus_get_device_property", return_value=False):
+        assert bt_manager.is_device_connected() is False
+    assert bt_manager.connected is False
+
+
+def test_is_device_connected_bluetoothctl_fallback(bt_manager):
+    """When D-Bus is unavailable, falls back to bluetoothctl output."""
+    with (
+        patch("bluetooth_manager._dbus_get_device_property", return_value=None),
+        patch.object(bt_manager, "_run_bluetoothctl", return_value=(True, "Connected: yes")),
+    ):
+        assert bt_manager.is_device_connected() is True
+
+
+def test_is_device_connected_exception_returns_false(bt_manager):
+    """Exceptions in connection check should return False."""
+    bt_manager.connected = True
+    with patch("bluetooth_manager._dbus_get_device_property", side_effect=RuntimeError("D-Bus exploded")):
+        assert bt_manager.is_device_connected() is False
+    assert bt_manager.connected is False
+
+
+# ---------------------------------------------------------------------------
+# Exponential backoff in reconnect logic
+# ---------------------------------------------------------------------------
+
+
+def test_reconnect_delay_first_three_attempts_use_check_interval(bt_manager):
+    """Attempts 1-3 should use check_interval without escalation."""
+    bt_manager.check_interval = 10
+    assert bt_manager._reconnect_delay(1) == 10
+    assert bt_manager._reconnect_delay(2) == 10
+    assert bt_manager._reconnect_delay(3) == 10
+
+
+def test_reconnect_delay_doubles_after_third_attempt(bt_manager):
+    """Attempts 4+ should double the delay each time."""
+    bt_manager.check_interval = 10
+    assert bt_manager._reconnect_delay(4) == 20  # 10 * 2^1
+    assert bt_manager._reconnect_delay(5) == 40  # 10 * 2^2
+    assert bt_manager._reconnect_delay(6) == 80  # 10 * 2^3
+
+
+def test_reconnect_delay_capped_at_max(bt_manager):
+    """Delay must never exceed _MAX_RECONNECT_DELAY_S (300s)."""
+    bt_manager.check_interval = 10
+    assert bt_manager._reconnect_delay(50) == 300.0
+
+
+def test_handle_reconnect_failure_releases_after_threshold(bt_manager):
+    """Management is released after max_reconnect_fails consecutive failures."""
+    bt_manager.max_reconnect_fails = 3
+    bt_manager.host = MagicMock()
+    bt_manager.host.bt_management_enabled = True
+
+    with patch("services.bluetooth.persist_device_released"):
+        released = bt_manager._handle_reconnect_failure(3)
+
+    assert released is True
+    assert bt_manager.management_enabled is False
+
+
+def test_handle_reconnect_failure_does_not_release_below_threshold(bt_manager):
+    """Management stays active below max_reconnect_fails."""
+    bt_manager.max_reconnect_fails = 5
+
+    released = bt_manager._handle_reconnect_failure(4)
+
+    assert released is False
+    assert bt_manager.management_enabled is True

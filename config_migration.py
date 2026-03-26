@@ -155,7 +155,7 @@ def _normalize_bluetooth_devices(config: dict, *, defaults: Mapping[str, Any]) -
             normalized["room_name"] = room_name
         else:
             normalized.pop("room_name", None)
-        if normalized.get("handoff_mode") not in (None, "") or handoff_mode != HANDOFF_MODES[0]:
+        if normalized.get("handoff_mode") not in (None, "") and handoff_mode != HANDOFF_MODES[0]:
             normalized["handoff_mode"] = handoff_mode
         else:
             normalized.pop("handoff_mode", None)

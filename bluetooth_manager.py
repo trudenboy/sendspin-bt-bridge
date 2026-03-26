@@ -377,6 +377,13 @@ class BluetoothManager:
             if proc.stdin is None:
                 raise RuntimeError("bluetoothctl subprocess stdin unavailable")
 
+            # Re-check after subprocess is spawned to close the race window
+            if self._reconnect_cancelled():
+                logger.info("[%s] Pairing cancelled after subprocess spawn", self.device_name)
+                proc.terminate()
+                proc.wait(timeout=3)
+                return False
+
             proc.stdin.write("\n".join(initial_cmds) + "\n")
             proc.stdin.flush()
             if not self._wait_with_cancel(_PAIRING_SCAN_DURATION):

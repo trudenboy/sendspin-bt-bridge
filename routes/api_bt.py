@@ -39,6 +39,7 @@ _CHG_RSSI_PAT = re.compile(r"\[CHG\]\s+Device\s+([0-9A-Fa-f:]{17})\s+RSSI:")
 _SHOW_CTRL_PAT = re.compile(r"^Controller\s+([0-9A-Fa-f:]{17})")
 _SHOW_DEV_PAT = re.compile(r"^Device\s+([0-9A-Fa-f:]{17})")
 _bt_operation_lock = threading.Lock()
+_scan_lock = threading.Lock()
 
 
 def _bt_operation_conflict_response():
@@ -137,7 +138,7 @@ def api_bt_management():
         return jsonify({"success": False, "error": "No client found"}), 503
     enabled = bool(enabled)
     threading.Thread(target=client.set_bt_management_enabled, args=(enabled,), daemon=True).start()
-    _persist_device_released(player_name, not enabled)
+    _persist_device_released(str(player_name), not enabled)
     # Sync enabled state to HA Supervisor so the Configuration page reflects it
     try:
         with config_lock, open(CONFIG_FILE) as _f:
@@ -521,8 +522,6 @@ def _run_reset_reconnect(job_id: str, mac: str, adapter: str) -> None:
 @bt_bp.route("/api/bt/scan", methods=["POST"])
 def api_bt_scan():
     """Start an async BT device scan; returns a job_id immediately."""
-    if is_scan_running():
-        return jsonify({"error": "A scan is already in progress"}), 409
     data = request.get_json(silent=True) or {}
     raw_adapter = (data.get("adapter") or "").strip()
     adapter_value = "" if raw_adapter.lower() == "all" else raw_adapter
@@ -532,22 +531,25 @@ def api_bt_scan():
         adapter_macs = _resolve_scan_adapter_macs(adapter)
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
-    if time.monotonic() - _last_scan_completed < _SCAN_COOLDOWN:
-        remaining = int(_SCAN_COOLDOWN - (time.monotonic() - _last_scan_completed)) + 1
-        return jsonify({"error": "Scan cooldown active", "retry_after": remaining}), 429
-    if not _try_acquire_bt_operation():
-        return _bt_operation_conflict_response()
-    job_id = str(uuid.uuid4())
-    scan_options = _build_scan_options(adapter, audio_only, adapter_macs)
-    expected_duration = _estimate_scan_duration(adapter_macs)
-    create_scan_job(
-        job_id,
-        {
-            "scan_options": scan_options,
-            "expected_duration": expected_duration,
-            "started_at": time.time(),
-        },
-    )
+    with _scan_lock:
+        if is_scan_running():
+            return jsonify({"error": "A scan is already in progress"}), 409
+        if time.monotonic() - _last_scan_completed < _SCAN_COOLDOWN:
+            remaining = int(_SCAN_COOLDOWN - (time.monotonic() - _last_scan_completed)) + 1
+            return jsonify({"error": "Scan cooldown active", "retry_after": remaining}), 429
+        if not _try_acquire_bt_operation():
+            return _bt_operation_conflict_response()
+        job_id = str(uuid.uuid4())
+        scan_options = _build_scan_options(adapter, audio_only, adapter_macs)
+        expected_duration = _estimate_scan_duration(adapter_macs)
+        create_scan_job(
+            job_id,
+            {
+                "scan_options": scan_options,
+                "expected_duration": expected_duration,
+                "started_at": time.time(),
+            },
+        )
 
     def _run_job():
         try:

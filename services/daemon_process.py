@@ -405,13 +405,15 @@ async def _read_commands(daemon_ref: list, stop_event: asyncio.Event) -> None:
                 except (ValueError, TypeError):
                     logger.warning("Invalid volume value: %s", value)
                     continue
-                daemon._bridge_status["volume"] = vol
+                with _status_lock:
+                    daemon._bridge_status["volume"] = vol
                 daemon._sync_bt_sink_volume(vol)
                 daemon._notify()
         elif cmd.cmd == "set_mute":
             daemon = daemon_ref[0] if daemon_ref else None
             if daemon and "muted" in cmd.payload:
-                daemon._bridge_status["muted"] = bool(cmd.payload["muted"])
+                with _status_lock:
+                    daemon._bridge_status["muted"] = bool(cmd.payload["muted"])
                 daemon._notify()
         elif cmd.cmd == "reconnect":
             daemon = daemon_ref[0] if daemon_ref else None

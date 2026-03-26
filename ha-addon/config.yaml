@@ -19,7 +19,6 @@ hassio_role: default
 homeassistant_api: true
 auth_api: true
 privileged:
-  - SYS_ADMIN
   - NET_ADMIN
   - NET_RAW
 devices:

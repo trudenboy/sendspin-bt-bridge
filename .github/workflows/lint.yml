@@ -66,3 +66,22 @@ jobs:
 
       - name: Mypy
         run: mypy --config-file pyproject.toml *.py routes/ services/
+
+      - name: Audit dependencies for CVEs
+        run: pip install pip-audit && pip-audit -r requirements.txt
+        continue-on-error: true
+
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install shellcheck
+        run: sudo apt-get install -y shellcheck
+
+      - name: Lint shell scripts
+        run: |
+          shellcheck entrypoint.sh
+          find rootfs -name '*.sh' -o -name 'run' -o -name 'finish' | xargs -r shellcheck --shell=bash || true
+        continue-on-error: true

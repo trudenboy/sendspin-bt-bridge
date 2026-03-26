@@ -309,6 +309,8 @@ def api_ma_artwork():
             if len(body) > _ARTWORK_MAX_BYTES:
                 return Response("Artwork too large", status=413)
             content_type = resp.headers.get("Content-Type", "application/octet-stream")
+            if not content_type.startswith("image/"):
+                content_type = "application/octet-stream"
             return Response(body, content_type=content_type, headers={"Cache-Control": "private, max-age=60"})
     except _ue.HTTPError as exc:
         logger.warning("MA artwork proxy HTTP %s for %s", exc.code, artwork_url)

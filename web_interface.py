@@ -12,11 +12,12 @@ from __future__ import annotations
 
 import logging
 import os
+import secrets
 import threading
 from datetime import timedelta
 from pathlib import Path
 
-from flask import Flask, jsonify, redirect, request, send_from_directory, session, url_for
+from flask import Flask, g, jsonify, redirect, request, send_from_directory, session, url_for
 from waitress import serve  # type: ignore[import-untyped]
 
 from config import ensure_secret_key, get_runtime_version, load_config, resolve_additional_web_port, resolve_web_port
@@ -121,6 +122,12 @@ app.register_blueprint(transport_bp)
 app.register_blueprint(auth_bp)
 
 
+@app.before_request
+def _generate_csp_nonce():
+    """Generate a per-request nonce for CSP script-src."""
+    g.csp_nonce = secrets.token_urlsafe(16)
+
+
 @app.context_processor
 def inject_version():
     """Make asset versions available in all templates for cache-busting."""
@@ -133,7 +140,7 @@ def inject_version():
             mtime = 0
         return f"{runtime_version}-{mtime}"
 
-    return {"VERSION": runtime_version, "asset_version": asset_version}
+    return {"VERSION": runtime_version, "asset_version": asset_version, "csp_nonce": g.csp_nonce}
 
 
 @app.route("/static/v<version>/<path:filename>")
@@ -161,9 +168,10 @@ def _set_cache_headers(response):
         response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
         response.headers["Pragma"] = "no-cache"
         response.headers["Expires"] = "0"
+        nonce = getattr(g, "csp_nonce", "")
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline'; "
+            f"script-src 'self' 'nonce-{nonce}'; "
             "style-src 'self' 'unsafe-inline'; "
             "img-src 'self' data:; "
             "connect-src 'self' ws: wss:; "

@@ -297,10 +297,11 @@ def _run(coro):
 @atexit.register
 def _cleanup_loops():
     with _thread_loops_lock:
-        for loop in _thread_loops:
-            if not loop.is_closed():
-                loop.close()
+        loops = list(_thread_loops)
         _thread_loops.clear()
+    for loop in loops:
+        if not loop.is_closed():
+            loop.close()
 
 
 def list_sinks() -> list[dict]:

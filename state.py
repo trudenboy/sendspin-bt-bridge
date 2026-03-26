@@ -230,8 +230,8 @@ def _sync_legacy_registry_aliases(snapshot) -> None:
     """Mirror canonical registry state onto legacy module-level aliases."""
     with clients_lock:
         clients[:] = snapshot.active_clients
-    with _disabled_devices_lock:
-        _disabled_devices[:] = snapshot.disabled_devices
+        with _disabled_devices_lock:
+            _disabled_devices[:] = snapshot.disabled_devices
 
 
 _register_registry_listener(_sync_legacy_registry_aliases)
@@ -429,8 +429,7 @@ def get_device_events(device_id: str, limit: int | None = None) -> list[dict[str
     if not device_id:
         return []
     with _device_events_lock:
-        events = list(_device_events.get(device_id, ()))
-    events.reverse()
+        events = list(reversed(_device_events.get(device_id, ())))
     if limit is not None:
         return events[:limit]
     return events

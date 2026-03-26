@@ -7,7 +7,7 @@ ARG SENDSPIN_VERSION=""
 
 # Build-time system dependencies (needed to compile dbus-python, portaudio bindings,
 # and PyAV on architectures without pre-built wheels)
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     g++ \
     pkg-config \
@@ -71,7 +71,7 @@ ENV PYTHONUNBUFFERED=1 \
     S6_CMD_WAIT_FOR_SERVICES_MAXTIME=30000
 
 # Runtime system dependencies only (no build tools)
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     bluetooth \
     bluez \
     bluez-tools \

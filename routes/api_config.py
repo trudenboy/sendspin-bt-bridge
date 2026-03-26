@@ -25,6 +25,7 @@ from config import (
     CONFIG_FILE,
     CONFIG_SCHEMA_VERSION,
     DEFAULT_UPDATE_CHANNEL,
+    RUNTIME_STATE_CONFIG_KEYS,
     SENSITIVE_CONFIG_KEYS,
     _player_id_from_mac,
     config_lock,
@@ -64,6 +65,13 @@ from services.update_checker import _is_newer_version, _start_upgrade_job, chann
 logger = logging.getLogger(__name__)
 
 config_bp = Blueprint("api_config", __name__)
+
+# Keys accepted via POST /api/config.  Sensitive keys (passwords, tokens,
+# secrets) and internal runtime-state keys are intentionally excluded so
+# they cannot be overwritten by the web form.
+_ALLOWED_POST_CONFIG_KEYS = (
+    CONFIG_ALLOWED_KEYS - SENSITIVE_CONFIG_KEYS - RUNTIME_STATE_CONFIG_KEYS - {"MA_AUTH_PROVIDER"}
+) | {"LAST_VOLUMES", "MA_API_TOKEN", "_new_device_default_volume"}
 
 # Cached config flag — avoid reading config.json on every volume/mute request.
 # Reloaded in api_config() after config save; also valid on process restart
@@ -617,6 +625,7 @@ def api_config():
         errors = [{"field": issue.field, "message": issue.message} for issue in validation.errors]
         return _validation_error_response(errors, warnings)
     config = validation.normalized_config
+    config = {k: v for k, v in config.items() if k in _ALLOWED_POST_CONFIG_KEYS}
     warnings = _append_ma_duplicate_device_warnings(config, warnings)
 
     # Validate top-level string fields
@@ -716,13 +725,6 @@ def api_config():
     except ValueError as exc:
         return _error_response(str(exc))
 
-    # Strip unknown top-level keys (whitelist)
-    _ALLOWED_POST_KEYS = (
-        CONFIG_ALLOWED_KEYS
-        - {"AUTH_PASSWORD_HASH", "SECRET_KEY", "MA_ACCESS_TOKEN", "MA_REFRESH_TOKEN", "LAST_SINKS", "MA_AUTH_PROVIDER"}
-    ) | {"_new_device_default_volume"}
-    config = {k: v for k, v in config.items() if k in _ALLOWED_POST_KEYS}
-
     # Require password when enabling auth (except HA addon — uses HA login)
     if config.get("AUTH_ENABLED") and not os.environ.get("SUPERVISOR_TOKEN"):
         has_hash = False
@@ -781,9 +783,12 @@ def api_config():
 
         for mac, old_dev in old_devices.items():
             new_dev = new_devices.get(mac)
-            adapter_changed = bool(new_dev) and _normalize_device_adapter(
-                new_dev.get("adapter")
-            ) != _normalize_device_adapter(old_dev.get("adapter"))
+            adapter_changed = (
+                bool(new_dev)
+                and new_dev is not None
+                and _normalize_device_adapter(new_dev.get("adapter"))
+                != _normalize_device_adapter(old_dev.get("adapter"))
+            )
             deleted = new_dev is None
             if deleted or adapter_changed:
                 adapter_mac = client_adapter.get(mac) or ""

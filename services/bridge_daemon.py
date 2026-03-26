@@ -179,6 +179,9 @@ class BridgeDaemon(SendspinDaemon):
 
     def _patch_artwork_handler(self, client) -> None:
         """Monkey-patch the client's binary message handler to forward artwork frames."""
+        if not hasattr(client, "_handle_binary_message"):
+            logger.warning("aiosendspin API changed: _handle_binary_message not found; artwork relay disabled")
+            return
         original_handler = client._handle_binary_message
         artwork_types = {
             BinaryMessageType.ARTWORK_CHANNEL_0.value,

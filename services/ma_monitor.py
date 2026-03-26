@@ -723,6 +723,7 @@ class MaMonitor:
                     logger.info("MA monitor: events unavailable, using polling every %ds", _POLL_INTERVAL)
                     await self._polling_loop(ws)
             finally:
+                self._cancel_pending_cmd_futures()
                 self._ws = None
 
     async def _poll_queues(self, ws) -> None:
@@ -824,6 +825,16 @@ class MaMonitor:
                 logger.debug("MA monitor event error: %s", exc)
                 raise  # bubble up to reconnect loop
 
+    def _cancel_pending_cmd_futures(self) -> None:
+        """Fail any pending command futures still in the queue."""
+        while not self._cmd_queue.empty():
+            try:
+                _, _, fut = self._cmd_queue.get_nowait()
+                if not fut.done():
+                    fut.set_exception(RuntimeError("MA monitor disconnected"))
+            except asyncio.QueueEmpty:
+                break
+
     async def _polling_loop(self, ws) -> None:
         """Fallback: poll every POLL_INTERVAL seconds."""
         while self._running:
@@ -865,14 +876,7 @@ class MaMonitor:
                 disconnect_error = str(exc)
                 logger.warning("MA monitor disconnected: %s — reconnecting in %ds", exc, delay)
             self._ws = None
-            # Cancel any pending command futures
-            while not self._cmd_queue.empty():
-                try:
-                    _, _, fut = self._cmd_queue.get_nowait()
-                    if not fut.done():
-                        fut.cancel()
-                except asyncio.QueueEmpty:
-                    break
+            self._cancel_pending_cmd_futures()
             _state.set_ma_connected(False)
             _state.mark_ma_now_playing_stale(disconnect_error)
             for client in _active_bridge_clients():

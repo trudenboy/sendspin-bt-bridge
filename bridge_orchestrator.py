@@ -62,7 +62,7 @@ def _harden_pulseaudio(*, disable_rescue_streams: bool) -> None:
             logger.info("PA hardening: loaded null-sink '%s'", _PA_FALLBACK_SINK)
         else:
             # Already loaded or PA not available — both are fine
-            logger.debug("PA hardening: null-sink load returned rc=%d: %s", r.returncode, r.stderr.strip())
+            logger.warning("PA hardening: null-sink load returned rc=%d: %s", r.returncode, r.stderr.strip())
 
         # 2. Set the null-sink as default so rescue-streams targets it
         r = subprocess.run(
@@ -74,7 +74,7 @@ def _harden_pulseaudio(*, disable_rescue_streams: bool) -> None:
         if r.returncode == 0:
             logger.info("PA hardening: default sink → %s", _PA_FALLBACK_SINK)
         else:
-            logger.debug("PA hardening: set-default-sink returned rc=%d: %s", r.returncode, r.stderr.strip())
+            logger.warning("PA hardening: set-default-sink returned rc=%d: %s", r.returncode, r.stderr.strip())
 
         # 3. Optionally unload module-rescue-streams
         if disable_rescue_streams:
@@ -87,7 +87,7 @@ def _harden_pulseaudio(*, disable_rescue_streams: bool) -> None:
             if r.returncode == 0:
                 logger.info("PA hardening: unloaded module-rescue-streams")
             else:
-                logger.debug(
+                logger.warning(
                     "PA hardening: module-rescue-streams unload returned rc=%d: %s",
                     r.returncode,
                     r.stderr.strip(),

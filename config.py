@@ -49,7 +49,7 @@ from config_network import (  # noqa: F401
     resolve_web_port,
 )
 
-VERSION = "2.49.0-rc.1"
+VERSION = "2.49.0-rc.2"
 BUILD_DATE = "2026-03-26"
 _RUNTIME_VERSION_REF_RE = re.compile(r"^v?\d+\.\d+\.\d+(?:-(?:rc|beta)\.\d+)?$")
 
@@ -184,7 +184,7 @@ def _backup_corrupt_config() -> Path | None:
     if not CONFIG_FILE.exists():
         return None
 
-    backup_path = CONFIG_DIR / f"{CONFIG_FILE.name}.corrupt-{int(time.time())}"
+    backup_path = CONFIG_DIR / f"{CONFIG_FILE.name}.corrupt-{int(time.time() * 1000)}"
     try:
         shutil.copy2(CONFIG_FILE, backup_path)
         return backup_path
@@ -285,19 +285,18 @@ def update_config(mutator) -> None:
     """
     with config_lock:
         raw = CONFIG_FILE.read_bytes() if CONFIG_FILE.exists() else None
-    existing: dict = {}
-    if raw is not None:
-        existing = json.loads(raw)
-        if not isinstance(existing, dict):
-            raise ValueError("Config file must contain a JSON object")
-    before = copy.deepcopy(existing)
-    mutator(existing)
-    existing.setdefault("CONFIG_SCHEMA_VERSION", CONFIG_SCHEMA_VERSION)
-    changed_keys = _changed_config_keys(before, existing)
-    if not changed_keys:
-        logger.debug("Config update made no changes for %s", CONFIG_FILE)
-        return
-    with config_lock:
+        existing: dict = {}
+        if raw is not None:
+            existing = json.loads(raw)
+            if not isinstance(existing, dict):
+                raise ValueError("Config file must contain a JSON object")
+        before = copy.deepcopy(existing)
+        mutator(existing)
+        existing.setdefault("CONFIG_SCHEMA_VERSION", CONFIG_SCHEMA_VERSION)
+        changed_keys = _changed_config_keys(before, existing)
+        if not changed_keys:
+            logger.debug("Config update made no changes for %s", CONFIG_FILE)
+            return
         write_config_file(existing)
     changed_key_list = ", ".join(changed_keys)
     if set(changed_keys).issubset(RUNTIME_STATE_CONFIG_KEYS):

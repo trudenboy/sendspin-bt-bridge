@@ -81,6 +81,10 @@ def _schedule_volume_persist(mac: str, volume: int) -> None:
         old = _volume_timers.pop(mac, None)
         if old:
             old.cancel()
+        # Purge stale entries from disconnected devices
+        stale = [k for k, t in _volume_timers.items() if not t.is_alive()]
+        for k in stale:
+            del _volume_timers[k]
         t = threading.Timer(1.0, _persist_volume, args=(mac, volume))
         t.daemon = True
         _volume_timers[mac] = t
@@ -442,7 +446,7 @@ def set_mute():
                     results.append({"player": getattr(client, "player_name", "?"), "ok": False})
         if not results:
             return jsonify({"success": False, "error": "Client not available"}), 503
-        muted = results[0].get("muted", False) if results else False
+        muted = bool(results[0].get("muted", False)) if results else False
         return jsonify({"success": True, "muted": muted, "results": results})
     except Exception:
         logger.exception("Mute update failed")

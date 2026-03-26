@@ -180,9 +180,17 @@ def _record_failure(client_id: str) -> None:
                 _failed[client_id] = (count + 1, first_ts)
         else:
             _failed[client_id] = (1, now)
-        if len(_failed) > 1000:
-            oldest = min(_failed, key=lambda k: _failed[k][1])
-            del _failed[oldest]
+        # Periodic sweep: remove expired entries when dict grows large
+        if len(_failed) > 200:
+            _, _, sweep_window, duration = _get_lockout_settings()
+            max_age = max(sweep_window, duration)
+            expired = [k for k, (_, ts) in _failed.items() if now - ts > max_age]
+            for k in expired:
+                del _failed[k]
+            # Hard cap as safety net
+            if len(_failed) > 1000:
+                oldest = min(_failed, key=lambda k: _failed[k][1])
+                del _failed[oldest]
 
 
 def _clear_failures(client_id: str) -> None:

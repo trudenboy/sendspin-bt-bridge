@@ -2741,7 +2741,7 @@ function _renderPlaybackTransportButtonsHtml(i, transportState, options) {
         buttons.push(_renderTransportButtonHtml({
             className: _joinClassNames([modeClass, state.hasQueueControls ? 'ma-ready' : '', isActive ? 'active' : '', modeStateClass]),
             id: 'dma-' + kind + '-' + i,
-            onclick: kind === 'repeat' ? 'maCycleRepeat(' + i + ')' : 'maQueueCmd(\'' + kind + '\', undefined, ' + i + ')',
+            onclick: kind === 'repeat' ? 'maCycleRepeat(' + i + ')' : 'maQueueCmd(\'' + escHtmlAttr(kind) + '\', undefined, ' + i + ')',
             title: resolvedTitle,
             iconHtml: iconHtml,
             disabled: (!state.hasQueueControls && !!opts.disableWhenInactive) || (!!state.hasQueueControls && !!state.queueActionPending),
@@ -2754,7 +2754,7 @@ function _renderPlaybackTransportButtonsHtml(i, transportState, options) {
         buttons.push(_renderTransportButtonHtml({
             className: baseClass,
             id: 'dma-' + kind + '-' + i,
-            onclick: 'maQueueCmd(\'' + (kind === 'prev' ? 'previous' : 'next') + '\', undefined, ' + i + ')',
+            onclick: 'maQueueCmd(\'' + escHtmlAttr(kind === 'prev' ? 'previous' : 'next') + '\', undefined, ' + i + ')',
             title: _buildQueueActionTitle(resolvedTitle, state.queueActionPending, !state.hasQueueControls ? state.queueUnavailableTitle : '', state.pendingSummary),
             iconHtml: iconHtml,
             disabled: (!state.hasQueueControls && !!opts.disableWhenInactive) || (!!state.hasQueueControls && !!state.queueActionPending),
