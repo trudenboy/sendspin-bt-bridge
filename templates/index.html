@@ -269,7 +269,7 @@
                 <div class="config-group">
                     <div class="config-group-heading ui-stack ui-stack--xs">
                         <h4 class="config-group-title"><span class="cg-icon ui-icon-slot" data-ui-icon="tag" aria-hidden="true"></span> General</h4>
-                        <p class="config-group-subtitle">Core bridge identity, restart defaults, update policy, and runtime-only controls.</p>
+                        <p class="config-group-subtitle">Bridge identity, audio configuration, restart behavior, and UI preferences.</p>
                     </div>
                     <div class="config-settings-grid">
                         <div class="config-settings-card">
@@ -295,13 +295,6 @@
                                             list="tz-list" autocomplete="off" oninput="updateTzPreview()">
                                         <datalist id="tz-list"></datalist>
                                     </div>
-                                </div>
-
-                                <div class="form-group">
-                                    <label>PulseAudio latency (ms)
-                                        <span class="form-hint">Higher values reduce dropouts on slow hardware (default 600)</span>
-                                    </label>
-                                    <input type="number" name="PULSE_LATENCY_MSEC" placeholder="600" min="50" max="2000">
                                 </div>
 
                                 <div class="form-group">
@@ -344,8 +337,47 @@
 
                         <div class="config-settings-card">
                             <div class="config-card-header ui-stack ui-stack--sm">
-                                <div class="config-card-title">Behavior</div>
-                                <p class="config-card-subtitle">Default restart and update behavior for this bridge instance.</p>
+                                <div class="config-card-title">Audio / PulseAudio</div>
+                                <p class="config-card-subtitle">Latency, codec, and stream routing for Bluetooth audio via PulseAudio.</p>
+                            </div>
+                            <div class="config-form-grid config-form-grid--single">
+                                <div class="form-group">
+                                    <label>PulseAudio latency (ms)
+                                        <span class="form-hint">Higher values reduce dropouts on slow hardware (default 600)</span>
+                                    </label>
+                                    <input type="number" name="PULSE_LATENCY_MSEC" placeholder="600" min="50" max="2000">
+                                </div>
+                            </div>
+                            <label class="config-setting-row config-setting-row--compact">
+                                <span class="config-setting-copy ui-stack ui-stack--xs">
+                                    <strong>Prefer SBC codec</strong>
+                                    <span class="form-hint">Reduces CPU load on slower hardware (PulseAudio 15+).</span>
+                                </span>
+                                <span class="config-setting-control">
+                                    <span class="config-switch">
+                                        <input type="checkbox" name="PREFER_SBC_CODEC" id="prefer-sbc-codec">
+                                        <span class="config-switch-track"></span>
+                                    </span>
+                                </span>
+                            </label>
+                            <label class="config-setting-row config-setting-row--compact">
+                                <span class="config-setting-copy ui-stack ui-stack--xs">
+                                    <strong>Disable PA rescue-streams</strong>
+                                    <span class="form-hint">Unload PulseAudio module-rescue-streams at startup. Prevents sink drift when BT devices reconnect. Requires restart.</span>
+                                </span>
+                                <span class="config-setting-control">
+                                    <span class="config-switch">
+                                        <input type="checkbox" name="DISABLE_PA_RESCUE_STREAMS" id="disable-pa-rescue-streams">
+                                        <span class="config-switch-track"></span>
+                                    </span>
+                                </span>
+                            </label>
+                        </div>
+
+                        <div class="config-settings-card">
+                            <div class="config-card-header ui-stack ui-stack--sm">
+                                <div class="config-card-title">Startup &amp; Restart</div>
+                                <p class="config-card-subtitle">Controls restart smoothness and post-startup grace periods.</p>
                             </div>
                             <label class="config-setting-row">
                                 <span class="config-setting-copy ui-stack ui-stack--xs">
@@ -385,44 +417,14 @@
                                     </span>
                                 </span>
                             </label>
+                        </div>
 
-                            <label class="config-setting-row">
-                                <span class="config-setting-copy ui-stack ui-stack--xs">
-                                    <strong>Show empty-state onboarding guidance</strong>
-                                    <span class="form-hint">Controls whether the full first-run checklist stays visible when no adapters or devices are configured.</span>
-                                </span>
-                                <span class="config-setting-control">
-                                    <span class="config-switch">
-                                        <input type="checkbox" id="guidance-show-onboarding" data-config-transient="true" checked>
-                                        <span class="config-switch-track"></span>
-                                    </span>
-                                </span>
-                            </label>
-
-                            <label class="config-setting-row">
-                                <span class="config-setting-copy ui-stack ui-stack--xs">
-                                    <strong>Show recovery banners</strong>
-                                    <span class="form-hint">Keep top-level recovery and attention banners visible when grouped issues need action.</span>
-                                </span>
-                                <span class="config-setting-control">
-                                    <span class="config-switch">
-                                        <input type="checkbox" id="guidance-show-recovery" data-config-transient="true" checked>
-                                        <span class="config-switch-track"></span>
-                                    </span>
-                                </span>
-                            </label>
-
-                            <div class="config-setting-row">
-                                <span class="config-setting-copy ui-stack ui-stack--xs">
-                                    <strong>Restore dismissed guidance</strong>
-                                    <span class="form-hint">Bring back onboarding and recovery guidance that was hidden with “Don’t show again”.</span>
-                                </span>
-                                <span class="config-setting-control">
-                                    <button type="button" class="btn btn-sm btn-secondary" id="guidance-reset-dismissed" data-config-transient="true">Reset</button>
-                                </span>
+                        {% if not ha_mode %}
+                        <div class="config-settings-card">
+                            <div class="config-card-header ui-stack ui-stack--sm">
+                                <div class="config-card-title">Updates</div>
+                                <p class="config-card-subtitle">Version polling and auto-update policy.</p>
                             </div>
-
-                            {% if not ha_mode %}
                             <label class="config-setting-row">
                                 <span class="config-setting-copy ui-stack ui-stack--xs">
                                     <strong>Check for updates</strong>
@@ -463,7 +465,51 @@
                                     </span>
                                 </span>
                             </label>
-                            {% endif %}
+                        </div>
+                        {% endif %}
+
+                        <div class="config-settings-card">
+                            <div class="config-card-header ui-stack ui-stack--sm">
+                                <div class="config-card-title">Guidance</div>
+                                <p class="config-card-subtitle">Onboarding checklists and recovery banner visibility. These are browser-local preferences.</p>
+                            </div>
+                            <label class="config-setting-row">
+                                <span class="config-setting-copy ui-stack ui-stack--xs">
+                                    <strong>Show empty-state onboarding guidance</strong>
+                                    <span class="form-hint">Controls whether the full first-run checklist stays visible when no adapters or devices are configured.</span>
+                                </span>
+                                <span class="config-setting-control">
+                                    <span class="config-switch">
+                                        <input type="checkbox" id="guidance-show-onboarding" data-config-transient="true" checked>
+                                        <span class="config-switch-track"></span>
+                                    </span>
+                                </span>
+                            </label>
+
+                            <label class="config-setting-row">
+                                <span class="config-setting-copy ui-stack ui-stack--xs">
+                                    <strong>Show recovery banners</strong>
+                                    <span class="form-hint">Keep top-level recovery and attention banners visible when grouped issues need action.</span>
+                                </span>
+                                <span class="config-setting-control">
+                                    <span class="config-switch">
+                                        <input type="checkbox" id="guidance-show-recovery" data-config-transient="true" checked>
+                                        <span class="config-switch-track"></span>
+                                    </span>
+                                </span>
+                            </label>
+
+                            <div class="config-setting-row">
+                                <span class="config-setting-copy ui-stack ui-stack--xs">
+                                    <strong>Restore dismissed guidance</strong>
+                                    <span class="form-hint">Bring back onboarding and recovery guidance that was hidden with “Don’t show again”.</span>
+                                </span>
+                                <span class="config-setting-control">
+                                    <button type="button" class="btn btn-sm btn-secondary" id="guidance-reset-dismissed" data-config-transient="true">Reset</button>
+                                </span>
+                            </div>
+
+
                         </div>
                     </div>
                 </div>
@@ -569,37 +615,6 @@
                                     <input type="number" name="BT_MAX_RECONNECT_FAILS" placeholder="0" min="0" max="100">
                                 </div>
                             </div>
-                        </div>
-
-                        <div class="config-settings-card">
-                            <div class="config-card-header ui-stack ui-stack--sm">
-                                <div class="config-card-title">Audio policy</div>
-                                <p class="config-card-subtitle">Prefer lower CPU usage when running on constrained hardware.</p>
-                            </div>
-                            <label class="config-setting-row config-setting-row--compact">
-                                <span class="config-setting-copy ui-stack ui-stack--xs">
-                                    <strong>Prefer SBC codec</strong>
-                                    <span class="form-hint">Reduces CPU load on slower hardware (PulseAudio 15+).</span>
-                                </span>
-                                <span class="config-setting-control">
-                                    <span class="config-switch">
-                                        <input type="checkbox" name="PREFER_SBC_CODEC" id="prefer-sbc-codec">
-                                        <span class="config-switch-track"></span>
-                                    </span>
-                                </span>
-                            </label>
-                            <label class="config-setting-row config-setting-row--compact">
-                                <span class="config-setting-copy ui-stack ui-stack--xs">
-                                    <strong>Disable PA rescue-streams</strong>
-                                    <span class="form-hint">Unload PulseAudio module-rescue-streams at startup. Prevents sink drift when BT devices reconnect. Requires restart.</span>
-                                </span>
-                                <span class="config-setting-control">
-                                    <span class="config-switch">
-                                        <input type="checkbox" name="DISABLE_PA_RESCUE_STREAMS" id="disable-pa-rescue-streams">
-                                        <span class="config-switch-track"></span>
-                                    </span>
-                                </span>
-                            </label>
                         </div>
                     </div>
 
