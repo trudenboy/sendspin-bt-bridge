@@ -5319,17 +5319,17 @@ function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabl
             '<input type="number" class="bt-keepalive-interval" min="0" placeholder="0" ' +
             'title="0 = disabled, min 30 when enabled" value="' +
             escHtmlAttr(String(kaVal)) + '"></div>' +
-        '<div data-experimental style="display:none"><label>Idle standby (min)</label>' +
+        '<div><label>Idle standby (min)</label>' +
             '<input type="number" class="bt-idle-disconnect" min="0" placeholder="0" ' +
             'title="Disconnect BT after this many idle minutes. 0 = always connected. Recommended: 30" value="' +
             escHtmlAttr(String(idleVal)) + '"></div>' +
-        '<div><label>Room name</label>' +
+        '<div data-experimental style="display:none"><label>Room name</label>' +
             '<input type="text" class="bt-room-name" placeholder="e.g. Living Room" title="Stable room label for MA/HA/MassDroid interoperability" value="' +
             escHtmlAttr(roomNameVal) + '"></div>' +
-        '<div><label>Room ID</label>' +
+        '<div data-experimental style="display:none"><label>Room ID</label>' +
             '<input type="text" class="bt-room-id" placeholder="living-room" title="Stable machine-readable room identifier" value="' +
             escHtmlAttr(roomIdVal) + '"></div>' +
-        '<div><label>Handoff mode</label>' +
+        '<div data-experimental style="display:none"><label>Handoff mode</label>' +
             '<select class="bt-handoff-mode" title="Optimize speaker readiness for room handoff scenarios">' +
                 '<option value="default"' + (handoffModeVal === 'default' ? ' selected' : '') + '>Default</option>' +
                 '<option value="fast_handoff"' + (handoffModeVal === 'fast_handoff' ? ' selected' : '') + '>Fast handoff</option>' +
