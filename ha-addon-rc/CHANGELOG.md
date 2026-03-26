@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.49.0-rc.8] - 2026-03-26
+
+### Fixed
+- **CI: duplicate pytest runs**: skip pytest triggered by tag-push Lint (main-push already covers same SHA)
+- **Flaky test**: stabilize `test_demo_config_save_is_temporary_and_restart_resets_to_canonical` — replace `time.sleep` (patched to no-op) with `threading.Event().wait()` to avoid CPU-starving spin loop on slow CI runners
+
 ## [2.49.0-rc.7] - 2026-03-26
 
 ### Fixed
