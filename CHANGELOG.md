@@ -7,206 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [2.49.0-rc.27] - 2026-03-26
+## [2.49.0] - 2026-03-26
 
 ### Added
-- **Standby status filter** — 🌙 Standby option in the device status filter dropdown
-
-### Fixed
-- **Wake button icon** — use ☀️ sun icon instead of ⟳ reconnect to visually distinguish Wake from Reconnect
-
-## [2.49.0-rc.26] - 2026-03-26
-
-### Fixed
-- **Recovery/guidance banner ignored standby state** — `bt_standby` lives on `DeviceStatus.extra`, not as a direct attribute; `getattr(device, "bt_standby")` always returned `False`; now reads from `_device_extra()` and state model bluetooth dict
-
-## [2.49.0-rc.25] - 2026-03-26
-
-### Added
-- **Standby/Wake toggle button** on device cards — replaces the Release button; moon icon toggles between standby and wake states
-- **Release/Reclaim in BT tools menus** — moved Release/Reclaim to Device Fleet BT tools dropdown and Already Paired devices list
+- **Phase 2: Null-sink standby with auto-wake** — daemon stays alive on a PulseAudio null sink after idle disconnect; MA player remains visible so playback auto-resumes when triggered (~5s BT reconnect latency)
+- **Auto-wake on play / sync-group wake** — when MA sends play while speaker is in standby, BT reconnects automatically; sync-group members wake each other
+- **Standby/Wake UI** — device card shows 💤 Standby badge, moon/sun toggle button, "Waking" transition state; standby status filter in toolbar
+- **Idle disconnect standby** — per-device `idle_disconnect_minutes`: disconnect BT after silence timeout to save speaker battery
 - **Mutual exclusion: keep-alive vs idle standby** — UI disables one when the other is set >0; backend skips idle timer when keep-alive is active
+- **Release/Reclaim in BT tools menus** — moved to Device Fleet dropdown and Already Paired list
+- **Experimental features toggle** — browser-local toggle to show/hide experimental features (room name, room ID, handoff mode)
+- **Configuration UX overhaul** — reorganized General tab into focused sections; dedicated Audio tab for PulseAudio settings
+- **PulseAudio sink-drift hardening** — null-sink fallback (`sendspin_fallback`) prevents orphaned streams landing on random BT speakers
+- **Disable PA rescue-streams option** (`DISABLE_PA_RESCUE_STREAMS`) — unloads `module-rescue-streams` at startup to eliminate sink drift
+- **Custom exception hierarchy** — `BridgeError` → `BluetoothError`, `PulseAudioError`, `MusicAssistantError`, `ConfigError`, `IPCError`
+- **125+ new tests** — covering sendspin_client, web_interface, bt_monitor, bt_manager; suite now at 959 tests
+- **POST `/api/bt/standby`** and **POST `/api/bt/wake`** endpoints
 
 ### Fixed
-- **upgrade.sh: armv7l pip not upgrading sendspin** — added `-U` flag so pip upgrades within the `>=5.3.0,<6` range instead of skipping
-- **Experimental features invisible until toggled** — call `_applyExperimentalVisibility()` after device rows are created dynamically
-- **Standby devices excluded from recovery banner** — standby devices no longer trigger disconnect warnings in recovery assistant, operator guidance, or health indicator pills
-- **Standby wake race: bt_monitor missed reroute** — detects `bt_waking` flag in connected branch and triggers reroute immediately
+- **Standby wake audio** — multiple fixes for audio routing after BT reconnect: ALSA error recovery, bt_monitor race conditions, reroute fallback to daemon restart
+- **Recovery/guidance banner ignored standby** — standby devices no longer trigger disconnect warnings
+- **upgrade.sh: armv7l pip not upgrading** — added `-U` flag for range-based pip installs
+- **CSP fix** — removed nonce (broke `unsafe-inline`), restored onclick handler compatibility
+- **Race conditions** — TOCTOU in `update_config()`, pair cancel race, lock ordering, status lock, future cleanup
+- **DISABLE_PA_RESCUE_STREAMS checkbox** — convert to boolean in config payload
+- **Idle disconnect not saving** — `collectBtDevices()` now persists `idle_disconnect_minutes`
+- **Null-sink leak** — reuse existing fallback sink instead of creating duplicates
+- **`_handle_disconnect` compat** — fallback for `aiosendspin < 5.x` in standalone LXC deployments
 
 ### Changed
-- Idle standby moved from experimental to regular settings; room name, room ID, and handoff mode moved to experimental
-
-## [2.49.0-rc.23] - 2026-03-26
-
-### Fixed
-- **`_handle_disconnect` compat for older aiosendspin** — added fallback method in `BridgeDaemon` for `aiosendspin < 5.x` (standalone LXC deployments) where `SendspinDaemon._handle_disconnect` does not exist; falls back to synchronous `_on_server_disconnect`
-
-## [2.49.0-rc.22] - 2026-03-26
-
-### Changed
-- **Wake fallback: MA reconnect instead of full restart** — when ALSA errors destroy PA streams during standby (libpulse caches sink name, ignoring `PULSE_SINK` env changes), the daemon now sends an MA reconnect command instead of killing and respawning the entire subprocess; this skips process spawn + mDNS registration overhead and should reduce wake time significantly
-
-## [2.49.0-rc.21] - 2026-03-26
-
-### Changed
-- **Wake time optimization** — three improvements to reduce standby-to-audio latency from ~19s to ~5s:
-  - `asyncio.Event` instantly unblocks bt_monitor's standby sleep (was polling every 5s)
-  - IPC `set_standby` redirects daemon's `PULSE_SINK` to null sink — new streams during standby no longer fail with ALSA errors, PA streams survive for reroute
-  - Direct `connect_device()` via `run_in_executor` from `_wake_from_standby()` — BT reconnect starts immediately without waiting for monitor loop
-
-## [2.49.0-rc.20] - 2026-03-26
-
-### Fixed
-- **Standby wake audio** — when ALSA errors during standby destroy PA streams, reroute now falls back to a full daemon restart instead of silently producing no audio
-- **bt_monitor standby guard** — top-of-loop guard checks `bt_waking` flag so monitor can reach BT reconnect code after auto-wake
-- **Duplicate wake suppression** — `_on_standby_play_detected()` skips when already waking
-
-## [2.49.0-rc.19] - 2026-03-26
-
-### Fixed
-- **Standby wake reconnect** — bt_monitor top-of-loop standby guard now checks `bt_waking` flag, allowing the monitor to reach BT reconnect code after auto-wake triggers
-- **Duplicate wake suppression** — `_on_standby_play_detected()` skips when already waking, preventing repeated wake attempts on every status update
-
-## [2.49.0-rc.18] - 2026-03-26
-
-### Added
-- **Fast standby wake** — `bt_waking` transition keeps daemon alive during BT reconnect; wake time drops from ~16s to ~5s (BT reconnect only, no daemon restart)
-- **"Waking" UI status** — device card shows pulsing "Waking" badge during standby→play transition
-
-## [2.49.0-rc.17] - 2026-03-26
-
-### Added
-- **Standby as first-class status** — device card shows "💤 Standby" badge and "Standby" status (neutral tone) instead of "Disconnected" when in idle standby
-- **Wake button always visible** — removed experimental gate from standby badge and wake button
-- **Typed standby events** — `BLUETOOTH_STANDBY_ENTERED` / `BLUETOOTH_STANDBY_EXITED` added to `DeviceEventType` enum
-
-## [2.49.0-rc.16] - 2026-03-26
-
-### Fixed
-- **bt_monitor killing daemon during standby** — D-Bus disconnect handler skipped the `bt_standby` guard and killed the daemon that was parked on the null sink; now properly sleeps during standby
-
-## [2.49.0-rc.15] - 2026-03-26
-
-### Fixed
-- **Null-sink leak on restart** — PA hardening created duplicate `sendspin_fallback` sinks on every restart; now checks if sink exists first
-- **Phase 2 standby sink creation failure** — reuse existing `sendspin_fallback` null sink for standby instead of creating a separate one (fixes "Module initialization failed" on systems with many restarts)
-
-## [2.49.0-rc.14] - 2026-03-26
-
-### Added
-- **Phase 2: Null-sink standby with auto-wake** — daemon stays alive on a PulseAudio null sink after idle disconnect; MA player remains visible/available so playback auto-resumes when triggered (~5-10 s BT reconnect latency)
-- **Auto-wake on play** — when MA sends play while speaker is in standby, BT reconnects automatically and streams reroute to the speaker
-- **Sync-group auto-wake** — if any member of a sync group starts playing, standby members of the same group are woken automatically
-- **Keepalive suppression** — keepalive bursts are skipped while in standby to avoid waking the null sink
-
-## [2.49.0-rc.13] - 2026-03-26
-
-### Fixed
-- **Idle disconnect not saving** — `collectBtDevices()` did not persist `idle_disconnect_minutes` to config.json; timer could never fire
-
-## [2.49.0-rc.12] - 2026-03-26
-
-### Added
-- **Experimental features toggle** — browser-local toggle in Configuration > General > Guidance card to show/hide experimental features
-- **Idle disconnect standby (Phase 1)** — per-device `idle_disconnect_minutes` config field: disconnect BT and stop daemon after silence timeout to save speaker battery
-- **Standby badge + wake button** — device card shows "💤 Standby" badge and manual "Wake" button (experimental)
-- `POST /api/bt/wake` endpoint to wake device from standby
-- 21 new tests for idle timer, standby, wake, and API
-
-## [2.49.0-rc.11] - 2026-03-26
-
-### Changed
-- **Configuration UX: Audio tab** — promote Audio/PulseAudio settings to a dedicated tab (General → Audio → Devices → Bluetooth → Music Assistant → Security)
-
-## [2.49.0-rc.10] - 2026-03-26
-
-### Changed
-- **Configuration UX: reorganize General tab** — split monolithic "Behavior" card into focused sections: Audio/PulseAudio, Startup & Restart, Updates, Guidance. Consolidated PulseAudio settings from two tabs into one card.
-
-## [2.49.0-rc.9] - 2026-03-26
-
-### Changed
-- **CI/CD: unified release pipeline** — single `VERSION` file triggers `release.yml` which handles lint, test, config.py update, tagging, Docker build (amd64+arm64), HA addon sync, GitHub Release (stable), and armv7 build (stable)
-- **CI: reusable workflows** — `_lint.yml` and `_test.yml` shared between `ci.yml` (dev) and `release.yml` (release)
-- **Developer release flow** reduced from 7 manual steps to 3 (edit VERSION + CHANGELOG, commit, push)
-
-### Removed
-- Replaced 6 separate workflow files with unified pipeline: `lint.yml`, `pytest.yml`, `docker-publish.yml`, `docker-publish-armv7.yml`, `sync-ha-addon-variants.yml`, `github-release.yml`
-
-## [2.49.0-rc.8] - 2026-03-26
-
-### Fixed
-- **CI: duplicate pytest runs**: skip pytest triggered by tag-push Lint (main-push already covers same SHA)
-- **Flaky test**: stabilize `test_demo_config_save_is_temporary_and_restart_resets_to_canonical` — replace `time.sleep` (patched to no-op) with `threading.Event().wait()` to avoid CPU-starving spin loop on slow CI runners
-
-## [2.49.0-rc.7] - 2026-03-26
-
-### Fixed
-- **DISABLE_PA_RESCUE_STREAMS checkbox**: convert to boolean in config payload (was sent as string `"on"`, failing validation)
-- **aiosendspin test**: make version-agnostic — check pin format, not exact version
-
-## [2.49.0-rc.6] - 2026-03-26
-
-### Changed
-- **deps**: Bump sendspin 5.8.0→5.9.0, aiosendspin 4.3.2→4.4.0, dbus-fast 2.46.4→4.0.0, pytest <9→<10
-- **ci**: Bump actions/checkout v4→v6, actions/setup-python v5→v6, docker/login-action v3→v4, docker/metadata-action v5→v6, docker/setup-qemu-action v3→v4
-
-## [2.49.0-rc.5] - 2026-03-26
-
-### Fixed
-- **CSP fix**: remove nonce from `script-src` — CSP3 browsers ignore `unsafe-inline` when nonce is present, which blocked all 35+ `onclick` handlers across both templates
-
-## [2.49.0-rc.4] - 2026-03-26
-
-### Changed
-- **CI/CD optimization**: merge 3 lint jobs → 1, add pip cache, timeouts, concurrency groups
-- **Pytest on PRs**: fix condition so tests run on ALL pull requests (not just `v*` tags)
-- **SBOM + provenance**: Docker images now include software bill of materials and SLSA provenance
-- **Dependabot**: automated weekly updates for pip, Docker, and GitHub Actions dependencies
-- **Ruff version sync**: pin `ruff==0.11.13` across pyproject.toml, pre-commit, and CI
-- **Cache scope**: namespace GHA build cache per platform for better hit rates
-
-## [2.49.0-rc.3] - 2026-03-26
-
-### Fixed
-- **CSP inline handler fix**: restore `'unsafe-inline'` alongside nonce in `script-src` so 30+ `onclick` handlers in the template work correctly (Save, Save & Restart, etc.)
-- **CI lint fix**: revert mypy `check_untyped_defs` (16 pre-existing errors), fix ruff RUF059/UP045 warnings
-
-## [2.49.0-rc.2] - 2026-03-26
-
-### Fixed
-- **Race condition fixes**: TOCTOU in `update_config()`, pair cancel race in `bluetooth_manager`, lock ordering in `state.py`, status lock in `daemon_process`, future cleanup in `ma_monitor`
-- **CSP hardening**: replaced `unsafe-inline` with nonce-based Content Security Policy
-- **PBKDF2 upgrade**: bumped to 600K iterations with versioned `v1:iters:salt:hash` format (backward compatible)
-- **Logic error**: `or` → `and` in `config_migration.py` handoff_mode normalization
-- **XSS prevention**: added `escHtmlAttr()` for dynamic `onclick` values in `app.js`
-- **Scan race**: added `_scan_lock` for atomic check+create in BT scan endpoint
-- **Config whitelist**: POST `/api/config` now filters through `_ALLOWED_POST_CONFIG_KEYS`
-- **Artwork proxy**: Content-Type validation (image/* only) for MA artwork proxy
-- **Brute-force cleanup**: TTL sweep for `_failed` dict in auth module (cap at 200 entries)
-- **Monkey-patch safety**: `hasattr` guard before patching `_handle_binary_message` in bridge daemon
-- **PA hardening logs**: elevated from DEBUG to WARNING in `bridge_orchestrator`
-- **Update checker**: tightened git ref regex to require alphanumeric first char
-- **PulseAudio cleanup race**: copy+clear under lock in `_cleanup_loops()`
-- **Volume timer leak**: stale timer purge in `_schedule_volume_persist()`
-- **D-Bus import**: module-level `try: import dbus` with early `None` guards in `bt_dbus`
-- **Config backup**: millisecond timestamp to avoid collision on rapid saves
-- **Deque reverse**: `list(reversed(...))` instead of `list()` + `.reverse()` in `state.py`
-
-### Added
-- **Custom exception hierarchy**: `exceptions.py` with `BridgeError` → `BluetoothError`, `PulseAudioError`, `MusicAssistantError`, `ConfigError`, `IPCError`
-- **125 new tests**: `test_sendspin_client.py` (57), `test_web_interface.py` (27), `test_bt_monitor.py` (25), expanded `test_bt_manager.py` (+16)
-- **CI improvements**: `pip-audit` + `shellcheck` in lint workflow; `pytest-cov` with 50% threshold; mypy `check_untyped_defs = true`
-- **Dockerfile hardening**: `--no-install-recommends` on apt-get install
+- **Fast standby wake** (~5s) — `asyncio.Event` unblocks bt_monitor instantly, IPC redirects daemon to null sink, direct `connect_device()` starts BT reconnect immediately
+- **Wake fallback** — MA reconnect instead of full daemon restart when PA streams survive
+- **CI/CD: unified release pipeline** — single `VERSION` file triggers lint → test → tag → Docker build → HA addon sync
+- **deps**: sendspin 5.8.0→5.9.0, aiosendspin 4.3.2→4.4.0, dbus-fast 2.46.4→4.0.0
 
 ### Security
-- Removed `SYS_ADMIN` capability from HA addon configs (stable, RC, beta)
-
-## [2.49.0-rc.1] - 2026-03-26
-
-### Added
-- **PulseAudio sink-drift hardening**: on startup the bridge now creates a null-sink (`sendspin_fallback`) and sets it as the PA default sink. Orphaned streams land on the silent fallback instead of a random Bluetooth speaker when `module-rescue-streams` fires.
-- **Disable PA rescue-streams option** (`DISABLE_PA_RESCUE_STREAMS`): when enabled, the bridge unloads PulseAudio's `module-rescue-streams` at startup, eliminating sink drift entirely. Off by default; toggle via web UI → Audio policy or HA addon config. Requires restart.
+- **PBKDF2 upgrade** — 600K iterations with versioned hash format
+- **Config whitelist** — POST `/api/config` filters through allowed keys
+- **Artwork proxy** — Content-Type validation (image/* only)
+- **XSS prevention** — `escHtmlAttr()` for dynamic onclick values
+- Removed `SYS_ADMIN` capability from HA addon configs
 - **Unique PA application name per subprocess**: each daemon subprocess now sets `PULSE_PROP_application.name=sendspin-<player_name>` so PulseAudio's `module-stream-restore` no longer confuses streams across different Bluetooth speakers.
 
 ## [2.48.2] - 2026-03-25
