@@ -17,6 +17,11 @@ If you want the latest status first, start with the newest entry below.
 
 ## Entries
 
+- [2026-03-25 — Native transport and null-sink standby](./2026-03-25-native-transport-and-standby/)
+- [2026-03-24 — Security audit and IPC hardening](./2026-03-24-security-audit-and-ipc/)
+- [2026-03-23 — Room metadata and HA area integration](./2026-03-23-room-metadata-and-ha-areas/)
+- [2026-03-22 — Scan modal redesign and guidance refinements](./2026-03-22-scan-modal-and-guidance/)
+- [2026-03-20 — Orchestrator extraction and onboarding guidance](./2026-03-20-orchestrator-and-onboarding/)
 - [2026-03-19 — 2.40.6 release wave, UI polish, and roadmap realignment](./2026-03-19-roadmap-and-docs-realignment/)
 - [2026-03-18 — Stable 2.40.5: manual ports, prerelease channels, and HA fixes](./2026-03-18-stable-2-40-5/)
 - [2026-03-17 — CI convergence and release completion](./2026-03-17-ci-convergence/)
