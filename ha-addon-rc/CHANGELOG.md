@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.49.0-rc.12] - 2026-03-26
+
+### Added
+- Experimental features toggle (browser-local, Guidance card)
+- Idle disconnect standby: per-device BT disconnect after silence timeout
+- Standby badge + wake button in device card (experimental)
+- `POST /api/bt/wake` endpoint
+
 ## [2.49.0-rc.11] - 2026-03-26
 
 ### Changed
