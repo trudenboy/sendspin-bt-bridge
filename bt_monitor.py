@@ -93,7 +93,7 @@ async def _monitor_polling(mgr: BluetoothManager) -> None:
                 await asyncio.sleep(5)
                 continue
 
-            if mgr.host and mgr.host.get_status_value("bt_standby"):
+            if mgr.host and mgr.host.get_status_value("bt_standby") and not mgr.host.get_status_value("bt_waking"):
                 await asyncio.sleep(5)
                 continue
 
@@ -328,7 +328,7 @@ async def _inner_dbus_monitor(mgr: BluetoothManager, device_iface, disconnect_ev
             await asyncio.sleep(5)
             continue
 
-        if mgr.host and mgr.host.get_status_value("bt_standby"):
+        if mgr.host and mgr.host.get_status_value("bt_standby") and not mgr.host.get_status_value("bt_waking"):
             await asyncio.sleep(5)
             continue
 

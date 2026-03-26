@@ -517,7 +517,7 @@ class SendspinClient:
         while ``bt_standby=True``.  The daemon is alive on the null sink;
         audio streams there silently until BT reconnects and streams are moved.
         """
-        if not self.status.get("bt_standby"):
+        if not self.status.get("bt_standby") or self.status.get("bt_waking"):
             return
         logger.info("[%s] Play detected during standby — auto-waking", self.player_name)
         await self._wake_from_standby()
