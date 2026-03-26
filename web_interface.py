@@ -171,7 +171,7 @@ def _set_cache_headers(response):
         nonce = getattr(g, "csp_nonce", "")
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
-            f"script-src 'self' 'nonce-{nonce}'; "
+            f"script-src 'self' 'nonce-{nonce}' 'unsafe-inline'; "
             "style-src 'self' 'unsafe-inline'; "
             "img-src 'self' data:; "
             "connect-src 'self' ws: wss:; "
