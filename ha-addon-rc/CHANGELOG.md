@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.49.0-rc.17] - 2026-03-26
+
+### Added
+- **Standby as first-class status** — device card shows "💤 Standby" badge and "Standby" status (neutral tone) instead of "Disconnected" when in idle standby
+- **Wake button always visible** — removed experimental gate from standby badge and wake button
+- **Typed standby events** — `BLUETOOTH_STANDBY_ENTERED` / `BLUETOOTH_STANDBY_EXITED` added to `DeviceEventType` enum
+
 ## [2.49.0-rc.16] - 2026-03-26
 
 ### Fixed
