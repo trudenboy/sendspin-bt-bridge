@@ -627,7 +627,7 @@ class SendspinClient:
                 logger.info("[%s] Subprocess PULSE_SINK=%s", self.player_name, self.bluetooth_sink_name)
             # Unique application.name so PA module-stream-restore does not confuse
             # streams across subprocesses (all share the same python3 binary name).
-            env["PULSE_PROP_application.name"] = f"sendspin-{self.player_name}"
+            env["PULSE_PROP_application.name"] = f"sendspin-{self.player_id}"
 
             self._daemon_proc = await asyncio.create_subprocess_exec(
                 sys.executable,
