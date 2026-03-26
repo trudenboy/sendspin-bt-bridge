@@ -443,7 +443,11 @@ class SendspinClient:
             task.cancel()
 
     async def _enter_standby(self) -> None:
-        """Disconnect BT and stop daemon to let the speaker save power."""
+        """Disconnect BT and park daemon on null sink to let the speaker save power.
+
+        Phase 2 behavior: daemon stays alive on a PA null sink so the player
+        remains visible in MA.  When MA sends play, the bridge auto-reconnects BT.
+        """
         if self.status.get("bt_standby"):
             return
         self._update_status(
@@ -453,7 +457,19 @@ class SendspinClient:
                 "bt_released_by": "idle_timeout",
             }
         )
-        await self.stop_sendspin()
+        # Move daemon streams to null sink instead of killing daemon
+        daemon_pid = self._daemon_proc.pid if self._daemon_proc else None
+        if daemon_pid:
+            from services.pulse import STANDBY_SINK_NAME, aensure_null_sink, amove_pid_sink_inputs
+
+            if await aensure_null_sink():
+                moved = await amove_pid_sink_inputs(daemon_pid, STANDBY_SINK_NAME)
+                logger.info("[%s] Moved %d stream(s) to null sink", self.player_name, moved)
+            else:
+                logger.warning("[%s] Could not create null sink — falling back to daemon stop", self.player_name)
+                await self.stop_sendspin()
+
+        # Disconnect BT to save speaker battery
         if self.bt_manager:
             try:
                 self.bt_manager.disconnect_device()
@@ -465,12 +481,18 @@ class SendspinClient:
             message="Speaker entered standby after idle timeout",
             details={"idle_minutes": self.idle_disconnect_minutes},
         )
-        logger.info("[%s] Entered standby (BT disconnected, daemon stopped)", self.player_name)
+        logger.info("[%s] Entered standby (BT disconnected, daemon on null sink)", self.player_name)
 
     async def _wake_from_standby(self) -> None:
-        """Reconnect BT and restart daemon after standby."""
+        """Reconnect BT and reroute daemon streams from null sink back to BT.
+
+        Phase 2: daemon is still alive on null sink.  Reconnect BT, find
+        the new sink name, move streams there, and send reanchor so playback
+        restarts cleanly from the current position.
+        """
         if not self.status.get("bt_standby"):
             return
+
         self._update_status(
             {
                 "bt_standby": False,
@@ -483,9 +505,39 @@ class SendspinClient:
         _state.publish_device_event(
             self._event_device_id(),
             "bluetooth_standby_exited",
-            message="Speaker woken from standby",
+            message="Speaker waking from standby",
         )
         logger.info("[%s] Waking from standby — BT reconnect will be handled by monitor", self.player_name)
+
+    async def _on_standby_play_detected(self) -> None:
+        """Auto-wake: MA started playback while in standby — reconnect BT.
+
+        Called from ``_read_subprocess_output()`` when ``playing=True`` arrives
+        while ``bt_standby=True``.  The daemon is alive on the null sink;
+        audio streams there silently until BT reconnects and streams are moved.
+        """
+        if not self.status.get("bt_standby"):
+            return
+        logger.info("[%s] Play detected during standby — auto-waking", self.player_name)
+        await self._wake_from_standby()
+
+    async def _reroute_to_bt_sink(self) -> None:
+        """After BT reconnect, move streams from null sink to the BT sink and reanchor.
+
+        Called from ``run()`` after BT connects and ``configure_bluetooth_audio()``
+        discovers the new sink name.
+        """
+        daemon_pid = self._daemon_proc.pid if self._daemon_proc else None
+        if not daemon_pid or not self.bluetooth_sink_name:
+            return
+        from services.pulse import amove_pid_sink_inputs
+
+        moved = await amove_pid_sink_inputs(daemon_pid, self.bluetooth_sink_name)
+        if moved > 0:
+            logger.info("[%s] Rerouted %d stream(s) to BT sink %s", self.player_name, moved, self.bluetooth_sink_name)
+            # Reanchor so the stream restarts from the current position
+            await self._send_subprocess_command({"cmd": "reconnect", "delay": 1.0})
+            logger.info("[%s] Sent reanchor after wake", self.player_name)
 
     def _cancel_ma_reconnect_task(self) -> None:
         task = self._ma_reconnect_task
@@ -674,6 +726,17 @@ class SendspinClient:
             if self.bt_manager and self.bt_manager.connected and not self.bluetooth_sink_name:
                 self.bt_manager.configure_bluetooth_audio()
 
+            # Phase 2 standby wake: daemon is alive on null sink — reroute streams
+            # to the BT sink instead of spawning a new subprocess.
+            if self.is_running() and self.bluetooth_sink_name:
+                logger.info(
+                    "[%s] Daemon already running — rerouting to BT sink %s",
+                    self.player_name,
+                    self.bluetooth_sink_name,
+                )
+                await self._reroute_to_bt_sink()
+                return
+
             # Stop any existing subprocess first
             await self.stop_sendspin()
 
@@ -775,6 +838,9 @@ class SendspinClient:
                 if updates:
                     if updates.get("server_connected") is True:
                         self._clear_ma_reconnecting()
+                    # Auto-wake: MA started playback while daemon is on null sink
+                    if updates.get("playing") is True and self.status.get("bt_standby"):
+                        asyncio.ensure_future(self._on_standby_play_detected())
                     new_volume = updates.get("volume")
                     _mac = self.bt_manager.mac_address if self.bt_manager else None
                     if isinstance(new_volume, int) and _mac:
@@ -839,6 +905,7 @@ class SendspinClient:
                     and self.bt_manager.connected
                     and self.bluetooth_sink_name
                     and not self.status.get("audio_streaming")
+                    and not self.status.get("bt_standby")
                 ):
                     await self._send_keepalive_burst()
         except asyncio.CancelledError:

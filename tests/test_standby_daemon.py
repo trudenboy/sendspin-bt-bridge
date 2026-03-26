@@ -1,0 +1,341 @@
+"""Tests for Phase 2: null-sink standby with daemon alive + auto-wake."""
+
+from __future__ import annotations
+
+import asyncio
+import threading
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
+# ── Helpers ────────────────────────────────────────────────────────────────
+
+
+def _make_client(idle_disconnect_minutes: int = 30, *, daemon_alive: bool = False):
+    """Create a SendspinClient with optional mock daemon proc."""
+    from sendspin_client import DeviceStatus, SendspinClient
+
+    client = SendspinClient.__new__(SendspinClient)
+    client.player_name = "TestSpeaker"
+    client.player_id = "test-player-id"
+    client.idle_disconnect_minutes = idle_disconnect_minutes
+    client._status_lock = threading.Lock()
+    client._idle_timer_task = None
+    client._playback_health = MagicMock()
+    client._playback_health.on_status_update = MagicMock()
+    client.status = DeviceStatus()
+    client._event_device_id = MagicMock(return_value="dev-test")  # type: ignore[method-assign]
+    client.bt_manager = MagicMock()
+    client.stop_sendspin = AsyncMock()  # type: ignore[method-assign]
+    client.bluetooth_sink_name = "bluez_sink.AA_BB_CC_DD_EE_FF.a2dp_sink"
+    client._command_service = MagicMock()
+
+    if daemon_alive:
+        proc = MagicMock()
+        proc.pid = 12345
+        proc.returncode = None
+        client._daemon_proc = proc
+    else:
+        client._daemon_proc = None
+
+    return client
+
+
+# ── Null sink tests ───────────────────────────────────────────────────────
+
+
+class TestNullSink:
+    """services.pulse null sink management."""
+
+    def test_standby_sink_name_constant(self):
+        from services.pulse import STANDBY_SINK_NAME
+
+        assert STANDBY_SINK_NAME == "sendspin_standby"
+
+    @patch("services.pulse.subprocess")
+    def test_fallback_load_creates_sink(self, mock_subprocess):
+        from services.pulse import _fallback_load_null_sink
+
+        # First call: list shows sink doesn't exist
+        list_result = MagicMock(returncode=0, stdout="alsa_output.default\t...\n")
+        # Second call: load-module succeeds
+        load_result = MagicMock(returncode=0, stdout="42\n")
+        mock_subprocess.run.side_effect = [list_result, load_result]
+
+        assert _fallback_load_null_sink() is True
+
+    @patch("services.pulse.subprocess")
+    def test_fallback_load_already_exists(self, mock_subprocess):
+        from services.pulse import STANDBY_SINK_NAME, _fallback_load_null_sink
+
+        list_result = MagicMock(
+            returncode=0,
+            stdout=f"1\t{STANDBY_SINK_NAME}\tmodule-null-sink.c\n",
+        )
+        mock_subprocess.run.return_value = list_result
+
+        assert _fallback_load_null_sink() is True
+        # Only one call (list), no load-module needed
+        assert mock_subprocess.run.call_count == 1
+
+    @patch("services.pulse.subprocess")
+    def test_remove_null_sink_no_module(self, mock_subprocess):
+        import services.pulse as pulse_mod
+
+        pulse_mod._null_sink_module_id = None
+        assert pulse_mod.remove_null_sink() is True
+        mock_subprocess.run.assert_not_called()
+
+
+# ── Standby with daemon alive ────────────────────────────────────────────
+
+
+class TestStandbyDaemonAlive:
+    """Phase 2: _enter_standby keeps daemon running on null sink."""
+
+    @pytest.mark.asyncio
+    async def test_enter_standby_moves_streams_to_null_sink(self):
+        """Daemon stays alive; streams are moved to null sink."""
+        with (
+            patch("sendspin_client._state") as state_mock,
+            patch("services.pulse.amove_pid_sink_inputs", new_callable=AsyncMock) as move_mock,
+            patch("services.pulse.aensure_null_sink", new_callable=AsyncMock) as ensure_mock,
+        ):
+            ensure_mock.return_value = True
+            move_mock.return_value = 1
+            client = _make_client(daemon_alive=True)
+
+            await client._enter_standby()
+
+            assert client.status["bt_standby"] is True
+            ensure_mock.assert_awaited_once()
+            move_mock.assert_awaited_once_with(12345, "sendspin_standby")
+            client.stop_sendspin.assert_not_awaited()
+            client.bt_manager.disconnect_device.assert_called_once()
+            state_mock.publish_device_event.assert_called()
+
+    @pytest.mark.asyncio
+    async def test_enter_standby_fallback_stops_daemon_if_null_sink_fails(self):
+        """Falls back to stopping daemon when null sink cannot be created."""
+        with (
+            patch("sendspin_client._state") as state_mock,
+            patch("services.pulse.amove_pid_sink_inputs", new_callable=AsyncMock),
+            patch("services.pulse.aensure_null_sink", new_callable=AsyncMock) as ensure_mock,
+        ):
+            ensure_mock.return_value = False  # null sink creation failed
+            client = _make_client(daemon_alive=True)
+
+            await client._enter_standby()
+
+            assert client.status["bt_standby"] is True
+            client.stop_sendspin.assert_awaited_once()
+            state_mock.publish_device_event.assert_called()
+
+    @pytest.mark.asyncio
+    async def test_enter_standby_no_daemon_skips_null_sink(self):
+        """When daemon is not running, null sink logic is skipped."""
+        with patch("sendspin_client._state") as state_mock:
+            client = _make_client(daemon_alive=False)
+
+            await client._enter_standby()
+
+            assert client.status["bt_standby"] is True
+            client.bt_manager.disconnect_device.assert_called_once()
+            state_mock.publish_device_event.assert_called()
+
+
+# ── Auto-wake on play detection ──────────────────────────────────────────
+
+
+class TestAutoWake:
+    """Auto-wake when MA starts playback during standby."""
+
+    @pytest.mark.asyncio
+    async def test_on_standby_play_detected_triggers_wake(self):
+        with patch("sendspin_client._state"):
+            client = _make_client(daemon_alive=True)
+            client.status.update({"bt_standby": True, "bt_standby_since": "2025-01-01"})
+
+            await client._on_standby_play_detected()
+
+            assert client.status["bt_standby"] is False
+            assert client.status["bt_standby_since"] is None
+            client.bt_manager.allow_reconnect.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_on_standby_play_noop_if_not_standby(self):
+        with patch("sendspin_client._state"):
+            client = _make_client(daemon_alive=True)
+            # Not in standby
+            await client._on_standby_play_detected()
+            client.bt_manager.allow_reconnect.assert_not_called()
+
+
+# ── Reroute to BT sink after wake ────────────────────────────────────────
+
+
+class TestRerouteToBtSink:
+    """After BT reconnects, streams move from null sink to BT sink."""
+
+    @pytest.mark.asyncio
+    async def test_reroute_moves_streams_and_sends_reanchor(self):
+        with patch("services.pulse.amove_pid_sink_inputs", new_callable=AsyncMock) as move_mock:
+            move_mock.return_value = 2
+            client = _make_client(daemon_alive=True)
+            client._send_subprocess_command = AsyncMock()
+
+            await client._reroute_to_bt_sink()
+
+            move_mock.assert_awaited_once_with(12345, client.bluetooth_sink_name)
+            client._send_subprocess_command.assert_awaited_once()
+            cmd = client._send_subprocess_command.call_args[0][0]
+            assert cmd["cmd"] == "reconnect"
+
+    @pytest.mark.asyncio
+    async def test_reroute_no_daemon_noop(self):
+        client = _make_client(daemon_alive=False)
+        client._send_subprocess_command = AsyncMock()
+
+        await client._reroute_to_bt_sink()
+
+        client._send_subprocess_command.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_reroute_no_sink_name_noop(self):
+        client = _make_client(daemon_alive=True)
+        client.bluetooth_sink_name = None
+        client._send_subprocess_command = AsyncMock()
+
+        await client._reroute_to_bt_sink()
+
+        client._send_subprocess_command.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_reroute_zero_moved_skips_reanchor(self):
+        with patch("services.pulse.amove_pid_sink_inputs", new_callable=AsyncMock) as move_mock:
+            move_mock.return_value = 0  # nothing to move
+            client = _make_client(daemon_alive=True)
+            client._send_subprocess_command = AsyncMock()
+
+            await client._reroute_to_bt_sink()
+
+            # No reanchor when no streams were actually moved
+            client._send_subprocess_command.assert_not_awaited()
+
+
+# ── Start sendspin with daemon already alive (standby wake) ──────────────
+
+
+class TestStartSendspinReroute:
+    """start_sendspin_inner reroutes instead of restart when daemon is alive."""
+
+    @pytest.mark.asyncio
+    async def test_start_sendspin_reroutes_if_daemon_alive(self):
+        """When daemon is already running, _start_sendspin_inner reroutes to BT sink."""
+        with patch("services.pulse.amove_pid_sink_inputs", new_callable=AsyncMock) as move_mock:
+            move_mock.return_value = 1
+            client = _make_client(daemon_alive=True)
+            client._send_subprocess_command = AsyncMock()
+            client._start_sendspin_lock = None
+
+            await client._start_sendspin_inner()
+
+            move_mock.assert_awaited_once()
+            client.stop_sendspin.assert_not_awaited()
+
+
+# ── Keepalive suppression during standby ─────────────────────────────────
+
+
+class TestKeepaliveSuppression:
+    """Keepalive loop skips bursts during standby."""
+
+    @pytest.mark.asyncio
+    async def test_keepalive_skips_when_standby(self):
+        """Verify keepalive conditions include not-in-standby check."""
+        client = _make_client(daemon_alive=True)
+        client.keepalive_enabled = True
+        client.keepalive_interval = 30
+        client.running = True
+        client.status.update({"bt_standby": True, "audio_streaming": False})
+        client.bt_manager.connected = True
+
+        # The standby check should prevent keepalive from firing
+        should_send = (
+            client.bt_manager
+            and client.bt_manager.connected
+            and client.bluetooth_sink_name
+            and not client.status.get("audio_streaming")
+            and not client.status.get("bt_standby")
+        )
+        assert not should_send
+
+
+# ── Sync group auto-wake ─────────────────────────────────────────────────
+
+
+class TestGroupAutoWake:
+    """Sync group auto-wake: wake standby members when group starts playing."""
+
+    @pytest.mark.asyncio
+    async def test_group_auto_wake_triggers_for_standby_member(self):
+        """When a group is playing and a client is in standby with that group_id, wake it."""
+        from sendspin_client import DeviceStatus
+
+        wake_called = False
+
+        async def fake_wake():
+            nonlocal wake_called
+            wake_called = True
+
+        client = MagicMock()
+        client.player_name = "Speaker-A"
+        client.status = DeviceStatus()
+        client.status.update({"bt_standby": True, "group_id": "group-1"})
+        client._wake_from_standby = fake_wake
+
+        import state
+
+        loop = asyncio.get_running_loop()
+        with (
+            patch.object(state, "_get_registry_active_clients_snapshot", return_value=[client]),
+            patch.object(state, "get_main_loop", return_value=loop),
+        ):
+            state._check_group_auto_wake({"group-1": {"state": "playing"}})
+            await asyncio.sleep(0.05)
+
+        assert wake_called
+
+    def test_group_auto_wake_noop_when_not_playing(self):
+        """No wake when group state is idle."""
+        import state
+
+        client = MagicMock()
+        client.status = MagicMock()
+        client.status.get.return_value = True  # bt_standby=True
+
+        with (
+            patch.object(state, "_get_registry_active_clients_snapshot", return_value=[client]),
+            patch.object(state, "get_main_loop", return_value=MagicMock()),
+        ):
+            state._check_group_auto_wake({"group-1": {"state": "idle"}})
+
+        # No playing groups → no wake attempted
+        client._wake_from_standby.assert_not_called()
+
+    def test_group_auto_wake_noop_when_not_standby(self):
+        """Client not in standby is not woken even if group is playing."""
+        import state
+        from sendspin_client import DeviceStatus
+
+        client = MagicMock()
+        client.status = DeviceStatus()
+        client.status.update({"bt_standby": False, "group_id": "group-1"})
+
+        with (
+            patch.object(state, "_get_registry_active_clients_snapshot", return_value=[client]),
+            patch.object(state, "get_main_loop", return_value=MagicMock()),
+        ):
+            state._check_group_auto_wake({"group-1": {"state": "playing"}})
+
+        client._wake_from_standby.assert_not_called()

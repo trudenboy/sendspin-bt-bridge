@@ -41,6 +41,9 @@ def _make_client(idle_disconnect_minutes: int = 30):
     client._event_device_id = MagicMock(return_value="dev-test")  # type: ignore[method-assign]
     client.bt_manager = MagicMock()
     client.stop_sendspin = AsyncMock()  # type: ignore[method-assign]
+    client._daemon_proc = None
+    client.bluetooth_sink_name = None
+    client._command_service = MagicMock()
     return client
 
 
@@ -140,7 +143,8 @@ class TestEnterStandby:
             assert client.status["bt_standby"] is True
             assert client.status["bt_standby_since"] is not None
             assert client.status["bt_released_by"] == "idle_timeout"
-            client.stop_sendspin.assert_awaited_once()
+            # Phase 2: daemon stays alive, stop_sendspin NOT called
+            client.stop_sendspin.assert_not_awaited()
             client.bt_manager.disconnect_device.assert_called_once()
             state_mock.publish_device_event.assert_called()
 
@@ -300,7 +304,8 @@ class TestIdleTimerFullCycle:
             # Instead of patching sleep (tricky), call _enter_standby directly
             await client._enter_standby()
             assert client.status["bt_standby"] is True
-            client.stop_sendspin.assert_awaited_once()
+            # Phase 2: daemon stays alive, stop_sendspin NOT called
+            client.stop_sendspin.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_timer_cancelled_before_firing(self):

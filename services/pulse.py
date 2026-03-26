@@ -25,15 +25,21 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+STANDBY_SINK_NAME = "sendspin_standby"
+
 __all__ = [
+    "STANDBY_SINK_NAME",
     "_PULSECTL_AVAILABLE",
+    "aensure_null_sink",
     "amove_pid_sink_inputs",
+    "ensure_null_sink",
     "get_server_name",
     "get_sink_description",
     "get_sink_input_ids",
     "get_sink_mute",
     "get_sink_volume",
     "list_sinks",
+    "remove_null_sink",
     "set_sink_mute",
     "set_sink_volume",
 ]
@@ -274,8 +280,91 @@ async def aget_server_name() -> str:
 
 
 # ---------------------------------------------------------------------------
-# Sync public API (thread-safe wrappers using a fresh event loop)
+# Null sink for standby (Phase 2: keep daemon alive on silent sink)
 # ---------------------------------------------------------------------------
+
+_null_sink_module_id: int | None = None
+
+
+async def aensure_null_sink() -> bool:
+    """Create the shared standby null sink if it doesn't already exist.
+
+    Returns True if the sink exists (created or already present).
+    Uses ``module-null-sink`` so audio routed here is silently discarded.
+    """
+    global _null_sink_module_id
+    # Check if sink already exists
+    if _PULSECTL_AVAILABLE:
+        try:
+            async with asyncio.timeout(_TIMEOUT):
+                async with pulsectl_asyncio.PulseAsync(_CLIENT_NAME) as pulse:
+                    sinks = await pulse.sink_list()
+                    if any(s.name == STANDBY_SINK_NAME for s in sinks):
+                        logger.debug("Standby null sink already exists")
+                        return True
+        except Exception as exc:
+            logger.debug("aensure_null_sink check error: %s", exc)
+    # Create via pactl (works with both pulsectl and fallback)
+    return _fallback_load_null_sink()
+
+
+def ensure_null_sink() -> bool:
+    """Sync wrapper: create standby null sink if missing."""
+    return _run(aensure_null_sink())
+
+
+def remove_null_sink() -> bool:
+    """Unload the standby null sink module. Returns True on success."""
+    global _null_sink_module_id
+    if _null_sink_module_id is None:
+        return True
+    try:
+        r = subprocess.run(
+            ["pactl", "unload-module", str(_null_sink_module_id)],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if r.returncode == 0:
+            logger.info("Removed standby null sink (module %d)", _null_sink_module_id)
+            _null_sink_module_id = None
+            return True
+        logger.warning("Failed to remove null sink module %d: %s", _null_sink_module_id, r.stderr.strip())
+    except (subprocess.SubprocessError, OSError) as exc:
+        logger.warning("remove_null_sink error: %s", exc)
+    return False
+
+
+def _fallback_load_null_sink() -> bool:
+    """Create null sink via pactl subprocess."""
+    global _null_sink_module_id
+    try:
+        # Check if already exists
+        r = subprocess.run(["pactl", "list", "short", "sinks"], capture_output=True, text=True, timeout=5)
+        if r.returncode == 0 and STANDBY_SINK_NAME in r.stdout:
+            logger.debug("Standby null sink already exists (pactl)")
+            return True
+        r = subprocess.run(
+            [
+                "pactl",
+                "load-module",
+                "module-null-sink",
+                f"sink_name={STANDBY_SINK_NAME}",
+                "sink_properties=device.description=Sendspin\\ Standby",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if r.returncode == 0:
+            mid = r.stdout.strip()
+            _null_sink_module_id = int(mid) if mid.isdigit() else None
+            logger.info("Created standby null sink (%s)", STANDBY_SINK_NAME)
+            return True
+        logger.warning("Failed to create null sink: %s", r.stderr.strip())
+    except (subprocess.SubprocessError, OSError) as exc:
+        logger.warning("_fallback_load_null_sink error: %s", exc)
+    return False
 
 
 _thread_local = threading.local()

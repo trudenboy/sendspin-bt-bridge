@@ -570,6 +570,9 @@ def set_ma_now_playing_for_group(syncgroup_id: str, data: dict) -> None:
 def replace_ma_now_playing(new_data: dict[str, dict]) -> None:
     """Atomically replace all now-playing entries. Removes stale keys."""
     _ma_runtime_state.replace_ma_now_playing(new_data)
+    # Check for sync group auto-wake: if any group started playing,
+    # wake standby members belonging to that group.
+    _check_group_auto_wake(new_data)
 
 
 def clear_ma_now_playing() -> None:
@@ -627,3 +630,44 @@ def get_update_available() -> dict | None:
 def set_update_available(data: dict | None) -> None:
     """Store update availability info. Called by update_checker."""
     _async_job_state.set_update_available(data)
+
+
+# ---------------------------------------------------------------------------
+# Sync group auto-wake
+# ---------------------------------------------------------------------------
+
+
+def _check_group_auto_wake(now_playing: dict[str, dict]) -> None:
+    """Wake standby devices whose sync group has started playing.
+
+    Called from ``replace_ma_now_playing()`` after the cache is updated.
+    Iterates over all active clients; if a client is in standby and its
+    group_id appears in *now_playing* with ``state == "playing"``, schedule
+    a wake on the main asyncio loop.
+    """
+    import asyncio
+
+    playing_groups: set[str] = set()
+    for gid, np in now_playing.items():
+        if np.get("state") == "playing":
+            playing_groups.add(gid)
+    if not playing_groups:
+        return
+
+    loop = get_main_loop()
+    if not loop or not loop.is_running():
+        return
+
+    for client in _get_registry_active_clients_snapshot():
+        if not getattr(client, "status", None):
+            continue
+        if not client.status.get("bt_standby"):
+            continue
+        gid = client.status.get("group_id")
+        if gid and gid in playing_groups:
+            logger.info(
+                "[%s] Sync group %s is playing — auto-waking from standby",
+                getattr(client, "player_name", "?"),
+                gid,
+            )
+            asyncio.run_coroutine_threadsafe(client._wake_from_standby(), loop)
