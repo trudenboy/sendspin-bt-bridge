@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.49.0-rc.19] - 2026-03-26
+
+### Fixed
+- **Standby wake reconnect** — bt_monitor top-of-loop standby guard now checks `bt_waking` flag, allowing the monitor to reach BT reconnect code after auto-wake triggers
+- **Duplicate wake suppression** — `_on_standby_play_detected()` skips when already waking, preventing repeated wake attempts on every status update
+
 ## [2.49.0-rc.18] - 2026-03-26
 
 ### Added
