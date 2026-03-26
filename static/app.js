@@ -2464,6 +2464,11 @@ function _actionButtonIconSvg(kind, className) {
         '</svg>';
     }
     if (kind === 'release') return _releaseIconSvg(className);
+    if (kind === 'standby') {
+        return '<svg' + cls + ' viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+            '<path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79z"/>' +
+        '</svg>';
+    }
     if (kind === 'disable') {
         return '<svg' + cls + ' viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
             '<circle cx="12" cy="12" r="8"/>' +
@@ -2487,6 +2492,15 @@ function _setReleaseActionButtonState(btn, mgmtEnabled) {
     btn.title = mgmtEnabled
         ? 'Stop BT management for this device (it will stop auto-reconnecting)'
         : 'Resume BT management and auto-reconnect';
+}
+
+function _setStandbyActionButtonState(btn, isStandby) {
+    if (!btn) return;
+    _setActionButtonTone(btn, isStandby ? 'success' : 'warn');
+    btn.innerHTML = _actionButtonInnerHtml(isStandby ? 'reconnect' : 'standby', isStandby ? 'Wake' : 'Standby');
+    btn.title = isStandby
+        ? 'Wake from standby — reconnect Bluetooth and resume audio'
+        : 'Enter standby — disconnect Bluetooth to save speaker battery';
 }
 
 function _getVisibleDeviceEntries() {
@@ -2933,17 +2947,10 @@ function buildListView(entries, hiddenCount) {
         var mgmtEnabled = dev.bt_management_enabled !== false;
         var transportState = _getDeviceTransportState(dev, mediaState);
         var reconnectCapability = _getDeviceActionCapability(dev, 'reconnect');
-        var toggleManagementCapability = _getDeviceActionCapability(dev, 'toggle_bt_management');
         var reconnectAvailable = _capabilityAvailable(reconnectCapability, mgmtEnabled);
-        var releaseAvailable = _capabilityAvailable(toggleManagementCapability, true);
         var reconnectTitle = reconnectAvailable
             ? 'Reconnect Bluetooth and refresh sink routing'
             : _capabilityBlockedReason(reconnectCapability, 'Reconnect unavailable');
-        var releaseTitle = releaseAvailable
-            ? (mgmtEnabled
-                ? 'Stop BT management for this device (it will stop auto-reconnecting)'
-                : 'Resume BT management and auto-reconnect')
-            : _capabilityBlockedReason(toggleManagementCapability, 'BT management action unavailable');
         var canTransport = transportState.canTransport;
         var canMute = transportState.hasSink;
         var hasQueueNeighbors = !!(mediaState.ma || {}).connected;
@@ -2959,7 +2966,6 @@ function buildListView(entries, hiddenCount) {
             : '';
         var rowPauseBtnId = 'drow-pause-' + i;
         var rowMuteBtnId = 'drow-mute-' + i;
-        var releaseActionClass = mgmtEnabled ? 'warn' : 'success';
         var cardDisabled = _isDeviceDisabled(dev);
         var showDetailTransport = !!transportState.canTransport;
         var detailTransport = showDetailTransport
@@ -2974,9 +2980,16 @@ function buildListView(entries, hiddenCount) {
                 }) +
               '</div>'
             : '';
+        var isStandby = !!dev.bt_standby;
+        var standbyActionClass = isStandby ? 'success' : 'warn';
+        var standbyLabel = isStandby ? 'Wake' : 'Standby';
+        var standbyIcon = isStandby ? 'reconnect' : 'standby';
+        var standbyTitle = isStandby
+            ? 'Wake from standby — reconnect Bluetooth and resume audio'
+            : 'Enter standby — disconnect Bluetooth to save speaker battery';
         var detailActions = '<div class="list-detail-actions" onclick="event.stopPropagation()">' +
             '<button type="button" class="action-btn list-action-btn accent" id="dbtn-reconnect-' + i + '" onclick="btReconnect(' + i + ')" title="' + escHtmlAttr(reconnectTitle) + '"' + (reconnectAvailable && !cardDisabled ? '' : ' disabled') + '>' + _actionButtonInnerHtml('reconnect', 'Reconnect') + '</button>' +
-            '<button type="button" class="action-btn list-action-btn ' + releaseActionClass + '" id="dbtn-release-' + i + '" onclick="btToggleManagement(' + i + ')" title="' + escHtmlAttr(releaseTitle) + '"' + (releaseAvailable && !cardDisabled ? '' : ' disabled') + '>' + _actionButtonInnerHtml('release', mgmtEnabled ? 'Release' : 'Reclaim') + '</button>' +
+            '<button type="button" class="action-btn list-action-btn ' + standbyActionClass + '" id="dbtn-standby-' + i + '" onclick="btToggleStandby(' + i + ')" title="' + escHtmlAttr(standbyTitle) + '"' + (cardDisabled ? ' disabled' : '') + '>' + _actionButtonInnerHtml(standbyIcon, standbyLabel) + '</button>' +
             '<button type="button" class="action-btn list-action-btn danger" onclick="confirmDisableDevice(' + i + ')"' + (cardDisabled ? ' disabled' : '') + '>' + _actionButtonInnerHtml('disable', 'Disable') + '</button>' +
         '</div>';
         var detailBlockedHints = _renderBlockedControlHints(_collectDeviceBlockedControlHints(dev, transportState, _lastOperatorGuidance), {compact: true});
@@ -3378,7 +3391,7 @@ function buildDeviceCard(i) {
           '<div class="card-action-buttons">' +
             '<button type="button" class="action-btn accent" id="dbtn-reconnect-' + i + '" onclick="btReconnect(' + i + ')">' + _actionButtonInnerHtml('reconnect', 'Reconnect') + '</button>' +
             '<button type="button" class="action-btn accent" id="dbtn-wake-' + i + '" onclick="wakeDevice(' + i + ')" style="display:none">' + _actionButtonInnerHtml('reconnect', 'Wake') + '</button>' +
-            '<button type="button" class="action-btn warn" id="dbtn-release-' + i + '" onclick="btToggleManagement(' + i + ')">' + _actionButtonInnerHtml('release', 'Release') + '</button>' +
+            '<button type="button" class="action-btn warn" id="dbtn-standby-' + i + '" onclick="btToggleStandby(' + i + ')">' + _actionButtonInnerHtml('standby', 'Standby') + '</button>' +
             '<button type="button" class="action-btn danger" id="dbtn-disable-' + i + '" onclick="confirmDisableDevice(' + i + ')">' + _actionButtonInnerHtml('disable', 'Disable') + '</button>' +
             '<button type="button" class="icon-btn device-settings-btn card-corner-settings-btn" onclick="openDeviceSettings(' + i + ')" title="Device settings">' + _settingsIconHtml() + '</button>' +
           '</div>' +
@@ -3689,16 +3702,23 @@ function populateDeviceCard(i, dev) {
     if (vslider) updateSliderFill(vslider);
 
     var relBtn = document.getElementById('dbtn-release-' + i);
+    var standbyBtn = document.getElementById('dbtn-standby-' + i);
     var reconnectCapability = _getDeviceActionCapability(dev, 'reconnect');
-    var toggleManagementCapability = _getDeviceActionCapability(dev, 'toggle_bt_management');
     var reconnectAvailable = _capabilityAvailable(reconnectCapability, dev.bt_management_enabled !== false);
+    if (standbyBtn) {
+        _setStandbyActionButtonState(standbyBtn, !!dev.bt_standby);
+        standbyBtn.disabled = _isDeviceDisabled(dev);
+    }
     if (relBtn) {
+        var toggleManagementCapability = _getDeviceActionCapability(dev, 'toggle_bt_management');
         var mgmtEnabled = dev.bt_management_enabled !== false;
         _setReleaseActionButtonState(relBtn, mgmtEnabled);
         relBtn.disabled = !_capabilityAvailable(toggleManagementCapability, true) || _isDeviceDisabled(dev);
         relBtn.title = relBtn.disabled
             ? _capabilityBlockedReason(toggleManagementCapability, 'BT management action unavailable')
             : relBtn.title;
+    }
+    {
         var reconnBtn = document.getElementById('dbtn-reconnect-' + i);
         if (reconnBtn) {
             reconnBtn.disabled = !reconnectAvailable || _isDeviceDisabled(dev);
@@ -4503,6 +4523,31 @@ async function wakeDevice(i) {
     if (status) status.textContent = '\u21BB Waking\u2026';
     try {
         var resp = await fetch(API_BASE + '/api/bt/wake', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({player_name: playerName})
+        });
+        var d = await resp.json();
+        if (status) status.textContent = d.success ? '\u2713 ' + d.message : '\u2717 ' + (d.error || 'Failed');
+    } catch (e) {
+        if (status) status.textContent = '\u2717 Error';
+    }
+    if (btn) btn.disabled = false;
+    setTimeout(function() { if (status) status.textContent = ''; }, 4000);
+}
+
+async function btToggleStandby(i) {
+    var dev = lastDevices && lastDevices[i];
+    if (!dev) return;
+    var isStandby = !!dev.bt_standby;
+    var playerName = dev.player_name || null;
+    var btn = document.getElementById('dbtn-standby-' + i);
+    var status = document.getElementById('dbt-action-status-' + i);
+    if (btn) btn.disabled = true;
+    if (status) status.textContent = isStandby ? '\u21BB Waking\u2026' : '\u21BB Entering standby\u2026';
+    try {
+        var endpoint = isStandby ? '/api/bt/wake' : '/api/bt/standby';
+        var resp = await fetch(API_BASE + endpoint, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({player_name: playerName})

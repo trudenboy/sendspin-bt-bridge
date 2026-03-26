@@ -178,6 +178,33 @@ def api_bt_wake():
     return jsonify({"success": True, "message": "Device waking from standby"})
 
 
+@bt_bp.route("/api/bt/standby", methods=["POST"])
+def api_bt_standby():
+    """Put a device into standby (disconnect BT, park daemon on null sink)."""
+    data = request.get_json() or {}
+    player_name = data.get("player_name")
+    client, err = get_client_or_error(player_name)
+    if err:
+        return err
+    if not client:
+        return jsonify({"success": False, "error": "No client found"}), 503
+    if client.status.get("bt_standby"):
+        return jsonify({"success": False, "error": "Device is already in standby"}), 409
+    import asyncio
+
+    import state as _state
+
+    loop = _state.get_main_loop()
+    if loop and loop.is_running():
+        fut = asyncio.run_coroutine_threadsafe(client._enter_standby(), loop)
+        try:
+            fut.result(timeout=10.0)
+        except Exception as exc:
+            logger.warning("[%s] enter_standby error: %s", player_name, exc)
+            return jsonify({"success": False, "error": str(exc)}), 500
+    return jsonify({"success": True, "message": "Device entering standby"})
+
+
 @bt_bp.route("/api/device/enabled", methods=["POST"])
 def api_device_enabled():
     """Toggle global device enabled state (requires bridge restart to take effect)."""
