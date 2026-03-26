@@ -185,8 +185,9 @@ class TestRerouteToBtSink:
             client = _make_client(daemon_alive=True)
             client._send_subprocess_command = AsyncMock()
 
-            await client._reroute_to_bt_sink()
+            result = await client._reroute_to_bt_sink()
 
+            assert result is True
             move_mock.assert_awaited_once_with(12345, client.bluetooth_sink_name)
             client._send_subprocess_command.assert_awaited_once()
             cmd = client._send_subprocess_command.call_args[0][0]
@@ -197,8 +198,9 @@ class TestRerouteToBtSink:
         client = _make_client(daemon_alive=False)
         client._send_subprocess_command = AsyncMock()
 
-        await client._reroute_to_bt_sink()
+        result = await client._reroute_to_bt_sink()
 
+        assert result is False
         client._send_subprocess_command.assert_not_awaited()
 
     @pytest.mark.asyncio
@@ -207,19 +209,21 @@ class TestRerouteToBtSink:
         client.bluetooth_sink_name = None
         client._send_subprocess_command = AsyncMock()
 
-        await client._reroute_to_bt_sink()
+        result = await client._reroute_to_bt_sink()
 
+        assert result is False
         client._send_subprocess_command.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_reroute_zero_moved_skips_reanchor(self):
+    async def test_reroute_zero_moved_returns_false(self):
         with patch("services.pulse.amove_pid_sink_inputs", new_callable=AsyncMock) as move_mock:
             move_mock.return_value = 0  # nothing to move
             client = _make_client(daemon_alive=True)
             client._send_subprocess_command = AsyncMock()
 
-            await client._reroute_to_bt_sink()
+            result = await client._reroute_to_bt_sink()
 
+            assert result is False
             # No reanchor when no streams were actually moved
             client._send_subprocess_command.assert_not_awaited()
 
@@ -243,6 +247,21 @@ class TestStartSendspinReroute:
 
             move_mock.assert_awaited_once()
             client.stop_sendspin.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_start_sendspin_restarts_if_reroute_finds_zero_streams(self):
+        """When reroute finds 0 streams (ALSA errors), fall through to full restart."""
+        with patch("services.pulse.amove_pid_sink_inputs", new_callable=AsyncMock) as move_mock:
+            move_mock.return_value = 0  # no streams to reroute
+            client = _make_client(daemon_alive=True)
+            client._send_subprocess_command = AsyncMock()
+            client._start_sendspin_lock = None
+
+            await client._start_sendspin_inner()
+
+            move_mock.assert_awaited_once()
+            # Should have fallen through to stop_sendspin (full restart path)
+            client.stop_sendspin.assert_awaited_once()
 
 
 # ── Keepalive suppression during standby ─────────────────────────────────

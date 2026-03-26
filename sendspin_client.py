@@ -522,15 +522,18 @@ class SendspinClient:
         logger.info("[%s] Play detected during standby — auto-waking", self.player_name)
         await self._wake_from_standby()
 
-    async def _reroute_to_bt_sink(self) -> None:
+    async def _reroute_to_bt_sink(self) -> bool:
         """After BT reconnect, move streams from null sink to the BT sink and reanchor.
 
         Called from ``_start_sendspin_inner()`` when daemon is still alive after
         standby wake.  Clears ``bt_standby`` / ``bt_waking`` on success.
+
+        Returns ``True`` if streams were rerouted, ``False`` if no streams
+        existed (ALSA errors during standby may have destroyed them).
         """
         daemon_pid = self._daemon_proc.pid if self._daemon_proc else None
         if not daemon_pid or not self.bluetooth_sink_name:
-            return
+            return False
         from services.pulse import amove_pid_sink_inputs
 
         moved = await amove_pid_sink_inputs(daemon_pid, self.bluetooth_sink_name)
@@ -546,8 +549,10 @@ class SendspinClient:
             logger.info("[%s] Rerouted %d stream(s) to BT sink %s", self.player_name, moved, self.bluetooth_sink_name)
             await self._send_subprocess_command({"cmd": "reconnect", "delay": 1.0})
             logger.info("[%s] Sent reanchor after wake", self.player_name)
-        else:
-            logger.info("[%s] Standby cleared (no active streams to reroute)", self.player_name)
+            return True
+
+        logger.info("[%s] No streams to reroute — will restart daemon", self.player_name)
+        return False
 
     def _cancel_ma_reconnect_task(self) -> None:
         task = self._ma_reconnect_task
@@ -744,8 +749,11 @@ class SendspinClient:
                     self.player_name,
                     self.bluetooth_sink_name,
                 )
-                await self._reroute_to_bt_sink()
-                return
+                if await self._reroute_to_bt_sink():
+                    return
+                # Reroute failed (ALSA errors during standby destroyed PA
+                # streams) — fall through to full daemon restart.
+                logger.info("[%s] Reroute found 0 streams — full daemon restart", self.player_name)
 
             # Stop any existing subprocess first
             await self.stop_sendspin()
