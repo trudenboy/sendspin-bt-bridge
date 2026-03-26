@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.49.0-rc.2] - 2026-03-26
+
+### Fixed
+- **Race condition fixes**: TOCTOU in `update_config()`, pair cancel race in `bluetooth_manager`, lock ordering in `state.py`, status lock in `daemon_process`, future cleanup in `ma_monitor`
+- **CSP hardening**: replaced `unsafe-inline` with nonce-based Content Security Policy
+- **PBKDF2 upgrade**: bumped to 600K iterations with versioned `v1:iters:salt:hash` format (backward compatible)
+- **Logic error**: `or` → `and` in `config_migration.py` handoff_mode normalization
+- **XSS prevention**: added `escHtmlAttr()` for dynamic `onclick` values in `app.js`
+- **Scan race**: added `_scan_lock` for atomic check+create in BT scan endpoint
+- **Config whitelist**: POST `/api/config` now filters through `_ALLOWED_POST_CONFIG_KEYS`
+- **Artwork proxy**: Content-Type validation (image/* only) for MA artwork proxy
+- **Brute-force cleanup**: TTL sweep for `_failed` dict in auth module (cap at 200 entries)
+- **Monkey-patch safety**: `hasattr` guard before patching `_handle_binary_message` in bridge daemon
+- **PA hardening logs**: elevated from DEBUG to WARNING in `bridge_orchestrator`
+- **Update checker**: tightened git ref regex to require alphanumeric first char
+- **PulseAudio cleanup race**: copy+clear under lock in `_cleanup_loops()`
+- **Volume timer leak**: stale timer purge in `_schedule_volume_persist()`
+- **D-Bus import**: module-level `try: import dbus` with early `None` guards in `bt_dbus`
+- **Config backup**: millisecond timestamp to avoid collision on rapid saves
+- **Deque reverse**: `list(reversed(...))` instead of `list()` + `.reverse()` in `state.py`
+
+### Added
+- **Custom exception hierarchy**: `exceptions.py` with `BridgeError` → `BluetoothError`, `PulseAudioError`, `MusicAssistantError`, `ConfigError`, `IPCError`
+- **125 new tests**: `test_sendspin_client.py` (57), `test_web_interface.py` (27), `test_bt_monitor.py` (25), expanded `test_bt_manager.py` (+16)
+- **CI improvements**: `pip-audit` + `shellcheck` in lint workflow; `pytest-cov` with 50% threshold; mypy `check_untyped_defs = true`
+- **Dockerfile hardening**: `--no-install-recommends` on apt-get install
+
+### Security
+- Removed `SYS_ADMIN` capability from HA addon configs (stable, RC, beta)
+
 ## [2.49.0-rc.1] - 2026-03-26
 
 ### Added
