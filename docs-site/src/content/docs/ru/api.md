@@ -115,6 +115,65 @@ CORS preflight эндпоинт. Возвращает `204 No Content` с соо
 ]
 ```
 
+### `GET /api/recovery/timeline`
+
+Хронологическая шкала восстановления, построенная из событий здоровья устройств и запуска.
+
+```json
+{
+  "summary": { "entry_count": 3 },
+  "entries": [
+    { "timestamp": "2026-03-22T19:00:00+00:00", "severity": "warning", "label": "BT reconnect", "summary": "..." }
+  ]
+}
+```
+
+### `GET /api/recovery/timeline/download`
+
+Скачать текущую шкалу восстановления как **CSV-файл** (`sendspin-recovery-timeline-<timestamp>.csv`).
+
+### `POST /api/checks/rerun`
+
+Повторно запустить одну безопасную проверку (например, подключение Bluetooth, верификация аудио-синка).
+
+**Body:**
+```json
+{ "check_key": "bluetooth", "device_names": ["Колонка в гостиной"] }
+```
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `check_key` | string | Обязательное. Идентификатор проверки для повторного запуска |
+| `device_names` | string[] | Опциональное. Ограничить проверку указанными устройствами |
+
+**Ответ:**
+```json
+{ "check_key": "bluetooth", "summary": "All devices connected", "status": "pass" }
+```
+
+Возвращает `400`, если `check_key` не распознан.
+
+### `GET /api/latency/recommendations`
+
+Текущие рекомендации ассистента задержки из recovery assistant. Включает рекомендованное значение `PULSE_LATENCY_MSEC` и пояснения.
+
+### `POST /api/latency/apply`
+
+Сохранить рекомендуемое значение задержки Pulse в `config.json`. Требуется перезапуск для применения.
+
+**Body:** `{ "pulse_latency_msec": 800 }`
+
+**Ответ:**
+```json
+{
+  "success": true,
+  "pulse_latency_msec": 800,
+  "restart_required": true,
+  "summary": "Saved Pulse latency 800 ms. Restart the bridge to apply the new buffer.",
+  "latency_assistant": { }
+}
+```
+
 ## Управление воспроизведением
 
 ### `POST /api/pause_all`
@@ -177,6 +236,24 @@ CORS preflight эндпоинт. Возвращает `204 No Content` с соо
 Включить/выключить mute. При включённом `MUTE_VIA_MA` и подключённом MA команда mute маршрутизируется через MA API. В противном случае mute применяется напрямую через PulseAudio.
 
 **Body:** `{ "mac": "AA:BB:CC:DD:EE:FF", "muted": true }`
+
+## Управление транспортом
+
+### `POST /api/transport/cmd`
+
+Отправить нативную транспортную команду Sendspin конкретному устройству. Обходит MA REST API для минимальной задержки — команда передаётся через канал Sendspin Controller WebSocket.
+
+**Body:**
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `action` | string | Обязательное. Одно из: `play`, `pause`, `stop`, `next`, `previous`, `volume`, `mute`, `repeat_off`, `repeat_one`, `repeat_all`, `shuffle`, `unshuffle`, `switch` |
+| `device_index` | integer | Обязательное. Индекс устройства в списке активных (с нуля) |
+| `value` | any | Опциональное. Для `volume` (0–100) или `mute` (boolean) |
+
+Возвращает `400`, если действие невалидно или не поддерживается устройством.
+
+**Ответ:** `{ "success": true }`
 
 ## Интеграция с Music Assistant
 
@@ -317,6 +394,33 @@ CORS preflight эндпоинт. Возвращает `204 No Content` с соо
 }
 ```
 
+### `POST /api/ma/reload`
+
+Перезагрузить компоненты MA (учётные данные, WebSocket-монитор, кэш syncgroup) без перезапуска бриджа. Считывает текущие `MA_API_URL` / `MA_API_TOKEN` из `config.json` и запускает повторное обнаружение групп.
+
+**Ответ (202):**
+```json
+{
+  "success": true,
+  "job_id": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "running",
+  "monitor_reloaded": true
+}
+```
+
+### `GET /api/ma/artwork`
+
+Проксирование обложек MA через бридж, чтобы веб-интерфейс использовал same-origin URL изображений (избегая CORS-проблем).
+
+**Query-параметры:**
+
+| Параметр | Тип | Описание |
+|---|---|---|
+| `url` | string | Обязательное. Путь или полный URL обложки на сервере MA |
+| `sig` | string | Обязательное. HMAC-подпись для защиты от SSRF |
+
+Возвращает бинарные данные обложки с оригинальным `Content-Type` (например, `image/jpeg`). Bearer-токен MA добавляется только при запросе к серверу MA. Возвращает `400` для невалидных URL или подписей, `413` для изображений больше 10 МБ.
+
 ## Bluetooth-управление
 
 ### `POST /api/bt/reconnect`
@@ -375,6 +479,125 @@ CORS preflight эндпоинт. Возвращает `204 No Content` с соо
 
 Список спаренных устройств по каждому адаптеру.
 
+### `POST /api/bt/remove`
+
+Удалить (распарить) устройство из стека BlueZ.
+
+**Body:** `{ "mac": "AA:BB:CC:DD:EE:FF" }`
+
+**Ответ:** `{ "ok": true, "mac": "AA:BB:CC:DD:EE:FF" }`
+
+### `POST /api/bt/info`
+
+Подробная информация `bluetoothctl info` для устройства: статус паринга, доверия и подключения.
+
+**Body:** `{ "mac": "AA:BB:CC:DD:EE:FF" }`
+
+**Ответ:**
+```json
+{
+  "mac": "AA:BB:CC:DD:EE:FF",
+  "name": "Колонка в гостиной",
+  "alias": "Колонка в гостиной",
+  "paired": "yes",
+  "bonded": "yes",
+  "trusted": "yes",
+  "connected": "yes",
+  "icon": "audio-card",
+  "raw": ["Device AA:BB:CC:DD:EE:FF ...", "..."]
+}
+```
+
+### `POST /api/bt/disconnect`
+
+Отключить Bluetooth-устройство без удаления паринга.
+
+**Body:** `{ "mac": "AA:BB:CC:DD:EE:FF" }`
+
+**Ответ:** `{ "ok": true, "mac": "AA:BB:CC:DD:EE:FF" }`
+
+### `POST /api/bt/adapter/power`
+
+Включить или выключить питание Bluetooth-адаптера.
+
+**Body:**
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `adapter` | string | Идентификатор адаптера (`hci0`, `hci1` или MAC-адрес). Пустое = адаптер по умолчанию |
+| `power` | boolean | `true` — включить, `false` — выключить (по умолчанию: `true`) |
+
+**Ответ:** `{ "ok": true, "power": true }`
+
+### `POST /api/bt/wake`
+
+Разбудить устройство из режима ожидания (переподключает Bluetooth и перезапускает подпроцесс демона).
+
+**Body:** `{ "player_name": "Колонка в гостиной" }`
+
+Возвращает `409`, если устройство не находится в режиме ожидания.
+
+**Ответ:** `{ "success": true, "message": "Device waking from standby" }`
+
+### `POST /api/bt/standby`
+
+Перевести устройство в режим ожидания (отключает Bluetooth и переключает подпроцесс демона на null-синк). Снижает энергопотребление неактивных колонок.
+
+**Body:** `{ "player_name": "Колонка в гостиной" }`
+
+Возвращает `409`, если устройство уже в режиме ожидания.
+
+**Ответ:** `{ "success": true, "message": "Device entering standby" }`
+
+### `POST /api/bt/reset_reconnect`
+
+Удалить устройство и переподключить с нуля. Выполняется асинхронно: удаление → перезагрузка питания → сканирование → паринг → доверие → подключение.
+
+**Body:**
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `mac` | string | Обязательное. MAC-адрес устройства |
+| `adapter` | string | Опциональное. Идентификатор адаптера (`hci0` или MAC-адрес) |
+
+Возвращает `409`, если другая Bluetooth-операция уже выполняется.
+
+**Ответ:** `{ "job_id": "550e8400-e29b-41d4-a716-446655440000" }`
+
+### `GET /api/bt/reset_reconnect/result/<job_id>`
+
+Опрос результата сброса и переподключения.
+
+**Ответ (выполняется):** `{ "status": "running" }`
+
+**Ответ (завершено):**
+```json
+{ "status": "done", "success": true, "connected": true, "mac": "AA:BB:CC:DD:EE:FF" }
+```
+
+### `POST /api/bt/pair_new`
+
+Спарить новое Bluetooth-устройство по MAC-адресу (существующий клиент бриджа не требуется). Используется для устройств, обнаруженных при сканировании, но ещё не добавленных в конфигурацию.
+
+**Body:**
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `mac` | string | Обязательное. MAC-адрес устройства |
+| `adapter` | string | Опциональное. Идентификатор адаптера |
+
+Возвращает `409`, если другая Bluetooth-операция уже выполняется.
+
+**Ответ:** `{ "job_id": "550e8400-e29b-41d4-a716-446655440000" }`
+
+### `GET /api/bt/pair_new/result/<job_id>`
+
+Опрос результата автономного паринга.
+
+**Ответ (выполняется):** `{ "status": "running" }`
+
+**Ответ (завершено):** `{ "status": "done", "success": true, "mac": "AA:BB:CC:DD:EE:FF" }`
+
 ### `GET /api/bugreport`
 
 Сгенерировать диагностический пакет для bug report. Возвращает JSON-объект с замаскированной системной информацией, состоянием устройств, последними логами, Bluetooth/audio-диагностикой и helper-текстом для GitHub issue.
@@ -397,6 +620,10 @@ CORS preflight эндпоинт. Возвращает `204 No Content` с соо
 **Query параметры:**
 - `lines` — количество строк (по умолчанию `100`)
 
+### `GET /api/logs/download`
+
+Скачать полный лог сервиса (до 500 строк) как **текстовый файл** (`sendspin-logs-<timestamp>.txt`). Читает из `journalctl`, HA Supervisor или `docker logs` в зависимости от среды выполнения.
+
 ### `POST /api/restart`
 
 Перезапустить сервис.
@@ -416,6 +643,17 @@ CORS preflight эндпоинт. Возвращает `204 No Content` с соо
 **Body:** `{ "level": "debug" }` — `"info"` или `"debug"`
 
 **Ответ:** `{ "success": true, "level": "DEBUG" }`
+
+### `GET /api/update/check/result/<job_id>`
+
+Опрос результата асинхронной проверки обновлений.
+
+**Ответ (выполняется):** `{ "status": "running", "channel": "stable" }`
+
+**Ответ (завершено):**
+```json
+{ "success": true, "update_available": true, "tag": "v2.28.2", "version": "2.28.2", "current_version": "2.28.1" }
+```
 
 ## Конфигурация
 
@@ -448,6 +686,72 @@ CORS preflight эндпоинт. Возвращает `204 No Content` с соо
 ```json
 { "success": false, "error": "Invalid JSON in uploaded file" }
 ```
+
+### `POST /api/config/validate`
+
+Валидация конфигурации без сохранения. Возвращает ошибки, предупреждения и нормализованную конфигурацию.
+
+**Body:** Полный или частичный JSON-объект конфигурации.
+
+**Ответ (200 — валидно):**
+```json
+{
+  "valid": true,
+  "errors": [],
+  "warnings": [{ "field": "BLUETOOTH_DEVICES[0].mac", "message": "..." }],
+  "normalized_config": { }
+}
+```
+
+**Ответ (400 — невалидно):**
+```json
+{
+  "valid": false,
+  "errors": [{ "field": "SENDSPIN_PORT", "message": "Invalid SENDSPIN_PORT: abc" }],
+  "warnings": [],
+  "normalized_config": { }
+}
+```
+
+### `POST /api/ha/areas`
+
+Получить предложения областей (areas) из Home Assistant с использованием временного HA-токена. Полезно для маппинга адаптеров к комнатам в UI. Работает только в режиме аддона или при доступности HA.
+
+**Body:**
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `ha_token` | string | Обязательное. Действующий access-токен HA |
+| `adapters` | object[] | Опциональное. Список объектов адаптеров для сопоставления с устройствами HA |
+| `include_devices` | boolean | Опциональное. Включить детали устройств HA в ответ |
+
+**Ответ:**
+```json
+{
+  "success": true,
+  "areas": [{ "area_id": "living_room", "name": "Гостиная" }],
+  "bridge_name_suggestions": ["Living Room Bridge"]
+}
+```
+
+## Аутентификация
+
+### `GET /login`
+
+Страница входа. Автоматически определяет доступные методы аутентификации:
+- **Режим аддона HA** — login flow Home Assistant с поддержкой 2FA/TOTP
+- **MA подключён** — валидация учётных данных Music Assistant (или HA через MA)
+- **Standalone** — локальная парольная аутентификация (PBKDF2-SHA256)
+
+### `POST /login`
+
+Обработка формы входа. Проверяет учётные данные через определённый бэкенд, обеспечивает CSRF-защиту и применяет блокировку от перебора (настраивается через параметры `BRUTE_FORCE_*`).
+
+При успехе устанавливает аутентифицированную сессию и перенаправляет на запрошенную страницу. При ошибке повторно отображает страницу входа с сообщением об ошибке.
+
+### `GET /logout`
+
+Очистить аутентифицированную сессию и перенаправить на страницу входа.
 
 ## Примеры использования
 

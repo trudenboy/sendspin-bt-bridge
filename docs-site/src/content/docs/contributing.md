@@ -61,7 +61,7 @@ Run `pytest` for automated unit tests:
 python3 -m pytest tests/ -v
 ```
 
-The test suite has **187 tests** across 18 test files covering config, volume routing, device status, state management, authentication, Ingress middleware, BT services, daemon process, MA integration, and scan cooldown.
+The test suite has **959+ tests** across 18 test files covering config, volume routing, device status, state management, authentication, Ingress middleware, BT services, daemon process, MA integration, and scan cooldown.
 
 ### Linting
 

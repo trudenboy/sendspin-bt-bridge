@@ -47,6 +47,7 @@ The header is split into a main action row and a runtime/status row.
 - **Version badge** — links directly to the matching GitHub release.
 - **Update badge** — shows `check`, `up to date`, or the available target version.
 - **Report / Docs / GitHub** — quick links for support and documentation.
+- **Theme toggle** — cycles through Auto → Light → Dark colour schemes; your choice is saved in the browser.
 - **User area** — shows the current user and **Sign out** when authentication is active.
 
 ### Runtime row
@@ -87,7 +88,7 @@ The toolbar above the fleet view includes:
 
 - **Group filter** — show one Music Assistant sync group or all groups.
 - **Adapter filter** — narrow the view to a specific Bluetooth adapter.
-- **Status filter** — filter by playing, idle, reconnecting, released, or error states.
+- **Status filter** — filter by playing, idle, standby, reconnecting, released, or error states.
 - **Selection controls** — select all visible devices, then apply group volume, mute, pause, reconnect, or release.
 - **Grid/List toggle** — switch between card view and table view.
 
@@ -96,6 +97,8 @@ The toolbar above the fleet view includes:
 The current UI defaults to **list view**. You can still switch to **grid view** when you want larger per-device cards, and your manual choice is remembered in browser storage.
 
 In **list view**, one row can be expanded at a time for transport controls, routing details, and device actions. The list auto-expands the most relevant row on load, usually the first active device.
+
+Devices are automatically sorted by activity: playing speakers appear first, then connected-idle, then disconnected or standby. Within each tier, sync-group members stay together.
 
 ## Device cards and rows
 
@@ -116,6 +119,7 @@ Hovering a card or expanding a row reveals more context and quick actions, inclu
 
 - **Reconnect** and **Re-pair**.
 - **Release / Reclaim** for temporarily handing the speaker back to a phone or PC without deleting it from the bridge.
+- **Standby / Wake** for power-saving disconnect; the speaker stays in the fleet but Bluetooth is parked until you wake it.
 - **BT Info** modal for copyable diagnostics.
 - **Settings gear** that jumps straight into the matching row in **Configuration → Devices**.
 
@@ -131,13 +135,14 @@ Group badges are interactive too: clicking a Music Assistant group badge opens t
 
 ![General tab of the redesigned Configuration section, with cards and footer actions](/sendspin-bt-bridge/screenshots/screenshot-config.png)
 
-The redesigned **Configuration** section is organized into five tabs:
+The redesigned **Configuration** section is organized into six tabs:
 
 | Tab | Purpose |
 |---|---|
-| **General** | Bridge identity, timezone, latency, direct web port, base listener port, restart behavior, update policy, and guidance visibility |
+| **General** | Bridge identity, timezone, direct web port, base listener port, restart behavior, update policy, guidance visibility, and experimental features toggle |
+| **Audio** | PulseAudio latency, codec preference, and PA rescue-streams control |
 | **Devices** | Speaker fleet table and per-device saved settings |
-| **Bluetooth** | Adapter inventory, paired-device import, scan modal, reconnect policy, and codec preference |
+| **Bluetooth** | Adapter inventory, paired-device management, scan modal, and reconnect policy |
 | **Music Assistant** | Connection status, token flows, reconfigure flow, and sync/routing toggles |
 | **Security** | Local auth, session timeout, brute-force settings (standalone only) |
 
@@ -150,6 +155,18 @@ The footer actions behave differently on purpose:
 - **Upload** imports a config file while preserving the current password hash, secret key, and stored MA token on the server.
 
 Unsaved edits enable **Cancel**, mark the configuration area as dirty, and trigger a browser warning if you try to leave the page mid-edit.
+
+### General tab
+
+Beyond the core identity and policy fields listed in the table, the General tab includes an **Experimental features** toggle at the bottom. Enabling it reveals early-stage per-device settings — currently **Room name**, **Room ID**, and **Handoff mode** — that may change or be removed in future versions. The toggle is a UI-only preference stored in the browser and is not persisted to the config file.
+
+### Audio tab
+
+The **Audio** tab groups latency and codec settings that affect all speakers:
+
+- **PulseAudio latency** (default 600 ms, range 50–2000 ms) — tunes the buffer between the bridge and the PulseAudio/PipeWire backend.
+- **Prefer SBC codec** — selects the lower-CPU Bluetooth audio codec; useful on Raspberry Pi and similar boards.
+- **Disable PA rescue-streams** — prevents PulseAudio's `module-rescue-streams` from moving audio to the wrong sink after a Bluetooth reconnect.
 
 ### Devices tab
 
@@ -169,11 +186,10 @@ If `listen_port` is left blank, the runtime uses **`BASE_LISTEN_PORT + device in
 
 The **Bluetooth** tab now owns the bridge-side Bluetooth tools:
 
-- **Adapters** card for rename, refresh, and manual adapter rows.
-- **Paired devices** card for inventory, import, and repair/reset actions.
+- **Adapters** card for rename, refresh, reboot, and manual adapter rows. The **↻ Reboot** button power-cycles a single adapter (off → 3 s pause → on) without restarting the bridge.
+- **Paired devices** card for inventory, import, and repair/reset actions. Each row has a **ℹ️ Info** button that opens the BT device info modal with copyable diagnostics.
 - **Scan nearby** opens a dedicated Bluetooth scan modal from this tab.
 - **Connection recovery** settings cover BT check interval and auto-disable threshold.
-- **Prefer SBC codec** remains the low-CPU audio policy toggle.
 
 The scan modal improves first-run discovery and troubleshooting:
 

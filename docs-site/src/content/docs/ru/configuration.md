@@ -150,6 +150,7 @@ Standalone-login использует CSRF-защищённые формы и co
 | **bt_max_reconnect_fails** | Порог auto-disable |
 | **auth_enabled** | Standalone-style auth toggle для прямого доступа; в HA addon mode auth всё равно принудительно контролируется HA |
 | **ma_api_url / ma_api_token** | REST-интеграция с Music Assistant |
+| **ma_auto_silent_auth** | Разрешить addon/Ingress-страницам пробовать silent-создание HA-backed MA-токена при открытии |
 | **volume_via_ma / mute_via_ma** | Маршрутизация управления через MA |
 | **update_channel** | Выбор release-lane для in-app update checks и предупреждений |
 | **log_level** | Базовый уровень логирования |
@@ -159,12 +160,6 @@ Standalone-login использует CSRF-защищённые формы и co
 ![Диалог редактирования устройства в конфигурации аддона HA](/sendspin-bt-bridge/screenshots/screenshot-ha-addon-device-edit.png)
 
 Через addon form доступны и полные структуры **Bluetooth devices** и **Bluetooth adapters**. Старые addon-конфиги могут по-прежнему сохранять legacy-поле `keepalive_silence` при трансляции, но текущее runtime-поведение определяется через `keepalive_interval`.
-
-Что важно для addon-режима:
-
-- auth в Home Assistant / Ingress всегда принудительно включена;
-- пользовательский `web_port` добавляет только дополнительный прямой listener и не переносит HA Ingress;
-- silent bootstrap токена HA для Music Assistant доступен только при открытом UI через аутентифицированную HA/Ingress browser-session.
 
 Что важно для addon-режима:
 
@@ -221,8 +216,12 @@ Bridge поддерживает два необязательных top-level ov
 | `TZ` | string | Часовой пояс IANA |
 | `PULSE_LATENCY_MSEC` | integer | Подсказка аудиобуфера |
 | `BT_CHECK_INTERVAL` | integer | Интервал проверки Bluetooth |
-| `BT_MAX_RECONNECT_FAILS` | integer | Порог auto-disable |
+| `BT_MAX_RECONNECT_FAILS` | integer | Порог auto-disable; `0` — без ограничений |
+| `BT_CHURN_THRESHOLD` | integer | Порог изоляции частых переподключений; `0` отключает |
+| `BT_CHURN_WINDOW` | number | Окно времени в секундах для обнаружения churn (по умолчанию `300`) |
 | `PREFER_SBC_CODEC` | boolean | Предпочтение кодека с меньшей нагрузкой |
+| `DISABLE_PA_RESCUE_STREAMS` | boolean | Выгрузить PulseAudio `module-rescue-streams` при старте, чтобы предотвратить смещение sink при переподключении |
+| `DUPLICATE_DEVICE_CHECK` | boolean | Обнаружение дублирующихся устройств между bridge-экземплярами |
 | `AUTH_ENABLED` | boolean | Включить локальную auth-защиту вне HA addon mode; в HA addon mode auth всегда принудительно включена |
 | `SESSION_TIMEOUT_HOURS` | integer | Срок жизни browser-сессии |
 | `BRUTE_FORCE_PROTECTION` | boolean | Включить временную блокировку после неудачных входов |
@@ -232,6 +231,7 @@ Bridge поддерживает два необязательных top-level ov
 | `MA_API_URL` | string | URL REST API Music Assistant |
 | `MA_API_TOKEN` | string | Токен Music Assistant API |
 | `MA_USERNAME` | string | Username, использованный при последнем успешном MA login-flow |
+| `MA_AUTO_SILENT_AUTH` | boolean | Разрешить addon/Ingress-страницам пробовать silent-создание HA-backed MA-токена при открытии |
 | `MA_WEBSOCKET_MONITOR` | boolean | Live monitor now-playing и очереди |
 | `VOLUME_VIA_MA` | boolean | Пропускать volume через MA |
 | `MUTE_VIA_MA` | boolean | Пропускать mute через MA |
@@ -239,8 +239,31 @@ Bridge поддерживает два необязательных top-level ov
 | `UPDATE_CHANNEL` | string | Канал обновлений: `stable`, `rc` или `beta` |
 | `AUTO_UPDATE` | boolean | Разрешить auto-update там, где он поддерживается |
 | `CHECK_UPDATES` | boolean | Включить проверку обновлений |
-| `LOG_LEVEL` | string | Базовый уровень логирования |
+| `LOG_LEVEL` | string | Базовый уровень логирования: `DEBUG`, `INFO`, `WARNING`, `ERROR` |
+| `HA_AREA_NAME_ASSIST_ENABLED` | boolean | Автоматическое определение имён зон Home Assistant для адаптеров |
+| `STARTUP_BANNER_GRACE_SECONDS` | integer | Секунды до появления баннера запуска (0–300) |
+| `RECOVERY_BANNER_GRACE_SECONDS` | integer | Секунды до появления баннеров восстановления/ошибок (0–300) |
 | `TRUSTED_PROXIES` | array | Дополнительные proxy IP, которым разрешено передавать trusted Ingress headers |
+
+### Автоматически управляемые ключи
+
+Следующие ключи записываются bridge во время работы и обычно не требуют ручного редактирования:
+
+| Ключ | Тип | Описание |
+|---|---|---|
+| `CONFIG_SCHEMA_VERSION` | integer | Внутренняя версия схемы для миграций конфига |
+| `AUTH_PASSWORD_HASH` | string | Bcrypt-хеш пароля веб-интерфейса |
+| `SECRET_KEY` | string | Ключ шифрования сессий Flask; генерируется автоматически при первом запуске |
+| `LAST_VOLUMES` | object | Сохранённая громкость устройств (`MAC → integer`) |
+| `LAST_SINKS` | object | Сохранённое имя PulseAudio-sink устройства (`MAC → string`) |
+| `MA_AUTH_PROVIDER` | string | Провайдер авторизации текущего подключения к MA (`"ha"` и т.д.) |
+| `MA_TOKEN_INSTANCE_HOSTNAME` | string | Hostname экземпляра MA, выдавшего токен |
+| `MA_TOKEN_LABEL` | string | Понятная метка сохранённого MA-токена |
+| `MA_ACCESS_TOKEN` | string | Текущий OAuth access token MA |
+| `MA_REFRESH_TOKEN` | string | OAuth refresh token MA для автоматического обновления |
+| `HA_ADAPTER_AREA_MAP` | object | Привязка MAC адаптера → зона Home Assistant |
+
+> **Чувствительные поля:** `AUTH_PASSWORD_HASH`, `SECRET_KEY`, `MA_ACCESS_TOKEN` и `MA_REFRESH_TOKEN` удаляются из скачиваемого конфига. **Upload** сохраняет серверные значения этих ключей.
 
 ### Bluetooth-устройства
 
@@ -273,6 +296,10 @@ Bridge поддерживает два необязательных top-level ov
 | `preferred_format` | Предпочтительный аудиоформат |
 | `keepalive_silence` | Legacy-совместимый флаг из старых addon-конфигов; отдельного переключателя для него в текущем web UI нет |
 | `keepalive_interval` | Интервал keepalive-тишины в секундах; любое положительное значение включает keepalive, минимальный эффективный интервал — 30 секунд |
+| `handoff_mode` | Режим передачи при смене комнат: `default` или `fast_handoff`; fast-режим автоматически устанавливает keepalive 45 с |
+| `room_id` | ID зоны / комнаты Home Assistant для устройства |
+| `room_name` | Понятное имя комнаты |
+| `idle_disconnect_minutes` | Отключить Bluetooth после указанного числа минут бездействия; `0` отключает |
 | `enabled` | При `false` устройство пропускается на старте |
 
 Каждый эффективный `listen_port` должен быть уникальным для устройства. Если на одном хосте работает несколько bridge-экземпляров, задайте им разные диапазоны `BASE_LISTEN_PORT` или явные `listen_port` для каждого устройства.
@@ -306,12 +333,48 @@ Bridge поддерживает два необязательных top-level ov
 
 ## Переменные окружения
 
-Bridge напрямую читает небольшой набор runtime/bootstrap-переменных окружения. `CONFIG_DIR` всегда определяет, где находится `config.json`, а env-override для `WEB_PORT` / `BASE_LISTEN_PORT` разрешаются раньше сохранённых значений конфига.
+Bridge читает переменные окружения при запуске. Они делятся на три группы: **bootstrap-переменные**, которые вы задаёте сами, **контейнерные внутренности**, устанавливаемые `entrypoint.sh`, и **переменные аддона Home Assistant**, внедряемые Supervisor.
 
-| Переменная | Описание |
-|---|---|
-| `WEB_PORT` | Override прямого web UI порта. В standalone default — `8080`; addon channels сохраняют фиксированные primary ports и могут открыть этот порт дополнительно |
-| `BASE_LISTEN_PORT` | Стартовый порт для auto-assigned player listeners. Stable default — `8928`, rc — `9028`, beta — `9128` |
-| `TZ` | Override часового пояса, используемый при инициализации локального времени runtime |
-| `BRIDGE_NAME` | Необязательный override имени bridge до появления сохранённого имени |
-| `CONFIG_DIR` | Путь к директории конфига |
+### Bootstrap-переменные
+
+Наиболее часто используемые overrides. `CONFIG_DIR` всегда определяет, где находится `config.json`, а env-override для `WEB_PORT` / `BASE_LISTEN_PORT` разрешаются раньше сохранённых значений конфига.
+
+| Переменная | По умолчанию | Описание |
+|---|---|---|
+| `CONFIG_DIR` | `/config` | Путь к директории конфига |
+| `WEB_PORT` | `8080` (standalone) | Override прямого web UI порта. Addon channels сохраняют фиксированные primary ports и могут открыть этот порт дополнительно |
+| `BASE_LISTEN_PORT` | `8928` (standalone) | Стартовый порт для auto-assigned player listeners. Stable `8928`, rc `9028`, beta `9128` |
+| `TZ` | из конфига | Override часового пояса, используемый при инициализации локального времени runtime |
+| `BRIDGE_NAME` | из конфига | Необязательный override имени bridge до появления сохранённого имени |
+| `LOG_LEVEL` | `INFO` | Уровень логирования: `DEBUG`, `INFO`, `WARNING`, `ERROR`. Также задаётся через конфиг или веб-интерфейс |
+| `WEB_THREADS` | `8` | Количество HTTP-потоков Waitress; увеличьте до `16` для 20+ устройств |
+| `DEMO_MODE` | *(не задана)* | Установите `1`, `true` или `yes` для запуска в демо/эмуляционном режиме без реального Bluetooth-оборудования |
+| `SENDSPIN_NAME` | `Sendspin-{hostname}` | Override префикса имени плеера по умолчанию |
+| `SENDSPIN_STATIC_DELAY_MS` | `-300` | Глобальный override статической задержки звука в миллисекундах (может быть отрицательным) |
+
+### Контейнерные внутренности
+
+Устанавливаются автоматически `entrypoint.sh` при запуске контейнера. Ручная настройка требуется редко.
+
+| Переменная | По умолчанию | Описание |
+|---|---|---|
+| `PULSE_SERVER` | *(автоопределение)* | Путь к сокету PulseAudio / PipeWire (например, `unix:/run/audio/pulse.sock`) |
+| `PULSE_LATENCY_MSEC` | из конфига (`600`) | Подсказка задержки PulseAudio в миллисекундах; берётся из ключа конфига `PULSE_LATENCY_MSEC` |
+| `PULSE_SINK` | *(на подпроцесс)* | PulseAudio-sink по умолчанию; задаётся отдельно для каждого подпроцесса устройства для маршрутизации звука на нужную колонку |
+| `AUDIO_UID` | `1000` | User ID для доступа к сокету PulseAudio |
+| `AUDIO_GID` | *(из сокета)* | Group ID для доступа к сокету PulseAudio |
+| `DBUS_SYSTEM_BUS_ADDRESS` | *(автоопределение)* | Путь к системному сокету D-Bus |
+| `STARTUP_DEPENDENCY_WAIT_ATTEMPTS` | `45` | Максимальное число попыток ожидания D-Bus, Bluetooth и аудио при старте |
+| `STARTUP_DEPENDENCY_WAIT_DELAY_SECONDS` | `1` | Задержка в секундах между проверками зависимостей при старте |
+
+### Переменные аддона Home Assistant
+
+Внедряются HA Supervisor; с точки зрения bridge — только для чтения.
+
+| Переменная | По умолчанию | Описание |
+|---|---|---|
+| `SUPERVISOR_TOKEN` | *(только HA)* | Токен API Home Assistant Supervisor; его наличие активирует addon-режим |
+| `HA_CORE_URL` | `http://homeassistant:8123` | URL Home Assistant Core для auth-flow и API-вызовов |
+| `HOSTNAME` | *(системный)* | Hostname контейнера; используется для определения типа аддона |
+| `SENDSPIN_HA_OPTIONS_FILE` | `/data/options.json` | Путь к файлу опций аддона, записанному Supervisor |
+| `SENDSPIN_HA_CONFIG_FILE` | `/data/config.json` | Путь к транслированному конфигу, используемому в addon-режиме |

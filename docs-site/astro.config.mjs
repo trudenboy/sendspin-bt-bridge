@@ -28,7 +28,7 @@ export default defineConfig({
       ],
       sidebar: [
         { label: 'Home', translations: { ru: 'Главная' }, link: '/' },
-        { label: 'Project Stats', translations: { ru: 'Статистика проекта' }, link: '/stats/' },
+        // { label: 'Project Stats', translations: { ru: 'Статистика проекта' }, link: '/stats/' },
         {
           label: 'Installation', translations: { ru: 'Установка' },
           autogenerate: { directory: 'installation' },

@@ -1,238 +1,511 @@
 # Дорожная карта v3
 
-Эта страница — краткое русское резюме v3-roadmap. Полная версия и основной source of truth находятся в [`ROADMAP.md`](ROADMAP.md).
+## Назначение
 
-## Что уже считается базой для v3
-
-v3 начинается не с нуля, а поверх уже собранного foundation из `v2.46.x+`:
-
-- явная lifecycle и orchestration-модель
-- typed snapshots для status и diagnostics
-- onboarding, recovery guidance и bugreport tooling
-- room metadata, readiness и handoff foundations
-- config migration и validation flows
-- versioned subprocess IPC и стабильные diagnostics endpoints
-- усиленные Docker и Raspberry Pi startup diagnostics
-
-## Новый принцип v3
+Эта дорожная карта написана для **волны v3**, стартующей от реальности, уже выпущенной в `v2.46.x+`.
 
 v3 стоит трактовать как **compatibility-preserving platform refresh**:
 
 - это **не** rewrite с нуля
 - но и **не** обещание вечно ограничиваться только маленькими incremental-изменениями
-- это шанс заменить те runtime-seams и UI-surfaces, которые мешают росту продукта, сохранив Bluetooth reliability и operator trust
+- это осознанная возможность модернизировать архитектуру, backend contracts и operator-facing UI, не жертвуя Bluetooth reliability
+
+Проект уже имеет:
+
+- явную bridge lifecycle и orchestration-модель
+- typed status и diagnostics read models
+- нормализованные onboarding, recovery и operator-guidance surfaces
+- config migration и validation flows
+- room metadata, readiness и handoff foundations для room-aware сценариев Music Assistant
+- усиленные Docker и Raspberry Pi startup diagnostics, которые выводят runtime UID, audio socket path, socket ownership и live `pactl` probe status
+- versioned subprocess IPC и стабильные operator-facing diagnostics endpoints
+
+Дорожная карта поэтому отвечает на более конкретный вопрос:
+
+- какие глубокие seams нужно заменить, чтобы v3 было проще развивать
+- как сделать wired и USB support настоящей продуктовой волной, а не экспериментом
+- как превратить UI в modern operator console, не теряя уже работающие deployment realities
 
 ## Обновлённый приоритет v3
 
-Wired и USB остаются первым крупным расширением v3, но теперь их нужно выпускать не как isolated backend-track, а как часть более широкой продуктовой волны.
+Первое крупное расширение v3 — по-прежнему **wired и USB audio support**, но теперь его нельзя трактовать как isolated backend-track.
 
 Новая логика порядка:
 
-1. считать `V3-0` уже собранной baseline-частью
+1. считать operator polish wave уже собранной baseline-частью, а не главной активной фазой
 2. запускать v3 как координированную программу из трёх треков: architecture, backend, frontend
-3. выпустить первую multi-backend волну как **platform contracts + wired/USB runtime + modern operator console**
-4. поднять observability, signal path и delay intelligence раньше AI и fleet
-5. расширяться в AI-assisted support и control plane только после зрелого single-bridge multi-backend story
+3. выпустить первую multi-backend волну как **shared platform contracts + wired/USB runtime + modern operator console**
+4. поднять observability, signal path и delay intelligence до first-class уровня раньше AI и fleet
+5. расширяться в AI-assisted support и multi-bridge control plane только после зрелого single-bridge multi-backend story
 
-Bluetooth при этом остаётся главным и самым battle-tested runtime.
+Bluetooth при этом остаётся главным и самым battle-tested runtime. v3 должен расширять продукт вокруг этого ядра, а не понижать его.
+
+## Продуктовый тезис v3
+
+Sendspin BT Bridge v3 должен стать **Bluetooth-first, room-aware, multi-backend audio platform с modern operator console**.
+
+Это значит — сохранять Bluetooth reliability как ядро продукта, добавляя поверх пять больших возможностей:
+
+1. **Shared platform layer** с явными backend contracts, capability modeling, config/runtime separation и event history
+2. **USB DAC и wired audio support** как первый смежный backend, затем virtual sink composition
+3. **Observability-first operations** с signal-path visibility, health summaries, recovery timelines и delay intelligence
+4. **Modern operator console** для creation, diagnostics, history и bulk operations
+5. **AI-assisted diagnostics и позднее fleet management**, построенные на тех же typed data models, а не на отдельной ad hoc логике
+
+## Стартовая база из v2
+
+Дорожная карта считает следующее уже устоявшимися основами:
+
+- Bluetooth остаётся primary и самым battle-tested runtime
+- onboarding, recovery guidance, diagnostics и bugreport tooling — реальные operator-facing surfaces
+- bridge и device health, recent events и blocked-action reasoning достаточно явные, чтобы на них строить
+- room metadata, transfer readiness и fast-handoff profiles уже существуют для room-following сценариев
+- Home Assistant и Music Assistant integration — часть нормального продуктового пути, а не afterthought
+- Docker и Raspberry Pi startup diagnostics уже выводят runtime UID, audio socket path, socket ownership и live `pactl` probe status
+- subprocess IPC, config migration и diagnostics endpoints уже ведут себя как versioned product contracts
 
 ## Три координированных трека v3
 
-### 1. Architecture / platform
+v3 нельзя описывать как «backend-работа с frontend-enablement сбоку». Он должен работать как три координированных трека, которые выпускаются вместе в каждой крупной фазе.
+
+### Трек A. Architecture и platform contracts
 
 Этот трек задаёт долгоживущий каркас v3:
 
-- явный `AudioBackend`-style contract
-- capability model в snapshots и API
-- internal event model + event history как общая основа для diagnostics, hooks и fleet
-- более жёсткое разделение `user config`, `runtime state` и `derived metadata`
-- сжатие `state.py` до compatibility/cache layer
-- simulator/mock runtime как штатный способ разработки и тестирования
+- определить настоящий `AudioBackend`-style contract вместо того, чтобы Bluetooth оставался неявной моделью
+- сделать capability modeling явным в API и snapshots
+- сжать `state.py` в сторону compatibility/cache layer, а не архитектурного центра
+- более жёстко разделить `user config`, `runtime state` и `derived metadata`
+- стандартизироваться на typed read models и лёгком internal event model
+- держать simulator и mock runtime support first-class, чтобы backend и UI работа не требовала железа
 
-### 2. Backend / runtime
+### Трек B. Backend и runtime expansion
 
 Этот трек делает v3 по-настоящему multi-backend:
 
-- Bluetooth остаётся primary runtime и эталоном надёжности
-- wired/USB становятся first-class player type
-- virtual sinks и composed zones идут как ранний follow-up, а не экзотика на потом
-- observability, route ownership, signal path и delay intelligence работают поперёк backend'ов
+- сохранить Bluetooth как primary runtime и reliability benchmark
+- добавить wired и USB outputs как first-class player types, а не special cases
+- открыть virtual sinks и composed zones, когда смежный backend story станет реальностью
+- провести route ownership, health и signal-path visibility сквозь все типы backend'ов
+- сделать delay и sync tooling backend-aware, а не Bluetooth-only
 
-### 3. Frontend / operator console
+### Трек C. Frontend и operator console
 
-Этот трек превращает текущий UI в более современный операционный продукт:
+Этот трек превращает текущий web UI в более чёткий операционный продукт:
 
-- `Vue 3 + TypeScript + Vite` для новых и заменяемых high-churn surfaces
-- typed frontend stores/models вокруг status, diagnostics, jobs и event history
-- headless accessible primitives + shared design tokens
-- modern operator console для device creation, diagnostics, details drawers, timelines и bulk actions
-- разрешение заменять целые high-churn экраны, если это чище, чем бесконечно латать монолитный `static/app.js`
+- эволюционировать от монолитного runtime script к typed feature modules и shared UI primitives
+- использовать **Vue 3 + TypeScript + Vite** для новых и заменяемых high-churn surfaces
+- сохранить server-driven entry points, ingress compatibility и fetch/SSE contracts там, где они всё ещё полезны
+- построить настоящий operator console вокруг creation flows, diagnostics, details drawers, timelines и bulk actions
+- разрешать замену целых high-churn screens, когда это даёт более чистый продукт, чем бесконечные incremental patches
 
-## Главная идея v3
+## Целевые результаты
 
-Сделать Sendspin BT Bridge **Bluetooth-first, room-aware, multi-backend audio platform с modern operator console**.
+v3 успешен, когда проект может делать всё перечисленное, не становясь хрупким или непрозрачным:
 
-Итоговые целевые свойства v3:
+1. Один bridge скучен и надёжен в HA, Docker, Raspberry Pi и LXC environments.
+2. Тот же bridge может хостить Bluetooth players и хотя бы один wired или USB-backed player type с целостным operator UX.
+3. Операторы могут создавать, диагностировать, тюнить и восстанавливать плееры из modern console, а не собирать решение из множества разрозненных UI surfaces.
+4. Signal path, route ownership, health и event history видны настолько, что проблемы обнаруживаются UI раньше, чем на слух.
+5. Delay tuning становится guided и explainable, а не trial and error.
+6. AI support и позднее fleet management могут строиться на тех же contracts, diagnostics bundles и event history, а не изобретать отдельные data models.
 
-1. shared platform contracts вместо Bluetooth-only неявной модели
-2. wired/USB и затем virtual sinks как реальное расширение продукта
-3. observability-first runtime с signal path, health summaries и event history
-4. современный operator console для create/diagnose/tune/recover flows
-5. AI diagnostics и fleet control поверх тех же typed models, а не поверх отдельных ad hoc слоёв
+## Фаза V3-0: Baseline operator polish перед v3
 
-## Фазы v3
+### Статус
 
-### V3-0. Baseline operator polish перед v3
+По сути уже закрыто в текущем коде. Эта секция сохраняется как baseline context, а не как главная активная фаза.
 
-Статус: по сути уже закрыто в текущем коде.
+### Цель
 
-Что считается уже достигнутым baseline:
+Задокументировать operator polish, который теперь формирует спокойную стартовую поверхность для v3.
 
-- calmer guidance для non-empty installs
-- preview и confirm для grouped recovery actions
-- меньше шума в compact/mobile recovery
-- один top-level owner для blocked-state explanations
+### Scope
 
-Практический вывод: активная продуктовая работа начинается уже с **V3-1**.
+- полный onboarding доминирует только для настоящего empty state
+- preview и confirm для grouped recovery actions перед запуском multi-device operations
+- меньше шума в compact/mobile recovery (`top issue + N more`, меньше дублирования copy)
+- blocked row-level hints согласованы с одним top-level guidance owner
+- diagnostics и recovery detail доступны, даже когда top-level guidance компактен
 
-### V3-1. Platform reset for v3
+### Exit criteria
 
-Главная цель:
+- зрелые инсталляции спокойны по умолчанию
+- grouped recovery actions ощущаются осознанными и понятными
+- top-level guidance владеет основным объяснением, а не дублированный microcopy
 
-- собрать shared platform model для v3 и заложить первые поверхности нового operator console
+### Текущая оценка
 
-Ключевой scope:
+Эти результаты уже отражены в выпущенных operator-guidance и recovery flows. Активная работа по roadmap должна начинаться с **V3-1**, а не с V3-0.
 
-- `AudioBackend`-style contract, capability model и backend-neutral runtime seams
-- config/runtime model v2 с разделением config, runtime state и derived metadata
-- internal event model, event history и typed read-models как общий фундамент
-- simulator/mock runtime и hardware-light validation как норма
-- frontend foundation: `Vue 3 + TS + Vite`, typed stores, reusable primitives, замена high-churn surfaces там, где это даёт более чистую основу
+## Фаза V3-1: Platform reset для v3
 
-### V3-2. Modern operator console и wired/USB runtime
+### Цель
 
-Главная цель:
+Собрать shared platform model для v3 и заложить первые modern operator-console foundations параллельно.
 
-- выпустить первую по-настоящему multi-backend продуктовую волну
+### Scope
 
-Ключевой scope:
+#### Epic 1. Runtime contracts и ownership seams
 
-- USB DAC, built-in audio, HDMI и другие wired outputs как first-class player types
-- backend-aware device creation/edit flow вместо старой несвязной device-management логики
-- typed forms, aliasing, room mapping и capability-driven UX
-- hotplug/discovery и явные route-lifecycle surfaces в UI
+- определить `AudioBackend`-style contract для lifecycle, capabilities, health, diagnostics, room metadata и route ownership
+- обернуть существующий Bluetooth runtime за этим контрактом первым
+- держать subprocess и control-plane contracts backend-agnostic где практично
+- сжать `state.py` из архитектурного центра в compatibility/cache layer по мере перехода routes и services к explicit ownership и snapshot reads
 
-### V3-2.5. Virtual sinks и composed zones
+#### Epic 2. Config и runtime model v2
 
-Главная цель:
+- перейти от Bluetooth-device-only модели к player и backend-ориентированной конфигурации
+- отделить user-owned config от runtime-derived state и generated metadata
+- добавить compatibility loading и migration tooling для текущей схемы
+- держать downgrade и partial-migration assumptions явными и задокументированными
 
-- превратить `module-combine-sink` и `module-remap-sink` в реальные продуктовые сценарии
+#### Epic 3. Event model, read models и simulator foundation
 
-Ключевой scope:
+- стандартизироваться на лёгком internal event model, который может питать diagnostics history, hooks, recovery timelines и позднее fleet views
+- сделать per-device и per-bridge event history first-class typed surface, а не разрозненные ad hoc payloads
+- расширить typed snapshots и health summaries, чтобы degraded-mode reporting стал продуктовой поверхностью, а не только debug aid
+- держать mock runtime и simulator path жизнеспособными для backend, config, diagnostics и onboarding flows
+- сделать hardware-light tests нормальным validation path для contract work
 
-- combine sinks для party mode/open floor plans
-- remap sinks для split-zone и multichannel USB DAC сценариев
-- persistence, recreation, verification и участие virtual sinks в player-management flow
+#### Epic 4. Operator console foundation
 
-### V3-3. Observability-first runtime и operations center
+- принять **Vue 3 + TypeScript + Vite** для новых и заменяемых high-churn surfaces
+- построить typed frontend models и stores вокруг `BridgeSnapshot`, `DeviceSnapshot`, guidance, diagnostics, jobs и event history
+- определить shared design tokens, headless accessible primitives и reusable drawer/dialog/filter/table patterns
+- сохранить Flask-rendered entry points и ingress compatibility, но разрешить замену high-churn UI surfaces, где это даёт более чистый продукт
 
-Главная цель:
+### Exit criteria
 
-- сделать health, signal path и recovery state видимыми оператору без чтения логов
+- runtime может описать backend-neutral players и explicit capabilities
+- config/runtime separation реальна и достаточна для чистой поддержки будущих backend'ов
+- event history и typed read models используются слоями diagnostics и UI
+- ключевые backend и UI flows можно проверить без реального Bluetooth hardware
+- у проекта есть жизнеспособная modern-console foundation, а не только один растущий runtime script
 
-Ключевой scope:
+## Фаза V3-2: Modern operator console и wired/USB runtime
 
-- live telemetry, degraded-mode summaries и per-device event history
-- signal path и route ownership surfaces для Bluetooth, wired и virtual backend'ов
-- unified diagnostics/recovery center, timeline/event-list views, bulk actions, split-pane/drawer patterns и более зрелая component system
+### Цель
 
-### V3-4. Delay intelligence и guided tuning
+Выпустить первую явно multi-backend продуктовую волну: wired и USB players плюс новые operator workflows, необходимые для хорошего управления ими.
 
-Главная цель:
+### Scope
 
-- убрать большую часть ручного подбора `static_delay_ms`
+#### Epic 5. Wired и USB backend
 
-Ключевой scope:
+- обнаруживать ALSA и PulseAudio / PipeWire output sinks через `pactl list sinks` и `aplay -l`
+- фильтровать и классифицировать вероятные outputs: USB DAC, built-in audio, HDMI, virtual sinks
+- создать direct-sink player type, который переиспользует subprocess model, status reporting, volume control и diagnostics patterns без Bluetooth pairing lifecycle
+- поддержать per-device volume persistence, mute state и backend-specific health reporting
 
-- drift/sync telemetry и confidence signals
-- guided calibration с approve/apply/rollback flow
-- bounded auto-tuning только там, где measurement quality достаточно высок
+#### Epic 6. Capability-driven player management UX
 
-### V3-5. AI-assisted diagnostics и deployment planning
+- заменить самые high-churn device-management flows backend-aware creation и edit experience
+- добавить typed forms, validation и room/alias mapping для Bluetooth и wired players
+- показывать обнаруженное hardware с backend type, friendly naming и capability hints
+- использовать overview + details-drawer patterns вместо перегрузки одной монолитной page surface
 
-AI должен быть operator copilot, а не скрытым control plane.
+#### Epic 7. Hotplug и route lifecycle
 
-Ключевой scope:
+- отслеживать появление и исчезновение wired и USB devices
+- уведомлять UI, когда новый sink становится доступен, меняет identity или исчезает
+- опционально разрешить operator-approved player creation для вновь обнаруженных USB DAC
+- явно показывать route ownership и sink disappearance issues в новой console, а не прятать их в логах
 
-- canonical machine-readable diagnostics bundle
-- planner развёртывания для HA add-on / Docker / RPi / LXC
-- plain-language diagnostics summary и safe next actions
-- redaction, opt-in и provider/local boundaries
-- AI-слой поверх тех же typed diagnostics, capability и event-history models
+### Exit criteria
 
-### V3-6. Fleet control plane для нескольких bridge
+- USB DAC и wired outputs появляются в UI рядом с Bluetooth speakers как first-class player shapes
+- операторы могут создавать и управлять wired players через новые operator workflows, а не raw config edits
+- Bluetooth и wired players разделяют одну capability-driven model без регрессий Bluetooth reliability
+- modern console отвечает за самые high-churn player-management paths
 
-Главная цель:
+## Фаза V3-2.5: Virtual sinks и composed zones
 
-- превратить несколько bridge в управляемую систему только после зрелости single-bridge multi-backend story
+### Цель
 
-Ключевой scope:
+Превратить PulseAudio virtual sinks в реальные продуктовые поверхности, когда первая multi-backend модель уже работает.
 
-- stable identity для bridge-инстансов
-- aggregate health, inventory, room coverage и backend mix
-- bulk diagnostics, compare/export/import config и fleet event timeline
-- reuse того же event model и hook/webhook contracts
+### Scope
 
-### V3-7. Избирательное расширение после стабилизации
+#### Epic 8. Combine sink creation
 
-Только после стабильных предыдущих фаз:
+- добавить operator flows для выбора 2+ sinks и создания `module-combine-sink`
+- целевые сценарии: party mode, open floor plans, лёгкая multi-room группировка
+- включить test-tone или route verification action
 
-- system-wide audio runtime / non-user-scoped socket support
-- richer sync/drift telemetry across groups and bridges
-- Snapcast/VBAN/backend strategy tracks
-- federation / plugin / HA component strategy
-- per-room DSP / EQ surfaces
+#### Epic 9. Remap sink creation
 
-## Ограничения
+- добавить operator flows для извлечения каналов из multi-channel devices через `module-remap-sink`
+- целевые сценарии: split-zone, например 4-канальный USB DAC, становящийся двумя stereo zones
+- поддержать стандартный PulseAudio channel-name mapping и наглядные channel previews
 
-Не нужно:
+#### Epic 10. Composed-zone lifecycle management
 
-- делать giant all-at-once rewrite всех слоёв
-- начинать speculative backend'ы до platform contracts
-- делать AI обязательным или cloud-only
-- включать opaque auto-remediation без operator approval
-- гнать fleet-first complexity до зрелого single-bridge multi-backend продукта
+- сохранять custom sinks в config и воссоздавать при перезапуске
+- показывать state, configuration summary, capability surface и delete actions
+- проверять наличие master и slave sinks перед попыткой создания
+- позволить virtual sinks участвовать в player creation и room assignment flows
 
-Нужно:
+### Exit criteria
 
-- держать Bluetooth reliability главным приоритетом
-- трактовать v3 как compatibility-preserving refresh, а не как запрет на глубокие замены
-- делать wired/USB additive, а не ломающим базовый runtime
-- держать architecture ahead of product sprawl
-- разрешать frontend заменять целые high-churn screens, если это улучшает operator workflows
-- делать AI optional и secret-safe
-- делать auto delay tuning bounded и explainable
-- держать fleet management additive, а не обязательным для одиночного bridge
-- выпускать migrations, docs и tests вместе с каждой фазой
+- операторы могут создавать combine и remap sinks без прямой работы с `pactl`
+- composed zones переживают рестарты и естественно вписываются в player-management flows
+- ошибки явно показаны, когда prerequisite sinks недоступны
 
-## Реалистичный первый milestone для v3
+## Фаза V3-3: Observability-first runtime и operations center
 
-`v3.0.0-rc.1` должен реалистично включать:
+### Цель
 
-- `V3-0` как уже достигнутый baseline polish
-- ядро `V3-1`:
-  - backend contracts и capability model
-  - foundations для config/runtime model v2
-  - event history и simulator foundation
+Сделать health, signal path и recovery state first-class operator surfaces, а не advanced diagnostics, спрятанные за логами.
+
+### Scope
+
+#### Epic 11. Live telemetry и degraded-mode summaries
+
+- показывать текущий codec, sample rate, buffer и stream state, uptime, reconnect count и resolved output sink где доступно
+- получать telemetry из subprocess status lines, bridge state, backend callbacks и event history
+- включить structured per-device event history: reconnects, sink loss/acquisition, route corrections, re-anchor events, MA sync failures
+- публиковать compact degraded-mode и health-summary surfaces в дополнение к raw live status
+
+#### Epic 12. Signal path и route ownership visibility
+
+- рендерить end-to-end path для каждого типа backend:
+  - MA → Sendspin → subprocess → PulseAudio / PipeWire sink → Bluetooth A2DP → speaker
+  - MA → Sendspin → subprocess → PulseAudio / ALSA sink → wired speaker / DAC
+- показывать measured или estimated latency на каждом hop где доступно
+- указывать route ownership, bottlenecks или degraded hops: codec fallback, sink mismatch, missing route ownership
+
+#### Epic 13. Operations center и reusable UI system
+
+- построить unified diagnostics и recovery center вместо разбрасывания операционных деталей по несвязанным UI sections
+- добавить frontend operation model, который может показывать live state, pending actions, recovery history и bulk actions без дублирования бизнес-логики по cards, rows, dialogs и modals
+- выстроить более сильную UI component system: badges, notices, toasts, drawers, dialogs, filters, timeline/event-list views и более спокойная mobile density
+- предпочитать split-pane, drawer и progressive-disclosure patterns, которые масштабируются на desktop и mobile лучше, чем бесконечно расширяющиеся rows
+
+### Exit criteria
+
+- операторы видят codec, sample rate, sink route, health и event history без чтения логов
+- signal path понятен с первого взгляда для Bluetooth, wired и virtual-sink players
+- degradation выявляется проактивно, а не обнаруживается только после того, как звук начал звучать неправильно
+- у UI есть reusable operations vocabulary, а не ручная сборка каждой diagnostic surface
+
+## Фаза V3-4: Delay intelligence и guided tuning
+
+### Цель
+
+Уменьшить ручной подбор `static_delay_ms` и сделать sync decisions более измеримыми, guided и explainable.
+
+### Scope
+
+#### Epic 14. Delay telemetry foundation
+
+- захватывать timing и drift telemetry, которые могут поддержать per-device delay decisions
+- показывать sync health, drift, confidence и measurement quality на уровне diagnostics и оператора
+- разделять «мы можем что-то измерить» и «мы доверяем этому достаточно, чтобы рекомендовать изменение тюнинга»
+
+#### Epic 15. Guided delay calibration
+
+- добавить calibration flow, который может измерить и предложить `static_delay_ms`
+- показывать recommended value, confidence и before/after сравнение
+- разрешить approve, apply и rollback вместо принудительного ручного редактирования
+
+#### Epic 16. Bounded auto-tuning
+
+- добавить опциональную консервативную автоматическую подстройку для устройств со стабильным measurement quality
+- держать adjustments bounded, visible и reversible
+- показывать, когда auto-tuning выключен, uncertain или недавно откачен
+
+### Exit criteria
+
+- большинство пользователей могут достичь хорошего delay value без trial-and-error editing
+- delay recommendations видимы и объяснимы
+- любой automatic tuning остаётся консервативным и operator-traceable
+
+## Фаза V3-5: AI-assisted diagnostics и deployment planning
+
+### Цель
+
+Использовать AI как **operator copilot**, а не как скрытый control plane.
+
+### Scope
+
+#### Epic 17. Structured diagnostics bundles
+
+- определить canonical machine-readable diagnostics bundle, объединяющий:
+  - bridge и runtime state
+  - device snapshots
+  - recovery timeline
+  - deployment environment facts
+  - preflight results
+  - backend identity и routing facts
+- сделать bundle достаточно стабильным для support tooling, bug reports и будущих AI consumers
+
+#### Epic 18. Deployment planner
+
+- добавить planner, который может инспектировать environment facts и предлагать:
+  - рекомендованный install path (HA add-on, Docker, Raspberry Pi, LXC)
+  - необходимые mounts и capabilities
+  - вероятные `AUDIO_UID`, port и adapter configuration
+  - когда wired или USB outputs лучше подходят для комнаты, чем Bluetooth
+  - safe next steps для первого развёртывания
+- держать planner operator-facing: генерировать планы и config suggestions, а не silent changes
+
+#### Epic 19. AI diagnostics summarizer
+
+- резюмировать failures plain language по данным diagnostics
+- ранжировать likely root causes и safe next actions
+- генерировать support-ready summaries для GitHub или forum issues
+- разрешить prompt export или support bundle export для внешнего или local AI analysis
+- показывать AI summaries так, чтобы сохранялся operator trust:
+  - explicit provenance из diagnostics data
+  - visible confidence и uncertainty
+  - one-click доступ к underlying raw diagnostics и event history
+
+#### Epic 20. AI safety и privacy boundaries
+
+- редактировать secrets перед любым external AI handoff
+- поддерживать pluggable providers и local/manual mode
+- требовать explicit operator approval перед применением suggested changes
+- держать non-AI diagnostics полностью usable сами по себе
+- строить AI summaries на тех же typed diagnostics, capability и event-history models, что используются non-AI tooling и operator console
+
+### Exit criteria
+
+- diagnostics bundles стабильны и структурированы
+- deployment planning полезен для реальных пользователей, особенно HA, Docker, Raspberry Pi и смешанных Bluetooth/wired инсталляций
+- AI-generated explanations улучшают support, не становясь обязательными для нормальной работы
+
+## Фаза V3-6: Централизованный multi-bridge control plane
+
+### Цель
+
+Превратить несколько bridge instances в управляемый fleet только после того, как single-bridge multi-backend продукт и modern operator console станут solid.
+
+### Scope
+
+#### Epic 21. Bridge registry и fleet identity
+
+- определить stable bridge instance identity и registration semantics
+- агрегировать version, host, adapter, room, backend и health metadata по bridge'ам
+- обнаруживать duplicate speakers, overlapping rooms и inconsistent bridge naming
+
+#### Epic 22. Fleet overview и bulk operations
+
+- построить centralized overview для:
+  - bridge health
+  - device inventory
+  - room coverage
+  - recovery attention
+  - update status
+- добавить safe bulk actions:
+  - restart selected bridges
+  - re-run diagnostics на selected bridges
+  - export и import configuration sets
+  - compare configs и versions across the fleet
+
+#### Epic 23. Fleet event timeline и policy surfaces
+
+- централизовать event и recovery timelines через bridge'и
+- добавить fleet-level webhook и telemetry views
+- разрешить higher-level policies: room ownership, update-channel consistency
+- переиспользовать тот же lightweight internal event model и hardened hook/webhook contracts вместо отдельных fleet-only event semantics
+
+### Exit criteria
+
+- операторы могут рассуждать о нескольких bridge'ах как об одной системе
+- duplicate или conflicting configuration легче обнаружить до того, как они вызовут runtime issues
+- fleet operations не заменяют single-bridge simplicity; они расширяют его
+
+## Фаза V3-7: Избирательное расширение после стабилизации ядра
+
+### Кандидатные работы
+
+Начинать их только после стабилизации предыдущих фаз и подтверждённого спроса:
+
+- system-wide audio runtime или non-user-scoped socket support для Raspberry Pi и других embedded hosts, где per-user PulseAudio или PipeWire sessions создают проблемы
+- richer sync и drift telemetry across groups и bridges
+- Snapcast, VBAN или другие backend strategy tracks
+- multi-bridge federation за пределами single control plane
+- Home Assistant custom component или HACS strategy
+- plugin или extension surfaces
+- per-room DSP и EQ через virtual sinks или backend-specific processing surfaces
+
+## Сквозные ограничения
+
+### 1. Bluetooth reliability остаётся на первом месте
+
+Никакая тема v3 не должна ухудшать реальные Bluetooth deployments в HA, Docker, Raspberry Pi или LXC.
+
+### 2. v3 — compatibility-preserving platform refresh
+
+Сохранять operator trust, ingress compatibility и stable contracts там, где они уже работают, но разрешать глубокую замену runtime seams и high-churn UI surfaces, когда это даёт более чистый v3 foundation.
+
+### 3. Wired и USB support должен оставаться additive
+
+Первый смежный backend должен переиспользовать проверенные runtime seams, diagnostics и subprocess patterns, а не заменять их полностью.
+
+### 4. Architecture должна опережать product sprawl
+
+Backend expansion, AI summaries и fleet views должны строиться на explicit services, typed read models, capability modeling, event history и hardware-light testability, а не обходить эти foundations.
+
+### 5. Frontend modernization может заменять high-churn surfaces
+
+Новая frontend infrastructure должна снижать сложность, улучшать accessibility и делать operational workflows понятнее. Она не обязана останавливаться на маленьких островках, если замена high-churn screen — более чистый путь.
+
+### 6. AI должен быть optional и operator-controlled
+
+- никакой обязательной cloud dependency
+- никакого silent external sharing sensitive config или state
+- никакого hidden auto-remediation без explicit approval
+
+### 7. Delay automation должен быть bounded и explainable
+
+Система может предлагать или консервативно auto-apply delay changes, но никогда как opaque magic.
+
+### 8. Fleet management должен оставаться additive
+
+Один bridge должен оставаться простым в deploy и эксплуатации. Fleet management не должен становиться обязательным для базового использования.
+
+### 9. Migrations, docs и tests выпускаются с каждой фазой
+
+v3 должен добавлять compatibility layers, постепенно мигрировать callers и config, документировать новые contracts по мере их появления и расширять tests параллельно с каждым новым backend или diagnostics surface.
+
+## Заметки о реализации и зависимостях
+
+Фазы roadmap выше — продуктовые, но наиболее безопасный порядок реализации внутри них должен учитывать несколько program-level dependencies:
+
+- двигать три трека вместе в release waves, а не трактовать frontend как late enablement после завершения backend work
+- выпустить backend contracts, event history и config/runtime separation до того, как AI или fleet features начнут от них зависеть
+- держать simulator и mock-runtime improvements рядом с backend и UI changes, чтобы новые flows оставались тестируемыми без hardware
+- использовать одни и те же event contracts для diagnostics, hooks, operator timelines и будущих fleet views
+- заменять high-churn surfaces первыми: player creation/editing, details views, diagnostics и history должны мигрировать раньше, чем уже стабильные pages будут переписаны ради самих себя
+- позволить virtual sinks и позднее fleet views строиться на тех же capability и read-model surfaces, что используются Bluetooth и wired players
+
+## Вне scope раннего v3
+
+- giant all-at-once rewrite каждого слоя
+- speculative backends до появления backend contract
+- AI-driven silent configuration edits
+- fleet-first complexity до доказанности single-bridge multi-backend story
+- замена operator diagnostics на AI вместо дополнения ими
+- отказ от deployment compatibility realities вроде HA ingress без доказуемо лучшего operator path
+
+## Реалистичный первый milestone v3
+
+Реалистичный `v3.0.0-rc.1` должен включать:
+
+- V3-0 уже выпущенный guidance и recovery polish как baseline
+- ядро V3-1:
+  - backend contracts и capability modeling
+  - config и runtime model v2 foundations
+  - event-history и simulator foundations
   - первые operator-console platform pieces
-- ядро `V3-2`:
-  - первый wired/USB backend
-  - backend-aware player creation/edit flow
-  - первые новые diagnostics/details surfaces
-- базовую audio health visibility и signal-path publication
+- ядро V3-2:
+  - первый wired и USB backend
+  - backend-aware player creation и editing flows
+  - первые новые diagnostics и details surfaces в operator console
+- baseline audio health visibility и signal-path publication
 - delay telemetry foundations и manual calibration path
-- diagnostics bundle foundations для будущего planner/AI слоя
+- structured diagnostics bundle foundations для будущей planner и AI работы
 
-То есть первый RC должен ощущаться как: **"Bluetooth-first multi-backend platform с modern operator console и заметно лучшей audio visibility"**.
-
-Полная англоязычная версия остаётся в [`ROADMAP.md`](ROADMAP.md).
+Этого достаточно, чтобы v3 ощущался принципиально иначе: **«Bluetooth-first multiroom с настоящей multi-backend platform, modern operator console и заметно лучшей audio visibility»**.

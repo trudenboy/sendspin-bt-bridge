@@ -243,6 +243,65 @@ Setup-verification endpoint used by onboarding and diagnostics.
 }
 ```
 
+### `GET /api/recovery/timeline`
+
+Structured chronological recovery timeline built from device health and startup events.
+
+```json
+{
+  "summary": { "entry_count": 3 },
+  "entries": [
+    { "timestamp": "2026-03-22T19:00:00+00:00", "severity": "warning", "label": "BT reconnect", "summary": "..." }
+  ]
+}
+```
+
+### `GET /api/recovery/timeline/download`
+
+Download the current recovery timeline as a **CSV attachment** (`sendspin-recovery-timeline-<timestamp>.csv`).
+
+### `POST /api/checks/rerun`
+
+Rerun a single safe, non-destructive operator check (e.g. Bluetooth connectivity, audio sink verification).
+
+**Body:**
+```json
+{ "check_key": "bluetooth", "device_names": ["Living Room Speaker"] }
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `check_key` | string | Required. The check identifier to rerun |
+| `device_names` | string[] | Optional. Scope the check to specific devices |
+
+**Response:**
+```json
+{ "check_key": "bluetooth", "summary": "All devices connected", "status": "pass" }
+```
+
+Returns `400` if `check_key` is unknown.
+
+### `GET /api/latency/recommendations`
+
+Return the current latency assistant payload from the recovery assistant. Includes recommended `PULSE_LATENCY_MSEC` value and explanations.
+
+### `POST /api/latency/apply`
+
+Persist a recommended Pulse latency value to `config.json`. Requires a restart to take effect.
+
+**Body:** `{ "pulse_latency_msec": 800 }`
+
+**Response:**
+```json
+{
+  "success": true,
+  "pulse_latency_msec": 800,
+  "restart_required": true,
+  "summary": "Saved Pulse latency 800 ms. Restart the bridge to apply the new buffer.",
+  "latency_assistant": { }
+}
+```
+
 ## Playback Control
 
 ### `POST /api/pause_all`
@@ -305,6 +364,24 @@ Pause or resume a single player. Sends the command via IPC to the target daemon 
 Toggle mute on a device. When `MUTE_VIA_MA` is enabled and MA is connected, the mute command is routed through the MA API. Otherwise, mute is applied directly via PulseAudio.
 
 **Body:** `{ "mac": "AA:BB:CC:DD:EE:FF", "muted": true }`
+
+## Transport Control
+
+### `POST /api/transport/cmd`
+
+Send a native Sendspin transport command to a specific device. Bypasses the MA REST API for lower latency by sending the command through the Sendspin Controller WebSocket channel.
+
+**Body:**
+
+| Field | Type | Description |
+|---|---|---|
+| `action` | string | Required. One of: `play`, `pause`, `stop`, `next`, `previous`, `volume`, `mute`, `repeat_off`, `repeat_one`, `repeat_all`, `shuffle`, `unshuffle`, `switch` |
+| `device_index` | integer | Required. Zero-based index into the active device list |
+| `value` | any | Optional. For `volume` (0–100) or `mute` (boolean) |
+
+Returns `400` if the action is invalid or not in the device's `supported_commands` set.
+
+**Response:** `{ "success": true }`
 
 ## Music Assistant Integration
 
@@ -459,6 +536,33 @@ Poll the async MA queue-command job.
 
 Debug dump of MA cache keys, discovered groups, per-client player IDs, and live queue IDs fetched from the MA WebSocket.
 
+### `POST /api/ma/reload`
+
+Reload MA runtime pieces (credentials, WebSocket monitor, syncgroup cache) without restarting the full bridge service. Reads current `MA_API_URL` / `MA_API_TOKEN` from `config.json` and triggers group rediscovery.
+
+**Response (202):**
+```json
+{
+  "success": true,
+  "job_id": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "running",
+  "monitor_reloaded": true
+}
+```
+
+### `GET /api/ma/artwork`
+
+Proxy MA artwork images through the bridge so the web UI can use same-origin image URLs (avoids CORS issues).
+
+**Query parameters:**
+
+| Param | Type | Description |
+|---|---|---|
+| `url` | string | Required. Artwork path or full URL on the MA server |
+| `sig` | string | Required. HMAC signature for SSRF protection |
+
+Returns the artwork binary with the original `Content-Type` (e.g. `image/jpeg`). The MA bearer token is attached only when the URL targets the MA server origin. Returns `400` for invalid URLs or signatures, `413` for images exceeding 10 MB.
+
 ## Bluetooth Control
 
 ### `POST /api/bt/reconnect`
@@ -533,6 +637,125 @@ List available Bluetooth adapters.
 
 List currently paired devices (name + MAC).
 
+### `POST /api/bt/remove`
+
+Remove (unpair) a device from the BlueZ stack.
+
+**Body:** `{ "mac": "AA:BB:CC:DD:EE:FF" }`
+
+**Response:** `{ "ok": true, "mac": "AA:BB:CC:DD:EE:FF" }`
+
+### `POST /api/bt/info`
+
+Return detailed `bluetoothctl info` for a device including pairing/trust/connection status.
+
+**Body:** `{ "mac": "AA:BB:CC:DD:EE:FF" }`
+
+**Response:**
+```json
+{
+  "mac": "AA:BB:CC:DD:EE:FF",
+  "name": "Living Room Speaker",
+  "alias": "Living Room Speaker",
+  "paired": "yes",
+  "bonded": "yes",
+  "trusted": "yes",
+  "connected": "yes",
+  "icon": "audio-card",
+  "raw": ["Device AA:BB:CC:DD:EE:FF ...", "..."]
+}
+```
+
+### `POST /api/bt/disconnect`
+
+Disconnect a Bluetooth device without removing its pairing.
+
+**Body:** `{ "mac": "AA:BB:CC:DD:EE:FF" }`
+
+**Response:** `{ "ok": true, "mac": "AA:BB:CC:DD:EE:FF" }`
+
+### `POST /api/bt/adapter/power`
+
+Toggle a Bluetooth adapter's power state.
+
+**Body:**
+
+| Field | Type | Description |
+|---|---|---|
+| `adapter` | string | Adapter identifier (`hci0`, `hci1`, or MAC address). Empty = default adapter |
+| `power` | boolean | `true` to power on, `false` to power off (default: `true`) |
+
+**Response:** `{ "ok": true, "power": true }`
+
+### `POST /api/bt/wake`
+
+Wake a device from idle-timeout standby (reconnects Bluetooth and restarts the daemon subprocess).
+
+**Body:** `{ "player_name": "Living Room Speaker" }`
+
+Returns `409` if the device is not currently in standby.
+
+**Response:** `{ "success": true, "message": "Device waking from standby" }`
+
+### `POST /api/bt/standby`
+
+Put a device into standby mode (disconnects Bluetooth and parks the daemon subprocess on a null sink). Reduces power consumption for idle speakers.
+
+**Body:** `{ "player_name": "Living Room Speaker" }`
+
+Returns `409` if the device is already in standby.
+
+**Response:** `{ "success": true, "message": "Device entering standby" }`
+
+### `POST /api/bt/reset_reconnect`
+
+Remove a device and re-pair from scratch. Runs asynchronously: remove → power cycle → scan → pair → trust → connect.
+
+**Body:**
+
+| Field | Type | Description |
+|---|---|---|
+| `mac` | string | Required. Device MAC address |
+| `adapter` | string | Optional. Adapter identifier (`hci0` or MAC address) |
+
+Returns `409` if another Bluetooth operation is in progress.
+
+**Response:** `{ "job_id": "550e8400-e29b-41d4-a716-446655440000" }`
+
+### `GET /api/bt/reset_reconnect/result/<job_id>`
+
+Poll for reset & reconnect result.
+
+**Response (running):** `{ "status": "running" }`
+
+**Response (done):**
+```json
+{ "status": "done", "success": true, "connected": true, "mac": "AA:BB:CC:DD:EE:FF" }
+```
+
+### `POST /api/bt/pair_new`
+
+Pair a new Bluetooth device by MAC address (no existing bridge client required). Used for devices discovered via scan that are not yet in the bridge config.
+
+**Body:**
+
+| Field | Type | Description |
+|---|---|---|
+| `mac` | string | Required. Device MAC address |
+| `adapter` | string | Optional. Adapter identifier |
+
+Returns `409` if another Bluetooth operation is in progress.
+
+**Response:** `{ "job_id": "550e8400-e29b-41d4-a716-446655440000" }`
+
+### `GET /api/bt/pair_new/result/<job_id>`
+
+Poll for standalone pair result.
+
+**Response (running):** `{ "status": "running" }`
+
+**Response (done):** `{ "status": "done", "success": true, "mac": "AA:BB:CC:DD:EE:FF" }`
+
 ## System
 
 ### `GET /api/logs`
@@ -541,6 +764,10 @@ Recent log lines from the bridge. Useful for debugging without SSH access.
 
 **Query parameters:**
 - `lines` — number of lines to return (default `100`)
+
+### `GET /api/logs/download`
+
+Download full service logs (up to 500 lines) as a **text file attachment** (`sendspin-logs-<timestamp>.txt`). Reads from `journalctl`, HA Supervisor, or `docker logs` depending on the runtime.
 
 ### `POST /api/restart`
 
@@ -564,9 +791,22 @@ Change log level immediately and persist to `config.json`. Propagates to all run
 
 ### `POST /api/update/check`
 
-Check for available updates by querying the GitHub API. Returns version comparison.
+Start an asynchronous version check against GitHub releases. Accepts an optional `channel` field (`stable`, `beta`, `rc`); defaults to the configured `UPDATE_CHANNEL`.
 
-**Response:** `{ "update_available": true, "latest_version": "2.28.2", "current_version": "2.28.1" }`
+**Body (optional):** `{ "channel": "stable" }`
+
+**Response (202):** `{ "job_id": "...", "status": "running", "channel": "stable" }`
+
+### `GET /api/update/check/result/<job_id>`
+
+Poll for async update-check result.
+
+**Response (running):** `{ "status": "running", "channel": "stable" }`
+
+**Response (done):**
+```json
+{ "success": true, "update_available": true, "tag": "v2.28.2", "version": "2.28.2", "current_version": "2.28.1" }
+```
 
 ### `GET /api/update/info`
 
@@ -605,6 +845,72 @@ The uploaded file is validated as valid JSON before saving. Sensitive keys (`AUT
 ```json
 { "success": false, "error": "Invalid JSON in uploaded file" }
 ```
+
+### `POST /api/config/validate`
+
+Validate a config payload without persisting it. Returns validation errors, warnings, and the normalized config.
+
+**Body:** A complete or partial JSON config object.
+
+**Response (200 — valid):**
+```json
+{
+  "valid": true,
+  "errors": [],
+  "warnings": [{ "field": "BLUETOOTH_DEVICES[0].mac", "message": "..." }],
+  "normalized_config": { }
+}
+```
+
+**Response (400 — invalid):**
+```json
+{
+  "valid": false,
+  "errors": [{ "field": "SENDSPIN_PORT", "message": "Invalid SENDSPIN_PORT: abc" }],
+  "warnings": [],
+  "normalized_config": { }
+}
+```
+
+### `POST /api/ha/areas`
+
+Fetch Home Assistant area suggestions using a transient HA token. Useful for the adapter-to-area mapping UI. Only works in HA addon mode or when HA is reachable.
+
+**Body:**
+
+| Field | Type | Description |
+|---|---|---|
+| `ha_token` | string | Required. A valid HA access token |
+| `adapters` | object[] | Optional. List of adapter objects to match against HA devices |
+| `include_devices` | boolean | Optional. Include HA device details in the response |
+
+**Response:**
+```json
+{
+  "success": true,
+  "areas": [{ "area_id": "living_room", "name": "Living Room" }],
+  "bridge_name_suggestions": ["Living Room Bridge"]
+}
+```
+
+## Authentication
+
+### `GET /login`
+
+Render the login page. Automatically detects available authentication methods:
+- **HA addon mode** — Home Assistant login flow with 2FA/TOTP support
+- **MA connected** — Music Assistant credential validation (or HA-via-MA)
+- **Standalone** — Local password authentication (PBKDF2-SHA256)
+
+### `POST /login`
+
+Process login form submission. Validates credentials against the detected backend, enforces CSRF protection, and applies brute-force lockout (configurable via `BRUTE_FORCE_*` settings).
+
+On success, sets an authenticated session and redirects to the requested page. On failure, re-renders the login page with an error message.
+
+### `GET /logout`
+
+Clear the authenticated session and redirect to the login page.
 
 ## Examples
 

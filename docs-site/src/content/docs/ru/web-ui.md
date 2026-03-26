@@ -45,6 +45,7 @@ description: Актуальное руководство по панели Sends
 - **Бейдж версии** — ссылка на соответствующий релиз GitHub.
 - **Бейдж обновления** — показывает `check`, `up to date` или целевую версию вроде `v2.31.8`.
 - **Report / Docs / GitHub** — быстрые ссылки.
+- **Переключатель темы** — циклически переключает Auto → Light → Dark; выбор сохраняется в браузере.
 - **Область пользователя** — текущий пользователь и **Sign out**, если включена аутентификация.
 
 ### Строка runtime
@@ -78,7 +79,7 @@ description: Актуальное руководство по панели Sends
 
 - **Фильтр по группе** Music Assistant.
 - **Фильтр по адаптеру**.
-- **Фильтр по статусу**.
+- **Фильтр по статусу** — playing, idle, standby, reconnecting, released, error.
 - **Групповые действия** — volume, mute, pause, reconnect, release для выбранных устройств.
 - **Переключатель режима сетки/списка**.
 
@@ -91,6 +92,8 @@ description: Актуальное руководство по панели Sends
 - **Ручной выбор запоминается** в браузере и применяется при следующем открытии.
 
 В **режиме списка** можно разворачивать строки для transport controls, routing details и device actions. Одновременно развёрнута только одна строка.
+
+Устройства автоматически сортируются по активности: воспроизводящие колонки идут первыми, затем подключённые в idle, затем отключённые или в standby. Внутри каждого уровня участники sync-группы остаются вместе.
 
 ## Карточки и строки устройств
 
@@ -111,6 +114,7 @@ description: Актуальное руководство по панели Sends
 
 - **Reconnect** и **Re-pair**.
 - **Release / Reclaim** для временной передачи колонки другому источнику.
+- **Standby / Wake** для энергосберегающего отключения Bluetooth; колонка остаётся в fleet, но соединение ставится на паузу до пробуждения.
 - **BT Info** modal с данными для копирования.
 - **Шестерёнка settings**, которая переводит прямо в соответствующую строку **Configuration → Devices**.
 
@@ -122,13 +126,14 @@ description: Актуальное руководство по панели Sends
 
 ![Общий вид раздела Configuration с карточками и footer actions](/sendspin-bt-bridge/screenshots/screenshot-config.png)
 
-Обновлённый раздел **Configuration** теперь разбит на пять вкладок:
+Обновлённый раздел **Configuration** теперь разбит на шесть вкладок:
 
 | Вкладка | Для чего нужна |
 |---|---|
-| **General** | Имя bridge, timezone, latency, прямой web-порт, base listener port, smooth restart, update policy |
+| **General** | Имя bridge, timezone, прямой web-порт, base listener port, smooth restart, update policy, видимость guidance и переключатель experimental features |
+| **Audio** | PulseAudio latency, предпочтения кодеков, управление PA rescue-streams |
 | **Devices** | Таблица колонок и сценарии discovery/import |
-| **Bluetooth** | Адаптеры, reconnect policy, codec preference |
+| **Bluetooth** | Адаптеры, управление paired devices, scan modal, reconnect policy |
 | **Music Assistant** | Connection status, token flows, monitor и routing toggles |
 | **Security** | Local auth, session timeout, brute-force settings |
 
@@ -141,6 +146,18 @@ description: Актуальное руководство по панели Sends
 - **Upload** импортирует config-файл, сохраняя текущие password hash, secret key и MA token на сервере.
 
 Несохранённые изменения включают **Cancel**, помечают раздел как dirty и вызывают browser warning при попытке уйти со страницы.
+
+### Вкладка General
+
+Помимо основных полей идентификации и политик, перечисленных в таблице, в нижней части вкладки General есть переключатель **Experimental features**. Его включение открывает доступ к ранним per-device настройкам — на данный момент **Room name**, **Room ID** и **Handoff mode** — которые могут измениться или быть удалены в будущих версиях. Переключатель — это UI-only настройка, хранящаяся в браузере, и она не сохраняется в config-файл.
+
+### Вкладка Audio
+
+Вкладка **Audio** объединяет настройки задержки и кодеков, влияющие на все колонки:
+
+- **PulseAudio latency** (по умолчанию 600 мс, диапазон 50–2000 мс) — задаёт буфер между bridge и PulseAudio/PipeWire backend.
+- **Prefer SBC codec** — выбирает менее ресурсоёмкий Bluetooth-кодек; полезно на Raspberry Pi и аналогичных платах.
+- **Disable PA rescue-streams** — предотвращает перемещение аудио на неправильный sink модулем `module-rescue-streams` PulseAudio после переподключения Bluetooth.
 
 ### Вкладка Devices
 
@@ -163,8 +180,9 @@ description: Актуальное руководство по панели Sends
 - Friendly names для адаптеров.
 - Ручные adapter rows, если автоопределения недостаточно.
 - Refresh inventory.
+- Кнопка **↻ Reboot** — перезагрузка одного адаптера (off → 3 с пауза → on) без перезапуска bridge.
+- **Paired devices** — inventory, import и repair/reset действия. Каждая строка имеет кнопку **ℹ️ Info**, открывающую BT device info modal с данными для копирования.
 - Настройку **BT check interval** и **auto-disable threshold**.
-- Переключатель **Prefer SBC codec** для слабого железа.
 
 Глубокие ссылки из dashboard и empty state теперь попадают сразу в эту вкладку и подсвечивают нужную строку адаптера.
 

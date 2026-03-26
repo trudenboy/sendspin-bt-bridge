@@ -90,6 +90,9 @@ graph TD
             SVC_PA[pulse.py<br/>PulseAudio helpers]
             SVC_MAC[ma_client.py<br/>MA REST API]
             SVC_IPC[ipc_protocol.py<br/>protocol_version envelope]
+            SVC_DHS[device_health_state.py<br/>health evaluation]
+            SVC_RA[recovery_assistant.py<br/>issue detection + actions]
+            SVC_OG[operator_guidance.py<br/>UI guidance pipeline]
         end
 
         BM --> SVC_BT
@@ -98,6 +101,10 @@ graph TD
         MM --> SVC_MAC
         BP_API --> SVC_MAC
         SUBSVC --> SVC_IPC
+        BP_STS --> SVC_DHS
+        BP_STS --> SVC_RA
+        BP_STS --> SVC_OG
+        SVC_OG --> SVC_RA
     end
 
     BT_HW[Bluetooth Hardware<br/>hci0 / hci1 / …]
@@ -881,6 +888,172 @@ stateDiagram-v2
 
 Опциональная функция (`BT_CHURN_THRESHOLD`, по умолчанию 0 = отключено), отслеживающая частоту переподключений устройства в скользящем окне (`BT_CHURN_WINDOW`, по умолчанию 300 с). Если устройство переподключается чаще порога в пределах окна, BT-управление автоматически отключается — предотвращая ситуацию, когда нестабильная колонка занимает адаптер и дестабилизирует другие динамики.
 
+### Состояние здоровья устройства (Device Health State)
+
+`services/device_health_state.py` предоставляет унифицированную оценку состояния каждого устройства. Функция `compute_device_health_state()` инспектирует живой объект устройства (статус BT, подключение демона, аудио-стриминг, флаги асинхронных операций, недавние события) и возвращает `DeviceHealthState` с меткой состояния, severity, человекочитаемым описанием и списком причин.
+
+Состояния здоровья оцениваются в строгом порядке приоритета — побеждает первое совпадение:
+
+```mermaid
+stateDiagram-v2
+    state "Priority Evaluation" as eval
+    [*] --> eval
+    eval --> disabled: bt_management_enabled = false
+    eval --> degraded: last_error present
+    eval --> transitioning: stopping = true
+    eval --> recovering: reconnecting / reanchoring
+    eval --> offline: BT disconnected
+    eval --> streaming: audio_streaming = true
+    eval --> recovering: MA reconnecting
+    eval --> degraded: server disconnected / play without stream
+    eval --> ready: connected = true
+    eval --> idle: not connected
+
+    state disabled {
+        [*] --> [*]: severity = info
+    }
+    state degraded {
+        [*] --> [*]: severity = error | warning
+    }
+    state recovering {
+        [*] --> [*]: severity = warning
+    }
+    state offline {
+        [*] --> [*]: severity = warning
+    }
+    state streaming {
+        [*] --> [*]: severity = info
+    }
+    state ready {
+        [*] --> [*]: severity = info
+    }
+    state idle {
+        [*] --> [*]: severity = info
+    }
+    state transitioning {
+        [*] --> [*]: severity = info
+    }
+```
+
+Сопутствующая функция `build_device_capabilities()` использует вычисленное состояние здоровья для определения, какие операции безопасны в данный момент, возвращая домены возможностей (connectivity, playback, music_assistant, recovery, diagnostics) — каждый с полями `supported`, `currently_available` и опциональным `blocked_reason`.
+
+`derive_event_reasons()` сканирует `recent_events` для добавления контекстных причин (например, `recent_reconnect_failure`, `recent_audio_stall`, `ma_monitor_stale`). Эти причины носят информационный характер — объясняют, *почему* было достигнуто данное состояние, но не управляют переходами.
+
+Обе функции используются в `status_snapshot.py`, который встраивает `health_summary` и `capabilities` в каждый API-ответ статуса.
+
+### Поток Standby / Wake
+
+Когда `idle_disconnect_minutes > 0` и устройство перестаёт стримить, запускается таймер простоя. По истечении таймаута бридж переходит в **standby**: демон остаётся живым на PulseAudio null-синке (`sendspin_fallback`), а Bluetooth отключается. Колонка экономит заряд, но устройство остаётся видимым в Music Assistant. Обнаружение воспроизведения автоматически запускает пробуждение.
+
+```mermaid
+sequenceDiagram
+    participant SC as SendspinClient
+    participant DP as daemon_process
+    participant PA as PulseAudio
+    participant BM as BluetoothManager
+    participant SPK as BT Speaker
+
+    Note over SC: audio_streaming → false
+    SC->>SC: _start_idle_timer()
+    Note over SC: sleep idle_disconnect_minutes
+
+    rect rgb(255, 245, 230)
+        Note over SC,SPK: Standby Entry
+        SC->>PA: aensure_null_sink()
+        PA-->>SC: sendspin_fallback ready
+        SC->>DP: {"cmd":"set_standby","sink":"sendspin_fallback"}
+        DP->>DP: PULSE_SINK = sendspin_fallback
+        SC->>PA: amove_pid_sink_inputs(pid, sendspin_fallback)
+        SC->>BM: disconnect_device()
+        BM->>SPK: BT disconnect
+        Note over SC: bt_standby = true
+    end
+
+    Note over SC: Daemon alive on null sink
+
+    rect rgb(230, 255, 230)
+        Note over SC,SPK: Auto-Wake on Play
+        DP-->>SC: playing = true (MA started playback)
+        SC->>SC: _on_standby_play_detected()
+        SC->>BM: allow_reconnect()
+        SC->>BM: signal_standby_wake()
+        Note over BM: _standby_wake_event.set()
+        BM->>SPK: connect_device()
+        SPK-->>BM: BT connected
+        SC->>DP: {"cmd":"set_standby"} (no sink → restore)
+        DP->>DP: PULSE_SINK = bluez_sink…
+        SC->>PA: amove_pid_sink_inputs(pid, bluez_sink…)
+        Note over SC: bt_standby = false
+    end
+```
+
+Ключевые компоненты реализации:
+
+| Компонент | Ответственность |
+|---|---|
+| `sendspin_client._enter_standby()` | Оркестрирует создание null-синка, перенаправление демона, отключение BT |
+| `sendspin_client._wake_from_standby()` | Устанавливает `bt_waking`, сигнализирует BT-монитору, инициирует reconnect |
+| `sendspin_client._reroute_to_bt_sink()` | После пробуждения: восстанавливает PULSE_SINK, перемещает потоки, сбрасывает флаги standby |
+| `daemon_process` обработчик `set_standby` | Переключает переменную `PULSE_SINK` между null-синком и BT-синком |
+| `bluetooth_manager.signal_standby_wake()` | Устанавливает `_standby_wake_event`, чтобы цикл BT-монитора проснулся немедленно |
+| `bt_monitor._standby_sleep()` | Прерываемый sleep — возвращается досрочно при срабатывании wake-события |
+| `services/pulse.aensure_null_sink()` | Создаёт `module-null-sink` с именем синка `sendspin_fallback` |
+
+### Пайплайн Recovery / Operator Guidance
+
+Подсистемы recovery и operator guidance образуют многоуровневый пайплайн, который обнаруживает проблемы устройств, генерирует действия восстановления и предоставляет их оператору через структурированный UI-контракт.
+
+**RecoveryAssistant** (`services/recovery_assistant.py`) инспектирует каждое устройство на проблемы подключения и здоровья, формируя плоский список объектов `RecoveryIssue`. Каждая проблема несёт severity, описание и primary/secondary `RecoveryAction` (например, «переподключить устройство», «переспарить колонку», «открыть диагностику»). Ассистент также строит трейсы устройств, безопасные действия, рекомендацию по latency и known-good test path.
+
+**OperatorGuidance** (`services/operator_guidance.py`) находится над recovery assistant. Он объединяет recovery-проблемы с состоянием onboarding-чеклиста (runtime access, Bluetooth-адаптер, аудио-бэкенд) и компилирует всё в `OperatorGuidanceSnapshot` для дашборда. Snapshot включает `mode` (empty_state / progress / attention / healthy), `header_status`, опциональный `banner`, опциональную `onboarding_card` и отсортированные `issue_groups`.
+
+```mermaid
+flowchart TD
+    subgraph "Data Sources"
+        DEV[Device State<br/>BT + sink + daemon + MA]
+        OB[Onboarding Checklist<br/>runtime · BT · audio · sink · MA · latency]
+        SP[Startup Progress]
+        CFG[Config]
+    end
+
+    subgraph "RecoveryAssistant"
+        RA_SCAN[Scan each device]
+        RA_SCAN -->|standby?| RA_SKIP[Skip]
+        RA_SCAN -->|auto-released?| RA_ISS1[Issue: auto_released]
+        RA_SCAN -->|missing sink?| RA_ISS2[Issue: missing_sink]
+        RA_SCAN -->|BT disconnected?| RA_ISS3[Issue: disconnected / repair_required]
+        RA_SCAN -->|transport down?| RA_ISS4[Issue: transport_down]
+        RA_SCAN -->|degraded health?| RA_ISS5[Issue: degraded]
+        RA_DUP[Duplicate device check] --> RA_ISS6[Issue: duplicate_device]
+        RA_OB[Onboarding step error] --> RA_ISS7[Issue: setup_step]
+
+        RA_ISS1 & RA_ISS2 & RA_ISS3 & RA_ISS4 & RA_ISS5 & RA_ISS6 & RA_ISS7 --> RA_OUT[RecoveryAssistantSnapshot<br/>issues · traces · safe_actions<br/>latency_assistant · test_path]
+    end
+
+    subgraph "OperatorGuidance"
+        OG_CHK[Preflight checks<br/>runtime_access · bluetooth · audio]
+        OG_DEV[Device issue grouping<br/>missing_sink · transport_down<br/>repair · disconnected · released]
+        OG_CHK & OG_DEV --> OG_MERGE[Merge + sort by severity]
+        OG_MERGE --> OG_MODE{Determine mode}
+        OG_MODE -->|no devices| OG_EMPTY[empty_state]
+        OG_MODE -->|startup/checklist| OG_PROG[progress]
+        OG_MODE -->|issues found| OG_ATT[attention]
+        OG_MODE -->|all clear| OG_OK[healthy]
+        OG_EMPTY & OG_PROG & OG_ATT & OG_OK --> OG_OUT[OperatorGuidanceSnapshot<br/>header_status · banner<br/>onboarding_card · issue_groups]
+    end
+
+    DEV --> RA_SCAN
+    DEV --> OG_DEV
+    OB --> RA_OB
+    OB --> OG_CHK
+    SP --> RA_OUT
+    CFG --> RA_OUT
+    RA_OUT -->|issues + actions| OG_DEV
+    OG_OUT -->|JSON| API[/api/operator/guidance<br/>/api/status]
+```
+
+Пайплайн является read-only и stateless — каждый snapshot вычисляется заново из текущего состояния устройств, конфигурации и прогресса onboarding. UI получает единый JSON-payload и рендерит его без поддержки собственных эвристик.
+
 ---
 
 ## Граф зависимостей
@@ -920,6 +1093,12 @@ graph LR
 
     SC --> UC[services/update_checker.py]
     UC -.->|GitHub API| GH[(GitHub Releases)]
+
+    R_STS --> SVC_DHS[services/device_health_state.py]
+    R_STS --> SVC_RA[services/recovery_assistant.py]
+    R_STS --> SVC_OG[services/operator_guidance.py]
+    SVC_OG --> SVC_RA
+    SVC_RA --> SVC_DHS
 
     DEMO[demo/__init__.py] -.->|patches| SC
     DEMO -.->|patches| BM

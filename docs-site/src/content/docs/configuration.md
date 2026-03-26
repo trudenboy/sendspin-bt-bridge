@@ -229,8 +229,12 @@ Use device-level overrides when:
 | `TZ` | string | IANA timezone |
 | `PULSE_LATENCY_MSEC` | integer | Audio buffer latency hint |
 | `BT_CHECK_INTERVAL` | integer | Probe interval for Bluetooth recovery |
-| `BT_MAX_RECONNECT_FAILS` | integer | Auto-disable threshold |
+| `BT_MAX_RECONNECT_FAILS` | integer | Auto-disable threshold; `0` means unlimited |
+| `BT_CHURN_THRESHOLD` | integer | Rapid-reconnect churn-isolation threshold; `0` disables |
+| `BT_CHURN_WINDOW` | number | Time window in seconds for churn detection (default `300`) |
 | `PREFER_SBC_CODEC` | boolean | Lower-CPU codec preference |
+| `DISABLE_PA_RESCUE_STREAMS` | boolean | Unload PulseAudio `module-rescue-streams` at startup to prevent sink drift on reconnect |
+| `DUPLICATE_DEVICE_CHECK` | boolean | Cross-bridge duplicate device detection |
 | `AUTH_ENABLED` | boolean | Enable local web auth outside HA addon mode; HA addon mode always enforces auth |
 | `SESSION_TIMEOUT_HOURS` | integer | Browser session lifetime |
 | `BRUTE_FORCE_PROTECTION` | boolean | Enable temporary lockout after failed sign-ins |
@@ -248,8 +252,31 @@ Use device-level overrides when:
 | `UPDATE_CHANNEL` | string | Update channel: `stable`, `rc`, or `beta` |
 | `AUTO_UPDATE` | boolean | Allow bridge-managed auto-update where supported |
 | `CHECK_UPDATES` | boolean | Enable update checks |
-| `LOG_LEVEL` | string | Base log verbosity |
+| `LOG_LEVEL` | string | Base log verbosity: `DEBUG`, `INFO`, `WARNING`, `ERROR` |
+| `HA_AREA_NAME_ASSIST_ENABLED` | boolean | Auto-resolve Home Assistant area names for adapters |
+| `STARTUP_BANNER_GRACE_SECONDS` | integer | Seconds before the startup banner appears (0–300) |
+| `RECOVERY_BANNER_GRACE_SECONDS` | integer | Seconds before recovery/error banners appear (0–300) |
 | `TRUSTED_PROXIES` | array | Extra proxy IPs allowed to supply trusted Ingress headers |
+
+### Auto-managed keys
+
+The following keys are written by the bridge at runtime and should not normally be edited by hand:
+
+| Key | Type | Description |
+|---|---|---|
+| `CONFIG_SCHEMA_VERSION` | integer | Internal schema version for config migrations |
+| `AUTH_PASSWORD_HASH` | string | Bcrypt hash of the web UI password |
+| `SECRET_KEY` | string | Flask session encryption key; auto-generated on first run |
+| `LAST_VOLUMES` | object | Per-device persisted volume (`MAC → integer`) |
+| `LAST_SINKS` | object | Per-device persisted PulseAudio sink name (`MAC → string`) |
+| `MA_AUTH_PROVIDER` | string | Auth provider used for the current MA connection (`"ha"`, etc.) |
+| `MA_TOKEN_INSTANCE_HOSTNAME` | string | Hostname of the MA instance that issued the token |
+| `MA_TOKEN_LABEL` | string | Human-readable label for the stored MA token |
+| `MA_ACCESS_TOKEN` | string | Current MA OAuth access token |
+| `MA_REFRESH_TOKEN` | string | MA OAuth refresh token for automatic renewal |
+| `HA_ADAPTER_AREA_MAP` | object | Adapter MAC → Home Assistant area mapping |
+
+> **Sensitive fields:** `AUTH_PASSWORD_HASH`, `SECRET_KEY`, `MA_ACCESS_TOKEN`, and `MA_REFRESH_TOKEN` are stripped from config downloads. **Upload** preserves the server-side values for these keys.
 
 ### Bluetooth devices
 
@@ -282,6 +309,10 @@ Use device-level overrides when:
 | `preferred_format` | Preferred output format |
 | `keepalive_silence` | Legacy compatibility flag from older addon configs; current runtime behavior does not expose a separate toggle in the web UI |
 | `keepalive_interval` | Silence keepalive interval in seconds; any positive value enables keepalive, minimum effective interval is 30 seconds |
+| `handoff_mode` | Room-transition handoff: `default` or `fast_handoff`; fast mode auto-sets a 45 s keepalive |
+| `room_id` | Home Assistant area / room ID for this device |
+| `room_name` | Human-readable room name |
+| `idle_disconnect_minutes` | Disconnect Bluetooth after this many idle minutes; `0` disables |
 | `enabled` | Skip on startup when `false` |
 
 Each effective `listen_port` must be unique across devices. If you run multiple bridge instances on the same host, either give each bridge a different `BASE_LISTEN_PORT` range or set explicit `listen_port` values per device.
@@ -315,12 +346,48 @@ Each effective `listen_port` must be unique across devices. If you run multiple 
 
 ## Environment variables
 
-The bridge directly reads a small set of runtime/bootstrap environment variables. `CONFIG_DIR` always chooses where `config.json` lives, and `WEB_PORT` / `BASE_LISTEN_PORT` environment overrides are resolved before the stored config values.
+The bridge reads environment variables at startup. They fall into three groups: **bootstrap** variables you may set yourself, **container internals** set by `entrypoint.sh`, and **Home Assistant addon** variables injected by the Supervisor.
 
-| Variable | Description |
-|---|---|
-| `WEB_PORT` | Direct web UI port override. Standalone default is `8080`; addon channels keep fixed primary ports and may open this as an extra direct port |
-| `BASE_LISTEN_PORT` | Starting port for auto-assigned player listeners. Stable default is `8928`, rc `9028`, beta `9128` |
-| `TZ` | Timezone override used when the runtime initializes local time handling |
-| `BRIDGE_NAME` | Optional bridge-name override before a stored name exists |
-| `CONFIG_DIR` | Config directory path |
+### Bootstrap variables
+
+These are the most commonly used overrides. `CONFIG_DIR` always determines where `config.json` lives, and `WEB_PORT` / `BASE_LISTEN_PORT` environment values are resolved before stored config values.
+
+| Variable | Default | Description |
+|---|---|---|
+| `CONFIG_DIR` | `/config` | Config directory path |
+| `WEB_PORT` | `8080` (standalone) | Direct web UI port override. Addon channels keep fixed primary ports and may open this as an extra direct port |
+| `BASE_LISTEN_PORT` | `8928` (standalone) | Starting port for auto-assigned player listeners. Stable `8928`, rc `9028`, beta `9128` |
+| `TZ` | from config | Timezone override applied when the runtime initializes local time handling |
+| `BRIDGE_NAME` | from config | Optional bridge-name override before a stored name exists |
+| `LOG_LEVEL` | `INFO` | Logging level: `DEBUG`, `INFO`, `WARNING`, `ERROR`. Also settable via config or web UI |
+| `WEB_THREADS` | `8` | Waitress HTTP worker thread count; increase to `16` for 20+ devices |
+| `DEMO_MODE` | *(unset)* | Set to `1`, `true`, or `yes` to run in demo/simulation mode without real Bluetooth hardware |
+| `SENDSPIN_NAME` | `Sendspin-{hostname}` | Override the default player name prefix |
+| `SENDSPIN_STATIC_DELAY_MS` | `-300` | Global static audio delay override in milliseconds (can be negative) |
+
+### Container internals
+
+Set automatically by `entrypoint.sh` during container startup. Rarely need manual adjustment.
+
+| Variable | Default | Description |
+|---|---|---|
+| `PULSE_SERVER` | *(auto-detected)* | PulseAudio / PipeWire socket path (e.g. `unix:/run/audio/pulse.sock`) |
+| `PULSE_LATENCY_MSEC` | from config (`600`) | PulseAudio latency hint in milliseconds; set from `PULSE_LATENCY_MSEC` config key |
+| `PULSE_SINK` | *(per-subprocess)* | Default PulseAudio sink for playback; set per device subprocess to route audio to the correct speaker |
+| `AUDIO_UID` | `1000` | User ID for PulseAudio socket access |
+| `AUDIO_GID` | *(from socket)* | Group ID for PulseAudio socket access |
+| `DBUS_SYSTEM_BUS_ADDRESS` | *(auto-detected)* | D-Bus system bus socket path |
+| `STARTUP_DEPENDENCY_WAIT_ATTEMPTS` | `45` | Maximum attempts to wait for D-Bus, Bluetooth, and audio during startup |
+| `STARTUP_DEPENDENCY_WAIT_DELAY_SECONDS` | `1` | Delay in seconds between startup dependency checks |
+
+### Home Assistant addon variables
+
+Injected by the HA Supervisor; read-only from the bridge's perspective.
+
+| Variable | Default | Description |
+|---|---|---|
+| `SUPERVISOR_TOKEN` | *(HA only)* | Home Assistant Supervisor API token; its presence enables addon mode |
+| `HA_CORE_URL` | `http://homeassistant:8123` | Home Assistant Core URL used for auth flows and API calls |
+| `HOSTNAME` | *(system)* | Container hostname; used for addon-type detection |
+| `SENDSPIN_HA_OPTIONS_FILE` | `/data/options.json` | Path to the addon options file written by the Supervisor |
+| `SENDSPIN_HA_CONFIG_FILE` | `/data/config.json` | Path to the translated config file used in addon mode |

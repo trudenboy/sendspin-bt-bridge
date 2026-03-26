@@ -23,7 +23,7 @@ docker logs -f sendspin-client
 docker exec -it sendspin-client bluetoothctl
 ```
 
-Unit tests: `pytest` (see `tests/`). 187 tests across 18 files. Manual testing via `docker logs` and the web UI at `http://localhost:8080`.
+Unit tests: `pytest` (see `tests/`). 959+ tests across 68+ files. Manual testing via `docker logs` and the web UI at `http://localhost:8080`.
 
 CI/CD: The `VERSION` file is the single source of truth. Pushing a VERSION change to `main` triggers `release.yml` which runs lint+pytest, updates `config.py`, creates the git tag, builds Docker images (amd64+arm64), syncs HA addon directories, creates a GitHub Release (stable only), and builds armv7 (stable only). Regular development pushes and PRs trigger `ci.yml` (lint+test only).
 
@@ -35,7 +35,7 @@ CI/CD: The `VERSION` file is the single source of truth. Pushing a VERSION chang
 - After sending `kill`, verify that the exact PID you targeted is actually gone before starting a replacement.
 - Account for OS-specific command syntax and behavior when managing the demo process, especially on macOS.
 
-## Architecture (v2.30.7)
+## Architecture (v2.50.0)
 
 **Subprocess isolation**: each Bluetooth speaker runs as a dedicated Python subprocess (`services/daemon_process.py`) with `PULSE_SINK=<bt_sink_name>` in env. This gives every speaker its own PulseAudio context → correct audio routing from the first sample, no `move-sink-input` needed.
 
@@ -46,7 +46,7 @@ main process (Flask API, BT manager, web UI)
     └── ...
 ```
 
-IPC: subprocess→parent via JSON lines on stdout; parent→subprocess via JSON lines on stdin (`set_volume`, `stop`).
+IPC: subprocess→parent via JSON lines on stdout; parent→subprocess via JSON lines on stdin (`set_volume`, `set_mute`, `stop`, `reconnect`, `set_log_level`, `transport`, `set_standby`).
 
 **`sendspin_client.py`** — core orchestration per device:
 - `DeviceStatus` — `@dataclass` typed per-device status; dict-compatible (`["key"]`, `.get()`, `.update()`, `.copy()`)
@@ -64,28 +64,82 @@ IPC: subprocess→parent via JSON lines on stdout; parent→subprocess via JSON 
 
 **`config.py`** — configuration layer:
 - `CONFIG_FILE: Path` — single source of truth for config path (replaces old `_CONFIG_PATH` string)
-- `_config_lock` (threading.Lock shared across modules)
-- `load_config()`, `_player_id_from_mac()`, `save_device_volume()` (public; `_save_device_volume` alias retained for compatibility)
-- `VERSION` — read from `VERSION` file at release time; `BUILD_DATE` — set by CI
+- `config_lock` (threading.RLock shared across modules)
+- `load_config()`, `_player_id_from_mac()`, `save_device_volume()`, `save_device_sink()`, `update_config()`, `write_config_file()`, `migrate_config_payload()`
+- `ensure_bridge_name()` — auto-populates BRIDGE_NAME from hostname on first startup
+- `ensure_secret_key()` — generates and persists SECRET_KEY if absent
+- `get_runtime_version()` — returns version from `.release-ref` file or falls back to `VERSION`
+- `VERSION = "2.50.0"`, `BUILD_DATE = "2025-07-18"` — set by CI from `VERSION` file
+- Re-exports from `config_auth.py` (password hashing), `config_migration.py` (schema migration, normalization), `config_network.py` (port resolution, HA addon detection)
 
-**`services/` module:**
+**`services/` module (core):**
 - `bridge_daemon.py` — `BridgeDaemon` subclass. Runs inside each subprocess. Handles `on_status_change` callbacks, stream events. `_sink_routed` flag prevents re-anchor feedback loop after PA rescue-streams correction.
-- `daemon_process.py` — subprocess entry point. Reads JSON args from argv, sets up `BridgeDaemon`, emits status as JSON to stdout, reads commands from stdin. `_startup_unmute_watcher` accepts `on_status_change` callback and calls it after unmuting (fixes stale mute indicators); startup unmute timeout is 15 s (was 60 s).
-- `bluetooth.py` — BT helpers: `bt_remove_device()`, `persist_device_enabled()`, `persist_device_released()` (sync to config.json + options.json), `is_audio_device()`, `_match_player_name()` — handles bridge name suffix matching for config persistence
+- `daemon_process.py` — subprocess entry point. Reads JSON args from argv, sets up `BridgeDaemon`, emits status as JSON to stdout, reads commands from stdin. IPC commands: `set_volume`, `set_mute`, `stop`, `reconnect`, `set_log_level`, `transport`, `set_standby`. `_startup_unmute_watcher` accepts `on_status_change` callback and calls it after unmuting; startup unmute timeout is 15 s.
+- `bluetooth.py` — BT helpers: `bt_remove_device()`, `persist_device_enabled()`, `persist_device_released()` (sync to config.json + options.json), `is_audio_device()`, `_match_player_name()`
 - `pulse.py` — PulseAudio async helpers: `afind_sink_for_mac()`, `amove_pid_sink_inputs()` (corrects streams after PA module-rescue-streams moves them on BT reconnect), `_PULSECTL_AVAILABLE` flag
+- `pa_volume_controller.py` — PulseAudio/PipeWire volume controller implementing the sendspin VolumeController protocol
+
+**`services/` module (IPC & subprocess):**
+- `ipc_protocol.py` — versioned IPC contract helpers for parent↔daemon message envelopes (status, log, error, command)
+- `subprocess_command.py` — serializes daemon stdin commands as JSON envelopes with protocol versioning
+- `subprocess_ipc.py` — parses daemon stdout JSON-line messages, dispatches status/error/log envelopes
+- `subprocess_stderr.py` — classifies daemon stderr severity and mirrors crash-like output into device status
+- `subprocess_stop.py` — handles reader-task cancellation and graceful daemon stop/kill flow with configurable timeouts
+
+**`services/` module (Music Assistant):**
 - `ma_discovery.py` — mDNS-based Music Assistant server discovery
 - `ma_client.py` — MA REST API helpers: `discover_ma_groups()`, `_fetch_all_players()`, `_normalize_ma_url()`, `ma_group_play()`
 - `ma_monitor.py` — `MaMonitor` class: persistent WebSocket connection to MA for real-time now-playing, queue state, and transport control
-- `update_checker.py` — Background version polling: `run_update_checker()`, `check_latest_version()`, auto-update support
+- `ma_artwork.py` — HMAC-signed artwork proxy URL builders for safe same-origin MA image access
+- `ma_integration_service.py` — bootstrap helper that resolves MA credentials, discovers groups, and starts the async monitor task
+- `ma_runtime_state.py` — MA state owner: API credentials, syncgroup mappings, now-playing cache with pending-op tracking
+
+**`services/` module (device & bridge state):**
+- `device_health_state.py` — computes device health state (ready/streaming/offline/degraded) and capability availability with remediation actions
+- `device_registry.py` — canonical thread-safe inventory service for active clients and disabled devices with listener callbacks
+- `bridge_runtime_state.py` — central publisher for bridge startup progress, runtime mode, and status-change notifications
+- `bridge_state_model.py` — normalized dataclass models for runtime substrate, config, and per-device state shared across API surfaces
+- `lifecycle_state.py` — publishes bridge-wide lifecycle events (startup, shutdown, client changes) into the shared state store
+- `status_event_builder.py` — pure builder deriving meaningful device events from status-transition deltas
+- `status_snapshot.py` — read-side snapshot models normalizing bridge/device status for API routes
+- `playback_health.py` — tracks playback watchdog state (zombie timeouts, restart counts, streaming status)
+
+**`services/` module (diagnostics & guidance):**
+- `recovery_assistant.py` — recovery-oriented diagnostics helpers identifying device issues and building actionable recovery guidance
+- `recovery_timeline.py` — chronological event timeline builder from startup progress and device events for diagnostics/CSV export
+- `operator_guidance.py` — unified guidance builder combining onboarding, capability, and recovery data with visibility and grace periods
+- `operator_check_runner.py` — safe, rerunnable operator checks (runtime access, Bluetooth, audio, sink verification, MA auth)
+- `onboarding_assistant.py` — operator-facing onboarding checklist generator with phases (foundation, first speaker, MA, tuning)
+- `guidance_issue_registry.py` — metadata registry for machine-readable operator guidance issues with priority, severity, and remediation codes
+- `preflight_status.py` — collects runtime diagnostics (audio backend, BT controller, D-Bus, memory) for health checks and reports
+- `log_analysis.py` — classifies log severity, detects issue-worthy lines from daemon stderr, and summarizes problem logs
+
+**`services/` module (infrastructure):**
+- `update_checker.py` — background version polling: `run_update_checker()`, `check_latest_version()`, auto-update support
+- `adapter_names.py` — thread-safe cache for Bluetooth adapter MAC→friendly name lookups
+- `async_job_state.py` — manages in-process state for long-running async jobs (MA discovery, scan, updates) with TTL eviction
+- `config_validation.py` — validates and normalizes uploaded config payloads including device MACs, ports, handoff modes
+- `duplicate_device_check.py` — cross-bridge duplicate device detection via MA API to prevent disconnect/reconnect loops
+- `event_hooks.py` — runtime-scoped webhook registry with delivery history and host validation
+- `internal_events.py` — lightweight pub/sub for typed internal runtime events (connections, playback, errors)
+- `ha_addon.py` — Home Assistant Supervisor integration for addon detection, delivery channels, and MA discovery candidates
+- `ha_core_api.py` — WebSocket client for fetching HA device/area registry data and deriving adapter→area suggestions
+- `sendspin_compat.py` — runtime dependency version inspection and sendspin audio API compatibility analysis
+- `_helpers.py` — shared helpers for device state extraction and ISO-8601 timestamp parsing
 
 **`routes/` module (Flask blueprints):**
-- `api.py` — core volume/mute/pause/restart endpoints (6 routes), `_schedule_volume_persist()` (1 s debounce)
-- `api_bt.py` — BT scan/pair/remove/reconnect/enable/disable/device/enabled/scan/result (9 routes). `_get_bt_device_info()` helper extracted from inline code. ANSI stripping in adapter power success detection.
-- `api_ma.py` — MA integration, OAuth sign-in, groups/nowplaying/queue control (10 routes)
-- `api_config.py` — configuration CRUD, adapter management, logs/download, update/check, update/info, update/apply, config/download (raw config.json with timestamped filename), config/upload (upload config.json replacing current, preserves sensitive keys) (11 routes)
-- `api_status.py` — status/diagnostics/version/logs/diagnostics/download/bugreport (8 routes). `_collect_bt_device_info()` helper for bugreport BT device info.
+- `api.py` — core volume/mute/pause/restart endpoints, `_schedule_volume_persist()` (1 s debounce)
+- `api_bt.py` — BT scan/pair/remove/reconnect/enable/disable/device/enabled/scan/result. `_get_bt_device_info()` helper. ANSI stripping in adapter power success detection.
+- `api_transport.py` — POST `/api/transport/cmd` endpoint for native Sendspin transport commands (play/pause/volume/etc.) with lower latency than MA REST
+- `api_ma.py` — MA integration, OAuth sign-in, groups/nowplaying/queue control
+- `api_config.py` — configuration CRUD, adapter management, logs/download, update/check, update/info, update/apply, config/download, config/upload
+- `api_status.py` — status/diagnostics/version/logs/diagnostics/download/bugreport. `_collect_bt_device_info()` helper for bugreport BT device info.
+- `ma_auth.py` — MA OAuth/token routes (`/api/ma/login`, `/api/ma/ha-*`) and helpers for secure token exchange and HA integration
+- `ma_groups.py` — MA discovery and groups routes (`/api/ma/discover*`, `/api/ma/groups`, `/api/ma/rediscover*`, `/api/ma/reload`, `/api/debug/ma`)
+- `ma_playback.py` — MA playback control routes (`/api/ma/queue/*`, `/api/ma/nowplaying`, `/api/ma/artwork`) and queue command helpers
 - `views.py` — HTML page renders
 - `auth.py` — optional web UI password protection (PBKDF2-SHA256); HA login_flow with 2FA/TOTP support; brute-force lockout (5 attempts / 5 min)
+- `_helpers.py` — shared route helpers for MAC/adapter validation and device lookup by player_name
 
 **`state.py`** — shared runtime state:
 - List of `SendspinClient` instances + global lock
@@ -117,6 +171,13 @@ IPC: subprocess→parent via JSON lines on stdout; parent→subprocess via JSON 
 | `TZ` | `Australia/Melbourne` | Container timezone |
 | `CONFIG_DIR` | `/config` | Config directory path |
 | `LOG_LEVEL` | `INFO` | Root logger level (`INFO` or `DEBUG`); set via HA addon option or web UI |
+| `BASE_LISTEN_PORT` | (auto) | Override per-device Sendspin listener base port |
+| `BRIDGE_NAME` | (hostname) | Override bridge name; `auto`/`hostname` resolved to machine hostname |
+| `WEB_THREADS` | `8` | Waitress worker thread count |
+| `PULSE_SINK` | (per-subprocess) | PulseAudio sink name; set automatically per daemon subprocess |
+| `SUPERVISOR_TOKEN` | — | Presence indicates HA addon runtime (set by HA Supervisor) |
+| `SENDSPIN_STATIC_DELAY_MS` | `-300` | Static audio delay in ms passed to daemon subprocess |
+| `SENDSPIN_VERSION_REF_FILE` | `/opt/sendspin-client/.release-ref` | Path to persisted install/update version ref |
 
 ## Container Requirements
 
