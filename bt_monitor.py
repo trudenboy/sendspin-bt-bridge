@@ -348,6 +348,11 @@ async def _inner_dbus_monitor(mgr: BluetoothManager, device_iface, disconnect_ev
             continue
 
         if mgr.connected:
+            # Standby wake: direct connect already finished — trigger reroute
+            if mgr.host and mgr.host.get_status_value("bt_waking"):
+                logger.info("[%s] BT already reconnected during wake — triggering reroute", mgr.device_name)
+                await mgr.host.start_subprocess()
+                continue
             # Clear reconnect state
             if mgr.host and mgr.host.get_status_value("reconnecting"):
                 mgr.host.update_status({"reconnecting": False, "reconnect_attempt": 0})

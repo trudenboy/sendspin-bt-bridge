@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.49.0-rc.24] - 2026-03-26
+
+### Fixed
+- **Standby wake race: bt_monitor missed reroute** — when direct `connect_device()` from `_wake_from_standby()` completed before bt_monitor woke from standby sleep, `mgr.connected` was already `True`; bt_monitor entered the connected-wait branch instead of calling `start_subprocess()` for reroute; now detects `bt_waking` flag in the connected branch and triggers reroute immediately
+
 ## [2.49.0-rc.23] - 2026-03-26
 
 ### Fixed
