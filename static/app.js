@@ -2498,7 +2498,7 @@ function _setReleaseActionButtonState(btn, mgmtEnabled) {
 function _setStandbyActionButtonState(btn, isStandby) {
     if (!btn) return;
     _setActionButtonTone(btn, isStandby ? 'success' : 'warn');
-    btn.innerHTML = _actionButtonInnerHtml(isStandby ? 'reconnect' : 'standby', isStandby ? 'Wake' : 'Standby');
+    btn.innerHTML = _actionButtonInnerHtml(isStandby ? 'sun' : 'standby', isStandby ? 'Wake' : 'Standby');
     btn.title = isStandby
         ? 'Wake from standby — reconnect Bluetooth and resume audio'
         : 'Enter standby — disconnect Bluetooth to save speaker battery';
@@ -3391,7 +3391,7 @@ function buildDeviceCard(i) {
           '<span class="bt-action-status" id="dbt-action-status-' + i + '"></span>' +
           '<div class="card-action-buttons">' +
             '<button type="button" class="action-btn accent" id="dbtn-reconnect-' + i + '" onclick="btReconnect(' + i + ')">' + _actionButtonInnerHtml('reconnect', 'Reconnect') + '</button>' +
-            '<button type="button" class="action-btn accent" id="dbtn-wake-' + i + '" onclick="wakeDevice(' + i + ')" style="display:none">' + _actionButtonInnerHtml('reconnect', 'Wake') + '</button>' +
+            '<button type="button" class="action-btn accent" id="dbtn-wake-' + i + '" onclick="wakeDevice(' + i + ')" style="display:none">' + _actionButtonInnerHtml('sun', 'Wake') + '</button>' +
             '<button type="button" class="action-btn warn" id="dbtn-standby-' + i + '" onclick="btToggleStandby(' + i + ')">' + _actionButtonInnerHtml('standby', 'Standby') + '</button>' +
             '<button type="button" class="action-btn danger" id="dbtn-disable-' + i + '" onclick="confirmDisableDevice(' + i + ')">' + _actionButtonInnerHtml('disable', 'Disable') + '</button>' +
             '<button type="button" class="icon-btn device-settings-btn card-corner-settings-btn" onclick="openDeviceSettings(' + i + ')" title="Device settings">' + _settingsIconHtml() + '</button>' +
