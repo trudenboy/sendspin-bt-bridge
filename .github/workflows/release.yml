@@ -155,17 +155,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Update config.py
-        env:
-          VERSION: ${{ needs.prepare.outputs.version }}
-        run: |
-          set -euo pipefail
-          BUILD_DATE="$(date -u +%Y-%m-%d)"
-          sed -i "s/^VERSION = .*/VERSION = \"${VERSION}\"/" config.py
-          sed -i "s/^BUILD_DATE = .*/BUILD_DATE = \"${BUILD_DATE}\"/" config.py
-          echo "Updated config.py: VERSION=${VERSION}, BUILD_DATE=${BUILD_DATE}"
-          grep -E '^(VERSION|BUILD_DATE)' config.py
-
       - name: Commit, tag, and push
         id: push
         env:
@@ -176,9 +165,16 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Pull latest main in case sync-addon committed after our trigger
+          # Pull latest main in case addon-sync committed after our trigger
           git fetch origin main
           git rebase origin/main
+
+          # Update config.py with version and build date
+          BUILD_DATE="$(date -u +%Y-%m-%d)"
+          sed -i "s/^VERSION = .*/VERSION = \"${VERSION}\"/" config.py
+          sed -i "s/^BUILD_DATE = .*/BUILD_DATE = \"${BUILD_DATE}\"/" config.py
+          echo "Updated config.py: VERSION=${VERSION}, BUILD_DATE=${BUILD_DATE}"
+          grep -E '^(VERSION|BUILD_DATE)' config.py
 
           git add config.py
           if git diff --cached --quiet; then
