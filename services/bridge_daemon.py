@@ -225,6 +225,19 @@ class BridgeDaemon(SendspinDaemon):
             logger.debug("Could not extract peer address: %s", _exc)
         self._notify()
 
+    async def _handle_disconnect(self) -> None:
+        """Disconnect cleanup — delegate to parent or fall back to local handler.
+
+        Older ``aiosendspin`` versions (< 5.x, e.g. armv7 builds) do not
+        provide ``_handle_disconnect`` on ``SendspinDaemon``.  Fall back to
+        the synchronous ``_on_server_disconnect`` to clear bridge status.
+        """
+        parent = getattr(super(), "_handle_disconnect", None)
+        if parent is not None:
+            await parent()
+        else:
+            self._on_server_disconnect()
+
     async def _handle_server_connection(self, ws) -> None:
         """Mirror the upstream connect flow without stale disconnect status races."""
         logger.info("Server connected")

@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.49.0-rc.23] - 2026-03-26
+
+### Fixed
+- **`_handle_disconnect` compat for older aiosendspin** — added fallback method in `BridgeDaemon` for `aiosendspin < 5.x` (standalone LXC deployments) where `SendspinDaemon._handle_disconnect` does not exist; falls back to synchronous `_on_server_disconnect`
+
 ## [2.49.0-rc.22] - 2026-03-26
 
 ### Changed
