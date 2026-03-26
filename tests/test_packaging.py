@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 
@@ -81,7 +82,7 @@ def test_armv7_publish_workflow_builds_pinned_sendspin_and_smoke_tests_import():
 def test_requirements_pin_aiosendspin_for_all_architectures():
     requirements = (Path(__file__).resolve().parents[1] / "requirements.txt").read_text()
 
-    assert "aiosendspin==4.3.2" in requirements
+    assert re.search(r"aiosendspin==\d+\.\d+\.\d+", requirements), "aiosendspin must be pinned in requirements.txt"
 
 
 def test_dockerfile_relies_on_requirements_pin_for_aiosendspin():
