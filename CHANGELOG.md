@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.49.0-rc.22] - 2026-03-26
+
+### Changed
+- **Wake fallback: MA reconnect instead of full restart** — when ALSA errors destroy PA streams during standby (libpulse caches sink name, ignoring `PULSE_SINK` env changes), the daemon now sends an MA reconnect command instead of killing and respawning the entire subprocess; this skips process spawn + mDNS registration overhead and should reduce wake time significantly
+
 ## [2.49.0-rc.21] - 2026-03-26
 
 ### Changed

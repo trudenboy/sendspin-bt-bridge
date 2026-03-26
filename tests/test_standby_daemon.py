@@ -221,7 +221,7 @@ class TestRerouteToBtSink:
         client._send_subprocess_command.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_reroute_zero_moved_returns_false(self):
+    async def test_reroute_zero_moved_sends_reconnect(self):
         with patch("services.pulse.amove_pid_sink_inputs", new_callable=AsyncMock) as move_mock:
             move_mock.return_value = 0  # nothing to move
             client = _make_client(daemon_alive=True)
@@ -229,10 +229,11 @@ class TestRerouteToBtSink:
 
             result = await client._reroute_to_bt_sink()
 
-            assert result is False
-            # set_standby restore is sent before move check
-            assert client._send_subprocess_command.await_count == 1
-            assert client._send_subprocess_command.call_args[0][0]["cmd"] == "set_standby"
+            assert result is True
+            # set_standby restore + reconnect
+            assert client._send_subprocess_command.await_count == 2
+            cmds = [c[0][0]["cmd"] for c in client._send_subprocess_command.call_args_list]
+            assert cmds == ["set_standby", "reconnect"]
 
 
 # ── Start sendspin with daemon already alive (standby wake) ──────────────
@@ -256,8 +257,8 @@ class TestStartSendspinReroute:
             client.stop_sendspin.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_start_sendspin_restarts_if_reroute_finds_zero_streams(self):
-        """When reroute finds 0 streams (ALSA errors), fall through to full restart."""
+    async def test_start_sendspin_reconnects_if_reroute_finds_zero_streams(self):
+        """When reroute finds 0 streams, daemon sends MA reconnect (no full restart)."""
         with patch("services.pulse.amove_pid_sink_inputs", new_callable=AsyncMock) as move_mock:
             move_mock.return_value = 0  # no streams to reroute
             client = _make_client(daemon_alive=True)
@@ -267,8 +268,8 @@ class TestStartSendspinReroute:
             await client._start_sendspin_inner()
 
             move_mock.assert_awaited_once()
-            # Should have fallen through to stop_sendspin (full restart path)
-            client.stop_sendspin.assert_awaited_once()
+            # Reroute now returns True (reconnect sent) — no full restart
+            client.stop_sendspin.assert_not_awaited()
 
 
 # ── Keepalive suppression during standby ─────────────────────────────────

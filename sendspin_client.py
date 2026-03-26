@@ -562,8 +562,12 @@ class SendspinClient:
             logger.info("[%s] Sent reanchor after wake", self.player_name)
             return True
 
-        logger.info("[%s] No streams to reroute — will restart daemon", self.player_name)
-        return False
+        # No streams survived (ALSA errors destroyed them) — trigger MA
+        # reconnect inside the daemon.  This is much faster than a full
+        # subprocess restart because it skips process spawn + mDNS registration.
+        logger.info("[%s] No streams to reroute — sending MA reconnect to daemon", self.player_name)
+        await self._send_subprocess_command({"cmd": "reconnect", "delay": 0.5})
+        return True
 
     def _cancel_ma_reconnect_task(self) -> None:
         task = self._ma_reconnect_task
