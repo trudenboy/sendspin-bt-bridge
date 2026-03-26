@@ -563,6 +563,7 @@ def _build_issue_groups(
         for device in devices
         if getattr(device, "bt_management_enabled", True)
         and not getattr(device, "bluetooth_connected", False)
+        and not getattr(device, "bt_standby", False)
         and _device_extra(device).get("bluetooth_paired") is False
     ]
     disconnected = [
@@ -570,6 +571,7 @@ def _build_issue_groups(
         for device in devices
         if getattr(device, "bt_management_enabled", True)
         and not getattr(device, "bluetooth_connected", False)
+        and not getattr(device, "bt_standby", False)
         and _device_extra(device).get("bluetooth_paired") is not False
     ]
     missing_sink = [

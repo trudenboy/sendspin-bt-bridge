@@ -11257,13 +11257,14 @@ function updateHealthIndicator(devices, guidance) {
     var active = devices.filter(function(d) {
         return d.bt_management_enabled !== false || d.bt_released_by === 'auto';
     });
+    var standbyCount = active.filter(function(d) { return !!d.bt_standby; }).length;
     var released = devices.length - active.length;
     var total = active.length;
     var playing = 0, btOk = 0, maOk = 0;
     active.forEach(function(d) {
         if (d.playing) playing++;
-        if (d.bluetooth_connected) btOk++;
-        if (d.connected) maOk++;
+        if (d.bluetooth_connected || d.bt_standby) btOk++;
+        if (d.connected || d.bt_standby) maOk++;
     });
     if (total > 0) {
         var btClass = btOk === total ? 'ok' : btOk > 0 ? 'warn' : 'error';
