@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.49.0-rc.16] - 2026-03-26
+
+### Fixed
+- **bt_monitor killing daemon during standby** — D-Bus disconnect handler skipped the `bt_standby` guard and killed the daemon that was parked on the null sink; now properly sleeps during standby
+
 ## [2.49.0-rc.15] - 2026-03-26
 
 ### Fixed
