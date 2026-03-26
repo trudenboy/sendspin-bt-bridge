@@ -7,10 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [2.49.0-rc.24] - 2026-03-26
+## [2.49.0-rc.25] - 2026-03-26
+
+### Added
+- **Standby/Wake toggle button** on device cards — replaces the Release button; moon icon toggles between standby and wake states
+- **Release/Reclaim in BT tools menus** — moved Release/Reclaim to Device Fleet BT tools dropdown and Already Paired devices list
+- **Mutual exclusion: keep-alive vs idle standby** — UI disables one when the other is set >0; backend skips idle timer when keep-alive is active
 
 ### Fixed
-- **Standby wake race: bt_monitor missed reroute** — when direct `connect_device()` from `_wake_from_standby()` completed before bt_monitor woke from standby sleep, `mgr.connected` was already `True`; bt_monitor entered the connected-wait branch instead of calling `start_subprocess()` for reroute; now detects `bt_waking` flag in the connected branch and triggers reroute immediately
+- **upgrade.sh: armv7l pip not upgrading sendspin** — added `-U` flag so pip upgrades within the `>=5.3.0,<6` range instead of skipping
+- **Experimental features invisible until toggled** — call `_applyExperimentalVisibility()` after device rows are created dynamically
+- **Standby devices excluded from recovery banner** — standby devices no longer trigger disconnect warnings in recovery assistant, operator guidance, or health indicator pills
+- **Standby wake race: bt_monitor missed reroute** — detects `bt_waking` flag in connected branch and triggers reroute immediately
+
+### Changed
+- Idle standby moved from experimental to regular settings; room name, room ID, and handoff mode moved to experimental
 
 ## [2.49.0-rc.23] - 2026-03-26
 
