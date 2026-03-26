@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.49.0-rc.3] - 2026-03-26
+
+### Fixed
+- **CSP inline handler fix**: restore `'unsafe-inline'` alongside nonce in `script-src` so 30+ `onclick` handlers in the template work correctly (Save, Save & Restart, etc.)
+- **CI lint fix**: revert mypy `check_untyped_defs` (16 pre-existing errors), fix ruff RUF059/UP045 warnings
+
 ## [2.49.0-rc.2] - 2026-03-26
 
 ### Fixed
