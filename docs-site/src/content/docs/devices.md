@@ -173,3 +173,55 @@ Use these per-device fields when tuning difficult speakers:
 - **`keepalive_interval`** — periodically sends silence so some speakers do not fall asleep between tracks.
 - **`keepalive_silence`** — legacy boolean from older addon configs; keepalive is now effectively controlled by `keepalive_interval > 0`.
 - **`preferred_format`** — can reduce resampling or CPU load depending on your MA output settings.
+
+## Standby & Wake-on-play
+
+The bridge supports **idle standby**: after a configurable period of silence the Bluetooth connection is dropped and the speaker enters a low-power state. The MA player remains visible, and when playback is triggered, the bridge automatically reconnects ("wake-on-play").
+
+### How it works
+
+1. Set **Idle standby (min)** in the device's expanded row (Configuration → Devices). A value of `0` means always connected.
+2. After the configured idle time the bridge disconnects Bluetooth and routes audio to a PulseAudio null sink.
+3. The device card shows a 💤 **Standby** badge and a ☀️ **Wake** button.
+4. When MA sends a play command, the bridge reconnects Bluetooth automatically (~5 s latency).
+5. Sync-group members wake each other: if one device wakes, the rest follow.
+
+### Speaker auto-off and deep sleep
+
+:::caution[Speaker-specific behavior]
+After the bridge disconnects Bluetooth, the speaker stays connectable only for a **model-specific** period before entering deep sleep or powering off entirely. Once in deep sleep, remote reconnection is no longer possible — the speaker must be woken physically (power button, NFC tap, etc.).
+:::
+
+The duration of this connectable window depends entirely on the speaker's firmware and cannot be changed by the bridge:
+
+| Category | Examples | Connectable window |
+|---|---|---|
+| **AC-powered speakers** | Sonos, Marshall Stanmore/Woburn, smart speakers | Indefinitely (always on) |
+| **Battery, auto-off disabled** | Sony XM4/5, Bose SoundLink, JBL (via companion app) | Until battery dies (6–24 h) |
+| **Battery, auto-off configurable** | Sony (5 min–3 h), Bose (5–60 min), JBL (10–60 min) | Depends on setting |
+| **Battery, fixed auto-off** | IKEA ENEBY/SYMFONISK (~15–20 min), budget speakers | Cannot be changed |
+
+### Disabling speaker auto-off
+
+Many speakers allow disabling or extending the auto-off timer through a **companion app** or hardware button combination:
+
+- **Sony** — Sony Headphones Connect app → System → Auto Power Off → **Do not turn off**
+- **Bose** — Bose app → Settings → Auto-Off → **Never**, or hold Mute button for 10 s
+- **JBL** — JBL Portable / JBL One app → Settings → Auto-Off → **Disable**
+- **Jabra** — Jabra Sound+ app → Headset settings → Auto-off
+
+There is no Bluetooth protocol command to change this remotely — it must be configured on the device itself.
+
+### Recommendations
+
+- For **AC-powered** speakers: idle standby works perfectly at any timeout.
+- For **battery speakers with disabled auto-off**: set idle standby freely; wake-on-play will work until the battery runs out.
+- For **speakers with fixed auto-off**: set `idle_disconnect_minutes` to a value **shorter** than the speaker's auto-off timer, so the bridge can reconnect before the speaker goes to deep sleep.
+- **Keep-alive and idle standby are mutually exclusive** — if keep-alive is enabled, idle standby is automatically disabled.
+
+### Mutual exclusion with keep-alive
+
+Keep-alive sends periodic silence to prevent the speaker from sleeping. Idle standby intentionally disconnects after silence. These two features have opposite goals, so only one can be active at a time:
+
+- In the UI, enabling one disables the other.
+- If both are set in the config file, keep-alive takes priority and the idle timer is skipped (a warning is logged at startup).
