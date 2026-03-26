@@ -6506,6 +6506,7 @@ function _buildConfigPayload(options) {
 
     config.BLUETOOTH_DEVICES = collectBtDevices();
     config.PREFER_SBC_CODEC = !!(document.getElementById('prefer-sbc-codec') || {}).checked;
+    config.DISABLE_PA_RESCUE_STREAMS = !!(document.getElementById('disable-pa-rescue-streams') || {}).checked;
     config.AUTH_ENABLED = !!(document.getElementById('auth-enabled') || {}).checked;
     config.BRUTE_FORCE_PROTECTION = !!(document.getElementById('brute-force-protection') || {}).checked;
     config.HA_AREA_NAME_ASSIST_ENABLED = !!(document.getElementById('ha-area-name-assist-enabled') || {}).checked;
