@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.49.0-rc.20] - 2026-03-26
+
+### Fixed
+- **Standby wake audio** — when ALSA errors during standby destroy PA streams, reroute now falls back to a full daemon restart instead of silently producing no audio
+- **bt_monitor standby guard** — top-of-loop guard checks `bt_waking` flag so monitor can reach BT reconnect code after auto-wake
+- **Duplicate wake suppression** — `_on_standby_play_detected()` skips when already waking
+
 ## [2.49.0-rc.19] - 2026-03-26
 
 ### Fixed
