@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.50.4] - 2026-03-27
+
+### Fixed
+- Idle standby timer now starts when a device connects with no audio playing. Previously, the timer only triggered on a streaming→idle transition, so a speaker that connected but never played would never enter standby.
+
 ## [2.50.3] - 2026-03-27
 
 ### Fixed
