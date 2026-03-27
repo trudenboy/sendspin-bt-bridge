@@ -51,7 +51,7 @@ RUN if [ "${TARGETARCH}${TARGETVARIANT}" = "armv7" ]; then \
     elif [ -n "${SENDSPIN_VERSION}" ]; then \
         grep -v '^sendspin' /tmp/requirements.txt > /tmp/requirements-release.txt && \
         pip install --no-cache-dir --prefix=/install -r /tmp/requirements-release.txt && \
-        pip install --no-cache-dir --prefix=/install "sendspin==${SENDSPIN_VERSION}"; \
+        pip install --no-cache-dir --prefix=/install -c /tmp/requirements-release.txt "sendspin==${SENDSPIN_VERSION}"; \
     else \
         pip install --no-cache-dir --prefix=/install -r /tmp/requirements.txt; \
     fi
