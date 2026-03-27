@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.50.2] - 2026-03-27
+
+### Fixed
+- Verify `numpy<2.0` pin is effective in published Docker images, resolving X86_V2 crash on older x86_64 CPUs (#109).
+
 ## [2.50.1] - 2026-03-27
 
 ### Fixed
