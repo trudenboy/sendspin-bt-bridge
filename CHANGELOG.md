@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.50.1] - 2026-03-27
+
+### Fixed
+- Actually pin `numpy<2.0` in requirements.txt and Dockerfile to fix X86_V2 crash on older CPUs (#109). The v2.50.0 changelog documented the fix but the pin was missing from the build.
+
 ## [2.50.0] - 2026-03-27
 
 ### Changed
