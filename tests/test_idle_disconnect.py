@@ -110,6 +110,41 @@ class TestIdleTimerStartCancel:
                 client._update_status({"audio_streaming": False})
                 start_mock.assert_not_called()
 
+    def test_timer_starts_on_daemon_connect_without_audio(self):
+        """Timer starts when daemon connects (server_connected=True) with no audio playing."""
+        with patch("sendspin_client._state"):
+            client = _make_client(idle_disconnect_minutes=15)
+            # Device has no audio streaming (initial state)
+            with patch.object(client, "_start_idle_timer") as start_mock:
+                client._update_status({"server_connected": True})
+                start_mock.assert_called_once()
+
+    def test_timer_not_started_on_daemon_connect_when_streaming(self):
+        """Timer does NOT start on daemon connect if audio is already streaming."""
+        with patch("sendspin_client._state"):
+            client = _make_client(idle_disconnect_minutes=15)
+            client.status.update({"audio_streaming": True})
+            with patch.object(client, "_start_idle_timer") as start_mock:
+                client._update_status({"server_connected": True})
+                start_mock.assert_not_called()
+
+    def test_timer_not_started_on_daemon_connect_when_already_standby(self):
+        """Timer does NOT start on daemon connect if already in standby."""
+        with patch("sendspin_client._state"):
+            client = _make_client(idle_disconnect_minutes=15)
+            client.status.update({"bt_standby": True})
+            with patch.object(client, "_start_idle_timer") as start_mock:
+                client._update_status({"server_connected": True})
+                start_mock.assert_not_called()
+
+    def test_timer_not_started_on_daemon_connect_when_disabled(self):
+        """Timer does NOT start on daemon connect when idle_disconnect_minutes=0."""
+        with patch("sendspin_client._state"):
+            client = _make_client(idle_disconnect_minutes=0)
+            with patch.object(client, "_start_idle_timer") as start_mock:
+                client._update_status({"server_connected": True})
+                start_mock.assert_not_called()
+
 
 class TestCancelIdleTimer:
     """_cancel_idle_timer edge cases."""

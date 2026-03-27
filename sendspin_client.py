@@ -407,17 +407,25 @@ class SendspinClient:
         # Check audio_streaming transition for idle disconnect timer.
         # Skip if keep-alive is enabled — it actively prevents speaker sleep,
         # which contradicts the purpose of idle standby.
-        if (
-            self.idle_disconnect_minutes > 0
-            and not getattr(self, "keepalive_enabled", False)
-            and "audio_streaming" in updates
-        ):
-            was_streaming = previous.get("audio_streaming", False)
-            now_streaming = self.status.get("audio_streaming", False)
-            if was_streaming and not now_streaming:
+        if self.idle_disconnect_minutes > 0 and not getattr(self, "keepalive_enabled", False):
+            if "audio_streaming" in updates:
+                was_streaming = previous.get("audio_streaming", False)
+                now_streaming = self.status.get("audio_streaming", False)
+                if was_streaming and not now_streaming:
+                    self._start_idle_timer()
+                elif not was_streaming and now_streaming:
+                    self._cancel_idle_timer()
+            # Start idle timer when daemon connects with no audio playing.
+            # Without this, a device that connects but never plays would
+            # never enter standby because the True→False transition that
+            # normally starts the timer never occurs.
+            if (
+                "server_connected" in updates
+                and self.status.get("server_connected") is True
+                and not self.status.get("audio_streaming")
+                and not self.status.get("bt_standby")
+            ):
                 self._start_idle_timer()
-            elif not was_streaming and now_streaming:
-                self._cancel_idle_timer()
 
     # ── Idle disconnect timer ────────────────────────────────────────────
 
