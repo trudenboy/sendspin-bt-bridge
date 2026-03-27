@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.50.3] - 2026-03-27
+
+### Fixed
+- Fix `numpy<2.0` pin being overridden during Docker build: `pip install sendspin` (without `--no-deps`) was pulling numpy>=2.0 as a transitive dependency, ignoring the pin from requirements.txt. Now uses `-c` (constraint file) to enforce `numpy<2.0` when installing sendspin (#109).
+
 ## [2.50.2] - 2026-03-27
 
 ### Fixed
