@@ -41,6 +41,7 @@ export default defineConfig({
         { label: 'Configuration', translations: { ru: 'Настройка' }, slug: 'configuration' },
         { label: 'Web UI', translations: { ru: 'Веб-интерфейс' }, slug: 'web-ui' },
         { label: 'Devices', translations: { ru: 'Устройства' }, slug: 'devices' },
+        { label: 'Bluetooth Adapters', translations: { ru: 'Bluetooth-адаптеры' }, slug: 'bluetooth-adapters' },
         { label: 'API Reference', slug: 'api' },
         { label: 'Architecture', slug: 'architecture' },
         { label: 'Troubleshooting', translations: { ru: 'Устранение неполадок' }, slug: 'troubleshooting' },
