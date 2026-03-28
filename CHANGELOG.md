@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.51.0-rc.2] - 2026-03-28
+
+### Fixed
+- Log viewer no longer crashes with "No such file or directory: docker" when the docker CLI is unavailable inside the container; falls back to Python log handler streams (#111)
+- Artwork proxy now URL-encodes path components so track names with spaces and unicode characters (e.g. `｜`, `⧹⧹`) no longer trigger `InvalidURL` errors (#112)
+
 ## [2.51.0-rc.1] - 2026-03-28
 
 ### Changed
