@@ -515,11 +515,22 @@ function showToast(msg, type) {
 
 function switchConfigTab(tabName) {
     document.querySelectorAll('.config-tab').forEach(function(tab) {
-        tab.classList.toggle('active', tab.dataset.configTab === tabName);
+        var isActive = tab.dataset.configTab === tabName;
+        tab.classList.toggle('active', isActive);
+        if (isActive) tab.scrollIntoView({behavior: 'smooth', block: 'nearest', inline: 'nearest'});
     });
     document.querySelectorAll('.config-tab-panel').forEach(function(panel) {
         panel.classList.toggle('active', panel.dataset.configPanel === tabName);
     });
+    _updateConfigTabsOverflow();
+}
+
+function _updateConfigTabsOverflow() {
+    var wrap = document.querySelector('.config-tabs-wrap');
+    var tabs = wrap && wrap.querySelector('.config-tabs');
+    if (!wrap || !tabs) return;
+    var hasRight = tabs.scrollLeft + tabs.clientWidth < tabs.scrollWidth - 2;
+    wrap.classList.toggle('has-overflow-right', hasRight);
 }
 
 function _openConfigPanel(tabName, targetId, block) {
@@ -575,6 +586,89 @@ function initConfigTabs() {
         tab.addEventListener('click', function() {
             switchConfigTab(tab.dataset.configTab);
         });
+    });
+    var tabsEl = document.querySelector('.config-tabs');
+    if (tabsEl) {
+        tabsEl.addEventListener('scroll', _updateConfigTabsOverflow, {passive: true});
+        requestAnimationFrame(_updateConfigTabsOverflow);
+    }
+}
+
+// ---- Mobile menu ----
+
+function toggleMobileMenu() {
+    var actions = document.querySelector('.header-actions');
+    if (!actions) return;
+    var isOpen = actions.classList.toggle('mobile-menu-open');
+    document.body.style.overflow = isOpen ? 'hidden' : '';
+    if (isOpen) {
+        var closeOnEscape = function(e) {
+            if (e.key === 'Escape') {
+                actions.classList.remove('mobile-menu-open');
+                document.body.style.overflow = '';
+                document.removeEventListener('keydown', closeOnEscape);
+            }
+        };
+        document.addEventListener('keydown', closeOnEscape);
+    }
+}
+
+function closeMobileMenu() {
+    var actions = document.querySelector('.header-actions');
+    if (actions) actions.classList.remove('mobile-menu-open');
+    document.body.style.overflow = '';
+}
+
+// ---- Haptic feedback ----
+
+function haptic(pattern) {
+    if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        try { navigator.vibrate(pattern || 10); } catch (_) {}
+    }
+}
+
+// ---- Skeleton loading ----
+
+function _showSkeletonCards(count) {
+    var grid = document.getElementById('status-grid');
+    if (!grid || grid.children.length > 0) return;
+    for (var i = 0; i < (count || 3); i++) {
+        var el = document.createElement('div');
+        el.className = 'skeleton-card';
+        el.innerHTML = '<div class="skeleton-line skeleton-line--title"></div>' +
+            '<div class="skeleton-line skeleton-line--subtitle"></div>' +
+            '<div class="skeleton-line skeleton-line--bar"></div>';
+        grid.appendChild(el);
+    }
+}
+
+function _removeSkeletonCards() {
+    var skeletons = document.querySelectorAll('.skeleton-card');
+    skeletons.forEach(function(el) { el.remove(); });
+}
+
+// ---- Bottom navigation ----
+
+function _scrollToSection(sectionId) {
+    var el = sectionId === 'devices' ? document.getElementById('status-grid')
+        : sectionId === 'config' ? document.querySelector('.config-section')
+        : sectionId === 'logs' ? document.querySelector('.logs-section')
+        : null;
+    if (el) {
+        if (el.tagName === 'DETAILS') el.open = true;
+        el.scrollIntoView({behavior: 'smooth', block: 'start'});
+    }
+    closeMobileMenu();
+}
+
+// ---- Progressive disclosure (mobile) ----
+
+function _initCardExpand() {
+    document.addEventListener('click', function(e) {
+        var indicator = e.target.closest('.card-expand-indicator');
+        if (!indicator) return;
+        var card = indicator.closest('.device-card') || indicator.closest('.list-row');
+        if (card) card.classList.toggle('expanded');
     });
 }
 
@@ -1531,10 +1625,12 @@ function _getViewModeMediaQuery() {
 }
 
 function _isMobileListViewForced() {
-    var media = _getViewModeMediaQuery();
-    if (media) return !!media.matches;
-    if (typeof window.innerWidth === 'number') return window.innerWidth <= MOBILE_LIST_VIEW_MAX_WIDTH;
     return false;
+}
+
+function _isPortraitMobile() {
+    return window.innerWidth <= MOBILE_LIST_VIEW_MAX_WIDTH &&
+           window.innerHeight > window.innerWidth;
 }
 
 function _setViewModeStorageScope(runtimeMode) {
@@ -1562,28 +1658,32 @@ function _applyDemoScreenshotDefaults() {
 }
 
 function _getAutomaticViewMode(deviceCount) {
-    return 'list';
+    if (_isPortraitMobile()) return 'grid';
+    if (window.innerWidth <= MOBILE_LIST_VIEW_MAX_WIDTH) return 'grid';
+    return deviceCount > 6 ? 'list' : 'grid';
 }
 
 function _resolveViewMode(deviceCount) {
-    if (_isMobileListViewForced()) return 'list';
+    if (_isPortraitMobile()) return 'grid';
     return userPreferredViewMode || _getAutomaticViewMode(deviceCount);
 }
 
 function _applyViewModeButtons(mode) {
     var gridBtn = document.getElementById('view-grid-btn');
     var listBtn = document.getElementById('view-list-btn');
-    var mobileForced = _isMobileListViewForced();
+    var portrait = _isPortraitMobile();
     if (gridBtn) {
-        var gridActive = !mobileForced && mode !== 'list';
-        gridBtn.disabled = mobileForced;
+        var gridActive = mode !== 'list';
+        gridBtn.disabled = false;
         gridBtn.classList.toggle('active', gridActive);
         gridBtn.setAttribute('aria-pressed', gridActive ? 'true' : 'false');
-        gridBtn.setAttribute('aria-disabled', mobileForced ? 'true' : 'false');
+        gridBtn.setAttribute('aria-disabled', 'false');
     }
     if (listBtn) {
         listBtn.classList.toggle('active', mode === 'list');
         listBtn.setAttribute('aria-pressed', mode === 'list' ? 'true' : 'false');
+        listBtn.disabled = portrait;
+        listBtn.setAttribute('aria-disabled', portrait ? 'true' : 'false');
     }
 }
 
@@ -3037,12 +3137,14 @@ function buildListView(entries, hiddenCount) {
             '<button type="button" class="media-btn list-inline-btn' + (effectiveMuted ? ' muted' : '') + '" id="' + rowMuteBtnId + '" onclick="event.stopPropagation();onMuteClick(' + i + ', \'' + rowMuteBtnId + '\')" title="' + escHtmlAttr(muteTitle) + '"' + (canMute && !cardDisabled ? '' : ' disabled') + '>' + _muteIconHtml(effectiveMuted) + '</button>' +
             '<button type="button" class="icon-btn list-inline-btn list-settings-btn" onclick="event.stopPropagation();openDeviceSettings(' + i + ')" title="Device settings"' + (cardDisabled ? ' disabled' : '') + '>' + _settingsIconHtml() + '</button>' +
         '</div>';
+        var expandIndicator = '<span class="card-expand-indicator" title="Show details" onclick="event.stopPropagation()">&#x25BE;</span>';
         var nameTitleRow = '<span class="list-name-title-row">' +
             '<span class="list-name-title-group">' +
                 '<span class="list-name-title">' + escHtml(dev.player_name || ('Device ' + (i + 1))) + '</span>' +
                 playerNameEq +
             '</span>' +
             collapsedBadges +
+            expandIndicator +
         '</span>';
         var nameMetaContent = expanded
             ? ''
@@ -3138,6 +3240,7 @@ function renderDevicesView() {
 }
 
 function renderStatusPayload(status) {
+    _removeSkeletonCards();
     _statusHasEverSucceeded = true;
     _lastDisabledDevices = Array.isArray(status && status.disabled_devices) ? status.disabled_devices : [];
     var info = [];
@@ -3338,6 +3441,7 @@ function buildDeviceCard(i) {
           '<span class="chip meta-badge meta-badge-status is-neutral" id="dreleased-badge-' + i + '" style="display:none"></span>' +
           '<span class="chip meta-badge meta-badge-status is-neutral" id="dstandby-badge-' + i + '" style="display:none"></span>' +
           '<button type="button" class="chip meta-badge meta-badge-link group-badge-unified meta-badge-interactive device-card-group-badge" id="dgroup-' + i + '" style="display:none"></button>' +
+          '<span class="card-expand-indicator" title="Show details"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/></svg></span>' +
         '</div>' +
         '<div class="card-chips">' +
           '<button type="button" class="chip meta-badge meta-badge-link meta-badge-interactive adapter-link-badge is-neutral" id="dchip-bt-' + i + '" title="Open Bluetooth adapter settings"></button>' +
@@ -4062,12 +4166,15 @@ function _updateGroupPanel() {
     }
     controls.style.display = 'flex';
     controls.classList.toggle('toolbar-stack--filters-only', total < 2);
-    if (actionBar) actionBar.style.display = total < 2 ? 'none' : 'flex';
+    if (actionBar) actionBar.style.display = total < 2 ? 'none' : '';
     _updateAdapterFilter();
     _updateGroupFilter();
     var sel = _getSelectedNames().length;
     var info = document.getElementById('group-select-info');
-    if (info) info.textContent = sel === total ? 'All ' + total + ' players' : sel + ' of ' + total + ' selected';
+    if (info) {
+        info.textContent = sel === total ? 'All ' + total + ' players' : sel + ' of ' + total + ' selected';
+        info.setAttribute('data-compact', sel === total ? 'All ' + total : sel + '/' + total);
+    }
     var allCb = document.getElementById('group-select-all');
     if (allCb) {
         allCb.checked = sel === total;
@@ -4210,10 +4317,6 @@ function filterDeviceCards() {
 }
 
 function setViewMode(mode) {
-    if (mode !== 'list' && _isMobileListViewForced()) {
-        _syncViewModeForViewport();
-        return;
-    }
     currentViewMode = mode === 'list' ? 'list' : 'grid';
     userPreferredViewMode = currentViewMode;
     _persistViewMode(currentViewMode);
@@ -11392,6 +11495,7 @@ function updateSliderFill(el) {
 // ---- Init ----
 _hydrateUiIcons(document);
 initConfigTabs();
+_initCardExpand();
 _applyBackendServiceState({
     kind: 'connecting',
     tone: 'info',
@@ -11413,6 +11517,107 @@ if (_viewModeMedia) {
 window.addEventListener('resize', _syncViewModeForViewport);
 _syncViewModeForViewport();
 updateStatus();
+_showSkeletonCards(3);
+
+// ---- Pull-to-refresh ----
+
+(function initPullToRefresh() {
+    var startY = 0;
+    var pulling = false;
+    var indicator = null;
+    var threshold = 60;
+
+    function getIndicator() {
+        if (!indicator) {
+            indicator = document.createElement('div');
+            indicator.className = 'pull-refresh-indicator';
+            indicator.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 0 1-15.36 6.36"/><path d="M3 12A9 9 0 0 1 18.36 5.64"/><path d="M3 16v-4h4"/><path d="M21 8v4h-4"/></svg>';
+            document.body.prepend(indicator);
+        }
+        return indicator;
+    }
+
+    document.addEventListener('touchstart', function(e) {
+        if (window.scrollY === 0 && e.touches.length === 1) {
+            startY = e.touches[0].clientY;
+            pulling = true;
+        }
+    }, {passive: true});
+
+    document.addEventListener('touchmove', function(e) {
+        if (!pulling) return;
+        var dy = e.touches[0].clientY - startY;
+        if (dy < 0) { pulling = false; return; }
+        if (dy > 10) {
+            var ind = getIndicator();
+            var progress = Math.min(dy / threshold, 1);
+            ind.style.transform = 'translateY(' + Math.min(dy * 0.4, 50) + 'px)';
+            ind.style.opacity = String(progress);
+            ind.querySelector('svg').style.transform = 'rotate(' + (progress * 360) + 'deg)';
+            if (dy > threshold) {
+                ind.classList.add('ready');
+            } else {
+                ind.classList.remove('ready');
+            }
+        }
+    }, {passive: true});
+
+    document.addEventListener('touchend', function() {
+        if (!pulling) return;
+        pulling = false;
+        var ind = indicator;
+        if (ind) {
+            if (ind.classList.contains('ready')) {
+                ind.classList.add('refreshing');
+                ind.style.transform = 'translateY(40px)';
+                updateStatus();
+                setTimeout(function() {
+                    ind.style.transform = '';
+                    ind.style.opacity = '0';
+                    ind.classList.remove('ready', 'refreshing');
+                }, 1000);
+            } else {
+                ind.style.transform = '';
+                ind.style.opacity = '0';
+                ind.classList.remove('ready');
+            }
+        }
+    }, {passive: true});
+})();
+
+// ---- Config tab swipe ----
+
+(function initConfigTabSwipe() {
+    var panels = document.querySelector('.config-section');
+    if (!panels) return;
+    var startX = 0;
+    var startY = 0;
+    var swiping = false;
+    var tabOrder = ['general', 'audio', 'devices', 'bluetooth', 'ma', 'security'];
+
+    panels.addEventListener('touchstart', function(e) {
+        if (e.touches.length !== 1) return;
+        startX = e.touches[0].clientX;
+        startY = e.touches[0].clientY;
+        swiping = true;
+    }, {passive: true});
+
+    panels.addEventListener('touchend', function(e) {
+        if (!swiping) return;
+        swiping = false;
+        var dx = e.changedTouches[0].clientX - startX;
+        var dy = e.changedTouches[0].clientY - startY;
+        if (Math.abs(dx) < 50 || Math.abs(dy) > Math.abs(dx)) return;
+        var current = document.querySelector('.config-tab.active');
+        if (!current) return;
+        var idx = tabOrder.indexOf(current.dataset.configTab);
+        if (idx === -1) return;
+        var next = dx < 0 ? idx + 1 : idx - 1;
+        if (next >= 0 && next < tabOrder.length) {
+            switchConfigTab(tabOrder[next]);
+        }
+    }, {passive: true});
+})();
 
 // Use SSE for real-time status push; fall back to polling if not supported
 var _statusInterval = null;

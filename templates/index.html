@@ -47,7 +47,13 @@
                     </div>
                 </div>
             </div>
+            <button type="button" class="header-hamburger" onclick="toggleMobileMenu()" title="Menu" aria-label="Open menu">
+                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>
+            </button>
             <div class="header-actions">
+                <button type="button" class="mobile-menu-close" onclick="closeMobileMenu()" title="Close menu" aria-label="Close menu">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                </button>
                 <a href="#" class="header-link" id="report-link" title="Submit a bug report"
                    onclick="return _openBugReport(event)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5 3.5 19h17L12 3.5Z"></path><path d="M12 9v4.75"></path><circle cx="12" cy="17.1" r="1" fill="currentColor" stroke="none"></circle></svg> Report</a>
                 <a href="https://trudenboy.github.io/sendspin-bt-bridge/" target="_blank" rel="noopener"
@@ -258,6 +264,7 @@
     <details class="config-section">
         <summary><span class="summary-title-icon ui-icon-slot" data-ui-icon="settings" aria-hidden="true"></span><span>Configuration</span><span id="config-summary-dirty-count" class="config-summary-dirty-count ui-count-badge ui-count-badge--warning" hidden>0</span></summary>
         <form id="config-form">
+            <div class="config-tabs-wrap">
             <div class="config-tabs" role="tablist" aria-label="Configuration sections">
                 <button type="button" class="config-tab active" data-config-tab="general"><span class="config-tab-label">General</span><span class="config-tab-dirty-count ui-count-badge ui-count-badge--warning" hidden>0</span></button>
                 <button type="button" class="config-tab" data-config-tab="audio"><span class="config-tab-label">Audio</span><span class="config-tab-dirty-count ui-count-badge ui-count-badge--warning" hidden>0</span></button>
@@ -266,6 +273,7 @@
                 <button type="button" class="config-tab" data-config-tab="ma"><span class="config-tab-label">Music Assistant</span><span class="config-tab-dirty-count ui-count-badge ui-count-badge--warning" hidden>0</span></button>
                 <button type="button" class="config-tab" data-config-tab="security"><span class="config-tab-label">Security</span><span class="config-tab-dirty-count ui-count-badge ui-count-badge--warning" hidden>0</span></button>
             </div>
+            </div><!-- .config-tabs-wrap -->
 
             <section class="config-tab-panel active" id="config-panel-general" data-config-panel="general">
                 <div class="config-group">
@@ -1009,6 +1017,25 @@
     </details>
 
 </div>
+
+<nav class="bottom-nav" aria-label="Navigation">
+    <button type="button" class="bottom-nav-item active" onclick="_scrollToSection('devices')">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17 2H7c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-5 2c.83 0 1.5.67 1.5 1.5S12.83 7 12 7s-1.5-.67-1.5-1.5S11.17 4 12 4zM7 22h10c1.1 0 2-.9 2-2H5c0 1.1.9 2 2 2zm0-7.5h10v-5H7v5z"/></svg>
+        <span>Devices</span>
+    </button>
+    <button type="button" class="bottom-nav-item" onclick="_scrollToSection('config')">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
+        <span>Config</span>
+    </button>
+    <button type="button" class="bottom-nav-item" onclick="_scrollToSection('logs')">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm-1 7V3.5L18.5 9H13z"/></svg>
+        <span>Logs</span>
+    </button>
+    <button type="button" class="bottom-nav-item" onclick="toggleMobileMenu()">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>
+        <span>Menu</span>
+    </button>
+</nav>
 
 <script src="{{ url_for('vstatic', version=asset_version('app.js'), filename='app.js') }}"></script>
 </body>

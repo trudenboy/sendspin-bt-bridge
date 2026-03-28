@@ -155,9 +155,10 @@
             box-shadow: var(--ui-focus-ring, 0 0 0 3px rgba(3, 169, 244, 0.14));
         }
         .login-tab.active {
-            background: var(--ui-segmented-active-bg, var(--card-background-color));
-            color: var(--ui-segmented-active-color, var(--primary-text-color));
-            box-shadow: inset 0 0 0 1px var(--ui-segmented-active-border, rgba(128, 145, 171, 0.22));
+            color: var(--primary-color, #6366f1);
+            background: rgba(99, 102, 241, 0.1);
+            box-shadow: inset 0 -2px 0 var(--primary-color, #6366f1);
+            font-weight: 600;
         }
         .login-method {
             display: none;
@@ -205,6 +206,65 @@
                 font-size: 18px;
             }
         }
+        /* Password toggle */
+        .login-password-wrap {
+            position: relative;
+        }
+        .login-password-wrap input {
+            padding-right: 44px;
+        }
+        .login-eye-toggle {
+            position: absolute;
+            right: 8px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: none;
+            background: transparent;
+            color: var(--secondary-text-color, #888);
+            cursor: pointer;
+            border-radius: 6px;
+            padding: 0;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .login-eye-toggle:active {
+            background: var(--divider-color, rgba(0,0,0,0.06));
+        }
+        .login-eye-toggle svg {
+            width: 18px;
+            height: 18px;
+        }
+
+        /* Submit loading state */
+        .login-submit.loading {
+            pointer-events: none;
+            opacity: 0.7;
+            position: relative;
+        }
+        .login-submit.loading .login-submit-text {
+            visibility: hidden;
+        }
+        .login-submit.loading::after {
+            content: '';
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            margin-left: -9px;
+            margin-top: -9px;
+            width: 18px;
+            height: 18px;
+            border: 2px solid transparent;
+            border-top-color: currentColor;
+            border-radius: 50%;
+            animation: login-spin 0.6s linear infinite;
+        }
+        @keyframes login-spin {
+            to { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body class="auth-page">
@@ -237,7 +297,7 @@
                     class="login-code-input" autocomplete="one-time-code" required autofocus
                     placeholder="6-digit code">
             </div>
-            <button type="submit" class="btn login-submit">Verify</button>
+            <button type="submit" class="btn login-submit"><span class="login-submit-text">Verify</span></button>
         </form>
 
         {% elif auth_methods|length == 0 %}
@@ -300,9 +360,14 @@
             </div>
             <div class="form-group">
                 <label>Password</label>
-                <input type="password" name="password" autocomplete="current-password" required>
+                <div class="login-password-wrap">
+                    <input type="password" name="password" autocomplete="current-password" required>
+                    <button type="button" class="login-eye-toggle" onclick="togglePasswordVisibility(this)" title="Show password" aria-label="Show password">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                    </button>
+                </div>
             </div>
-            <button type="submit" class="btn login-submit">Sign in with Home Assistant</button>
+            <button type="submit" class="btn login-submit"><span class="login-submit-text">Sign in with Home Assistant</span></button>
         </form>
         {% endif %}
 
@@ -319,9 +384,14 @@
             </div>
             <div class="form-group">
                 <label>Password</label>
-                <input type="password" name="password" autocomplete="current-password" required>
+                <div class="login-password-wrap">
+                    <input type="password" name="password" autocomplete="current-password" required>
+                    <button type="button" class="login-eye-toggle" onclick="togglePasswordVisibility(this)" title="Show password" aria-label="Show password">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                    </button>
+                </div>
             </div>
-            <button type="submit" class="btn login-submit">Sign in with Music Assistant</button>
+            <button type="submit" class="btn login-submit"><span class="login-submit-text">Sign in with Music Assistant</span></button>
         </form>
         {% endif %}
 
@@ -338,9 +408,14 @@
             </div>
             <div class="form-group">
                 <label>Password</label>
-                <input type="password" name="password" autocomplete="current-password" required>
+                <div class="login-password-wrap">
+                    <input type="password" name="password" autocomplete="current-password" required>
+                    <button type="button" class="login-eye-toggle" onclick="togglePasswordVisibility(this)" title="Show password" aria-label="Show password">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                    </button>
+                </div>
             </div>
-            <button type="submit" class="btn login-submit">Sign in with Home Assistant</button>
+            <button type="submit" class="btn login-submit"><span class="login-submit-text">Sign in with Home Assistant</span></button>
         </form>
         {% endif %}
 
@@ -352,10 +427,15 @@
             <input type="hidden" name="step" value="credentials">
             <div class="form-group">
                 <label>Password</label>
-                <input type="password" name="password" autocomplete="current-password" required
+                <div class="login-password-wrap">
+                    <input type="password" name="password" autocomplete="current-password" required
                     {% if auth_methods[0] == 'password' %}autofocus{% endif %}>
+                    <button type="button" class="login-eye-toggle" onclick="togglePasswordVisibility(this)" title="Show password" aria-label="Show password">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                    </button>
+                </div>
             </div>
-            <button type="submit" class="btn login-submit">Sign in</button>
+            <button type="submit" class="btn login-submit"><span class="login-submit-text">Sign in</span></button>
         </form>
         {% endif %}
 
@@ -384,6 +464,27 @@ function switchMethod(event, method) {
     }
     return false;
 }
+
+function togglePasswordVisibility(btn) {
+    var wrap = btn.closest('.login-password-wrap');
+    if (!wrap) return;
+    var input = wrap.querySelector('input');
+    if (!input) return;
+    var show = input.type === 'password';
+    input.type = show ? 'text' : 'password';
+    btn.title = show ? 'Hide password' : 'Show password';
+    btn.setAttribute('aria-label', btn.title);
+    btn.innerHTML = show
+        ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>'
+        : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+}
+
+document.querySelectorAll('.login-form').forEach(function(form) {
+    form.addEventListener('submit', function() {
+        var btn = form.querySelector('.login-submit');
+        if (btn) btn.classList.add('loading');
+    });
+});
 </script>
 </body>
 </html>
