@@ -1,0 +1,47 @@
+[
+  {
+    "referrer": "github.com",
+    "count": 194,
+    "uniques": 45
+  },
+  {
+    "referrer": "community.home-assistant.io",
+    "count": 131,
+    "uniques": 28
+  },
+  {
+    "referrer": "Google",
+    "count": 22,
+    "uniques": 9
+  },
+  {
+    "referrer": "trudenboy.github.io",
+    "count": 20,
+    "uniques": 8
+  },
+  {
+    "referrer": "yandex.ru",
+    "count": 12,
+    "uniques": 3
+  },
+  {
+    "referrer": "sendspin-demo.onrender.com",
+    "count": 4,
+    "uniques": 2
+  },
+  {
+    "referrer": "music-assistant.io",
+    "count": 2,
+    "uniques": 1
+  },
+  {
+    "referrer": "com.slack",
+    "count": 1,
+    "uniques": 1
+  },
+  {
+    "referrer": "dzen.ru",
+    "count": 1,
+    "uniques": 1
+  }
+]
