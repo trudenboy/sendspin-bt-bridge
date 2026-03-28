@@ -49,6 +49,29 @@ UTC = timezone.utc
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
+
+# In-memory ring buffer so the web UI can read logs even when docker CLI
+# is unavailable (e.g. inside the container itself).
+from collections import deque as _deque  # noqa: E402
+
+
+class _RingLogHandler(logging.Handler):
+    """Keeps the last *maxlen* formatted log records in a deque."""
+
+    def __init__(self, maxlen: int = 2000) -> None:
+        super().__init__()
+        self.records: _deque[str] = _deque(maxlen=maxlen)
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            self.records.append(self.format(record))
+        except Exception:
+            pass
+
+
+_ring_log_handler = _RingLogHandler(maxlen=2000)
+_ring_log_handler.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
+logging.getLogger().addHandler(_ring_log_handler)
 _MA_RECONNECT_TIMEOUT_S = 15.0
 
 _IPC_ALLOWED_KEYS = frozenset(

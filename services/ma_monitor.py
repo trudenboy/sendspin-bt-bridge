@@ -17,6 +17,7 @@ import itertools
 import json
 import logging
 import time
+import urllib.parse as _up
 from typing import TYPE_CHECKING
 
 import state as _state
@@ -133,6 +134,18 @@ async def _hydrate_missing_queue_neighbors(
             _set_queue_neighbor(result, "next", _build_queue_item_summary(next_items[0]))
 
 
+def _build_imageproxy_url(path: str, provider: str) -> str:
+    """Build an MA ``/imageproxy`` URL from a raw media path and provider ID."""
+    ma_url, _ = _state.get_ma_api_credentials()
+    if not ma_url:
+        return path  # fall back to raw path; proxy will try urljoin
+    params = _up.urlencode(
+        {"path": path, "provider": provider, "size": "256"},
+        quote_via=_up.quote,
+    )
+    return f"{ma_url.rstrip('/')}/imageproxy?{params}"
+
+
 def _build_now_playing(queue: dict) -> dict:
     """Extract now-playing metadata from a player_queues/all queue entry."""
     ci = queue.get("current_item") or {}
@@ -147,7 +160,13 @@ def _build_now_playing(queue: dict) -> dict:
     metadata = mi.get("metadata") or {}
     images = metadata.get("images") or []
     if images:
-        image_url = images[0].get("path", "")
+        img = images[0]
+        img_path = img.get("path", "")
+        if img_path:
+            if img_path.startswith(("http://", "https://")):
+                image_url = img_path
+            else:
+                image_url = _build_imageproxy_url(img_path, img.get("provider", ""))
     if not image_url:
         for pm in mi.get("provider_mappings") or []:
             if pm.get("thumbnail_url"):
