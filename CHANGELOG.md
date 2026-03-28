@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.51.0-rc.3] - 2026-03-28
+
+### Fixed
+- Log viewer now shows actual logs inside Docker containers using an in-memory ring buffer (2000 lines) instead of relying on the docker CLI which is unavailable inside the container (#111)
+- Artwork proxy now constructs proper MA `/imageproxy?path=&provider=&size=` URLs from raw metadata image paths instead of joining file paths directly with the base URL (which returned 404) (#112)
+
 ## [2.51.0-rc.2] - 2026-03-28
 
 ### Fixed
