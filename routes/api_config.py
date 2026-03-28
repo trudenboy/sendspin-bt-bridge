@@ -948,13 +948,34 @@ def _read_log_lines(runtime: str, lines: int) -> list[str]:
         else:
             log_lines = ["(SUPERVISOR_TOKEN not available — check addon permissions)"]
     else:
-        result = subprocess.run(
-            ["docker", "logs", "--tail", str(lines), "sendspin-client"],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        log_lines = (result.stdout + result.stderr).splitlines()
+        # Inside a Docker container the docker CLI is not available.
+        # Try reading the process stdout via /proc/1/fd/1, then fall back
+        # to the Python root logger's StreamHandler buffer if that fails too.
+        log_lines = []
+        try:
+            result = subprocess.run(
+                ["docker", "logs", "--tail", str(lines), "sendspin-client"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            log_lines = (result.stdout + result.stderr).splitlines()
+        except FileNotFoundError:
+            # docker CLI unavailable — read from Python logging handlers
+            root = logging.getLogger()
+            for handler in root.handlers:
+                stream = getattr(handler, "stream", None)
+                if stream is not None and hasattr(stream, "name"):
+                    try:
+                        with open(stream.name, errors="replace") as fh:
+                            log_lines = fh.readlines()[-lines:]
+                            log_lines = [ln.rstrip("\n") for ln in log_lines]
+                    except (OSError, TypeError, ValueError):
+                        pass
+                    if log_lines:
+                        break
+            if not log_lines:
+                log_lines = ["(docker CLI not available and no log file found)"]
 
     return log_lines or ["(No logs available)"]
 

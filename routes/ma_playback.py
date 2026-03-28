@@ -291,6 +291,18 @@ def api_ma_artwork():
     except ValueError as exc:
         return Response(str(exc), status=400)
 
+    # URL-encode path component so spaces / unicode don't trip http.client
+    _parsed = _up.urlsplit(artwork_url)
+    artwork_url = _up.urlunsplit(
+        (
+            _parsed.scheme,
+            _parsed.netloc,
+            _up.quote(_parsed.path, safe="/:@!$&'()*+,;=-._~"),
+            _parsed.query,
+            _parsed.fragment,
+        )
+    )
+
     # HMAC signature (checked above) prevents arbitrary-URL SSRF.
     # Only attach MA bearer token when the URL targets the MA server itself.
     _ma_url, ma_token = get_ma_api_credentials()
