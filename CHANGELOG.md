@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.51.0-rc.1] - 2026-03-28
+
+### Changed
+- Grid view is now the default in mobile portrait orientation; list view is landscape-only
+- Compact action bar layout: checkbox, volume slider, mute, and pause share one row; bulk actions on second row (104px vs 321px)
+- Card controls reordered: volume + mute row first, transport buttons second
+- Action buttons (Reconnect / Standby / Disable) fit a single row on Pixel 8 (412px)
+
+### Fixed
+- Eliminated horizontal scroll on mobile by fixing grid track minimums (`minmax(0, 1fr)`)
+- Touch targets enlarged to 44px minimum across all interactive elements
+- Dark theme contrast and readability improvements across all breakpoints
+- Login page: added password visibility toggle, loading states, active tab contrast
+
+### Added
+- Hamburger menu, bottom navigation, and config tab scrolling for small screens
+- Progressive disclosure for collapsed list items
+- Safe-area inset support for notched devices
+
 ## [2.50.4] - 2026-03-27
 
 ### Fixed
