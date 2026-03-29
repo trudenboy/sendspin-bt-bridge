@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.51.0-rc.5] - 2026-03-29
+
+### Changed
+- Fallback player ID (no MAC) now uses UUID5 from player name instead of sanitized name string — always 36 chars, no mDNS length issues, same approach as MAC-based path (#115)
+
 ## [2.51.0-rc.4] - 2026-03-29
 
 ### Added
