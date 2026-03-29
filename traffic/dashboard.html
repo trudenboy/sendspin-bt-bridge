@@ -106,6 +106,7 @@
   .timeline-dot.pre { background: #d29922; border-color: #d29922; }
   .timeline-tag { font-weight: 600; font-size: 0.9rem; }
   .timeline-date { font-size: 0.75rem; color: #8b949e; }
+  .timeline-downloads { font-size: 0.75rem; color: #58a6ff; margin-top: 1px; }
   .timeline-badge {
     display: inline-block; font-size: 0.65rem; padding: 1px 6px; border-radius: 10px;
     margin-left: 6px; vertical-align: middle;
@@ -175,6 +176,7 @@
     { value: fmt(repo.forks_count), label: '🍴 Forks' },
     { value: fmt(viewsW.count), label: '👁 Views (14d)' },
     { value: fmt(clonesW.count), label: '📦 Clones (14d)' },
+    { value: fmt(releases.total_downloads), label: '⬇ Downloads' },
     { value: fmt(releases.release_count), label: '🏷 Releases' },
     { value: fmt(container.tagged_versions), label: '🐳 Container Tags' },
   ];
@@ -204,6 +206,9 @@
   const pathsCard = el('div', 'card full-width');
   pathsCard.appendChild(buildPathsTable(data));
   grid.appendChild(pathsCard);
+
+  // --- Release downloads chart ---
+  grid.appendChild(buildReleaseDownloadsChart(data));
 
   // --- Release timeline ---
   const timelineCard = el('div', 'card full-width');
@@ -480,6 +485,25 @@
     return wrapper;
   }
 
+  function buildReleaseDownloadsChart(data) {
+    const card = el('div', 'card');
+    const h = el('h2');
+    h.textContent = 'Release Downloads';
+    const badge = document.createElement('span');
+    badge.className = 'badge';
+    badge.textContent = 'total over time';
+    h.appendChild(badge);
+    card.appendChild(h);
+
+    const history = data.release_history || {};
+    const dates = Object.keys(history).sort();
+    if (dates.length === 0) { card.appendChild(emptyMsg('No release download history yet')); return card; }
+
+    const values = dates.map(d => history[d]?.total_downloads || 0);
+    card.appendChild(buildLineChart(dates, values, '#58a6ff'));
+    return card;
+  }
+
   function buildReleaseTimeline(data) {
     const wrapper = el('div');
     const h = el('h2');
@@ -518,6 +542,12 @@
         const date = el('div', 'timeline-date');
         date.textContent = isoDate(r.published_at);
         item.appendChild(date);
+      }
+
+      if (r.asset_downloads != null) {
+        const dl = el('div', 'timeline-downloads');
+        dl.textContent = `⬇ ${fmt(r.asset_downloads)} download${r.asset_downloads === 1 ? '' : 's'}`;
+        item.appendChild(dl);
       }
 
       timeline.appendChild(item);
