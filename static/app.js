@@ -9884,34 +9884,27 @@ function _openBugReport(e, context) {
     body.appendChild(previewToggle);
     body.appendChild(previewBox);
 
-    // Submission options (replaces old footer buttons)
+    // Email field (required for proxy submit)
+    var emailField = document.createElement('div');
+    emailField.className = 'bugreport-field';
+    emailField.innerHTML =
+        '<label for="br-email">Your email <small>(for follow-up on this report)</small></label>' +
+        '<input type="email" id="br-email" placeholder="your@email.com">' +
+        '<div class="field-error">Please enter a valid email address</div>';
+    body.appendChild(emailField);
+    var emailInput = emailField.querySelector('#br-email');
+
+    // Submission: dropdown + single submit button
     var submitSection = document.createElement('div');
     submitSection.className = 'bugreport-submit-section';
     submitSection.innerHTML =
-        '<div class="bugreport-submit-label">How would you like to submit?</div>' +
-        '<div class="bugreport-submit-options">' +
-        '<button class="bugreport-option bugreport-option-github" id="br-github-btn" disabled>' +
-        '<span class="bugreport-option-icon">🐙</span>' +
-        '<span class="bugreport-option-text">' +
-        '<strong>Open on GitHub</strong>' +
-        '<small>Requires a GitHub account</small>' +
-        '</span></button>' +
-        '<button class="bugreport-option bugreport-option-submit" id="br-submit-btn" disabled style="display:none">' +
-        '<span class="bugreport-option-icon">📨</span>' +
-        '<span class="bugreport-option-text">' +
-        '<strong>Submit Report</strong>' +
-        '<small>No account needed</small>' +
-        '</span></button>' +
-        '<button class="bugreport-option bugreport-option-copy" id="br-copy-btn" disabled>' +
-        '<span class="bugreport-option-icon">📋</span>' +
-        '<span class="bugreport-option-text">' +
-        '<strong>Copy to Clipboard</strong>' +
-        '<small>For forum, email, or discussion</small>' +
-        '</span></button>' +
-        '</div>' +
-        '<div class="bugreport-email-row" id="br-email-row" style="display:none">' +
-        '<label for="br-email">Email <small>(optional, for follow-up)</small></label>' +
-        '<input type="email" id="br-email" placeholder="your@email.com">' +
+        '<div class="bugreport-submit-row">' +
+        '<select class="bugreport-method-select" id="br-method">' +
+        '<option value="proxy" selected>📨 Submit report (no GitHub account needed)</option>' +
+        '<option value="github">🐙 Open on GitHub (requires account)</option>' +
+        '<option value="copy">📋 Copy to clipboard</option>' +
+        '</select>' +
+        '<button class="bugreport-submit-btn" id="br-submit-btn" disabled>Submit</button>' +
         '</div>' +
         '<div class="bugreport-status" id="br-status"></div>';
     body.appendChild(submitSection);
@@ -9931,24 +9924,38 @@ function _openBugReport(e, context) {
 
     // Validation
     var dataReady = false;
-    var githubBtn = submitSection.querySelector('#br-github-btn');
-    var proxyBtn = submitSection.querySelector('#br-submit-btn');
-    var copyBtn = submitSection.querySelector('#br-copy-btn');
-    var emailRow = submitSection.querySelector('#br-email-row');
+    var methodSelect = submitSection.querySelector('#br-method');
+    var submitBtn = submitSection.querySelector('#br-submit-btn');
     var statusEl = submitSection.querySelector('#br-status');
+    var proxyAvailable = false;
+
+    function _isEmailRequired() {
+        return methodSelect.value === 'proxy';
+    }
+
+    function _isEmailValid() {
+        var v = emailInput.value.trim();
+        if (!_isEmailRequired()) return true;
+        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+    }
 
     function validateForm() {
         var hasTitle = titleInput.value.trim().length >= 5;
         var hasDesc = descInput.value.trim().length >= 10;
-        var ready = dataReady && hasTitle && hasDesc;
-        githubBtn.disabled = !ready;
-        proxyBtn.disabled = !ready;
-        copyBtn.disabled = !ready;
+        var emailOk = _isEmailValid();
+        var methodOk = methodSelect.value !== 'proxy' || proxyAvailable;
+        var ready = dataReady && hasTitle && hasDesc && emailOk && methodOk;
+        submitBtn.disabled = !ready;
         if (titleInput.value.trim().length > 0) titleInput.classList.remove('invalid');
         if (descInput.value.trim().length > 0) descInput.classList.remove('invalid');
+        if (emailInput.value.trim().length > 0) emailInput.classList.remove('invalid');
+        // Toggle email required visual
+        emailField.style.display = methodSelect.value === 'copy' ? 'none' : '';
     }
     titleInput.addEventListener('input', validateForm);
     descInput.addEventListener('input', validateForm);
+    emailInput.addEventListener('input', validateForm);
+    methodSelect.addEventListener('change', validateForm);
 
     // Assemble and show
     overlay.appendChild(modal);
@@ -9965,10 +9972,22 @@ function _openBugReport(e, context) {
         .then(function(r) { return r.json(); })
         .then(function(d) {
             if (d.available) {
-                proxyBtn.style.display = '';
+                proxyAvailable = true;
+                validateForm();
+            } else {
+                // Proxy not available — remove proxy option, default to github
+                var proxyOpt = methodSelect.querySelector('option[value="proxy"]');
+                if (proxyOpt) proxyOpt.remove();
+                methodSelect.value = 'github';
+                validateForm();
             }
         })
-        .catch(function() { /* proxy not available, that's fine */ });
+        .catch(function() {
+            var proxyOpt = methodSelect.querySelector('option[value="proxy"]');
+            if (proxyOpt) proxyOpt.remove();
+            methodSelect.value = 'github';
+            validateForm();
+        });
 
     // Fetch diagnostics
     var reportShort = '';
@@ -10033,54 +10052,39 @@ function _openBugReport(e, context) {
     }
 
     function _wireUpButtons() {
-        // GitHub button — download diagnostics + open GitHub issue
-        githubBtn.onclick = function() {
-            if (githubBtn.disabled) return;
+        submitBtn.onclick = function() {
+            if (submitBtn.disabled) return;
+            var method = methodSelect.value;
             var title = titleInput.value.trim() || 'Bug report';
             var desc = descInput.value.trim();
-            var fullBody = _buildBugReportBody(title, desc, reportFull);
-            _downloadBugReport(fullBody, title);
-            var issueUrl = _buildGitHubIssueUrl(title, desc, reportData);
-            window.open(issueUrl, '_blank');
-            showToast('Report downloaded — attach the file to the GitHub issue', 'info');
-            overlay.remove();
-            document.removeEventListener('keydown', onEsc);
-        };
+            var email = emailInput.value.trim();
 
-        // Copy button
-        copyBtn.onclick = function() {
-            if (copyBtn.disabled) return;
-            var fullBody = _buildBugReportBody(titleInput.value, descInput.value, reportFull);
-            _copyToClipboard(fullBody).then(function() {
-                showToast('Report copied to clipboard', 'info');
-            }).catch(function() {
-                showToast('Could not copy to clipboard', 'error');
-            });
-        };
-
-        // Submit via proxy button — two-step: first shows email row, second submits
-        var proxyReady = false;
-        proxyBtn.onclick = function() {
-            if (proxyBtn.disabled) return;
-            if (!proxyReady) {
-                emailRow.style.display = '';
-                proxyReady = true;
-                proxyBtn.querySelector('.bugreport-option-text strong').textContent = 'Send Now';
-                proxyBtn.querySelector('.bugreport-option-text small').textContent = 'Click again to submit';
-                var emailInput = emailRow.querySelector('#br-email');
-                if (emailInput) emailInput.focus();
+            if (method === 'github') {
+                var fullBody = _buildBugReportBody(title, desc, reportFull);
+                _downloadBugReport(fullBody, title);
+                var issueUrl = _buildGitHubIssueUrl(title, desc, reportData);
+                window.open(issueUrl, '_blank');
+                showToast('Report downloaded — attach the file to the GitHub issue', 'info');
+                overlay.remove();
+                document.removeEventListener('keydown', onEsc);
                 return;
             }
 
-            // Submit to proxy
-            proxyBtn.classList.add('is-loading');
-            proxyBtn.querySelector('.bugreport-option-icon').textContent = '⏳';
+            if (method === 'copy') {
+                var fullBodyCopy = _buildBugReportBody(title, desc, reportFull);
+                _copyToClipboard(fullBodyCopy).then(function() {
+                    showToast('Report copied to clipboard', 'info');
+                }).catch(function() {
+                    showToast('Could not copy to clipboard', 'error');
+                });
+                return;
+            }
+
+            // Proxy submit
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Submitting…';
             statusEl.className = 'bugreport-status';
             statusEl.style.display = 'none';
-
-            var title = titleInput.value.trim();
-            var desc = descInput.value.trim();
-            var email = (emailRow.querySelector('#br-email') || {}).value || '';
 
             fetch(API_BASE + '/api/bugreport/submit', {
                 method: 'POST',
@@ -10088,32 +10092,32 @@ function _openBugReport(e, context) {
                 body: JSON.stringify({
                     title: title,
                     description: desc,
-                    email: email.trim(),
+                    email: email,
                     diagnostics_text: reportFull
                 })
             })
             .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
             .then(function(result) {
-                proxyBtn.classList.remove('is-loading');
                 if (result.ok && result.data.success) {
-                    proxyBtn.classList.add('is-success');
-                    proxyBtn.querySelector('.bugreport-option-icon').textContent = '✓';
-                    proxyBtn.querySelector('.bugreport-option-text strong').textContent = 'Submitted';
-                    proxyBtn.querySelector('.bugreport-option-text small').textContent = '#' + result.data.issue_number;
-                    proxyBtn.disabled = true;
+                    submitBtn.textContent = '✓ Submitted #' + result.data.issue_number;
+                    submitBtn.classList.add('is-success');
                     statusEl.className = 'bugreport-status is-success';
                     statusEl.innerHTML = 'Issue created: <a href="' + result.data.issue_url + '" target="_blank">#' + result.data.issue_number + '</a>';
+                    statusEl.style.display = '';
                 } else {
-                    proxyBtn.querySelector('.bugreport-option-icon').textContent = '📨';
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Submit';
                     statusEl.className = 'bugreport-status is-error';
                     statusEl.textContent = result.data.error || 'Failed to create issue';
+                    statusEl.style.display = '';
                 }
             })
             .catch(function() {
-                proxyBtn.classList.remove('is-loading');
-                proxyBtn.querySelector('.bugreport-option-icon').textContent = '📨';
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Submit';
                 statusEl.className = 'bugreport-status is-error';
-                statusEl.textContent = 'Network error. Please try the Copy option instead.';
+                statusEl.textContent = 'Network error. Please try Copy to clipboard instead.';
+                statusEl.style.display = '';
             });
         };
     }

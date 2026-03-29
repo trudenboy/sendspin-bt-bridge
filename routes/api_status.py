@@ -1852,6 +1852,8 @@ def api_bugreport_submit():
             jsonify({"success": False, "error": "Description must be less than 5000 characters"}),
             400,
         )
+    if not email or "@" not in email:
+        return jsonify({"success": False, "error": "A valid email address is required"}), 400
 
     # Rate limit
     client_ip = request.headers.get("X-Forwarded-For", request.remote_addr or "unknown").split(",")[0].strip()
@@ -1862,9 +1864,8 @@ def api_bugreport_submit():
     # Build issue body
     body_parts = [
         "_Submitted via Sendspin bridge web UI (no GitHub account)._\n",
+        f"**Contact:** {email}\n",
     ]
-    if email:
-        body_parts.append(f"**Contact:** {email}\n")
 
     body_parts.append(f"## Description\n\n{description}\n")
 
