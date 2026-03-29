@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.52.0-rc.2] - 2026-03-30
+
+### Fixed
+- HA Addon AppArmor profile: add `dbus,` and `network raw,` rules for HA Supervised on Ubuntu 24.04+ (#114)
+- Docker build: replace `PyJWT[crypto]` with separate `PyJWT` + `cryptography` deps to fix pip constraints error
+
+## [2.52.0-rc.1] - 2026-03-30
+
+### Added
+- Bug report modal: GitHub App proxy for users without GitHub accounts — submit issues directly from the bridge UI
+- Backend proxy `/api/bugreport/submit` with JWT auth, per-IP (3/hr) and global (20/day) rate limiting
+- New dependency: `PyJWT>=2.8.0` + `cryptography>=3.4.0` for GitHub App RS256 JWT signing
+
+### Changed
+- Bug report modal: replaced three submission cards with a compact dropdown + single Submit button
+- Email is now required for proxy submissions (for follow-up contact)
+- Email field hidden when "Copy to clipboard" method is selected
+
+## [2.51.1-rc.3] - 2026-03-29
+
+### Added
+- Bug report modal: three submission paths — Open on GitHub, Submit Report (no account needed via GitHub App proxy), Copy to Clipboard
+- Backend proxy `/api/bugreport/submit` creates GitHub issues via GitHub App JWT auth with per-IP (3/hr) and global (20/day) rate limiting
+- Two-step submit flow with optional email field for follow-up contact
+- New dependency: `PyJWT[crypto]>=2.8.0` for GitHub App RS256 JWT signing
+
 ## [2.51.1-rc.2] - 2026-03-29
 
 ### Added
