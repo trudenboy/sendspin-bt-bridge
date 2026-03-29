@@ -43,6 +43,18 @@ description: Решение частых проблем Sendspin Bluetooth Bridg
 
 Если прямой порт не отвечает, проверьте, не занят ли он другим сервисом, и после изменения значения выполните **Save & Restart**.
 
+## Bluetooth недоступен на HA Supervised + Ubuntu
+
+Если аддон не видит и не может управлять Bluetooth-адаптером на **HA Supervised под Ubuntu 24.04+**, host AppArmor блокирует raw HCI socket и D-Bus доступ.
+
+Симптомы: адаптер показывается как выключенный, `bluetoothctl` внутри аддона не может ни перечислить, ни спарить устройства, в логах ошибки Bluetooth permissions.
+
+**Исправлено (v2.52.0+):** обновите аддон — AppArmor профиль теперь включает правила `dbus,` и `network raw,`, нужные для строгих defaults Ubuntu 24.04.
+
+**Standalone Docker на Ubuntu:** в `docker-compose.yml` уже есть `security_opt: apparmor:unconfined, seccomp:unconfined`. Если вы писали compose вручную — добавьте эти строки.
+
+**HAOS** не затронута — минимальная политика безопасности не ограничивает Bluetooth.
+
 ## Bluetooth не подключается
 
 1. Устройство действительно спарено на уровне хоста.

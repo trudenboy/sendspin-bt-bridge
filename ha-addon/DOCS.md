@@ -304,6 +304,9 @@ Home Assistant browser session.
    or Core installations.
 2. Check the Log tab for error messages about missing D-Bus or PulseAudio
    sockets.
+3. If running **HA Supervised on Ubuntu 24.04+**, the host AppArmor may block
+   Bluetooth access. Update to v2.52.0+ — the addon's AppArmor profile now
+   includes `dbus` and `network raw` rules required by Ubuntu's strict defaults.
 
 ## Known Issues & Limitations
 

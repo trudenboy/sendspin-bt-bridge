@@ -143,6 +143,16 @@ Required capabilities:
 | `NET_ADMIN` | Bluetooth adapter control |
 | `NET_RAW` | Raw Bluetooth/HCI socket access |
 
+On **Ubuntu 24.04+** and other hosts with strict AppArmor/seccomp defaults, add `security_opt` to avoid Bluetooth permission errors:
+
+```yaml
+security_opt:
+  - apparmor:unconfined
+  - seccomp:unconfined
+```
+
+This is already included in the project's `docker-compose.yml`. HAOS and other minimal OSes ignore these options safely.
+
 <Aside type="caution">
   `privileged: true` is not required for the standard Docker deployment shown above.
 </Aside>

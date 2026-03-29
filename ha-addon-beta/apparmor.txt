@@ -6,6 +6,7 @@ profile sendspin_bt_bridge_beta flags=(attach_disconnected,mediate_deleted) {
   # and restrict via capabilities and network rules instead.
   file,
   signal,
+  dbus,
 
   capability net_admin,
   capability net_raw,
@@ -20,6 +21,7 @@ profile sendspin_bt_bridge_beta flags=(attach_disconnected,mediate_deleted) {
   network inet6 stream,
   network inet6 dgram,
   network bluetooth,
+  network raw,
   network netlink raw,
   network unix dgram,
   network unix stream,

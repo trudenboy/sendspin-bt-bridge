@@ -105,6 +105,12 @@ This is useful for direct diagnostics or API access, but ingress remains the pri
 
 The addon requests `audio: true`, so Home Assistant injects the audio bridge automatically. No manual PulseAudio or PipeWire socket mount is required.
 
+## HA Supervised on Ubuntu
+
+If you run **HA Supervised on Ubuntu 24.04+**, the host AppArmor may block Bluetooth access even though the addon has its own AppArmor profile. The addon profile (v2.52.0+) includes `dbus,` and `network raw,` rules to work around this.
+
+If you are on an older addon version and cannot update yet, see the [Troubleshooting](/troubleshooting/#bluetooth-not-accessible-on-ha-supervised--ubuntu) page for a manual workaround.
+
 ## Applying configuration changes
 
 Changes to devices, adapters, `web_port`, `base_listen_port`, and Music Assistant connection settings take effect after a restart. Use **Restart** on the addon page or **Save & Restart** in the web UI.

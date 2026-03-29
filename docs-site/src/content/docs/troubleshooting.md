@@ -46,6 +46,27 @@ If the device has no explicit `listen_port`, remember that the runtime uses **`B
 
 If a direct port does not respond, check for another service already bound to that port and use **Save & Restart** after changing the setting.
 
+## Bluetooth not accessible on HA Supervised + Ubuntu
+
+If the addon cannot see or control the Bluetooth adapter on **HA Supervised running on Ubuntu 24.04+**, the host AppArmor profile is likely blocking raw HCI socket and D-Bus access.
+
+Symptoms: adapter shows as powered off, `bluetoothctl` inside the addon cannot list or pair devices, logs show permission errors for Bluetooth operations.
+
+**Fix (v2.52.0+):** Update the addon — the AppArmor profile now includes `dbus,` and `network raw,` rules required by Ubuntu 24.04's strict defaults.
+
+**Workaround for older versions:** On the host, temporarily set the addon container's AppArmor profile to unconfined:
+
+```bash
+sudo aa-status | grep sendspin        # confirm the profile name
+sudo apparmor_parser -R /etc/apparmor.d/<profile>   # remove it
+```
+
+Then restart the addon. This is a temporary measure — updating is the correct fix.
+
+**Standalone Docker on Ubuntu:** The `docker-compose.yml` already includes `security_opt: apparmor:unconfined, seccomp:unconfined`. If you wrote your own compose file, add those lines.
+
+**HAOS** is not affected — it uses a minimal security policy that does not restrict Bluetooth.
+
 ## Bluetooth does not connect
 
 1. Confirm the speaker is paired at the host level.
