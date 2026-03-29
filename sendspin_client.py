@@ -7,7 +7,6 @@ Runs the sendspin CLI player with Bluetooth speaker management
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import json
 import logging
 import os
@@ -334,21 +333,15 @@ class SendspinClient:
 
         self._status_lock = threading.Lock()
         self.running = False
-        # Compute player_id eagerly from BT MAC (stable UUID5)
+        # Compute player_id: stable UUID5 from MAC (preferred) or player name
         _mac = bt_manager.mac_address if bt_manager else None
         safe_id = "".join(c if c.isalnum() or c == "-" else "-" for c in player_name.lower()).strip("-")
         self._safe_id = safe_id
-        if _mac:
-            self.player_id: str = _player_id_from_mac(_mac)
-        else:
-            # mDNS labels must be ≤63 bytes; truncate + hash suffix for uniqueness
-            _MAX_MDNS_LABEL = 63
-            candidate = f"sendspin-{safe_id}"
-            if len(candidate.encode()) > _MAX_MDNS_LABEL:
-                _hash = hashlib.sha256(safe_id.encode()).hexdigest()[:8]
-                _prefix_budget = _MAX_MDNS_LABEL - len(f"sendspin--{_hash}")
-                candidate = f"sendspin-{safe_id[:_prefix_budget]}-{_hash}"
-            self.player_id = candidate
+        self.player_id: str = (
+            _player_id_from_mac(_mac)
+            if _mac
+            else str(__import__("uuid").uuid5(__import__("uuid").NAMESPACE_DNS, player_name.lower()))
+        )
         self.bt_management_enabled: bool = True
         self.bluetooth_sink_name: str | None = None  # Store Bluetooth sink name for volume sync
         self.connected_server_url: str = ""  # actual resolved ws:// URL (populated after connect)
