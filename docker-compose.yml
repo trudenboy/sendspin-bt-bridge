@@ -46,7 +46,13 @@ services:
     cap_add:
       - NET_ADMIN   # Bluetooth adapter control
       - NET_RAW     # Raw BT/HCI socket access
-      # SYS_ADMIN removed — not needed for D-Bus/rfkill (handled via socket mount)
+
+    # Required on Ubuntu/Debian hosts where default AppArmor/seccomp profiles
+    # block raw Bluetooth HCI socket access even with the capabilities above.
+    # Safe to keep on all systems — HAOS and other minimal OSes are unaffected.
+    security_opt:
+      - apparmor:unconfined
+      - seccomp:unconfined
 
     labels:
       - "com.centurylinklabs.watchtower.enable=true"

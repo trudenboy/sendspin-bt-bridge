@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.51.1-rc.1] - 2026-03-29
+
+### Fixed
+- Docker Compose: add `security_opt: apparmor:unconfined, seccomp:unconfined` so Bluetooth works on Ubuntu/Debian hosts without `privileged: true` (#114)
+
 ## [2.51.0] - 2026-03-29
 
 ### Added
