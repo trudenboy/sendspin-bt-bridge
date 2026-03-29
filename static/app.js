@@ -9826,7 +9826,7 @@ function _openBugReport(e, context) {
     hint.className = 'bugreport-hint';
     hint.innerHTML =
         '<span class="bugreport-hint-icon">' + _BR_ICON_INFO + '</span>' +
-        '<span>A diagnostics file will download and a GitHub issue will open — drag the file into the issue to attach it.</span>';
+        '<span>Diagnostics are collected automatically. Choose a submission method below.</span>';
     body.appendChild(hint);
 
     // Title field
@@ -9884,42 +9884,68 @@ function _openBugReport(e, context) {
     body.appendChild(previewToggle);
     body.appendChild(previewBox);
 
+    // Submission options (replaces old footer buttons)
+    var submitSection = document.createElement('div');
+    submitSection.className = 'bugreport-submit-section';
+    submitSection.innerHTML =
+        '<div class="bugreport-submit-label">How would you like to submit?</div>' +
+        '<div class="bugreport-submit-options">' +
+        '<button class="bugreport-option bugreport-option-github" id="br-github-btn" disabled>' +
+        '<span class="bugreport-option-icon">🐙</span>' +
+        '<span class="bugreport-option-text">' +
+        '<strong>Open on GitHub</strong>' +
+        '<small>Requires a GitHub account</small>' +
+        '</span></button>' +
+        '<button class="bugreport-option bugreport-option-submit" id="br-submit-btn" disabled style="display:none">' +
+        '<span class="bugreport-option-icon">📨</span>' +
+        '<span class="bugreport-option-text">' +
+        '<strong>Submit Report</strong>' +
+        '<small>No account needed</small>' +
+        '</span></button>' +
+        '<button class="bugreport-option bugreport-option-copy" id="br-copy-btn" disabled>' +
+        '<span class="bugreport-option-icon">📋</span>' +
+        '<span class="bugreport-option-text">' +
+        '<strong>Copy to Clipboard</strong>' +
+        '<small>For forum, email, or discussion</small>' +
+        '</span></button>' +
+        '</div>' +
+        '<div class="bugreport-email-row" id="br-email-row" style="display:none">' +
+        '<label for="br-email">Email <small>(optional, for follow-up)</small></label>' +
+        '<input type="email" id="br-email" placeholder="your@email.com">' +
+        '</div>' +
+        '<div class="bugreport-status" id="br-status"></div>';
+    body.appendChild(submitSection);
+
     modal.appendChild(body);
 
-    // Footer with actions
+    // Footer with Cancel
     var footer = document.createElement('div');
     footer.className = 'bugreport-footer';
-
     var cancelBtn = document.createElement('button');
     cancelBtn.className = 'bugreport-btn secondary';
     cancelBtn.textContent = 'Cancel';
-    cancelBtn.onclick = function() { overlay.remove(); };
+    cancelBtn.onclick = function() { overlay.remove(); document.removeEventListener('keydown', onEsc); };
     footer.appendChild(cancelBtn);
-
-    var copyBtn = document.createElement('button');
-    copyBtn.className = 'bugreport-btn secondary';
-    copyBtn.innerHTML = '<span class="bugreport-btn-icon">' + _BR_ICON_COPY + '</span> Copy';
-    copyBtn.style.display = 'none';
-    footer.appendChild(copyBtn);
-
-    var submitBtn = document.createElement('button');
-    submitBtn.className = 'bugreport-btn primary btn-disabled';
-    submitBtn.innerHTML = '<span class="bugreport-spinner"></span> Loading…';
-    submitBtn._formValid = false;
-    footer.appendChild(submitBtn);
 
     modal.appendChild(footer);
 
     // Validation
     var dataReady = false;
+    var githubBtn = submitSection.querySelector('#br-github-btn');
+    var proxyBtn = submitSection.querySelector('#br-submit-btn');
+    var copyBtn = submitSection.querySelector('#br-copy-btn');
+    var emailRow = submitSection.querySelector('#br-email-row');
+    var statusEl = submitSection.querySelector('#br-status');
+
     function validateForm() {
-        var hasTitle = titleInput.value.trim().length > 0;
-        var hasDesc = descInput.value.trim().length > 0;
+        var hasTitle = titleInput.value.trim().length >= 5;
+        var hasDesc = descInput.value.trim().length >= 10;
         var ready = dataReady && hasTitle && hasDesc;
-        submitBtn.classList.toggle('btn-disabled', !ready);
-        submitBtn._formValid = ready;
-        if (hasTitle) titleInput.classList.remove('invalid');
-        if (hasDesc) descInput.classList.remove('invalid');
+        githubBtn.disabled = !ready;
+        proxyBtn.disabled = !ready;
+        copyBtn.disabled = !ready;
+        if (titleInput.value.trim().length > 0) titleInput.classList.remove('invalid');
+        if (descInput.value.trim().length > 0) descInput.classList.remove('invalid');
     }
     titleInput.addEventListener('input', validateForm);
     descInput.addEventListener('input', validateForm);
@@ -9934,10 +9960,164 @@ function _openBugReport(e, context) {
     function onEsc(ev) { if (ev.key === 'Escape') { overlay.remove(); document.removeEventListener('keydown', onEsc); } }
     document.addEventListener('keydown', onEsc);
 
+    // Check proxy availability
+    fetch(API_BASE + '/api/bugreport/proxy-available')
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            if (d.available) {
+                proxyBtn.style.display = '';
+            }
+        })
+        .catch(function() { /* proxy not available, that's fine */ });
+
     // Fetch diagnostics
     var reportShort = '';
     var reportFull = '';
     var reportData = null;
+
+    function _buildGitHubIssueUrl(title, desc, rep) {
+        var env = (rep || {}).environment || {};
+        var diag = (rep || {}).diagnostics || {};
+        var runtime = (rep || {}).runtime || '';
+        var runtimeMap = { ha_addon: 'Home Assistant Addon', docker: 'Docker Compose', systemd: 'Proxmox LXC' };
+        var deployment = runtimeMap[runtime] || '';
+        var info = [];
+        if (env.platform) info.push('OS:       ' + env.platform);
+        if (env.kernel) info.push('Kernel:   ' + env.kernel);
+        if (env.audio_server) info.push('Audio:    ' + env.audio_server);
+        var adapters = diag.adapters || [];
+        if (adapters.length) {
+            info.push('BT:       ' + adapters.map(function(a) {
+                return (a.id || '') + ' ' + (a.mac || '');
+            }).join(', ').trim());
+        }
+        if (env.python) info.push('Python:   ' + env.python.split(' ')[0]);
+        if (env.bluez) info.push('BlueZ:    ' + env.bluez);
+        var uptime = ((rep || {}).uptime || '?').replace(/\.\d+$/, '');
+        info.push('Uptime:   ' + uptime);
+        info.push('RAM:      ' + (env.process_rss_mb || '?') + ' MB');
+        var devices = diag.devices || [];
+        var devParts = [String(devices.length || 1)];
+        devices.forEach(function(d) {
+            devParts.push('  ' + (d.name || d.mac) + ': ' +
+                (d.connected ? 'connected' : 'disconnected') +
+                ', sink=' + (d.sink || 'none'));
+        });
+        info.push('Devices:  ' + devParts.join('\n'));
+        var ma = diag.ma_integration || {};
+        if (ma.configured) {
+            info.push('MA:       ' + (ma.connected ? 'connected' : 'disconnected') +
+                (ma.version ? ' v' + ma.version : '') +
+                ', ' + ((ma.syncgroups || []).length) + ' group(s)');
+        }
+        var systemInfo = info.join('\n');
+        var issueLines = (rep || {}).recent_issue_logs || [];
+        var recentErrors = issueLines.slice(-3).map(function(l) {
+            var m = l.match(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d+ - .+/);
+            return m ? m[0] : l;
+        }).join('\n');
+        var versionStr = (rep || {}).version || '';
+        if ((rep || {}).build_date) versionStr += ' (' + rep.build_date + ')';
+        var params = [
+            'template=bug_report_auto.yml',
+            'title=' + encodeURIComponent(title),
+            'description=' + encodeURIComponent(desc),
+            'version=' + encodeURIComponent(versionStr),
+            'diagnostics=' + encodeURIComponent('📎 Drag and drop the downloaded diagnostics file here'),
+            'additional=' + encodeURIComponent('Submitted via web UI Report button')
+        ];
+        if (deployment) params.push('deployment=' + encodeURIComponent(deployment));
+        if (systemInfo) params.push('system_info=' + encodeURIComponent(systemInfo));
+        if (recentErrors) params.push('recent_errors=' + encodeURIComponent(recentErrors));
+        return 'https://github.com/trudenboy/sendspin-bt-bridge/issues/new?' + params.join('&');
+    }
+
+    function _wireUpButtons() {
+        // GitHub button — download diagnostics + open GitHub issue
+        githubBtn.onclick = function() {
+            if (githubBtn.disabled) return;
+            var title = titleInput.value.trim() || 'Bug report';
+            var desc = descInput.value.trim();
+            var fullBody = _buildBugReportBody(title, desc, reportFull);
+            _downloadBugReport(fullBody, title);
+            var issueUrl = _buildGitHubIssueUrl(title, desc, reportData);
+            window.open(issueUrl, '_blank');
+            showToast('Report downloaded — attach the file to the GitHub issue', 'info');
+            overlay.remove();
+            document.removeEventListener('keydown', onEsc);
+        };
+
+        // Copy button
+        copyBtn.onclick = function() {
+            if (copyBtn.disabled) return;
+            var fullBody = _buildBugReportBody(titleInput.value, descInput.value, reportFull);
+            _copyToClipboard(fullBody).then(function() {
+                showToast('Report copied to clipboard', 'info');
+            }).catch(function() {
+                showToast('Could not copy to clipboard', 'error');
+            });
+        };
+
+        // Submit via proxy button — two-step: first shows email row, second submits
+        var proxyReady = false;
+        proxyBtn.onclick = function() {
+            if (proxyBtn.disabled) return;
+            if (!proxyReady) {
+                emailRow.style.display = '';
+                proxyReady = true;
+                proxyBtn.querySelector('.bugreport-option-text strong').textContent = 'Send Now';
+                proxyBtn.querySelector('.bugreport-option-text small').textContent = 'Click again to submit';
+                var emailInput = emailRow.querySelector('#br-email');
+                if (emailInput) emailInput.focus();
+                return;
+            }
+
+            // Submit to proxy
+            proxyBtn.classList.add('is-loading');
+            proxyBtn.querySelector('.bugreport-option-icon').textContent = '⏳';
+            statusEl.className = 'bugreport-status';
+            statusEl.style.display = 'none';
+
+            var title = titleInput.value.trim();
+            var desc = descInput.value.trim();
+            var email = (emailRow.querySelector('#br-email') || {}).value || '';
+
+            fetch(API_BASE + '/api/bugreport/submit', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title: title,
+                    description: desc,
+                    email: email.trim(),
+                    diagnostics_text: reportFull
+                })
+            })
+            .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+            .then(function(result) {
+                proxyBtn.classList.remove('is-loading');
+                if (result.ok && result.data.success) {
+                    proxyBtn.classList.add('is-success');
+                    proxyBtn.querySelector('.bugreport-option-icon').textContent = '✓';
+                    proxyBtn.querySelector('.bugreport-option-text strong').textContent = 'Submitted';
+                    proxyBtn.querySelector('.bugreport-option-text small').textContent = '#' + result.data.issue_number;
+                    proxyBtn.disabled = true;
+                    statusEl.className = 'bugreport-status is-success';
+                    statusEl.innerHTML = 'Issue created: <a href="' + result.data.issue_url + '" target="_blank">#' + result.data.issue_number + '</a>';
+                } else {
+                    proxyBtn.querySelector('.bugreport-option-icon').textContent = '📨';
+                    statusEl.className = 'bugreport-status is-error';
+                    statusEl.textContent = result.data.error || 'Failed to create issue';
+                }
+            })
+            .catch(function() {
+                proxyBtn.classList.remove('is-loading');
+                proxyBtn.querySelector('.bugreport-option-icon').textContent = '📨';
+                statusEl.className = 'bugreport-status is-error';
+                statusEl.textContent = 'Network error. Please try the Copy option instead.';
+            });
+        };
+    }
+
     fetch(API_BASE + '/api/bugreport')
         .then(function(r) { return r.json(); })
         .then(function(data) {
@@ -9949,132 +10129,15 @@ function _openBugReport(e, context) {
                 descInput.value = suggestedDescription;
             }
             previewBox.textContent = reportFull || 'No data available';
-            submitBtn.innerHTML = '<span class="bugreport-btn-icon">' + _BR_ICON_GITHUB + '</span> Submit to GitHub';
             dataReady = true;
             validateForm();
-            copyBtn.style.display = '';
-
-            copyBtn.onclick = function() {
-                var fullBody = _buildBugReportBody(titleInput.value, descInput.value, reportFull);
-                _copyToClipboard(fullBody).then(function() {
-                    showToast('Report copied to clipboard', 'info');
-                }).catch(function() {
-                    showToast('Could not copy to clipboard', 'error');
-                });
-            };
-
-            submitBtn.onclick = function() {
-                if (!submitBtn._formValid) {
-                    var _hasTitle = titleInput.value.trim().length > 0;
-                    var _hasDesc = descInput.value.trim().length > 0;
-                    if (!_hasTitle) { titleInput.classList.add('invalid'); titleInput.focus(); }
-                    if (!_hasDesc) { descInput.classList.add('invalid'); }
-                    return;
-                }
-                var title = titleInput.value.trim() || 'Bug report';
-                var desc = descInput.value.trim();
-                var fullBody = _buildBugReportBody(title, desc, reportFull);
-
-                _downloadBugReport(fullBody, title);
-
-                var rep = reportData || {};
-                var env = rep.environment || {};
-                var diag = rep.diagnostics || {};
-                var runtime = rep.runtime || '';
-
-                var runtimeMap = {
-                    ha_addon: 'Home Assistant Addon',
-                    docker: 'Docker Compose',
-                    systemd: 'Proxmox LXC'
-                };
-                var deployment = runtimeMap[runtime] || '';
-
-                var info = [];
-                if (env.platform) info.push('OS:       ' + env.platform);
-                if (env.kernel) info.push('Kernel:   ' + env.kernel);
-                if (env.audio_server) info.push('Audio:    ' + env.audio_server);
-                var adapters = diag.adapters || [];
-                if (adapters.length) {
-                    info.push('BT:       ' + adapters.map(function(a) {
-                        return (a.id || '') + ' ' + (a.mac || '');
-                    }).join(', ').trim());
-                }
-                if (env.python) info.push('Python:   ' + env.python.split(' ')[0]);
-                if (env.bluez) info.push('BlueZ:    ' + env.bluez);
-
-                var uptime = (rep.uptime || '?').replace(/\.\d+$/, '');
-                info.push('Uptime:   ' + uptime);
-                info.push('RAM:      ' + (env.process_rss_mb || '?') + ' MB');
-
-                var devices = diag.devices || [];
-                var devParts = [String(devices.length || 1)];
-                devices.forEach(function(d) {
-                    devParts.push('  ' + (d.name || d.mac) + ': ' +
-                        (d.connected ? 'connected' : 'disconnected') +
-                        ', sink=' + (d.sink || 'none'));
-                });
-                info.push('Devices:  ' + devParts.join('\n'));
-
-                var ma = diag.ma_integration || {};
-                if (ma.configured) {
-                    info.push('MA:       ' + (ma.connected ? 'connected' : 'disconnected') +
-                        (ma.version ? ' v' + ma.version : '') +
-                        ', ' + ((ma.syncgroups || []).length) + ' group(s)');
-                }
-                var systemInfo = info.join('\n');
-
-                var issueLines = rep.recent_issue_logs || [];
-                var recentErrors = issueLines.slice(-3).map(function(l) {
-                    var m = l.match(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d+ - .+/);
-                    return m ? m[0] : l;
-                }).join('\n');
-
-                var versionStr = rep.version || '';
-                if (rep.build_date) versionStr += ' (' + rep.build_date + ')';
-
-                var params = [
-                    'template=bug_report_auto.yml',
-                    'title=' + encodeURIComponent(title),
-                    'description=' + encodeURIComponent(desc),
-                    'version=' + encodeURIComponent(versionStr),
-                    'diagnostics=' + encodeURIComponent('📎 Drag and drop the downloaded diagnostics file here'),
-                    'additional=' + encodeURIComponent('Submitted via web UI Report button')
-                ];
-                if (deployment) params.push('deployment=' + encodeURIComponent(deployment));
-                if (systemInfo) params.push('system_info=' + encodeURIComponent(systemInfo));
-                if (recentErrors) params.push('recent_errors=' + encodeURIComponent(recentErrors));
-
-                var issueUrl = 'https://github.com/trudenboy/sendspin-bt-bridge/issues/new?' + params.join('&');
-
-                window.open(issueUrl, '_blank');
-                showToast('Report downloaded — attach the file to the GitHub issue', 'info');
-                overlay.remove();
-                document.removeEventListener('keydown', onEsc);
-            };
+            _wireUpButtons();
         })
         .catch(function() {
             previewBox.textContent = 'Failed to load diagnostics';
-            submitBtn.innerHTML = '<span class="bugreport-btn-icon">' + _BR_ICON_GITHUB + '</span> Submit to GitHub';
             dataReady = true;
             validateForm();
-            submitBtn.onclick = function() {
-                if (!submitBtn._formValid) {
-                    var _hasTitle = titleInput.value.trim().length > 0;
-                    var _hasDesc = descInput.value.trim().length > 0;
-                    if (!_hasTitle) { titleInput.classList.add('invalid'); titleInput.focus(); }
-                    if (!_hasDesc) { descInput.classList.add('invalid'); }
-                    return;
-                }
-                var title = titleInput.value.trim() || 'Bug report';
-                var desc = descInput.value.trim();
-                var issueUrl = 'https://github.com/trudenboy/sendspin-bt-bridge/issues/new'
-                    + '?template=bug_report_auto.yml'
-                    + '&title=' + encodeURIComponent(title)
-                    + '&description=' + encodeURIComponent(desc + '\n\n_Diagnostics could not be loaded._');
-                window.open(issueUrl, '_blank');
-                overlay.remove();
-                document.removeEventListener('keydown', onEsc);
-            };
+            _wireUpButtons();
         });
 
     return false;

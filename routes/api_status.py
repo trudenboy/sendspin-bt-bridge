@@ -1811,3 +1811,96 @@ def api_preflight():
     payload = _collect_preflight_status()
     payload["ok"] = True
     return jsonify(payload)
+
+
+@status_bp.route("/api/bugreport/proxy-available")
+def api_bugreport_proxy_available():
+    """Check if the GitHub issue creation proxy is available."""
+    from services.github_issue_proxy import get_issue_proxy
+
+    proxy = get_issue_proxy()
+    return jsonify({"available": proxy.available})
+
+
+@status_bp.route("/api/bugreport/submit", methods=["POST"])
+def api_bugreport_submit():
+    """Create a GitHub issue via the App proxy (for users without GitHub accounts)."""
+    from services.github_issue_proxy import get_issue_proxy
+
+    proxy = get_issue_proxy()
+    if not proxy.available:
+        return jsonify({"success": False, "error": "Issue proxy not configured"}), 503
+
+    data = request.get_json(silent=True) or {}
+    title = (data.get("title") or "").strip()
+    description = (data.get("description") or "").strip()
+    email = (data.get("email") or "").strip()
+    diagnostics_text = (data.get("diagnostics_text") or "").strip()
+
+    # Validation
+    if not title or len(title) < 5:
+        return jsonify({"success": False, "error": "Title must be at least 5 characters"}), 400
+    if len(title) > 200:
+        return jsonify({"success": False, "error": "Title must be less than 200 characters"}), 400
+    if not description or len(description) < 10:
+        return (
+            jsonify({"success": False, "error": "Description must be at least 10 characters"}),
+            400,
+        )
+    if len(description) > 5000:
+        return (
+            jsonify({"success": False, "error": "Description must be less than 5000 characters"}),
+            400,
+        )
+
+    # Rate limit
+    client_ip = request.headers.get("X-Forwarded-For", request.remote_addr or "unknown").split(",")[0].strip()
+    rate_error = proxy.check_rate_limit(client_ip)
+    if rate_error:
+        return jsonify({"success": False, "error": rate_error}), 429
+
+    # Build issue body
+    body_parts = [
+        "_Submitted via Sendspin bridge web UI (no GitHub account)._\n",
+    ]
+    if email:
+        body_parts.append(f"**Contact:** {email}\n")
+
+    body_parts.append(f"## Description\n\n{description}\n")
+
+    if diagnostics_text:
+        # Truncate diagnostics to fit GitHub's 65536 char limit
+        max_diag = 60000 - len("\n".join(body_parts))
+        if len(diagnostics_text) > max_diag:
+            diagnostics_text = diagnostics_text[:max_diag] + "\n\n... (truncated)"
+        body_parts.append(
+            f"## Diagnostics\n\n<details><summary>Click to expand</summary>\n\n"
+            f"```\n{diagnostics_text}\n```\n\n</details>\n"
+        )
+
+    body = "\n".join(body_parts)
+
+    try:
+        result = proxy.create_issue(
+            title=title,
+            body=body,
+            labels=["submitted-via-bridge"],
+        )
+        return jsonify(
+            {
+                "success": True,
+                "issue_url": result["html_url"],
+                "issue_number": result["number"],
+            }
+        )
+    except Exception:
+        logger.exception("Failed to create GitHub issue via proxy")
+        return (
+            jsonify(
+                {
+                    "success": False,
+                    "error": "Failed to create issue. Please try the Copy option instead.",
+                }
+            ),
+            502,
+        )

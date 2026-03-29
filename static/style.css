@@ -447,6 +447,123 @@ body {
             animation: spin 0.8s linear infinite;
         }
 
+        /* Bug Report Modal — submission options */
+        .bugreport-submit-section {
+            margin-top: 16px;
+            border-top: 1px solid var(--divider-color, rgba(0,0,0,.12));
+            padding-top: 16px;
+        }
+        .bugreport-submit-label {
+            font-size: 12px;
+            color: var(--secondary-text-color, #666);
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .bugreport-submit-options {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .bugreport-option {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            border: 1px solid var(--divider-color, rgba(0,0,0,.12));
+            border-radius: 8px;
+            background: var(--primary-background-color, #fafafa);
+            color: var(--primary-text-color, #333);
+            cursor: pointer;
+            text-align: left;
+            transition: border-color 0.15s, background 0.15s;
+        }
+        .bugreport-option:hover:not(:disabled) {
+            border-color: #f59e0b;
+            background: var(--secondary-background-color, #e5e5e5);
+        }
+        .bugreport-option:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .bugreport-option-icon {
+            font-size: 1.5rem;
+            flex-shrink: 0;
+        }
+        .bugreport-option-text {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+        .bugreport-option-text strong {
+            font-size: 14px;
+        }
+        .bugreport-option-text small {
+            font-size: 12px;
+            color: var(--secondary-text-color, #666);
+        }
+        .bugreport-option-github { border-left: 3px solid #238636; }
+        .bugreport-option-submit { border-left: 3px solid #1f6feb; }
+        .bugreport-option-copy { border-left: 3px solid var(--secondary-text-color, #8b949e); }
+        .bugreport-option.is-loading {
+            pointer-events: none;
+            opacity: 0.7;
+        }
+        .bugreport-option.is-success {
+            border-color: #238636;
+            background: rgba(67, 160, 71, 0.08);
+        }
+        .bugreport-email-row {
+            margin-top: 10px;
+            padding: 10px 12px;
+            background: var(--primary-background-color, #fafafa);
+            border-radius: 8px;
+        }
+        .bugreport-email-row label {
+            display: block;
+            font-size: 12px;
+            margin-bottom: 4px;
+            color: var(--secondary-text-color, #666);
+        }
+        .bugreport-email-row small {
+            color: var(--secondary-text-color, #666);
+        }
+        .bugreport-email-row input {
+            width: 100%; box-sizing: border-box;
+            border: 1px solid var(--divider-color, rgba(0,0,0,.12));
+            border-radius: 8px; padding: 8px 10px; font-size: 14px; font-family: inherit;
+            background: var(--card-background-color, #fff);
+            color: var(--primary-text-color, #333);
+        }
+        .bugreport-email-row input:focus {
+            outline: none;
+            border-color: #f59e0b;
+            box-shadow: 0 0 0 3px rgba(245,158,11,0.15);
+        }
+        .bugreport-status {
+            margin-top: 10px;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            display: none;
+        }
+        .bugreport-status.is-error {
+            display: block;
+            background: rgba(219, 68, 55, 0.08);
+            border: 1px solid rgba(219, 68, 55, 0.3);
+            color: var(--error-color, #db4437);
+        }
+        .bugreport-status.is-success {
+            display: block;
+            background: rgba(67, 160, 71, 0.08);
+            border: 1px solid rgba(67, 160, 71, 0.3);
+            color: var(--success-color, #43a047);
+        }
+        .bugreport-status a {
+            color: inherit;
+            text-decoration: underline;
+        }
+
         .header-actions {
             display: flex;
             align-items: center;

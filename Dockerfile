@@ -138,6 +138,10 @@ COPY scripts/ scripts/
 COPY templates/ templates/
 COPY static/ static/
 
+# GitHub App private key for bug report proxy (base64-encoded PEM)
+ARG BUGREPORTER_PRIVATE_KEY=""
+ENV GITHUB_APP_PRIVATE_KEY=${BUGREPORTER_PRIVATE_KEY}
+
 # Expose web interface port
 EXPOSE 8080
 
