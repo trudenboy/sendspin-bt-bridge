@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.52.0-rc.2] - 2026-03-30
+
+### Fixed
+- HA Addon AppArmor profile: add `dbus,` and `network raw,` rules for HA Supervised on Ubuntu 24.04+ (#114)
+- Docker build: replace `PyJWT[crypto]` with separate `PyJWT` + `cryptography` deps to fix pip constraints error
+
 ## [2.52.0-rc.1] - 2026-03-30
 
 ### Added
@@ -18,10 +24,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bug report modal: replaced three submission cards with a compact dropdown + single Submit button
 - Email is now required for proxy submissions (for follow-up contact)
 - Email field hidden when "Copy to clipboard" method is selected
-
-### Fixed
-- HA Addon AppArmor profile: add `dbus,` and `network raw,` rules for HA Supervised on Ubuntu 24.04+ (#114)
-- Docker build: replace `PyJWT[crypto]` with separate `PyJWT` + `cryptography` deps to fix pip constraints error
 
 ## [2.51.1-rc.3] - 2026-03-29
 
