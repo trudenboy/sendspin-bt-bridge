@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.51.1-rc.2] - 2026-03-29
+
+### Added
+- Stable releases now attach a source tarball as a release asset with tracked download counts
+- LXC `upgrade.sh` prefers release asset download (tracked) over archive URL, with automatic fallback
+- Traffic dashboard: Total Downloads metric card, release downloads chart, per-release download column
+
+### Fixed
+- Docker Compose: add `security_opt: apparmor:unconfined, seccomp:unconfined` so Bluetooth works on Ubuntu/Debian hosts without `privileged: true` (#114)
+
 ## [2.51.1-rc.1] - 2026-03-29
 
 ### Fixed
