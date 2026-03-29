@@ -7,64 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [2.51.0-rc.5] - 2026-03-29
-
-### Changed
-- Fallback player ID (no MAC) now uses UUID5 from player name instead of sanitized name string — always 36 chars, no mDNS length issues, same approach as MAC-based path (#115)
-
-## [2.51.0-rc.4] - 2026-03-29
-
-### Added
-- Diagnostics: sticky section nav strip with auto-highlighting via IntersectionObserver
-- Diagnostics: Simple/Advanced toggle with localStorage persistence (76% content reduction in Simple mode)
-- Diagnostics: health status pills strip (speakers, sinks, MA, adapters)
-- Diagnostics: speaker filter input for quick search across devices
-- Diagnostics: copy-to-clipboard for diagnostics summary and per-device support info
-- Diagnostics: contextual bug report pre-fill from recovery issue cards
-- Diagnostics: humanized summary cards (issue count, latency comparison, warning breakdown)
-- Diagnostics: `_timeAgo()` relative timestamps in timeline and traces
-
-### Changed
-- Diagnostics: Recovery center broken into 5 collapsible sub-sections with count badges
-- Diagnostics: action buttons consolidated into sticky footer (Refresh, Download, Copy, Report)
-- Diagnostics: default timeline limit reduced from 12 to 5 entries
-- Diagnostics: PA sinks table mobile layout with truncation and tooltips
-
-### Fixed
-- Truncate long player names to fit mDNS 63-byte label limit — fixes `zeroconf.BadTypeInNameException` for speakers like "[AV] Samsung Soundbar M360 M-Series @ asus-laptop-ubuntu" (#115)
-- Remove circular "Open diagnostics" button from within diagnostics panel
-
-## [2.51.0-rc.3] - 2026-03-28
-
-### Fixed
-- Log viewer now shows actual logs inside Docker containers using an in-memory ring buffer (2000 lines) instead of relying on the docker CLI which is unavailable inside the container (#111)
-- Artwork proxy now constructs proper MA `/imageproxy?path=&provider=&size=` URLs from raw metadata image paths instead of joining file paths directly with the base URL (which returned 404) (#112)
-
-## [2.51.0-rc.2] - 2026-03-28
-
-### Fixed
-- Log viewer no longer crashes with "No such file or directory: docker" when the docker CLI is unavailable inside the container; falls back to Python log handler streams (#111)
-- Artwork proxy now URL-encodes path components so track names with spaces and unicode characters (e.g. `｜`, `⧹⧹`) no longer trigger `InvalidURL` errors (#112)
-
-## [2.51.0-rc.1] - 2026-03-28
-
-### Changed
-- Grid view is now the default in mobile portrait orientation; list view is landscape-only
-- Compact action bar layout: checkbox, volume slider, mute, and pause share one row; bulk actions on second row (104px vs 321px)
-- Card controls reordered: volume + mute row first, transport buttons second
-- Action buttons (Reconnect / Standby / Disable) fit a single row on Pixel 8 (412px)
-
-### Fixed
-- Eliminated horizontal scroll on mobile by fixing grid track minimums (`minmax(0, 1fr)`)
-- Touch targets enlarged to 44px minimum across all interactive elements
-- Dark theme contrast and readability improvements across all breakpoints
-- Login page: added password visibility toggle, loading states, active tab contrast
-
-### Added
-- Hamburger menu, bottom navigation, and config tab scrolling for small screens
-- Progressive disclosure for collapsed list items
-- Safe-area inset support for notched devices
-
 ## [2.50.0-rc.1] - 2026-03-26
 
 ### Changed

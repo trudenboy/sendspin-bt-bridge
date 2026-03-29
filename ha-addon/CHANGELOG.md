@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.51.0] - 2026-03-29
+
+### Added
+- Diagnostics: sticky section nav strip with auto-highlighting via IntersectionObserver
+- Diagnostics: Simple/Advanced toggle with localStorage persistence (76% content reduction in Simple mode)
+- Diagnostics: health status pills strip (speakers, sinks, MA, adapters)
+- Diagnostics: speaker filter input for quick search across devices
+- Diagnostics: copy-to-clipboard for diagnostics summary and per-device support info
+- Diagnostics: contextual bug report pre-fill from recovery issue cards
+- Diagnostics: humanized summary cards (issue count, latency comparison, warning breakdown)
+- Diagnostics: `_timeAgo()` relative timestamps in timeline and traces
+- Diagnostics: Recovery center broken into 5 collapsible sub-sections with count badges
+- Diagnostics: action buttons consolidated into sticky footer (Refresh, Download, Copy, Report)
+- Hamburger menu, bottom navigation, and config tab scrolling for small screens
+- Progressive disclosure for collapsed list items
+- Safe-area inset support for notched devices
+
+### Changed
+- Grid view is now the default in mobile portrait orientation; list view is landscape-only
+- Compact action bar layout: checkbox, volume slider, mute, and pause share one row; bulk actions on second row (104px vs 321px)
+- Card controls reordered: volume + mute row first, transport buttons second
+- Action buttons (Reconnect / Standby / Disable) fit a single row on Pixel 8 (412px)
+- Diagnostics: default timeline limit reduced from 12 to 5 entries
+- Diagnostics: PA sinks table mobile layout with truncation and tooltips
+- Fallback player ID (no MAC) now uses UUID5 from player name — always 36 chars, no mDNS length issues (#115)
+
+### Fixed
+- Long player names no longer cause `zeroconf.BadTypeInNameException` (#115)
+- Log viewer now shows actual logs inside Docker containers using an in-memory ring buffer (2000 lines) (#111)
+- Artwork proxy now constructs proper MA `/imageproxy` URLs from raw metadata image paths (#112)
+- Artwork proxy URL-encodes path components so unicode characters no longer trigger `InvalidURL` errors (#112)
+- Eliminated horizontal scroll on mobile by fixing grid track minimums (`minmax(0, 1fr)`)
+- Touch targets enlarged to 44px minimum across all interactive elements
+- Dark theme contrast and readability improvements across all breakpoints
+- Login page: added password visibility toggle, loading states, active tab contrast
+- Removed circular "Open diagnostics" button from within diagnostics panel
+
 ## [2.50.4] - 2026-03-27
 
 ### Fixed
