@@ -607,7 +607,26 @@ class TestClientInit:
         )
         assert c.player_id.startswith("sendspin-")
 
-    def test_keepalive_interval_clamped_to_30(self, _patch_state):
+    def test_long_name_player_id_truncated_for_mdns(self, _patch_state):
+        """Long speaker names must produce player_id ≤63 bytes (mDNS label limit)."""
+        from sendspin_client import SendspinClient
+
+        c = SendspinClient(
+            player_name="[AV] Samsung Soundbar M360 M-Series @ asus-laptop-ubuntu",
+            server_host="auto",
+            server_port=9000,
+        )
+        assert c.player_id.startswith("sendspin-")
+        assert len(c.player_id.encode()) <= 63
+
+    def test_long_name_player_id_is_deterministic(self, _patch_state):
+        """Same long name must always produce the same truncated player_id."""
+        from sendspin_client import SendspinClient
+
+        name = "[AV] Samsung Soundbar M360 M-Series @ asus-laptop-ubuntu"
+        c1 = SendspinClient(player_name=name, server_host="auto", server_port=9000)
+        c2 = SendspinClient(player_name=name, server_host="auto", server_port=9000)
+        assert c1.player_id == c2.player_id
         from sendspin_client import SendspinClient
 
         c = SendspinClient(
