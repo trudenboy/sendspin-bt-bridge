@@ -48,6 +48,20 @@ trap cleanup EXIT
 
 download_repo_snapshot() {
   local extract_dir="$1"
+
+  # For tag-based installs, try release asset first (downloads are tracked)
+  if [[ "${REF_KIND}" == "tags" ]]; then
+    local version="${GITHUB_BRANCH#v}"  # strip leading 'v'
+    local asset_url="https://github.com/${GITHUB_REPO}/releases/download/${GITHUB_BRANCH}/sendspin-bt-bridge-${version}.tar.gz"
+    if wget -qO- "${asset_url}" 2>/dev/null | tar -xzf - -C "${extract_dir}"; then
+      msg "Downloaded release asset for ${GITHUB_BRANCH}"
+      find "${extract_dir}" -mindepth 1 -maxdepth 1 -type d | head -n 1
+      return
+    fi
+    warn "Release asset not available, falling back to archive"
+  fi
+
+  # Fallback: GitHub-generated archive
   wget -qO- "${ARCHIVE_URL}" | tar -xzf - -C "${extract_dir}"
   find "${extract_dir}" -mindepth 1 -maxdepth 1 -type d | head -n 1
 }

@@ -476,6 +476,16 @@ jobs:
               await github.rest.repos.createRelease({ ...payload, generate_release_notes: false });
             }
 
+      - name: Upload source tarball
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          TARBALL="sendspin-bt-bridge-${VERSION}.tar.gz"
+          git archive --format=tar.gz --prefix="sendspin-bt-bridge-${VERSION}/" "${TAG}" -o "${TARBALL}"
+          gh release upload "${TAG}" "${TARBALL}" --clobber
+
   # ── 9. ARMv7 build (stable only) ────────────────────────────────
   armv7-build:
     needs: [prepare, docker-merge]
