@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sendspin BT Bridge — Traffic Dashboard</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: #0d1117; color: #e6edf3; line-height: 1.5; padding: 16px;
+  }
+  a { color: #58a6ff; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  .header { text-align: center; margin-bottom: 24px; }
+  .header h1 { font-size: 1.6rem; font-weight: 600; margin-bottom: 4px; }
+  .header .subtitle { color: #8b949e; font-size: 0.85rem; }
+
+  .metrics-row {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 12px; margin-bottom: 24px;
+  }
+  .metric-card {
+    background: #161b22; border: 1px solid #30363d; border-radius: 8px;
+    padding: 14px 16px; text-align: center;
+  }
+  .metric-card .value { font-size: 1.7rem; font-weight: 700; color: #f0f6fc; }
+  .metric-card .label { font-size: 0.75rem; color: #8b949e; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
+
+  .grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
+  @media (min-width: 768px) { .grid { grid-template-columns: 1fr 1fr; } }
+  .grid .full-width { grid-column: 1 / -1; }
+
+  .card {
+    background: #161b22; border: 1px solid #30363d; border-radius: 8px;
+    padding: 20px; overflow: hidden;
+  }
+  .card h2 { font-size: 1rem; font-weight: 600; margin-bottom: 14px; color: #e6edf3; }
+  .card h2 .badge {
+    display: inline-block; background: #30363d; color: #8b949e; font-size: 0.7rem;
+    padding: 2px 7px; border-radius: 10px; margin-left: 8px; font-weight: 400; vertical-align: middle;
+  }
+
+  /* Bar charts */
+  .chart-container { width: 100%; overflow-x: auto; }
+  .bar-chart { display: flex; align-items: flex-end; gap: 3px; height: 160px; min-width: 100%; }
+  .bar-group { flex: 1; min-width: 14px; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; position: relative; }
+  .bar {
+    width: 100%; min-width: 6px; max-width: 28px; border-radius: 3px 3px 0 0;
+    transition: opacity 0.2s; cursor: default; position: relative;
+  }
+  .bar:hover { opacity: 0.8; }
+  .bar-label {
+    font-size: 0.6rem; color: #8b949e; margin-top: 4px; white-space: nowrap;
+    transform: rotate(-45deg); transform-origin: top left; position: relative; left: 8px;
+  }
+  .bar-tooltip {
+    display: none; position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%);
+    background: #30363d; color: #e6edf3; font-size: 0.7rem; padding: 4px 8px;
+    border-radius: 4px; white-space: nowrap; z-index: 10; margin-bottom: 4px;
+  }
+  .bar:hover .bar-tooltip, .bar-group:hover .bar-tooltip { display: block; }
+
+  .legend { display: flex; gap: 16px; margin-bottom: 10px; flex-wrap: wrap; }
+  .legend-item { display: flex; align-items: center; gap: 5px; font-size: 0.75rem; color: #8b949e; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 2px; }
+
+  /* Line chart */
+  .line-chart { position: relative; height: 160px; border-left: 1px solid #30363d; border-bottom: 1px solid #30363d; }
+  .line-chart svg { width: 100%; height: 100%; }
+  .line-chart polyline { fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .line-chart .area { stroke: none; opacity: 0.15; }
+  .line-chart .dot { r: 3; cursor: default; }
+  .line-chart .dot:hover { r: 5; }
+  .line-y-labels { display: flex; flex-direction: column; justify-content: space-between; position: absolute; left: -4px; top: 0; bottom: 0; transform: translateX(-100%); padding-right: 6px; }
+  .line-y-labels span { font-size: 0.6rem; color: #8b949e; }
+  .line-x-labels { display: flex; justify-content: space-between; margin-top: 4px; }
+  .line-x-labels span { font-size: 0.6rem; color: #8b949e; }
+
+  /* Horizontal bar chart */
+  .h-bar-chart { display: flex; flex-direction: column; gap: 8px; }
+  .h-bar-row { display: flex; align-items: center; gap: 10px; }
+  .h-bar-label { flex: 0 0 160px; font-size: 0.8rem; color: #c9d1d9; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; }
+  .h-bar-track { flex: 1; height: 20px; background: #21262d; border-radius: 4px; position: relative; overflow: hidden; }
+  .h-bar-fill { height: 100%; border-radius: 4px; display: flex; align-items: center; padding-left: 6px; font-size: 0.7rem; color: #fff; min-width: max-content; }
+  .h-bar-value { flex: 0 0 70px; font-size: 0.75rem; color: #8b949e; text-align: right; }
+  @media (max-width: 600px) { .h-bar-label { flex: 0 0 100px; font-size: 0.7rem; } }
+
+  /* Table */
+  .data-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+  .data-table th { text-align: left; color: #8b949e; font-weight: 500; padding: 8px 10px; border-bottom: 1px solid #30363d; }
+  .data-table td { padding: 8px 10px; border-bottom: 1px solid #21262d; color: #c9d1d9; }
+  .data-table tr:hover td { background: #1c2128; }
+  .data-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+
+  /* Release timeline */
+  .timeline { position: relative; padding-left: 20px; }
+  .timeline::before { content: ''; position: absolute; left: 6px; top: 0; bottom: 0; width: 2px; background: #30363d; }
+  .timeline-item { position: relative; margin-bottom: 16px; }
+  .timeline-dot {
+    position: absolute; left: -20px; top: 4px; width: 12px; height: 12px;
+    border-radius: 50%; border: 2px solid #30363d; background: #0d1117;
+  }
+  .timeline-dot.stable { background: #3fb950; border-color: #3fb950; }
+  .timeline-dot.pre { background: #d29922; border-color: #d29922; }
+  .timeline-tag { font-weight: 600; font-size: 0.9rem; }
+  .timeline-date { font-size: 0.75rem; color: #8b949e; }
+  .timeline-badge {
+    display: inline-block; font-size: 0.65rem; padding: 1px 6px; border-radius: 10px;
+    margin-left: 6px; vertical-align: middle;
+  }
+  .timeline-badge.pre { background: #d29922; color: #0d1117; }
+  .timeline-badge.stable { background: #238636; color: #fff; }
+
+  .loading { text-align: center; padding: 60px 20px; color: #8b949e; }
+  .error { text-align: center; padding: 40px 20px; color: #f85149; }
+  .empty { text-align: center; padding: 20px; color: #484f58; font-size: 0.85rem; }
+
+  /* Dual bar overlay */
+  .dual-bars { display: flex; gap: 2px; align-items: flex-end; height: 100%; }
+  .dual-bars .bar { width: 50%; }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <div class="loading" id="loading">Loading dashboard data…</div>
+</div>
+
+<script>
+(async function () {
+  const app = document.getElementById('app');
+  const loading = document.getElementById('loading');
+
+  let data;
+  try {
+    const resp = await fetch('summary.json');
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    data = await resp.json();
+  } catch (err) {
+    loading.innerHTML = `<div class="error">Failed to load summary.json<br><small>${err.message}</small></div>`;
+    return;
+  }
+  loading.style.display = 'none';
+
+  const fmt = n => (n ?? 0).toLocaleString();
+  const shortDate = iso => {
+    const d = new Date(iso);
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  };
+  const isoDate = iso => {
+    const d = new Date(iso);
+    return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  };
+
+  // === Header ===
+  const header = el('div', 'header');
+  header.innerHTML = `
+    <h1>📡 Sendspin BT Bridge — Traffic Dashboard</h1>
+    <div class="subtitle">Last updated: ${data.last_updated ? isoDate(data.last_updated) + ' · ' + new Date(data.last_updated).toLocaleTimeString() : 'N/A'}</div>
+  `;
+  app.appendChild(header);
+
+  // === Metrics row ===
+  const viewsW = data.views_window || {};
+  const clonesW = data.clones_window || {};
+  const repo = data.repo || {};
+  const releases = data.releases || {};
+  const container = data.container || {};
+
+  const metricsRow = el('div', 'metrics-row');
+  const metrics = [
+    { value: fmt(repo.stargazers_count), label: '⭐ Stars' },
+    { value: fmt(repo.forks_count), label: '🍴 Forks' },
+    { value: fmt(viewsW.count), label: '👁 Views (14d)' },
+    { value: fmt(clonesW.count), label: '📦 Clones (14d)' },
+    { value: fmt(releases.release_count), label: '🏷 Releases' },
+    { value: fmt(container.tagged_versions), label: '🐳 Container Tags' },
+  ];
+  metrics.forEach(m => {
+    const card = el('div', 'metric-card');
+    card.innerHTML = `<div class="value">${m.value}</div><div class="label">${m.label}</div>`;
+    metricsRow.appendChild(card);
+  });
+  app.appendChild(metricsRow);
+
+  // === Charts grid ===
+  const grid = el('div', 'grid');
+
+  // --- Views & Clones chart ---
+  grid.appendChild(buildViewsClonesChart(data));
+
+  // --- Stars growth ---
+  grid.appendChild(buildStarsChart(data));
+
+  // --- Container versions ---
+  grid.appendChild(buildContainerChart(data));
+
+  // --- Top referrers ---
+  grid.appendChild(buildReferrersChart(data));
+
+  // --- Popular paths ---
+  const pathsCard = el('div', 'card full-width');
+  pathsCard.appendChild(buildPathsTable(data));
+  grid.appendChild(pathsCard);
+
+  // --- Release timeline ---
+  const timelineCard = el('div', 'card full-width');
+  timelineCard.appendChild(buildReleaseTimeline(data));
+  grid.appendChild(timelineCard);
+
+  app.appendChild(grid);
+
+  // ===== Chart builders =====
+
+  function buildViewsClonesChart(data) {
+    const card = el('div', 'card full-width');
+    const h = el('h2');
+    h.textContent = 'Views & Clones Over Time';
+    card.appendChild(h);
+
+    const legend = el('div', 'legend');
+    legend.innerHTML = `
+      <div class="legend-item"><span class="legend-dot" style="background:#58a6ff"></span>Views</div>
+      <div class="legend-item"><span class="legend-dot" style="background:#3fb950"></span>Clones</div>
+      <div class="legend-item"><span class="legend-dot" style="background:#58a6ff;opacity:0.4"></span>Unique views</div>
+      <div class="legend-item"><span class="legend-dot" style="background:#3fb950;opacity:0.4"></span>Unique clones</div>
+    `;
+    card.appendChild(legend);
+
+    const views = data.views || {};
+    const clones = data.clones || {};
+    const allDates = [...new Set([...Object.keys(views), ...Object.keys(clones)])].sort();
+    const last30 = allDates.slice(-30);
+
+    if (last30.length === 0) {
+      card.appendChild(emptyMsg('No views/clones data yet'));
+      return card;
+    }
+
+    let maxVal = 0;
+    last30.forEach(d => {
+      maxVal = Math.max(maxVal, (views[d]?.count || 0), (clones[d]?.count || 0));
+    });
+    if (maxVal === 0) maxVal = 1;
+
+    const container = el('div', 'chart-container');
+    const chart = el('div', 'bar-chart');
+
+    last30.forEach((d, i) => {
+      const vc = views[d]?.count || 0;
+      const vu = views[d]?.uniques || 0;
+      const cc = clones[d]?.count || 0;
+      const cu = clones[d]?.uniques || 0;
+
+      const group = el('div', 'bar-group');
+      group.style.position = 'relative';
+
+      const vBar = el('div', 'bar');
+      vBar.style.background = '#58a6ff';
+      vBar.style.height = (vc / maxVal * 100) + '%';
+      vBar.style.width = '48%';
+      vBar.style.position = 'absolute';
+      vBar.style.bottom = '20px';
+      vBar.style.left = '0';
+      vBar.innerHTML = `<div class="bar-tooltip">${shortDate(d)}: ${fmt(vc)} views (${fmt(vu)} unique)</div>`;
+
+      const cBar = el('div', 'bar');
+      cBar.style.background = '#3fb950';
+      cBar.style.height = (cc / maxVal * 100) + '%';
+      cBar.style.width = '48%';
+      cBar.style.position = 'absolute';
+      cBar.style.bottom = '20px';
+      cBar.style.right = '0';
+      cBar.innerHTML = `<div class="bar-tooltip">${shortDate(d)}: ${fmt(cc)} clones (${fmt(cu)} unique)</div>`;
+
+      group.appendChild(vBar);
+      group.appendChild(cBar);
+
+      if (i % Math.ceil(last30.length / 10) === 0 || i === last30.length - 1) {
+        const label = el('div', 'bar-label');
+        label.textContent = shortDate(d);
+        label.style.position = 'absolute';
+        label.style.bottom = '0';
+        group.appendChild(label);
+      }
+
+      chart.appendChild(group);
+    });
+
+    container.appendChild(chart);
+    card.appendChild(container);
+    return card;
+  }
+
+  function buildStarsChart(data) {
+    const card = el('div', 'card');
+    const h = el('h2');
+    h.textContent = 'Stars Growth';
+    card.appendChild(h);
+
+    const history = data.repo_history || {};
+    const dates = Object.keys(history).sort();
+    if (dates.length === 0) { card.appendChild(emptyMsg('No repo history yet')); return card; }
+
+    const values = dates.map(d => history[d]?.stargazers_count || 0);
+    card.appendChild(buildLineChart(dates, values, '#f0883e'));
+    return card;
+  }
+
+  function buildContainerChart(data) {
+    const card = el('div', 'card');
+    const h = el('h2');
+    h.textContent = 'Container Versions';
+    const badge = document.createElement('span');
+    badge.className = 'badge';
+    badge.textContent = 'GHCR';
+    h.appendChild(badge);
+    card.appendChild(h);
+
+    const history = data.container_history || {};
+    const dates = Object.keys(history).sort();
+    if (dates.length === 0) { card.appendChild(emptyMsg('No container data yet — will appear after next workflow run')); return card; }
+
+    const values = dates.map(d => history[d]?.tagged_versions || 0);
+    card.appendChild(buildLineChart(dates, values, '#a371f7'));
+    return card;
+  }
+
+  function buildLineChart(dates, values, color) {
+    const wrapper = el('div');
+    wrapper.style.position = 'relative';
+    wrapper.style.paddingLeft = '36px';
+    wrapper.style.marginTop = '8px';
+
+    const minV = Math.min(...values);
+    const maxV = Math.max(...values);
+    const range = maxV - minV || 1;
+
+    const chartH = 140;
+    const chartW = 500;
+
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', `0 0 ${chartW} ${chartH}`);
+    svg.setAttribute('preserveAspectRatio', 'none');
+    svg.style.width = '100%';
+    svg.style.height = chartH + 'px';
+
+    const points = values.map((v, i) => {
+      const x = dates.length === 1 ? chartW / 2 : (i / (dates.length - 1)) * chartW;
+      const y = chartH - ((v - minV) / range) * (chartH - 10) - 5;
+      return `${x},${y}`;
+    });
+
+    // Area fill
+    const area = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+    area.setAttribute('points', `0,${chartH} ${points.join(' ')} ${chartW},${chartH}`);
+    area.setAttribute('fill', color);
+    area.setAttribute('opacity', '0.12');
+    svg.appendChild(area);
+
+    // Line
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+    line.setAttribute('points', points.join(' '));
+    line.setAttribute('fill', 'none');
+    line.setAttribute('stroke', color);
+    line.setAttribute('stroke-width', '2');
+    svg.appendChild(line);
+
+    // Dots
+    values.forEach((v, i) => {
+      const x = dates.length === 1 ? chartW / 2 : (i / (dates.length - 1)) * chartW;
+      const y = chartH - ((v - minV) / range) * (chartH - 10) - 5;
+      const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      dot.setAttribute('cx', x);
+      dot.setAttribute('cy', y);
+      dot.setAttribute('r', '3');
+      dot.setAttribute('fill', color);
+
+      const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+      title.textContent = `${shortDate(dates[i])}: ${fmt(v)}`;
+      dot.appendChild(title);
+      svg.appendChild(dot);
+    });
+
+    const chartDiv = el('div');
+    chartDiv.style.borderLeft = '1px solid #30363d';
+    chartDiv.style.borderBottom = '1px solid #30363d';
+    chartDiv.appendChild(svg);
+    wrapper.appendChild(chartDiv);
+
+    // Y labels
+    const yLabels = el('div');
+    yLabels.style.cssText = 'position:absolute;left:0;top:0;bottom:0;display:flex;flex-direction:column;justify-content:space-between;width:32px;text-align:right;padding-right:4px;';
+    yLabels.innerHTML = `<span style="font-size:0.6rem;color:#8b949e">${fmt(maxV)}</span><span style="font-size:0.6rem;color:#8b949e">${fmt(minV)}</span>`;
+    wrapper.appendChild(yLabels);
+
+    // X labels
+    const xLabels = el('div');
+    xLabels.style.cssText = 'display:flex;justify-content:space-between;padding-left:36px;margin-top:4px;';
+    const step = Math.max(1, Math.floor(dates.length / 5));
+    dates.forEach((d, i) => {
+      if (i % step === 0 || i === dates.length - 1) {
+        const s = el('span');
+        s.style.cssText = 'font-size:0.6rem;color:#8b949e;';
+        s.textContent = shortDate(d);
+        xLabels.appendChild(s);
+      }
+    });
+    wrapper.appendChild(xLabels);
+
+    return wrapper;
+  }
+
+  function buildReferrersChart(data) {
+    const card = el('div', 'card');
+    const h = el('h2');
+    h.textContent = 'Top Referrers';
+    card.appendChild(h);
+
+    const referrers = data.referrers || [];
+    if (referrers.length === 0) { card.appendChild(emptyMsg('No referrer data')); return card; }
+
+    const maxCount = Math.max(...referrers.map(r => r.count || 0), 1);
+    const chart = el('div', 'h-bar-chart');
+
+    referrers.slice(0, 10).forEach(r => {
+      const row = el('div', 'h-bar-row');
+      const label = el('div', 'h-bar-label');
+      label.textContent = r.referrer || 'Direct';
+      label.title = r.referrer || 'Direct';
+
+      const track = el('div', 'h-bar-track');
+      const fill = el('div', 'h-bar-fill');
+      fill.style.width = ((r.count / maxCount) * 100) + '%';
+      fill.style.background = 'linear-gradient(90deg, #58a6ff, #388bfd)';
+      fill.style.minWidth = '2px';
+      track.appendChild(fill);
+
+      const val = el('div', 'h-bar-value');
+      val.textContent = `${fmt(r.count)} / ${fmt(r.uniques)}`;
+
+      row.appendChild(label);
+      row.appendChild(track);
+      row.appendChild(val);
+      chart.appendChild(row);
+    });
+
+    const hint = el('div');
+    hint.style.cssText = 'font-size:0.65rem;color:#484f58;margin-top:8px;text-align:right;';
+    hint.textContent = 'total / unique';
+    chart.appendChild(hint);
+
+    card.appendChild(chart);
+    return card;
+  }
+
+  function buildPathsTable(data) {
+    const wrapper = el('div');
+    const h = el('h2');
+    h.textContent = 'Popular Paths';
+    wrapper.appendChild(h);
+
+    const paths = data.paths || [];
+    if (paths.length === 0) { wrapper.appendChild(emptyMsg('No path data')); return wrapper; }
+
+    const table = el('table', 'data-table');
+    table.innerHTML = `
+      <thead><tr><th>Path</th><th class="num">Views</th><th class="num">Unique</th></tr></thead>
+      <tbody>${paths.map(p => `
+        <tr>
+          <td><code>${escHtml(p.path || '')}</code></td>
+          <td class="num">${fmt(p.count)}</td>
+          <td class="num">${fmt(p.uniques)}</td>
+        </tr>`).join('')}
+      </tbody>
+    `;
+    wrapper.appendChild(table);
+    return wrapper;
+  }
+
+  function buildReleaseTimeline(data) {
+    const wrapper = el('div');
+    const h = el('h2');
+    const releases = data.releases || {};
+    const byTag = releases.by_tag || {};
+    const tags = Object.keys(byTag);
+    h.innerHTML = `Release Timeline <span class="badge">${tags.length} releases</span>`;
+    wrapper.appendChild(h);
+
+    if (tags.length === 0) { wrapper.appendChild(emptyMsg('No releases')); return wrapper; }
+
+    const sorted = tags
+      .map(tag => ({ tag, ...byTag[tag] }))
+      .sort((a, b) => (b.published_at || '').localeCompare(a.published_at || ''));
+
+    const timeline = el('div', 'timeline');
+    sorted.slice(0, 20).forEach(r => {
+      const item = el('div', 'timeline-item');
+      const dot = el('div', r.prerelease ? 'timeline-dot pre' : 'timeline-dot stable');
+      item.appendChild(dot);
+
+      const tag = el('div', 'timeline-tag');
+      if (r.html_url) {
+        tag.innerHTML = `<a href="${escHtml(r.html_url)}">${escHtml(r.tag)}</a>`;
+      } else {
+        tag.textContent = r.tag;
+      }
+      if (r.prerelease) {
+        tag.innerHTML += ' <span class="timeline-badge pre">pre-release</span>';
+      } else {
+        tag.innerHTML += ' <span class="timeline-badge stable">stable</span>';
+      }
+      item.appendChild(tag);
+
+      if (r.published_at) {
+        const date = el('div', 'timeline-date');
+        date.textContent = isoDate(r.published_at);
+        item.appendChild(date);
+      }
+
+      timeline.appendChild(item);
+    });
+
+    if (sorted.length > 20) {
+      const more = el('div', 'empty');
+      more.textContent = `+ ${sorted.length - 20} more releases`;
+      timeline.appendChild(more);
+    }
+
+    wrapper.appendChild(timeline);
+    return wrapper;
+  }
+
+  // ===== Helpers =====
+  function el(tag, cls) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    return e;
+  }
+  function emptyMsg(text) {
+    const d = el('div', 'empty');
+    d.textContent = text;
+    return d;
+  }
+  function escHtml(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+})();
+</script>
+</body>
+</html>
