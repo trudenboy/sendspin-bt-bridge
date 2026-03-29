@@ -9792,7 +9792,7 @@ var _BR_ICON_GITHUB = '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 
 var _BR_ICON_COPY = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M3 11V3a1.5 1.5 0 011.5-1.5H11"/></svg>';
 var _BR_ICON_INFO = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="7"/><line x1="8" y1="7" x2="8" y2="11"/><line x1="8" y1="5" x2="8" y2="5" stroke-width="2"/></svg>';
 
-function _openBugReport(e) {
+function _openBugReport(e, context) {
     e.preventDefault();
 
     // Overlay
@@ -9855,6 +9855,18 @@ function _openBugReport(e) {
     descError.textContent = 'Please describe the issue';
     descField.appendChild(descError);
     body.appendChild(descField);
+
+    // Pre-fill from context (e.g. recovery issue report button)
+    if (context) {
+        if (context.device && context.issue) {
+            titleInput.value = context.device + ': ' + context.issue;
+        } else if (context.issue) {
+            titleInput.value = context.issue;
+        }
+        if (context.issue) {
+            descInput.value = 'Issue detected by diagnostics: ' + context.issue;
+        }
+    }
 
     // Preview toggle
     var previewToggle = document.createElement('div');
@@ -10405,10 +10417,72 @@ async function loadDiagnostics(contentEl) {
         _lastDiagnosticsPayload = data;
         contentEl.innerHTML = renderDiagnostics(data);
         contentEl.dataset.loaded = '1';
+        _setupDiagNavObserver();
+        var diagMode = localStorage.getItem('sendspin-diag-mode') || 'advanced';
+        var diagPanel = document.querySelector('.diag-panel');
+        if (diagPanel && diagMode === 'simple') {
+            diagPanel.classList.add('is-simple');
+        }
     } catch (err) {
         _lastDiagnosticsPayload = null;
         contentEl.innerHTML =
             '<span style="color:#ef4444;font-size:13px;">Error: ' + err.message + '</span>';
+    }
+}
+
+function _setupDiagNavObserver() {
+    var nav = document.getElementById('diag-nav');
+    if (!nav) return;
+    var buttons = nav.querySelectorAll('.diag-nav-btn');
+    if (!buttons.length) return;
+    var sectionIds = [
+        'diag-recovery-center',
+        'diag-health-summary',
+        'diag-speaker-states',
+        'diag-routing',
+        'diag-ma-groups-card',
+        'diag-advanced-section'
+    ];
+    var sectionEls = [];
+    sectionIds.forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) sectionEls.push(el);
+    });
+    if (!sectionEls.length) return;
+    var idToIndex = {};
+    sectionIds.forEach(function(id, i) { idToIndex[id] = i; });
+    var observer = new IntersectionObserver(function(entries) {
+        entries.forEach(function(entry) {
+            if (!entry.isIntersecting) return;
+            var idx = idToIndex[entry.target.id];
+            if (idx == null) return;
+            buttons.forEach(function(btn, i) {
+                if (i === idx) {
+                    btn.classList.add('is-active');
+                    btn.scrollIntoView({behavior: 'smooth', block: 'nearest', inline: 'nearest'});
+                } else {
+                    btn.classList.remove('is-active');
+                }
+            });
+        });
+    }, {root: null, rootMargin: '-20% 0px -70% 0px', threshold: 0});
+    sectionEls.forEach(function(el) { observer.observe(el); });
+}
+
+function _toggleDiagMode() {
+    var panel = document.querySelector('.diag-panel');
+    if (!panel) return;
+    var isSimple = panel.classList.contains('is-simple');
+    if (isSimple) {
+        panel.classList.remove('is-simple');
+        localStorage.setItem('sendspin-diag-mode', 'advanced');
+    } else {
+        panel.classList.add('is-simple');
+        localStorage.setItem('sendspin-diag-mode', 'simple');
+    }
+    var btn = panel.querySelector('.diag-mode-toggle');
+    if (btn) {
+        btn.innerHTML = '<span class="diag-mode-icon">\u26A1</span> ' + (isSimple ? 'Advanced' : 'Simple');
     }
 }
 
@@ -10427,12 +10501,26 @@ function _diagRecoveryDotTone(tone) {
     return tone === 'error' ? 'err' : (tone === 'warning' || tone === 'warn' ? 'warn' : 'ok');
 }
 
+function _timeAgo(iso) {
+    if (!iso) return '';
+    try {
+        var diff = (Date.now() - new Date(iso).getTime()) / 1000;
+        if (diff < 0) diff = 0;
+        if (diff < 60) return 'just now';
+        if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+        if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+        return Math.floor(diff / 86400) + 'd ago';
+    } catch (e) {
+        return '';
+    }
+}
+
 function _recoveryTimelineEntries(timeline) {
     return timeline && Array.isArray(timeline.entries) ? timeline.entries : [];
 }
 
 function _normalizeRecoveryTimelineLimit(limit) {
-    return limit === '24' || limit === 'all' ? limit : '12';
+    return limit === '12' || limit === '24' || limit === 'all' ? limit : '5';
 }
 
 function _recoveryTimelineSourceOptions(timeline, sourceType) {
@@ -10494,7 +10582,7 @@ function _recoveryTimelineFilteredView(timeline) {
 }
 
 function _recoveryTimelineHasActiveFilters(view) {
-    return !!(view && (view.level !== 'all' || view.sourceType !== 'all' || view.source !== 'all' || view.limit !== '12'));
+    return !!(view && (view.level !== 'all' || view.sourceType !== 'all' || view.source !== 'all' || view.limit !== '5'));
 }
 
 function _setRecoveryTimelineViewPatch(patch) {
@@ -10572,6 +10660,7 @@ function _renderRecoveryTimelineControls(timelineView) {
                 '<span class="diag-timeline-control-label">Window</span>' +
                 '<select onchange="return _setRecoveryTimelineLimit(this.value)">' +
                     _renderRecoveryTimelineControlOptions([
+                        {value: '5', label: 'Latest 5 matches'},
                         {value: '12', label: 'Latest 12 matches'},
                         {value: '24', label: 'Latest 24 matches'},
                         {value: 'all', label: 'All retained matches'},
@@ -10643,6 +10732,75 @@ function _renderDiagMetaRow(label, value, options) {
     '</div>';
 }
 
+function _filterDiagSpeakers(query) {
+    var cards = document.querySelectorAll('#diag-speaker-states .diag-mini-card');
+    var q = (query || '').toLowerCase().trim();
+    var shown = 0;
+    for (var i = 0; i < cards.length; i++) {
+        var text = cards[i].textContent.toLowerCase();
+        var match = !q || text.indexOf(q) !== -1;
+        cards[i].style.display = match ? '' : 'none';
+        if (match) shown++;
+    }
+    var empty = document.getElementById('diag-speaker-filter-empty');
+    if (empty) empty.style.display = (q && !shown) ? '' : 'none';
+}
+
+function _copyDeviceSupportInfo(deviceName) {
+    var dc = document.getElementById('diag-content');
+    if (!dc) return;
+    var cards = dc.querySelectorAll('#diag-speaker-states .diag-mini-card');
+    var text = '';
+    for (var i = 0; i < cards.length; i++) {
+        var nameEl = cards[i].querySelector('.diag-mini-title span');
+        if (!nameEl) continue;
+        var name = nameEl.textContent.trim();
+        if (deviceName && name !== deviceName) continue;
+        var fields = cards[i].querySelectorAll('.diag-meta-label, .diag-meta-value');
+        text += '=== ' + name + ' ===\n';
+        for (var j = 0; j < fields.length; j += 2) {
+            var label = fields[j] ? fields[j].textContent.trim() : '';
+            var value = fields[j + 1] ? fields[j + 1].textContent.trim() : '';
+            if (label) text += label + ': ' + value + '\n';
+        }
+        text += '\n';
+    }
+    if (!text) text = 'No device data available.';
+    navigator.clipboard.writeText(text.trim()).then(function() {
+        showToast('Copied to clipboard', 'info');
+    }).catch(function() {
+        showToast('Failed to copy', 'error');
+    });
+}
+
+function _copyDiagSummary() {
+    var dc = document.getElementById('diag-content');
+    if (!dc) return;
+    var pills = dc.querySelectorAll('.diag-health-pill');
+    var text = 'Diagnostics Summary\n';
+    text += '===================\n';
+    for (var i = 0; i < pills.length; i++) {
+        text += pills[i].textContent.trim() + '\n';
+    }
+    text += '\n';
+    var issues = dc.querySelectorAll('.diag-recovery-item');
+    if (issues.length) {
+        text += 'Active Issues\n';
+        text += '-------------\n';
+        for (var i = 0; i < issues.length; i++) {
+            var title = issues[i].querySelector('.diag-recovery-item-title span');
+            var desc = issues[i].querySelector('.diag-recovery-item-summary');
+            text += '• ' + (title ? title.textContent.trim() : 'Unknown') + '\n';
+            if (desc) text += '  ' + desc.textContent.trim() + '\n';
+        }
+    }
+    navigator.clipboard.writeText(text.trim()).then(function() {
+        showToast('Summary copied', 'info');
+    }).catch(function() {
+        showToast('Failed to copy', 'error');
+    });
+}
+
 function _renderDiagInfoItem(label, value, options) {
     var opts = options || {};
     var itemClasses = ['diag-item'];
@@ -10674,6 +10832,8 @@ function focusDiagnosticsSection(targetId) {
     if (!target) return false;
     var advancedSection = target.closest('.diag-advanced-section');
     if (advancedSection && !advancedSection.open) advancedSection.open = true;
+    var recoverySub = target.closest('.diag-recovery-sub');
+    if (recoverySub && !recoverySub.open) recoverySub.open = true;
     window.requestAnimationFrame(function() {
         window.requestAnimationFrame(function() {
             target.classList.remove('diag-target-highlight');
@@ -10768,7 +10928,7 @@ function _renderDiagRawDetails(payload, summaryLabel) {
     if (!payload) return '';
     var rawJson = JSON.stringify(payload, null, 2);
     if (!rawJson) return '';
-    return '<details class="diag-raw-details">' +
+    return '<details class="diag-raw-details diag-simple-hide">' +
         '<summary>' + escHtml(summaryLabel || 'Raw details') + '</summary>' +
         '<pre class="diag-raw-pre">' + escHtml(rawJson) + '</pre>' +
     '</details>';
@@ -10776,6 +10936,8 @@ function _renderDiagRawDetails(payload, summaryLabel) {
 
 function _renderRecoveryActionButton(action, options) {
     if (!action || !action.key) return '';
+    // Filter out circular "open diagnostics" when already inside diagnostics
+    if (action.key === 'open_diagnostics' || action.key === 'download_diagnostics') return '';
     var opts = options || {};
     var classes = ['btn', 'btn-sm', 'diag-recovery-action'];
     if (opts.primary) classes.push('diag-recovery-action--primary');
@@ -10811,10 +10973,18 @@ function _renderRecoveryIssueActionRow(issue) {
         var actionNames = action.device_name ? [String(action.device_name || '')] : (action.device_names || []);
         return action.key !== primaryAction.key || JSON.stringify(actionNames) !== JSON.stringify(primaryNames);
     });
-    if (!primaryAction && !secondaryActions.length) return '';
+    var reportContext = '';
+    if (issue.device_name || (issue.device_names && issue.device_names.length)) {
+        var dev = issue.device_name || issue.device_names[0] || '';
+        reportContext = '<button type="button" class="btn btn-sm diag-recovery-action diag-report-issue-btn" ' +
+            'onclick="return _openBugReport(event, {device: \'' + escHtmlAttr(dev) + '\', issue: \'' + escHtmlAttr(issue.title || '') + '\'})" ' +
+            'title="Report this issue">\uD83D\uDC1B</button>';
+    }
+    if (!primaryAction && !secondaryActions.length && !reportContext) return '';
     return '<div class="diag-recovery-actions">' +
         (primaryAction ? _renderRecoveryActionButton(primaryAction, {primary: true}) : '') +
         _renderRecoveryActionMenu(secondaryActions) +
+        reportContext +
     '</div>';
 }
 
@@ -10848,7 +11018,7 @@ function _renderRecoveryTraces(traces) {
                         '<div class="diag-trace-label">' + escHtml(entry.label || 'Event') + '</div>' +
                         '<div class="diag-trace-meta">' +
                             escHtml(entry.summary || '') +
-                            (entry.at ? ' · ' + escHtml(entry.at) : '') +
+                            (entry.at ? ' · <span title="' + escHtmlAttr(entry.at) + '">' + escHtml(_timeAgo(entry.at)) + '</span>' : '') +
                         '</div>' +
                     '</div>' +
                 '</div>';
@@ -10898,7 +11068,7 @@ function _renderRecoveryTimeline(timeline) {
             '<div class="diag-timeline-copy">' +
                 '<div class="diag-timeline-title">' + escHtml(entry.source || 'Bridge') + ' · ' + escHtml(entry.label || 'Event') + '</div>' +
                 '<div class="diag-timeline-summary">' + escHtml(entry.summary || '') + '</div>' +
-                '<div class="diag-timeline-meta">' + escHtml(entry.at || 'Latest known state') + '</div>' +
+                '<div class="diag-timeline-meta" title="' + escHtmlAttr(entry.at || '') + '">' + escHtml(entry.at ? _timeAgo(entry.at) : 'Latest known state') + '</div>' +
             '</div>' +
         '</div>';
     }).join('') + '</div>';
@@ -11011,6 +11181,15 @@ function renderDiagnostics(d) {
         },
     ].map(_renderDiagSummaryCard).join('');
 
+    var healthStripHtml = '<div class="diag-health-strip">' + [
+        {label: connectedDevices.length + '/' + activeDevices.length + ' speakers', tone: connectedDevices.length === activeDevices.length && activeDevices.length ? 'ok' : (connectedDevices.length ? 'warn' : 'err')},
+        {label: routedDevices.length + '/' + activeDevices.length + ' sinks', tone: routedDevices.length === activeDevices.length && activeDevices.length ? 'ok' : (routedDevices.length ? 'warn' : 'err')},
+        {label: 'MA ' + (ma.connected ? 'connected' : (ma.configured ? 'configured' : 'offline')), tone: ma.connected ? 'ok' : (ma.configured ? 'warn' : 'err')},
+        {label: (daemonActive ? healthyAdapters.length : 0) + '/' + adapters.length + ' adapters', tone: daemonActive && healthyAdapters.length === adapters.length && adapters.length ? 'ok' : (healthyAdapters.length ? 'warn' : 'err')},
+    ].map(function(pill) {
+        return '<span class="diag-health-pill ' + pill.tone + '">' + escHtml(pill.label) + '</span>';
+    }).join('') + '</div>';
+
     var overview = [
         {label: 'Version', value: d.version || 'Unknown', code: true},
         {label: 'Build date', value: d.build_date || 'Unknown'},
@@ -11052,8 +11231,11 @@ function renderDiagnostics(d) {
                 : (dev.connected ? 'Waiting for sink attachment before playback can route.' : 'No Bluetooth audio route is available yet.');
             if (dev.enabled === false) deviceStatus += ' · Disabled';
             if (dev.last_error) deviceStatus += ' · Attention needed';
+            var deviceName = dev.name || dev.mac || 'Unknown';
             return '<div class="diag-mini-card">' +
-                '<div class="diag-mini-title">' + dot(deviceTone) + '<span>' + escHtml(dev.name || dev.mac || 'Unknown') + '</span></div>' +
+                '<div class="diag-mini-title">' + dot(deviceTone) + '<span>' + escHtml(deviceName) + '</span>' +
+                    '<button type="button" class="btn btn-sm diag-copy-device-btn" onclick="_copyDeviceSupportInfo(\'' + escHtmlAttr(deviceName) + '\')" title="Copy device info">📋</button>' +
+                '</div>' +
                 '<div class="diag-mini-meta">' +
                     _renderDiagMetaRow('Availability', deviceOutcome, {stack: true}) +
                     _renderDiagMetaRow('Status', deviceStatus) +
@@ -11099,7 +11281,7 @@ function renderDiagnostics(d) {
         ? sinks.map(function(sink) {
             var state = sinkStates[sink] || 'idle';
             return '<tr>' +
-                '<td><code>' + escHtml(sink) + '</code></td>' +
+                '<td><code title="' + escHtmlAttr(sink) + '">' + escHtml(sink) + '</code></td>' +
                 '<td><span class="sink-status ' + state + '">' + escHtml(state.toUpperCase()) + '</span></td>' +
                 '<td>' + escHtml(sinkOwners[sink] || '—') + '</td>' +
             '</tr>';
@@ -11224,39 +11406,50 @@ function renderDiagnostics(d) {
         {
             title: 'Needs attention',
             target: 'diag-recovery-issues',
-            value: String(recoverySummary.open_issue_count || 0),
+            value: (function() {
+                var c = recoverySummary.open_issue_count || 0;
+                return c === 0 ? 'All clear' : c + ' issue' + (c === 1 ? '' : 's');
+            })(),
             tone: _diagRecoveryToneClass(recoverySummary.highest_severity || 'ok'),
             hint: recoverySummary.headline || 'Nothing needs recovery right now',
         },
         {
             title: 'Latency review',
             target: 'diag-recovery-latency',
-            value: recoveryLatency.recommended_pulse_latency_msec != null
-                ? String(recoveryLatency.recommended_pulse_latency_msec) + ' ms'
-                : '—',
+            value: (function() {
+                var cur = recoveryLatency.current_pulse_latency_msec;
+                var rec = recoveryLatency.recommended_pulse_latency_msec;
+                if (cur == null) return '—';
+                if (rec != null && cur === rec) return cur + ' ms ✓';
+                return cur + ' ms';
+            })(),
             tone: _diagRecoveryToneClass(recoveryLatency.tone || 'ok'),
             hint: recoveryLatency.summary || 'No latency guidance available.',
         },
         {
             title: 'Timeline',
             target: 'diag-recovery-timeline',
-            value: String((recoveryTimeline.summary && recoveryTimeline.summary.entry_count) || 0),
+            value: (function() {
+                var s = recoveryTimeline.summary || {};
+                var errs = s.error_count || 0;
+                var warns = s.warning_count || 0;
+                if (errs > 0) return errs + ' error' + (errs === 1 ? '' : 's');
+                if (warns > 0) return warns + ' warning' + (warns === 1 ? '' : 's');
+                return 'All clear';
+            })(),
             tone: ((recoveryTimeline.summary && recoveryTimeline.summary.error_count) || 0) > 0
                 ? 'error'
                 : ((((recoveryTimeline.summary && recoveryTimeline.summary.warning_count) || 0) > 0) ? 'warn' : 'ok'),
-            hint: (recoveryTimeline.summary && recoveryTimeline.summary.latest_at) || 'No timeline entries yet',
+            hint: (function() {
+                var s = recoveryTimeline.summary || {};
+                var at = s.latest_at;
+                if (!at) return 'No timeline entries yet';
+                return (s.entry_count || 0) + ' events · last ' + _timeAgo(at);
+            })(),
         },
     ].map(_renderDiagSummaryCard).join('');
     var recoverySafeActions = (recovery.safe_actions || []).map(_renderRecoveryActionButton).join('');
-    var diagnosticsActions = '<div class="diag-actions diag-actions--hero">' +
-        '<div class="diag-actions-left">' +
-            '<button type="button" class="btn btn-sm btn-secondary" onclick="reloadDiagnostics()">' + _buttonLabelWithIconHtml('refresh', 'Refresh') + '</button>' +
-            '<button type="button" class="btn btn-sm btn-secondary" onclick="downloadDiagnostics()">' + _buttonLabelWithIconHtml('download', 'Download diagnostics') + '</button>' +
-        '</div>' +
-        '<div class="diag-actions-right">' +
-            '<button type="button" class="btn btn-sm btn-primary" onclick="return _openBugReport(event)">' + _buttonLabelWithIconHtml('report', 'Submit bug report') + '</button>' +
-        '</div>' +
-    '</div>';
+    var diagnosticsActions = '';
     var latencyHints = (recoveryLatency.hints || []).map(function(hint) {
         return _renderDiagInfoItem('Hint', hint, {stack: true});
     }).join('');
@@ -11290,52 +11483,81 @@ function renderDiagnostics(d) {
         (portAudioError ? 'local output scan failed' : (visiblePortAudioDevices.length + ' local output' + (visiblePortAudioDevices.length === 1 ? '' : 's'))),
     ].join(' · ');
 
+    var _recoveryIssues = recovery.issues || [];
+    var _recoveryTraces = recovery.traces || [];
+    var _recoveryIssueTone = _recoveryIssues.length === 0 ? ''
+        : (_recoveryIssues.some(function(i) { return i.severity === 'error'; }) ? ' error' : ' warn');
+    var _timelineEntryCount = Number((recoveryTimeline.summary && recoveryTimeline.summary.entry_count) || 0);
+
     return '<div class="diag-panel">' +
+        '<nav class="diag-nav" id="diag-nav">' +
+            '<button type="button" class="diag-nav-btn is-active" data-target="diag-recovery-center" onclick="return focusDiagnosticsSection(\'diag-recovery-center\')">Issues</button>' +
+            '<button type="button" class="diag-nav-btn" data-target="diag-health-summary" onclick="return focusDiagnosticsSection(\'diag-health-summary\')">Health</button>' +
+            '<button type="button" class="diag-nav-btn" data-target="diag-speaker-states" onclick="return focusDiagnosticsSection(\'diag-speaker-states\')">Speakers</button>' +
+            '<button type="button" class="diag-nav-btn" data-target="diag-routing" onclick="return focusDiagnosticsSection(\'diag-routing\')">Routing</button>' +
+            '<button type="button" class="diag-nav-btn" data-target="diag-ma-groups-card" onclick="return focusDiagnosticsSection(\'diag-ma-groups-card\')">MA</button>' +
+            '<button type="button" class="diag-nav-btn" data-target="diag-advanced-section" onclick="return focusDiagnosticsSection(\'diag-advanced-section\')">Advanced</button>' +
+            '<button type="button" class="diag-mode-toggle" onclick="_toggleDiagMode()" title="Switch between simple and advanced view">' +
+                '<span class="diag-mode-icon">\u26A1</span> ' +
+                (localStorage.getItem('sendspin-diag-mode') === 'advanced' ? 'Simple' : 'Advanced') +
+            '</button>' +
+        '</nav>' +
+        healthStripHtml +
         '<div class="diag-overview-head">' +
             '<div class="diag-overview-title">Overview</div>' +
             '<div class="diag-overview-copy">Start in this first layer for the current issue, bridge health, and speaker readiness.</div>' +
         '</div>' +
         '<div class="diag-card diag-card--primary diag-jump-target" id="diag-recovery-center">' +
             '<div class="diag-card-header"><div><div class="diag-card-title">Recovery center</div><div class="diag-card-subtitle">Start here for current blockers, recent recovery signals, and the safest next step.</div></div><div class="diag-card-header-actions">' + _renderDiagCopyButton('diag-recovery-center', 'Recovery center') + '</div></div>' +
-            '<div class="diag-summary-grid">' + recoveryOverviewCards + '</div>' +
             '<div class="diag-recovery-summary diag-recovery-summary--hero">' +
                 '<div class="diag-recovery-headline">' + escHtml(recoverySummary.headline || 'Nothing needs recovery right now') + '</div>' +
                 '<div class="diag-recovery-copy">' + escHtml(recoverySummary.summary || 'Playback and recovery signals look healthy right now.') + '</div>' +
                 (recoverySafeActions ? '<div class="diag-recovery-actions">' + recoverySafeActions + '</div>' : '') +
                 diagnosticsActions +
             '</div>' +
-            '<div class="diag-recovery-grid">' +
-                '<div class="diag-jump-target" id="diag-recovery-issues"><div class="diag-subsection-title">Active issues</div>' + _renderRecoveryIssues(recovery.issues || []) + '</div>' +
-                '<div><div class="diag-subsection-title">Recent recovery events</div>' + _renderRecoveryTraces(recovery.traces || []) + '</div>' +
-            '</div>' +
-            '<div class="diag-recovery-grid">' +
-                recoveryLatencyCard +
-                '<div><div class="diag-subsection-title">Recommended verification path</div>' + _renderKnownGoodTestPath(recovery.known_good_test_path || {}) + '</div>' +
-            '</div>' +
-            '<div class="diag-recovery-grid">' +
-                recoveryTimelineCard +
-                '<div></div>' +
-            '</div>' +
+            '<div class="diag-summary-grid">' + recoveryOverviewCards + '</div>' +
+            '<details class="diag-recovery-sub" id="diag-recovery-issues-sub"' + (_recoveryIssues.length > 0 ? ' open' : '') + '>' +
+                '<summary class="diag-recovery-sub-summary">Active issues<span class="diag-recovery-sub-count' + _recoveryIssueTone + '">' + _recoveryIssues.length + '</span></summary>' +
+                '<div class="diag-recovery-sub-body">' + _renderRecoveryIssues(_recoveryIssues) + '</div>' +
+            '</details>' +
+            '<details class="diag-recovery-sub" open>' +
+                '<summary class="diag-recovery-sub-summary">Verification path</summary>' +
+                '<div class="diag-recovery-sub-body">' + _renderKnownGoodTestPath(recovery.known_good_test_path || {}) + '</div>' +
+            '</details>' +
+            '<details class="diag-recovery-sub diag-simple-hide">' +
+                '<summary class="diag-recovery-sub-summary">Recovery events<span class="diag-recovery-sub-count">' + _recoveryTraces.length + '</span></summary>' +
+                '<div class="diag-recovery-sub-body">' + _renderRecoveryTraces(_recoveryTraces) + '</div>' +
+            '</details>' +
+            '<details class="diag-recovery-sub diag-simple-hide">' +
+                '<summary class="diag-recovery-sub-summary">Latency tuning</summary>' +
+                '<div class="diag-recovery-sub-body">' + recoveryLatencyCard + '</div>' +
+            '</details>' +
+            '<details class="diag-recovery-sub diag-simple-hide">' +
+                '<summary class="diag-recovery-sub-summary">Timeline<span class="diag-recovery-sub-count">' + _timelineEntryCount + '</span></summary>' +
+                '<div class="diag-recovery-sub-body">' + recoveryTimelineCard + '</div>' +
+            '</details>' +
         '</div>' +
-        '<div class="diag-card diag-jump-target" id="diag-health-summary">' +
+        '<div class="diag-card diag-jump-target diag-simple-hide" id="diag-health-summary">' +
             '<div class="diag-card-header"><div><div class="diag-card-title">Health summary</div><div class="diag-card-subtitle">Fast read on speaker health, routing coverage, and Music Assistant readiness.</div></div><div class="diag-card-header-actions">' + _renderDiagCopyButton('diag-health-summary', 'Health summary') + '</div></div>' +
             '<div class="diag-summary-grid">' + summaryCards + '</div>' +
             '<div class="diag-grid diag-runtime-grid">' + overview + '</div>' +
         '</div>' +
-        '<div class="diag-card diag-jump-target" id="diag-speaker-states">' +
+        '<div class="diag-card diag-jump-target diag-simple-hide" id="diag-speaker-states">' +
             '<div class="diag-card-header"><div><div class="diag-card-title">Speaker states</div><div class="diag-card-subtitle">Connection state, sink attachment, and the clearest next hint for each speaker.</div></div><div class="diag-card-header-actions">' + _renderDiagConfigButton('devices', 'Device settings') + _renderDiagCopyButton('diag-speaker-states', 'Speaker states') + '</div></div>' +
+            (devices.length > 3 ? '<input class="diag-filter-input" type="search" placeholder="Filter speakers\u2026" oninput="_filterDiagSpeakers(this.value)">' +
+            '<p id="diag-speaker-filter-empty" class="diag-filter-empty" style="display:none">No speakers match your filter.</p>' : '') +
             '<div class="diag-devices">' + deviceCards + '</div>' +
         '</div>' +
-        '<div class="diag-card diag-jump-target" id="diag-routing">' +
+        '<div class="diag-card diag-jump-target diag-simple-hide" id="diag-routing">' +
             '<div class="diag-card-header"><div><div class="diag-card-title">Adapters & routing</div><div class="diag-card-subtitle">Detected controllers and attached PulseAudio / PipeWire outputs.</div></div><div class="diag-card-header-actions">' + _renderDiagConfigButton('bluetooth', 'Bluetooth settings') + _renderDiagCopyButton('diag-routing', 'Adapters & routing') + '</div></div>' +
             '<div class="diag-adapters">' + adapterCards + '</div>' +
             '<div class="sink-table-wrap"><table class="sink-table"><thead><tr><th>Sink</th><th>Status</th><th>Used by</th></tr></thead><tbody>' + sinkRows + '</tbody></table></div>' +
         '</div>' +
-        '<div class="diag-card diag-jump-target" id="diag-ma-groups-card">' +
+        '<div class="diag-card diag-jump-target diag-simple-hide" id="diag-ma-groups-card">' +
             '<div class="diag-card-header"><div><div class="diag-card-title">Music Assistant groups</div><div class="diag-card-subtitle">' + escHtml(ma.url || 'No MA URL configured') + '</div></div><div class="diag-card-header-actions">' + _renderDiagConfigButton('ma', 'MA settings') + _renderDiagCopyButton('diag-ma-groups-card', 'Music Assistant groups') + '</div></div>' +
             '<div class="diag-ma-groups">' + groupCards + '</div>' +
         '</div>' +
-        '<details class="diag-advanced-section">' +
+        '<details class="diag-advanced-section diag-simple-hide">' +
             '<summary>' +
                 '<span class="diag-advanced-summary">' +
                     '<span class="diag-advanced-title">Advanced diagnostics</span>' +
@@ -11358,6 +11580,16 @@ function renderDiagnostics(d) {
                 '</div>' +
             '</div>' +
         '</details>' +
+        '<div class="diag-footer">' +
+            '<div class="diag-footer-left">' +
+                '<button type="button" class="btn btn-sm btn-secondary" onclick="reloadDiagnostics()">' + _buttonLabelWithIconHtml('refresh', 'Refresh') + '</button>' +
+                '<button type="button" class="btn btn-sm btn-secondary" onclick="downloadDiagnostics()">' + _buttonLabelWithIconHtml('download', 'Download') + '</button>' +
+                '<button type="button" class="btn btn-sm diag-footer-btn" onclick="_copyDiagSummary()" title="Copy diagnostics summary to clipboard">📋 Copy</button>' +
+            '</div>' +
+            '<div class="diag-footer-right">' +
+                '<button type="button" class="btn btn-sm btn-primary" onclick="return _openBugReport(event)">' + _buttonLabelWithIconHtml('report', 'Report issue') + '</button>' +
+            '</div>' +
+        '</div>' +
     '</div>';
 }
 
