@@ -44,7 +44,7 @@ jobs:
             git rm -rf . >/dev/null 2>&1 || true
           fi
 
-          mkdir -p traffic/clones traffic/views traffic/referrers traffic/paths traffic/releases traffic/repo
+          mkdir -p traffic/clones traffic/views traffic/referrers traffic/paths traffic/releases traffic/repo traffic/container
 
       - name: Fetch traffic data
         if: steps.traffic-token.outputs.available == 'true'
@@ -144,6 +144,35 @@ jobs:
             const repoSnapshot = buildRepoSnapshot(repoResponse.data);
             const releaseSnapshot = buildReleaseSnapshot(releases);
 
+            // Fetch GHCR container package versions
+            let containerSnapshot = { total_versions: 0, tagged_versions: 0, versions: [] };
+            try {
+              const pkgVersions = await github.paginate(
+                github.rest.packages.getAllPackageVersionsForPackageOwnedByUser,
+                { package_type: 'container', package_name: 'sendspin-bt-bridge', username: owner, per_page: 100 }
+              );
+
+              const taggedVersions = pkgVersions
+                .filter(v => v.metadata?.container?.tags?.length > 0)
+                .map(v => ({
+                  id: v.id,
+                  tags: v.metadata.container.tags,
+                  created_at: v.created_at,
+                  updated_at: v.updated_at,
+                }));
+
+              containerSnapshot = {
+                total_versions: pkgVersions.length,
+                tagged_versions: taggedVersions.length,
+                versions: taggedVersions,
+              };
+            } catch (err) {
+              console.log(`Container stats unavailable: ${err.message}`);
+            }
+
+            fs.mkdirSync('traffic/container', { recursive: true });
+            writeJson(`traffic/container/${date}.json`, containerSnapshot);
+
             writeJson(`traffic/clones/${date}.json`, clones.data);
             writeJson(`traffic/views/${date}.json`, views.data);
             writeJson(`traffic/referrers/${date}.json`, referrers.data);
@@ -210,6 +239,19 @@ jobs:
               release_count: releaseSnapshot.release_count,
               latest_release_tag: releaseSnapshot.latest_release_tag,
             };
+
+            // Container summary
+            summary.container = {
+              total_versions: containerSnapshot.total_versions,
+              tagged_versions: containerSnapshot.tagged_versions,
+              latest_tags: containerSnapshot.versions.length > 0 ? containerSnapshot.versions[0].tags : [],
+            };
+            if (!summary.container_history) summary.container_history = {};
+            summary.container_history[date] = {
+              total_versions: containerSnapshot.total_versions,
+              tagged_versions: containerSnapshot.tagged_versions,
+            };
+
             summary.last_updated = new Date().toISOString();
 
             writeJson(summaryPath, summary);
@@ -224,6 +266,9 @@ jobs:
             );
             console.log(
               `Repo snapshot: ${repoSnapshot.stargazers_count} stars, ${repoSnapshot.forks_count} forks, ${repoSnapshot.subscribers_count} subscribers`
+            );
+            console.log(
+              `Container: ${containerSnapshot.total_versions} total versions, ${containerSnapshot.tagged_versions} tagged`
             );
 
       - name: Commit and push
