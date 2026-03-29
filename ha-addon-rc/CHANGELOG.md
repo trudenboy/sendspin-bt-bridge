@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.51.0-rc.4] - 2026-03-29
+
+### Added
+- Diagnostics: sticky section nav strip with auto-highlighting via IntersectionObserver
+- Diagnostics: Simple/Advanced toggle with localStorage persistence (76% content reduction in Simple mode)
+- Diagnostics: health status pills strip (speakers, sinks, MA, adapters)
+- Diagnostics: speaker filter input for quick search across devices
+- Diagnostics: copy-to-clipboard for diagnostics summary and per-device support info
+- Diagnostics: contextual bug report pre-fill from recovery issue cards
+- Diagnostics: humanized summary cards (issue count, latency comparison, warning breakdown)
+- Diagnostics: `_timeAgo()` relative timestamps in timeline and traces
+
+### Changed
+- Diagnostics: Recovery center broken into 5 collapsible sub-sections with count badges
+- Diagnostics: action buttons consolidated into sticky footer (Refresh, Download, Copy, Report)
+- Diagnostics: default timeline limit reduced from 12 to 5 entries
+- Diagnostics: PA sinks table mobile layout with truncation and tooltips
+
+### Fixed
+- Truncate long player names to fit mDNS 63-byte label limit — fixes `zeroconf.BadTypeInNameException` for speakers like "[AV] Samsung Soundbar M360 M-Series @ asus-laptop-ubuntu" (#115)
+- Remove circular "Open diagnostics" button from within diagnostics panel
+
 ## [2.51.0-rc.3] - 2026-03-28
 
 ### Fixed
