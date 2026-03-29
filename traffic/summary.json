@@ -103,6 +103,10 @@
     "2026-03-26T00:00:00Z": {
       "count": 835,
       "uniques": 234
+    },
+    "2026-03-27T00:00:00Z": {
+      "count": 151,
+      "uniques": 75
     }
   },
   "views": {
@@ -209,18 +213,22 @@
     "2026-03-26T00:00:00Z": {
       "count": 140,
       "uniques": 64
+    },
+    "2026-03-27T00:00:00Z": {
+      "count": 82,
+      "uniques": 40
     }
   },
   "referrers": [
     {
       "referrer": "github.com",
-      "count": 194,
-      "uniques": 45
+      "count": 196,
+      "uniques": 43
     },
     {
       "referrer": "community.home-assistant.io",
-      "count": 131,
-      "uniques": 28
+      "count": 132,
+      "uniques": 30
     },
     {
       "referrer": "Google",
@@ -229,7 +237,7 @@
     },
     {
       "referrer": "trudenboy.github.io",
-      "count": 20,
+      "count": 21,
       "uniques": 8
     },
     {
@@ -244,11 +252,16 @@
     },
     {
       "referrer": "music-assistant.io",
+      "count": 4,
+      "uniques": 1
+    },
+    {
+      "referrer": "Bing",
       "count": 2,
       "uniques": 1
     },
     {
-      "referrer": "com.slack",
+      "referrer": "Yahoo",
       "count": 1,
       "uniques": 1
     },
@@ -258,33 +271,33 @@
       "uniques": 1
     }
   ],
-  "last_updated": "2026-03-28T04:55:53.044Z",
+  "last_updated": "2026-03-29T05:13:46.664Z",
   "clones_window": {
-    "count": 3623,
-    "uniques": 879
+    "count": 3619,
+    "uniques": 910
   },
   "views_window": {
-    "count": 1064,
-    "uniques": 255
+    "count": 1111,
+    "uniques": 280
   },
   "paths": [
     {
       "path": "/trudenboy/sendspin-bt-bridge",
       "title": "trudenboy/sendspin-bt-bridge: A Bluetooth bridge for Music Assistant — connec...",
-      "count": 506,
-      "uniques": 206
+      "count": 543,
+      "uniques": 225
     },
     {
       "path": "/trudenboy/sendspin-bt-bridge/blob/main/README.ru.md",
       "title": "sendspin-bt-bridge/README.ru.md at main · trudenboy/sendspin-bt-bridge · GitHub",
-      "count": 75,
-      "uniques": 48
+      "count": 76,
+      "uniques": 49
     },
     {
       "path": "/trudenboy/sendspin-bt-bridge/issues",
       "title": "GitHub · Where software is built",
-      "count": 72,
-      "uniques": 25
+      "count": 66,
+      "uniques": 22
     },
     {
       "path": "/trudenboy/sendspin-bt-bridge/actions",
@@ -295,8 +308,8 @@
     {
       "path": "/trudenboy/sendspin-bt-bridge/releases",
       "title": "Releases · trudenboy/sendspin-bt-bridge",
-      "count": 43,
-      "uniques": 11
+      "count": 45,
+      "uniques": 13
     },
     {
       "path": "/trudenboy/sendspin-bt-bridge/tags",
@@ -307,8 +320,8 @@
     {
       "path": "/trudenboy/sendspin-bt-bridge/tree/main",
       "title": "GitHub - trudenboy/sendspin-bt-bridge: A Bluetooth bridge for Music Assistant...",
-      "count": 15,
-      "uniques": 8
+      "count": 16,
+      "uniques": 9
     },
     {
       "path": "/trudenboy/sendspin-bt-bridge/actions/runs/23264458415",
@@ -333,14 +346,14 @@
     "full_name": "trudenboy/sendspin-bt-bridge",
     "default_branch": "main",
     "open_issues_count": 0,
-    "stargazers_count": 33,
+    "stargazers_count": 37,
     "subscribers_count": 0,
-    "watchers_count": 33,
+    "watchers_count": 37,
     "forks_count": 1,
     "network_count": 1,
-    "size_kb": 33917,
-    "pushed_at": "2026-03-27T18:33:46Z",
-    "updated_at": "2026-03-27T20:58:47Z"
+    "size_kb": 34497,
+    "pushed_at": "2026-03-28T17:13:20Z",
+    "updated_at": "2026-03-29T05:00:55Z"
   },
   "repo_history": {
     "2026-03-17": {
@@ -498,6 +511,19 @@
       "size_kb": 33917,
       "pushed_at": "2026-03-27T18:33:46Z",
       "updated_at": "2026-03-27T20:58:47Z"
+    },
+    "2026-03-29": {
+      "full_name": "trudenboy/sendspin-bt-bridge",
+      "default_branch": "main",
+      "open_issues_count": 0,
+      "stargazers_count": 37,
+      "subscribers_count": 0,
+      "watchers_count": 37,
+      "forks_count": 1,
+      "network_count": 1,
+      "size_kb": 34497,
+      "pushed_at": "2026-03-28T17:13:20Z",
+      "updated_at": "2026-03-29T05:00:55Z"
     }
   },
   "releases": {
@@ -1917,6 +1943,11 @@
       "latest_release_tag": "v2.50.1"
     },
     "2026-03-28": {
+      "total_downloads": 0,
+      "release_count": 169,
+      "latest_release_tag": "v2.50.4"
+    },
+    "2026-03-29": {
       "total_downloads": 0,
       "release_count": 169,
       "latest_release_tag": "v2.50.4"
