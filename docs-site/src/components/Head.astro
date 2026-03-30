@@ -1,11 +1,98 @@
 ---
-// Custom Head override — adds Mermaid.js for diagram rendering + lightbox on click.
+// Custom Head override — adds Mermaid.js, lightbox, and Google Translate auto-translation.
 import Default from '@astrojs/starlight/components/Head.astro';
 ---
 
 <Default {...Astro.props}><slot /></Default>
 
 <style is:global>
+  /* ── Google Translate: hide banner, prevent body shift ── */
+  .goog-te-banner-frame { display: none !important; }
+  body { top: 0 !important; }
+  body > .skiptranslate:first-child { display: none; }
+
+  /* ── Custom language picker (top-right of header) ── */
+  .gt-picker {
+    position: fixed;
+    top: 12px;
+    right: 16px;
+    z-index: 10000;
+    font-family: system-ui, -apple-system, sans-serif;
+  }
+  .gt-picker-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    background: var(--sl-color-bg-nav, rgba(30,30,40,0.85));
+    border: 1px solid var(--sl-color-gray-5, rgba(255,255,255,0.12));
+    border-radius: 8px;
+    color: var(--sl-color-text, #e0e0e0);
+    font-size: 0.82rem;
+    cursor: pointer;
+    backdrop-filter: blur(12px);
+    transition: all 0.2s;
+  }
+  .gt-picker-btn:hover {
+    border-color: var(--sl-color-accent, #50B0B8);
+    background: var(--sl-color-bg-nav, rgba(40,40,55,0.95));
+  }
+  .gt-picker-btn .chevron {
+    font-size: 0.55rem;
+    transition: transform 0.2s;
+  }
+  .gt-picker.open .chevron { transform: rotate(180deg); }
+
+  .gt-picker-menu {
+    display: none;
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    min-width: 170px;
+    max-height: 320px;
+    overflow-y: auto;
+    background: var(--sl-color-bg-nav, rgba(25,25,35,0.96));
+    border: 1px solid var(--sl-color-gray-5, rgba(255,255,255,0.1));
+    border-radius: 10px;
+    padding: 6px;
+    backdrop-filter: blur(16px);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  }
+  .gt-picker.open .gt-picker-menu { display: block; }
+
+  .gt-picker-menu button {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 7px 10px;
+    background: none;
+    border: none;
+    border-radius: 6px;
+    color: var(--sl-color-text, #ccc);
+    font-size: 0.82rem;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.15s;
+  }
+  .gt-picker-menu button:hover {
+    background: var(--sl-color-gray-6, rgba(255,255,255,0.08));
+  }
+  .gt-picker-menu button.active {
+    background: linear-gradient(135deg, rgba(80,176,184,0.15), rgba(144,112,184,0.15));
+    color: var(--sl-color-accent, #50B0B8);
+  }
+  .gt-picker-menu .gt-divider {
+    height: 1px;
+    background: var(--sl-color-gray-5, rgba(255,255,255,0.08));
+    margin: 4px 6px;
+  }
+  .gt-picker-menu .gt-more-btn {
+    color: var(--sl-color-text-accent, #50B0B8);
+    font-size: 0.78rem;
+    opacity: 0.8;
+  }
+  .gt-picker-menu .gt-more-btn:hover { opacity: 1; }
   .mermaid-wrapper {
     position: relative;
     cursor: zoom-in;
@@ -65,6 +152,144 @@ import Default from '@astrojs/starlight/components/Head.astro';
   }
   #mermaid-lightbox-close:hover { opacity: 1; background: var(--sl-color-gray-6, #eee); }
 </style>
+
+<!-- ── Google Translate hidden widget ── -->
+<div id="google_translate_element" style="opacity:0;position:absolute;pointer-events:none;height:0;overflow:hidden;"></div>
+
+<!-- ── Custom language picker ── -->
+<div class="gt-picker" id="gtPicker">
+  <button class="gt-picker-btn" id="gtPickerBtn" aria-haspopup="true" aria-expanded="false">
+    <span class="flag" id="gtActiveFlag">🌐</span>
+    <span id="gtActiveLang">English</span>
+    <span class="chevron">▼</span>
+  </button>
+  <div class="gt-picker-menu" id="gtPickerMenu" role="menu"></div>
+</div>
+
+<script is:inline>
+(function(){
+  const LANGS = [
+    {code:'en',flag:'🇬🇧',name:'English'},
+    {code:'zh-CN',flag:'🇨🇳',name:'中文'},
+    {code:'es',flag:'🇪🇸',name:'Español'},
+    {code:'fr',flag:'🇫🇷',name:'Français'},
+    {code:'de',flag:'🇩🇪',name:'Deutsch'},
+    {code:'ru',flag:'🇷🇺',name:'Русский'},
+    {code:'uk',flag:'🇺🇦',name:'Українська'},
+    {code:'pt',flag:'🇧🇷',name:'Português'},
+    {code:'ja',flag:'🇯🇵',name:'日本語'},
+    {code:'ko',flag:'🇰🇷',name:'한국어'},
+    {code:'ar',flag:'🇸🇦',name:'العربية'},
+    {code:'hi',flag:'🇮🇳',name:'हिन्दी'},
+    {code:'it',flag:'🇮🇹',name:'Italiano'},
+    {code:'tr',flag:'🇹🇷',name:'Türkçe'},
+  ];
+
+  function initGTPicker(){
+    const picker = document.getElementById('gtPicker');
+    const btn = document.getElementById('gtPickerBtn');
+    const menu = document.getElementById('gtPickerMenu');
+    const flagEl = document.getElementById('gtActiveFlag');
+    const nameEl = document.getElementById('gtActiveLang');
+    if(!picker||!btn||!menu) return;
+
+    // Build menu
+    menu.innerHTML = '';
+    LANGS.forEach(l => {
+      const b = document.createElement('button');
+      b.role = 'menuitem';
+      b.dataset.lang = l.code;
+      b.innerHTML = '<span>'+l.flag+'</span> '+l.name;
+      b.addEventListener('click', () => selectLang(l));
+      menu.appendChild(b);
+    });
+    // Divider + More
+    const div = document.createElement('div');
+    div.className = 'gt-divider';
+    menu.appendChild(div);
+    const more = document.createElement('button');
+    more.className = 'gt-more-btn';
+    more.role = 'menuitem';
+    more.textContent = '🌐 More languages…';
+    more.addEventListener('click', openNativeGT);
+    menu.appendChild(more);
+
+    // Detect current language from cookie
+    const cur = (document.cookie.match(/googtrans=\/en\/([^;]+)/)||[])[1] || 'en';
+    const active = LANGS.find(l => l.code === cur) || LANGS[0];
+    setActive(active);
+
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      picker.classList.toggle('open');
+      btn.setAttribute('aria-expanded', picker.classList.contains('open'));
+    });
+    document.addEventListener('click', () => {
+      picker.classList.remove('open');
+      btn.setAttribute('aria-expanded','false');
+    });
+    menu.addEventListener('click', e => e.stopPropagation());
+
+    function setActive(l){
+      flagEl.textContent = l.flag;
+      nameEl.textContent = l.name;
+      menu.querySelectorAll('button[data-lang]').forEach(b => {
+        b.classList.toggle('active', b.dataset.lang === l.code);
+      });
+    }
+
+    function selectLang(l){
+      setActive(l);
+      picker.classList.remove('open');
+      if(l.code === 'en'){
+        // Remove translation
+        document.cookie = 'googtrans=;path=/;expires=Thu,01 Jan 1970 00:00:00 GMT';
+        document.cookie = 'googtrans=;path=/;domain='+location.hostname+';expires=Thu,01 Jan 1970 00:00:00 GMT';
+        location.reload();
+        return;
+      }
+      document.cookie = 'googtrans=/en/'+l.code+';path=/';
+      document.cookie = 'googtrans=/en/'+l.code+';path=/;domain='+location.hostname;
+      // Trigger GT select if loaded
+      const sel = document.querySelector('#google_translate_element select');
+      if(sel){
+        sel.value = l.code;
+        sel.dispatchEvent(new Event('change'));
+      } else {
+        location.reload();
+      }
+    }
+
+    function openNativeGT(){
+      const el = document.getElementById('google_translate_element');
+      if(el){ el.style.opacity='1'; el.style.position='static'; el.style.pointerEvents='auto'; el.style.height='auto'; }
+      const sel = el && el.querySelector('select');
+      if(sel) sel.focus();
+      picker.classList.remove('open');
+    }
+  }
+
+  // Load Google Translate
+  window.googleTranslateElementInit = function(){
+    new google.translate.TranslateElement({
+      pageLanguage: 'en',
+      autoDisplay: false
+    }, 'google_translate_element');
+  };
+
+  function loadGT(){
+    if(document.getElementById('gt-script')) return;
+    const s = document.createElement('script');
+    s.id = 'gt-script';
+    s.src = '//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit';
+    document.head.appendChild(s);
+  }
+
+  function init(){ initGTPicker(); loadGT(); }
+  document.addEventListener('DOMContentLoaded', init);
+  document.addEventListener('astro:page-load', init);
+})();
+</script>
 
 <div id="mermaid-lightbox" role="dialog" aria-modal="true" aria-label="Diagram viewer">
   <div id="mermaid-lightbox-inner">
