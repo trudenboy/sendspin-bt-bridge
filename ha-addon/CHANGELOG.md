@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.52.0] - 2026-03-30
+
+### Added
+- Bug report modal: GitHub App proxy for users without GitHub accounts — submit issues directly from the bridge UI
+- Backend proxy `/api/bugreport/submit` with JWT auth, per-IP (3/hr) and global (20/day) rate limiting
+- New dependencies: `PyJWT>=2.8.0` + `cryptography>=3.4.0` for GitHub App RS256 JWT signing
+- Stable releases now attach a source tarball as a release asset with tracked download counts
+- LXC `upgrade.sh` prefers release asset download (tracked) over archive URL, with automatic fallback
+- LXC upgrade: self-update mechanism — `upgrade.sh` fetches its latest version from the target ref before running
+- Traffic dashboard: Total Downloads metric card, release downloads chart, per-release download column
+- TDD rules for AI agents in CLAUDE.md and CONTRIBUTING.md — red/green/refactor, 5 agent constraints
+- CRITICAL risk markers on 7 high-risk code zones (audio routing, thread safety, path traversal, auth, config persistence)
+- CI test protection: PR warning when test files change without source changes or bulk modifications
+- `config.schema.json` — machine-readable JSON Schema for config.json (all 40+ fields, device/adapter sub-schemas)
+- SMM-optimized landing page with infographics, share bars, and custom language picker (14 languages + Google Translate)
+- Google Translate auto-translation widget for documentation site
+- Landing page deployed to Cloudflare Pages (sendspin-bt-bridge.pages.dev)
+
+### Changed
+- Bug report modal: compact dropdown + single Submit button instead of three cards
+- Email required for proxy submissions; hidden for "Copy to clipboard" method
+
+### Fixed
+- Docker Compose: add `security_opt: apparmor:unconfined, seccomp:unconfined` for Bluetooth on Ubuntu/Debian (#114)
+- HA Addon AppArmor profile: add `dbus,` and `network raw,` rules for HA Supervised on Ubuntu 24.04+ (#114)
+- Docker build: replace `PyJWT[crypto]` with separate `PyJWT` + `cryptography` deps to fix pip constraints
+- LXC upgrade: download release archive to temp file with retry instead of fragile pipe
+- LXC upgrade: `warn()` output to stderr to prevent path variable pollution
+- Wake button: distinct sunrise icon instead of sharing the reconnect icon
+- Test audit: fixed tautological tests and added missing assertions across 6 test files
+
 ## [2.51.0] - 2026-03-29
 
 ### Added
