@@ -99,6 +99,23 @@ This track turns the current web UI into a clearer operational product:
 - build a real operator console around creation flows, diagnostics, details drawers, timelines, and bulk actions
 - allow replacement of whole high-churn screens when that produces a cleaner product than endless incremental patching
 
+### Track D. Management CLI (`sbb`)
+
+This track adds a terminal-first operator interface alongside the web UI:
+
+- a standalone CLI tool (`sbb`) that wraps the existing REST API — no direct runtime coupling
+- **Click** as the framework (already a transitive dependency via Flask, zero new deps)
+- noun-verb command structure (`sbb device list`, `sbb config get`, `sbb ma groups`) following kubectl/docker conventions
+- dual-mode operation: one-shot parametric commands and an interactive REPL shell (`sbb shell`) sharing the same handler functions
+- `--output json|table|yaml|csv` for machine-readable and human-friendly output
+- shell completion for bash, zsh, and fish generated from Click command definitions
+- config discovery chain: CLI flag → `SBB_URL` env var → `~/.config/sbb/config.toml` → default `http://localhost:8080`
+- can be installed separately from the bridge (e.g. on a laptop managing a remote instance via `pip install sbb-cli`)
+- **rich** as an optional soft-dependency for styled terminal tables; plain-text fallback when absent
+- **prompt_toolkit** for the interactive REPL with persistent history and dynamic MAC/adapter auto-completion
+
+The CLI does **not** replace the web UI — it complements it for SSH-only access, scripting, CI/CD automation, and power-user workflows.
+
 ## North-star outcomes
 
 v3 is successful when the project can do all of the following without becoming fragile or opaque:
@@ -212,12 +229,26 @@ Ship the first clearly multi-backend product wave: wired and USB players plus th
 - optionally allow operator-approved player creation for newly detected USB DACs
 - surface route ownership and sink disappearance issues explicitly in the new console instead of burying them in logs
 
+#### Epic 8. Management CLI foundation (`sbb`)
+
+- scaffold `sbb_cli/` package with Click-based grouped subcommands
+- implement `BridgeClient` HTTP wrapper for REST API communication with timeout, auth, and structured error mapping
+- deliver core command groups: `device` (list, info, scan, pair, remove, connect, disconnect, enable, disable, wake, standby), `adapter` (list, power, scan), `config` (show, get, set, export, import, validate), `status` (show, health, groups), `logs` (show, follow, download), `diag` (preflight, runtime, bugreport, recovery), `ma` (discover, groups, nowplaying, login), `update` (check, apply)
+- add top-level shortcuts: `volume`, `mute`, `restart`
+- implement `--output json|table|yaml|csv` formatting with rich as an optional soft-dependency
+- config discovery: CLI flag → `SBB_URL` env var → `~/.config/sbb/config.toml` → default
+- generate shell completion scripts for bash, zsh, and fish via `sbb completion`
+- support SSE streaming for `status show --watch` and `logs follow`
+- implement `sbb shell` interactive REPL with prompt_toolkit, persistent history, and dynamic MAC/adapter auto-completion
+- publish to PyPI as `sbb-cli` for standalone installation
+
 ### Exit criteria
 
 - USB DACs and wired outputs appear in the UI alongside Bluetooth speakers as first-class player shapes
 - operators can create and manage wired players through the new operator workflows rather than raw config edits
 - Bluetooth and wired players share one capability-driven model without regressing Bluetooth reliability
 - the modern console is now responsible for the highest-churn player-management paths
+- `sbb` CLI can list devices, show status, manage config, and run diagnostics from a terminal without requiring a browser
 
 ## Phase V3-2.5: Virtual sinks and composed zones
 
@@ -227,19 +258,19 @@ Turn PulseAudio virtual sinks into real product surfaces once the first multi-ba
 
 ### Scope
 
-#### Epic 8. Combine sink creation
+#### Epic 9. Combine sink creation
 
 - add operator flows to select 2+ sinks and create a `module-combine-sink`
 - target party mode, open floor plans, and lightweight multi-room grouping scenarios
 - include a test-tone or route verification action
 
-#### Epic 9. Remap sink creation
+#### Epic 10. Remap sink creation
 
 - add operator flows to extract channels from multi-channel devices via `module-remap-sink`
 - target split-zone scenarios such as a 4-channel USB DAC becoming two stereo zones
 - support standard PulseAudio channel-name mapping and clear channel previews
 
-#### Epic 10. Composed-zone lifecycle management
+#### Epic 11. Composed-zone lifecycle management
 
 - persist custom sinks in config and recreate them on restart
 - expose state, configuration summary, capability surface, and delete actions
@@ -260,14 +291,14 @@ Make health, signal path, and recovery state first-class operator surfaces rathe
 
 ### Scope
 
-#### Epic 11. Live telemetry and degraded-mode summaries
+#### Epic 12. Live telemetry and degraded-mode summaries
 
 - expose current codec, sample rate, buffer and stream state, uptime, reconnect count, and resolved output sink where available
 - pull telemetry from subprocess status lines, bridge state, backend callbacks, and event history
 - include structured per-device event history such as reconnects, sink loss or acquisition, route corrections, re-anchor events, and MA sync failures
 - publish compact degraded-mode and health-summary surfaces in addition to raw live status
 
-#### Epic 12. Signal path and route ownership visibility
+#### Epic 13. Signal path and route ownership visibility
 
 - render the end-to-end path for each backend type:
   - MA → Sendspin → subprocess → PulseAudio or PipeWire sink → Bluetooth A2DP → speaker
@@ -275,7 +306,7 @@ Make health, signal path, and recovery state first-class operator surfaces rathe
 - show measured or estimated latency at each hop where available
 - indicate route ownership, bottlenecks, or degraded hops such as codec fallback, sink mismatch, or missing route ownership
 
-#### Epic 13. Operations center and reusable UI system
+#### Epic 14. Operations center and reusable UI system
 
 - build a unified diagnostics and recovery center instead of scattering operational detail across many unrelated UI sections
 - add a frontend operation model that can present live state, pending actions, recovery history, and bulk actions without duplicating business logic across cards, rows, dialogs, and modals
@@ -297,19 +328,19 @@ Reduce manual `static_delay_ms` guesswork and make sync decisions more measurabl
 
 ### Scope
 
-#### Epic 14. Delay telemetry foundation
+#### Epic 15. Delay telemetry foundation
 
 - capture timing and drift telemetry that can support per-device delay decisions
 - expose sync health, drift, confidence, and measurement quality at the diagnostics and operator level
 - distinguish between "we can measure something" and "we trust this enough to recommend a tuning change"
 
-#### Epic 15. Guided delay calibration
+#### Epic 16. Guided delay calibration
 
 - add a calibration flow that can measure and suggest `static_delay_ms`
 - show recommended value, confidence, and before/after comparison
 - allow approve, apply, and rollback instead of forcing raw manual edits
 
-#### Epic 16. Bounded auto-tuning
+#### Epic 17. Bounded auto-tuning
 
 - add optional conservative automatic adjustment for devices with stable measurement quality
 - keep adjustments bounded, visible, and reversible
@@ -329,7 +360,7 @@ Use AI as an **operator copilot**, not as a hidden control plane.
 
 ### Scope
 
-#### Epic 17. Structured diagnostics bundles
+#### Epic 18. Structured diagnostics bundles
 
 - define a canonical machine-readable diagnostics bundle that combines:
   - bridge and runtime state
@@ -340,7 +371,7 @@ Use AI as an **operator copilot**, not as a hidden control plane.
   - backend identity and routing facts
 - make the bundle stable enough for support tooling, bug reports, and future AI consumers
 
-#### Epic 18. Deployment planner
+#### Epic 19. Deployment planner
 
 - add a planner that can inspect environment facts and suggest:
   - recommended install path (HA add-on, Docker, Raspberry Pi, LXC)
@@ -350,7 +381,7 @@ Use AI as an **operator copilot**, not as a hidden control plane.
   - safe next steps for first deployment
 - keep the planner operator-facing: generate plans and config suggestions, not silent changes
 
-#### Epic 19. AI diagnostics summarizer
+#### Epic 20. AI diagnostics summarizer
 
 - summarize failures in plain language from diagnostics data
 - rank likely root causes and safe next actions
@@ -361,7 +392,7 @@ Use AI as an **operator copilot**, not as a hidden control plane.
   - visible confidence and uncertainty
   - one-click access to the underlying raw diagnostics and event history
 
-#### Epic 20. AI safety and privacy boundaries
+#### Epic 21. AI safety and privacy boundaries
 
 - redact secrets before any external AI handoff
 - support pluggable providers and a local or manual mode
@@ -383,13 +414,13 @@ Turn multiple bridge instances into a manageable fleet after the single-bridge m
 
 ### Scope
 
-#### Epic 21. Bridge registry and fleet identity
+#### Epic 22. Bridge registry and fleet identity
 
 - define stable bridge instance identity and registration semantics
 - aggregate version, host, adapter, room, backend, and health metadata across bridges
 - detect duplicate speakers, overlapping rooms, and inconsistent bridge naming
 
-#### Epic 22. Fleet overview and bulk operations
+#### Epic 23. Fleet overview and bulk operations
 
 - build a centralized overview for:
   - bridge health
@@ -403,7 +434,7 @@ Turn multiple bridge instances into a manageable fleet after the single-bridge m
   - export and import configuration sets
   - compare configs and versions across the fleet
 
-#### Epic 23. Fleet event timeline and policy surfaces
+#### Epic 24. Fleet event timeline and policy surfaces
 
 - centralize event and recovery timelines across bridges
 - add fleet-level webhook and telemetry views
@@ -470,6 +501,10 @@ A single bridge should remain simple to deploy and operate. Fleet management sho
 
 v3 should add compatibility layers, migrate callers and config gradually, document new contracts as they land, and extend tests alongside each new backend or diagnostics surface.
 
+### 10. CLI must stay a pure HTTP client
+
+The `sbb` CLI must never import bridge runtime code or depend on Bluetooth, PulseAudio, or D-Bus libraries. It communicates exclusively through the REST API so it can be installed on any machine, including developer laptops without audio hardware.
+
 ## Execution and dependency notes
 
 The roadmap phases above are product-facing, but the safest implementation order inside them should still respect a few program-level dependencies:
@@ -504,6 +539,7 @@ A realistic `v3.0.0-rc.1` should include:
   - the first wired and USB backend
   - backend-aware player creation and editing flows
   - the first new diagnostics and details surfaces in the operator console
+  - `sbb` CLI with core device, config, status, and diagnostics commands
 - baseline audio health visibility and signal-path publication
 - delay telemetry foundations and a manual calibration path
 - structured diagnostics bundle foundations for future planner and AI work
