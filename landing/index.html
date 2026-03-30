@@ -199,6 +199,38 @@
       transition: transform var(--transition), box-shadow var(--transition);
     }
     .nav-cta:hover { transform: translateY(-1px); box-shadow: 0 4px 20px rgba(80,176,184,.4); }
+
+    /* Google Translate widget styling */
+    .nav-lang-wrap { position: relative; }
+    #google_translate_element { display: inline-block; }
+    #google_translate_element .goog-te-gadget { font-size: 0; }
+    #google_translate_element .goog-te-gadget-simple {
+      background: rgba(255,255,255,.08) !important;
+      border: 1px solid var(--border) !important;
+      border-radius: 8px !important;
+      padding: 4px 10px !important;
+      font-size: .82rem !important;
+      line-height: 1.4 !important;
+      cursor: pointer;
+      transition: background var(--transition);
+    }
+    #google_translate_element .goog-te-gadget-simple:hover {
+      background: rgba(255,255,255,.14) !important;
+    }
+    #google_translate_element .goog-te-gadget-simple .goog-te-menu-value {
+      color: var(--text-muted) !important;
+      font-family: inherit !important;
+    }
+    #google_translate_element .goog-te-gadget-simple .goog-te-menu-value span:first-child {
+      color: var(--text) !important;
+      font-weight: 500;
+    }
+    #google_translate_element .goog-te-gadget-simple img { display: none !important; }
+    .goog-te-banner-frame { display: none !important; }
+    body { top: 0 !important; }
+    .skiptranslate { display: none !important; }
+    #google_translate_element .skiptranslate { display: inline !important; }
+
     .nav-hamburger {
       display: none; background: none; border: none; cursor: pointer;
       padding: 8px; color: var(--text);
@@ -749,6 +781,7 @@
         <li><a href="#community">Community</a></li>
         <li><a href="https://trudenboy.github.io/sendspin-bt-bridge/" target="_blank" rel="noopener">Docs</a></li>
         <li><a href="https://sendspin-demo.onrender.com" target="_blank" rel="noopener" class="nav-cta">Live Demo</a></li>
+        <li class="nav-lang-wrap"><div id="google_translate_element"></div></li>
       </ul>
       <button class="nav-hamburger" onclick="document.getElementById('navLinks').classList.toggle('open')" aria-label="Toggle navigation">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
@@ -1410,6 +1443,17 @@
         ticking = true;
       }
     }, { passive: true });
+
+    // Google Translate
+    function googleTranslateElementInit() {
+      new google.translate.TranslateElement({
+        pageLanguage: 'en',
+        includedLanguages: 'en,ru,uk,be,de,fr,es',
+        layout: google.translate.TranslateElement.InlineLayout.SIMPLE,
+        autoDisplay: false
+      }, 'google_translate_element');
+    }
   </script>
+  <script src="//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"></script>
 </body>
 </html>
