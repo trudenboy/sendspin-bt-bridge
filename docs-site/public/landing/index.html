@@ -1,0 +1,1414 @@
+<!DOCTYPE html>
+<html lang="en" prefix="og: https://ogp.me/ns#">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Sendspin Bluetooth Bridge — Make Any Speaker or Headphones Smart · Build Your Own Multi-Room Audio</title>
+
+  <!-- ══ SEO ══ -->
+  <meta name="description" content="Make any Bluetooth speaker or headphones smart. Build a DIY multi-room audio system for home &amp; office with AI-driven automations — powered by Sendspin, Music Assistant, and Home Assistant. Free &amp; open-source.">
+  <meta name="keywords" content="smart speaker DIY, multiroom audio, Bluetooth speaker smart, Bluetooth headphones smart, Music Assistant, Home Assistant AI, Sendspin protocol, whole-home audio, office audio, Raspberry Pi audio, open source multiroom, voice assistant speaker">
+  <meta name="author" content="Mikhail Nevskiy">
+  <meta name="robots" content="index, follow, max-image-preview:large">
+  <link rel="canonical" href="https://sendspin-bt-bridge.pages.dev/">
+
+  <!-- ══ Open Graph (Facebook, LinkedIn, Telegram, Discord) ══ -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://sendspin-bt-bridge.pages.dev/">
+  <meta property="og:title" content="Make Any Speaker or Headphones Smart — DIY Multi-Room Audio with AI">
+  <meta property="og:description" content="Turn any Bluetooth speaker or headphones into a smart multi-room player for home &amp; office. AI-driven Home Assistant automations. Powered by Sendspin &amp; Music Assistant. Free &amp; open-source.">
+  <meta property="og:image" content="https://trudenboy.github.io/sendspin-bt-bridge/screenshots/sbb_infographic_en.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Sendspin Bluetooth Bridge architecture and features infographic">
+  <meta property="og:site_name" content="Sendspin Bluetooth Bridge">
+  <meta property="og:locale" content="en_US">
+  <meta property="og:locale:alternate" content="ru_RU">
+
+  <!-- ══ Twitter Card ══ -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Make Any Speaker or Headphones Smart — DIY Multi-Room Audio 🔊">
+  <meta name="twitter:description" content="Turn any BT speaker or headphones into a smart multi-room player. AI automations via Home Assistant. Powered by Sendspin &amp; Music Assistant. Free &amp; open-source.">
+  <meta name="twitter:image" content="https://trudenboy.github.io/sendspin-bt-bridge/screenshots/sbb_infographic_en.png">
+  <meta name="twitter:image:alt" content="Sendspin Bluetooth Bridge architecture infographic">
+
+  <!-- ══ Favicons ══ -->
+  <link rel="icon" type="image/svg+xml" href="https://trudenboy.github.io/sendspin-bt-bridge/logo.svg">
+  <link rel="icon" type="image/png" sizes="32x32" href="https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/static/favicon.png">
+
+  <!-- ══ Preconnect ══ -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+
+  <!-- ══ JSON-LD Structured Data ══ -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "Sendspin Bluetooth Bridge",
+    "description": "Make any Bluetooth speaker or headphones smart. Build a DIY multi-room audio system for home and office with AI-driven Home Assistant automations — powered by Sendspin protocol and Music Assistant. Free and open-source.",
+    "url": "https://sendspin-bt-bridge.pages.dev/",
+    "applicationCategory": "MultimediaApplication",
+    "operatingSystem": "Linux",
+    "license": "https://opensource.org/licenses/MIT",
+    "isAccessibleForFree": true,
+    "downloadUrl": "https://github.com/trudenboy/sendspin-bt-bridge",
+    "screenshot": "https://trudenboy.github.io/sendspin-bt-bridge/screenshots/screenshot-dashboard-full.png",
+    "softwareVersion": "2.52.0",
+    "author": {
+      "@type": "Person",
+      "name": "Mikhail Nevskiy",
+      "url": "https://github.com/trudenboy"
+    },
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    },
+    "aggregateRating": {
+      "@type": "AggregateRating",
+      "ratingValue": "5",
+      "ratingCount": "1"
+    }
+  }
+  </script>
+
+  <style>
+    /* ══════════════════════════════════════════
+       DESIGN TOKENS
+       ══════════════════════════════════════════ */
+    :root {
+      --teal: #50B0B8;
+      --teal-dark: #3A8F96;
+      --purple: #9070B8;
+      --purple-dark: #7058A0;
+      --gradient: linear-gradient(135deg, #50B0B8 0%, #7085AE 50%, #9070B8 100%);
+      --gradient-h: linear-gradient(90deg, #50B0B8, #5A9AAE, #7085AE, #9070B8);
+      --bg: #0B0F1A;
+      --bg-card: #111827;
+      --bg-card-hover: #1a2332;
+      --surface: #1E293B;
+      --text: #F1F5F9;
+      --text-muted: #94A3B8;
+      --text-dim: #64748B;
+      --border: rgba(148, 163, 184, .12);
+      --radius: 16px;
+      --radius-sm: 10px;
+      --shadow-sm: 0 1px 3px rgba(0,0,0,.3);
+      --shadow: 0 4px 24px rgba(0,0,0,.4);
+      --shadow-glow: 0 0 60px rgba(80,176,184,.15);
+      --transition: .3s cubic-bezier(.4,0,.2,1);
+      --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      --max-w: 1200px;
+    }
+
+    /* ══════════════════════════════════════════
+       RESET & BASE
+       ══════════════════════════════════════════ */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+    a { color: var(--teal); text-decoration: none; transition: color var(--transition); }
+    a:hover { color: #6fcfd5; }
+    img { max-width: 100%; height: auto; display: block; }
+    ::selection { background: rgba(80,176,184,.35); }
+
+    /* ══════════════════════════════════════════
+       LAYOUT HELPERS
+       ══════════════════════════════════════════ */
+    .wrap { max-width: var(--max-w); margin: 0 auto; padding: 0 24px; }
+    .section { padding: 100px 0; position: relative; }
+    .section-label {
+      display: inline-flex; align-items: center; gap: 8px;
+      font-size: .75rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase;
+      color: var(--teal); margin-bottom: 16px;
+    }
+    .section-label::before {
+      content: ''; width: 32px; height: 2px;
+      background: var(--gradient-h); border-radius: 1px;
+    }
+    .section-title {
+      font-size: clamp(1.8rem, 4vw, 2.6rem); font-weight: 800;
+      line-height: 1.2; margin-bottom: 16px;
+    }
+    .section-subtitle {
+      font-size: 1.1rem; color: var(--text-muted); max-width: 620px; line-height: 1.7;
+    }
+    .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+
+    /* ══════════════════════════════════════════
+       AMBIENT BACKGROUND
+       ══════════════════════════════════════════ */
+    .ambient {
+      position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none;
+    }
+    .ambient::before, .ambient::after {
+      content: ''; position: absolute; border-radius: 50%; filter: blur(120px); opacity: .12;
+    }
+    .ambient::before {
+      width: 600px; height: 600px; top: -150px; left: -100px;
+      background: radial-gradient(circle, #50B0B8, transparent 70%);
+    }
+    .ambient::after {
+      width: 500px; height: 500px; bottom: 10%; right: -80px;
+      background: radial-gradient(circle, #9070B8, transparent 70%);
+    }
+
+    /* ══════════════════════════════════════════
+       NAVBAR
+       ══════════════════════════════════════════ */
+    .nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      padding: 0 24px; height: 68px;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(11,15,26,.75);
+      backdrop-filter: blur(20px) saturate(180%);
+      -webkit-backdrop-filter: blur(20px) saturate(180%);
+      border-bottom: 1px solid var(--border);
+      transition: background var(--transition);
+    }
+    .nav-inner {
+      max-width: var(--max-w); width: 100%;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .nav-logo {
+      display: flex; align-items: center; gap: 12px;
+      font-weight: 700; font-size: 1.05rem; color: var(--text);
+    }
+    .nav-logo svg { height: 36px; width: auto; }
+    .nav-links { display: flex; align-items: center; gap: 32px; list-style: none; }
+    .nav-links a {
+      font-size: .88rem; font-weight: 500; color: var(--text-muted);
+      transition: color var(--transition);
+    }
+    .nav-links a:hover { color: var(--text); }
+    .nav-cta {
+      padding: 8px 20px; border-radius: 8px; font-weight: 600; font-size: .85rem;
+      background: var(--gradient); color: #fff !important;
+      transition: transform var(--transition), box-shadow var(--transition);
+    }
+    .nav-cta:hover { transform: translateY(-1px); box-shadow: 0 4px 20px rgba(80,176,184,.4); }
+    .nav-hamburger {
+      display: none; background: none; border: none; cursor: pointer;
+      padding: 8px; color: var(--text);
+    }
+
+    /* ══════════════════════════════════════════
+       HERO
+       ══════════════════════════════════════════ */
+    .hero {
+      min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      padding: 120px 24px 80px; text-align: center; position: relative;
+    }
+    .hero-glow {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -55%);
+      width: 900px; height: 500px; border-radius: 50%;
+      background: radial-gradient(ellipse, rgba(80,176,184,.08) 0%, rgba(144,112,184,.05) 40%, transparent 70%);
+      pointer-events: none;
+    }
+    .hero-content { position: relative; z-index: 1; max-width: 820px; }
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 6px 16px 6px 8px; border-radius: 100px;
+      background: rgba(80,176,184,.1); border: 1px solid rgba(80,176,184,.2);
+      font-size: .8rem; font-weight: 500; color: var(--teal);
+      margin-bottom: 32px; animation: fadeInUp .6s ease-out;
+    }
+    .hero-badge-dot {
+      width: 8px; height: 8px; border-radius: 50%; background: #4ade80;
+      animation: pulse-dot 2s infinite;
+    }
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; } 50% { opacity: .4; }
+    }
+    .hero h1 {
+      font-size: clamp(2.4rem, 6vw, 4rem); font-weight: 900;
+      line-height: 1.1; margin-bottom: 24px;
+      animation: fadeInUp .6s ease-out .1s both;
+    }
+    .hero h1 .gradient-text {
+      background: var(--gradient); -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent; background-clip: text;
+    }
+    .hero-sub {
+      font-size: clamp(1.05rem, 2.5vw, 1.25rem); color: var(--text-muted);
+      max-width: 600px; margin: 0 auto 40px; line-height: 1.7;
+      animation: fadeInUp .6s ease-out .2s both;
+    }
+    .hero-actions {
+      display: flex; flex-wrap: wrap; justify-content: center; gap: 16px;
+      animation: fadeInUp .6s ease-out .3s both;
+    }
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(24px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex; align-items: center; gap: 10px;
+      padding: 14px 28px; border-radius: 12px;
+      font-weight: 600; font-size: .95rem; cursor: pointer;
+      transition: all var(--transition); border: none; text-decoration: none;
+    }
+    .btn-primary {
+      background: var(--gradient); color: #fff;
+      box-shadow: 0 4px 24px rgba(80,176,184,.25);
+    }
+    .btn-primary:hover {
+      transform: translateY(-2px); box-shadow: 0 8px 32px rgba(80,176,184,.35);
+      color: #fff;
+    }
+    .btn-secondary {
+      background: var(--surface); color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .btn-secondary:hover {
+      background: var(--bg-card-hover); transform: translateY(-2px);
+      border-color: rgba(148,163,184,.25); color: var(--text);
+    }
+    .btn-ghost {
+      background: transparent; color: var(--text-muted); padding: 14px 20px;
+    }
+    .btn-ghost:hover { color: var(--text); }
+    .btn svg { width: 20px; height: 20px; flex-shrink: 0; }
+
+    /* ══════════════════════════════════════════
+       SOCIAL PROOF BAR
+       ══════════════════════════════════════════ */
+    .proof {
+      padding: 40px 0; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+      background: rgba(17,24,39,.5);
+    }
+    .proof-inner {
+      display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 32px;
+    }
+    .proof-item {
+      display: flex; align-items: center; gap: 8px;
+      font-size: .85rem; color: var(--text-muted);
+    }
+    .proof-item img { height: 22px; border-radius: 3px; }
+
+    /* ══════════════════════════════════════════
+       FEATURES
+       ══════════════════════════════════════════ */
+    .features-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px;
+      margin-top: 48px;
+    }
+    .feature-card {
+      padding: 32px; border-radius: var(--radius);
+      background: var(--bg-card); border: 1px solid var(--border);
+      transition: all var(--transition); position: relative; overflow: hidden;
+    }
+    .feature-card::before {
+      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+      background: var(--gradient-h); opacity: 0; transition: opacity var(--transition);
+    }
+    .feature-card:hover {
+      transform: translateY(-4px); border-color: rgba(80,176,184,.25);
+      box-shadow: var(--shadow-glow);
+    }
+    .feature-card:hover::before { opacity: 1; }
+    .feature-icon {
+      width: 48px; height: 48px; border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(80,176,184,.1); margin-bottom: 20px;
+      font-size: 1.4rem;
+    }
+    .feature-card h3 { font-size: 1.1rem; font-weight: 700; margin-bottom: 8px; }
+    .feature-card p { font-size: .9rem; color: var(--text-muted); line-height: 1.6; }
+
+    /* ══════════════════════════════════════════
+       HOW IT WORKS
+       ══════════════════════════════════════════ */
+    .steps { margin-top: 56px; }
+    .steps-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 40px;
+      position: relative;
+    }
+    .steps-grid::before {
+      content: ''; position: absolute; top: 36px; left: 15%; right: 15%;
+      height: 2px; background: var(--gradient-h); opacity: .3;
+    }
+    .step { text-align: center; position: relative; }
+    .step-num {
+      width: 72px; height: 72px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto 24px; font-size: 1.6rem; font-weight: 800;
+      background: var(--bg-card); border: 2px solid var(--teal);
+      color: var(--teal); position: relative; z-index: 1;
+    }
+    .step h3 { font-size: 1.15rem; font-weight: 700; margin-bottom: 8px; }
+    .step p { font-size: .9rem; color: var(--text-muted); max-width: 300px; margin: 0 auto; line-height: 1.6; }
+
+    /* ══════════════════════════════════════════
+       SCREENSHOT SHOWCASE
+       ══════════════════════════════════════════ */
+    .showcase { margin-top: 64px; }
+    .showcase-frame {
+      border-radius: var(--radius); overflow: hidden;
+      border: 1px solid var(--border); box-shadow: var(--shadow);
+      position: relative;
+    }
+    .showcase-frame img { width: 100%; display: block; }
+    .showcase-bar {
+      display: flex; align-items: center; gap: 8px;
+      padding: 14px 20px; background: var(--surface); border-bottom: 1px solid var(--border);
+    }
+    .showcase-dot {
+      width: 12px; height: 12px; border-radius: 50%; background: #334155;
+    }
+    .showcase-dot:nth-child(1) { background: #ef4444; }
+    .showcase-dot:nth-child(2) { background: #f59e0b; }
+    .showcase-dot:nth-child(3) { background: #22c55e; }
+    .showcase-tabs {
+      display: flex; gap: 8px; margin-top: 24px; justify-content: center; flex-wrap: wrap;
+    }
+    .showcase-tab {
+      padding: 8px 16px; border-radius: 8px; font-size: .82rem; font-weight: 500;
+      background: var(--surface); color: var(--text-muted); cursor: pointer;
+      border: 1px solid transparent; transition: all var(--transition);
+    }
+    .showcase-tab:hover, .showcase-tab.active {
+      color: var(--teal); border-color: rgba(80,176,184,.3);
+      background: rgba(80,176,184,.08);
+    }
+
+    /* ══════════════════════════════════════════
+       DEPLOYMENT OPTIONS
+       ══════════════════════════════════════════ */
+    .deploy-grid {
+      display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px;
+      margin-top: 48px;
+    }
+    .deploy-card {
+      padding: 28px 16px; border-radius: var(--radius);
+      background: var(--bg-card); border: 1px solid var(--border);
+      text-align: center; transition: all var(--transition);
+    }
+    .deploy-card:hover {
+      transform: translateY(-4px); border-color: rgba(80,176,184,.25);
+      box-shadow: var(--shadow-glow);
+    }
+    .deploy-icon {
+      font-size: 2rem; margin-bottom: 12px; display: block;
+    }
+    .deploy-card h3 { font-size: .95rem; font-weight: 700; margin-bottom: 6px; }
+    .deploy-card p { font-size: .78rem; color: var(--text-muted); line-height: 1.5; }
+    .deploy-arch {
+      margin-top: 12px; display: flex; flex-wrap: wrap; justify-content: center; gap: 4px;
+    }
+    .deploy-arch span {
+      font-size: .65rem; padding: 2px 8px; border-radius: 4px;
+      background: rgba(80,176,184,.1); color: var(--teal);
+    }
+
+    /* ══════════════════════════════════════════
+       ECOSYSTEM CARDS
+       ══════════════════════════════════════════ */
+    .eco-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px;
+    }
+    .eco-card {
+      padding: 32px; border-radius: var(--radius);
+      background: var(--bg-card); border: 1px solid var(--border);
+      transition: all var(--transition); position: relative; overflow: hidden;
+    }
+    .eco-card::after {
+      content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 3px;
+      background: var(--gradient-h); opacity: 0; transition: opacity var(--transition);
+    }
+    .eco-card:hover {
+      transform: translateY(-4px); border-color: rgba(80,176,184,.2);
+      box-shadow: var(--shadow-glow);
+    }
+    .eco-card:hover::after { opacity: 1; }
+    .eco-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 20px;
+    }
+    .eco-icon {
+      width: 52px; height: 52px; border-radius: 14px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .eco-badge {
+      font-size: .68rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
+      padding: 4px 10px; border-radius: 6px;
+      background: rgba(148,163,184,.08); color: var(--text-dim);
+    }
+    .eco-card h3 { font-size: 1.3rem; font-weight: 800; margin-bottom: 4px; }
+    .eco-tagline {
+      font-size: .85rem; color: var(--teal); font-weight: 600; margin-bottom: 16px;
+    }
+    .eco-desc {
+      font-size: .88rem; color: var(--text-muted); line-height: 1.7; margin-bottom: 20px;
+    }
+    .eco-desc strong { color: var(--text); }
+    .eco-desc em { color: var(--teal); font-style: normal; }
+    .eco-link {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: .85rem; font-weight: 600; color: var(--teal);
+      padding: 8px 16px; border-radius: 8px;
+      background: rgba(80,176,184,.08); border: 1px solid rgba(80,176,184,.15);
+      transition: all var(--transition);
+    }
+    .eco-link:hover {
+      background: rgba(80,176,184,.15); border-color: rgba(80,176,184,.3);
+      color: #6fcfd5;
+    }
+
+    /* ══════════════════════════════════════════
+       MA INTEGRATION
+       ══════════════════════════════════════════ */
+    .integration-split {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 64px;
+      align-items: center; margin-top: 48px;
+    }
+    .integration-list { list-style: none; display: flex; flex-direction: column; gap: 20px; }
+    .integration-list li {
+      display: flex; gap: 16px; align-items: flex-start;
+      padding: 16px; border-radius: var(--radius-sm);
+      background: var(--bg-card); border: 1px solid var(--border);
+    }
+    .integration-list .check {
+      width: 24px; height: 24px; border-radius: 50%; flex-shrink: 0;
+      background: rgba(80,176,184,.15); color: var(--teal);
+      display: flex; align-items: center; justify-content: center;
+      font-size: .75rem; margin-top: 2px;
+    }
+    .integration-list h4 { font-size: .95rem; font-weight: 600; margin-bottom: 2px; }
+    .integration-list p { font-size: .82rem; color: var(--text-muted); }
+
+    /* ══════════════════════════════════════════
+       COMMUNITY
+       ══════════════════════════════════════════ */
+    .community-grid {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;
+      margin-top: 48px;
+    }
+    .community-card {
+      padding: 24px; border-radius: var(--radius);
+      background: var(--bg-card); border: 1px solid var(--border);
+      text-align: center; transition: all var(--transition);
+      text-decoration: none;
+    }
+    .community-card:hover {
+      transform: translateY(-4px); border-color: rgba(80,176,184,.25);
+      box-shadow: var(--shadow-glow);
+    }
+    .community-card .icon { font-size: 2rem; margin-bottom: 12px; display: block; }
+    .community-card h3 { font-size: .95rem; font-weight: 700; margin-bottom: 4px; color: var(--text); }
+    .community-card p { font-size: .8rem; color: var(--text-muted); }
+
+    /* ══════════════════════════════════════════
+       FINAL CTA
+       ══════════════════════════════════════════ */
+    .cta-section {
+      padding: 100px 0; text-align: center; position: relative;
+    }
+    .cta-box {
+      padding: 64px 48px; border-radius: 24px; position: relative; overflow: hidden;
+      background: linear-gradient(135deg, rgba(80,176,184,.1) 0%, rgba(144,112,184,.1) 100%);
+      border: 1px solid rgba(80,176,184,.2);
+    }
+    .cta-box::before {
+      content: ''; position: absolute; inset: 0;
+      background: radial-gradient(ellipse at center, rgba(80,176,184,.06) 0%, transparent 70%);
+    }
+    .cta-box > * { position: relative; z-index: 1; }
+    .cta-box h2 {
+      font-size: clamp(1.6rem, 4vw, 2.4rem); font-weight: 800;
+      margin-bottom: 16px;
+    }
+    .cta-box p { color: var(--text-muted); margin-bottom: 32px; font-size: 1.05rem; }
+
+    /* ══════════════════════════════════════════
+       SHARE BAR (prominent horizontal)
+       ══════════════════════════════════════════ */
+    .share-bar {
+      padding: 24px 0; text-align: center;
+      border-bottom: 1px solid var(--border);
+      background: rgba(17,24,39,.5);
+    }
+    .share-bar-label {
+      font-size: .78rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase;
+      color: var(--text-dim); margin-bottom: 14px;
+    }
+    .share-bar-links {
+      display: flex; justify-content: center; align-items: center; gap: 12px; flex-wrap: wrap;
+    }
+    .share-btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 10px 20px; border-radius: 10px; font-size: .82rem; font-weight: 600;
+      text-decoration: none; transition: all var(--transition);
+      border: 1px solid var(--border); color: var(--text-muted);
+    }
+    .share-btn:hover { transform: translateY(-2px); color: var(--text); }
+    .share-btn svg { width: 18px; height: 18px; flex-shrink: 0; }
+    .share-btn.x { background: rgba(0,0,0,.3); }
+    .share-btn.x:hover { background: #1a1a2e; border-color: #536471; color: #e7e9ea; }
+    .share-btn.reddit { background: rgba(255,69,0,.06); }
+    .share-btn.reddit:hover { background: rgba(255,69,0,.15); border-color: #ff4500; color: #ff6633; }
+    .share-btn.telegram { background: rgba(38,165,220,.06); }
+    .share-btn.telegram:hover { background: rgba(38,165,220,.15); border-color: #26a5dc; color: #26a5dc; }
+    .share-btn.linkedin { background: rgba(10,102,194,.06); }
+    .share-btn.linkedin:hover { background: rgba(10,102,194,.15); border-color: #0a66c2; color: #0a66c2; }
+    .share-btn.facebook { background: rgba(24,119,242,.06); }
+    .share-btn.facebook:hover { background: rgba(24,119,242,.15); border-color: #1877f2; color: #1877f2; }
+    .share-btn.ha-community { background: rgba(65,165,210,.06); }
+    .share-btn.ha-community:hover { background: rgba(65,165,210,.15); border-color: #41a5d2; color: #41a5d2; }
+
+    /* Sticky mobile share */
+    .share-sticky {
+      display: none; position: fixed; bottom: 0; left: 0; right: 0; z-index: 80;
+      padding: 10px 16px; gap: 8px;
+      background: rgba(11,15,26,.92); backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-top: 1px solid var(--border);
+      justify-content: center; align-items: center;
+    }
+    .share-sticky .share-btn { padding: 8px 14px; font-size: .75rem; }
+    @media (max-width: 768px) {
+      .share-sticky { display: flex; }
+      footer { padding-bottom: 72px; }
+    }
+
+    /* ══════════════════════════════════════════
+       INFOGRAPHIC (inline HTML/CSS)
+       ══════════════════════════════════════════ */
+    .infographic {
+      margin-top: 48px; padding: 48px 40px; border-radius: 20px;
+      background: linear-gradient(160deg, rgba(17,24,39,.9) 0%, rgba(30,41,59,.7) 100%);
+      border: 1px solid var(--border); position: relative; overflow: hidden;
+    }
+    .infographic::before {
+      content: ''; position: absolute; inset: 0;
+      background: radial-gradient(ellipse at 30% 20%, rgba(80,176,184,.06) 0%, transparent 50%),
+                  radial-gradient(ellipse at 70% 80%, rgba(144,112,184,.06) 0%, transparent 50%);
+      pointer-events: none;
+    }
+    .infographic > * { position: relative; z-index: 1; }
+    .infographic-title {
+      text-align: center; margin-bottom: 48px;
+    }
+    .infographic-title h3 {
+      font-size: clamp(1.2rem, 3vw, 1.6rem); font-weight: 800; margin-bottom: 8px;
+    }
+    .infographic-title p { font-size: .9rem; color: var(--text-muted); }
+
+    /* Flow pipeline */
+    .info-flow {
+      display: grid; grid-template-columns: 1fr auto 1fr auto 1fr; gap: 0;
+      align-items: center; margin-bottom: 48px;
+    }
+    .info-node {
+      text-align: center; padding: 28px 20px; border-radius: var(--radius);
+      background: var(--bg-card); border: 1px solid var(--border);
+      transition: all var(--transition);
+    }
+    .info-node:hover {
+      border-color: rgba(80,176,184,.3); box-shadow: var(--shadow-glow);
+      transform: translateY(-3px);
+    }
+    .info-node-icon { font-size: 2.8rem; margin-bottom: 12px; display: block; line-height: 1; }
+    .info-node h4 { font-size: 1rem; font-weight: 700; margin-bottom: 4px; }
+    .info-node p { font-size: .78rem; color: var(--text-muted); line-height: 1.5; }
+    .info-node .tag {
+      display: inline-block; margin-top: 10px; padding: 3px 10px; border-radius: 6px;
+      font-size: .68rem; font-weight: 600; text-transform: uppercase; letter-spacing: .04em;
+    }
+    .info-arrow {
+      display: flex; align-items: center; justify-content: center;
+      padding: 0 8px; color: var(--teal); font-size: 1.6rem;
+      animation: arrowPulse 2s ease-in-out infinite;
+    }
+    @keyframes arrowPulse {
+      0%, 100% { opacity: .4; transform: translateX(0); }
+      50% { opacity: 1; transform: translateX(4px); }
+    }
+
+    /* Result panels */
+    .info-results {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;
+    }
+    .info-result {
+      padding: 20px; border-radius: var(--radius-sm); text-align: center;
+      background: rgba(80,176,184,.04); border: 1px solid rgba(80,176,184,.1);
+    }
+    .info-result-icon { font-size: 1.5rem; margin-bottom: 8px; display: block; }
+    .info-result h5 { font-size: .82rem; font-weight: 700; margin-bottom: 4px; }
+    .info-result p { font-size: .72rem; color: var(--text-muted); line-height: 1.5; }
+
+    @media (max-width: 1024px) {
+      .info-results { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 768px) {
+      .infographic { padding: 32px 20px; }
+      .info-flow { grid-template-columns: 1fr; gap: 0; }
+      .info-arrow { transform: rotate(90deg); padding: 8px 0; }
+      @keyframes arrowPulse {
+        0%, 100% { opacity: .4; transform: rotate(90deg) translateX(0); }
+        50% { opacity: 1; transform: rotate(90deg) translateX(4px); }
+      }
+      .info-results { grid-template-columns: 1fr; }
+    }
+
+    /* ══════════════════════════════════════════
+       FOOTER
+       ══════════════════════════════════════════ */
+    footer {
+      padding: 48px 0; border-top: 1px solid var(--border);
+      text-align: center; font-size: .82rem; color: var(--text-dim);
+    }
+    footer a { color: var(--text-muted); }
+    footer a:hover { color: var(--teal); }
+    .footer-links { display: flex; justify-content: center; gap: 24px; margin-bottom: 16px; flex-wrap: wrap; }
+
+    /* ══════════════════════════════════════════
+       RESPONSIVE
+       ══════════════════════════════════════════ */
+    @media (max-width: 1024px) {
+      .features-grid { grid-template-columns: repeat(2, 1fr); }
+      .deploy-grid { grid-template-columns: repeat(3, 1fr); }
+      .integration-split { grid-template-columns: 1fr; gap: 40px; }
+      .community-grid { grid-template-columns: repeat(2, 1fr); }
+      .eco-grid { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 768px) {
+      .section { padding: 64px 0; }
+      .nav-links { display: none; }
+      .nav-hamburger { display: block; }
+      .nav-links.open {
+        display: flex; flex-direction: column; position: absolute;
+        top: 68px; left: 0; right: 0; background: rgba(11,15,26,.95);
+        backdrop-filter: blur(20px); padding: 24px;
+        border-bottom: 1px solid var(--border); gap: 16px;
+      }
+      .hero { min-height: auto; padding: 120px 24px 60px; }
+      .features-grid { grid-template-columns: 1fr; }
+      .steps-grid { grid-template-columns: 1fr; gap: 32px; }
+      .steps-grid::before { display: none; }
+      .deploy-grid { grid-template-columns: repeat(2, 1fr); }
+      .community-grid { grid-template-columns: 1fr; }
+      .eco-grid { grid-template-columns: 1fr; }
+      .hero-actions { flex-direction: column; align-items: center; }
+      .btn { width: 100%; max-width: 320px; justify-content: center; }
+      .cta-box { padding: 40px 24px; }
+    }
+    @media (max-width: 480px) {
+      .deploy-grid { grid-template-columns: 1fr; }
+    }
+
+    /* ══════════════════════════════════════════
+       ANIMATIONS (prefer reduced motion)
+       ══════════════════════════════════════════ */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+    }
+    .fade-in { opacity: 0; transform: translateY(24px); transition: all .6s ease-out; }
+    .fade-in.visible { opacity: 1; transform: translateY(0); }
+  </style>
+</head>
+
+<body>
+  <div class="ambient" aria-hidden="true"></div>
+
+  <!-- ══ NAVBAR ══ -->
+  <nav class="nav" role="navigation" aria-label="Main navigation">
+    <div class="nav-inner">
+      <a href="#" class="nav-logo" aria-label="Sendspin Bluetooth Bridge Home">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 204 108" height="36" aria-hidden="true">
+          <defs>
+            <linearGradient id="hG" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#50B0B8"/><stop offset="35%" stop-color="#5A9AAE"/><stop offset="65%" stop-color="#7085AE"/><stop offset="100%" stop-color="#9070B8"/></linearGradient>
+            <linearGradient id="c1" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#40B5B8"/><stop offset="100%" stop-color="#58C5C5"/></linearGradient>
+            <linearGradient id="c5" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#5890A5"/><stop offset="100%" stop-color="#70A0AA"/></linearGradient>
+            <linearGradient id="c9" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#8565AA"/><stop offset="100%" stop-color="#9878B2"/></linearGradient>
+          </defs>
+          <g><g fill="url(#c1)"><rect x="28" y="50.5" width="5" height="4" rx=".6"/><rect x="28" y="45" width="5" height="4" rx=".6"/><rect x="28" y="39.5" width="5" height="4" rx=".6"/><rect x="28" y="34" width="5" height="4" rx=".6"/><rect x="28" y="28.5" width="5" height="4" rx=".6"/></g>
+          <g fill="url(#c5)"><rect x="83" y="50.5" width="8" height="4" rx=".6"/><rect x="83" y="45" width="8" height="4" rx=".6"/><rect x="83" y="39.5" width="8" height="4" rx=".6"/><rect x="83" y="34" width="8" height="4" rx=".6"/><rect x="83" y="28.5" width="8" height="4" rx=".6"/><rect x="83" y="23" width="8" height="4" rx=".6"/><rect x="83" y="17.5" width="8" height="4" rx=".6"/><rect x="83" y="12" width="8" height="4" rx=".6"/><rect x="83" y="6.5" width="8" height="4" rx=".6"/><rect x="83" y="1" width="8" height="4" rx=".6"/></g>
+          <g fill="url(#c9)"><rect x="161" y="50.5" width="6" height="4" rx=".6"/><rect x="161" y="45" width="6" height="4" rx=".6"/><rect x="161" y="39.5" width="6" height="4" rx=".6"/><rect x="161" y="34" width="6" height="4" rx=".6"/><rect x="161" y="28.5" width="6" height="4" rx=".6"/><rect x="161" y="23" width="6" height="4" rx=".6"/><rect x="161" y="17.5" width="6" height="4" rx=".6"/><rect x="161" y="12" width="6" height="4" rx=".6"/><rect x="161" y="6.5" width="6" height="4" rx=".6"/></g></g>
+          <g stroke="url(#hG)" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="0" y1="74" x2="204" y2="74"/><line x1="0" y1="77" x2="204" y2="77"/>
+            <line x1="0" y1="82" x2="204" y2="82"/><line x1="0" y1="85" x2="204" y2="85"/>
+            <line x1="41" y1="55" x2="37" y2="108"/><line x1="49" y1="55" x2="53" y2="108"/>
+            <line x1="155" y1="55" x2="151" y2="108"/><line x1="163" y1="55" x2="167" y2="108"/>
+            <path d="M2,77 Q22,62 41,55"/><path d="M41,55 Q72,72 102,72"/>
+            <path d="M102,72 Q132,72 163,55"/><path d="M163,55 Q182,62 202,77"/>
+          </g>
+        </svg>
+        <span>Sendspin BT Bridge</span>
+      </a>
+      <ul class="nav-links" id="navLinks">
+        <li><a href="#features">Features</a></li>
+        <li><a href="#how-it-works">How it Works</a></li>
+        <li><a href="#deploy">Deploy</a></li>
+        <li><a href="https://trudenboy.github.io/sendspin-bt-bridge/" target="_blank" rel="noopener">Docs</a></li>
+        <li><a href="https://sendspin-demo.onrender.com" target="_blank" rel="noopener" class="nav-cta">Live Demo</a></li>
+      </ul>
+      <button class="nav-hamburger" onclick="document.getElementById('navLinks').classList.toggle('open')" aria-label="Toggle navigation">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+      </button>
+    </div>
+  </nav>
+
+  <!-- ══ HERO ══ -->
+  <section class="hero" id="hero">
+    <div class="hero-glow" aria-hidden="true"></div>
+    <div class="hero-content">
+      <div class="hero-badge">
+        <span class="hero-badge-dot" aria-hidden="true"></span>
+        Open Source &amp; Free Forever — MIT License
+      </div>
+      <h1>
+        Make Any Speaker or Headphones <span class="gradient-text">Smart</span><br>
+        Build Your Own<br><span class="gradient-text">Multi-Room</span> System
+      </h1>
+      <p class="hero-sub">
+        That $20 Bluetooth speaker on your shelf? Those wireless headphones in your office? They're now smart, AI‑driven multi-room players.
+        Synchronized audio across every room — powered by
+        <a href="https://www.sendspin-audio.com/" target="_blank" rel="noopener" style="color:var(--teal);font-weight:600;">Sendspin</a>,
+        <a href="https://www.music-assistant.io/" target="_blank" rel="noopener" style="color:var(--teal);font-weight:600;">Music&nbsp;Assistant</a> &amp;
+        <a href="https://www.home-assistant.io/" target="_blank" rel="noopener" style="color:var(--teal);font-weight:600;">Home&nbsp;Assistant</a>.
+        <br>No cloud. No subscriptions.
+      </p>
+      <div class="hero-actions">
+        <a href="https://my.home-assistant.io/redirect/supervisor_addon/?addon=85b1ecde_sendspin_bt_bridge&repository_url=https%3A%2F%2Fgithub.com%2Ftrudenboy%2Fsendspin-bt-bridge" class="btn btn-primary" target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+          Install HA Addon
+        </a>
+        <a href="https://sendspin-demo.onrender.com" class="btn btn-secondary" target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          Try Live Demo
+        </a>
+        <a href="https://github.com/trudenboy/sendspin-bt-bridge" class="btn btn-ghost" target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+          GitHub
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ SOCIAL PROOF ══ -->
+  <section class="proof" aria-label="Project badges">
+    <div class="wrap">
+      <div class="proof-inner">
+        <div class="proof-item">
+          <img src="https://img.shields.io/github/v/release/trudenboy/sendspin-bt-bridge?label=Latest&color=50B0B8&style=flat-square" alt="Latest Release" loading="lazy">
+        </div>
+        <div class="proof-item">
+          <img src="https://img.shields.io/github/stars/trudenboy/sendspin-bt-bridge?style=flat-square&color=f59e0b&label=Stars" alt="GitHub Stars" loading="lazy">
+        </div>
+        <div class="proof-item">
+          <img src="https://img.shields.io/github/license/trudenboy/sendspin-bt-bridge?style=flat-square&color=9070B8&label=License" alt="License" loading="lazy">
+        </div>
+        <div class="proof-item">
+          <img src="https://img.shields.io/badge/architectures-amd64%20|%20arm64%20|%20armv7-50B0B8?style=flat-square" alt="Supported Architectures" loading="lazy">
+        </div>
+        <div class="proof-item">
+          <img src="https://img.shields.io/badge/HA_Addon-Available-22c55e?style=flat-square" alt="Home Assistant Addon" loading="lazy">
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ SHARE BAR ══ -->
+  <section class="share-bar" aria-label="Share this project">
+    <div class="wrap">
+      <div class="share-bar-label">📣 Spread the Word</div>
+      <div class="share-bar-links">
+        <a class="share-btn x" target="_blank" rel="noopener"
+           href="https://twitter.com/intent/tweet?text=Make%20any%20Bluetooth%20speaker%20or%20headphones%20smart%20%E2%80%94%20DIY%20multi-room%20audio%20for%20home%20%26%20office.%20Free%20%26%20open-source%20%F0%9F%94%8A&url=https://sendspin-bt-bridge.pages.dev/">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+          Post on X
+        </a>
+        <a class="share-btn reddit" target="_blank" rel="noopener"
+           href="https://reddit.com/submit?url=https://sendspin-bt-bridge.pages.dev/&title=Make%20Any%20BT%20Speaker%20or%20Headphones%20Smart%20%E2%80%94%20DIY%20Multi-Room%20Audio%20for%20Home%20%26%20Office">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+          Share on Reddit
+        </a>
+        <a class="share-btn telegram" target="_blank" rel="noopener"
+           href="https://t.me/share/url?url=https://sendspin-bt-bridge.pages.dev/&text=Make%20any%20Bluetooth%20speaker%20or%20headphones%20smart%20%F0%9F%94%8A%20DIY%20multi-room%20audio%20for%20home%20%26%20office.%20Free%20%26%20open-source">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg>
+          Telegram
+        </a>
+        <a class="share-btn linkedin" target="_blank" rel="noopener"
+           href="https://www.linkedin.com/sharing/share-offsite/?url=https://sendspin-bt-bridge.pages.dev/">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0z"/></svg>
+          LinkedIn
+        </a>
+        <a class="share-btn facebook" target="_blank" rel="noopener"
+           href="https://www.facebook.com/sharer/sharer.php?u=https://sendspin-bt-bridge.pages.dev/">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+          Facebook
+        </a>
+        <a class="share-btn ha-community" target="_blank" rel="noopener"
+           href="https://community.home-assistant.io/t/sendspin-bluetooth-bridge-turn-any-bt-speaker-into-an-ma-player-and-ha/993762">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12s5.37 12 12 12 12-5.37 12-12S18.63 0 12 0zm0 4.6l6.9 5.133v1.867H5.1v-1.867L12 4.6zm5.4 12.4H6.6v-5h10.8v5z"/></svg>
+          HA Community
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ FEATURES ══ -->
+  <section class="section" id="features">
+    <div class="wrap">
+      <div class="section-label">Features</div>
+      <h2 class="section-title fade-in">From "Dumb" Device to<br>Smart Multi-Room System</h2>
+      <p class="section-subtitle fade-in">Any A2DP Bluetooth speaker or headphones becomes a fully controllable, AI-automatable, multi-room audio endpoint — at home or in the office.</p>
+
+      <div class="features-grid">
+        <div class="feature-card fade-in">
+          <div class="feature-icon">🔊</div>
+          <h3>Instant Smart Upgrade</h3>
+          <p>That dusty Bluetooth speaker? Those forgotten headphones? Now they're smart players — controllable from your phone, automatable, and part of your multi-room system.</p>
+        </div>
+        <div class="feature-card fade-in">
+          <div class="feature-icon">🏠</div>
+          <h3>True Multi-Room Sync</h3>
+          <p>Sendspin's sample-accurate synchronization keeps every device in every room perfectly aligned. Kitchen, bedroom, office, garden — one song, zero delay.</p>
+        </div>
+        <div class="feature-card fade-in">
+          <div class="feature-icon">🤖</div>
+          <h3>AI-Driven Automations</h3>
+          <p>Home Assistant turns speakers and headphones into smart endpoints. <em>"Morning routine → lights on → weather → jazz on the kitchen speaker"</em> — all automated.</p>
+        </div>
+        <div class="feature-card fade-in">
+          <div class="feature-icon">🖥️</div>
+          <h3>Web UI Dashboard</h3>
+          <p>Scan, pair, configure, and monitor every device from a polished web interface. Dark mode included. No terminal needed.</p>
+        </div>
+        <div class="feature-card fade-in">
+          <div class="feature-icon">🗣️</div>
+          <h3>Voice Control Ready</h3>
+          <p>Home Assistant Assist brings local AI voice control. <em>"Hey Assist, play rock in the living room"</em> — your $20 speaker or wireless headphones respond.</p>
+        </div>
+        <div class="feature-card fade-in">
+          <div class="feature-icon">🔐</div>
+          <h3>Secure by Design</h3>
+          <p>Password auth with PBKDF2-SHA256, brute-force lockout, HA two-factor authentication, and HMAC-signed artwork URLs. Your bridge, your rules.</p>
+        </div>
+        <div class="feature-card fade-in">
+          <div class="feature-icon">🛡️</div>
+          <h3>Guided Setup &amp; Recovery</h3>
+          <p>Onboarding checklist, diagnostics-driven bug reports, and automatic BT reconnection with exponential backoff. From zero to multi-room in five minutes.</p>
+        </div>
+        <div class="feature-card fade-in">
+          <div class="feature-icon">📡</div>
+          <h3>Any Bluetooth Adapter</h3>
+          <p>Built-in or USB — any Bluetooth adapter works. Multiple adapters supported for more speakers. <a href="https://trudenboy.github.io/sendspin-bt-bridge/bluetooth-adapters/" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:underline">Recommended adapters →</a></p>
+        </div>
+        <div class="feature-card fade-in">
+          <div class="feature-icon">🌙</div>
+          <h3>Standby Mode</h3>
+          <p>Idle speakers auto-disconnect to save energy and free BT slots, then wake instantly when music starts. <a href="https://trudenboy.github.io/sendspin-bt-bridge/devices/#standby--wake-on-play" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:underline">How standby works →</a></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ HOW IT WORKS ══ -->
+  <section class="section steps" id="how-it-works" style="background: rgba(17,24,39,.4);">
+    <div class="wrap">
+      <div class="section-label">How It Works</div>
+      <h2 class="section-title fade-in">From Box to Multi-Room in Three Steps</h2>
+      <p class="section-subtitle fade-in">Any Bluetooth speaker or headphones. Any room. Five minutes to a smart multi-room system.</p>
+
+      <div class="steps-grid" style="margin-top: 56px;">
+        <div class="step fade-in">
+          <div class="step-num">1</div>
+          <h3>Install the Bridge</h3>
+          <p>One-click HA addon, Docker Compose, or bootstrap script for Pi&nbsp;/&nbsp;LXC. Auto-detects your audio&nbsp;system and Music&nbsp;Assistant server.</p>
+        </div>
+        <div class="step fade-in">
+          <div class="step-num">2</div>
+          <h3>Pair Your Speakers</h3>
+          <p>Open the web UI → scan → tap to pair. Each speaker or headphones instantly becomes a smart player in Music&nbsp;Assistant and a controllable entity in Home&nbsp;Assistant.</p>
+        </div>
+        <div class="step fade-in">
+          <div class="step-num">3</div>
+          <h3>Play &amp; Automate</h3>
+          <p>Stream in sync across rooms. Create automations: <em>"bedtime → dim lights → ambient playlist → volume fade."</em> Voice control with HA&nbsp;Assist.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ INFOGRAPHIC — THE TRANSFORMATION ══ -->
+  <section class="section" id="infographic">
+    <div class="wrap">
+      <div class="section-label">How the Magic Happens</div>
+      <h2 class="section-title fade-in">From Any Device to Smart Multi-Room</h2>
+      <p class="section-subtitle fade-in">One bridge connects the entire open-source audio ecosystem to your Bluetooth speakers and headphones.</p>
+
+      <div class="infographic fade-in">
+        <div class="infographic-title">
+          <h3>The <span class="gradient-text">Smart Speaker</span> Pipeline</h3>
+          <p>Every ordinary Bluetooth speaker or headphones goes through this transformation</p>
+        </div>
+
+        <!-- 3-node flow: Speaker → Bridge → Smart System -->
+        <div class="info-flow">
+
+          <div class="info-node">
+            <span class="info-node-icon">🔈</span>
+            <h4>Any BT Speaker<br>or Headphones</h4>
+            <p>IKEA ENEBY, JBL Flip, Sony XM4, a vintage boombox — any A2DP Bluetooth device</p>
+            <span class="tag" style="background:rgba(148,163,184,.1); color:var(--text-dim);">Dumb Hardware</span>
+          </div>
+
+          <div class="info-arrow" aria-hidden="true">→</div>
+
+          <div class="info-node" style="border-color:rgba(80,176,184,.25);">
+            <span class="info-node-icon" style="filter:drop-shadow(0 0 12px rgba(80,176,184,.4));">🌉</span>
+            <h4>Sendspin BT Bridge</h4>
+            <p>Pairs via BT, creates isolated audio subprocess, registers as Sendspin player</p>
+            <span class="tag" style="background:rgba(80,176,184,.12); color:var(--teal);">The Bridge</span>
+          </div>
+
+          <div class="info-arrow" aria-hidden="true">→</div>
+
+          <div class="info-node">
+            <span class="info-node-icon">✨</span>
+            <h4>Smart Multi-Room Player</h4>
+            <p>Appears in Music Assistant, controllable via HA, voice-ready, automatable</p>
+            <span class="tag" style="background:rgba(144,112,184,.12); color:var(--purple);">Smart &amp; Connected</span>
+          </div>
+
+        </div>
+
+        <!-- What you get -->
+        <div class="info-results">
+          <div class="info-result">
+            <span class="info-result-icon">🎵</span>
+            <h5>Sendspin Sync</h5>
+            <p>Lossless, sample-accurate multi-room streaming via open protocol</p>
+          </div>
+          <div class="info-result">
+            <span class="info-result-icon">📚</span>
+            <h5>20+ Music Sources</h5>
+            <p>Spotify, YouTube Music, Tidal, local files — all via Music Assistant</p>
+          </div>
+          <div class="info-result">
+            <span class="info-result-icon">🤖</span>
+            <h5>AI Automations</h5>
+            <p>HA scenes, voice control, routines — devices as smart entities</p>
+          </div>
+          <div class="info-result">
+            <span class="info-result-icon">🏠</span>
+            <h5>Home &amp; Office Audio</h5>
+            <p>Kitchen, bedroom, garden — one ecosystem, every room</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ ECOSYSTEM — THE SMART SPEAKER STACK ══ -->
+  <section class="section" id="ecosystem">
+    <div class="wrap">
+      <div class="section-label">Powered By</div>
+      <h2 class="section-title fade-in">The Open-Source Smart Speaker Stack</h2>
+      <p class="section-subtitle fade-in">Three projects that turn any Bluetooth speaker or headphones into an AI-driven, multi-room smart player — no proprietary hardware, no subscriptions.</p>
+
+      <div class="eco-grid" style="margin-top: 48px;">
+
+        <!-- Sendspin -->
+        <div class="eco-card fade-in">
+          <div class="eco-header">
+            <div class="eco-icon" style="background:rgba(80,176,184,.12);">
+              <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="#50B0B8" stroke-width="2" stroke-linecap="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+            </div>
+            <span class="eco-badge">Protocol</span>
+          </div>
+          <h3>Sendspin</h3>
+          <p class="eco-tagline">Music Experience Protocol</p>
+          <p class="eco-desc">
+            Sendspin is an open audio streaming protocol by the <strong>Open Home Foundation</strong> that delivers
+            <em>lossless, time-synchronized</em> music to any device on your network. Unlike Chromecast or AirPlay,
+            it's fully local — no cloud, no account, no latency surprises. The protocol handles
+            sample-accurate multi-room sync so every speaker and headphones in your home or office plays in perfect unison.
+          </p>
+          <a href="https://www.sendspin-audio.com/" target="_blank" rel="noopener" class="eco-link">
+            sendspin-audio.com
+            <svg viewBox="0 0 20 20" width="16" height="16" fill="currentColor"><path d="M11 3a1 1 0 100 2h2.586l-6.293 6.293a1 1 0 101.414 1.414L15 6.414V9a1 1 0 102 0V4a1 1 0 00-1-1h-5z"/><path d="M5 5a2 2 0 00-2 2v8a2 2 0 002 2h8a2 2 0 002-2v-3a1 1 0 10-2 0v3H5V7h3a1 1 0 000-2H5z"/></svg>
+          </a>
+        </div>
+
+        <!-- Music Assistant -->
+        <div class="eco-card fade-in">
+          <div class="eco-header">
+            <div class="eco-icon" style="background:rgba(112,133,174,.12);">
+              <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="#7085AE" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+            </div>
+            <span class="eco-badge">Music Server</span>
+          </div>
+          <h3>Music Assistant</h3>
+          <p class="eco-tagline">Your Music, Your Rules</p>
+          <p class="eco-desc">
+            Music Assistant is a <strong>free, open-source music library manager and streamer</strong> that unifies
+            Spotify, YouTube Music, Tidal, local files, and 20+ sources into one interface. It connects to
+            Chromecast, Sonos, AirPlay, DLNA, Sendspin — and now your Bluetooth speakers and headphones via this bridge.
+            Runs as a Home Assistant addon or standalone. <em>Your library, every player, one dashboard.</em>
+          </p>
+          <a href="https://www.music-assistant.io/" target="_blank" rel="noopener" class="eco-link">
+            music-assistant.io
+            <svg viewBox="0 0 20 20" width="16" height="16" fill="currentColor"><path d="M11 3a1 1 0 100 2h2.586l-6.293 6.293a1 1 0 101.414 1.414L15 6.414V9a1 1 0 102 0V4a1 1 0 00-1-1h-5z"/><path d="M5 5a2 2 0 00-2 2v8a2 2 0 002 2h8a2 2 0 002-2v-3a1 1 0 10-2 0v3H5V7h3a1 1 0 000-2H5z"/></svg>
+          </a>
+        </div>
+
+        <!-- Home Assistant -->
+        <div class="eco-card fade-in">
+          <div class="eco-header">
+            <div class="eco-icon" style="background:rgba(144,112,184,.12);">
+              <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="#9070B8" stroke-width="2" stroke-linecap="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+            </div>
+            <span class="eco-badge">Smart Home Platform</span>
+          </div>
+          <h3>Home Assistant</h3>
+          <p class="eco-tagline">Automate Everything — Including Your Music</p>
+          <p class="eco-desc">
+            Home Assistant is the world's #1 open-source smart home platform with <strong>2500+ integrations</strong>.
+            Every speaker and headphones the bridge creates becomes an HA entity — ready for automations, scenes, and
+            <a href="https://www.home-assistant.io/voice_control/" target="_blank" rel="noopener" style="color:var(--purple);font-weight:600;">AI‑powered voice control</a>.
+            <em>"Hey Assist, play jazz in the kitchen"</em> — and your $20 Bluetooth speaker or headphones responds.
+          </p>
+          <a href="https://www.home-assistant.io/" target="_blank" rel="noopener" class="eco-link">
+            home-assistant.io
+            <svg viewBox="0 0 20 20" width="16" height="16" fill="currentColor"><path d="M11 3a1 1 0 100 2h2.586l-6.293 6.293a1 1 0 101.414 1.414L15 6.414V9a1 1 0 102 0V4a1 1 0 00-1-1h-5z"/><path d="M5 5a2 2 0 00-2 2v8a2 2 0 002 2h8a2 2 0 002-2v-3a1 1 0 10-2 0v3H5V7h3a1 1 0 000-2H5z"/></svg>
+          </a>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ AI-DRIVEN BANNER ══ -->
+  <section class="section" style="padding: 64px 0; background: linear-gradient(135deg, rgba(80,176,184,.06) 0%, rgba(144,112,184,.06) 100%); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);">
+    <div class="wrap" style="text-align:center;">
+      <div class="fade-in" style="max-width:760px; margin:0 auto;">
+        <div style="font-size:2.5rem; margin-bottom:16px;">🤖</div>
+        <h2 style="font-size:clamp(1.4rem,3vw,1.8rem); font-weight:800; margin-bottom:12px;">
+          AI-Driven Smart Speakers — For Real
+        </h2>
+        <p style="color:var(--text-muted); font-size:1.05rem; line-height:1.7; margin-bottom:24px;">
+          Home Assistant's <strong style="color:var(--text);">Assist</strong> brings conversational AI to your home — entirely local or cloud-enhanced.
+          Combined with this bridge, every Bluetooth speaker or headphones becomes a voice-controllable, automation-ready endpoint.
+          Morning alarm → lights on → news briefing → your favorite playlist on the kitchen speaker. All automated, all private.
+        </p>
+        <a href="https://www.home-assistant.io/voice_control/" target="_blank" rel="noopener" class="btn btn-secondary" style="display:inline-flex;">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+          Explore HA Voice &amp; AI
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ SCREENSHOT SHOWCASE ══ -->
+  <section class="section showcase" id="showcase">
+    <div class="wrap">
+      <div class="section-label">Web Interface</div>
+      <h2 class="section-title fade-in">A Dashboard That Just Works</h2>
+      <p class="section-subtitle fade-in">Monitor devices, control playback, view diagnostics — all from your browser.</p>
+
+      <div class="showcase-frame fade-in" style="margin-top: 48px;">
+        <div class="showcase-bar" aria-hidden="true">
+          <span class="showcase-dot"></span>
+          <span class="showcase-dot"></span>
+          <span class="showcase-dot"></span>
+        </div>
+        <img id="showcaseImg"
+             src="https://trudenboy.github.io/sendspin-bt-bridge/screenshots/screenshot-dashboard-full.png"
+             alt="Sendspin Bluetooth Bridge dashboard showing connected speakers and headphones with volume controls and playback status"
+             loading="lazy" width="1200" height="800">
+      </div>
+      <div class="showcase-tabs" role="tablist" aria-label="Screenshot gallery">
+        <button class="showcase-tab active" role="tab"
+                onclick="switchScreenshot(this, 'screenshot-dashboard-full.png', 'Dashboard showing connected speakers and headphones')">
+          Dashboard
+        </button>
+        <button class="showcase-tab" role="tab"
+                onclick="switchScreenshot(this, 'screenshot-list-expand-playing.png', 'List view with expanded device card showing now-playing and transport controls')">
+          Now Playing
+        </button>
+        <button class="showcase-tab" role="tab"
+                onclick="switchScreenshot(this, 'screenshot-theme-dark.png', 'Dark theme dashboard view')">
+          Dark Mode
+        </button>
+        <button class="showcase-tab" role="tab"
+                onclick="switchScreenshot(this, 'screenshot-config.png', 'Configuration page with device settings')">
+          Configuration
+        </button>
+        <button class="showcase-tab" role="tab"
+                onclick="switchScreenshot(this, 'screenshot-diagnostics.png', 'Diagnostics page with health checks')">
+          Diagnostics
+        </button>
+        <button class="showcase-tab" role="tab"
+                onclick="switchScreenshot(this, 'screenshot-onboarding-checklist-expanded.png', 'Guided onboarding checklist')">
+          Onboarding
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ DEPLOYMENT OPTIONS ══ -->
+  <section class="section" id="deploy" style="background: rgba(17,24,39,.4);">
+    <div class="wrap">
+      <div class="section-label">Deployment</div>
+      <h2 class="section-title fade-in">Five Ways to Deploy</h2>
+      <p class="section-subtitle fade-in">Choose the deployment that fits your setup. Same features everywhere.</p>
+
+      <div class="deploy-grid" style="margin-top: 48px;">
+        <a href="https://my.home-assistant.io/redirect/supervisor_addon/?addon=85b1ecde_sendspin_bt_bridge&repository_url=https%3A%2F%2Fgithub.com%2Ftrudenboy%2Fsendspin-bt-bridge" class="deploy-card fade-in" target="_blank" rel="noopener" style="text-decoration:none;color:inherit;">
+          <span class="deploy-icon">🏠</span>
+          <h3>Home Assistant</h3>
+          <p>One-click addon install with Ingress, SSO, and auto-discovery.</p>
+          <div class="deploy-arch">
+            <span>aarch64</span><span>amd64</span><span>armv7</span>
+          </div>
+        </a>
+        <div class="deploy-card fade-in">
+          <span class="deploy-icon">🐳</span>
+          <h3>Docker</h3>
+          <p>docker-compose.yml included. Host network mode for mDNS.</p>
+          <div class="deploy-arch">
+            <span>amd64</span><span>arm64</span>
+          </div>
+        </div>
+        <div class="deploy-card fade-in">
+          <span class="deploy-icon">🍓</span>
+          <h3>Raspberry Pi</h3>
+          <p>Optimized for Pi 3/4/5. Bootstrap script handles everything.</p>
+          <div class="deploy-arch">
+            <span>armv7</span><span>aarch64</span>
+          </div>
+        </div>
+        <div class="deploy-card fade-in">
+          <span class="deploy-icon">📦</span>
+          <h3>Proxmox LXC</h3>
+          <p>Lightweight container with USB passthrough and shared BT stack.</p>
+          <div class="deploy-arch">
+            <span>amd64</span><span>aarch64</span>
+          </div>
+        </div>
+        <div class="deploy-card fade-in">
+          <span class="deploy-icon">📡</span>
+          <h3>OpenWrt LXC</h3>
+          <p>Run on your router. Perfect for distributed audio zones.</p>
+          <div class="deploy-arch">
+            <span>aarch64</span><span>armv7</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ MA INTEGRATION ══ -->
+  <section class="section" id="integration">
+    <div class="wrap">
+      <div class="section-label">Integration</div>
+      <h2 class="section-title fade-in">Deep Music Assistant Integration</h2>
+      <p class="section-subtitle fade-in">Not just audio forwarding — full bidirectional sync with your MA server.</p>
+
+      <div class="integration-split" style="margin-top: 48px;">
+        <div>
+          <ul class="integration-list">
+            <li class="fade-in">
+              <span class="check">✓</span>
+              <div>
+                <h4>Now Playing &amp; Album Art</h4>
+                <p>Real-time metadata, artwork proxy with HMAC-signed URLs for safe same-origin access.</p>
+              </div>
+            </li>
+            <li class="fade-in">
+              <span class="check">✓</span>
+              <div>
+                <h4>Transport Controls</h4>
+                <p>Play, pause, skip, seek, shuffle, repeat — native Sendspin transport for lowest latency.</p>
+              </div>
+            </li>
+            <li class="fade-in">
+              <span class="check">✓</span>
+              <div>
+                <h4>Sync Groups</h4>
+                <p>View active sync groups and per-device status in the bridge UI. Create &amp; manage groups in Music Assistant.</p>
+              </div>
+            </li>
+            <li class="fade-in">
+              <span class="check">✓</span>
+              <div>
+                <h4>Queue &amp; Playback Modes</h4>
+                <p>See previous &amp; next tracks, control shuffle/repeat modes in the bridge UI. Full queue management in Music Assistant.</p>
+              </div>
+            </li>
+            <li class="fade-in">
+              <span class="check">✓</span>
+              <div>
+                <h4>HA Automations</h4>
+                <p>Every device is an HA entity. Trigger scenes, announcements, and schedules natively.</p>
+              </div>
+            </li>
+          </ul>
+        </div>
+        <div class="fade-in" style="position:relative;">
+          <div class="showcase-frame">
+            <div class="showcase-bar" aria-hidden="true">
+              <span class="showcase-dot"></span><span class="showcase-dot"></span><span class="showcase-dot"></span>
+            </div>
+            <img src="https://trudenboy.github.io/sendspin-bt-bridge/screenshots/screenshot-list-expand-playing.png"
+                 alt="List view with expanded device card showing now-playing track, transport controls, and action buttons"
+                 loading="lazy" width="600" height="400">
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ COMMUNITY ══ -->
+  <section class="section" id="community" style="background: rgba(17,24,39,.4);">
+    <div class="wrap">
+      <div class="section-label">Community</div>
+      <h2 class="section-title fade-in">Join the Community</h2>
+      <p class="section-subtitle fade-in">Get help, share your setup, or contribute code.</p>
+
+      <div class="community-grid" style="margin-top: 48px;">
+        <a href="https://github.com/trudenboy/sendspin-bt-bridge" target="_blank" rel="noopener" class="community-card fade-in">
+          <span class="icon">⭐</span>
+          <h3>GitHub</h3>
+          <p>Star the repo, file issues, contribute code</p>
+        </a>
+        <a href="https://discord.gg/kaVm8hGpne" target="_blank" rel="noopener" class="community-card fade-in">
+          <span class="icon">💬</span>
+          <h3>Discord</h3>
+          <p>Chat in MA Discord #addons channel</p>
+        </a>
+        <a href="https://community.home-assistant.io/t/sendspin-bluetooth-bridge-turn-any-bt-speaker-into-an-ma-player-and-ha/993762" target="_blank" rel="noopener" class="community-card fade-in">
+          <span class="icon">🏡</span>
+          <h3>HA Community</h3>
+          <p>Discussion thread on HA Community</p>
+        </a>
+        <a href="https://github.com/orgs/music-assistant/discussions/5061" target="_blank" rel="noopener" class="community-card fade-in">
+          <span class="icon">🎶</span>
+          <h3>MA Discussion</h3>
+          <p>Show and Tell in Music Assistant</p>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ FINAL CTA ══ -->
+  <section class="cta-section">
+    <div class="wrap">
+      <div class="cta-box fade-in">
+        <h2>Ready to Make Your Devices Smart?</h2>
+        <p>Free, open-source, and running in minutes. Pick any Bluetooth speaker or headphones, pick your platform, and build your multi-room system for home or office.</p>
+        <div class="hero-actions">
+          <a href="https://my.home-assistant.io/redirect/supervisor_addon/?addon=85b1ecde_sendspin_bt_bridge&repository_url=https%3A%2F%2Fgithub.com%2Ftrudenboy%2Fsendspin-bt-bridge" class="btn btn-primary" target="_blank" rel="noopener">
+            Install HA Addon
+          </a>
+          <a href="https://trudenboy.github.io/sendspin-bt-bridge/" class="btn btn-secondary" target="_blank" rel="noopener">
+            Read the Docs
+          </a>
+          <a href="https://github.com/trudenboy/sendspin-bt-bridge" class="btn btn-ghost" target="_blank" rel="noopener">
+            View on GitHub →
+          </a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ STICKY MOBILE SHARE ══ -->
+  <div class="share-sticky" aria-label="Share">
+    <a class="share-btn x" target="_blank" rel="noopener"
+       href="https://twitter.com/intent/tweet?text=Make%20any%20Bluetooth%20speaker%20or%20headphones%20smart%20%E2%80%94%20DIY%20multi-room%20audio%20for%20home%20%26%20office.%20Free%20%26%20open-source%20%F0%9F%94%8A&url=https://sendspin-bt-bridge.pages.dev/">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+      X
+    </a>
+    <a class="share-btn reddit" target="_blank" rel="noopener"
+       href="https://reddit.com/submit?url=https://sendspin-bt-bridge.pages.dev/&title=Make%20Any%20BT%20Speaker%20or%20Headphones%20Smart%20%E2%80%94%20DIY%20Multi-Room%20Audio%20for%20Home%20%26%20Office">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701z"/></svg>
+      Reddit
+    </a>
+    <a class="share-btn telegram" target="_blank" rel="noopener"
+       href="https://t.me/share/url?url=https://sendspin-bt-bridge.pages.dev/&text=Make%20any%20Bluetooth%20speaker%20or%20headphones%20smart%20%F0%9F%94%8A%20DIY%20multi-room%20audio%20for%20home%20%26%20office.%20Free%20%26%20open-source">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg>
+      TG
+    </a>
+  </div>
+
+  <!-- ══ FOOTER ══ -->
+  <footer>
+    <div class="wrap">
+      <div class="footer-links">
+        <a href="https://trudenboy.github.io/sendspin-bt-bridge/">Documentation</a>
+        <a href="https://sendspin-demo.onrender.com" target="_blank" rel="noopener">Live Demo</a>
+        <a href="https://github.com/trudenboy/sendspin-bt-bridge" target="_blank" rel="noopener">GitHub</a>
+        <a href="https://github.com/trudenboy/sendspin-bt-bridge/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">Contributing</a>
+        <a href="https://github.com/trudenboy/sendspin-bt-bridge/blob/main/LICENSE" target="_blank" rel="noopener">MIT License</a>
+      </div>
+      <p>
+        © 2026 <a href="https://github.com/trudenboy">Mikhail Nevskiy</a>.
+        Built with ❤️ for the Music Assistant community.
+      </p>
+    </div>
+  </footer>
+
+  <!-- ══ MINIMAL JS ══ -->
+  <script>
+    // Screenshot switcher
+    function switchScreenshot(btn, file, alt) {
+      const img = document.getElementById('showcaseImg');
+      img.src = 'https://trudenboy.github.io/sendspin-bt-bridge/screenshots/' + file;
+      img.alt = alt;
+      document.querySelectorAll('.showcase-tab').forEach(t => t.classList.remove('active'));
+      btn.classList.add('active');
+    }
+
+    // Intersection Observer for fade-in animations
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('visible');
+          observer.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+
+    document.querySelectorAll('.fade-in').forEach(el => observer.observe(el));
+
+    // Close mobile nav on link click
+    document.querySelectorAll('.nav-links a').forEach(link => {
+      link.addEventListener('click', () => {
+        document.getElementById('navLinks').classList.remove('open');
+      });
+    });
+
+    // Navbar background on scroll
+    let ticking = false;
+    window.addEventListener('scroll', () => {
+      if (!ticking) {
+        requestAnimationFrame(() => {
+          const nav = document.querySelector('.nav');
+          nav.style.background = window.scrollY > 50
+            ? 'rgba(11,15,26,.92)'
+            : 'rgba(11,15,26,.75)';
+          ticking = false;
+        });
+        ticking = true;
+      }
+    }, { passive: true });
+  </script>
+</body>
+</html>
