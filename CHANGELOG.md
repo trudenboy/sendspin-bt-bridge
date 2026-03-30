@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [2.52.1-rc.2] - 2026-03-30
+## [2.52.1] - 2026-03-30
 
 ### Fixed
 - LXC upgrade: removed `demo/` from sync list and added directory existence guard — fixes upgrade failure when dirs are excluded from release tarball via `.gitattributes`
