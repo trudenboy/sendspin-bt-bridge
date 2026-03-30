@@ -54,9 +54,11 @@ sync_app_tree() {
   mkdir -p "${dest_root}"
   find "${src_root}" -maxdepth 1 -type f \( -name '*.py' -o -name 'requirements.txt' \) -exec cp -a {} "${dest_root}/" \;
 
-  for dir in services routes demo templates static lxc scripts; do
-    rm -rf "${dest_root}/${dir}"
-    cp -a "${src_root}/${dir}" "${dest_root}/${dir}"
+  for dir in services routes templates static lxc scripts; do
+    if [[ -d "${src_root}/${dir}" ]]; then
+      rm -rf "${dest_root}/${dir}"
+      cp -a "${src_root}/${dir}" "${dest_root}/${dir}"
+    fi
   done
 
   chmod +x "${dest_root}/sendspin_client.py"
