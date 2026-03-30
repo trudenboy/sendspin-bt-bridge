@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.52.0-rc.3] - 2026-03-30
+
+### Fixed
+- Wake button now uses a distinct sunrise icon instead of sharing the reconnect icon
+- Bug report dropdown: removed emoji icons for consistent UI style
+- LXC upgrade: download release archive to temp file with retry instead of fragile pipe
+- Bug report modal: default to "Open on GitHub", show email field only for proxy submissions
+
 ## [2.52.0-rc.2] - 2026-03-30
 
 ### Fixed
