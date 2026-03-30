@@ -26,9 +26,6 @@ ha-addon-beta/ export-ignore
 ha-addon-rc/ export-ignore
 ha-addon-assets/ export-ignore
 
-# LXC installer
-lxc/ export-ignore
-
 # Demo fixtures
 demo/ export-ignore
 
