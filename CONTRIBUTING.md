@@ -37,6 +37,18 @@ python sendspin_client.py
 
 Run `python3 -m pytest -q` for the automated runtime suite and use `cd docs-site && npm run build` when changing the Starlight docs. The test suite and docs should be treated as separate validation surfaces: Python catches runtime regressions, while the docs build catches broken Starlight routes, content, screenshot references, and frontmatter/schema issues.
 
+### Test-Driven Development (TDD)
+
+Use **red/green TDD** for new features and bug fixes:
+
+1. **Red** — Write the test first. Confirm it fails.
+2. **Green** — Write the minimal code to make the test pass.
+3. **Refactor** — Clean up while keeping tests green.
+
+When fixing a bug, first write a test that reproduces it (red), then fix (green).
+
+**Do not** modify existing tests to make them pass — fix the implementation instead. If a test is genuinely wrong, explain why in the commit message.
+
 ### Linting
 
 ```bash

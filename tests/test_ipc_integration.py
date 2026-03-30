@@ -57,7 +57,7 @@ def test_status_roundtrip_with_allowed_keys_none():
 
 
 def test_status_roundtrip_with_explicit_empty_frozenset():
-    """Empty frozenset yields no updates — same behavior as None."""
+    """Empty frozenset filters out all updates (opposite of None which passes all)."""
     envelope = build_status_envelope({"playing": True})
     parsed = parse_status_envelope(envelope, allowed_keys=frozenset())
 

@@ -525,3 +525,11 @@ def test_update_config_creates_dir(tmp_path, monkeypatch):
     assert sub.exists()
     with open(sub / "config.json") as f:
         assert json.load(f)["key"] == "val"
+
+
+def test_config_default_has_ma_username():
+    """DEFAULT_CONFIG includes MA_USERNAME."""
+    from config import DEFAULT_CONFIG
+
+    assert "MA_USERNAME" in DEFAULT_CONFIG
+    assert DEFAULT_CONFIG["MA_USERNAME"] == ""

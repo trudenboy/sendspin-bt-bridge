@@ -502,7 +502,8 @@ async def _run(params: dict) -> None:
     # sanitize client_id for safe path usage
     safe_id = re.sub(r"[^a-zA-Z0-9_:-]", "_", client_id)
     settings_dir: str = params.get("settings_dir", f"/tmp/sendspin-{safe_id}")
-    # Verify resolved path stays under /tmp
+    # CRITICAL: Security — path traversal guard. settings_dir comes from IPC params;
+    # must resolve under /tmp/ to prevent directory escape via ../
     resolved = str(Path(settings_dir).resolve())
     if not resolved.startswith("/tmp/"):
         settings_dir = f"/tmp/sendspin-{safe_id}"

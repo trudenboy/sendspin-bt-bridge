@@ -258,6 +258,8 @@ def migrate_config_payload(config: dict[str, Any]) -> ConfigMigrationResult:
 def write_config_file(
     config: dict[str, Any], *, config_file: Path | None = None, config_dir: Path | None = None
 ) -> None:
+    # CRITICAL: Config persistence — atomic write via tempfile + os.replace().
+    # fsync ensures data reaches disk before replacing the original file.
     target_file = CONFIG_FILE if config_file is None else config_file
     target_dir = CONFIG_DIR if config_dir is None else config_dir
     target_dir.mkdir(parents=True, exist_ok=True)

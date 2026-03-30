@@ -47,7 +47,8 @@ _FLOW_CLIENT_ID = f"{_HA_CORE_URL}/"
 _FLOW_ID_RE = re.compile(r"[0-9a-f-]{32,36}", re.IGNORECASE)
 
 # ---------------------------------------------------------------------------
-# Brute-force protection — in-memory, no external dependency
+# CRITICAL: Authentication — brute-force protection. In-memory tracking resets
+# on restart. Session-based client ID can be bypassed by clearing cookies.
 # ---------------------------------------------------------------------------
 
 _LOCKOUT_MAX_ATTEMPTS = 5

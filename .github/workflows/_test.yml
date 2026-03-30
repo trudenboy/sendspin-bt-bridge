@@ -53,3 +53,29 @@ jobs:
 
       - name: Run tests
         run: python -m pytest tests/ --cov=. --cov-report=term-missing --cov-fail-under=50 -q
+
+      - name: Check test modifications are intentional
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          # List test files changed in this PR
+          changed_tests=$(git diff --name-only "$BASE_SHA"..."$HEAD_SHA" -- 'tests/' || true)
+          if [ -z "$changed_tests" ]; then
+            echo "No test files changed — skipping check."
+            exit 0
+          fi
+          echo "::group::Changed test files"
+          echo "$changed_tests"
+          echo "::endgroup::"
+          # Count non-test source files changed alongside tests
+          changed_src=$(git diff --name-only "$BASE_SHA"..."$HEAD_SHA" -- '*.py' ':!tests/' || true)
+          test_count=$(echo "$changed_tests" | wc -l | tr -d ' ')
+          src_count=$(echo "$changed_src" | wc -l | tr -d ' ')
+          # Warn when tests change without source, or many tests change at once
+          if [ "$src_count" -eq 0 ] && [ "$test_count" -gt 0 ]; then
+            echo "::warning::$test_count test file(s) modified with no source changes — verify this is intentional (TDD red phase or test refactor)."
+          elif [ "$test_count" -gt 5 ]; then
+            echo "::warning::$test_count test files modified — bulk test changes deserve extra review."
+          fi

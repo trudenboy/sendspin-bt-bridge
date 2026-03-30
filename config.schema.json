@@ -1,0 +1,384 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/trudenboy/sendspin-bt-bridge/blob/main/config.schema.json",
+  "title": "Sendspin BT Bridge Configuration",
+  "description": "Machine-readable schema for /config/config.json used by the Sendspin BT Bridge.",
+  "type": "object",
+  "properties": {
+    "CONFIG_SCHEMA_VERSION": {
+      "type": "integer",
+      "const": 1,
+      "description": "Schema version; managed by the application — do not change."
+    },
+    "SENDSPIN_SERVER": {
+      "type": "string",
+      "default": "auto",
+      "description": "Music Assistant server hostname/IP. 'auto' uses mDNS discovery."
+    },
+    "SENDSPIN_PORT": {
+      "type": "integer",
+      "default": 9000,
+      "minimum": 1,
+      "maximum": 65535,
+      "description": "Music Assistant WebSocket port."
+    },
+    "WEB_PORT": {
+      "type": ["integer", "null"],
+      "default": null,
+      "minimum": 1,
+      "maximum": 65535,
+      "description": "Web UI port. null = use WEB_PORT env var or 8080."
+    },
+    "BASE_LISTEN_PORT": {
+      "type": ["integer", "null"],
+      "default": null,
+      "minimum": 1024,
+      "maximum": 65535,
+      "description": "Override per-device Sendspin listener base port. null = auto-assign."
+    },
+    "BRIDGE_NAME": {
+      "type": "string",
+      "default": "",
+      "description": "Bridge instance name. Empty or 'auto' resolves to hostname."
+    },
+    "BLUETOOTH_DEVICES": {
+      "type": "array",
+      "default": [],
+      "description": "List of configured Bluetooth speaker devices.",
+      "items": {
+        "$ref": "#/$defs/BluetoothDevice"
+      }
+    },
+    "BLUETOOTH_ADAPTERS": {
+      "type": "array",
+      "default": [],
+      "description": "List of Bluetooth adapter configurations.",
+      "items": {
+        "$ref": "#/$defs/BluetoothAdapter"
+      }
+    },
+    "HA_AREA_NAME_ASSIST_ENABLED": {
+      "type": "boolean",
+      "default": false,
+      "description": "Enable automatic room name assist from Home Assistant areas."
+    },
+    "HA_ADAPTER_AREA_MAP": {
+      "type": "object",
+      "default": {},
+      "description": "Manual mapping of adapter MAC → HA area name.",
+      "additionalProperties": { "type": "string" }
+    },
+    "TZ": {
+      "type": "string",
+      "default": "Australia/Melbourne",
+      "description": "Timezone (IANA format)."
+    },
+    "LAST_VOLUMES": {
+      "type": "object",
+      "default": {},
+      "description": "Runtime state: persisted per-device volumes keyed by MAC.",
+      "additionalProperties": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 100
+      }
+    },
+    "LAST_SINKS": {
+      "type": "object",
+      "default": {},
+      "description": "Runtime state: persisted per-device PulseAudio sink names keyed by MAC.",
+      "additionalProperties": { "type": "string" }
+    },
+    "PULSE_LATENCY_MSEC": {
+      "type": "integer",
+      "default": 600,
+      "minimum": 0,
+      "maximum": 5000,
+      "description": "PulseAudio latency in milliseconds."
+    },
+    "PREFER_SBC_CODEC": {
+      "type": "boolean",
+      "default": false,
+      "description": "Prefer SBC codec over AAC/aptX for Bluetooth audio."
+    },
+    "BT_CHECK_INTERVAL": {
+      "type": "integer",
+      "default": 10,
+      "minimum": 1,
+      "maximum": 300,
+      "description": "Bluetooth connection check interval in seconds."
+    },
+    "BT_MAX_RECONNECT_FAILS": {
+      "type": "integer",
+      "default": 0,
+      "minimum": 0,
+      "description": "Max consecutive reconnect failures before giving up. 0 = unlimited."
+    },
+    "BT_CHURN_THRESHOLD": {
+      "type": "integer",
+      "default": 0,
+      "minimum": 0,
+      "description": "Number of rapid connect/disconnect cycles triggering churn isolation. 0 = disabled."
+    },
+    "BT_CHURN_WINDOW": {
+      "type": "number",
+      "default": 300.0,
+      "minimum": 0,
+      "description": "Window in seconds for churn threshold counting."
+    },
+    "AUTH_ENABLED": {
+      "type": "boolean",
+      "default": false,
+      "description": "Enable web UI password authentication."
+    },
+    "SESSION_TIMEOUT_HOURS": {
+      "type": "integer",
+      "default": 24,
+      "minimum": 1,
+      "description": "Authenticated session lifetime in hours."
+    },
+    "BRUTE_FORCE_PROTECTION": {
+      "type": "boolean",
+      "default": true,
+      "description": "Enable brute-force login protection."
+    },
+    "BRUTE_FORCE_MAX_ATTEMPTS": {
+      "type": "integer",
+      "default": 5,
+      "minimum": 1,
+      "description": "Max failed login attempts before lockout."
+    },
+    "BRUTE_FORCE_WINDOW_MINUTES": {
+      "type": "integer",
+      "default": 1,
+      "minimum": 1,
+      "description": "Time window for counting failed login attempts."
+    },
+    "BRUTE_FORCE_LOCKOUT_MINUTES": {
+      "type": "integer",
+      "default": 5,
+      "minimum": 1,
+      "description": "Lockout duration after exceeding max attempts."
+    },
+    "STARTUP_BANNER_GRACE_SECONDS": {
+      "type": "integer",
+      "default": 5,
+      "minimum": 0,
+      "description": "Grace period before showing startup guidance banners."
+    },
+    "RECOVERY_BANNER_GRACE_SECONDS": {
+      "type": "integer",
+      "default": 15,
+      "minimum": 0,
+      "description": "Grace period before showing recovery guidance banners."
+    },
+    "AUTH_PASSWORD_HASH": {
+      "type": "string",
+      "default": "",
+      "description": "PBKDF2-SHA256 password hash. Managed by the application — do not edit manually."
+    },
+    "SECRET_KEY": {
+      "type": "string",
+      "default": "",
+      "description": "Flask session secret key. Auto-generated on first startup — do not edit."
+    },
+    "LOG_LEVEL": {
+      "type": "string",
+      "default": "INFO",
+      "enum": ["DEBUG", "INFO", "WARNING", "ERROR"],
+      "description": "Root logger level."
+    },
+    "MA_API_URL": {
+      "type": "string",
+      "default": "",
+      "description": "Music Assistant REST API URL."
+    },
+    "MA_API_TOKEN": {
+      "type": "string",
+      "default": "",
+      "description": "Music Assistant API token."
+    },
+    "MA_AUTH_PROVIDER": {
+      "type": "string",
+      "default": "",
+      "description": "MA authentication provider identifier."
+    },
+    "MA_USERNAME": {
+      "type": "string",
+      "default": "",
+      "description": "Music Assistant username."
+    },
+    "MA_TOKEN_INSTANCE_HOSTNAME": {
+      "type": "string",
+      "default": "",
+      "description": "Hostname of the MA instance the token was issued for."
+    },
+    "MA_TOKEN_LABEL": {
+      "type": "string",
+      "default": "",
+      "description": "Label for the MA API token."
+    },
+    "MA_ACCESS_TOKEN": {
+      "type": "string",
+      "default": "",
+      "description": "MA OAuth access token. Managed by the application."
+    },
+    "MA_REFRESH_TOKEN": {
+      "type": "string",
+      "default": "",
+      "description": "MA OAuth refresh token. Managed by the application."
+    },
+    "MA_AUTO_SILENT_AUTH": {
+      "type": "boolean",
+      "default": true,
+      "description": "Automatically attempt silent MA re-authentication."
+    },
+    "MA_WEBSOCKET_MONITOR": {
+      "type": "boolean",
+      "default": true,
+      "description": "Enable persistent WebSocket connection to MA for real-time updates."
+    },
+    "VOLUME_VIA_MA": {
+      "type": "boolean",
+      "default": true,
+      "description": "Route volume commands through Music Assistant API."
+    },
+    "MUTE_VIA_MA": {
+      "type": "boolean",
+      "default": false,
+      "description": "Route mute commands through Music Assistant API."
+    },
+    "SMOOTH_RESTART": {
+      "type": "boolean",
+      "default": true,
+      "description": "Enable smooth daemon restart (reconnect IPC instead of full restart)."
+    },
+    "UPDATE_CHANNEL": {
+      "type": "string",
+      "default": "stable",
+      "enum": ["stable", "rc", "beta"],
+      "description": "Software update channel."
+    },
+    "AUTO_UPDATE": {
+      "type": "boolean",
+      "default": false,
+      "description": "Automatically apply available updates."
+    },
+    "CHECK_UPDATES": {
+      "type": "boolean",
+      "default": true,
+      "description": "Periodically check for new versions."
+    },
+    "DISABLE_PA_RESCUE_STREAMS": {
+      "type": "boolean",
+      "default": false,
+      "description": "Disable PulseAudio module-rescue-streams correction on BT reconnect."
+    },
+    "DUPLICATE_DEVICE_CHECK": {
+      "type": "boolean",
+      "default": true,
+      "description": "Check MA API for duplicate device registrations across bridges."
+    },
+    "TRUSTED_PROXIES": {
+      "type": "array",
+      "default": [],
+      "description": "Additional trusted proxy IP addresses for X-Forwarded-For.",
+      "items": { "type": "string" }
+    }
+  },
+  "$defs": {
+    "BluetoothDevice": {
+      "type": "object",
+      "required": ["mac"],
+      "properties": {
+        "mac": {
+          "type": "string",
+          "pattern": "^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$",
+          "description": "Bluetooth MAC address (XX:XX:XX:XX:XX:XX)."
+        },
+        "player_name": {
+          "type": "string",
+          "description": "Display name for the speaker. Falls back to MAC if empty."
+        },
+        "adapter": {
+          "type": "string",
+          "default": "",
+          "description": "Bluetooth adapter to use (e.g. 'hci0'). Empty = default adapter."
+        },
+        "listen_port": {
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 65535,
+          "description": "Override Sendspin listener port for this device."
+        },
+        "delay_ms": {
+          "type": "integer",
+          "description": "Per-device static audio delay in milliseconds (negative = earlier)."
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether this device is active."
+        },
+        "volume_controller": {
+          "type": "string",
+          "enum": ["pa", "sendspin"],
+          "default": "pa",
+          "description": "Volume control backend: 'pa' (PulseAudio) or 'sendspin'."
+        },
+        "handoff_mode": {
+          "type": "string",
+          "enum": ["default", "fast_handoff"],
+          "default": "default",
+          "description": "Stream handoff strategy."
+        },
+        "idle_disconnect_minutes": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0,
+          "description": "Minutes of idle before BT standby disconnect. 0 = disabled."
+        },
+        "keepalive_enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Send periodic silence to prevent BT speaker auto-sleep."
+        },
+        "keepalive_interval": {
+          "type": "integer",
+          "minimum": 30,
+          "default": 30,
+          "description": "Seconds between keepalive silence bursts."
+        },
+        "room_id": {
+          "type": "string",
+          "description": "Home Assistant area/room ID for this device."
+        },
+        "room_name": {
+          "type": "string",
+          "description": "Human-readable room name."
+        }
+      },
+      "additionalProperties": false
+    },
+    "BluetoothAdapter": {
+      "type": "object",
+      "properties": {
+        "mac": {
+          "type": "string",
+          "pattern": "^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$",
+          "description": "Adapter MAC address."
+        },
+        "name": {
+          "type": "string",
+          "description": "Friendly name for the adapter."
+        },
+        "hci": {
+          "type": "string",
+          "description": "HCI device name (e.g. 'hci0')."
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

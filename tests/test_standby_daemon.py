@@ -280,23 +280,49 @@ class TestKeepaliveSuppression:
 
     @pytest.mark.asyncio
     async def test_keepalive_skips_when_standby(self):
-        """Verify keepalive conditions include not-in-standby check."""
+        """Verify _keepalive_loop does NOT send burst when bt_standby is True."""
         client = _make_client(daemon_alive=True)
         client.keepalive_enabled = True
-        client.keepalive_interval = 30
+        client.keepalive_interval = 0.05
         client.running = True
         client.status.update({"bt_standby": True, "audio_streaming": False})
         client.bt_manager.connected = True
+        client._send_keepalive_burst = AsyncMock()
 
-        # The standby check should prevent keepalive from firing
-        should_send = (
-            client.bt_manager
-            and client.bt_manager.connected
-            and client.bluetooth_sink_name
-            and not client.status.get("audio_streaming")
-            and not client.status.get("bt_standby")
-        )
-        assert not should_send
+        # Run keepalive loop briefly
+        task = asyncio.create_task(client._keepalive_loop())
+        await asyncio.sleep(0.15)
+        client.running = False
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+        # bt_standby=True should have suppressed all bursts
+        client._send_keepalive_burst.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_keepalive_fires_when_not_standby(self):
+        """Verify _keepalive_loop DOES send burst when conditions are met."""
+        client = _make_client(daemon_alive=True)
+        client.keepalive_enabled = True
+        client.keepalive_interval = 0.05
+        client.running = True
+        client.status.update({"bt_standby": False, "audio_streaming": False})
+        client.bt_manager.connected = True
+        client._send_keepalive_burst = AsyncMock()
+
+        task = asyncio.create_task(client._keepalive_loop())
+        await asyncio.sleep(0.15)
+        client.running = False
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+        assert client._send_keepalive_burst.await_count >= 1
 
 
 # ── Sync group auto-wake ─────────────────────────────────────────────────
@@ -337,10 +363,11 @@ class TestGroupAutoWake:
     def test_group_auto_wake_noop_when_not_playing(self):
         """No wake when group state is idle."""
         import state
+        from sendspin_client import DeviceStatus
 
         client = MagicMock()
-        client.status = MagicMock()
-        client.status.get.return_value = True  # bt_standby=True
+        client.status = DeviceStatus()
+        client.status.update({"bt_standby": True, "group_id": "group-1"})
 
         with (
             patch.object(state, "_get_registry_active_clients_snapshot", return_value=[client]),

@@ -14,6 +14,8 @@ import hashlib
 import hmac
 import secrets
 
+# CRITICAL: Authentication — PBKDF2-SHA256 password hashing.
+# Uses hmac.compare_digest for constant-time comparison.
 _PBKDF2_ITERS = 600_000  # OWASP 2023 recommendation for PBKDF2-SHA256
 _LEGACY_ITERS = 260_000
 

@@ -110,6 +110,9 @@ def configure_bluetooth_audio(
             logger.info("Available audio sinks: %s", [s["name"] for s in sinks])
 
             # Find the Bluetooth sink
+            # CRITICAL: Audio routing — sink discovery with bounded retries (_SINK_RETRY_COUNT).
+            # If no sink found after retries, BT speaker will connect but play no audio.
+            # Sink naming differs between PipeWire and PulseAudio — order matters.
             sink_names = [
                 f"bluez_output.{pa_mac}.1",  # PipeWire format
                 f"bluez_output.{pa_mac}.a2dp-sink",

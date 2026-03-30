@@ -411,7 +411,11 @@ class SendspinClient:
         return StatusEventBuilder.build(previous, current, updates)
 
     def _update_status(self, updates: dict) -> None:
-        """Thread-safe update of self.status; notifies SSE listeners."""
+        """Thread-safe update of self.status; notifies SSE listeners.
+
+        CRITICAL: Thread safety — acquired by Flask WSGI threads, asyncio event loop,
+        and D-Bus callback thread. Callbacks are invoked OUTSIDE the lock to avoid deadlocks.
+        """
         recorded_events: list[dict[str, object]] = []
         with self._status_lock:
             previous = self.status.copy()
@@ -863,6 +867,8 @@ class SendspinClient:
             )
 
             # Build subprocess environment: inherit everything + PULSE_SINK for routing
+            # CRITICAL: Audio routing — PULSE_SINK determines which BT speaker this
+            # subprocess sends audio to. Wrong value = audio to wrong speaker or silence.
             env = os.environ.copy()
             if self.bluetooth_sink_name:
                 env["PULSE_SINK"] = self.bluetooth_sink_name

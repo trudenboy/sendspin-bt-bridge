@@ -25,6 +25,9 @@ def test_set_ma_groups_logs_info_when_cache_changes(caplog):
     assert any(
         record.levelno == logging.INFO and "MA syncgroup cache updated" in record.message for record in caplog.records
     )
+    # Verify cache actually stored the data
+    assert ma_runtime_state.get_ma_groups() == all_groups
+    assert ma_runtime_state.get_ma_group_for_player("player-1") == {"id": "syncgroup_1", "name": "Kitchen"}
 
 
 def test_set_ma_groups_logs_debug_when_cache_is_unchanged(caplog):

@@ -148,14 +148,24 @@ def test_client_id_path_stays_under_tmp():
 
 
 def test_client_id_path_fallback_on_escape():
-    """If someone manually sets settings_dir outside /tmp, the fallback kicks in."""
+    """If settings_dir resolves outside /tmp, the fallback kicks in (mirrors daemon_process._run logic)."""
+    from pathlib import Path
+
     client_id = "speaker1"
     safe_id = _sanitize_client_id(client_id)
+
+    # Simulate the actual fallback logic from daemon_process._run (line 504-508)
     settings_dir = "/var/evil"
     resolved = str(Path(settings_dir).resolve())
-    if not resolved.startswith("/tmp/"):
+    tmp_real = str(Path("/tmp").resolve())
+    if not resolved.startswith(tmp_real + "/") and resolved != tmp_real:
         settings_dir = f"/tmp/sendspin-{safe_id}"
-    assert settings_dir.startswith("/tmp/")
+    assert settings_dir == f"/tmp/sendspin-{safe_id}"
+
+    # Verify safe path is not overridden
+    settings_dir_safe = f"/tmp/sendspin-{safe_id}"
+    resolved_safe = str(Path(settings_dir_safe).resolve())
+    assert resolved_safe.startswith(str(Path("/tmp").resolve()))
 
 
 def test_filter_supported_daemon_args_kwargs_drops_unknown_fields():
@@ -198,7 +208,12 @@ def test_filter_supported_daemon_args_kwargs_preserves_volume_controller():
         },
     )
 
-    assert filtered["volume_controller"] is None
+    assert filtered == {
+        "audio_device": "default",
+        "client_id": "player-1",
+        "use_mpris": False,
+        "volume_controller": None,
+    }
 
 
 def test_filter_supported_daemon_args_kwargs_preserves_legacy_hw_volume():

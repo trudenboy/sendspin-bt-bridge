@@ -23,9 +23,25 @@ docker logs -f sendspin-client
 docker exec -it sendspin-client bluetoothctl
 ```
 
-Unit tests: `pytest` (see `tests/`). 959+ tests across 68+ files. Manual testing via `docker logs` and the web UI at `http://localhost:8080`.
+Unit tests: `pytest` (see `tests/`). 965+ tests across 68+ files. Manual testing via `docker logs` and the web UI at `http://localhost:8080`.
 
 CI/CD: The `VERSION` file is the single source of truth. Pushing a VERSION change to `main` triggers `release.yml` which runs lint+pytest, updates `config.py`, creates the git tag, builds Docker images (amd64+arm64), syncs HA addon directories, creates a GitHub Release (stable only), and builds armv7 (stable only). Regular development pushes and PRs trigger `ci.yml` (lint+test only).
+
+## Test-Driven Development (TDD)
+
+Use **red/green TDD** for all new features and bug fixes:
+
+1. **Red**: Write the test first. Confirm it **fails** before writing implementation.
+2. **Green**: Write the **minimal** code to make the test pass.
+3. **Refactor**: Clean up the implementation while keeping tests green.
+
+### Rules for AI agents
+
+- **Never modify existing tests to make them pass.** If a test fails, fix the implementation. If a test is genuinely wrong, explain the reason in the commit message before changing it.
+- **Never write tautological tests** — tests that reimplement the logic under test locally and assert on that local copy. Always call the real function/method.
+- **Test real behavior, not mocks.** Avoid over-mocking: if a test only verifies that mocks return what they were configured to return, it tests nothing.
+- **Every test must be able to fail.** If removing the implementation doesn't break the test, the test is useless.
+- When fixing a bug, first write a test that **reproduces** the bug (red), then fix it (green).
 
 ## Local Demo Workflow
 
@@ -155,7 +171,7 @@ IPC: subprocess→parent via JSON lines on stdout; parent→subprocess via JSON 
 - `_merge_adapters()` — merges user-supplied names with detected hardware
 - Preserves runtime state from previous config (LAST_VOLUMES, AUTH_PASSWORD_HASH, SECRET_KEY)
 
-**Config persistence:** `/config/config.json` (mounted Docker volume at `/etc/docker/Sendspin`). Changes via the web UI require a container restart to take effect.
+**Config persistence:** `/config/config.json` (mounted Docker volume at `/etc/docker/Sendspin`). Changes via the web UI require a container restart to take effect. See `config.schema.json` for the machine-readable JSON Schema describing all fields, types, and constraints.
 
 **`static/app.js`** — frontend logic: `_showBtInfoModal()` (BT device info modal), `rebootAdapter()` (adapter power cycle), `_startScanCooldown()` (scan button cooldown timer), `uploadConfig()` (config file upload).
 

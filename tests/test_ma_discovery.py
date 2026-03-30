@@ -69,25 +69,19 @@ async def test_validate_ma_url_success():
 # ---------------------------------------------------------------------------
 
 
-def test_login_url_normalization():
-    """URL without scheme gets http:// prepended."""
-    url = "192.168.1.100:8095"
-    if "://" not in url:
-        url = f"http://{url}"
-    assert url == "http://192.168.1.100:8095"
+@pytest.mark.asyncio
+async def test_login_url_normalization():
+    """URL without scheme gets http:// prepended by _normalize_ma_url."""
+    from services.ma_client import _normalize_ma_url
+
+    assert await _normalize_ma_url("192.168.1.100:8095") == "http://192.168.1.100:8095"
+    assert await _normalize_ma_url("ma.local") == "http://ma.local"
 
 
-def test_login_url_with_scheme_unchanged():
-    """URL with scheme is not modified."""
-    url = "https://ma.local:8095"
-    if "://" not in url:
-        url = f"http://{url}"
-    assert url == "https://ma.local:8095"
+@pytest.mark.asyncio
+async def test_login_url_with_scheme_unchanged():
+    """URL with scheme is not modified by _normalize_ma_url."""
+    from services.ma_client import _normalize_ma_url
 
-
-def test_config_default_has_ma_username():
-    """DEFAULT_CONFIG includes MA_USERNAME."""
-    from config import DEFAULT_CONFIG
-
-    assert "MA_USERNAME" in DEFAULT_CONFIG
-    assert DEFAULT_CONFIG["MA_USERNAME"] == ""
+    assert await _normalize_ma_url("https://ma.local:8095") == "https://ma.local:8095"
+    assert await _normalize_ma_url("http://192.168.1.1:8095") == "http://192.168.1.1:8095"
