@@ -1417,7 +1417,7 @@ html
     // Google Translate
     function googleTranslateElementInit() {
       new google.translate.TranslateElement({
-        pageLanguage: 'en',
+        pageLanguage: 'ru',
         layout: google.translate.TranslateElement.InlineLayout.SIMPLE,
         autoDisplay: false
       }, 'google_translate_element');
@@ -1428,7 +1428,12 @@ html
 
     function setLang(lang) {
       if (lang === 'en') {
-        // Reset to original
+        // Navigate to the English static page
+        window.location.href = '../';
+        return;
+      }
+      if (lang === 'ru') {
+        // Already on Russian page — clear any Google Translate overlay
         const frame = document.querySelector('.goog-te-banner-frame');
         if (frame) {
           const btn = frame.contentDocument.querySelector('.goog-close-link');
@@ -1437,9 +1442,9 @@ html
         document.cookie = 'googtrans=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/';
         document.cookie = 'googtrans=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=.' + location.hostname;
       } else {
-        document.cookie = 'googtrans=/en/' + lang + '; path=/';
-        document.cookie = 'googtrans=/en/' + lang + '; path=/; domain=.' + location.hostname;
-        // Trigger Google Translate
+        // Translate FROM Russian to target language
+        document.cookie = 'googtrans=/ru/' + lang + '; path=/';
+        document.cookie = 'googtrans=/ru/' + lang + '; path=/; domain=.' + location.hostname;
         const sel = document.querySelector('#google_translate_element select');
         if (sel) { sel.value = lang; sel.dispatchEvent(new Event('change')); }
         else location.reload();
