@@ -48,22 +48,35 @@ trap cleanup EXIT
 
 download_repo_snapshot() {
   local extract_dir="$1"
+  local tmp_tar
+  tmp_tar="$(mktemp "${extract_dir}/snapshot.XXXXXX.tar.gz")"
 
   # For tag-based installs, try release asset first (downloads are tracked)
   if [[ "${REF_KIND}" == "tags" ]]; then
     local version="${GITHUB_BRANCH#v}"  # strip leading 'v'
     local asset_url="https://github.com/${GITHUB_REPO}/releases/download/${GITHUB_BRANCH}/sendspin-bt-bridge-${version}.tar.gz"
-    if wget -qO- "${asset_url}" 2>/dev/null | tar -xzf - -C "${extract_dir}"; then
+    if wget -q -O "${tmp_tar}" "${asset_url}" 2>/dev/null && tar -xzf "${tmp_tar}" -C "${extract_dir}"; then
+      rm -f "${tmp_tar}"
       msg "Downloaded release asset for ${GITHUB_BRANCH}"
       find "${extract_dir}" -mindepth 1 -maxdepth 1 -type d | head -n 1
       return
     fi
+    rm -f "${tmp_tar}"
     warn "Release asset not available, falling back to archive"
   fi
 
-  # Fallback: GitHub-generated archive
-  wget -qO- "${ARCHIVE_URL}" | tar -xzf - -C "${extract_dir}"
-  find "${extract_dir}" -mindepth 1 -maxdepth 1 -type d | head -n 1
+  # Fallback: GitHub-generated archive (download to file, then extract)
+  local attempt
+  for attempt in 1 2 3; do
+    if wget -q -O "${tmp_tar}" "${ARCHIVE_URL}" 2>/dev/null && tar -xzf "${tmp_tar}" -C "${extract_dir}"; then
+      rm -f "${tmp_tar}"
+      find "${extract_dir}" -mindepth 1 -maxdepth 1 -type d | head -n 1
+      return
+    fi
+    rm -f "${tmp_tar}"
+    [[ $attempt -lt 3 ]] && { warn "Download attempt ${attempt} failed, retrying in 3s..."; sleep 3; }
+  done
+  return 1
 }
 
 sync_app_tree() {
