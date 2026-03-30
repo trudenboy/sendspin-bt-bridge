@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.52.0-rc.6] - 2026-03-30
+
+### Added
+- TDD rules for AI agents in CLAUDE.md and CONTRIBUTING.md — red/green/refactor, 5 agent constraints
+- CRITICAL risk markers on 7 high-risk code zones (audio routing, thread safety, path traversal, auth, config persistence)
+- CI test protection: PR warning when test files change without source changes or bulk modifications
+- `config.schema.json` — machine-readable JSON Schema for config.json (all 40+ fields, device/adapter sub-schemas)
+
+### Fixed
+- Test audit: fixed tautological tests in daemon_process, standby_daemon, ma_discovery
+- Test audit: added missing assertions in container_runtime, ma_runtime_state, config
+- Test audit: moved misplaced config test from ma_discovery to test_config
+
 ## [2.52.0-rc.5] - 2026-03-30
 
 ### Added
