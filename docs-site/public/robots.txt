@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://trudenboy.github.io/sendspin-bt-bridge/sitemap-index.xml
