@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.52.0-rc.4] - 2026-03-30
+
+### Fixed
+- LXC upgrade: `warn()` output to stderr so it doesn't pollute `SNAPSHOT_ROOT` path in `download_repo_snapshot()`
+
 ## [2.52.0-rc.3] - 2026-03-30
 
 ### Fixed
