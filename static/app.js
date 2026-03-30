@@ -2570,6 +2570,12 @@ function _actionButtonIconSvg(kind, className) {
             '<path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79z"/>' +
         '</svg>';
     }
+    if (kind === 'sunrise') {
+        return '<svg' + cls + ' viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+            '<path d="M12 2v4"/><path d="m4.93 5.93 1.41 1.41"/><path d="m17.66 5.93-1.41 1.41"/><path d="M2 13h4"/><path d="M18 13h4"/>' +
+            '<path d="M12 17a5 5 0 0 1-5-5h10a5 5 0 0 1-5 5z"/><path d="M2 21h20"/>' +
+        '</svg>';
+    }
     if (kind === 'disable') {
         return '<svg' + cls + ' viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
             '<circle cx="12" cy="12" r="8"/>' +
@@ -2598,7 +2604,7 @@ function _setReleaseActionButtonState(btn, mgmtEnabled) {
 function _setStandbyActionButtonState(btn, isStandby) {
     if (!btn) return;
     _setActionButtonTone(btn, isStandby ? 'success' : 'warn');
-    btn.innerHTML = _actionButtonInnerHtml(isStandby ? 'sun' : 'standby', isStandby ? 'Wake' : 'Standby');
+    btn.innerHTML = _actionButtonInnerHtml(isStandby ? 'sunrise' : 'standby', isStandby ? 'Wake' : 'Standby');
     btn.title = isStandby
         ? 'Wake from standby — reconnect Bluetooth and resume audio'
         : 'Enter standby — disconnect Bluetooth to save speaker battery';
@@ -3084,7 +3090,7 @@ function buildListView(entries, hiddenCount) {
         var isStandby = !!dev.bt_standby;
         var standbyActionClass = isStandby ? 'success' : 'warn';
         var standbyLabel = isStandby ? 'Wake' : 'Standby';
-        var standbyIcon = isStandby ? 'reconnect' : 'standby';
+        var standbyIcon = isStandby ? 'sunrise' : 'standby';
         var standbyTitle = isStandby
             ? 'Wake from standby — reconnect Bluetooth and resume audio'
             : 'Enter standby — disconnect Bluetooth to save speaker battery';
@@ -3495,7 +3501,7 @@ function buildDeviceCard(i) {
           '<span class="bt-action-status" id="dbt-action-status-' + i + '"></span>' +
           '<div class="card-action-buttons">' +
             '<button type="button" class="action-btn accent" id="dbtn-reconnect-' + i + '" onclick="btReconnect(' + i + ')">' + _actionButtonInnerHtml('reconnect', 'Reconnect') + '</button>' +
-            '<button type="button" class="action-btn accent" id="dbtn-wake-' + i + '" onclick="wakeDevice(' + i + ')" style="display:none">' + _actionButtonInnerHtml('sun', 'Wake') + '</button>' +
+            '<button type="button" class="action-btn accent" id="dbtn-wake-' + i + '" onclick="wakeDevice(' + i + ')" style="display:none">' + _actionButtonInnerHtml('sunrise', 'Wake') + '</button>' +
             '<button type="button" class="action-btn warn" id="dbtn-standby-' + i + '" onclick="btToggleStandby(' + i + ')">' + _actionButtonInnerHtml('standby', 'Standby') + '</button>' +
             '<button type="button" class="action-btn danger" id="dbtn-disable-' + i + '" onclick="confirmDisableDevice(' + i + ')">' + _actionButtonInnerHtml('disable', 'Disable') + '</button>' +
             '<button type="button" class="icon-btn device-settings-btn card-corner-settings-btn" onclick="openDeviceSettings(' + i + ')" title="Device settings">' + _settingsIconHtml() + '</button>' +
