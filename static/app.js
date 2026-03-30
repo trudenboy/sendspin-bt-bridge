@@ -9901,9 +9901,9 @@ function _openBugReport(e, context) {
     submitSection.innerHTML =
         '<div class="bugreport-submit-row">' +
         '<select class="bugreport-method-select" id="br-method">' +
-        '<option value="github" selected>🐙 Open on GitHub (requires account)</option>' +
-        '<option value="proxy">📨 Submit report (no GitHub account needed)</option>' +
-        '<option value="copy">📋 Copy to clipboard</option>' +
+        '<option value="github" selected>Open on GitHub (requires account)</option>' +
+        '<option value="proxy">Submit report (no GitHub account needed)</option>' +
+        '<option value="copy">Copy to clipboard</option>' +
         '</select>' +
         '<button class="bugreport-submit-btn" id="br-submit-btn" disabled>Submit</button>' +
         '</div>' +
