@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0B0F1A">
   <title>Sendspin Bluetooth Bridge — Make Any Speaker Smart · Build Your Own Multi-Room Audio</title>
 
   <!-- ══ SEO ══ -->
@@ -42,6 +43,8 @@
   <!-- ══ Preconnect ══ -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://translate.googleapis.com" crossorigin>
+  <link rel="dns-prefetch" href="https://translate.googleapis.com">
   <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
 
@@ -59,7 +62,7 @@
     "isAccessibleForFree": true,
     "downloadUrl": "https://github.com/trudenboy/sendspin-bt-bridge",
     "screenshot": "https://sendspin-bt-bridge.pages.dev/screenshots/screenshot-dashboard-full.png",
-    "softwareVersion": "2.52.0",
+    "softwareVersion": "2.52.1",
     "author": {
       "@type": "Person",
       "name": "Mikhail Nevskiy",
@@ -77,8 +80,54 @@
     }
   }
   </script>
-
-  <style>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "What Bluetooth devices work with Sendspin BT Bridge?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Any Bluetooth speaker, headphones, or soundbar that supports the A2DP audio profile. This includes budget speakers, premium soundbars, and wireless headphones from any manufacturer."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Is Sendspin BT Bridge free?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes, completely free and open-source under the MIT license. No subscriptions, no cloud dependencies, no hidden costs."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Do I need Home Assistant to use it?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "No. The bridge runs standalone via Docker, Raspberry Pi, or Proxmox LXC. Home Assistant integration adds AI automations and voice control but is optional."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "How many speakers can I connect simultaneously?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Each USB Bluetooth adapter supports 1-3 concurrent speakers. Add more adapters for more speakers. Users run 6+ speakers across multiple adapters with synchronized multi-room playback."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Does it work with Raspberry Pi?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes. Optimized for Raspberry Pi 3, 4, and 5. A bootstrap script handles the complete setup including Bluetooth and audio configuration."
+        }
+      }
+    ]
+  }
+  </script>
     /* ══════════════════════════════════════════
        DESIGN TOKENS
        ══════════════════════════════════════════ */

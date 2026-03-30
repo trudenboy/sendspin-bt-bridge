@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://sendspin-bt-bridge.pages.dev/sitemap.xml

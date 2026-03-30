@@ -3,19 +3,20 @@ html
 <head>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1, viewport-fit=cover" name="viewport"/>
+<meta name="theme-color" content="#0B0F1A"/>
 <title>Sendspin Bluetooth Bridge — Превратите любую акустическую систему в «умную» · Создайте собственную аудиосистему Multi-Room</title>
 <!-- ══ SEO ══ -->
 <meta content="Превратите любую Bluetooth-колонку, наушники или саундбар в «умное» устройство. Создайте собственную аудиосистему multi-room для дома и офиса с автоматизацией на базе искусственного интеллекта — на платформах Sendspin, Music Assistant и Home Assistant. Бесплатно и с открытым исходным кодом." name="description"/>
-<meta content="Сборка умного динамика своими руками, аудиосистема multiroom, умный Bluetooth-динамик, умные Bluetooth-наушники, умная Bluetooth-саундбар, Music Assistant, Home Assistant AI, Sendspin protocol, аудиосистема для всего дома, офисная аудиосистема, аудиосистема на базе Raspberry Pi, открытый исходный код multiroom, динамик с голосовым помощником" name="keywords"/>
+<meta content="умная колонка bluetooth, мультирум аудио система, bluetooth колонка multiroom, Music Assistant, Home Assistant автоматизация, Sendspin протокол, умный дом аудио, домашний кинотеатр bluetooth, Raspberry Pi аудио, open source мультирум, bluetooth наушники multiroom, саундбар мультирум" name="keywords"/>
 <meta content="Mikhail Nevskiy" name="author"/>
 <meta content="index, follow, max-image-preview:large" name="robots"/>
 <link href="https://sendspin-bt-bridge.pages.dev/ru/" rel="canonical"/><link href="https://sendspin-bt-bridge.pages.dev/" hreflang="x-default" rel="alternate"/><link href="https://sendspin-bt-bridge.pages.dev/ru/" hreflang="ru" rel="alternate"/><link href="https://sendspin-bt-bridge.pages.dev/" hreflang="en" rel="alternate"/>
 <!-- ══ Open Graph (Facebook, LinkedIn, Telegram, Discord) ══ -->
 <meta content="website" property="og:type"/>
-<meta content="https://sendspin-bt-bridge.pages.dev/" property="og:url"/>
+<meta content="https://sendspin-bt-bridge.pages.dev/ru/" property="og:url"/>
 <meta content="Превратите любую акустическую систему в «умную» — создайте собственную аудиосистему Multi-Room с искусственным интеллектом" property="og:title"/>
 <meta content="Превратите любую Bluetooth-колонку, наушники или саундбар в интеллектуальный проигрыватель multi-room для дома и офиса. Автоматизация с помощью Home Assistant на базе искусственного интеллекта. Работает на платформах Sendspin и Music Assistant. Бесплатно и с открытым исходным кодом." property="og:description"/>
-<meta content="https://sendspin-bt-bridge.pages.dev/screenshots/sbb_infographic_en.png" property="og:image"/>
+<meta content="https://sendspin-bt-bridge.pages.dev/screenshots/sbb_infographic_ru.png" property="og:image"/>
 <meta content="1200" property="og:image:width"/>
 <meta content="630" property="og:image:height"/>
 <meta content="Sendspin Bluetooth Bridge инфографика об архитектуре и функциях" property="og:image:alt"/>
@@ -26,7 +27,7 @@ html
 <meta content="summary_large_image" name="twitter:card"/>
 <meta content="Превратите любую акустическую систему в «умную» — аудиосистема Multi-Room своими руками 🔊" name="twitter:title"/>
 <meta content="Превратите любой Bluetooth-динамик, наушники или саундбар в интеллектуальный плеер multi-room. Автоматизация с помощью искусственного интеллекта через Home Assistant. Работает на базе Sendspin и Music Assistant. Бесплатно и с открытым исходным кодом." name="twitter:description"/>
-<meta content="https://sendspin-bt-bridge.pages.dev/screenshots/sbb_infographic_en.png" name="twitter:image"/>
+<meta content="https://sendspin-bt-bridge.pages.dev/screenshots/sbb_infographic_ru.png" name="twitter:image"/>
 <meta content="Sendspin Bluetooth Bridge инфографика по архитектуре" name="twitter:image:alt"/>
 <!-- ══ Favicons ══ -->
 <link href="https://trudenboy.github.io/sendspin-bt-bridge/logo.svg" rel="icon" type="image/svg+xml"/>
@@ -34,6 +35,8 @@ html
 <!-- ══ Preconnect ══ -->
 <link href="https://fonts.googleapis.com" rel="preconnect"/>
 <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link rel="preconnect" href="https://translate.googleapis.com" crossorigin/>
+<link rel="dns-prefetch" href="https://translate.googleapis.com"/>
 <link as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;display=swap" rel="preload"/>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;display=swap" rel="stylesheet"/>
 <!-- ══ JSON-LD Structured Data ══ -->
@@ -49,7 +52,7 @@ html
     "isAccessibleForFree": true,
     "downloadUrl": "https://github.com/trudenboy/sendspin-bt-bridge",
     "screenshot": "https://sendspin-bt-bridge.pages.dev/screenshots/screenshot-dashboard-full.png",
-    "softwareVersion": "2.52.0",
+    "softwareVersion": "2.52.1",
     "author": {
         "@type": "Person",
         "name": "Mikhail Nevskiy",
@@ -67,6 +70,54 @@ html
     },
     "inLanguage": "ru"
 }</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Какие Bluetooth-устройства поддерживаются?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Любые Bluetooth-колонки, наушники или саундбары с профилем A2DP. Подходят бюджетные колонки, премиальные саундбары и беспроводные наушники любого производителя."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Sendspin BT Bridge бесплатный?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Да, полностью бесплатный и с открытым исходным кодом (лицензия MIT). Без подписок, без облака, без скрытых платежей."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Нужен ли Home Assistant?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Нет. Мост работает автономно через Docker, Raspberry Pi или Proxmox LXC. Интеграция с Home Assistant добавляет AI-автоматизации и голосовое управление, но не обязательна."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Сколько колонок можно подключить одновременно?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Каждый USB Bluetooth-адаптер поддерживает 1–3 колонки. Добавьте больше адаптеров для большего числа колонок. Пользователи запускают 6+ колонок с синхронным мультирум-воспроизведением."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Работает ли на Raspberry Pi?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Да. Оптимизирован для Raspberry Pi 3, 4 и 5. Скрипт установки автоматически настраивает Bluetooth и аудиосистему."
+      }
+    }
+  ]
+}
+</script>
 <style>
     /* ══════════════════════════════════════════
        DESIGN TOKENS
