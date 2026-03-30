@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.52.1] - 2026-03-30
+
+### Fixed
+- LXC upgrade: removed `demo/` from sync list and added directory existence guard — fixes upgrade failure when dirs are excluded from release tarball via `.gitattributes`
+
+### Changed
+- Release tarball optimized from ~21 MB to ~800 KB via `.gitattributes` export-ignore (excludes docs-site, tests, img, marketing assets)
+- Docker build context slimmed with expanded `.dockerignore` (tests, landing, img, addon variants, dev files)
+
+### Added
+- Google Translate auto-translation widget for documentation site (14 languages + 100+ via "More")
+- Journey log entries for March 26–30 (NumPy crisis, mobile UI, diagnostics, bug report proxy, landing page)
+
 ## [2.52.0] - 2026-03-30
 
 ### Added
