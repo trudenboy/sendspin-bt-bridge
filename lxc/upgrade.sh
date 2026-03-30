@@ -33,6 +33,36 @@ if [[ "${GITHUB_BRANCH}" == v* ]]; then
   REF_KIND="tags"
 fi
 ARCHIVE_URL="https://github.com/${GITHUB_REPO}/archive/refs/${REF_KIND}/${GITHUB_BRANCH}.tar.gz"
+
+# ─── Self-update ───────────────────────────────────────────────────────────────
+# Fetch the latest upgrade.sh from the target ref before running the full
+# upgrade. This prevents chicken-and-egg situations where a bug in the current
+# upgrade.sh blocks the update that would fix it.
+_SELF_UPDATED="${_SELF_UPDATED:-}"
+_self_update() {
+  if [[ -n "${_SELF_UPDATED}" ]]; then
+    return  # already updated once — avoid infinite loop
+  fi
+  local raw_url="https://raw.githubusercontent.com/${GITHUB_REPO}/refs/${REF_KIND}/${GITHUB_BRANCH}/lxc/upgrade.sh"
+  local new_script
+  new_script="$(mktemp)"
+  if wget -q -O "${new_script}" "${raw_url}" 2>/dev/null && [[ -s "${new_script}" ]]; then
+    if ! cmp -s "${new_script}" "${BASH_SOURCE[0]}"; then
+      cp "${new_script}" "${BASH_SOURCE[0]}"
+      chmod +x "${BASH_SOURCE[0]}"
+      rm -f "${new_script}"
+      msg "upgrade.sh updated, restarting..."
+      export _SELF_UPDATED=1
+      exec bash "${BASH_SOURCE[0]}" "$@"
+    fi
+    rm -f "${new_script}"
+  else
+    rm -f "${new_script}"
+    warn "Could not fetch latest upgrade.sh — continuing with current version"
+  fi
+}
+_self_update "$@"
+
 SCRIPT_TMP_DIR=""
 STAGE_APP=""
 BACKUP_APP=""

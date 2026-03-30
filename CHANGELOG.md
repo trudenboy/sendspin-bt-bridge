@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.52.0-rc.5] - 2026-03-30
+
+### Added
+- LXC upgrade: self-update mechanism — `upgrade.sh` fetches its latest version from the target ref before running, preventing chicken-and-egg upgrade failures
+
 ## [2.52.0-rc.4] - 2026-03-30
 
 ### Fixed
