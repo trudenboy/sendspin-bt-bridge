@@ -1,12 +1,16 @@
 # [Sendspin](https://www.sendspin-audio.com/) Bluetooth Bridge
 
 [![GitHub Release](https://img.shields.io/github/v/release/trudenboy/sendspin-bt-bridge?style=flat&logo=github)](https://github.com/trudenboy/sendspin-bt-bridge/releases/latest)
+[![CI](https://img.shields.io/github/actions/workflow/status/trudenboy/sendspin-bt-bridge/ci.yml?branch=main&label=CI&logo=githubactions)](https://github.com/trudenboy/sendspin-bt-bridge/actions/workflows/ci.yml)
 [![Docker Pulls](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fghcr-badge.elias.eu.org%2Fapi%2Ftrudenboy%2Fsendspin-bt-bridge%2Fsendspin-bt-bridge&query=downloadCount&label=Docker%20Pulls&logo=docker&color=blue)](https://github.com/trudenboy/sendspin-bt-bridge/pkgs/container/sendspin-bt-bridge)
 [![HA Installs](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fanalytics.home-assistant.io%2Faddons.json&query=%24%5B%2285b1ecde_sendspin_bt_bridge%22%5D.total&label=HA%20Installs&logo=homeassistant&color=18bcf2)](https://analytics.home-assistant.io/apps/)
 [![GitHub Stars](https://img.shields.io/github/stars/trudenboy/sendspin-bt-bridge?style=flat&logo=github)](https://github.com/trudenboy/sendspin-bt-bridge/stargazers)
+[![License: MIT](https://img.shields.io/github/license/trudenboy/sendspin-bt-bridge?style=flat&color=9070B8)](LICENSE)
 [![Try Demo](https://img.shields.io/badge/Try_Demo-Live-brightgreen?style=flat&logo=render)](https://sendspin-demo.onrender.com)
 
-[Read in Russian](README.ru.md) · [Documentation](https://trudenboy.github.io/sendspin-bt-bridge/) · [Roadmap](ROADMAP.md) · [Live Demo](https://sendspin-demo.onrender.com) · [Changelog](CHANGELOG.md)
+**🏠 [Landing Page](https://sendspin-bt-bridge.pages.dev/)** · **📖 [Documentation](https://trudenboy.github.io/sendspin-bt-bridge/)** · **🚀 [Live Demo](https://sendspin-demo.onrender.com)** · **🇷🇺 [Русская версия](README.ru.md)**
+
+[Changelog](CHANGELOG.md) · [Roadmap](ROADMAP.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md)
 
 Turn Bluetooth speakers and headphones into native [Music Assistant](https://www.music-assistant.io/) [Sendspin](https://www.music-assistant.io/player-support/sendspin/) players.
 
@@ -32,6 +36,15 @@ Sendspin Bluetooth Bridge is a local-first, headless-friendly bridge for Home As
 - A Linux host with a USB or built-in Bluetooth adapter — Raspberry Pi, NUC, Proxmox VM, or a Home Assistant OS installation.
 
 No command-line setup required. The web UI handles Bluetooth scanning, pairing, and Music Assistant configuration entirely from the browser.
+
+### Tested on
+
+| Platform | Hardware | Audio system |
+|----------|----------|-------------|
+| Home Assistant OS 17+ | Proxmox VM, Raspberry Pi 4/5 | PulseAudio 17 |
+| Ubuntu 22.04 / 24.04 | x86_64, aarch64 | PulseAudio / PipeWire |
+| Proxmox VE 8.x LXC | x86_64 | PulseAudio |
+| OpenWrt 23+ LXC | aarch64, armv7 | PulseAudio |
 
 ## Runtime modes
 
@@ -60,6 +73,16 @@ The fastest path is the Home Assistant addon.
 4. Add your Bluetooth speakers, then use **Configuration → Music Assistant** to connect or reconfigure Music Assistant. The dashboard onboarding checklist and recovery hints point to the next safe step.
 
 Full Home Assistant guide: <https://trudenboy.github.io/sendspin-bt-bridge/installation/ha-addon/>
+
+## Quick start: Docker
+
+```bash
+git clone https://github.com/trudenboy/sendspin-bt-bridge.git
+cd sendspin-bt-bridge
+docker compose up -d
+```
+
+Open `http://<host-ip>:8080/` and follow the onboarding checklist. Full Docker guide: <https://trudenboy.github.io/sendspin-bt-bridge/installation/docker/>
 
 ## Choose your deployment
 
@@ -134,6 +157,8 @@ Use the docs site for the full guides and reference:
 
 - [Contributing](CONTRIBUTING.md)
 - [Roadmap](ROADMAP.md)
-- [License](LICENSE)
+- [License (MIT)](LICENSE)
 - [Changelog](CHANGELOG.md)
+- [Security Policy](SECURITY.md)
+- [Code of Conduct](CODE_OF_CONDUCT.md)
 - [History](HISTORY.md)

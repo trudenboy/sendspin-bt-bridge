@@ -1,12 +1,16 @@
 # [Sendspin](https://www.sendspin-audio.com/) Bluetooth Bridge
 
 [![GitHub Release](https://img.shields.io/github/v/release/trudenboy/sendspin-bt-bridge?style=flat&logo=github)](https://github.com/trudenboy/sendspin-bt-bridge/releases/latest)
+[![CI](https://img.shields.io/github/actions/workflow/status/trudenboy/sendspin-bt-bridge/ci.yml?branch=main&label=CI&logo=githubactions)](https://github.com/trudenboy/sendspin-bt-bridge/actions/workflows/ci.yml)
 [![Docker Pulls](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fghcr-badge.elias.eu.org%2Fapi%2Ftrudenboy%2Fsendspin-bt-bridge%2Fsendspin-bt-bridge&query=downloadCount&label=Docker%20Pulls&logo=docker&color=blue)](https://github.com/trudenboy/sendspin-bt-bridge/pkgs/container/sendspin-bt-bridge)
 [![HA Installs](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fanalytics.home-assistant.io%2Faddons.json&query=%24%5B%2285b1ecde_sendspin_bt_bridge%22%5D.total&label=HA%20Installs&logo=homeassistant&color=18bcf2)](https://analytics.home-assistant.io/apps/)
 [![GitHub Stars](https://img.shields.io/github/stars/trudenboy/sendspin-bt-bridge?style=flat&logo=github)](https://github.com/trudenboy/sendspin-bt-bridge/stargazers)
+[![License: MIT](https://img.shields.io/github/license/trudenboy/sendspin-bt-bridge?style=flat&color=9070B8)](LICENSE)
 [![Try Demo](https://img.shields.io/badge/Try_Demo-Live-brightgreen?style=flat&logo=render)](https://sendspin-demo.onrender.com)
 
-[Read in English](README.md) · [Документация](https://trudenboy.github.io/sendspin-bt-bridge/ru/) · [Дорожная карта](ROADMAP.ru.md) · [Демо](https://sendspin-demo.onrender.com) · [История проекта](HISTORY.ru.md)
+**🏠 [Лендинг](https://sendspin-bt-bridge.pages.dev/ru/)** · **📖 [Документация](https://trudenboy.github.io/sendspin-bt-bridge/ru/)** · **🚀 [Демо](https://sendspin-demo.onrender.com)** · **🇬🇧 [English version](README.md)**
+
+[История изменений](CHANGELOG.md) · [Дорожная карта](ROADMAP.ru.md) · [Участие в разработке](CONTRIBUTING.md) · [Безопасность](SECURITY.md)
 
 Превратите Bluetooth-колонки и наушники в нативные плееры [Music Assistant](https://www.music-assistant.io/) на протоколе [Sendspin](https://www.music-assistant.io/player-support/sendspin/).
 
@@ -30,6 +34,15 @@ Sendspin Bluetooth Bridge — это local-first мост для headless-сце
 - Linux-хост с USB или встроенным Bluetooth-адаптером — Raspberry Pi, NUC, Proxmox VM или Home Assistant OS.
 
 Командная строка не нужна. Веб-интерфейс полностью берёт на себя поиск Bluetooth-устройств, сопряжение и настройку Music Assistant.
+
+### Проверено на
+
+| Платформа | Оборудование | Аудиосистема |
+|-----------|-------------|-------------|
+| Home Assistant OS 17+ | Proxmox VM, Raspberry Pi 4/5 | PulseAudio 17 |
+| Ubuntu 22.04 / 24.04 | x86_64, aarch64 | PulseAudio / PipeWire |
+| Proxmox VE 8.x LXC | x86_64 | PulseAudio |
+| OpenWrt 23+ LXC | aarch64, armv7 | PulseAudio |
 
 ## Режимы работы
 
@@ -58,6 +71,16 @@ DEMO_MODE=true python sendspin_client.py
 4. Добавьте Bluetooth-колонки, затем откройте **Configuration → Music Assistant**, чтобы подключить или перенастроить Music Assistant. Dashboard сам подскажет следующий безопасный шаг через onboarding checklist и recovery guidance.
 
 Полный гайд по Home Assistant: <https://trudenboy.github.io/sendspin-bt-bridge/ru/installation/ha-addon/>
+
+## Быстрый старт: Docker
+
+```bash
+git clone https://github.com/trudenboy/sendspin-bt-bridge.git
+cd sendspin-bt-bridge
+docker compose up -d
+```
+
+Откройте `http://<host-ip>:8080/` и следуйте инструкциям на экране. Полный гайд по Docker: <https://trudenboy.github.io/sendspin-bt-bridge/ru/installation/docker/>
 
 ## Выберите вариант развёртывания
 
@@ -132,6 +155,8 @@ Bridge уже рассматривает несколько runtime-поверх
 - [Участие в разработке](CONTRIBUTING.md)
 - [Дорожная карта (RU)](ROADMAP.ru.md)
 - [Roadmap (EN)](ROADMAP.md)
-- [Лицензия](LICENSE)
+- [Лицензия (MIT)](LICENSE)
 - [История изменений](CHANGELOG.md)
+- [Политика безопасности](SECURITY.md)
+- [Кодекс поведения](CODE_OF_CONDUCT.md)
 - [История проекта](HISTORY.ru.md)
