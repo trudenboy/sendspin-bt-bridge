@@ -1,0 +1,46 @@
+# Exclude from release tarball (git archive)
+
+# Documentation site (402 MB with node_modules)
+docs-site/ export-ignore
+
+# Tests
+tests/ export-ignore
+pytest.ini export-ignore
+dev-requirements.txt export-ignore
+
+# CI/CD
+.github/ export-ignore
+.pre-commit-config.yaml export-ignore
+
+# Marketing / screenshots
+img/ export-ignore
+landing/ export-ignore
+ui-redesign-mockup.html export-ignore
+mobile-375-*.png export-ignore
+mobile-375-*.md export-ignore
+tablet-*.png export-ignore
+bugreport-*.png export-ignore
+
+# HA addon variants (stable addon stays — needed for repo install)
+ha-addon-beta/ export-ignore
+ha-addon-rc/ export-ignore
+ha-addon-assets/ export-ignore
+
+# LXC installer
+lxc/ export-ignore
+
+# Demo fixtures
+demo/ export-ignore
+
+# Dev notes / snapshots
+github-issue-snapshot*.md export-ignore
+community_engagement.md export-ignore
+CLAUDE.md export-ignore
+ROADMAP.md export-ignore
+ROADMAP.ru.md export-ignore
+HISTORY.md export-ignore
+HISTORY.ru.md export-ignore
+CONTRIBUTING.md export-ignore
+CODE_OF_CONDUCT.md export-ignore
+SECURITY.md export-ignore
+TODO.md export-ignore

@@ -3,15 +3,43 @@ docs-site/
 .git/
 lxc/
 ha-addon/
+ha-addon-beta/
+ha-addon-rc/
+ha-addon-assets/
 .github/
 patches/
 .playwright-mcp/
+.wrangler/
+.understand-anything/
+
+# Tests
+tests/
+pytest.ini
+dev-requirements.txt
 
 # Documentation
 *.md
 CHANGELOG*
 LICENSE
 
+# Marketing / screenshots
+img/
+landing/
+ui-redesign-mockup.html
+mobile-375-*
+tablet-*
+bugreport-*.png
+github-issue-snapshot*
+
+# Demo
+demo/
+
 # Dev/compose files
 docker-compose.yml
 .dockerignore
+.gitattributes
+.pre-commit-config.yaml
+.hadolint.yaml
+pyproject.toml
+render.yaml
+repository.yaml
