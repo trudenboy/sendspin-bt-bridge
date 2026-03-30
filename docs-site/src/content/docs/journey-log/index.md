@@ -17,6 +17,10 @@ If you want the latest status first, start with the newest entry below.
 
 ## Entries
 
+- [2026-03-30 — Landing page, auto-translation, and v2.52.0](./2026-03-30-landing-page-and-v2-52/)
+- [2026-03-29 — Bug report proxy, Docker Compose fix, and v2.51.0 stable](./2026-03-29-bugreport-proxy-and-docker-fix/)
+- [2026-03-28 — Mobile UI overhaul, diagnostics redesign, and v2.51.0](./2026-03-28-mobile-ui-and-diagnostics/)
+- [2026-03-26 — NumPy CPU crash, documentation audit, and v2.50.0](./2026-03-26-numpy-crisis-and-docs-audit/)
 - [2026-03-25 — Native transport and null-sink standby](./2026-03-25-native-transport-and-standby/)
 - [2026-03-24 — Security audit and IPC hardening](./2026-03-24-security-audit-and-ipc/)
 - [2026-03-23 — Room metadata and HA area integration](./2026-03-23-room-metadata-and-ha-areas/)
