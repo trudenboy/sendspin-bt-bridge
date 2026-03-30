@@ -11,7 +11,7 @@ CYAN='\033[0;36m'; BOLD='\033[1m'; NC='\033[0m'
 
 msg()  { echo -e "${CYAN}${BOLD}[Sendspin]${NC} $*"; }
 ok()   { echo -e "${GREEN}✓${NC} $*"; }
-warn() { echo -e "${YELLOW}⚠${NC}  $*"; }
+warn() { echo -e "${YELLOW}⚠${NC}  $*" >&2; }
 err()  { echo -e "${RED}✗${NC}  $*" >&2; }
 die()  { err "$*"; exit 1; }
 
@@ -57,7 +57,7 @@ download_repo_snapshot() {
     local asset_url="https://github.com/${GITHUB_REPO}/releases/download/${GITHUB_BRANCH}/sendspin-bt-bridge-${version}.tar.gz"
     if wget -q -O "${tmp_tar}" "${asset_url}" 2>/dev/null && tar -xzf "${tmp_tar}" -C "${extract_dir}"; then
       rm -f "${tmp_tar}"
-      msg "Downloaded release asset for ${GITHUB_BRANCH}"
+      msg "Downloaded release asset for ${GITHUB_BRANCH}" >&2
       find "${extract_dir}" -mindepth 1 -maxdepth 1 -type d | head -n 1
       return
     fi
