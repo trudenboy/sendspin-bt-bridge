@@ -67,6 +67,9 @@ known-first-party = [
     "services",
 ]
 
+[tool.ruff.lint.per-file-ignores]
+"scripts/translate_landing.py" = ["RUF001"]  # Cyrillic strings are intentional
+
 [tool.mypy]
 python_version = "3.12"
 follow_imports = "silent"
