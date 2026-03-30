@@ -9892,6 +9892,7 @@ function _openBugReport(e, context) {
         '<input type="email" id="br-email" placeholder="your@email.com">' +
         '<div class="field-error">Please enter a valid email address</div>';
     body.appendChild(emailField);
+    emailField.style.display = 'none';  // hidden by default; shown when proxy method selected
     var emailInput = emailField.querySelector('#br-email');
 
     // Submission: dropdown + single submit button
@@ -9900,8 +9901,8 @@ function _openBugReport(e, context) {
     submitSection.innerHTML =
         '<div class="bugreport-submit-row">' +
         '<select class="bugreport-method-select" id="br-method">' +
-        '<option value="proxy" selected>📨 Submit report (no GitHub account needed)</option>' +
-        '<option value="github">🐙 Open on GitHub (requires account)</option>' +
+        '<option value="github" selected>🐙 Open on GitHub (requires account)</option>' +
+        '<option value="proxy">📨 Submit report (no GitHub account needed)</option>' +
         '<option value="copy">📋 Copy to clipboard</option>' +
         '</select>' +
         '<button class="bugreport-submit-btn" id="br-submit-btn" disabled>Submit</button>' +
@@ -9950,7 +9951,7 @@ function _openBugReport(e, context) {
         if (descInput.value.trim().length > 0) descInput.classList.remove('invalid');
         if (emailInput.value.trim().length > 0) emailInput.classList.remove('invalid');
         // Toggle email required visual
-        emailField.style.display = methodSelect.value === 'copy' ? 'none' : '';
+        emailField.style.display = methodSelect.value === 'proxy' ? '' : 'none';
     }
     titleInput.addEventListener('input', validateForm);
     descInput.addEventListener('input', validateForm);
@@ -9975,17 +9976,15 @@ function _openBugReport(e, context) {
                 proxyAvailable = true;
                 validateForm();
             } else {
-                // Proxy not available — remove proxy option, default to github
+                // Proxy not available — disable proxy option
                 var proxyOpt = methodSelect.querySelector('option[value="proxy"]');
-                if (proxyOpt) proxyOpt.remove();
-                methodSelect.value = 'github';
+                if (proxyOpt) { proxyOpt.disabled = true; proxyOpt.textContent += ' (unavailable)'; }
                 validateForm();
             }
         })
         .catch(function() {
             var proxyOpt = methodSelect.querySelector('option[value="proxy"]');
-            if (proxyOpt) proxyOpt.remove();
-            methodSelect.value = 'github';
+            if (proxyOpt) { proxyOpt.disabled = true; proxyOpt.textContent += ' (unavailable)'; }
             validateForm();
         });
 
