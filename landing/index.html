@@ -205,17 +205,20 @@
     #google_translate_element { display: inline-block; }
     #google_translate_element .goog-te-gadget { font-size: 0; }
     #google_translate_element .goog-te-gadget-simple {
-      background: rgba(255,255,255,.08) !important;
-      border: 1px solid var(--border) !important;
-      border-radius: 8px !important;
-      padding: 4px 10px !important;
+      background: linear-gradient(135deg, rgba(80,176,184,.12), rgba(144,112,184,.12)) !important;
+      border: 1px solid rgba(80,176,184,.25) !important;
+      border-radius: 20px !important;
+      padding: 5px 14px !important;
       font-size: .82rem !important;
       line-height: 1.4 !important;
       cursor: pointer;
-      transition: background var(--transition);
+      transition: all .2s ease;
+      backdrop-filter: blur(8px);
     }
     #google_translate_element .goog-te-gadget-simple:hover {
-      background: rgba(255,255,255,.14) !important;
+      background: linear-gradient(135deg, rgba(80,176,184,.22), rgba(144,112,184,.22)) !important;
+      border-color: rgba(80,176,184,.45) !important;
+      box-shadow: 0 0 12px rgba(80,176,184,.15);
     }
     #google_translate_element .goog-te-gadget-simple .goog-te-menu-value {
       color: var(--text-muted) !important;
@@ -225,11 +228,21 @@
       color: var(--text) !important;
       font-weight: 500;
     }
+    #google_translate_element .goog-te-gadget-simple .goog-te-menu-value span[style*="border-left"] {
+      border-left-color: rgba(80,176,184,.4) !important;
+      margin-left: 8px !important;
+      padding-left: 8px !important;
+    }
     #google_translate_element .goog-te-gadget-simple img { display: none !important; }
     .goog-te-banner-frame { display: none !important; }
     body { top: 0 !important; }
     body > .skiptranslate:first-child { display: none !important; }
     #google_translate_element .skiptranslate { display: inline !important; }
+    .goog-te-menu-frame {
+      box-shadow: 0 8px 32px rgba(0,0,0,.5) !important;
+      border-radius: 12px !important;
+      overflow: hidden !important;
+    }
 
     .nav-hamburger {
       display: none; background: none; border: none; cursor: pointer;
@@ -1448,7 +1461,6 @@
     function googleTranslateElementInit() {
       new google.translate.TranslateElement({
         pageLanguage: 'en',
-        includedLanguages: 'en,ru,uk,be,de,fr,es',
         layout: google.translate.TranslateElement.InlineLayout.SIMPLE,
         autoDisplay: false
       }, 'google_translate_element');
