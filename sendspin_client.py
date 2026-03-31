@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     import concurrent.futures
 
     from services.audio_backend import AudioBackend
-    from services.player_model import Player
+    from services.player_model import Player, PlayerState
 
 import state as _state
 from bluetooth_manager import BluetoothManager
@@ -460,6 +460,23 @@ class SendspinClient:
         """Translate meaningful status transitions into structured device events."""
         return StatusEventBuilder.build(previous, current, updates)
 
+    def _derive_player_state(self) -> PlayerState | None:
+        """Derive PlayerState from current client status for orchestrator sync."""
+        if not self._player:
+            return None
+        from services.player_model import PlayerState
+
+        status = self.status
+        if status.get("audio_streaming"):
+            return PlayerState.STREAMING
+        if status.get("server_connected"):
+            return PlayerState.READY
+        if status.get("bluetooth_connected"):
+            return PlayerState.CONNECTING
+        if status.get("last_error"):
+            return PlayerState.ERROR
+        return PlayerState.OFFLINE
+
     def _update_status(self, updates: dict) -> None:
         """Thread-safe update of self.status; notifies SSE listeners.
 
@@ -485,6 +502,19 @@ class SendspinClient:
                 details=event["details"] if isinstance(event["details"], dict) else None,
             )
         _state.notify_status_changed()
+        # Sync derived player state to BackendOrchestrator (best-effort).
+        if getattr(self, "_player", None):
+            try:
+                from state import get_backend_orchestrator
+
+                new_state = self._derive_player_state()
+                if new_state is not None:
+                    orch = get_backend_orchestrator()
+                    current = orch.get_player_state(self.player_id)
+                    if current != new_state:
+                        orch.set_player_state(self.player_id, new_state)
+            except Exception:
+                pass
         # Check audio_streaming transition for idle disconnect timer.
         # Skip if keep-alive is enabled — it actively prevents speaker sleep,
         # which contradicts the purpose of idle standby.

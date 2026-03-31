@@ -61,6 +61,8 @@ class DeviceSnapshot:
     health_summary: dict[str, Any] | None = None
     capabilities: dict[str, Any] | None = None
     state_model: dict[str, Any] | None = None
+    backend_info: dict[str, Any] | None = None
+    player_state: str | None = None
     extra: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -183,6 +185,7 @@ class BridgeSnapshot:
     startup_progress: StartupProgressSnapshot | None = None
     runtime_mode: str = "production"
     mock_runtime: MockRuntimeSnapshot | None = None
+    orchestrator_summary: dict[str, Any] | None = None
     error: str | None = None
 
     def to_status_payload(self) -> dict[str, Any]:
@@ -209,6 +212,8 @@ class BridgeSnapshot:
             payload["ma_web_url"] = self.ma_web_url
         if self.update_available:
             payload["update_available"] = self.update_available
+        if self.orchestrator_summary is not None:
+            payload["orchestrator_summary"] = self.orchestrator_summary
         return payload
 
 
@@ -583,6 +588,19 @@ def build_device_snapshot(client, *, configured_enabled: dict[str, bool] | None 
     device.capabilities = _build_device_capabilities(device)
     device.state_model = build_normalized_device_state(device).to_dict()
     device.extra["state_model"] = device.state_model
+
+    # Backend info from atomic snapshot or client attribute.
+    _snap_backend = _snap.get("audio_backend") if _snap else getattr(client, "backend_status", None)
+    device.backend_info = _snap_backend
+
+    # Player state from orchestrator.
+    try:
+        orch = state.get_backend_orchestrator()
+        ps = orch.get_player_state(_snap_player_id) if _snap_player_id else None
+        device.player_state = ps.value if ps else None
+    except Exception:
+        pass
+
     return device
 
 
@@ -691,12 +709,26 @@ def build_group_snapshots(
     return result
 
 
+def _build_orchestrator_summary() -> dict[str, Any] | None:
+    """Build orchestrator summary from the global BackendOrchestrator."""
+    try:
+        orch = state.get_backend_orchestrator()
+        return {
+            "player_count": orch.player_count,
+            "connected_count": orch.connected_count,
+            "states": {pid: s.value for pid, s in orch.get_all_states().items()},
+        }
+    except Exception:
+        return None
+
+
 def build_bridge_snapshot(clients: list[Any]) -> BridgeSnapshot:
     """Build the normalized bridge snapshot for `/api/status`-style responses."""
     ma_url, _token = state.get_ma_api_credentials()
     update_available = state.get_update_available()
     mock_runtime = build_mock_runtime_snapshot()
     configured_enabled = _configured_enabled_by_player_name()
+    orch_summary = _build_orchestrator_summary()
     if not clients:
         return BridgeSnapshot(
             devices=[],
@@ -709,6 +741,7 @@ def build_bridge_snapshot(clients: list[Any]) -> BridgeSnapshot:
             startup_progress=build_startup_progress_snapshot(),
             runtime_mode=mock_runtime.mode,
             mock_runtime=mock_runtime,
+            orchestrator_summary=orch_summary,
             error="No clients",
         )
 
@@ -724,4 +757,5 @@ def build_bridge_snapshot(clients: list[Any]) -> BridgeSnapshot:
         startup_progress=build_startup_progress_snapshot(),
         runtime_mode=mock_runtime.mode,
         mock_runtime=mock_runtime,
+        orchestrator_summary=orch_summary,
     )
