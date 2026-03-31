@@ -22,6 +22,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import concurrent.futures
 
+    from services.audio_backend import AudioBackend
+
 import state as _state
 from bluetooth_manager import BluetoothManager
 from bridge_orchestrator import BridgeOrchestrator
@@ -344,6 +346,7 @@ class SendspinClient:
         )
         self.bt_management_enabled: bool = True
         self.bluetooth_sink_name: str | None = None  # Store Bluetooth sink name for volume sync
+        self._audio_backend: AudioBackend | None = None
         self.connected_server_url: str = ""  # actual resolved ws:// URL (populated after connect)
         self._seen_ipc_protocol_warnings: set[str] = set()
         self._daemon_proc: asyncio.subprocess.Process | None = None
@@ -372,6 +375,46 @@ class SendspinClient:
         )
         self._stop_service = SubprocessStopService(logger_=logger)
         self._idle_timer_task: asyncio.Task | concurrent.futures.Future | None = None
+
+    # ------ AudioBackend integration (V3-1) ------
+
+    @property
+    def audio_backend(self) -> AudioBackend | None:
+        return self._audio_backend
+
+    @audio_backend.setter
+    def audio_backend(self, backend: AudioBackend | None) -> None:
+        self._audio_backend = backend
+
+    @property
+    def audio_destination(self) -> str | None:
+        """Backend-agnostic audio destination (sink name).
+
+        Prefers AudioBackend.get_audio_destination() if backend exists,
+        falls back to bluetooth_sink_name for backward compat.
+        """
+        if self._audio_backend is not None:
+            return self._audio_backend.get_audio_destination()
+        return self.bluetooth_sink_name
+
+    @property
+    def backend_status(self) -> dict[str, object] | None:
+        """Return AudioBackend status dict, or None if no backend."""
+        if self._audio_backend is not None:
+            return self._audio_backend.to_dict()
+        return None
+
+    async def backend_connect(self) -> bool:
+        """Connect via AudioBackend if available, else no-op."""
+        if self._audio_backend is not None:
+            return self._audio_backend.connect()
+        return False
+
+    async def backend_disconnect(self) -> bool:
+        """Disconnect via AudioBackend if available."""
+        if self._audio_backend is not None:
+            return self._audio_backend.disconnect()
+        return False
 
     @property
     def _playing_since(self) -> float | None:
@@ -1090,6 +1133,8 @@ class SendspinClient:
                 "battery_level": getattr(bt_mgr, "battery_level", None) if bt_mgr else None,
                 "paired": getattr(bt_mgr, "paired", None) if bt_mgr else None,
                 "max_reconnect_fails": int(getattr(bt_mgr, "max_reconnect_fails", 0) or 0) if bt_mgr else 0,
+                "audio_backend": self.backend_status,
+                "audio_destination": self.audio_destination,
             }
 
     async def run(self) -> None:
