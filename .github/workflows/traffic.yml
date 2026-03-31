@@ -147,6 +147,48 @@ jobs:
             const repoSnapshot = buildRepoSnapshot(repoResponse.data);
             const releaseSnapshot = buildReleaseSnapshot(releases);
 
+            // Fetch issues/PRs and CI workflow stats
+            const [openIssues, closedIssues, openPRs, closedPRs, workflowsResp] = await Promise.all([
+              github.request('GET /search/issues', { q: `repo:${owner}/${repo}+type:issue+state:open` }),
+              github.request('GET /search/issues', { q: `repo:${owner}/${repo}+type:issue+state:closed` }),
+              github.request('GET /search/issues', { q: `repo:${owner}/${repo}+type:pr+state:open` }),
+              github.request('GET /search/issues', { q: `repo:${owner}/${repo}+type:pr+state:closed` }),
+              github.rest.actions.listRepoWorkflows({ owner, repo }),
+            ]);
+
+            const issuesSnapshot = {
+              open_issues: openIssues.data.total_count,
+              closed_issues: closedIssues.data.total_count,
+              open_prs: openPRs.data.total_count,
+              closed_prs: closedPRs.data.total_count,
+            };
+
+            // Fetch per-workflow CI stats (only user-facing workflows, skip reusable _prefixed ones)
+            const userWorkflows = workflowsResp.data.workflows.filter(
+              (w) => w.state === 'active' && !w.name.startsWith('_')
+            );
+            const ciWorkflows = [];
+            for (const wf of userWorkflows) {
+              try {
+                const [totalResp, successResp, failureResp] = await Promise.all([
+                  github.rest.actions.listWorkflowRuns({ owner, repo, workflow_id: wf.id, per_page: 1 }),
+                  github.rest.actions.listWorkflowRuns({ owner, repo, workflow_id: wf.id, status: 'success', per_page: 1 }),
+                  github.rest.actions.listWorkflowRuns({ owner, repo, workflow_id: wf.id, status: 'failure', per_page: 1 }),
+                ]);
+                const lastRun = totalResp.data.workflow_runs[0] || null;
+                ciWorkflows.push({
+                  name: wf.name,
+                  total_runs: totalResp.data.total_count,
+                  success_runs: successResp.data.total_count,
+                  failure_runs: failureResp.data.total_count,
+                  last_status: lastRun?.conclusion || lastRun?.status || null,
+                  last_run_at: lastRun?.created_at || null,
+                });
+              } catch (e) {
+                console.log(`  CI stats for ${wf.name} failed: ${e.message}`);
+              }
+            }
+
             // GHCR container versions are fetched later during the container summary section
 
             writeJson(`traffic/clones/${date}.json`, clones.data);
@@ -155,6 +197,11 @@ jobs:
             writeJson(`traffic/paths/${date}.json`, paths.data);
             writeJson(`traffic/releases/${date}.json`, releaseSnapshot);
             writeJson(`traffic/repo/${date}.json`, repoSnapshot);
+
+            fs.mkdirSync('traffic/issues', { recursive: true });
+            fs.mkdirSync('traffic/ci', { recursive: true });
+            writeJson(`traffic/issues/${date}.json`, issuesSnapshot);
+            writeJson(`traffic/ci/${date}.json`, ciWorkflows);
 
             // Update cumulative summary
             let summary = {};
@@ -215,6 +262,21 @@ jobs:
               release_count: releaseSnapshot.release_count,
               latest_release_tag: releaseSnapshot.latest_release_tag,
             };
+
+            // Issues & PRs summary
+            summary.issues = issuesSnapshot;
+            if (!summary.issues_history) summary.issues_history = {};
+            summary.issues_history[date] = issuesSnapshot;
+
+            // CI workflows summary
+            summary.ci = ciWorkflows;
+            if (!summary.ci_history) summary.ci_history = {};
+            summary.ci_history[date] = ciWorkflows.map(w => ({
+              name: w.name,
+              total_runs: w.total_runs,
+              success_runs: w.success_runs,
+              failure_runs: w.failure_runs,
+            }));
 
             // Container summary — scrape download counts from GHCR HTML pages
             const containerByTag = {};
@@ -335,6 +397,12 @@ jobs:
             );
             console.log(
               `Container: ${containerTotal} total versions, ${containerTagged} tagged, ${Object.keys(containerByTag).length} with download data`
+            );
+            console.log(
+              `Issues: ${issuesSnapshot.open_issues} open, ${issuesSnapshot.closed_issues} closed | PRs: ${issuesSnapshot.open_prs} open, ${issuesSnapshot.closed_prs} closed`
+            );
+            console.log(
+              `CI: ${ciWorkflows.length} workflows tracked`
             );
 
       - name: Commit and push

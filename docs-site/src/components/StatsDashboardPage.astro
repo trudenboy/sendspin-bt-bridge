@@ -24,6 +24,10 @@ interface DashboardStrings {
   releasesDescription: string;
   legendAssets?: string;
   legendContainers?: string;
+  issuesTitle: string;
+  issuesDescription: string;
+  ciTitle: string;
+  ciDescription: string;
   emptyTable: string;
   tableRank: string;
   tableName: string;
@@ -44,6 +48,10 @@ interface DashboardStrings {
     releaseDownloads: string;
     latestRelease: string;
     openIssues: string;
+    closedIssues: string;
+    openPRs: string;
+    closedPRs: string;
+    ciRuns: string;
   };
   subtotals: {
     uniques14d: string;
@@ -517,6 +525,68 @@ const summaryUrl = `${repoHref.replace('https://github.com', 'https://raw.github
         padding: 1rem 0 0;
       }
 
+      .issues-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: 0.75rem;
+        margin-top: 0.75rem;
+      }
+
+      .issue-card {
+        background: rgba(15, 23, 42, 0.55);
+        border: 1px solid rgba(148, 163, 191, 0.12);
+        border-radius: 10px;
+        padding: 0.8rem 1rem;
+        text-align: center;
+      }
+
+      .issue-card .ic-value {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: var(--fg);
+      }
+
+      .issue-card .ic-label {
+        font-size: 0.78rem;
+        color: var(--muted);
+        margin-top: 0.2rem;
+      }
+
+      .ci-badge {
+        display: inline-block;
+        padding: 0.15rem 0.5rem;
+        border-radius: 6px;
+        font-size: 0.75rem;
+        font-weight: 600;
+      }
+
+      .ci-badge.success {
+        background: rgba(52, 211, 153, 0.15);
+        color: #34d399;
+      }
+
+      .ci-badge.failure {
+        background: rgba(248, 113, 113, 0.15);
+        color: #f87171;
+      }
+
+      .ci-badge.cancelled {
+        background: rgba(148, 163, 191, 0.15);
+        color: #93a4bf;
+      }
+
+      .ci-rate {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+        font-weight: 600;
+        font-size: 0.85rem;
+      }
+
+      .ci-rate.high { color: #34d399; }
+      .ci-rate.medium { color: #fbbf24; }
+      .ci-rate.low { color: #f87171; }
+
       .footer-note {
         margin-top: 1rem;
         color: var(--muted);
@@ -664,6 +734,32 @@ const summaryUrl = `${repoHref.replace('https://github.com', 'https://raw.github
               <span class="legend-item"><span class="legend-dot legend-containers"></span> {strings.legendContainers ?? 'Containers'}</span>
             </div>
           </section>
+
+          <section class="panel">
+            <h2 class="section-title">{strings.issuesTitle}</h2>
+            <p class="section-copy">{strings.issuesDescription}</p>
+            <div id="issues-cards" class="issues-grid" hidden></div>
+            <div id="issues-empty" class="table-empty" hidden>{strings.emptyTable}</div>
+          </section>
+
+          <section class="panel">
+            <h2 class="section-title">{strings.ciTitle}</h2>
+            <p class="section-copy">{strings.ciDescription}</p>
+            <div id="ci-empty" class="table-empty" hidden>{strings.emptyTable}</div>
+            <table id="ci-table" class="stat-table" hidden>
+              <thead>
+                <tr>
+                  <th>Workflow</th>
+                  <th>Runs</th>
+                  <th>Success</th>
+                  <th>Fail</th>
+                  <th>Rate</th>
+                  <th>Last run</th>
+                </tr>
+              </thead>
+              <tbody id="ci-body"></tbody>
+            </table>
+          </section>
         </div>
 
         <p class="footer-note">{strings.footerNote}</p>
@@ -693,6 +789,11 @@ const summaryUrl = `${repoHref.replace('https://github.com', 'https://raw.github
       const releasesChart = document.getElementById('releases-chart');
       const releasesLegend = document.getElementById('releases-legend');
       const releasesEmpty = document.getElementById('releases-empty');
+      const issuesCards = document.getElementById('issues-cards');
+      const issuesEmpty = document.getElementById('issues-empty');
+      const ciTable = document.getElementById('ci-table');
+      const ciBody = document.getElementById('ci-body');
+      const ciEmpty = document.getElementById('ci-empty');
 
       const numberFormatter = new Intl.NumberFormat(strings.locale);
       const dateTimeFormatter = new Intl.DateTimeFormat(strings.locale, {
@@ -813,8 +914,26 @@ const summaryUrl = `${repoHref.replace('https://github.com', 'https://raw.github
           },
           {
             label: strings.cards.openIssues,
-            value: metricValue(summary.repo?.open_issues_count),
-            subtitle: summary.repo ? strings.subtotals.issuesLabel : strings.subtotals.awaitingArchive,
+            value: metricValue(summary.issues?.open_issues ?? summary.repo?.open_issues_count),
+            subtitle: summary.issues
+              ? `${formatNumber(summary.issues.closed_issues)} closed`
+              : strings.subtotals.issuesLabel,
+          },
+          {
+            label: strings.cards.closedPRs,
+            value: metricValue(summary.issues?.closed_prs),
+            subtitle: summary.issues
+              ? `${formatNumber(summary.issues.open_prs)} open`
+              : strings.subtotals.awaitingArchive,
+          },
+          {
+            label: strings.cards.ciRuns,
+            value: metricValue(
+              summary.ci?.reduce((s, w) => s + (w.total_runs || 0), 0)
+            ),
+            subtitle: summary.ci
+              ? `${summary.ci.length} workflows`
+              : strings.subtotals.awaitingArchive,
           },
         ];
 
@@ -1142,6 +1261,77 @@ const summaryUrl = `${repoHref.replace('https://github.com', 'https://raw.github
         });
       }
 
+      function renderIssues(summary) {
+        const issues = summary.issues;
+        if (!issues) {
+          issuesEmpty.hidden = false;
+          issuesCards.hidden = true;
+          return;
+        }
+        issuesEmpty.hidden = true;
+        issuesCards.hidden = false;
+
+        const items = [
+          { label: strings.cards.openIssues, value: issues.open_issues, color: '#fbbf24' },
+          { label: strings.cards.closedIssues, value: issues.closed_issues, color: '#34d399' },
+          { label: strings.cards.openPRs, value: issues.open_prs, color: '#38bdf8' },
+          { label: strings.cards.closedPRs, value: issues.closed_prs, color: '#a78bfa' },
+        ];
+
+        issuesCards.innerHTML = items
+          .map(
+            (item) => `
+              <div class="issue-card">
+                <div class="ic-value" style="color:${item.color}">${formatNumber(item.value)}</div>
+                <div class="ic-label">${escapeHtml(item.label)}</div>
+              </div>
+            `
+          )
+          .join('');
+      }
+
+      function renderCI(summary) {
+        const workflows = summary.ci;
+        if (!workflows || !workflows.length) {
+          ciEmpty.hidden = false;
+          ciTable.hidden = true;
+          return;
+        }
+        ciEmpty.hidden = true;
+        ciTable.hidden = false;
+
+        ciBody.innerHTML = workflows
+          .sort((a, b) => (b.total_runs || 0) - (a.total_runs || 0))
+          .map((wf) => {
+            const rate = wf.total_runs > 0
+              ? ((wf.success_runs / wf.total_runs) * 100).toFixed(1)
+              : '—';
+            const rateClass = rate === '—' ? '' : (rate >= 90 ? 'high' : rate >= 70 ? 'medium' : 'low');
+            const statusClass = wf.last_status === 'success'
+              ? 'success'
+              : wf.last_status === 'failure'
+                ? 'failure'
+                : 'cancelled';
+            const lastRun = wf.last_run_at
+              ? dayFormatter.format(new Date(wf.last_run_at))
+              : '—';
+            return `
+              <tr>
+                <td><strong>${escapeHtml(wf.name)}</strong></td>
+                <td>${formatNumber(wf.total_runs)}</td>
+                <td>${formatNumber(wf.success_runs)}</td>
+                <td>${formatNumber(wf.failure_runs)}</td>
+                <td><span class="ci-rate ${rateClass}">${rate}%</span></td>
+                <td>
+                  <span class="ci-badge ${statusClass}">${escapeHtml(wf.last_status || '—')}</span>
+                  <small style="color:var(--muted);margin-left:0.3rem">${escapeHtml(lastRun)}</small>
+                </td>
+              </tr>
+            `;
+          })
+          .join('');
+      }
+
       function render(summary) {
         const lastUpdated = summary.last_updated ? new Date(summary.last_updated) : null;
         lastUpdatedEl.textContent = lastUpdated ? dateTimeFormatter.format(lastUpdated) : '—';
@@ -1156,6 +1346,8 @@ const summaryUrl = `${repoHref.replace('https://github.com', 'https://raw.github
         renderChart(viewsChart, viewsChartTotal, viewsEntries, summary.views_window?.count ?? sumCounts(viewsEntries), ['#38bdf8', '#38bdf8']);
         renderChart(clonesChart, clonesChartTotal, clonesEntries, summary.clones_window?.count ?? sumCounts(clonesEntries), ['#34d399', '#34d399']);
         renderTables(summary);
+        renderIssues(summary);
+        renderCI(summary);
       }
 
       async function loadSummary() {
