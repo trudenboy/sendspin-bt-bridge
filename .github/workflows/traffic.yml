@@ -241,10 +241,21 @@ jobs:
             };
 
             // Container summary
+            const containerByTag = {};
+            for (const cv of containerSnapshot.versions) {
+              for (const tag of cv.tags) {
+                if (tag.startsWith('v') || /^\d+\.\d+/.test(tag)) {
+                  const key = tag.startsWith('v') ? tag : `v${tag}`;
+                  if (!containerByTag[key]) containerByTag[key] = 0;
+                  containerByTag[key]++;
+                }
+              }
+            }
             summary.container = {
               total_versions: containerSnapshot.total_versions,
               tagged_versions: containerSnapshot.tagged_versions,
               latest_tags: containerSnapshot.versions.length > 0 ? containerSnapshot.versions[0].tags : [],
+              by_tag: containerByTag,
             };
             if (!summary.container_history) summary.container_history = {};
             summary.container_history[date] = {

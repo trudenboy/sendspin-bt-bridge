@@ -22,6 +22,8 @@ interface DashboardStrings {
   pathsDescription: string;
   releasesTitle: string;
   releasesDescription: string;
+  legendAssets?: string;
+  legendContainers?: string;
   emptyTable: string;
   tableRank: string;
   tableName: string;
@@ -468,6 +470,96 @@ const summaryUrl = `${repoHref.replace('https://github.com', 'https://raw.github
         background: rgba(146, 64, 14, 0.18);
       }
 
+      .releases-chart {
+        display: flex;
+        align-items: flex-end;
+        gap: 3px;
+        margin-top: 1rem;
+        padding-bottom: 0.5rem;
+        min-height: 180px;
+        overflow-x: auto;
+        overflow-y: hidden;
+      }
+
+      .rel-col {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        flex: 1 1 0;
+        min-width: 18px;
+        max-width: 42px;
+        position: relative;
+        cursor: pointer;
+      }
+
+      .rel-bar-stack {
+        width: 100%;
+        display: flex;
+        flex-direction: column-reverse;
+        border-radius: 4px 4px 0 0;
+        overflow: hidden;
+        min-height: 2px;
+      }
+
+      .rel-seg-assets {
+        background: var(--accent);
+      }
+
+      .rel-seg-containers {
+        background: var(--success);
+      }
+
+      .rel-label {
+        font-size: 0.65rem;
+        color: var(--muted);
+        writing-mode: vertical-rl;
+        text-orientation: mixed;
+        transform: rotate(180deg);
+        margin-top: 6px;
+        white-space: nowrap;
+        max-height: 60px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .rel-col:hover .rel-bar-stack {
+        filter: brightness(1.3);
+      }
+
+      .rel-tooltip {
+        transform: translateX(-50%);
+        margin-top: 0;
+      }
+
+      .releases-legend {
+        display: flex;
+        gap: 1.2rem;
+        margin-top: 0.7rem;
+        font-size: 0.82rem;
+        color: var(--muted);
+      }
+
+      .legend-item {
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+      }
+
+      .legend-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 3px;
+        display: inline-block;
+      }
+
+      .legend-assets {
+        background: var(--accent);
+      }
+
+      .legend-containers {
+        background: var(--success);
+      }
+
       .table-empty {
         color: var(--muted);
         padding: 1rem 0 0;
@@ -614,16 +706,11 @@ const summaryUrl = `${repoHref.replace('https://github.com', 'https://raw.github
             <h2 class="section-title">{strings.releasesTitle}</h2>
             <p class="section-copy">{strings.releasesDescription}</p>
             <div id="releases-empty" class="table-empty" hidden>{strings.emptyTable}</div>
-            <table id="releases-table" hidden>
-              <thead>
-                <tr>
-                  <th>{strings.tableName}</th>
-                  <th>{strings.tableDownloads}</th>
-                  <th>{strings.tablePublished}</th>
-                </tr>
-              </thead>
-              <tbody id="releases-body"></tbody>
-            </table>
+            <div id="releases-chart" class="releases-chart" hidden></div>
+            <div id="releases-legend" class="releases-legend" hidden>
+              <span class="legend-item"><span class="legend-dot legend-assets"></span> {strings.legendAssets ?? 'Assets'}</span>
+              <span class="legend-item"><span class="legend-dot legend-containers"></span> {strings.legendContainers ?? 'Containers'}</span>
+            </div>
           </section>
         </div>
 
@@ -651,8 +738,8 @@ const summaryUrl = `${repoHref.replace('https://github.com', 'https://raw.github
       const pathsTable = document.getElementById('paths-table');
       const pathsBody = document.getElementById('paths-body');
       const pathsEmpty = document.getElementById('paths-empty');
-      const releasesTable = document.getElementById('releases-table');
-      const releasesBody = document.getElementById('releases-body');
+      const releasesChart = document.getElementById('releases-chart');
+      const releasesLegend = document.getElementById('releases-legend');
       const releasesEmpty = document.getElementById('releases-empty');
 
       const numberFormatter = new Intl.NumberFormat(strings.locale);
@@ -957,37 +1044,89 @@ const summaryUrl = `${repoHref.replace('https://github.com', 'https://raw.github
           `,
         });
 
+        const containerByTag = summary.container?.by_tag || {};
         const releases = Object.entries(summary.releases?.by_tag || {})
-          .map(([tag, values]) => ({ tag, ...values }))
-          .sort((a, b) => (b.asset_downloads || 0) - (a.asset_downloads || 0))
-          .slice(0, 12);
+          .map(([tag, values]) => ({
+            tag,
+            ...values,
+            container_images: containerByTag[tag] || 0,
+          }))
+          .filter((r) => !r.prerelease)
+          .sort((a, b) => new Date(a.published_at || 0) - new Date(b.published_at || 0))
+          .slice(-30);
 
-        renderRows({
-          items: releases,
-          emptyEl: releasesEmpty,
-          tableEl: releasesTable,
-          bodyEl: releasesBody,
-          renderRow: (item) => {
-            const badges = [];
-            if (item.prerelease) badges.push(`<span class="chip pre">${escapeHtml(strings.releasePre)}</span>`);
-            const published = item.published_at
-              ? dateTimeFormatter.format(new Date(item.published_at))
-              : '—';
-            const tagMarkup = item.html_url
-              ? `<a href="${escapeHtml(item.html_url)}">${escapeHtml(item.tag)}</a>`
-              : escapeHtml(item.tag);
+        renderReleasesChart(releases);
+      }
+
+      function renderReleasesChart(releases) {
+        if (!releases.length) {
+          releasesEmpty.hidden = false;
+          releasesChart.hidden = true;
+          releasesLegend.hidden = true;
+          return;
+        }
+
+        releasesEmpty.hidden = true;
+        releasesChart.hidden = false;
+        releasesLegend.hidden = false;
+
+        const maxVal = Math.max(
+          ...releases.map((r) => (r.asset_downloads || 0) + (r.container_images || 0)),
+          1
+        );
+        const barMaxH = 140;
+
+        releasesChart.innerHTML = releases
+          .map((r) => {
+            const assets = r.asset_downloads || 0;
+            const containers = r.container_images || 0;
+            const total = assets + containers;
+            const assetsH = Math.max((assets / maxVal) * barMaxH, assets > 0 ? 3 : 0);
+            const containersH = Math.max((containers / maxVal) * barMaxH, containers > 0 ? 3 : 0);
+            const totalH = assetsH + containersH;
+
+            const shortTag = r.tag.replace(/^v/, '');
+            const published = r.published_at
+              ? dayFormatter.format(new Date(r.published_at))
+              : '';
+            const ttLines = [
+              `<strong>${escapeHtml(r.tag)}</strong>`,
+              published ? `<span style="color:#93a4bf">${escapeHtml(published)}</span>` : '',
+              `Assets: ${formatNumber(assets)}`,
+              `Containers: ${formatNumber(containers)}`,
+            ]
+              .filter(Boolean)
+              .join('<br>');
+
+            const tagMarkup = r.html_url
+              ? `<a href="${escapeHtml(r.html_url)}" style="color:inherit;text-decoration:none">${escapeHtml(shortTag)}</a>`
+              : escapeHtml(shortTag);
+
             return `
-              <tr>
-                <td>
-                  <strong>${tagMarkup}</strong>
-                  <small>${escapeHtml(item.name || item.tag)}</small>
-                  ${badges.join(' ')}
-                </td>
-                <td>${escapeHtml(formatNumber(item.asset_downloads))}</td>
-                <td>${escapeHtml(published)}</td>
-              </tr>
+              <div class="rel-col" title="">
+                <div class="rel-bar-stack" style="height:${Math.max(totalH, 2)}px">
+                  <div class="rel-seg-assets" style="height:${assetsH}px"></div>
+                  <div class="rel-seg-containers" style="height:${containersH}px"></div>
+                </div>
+                <span class="rel-label">${tagMarkup}</span>
+                <div class="chart-tooltip rel-tooltip">${ttLines}</div>
+              </div>
             `;
-          },
+          })
+          .join('');
+
+        releasesChart.querySelectorAll('.rel-col').forEach((col) => {
+          const tt = col.querySelector('.rel-tooltip');
+          col.addEventListener('mouseenter', () => {
+            tt.style.left = '50%';
+            tt.style.bottom = `${col.querySelector('.rel-bar-stack').offsetHeight + 8}px`;
+            tt.style.top = 'auto';
+            tt.style.transform = 'translateX(-50%)';
+            tt.classList.add('visible');
+          });
+          col.addEventListener('mouseleave', () => {
+            tt.classList.remove('visible');
+          });
         });
       }
 
