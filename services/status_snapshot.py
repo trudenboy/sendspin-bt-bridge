@@ -17,7 +17,7 @@ from config import BUILD_DATE, HANDOFF_MODES, get_runtime_version, load_config, 
 from services.bluetooth import _match_player_name
 from services.bridge_state_model import build_normalized_device_state
 from services.device_health_state import build_device_capabilities, compute_device_health_state
-from state import get_adapter_name, get_ma_group_for_player_id, get_ma_now_playing_for_group
+from state import get_adapter_name, get_event_store, get_ma_group_for_player_id, get_ma_now_playing_for_group
 
 UTC = timezone.utc
 
@@ -570,7 +570,12 @@ def build_device_snapshot(client, *, configured_enabled: dict[str, bool] | None 
     if uptime is not None:
         device.extra["uptime"] = uptime
     _enrich_device_snapshot_with_ma(device, _snap_player_id)
-    device.recent_events = state.get_device_events(_get_device_event_id(_snap_player_id, device), limit=5)
+    _device_event_id = _get_device_event_id(_snap_player_id, device)
+    _es_events = get_event_store().query(player_id=_device_event_id, limit=20)
+    if _es_events:
+        device.recent_events = [asdict(e) for e in _es_events]
+    else:
+        device.recent_events = state.get_device_events(_device_event_id, limit=5)
     device.transfer_readiness = _build_transfer_readiness(
         device=device, status=status, recent_events=device.recent_events
     )

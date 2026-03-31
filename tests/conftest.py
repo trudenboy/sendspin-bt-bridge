@@ -17,3 +17,13 @@ def tmp_config(tmp_path):
     yield config_file
     _cfg.CONFIG_FILE = original_file
     _cfg.CONFIG_DIR = original_dir
+
+
+@pytest.fixture(autouse=True)
+def _clear_event_store():
+    """Clear the global EventStore between tests to prevent cross-test leakage."""
+    from state import get_event_store
+
+    get_event_store().clear()
+    yield
+    get_event_store().clear()
