@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     import concurrent.futures
 
     from services.audio_backend import AudioBackend
+    from services.player_model import Player
 
 import state as _state
 from bluetooth_manager import BluetoothManager
@@ -347,6 +348,7 @@ class SendspinClient:
         self.bt_management_enabled: bool = True
         self.bluetooth_sink_name: str | None = None  # Store Bluetooth sink name for volume sync
         self._audio_backend: AudioBackend | None = None
+        self._player: Player | None = None
         self.connected_server_url: str = ""  # actual resolved ws:// URL (populated after connect)
         self._seen_ipc_protocol_warnings: set[str] = set()
         self._daemon_proc: asyncio.subprocess.Process | None = None
@@ -377,6 +379,11 @@ class SendspinClient:
         self._idle_timer_task: asyncio.Task | concurrent.futures.Future | None = None
 
     # ------ AudioBackend integration (V3-1) ------
+
+    @property
+    def player(self) -> Player | None:
+        """Return the typed Player model, or None if not yet initialized."""
+        return self._player
 
     @property
     def audio_backend(self) -> AudioBackend | None:

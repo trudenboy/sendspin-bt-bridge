@@ -21,6 +21,7 @@ from config import detect_ha_addon_channel, ensure_bridge_name, load_config, res
 from services.device_registry import get_device_registry_snapshot
 from services.lifecycle_state import BridgeLifecycleState
 from services.ma_integration_service import BridgeMaIntegrationService
+from services.player_model import Player
 from services.sendspin_compat import format_dependency_versions, get_runtime_dependency_versions
 from services.update_checker import run_update_checker
 
@@ -484,6 +485,14 @@ class BridgeOrchestrator:
                         client._update_status({"volume": saved_volume})
 
             clients.append(client)
+
+            # Create typed Player model from device config
+            try:
+                player = Player.from_config(device)
+                client._player = player
+            except Exception:
+                logger.debug("Could not create Player model for %s", player_name, exc_info=True)
+
             if device.get("released", False):
                 client.set_bt_management_enabled(False)
                 logger.info("  Player '%s': restored released state", player_name)
