@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  packages: read
 
 jobs:
   archive:
@@ -49,6 +50,8 @@ jobs:
       - name: Fetch traffic data
         if: steps.traffic-token.outputs.available == 'true'
         uses: actions/github-script@v8
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           github-token: ${{ env.TRAFFIC_METRICS_TOKEN }}
           script: |
@@ -219,8 +222,11 @@ jobs:
             let containerTagged = 0;
 
             try {
-              const pkgVersions = await github.paginate(
-                github.rest.packages.getAllPackageVersionsForPackageOwnedByUser,
+              // Use GITHUB_TOKEN (with packages:read) instead of TRAFFIC_METRICS_TOKEN
+              const { getOctokit } = require('@actions/github');
+              const pkgOctokit = getOctokit(process.env.GITHUB_TOKEN);
+              const pkgVersions = await pkgOctokit.paginate(
+                pkgOctokit.rest.packages.getAllPackageVersionsForPackageOwnedByUser,
                 { package_type: 'container', package_name: 'sendspin-bt-bridge', username: owner, per_page: 100 }
               );
               containerTotal = pkgVersions.length;
