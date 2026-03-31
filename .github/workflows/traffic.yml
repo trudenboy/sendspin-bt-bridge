@@ -192,21 +192,19 @@ jobs:
             // GHCR container versions are fetched later during the container summary section
 
             // Fetch development activity stats (stats API may return 202 on first call — retry)
-            async function fetchWithRetry(url, maxRetries = 3) {
+            async function fetchWithRetry(url, maxRetries = 5) {
               for (let attempt = 0; attempt < maxRetries; attempt++) {
                 const resp = await github.request(url, { owner, repo });
                 if (Array.isArray(resp.data) && resp.data.length > 0) return resp;
                 if (resp.status === 200 && resp.data && typeof resp.data === 'object' && Object.keys(resp.data).length > 0) return resp;
                 console.log(`  Stats API ${url} returned ${resp.status}, retry ${attempt + 1}/${maxRetries}...`);
-                await new Promise(r => setTimeout(r, 2000));
+                await new Promise(r => setTimeout(r, 4000));
               }
               return { data: {} };
             }
 
-            const [participationResp, codeFreqResp] = await Promise.all([
-              fetchWithRetry('GET /repos/{owner}/{repo}/stats/participation'),
-              fetchWithRetry('GET /repos/{owner}/{repo}/stats/code_frequency'),
-            ]);
+            const participationResp = await fetchWithRetry('GET /repos/{owner}/{repo}/stats/participation');
+            const codeFreqResp = await fetchWithRetry('GET /repos/{owner}/{repo}/stats/code_frequency');
 
             // Commit activity from participation API (52 weeks)
             const participation = participationResp.data;
