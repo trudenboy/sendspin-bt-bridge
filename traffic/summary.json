@@ -287,7 +287,7 @@
       "uniques": 2
     }
   ],
-  "last_updated": "2026-03-31T07:10:55.221Z",
+  "last_updated": "2026-03-31T07:22:59.531Z",
   "clones_window": {
     "count": 3824,
     "uniques": 983
@@ -368,8 +368,8 @@
     "forks_count": 1,
     "network_count": 1,
     "size_kb": 36077,
-    "pushed_at": "2026-03-31T07:04:26Z",
-    "updated_at": "2026-03-31T07:04:03Z"
+    "pushed_at": "2026-03-31T07:22:30Z",
+    "updated_at": "2026-03-31T07:22:34Z"
   },
   "repo_history": {
     "2026-03-17": {
@@ -564,12 +564,12 @@
       "forks_count": 1,
       "network_count": 1,
       "size_kb": 36077,
-      "pushed_at": "2026-03-31T07:04:26Z",
-      "updated_at": "2026-03-31T07:04:03Z"
+      "pushed_at": "2026-03-31T07:22:30Z",
+      "updated_at": "2026-03-31T07:22:34Z"
     }
   },
   "releases": {
-    "total_downloads": 0,
+    "total_downloads": 1,
     "release_count": 172,
     "latest_release_tag": "v2.52.1",
     "latest_release_published_at": "2026-03-30T14:15:16Z",
@@ -579,11 +579,11 @@
         "prerelease": false,
         "published_at": "2026-03-30T14:15:16Z",
         "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.52.1",
-        "asset_downloads": 0,
+        "asset_downloads": 1,
         "assets": [
           {
             "name": "sendspin-bt-bridge-2.52.1.tar.gz",
-            "download_count": 0,
+            "download_count": 1,
             "size": 829624,
             "content_type": "application/x-gtar",
             "created_at": "2026-03-30T14:15:17Z",
@@ -2042,7 +2042,7 @@
       "latest_release_tag": "v2.51.0"
     },
     "2026-03-31": {
-      "total_downloads": 0,
+      "total_downloads": 1,
       "release_count": 172,
       "latest_release_tag": "v2.52.1"
     }
@@ -2098,5 +2098,123 @@
       "total_versions": 3033,
       "tagged_versions": 398
     }
+  },
+  "issues": {
+    "open_issues": 0,
+    "closed_issues": 23,
+    "open_prs": 0,
+    "closed_prs": 92
+  },
+  "issues_history": {
+    "2026-03-31": {
+      "open_issues": 0,
+      "closed_issues": 23,
+      "open_prs": 0,
+      "closed_prs": 92
+    }
+  },
+  "ci": [
+    {
+      "name": "Deploy Docs to GitHub Pages",
+      "total_runs": 137,
+      "success_runs": 133,
+      "failure_runs": 3,
+      "last_status": "in_progress",
+      "last_run_at": "2026-03-31T07:22:33Z"
+    },
+    {
+      "name": "Copilot code review",
+      "total_runs": 11,
+      "success_runs": 11,
+      "failure_runs": 0,
+      "last_status": "success",
+      "last_run_at": "2026-03-23T08:03:51Z"
+    },
+    {
+      "name": "Archive Traffic Stats",
+      "total_runs": 30,
+      "success_runs": 22,
+      "failure_runs": 7,
+      "last_status": "in_progress",
+      "last_run_at": "2026-03-31T07:22:38Z"
+    },
+    {
+      "name": "Copilot coding agent",
+      "total_runs": 1,
+      "success_runs": 1,
+      "failure_runs": 0,
+      "last_status": "success",
+      "last_run_at": "2026-03-16T17:53:52Z"
+    },
+    {
+      "name": "Dependabot Updates",
+      "total_runs": 15,
+      "success_runs": 15,
+      "failure_runs": 0,
+      "last_status": "success",
+      "last_run_at": "2026-03-26T17:14:13Z"
+    },
+    {
+      "name": "CI",
+      "total_runs": 106,
+      "success_runs": 93,
+      "failure_runs": 1,
+      "last_status": "in_progress",
+      "last_run_at": "2026-03-31T07:22:33Z"
+    },
+    {
+      "name": "Release",
+      "total_runs": 47,
+      "success_runs": 34,
+      "failure_runs": 3,
+      "last_status": "cancelled",
+      "last_run_at": "2026-03-30T14:10:47Z"
+    }
+  ],
+  "ci_history": {
+    "2026-03-31": [
+      {
+        "name": "Deploy Docs to GitHub Pages",
+        "total_runs": 137,
+        "success_runs": 133,
+        "failure_runs": 3
+      },
+      {
+        "name": "Copilot code review",
+        "total_runs": 11,
+        "success_runs": 11,
+        "failure_runs": 0
+      },
+      {
+        "name": "Archive Traffic Stats",
+        "total_runs": 30,
+        "success_runs": 22,
+        "failure_runs": 7
+      },
+      {
+        "name": "Copilot coding agent",
+        "total_runs": 1,
+        "success_runs": 1,
+        "failure_runs": 0
+      },
+      {
+        "name": "Dependabot Updates",
+        "total_runs": 15,
+        "success_runs": 15,
+        "failure_runs": 0
+      },
+      {
+        "name": "CI",
+        "total_runs": 106,
+        "success_runs": 93,
+        "failure_runs": 1
+      },
+      {
+        "name": "Release",
+        "total_runs": 47,
+        "success_runs": 34,
+        "failure_runs": 3
+      }
+    ]
   }
 }

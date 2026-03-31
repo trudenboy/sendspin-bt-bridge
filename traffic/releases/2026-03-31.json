@@ -1,5 +1,5 @@
 {
-  "total_downloads": 0,
+  "total_downloads": 1,
   "release_count": 172,
   "latest_release_tag": "v2.52.1",
   "latest_release_published_at": "2026-03-30T14:15:16Z",
@@ -11,11 +11,11 @@
       "published_at": "2026-03-30T14:15:16Z",
       "created_at": "2026-03-30T14:12:50Z",
       "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.52.1",
-      "asset_downloads": 0,
+      "asset_downloads": 1,
       "assets": [
         {
           "name": "sendspin-bt-bridge-2.52.1.tar.gz",
-          "download_count": 0,
+          "download_count": 1,
           "size": 829624,
           "content_type": "application/x-gtar",
           "created_at": "2026-03-30T14:15:17Z",
