@@ -369,12 +369,12 @@ const summaryUrl = `${repoHref.replace('https://github.com', 'https://raw.github
       }
 
       .chart-area .grid-line {
-        stroke: var(--border);
+        stroke: rgba(148, 163, 184, 0.22);
         stroke-width: 1;
       }
 
       .chart-area .axis-label {
-        fill: var(--muted);
+        fill: #93a4bf;
         font-size: 11px;
         font-family: inherit;
       }
@@ -832,15 +832,16 @@ const summaryUrl = `${repoHref.replace('https://github.com', 'https://raw.github
         let dots = '';
         for (let i = 0; i < points.length; i++) {
           const p = points[i];
-          dots += `<circle cx="${p.x}" cy="${p.y}" r="3.5" fill="${c2}" stroke="var(--bg)" stroke-width="1.5" class="dot" data-idx="${i}"/>`;
+          dots += `<circle cx="${p.x}" cy="${p.y}" r="3.5" fill="${c2}" stroke="#0b1120" stroke-width="1.5" class="dot" data-idx="${i}"/>`;
         }
 
         container.innerHTML = `
           <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" aria-label="${strings.chartsTitle}">
             <defs>
               <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stop-color="${c1}" stop-opacity="0.55"/>
-                <stop offset="100%" stop-color="${c1}" stop-opacity="0.04"/>
+                <stop offset="0%" stop-color="${c1}" stop-opacity="0.6"/>
+                <stop offset="85%" stop-color="${c1}" stop-opacity="0.08"/>
+                <stop offset="100%" stop-color="${c1}" stop-opacity="0"/>
               </linearGradient>
             </defs>
             ${gridLines}
@@ -910,8 +911,11 @@ const summaryUrl = `${repoHref.replace('https://github.com', 'https://raw.github
           labels.push({ x: points[i].x, label: dayFormatter.format(data[i].date) });
         }
         const last = data.length - 1;
-        if (last - (labels.length - 1) * step >= Math.floor(step / 2)) {
+        const lastLabelIdx = (labels.length - 1) * step;
+        if (last - lastLabelIdx >= step) {
           labels.push({ x: points[last].x, label: dayFormatter.format(data[last].date) });
+        } else if (last !== lastLabelIdx) {
+          labels[labels.length - 1] = { x: points[last].x, label: dayFormatter.format(data[last].date) };
         }
         return labels;
       }
