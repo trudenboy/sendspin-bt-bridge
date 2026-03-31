@@ -47,6 +47,16 @@ jobs:
 
           mkdir -p traffic/clones traffic/views traffic/referrers traffic/paths traffic/releases traffic/repo traffic/container traffic/dev
 
+      - name: Pre-warm GitHub Stats API
+        if: steps.traffic-token.outputs.available == 'true'
+        run: |
+          curl -s -H "Authorization: token $TRAFFIC_METRICS_TOKEN" \
+            "https://api.github.com/repos/${{ github.repository }}/stats/code_frequency" > /dev/null
+          curl -s -H "Authorization: token $TRAFFIC_METRICS_TOKEN" \
+            "https://api.github.com/repos/${{ github.repository }}/stats/participation" > /dev/null
+          echo "Triggered stats computation, waiting 15s for GitHub to process..."
+          sleep 15
+
       - name: Fetch traffic data
         if: steps.traffic-token.outputs.available == 'true'
         uses: actions/github-script@v8
