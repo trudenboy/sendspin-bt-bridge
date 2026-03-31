@@ -327,15 +327,15 @@ const summaryUrl = `${repoHref.replace('https://github.com', 'https://raw.github
       }
 
       .metric-card.ind-warn {
-        border-left: 3px solid #fbbf24;
+        border-left: 3px solid #fbbf24 !important;
       }
 
       .metric-card.ind-error {
-        border-left: 3px solid #f87171;
+        border-left: 3px solid #f87171 !important;
       }
 
       .metric-card.ind-ok {
-        border-left: 3px solid #34d399;
+        border-left: 3px solid #34d399 !important;
       }
 
       .metric-label {
@@ -975,7 +975,7 @@ const summaryUrl = `${repoHref.replace('https://github.com', 'https://raw.github
         const openIssuesCount = summary.issues?.open_issues ?? summary.repo?.open_issues_count ?? 0;
         const ciWorkflows = summary.ci || [];
         const ciHasFailure = ciWorkflows.some(w => w.last_status === 'failure');
-        const ciAllGreen = ciWorkflows.length > 0 && ciWorkflows.every(w => w.last_status === 'success');
+        const ciNoFailures = ciWorkflows.length > 0 && !ciHasFailure;
         const ciRate = ciWorkflows.length > 0
           ? (ciWorkflows.reduce((s, w) => s + (w.success_runs || 0), 0) /
              Math.max(1, ciWorkflows.reduce((s, w) => s + (w.total_runs || 0), 0)) * 100).toFixed(0)
@@ -1026,9 +1026,9 @@ const summaryUrl = `${repoHref.replace('https://github.com', 'https://raw.github
             iss ? `${formatNumber(iss.open_prs)} open` : w.awaitingArchive),
           tile(c.ciRuns, metricValue(ciWorkflows.reduce((s, w) => s + (w.total_runs || 0), 0)),
             ciWorkflows.length > 0 ? `${ciWorkflows.length} workflows` : w.awaitingArchive,
-            ciHasFailure ? 'error' : (ciAllGreen ? 'ok' : null),
-            ciRate != null ? (ciHasFailure ? `${ciRate}% — has failures` : ciAllGreen ? 'All green' : `${ciRate}% success`) : null,
-            ciHasFailure ? 'error' : (ciAllGreen ? 'ok' : 'warn')),
+            ciHasFailure ? 'error' : (ciNoFailures ? 'ok' : null),
+            ciRate != null ? (ciHasFailure ? `${ciRate}% — has failures` : `${ciRate}% success`) : null,
+            ciHasFailure ? 'error' : (ciNoFailures ? 'ok' : 'warn')),
           // Development
           tile(c.totalCommits, metricValue(dev?.weekly_commits?.reduce((s, w) => s + w.total, 0)),
             dev ? `${dev.weekly_commits?.length || 0} ${w.weekLabel}` : w.awaitingArchive),
