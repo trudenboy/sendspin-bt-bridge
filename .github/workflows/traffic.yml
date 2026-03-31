@@ -312,7 +312,7 @@ jobs:
               `Repo snapshot: ${repoSnapshot.stargazers_count} stars, ${repoSnapshot.forks_count} forks, ${repoSnapshot.subscribers_count} subscribers`
             );
             console.log(
-              `Container: ${containerSnapshot.total_versions} total versions, ${containerSnapshot.tagged_versions} tagged`
+              `Container: ${containerTotal} total versions, ${containerTagged} tagged, ${Object.keys(containerByTag).length} with download data`
             );
 
       - name: Commit and push
