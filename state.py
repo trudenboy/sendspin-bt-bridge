@@ -14,6 +14,7 @@ from services import adapter_names as _adapter_names
 from services import async_job_state as _async_job_state
 from services import bridge_runtime_state as _bridge_runtime_state
 from services import ma_runtime_state as _ma_runtime_state
+from services.backend_orchestrator import BackendOrchestrator
 from services.device_registry import (
     get_active_clients_snapshot as _get_registry_active_clients_snapshot,
 )
@@ -55,6 +56,7 @@ __all__ = [
     "finish_scan_job",
     "get_adapter_name",
     "get_async_job",
+    "get_backend_orchestrator",
     "get_bridge_system_info",
     "get_device_events",
     "get_disabled_devices",
@@ -320,6 +322,18 @@ _event_store.subscribe_to_publisher(_internal_event_publisher)
 def get_event_store() -> EventStore:
     """Return the global EventStore singleton."""
     return _event_store
+
+
+# Backend orchestrator singleton — wired to EventStore and InternalEventPublisher
+_backend_orchestrator = BackendOrchestrator(
+    event_store=_event_store,
+    event_publisher=_internal_event_publisher,
+)
+
+
+def get_backend_orchestrator() -> BackendOrchestrator:
+    """Return the global BackendOrchestrator singleton."""
+    return _backend_orchestrator
 
 
 def _store_device_event(

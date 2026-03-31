@@ -1905,3 +1905,57 @@ def api_bugreport_submit():
             ),
             502,
         )
+
+
+# ---------------------------------------------------------------------------
+# Event history
+# ---------------------------------------------------------------------------
+
+
+@status_bp.route("/api/events")
+def api_events():
+    """Query event history from the EventStore.
+
+    Query params:
+        player_id: Filter by player ID
+        type: Filter by event type (comma-separated for multiple)
+        since: ISO 8601 timestamp filter
+        limit: Max events to return (default 100, max 1000)
+    """
+    from state import get_event_store
+
+    store = get_event_store()
+    player_id = request.args.get("player_id")
+    event_types = request.args.get("type")
+    since = request.args.get("since")
+    limit = min(request.args.get("limit", 100, type=int), 1000)
+
+    type_list = event_types.split(",") if event_types else None
+
+    events = store.query(
+        player_id=player_id,
+        event_types=type_list,
+        since=since,
+        limit=limit,
+    )
+
+    return jsonify(
+        [
+            {
+                "event_type": e.event_type,
+                "subject_id": e.subject_id,
+                "category": e.category,
+                "payload": e.payload,
+                "at": e.at,
+            }
+            for e in events
+        ]
+    )
+
+
+@status_bp.route("/api/events/stats")
+def api_events_stats():
+    """Return EventStore statistics."""
+    from state import get_event_store
+
+    return jsonify(get_event_store().stats().to_dict())
