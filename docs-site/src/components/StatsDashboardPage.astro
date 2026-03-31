@@ -998,6 +998,7 @@ const summaryUrl = `${repoHref.replace('https://github.com', 'https://raw.github
         const w = strings.subtotals;
         const c = strings.cards;
         const r = summary.releases;
+        const containerTotal = Object.values(summary.container?.by_tag || {}).reduce((s, v) => s + (typeof v === 'number' ? v : 0), 0);
         const iss = summary.issues;
         const dev = summary.dev;
 
@@ -1015,8 +1016,8 @@ const summaryUrl = `${repoHref.replace('https://github.com', 'https://raw.github
           tile(c.subscribers, metricValue(summary.repo?.subscribers_count),
             summary.repo ? w.currentSnapshot : w.awaitingArchive),
           // Releases
-          tile(c.releaseDownloads, metricValue(r?.total_downloads),
-            r?.release_count != null ? `${formatNumber(r.release_count)} ${w.releaseCountLabel}` : w.awaitingArchive),
+          tile(c.releaseDownloads, metricValue((r?.total_downloads || 0) + containerTotal),
+            r?.release_count != null ? `${formatNumber(r.total_downloads || 0)} assets · ${formatNumber(containerTotal)} containers` : w.awaitingArchive),
           tile(c.latestRelease, r?.latest_release_tag ?? '—',
             r?.latest_release_published_at ? `${w.publishedLabel} ${dateTimeFormatter.format(new Date(r.latest_release_published_at))}` : w.awaitingArchive),
           // Health — with indicators
