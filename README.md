@@ -8,7 +8,7 @@
 [![License: MIT](https://img.shields.io/github/license/trudenboy/sendspin-bt-bridge?style=flat&color=9070B8)](LICENSE)
 [![Try Demo](https://img.shields.io/badge/Try_Demo-Live-brightgreen?style=flat&logo=render)](https://sendspin-demo.onrender.com)
 
-**🏠 [Landing Page](https://sendspin-bt-bridge.pages.dev/)** · **📖 [Documentation](https://trudenboy.github.io/sendspin-bt-bridge/)** · **🚀 [Live Demo](https://sendspin-demo.onrender.com)** · **🇷🇺 [Русская версия](README.ru.md)**
+**🏠 [Landing Page](https://sendspin-bt-bridge.pages.dev/)** · **📖 [Documentation](https://trudenboy.github.io/sendspin-bt-bridge/)** · **🚀 [Live Demo](https://sendspin-demo.onrender.com)** · **RU [Русская версия](README.ru.md)**
 
 [Changelog](CHANGELOG.md) · [Roadmap](ROADMAP.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md)
 
