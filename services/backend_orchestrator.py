@@ -81,6 +81,44 @@ class BackendOrchestrator:
         )
         logger.info("Registered player %s (%s) → %s", player.id, player.player_name, initial_state.value)
 
+    def register_player_with_backend(
+        self,
+        player: Player,
+        backend: AudioBackend,
+    ) -> None:
+        """Register a player with a pre-created backend instance.
+
+        Use this instead of :meth:`register_player` when the backend has
+        already been constructed (e.g. during device initialization where
+        the same backend is also assigned to the client).
+
+        Raises:
+            ValueError: If the player is already registered.
+        """
+        with self._lock:
+            if player.id in self._players:
+                raise ValueError(f"Player {player.id!r} already registered")
+            self._players[player.id] = player
+            self._backends[player.id] = backend
+            initial_state = PlayerState.DISABLED if not player.enabled else PlayerState.INITIALIZING
+            self._states[player.id] = initial_state
+
+        self._emit_event(
+            "player.registered",
+            player.id,
+            {
+                "player_name": player.player_name,
+                "backend_type": backend.backend_type.value,
+                "initial_state": initial_state.value,
+            },
+        )
+        logger.info(
+            "Registered player %s (%s) with pre-created backend → %s",
+            player.id,
+            player.player_name,
+            initial_state.value,
+        )
+
     def unregister_player(self, player_id: str) -> None:
         """Unregister a player and clean up its backend."""
         with self._lock:

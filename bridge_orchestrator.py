@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Coroutine
 
 from config import detect_ha_addon_channel, ensure_bridge_name, load_config, resolve_base_listen_port, resolve_web_port
+from services.backends import create_backend
 from services.device_registry import get_device_registry_snapshot
 from services.lifecycle_state import BridgeLifecycleState
 from services.ma_integration_service import BridgeMaIntegrationService
@@ -479,6 +480,14 @@ class BridgeOrchestrator:
                     logger.warning("BT adapter '%s' not available for %s", adapter or "default", player_name)
                 client.bt_manager = bt_mgr
                 client._update_status({"bluetooth_available": bt_available})
+
+                # Create audio backend wrapping the bt_manager
+                try:
+                    backend = create_backend("bluetooth_a2dp", bt_manager=bt_mgr)
+                    client.audio_backend = backend
+                except Exception:
+                    logger.warning("Failed to create audio backend for %s", player_name, exc_info=True)
+
                 if load_saved_volume_fn is not None:
                     saved_volume = load_saved_volume_fn(mac)
                     if saved_volume is not None and 0 <= saved_volume <= 100:
@@ -492,6 +501,19 @@ class BridgeOrchestrator:
                 client._player = player
             except Exception:
                 logger.debug("Could not create Player model for %s", player_name, exc_info=True)
+
+            # Register player + backend in the BackendOrchestrator
+            if getattr(client, "_player", None) and getattr(client, "audio_backend", None):
+                try:
+                    from state import get_backend_orchestrator
+
+                    get_backend_orchestrator().register_player_with_backend(client._player, client.audio_backend)
+                except Exception:
+                    logger.debug(
+                        "Failed to register player in orchestrator: %s",
+                        player_name,
+                        exc_info=True,
+                    )
 
             if device.get("released", False):
                 client.set_bt_management_enabled(False)
