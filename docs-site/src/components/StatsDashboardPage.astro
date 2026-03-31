@@ -157,8 +157,7 @@ const summaryUrl = `${repoHref.replace('https://github.com', 'https://raw.github
 
       .topbar,
       .hero,
-      .panel,
-      .metric-card {
+      .panel {
         border: 1px solid var(--border);
         border-radius: 22px;
         background: var(--panel);
@@ -321,43 +320,47 @@ const summaryUrl = `${repoHref.replace('https://github.com', 'https://raw.github
         gap: 0.6rem;
       }
 
-      .metric-card {
+      :global(.metric-card) {
         padding: 0.85rem 1rem;
         border-radius: 10px;
+        border: 1px solid var(--border);
+        background: var(--panel);
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(16px);
       }
 
-      .metric-card.ind-warn {
-        border-left: 3px solid #fbbf24 !important;
+      :global(.metric-card.ind-warn) {
+        border-left: 3px solid #fbbf24;
       }
 
-      .metric-card.ind-error {
-        border-left: 3px solid #f87171 !important;
+      :global(.metric-card.ind-error) {
+        border-left: 3px solid #f87171;
       }
 
-      .metric-card.ind-ok {
-        border-left: 3px solid #34d399 !important;
+      :global(.metric-card.ind-ok) {
+        border-left: 3px solid #34d399;
       }
 
-      .metric-label {
+      :global(.metric-label) {
         display: block;
         color: var(--muted);
         font-size: 0.78rem;
         margin-bottom: 0.25rem;
       }
 
-      .metric-value {
+      :global(.metric-value) {
         font-size: 1.6rem;
         font-weight: 700;
         line-height: 1.15;
       }
 
-      .metric-subtitle {
+      :global(.metric-subtitle) {
         margin-top: 0.2rem;
         color: var(--muted);
         font-size: 0.78rem;
       }
 
-      .mc-badge {
+      :global(.mc-badge) {
         display: inline-block;
         font-size: 0.68rem;
         font-weight: 600;
@@ -366,9 +369,9 @@ const summaryUrl = `${repoHref.replace('https://github.com', 'https://raw.github
         margin-top: 0.3rem;
       }
 
-      .mc-badge.ok { background: rgba(52,211,153,0.15); color: #34d399; }
-      .mc-badge.warn { background: rgba(251,191,36,0.15); color: #fbbf24; }
-      .mc-badge.error { background: rgba(248,113,113,0.15); color: #f87171; }
+      :global(.mc-badge.ok) { background: rgba(52,211,153,0.15); color: #34d399; }
+      :global(.mc-badge.warn) { background: rgba(251,191,36,0.15); color: #fbbf24; }
+      :global(.mc-badge.error) { background: rgba(248,113,113,0.15); color: #f87171; }
 
       .panel-grid {
         display: grid;
@@ -565,14 +568,14 @@ const summaryUrl = `${repoHref.replace('https://github.com', 'https://raw.github
         padding: 1rem 0 0;
       }
 
-      .issues-grid {
+      :global(.issues-grid) {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
         gap: 0.75rem;
         margin-top: 0.75rem;
       }
 
-      .issue-card {
+      :global(.issue-card) {
         background: rgba(15, 23, 42, 0.55);
         border: 1px solid rgba(148, 163, 191, 0.12);
         border-radius: 10px;
@@ -580,19 +583,19 @@ const summaryUrl = `${repoHref.replace('https://github.com', 'https://raw.github
         text-align: center;
       }
 
-      .issue-card .ic-value {
+      :global(.issue-card .ic-value) {
         font-size: 1.5rem;
         font-weight: 700;
         color: var(--fg);
       }
 
-      .issue-card .ic-label {
+      :global(.issue-card .ic-label) {
         font-size: 0.78rem;
         color: var(--muted);
         margin-top: 0.2rem;
       }
 
-      .ci-badge {
+      :global(.ci-badge) {
         display: inline-block;
         padding: 0.15rem 0.5rem;
         border-radius: 6px;
@@ -600,22 +603,22 @@ const summaryUrl = `${repoHref.replace('https://github.com', 'https://raw.github
         font-weight: 600;
       }
 
-      .ci-badge.success {
+      :global(.ci-badge.success) {
         background: rgba(52, 211, 153, 0.15);
         color: #34d399;
       }
 
-      .ci-badge.failure {
+      :global(.ci-badge.failure) {
         background: rgba(248, 113, 113, 0.15);
         color: #f87171;
       }
 
-      .ci-badge.cancelled {
+      :global(.ci-badge.cancelled) {
         background: rgba(148, 163, 191, 0.15);
         color: #93a4bf;
       }
 
-      .ci-rate {
+      :global(.ci-rate) {
         display: inline-flex;
         align-items: center;
         gap: 0.3rem;
@@ -623,9 +626,9 @@ const summaryUrl = `${repoHref.replace('https://github.com', 'https://raw.github
         font-size: 0.85rem;
       }
 
-      .ci-rate.high { color: #34d399; }
-      .ci-rate.medium { color: #fbbf24; }
-      .ci-rate.low { color: #f87171; }
+      :global(.ci-rate.high) { color: #34d399; }
+      :global(.ci-rate.medium) { color: #fbbf24; }
+      :global(.ci-rate.low) { color: #f87171; }
 
       .ai-ring-wrap {
         display: flex;
