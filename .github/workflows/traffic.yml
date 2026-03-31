@@ -45,7 +45,7 @@ jobs:
             git rm -rf . >/dev/null 2>&1 || true
           fi
 
-          mkdir -p traffic/clones traffic/views traffic/referrers traffic/paths traffic/releases traffic/repo traffic/container
+          mkdir -p traffic/clones traffic/views traffic/referrers traffic/paths traffic/releases traffic/repo traffic/container traffic/dev
 
       - name: Fetch traffic data
         if: steps.traffic-token.outputs.available == 'true'
@@ -191,6 +191,72 @@ jobs:
 
             // GHCR container versions are fetched later during the container summary section
 
+            // Fetch development activity stats
+            const [participationResp, codeFreqResp] = await Promise.all([
+              github.request('GET /repos/{owner}/{repo}/stats/participation', { owner, repo }),
+              github.request('GET /repos/{owner}/{repo}/stats/code_frequency', { owner, repo }),
+            ]);
+
+            // Commit activity from participation API (52 weeks)
+            const participation = participationResp.data;
+            const weeklyCommits = (participation.all || []).map((total, i) => ({
+              week_offset: i - 51,
+              total,
+              owner: (participation.owner || [])[i] || 0,
+            }));
+
+            // Code frequency (weekly additions/deletions)
+            const codeFrequency = Array.isArray(codeFreqResp.data)
+              ? codeFreqResp.data.map(([ts, additions, deletions]) => ({
+                  week: new Date(ts * 1000).toISOString().slice(0, 10),
+                  additions,
+                  deletions: Math.abs(deletions),
+                }))
+              : [];
+
+            // AI co-authored commits — scan last 200 commits for Co-authored-by trailers
+            const aiAgents = {};
+            let totalCommitsScanned = 0;
+            let aiCommitCount = 0;
+            for (let page = 1; page <= 2; page++) {
+              const commitsResp = await github.rest.repos.listCommits({
+                owner, repo, per_page: 100, page,
+              });
+              const commits = commitsResp.data;
+              if (!commits.length) break;
+              totalCommitsScanned += commits.length;
+              for (const c of commits) {
+                const msg = c.commit.message || '';
+                const matches = msg.matchAll(/Co-authored-by:\s*([^<]+)</g);
+                const agents = new Set();
+                for (const m of matches) {
+                  const name = m[1].trim();
+                  if (name) agents.add(name);
+                }
+                if (agents.size > 0) {
+                  aiCommitCount++;
+                  for (const name of agents) {
+                    aiAgents[name] = (aiAgents[name] || 0) + 1;
+                  }
+                }
+              }
+            }
+
+            const devSnapshot = {
+              weekly_commits: weeklyCommits.filter(w => w.total > 0),
+              code_frequency: codeFrequency.filter(w => w.additions > 0 || w.deletions > 0),
+              ai: {
+                commits_scanned: totalCommitsScanned,
+                ai_commits: aiCommitCount,
+                ai_ratio: totalCommitsScanned > 0 ? +(aiCommitCount / totalCommitsScanned).toFixed(3) : 0,
+                agents: Object.entries(aiAgents)
+                  .map(([name, count]) => ({ name, commits: count }))
+                  .sort((a, b) => b.commits - a.commits),
+              },
+            };
+
+            writeJson(`traffic/dev/${date}.json`, devSnapshot);
+
             writeJson(`traffic/clones/${date}.json`, clones.data);
             writeJson(`traffic/views/${date}.json`, views.data);
             writeJson(`traffic/referrers/${date}.json`, referrers.data);
@@ -277,6 +343,15 @@ jobs:
               success_runs: w.success_runs,
               failure_runs: w.failure_runs,
             }));
+
+            // Development activity summary
+            summary.dev = devSnapshot;
+            if (!summary.dev_history) summary.dev_history = {};
+            summary.dev_history[date] = {
+              total_weekly_commits: weeklyCommits.reduce((s, w) => s + w.total, 0),
+              ai_commits: devSnapshot.ai.ai_commits,
+              ai_ratio: devSnapshot.ai.ai_ratio,
+            };
 
             // Container summary — scrape download counts from GHCR HTML pages
             const containerByTag = {};
@@ -403,6 +478,9 @@ jobs:
             );
             console.log(
               `CI: ${ciWorkflows.length} workflows tracked`
+            );
+            console.log(
+              `Dev: ${devSnapshot.weekly_commits.length} active weeks, ${devSnapshot.code_frequency.length} code-freq weeks, ${devSnapshot.ai.ai_commits}/${devSnapshot.ai.commits_scanned} AI co-authored commits`
             );
 
       - name: Commit and push

@@ -28,6 +28,12 @@ interface DashboardStrings {
   issuesDescription: string;
   ciTitle: string;
   ciDescription: string;
+  devTitle: string;
+  devDescription: string;
+  codeVelocityTitle: string;
+  codeVelocityDescription: string;
+  aiTitle: string;
+  aiDescription: string;
   emptyTable: string;
   tableRank: string;
   tableName: string;
@@ -52,6 +58,10 @@ interface DashboardStrings {
     openPRs: string;
     closedPRs: string;
     ciRuns: string;
+    totalCommits: string;
+    linesAdded: string;
+    linesDeleted: string;
+    aiRatio: string;
   };
   subtotals: {
     uniques14d: string;
@@ -61,6 +71,10 @@ interface DashboardStrings {
     releaseCountLabel: string;
     issuesLabel: string;
     awaitingArchive: string;
+    weekLabel: string;
+    commitsLabel: string;
+    additionsLabel: string;
+    deletionsLabel: string;
   };
 }
 
@@ -587,6 +601,45 @@ const summaryUrl = `${repoHref.replace('https://github.com', 'https://raw.github
       .ci-rate.medium { color: #fbbf24; }
       .ci-rate.low { color: #f87171; }
 
+      .ai-ring-wrap {
+        display: flex;
+        align-items: center;
+        gap: 1.5rem;
+        margin-top: 0.75rem;
+        flex-wrap: wrap;
+      }
+
+      .ai-ring-wrap svg {
+        flex-shrink: 0;
+      }
+
+      .ai-agents-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+      }
+
+      .ai-agents-list li {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.3rem 0;
+        font-size: 0.88rem;
+      }
+
+      .ai-agent-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        flex-shrink: 0;
+      }
+
+      .ai-agent-count {
+        color: var(--muted);
+        font-size: 0.78rem;
+        margin-left: auto;
+      }
+
       .footer-note {
         margin-top: 1rem;
         color: var(--muted);
@@ -760,6 +813,27 @@ const summaryUrl = `${repoHref.replace('https://github.com', 'https://raw.github
               <tbody id="ci-body"></tbody>
             </table>
           </section>
+
+          <section class="panel">
+            <h2 class="section-title">{strings.devTitle}</h2>
+            <p class="section-copy">{strings.devDescription}</p>
+            <div id="commits-chart" class="chart-container" style="min-height:220px"></div>
+            <div id="commits-empty" class="table-empty" hidden>{strings.emptyTable}</div>
+          </section>
+
+          <section class="panel">
+            <h2 class="section-title">{strings.codeVelocityTitle}</h2>
+            <p class="section-copy">{strings.codeVelocityDescription}</p>
+            <div id="code-freq-chart" class="chart-container" style="min-height:220px"></div>
+            <div id="code-freq-empty" class="table-empty" hidden>{strings.emptyTable}</div>
+          </section>
+
+          <section class="panel">
+            <h2 class="section-title">{strings.aiTitle}</h2>
+            <p class="section-copy">{strings.aiDescription}</p>
+            <div id="ai-cards" class="issues-grid" hidden></div>
+            <div id="ai-empty" class="table-empty" hidden>{strings.emptyTable}</div>
+          </section>
         </div>
 
         <p class="footer-note">{strings.footerNote}</p>
@@ -794,6 +868,12 @@ const summaryUrl = `${repoHref.replace('https://github.com', 'https://raw.github
       const ciTable = document.getElementById('ci-table');
       const ciBody = document.getElementById('ci-body');
       const ciEmpty = document.getElementById('ci-empty');
+      const commitsChart = document.getElementById('commits-chart');
+      const commitsEmpty = document.getElementById('commits-empty');
+      const codeFreqChart = document.getElementById('code-freq-chart');
+      const codeFreqEmpty = document.getElementById('code-freq-empty');
+      const aiCards = document.getElementById('ai-cards');
+      const aiEmpty = document.getElementById('ai-empty');
 
       const numberFormatter = new Intl.NumberFormat(strings.locale);
       const dateTimeFormatter = new Intl.DateTimeFormat(strings.locale, {
@@ -933,6 +1013,24 @@ const summaryUrl = `${repoHref.replace('https://github.com', 'https://raw.github
             ),
             subtitle: summary.ci
               ? `${summary.ci.length} workflows`
+              : strings.subtotals.awaitingArchive,
+          },
+          {
+            label: strings.cards.totalCommits,
+            value: metricValue(
+              summary.dev?.weekly_commits?.reduce((s, w) => s + w.total, 0)
+            ),
+            subtitle: summary.dev
+              ? `${summary.dev.weekly_commits?.length || 0} ${strings.subtotals.weekLabel}`
+              : strings.subtotals.awaitingArchive,
+          },
+          {
+            label: strings.cards.aiRatio,
+            value: summary.dev?.ai
+              ? `${(summary.dev.ai.ai_ratio * 100).toFixed(0)}%`
+              : '—',
+            subtitle: summary.dev?.ai
+              ? `${formatNumber(summary.dev.ai.ai_commits)} / ${formatNumber(summary.dev.ai.commits_scanned)} ${strings.subtotals.commitsLabel}`
               : strings.subtotals.awaitingArchive,
           },
         ];
@@ -1332,6 +1430,245 @@ const summaryUrl = `${repoHref.replace('https://github.com', 'https://raw.github
           .join('');
       }
 
+      function renderCommitsChart(dev) {
+        const weeks = dev?.weekly_commits;
+        if (!weeks || !weeks.length) {
+          commitsEmpty.hidden = false;
+          commitsChart.innerHTML = '';
+          return;
+        }
+        commitsEmpty.hidden = true;
+
+        const W = 700, H = 200;
+        const padL = 50, padR = 15, padT = 20, padB = 40;
+        const cW = W - padL - padR, cH = H - padT - padB;
+
+        const maxVal = Math.max(...weeks.map(w => w.total), 1);
+        const barW = Math.max(2, cW / weeks.length - 2);
+
+        const weekFmt = (offset) => {
+          const d = new Date();
+          d.setDate(d.getDate() + offset * 7);
+          return dayFormatter.format(d);
+        };
+
+        // Y-axis grid
+        const ySteps = 4;
+        let gridLines = '';
+        let yLabels = '';
+        for (let i = 0; i <= ySteps; i++) {
+          const val = Math.round((maxVal / ySteps) * i);
+          const y = padT + cH - (val / maxVal) * cH;
+          gridLines += `<line x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}" stroke="#93a4bf" stroke-opacity="0.15"/>`;
+          yLabels += `<text x="${padL - 6}" y="${y + 4}" text-anchor="end" fill="#93a4bf" font-size="11">${val}</text>`;
+        }
+
+        // Bars
+        let bars = '';
+        let hits = '';
+        const step = Math.ceil(weeks.length / 6);
+        let xLabels = '';
+        weeks.forEach((w, i) => {
+          const x = padL + (i / weeks.length) * cW + 1;
+          const ownerH = (w.owner / maxVal) * cH;
+          const othersH = ((w.total - w.owner) / maxVal) * cH;
+          const baseY = padT + cH;
+
+          bars += `<rect x="${x}" y="${baseY - ownerH}" width="${barW}" height="${ownerH}" fill="#a78bfa" rx="1"/>`;
+          if (othersH > 0) {
+            bars += `<rect x="${x}" y="${baseY - ownerH - othersH}" width="${barW}" height="${othersH}" fill="#38bdf8" rx="1"/>`;
+          }
+
+          // Hit area for tooltip
+          hits += `
+            <rect class="bar-hit" data-idx="${i}" x="${x}" y="${padT}" width="${barW}" height="${cH}" fill="transparent" style="cursor:crosshair"/>
+          `;
+
+          if (i % step === 0 || i === weeks.length - 1) {
+            xLabels += `<text x="${x + barW / 2}" y="${H - 5}" text-anchor="middle" fill="#93a4bf" font-size="10">${weekFmt(w.week_offset)}</text>`;
+          }
+        });
+
+        commitsChart.innerHTML = `
+          <div style="position:relative">
+            <svg viewBox="0 0 ${W} ${H}" width="100%" preserveAspectRatio="xMidYMid meet">
+              ${gridLines}${yLabels}${bars}${xLabels}${hits}
+            </svg>
+            <div class="chart-tooltip" style="position:absolute;display:none;background:rgba(15,23,42,0.95);border:1px solid rgba(148,163,191,0.25);border-radius:8px;padding:0.4rem 0.6rem;font-size:0.8rem;pointer-events:none;z-index:10;color:#e2e8f0">
+            </div>
+          </div>
+          <div style="display:flex;gap:1rem;margin-top:0.5rem;font-size:0.78rem;color:#93a4bf">
+            <span><span style="display:inline-block;width:10px;height:10px;background:#a78bfa;border-radius:2px;margin-right:4px"></span>Owner</span>
+            <span><span style="display:inline-block;width:10px;height:10px;background:#38bdf8;border-radius:2px;margin-right:4px"></span>Others</span>
+          </div>
+        `;
+
+        const svg = commitsChart.querySelector('svg');
+        const tooltip = commitsChart.querySelector('.chart-tooltip');
+        const rect = svg.getBoundingClientRect();
+        svg.querySelectorAll('.bar-hit').forEach((hit) => {
+          hit.addEventListener('mouseenter', (e) => {
+            const idx = +hit.dataset.idx;
+            const w = weeks[idx];
+            tooltip.innerHTML = `<div style="font-weight:600">${weekFmt(w.week_offset)}</div><div>${w.total} ${strings.subtotals.commitsLabel} (${w.owner} owner)</div>`;
+            tooltip.style.display = 'block';
+            const bx = hit.getBoundingClientRect();
+            tooltip.style.left = `${bx.left - rect.left + barW / 2}px`;
+            tooltip.style.top = `${padT - 4}px`;
+          });
+          hit.addEventListener('mouseleave', () => {
+            tooltip.style.display = 'none';
+          });
+        });
+      }
+
+      function renderCodeFreqChart(dev) {
+        const freq = dev?.code_frequency;
+        if (!freq || !freq.length) {
+          codeFreqEmpty.hidden = false;
+          codeFreqChart.innerHTML = '';
+          return;
+        }
+        codeFreqEmpty.hidden = true;
+
+        const W = 700, H = 200;
+        const padL = 55, padR = 15, padT = 20, padB = 40;
+        const cW = W - padL - padR, cH = H - padT - padB;
+
+        const maxAdd = Math.max(...freq.map(w => w.additions), 1);
+        const maxDel = Math.max(...freq.map(w => w.deletions), 1);
+        const maxVal = Math.max(maxAdd, maxDel);
+
+        const barW = Math.max(2, (cW / freq.length - 4) / 2);
+        const step = Math.ceil(freq.length / 6);
+
+        let gridLines = '';
+        let yLabels = '';
+        const ySteps = 4;
+        for (let i = 0; i <= ySteps; i++) {
+          const val = Math.round((maxVal / ySteps) * i);
+          const y = padT + cH - (val / maxVal) * cH;
+          gridLines += `<line x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}" stroke="#93a4bf" stroke-opacity="0.15"/>`;
+          yLabels += `<text x="${padL - 6}" y="${y + 4}" text-anchor="end" fill="#93a4bf" font-size="11">${val >= 1000 ? (val / 1000).toFixed(0) + 'k' : val}</text>`;
+        }
+
+        let bars = '';
+        let xLabels = '';
+        let hits = '';
+        freq.forEach((w, i) => {
+          const groupX = padL + (i / freq.length) * cW + 1;
+          const addH = (w.additions / maxVal) * cH;
+          const delH = (w.deletions / maxVal) * cH;
+          const baseY = padT + cH;
+
+          bars += `<rect x="${groupX}" y="${baseY - addH}" width="${barW}" height="${addH}" fill="#34d399" rx="1"/>`;
+          bars += `<rect x="${groupX + barW + 1}" y="${baseY - delH}" width="${barW}" height="${delH}" fill="#f87171" rx="1"/>`;
+
+          hits += `<rect class="bar-hit" data-idx="${i}" x="${groupX}" y="${padT}" width="${barW * 2 + 1}" height="${cH}" fill="transparent" style="cursor:crosshair"/>`;
+
+          if (i % step === 0 || i === freq.length - 1) {
+            xLabels += `<text x="${groupX + barW}" y="${H - 5}" text-anchor="middle" fill="#93a4bf" font-size="10">${w.week}</text>`;
+          }
+        });
+
+        codeFreqChart.innerHTML = `
+          <div style="position:relative">
+            <svg viewBox="0 0 ${W} ${H}" width="100%" preserveAspectRatio="xMidYMid meet">
+              ${gridLines}${yLabels}${bars}${xLabels}${hits}
+            </svg>
+            <div class="chart-tooltip" style="position:absolute;display:none;background:rgba(15,23,42,0.95);border:1px solid rgba(148,163,191,0.25);border-radius:8px;padding:0.4rem 0.6rem;font-size:0.8rem;pointer-events:none;z-index:10;color:#e2e8f0">
+            </div>
+          </div>
+          <div style="display:flex;gap:1rem;margin-top:0.5rem;font-size:0.78rem;color:#93a4bf">
+            <span><span style="display:inline-block;width:10px;height:10px;background:#34d399;border-radius:2px;margin-right:4px"></span>${strings.subtotals.additionsLabel}</span>
+            <span><span style="display:inline-block;width:10px;height:10px;background:#f87171;border-radius:2px;margin-right:4px"></span>${strings.subtotals.deletionsLabel}</span>
+          </div>
+        `;
+
+        const svg = codeFreqChart.querySelector('svg');
+        const tooltip = codeFreqChart.querySelector('.chart-tooltip');
+        const rect = svg.getBoundingClientRect();
+        svg.querySelectorAll('.bar-hit').forEach((hit) => {
+          hit.addEventListener('mouseenter', () => {
+            const idx = +hit.dataset.idx;
+            const w = freq[idx];
+            tooltip.innerHTML = `<div style="font-weight:600">${w.week}</div><div style="color:#34d399">+${formatNumber(w.additions)}</div><div style="color:#f87171">−${formatNumber(w.deletions)}</div>`;
+            tooltip.style.display = 'block';
+            const bx = hit.getBoundingClientRect();
+            tooltip.style.left = `${bx.left - rect.left + barW}px`;
+            tooltip.style.top = `${padT - 4}px`;
+          });
+          hit.addEventListener('mouseleave', () => {
+            tooltip.style.display = 'none';
+          });
+        });
+      }
+
+      function renderAI(dev) {
+        const ai = dev?.ai;
+        if (!ai || ai.commits_scanned === 0) {
+          aiEmpty.hidden = false;
+          aiCards.hidden = true;
+          return;
+        }
+        aiEmpty.hidden = true;
+        aiCards.hidden = false;
+
+        const pct = (ai.ai_ratio * 100).toFixed(1);
+        const agents = ai.agents || [];
+
+        // Donut ring SVG
+        const R = 50, stroke = 12, cx = 60, cy = 60;
+        const circ = 2 * Math.PI * R;
+        const filled = circ * ai.ai_ratio;
+        const agentColors = ['#a78bfa', '#38bdf8', '#fbbf24', '#f87171', '#34d399'];
+
+        const ring = `
+          <svg width="120" height="120" viewBox="0 0 120 120">
+            <circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="rgba(148,163,191,0.15)" stroke-width="${stroke}"/>
+            <circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="#a78bfa" stroke-width="${stroke}"
+              stroke-dasharray="${filled} ${circ - filled}" stroke-dashoffset="${circ / 4}"
+              stroke-linecap="round" transform="rotate(-90 ${cx} ${cy})"/>
+            <text x="${cx}" y="${cy - 4}" text-anchor="middle" fill="#e2e8f0" font-size="18" font-weight="700">${pct}%</text>
+            <text x="${cx}" y="${cy + 14}" text-anchor="middle" fill="#93a4bf" font-size="10">AI</text>
+          </svg>
+        `;
+
+        const agentList = agents.length > 0
+          ? `<ul class="ai-agents-list">${agents.map((a, i) => `
+              <li>
+                <span class="ai-agent-dot" style="background:${agentColors[i % agentColors.length]}"></span>
+                <span>${escapeHtml(a.name)}</span>
+                <span class="ai-agent-count">${formatNumber(a.commits)} ${strings.subtotals.commitsLabel}</span>
+              </li>
+            `).join('')}</ul>`
+          : '';
+
+        const summaryCards = `
+          <div class="issues-grid" style="margin-top:0.75rem">
+            <div class="issue-card">
+              <div class="ic-value" style="color:#a78bfa">${formatNumber(ai.ai_commits)}</div>
+              <div class="ic-label">AI ${strings.subtotals.commitsLabel}</div>
+            </div>
+            <div class="issue-card">
+              <div class="ic-value" style="color:#38bdf8">${formatNumber(ai.commits_scanned - ai.ai_commits)}</div>
+              <div class="ic-label">Manual ${strings.subtotals.commitsLabel}</div>
+            </div>
+            <div class="issue-card">
+              <div class="ic-value" style="color:#34d399">${agents.length}</div>
+              <div class="ic-label">AI agents</div>
+            </div>
+          </div>
+        `;
+
+        aiCards.innerHTML = `
+          <div style="width:100%">
+            <div class="ai-ring-wrap">${ring}${agentList}</div>
+            ${summaryCards}
+          </div>
+        `;
+      }
+
       function render(summary) {
         const lastUpdated = summary.last_updated ? new Date(summary.last_updated) : null;
         lastUpdatedEl.textContent = lastUpdated ? dateTimeFormatter.format(lastUpdated) : '—';
@@ -1348,6 +1685,9 @@ const summaryUrl = `${repoHref.replace('https://github.com', 'https://raw.github
         renderTables(summary);
         renderIssues(summary);
         renderCI(summary);
+        renderCommitsChart(summary.dev);
+        renderCodeFreqChart(summary.dev);
+        renderAI(summary.dev);
       }
 
       async function loadSummary() {
