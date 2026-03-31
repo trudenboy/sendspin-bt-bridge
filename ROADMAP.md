@@ -1,8 +1,20 @@
 # Roadmap
 
+> **Last updated: March 2026 (v2.52.1)**
+
+## Status legend
+
+| Symbol | Meaning |
+|--------|---------|
+| ✅ ~~strikethrough~~ | Completed — shipped and in production |
+| 🔄 | Partially implemented — foundation exists, scope described below |
+| *(unmarked)* | Not yet implemented — planned for a future phase |
+
+---
+
 ## Purpose
 
-This roadmap is written for the **v3 wave**, starting from the reality already shipped in `v2.46.x+`.
+This roadmap is written for the **v3 wave**, starting from the reality already shipped in `v2.52.x`.
 
 v3 should be treated as a **compatibility-preserving platform refresh**:
 
@@ -12,13 +24,14 @@ v3 should be treated as a **compatibility-preserving platform refresh**:
 
 The project already has:
 
-- explicit bridge lifecycle and orchestration seams
-- typed status and diagnostics read models
-- normalized onboarding, recovery, and operator-guidance surfaces
-- config migration and validation flows
-- room, readiness, and handoff foundations for room-aware Music Assistant scenarios
-- stronger Docker and Raspberry Pi diagnostics for real deployment environments
-- versioned subprocess IPC and stable operator-facing diagnostics endpoints
+- ✅ ~~explicit bridge lifecycle and orchestration seams~~ (`bridge_orchestrator.py`, `services/lifecycle_state.py`)
+- ✅ ~~typed status and diagnostics read models~~ (`services/status_snapshot.py`, `services/bridge_state_model.py`)
+- ✅ ~~normalized onboarding, recovery, and operator-guidance surfaces~~ (`services/onboarding_assistant.py`, `services/recovery_assistant.py`, `services/operator_guidance.py`)
+- ✅ ~~config migration and validation flows~~ (`config_migration.py`, `services/config_validation.py`)
+- ✅ ~~Home Assistant and Music Assistant integration as part of the normal product path~~ (`services/ma_client.py`, `services/ma_monitor.py`, `routes/ma_auth.py`, `routes/ma_groups.py`, `routes/ma_playback.py`)
+- ✅ ~~Docker and Raspberry Pi startup diagnostics for real deployment environments~~ (`services/preflight_status.py`)
+- ✅ ~~versioned subprocess IPC and stable operator-facing diagnostics endpoints~~ (`services/ipc_protocol.py`, `services/subprocess_ipc.py`, `routes/api_status.py`)
+- 🔄 room, readiness, and handoff foundations for room-following scenarios — MA groups exist but no bridge-native room assignment
 
 The roadmap should therefore answer a sharper question:
 
@@ -52,17 +65,91 @@ That means keeping Bluetooth reliability as the core product while adding five m
 4. **A modern operator console** for creation, diagnostics, history, and bulk operations
 5. **AI-assisted diagnostics and later fleet management** built on the same typed data model rather than separate one-off logic
 
-## Starting baseline from v2
+## Shipped foundations from v2 (baseline for v3)
 
-The roadmap treats the following as already-established foundations:
+The roadmap treats the following as already-established and shipped foundations. These are not aspirational — they are real, tested, and running in production.
 
-- Bluetooth remains the primary and most battle-tested runtime
-- onboarding, recovery guidance, diagnostics, and bugreport tooling are real operator-facing surfaces
-- bridge and device health, recent events, and blocked-action reasoning are explicit enough to build on
-- room metadata, transfer readiness, and fast-handoff profiles already exist for room-following scenarios
-- Home Assistant and Music Assistant integration are part of the normal product path, not an afterthought
-- Docker and Raspberry Pi startup diagnostics already surface runtime UID, audio socket path, socket ownership, and live `pactl` probe status
-- subprocess IPC, config migration, and diagnostics endpoints already behave like versioned product contracts
+### Operator Guidance & Recovery
+
+- ✅ ~~Operator guidance surface~~ (`services/operator_guidance.py`, `services/guidance_issue_registry.py`)
+- ✅ ~~Recovery assistant with actionable remediation~~ (`services/recovery_assistant.py`)
+- ✅ ~~Onboarding assistant with phased checklist~~ (`services/onboarding_assistant.py`)
+- ✅ ~~Device health tracking and capability availability~~ (`services/device_health_state.py`, `services/playback_health.py`)
+- ✅ ~~Diagnostics API and status endpoints~~ (`routes/api_status.py`, `/api/diagnostics`, `/api/status/*`)
+- ✅ ~~Bug report with GitHub issue proxy~~ (`routes/api_status.py`, `services/github_issue_proxy.py`)
+- ✅ ~~Recovery timeline builder~~ (`services/recovery_timeline.py`)
+- ✅ ~~Operator check runner~~ (`services/operator_check_runner.py`)
+- ✅ ~~Log analysis and severity classification~~ (`services/log_analysis.py`)
+
+### Device & Bridge Management
+
+- ✅ ~~Device registry with duplicate detection~~ (`services/device_registry.py`, `services/duplicate_device_check.py`)
+- ✅ ~~Bridge lifecycle orchestration~~ (`bridge_orchestrator.py`, `services/bridge_daemon.py`)
+- ✅ ~~Bridge state model and snapshots~~ (`services/bridge_state_model.py`, `services/status_snapshot.py`)
+- ✅ ~~Lifecycle state management~~ (`services/lifecycle_state.py`)
+- ✅ ~~Device pairing, connection, and reconnect~~ (`services/bluetooth.py`, `routes/api_bt.py`, `bluetooth_manager.py`)
+- ✅ ~~Status event builder~~ (`services/status_event_builder.py`)
+- ✅ ~~Bridge runtime state publisher~~ (`services/bridge_runtime_state.py`)
+
+### Music Assistant Integration
+
+- ✅ ~~MA client and monitor~~ (`services/ma_client.py`, `services/ma_monitor.py`)
+- ✅ ~~MA discovery via mDNS~~ (`services/ma_discovery.py`)
+- ✅ ~~MA groups and sync~~ (`routes/ma_groups.py`)
+- ✅ ~~Now-playing and queue control~~ (`routes/ma_playback.py`)
+- ✅ ~~HMAC-signed artwork proxy~~ (`services/ma_artwork.py`)
+- ✅ ~~OAuth/token auth for MA~~ (`routes/ma_auth.py`)
+- ✅ ~~WebSocket MA connection for real-time state~~ (`services/ma_monitor.py`)
+- ✅ ~~MA runtime state management~~ (`services/ma_runtime_state.py`)
+- ✅ ~~MA integration service bootstrap~~ (`services/ma_integration_service.py`)
+
+### Audio Control & Transport
+
+- ✅ ~~Native transport control with lower latency~~ (`routes/api_transport.py`)
+- ✅ ~~Standby/idle disconnect~~ (`sendspin_client.py`)
+- ✅ ~~PA volume controller~~ (`services/pa_volume_controller.py`)
+- ✅ ~~Static delay compensation per device~~ (per-device config)
+- ✅ ~~Multi-pattern audio sink discovery~~ (`bluetooth_manager.py` — PipeWire, PulseAudio, HAOS patterns)
+
+### Infrastructure & Observability
+
+- ✅ ~~Event hooks/webhooks with delivery history~~ (`services/event_hooks.py`)
+- ✅ ~~Internal events pub/sub~~ (`services/internal_events.py`)
+- ✅ ~~IPC protocol versioning~~ (`services/ipc_protocol.py`, `services/subprocess_ipc.py`)
+- ✅ ~~Subprocess management~~ (`services/daemon_process.py`, `services/subprocess_command.py`, `services/subprocess_stop.py`, `services/subprocess_stderr.py`)
+- ✅ ~~HA Core API integration~~ (`services/ha_core_api.py`)
+- ✅ ~~Sendspin compatibility layer~~ (`services/sendspin_compat.py`)
+- ✅ ~~Update checker with auto-update support~~ (`services/update_checker.py`)
+- ✅ ~~Async job state with TTL eviction~~ (`services/async_job_state.py`)
+- ✅ ~~Adapter name cache~~ (`services/adapter_names.py`)
+- ✅ ~~Preflight diagnostics~~ (`services/preflight_status.py`)
+- ✅ ~~HA addon detection and delivery channels~~ (`services/ha_addon.py`)
+
+### Configuration & Validation
+
+- ✅ ~~Config validation and normalization~~ (`services/config_validation.py`)
+- ✅ ~~Config migration with schema versioning~~ (`config_migration.py`)
+- ✅ ~~Config persistence with thread-safe locking~~ (`config.py`)
+- ✅ ~~Config auth (PBKDF2-SHA256, brute-force protection)~~ (`config_auth.py`, `routes/auth.py`)
+- ✅ ~~Config network (port resolution, HA addon detection)~~ (`config_network.py`)
+
+### Deployment & Release
+
+- ✅ ~~HA Addon with stable, beta, and RC channels~~ (`ha-addon/`, `ha-addon-beta/`, `ha-addon-rc/`)
+- ✅ ~~Docker multi-arch builds (amd64, arm64, armv7)~~
+- ✅ ~~LXC deployment support~~ (`lxc/`)
+- ✅ ~~Landing page~~ (`landing/`)
+- ✅ ~~Documentation site with Astro Starlight~~ (`docs-site/`)
+- ✅ ~~Stats dashboard~~ (`docs-site/src/pages/stats/`)
+- ✅ ~~CI/CD unified pipeline with beta branch support~~ (`release.yml`)
+- ✅ ~~Beta branch release workflow~~
+
+### Testing & Quality
+
+- ✅ ~~965+ tests across 68+ files~~
+- ✅ ~~Type safety with dataclasses throughout~~
+
+---
 
 ## Three coordinated tracks for v3
 
@@ -127,11 +214,13 @@ v3 is successful when the project can do all of the following without becoming f
 5. Delay tuning becomes guided and explainable rather than trial and error.
 6. AI support and later fleet management can build on the same contracts, diagnostics bundles, and event history rather than inventing separate data models.
 
-## Phase V3-0: Pre-v3 operator polish baseline
+---
+
+## Phase V3-0: Pre-v3 operator polish baseline ✅
 
 ### Status
 
-Effectively complete in the current codebase. Keep this section as baseline context, not as the primary active phase.
+**Complete.** All scope items shipped and running in production as of v2.52.1.
 
 ### Goal
 
@@ -139,23 +228,25 @@ Document the operator polish that now forms the calm starting surface for v3.
 
 ### Scope
 
-- keep full onboarding dominant only for the true empty state
-- preview and confirm grouped recovery actions before multi-device operations run
-- reduce compact and mobile recovery noise (`top issue + N more`, less duplicate copy)
-- align blocked row-level hints with one top-level guidance owner
-- keep diagnostics and recovery detail available even when top-level guidance is compact
+- ✅ ~~keep full onboarding dominant only for the true empty state~~
+- ✅ ~~preview and confirm grouped recovery actions before multi-device operations run~~
+- ✅ ~~reduce compact and mobile recovery noise (`top issue + N more`, less duplicate copy)~~
+- ✅ ~~align blocked row-level hints with one top-level guidance owner~~
+- ✅ ~~keep diagnostics and recovery detail available even when top-level guidance is compact~~
 
 ### Exit criteria
 
-- mature installs are calm by default
-- grouped recovery actions feel deliberate and understandable
-- top-level guidance owns the main explanation instead of duplicated microcopy
+- ✅ ~~mature installs are calm by default~~
+- ✅ ~~grouped recovery actions feel deliberate and understandable~~
+- ✅ ~~top-level guidance owns the main explanation instead of duplicated microcopy~~
 
-### Current assessment
-
-These outcomes are already reflected in the shipped operator-guidance and recovery flows. Active roadmap work should therefore start at **V3-1**, not at V3-0.
+---
 
 ## Phase V3-1: Platform reset for v3
+
+### Status
+
+**Foundations partially in place.** Several building blocks exist but the full epic scopes are not yet complete.
 
 ### Goal
 
@@ -165,13 +256,14 @@ Create the shared platform model for v3 and ship the first modern operator-conso
 
 #### Epic 1. Runtime contracts and ownership seams
 
-- define an `AudioBackend`-style contract for lifecycle, capabilities, health, diagnostics, room metadata, and route ownership
+- 🔄 Runtime contracts — foundation exists in `services/status_snapshot.py`, `services/bridge_state_model.py`, and `services/device_health_state.py`, but no formal `AudioBackend` ABC defining lifecycle, capabilities, health, diagnostics, room metadata, and route ownership
 - wrap the existing Bluetooth runtime behind that contract first
 - keep subprocess and control-plane contracts backend-agnostic where practical
-- reduce `state.py` from architectural center toward a compatibility and cache layer as routes and services move to explicit ownership and snapshot reads
+- 🔄 Reduce `state.py` — routes and services have moved toward explicit ownership and snapshot reads (`services/bridge_runtime_state.py`, `services/device_registry.py`), but `state.py` still serves as architectural center for SSE signaling, scan jobs, and MA cache
 
 #### Epic 2. Config and runtime model v2
 
+- 🔄 Config/runtime separation — `services/bridge_state_model.py` provides normalized runtime models, but no player/backend-oriented config schema v2 yet
 - move from a Bluetooth-device-only model to player and backend-oriented configuration
 - separate user-owned config from runtime-derived state and generated metadata
 - add compatibility loading and migration tooling from the current schema
@@ -179,7 +271,7 @@ Create the shared platform model for v3 and ship the first modern operator-conso
 
 #### Epic 3. Event model, read models, and simulator foundation
 
-- standardize on a lightweight internal event model that can feed diagnostics history, hooks, recovery timelines, and later fleet views
+- 🔄 Event model — `services/internal_events.py` provides lightweight typed pub/sub, but no persistent event history for diagnostics, recovery timelines, or fleet views
 - make per-device and per-bridge event history a first-class typed surface rather than scattered ad hoc payloads
 - broaden typed snapshots and health summaries so degraded-mode reporting is a product surface, not just a debug aid
 - keep the mock runtime and simulator path viable for backend, config, diagnostics, and onboarding flows
@@ -199,6 +291,8 @@ Create the shared platform model for v3 and ship the first modern operator-conso
 - event history and typed read models are usable by diagnostics and UI layers
 - key backend and UI flows can be validated without requiring real Bluetooth hardware
 - the project has a viable modern-console foundation instead of only one growing runtime script
+
+---
 
 ## Phase V3-2: Modern operator console and wired/USB runtime
 
@@ -250,6 +344,8 @@ Ship the first clearly multi-backend product wave: wired and USB players plus th
 - the modern console is now responsible for the highest-churn player-management paths
 - `sbb` CLI can list devices, show status, manage config, and run diagnostics from a terminal without requiring a browser
 
+---
+
 ## Phase V3-2.5: Virtual sinks and composed zones
 
 ### Goal
@@ -283,6 +379,8 @@ Turn PulseAudio virtual sinks into real product surfaces once the first multi-ba
 - composed zones survive restarts and fit naturally into player-management flows
 - failures are explicit when prerequisite sinks are unavailable
 
+---
+
 ## Phase V3-3: Observability-first runtime and operations center
 
 ### Goal
@@ -300,6 +398,7 @@ Make health, signal path, and recovery state first-class operator surfaces rathe
 
 #### Epic 13. Signal path and route ownership visibility
 
+- 🔄 Signal path visibility — device health state and capability modeling exist (`services/device_health_state.py`), but no end-to-end signal-path visualization
 - render the end-to-end path for each backend type:
   - MA → Sendspin → subprocess → PulseAudio or PipeWire sink → Bluetooth A2DP → speaker
   - MA → Sendspin → subprocess → PulseAudio or ALSA sink → wired speaker or DAC
@@ -320,6 +419,8 @@ Make health, signal path, and recovery state first-class operator surfaces rathe
 - degradation is surfaced proactively instead of discovered only after audio sounds wrong
 - the UI has a reusable operations vocabulary instead of repeatedly hand-assembling each diagnostic surface
 
+---
+
 ## Phase V3-4: Delay intelligence and guided tuning
 
 ### Goal
@@ -330,6 +431,7 @@ Reduce manual `static_delay_ms` guesswork and make sync decisions more measurabl
 
 #### Epic 15. Delay telemetry foundation
 
+- 🔄 Latency telemetry — per-device `static_delay_ms` configuration exists but no measured per-hop timing or drift telemetry
 - capture timing and drift telemetry that can support per-device delay decisions
 - expose sync health, drift, confidence, and measurement quality at the diagnostics and operator level
 - distinguish between "we can measure something" and "we trust this enough to recommend a tuning change"
@@ -351,6 +453,8 @@ Reduce manual `static_delay_ms` guesswork and make sync decisions more measurabl
 - most users can reach a good delay value without trial-and-error editing
 - delay recommendations are visible and explainable
 - any automatic tuning stays conservative and operator-traceable
+
+---
 
 ## Phase V3-5: AI-assisted diagnostics and deployment planning
 
@@ -406,6 +510,8 @@ Use AI as an **operator copilot**, not as a hidden control plane.
 - deployment planning is useful for real users, especially HA, Docker, Raspberry Pi, and mixed Bluetooth or wired installs
 - AI-generated explanations improve support without becoming required for normal operation
 
+---
+
 ## Phase V3-6: Centralized multi-bridge control plane
 
 ### Goal
@@ -447,6 +553,8 @@ Turn multiple bridge instances into a manageable fleet after the single-bridge m
 - duplicate or conflicting configuration becomes easier to spot before it causes runtime issues
 - fleet operations do not replace single-bridge simplicity; they extend it
 
+---
+
 ## Phase V3-7: Selective expansion after core stability
 
 ### Candidate work
@@ -460,6 +568,8 @@ Only start these once earlier phases are stable and demand is proven:
 - Home Assistant custom component or HACS strategy
 - plugin or extension surfaces
 - per-room DSP and EQ via virtual sinks or backend-specific processing surfaces
+
+---
 
 ## Cross-cutting guardrails
 
@@ -504,6 +614,8 @@ v3 should add compatibility layers, migrate callers and config gradually, docume
 ### 10. CLI must stay a pure HTTP client
 
 The `sbb` CLI must never import bridge runtime code or depend on Bluetooth, PulseAudio, or D-Bus libraries. It communicates exclusively through the REST API so it can be installed on any machine, including developer laptops without audio hardware.
+
+---
 
 ## Execution and dependency notes
 

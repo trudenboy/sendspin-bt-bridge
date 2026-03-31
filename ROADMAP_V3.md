@@ -1,4 +1,16 @@
-# sendspin-audio-bridge — Roadmap v3.0+
+# sendspin-bt-bridge — Roadmap v3.0+
+
+> **Last updated:** March 2026 (v2.52.1)
+
+### Status Legend
+
+| Icon | Meaning |
+|------|---------|
+| ✅ | Completed |
+| 🔄 | In Progress / Partial |
+| *(unmarked)* | Planned |
+
+---
 
 ## Контекст
 
@@ -34,7 +46,7 @@ PulseAudio синками и переподключением устройств
 
 ## Архитектурная эволюция
 
-### Сейчас (v2.x)
+### Сейчас (v2.52.x) — ✅ Implemented
 
 ```
 [MA/Sendspin Server]
@@ -42,8 +54,9 @@ PulseAudio синками и переподключением устройств
 [sendspin-bt-bridge]
     ├── BluetoothManager × N (per device)
     ├── SendspinClient × N → subprocess(PULSE_SINK=bluez_sink.MAC)
-    ├── Flask API
-    └── state.py (shared mutable state)
+    ├── Flask API + routes/ blueprints
+    ├── services/ (IPC, MA, device registry, diagnostics, guidance)
+    └── state.py (shared runtime state, SSE, batched notifications)
 ```
 
 ### v3.0 — Backend Abstraction Layer
@@ -124,30 +137,105 @@ subprocess.
 
 ---
 
-## Phase 0: Rebrand & Foundation — v3.0.0
-
-**Ветка:** `dev/v3.0` (нестабильная, breaking changes разрешены)
+## Phase 0: Foundation — v3.0.0
 
 **Prerequisite:** завершение фаз 1–3 текущего `ROADMAP.md` (snapshot-модели, оркестратор,
-versioned IPC).
+versioned IPC). ✅ **All prerequisite phases completed in v2.52.1.**
 
-### Переименование
+### Переименование — ⏸️ DEFERRED
 
-| Было | Стало |
-|------|-------|
-| `sendspin-bt-bridge` | `sendspin-audio-bridge` |
-| `ghcr.io/trudenboy/sendspin-bt-bridge` | `ghcr.io/trudenboy/sendspin-audio-bridge` |
-| HA addon slug `sendspin_bt_bridge` | `sendspin_audio_bridge` |
+Project remains `sendspin-bt-bridge` until v3.0 backend abstraction layer is ready.
+Rename to `sendspin-audio-bridge` deferred — current name accurately reflects BT-only scope.
+
+| Было | Стало | Статус |
+|------|-------|--------|
+| `sendspin-bt-bridge` | `sendspin-audio-bridge` | ⏸️ Deferred to v3.0 |
+| `ghcr.io/trudenboy/sendspin-bt-bridge` | `ghcr.io/trudenboy/sendspin-audio-bridge` | ⏸️ Deferred to v3.0 |
+| HA addon slug `sendspin_bt_bridge` | `sendspin_audio_bridge` | ⏸️ Deferred to v3.0 |
 
 ### Deliverables
 
-- `AudioBackend` ABC + `BackendCapabilities` + `BackendStatus`
+- 🔄 `AudioBackend` ABC + `BackendCapabilities` + `BackendStatus` — *foundation exists (device health state, capability model, backend status in `DeviceStatus`), but no explicit ABC interface yet*
 - `BluetoothA2DPBackend` — обёртка вокруг существующего `BluetoothManager`
 - `BackendFactory.from_config(player_config)` → `AudioBackend`
-- `PlayerRegistry` — единый реестр вместо `bluetooth_devices` в `state.py`
-- Config schema v2 + `scripts/migrate_v2_to_v3.py`
-- Новый HA addon manifest, переименованный Docker image
-- Обновлённая архитектурная документация в `docs-site`
+- ✅ ~~`PlayerRegistry` — единый реестр вместо `bluetooth_devices` в `state.py`~~ — *`device_registry.py`: canonical thread-safe inventory with listener callbacks*
+- 🔄 Config schema v2 + `scripts/migrate_v2_to_v3.py` — *config validation & migration (`config_validation.py`, `config_migration.py`) implemented, but schema not yet migrated to `players[]`/`backends[]` structure*
+- Новый HA addon manifest, переименованный Docker image — ⏸️ blocked on rename
+- ✅ ~~Обновлённая архитектурная документация в `docs-site`~~
+
+### Phase 0 — completed foundation items (v2.52.1)
+
+The following capabilities were delivered as part of the v2.x foundation, satisfying Phase 0 prerequisites:
+
+#### Operator Guidance & Diagnostics
+
+- ✅ ~~Operator guidance surface (`operator_guidance.py`, `guidance_issue_registry.py`)~~
+- ✅ ~~Recovery assistant (`recovery_assistant.py`, `recovery_timeline.py`)~~
+- ✅ ~~Onboarding checklist generator (`onboarding_assistant.py`)~~
+- ✅ ~~Operator check runner with safe, rerunnable checks (`operator_check_runner.py`)~~
+- ✅ ~~Device health state with capability model and remediation actions (`device_health_state.py`)~~
+- ✅ ~~Diagnostics API, preflight status, log analysis (`preflight_status.py`, `log_analysis.py`)~~
+- ✅ ~~Bug report generation (`api_status.py`)~~
+
+#### Bridge State & Lifecycle
+
+- ✅ ~~Bridge state model with normalized dataclasses (`bridge_state_model.py`)~~
+- ✅ ~~Status snapshots for API surfaces (`status_snapshot.py`)~~
+- ✅ ~~Lifecycle state publisher (`lifecycle_state.py`)~~
+- ✅ ~~Bridge runtime state with startup progress (`bridge_runtime_state.py`)~~
+- ✅ ~~Status event builder from transition deltas (`status_event_builder.py`)~~
+
+#### Device Management
+
+- ✅ ~~Device registry — canonical thread-safe inventory (`device_registry.py`)~~
+- ✅ ~~Duplicate device detection via MA API (`duplicate_device_check.py`)~~
+- ✅ ~~Playback health watchdog (`playback_health.py`)~~
+
+#### Music Assistant Integration
+
+- ✅ ~~MA REST API client (`ma_client.py`) — groups, players, group play~~
+- ✅ ~~MA WebSocket monitor (`ma_monitor.py`) — real-time now-playing, queue state, transport~~
+- ✅ ~~MA mDNS discovery (`ma_discovery.py`)~~
+- ✅ ~~MA groups & sync group management (`ma_groups.py`, `ma_runtime_state.py`)~~
+- ✅ ~~MA queue control & playback routes (`ma_playback.py`)~~
+- ✅ ~~MA artwork proxy with HMAC signing (`ma_artwork.py`)~~
+- ✅ ~~MA OAuth/token authentication (`ma_auth.py`)~~
+- ✅ ~~MA integration bootstrap (`ma_integration_service.py`)~~
+
+#### Transport & Audio Control
+
+- ✅ ~~Native transport control endpoint (`api_transport.py`)~~
+- ✅ ~~Standby/idle mode with `set_standby` IPC command~~
+- ✅ ~~PA/PipeWire volume controller (`pa_volume_controller.py`)~~
+
+#### Events & IPC
+
+- ✅ ~~Event hooks with delivery history (`event_hooks.py`)~~
+- ✅ ~~Internal pub/sub for typed events (`internal_events.py`)~~
+- ✅ ~~Versioned IPC protocol (`ipc_protocol.py`, `subprocess_command.py`, `subprocess_ipc.py`)~~
+- ✅ ~~Subprocess lifecycle management (`subprocess_stop.py`, `subprocess_stderr.py`)~~
+
+#### Configuration & Persistence
+
+- ✅ ~~Config validation & normalization (`config_validation.py`)~~
+- ✅ ~~Config migration & schema normalization (`config_migration.py`)~~
+- ✅ ~~Thread-safe config persistence with `config_lock`~~
+- ✅ ~~`config.schema.json` — machine-readable JSON Schema~~
+
+#### Deployment & Ecosystem
+
+- ✅ ~~HA addon ecosystem (stable, beta, RC channels in `ha-addon*/`)~~
+- ✅ ~~Docker multi-arch builds (amd64, arm64, armv7)~~
+- ✅ ~~Proxmox LXC deployment (`lxc/`)~~
+- ✅ ~~HA Supervisor integration (`ha_addon.py`, `ha_core_api.py`)~~
+
+#### Documentation & Quality
+
+- ✅ ~~Documentation site (`docs-site/`) — Astro Starlight, GitHub Pages~~
+- ✅ ~~Stats dashboard in web UI~~
+- ✅ ~~Landing page (`landing/`)~~
+- ✅ ~~965+ tests across 68+ files~~
+- ✅ ~~Unified CI/CD pipeline (`release.yml` + `ci.yml`)~~
 
 ---
 

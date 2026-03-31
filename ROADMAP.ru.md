@@ -1,5 +1,9 @@
 # Дорожная карта v3
 
+> Последнее обновление: март 2026 (v2.52.1)
+
+**Обозначения статуса:** ✅ Реализовано · 🔄 В процессе · без отметки = Запланировано
+
 ## Назначение
 
 Эта дорожная карта написана для **волны v3**, стартующей от реальности, уже выпущенной в `v2.46.x+`.
@@ -12,13 +16,13 @@ v3 стоит трактовать как **compatibility-preserving platform re
 
 Проект уже имеет:
 
-- явную bridge lifecycle и orchestration-модель
-- typed status и diagnostics read models
-- нормализованные onboarding, recovery и operator-guidance surfaces
-- config migration и validation flows
-- room metadata, readiness и handoff foundations для room-aware сценариев Music Assistant
-- усиленные Docker и Raspberry Pi startup diagnostics, которые выводят runtime UID, audio socket path, socket ownership и live `pactl` probe status
-- versioned subprocess IPC и стабильные operator-facing diagnostics endpoints
+- ✅ ~~явную bridge lifecycle и orchestration-модель~~
+- ✅ ~~typed status и diagnostics read models~~
+- ✅ ~~нормализованные onboarding, recovery и operator-guidance surfaces~~
+- ✅ ~~config migration и validation flows~~
+- 🔄 room metadata, readiness и handoff foundations для room-aware сценариев Music Assistant — группы MA реализованы, но нет нативного назначения комнат
+- ✅ ~~усиленные Docker и Raspberry Pi startup diagnostics, которые выводят runtime UID, audio socket path, socket ownership и live `pactl` probe status~~
+- ✅ ~~versioned subprocess IPC и стабильные operator-facing diagnostics endpoints~~
 
 Дорожная карта поэтому отвечает на более конкретный вопрос:
 
@@ -56,13 +60,79 @@ Sendspin BT Bridge v3 должен стать **Bluetooth-first, room-aware, mul
 
 Дорожная карта считает следующее уже устоявшимися основами:
 
-- Bluetooth остаётся primary и самым battle-tested runtime
-- onboarding, recovery guidance, diagnostics и bugreport tooling — реальные operator-facing surfaces
-- bridge и device health, recent events и blocked-action reasoning достаточно явные, чтобы на них строить
-- room metadata, transfer readiness и fast-handoff profiles уже существуют для room-following сценариев
-- Home Assistant и Music Assistant integration — часть нормального продуктового пути, а не afterthought
-- Docker и Raspberry Pi startup diagnostics уже выводят runtime UID, audio socket path, socket ownership и live `pactl` probe status
-- subprocess IPC, config migration и diagnostics endpoints уже ведут себя как versioned product contracts
+- ✅ ~~Bluetooth остаётся primary и самым battle-tested runtime~~
+- ✅ ~~onboarding, recovery guidance, diagnostics и bugreport tooling — реальные operator-facing surfaces~~
+- ✅ ~~bridge и device health, recent events и blocked-action reasoning достаточно явные, чтобы на них строить~~
+- 🔄 room metadata, transfer readiness и fast-handoff profiles — группы MA реализованы, но нативное назначение комнат пока отсутствует
+- ✅ ~~Home Assistant и Music Assistant integration — часть нормального продуктового пути, а не afterthought~~
+- ✅ ~~Docker и Raspberry Pi startup diagnostics уже выводят runtime UID, audio socket path, socket ownership и live `pactl` probe status~~
+- ✅ ~~subprocess IPC, config migration и diagnostics endpoints уже ведут себя как versioned product contracts~~
+
+### Детализация реализованного в v2
+
+#### ✅ Руководство оператора и восстановление
+
+- ✅ ~~Панель руководства оператора (`services/operator_guidance.py`)~~
+- ✅ ~~Помощник восстановления (`services/recovery_assistant.py`)~~
+- ✅ ~~Помощник начальной настройки (`services/onboarding_assistant.py`)~~
+- ✅ ~~Отслеживание здоровья устройств (`services/device_health_state.py`)~~
+- ✅ ~~API диагностики (`/api/diagnostics`, `/api/status/*`)~~
+- ✅ ~~Отчёт об ошибке через GitHub (`routes/api_status.py`)~~
+
+#### ✅ Управление устройствами и мостом
+
+- ✅ ~~Реестр устройств (`services/device_registry.py`)~~
+- ✅ ~~Оркестрация жизненного цикла моста (`bridge_orchestrator.py`)~~
+- ✅ ~~Модель состояния моста и снимки (`services/bridge_state_model.py`)~~
+- ✅ ~~Управление состоянием жизненного цикла (`services/lifecycle_state.py`)~~
+- ✅ ~~Сопряжение и подключение устройств (`services/bluetooth.py`)~~
+
+#### ✅ Интеграция с Music Assistant
+
+- ✅ ~~Клиент и монитор MA (`services/ma_client.py`, `ma_monitor.py`)~~
+- ✅ ~~Обнаружение MA через mDNS (`services/ma_discovery.py`)~~
+- ✅ ~~Группы и синхронизация MA (`routes/ma_groups.py`)~~
+- ✅ ~~Управление воспроизведением и очередью (`routes/ma_playback.py`)~~
+- ✅ ~~Прокси обложек (`services/ma_artwork.py`)~~
+- ✅ ~~OAuth/token авторизация для MA (`routes/ma_auth.py`)~~
+- ✅ ~~WebSocket подключение к MA (`services/ma_monitor.py`)~~
+
+#### ✅ Управление аудио и транспорт
+
+- ✅ ~~Нативное управление транспортом (`routes/api_transport.py`)~~
+- ✅ ~~Режим ожидания / отключение при простое~~
+- ✅ ~~Контроллер громкости PA (`services/pa_volume_controller.py`)~~
+- ✅ ~~Компенсация статической задержки~~
+
+#### ✅ Инфраструктура
+
+- ✅ ~~Вебхуки (`services/event_hooks.py`)~~
+- ✅ ~~Внутренние события pub/sub (`services/internal_events.py`)~~
+- ✅ ~~Версионирование IPC протокола (`services/ipc_protocol.py`)~~
+- ✅ ~~Управление подпроцессами (`services/daemon_process.py`)~~
+- ✅ ~~Интеграция с HA Core API (`services/ha_core_api.py`)~~
+- ✅ ~~Слой совместимости Sendspin (`services/sendspin_compat.py`)~~
+- ✅ ~~Проверка обновлений (`services/update_checker.py`)~~
+
+#### ✅ Конфигурация
+
+- ✅ ~~Валидация конфигурации (`services/config_validation.py`)~~
+- ✅ ~~Миграция конфигурации (`config_migration.py`)~~
+- ✅ ~~Потокобезопасное хранение конфигурации (`config.py`)~~
+
+#### ✅ Развёртывание
+
+- ✅ ~~HA аддон (`ha-addon/`, `ha-addon-beta/`, `ha-addon-rc/`)~~
+- ✅ ~~Docker мультиархитектурная сборка (amd64, arm64, armv7)~~
+- ✅ ~~LXC развёртывание (`lxc/`)~~
+- ✅ ~~Лендинг (`landing/`)~~
+- ✅ ~~Документация (`docs-site/`)~~
+- ✅ ~~Дашборд статистики (`docs-site/src/pages/stats/`)~~
+- ✅ ~~CI/CD pipeline с поддержкой beta-ветки~~
+
+#### ✅ Тестирование
+
+- ✅ ~~965+ тестов в 68+ файлах~~
 
 ## Три координированных трека v3
 
@@ -131,7 +201,7 @@ v3 успешен, когда проект может делать всё пер
 
 ### Статус
 
-По сути уже закрыто в текущем коде. Эта секция сохраняется как baseline context, а не как главная активная фаза.
+✅ По сути уже закрыто в текущем коде. Эта секция сохраняется как baseline context, а не как главная активная фаза.
 
 ### Цель
 
@@ -139,17 +209,17 @@ v3 успешен, когда проект может делать всё пер
 
 ### Scope
 
-- полный onboarding доминирует только для настоящего empty state
-- preview и confirm для grouped recovery actions перед запуском multi-device operations
-- меньше шума в compact/mobile recovery (`top issue + N more`, меньше дублирования copy)
-- blocked row-level hints согласованы с одним top-level guidance owner
-- diagnostics и recovery detail доступны, даже когда top-level guidance компактен
+- ✅ ~~полный onboarding доминирует только для настоящего empty state~~
+- ✅ ~~preview и confirm для grouped recovery actions перед запуском multi-device operations~~
+- ✅ ~~меньше шума в compact/mobile recovery (`top issue + N more`, меньше дублирования copy)~~
+- ✅ ~~blocked row-level hints согласованы с одним top-level guidance owner~~
+- ✅ ~~diagnostics и recovery detail доступны, даже когда top-level guidance компактен~~
 
 ### Exit criteria
 
-- зрелые инсталляции спокойны по умолчанию
-- grouped recovery actions ощущаются осознанными и понятными
-- top-level guidance владеет основным объяснением, а не дублированный microcopy
+- ✅ ~~зрелые инсталляции спокойны по умолчанию~~
+- ✅ ~~grouped recovery actions ощущаются осознанными и понятными~~
+- ✅ ~~top-level guidance владеет основным объяснением, а не дублированный microcopy~~
 
 ### Текущая оценка
 
@@ -165,21 +235,21 @@ v3 успешен, когда проект может делать всё пер
 
 #### Epic 1. Runtime contracts и ownership seams
 
-- определить `AudioBackend`-style contract для lifecycle, capabilities, health, diagnostics, room metadata и route ownership
+- 🔄 определить `AudioBackend`-style contract для lifecycle, capabilities, health, diagnostics, room metadata и route ownership — основа заложена в `status_snapshot.py`, но формальный `AudioBackend` ABC пока отсутствует
 - обернуть существующий Bluetooth runtime за этим контрактом первым
-- держать subprocess и control-plane contracts backend-agnostic где практично
+- ✅ ~~держать subprocess и control-plane contracts backend-agnostic где практично~~
 - сжать `state.py` из архитектурного центра в compatibility/cache layer по мере перехода routes и services к explicit ownership и snapshot reads
 
 #### Epic 2. Config и runtime model v2
 
 - перейти от Bluetooth-device-only модели к player и backend-ориентированной конфигурации
-- отделить user-owned config от runtime-derived state и generated metadata
-- добавить compatibility loading и migration tooling для текущей схемы
+- 🔄 отделить user-owned config от runtime-derived state и generated metadata — `bridge_state_model.py` реализован, но config schema v2 ещё не создана
+- ✅ ~~добавить compatibility loading и migration tooling для текущей схемы~~
 - держать downgrade и partial-migration assumptions явными и задокументированными
 
 #### Epic 3. Event model, read models и simulator foundation
 
-- стандартизироваться на лёгком internal event model, который может питать diagnostics history, hooks, recovery timelines и позднее fleet views
+- 🔄 стандартизироваться на лёгком internal event model — `internal_events.py` реализован, но персистентность истории событий пока отсутствует
 - сделать per-device и per-bridge event history first-class typed surface, а не разрозненные ad hoc payloads
 - расширить typed snapshots и health summaries, чтобы degraded-mode reporting стал продуктовой поверхностью, а не только debug aid
 - держать mock runtime и simulator path жизнеспособными для backend, config, diagnostics и onboarding flows
@@ -300,7 +370,7 @@ v3 успешен, когда проект может делать всё пер
 
 #### Epic 13. Signal path и route ownership visibility
 
-- рендерить end-to-end path для каждого типа backend:
+- 🔄 рендерить end-to-end path для каждого типа backend — health-данные доступны, но сквозная визуализация сигнального пути пока отсутствует:
   - MA → Sendspin → subprocess → PulseAudio / PipeWire sink → Bluetooth A2DP → speaker
   - MA → Sendspin → subprocess → PulseAudio / ALSA sink → wired speaker / DAC
 - показывать measured или estimated latency на каждом hop где доступно
@@ -529,7 +599,7 @@ v3 должен добавлять compatibility layers, постепенно м
 
 Реалистичный `v3.0.0-rc.1` должен включать:
 
-- V3-0 уже выпущенный guidance и recovery polish как baseline
+- ✅ ~~V3-0 уже выпущенный guidance и recovery polish как baseline~~
 - ядро V3-1:
   - backend contracts и capability modeling
   - config и runtime model v2 foundations
