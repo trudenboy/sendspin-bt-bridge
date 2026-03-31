@@ -368,17 +368,6 @@ const summaryUrl = `${repoHref.replace('https://github.com', 'https://raw.github
         height: auto;
       }
 
-      .chart-area .grid-line {
-        stroke: rgba(148, 163, 184, 0.22);
-        stroke-width: 1;
-      }
-
-      .chart-area .axis-label {
-        fill: #93a4bf;
-        font-size: 11px;
-        font-family: inherit;
-      }
-
       .chart-area .data-line {
         fill: none;
         stroke-width: 2;
@@ -816,17 +805,20 @@ const summaryUrl = `${repoHref.replace('https://github.com', 'https://raw.github
         const linePath = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ');
         const areaPath = `${linePath} L${points[points.length - 1].x},${padT + chartH} L${points[0].x},${padT + chartH} Z`;
 
+        const labelColor = '#93a4bf';
+        const gridColor = 'rgba(148,163,184,0.22)';
+
         let gridLines = '';
         for (const t of ticks) {
           const y = padT + chartH - (t / niceMax) * chartH;
-          gridLines += `<line x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}" class="grid-line"/>`;
-          gridLines += `<text x="${padL - 8}" y="${y + 4}" class="axis-label" text-anchor="end">${abbreviate(t)}</text>`;
+          gridLines += `<line x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}" stroke="${gridColor}"/>`;
+          gridLines += `<text x="${padL - 8}" y="${y + 4}" fill="${labelColor}" font-size="11" font-family="inherit" text-anchor="end">${abbreviate(t)}</text>`;
         }
 
         const xLabels = selectXLabels(data, points, padL, W - padR);
         let xLabelSvg = '';
         for (const { x, label } of xLabels) {
-          xLabelSvg += `<text x="${x}" y="${H - 6}" class="axis-label" text-anchor="middle">${escapeHtml(label)}</text>`;
+          xLabelSvg += `<text x="${x}" y="${H - 6}" fill="${labelColor}" font-size="11" font-family="inherit" text-anchor="middle">${escapeHtml(label)}</text>`;
         }
 
         let dots = '';
