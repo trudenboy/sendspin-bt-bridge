@@ -1,0 +1,50 @@
+{
+  "weekly_commits": [
+    {
+      "week_offset": -12,
+      "total": 14,
+      "owner": 0
+    },
+    {
+      "week_offset": -4,
+      "total": 177,
+      "owner": 177
+    },
+    {
+      "week_offset": -3,
+      "total": 420,
+      "owner": 353
+    },
+    {
+      "week_offset": -2,
+      "total": 356,
+      "owner": 290
+    },
+    {
+      "week_offset": -1,
+      "total": 307,
+      "owner": 254
+    },
+    {
+      "week_offset": 0,
+      "total": 358,
+      "owner": 158
+    }
+  ],
+  "code_frequency": [],
+  "ai": {
+    "commits_scanned": 200,
+    "ai_commits": 136,
+    "ai_ratio": 0.68,
+    "agents": [
+      {
+        "name": "Copilot",
+        "commits": 128
+      },
+      {
+        "name": "dependabot[bot]",
+        "commits": 8
+      }
+    ]
+  }
+}

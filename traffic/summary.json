@@ -287,7 +287,7 @@
       "uniques": 2
     }
   ],
-  "last_updated": "2026-03-31T07:22:59.531Z",
+  "last_updated": "2026-03-31T07:32:09.520Z",
   "clones_window": {
     "count": 3824,
     "uniques": 983
@@ -368,8 +368,8 @@
     "forks_count": 1,
     "network_count": 1,
     "size_kb": 36077,
-    "pushed_at": "2026-03-31T07:22:30Z",
-    "updated_at": "2026-03-31T07:22:34Z"
+    "pushed_at": "2026-03-31T07:31:41Z",
+    "updated_at": "2026-03-31T07:31:44Z"
   },
   "repo_history": {
     "2026-03-17": {
@@ -564,8 +564,8 @@
       "forks_count": 1,
       "network_count": 1,
       "size_kb": 36077,
-      "pushed_at": "2026-03-31T07:22:30Z",
-      "updated_at": "2026-03-31T07:22:34Z"
+      "pushed_at": "2026-03-31T07:31:41Z",
+      "updated_at": "2026-03-31T07:31:44Z"
     }
   },
   "releases": {
@@ -2116,11 +2116,11 @@
   "ci": [
     {
       "name": "Deploy Docs to GitHub Pages",
-      "total_runs": 137,
-      "success_runs": 133,
+      "total_runs": 138,
+      "success_runs": 134,
       "failure_runs": 3,
       "last_status": "in_progress",
-      "last_run_at": "2026-03-31T07:22:33Z"
+      "last_run_at": "2026-03-31T07:31:43Z"
     },
     {
       "name": "Copilot code review",
@@ -2132,11 +2132,11 @@
     },
     {
       "name": "Archive Traffic Stats",
-      "total_runs": 30,
-      "success_runs": 22,
+      "total_runs": 31,
+      "success_runs": 23,
       "failure_runs": 7,
       "last_status": "in_progress",
-      "last_run_at": "2026-03-31T07:22:38Z"
+      "last_run_at": "2026-03-31T07:31:49Z"
     },
     {
       "name": "Copilot coding agent",
@@ -2156,11 +2156,11 @@
     },
     {
       "name": "CI",
-      "total_runs": 106,
-      "success_runs": 93,
+      "total_runs": 107,
+      "success_runs": 94,
       "failure_runs": 1,
       "last_status": "in_progress",
-      "last_run_at": "2026-03-31T07:22:33Z"
+      "last_run_at": "2026-03-31T07:31:43Z"
     },
     {
       "name": "Release",
@@ -2175,8 +2175,8 @@
     "2026-03-31": [
       {
         "name": "Deploy Docs to GitHub Pages",
-        "total_runs": 137,
-        "success_runs": 133,
+        "total_runs": 138,
+        "success_runs": 134,
         "failure_runs": 3
       },
       {
@@ -2187,8 +2187,8 @@
       },
       {
         "name": "Archive Traffic Stats",
-        "total_runs": 30,
-        "success_runs": 22,
+        "total_runs": 31,
+        "success_runs": 23,
         "failure_runs": 7
       },
       {
@@ -2205,8 +2205,8 @@
       },
       {
         "name": "CI",
-        "total_runs": 106,
-        "success_runs": 93,
+        "total_runs": 107,
+        "success_runs": 94,
         "failure_runs": 1
       },
       {
@@ -2216,5 +2216,62 @@
         "failure_runs": 3
       }
     ]
+  },
+  "dev": {
+    "weekly_commits": [
+      {
+        "week_offset": -12,
+        "total": 14,
+        "owner": 0
+      },
+      {
+        "week_offset": -4,
+        "total": 177,
+        "owner": 177
+      },
+      {
+        "week_offset": -3,
+        "total": 420,
+        "owner": 353
+      },
+      {
+        "week_offset": -2,
+        "total": 356,
+        "owner": 290
+      },
+      {
+        "week_offset": -1,
+        "total": 307,
+        "owner": 254
+      },
+      {
+        "week_offset": 0,
+        "total": 358,
+        "owner": 158
+      }
+    ],
+    "code_frequency": [],
+    "ai": {
+      "commits_scanned": 200,
+      "ai_commits": 136,
+      "ai_ratio": 0.68,
+      "agents": [
+        {
+          "name": "Copilot",
+          "commits": 128
+        },
+        {
+          "name": "dependabot[bot]",
+          "commits": 8
+        }
+      ]
+    }
+  },
+  "dev_history": {
+    "2026-03-31": {
+      "total_weekly_commits": 1632,
+      "ai_commits": 136,
+      "ai_ratio": 0.68
+    }
   }
 }
