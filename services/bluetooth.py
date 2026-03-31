@@ -166,6 +166,10 @@ def persist_device_enabled(player_name: str, enabled: bool) -> None:
             if _match_player_name(dev.get("player_name", ""), player_name):
                 dev["enabled"] = enabled
                 break
+        for player in cfg.get("players", []):
+            if _match_player_name(player.get("player_name", ""), player_name):
+                player["enabled"] = enabled
+                break
 
     try:
         _update_bound_config_file(_set_enabled)
@@ -200,6 +204,10 @@ def persist_device_released(player_name: str, released: bool) -> None:
         for dev in cfg.get("BLUETOOTH_DEVICES", []):
             if _match_player_name(dev.get("player_name", ""), player_name):
                 dev["released"] = released
+                break
+        for player in cfg.get("players", []):
+            if _match_player_name(player.get("player_name", ""), player_name):
+                player["released"] = released
                 break
 
     try:

@@ -804,6 +804,13 @@ def api_config():
                     last_volumes[mac] = default_vol
         config["LAST_VOLUMES"] = _sanitize_last_volumes(last_volumes, set(new_devices))
 
+        # Ensure players[] and BLUETOOTH_DEVICES stay in sync.
+        # The migration already populates players from BLUETOOTH_DEVICES when
+        # players is absent.  If the POST included explicit players[], keep
+        # them.  Either way both keys end up in the persisted config.
+        if "players" not in config:
+            config["players"] = existing.get("players", [])
+
         write_config_file(config, config_file=CONFIG_FILE, config_dir=CONFIG_FILE.parent)
 
     # Invalidate adapter name cache so next status poll picks up changes

@@ -275,6 +275,84 @@ def validate_uploaded_config(
                     )
                 )
 
+    # -- Validate players[] (v2 schema) --
+    players_raw = normalized.get("players")
+    if players_raw is not None:
+        if not isinstance(players_raw, list):
+            result.errors.append(ConfigValidationIssue(field="players", message="players must be an array"))
+        else:
+            _VALID_BACKEND_TYPES = {"bluetooth_a2dp", "local_sink", "snapcast"}
+            for idx, player in enumerate(players_raw):
+                fp = f"players[{idx}]"
+                if not isinstance(player, dict):
+                    result.errors.append(ConfigValidationIssue(field=fp, message="Each player must be an object"))
+                    continue
+                # player_name required
+                pname = player.get("player_name")
+                if not pname or not isinstance(pname, str) or not pname.strip():
+                    result.errors.append(
+                        ConfigValidationIssue(
+                            field=f"{fp}.player_name", message="player_name is required and must be a non-empty string"
+                        )
+                    )
+                # backend required
+                backend = player.get("backend")
+                if not isinstance(backend, dict):
+                    result.errors.append(
+                        ConfigValidationIssue(
+                            field=f"{fp}.backend", message="backend is required and must be an object"
+                        )
+                    )
+                else:
+                    btype = backend.get("type", "")
+                    if btype not in _VALID_BACKEND_TYPES:
+                        result.errors.append(
+                            ConfigValidationIssue(
+                                field=f"{fp}.backend.type",
+                                message=f"Invalid backend.type: {btype} (must be one of {', '.join(sorted(_VALID_BACKEND_TYPES))})",
+                            )
+                        )
+                    if btype == "bluetooth_a2dp":
+                        mac = str(backend.get("mac") or "").strip().upper()
+                        if not mac:
+                            result.errors.append(
+                                ConfigValidationIssue(
+                                    field=f"{fp}.backend.mac",
+                                    message="MAC address is required for bluetooth_a2dp backend",
+                                )
+                            )
+                        elif not _MAC_RE.match(mac):
+                            result.errors.append(
+                                ConfigValidationIssue(field=f"{fp}.backend.mac", message=f"Invalid MAC address: {mac}")
+                            )
+                        else:
+                            backend["mac"] = mac
+                # enabled — optional but must be bool
+                enabled_val = player.get("enabled")
+                if enabled_val is not None and not isinstance(enabled_val, bool):
+                    result.errors.append(
+                        ConfigValidationIssue(field=f"{fp}.enabled", message="enabled must be a boolean")
+                    )
+                # listen_port — optional but must be int in valid range (0 = auto)
+                lp = player.get("listen_port")
+                if lp is not None and lp != "" and lp != 0:
+                    try:
+                        lp_int = int(str(lp))
+                    except (ValueError, TypeError):
+                        result.errors.append(
+                            ConfigValidationIssue(field=f"{fp}.listen_port", message=f"Invalid listen_port: {lp}")
+                        )
+                    else:
+                        if not (1024 <= lp_int <= 65535):
+                            result.errors.append(
+                                ConfigValidationIssue(
+                                    field=f"{fp}.listen_port",
+                                    message=f"Invalid listen_port: {lp} (must be 0 or 1024-65535)",
+                                )
+                            )
+                        else:
+                            player["listen_port"] = lp_int
+
     bt_adapters = normalized.get("BLUETOOTH_ADAPTERS", [])
     if not isinstance(bt_adapters, list):
         result.errors.append(
