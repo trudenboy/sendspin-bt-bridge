@@ -155,11 +155,11 @@ Rename to `sendspin-audio-bridge` deferred — current name accurately reflects 
 
 ### Deliverables
 
-- 🔄 `AudioBackend` ABC + `BackendCapabilities` + `BackendStatus` — *foundation exists (device health state, capability model, backend status in `DeviceStatus`), but no explicit ABC interface yet*
-- `BluetoothA2DPBackend` — обёртка вокруг существующего `BluetoothManager`
-- `BackendFactory.from_config(player_config)` → `AudioBackend`
+- ✅ ~~`AudioBackend` ABC + `BackendCapabilities` + `BackendStatus`~~ — *`services/audio_backend.py`: AudioBackend ABC with BackendType enum (BLUETOOTH_A2DP, LOCAL_SINK, SNAPCAST), BackendCapability enum, BackendStatus dataclass*
+- ✅ ~~`BluetoothA2DPBackend` — обёртка вокруг существующего `BluetoothManager`~~ — *`services/backends/bluetooth_a2dp.py`: concrete AudioBackend wrapping BluetoothManager*
+- ✅ ~~`BackendFactory.from_config(player_config)` → `AudioBackend`~~ — *`services/backends/__init__.py`: `create_backend()` factory dispatcher*
 - ✅ ~~`PlayerRegistry` — единый реестр вместо `bluetooth_devices` в `state.py`~~ — *`device_registry.py`: canonical thread-safe inventory with listener callbacks*
-- 🔄 Config schema v2 + `scripts/migrate_v2_to_v3.py` — *config validation & migration (`config_validation.py`, `config_migration.py`) implemented, but schema not yet migrated to `players[]`/`backends[]` structure*
+- ✅ ~~Config schema v2 + auto-migration~~ — *`config.py`: CONFIG_SCHEMA_VERSION=2, `config_migration.py`: v1→v2 auto-migration (BLUETOOTH_DEVICES → players[]), `config_validation.py`: players[] validation*
 - Новый HA addon manifest, переименованный Docker image — ⏸️ blocked on rename
 - ✅ ~~Обновлённая архитектурная документация в `docs-site`~~
 
@@ -236,6 +236,31 @@ The following capabilities were delivered as part of the v2.x foundation, satisf
 - ✅ ~~Landing page (`landing/`)~~
 - ✅ ~~965+ tests across 68+ files~~
 - ✅ ~~Unified CI/CD pipeline (`release.yml` + `ci.yml`)~~
+
+### Phase 0 — V3-1 Platform Reset deliverables (3.0.0-beta.1)
+
+The following backend abstraction layer was delivered as V3-1:
+
+#### AudioBackend Abstraction
+
+- ✅ ~~`AudioBackend` ABC with `BackendType`, `BackendCapability` enums, `BackendStatus` dataclass (`services/audio_backend.py`)~~
+- ✅ ~~`BluetoothA2dpBackend` concrete implementation wrapping `BluetoothManager` (`services/backends/bluetooth_a2dp.py`)~~
+- ✅ ~~`MockAudioBackend` for hardware-free testing with configurable failures (`services/backends/mock_backend.py`)~~
+- ✅ ~~`create_backend()` factory dispatcher (`services/backends/__init__.py`)~~
+- ✅ ~~`BackendOrchestrator` per-player backend lifecycle management (`services/backend_orchestrator.py`)~~
+
+#### Player Model & Config v2
+
+- ✅ ~~`Player` dataclass with `from_config()` supporting v1/v2, `PlayerState` enum (`services/player_model.py`)~~
+- ✅ ~~Config schema v2 (`CONFIG_SCHEMA_VERSION=2`) with `players[]` array and v1→v2 auto-migration~~
+- ✅ ~~Config validation extended for `players[]` entries (backend type, MAC format, enabled, listen_port)~~
+- ✅ ~~`persist_device_enabled`/`persist_device_released` sync both `BLUETOOTH_DEVICES[]` and `players[]`~~
+
+#### Event & Integration
+
+- ✅ ~~`EventStore` thread-safe ring buffer for per-player and bridge-wide event history (`services/event_store.py`)~~
+- ✅ ~~`SendspinClient` AudioBackend integration: `audio_backend` property, `audio_destination`, `backend_connect`/`backend_disconnect`~~
+- ✅ ~~`device_registry.py` extended: `find_client_by_player_id()`, `client_map_by_player_id()`, `find_clients_by_backend_type()`~~
 
 ---
 

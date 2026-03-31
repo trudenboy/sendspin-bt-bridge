@@ -66,7 +66,7 @@ IPC: subprocess→parent via JSON lines on stdout; parent→subprocess via JSON 
 
 **`sendspin_client.py`** — core orchestration per device:
 - `DeviceStatus` — `@dataclass` typed per-device status; dict-compatible (`["key"]`, `.get()`, `.update()`, `.copy()`)
-- `SendspinClient` — manages the per-device subprocess lifecycle. Spawns `services/daemon_process.py` with correct `PULSE_SINK` env var. Reads JSON status from subprocess stdout, sends volume/stop commands via stdin.
+- `SendspinClient` — manages the per-device subprocess lifecycle. Spawns `services/daemon_process.py` with correct `PULSE_SINK` env var. Reads JSON status from subprocess stdout, sends volume/stop commands via stdin. Optional `audio_backend` property for AudioBackend integration; `audio_destination` computed from backend when available. `backend_connect()`/`backend_disconnect()` delegate to the attached AudioBackend.
 - `_status_lock = threading.Lock()` + `_update_status(updates)` — thread-safe status mutation from asyncio loop, D-Bus callback thread, and Flask WSGI threads; calls `notify_status_changed()` after each mutation
 - `_start_sendspin_inner()` — subprocess spawn with `PULSE_SINK` and JSON args
 - `stop_sendspin()` — graceful stop: sends `{"cmd":"stop"}` to stdin, kills if timeout
@@ -85,13 +85,22 @@ IPC: subprocess→parent via JSON lines on stdout; parent→subprocess via JSON 
 - `ensure_bridge_name()` — auto-populates BRIDGE_NAME from hostname on first startup
 - `ensure_secret_key()` — generates and persists SECRET_KEY if absent
 - `get_runtime_version()` — returns version from `.release-ref` file or falls back to `VERSION`
+- `CONFIG_SCHEMA_VERSION = 2` — config schema version; v1→v2 auto-migration adds `players[]` alongside `BLUETOOTH_DEVICES[]`
 - `VERSION = "2.50.0"`, `BUILD_DATE = "2025-07-18"` — set by CI from `VERSION` file
 - Re-exports from `config_auth.py` (password hashing), `config_migration.py` (schema migration, normalization), `config_network.py` (port resolution, HA addon detection)
 
 **`services/` module (core):**
+- `audio_backend.py` — `AudioBackend` ABC defining the backend lifecycle contract (`connect()`, `disconnect()`, `get_sink_name()`, `get_capabilities()`, `get_status()`). `BackendType` enum (`BLUETOOTH_A2DP`, `LOCAL_SINK`, `SNAPCAST`), `BackendCapability` enum, `BackendStatus` dataclass.
+- `player_model.py` — `Player` dataclass with `from_config()` supporting v1 (`BLUETOOTH_DEVICES[]`) and v2 (`players[]`) config formats. `PlayerState` lifecycle enum.
+- `event_store.py` — Thread-safe ring buffer for per-player and bridge-wide event history. Configurable capacity with oldest-eviction.
+- `backend_orchestrator.py` — `BackendOrchestrator` managing per-player backend lifecycle: creation via factory, connect/disconnect, status aggregation, event integration.
+- `backends/` — Backend implementations package:
+  - `__init__.py` — `create_backend()` factory dispatching `BackendType` → concrete `AudioBackend` instance
+  - `bluetooth_a2dp.py` — `BluetoothA2dpBackend` wrapping `BluetoothManager` behind the `AudioBackend` contract
+  - `mock_backend.py` — `MockAudioBackend` for hardware-free testing with configurable failures and state transitions
 - `bridge_daemon.py` — `BridgeDaemon` subclass. Runs inside each subprocess. Handles `on_status_change` callbacks, stream events. `_sink_routed` flag prevents re-anchor feedback loop after PA rescue-streams correction.
 - `daemon_process.py` — subprocess entry point. Reads JSON args from argv, sets up `BridgeDaemon`, emits status as JSON to stdout, reads commands from stdin. IPC commands: `set_volume`, `set_mute`, `stop`, `reconnect`, `set_log_level`, `transport`, `set_standby`. `_startup_unmute_watcher` accepts `on_status_change` callback and calls it after unmuting; startup unmute timeout is 15 s.
-- `bluetooth.py` — BT helpers: `bt_remove_device()`, `persist_device_enabled()`, `persist_device_released()` (sync to config.json + options.json), `is_audio_device()`, `_match_player_name()`
+- `bluetooth.py` — BT helpers: `bt_remove_device()`, `persist_device_enabled()`, `persist_device_released()` (sync both `BLUETOOTH_DEVICES[]` and `players[]` to config.json + options.json), `is_audio_device()`, `_match_player_name()`
 - `pulse.py` — PulseAudio async helpers: `afind_sink_for_mac()`, `amove_pid_sink_inputs()` (corrects streams after PA module-rescue-streams moves them on BT reconnect), `_PULSECTL_AVAILABLE` flag
 - `pa_volume_controller.py` — PulseAudio/PipeWire volume controller implementing the sendspin VolumeController protocol
 
@@ -112,7 +121,7 @@ IPC: subprocess→parent via JSON lines on stdout; parent→subprocess via JSON 
 
 **`services/` module (device & bridge state):**
 - `device_health_state.py` — computes device health state (ready/streaming/offline/degraded) and capability availability with remediation actions
-- `device_registry.py` — canonical thread-safe inventory service for active clients and disabled devices with listener callbacks
+- `device_registry.py` — canonical thread-safe inventory service for active clients and disabled devices with listener callbacks. `find_client_by_player_id()`, `client_map_by_player_id()`, `find_clients_by_backend_type()` for backend-aware lookups.
 - `bridge_runtime_state.py` — central publisher for bridge startup progress, runtime mode, and status-change notifications
 - `bridge_state_model.py` — normalized dataclass models for runtime substrate, config, and per-device state shared across API surfaces
 - `lifecycle_state.py` — publishes bridge-wide lifecycle events (startup, shutdown, client changes) into the shared state store
@@ -134,7 +143,7 @@ IPC: subprocess→parent via JSON lines on stdout; parent→subprocess via JSON 
 - `update_checker.py` — background version polling: `run_update_checker()`, `check_latest_version()`, auto-update support
 - `adapter_names.py` — thread-safe cache for Bluetooth adapter MAC→friendly name lookups
 - `async_job_state.py` — manages in-process state for long-running async jobs (MA discovery, scan, updates) with TTL eviction
-- `config_validation.py` — validates and normalizes uploaded config payloads including device MACs, ports, handoff modes
+- `config_validation.py` — validates and normalizes uploaded config payloads including device MACs, ports, handoff modes, and `players[]` entries (backend type, MAC format, enabled, listen_port)
 - `duplicate_device_check.py` — cross-bridge duplicate device detection via MA API to prevent disconnect/reconnect loops
 - `event_hooks.py` — runtime-scoped webhook registry with delivery history and host validation
 - `internal_events.py` — lightweight pub/sub for typed internal runtime events (connections, playback, errors)

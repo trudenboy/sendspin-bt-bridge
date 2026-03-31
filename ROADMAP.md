@@ -246,7 +246,7 @@ Document the operator polish that now forms the calm starting surface for v3.
 
 ### Status
 
-**Foundations partially in place.** Several building blocks exist but the full epic scopes are not yet complete.
+**Epic 1–3 core deliverables complete (3.0.0-beta.1).** AudioBackend ABC, Player model, config schema v2 with auto-migration, BluetoothA2dpBackend, MockAudioBackend, BackendOrchestrator, EventStore, and SendspinClient integration are shipped. Epic 4 (operator console) remains planned.
 
 ### Goal
 
@@ -256,25 +256,23 @@ Create the shared platform model for v3 and ship the first modern operator-conso
 
 #### Epic 1. Runtime contracts and ownership seams
 
-- 🔄 Runtime contracts — foundation exists in `services/status_snapshot.py`, `services/bridge_state_model.py`, and `services/device_health_state.py`, but no formal `AudioBackend` ABC defining lifecycle, capabilities, health, diagnostics, room metadata, and route ownership
-- wrap the existing Bluetooth runtime behind that contract first
-- keep subprocess and control-plane contracts backend-agnostic where practical
+- ✅ Runtime contracts — `AudioBackend` ABC (`services/audio_backend.py`) with `BackendType`, `BackendCapability` enums, `BackendStatus` dataclass. `BluetoothA2dpBackend` (`services/backends/bluetooth_a2dp.py`) wraps existing `BluetoothManager`. `MockAudioBackend` (`services/backends/mock_backend.py`) for hardware-free testing. `create_backend()` factory (`services/backends/__init__.py`).
+- ✅ `BackendOrchestrator` (`services/backend_orchestrator.py`) — per-player backend lifecycle management with event integration
+- ✅ `SendspinClient` AudioBackend integration — `audio_backend` property, `audio_destination`, `backend_connect()`/`backend_disconnect()`
 - 🔄 Reduce `state.py` — routes and services have moved toward explicit ownership and snapshot reads (`services/bridge_runtime_state.py`, `services/device_registry.py`), but `state.py` still serves as architectural center for SSE signaling, scan jobs, and MA cache
 
 #### Epic 2. Config and runtime model v2
 
-- 🔄 Config/runtime separation — `services/bridge_state_model.py` provides normalized runtime models, but no player/backend-oriented config schema v2 yet
-- move from a Bluetooth-device-only model to player and backend-oriented configuration
-- separate user-owned config from runtime-derived state and generated metadata
-- add compatibility loading and migration tooling from the current schema
-- keep downgrade and partial-migration assumptions explicit and documented
+- ✅ Config schema v2 — `CONFIG_SCHEMA_VERSION=2` with `players[]` array alongside `BLUETOOTH_DEVICES[]`. Auto-migration v1→v2 in `config_migration.py`. Config validation extended for `players[]` entries.
+- ✅ Player model — `Player` dataclass with `from_config()` supporting v1/v2 config formats, `PlayerState` lifecycle enum (`services/player_model.py`)
+- ✅ `persist_device_enabled`/`persist_device_released` now sync both `BLUETOOTH_DEVICES[]` and `players[]`
+- ✅ `device_registry.py` extended — `find_client_by_player_id()`, `client_map_by_player_id()`, `find_clients_by_backend_type()`
 
 #### Epic 3. Event model, read models, and simulator foundation
 
-- 🔄 Event model — `services/internal_events.py` provides lightweight typed pub/sub, but no persistent event history for diagnostics, recovery timelines, or fleet views
-- make per-device and per-bridge event history a first-class typed surface rather than scattered ad hoc payloads
+- ✅ Event model — `EventStore` (`services/event_store.py`): thread-safe ring buffer for per-player and bridge-wide event history
+- ✅ `MockAudioBackend` (`services/backends/mock_backend.py`) — hardware-free test backend with configurable failures, enabling simulator and contract testing paths
 - broaden typed snapshots and health summaries so degraded-mode reporting is a product surface, not just a debug aid
-- keep the mock runtime and simulator path viable for backend, config, diagnostics, and onboarding flows
 - make hardware-light tests a normal validation path for contract work
 
 #### Epic 4. Operator console foundation
@@ -286,10 +284,10 @@ Create the shared platform model for v3 and ship the first modern operator-conso
 
 ### Exit criteria
 
-- the runtime can describe backend-neutral players and explicit capabilities
-- config/runtime separation is real enough to support future backends cleanly
-- event history and typed read models are usable by diagnostics and UI layers
-- key backend and UI flows can be validated without requiring real Bluetooth hardware
+- ✅ the runtime can describe backend-neutral players and explicit capabilities
+- ✅ config/runtime separation is real enough to support future backends cleanly
+- ✅ event history and typed read models are usable by diagnostics and UI layers
+- ✅ key backend and UI flows can be validated without requiring real Bluetooth hardware
 - the project has a viable modern-console foundation instead of only one growing runtime script
 
 ---

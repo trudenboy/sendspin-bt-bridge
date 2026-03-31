@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.0-beta.1] — UNRELEASED
+
+### Added — V3-1 Platform Reset
+- **AudioBackend ABC** (`services/audio_backend.py`): Abstract base class for audio backends with BackendType, BackendCapability enums, and BackendStatus dataclass
+- **Player model** (`services/player_model.py`): Typed Player dataclass with `from_config()` supporting v1/v2 config formats, PlayerState lifecycle enum
+- **Config schema v2**: New `players[]` array alongside `BLUETOOTH_DEVICES[]` with automatic v1→v2 migration on load
+- **BluetoothA2dpBackend** (`services/backends/bluetooth_a2dp.py`): Concrete AudioBackend wrapping BluetoothManager
+- **MockAudioBackend** (`services/backends/mock_backend.py`): Hardware-free test backend with configurable failures
+- **Backend factory** (`services/backends/__init__.py`): `create_backend()` dispatcher for backend instantiation
+- **BackendOrchestrator** (`services/backend_orchestrator.py`): Per-player backend lifecycle management with event integration
+- **EventStore** (`services/event_store.py`): Thread-safe ring buffer for per-player and bridge-wide event history
+- **SendspinClient AudioBackend integration**: Optional `audio_backend` property with `audio_destination` computed from backend
+- **Config validation**: Extended for `players[]` entries (backend type, MAC format, enabled, listen_port)
+- **Device registry**: Added `find_client_by_player_id()`, `client_map_by_player_id()`, `find_clients_by_backend_type()`
+
+### Changed
+- CONFIG_SCHEMA_VERSION bumped to 2
+- `persist_device_enabled`/`persist_device_released` now sync both `BLUETOOTH_DEVICES[]` and `players[]`
+
 ## [2.52.1] - 2026-03-30
 
 ### Fixed
