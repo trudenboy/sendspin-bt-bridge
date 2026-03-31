@@ -792,11 +792,11 @@ const summaryUrl = `${repoHref.replace('https://github.com', 'https://raw.github
         totalEl.textContent = `${formatNumber(total)} ${strings.subtotals.dailyBars}`;
 
         const W = 520;
-        const H = 200;
+        const H = 210;
         const padL = 44;
-        const padR = 12;
-        const padT = 16;
-        const padB = 36;
+        const padR = 36;
+        const padT = 12;
+        const padB = 38;
         const chartW = W - padL - padR;
         const chartH = H - padT - padB;
 
@@ -839,8 +839,8 @@ const summaryUrl = `${repoHref.replace('https://github.com', 'https://raw.github
           <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" aria-label="${strings.chartsTitle}">
             <defs>
               <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stop-color="${c1}" stop-opacity="0.45"/>
-                <stop offset="100%" stop-color="${c1}" stop-opacity="0.03"/>
+                <stop offset="0%" stop-color="${c1}" stop-opacity="0.55"/>
+                <stop offset="100%" stop-color="${c1}" stop-opacity="0.04"/>
               </linearGradient>
             </defs>
             ${gridLines}
@@ -904,13 +904,13 @@ const summaryUrl = `${repoHref.replace('https://github.com', 'https://raw.github
             label: dayFormatter.format(e.date),
           }));
         }
-        const step = Math.ceil(data.length / 6);
+        const step = Math.ceil(data.length / 5);
         const labels = [];
         for (let i = 0; i < data.length; i += step) {
           labels.push({ x: points[i].x, label: dayFormatter.format(data[i].date) });
         }
         const last = data.length - 1;
-        if (last % step !== 0) {
+        if (last - (labels.length - 1) * step >= Math.floor(step / 2)) {
           labels.push({ x: points[last].x, label: dayFormatter.format(data[last].date) });
         }
         return labels;
