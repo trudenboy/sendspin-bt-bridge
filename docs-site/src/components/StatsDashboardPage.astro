@@ -356,38 +356,76 @@ const summaryUrl = `${repoHref.replace('https://github.com', 'https://raw.github
         font-size: 0.9rem;
       }
 
-      .bar-list {
-        display: grid;
-        gap: 0.55rem;
-      }
-
-      .bar-row {
-        display: grid;
-        grid-template-columns: 64px minmax(0, 1fr) 56px;
-        gap: 0.65rem;
-        align-items: center;
-      }
-
-      .bar-label,
-      .bar-value {
-        color: var(--muted);
-        font-size: 0.85rem;
-      }
-
-      .bar-track {
+      .chart-area {
         position: relative;
         width: 100%;
-        height: 0.8rem;
-        border-radius: 999px;
-        overflow: hidden;
-        background: rgba(148, 163, 184, 0.12);
+        overflow: visible;
       }
 
-      .bar-fill {
+      .chart-area svg {
+        display: block;
+        width: 100%;
+        height: auto;
+      }
+
+      .chart-area .grid-line {
+        stroke: var(--border);
+        stroke-width: 1;
+      }
+
+      .chart-area .axis-label {
+        fill: var(--muted);
+        font-size: 11px;
+        font-family: inherit;
+      }
+
+      .chart-area .data-line {
+        fill: none;
+        stroke-width: 2;
+        stroke-linejoin: round;
+        stroke-linecap: round;
+      }
+
+      .chart-area .dot {
+        transition: r 0.15s ease;
+        cursor: pointer;
+      }
+
+      .chart-area .dot:hover {
+        r: 5.5;
+      }
+
+      .chart-tooltip {
         position: absolute;
-        inset: 0 auto 0 0;
-        border-radius: inherit;
-        background: linear-gradient(90deg, rgba(56, 189, 248, 0.65), rgba(52, 211, 153, 0.95));
+        pointer-events: none;
+        padding: 6px 10px;
+        border-radius: 8px;
+        background: var(--panel-strong);
+        border: 1px solid var(--border);
+        color: var(--text);
+        font-size: 0.82rem;
+        line-height: 1.35;
+        white-space: nowrap;
+        opacity: 0;
+        transition: opacity 0.15s ease;
+        z-index: 10;
+        box-shadow: 0 4px 12px rgba(0,0,0,.4);
+        transform: translate(-50%, -100%);
+        margin-top: -10px;
+      }
+
+      .chart-tooltip.visible {
+        opacity: 1;
+      }
+
+      .chart-tooltip .tt-date {
+        color: var(--muted);
+        font-size: 0.78rem;
+      }
+
+      .chart-tooltip .tt-value {
+        font-weight: 700;
+        font-size: 0.95rem;
       }
 
       table {
@@ -471,10 +509,6 @@ const summaryUrl = `${repoHref.replace('https://github.com', 'https://raw.github
           justify-content: flex-start;
         }
 
-        .bar-row {
-          grid-template-columns: 54px minmax(0, 1fr) 48px;
-        }
-
         th:nth-child(3),
         td:nth-child(3) {
           display: none;
@@ -541,14 +575,14 @@ const summaryUrl = `${repoHref.replace('https://github.com', 'https://raw.github
                   <h3>{strings.viewsChart}</h3>
                   <span id="views-chart-total">—</span>
                 </div>
-                <div id="views-chart" class="bar-list"></div>
+                <div id="views-chart" class="chart-area"></div>
               </div>
               <div class="chart-card">
                 <div class="chart-header">
                   <h3>{strings.clonesChart}</h3>
                   <span id="clones-chart-total">—</span>
                 </div>
-                <div id="clones-chart" class="bar-list"></div>
+                <div id="clones-chart" class="chart-area"></div>
               </div>
             </div>
           </section>
@@ -746,30 +780,140 @@ const summaryUrl = `${repoHref.replace('https://github.com', 'https://raw.github
           .join('');
       }
 
-      function renderBars(container, totalEl, entries, total) {
+      function renderChart(container, totalEl, entries, total, colorScheme) {
         if (!entries.length) {
           container.innerHTML = `<div class="table-empty">${escapeHtml(strings.emptyChart)}</div>`;
           totalEl.textContent = strings.emptyChart;
           return;
         }
 
-        const max = Math.max(...entries.map((entry) => entry.count), 1);
+        const data = entries.slice(-14);
+        const max = Math.max(...data.map((e) => e.count), 1);
         totalEl.textContent = `${formatNumber(total)} ${strings.subtotals.dailyBars}`;
-        container.innerHTML = entries
-          .slice(-14)
-          .map((entry) => {
-            const width = Math.max((entry.count / max) * 100, entry.count > 0 ? 6 : 0);
-            return `
-              <div class="bar-row">
-                <span class="bar-label">${escapeHtml(dayFormatter.format(entry.date))}</span>
-                <div class="bar-track">
-                  <div class="bar-fill" style="width:${width}%"></div>
-                </div>
-                <span class="bar-value">${escapeHtml(formatNumber(entry.count))}</span>
-              </div>
-            `;
-          })
-          .join('');
+
+        const W = 520;
+        const H = 200;
+        const padL = 44;
+        const padR = 12;
+        const padT = 16;
+        const padB = 36;
+        const chartW = W - padL - padR;
+        const chartH = H - padT - padB;
+
+        const niceMax = niceRound(max);
+        const ticks = buildTicks(niceMax);
+
+        const gradId = `grad-${Math.random().toString(36).slice(2, 8)}`;
+        const [c1, c2] = colorScheme;
+
+        const xStep = data.length > 1 ? chartW / (data.length - 1) : 0;
+        const points = data.map((e, i) => ({
+          x: padL + i * xStep,
+          y: padT + chartH - (e.count / niceMax) * chartH,
+          entry: e,
+        }));
+
+        const linePath = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ');
+        const areaPath = `${linePath} L${points[points.length - 1].x},${padT + chartH} L${points[0].x},${padT + chartH} Z`;
+
+        let gridLines = '';
+        for (const t of ticks) {
+          const y = padT + chartH - (t / niceMax) * chartH;
+          gridLines += `<line x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}" class="grid-line"/>`;
+          gridLines += `<text x="${padL - 8}" y="${y + 4}" class="axis-label" text-anchor="end">${abbreviate(t)}</text>`;
+        }
+
+        const xLabels = selectXLabels(data, points, padL, W - padR);
+        let xLabelSvg = '';
+        for (const { x, label } of xLabels) {
+          xLabelSvg += `<text x="${x}" y="${H - 6}" class="axis-label" text-anchor="middle">${escapeHtml(label)}</text>`;
+        }
+
+        let dots = '';
+        for (let i = 0; i < points.length; i++) {
+          const p = points[i];
+          dots += `<circle cx="${p.x}" cy="${p.y}" r="3.5" fill="${c2}" stroke="var(--bg)" stroke-width="1.5" class="dot" data-idx="${i}"/>`;
+        }
+
+        container.innerHTML = `
+          <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" aria-label="${strings.chartsTitle}">
+            <defs>
+              <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="${c1}" stop-opacity="0.45"/>
+                <stop offset="100%" stop-color="${c1}" stop-opacity="0.03"/>
+              </linearGradient>
+            </defs>
+            ${gridLines}
+            <path d="${areaPath}" fill="url(#${gradId})"/>
+            <path d="${linePath}" class="data-line" stroke="${c2}"/>
+            ${dots}
+            ${xLabelSvg}
+          </svg>
+          <div class="chart-tooltip" id="tt-${gradId}"></div>
+        `;
+
+        const tooltip = container.querySelector('.chart-tooltip');
+        const svg = container.querySelector('svg');
+        container.querySelectorAll('.dot').forEach((dot) => {
+          dot.addEventListener('mouseenter', (e) => {
+            const idx = Number(dot.dataset.idx);
+            const d = data[idx];
+            tooltip.innerHTML = `<div class="tt-date">${escapeHtml(dayFormatter.format(d.date))}</div><div class="tt-value">${formatNumber(d.count)}</div>`;
+            const rect = svg.getBoundingClientRect();
+            const cx = Number(dot.getAttribute('cx'));
+            const cy = Number(dot.getAttribute('cy'));
+            const px = (cx / W) * rect.width;
+            const py = (cy / H) * rect.height;
+            tooltip.style.left = `${px}px`;
+            tooltip.style.top = `${py}px`;
+            tooltip.classList.add('visible');
+          });
+          dot.addEventListener('mouseleave', () => {
+            tooltip.classList.remove('visible');
+          });
+        });
+      }
+
+      function niceRound(val) {
+        if (val <= 0) return 1;
+        const mag = Math.pow(10, Math.floor(Math.log10(val)));
+        const norm = val / mag;
+        if (norm <= 1) return mag;
+        if (norm <= 2) return 2 * mag;
+        if (norm <= 5) return 5 * mag;
+        return 10 * mag;
+      }
+
+      function buildTicks(niceMax) {
+        const count = 4;
+        const step = niceMax / count;
+        const ticks = [];
+        for (let i = 0; i <= count; i++) ticks.push(Math.round(i * step));
+        return ticks;
+      }
+
+      function abbreviate(n) {
+        if (n >= 1000) return (n / 1000).toFixed(n % 1000 === 0 ? 0 : 1) + 'k';
+        return String(n);
+      }
+
+      function selectXLabels(data, points, minX, maxX) {
+        if (data.length <= 7) {
+          return data.map((e, i) => ({
+            x: points[i].x,
+            label: dayFormatter.format(e.date),
+          }));
+        }
+        const step = Math.ceil(data.length / 6);
+        const labels = [];
+        for (let i = 0; i < data.length; i += step) {
+          labels.push({ x: points[i].x, label: dayFormatter.format(data[i].date) });
+        }
+        const last = data.length - 1;
+        if (last % step !== 0) {
+          labels.push({ x: points[last].x, label: dayFormatter.format(data[last].date) });
+        }
+        return labels;
       }
 
       function renderRows({ items, emptyEl, tableEl, bodyEl, renderRow }) {
@@ -862,8 +1006,8 @@ const summaryUrl = `${repoHref.replace('https://github.com', 'https://raw.github
         renderMetricCards(summary);
         const viewsEntries = historyEntries(summary.views);
         const clonesEntries = historyEntries(summary.clones);
-        renderBars(viewsChart, viewsChartTotal, viewsEntries, summary.views_window?.count ?? sumCounts(viewsEntries));
-        renderBars(clonesChart, clonesChartTotal, clonesEntries, summary.clones_window?.count ?? sumCounts(clonesEntries));
+        renderChart(viewsChart, viewsChartTotal, viewsEntries, summary.views_window?.count ?? sumCounts(viewsEntries), ['#38bdf8', '#38bdf8']);
+        renderChart(clonesChart, clonesChartTotal, clonesEntries, summary.clones_window?.count ?? sumCounts(clonesEntries), ['#34d399', '#34d399']);
         renderTables(summary);
       }
 
