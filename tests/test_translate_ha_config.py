@@ -153,7 +153,7 @@ def test_runtime_state_preserved(tmp_path):
         main()
 
     cfg = _read_json(tmp_path / "config.json")
-    assert cfg["CONFIG_SCHEMA_VERSION"] == 1
+    assert cfg["CONFIG_SCHEMA_VERSION"] == 2
     assert cfg["LAST_VOLUMES"] == {"AA:BB:CC:DD:EE:FF": 50}
     assert cfg["LAST_SINKS"] == {"AA:BB:CC:DD:EE:FF": "bluez_sink.AA_BB_CC_DD_EE_FF.a2dp_sink"}
     assert cfg["AUTH_PASSWORD_HASH"] == "abc123hash"
@@ -239,7 +239,7 @@ def test_basic_translation(tmp_path):
 
     cfg = _read_json(tmp_path / "config.json")
 
-    assert cfg["CONFIG_SCHEMA_VERSION"] == 1
+    assert cfg["CONFIG_SCHEMA_VERSION"] == 2
     assert cfg["SENDSPIN_SERVER"] == "10.0.0.5"
     assert cfg["SENDSPIN_PORT"] == 9001
     assert cfg["WEB_PORT"] is None

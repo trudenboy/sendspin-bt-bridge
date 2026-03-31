@@ -102,6 +102,7 @@ DEFAULT_CONFIG = {
     "BASE_LISTEN_PORT": None,
     "BRIDGE_NAME": "",
     "BLUETOOTH_DEVICES": [],
+    "players": [],
     "BLUETOOTH_ADAPTERS": [],
     "HA_AREA_NAME_ASSIST_ENABLED": False,
     "HA_ADAPTER_AREA_MAP": {},

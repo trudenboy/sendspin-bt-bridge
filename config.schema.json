@@ -7,7 +7,7 @@
   "properties": {
     "CONFIG_SCHEMA_VERSION": {
       "type": "integer",
-      "const": 1,
+      "const": 2,
       "description": "Schema version; managed by the application — do not change."
     },
     "SENDSPIN_SERVER": {
@@ -47,6 +47,14 @@
       "description": "List of configured Bluetooth speaker devices.",
       "items": {
         "$ref": "#/$defs/BluetoothDevice"
+      }
+    },
+    "players": {
+      "type": "array",
+      "default": [],
+      "description": "List of configured audio players (v2 schema). Replaces BLUETOOTH_DEVICES.",
+      "items": {
+        "$ref": "#/$defs/Player"
       }
     },
     "BLUETOOTH_ADAPTERS": {
@@ -287,6 +295,92 @@
     }
   },
   "$defs": {
+    "Player": {
+      "type": "object",
+      "required": ["player_name", "backend"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Stable unique player identifier. Auto-generated if omitted."
+        },
+        "player_name": {
+          "type": "string",
+          "description": "Display name for the audio player."
+        },
+        "backend": {
+          "$ref": "#/$defs/PlayerBackend"
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether this player is active."
+        },
+        "listen_port": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535,
+          "default": 0,
+          "description": "Sendspin listener port. 0 = auto-assign."
+        },
+        "static_delay_ms": {
+          "type": ["number", "null"],
+          "description": "Per-player static audio delay in milliseconds."
+        },
+        "handoff_mode": {
+          "type": "string",
+          "enum": ["default", "fast_handoff"],
+          "default": "default"
+        },
+        "volume_controller": {
+          "type": "string",
+          "enum": ["pa", "sendspin"],
+          "default": "pa"
+        },
+        "idle_disconnect_minutes": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0
+        },
+        "keepalive_enabled": {
+          "type": "boolean",
+          "default": false
+        },
+        "keepalive_interval": {
+          "type": "integer",
+          "minimum": 30,
+          "default": 30
+        },
+        "room_id": {
+          "type": ["string", "null"]
+        },
+        "room_name": {
+          "type": ["string", "null"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "PlayerBackend": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["bluetooth_a2dp", "local_sink", "snapcast"],
+          "description": "Backend type discriminator."
+        },
+        "mac": {
+          "type": "string",
+          "pattern": "^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$",
+          "description": "Bluetooth MAC address (bluetooth_a2dp backend only)."
+        },
+        "adapter": {
+          "type": "string",
+          "default": "",
+          "description": "Bluetooth adapter (bluetooth_a2dp backend only)."
+        }
+      },
+      "additionalProperties": true
+    },
     "BluetoothDevice": {
       "type": "object",
       "required": ["mac"],

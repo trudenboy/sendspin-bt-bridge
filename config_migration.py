@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-CONFIG_SCHEMA_VERSION = 1
+CONFIG_SCHEMA_VERSION = 2
 UPDATE_CHANNELS = ("stable", "rc", "beta")
 DEFAULT_UPDATE_CHANNEL = "stable"
 HANDOFF_MODES = ("default", "fast_handoff")

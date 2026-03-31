@@ -12,7 +12,7 @@ def test_validate_uploaded_config_adds_schema_version_warning_when_missing():
     )
 
     assert result.is_valid is True
-    assert result.normalized_config["CONFIG_SCHEMA_VERSION"] == 1
+    assert result.normalized_config["CONFIG_SCHEMA_VERSION"] == 2
     assert result.normalized_config["SENDSPIN_PORT"] == 9000
     assert result.normalized_config["BLUETOOTH_DEVICES"][0]["mac"] == "AA:BB:CC:DD:EE:FF"
     assert result.warnings[0].field == "CONFIG_SCHEMA_VERSION"
