@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [3.0.0-beta.1] — UNRELEASED
+## [3.0.0-beta.1] — 2026-03-31
 
 ### Added — V3-1 Platform Reset
 - **AudioBackend ABC** (`services/audio_backend.py`): Abstract base class for audio backends with BackendType, BackendCapability enums, and BackendStatus dataclass
