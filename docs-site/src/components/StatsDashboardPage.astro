@@ -1128,7 +1128,7 @@ const summaryUrl = `${repoHref.replace('https://github.com', 'https://raw.github
               `<div style="font-weight:700">${escapeHtml(h.r.tag)}</div>`,
               published ? `<div class="tt-date">${escapeHtml(published)}</div>` : '',
               `<div>Assets: <strong>${formatNumber(h.assets)}</strong></div>`,
-              `<div>Containers: <strong>${formatNumber(h.containers)}</strong></div>`,
+              `<div>Container pulls: <strong>${formatNumber(h.containers)}</strong></div>`,
             ].join('');
             const rect = svg.getBoundingClientRect();
             const px = ((h.x + barW / 2) / W) * rect.width;

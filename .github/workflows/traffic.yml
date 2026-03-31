@@ -25,7 +25,7 @@ jobs:
         run: |
           if [ -z "${TRAFFIC_METRICS_TOKEN}" ]; then
             echo "available=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::Skipping traffic archive because secret TRAFFIC_METRICS_TOKEN is not configured. Use a fine-grained PAT with Administration: read and Contents: write for this repository."
+            echo "::notice::Skipping traffic archive because secret TRAFFIC_METRICS_TOKEN is not configured. Use a fine-grained PAT with Administration: read, Contents: write, and Packages: read for this repository."
           else
             echo "available=true" >> "$GITHUB_OUTPUT"
           fi
@@ -144,34 +144,7 @@ jobs:
             const repoSnapshot = buildRepoSnapshot(repoResponse.data);
             const releaseSnapshot = buildReleaseSnapshot(releases);
 
-            // Fetch GHCR container package versions
-            let containerSnapshot = { total_versions: 0, tagged_versions: 0, versions: [] };
-            try {
-              const pkgVersions = await github.paginate(
-                github.rest.packages.getAllPackageVersionsForPackageOwnedByUser,
-                { package_type: 'container', package_name: 'sendspin-bt-bridge', username: owner, per_page: 100 }
-              );
-
-              const taggedVersions = pkgVersions
-                .filter(v => v.metadata?.container?.tags?.length > 0)
-                .map(v => ({
-                  id: v.id,
-                  tags: v.metadata.container.tags,
-                  created_at: v.created_at,
-                  updated_at: v.updated_at,
-                }));
-
-              containerSnapshot = {
-                total_versions: pkgVersions.length,
-                tagged_versions: taggedVersions.length,
-                versions: taggedVersions,
-              };
-            } catch (err) {
-              console.log(`Container stats unavailable: ${err.message}`);
-            }
-
-            fs.mkdirSync('traffic/container', { recursive: true });
-            writeJson(`traffic/container/${date}.json`, containerSnapshot);
+            // GHCR container versions are fetched later during the container summary section
 
             writeJson(`traffic/clones/${date}.json`, clones.data);
             writeJson(`traffic/views/${date}.json`, views.data);
@@ -240,27 +213,87 @@ jobs:
               latest_release_tag: releaseSnapshot.latest_release_tag,
             };
 
-            // Container summary
+            // Container summary — scrape download counts from GHCR HTML pages
             const containerByTag = {};
-            for (const cv of containerSnapshot.versions) {
-              for (const tag of cv.tags) {
-                if (tag.startsWith('v') || /^\d+\.\d+/.test(tag)) {
-                  const key = tag.startsWith('v') ? tag : `v${tag}`;
-                  if (!containerByTag[key]) containerByTag[key] = 0;
-                  containerByTag[key]++;
+            let containerTotal = 0;
+            let containerTagged = 0;
+
+            try {
+              const pkgVersions = await github.paginate(
+                github.rest.packages.getAllPackageVersionsForPackageOwnedByUser,
+                { package_type: 'container', package_name: 'sendspin-bt-bridge', username: owner, per_page: 100 }
+              );
+              containerTotal = pkgVersions.length;
+
+              // Build map: semver tag → version id (stable only, e.g. "2.52.1")
+              const tagToVersion = {};
+              for (const v of pkgVersions) {
+                const tags = v.metadata?.container?.tags || [];
+                if (tags.length > 0) containerTagged++;
+                for (const tag of tags) {
+                  if (/^\d+\.\d+\.\d+$/.test(tag)) {
+                    tagToVersion[tag] = v.id;
+                  }
                 }
               }
+
+              // Match release tags (v2.52.1) to container tags (2.52.1)
+              const releaseTags = Object.keys(summary.releases?.by_tag || {});
+              const stableReleaseTags = releaseTags
+                .filter(t => !summary.releases.by_tag[t].prerelease)
+                .sort((a, b) => {
+                  const da = summary.releases.by_tag[a].published_at || '';
+                  const db = summary.releases.by_tag[b].published_at || '';
+                  return db.localeCompare(da);
+                })
+                .slice(0, 35);
+
+              // Scrape download counts in parallel batches of 5
+              const toScrape = [];
+              for (const releaseTag of stableReleaseTags) {
+                const containerTag = releaseTag.replace(/^v/, '');
+                const versionId = tagToVersion[containerTag];
+                if (versionId) {
+                  toScrape.push({ releaseTag, containerTag, versionId });
+                }
+              }
+
+              const BATCH = 5;
+              for (let i = 0; i < toScrape.length; i += BATCH) {
+                const batch = toScrape.slice(i, i + BATCH);
+                const results = await Promise.all(batch.map(async ({ releaseTag, containerTag, versionId }) => {
+                  try {
+                    const url = `https://github.com/trudenboy/sendspin-bt-bridge/pkgs/container/sendspin-bt-bridge/${versionId}?tag=${containerTag}`;
+                    const resp = await fetch(url, { headers: { 'User-Agent': 'GitHub-Actions-Traffic-Collector' } });
+                    const html = await resp.text();
+                    const match = html.match(/Total downloads[\s\S]*?(\d[\d,]*)/);
+                    const downloads = match ? parseInt(match[1].replace(/,/g, ''), 10) : 0;
+                    return { releaseTag, downloads };
+                  } catch (e) {
+                    console.log(`  Scrape failed for ${releaseTag}: ${e.message}`);
+                    return { releaseTag, downloads: 0 };
+                  }
+                }));
+                for (const { releaseTag, downloads } of results) {
+                  containerByTag[releaseTag] = downloads;
+                }
+              }
+
+              console.log(`Scraped container downloads for ${Object.keys(containerByTag).length} releases`);
+            } catch (err) {
+              console.log(`Container stats unavailable: ${err.message}`);
             }
+
             summary.container = {
-              total_versions: containerSnapshot.total_versions,
-              tagged_versions: containerSnapshot.tagged_versions,
-              latest_tags: containerSnapshot.versions.length > 0 ? containerSnapshot.versions[0].tags : [],
+              total_versions: containerTotal,
+              tagged_versions: containerTagged,
+              latest_tags: [],
               by_tag: containerByTag,
             };
             if (!summary.container_history) summary.container_history = {};
             summary.container_history[date] = {
-              total_versions: containerSnapshot.total_versions,
-              tagged_versions: containerSnapshot.tagged_versions,
+              total_versions: containerTotal,
+              tagged_versions: containerTagged,
             };
 
             summary.last_updated = new Date().toISOString();
