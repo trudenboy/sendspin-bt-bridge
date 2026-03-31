@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - beta
     paths:
       - VERSION
   workflow_dispatch:
@@ -17,7 +18,7 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 concurrency:
-  group: release
+  group: release-${{ github.ref_name }}
   cancel-in-progress: false
 
 # ---------------------------------------------------------------------
@@ -48,6 +49,7 @@ jobs:
       is_stable: ${{ steps.resolve.outputs.is_stable }}
       metadata_tags: ${{ steps.resolve.outputs.metadata_tags }}
       sendspin_version: ${{ steps.resolve.outputs.sendspin_version }}
+      source_branch: ${{ steps.resolve.outputs.source_branch }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -106,11 +108,15 @@ jobs:
           # Extract sendspin version from requirements.txt
           SENDSPIN_VERSION="$(grep '^sendspin==' requirements.txt | sed 's/sendspin==//' || echo '')"
 
+          # Determine source branch
+          SOURCE_BRANCH="${GITHUB_REF_NAME:-main}"
+
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "channel=${CHANNEL}" >> "$GITHUB_OUTPUT"
           echo "is_stable=${IS_STABLE}" >> "$GITHUB_OUTPUT"
           echo "sendspin_version=${SENDSPIN_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "source_branch=${SOURCE_BRANCH}" >> "$GITHUB_OUTPUT"
           {
             echo "metadata_tags<<EOF"
             printf '%s\n' "${METADATA_TAGS}"
@@ -123,6 +129,7 @@ jobs:
             echo "- Version: \`${VERSION}\`"
             echo "- Tag: \`${TAG}\`"
             echo "- Channel: \`${CHANNEL}\`"
+            echo "- Branch: \`${SOURCE_BRANCH}\`"
             echo "- Sendspin: \`${SENDSPIN_VERSION}\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -160,14 +167,15 @@ jobs:
         env:
           VERSION: ${{ needs.prepare.outputs.version }}
           TAG: ${{ needs.prepare.outputs.tag }}
+          SOURCE_BRANCH: ${{ needs.prepare.outputs.source_branch }}
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Pull latest main in case addon-sync committed after our trigger
-          git fetch origin main
-          git rebase origin/main
+          # Pull latest source branch in case addon-sync committed after our trigger
+          git fetch origin "${SOURCE_BRANCH}"
+          git rebase "origin/${SOURCE_BRANCH}"
 
           # Update config.py with version and build date
           BUILD_DATE="$(date -u +%Y-%m-%d)"
@@ -184,7 +192,7 @@ jobs:
           fi
 
           git tag -a "${TAG}" -m "Release ${VERSION}"
-          git push origin HEAD:main --tags
+          git push origin "HEAD:${SOURCE_BRANCH}" --tags
 
           SHA="$(git rev-parse HEAD)"
           echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
