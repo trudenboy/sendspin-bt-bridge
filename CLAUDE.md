@@ -67,7 +67,8 @@ IPC: subprocess→parent via JSON lines on stdout; parent→subprocess via JSON 
 **`sendspin_client.py`** — core orchestration per device:
 - `DeviceStatus` — `@dataclass` typed per-device status; dict-compatible (`["key"]`, `.get()`, `.update()`, `.copy()`)
 - `SendspinClient` — manages the per-device subprocess lifecycle. Spawns `services/daemon_process.py` with correct `PULSE_SINK` env var. Reads JSON status from subprocess stdout, sends volume/stop commands via stdin. Optional `audio_backend` property for AudioBackend integration; `audio_destination` computed from backend when available. `backend_connect()`/`backend_disconnect()` delegate to the attached AudioBackend.
-- `_status_lock = threading.Lock()` + `_update_status(updates)` — thread-safe status mutation from asyncio loop, D-Bus callback thread, and Flask WSGI threads; calls `notify_status_changed()` after each mutation
+- `_derive_player_state()` — maps client status fields to `PlayerState` (STREAMING/READY/CONNECTING/ERROR/OFFLINE); syncs to `BackendOrchestrator` on every status change with change-detection guard
+- `_status_lock = threading.Lock()` + `_update_status(updates)` — thread-safe status mutation from asyncio loop, D-Bus callback thread, and Flask WSGI threads; calls `notify_status_changed()` after each mutation; syncs derived `PlayerState` to orchestrator
 - `_start_sendspin_inner()` — subprocess spawn with `PULSE_SINK` and JSON args
 - `stop_sendspin()` — graceful stop: sends `{"cmd":"stop"}` to stdin, kills if timeout
 - `_read_subprocess_output()` — async task: forwards log lines, detects volume changes, calls `save_device_volume()`
@@ -89,11 +90,15 @@ IPC: subprocess→parent via JSON lines on stdout; parent→subprocess via JSON 
 - `VERSION = "2.50.0"`, `BUILD_DATE = "2025-07-18"` — set by CI from `VERSION` file
 - Re-exports from `config_auth.py` (password hashing), `config_migration.py` (schema migration, normalization), `config_network.py` (port resolution, HA addon detection)
 
+**`bridge_orchestrator.py`** — bridge lifecycle orchestration:
+- `BridgeOrchestrator` — initializes devices (`Player.from_config()`, `create_backend()`, `audio_backend` assignment), wires `BackendOrchestrator` registration, starts web server, MA integration
+- `initialize_devices()` — creates `BluetoothManager` + `SendspinClient` per device, creates `Player` and `AudioBackend` from config, registers in `BackendOrchestrator` singleton
+
 **`services/` module (core):**
 - `audio_backend.py` — `AudioBackend` ABC defining the backend lifecycle contract (`connect()`, `disconnect()`, `get_sink_name()`, `get_capabilities()`, `get_status()`). `BackendType` enum (`BLUETOOTH_A2DP`, `LOCAL_SINK`, `SNAPCAST`), `BackendCapability` enum, `BackendStatus` dataclass.
 - `player_model.py` — `Player` dataclass with `from_config()` supporting v1 (`BLUETOOTH_DEVICES[]`) and v2 (`players[]`) config formats. `PlayerState` lifecycle enum.
-- `event_store.py` — Thread-safe ring buffer for per-player and bridge-wide event history. Configurable capacity with oldest-eviction.
-- `backend_orchestrator.py` — `BackendOrchestrator` managing per-player backend lifecycle: creation via factory, connect/disconnect, status aggregation, event integration.
+- `event_store.py` — Thread-safe ring buffer for per-player and bridge-wide event history. Configurable capacity with oldest-eviction. `EventStoreStats` dataclass. Global `_event_store` singleton in `state.py`, access via `get_event_store()`. Auto-captures all internal events via `InternalEventPublisher` subscription.
+- `backend_orchestrator.py` — `BackendOrchestrator` managing per-player backend lifecycle: creation via factory, connect/disconnect, status aggregation, event integration. `register_player_with_backend()` for pre-created backends. Global `_backend_orchestrator` singleton in `state.py`, access via `get_backend_orchestrator()`.
 - `backends/` — Backend implementations package:
   - `__init__.py` — `create_backend()` factory dispatching `BackendType` → concrete `AudioBackend` instance
   - `bluetooth_a2dp.py` — `BluetoothA2dpBackend` wrapping `BluetoothManager` behind the `AudioBackend` contract
@@ -126,7 +131,7 @@ IPC: subprocess→parent via JSON lines on stdout; parent→subprocess via JSON 
 - `bridge_state_model.py` — normalized dataclass models for runtime substrate, config, and per-device state shared across API surfaces
 - `lifecycle_state.py` — publishes bridge-wide lifecycle events (startup, shutdown, client changes) into the shared state store
 - `status_event_builder.py` — pure builder deriving meaningful device events from status-transition deltas
-- `status_snapshot.py` — read-side snapshot models normalizing bridge/device status for API routes
+- `status_snapshot.py` — read-side snapshot models normalizing bridge/device status for API routes. `DeviceSnapshot` includes `backend_info` (type, MAC, capabilities) and `player_state` (current `PlayerState`). `BridgeSnapshot` includes `orchestrator_summary` with per-player backend status. Device events sourced from `EventStore` with legacy fallback.
 - `playback_health.py` — tracks playback watchdog state (zombie timeouts, restart counts, streaming status)
 
 **`services/` module (diagnostics & guidance):**
@@ -158,7 +163,7 @@ IPC: subprocess→parent via JSON lines on stdout; parent→subprocess via JSON 
 - `api_transport.py` — POST `/api/transport/cmd` endpoint for native Sendspin transport commands (play/pause/volume/etc.) with lower latency than MA REST
 - `api_ma.py` — MA integration, OAuth sign-in, groups/nowplaying/queue control
 - `api_config.py` — configuration CRUD, adapter management, logs/download, update/check, update/info, update/apply, config/download, config/upload
-- `api_status.py` — status/diagnostics/version/logs/diagnostics/download/bugreport. `_collect_bt_device_info()` helper for bugreport BT device info.
+- `api_status.py` — status/diagnostics/version/logs/diagnostics/download/bugreport. `_collect_bt_device_info()` helper for bugreport BT device info. GET `/api/events` (query params: `player_id`, `event_type`, `since`, `limit`) and GET `/api/events/stats` for EventStore access.
 - `ma_auth.py` — MA OAuth/token routes (`/api/ma/login`, `/api/ma/ha-*`) and helpers for secure token exchange and HA integration
 - `ma_groups.py` — MA discovery and groups routes (`/api/ma/discover*`, `/api/ma/groups`, `/api/ma/rediscover*`, `/api/ma/reload`, `/api/debug/ma`)
 - `ma_playback.py` — MA playback control routes (`/api/ma/queue/*`, `/api/ma/nowplaying`, `/api/ma/artwork`) and queue command helpers
@@ -173,6 +178,8 @@ IPC: subprocess→parent via JSON lines on stdout; parent→subprocess via JSON 
 - `create_scan_job()` / `get_scan_job()` / `finish_scan_job()` — storage for async BT-scan jobs (TTL 2 min)
 - `set_ma_groups()` / `set_ma_now_playing_for_group()` — MA sync group and now-playing cache
 - Batched SSE notifications (100 ms debounce window) to prevent event storms
+- `_event_store` singleton (`EventStore`) — auto-subscribed to `InternalEventPublisher`; access via `get_event_store()`
+- `_backend_orchestrator` singleton (`BackendOrchestrator`) — initialized with `EventStore` ref; access via `get_backend_orchestrator()`
 
 **`scripts/translate_ha_config.py`** — called from `entrypoint.sh` in HA addon mode:
 - Converts `/data/options.json` → `/data/config.json` with full field typing

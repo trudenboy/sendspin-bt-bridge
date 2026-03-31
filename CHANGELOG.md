@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.0-beta.2] — 2026-03-31
+
+### Added — V3-1.5 Runtime Wiring
+- **EventStore singleton** in `state.py`: auto-subscribed to `InternalEventPublisher`, all device/bridge events captured centrally. Access via `get_event_store()`
+- **BackendOrchestrator singleton** in `state.py`: manages per-player backend lifecycle at runtime. Access via `get_backend_orchestrator()`
+- **Runtime backend wiring** in `bridge_orchestrator.py`: `Player.from_config()`, `create_backend()`, `audio_backend` assignment, and orchestrator registration during `initialize_devices()`
+- **Player state derivation** (`_derive_player_state()` in `SendspinClient`): maps status→PlayerState (STREAMING/READY/CONNECTING/ERROR/OFFLINE) and syncs to orchestrator on every update
+- **Snapshot enrichment**: `DeviceSnapshot.backend_info` (type, MAC, capabilities), `DeviceSnapshot.player_state`, `BridgeSnapshot.orchestrator_summary`
+- **Event API endpoints**: GET `/api/events` (query: player_id, event_type, since, limit) and GET `/api/events/stats`
+- **EventStore in snapshots**: `build_device_snapshot()` uses EventStore with legacy fallback
+- 37 new tests (state sync, snapshot enrichment, EventStore integration, API events)
+
 ## [3.0.0-beta.1] — 2026-03-31
 
 ### Added — V3-1 Platform Reset

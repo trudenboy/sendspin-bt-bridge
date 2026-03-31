@@ -262,6 +262,18 @@ The following backend abstraction layer was delivered as V3-1:
 - ✅ ~~`SendspinClient` AudioBackend integration: `audio_backend` property, `audio_destination`, `backend_connect`/`backend_disconnect`~~
 - ✅ ~~`device_registry.py` extended: `find_client_by_player_id()`, `client_map_by_player_id()`, `find_clients_by_backend_type()`~~
 
+#### V3-1.5 Runtime Wiring (3.0.0-beta.2)
+
+- ✅ ~~`EventStore` singleton in `state.py` with auto-subscription to `InternalEventPublisher`~~
+- ✅ ~~`BackendOrchestrator` singleton in `state.py` with EventStore integration~~
+- ✅ ~~`Player.from_config()` + `create_backend()` + orchestrator registration in `bridge_orchestrator.py:initialize_devices()`~~
+- ✅ ~~`AudioBackend` wired to `SendspinClient` during device init~~
+- ✅ ~~`_derive_player_state()` with orchestrator sync on every status change~~
+- ✅ ~~`DeviceSnapshot` enriched: `backend_info`, `player_state` fields~~
+- ✅ ~~`BridgeSnapshot` enriched: `orchestrator_summary` field~~
+- ✅ ~~GET `/api/events` and `/api/events/stats` endpoints~~
+- ✅ ~~EventStore replaces legacy events in `build_device_snapshot()`~~
+
 ---
 
 ## Phase 1: Local Audio Backends — v3.1.x
