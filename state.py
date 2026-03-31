@@ -33,6 +33,7 @@ from services.device_registry import (
     set_disabled_devices as _set_registry_disabled_devices,
 )
 from services.event_hooks import dispatch_internal_event_to_hooks
+from services.event_store import EventStore
 from services.internal_events import DeviceEventType, InternalEvent, InternalEventPublisher, normalize_device_event
 
 if TYPE_CHECKING:
@@ -58,6 +59,7 @@ __all__ = [
     "get_device_events",
     "get_disabled_devices",
     "get_duplicate_device_warnings",
+    "get_event_store",
     "get_ma_api_credentials",
     "get_ma_group_for_player",
     "get_ma_groups",
@@ -309,6 +311,15 @@ _device_events: dict[str, deque[dict[str, Any]]] = {}
 _device_events_lock = threading.Lock()
 _DEVICE_EVENT_LIMIT = 25
 _internal_event_publisher = InternalEventPublisher()
+
+# Event store singleton — captures all events from the internal publisher
+_event_store = EventStore()
+_event_store.subscribe_to_publisher(_internal_event_publisher)
+
+
+def get_event_store() -> EventStore:
+    """Return the global EventStore singleton."""
+    return _event_store
 
 
 def _store_device_event(
