@@ -287,7 +287,7 @@
       "uniques": 2
     }
   ],
-  "last_updated": "2026-03-31T05:12:14.362Z",
+  "last_updated": "2026-03-31T06:46:01.448Z",
   "clones_window": {
     "count": 3824,
     "uniques": 983
@@ -367,9 +367,9 @@
     "watchers_count": 42,
     "forks_count": 1,
     "network_count": 1,
-    "size_kb": 36588,
-    "pushed_at": "2026-03-31T04:28:35Z",
-    "updated_at": "2026-03-31T04:28:39Z"
+    "size_kb": 36012,
+    "pushed_at": "2026-03-31T06:41:50Z",
+    "updated_at": "2026-03-31T06:41:54Z"
   },
   "repo_history": {
     "2026-03-17": {
@@ -563,9 +563,9 @@
       "watchers_count": 42,
       "forks_count": 1,
       "network_count": 1,
-      "size_kb": 36588,
-      "pushed_at": "2026-03-31T04:28:35Z",
-      "updated_at": "2026-03-31T04:28:39Z"
+      "size_kb": 36012,
+      "pushed_at": "2026-03-31T06:41:50Z",
+      "updated_at": "2026-03-31T06:41:54Z"
     }
   },
   "releases": {
@@ -2050,7 +2050,8 @@
   "container": {
     "total_versions": 0,
     "tagged_versions": 0,
-    "latest_tags": []
+    "latest_tags": [],
+    "by_tag": {}
   },
   "container_history": {
     "2026-03-30": {
