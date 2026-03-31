@@ -488,4 +488,64 @@ def migrate_config_payload(config: dict[str, Any], *, allowed_keys: frozenset[st
         )
         needs_persist = True
 
+    # v1→v2: BLUETOOTH_DEVICES → players[]
+    v2_devices = normalized.get("BLUETOOTH_DEVICES", [])
+    existing_players = normalized.get("players", [])
+    if isinstance(v2_devices, list) and v2_devices and not existing_players:
+        from config import _player_id_from_mac
+
+        players: list[dict[str, Any]] = []
+        for dev in v2_devices:
+            if not isinstance(dev, dict):
+                continue
+            mac = (dev.get("mac") or "").strip().upper()
+            if not mac:
+                continue
+            player_id = _player_id_from_mac(mac)
+            player: dict[str, Any] = {
+                "id": player_id,
+                "player_name": (dev.get("player_name") or mac).strip(),
+                "backend": {
+                    "type": "bluetooth_a2dp",
+                    "mac": mac,
+                    "adapter": (dev.get("adapter") or "").strip(),
+                },
+                "enabled": dev.get("enabled", True),
+                "listen_port": dev.get("listen_port", 0),
+                "static_delay_ms": dev.get("delay_ms"),
+                "handoff_mode": dev.get("handoff_mode", "default"),
+                "volume_controller": dev.get("volume_controller", "pa"),
+                "idle_disconnect_minutes": dev.get("idle_disconnect_minutes", 0),
+                "keepalive_enabled": dev.get("keepalive_enabled", False),
+                "keepalive_interval": dev.get("keepalive_interval", 30),
+                "room_id": dev.get("room_id"),
+                "room_name": dev.get("room_name"),
+            }
+            players.append(player)
+
+        normalized["players"] = players
+
+        for store_key in ("LAST_VOLUMES", "LAST_SINKS"):
+            store = normalized.get(store_key)
+            if isinstance(store, dict) and store:
+                new_entries: dict[str, Any] = {}
+                for dev in v2_devices:
+                    if not isinstance(dev, dict):
+                        continue
+                    dev_mac = (dev.get("mac") or "").strip().upper()
+                    if dev_mac and dev_mac in store:
+                        pid = _player_id_from_mac(dev_mac)
+                        new_entries[pid] = store[dev_mac]
+                if new_entries:
+                    store.update(new_entries)
+                    normalized[store_key] = store
+
+        warnings.append(
+            ConfigMigrationIssue(
+                field="players",
+                message=f"Migrated {len(players)} device(s) from BLUETOOTH_DEVICES to players[] (schema v2)",
+            )
+        )
+        needs_persist = True
+
     return ConfigMigrationResult(normalized_config=normalized, warnings=warnings, needs_persist=needs_persist)

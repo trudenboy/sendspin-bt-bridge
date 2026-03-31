@@ -200,5 +200,5 @@ def test_validate_uploaded_config_migrates_legacy_shape():
     assert result.normalized_config["BLUETOOTH_DEVICES"] == [
         {"mac": "AA:BB:CC:DD:EE:FF", "adapter": "", "player_name": "Sendspin Player"}
     ]
-    assert result.normalized_config["LAST_VOLUMES"] == {"AA:BB:CC:DD:EE:FF": 40}
+    assert result.normalized_config["LAST_VOLUMES"]["AA:BB:CC:DD:EE:FF"] == 40
     assert any(issue.field == "BLUETOOTH_DEVICES" for issue in result.warnings)

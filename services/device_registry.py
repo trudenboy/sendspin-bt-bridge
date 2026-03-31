@@ -55,6 +55,30 @@ class DeviceRegistrySnapshot:
             if (mac := getattr(getattr(client, "bt_manager", None), "mac_address", None))
         }
 
+    def find_client_by_player_id(self, player_id: str | None) -> Any | None:
+        """Return the active client with the requested player_id, if present."""
+        if not player_id:
+            return None
+        return next(
+            (client for client in self.active_clients if getattr(client, "player_id", None) == player_id),
+            None,
+        )
+
+    def client_map_by_player_id(self) -> dict[str, Any]:
+        """Index active clients by player_id."""
+        return {pid: client for client in self.active_clients if (pid := getattr(client, "player_id", None))}
+
+    def find_clients_by_backend_type(self, backend_type: str) -> list[Any]:
+        """Return all active clients matching the given backend type string."""
+        results: list[Any] = []
+        for client in self.active_clients:
+            player = getattr(client, "player", None)
+            if player and getattr(player, "backend_type", None) is not None:
+                bt = getattr(player.backend_type, "value", str(player.backend_type))
+                if bt == backend_type:
+                    results.append(client)
+        return results
+
     def released_clients(self) -> list[Any]:
         """Return active clients whose BT management is currently released/disabled."""
         return [client for client in self.active_clients if not getattr(client, "bt_management_enabled", True)]

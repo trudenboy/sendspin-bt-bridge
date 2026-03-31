@@ -29,7 +29,7 @@ class PlayerState(str, Enum):
 
 def _player_id_from_mac(mac: str) -> str:
     """Deterministic player ID from BT MAC address (matches config.py logic)."""
-    return str(uuid.uuid5(uuid.NAMESPACE_DNS, mac.strip().upper().replace(":", "-")))
+    return str(uuid.uuid5(uuid.NAMESPACE_DNS, mac.lower()))
 
 
 def _player_id_from_name(name: str) -> str:

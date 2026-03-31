@@ -71,11 +71,11 @@ def test_load_migrates_legacy_config_keys(tmp_path):
     assert loaded["BLUETOOTH_DEVICES"] == [
         {"mac": "AA:BB:CC:DD:EE:FF", "adapter": "", "player_name": "Sendspin Player"}
     ]
-    assert loaded["LAST_VOLUMES"] == {"AA:BB:CC:DD:EE:FF": 33}
+    assert loaded["LAST_VOLUMES"]["AA:BB:CC:DD:EE:FF"] == 33
     saved = json.loads((tmp_path / "config.json").read_text())
     assert "BLUETOOTH_MAC" not in saved
     assert "LAST_VOLUME" not in saved
-    assert saved["LAST_VOLUMES"] == {"AA:BB:CC:DD:EE:FF": 33}
+    assert saved["LAST_VOLUMES"]["AA:BB:CC:DD:EE:FF"] == 33
 
 
 def test_save_device_volume(tmp_path):

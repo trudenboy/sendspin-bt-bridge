@@ -306,7 +306,7 @@ class TestIdGeneration:
 
     def test_id_from_mac_is_uuid5(self) -> None:
         mac = "AA:BB:CC:DD:EE:FF"
-        expected = str(uuid.uuid5(uuid.NAMESPACE_DNS, "AA-BB-CC-DD-EE-FF"))
+        expected = str(uuid.uuid5(uuid.NAMESPACE_DNS, "aa:bb:cc:dd:ee:ff"))
         assert _player_id_from_mac(mac) == expected
 
     def test_v1_no_mac_falls_back_to_name(self) -> None:
