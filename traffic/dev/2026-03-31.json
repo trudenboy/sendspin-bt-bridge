@@ -34,12 +34,12 @@
   "code_frequency": [],
   "ai": {
     "commits_scanned": 200,
-    "ai_commits": 137,
-    "ai_ratio": 0.685,
+    "ai_commits": 138,
+    "ai_ratio": 0.69,
     "agents": [
       {
         "name": "Copilot",
-        "commits": 129
+        "commits": 130
       },
       {
         "name": "dependabot[bot]",
