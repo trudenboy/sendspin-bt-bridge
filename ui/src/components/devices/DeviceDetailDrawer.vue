@@ -79,8 +79,8 @@ const timelineEvents = computed(() =>
   })),
 )
 
-function onDrawerUpdate(val: boolean) {
-  emit('update:open', val)
+function onDrawerUpdate(...args: unknown[]) {
+  emit('update:open', Boolean(args[0]))
 }
 
 watch(

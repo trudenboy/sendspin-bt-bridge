@@ -21,7 +21,7 @@ const overallStatus = computed(() => {
   const s = diagnostics.health?.status ?? 'unknown'
   const map: Record<string, 'streaming' | 'ready' | 'error' | 'offline'> = {
     healthy: 'ready',
-    degraded: 'connecting',
+    degraded: 'error',
     error: 'error',
   }
   return map[s] ?? 'offline'

@@ -15,7 +15,8 @@ const emit = defineEmits<{
 const { t } = useI18n()
 const btStore = useBluetoothStore()
 
-function onClose(val: boolean) {
+function onClose(...args: unknown[]) {
+  const val = Boolean(args[0])
   if (!val) btStore.stopPolling()
   emit('update:open', val)
 }
@@ -26,13 +27,6 @@ function startScan() {
 
 function pair(mac: string) {
   btStore.pairDevice(mac)
-}
-
-function signalStrength(rssi?: number): string {
-  if (rssi == null) return ''
-  if (rssi > -50) return t('bluetooth.signal.strong')
-  if (rssi > -70) return t('bluetooth.signal.medium')
-  return t('bluetooth.signal.weak')
 }
 
 function signalTone(rssi?: number): 'success' | 'warning' | 'error' | 'neutral' {

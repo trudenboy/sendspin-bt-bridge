@@ -9,7 +9,6 @@ import {
   SbEmptyState,
   SbFilterBar,
   SbBadge,
-  SbStatusDot,
 } from '@/kit'
 import DeviceCard from '@/components/devices/DeviceCard.vue'
 import DeviceDetailDrawer from '@/components/devices/DeviceDetailDrawer.vue'

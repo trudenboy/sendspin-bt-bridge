@@ -33,8 +33,6 @@ const sizeClasses = computed(() => {
   return map[props.size]
 })
 
-const spinnerSize = computed(() => (props.size === 'lg' ? 'sm' : 'sm'))
-
 const isDisabled = computed(() => props.disabled || props.loading)
 </script>
 
