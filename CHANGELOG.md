@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.0-beta.14] — 2026-04-02
+
+### Fixed
+- Fix unused `lastSource` variable in `usePlaybackProgress.ts` (TS strict error)
+
+### Changed
+- CI: `test-vue` runs after lint+test (not parallel); `vue-build` runs after `test-vue`
+- Release: `vue-build` includes tsc + vitest + vite build, runs after python tests
+
 ## [3.0.0-beta.13] — 2026-04-02
 
 ### Fixed
