@@ -38,11 +38,14 @@ describe('MaNowPlaying', () => {
       global: { plugins: [buildI18n()] },
     })
     const buttons = wrapper.findAll('button')
-    expect(buttons.length).toBe(3)
-    // prev, play/pause, next
-    expect(buttons[0].attributes('aria-label')).toBe('Previous track')
-    expect(buttons[1].attributes('aria-label')).toBe('Play / Pause')
-    expect(buttons[2].attributes('aria-label')).toBe('Next track')
+    // prev, play/pause, next (+ possible artwork close button)
+    const transportButtons = buttons.filter(
+      (b) => ['Previous track', 'Play / Pause', 'Next track'].includes(b.attributes('aria-label') ?? '')
+    )
+    expect(transportButtons.length).toBe(3)
+    expect(transportButtons[0].attributes('aria-label')).toBe('Previous track')
+    expect(transportButtons[1].attributes('aria-label')).toBe('Play / Pause')
+    expect(transportButtons[2].attributes('aria-label')).toBe('Next track')
   })
 
   it('renders artwork placeholder when no track', () => {

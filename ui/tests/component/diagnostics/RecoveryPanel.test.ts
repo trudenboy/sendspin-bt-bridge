@@ -12,6 +12,7 @@ vi.mock('@/api/diagnostics', () => ({
   getOperatorGuidance: vi.fn().mockResolvedValue({}),
   downloadBugreport: vi.fn(),
   rerunChecks: vi.fn().mockResolvedValue({}),
+  downloadTimelineCsv: vi.fn(),
 }))
 
 function buildI18n() {
