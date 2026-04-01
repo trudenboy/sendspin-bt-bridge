@@ -243,8 +243,87 @@ class TestCreateMaTokenViaIngress:
 
         assert _create_ma_token_via_ingress("user123", "user") is None
 
+    @patch("routes.ma_auth._find_ma_ingress_url", return_value="http://localhost:8094")
+    @patch("routes.ma_auth.socket.gethostname", return_value="bridge-host")
+    @patch("urllib.request.urlopen")
+    def test_non_ascii_username_is_percent_encoded(self, mock_urlopen, _h, _f):
+        """Non-latin1 usernames (e.g. CJK) must be percent-encoded in headers.
 
-class TestCreateMaTokenViaHaProxy:
+        urllib encodes headers as latin-1; raw CJK chars cause
+        UnicodeEncodeError.  Regression test for GH-119.
+        """
+        resp_body = json.dumps({"result": "tok"}).encode()
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = resp_body
+        mock_resp.__enter__ = MagicMock(return_value=mock_resp)
+        mock_resp.__exit__ = MagicMock(return_value=False)
+        mock_urlopen.return_value = mock_resp
+
+        from routes.ma_auth import _create_ma_token_via_ingress
+
+        result = _create_ma_token_via_ingress("uid", "用户", "显示名")
+        assert result == "tok"
+
+        req = mock_urlopen.call_args[0][0]
+        name_hdr = req.get_header("X-remote-user-name")
+        display_hdr = req.get_header("X-remote-user-display-name")
+        # Must not contain raw CJK — should be percent-encoded
+        assert "用户" not in name_hdr
+        assert "显示名" not in display_hdr
+        # Percent-encoded values must round-trip
+        from urllib.parse import unquote
+
+        assert unquote(name_hdr) == "用户"
+        assert unquote(display_hdr) == "显示名"
+
+    @patch("routes.ma_auth._find_ma_ingress_url", return_value="http://localhost:8094")
+    @patch("routes.ma_auth.socket.gethostname", return_value="bridge-host")
+    @patch("urllib.request.urlopen")
+    def test_ascii_username_not_encoded(self, mock_urlopen, _h, _f):
+        """Pure ASCII usernames must pass through unchanged."""
+        resp_body = json.dumps({"result": "tok"}).encode()
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = resp_body
+        mock_resp.__enter__ = MagicMock(return_value=mock_resp)
+        mock_resp.__exit__ = MagicMock(return_value=False)
+        mock_urlopen.return_value = mock_resp
+
+        from routes.ma_auth import _create_ma_token_via_ingress
+
+        _create_ma_token_via_ingress("uid", "admin", "Admin User")
+        req = mock_urlopen.call_args[0][0]
+        assert req.get_header("X-remote-user-name") == "admin"
+        assert req.get_header("X-remote-user-display-name") == "Admin User"
+
+
+class TestLatinSafe:
+    def test_ascii_passthrough(self):
+        from routes.ma_auth import _latin1_safe
+
+        assert _latin1_safe("hello") == "hello"
+
+    def test_latin1_passthrough(self):
+        from routes.ma_auth import _latin1_safe
+
+        assert _latin1_safe("café") == "café"
+
+    def test_cjk_percent_encoded(self):
+        from routes.ma_auth import _latin1_safe
+
+        result = _latin1_safe("用户")
+        assert "用户" not in result
+        from urllib.parse import unquote
+
+        assert unquote(result) == "用户"
+
+    def test_mixed_ascii_cjk(self):
+        from routes.ma_auth import _latin1_safe
+
+        result = _latin1_safe("user_名前")
+        from urllib.parse import unquote
+
+        assert unquote(result) == "user_名前"
+
     @patch("routes.ma_auth._get_ha_supervisor_addon_info_via_ws", return_value=None)
     @patch("routes.ma_auth._create_ha_ingress_session_via_ws", return_value="ingress-session-token")
     @patch("urllib.request.urlopen")

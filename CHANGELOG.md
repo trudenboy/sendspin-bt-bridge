@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [3.0.0-beta.2] — 2026-03-31
 
+### Fixed
+- MA Ingress sign-in crash with non-ASCII usernames (e.g. CJK characters) — `'latin-1' codec can't encode` error when creating MA token via Ingress JSONRPC (GH-119)
+
 ### Added — V3-1.5 Runtime Wiring
 - **EventStore singleton** in `state.py`: auto-subscribed to `InternalEventPublisher`, all device/bridge events captured centrally. Access via `get_event_store()`
 - **BackendOrchestrator singleton** in `state.py`: manages per-player backend lifecycle at runtime. Access via `get_backend_orchestrator()`
