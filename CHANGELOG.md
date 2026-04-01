@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.0-beta.7] — 2026-04-01
+
+### Fixed
+- **Beta addon changelog**: addon-sync now merges CHANGELOG.md from the release tag, so beta/rc entries appear in HA addon update notes
+- **No GH release for beta/rc**: `gh-release` job reverted to stable-only; beta/rc no longer create GitHub Releases
+- **Vue dist for LXC**: new `vue-dist` CI job creates `vue-dist-vX.Y.Z` prerelease with pre-built Vue frontend for non-Docker deployments
+
 ## [3.0.0-beta.6] — 2026-04-01
 
 ### Added — Epic 4: Vue Operator Console
