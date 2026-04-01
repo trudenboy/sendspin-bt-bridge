@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useUpdateStore } from '@/stores/update'
 import { useBridgeStore } from '@/stores/bridge'
@@ -8,9 +8,17 @@ import SbButton from '@/kit/SbButton.vue'
 import SbBadge from '@/kit/SbBadge.vue'
 import { ArrowUpCircle, ExternalLink, RefreshCw, Terminal, Copy } from 'lucide-vue-next'
 
+const CHANNELS = ['stable', 'rc', 'beta'] as const
+
 const { t } = useI18n()
 const update = useUpdateStore()
 const bridge = useBridgeStore()
+
+const selectedChannel = ref(update.channel)
+
+watch(() => update.channel, (ch) => {
+  selectedChannel.value = ch
+})
 
 const channelTone = computed(() => {
   const map: Record<string, 'success' | 'warning' | 'info'> = {
@@ -30,6 +38,10 @@ const releaseNotesFormatted = computed(() => {
     .trim()
     .slice(0, 2000)
 })
+
+function checkWithChannel() {
+  update.checkForUpdates(selectedChannel.value)
+}
 
 function copyCommand() {
   if (update.info?.command) {
@@ -53,8 +65,39 @@ function openHaAddon() {
 <template>
   <SbDialog v-model="update.showDialog" :title="t('update.title')" size="lg">
     <div class="space-y-5">
+      <!-- Channel selector -->
+      <div class="flex items-center gap-3">
+        <span class="text-sm text-text-secondary">{{ t('update.channel') }}</span>
+        <div class="flex rounded-lg border border-border">
+          <button
+            v-for="ch in CHANNELS"
+            :key="ch"
+            type="button"
+            class="px-3 py-1.5 text-xs font-medium transition-colors first:rounded-l-lg last:rounded-r-lg"
+            :class="
+              selectedChannel === ch
+                ? 'bg-primary text-white'
+                : 'text-text-secondary hover:bg-surface-secondary'
+            "
+            @click="selectedChannel = ch"
+          >
+            {{ ch.toUpperCase() }}
+          </button>
+        </div>
+        <SbButton
+          v-if="selectedChannel !== update.channel"
+          variant="primary"
+          size="sm"
+          :loading="update.checking"
+          @click="checkWithChannel"
+        >
+          <template #icon-left><RefreshCw class="h-3.5 w-3.5" /></template>
+          {{ t('update.checkChannel') }}
+        </SbButton>
+      </div>
+
       <!-- Version comparison -->
-      <div class="flex items-center gap-3 rounded-lg bg-surface-secondary p-4">
+      <div v-if="update.latestVersion" class="flex items-center gap-3 rounded-lg bg-surface-secondary p-4">
         <ArrowUpCircle class="h-8 w-8 shrink-0 text-primary" />
         <div class="min-w-0">
           <p class="text-sm text-text-secondary">{{ t('update.versionCompare') }}</p>
@@ -75,6 +118,16 @@ function openHaAddon() {
             </span>
           </div>
         </div>
+      </div>
+
+      <!-- No update available -->
+      <div v-else-if="!update.checking && !update.loading" class="rounded-lg bg-surface-secondary p-4 text-center text-sm text-text-secondary">
+        {{ t('update.upToDate') }}
+      </div>
+
+      <!-- Checking spinner -->
+      <div v-if="update.checking" class="py-4 text-center text-sm text-text-secondary">
+        {{ t('update.checking') }}
       </div>
 
       <!-- Platform instructions -->
@@ -113,7 +166,7 @@ function openHaAddon() {
     </div>
 
     <template #footer>
-      <SbButton variant="ghost" size="sm" @click="update.checkForUpdates()">
+      <SbButton variant="ghost" size="sm" @click="checkWithChannel">
         <template #icon-left><RefreshCw class="h-4 w-4" /></template>
         {{ t('update.recheck') }}
       </SbButton>

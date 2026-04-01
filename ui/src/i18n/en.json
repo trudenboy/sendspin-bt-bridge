@@ -296,7 +296,9 @@
     "applyStarted": "Update started — the bridge will restart shortly",
     "openHa": "Update in HA",
     "copyCommand": "Copy command",
-    "checking": "Checking for updates…"
+    "checking": "Checking for updates…",
+    "channel": "Channel",
+    "checkChannel": "Check"
   },
   "transport": {
     "play": "Play",

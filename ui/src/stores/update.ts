@@ -7,6 +7,7 @@ import {
   applyUpdate,
   type UpdateInfo,
 } from '@/api/updates'
+import { saveConfig } from '@/api/config'
 import { useNotificationStore } from './notifications'
 
 const POLL_INTERVAL = 1500
@@ -57,7 +58,7 @@ export const useUpdateStore = defineStore('update', () => {
           await fetchInfo()
           if (info.value?.update_available) {
             showDialog.value = true
-          } else {
+          } else if (!showDialog.value) {
             notifications.info('update.upToDate')
           }
           return
@@ -79,14 +80,19 @@ export const useUpdateStore = defineStore('update', () => {
     }
   }
 
-  /** Apply update (systemd/LXC only). */
+  /** Apply update (systemd/LXC only). Persists channel if changed. */
   async function doApplyUpdate() {
     applying.value = true
     error.value = null
     const notifications = useNotificationStore()
     try {
-      const result = await applyUpdate(info.value?.tag, info.value?.channel)
+      const targetChannel = info.value?.channel
+      const result = await applyUpdate(info.value?.tag, targetChannel)
       if (result.success) {
+        // Persist channel choice so future checks use this channel
+        if (targetChannel) {
+          saveConfig({ UPDATE_CHANNEL: targetChannel } as any).catch(() => {})
+        }
         notifications.success('update.applyStarted')
         showDialog.value = false
       } else {
