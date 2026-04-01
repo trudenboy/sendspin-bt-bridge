@@ -1,0 +1,61 @@
+{
+  "app": {
+    "title": "Sendspin Bridge",
+    "dashboard": "Панель управления",
+    "devices": "Устройства",
+    "config": "Настройки",
+    "diagnostics": "Диагностика",
+    "ma": "Music Assistant"
+  },
+  "device": {
+    "status": {
+      "streaming": "Воспроизведение",
+      "ready": "Готов",
+      "connecting": "Подключение",
+      "error": "Ошибка",
+      "offline": "Отключён",
+      "standby": "Ожидание",
+      "idle": "Простой"
+    },
+    "actions": {
+      "reconnect": "Переподключить",
+      "disconnect": "Отключить",
+      "remove": "Удалить",
+      "wake": "Разбудить",
+      "standby": "В ожидание",
+      "enable": "Включить",
+      "disable": "Отключить",
+      "details": "Подробнее"
+    },
+    "backend": {
+      "bluetooth_a2dp": "Bluetooth A2DP",
+      "local_sink": "Локальный аудиовыход",
+      "usb_audio": "USB аудио",
+      "virtual_sink": "Виртуальный выход",
+      "snapcast_client": "Snapcast",
+      "vban": "VBAN",
+      "le_audio": "LE Audio"
+    }
+  },
+  "config": {
+    "general": "Основные",
+    "audio": "Аудио",
+    "bluetooth": "Bluetooth",
+    "ma": "Music Assistant",
+    "security": "Безопасность",
+    "advanced": "Расширенные",
+    "save": "Сохранить",
+    "saved": "Настройки сохранены",
+    "unsaved": "Есть несохранённые изменения"
+  },
+  "common": {
+    "loading": "Загрузка...",
+    "error": "Ошибка",
+    "retry": "Повторить",
+    "cancel": "Отмена",
+    "confirm": "Подтвердить",
+    "close": "Закрыть",
+    "search": "Поиск",
+    "noResults": "Нет результатов"
+  }
+}

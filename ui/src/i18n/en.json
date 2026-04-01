@@ -1,0 +1,61 @@
+{
+  "app": {
+    "title": "Sendspin Bridge",
+    "dashboard": "Dashboard",
+    "devices": "Devices",
+    "config": "Configuration",
+    "diagnostics": "Diagnostics",
+    "ma": "Music Assistant"
+  },
+  "device": {
+    "status": {
+      "streaming": "Streaming",
+      "ready": "Ready",
+      "connecting": "Connecting",
+      "error": "Error",
+      "offline": "Offline",
+      "standby": "Standby",
+      "idle": "Idle"
+    },
+    "actions": {
+      "reconnect": "Reconnect",
+      "disconnect": "Disconnect",
+      "remove": "Remove",
+      "wake": "Wake",
+      "standby": "Standby",
+      "enable": "Enable",
+      "disable": "Disable",
+      "details": "Details"
+    },
+    "backend": {
+      "bluetooth_a2dp": "Bluetooth A2DP",
+      "local_sink": "Local Audio",
+      "usb_audio": "USB Audio",
+      "virtual_sink": "Virtual Sink",
+      "snapcast_client": "Snapcast",
+      "vban": "VBAN",
+      "le_audio": "LE Audio"
+    }
+  },
+  "config": {
+    "general": "General",
+    "audio": "Audio",
+    "bluetooth": "Bluetooth",
+    "ma": "Music Assistant",
+    "security": "Security",
+    "advanced": "Advanced",
+    "save": "Save",
+    "saved": "Configuration saved",
+    "unsaved": "Unsaved changes"
+  },
+  "common": {
+    "loading": "Loading...",
+    "error": "Error",
+    "retry": "Retry",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "close": "Close",
+    "search": "Search",
+    "noResults": "No results"
+  }
+}
