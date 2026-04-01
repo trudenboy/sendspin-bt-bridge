@@ -1,12 +1,26 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useDiagnosticsStore } from '@/stores/diagnostics'
-import { SbCard, SbStatusDot, SbBadge, SbSpinner } from '@/kit'
-import { Activity, Bluetooth, Monitor, HardDrive } from 'lucide-vue-next'
+import { SbCard, SbStatusDot, SbBadge, SbSpinner, SbButton } from '@/kit'
+import { Activity, Bluetooth, Monitor, HardDrive, ClipboardCopy } from 'lucide-vue-next'
+import { copyToClipboard } from '@/utils/clipboard'
 
 const { t } = useI18n()
 const diagnostics = useDiagnosticsStore()
+const copyLabel = ref(t('diagnostics.copy'))
+
+async function copyHealth() {
+  const h = diagnostics.health
+  if (!h) return
+  const lines = [
+    `Health: ${h.status ?? 'unknown'}`,
+    ...subsystems.value.map((s) => `${s.label}: ${s.status}`),
+  ]
+  const ok = await copyToClipboard(lines.join('\n'))
+  copyLabel.value = ok ? t('diagnostics.copied') : t('diagnostics.copyFailed')
+  setTimeout(() => { copyLabel.value = t('diagnostics.copy') }, 2000)
+}
 
 type CheckStatus = 'ok' | 'warning' | 'error' | 'unknown'
 
@@ -70,7 +84,15 @@ const subsystems = computed<SubsystemCheck[]>(() => [
     <!-- Overall health -->
     <SbCard>
       <template #header>
-        <span>{{ t('diagnostics.health.title') }}</span>
+        <div class="flex w-full items-center justify-between">
+          <span>{{ t('diagnostics.health.title') }}</span>
+          <SbButton variant="ghost" size="sm" @click="copyHealth">
+            <template #icon-left>
+              <ClipboardCopy class="h-4 w-4" aria-hidden="true" />
+            </template>
+            {{ copyLabel }}
+          </SbButton>
+        </div>
       </template>
       <div class="flex items-center gap-3">
         <SbStatusDot :status="overallStatus" size="md" />

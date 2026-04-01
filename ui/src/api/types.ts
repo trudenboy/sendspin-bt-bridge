@@ -58,6 +58,11 @@ export interface DeviceSnapshot {
   events?: DeviceEvent[]
   listen_port?: number
   static_delay_ms?: number
+  track_progress_ms?: number | null
+  track_duration_ms?: number | null
+  ma_now_playing?: MaNowPlaying | null
+  battery_level?: number | null
+  reanchor_count?: number
 }
 
 export interface DeviceEvent {
@@ -111,6 +116,23 @@ export interface GroupMember {
 }
 
 /* MA types */
+
+export interface MaNowPlaying {
+  state?: string
+  track?: string
+  artist?: string
+  album?: string
+  image_url?: string
+  elapsed?: number
+  elapsed_updated_at?: number
+  duration?: number
+  shuffle?: boolean
+  repeat?: string
+  queue_index?: number
+  queue_total?: number
+  syncgroup_id?: string
+  connected?: boolean
+}
 
 export interface NowPlaying {
   title?: string
@@ -206,6 +228,29 @@ export interface BtScanDevice {
   rssi?: number
   is_audio: boolean
   paired: boolean
+}
+
+/* BT paired devices & info */
+
+export interface PairedDevice {
+  mac: string
+  name: string
+}
+
+export interface BtDeviceInfo {
+  mac: string
+  name?: string
+  alias?: string
+  paired?: string
+  trusted?: string
+  connected?: string
+  bonded?: string
+  blocked?: string
+  class?: string
+  icon?: string
+  raw?: string[]
+  error?: string
+  [key: string]: unknown
 }
 
 /* Diagnostics */

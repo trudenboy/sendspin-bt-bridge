@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { useSSE } from '@/composables/useSSE'
 import { getStatus } from '@/api/status'
+import { apiPost } from '@/api/client'
 import type {
   BridgeSnapshot,
   DeviceSnapshot,
@@ -9,10 +10,16 @@ import type {
   AdapterInfo,
 } from '@/api/types'
 
+export type RestartState = 'idle' | 'stopping' | 'restarting' | 'ready' | 'error'
+
 export const useBridgeStore = defineStore('bridge', () => {
   const snapshot = ref<BridgeSnapshot | null>(null)
   const loading = ref(true)
   const sseConnected = ref(false)
+
+  /* Restart state machine */
+  const restartState = ref<RestartState>('idle')
+  const restartStartedAt = ref<number | null>(null)
 
   /* Computed from snapshot */
   const devices = computed<DeviceSnapshot[]>(
@@ -33,8 +40,42 @@ export const useBridgeStore = defineStore('bridge', () => {
         snapshot.value = data
         loading.value = false
       },
+      {
+        onConnect() {
+          sseConnected.value = true
+          if (restartState.value === 'restarting' || restartState.value === 'stopping') {
+            restartState.value = 'ready'
+          }
+        },
+        onDisconnect() {
+          sseConnected.value = false
+          if (restartState.value === 'stopping') {
+            restartState.value = 'restarting'
+          }
+        },
+      },
     )
     sseConnected.value = connected.value
+  }
+
+  /* Restart lifecycle */
+  function initiateRestart() {
+    restartState.value = 'stopping'
+    restartStartedAt.value = Date.now()
+  }
+
+  function dismissRestart() {
+    restartState.value = 'idle'
+    restartStartedAt.value = null
+  }
+
+  async function restart() {
+    initiateRestart()
+    try {
+      await apiPost('/api/restart')
+    } catch {
+      restartState.value = 'error'
+    }
   }
 
   /* Manual refresh */
@@ -58,5 +99,10 @@ export const useBridgeStore = defineStore('bridge', () => {
     maConnected,
     connectSSE,
     refresh,
+    restartState,
+    restartStartedAt,
+    initiateRestart,
+    dismissRestart,
+    restart,
   }
 })

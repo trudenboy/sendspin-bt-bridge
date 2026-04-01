@@ -6,6 +6,10 @@ export interface UseSSEOptions {
   maxRetries?: number
   /** Polling interval in ms when SSE is unavailable. */
   pollInterval?: number
+  /** Called when SSE connection opens or polling recovers. */
+  onConnect?: () => void
+  /** Called when SSE connection drops. */
+  onDisconnect?: () => void
 }
 
 /**
@@ -20,7 +24,7 @@ export function useSSE<T>(
   options: UseSSEOptions = {},
 ) {
   const { apiBase } = useIngress()
-  const { maxRetries = 5, pollInterval = 2000 } = options
+  const { maxRetries = 5, pollInterval = 2000, onConnect, onDisconnect } = options
 
   const connected = ref(false)
   const error = ref<string | null>(null)
@@ -45,6 +49,7 @@ export function useSSE<T>(
       connected.value = true
       error.value = null
       retries = 0
+      onConnect?.()
     }
 
     es.onmessage = (event) => {
@@ -58,6 +63,7 @@ export function useSSE<T>(
 
     es.onerror = () => {
       connected.value = false
+      onDisconnect?.()
       es?.close()
       es = null
 

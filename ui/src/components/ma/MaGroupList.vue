@@ -2,17 +2,26 @@
 import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useMaStore } from '@/stores/ma'
+import { useBridgeStore } from '@/stores/bridge'
 import { SbCard, SbBadge, SbButton, SbEmptyState } from '@/kit'
-import { Users, ChevronDown } from 'lucide-vue-next'
+import { Users, ChevronDown, ExternalLink } from 'lucide-vue-next'
 import MaNowPlaying from './MaNowPlaying.vue'
 
 const { t } = useI18n()
 const ma = useMaStore()
+const bridge = useBridgeStore()
 
 const expandedGroupId = ref<string | null>(null)
 
 function toggleGroup(groupId: string) {
   expandedGroupId.value = expandedGroupId.value === groupId ? null : groupId
+}
+
+function openInMA(groupId: string) {
+  const baseUrl = bridge.snapshot?.ma_url
+  if (baseUrl) {
+    window.open(`${baseUrl}/#/player/${groupId}`, '_blank', 'noopener')
+  }
 }
 
 async function discoverGroups() {
@@ -44,6 +53,15 @@ onMounted(() => {
           <SbBadge tone="info" size="sm">
             {{ group.members.length }} {{ t('ma.groups.members') }}
           </SbBadge>
+          <button
+            v-if="bridge.snapshot?.ma_url"
+            type="button"
+            class="rounded p-1 text-text-secondary transition-colors hover:bg-bg-tertiary hover:text-text-primary"
+            :title="t('ma.openInMA')"
+            @click.stop="openInMA(group.group_id)"
+          >
+            <ExternalLink class="h-4 w-4" aria-hidden="true" />
+          </button>
           <ChevronDown
             class="h-4 w-4 text-text-secondary transition-transform"
             :class="{ 'rotate-180': expandedGroupId === group.group_id }"

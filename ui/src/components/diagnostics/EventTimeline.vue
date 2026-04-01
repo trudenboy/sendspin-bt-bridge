@@ -3,9 +3,22 @@ import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useEventStore } from '@/stores/events'
 import { SbFilterBar, SbTimeline, SbSpinner, SbButton, SbEmptyState } from '@/kit'
+import { ClipboardCopy } from 'lucide-vue-next'
+import { copyToClipboard } from '@/utils/clipboard'
 
 const { t } = useI18n()
 const eventStore = useEventStore()
+const copyLabel = ref(t('diagnostics.copy'))
+
+async function copyEvents() {
+  const header = 'Timestamp\tType\tSubject\tPayload'
+  const rows = eventStore.events.map((e) =>
+    [e.at, e.event_type, e.subject_id, JSON.stringify(e.payload ?? {})].join('\t'),
+  )
+  const ok = await copyToClipboard([header, ...rows].join('\n'))
+  copyLabel.value = ok ? t('diagnostics.copied') : t('diagnostics.copyFailed')
+  setTimeout(() => { copyLabel.value = t('diagnostics.copy') }, 2000)
+}
 
 const searchQuery = ref('')
 const activeTypes = ref<Set<string>>(new Set())
@@ -76,12 +89,22 @@ onMounted(async () => {
 
 <template>
   <div class="space-y-4">
-    <SbFilterBar
-      v-model="searchQuery"
-      :placeholder="t('common.search')"
-      :filters="typeFilters"
-      @toggle-filter="toggleFilter"
-    />
+    <div class="flex items-center gap-2">
+      <div class="flex-1">
+        <SbFilterBar
+          v-model="searchQuery"
+          :placeholder="t('common.search')"
+          :filters="typeFilters"
+          @toggle-filter="toggleFilter"
+        />
+      </div>
+      <SbButton v-if="eventStore.events.length > 0" variant="ghost" size="sm" @click="copyEvents">
+        <template #icon-left>
+          <ClipboardCopy class="h-4 w-4" aria-hidden="true" />
+        </template>
+        {{ copyLabel }}
+      </SbButton>
+    </div>
 
     <div v-if="eventStore.loading" class="flex justify-center py-8">
       <SbSpinner size="md" :label="t('common.loading')" />

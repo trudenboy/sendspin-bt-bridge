@@ -7,6 +7,21 @@
     "diagnostics": "Diagnostics",
     "ma": "Music Assistant"
   },
+  "header": {
+    "viewRelease": "View release on GitHub",
+    "uptime": "Uptime",
+    "hourShort": "h",
+    "minShort": "m",
+    "secShort": "s",
+    "healthGood": "All systems OK",
+    "healthDegraded": "Some devices degraded",
+    "healthError": "Devices offline",
+    "healthUnknown": "No devices",
+    "bugReport": "Bug report",
+    "docs": "Documentation",
+    "github": "GitHub repository",
+    "toggleMenu": "Toggle menu"
+  },
   "device": {
     "status": {
       "streaming": "Streaming",
@@ -28,6 +43,8 @@
       "details": "Details",
       "enableFailed": "Failed to toggle device"
     },
+    "battery": "Battery {level}%",
+    "reanchored": "Reanchored ×{count}",
     "backend": {
       "bluetooth_a2dp": "Bluetooth A2DP",
       "local_sink": "Local Audio",
@@ -96,14 +113,22 @@
     "rawJsonWarning": "Editing raw JSON can break your configuration. Proceed with caution.",
     "invalidJson": "Invalid JSON",
     "uploadConfig": "Upload Config",
-    "downloadConfig": "Download Config"
+    "downloadConfig": "Download Config",
+    "saveAndRestart": "Save & Restart",
+    "editAdapterName": "Edit adapter name",
+    "latencyPresets": "Latency Presets",
+    "latencyLow": "Low (200ms)",
+    "latencyStandard": "Standard (500ms)",
+    "latencyHigh": "High (800ms)",
+    "latencyCustom": "Custom"
   },
   "diagnostics": {
     "tabs": {
       "health": "Health",
       "events": "Events",
       "recovery": "Recovery",
-      "bugreport": "Bug Report"
+      "bugreport": "Bug Report",
+      "logs": "Logs"
     },
     "health": {
       "title": "Bridge Health",
@@ -127,6 +152,15 @@
       "noIssues": "All clear",
       "noIssuesDesc": "No issues detected. All systems are operating normally."
     },
+    "copy": "Copy",
+    "copied": "Copied!",
+    "copyFailed": "Copy failed",
+    "downloadCsv": "Download CSV",
+    "audioRouting": "Audio Routing",
+    "audioSink": "Audio Sink",
+    "codec": "Codec",
+    "sampleRate": "Sample Rate",
+    "reanchorCount": "Routing Corrections",
     "bugreport": {
       "systemInfo": "System Information",
       "version": "Version",
@@ -140,6 +174,17 @@
       "step1": "Download the bug report using the button above.",
       "step2": "Describe the issue and steps to reproduce.",
       "step3": "Open a new issue on"
+    },
+    "logs": {
+      "title": "Application Logs",
+      "logLevel": "Log Level",
+      "autoScroll": "Auto-scroll",
+      "refresh": "Refresh",
+      "download": "Download",
+      "apply": "Apply",
+      "search": "Search logs…",
+      "showingLines": "Showing {shown} of {total} lines",
+      "noLogs": "No log entries"
     }
   },
   "ma": {
@@ -168,11 +213,16 @@
     },
     "nowPlaying": {
       "artwork": "Album artwork",
+      "artworkPreview": "Artwork Preview",
+      "artworkClose": "Close",
       "noTrack": "Nothing playing",
       "prev": "Previous track",
       "playPause": "Play / Pause",
       "next": "Next track"
-    }
+    },
+    "autoConnecting": "Connecting to Music Assistant...",
+    "openInMA": "Open in Music Assistant",
+    "silentAuthFailed": "Auto-connect failed, please log in manually"
   },
   "login": {
     "title": "Sign In",
@@ -192,6 +242,13 @@
     "empty": {
       "title": "No devices configured",
       "description": "Add a Bluetooth speaker or audio device to get started."
+    },
+    "onboarding": {
+      "title": "Getting Started",
+      "addSpeaker": "Add your first Bluetooth speaker",
+      "connectMA": "Connect to Music Assistant",
+      "configure": "Configure settings",
+      "dismiss": "Dismiss"
     }
   },
   "devices": {
@@ -202,6 +259,16 @@
     },
     "viewGrid": "Grid view",
     "viewList": "List view",
+    "allAdapters": "All adapters",
+    "allGroups": "All groups",
+    "selected": "{count} of {total} selected",
+    "noneSelected": "0 selected",
+    "selectAll": "Select all",
+    "groupVolume": "Group volume",
+    "muteAll": "Mute all",
+    "pauseAll": "Pause all",
+    "reconnectAll": "Reconnect all",
+    "actionFailed": "Action failed",
     "list": {
       "name": "Name",
       "status": "Status",
@@ -267,7 +334,19 @@
       "strong": "Strong",
       "medium": "Medium",
       "weak": "Weak"
-    }
+    },
+    "paired": "Paired Devices",
+    "audioOnly": "Audio only",
+    "allDevices": "All devices",
+    "audioCount": "{audio} audio · {total} total",
+    "addToFleet": "Add to fleet",
+    "info": "Device Info",
+    "release": "Release",
+    "reclaim": "Reclaim",
+    "released": "Released",
+    "resetReconnect": "Reset & Reconnect",
+    "deviceInfo": "Bluetooth Device Info",
+    "noDevices": "No paired devices found"
   },
   "common": {
     "loading": "Loading...",
@@ -305,7 +384,8 @@
     "pause": "Pause",
     "next": "Next track",
     "previous": "Previous track",
-    "failed": "Transport command failed"
+    "failed": "Transport command failed",
+    "progress": "Playback progress"
   },
   "adapter": {
     "management": "Adapter Management",
@@ -315,6 +395,13 @@
     "powerFailed": "Failed to toggle adapter power",
     "rebooted": "Adapter rebooted",
     "rebootFailed": "Failed to reboot adapter"
+  },
+  "restart": {
+    "stopping": "Stopping bridge…",
+    "restarting": "Restarting bridge…",
+    "ready": "Bridge restarted successfully",
+    "error": "Restart failed",
+    "elapsed": "{seconds}s"
   },
   "bugreport": {
     "title": "File a Bug Report",

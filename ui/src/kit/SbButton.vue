@@ -4,13 +4,13 @@ import SbSpinner from './SbSpinner.vue'
 
 const props = withDefaults(
   defineProps<{
-    variant?: 'primary' | 'secondary' | 'ghost' | 'danger'
+    variant?: 'primary' | 'secondary' | 'ghost' | 'danger' | 'warning'
     size?: 'sm' | 'md' | 'lg'
     loading?: boolean
     disabled?: boolean
     icon?: boolean
   }>(),
-  { variant: 'primary', size: 'md', loading: false, disabled: false, icon: false },
+  { variant: 'primary' as const, size: 'md' as const, loading: false, disabled: false, icon: false },
 )
 
 const variantClasses = {
@@ -18,6 +18,7 @@ const variantClasses = {
   secondary: 'bg-surface-secondary text-text-primary hover:opacity-80',
   ghost: 'bg-transparent text-text-primary hover:bg-surface-secondary',
   danger: 'bg-error text-white hover:bg-red-700',
+  warning: 'bg-warning text-white hover:opacity-90',
 } as const
 
 const sizeClasses = computed(() => {

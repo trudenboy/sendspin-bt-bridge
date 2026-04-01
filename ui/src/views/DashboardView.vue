@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 import { useBridgeStore } from '@/stores/bridge'
 import { useDeviceStore } from '@/stores/devices'
 import {
@@ -12,14 +13,27 @@ import {
 } from '@/kit'
 import DeviceCard from '@/components/devices/DeviceCard.vue'
 import DeviceDetailDrawer from '@/components/devices/DeviceDetailDrawer.vue'
-import { Bluetooth, Server, Wifi, Speaker } from 'lucide-vue-next'
+import { Bluetooth, Server, Wifi, Speaker, ListChecks, Settings, Music2, X } from 'lucide-vue-next'
 
 const { t } = useI18n()
+const router = useRouter()
 const bridge = useBridgeStore()
 const deviceStore = useDeviceStore()
 
 const drawerOpen = ref(false)
 const selectedMac = ref<string | null>(null)
+
+const ONBOARDING_KEY = 'sb:onboarding-dismissed'
+const onboardingDismissed = ref(localStorage.getItem(ONBOARDING_KEY) === '1')
+
+function dismissOnboarding() {
+  onboardingDismissed.value = true
+  localStorage.setItem(ONBOARDING_KEY, '1')
+}
+
+const showOnboarding = computed(
+  () => !bridge.loading && bridge.devices.length === 0 && !onboardingDismissed.value,
+)
 
 onMounted(() => {
   bridge.connectSSE()
@@ -102,6 +116,58 @@ function openDetail(mac: string) {
             </div>
           </div>
         </div>
+      </SbCard>
+
+      <!-- Onboarding card -->
+      <SbCard v-if="showOnboarding" class="mb-6">
+        <div class="flex items-start justify-between">
+          <div class="flex items-center gap-2">
+            <ListChecks class="h-5 w-5 text-primary" />
+            <h2 class="text-base font-semibold text-text-primary">
+              {{ t('dashboard.onboarding.title') }}
+            </h2>
+          </div>
+          <button
+            type="button"
+            class="rounded p-1 text-text-secondary transition-colors hover:text-text-primary"
+            :aria-label="t('dashboard.onboarding.dismiss')"
+            @click="dismissOnboarding"
+          >
+            <X class="h-4 w-4" />
+          </button>
+        </div>
+        <ol class="mt-3 space-y-2 text-sm">
+          <li>
+            <button
+              type="button"
+              class="flex items-center gap-2 text-text-secondary transition-colors hover:text-primary"
+              @click="router.push('/devices')"
+            >
+              <Bluetooth class="h-4 w-4" />
+              {{ t('dashboard.onboarding.addSpeaker') }}
+            </button>
+          </li>
+          <li>
+            <button
+              type="button"
+              class="flex items-center gap-2 text-text-secondary transition-colors hover:text-primary"
+              @click="router.push('/ma')"
+            >
+              <Music2 class="h-4 w-4" />
+              {{ t('dashboard.onboarding.connectMA') }}
+            </button>
+          </li>
+          <li>
+            <button
+              type="button"
+              class="flex items-center gap-2 text-text-secondary transition-colors hover:text-primary"
+              @click="router.push('/config')"
+            >
+              <Settings class="h-4 w-4" />
+              {{ t('dashboard.onboarding.configure') }}
+            </button>
+          </li>
+        </ol>
       </SbCard>
 
       <!-- Filter bar -->

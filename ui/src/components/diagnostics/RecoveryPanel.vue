@@ -1,12 +1,15 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useDiagnosticsStore } from '@/stores/diagnostics'
 import { SbCard, SbBadge, SbButton, SbEmptyState, SbSpinner } from '@/kit'
-import { ShieldCheck, RefreshCw } from 'lucide-vue-next'
+import { ShieldCheck, RefreshCw, ClipboardCopy, DownloadCloud } from 'lucide-vue-next'
+import { copyToClipboard } from '@/utils/clipboard'
+import { downloadTimelineCsv } from '@/api/diagnostics'
 
 const { t } = useI18n()
 const diagnostics = useDiagnosticsStore()
+const copyLabel = ref(t('diagnostics.copy'))
 
 const issues = computed(() => diagnostics.recovery?.issues ?? [])
 
@@ -17,6 +20,15 @@ function severityTone(severity: string) {
     info: 'info',
   }
   return map[severity] ?? 'neutral' as const
+}
+
+async function copyIssues() {
+  const lines = issues.value.map(
+    (i) => `[${i.severity}] ${i.device_mac}: ${i.issue}`,
+  )
+  const ok = await copyToClipboard(lines.join('\n'))
+  copyLabel.value = ok ? t('diagnostics.copied') : t('diagnostics.copyFailed')
+  setTimeout(() => { copyLabel.value = t('diagnostics.copy') }, 2000)
 }
 
 async function runChecks() {
@@ -31,12 +43,26 @@ async function runChecks() {
       <h3 class="text-lg font-semibold text-text-primary">
         {{ t('diagnostics.recovery.title') }}
       </h3>
-      <SbButton variant="secondary" size="sm" :loading="diagnostics.loading" @click="runChecks">
-        <template #icon-left>
-          <RefreshCw class="h-4 w-4" aria-hidden="true" />
-        </template>
-        {{ t('diagnostics.recovery.runChecks') }}
-      </SbButton>
+      <div class="flex items-center gap-2">
+        <SbButton variant="secondary" size="sm" :loading="diagnostics.loading" @click="runChecks">
+          <template #icon-left>
+            <RefreshCw class="h-4 w-4" aria-hidden="true" />
+          </template>
+          {{ t('diagnostics.recovery.runChecks') }}
+        </SbButton>
+        <SbButton v-if="issues.length > 0" variant="ghost" size="sm" @click="copyIssues">
+          <template #icon-left>
+            <ClipboardCopy class="h-4 w-4" aria-hidden="true" />
+          </template>
+          {{ copyLabel }}
+        </SbButton>
+        <SbButton variant="ghost" size="sm" @click="downloadTimelineCsv">
+          <template #icon-left>
+            <DownloadCloud class="h-4 w-4" aria-hidden="true" />
+          </template>
+          {{ t('diagnostics.downloadCsv') }}
+        </SbButton>
+      </div>
     </div>
 
     <div v-if="diagnostics.loading" class="flex justify-center py-8">

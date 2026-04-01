@@ -18,6 +18,8 @@ export interface DeviceFilter {
   search: string
   status: string[]
   backendType: string[]
+  adapter: string
+  group: string
 }
 
 export const useDeviceStore = defineStore('devices', () => {
@@ -26,6 +28,8 @@ export const useDeviceStore = defineStore('devices', () => {
     search: '',
     status: [],
     backendType: [],
+    adapter: '',
+    group: '',
   })
   const sortBy = ref<DeviceSortField>('name')
   const sortDir = ref<SortDirection>('asc')
@@ -60,6 +64,16 @@ export const useDeviceStore = defineStore('devices', () => {
           d.backend_info &&
           filter.value.backendType.includes(d.backend_info.type),
       )
+    }
+    if (filter.value.adapter) {
+      list = list.filter((d) => d.adapter === filter.value.adapter)
+    }
+    if (filter.value.group) {
+      const group = bridge.groups.find((g) => g.group_id === filter.value.group)
+      if (group) {
+        const memberNames = new Set(group.members.map((m) => m.player_name))
+        list = list.filter((d) => memberNames.has(d.player_name))
+      }
     }
 
     list.sort((a, b) => {

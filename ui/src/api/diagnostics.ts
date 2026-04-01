@@ -63,3 +63,31 @@ export function downloadBugreport() {
   const { apiBase } = useIngress()
   window.location.href = `${apiBase}/api/diagnostics/download`
 }
+
+export function downloadTimelineCsv() {
+  const { apiBase } = useIngress()
+  window.location.href = `${apiBase}/api/recovery/timeline/download`
+}
+
+/* ── Logs ── */
+
+export interface LogsResponse {
+  logs: string[]
+  runtime: string
+  has_recent_issues: boolean
+  recent_issue_count: number
+  recent_issue_level: string
+}
+
+export function getLogs(lines = 200) {
+  return apiGet<LogsResponse>('/api/logs', { query: { lines } })
+}
+
+export function downloadLogs() {
+  const { apiBase } = useIngress()
+  window.location.href = `${apiBase}/api/logs/download`
+}
+
+export function setLogLevel(level: string) {
+  return apiPost<{ success: boolean; level: string }>('/api/settings/log_level', { level })
+}

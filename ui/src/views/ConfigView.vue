@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useConfigStore } from '@/stores/config'
+import { useBridgeStore } from '@/stores/bridge'
 import { useNotificationStore } from '@/stores/notifications'
 import { SbTabs, SbButton, SbBadge, SbSpinner } from '@/kit'
 import ConfigGeneral from '@/components/config/ConfigGeneral.vue'
@@ -13,6 +14,7 @@ import ConfigAdvanced from '@/components/config/ConfigAdvanced.vue'
 
 const { t } = useI18n()
 const configStore = useConfigStore()
+const bridgeStore = useBridgeStore()
 const notifications = useNotificationStore()
 
 const activeTab = ref('general')
@@ -30,6 +32,16 @@ async function handleSave() {
   try {
     await configStore.saveConfig()
     notifications.success(t('config.saved'))
+  } catch {
+    notifications.error(t('common.error'))
+  }
+}
+
+async function handleSaveAndRestart() {
+  try {
+    await configStore.saveConfig()
+    notifications.success(t('config.saved'))
+    await bridgeStore.restart()
   } catch {
     notifications.error(t('common.error'))
   }
@@ -80,6 +92,14 @@ onMounted(() => {
           @click="handleSave"
         >
           {{ configStore.saving ? t('config.saving') : t('config.save') }}
+        </SbButton>
+        <SbButton
+          variant="warning"
+          :disabled="!configStore.isDirty"
+          :loading="configStore.saving"
+          @click="handleSaveAndRestart"
+        >
+          {{ t('config.saveAndRestart') }}
         </SbButton>
       </div>
     </div>

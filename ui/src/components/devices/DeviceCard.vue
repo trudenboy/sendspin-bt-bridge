@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useDeviceStore } from '@/stores/devices'
+import { useBluetoothStore } from '@/stores/bluetooth'
 import { useMaStore } from '@/stores/ma'
 import { useNotificationStore } from '@/stores/notifications'
 import {
@@ -12,6 +13,8 @@ import {
 } from '@/kit'
 import DeviceStatusBadge from './DeviceStatusBadge.vue'
 import VolumeSlider from '@/components/playback/VolumeSlider.vue'
+import PlaybackProgress from '@/components/playback/PlaybackProgress.vue'
+import BtDeviceInfoModal from '@/components/bluetooth/BtDeviceInfoModal.vue'
 import {
   Bluetooth,
   Speaker,
@@ -25,25 +28,40 @@ import {
   Pause,
   SkipBack,
   SkipForward,
+  BatteryLow,
+  BatteryMedium,
+  BatteryFull,
+  Anchor,
 } from 'lucide-vue-next'
 import { transportCmd } from '@/api/playback'
 import type { DeviceSnapshot } from '@/api/types'
 
-const props = defineProps<{
-  device: DeviceSnapshot
-  deviceIndex: number
-}>()
+const props = withDefaults(
+  defineProps<{
+    device: DeviceSnapshot
+    deviceIndex: number
+    selectable?: boolean
+    selected?: boolean
+  }>(),
+  {
+    selectable: false,
+    selected: false,
+  },
+)
 
 const emit = defineEmits<{
   openDetail: [mac: string]
+  toggleSelect: [name: string]
 }>()
 
 const { t } = useI18n()
 const deviceStore = useDeviceStore()
+const btStore = useBluetoothStore()
 const maStore = useMaStore()
 const notifications = useNotificationStore()
 
 const transportLoading = ref(false)
+const btInfoOpen = ref(false)
 
 const playerState = computed(() => props.device.player_state ?? 'OFFLINE')
 
@@ -65,6 +83,22 @@ const backendIconMap: Record<string, typeof Bluetooth> = {
 const BackendIcon = computed(
   () => backendIconMap[props.device.backend_info?.type ?? 'bluetooth_a2dp'] ?? Bluetooth,
 )
+
+const BatteryIcon = computed(() => {
+  const level = props.device.battery_level
+  if (level == null) return null
+  if (level < 20) return BatteryLow
+  if (level <= 50) return BatteryMedium
+  return BatteryFull
+})
+
+const batteryColor = computed(() => {
+  const level = props.device.battery_level
+  if (level == null) return ''
+  if (level < 20) return 'text-red-500'
+  if (level <= 50) return 'text-yellow-500'
+  return 'text-green-500'
+})
 
 const nowPlaying = computed(() => {
   for (const np of Object.values(maStore.nowPlaying)) {
@@ -113,6 +147,28 @@ async function onToggleEnabled() {
   }
 }
 
+async function onRelease() {
+  try {
+    await btStore.setManagement(props.device.player_name, false)
+    notifications.success(t('bluetooth.release'))
+  } catch {
+    notifications.error(t('device.actions.enableFailed'))
+  }
+}
+
+async function onReclaim() {
+  try {
+    await btStore.setManagement(props.device.player_name, true)
+    notifications.success(t('bluetooth.reclaim'))
+  } catch {
+    notifications.error(t('device.actions.enableFailed'))
+  }
+}
+
+function onBtInfo() {
+  btInfoOpen.value = true
+}
+
 async function onTransport(action: 'play' | 'pause' | 'previous' | 'next') {
   transportLoading.value = true
   try {
@@ -129,9 +185,27 @@ async function onTransport(action: 'play' | 'pause' | 'previous' | 'next') {
   <SbCard :class="{ 'opacity-50': !device.enabled }">
     <template #header>
       <div class="flex min-w-0 flex-1 items-center gap-2">
+        <input
+          v-if="selectable"
+          type="checkbox"
+          :checked="selected"
+          class="h-4 w-4 shrink-0 cursor-pointer rounded border-gray-300 text-primary accent-primary focus:ring-primary"
+          :aria-label="`Select ${device.player_name}`"
+          @click.stop
+          @change.stop="emit('toggleSelect', device.player_name)"
+        />
         <component :is="BackendIcon" class="h-4 w-4 shrink-0 text-text-secondary" />
         <span class="truncate font-semibold text-text-primary">
           {{ device.player_name }}
+        </span>
+        <span
+          v-if="device.battery_level != null && BatteryIcon"
+          class="ml-auto flex shrink-0 items-center gap-0.5 text-xs"
+          :class="batteryColor"
+          :title="t('device.battery', { level: device.battery_level })"
+        >
+          <component :is="BatteryIcon" class="h-3.5 w-3.5" />
+          {{ device.battery_level }}%
         </span>
       </div>
     </template>
@@ -161,6 +235,15 @@ async function onTransport(action: 'play' | 'pause' | 'previous' | 'next') {
           <SbDropdownItem @click="onToggleEnabled">
             {{ device.enabled ? t('device.actions.disable') : t('device.actions.enable') }}
           </SbDropdownItem>
+          <SbDropdownItem v-if="device.enabled" @click="onRelease">
+            {{ t('bluetooth.release') }}
+          </SbDropdownItem>
+          <SbDropdownItem v-else @click="onReclaim">
+            {{ t('bluetooth.reclaim') }}
+          </SbDropdownItem>
+          <SbDropdownItem @click="onBtInfo">
+            {{ t('bluetooth.info') }}
+          </SbDropdownItem>
           <SbDropdownItem @click="onDetails">
             {{ t('device.actions.details') }}
           </SbDropdownItem>
@@ -178,6 +261,16 @@ async function onTransport(action: 'play' | 'pause' | 'previous' | 'next') {
         <SbBadge tone="neutral" size="sm">
           {{ backendLabel }}
         </SbBadge>
+        <SbBadge v-if="!device.enabled" tone="warning" size="sm">
+          {{ t('bluetooth.released') }}
+        </SbBadge>
+        <span
+          v-if="device.reanchor_count"
+          class="inline-flex items-center gap-0.5 text-xs text-text-secondary"
+        >
+          <Anchor class="h-3 w-3" />
+          {{ t('device.reanchored', { count: device.reanchor_count }) }}
+        </span>
         <span class="text-xs text-text-secondary">{{ device.mac }}</span>
       </div>
 
@@ -227,6 +320,9 @@ async function onTransport(action: 'play' | 'pause' | 'previous' | 'next') {
         </button>
       </div>
 
+      <!-- Playback progress -->
+      <PlaybackProgress v-if="isStreaming" :device="device" />
+
       <!-- Now playing -->
       <div
         v-if="nowPlaying && device.audio_streaming"
@@ -243,5 +339,12 @@ async function onTransport(action: 'play' | 'pause' | 'previous' | 'next') {
         </div>
       </div>
     </div>
+
+    <!-- BT Device Info Modal -->
+    <BtDeviceInfoModal
+      :mac="device.mac"
+      :open="btInfoOpen"
+      @update:open="btInfoOpen = $event"
+    />
   </SbCard>
 </template>

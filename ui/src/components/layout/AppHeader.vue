@@ -4,42 +4,26 @@ import { useTheme } from '@/composables/useTheme'
 import { useBridgeStore } from '@/stores/bridge'
 import { useUpdateStore } from '@/stores/update'
 import {
-  LayoutDashboard,
-  Speaker,
-  Settings,
-  Activity,
-  Music,
+  Bug,
+  BookOpen,
+  Github,
   Sun,
   Moon,
   Monitor,
   Menu,
-  X,
   Globe,
   ArrowUpCircle,
 } from 'lucide-vue-next'
-import { ref, onMounted, type Component } from 'vue'
-import { useRoute } from 'vue-router'
+import { computed, onMounted } from 'vue'
 
 const { t, locale } = useI18n()
 const { mode, toggleTheme } = useTheme()
 const bridge = useBridgeStore()
 const update = useUpdateStore()
-const route = useRoute()
-const mobileMenuOpen = ref(false)
 
-interface NavLink {
-  to: string
-  label: string
-  icon: Component
-}
-
-const navLinks: NavLink[] = [
-  { to: '/', label: 'app.dashboard', icon: LayoutDashboard },
-  { to: '/devices', label: 'app.devices', icon: Speaker },
-  { to: '/config', label: 'app.config', icon: Settings },
-  { to: '/diagnostics', label: 'app.diagnostics', icon: Activity },
-  { to: '/ma', label: 'app.ma', icon: Music },
-]
+const emit = defineEmits<{
+  'toggle-sidebar': []
+}>()
 
 const themeIcon = {
   light: Sun,
@@ -47,10 +31,56 @@ const themeIcon = {
   auto: Monitor,
 } as const
 
-function isActive(to: string): boolean {
-  if (to === '/') return route.path === '/'
-  return route.path.startsWith(to)
-}
+const GITHUB_URL = 'https://github.com/trudenboy/sendspin-bt-bridge'
+const DOCS_URL = 'https://trudenboy.github.io/sendspin-bt-bridge'
+
+const uptimeFormatted = computed(() => {
+  const secs = bridge.snapshot?.uptime_seconds
+  if (secs == null) return null
+  const h = Math.floor(secs / 3600)
+  const m = Math.floor((secs % 3600) / 60)
+  if (h > 0) return `${h}${t('header.hourShort')} ${m}${t('header.minShort')}`
+  const s = Math.floor(secs % 60)
+  return `${m}${t('header.minShort')} ${s}${t('header.secShort')}`
+})
+
+type HealthColor = 'green' | 'yellow' | 'red' | 'gray'
+
+const healthColor = computed<HealthColor>(() => {
+  const devs = bridge.devices
+  if (!devs.length) return 'gray'
+  const enabled = devs.filter((d) => d.enabled)
+  if (!enabled.length) return 'gray'
+  const allGood = enabled.every((d) =>
+    ['STREAMING', 'READY', 'IDLE', 'STANDBY'].includes(d.player_state ?? ''),
+  )
+  if (allGood) return 'green'
+  const allBad = enabled.every((d) =>
+    ['ERROR', 'OFFLINE'].includes(d.player_state ?? ''),
+  )
+  if (allBad) return 'red'
+  return 'yellow'
+})
+
+const healthDotClass = computed(() => {
+  const cls: Record<HealthColor, string> = {
+    green: 'bg-green-500',
+    yellow: 'bg-yellow-500 animate-pulse',
+    red: 'bg-red-500 animate-pulse',
+    gray: 'bg-gray-400',
+  }
+  return cls[healthColor.value]
+})
+
+const healthLabel = computed(() => {
+  const key: Record<HealthColor, string> = {
+    green: 'header.healthGood',
+    yellow: 'header.healthDegraded',
+    red: 'header.healthError',
+    gray: 'header.healthUnknown',
+  }
+  return t(key[healthColor.value])
+})
 
 function toggleLocale() {
   const next = locale.value === 'en' ? 'ru' : 'en'
@@ -67,8 +97,8 @@ onMounted(() => {
   <header
     class="fixed top-0 right-0 left-0 z-30 border-b border-surface-secondary bg-surface-card shadow-sm"
   >
-    <div class="flex h-16 items-center gap-4 px-4 sm:px-6">
-      <!-- Logo + Title -->
+    <div class="flex h-16 items-center gap-3 px-4 sm:px-6">
+      <!-- Left: Logo + Title + Version + Update -->
       <router-link to="/" class="flex shrink-0 items-center gap-2">
         <img
           src="/bridge-logo.svg"
@@ -82,12 +112,16 @@ onMounted(() => {
         </span>
       </router-link>
 
-      <span
+      <a
         v-if="bridge.version"
-        class="hidden rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary sm:inline-flex"
+        :href="`${GITHUB_URL}/releases/tag/v${bridge.version}`"
+        target="_blank"
+        rel="noopener"
+        class="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary transition-colors hover:bg-primary/20"
+        :title="t('header.viewRelease')"
       >
         v{{ bridge.version }}
-      </span>
+      </a>
 
       <!-- Update badge -->
       <button
@@ -109,25 +143,53 @@ onMounted(() => {
         <ArrowUpCircle class="h-3.5 w-3.5" :class="{ 'animate-spin': update.checking }" />
       </button>
 
-      <!-- Desktop nav -->
-      <nav class="ml-4 hidden items-center gap-1 md:flex">
-        <router-link
-          v-for="link in navLinks"
-          :key="link.to"
-          :to="link.to"
-          :class="[
-            'flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm transition-colors',
-            isActive(link.to)
-              ? 'border-primary font-medium text-primary'
-              : 'border-transparent text-text-secondary hover:border-surface-secondary hover:text-text-primary',
-          ]"
+      <!-- Center: System info (desktop only) -->
+      <div class="ml-auto hidden items-center gap-3 text-xs text-text-secondary md:flex">
+        <span v-if="uptimeFormatted" :title="t('header.uptime')">
+          {{ t('header.uptime') }}: {{ uptimeFormatted }}
+        </span>
+        <span
+          class="flex items-center gap-1.5"
+          :title="healthLabel"
         >
-          <component :is="link.icon" class="h-4 w-4" />
-          {{ t(link.label) }}
-        </router-link>
-      </nav>
+          <span class="inline-block h-2 w-2 rounded-full" :class="healthDotClass" />
+          <span class="hidden lg:inline">{{ healthLabel }}</span>
+        </span>
+      </div>
 
-      <div class="ml-auto flex items-center gap-1">
+      <!-- Right: Action buttons + toggles -->
+      <div :class="['flex items-center gap-1', { 'ml-auto': !uptimeFormatted && !bridge.devices.length }]">
+        <!-- Bug report -->
+        <router-link
+          to="/diagnostics"
+          class="hidden rounded-lg p-2 text-text-secondary transition-colors hover:bg-surface-secondary sm:flex"
+          :title="t('header.bugReport')"
+        >
+          <Bug class="h-4 w-4" />
+        </router-link>
+
+        <!-- Docs link -->
+        <a
+          :href="DOCS_URL"
+          target="_blank"
+          rel="noopener"
+          class="hidden rounded-lg p-2 text-text-secondary transition-colors hover:bg-surface-secondary sm:flex"
+          :title="t('header.docs')"
+        >
+          <BookOpen class="h-4 w-4" />
+        </a>
+
+        <!-- GitHub link -->
+        <a
+          :href="GITHUB_URL"
+          target="_blank"
+          rel="noopener"
+          class="hidden rounded-lg p-2 text-text-secondary transition-colors hover:bg-surface-secondary sm:flex"
+          :title="t('header.github')"
+        >
+          <Github class="h-4 w-4" />
+        </a>
+
         <!-- Language toggle -->
         <button
           class="flex items-center gap-1 rounded-lg px-2 py-2 text-sm text-text-secondary transition-colors hover:bg-surface-secondary"
@@ -147,47 +209,15 @@ onMounted(() => {
           <component :is="themeIcon[mode]" class="h-5 w-5" />
         </button>
 
-        <!-- Mobile menu button -->
+        <!-- Mobile sidebar toggle -->
         <button
-          class="rounded-lg p-2 text-text-secondary md:hidden"
-          aria-label="Toggle menu"
-          @click="mobileMenuOpen = !mobileMenuOpen"
+          class="rounded-lg p-2 text-text-secondary lg:hidden"
+          :aria-label="t('header.toggleMenu')"
+          @click="emit('toggle-sidebar')"
         >
-          <X v-if="mobileMenuOpen" class="h-5 w-5" />
-          <Menu v-else class="h-5 w-5" />
+          <Menu class="h-5 w-5" />
         </button>
       </div>
     </div>
-
-    <!-- Mobile dropdown nav -->
-    <Transition
-      enter-active-class="transition-all duration-200 ease-out"
-      leave-active-class="transition-all duration-150 ease-in"
-      enter-from-class="max-h-0 opacity-0"
-      enter-to-class="max-h-80 opacity-100"
-      leave-from-class="max-h-80 opacity-100"
-      leave-to-class="max-h-0 opacity-0"
-    >
-      <nav
-        v-if="mobileMenuOpen"
-        class="overflow-hidden border-t border-surface-secondary px-4 pb-3 pt-2 md:hidden"
-      >
-        <router-link
-          v-for="link in navLinks"
-          :key="link.to"
-          :to="link.to"
-          :class="[
-            'flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
-            isActive(link.to)
-              ? 'bg-primary/10 text-primary'
-              : 'text-text-secondary hover:bg-surface-secondary',
-          ]"
-          @click="mobileMenuOpen = false"
-        >
-          <component :is="link.icon" class="h-4 w-4" />
-          {{ t(link.label) }}
-        </router-link>
-      </nav>
-    </Transition>
   </header>
 </template>

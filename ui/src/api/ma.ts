@@ -40,3 +40,10 @@ export function maLogin(haToken: string) {
 export function maReload() {
   return apiPost<{ success: boolean }>('/api/ma/reload')
 }
+
+export function silentAuth(haToken: string, maUrl: string) {
+  return apiPost<{ success: boolean; url?: string; username?: string; message?: string }>(
+    '/api/ma/ha-silent-auth',
+    { ha_token: haToken, ma_url: maUrl },
+  )
+}

@@ -3,12 +3,14 @@ import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useBridgeStore } from '@/stores/bridge'
 import { useDeviceStore } from '@/stores/devices'
-import { SbFilterBar, SbButton, SbSpinner, SbEmptyState } from '@/kit'
+import { useDeviceSelection } from '@/composables/useDeviceSelection'
+import { SbFilterBar, SbButton, SbSpinner, SbEmptyState, SbDropdown, SbDropdownItem } from '@/kit'
 import DeviceCard from '@/components/devices/DeviceCard.vue'
 import DeviceListRow from '@/components/devices/DeviceListRow.vue'
 import DeviceDetailDrawer from '@/components/devices/DeviceDetailDrawer.vue'
+import GroupActionBar from '@/components/devices/GroupActionBar.vue'
 import BtScanModal from '@/components/bluetooth/BtScanModal.vue'
-import { Plus, Bluetooth, LayoutGrid, List } from 'lucide-vue-next'
+import { Plus, Bluetooth, LayoutGrid, List, ChevronDown } from 'lucide-vue-next'
 
 type ViewMode = 'grid' | 'list'
 const STORAGE_KEY = 'sb-view-mode'
@@ -23,6 +25,13 @@ const scanModalOpen = ref(false)
 const viewMode = ref<ViewMode>(
   (localStorage.getItem(STORAGE_KEY) as ViewMode) || 'grid',
 )
+
+const selection = useDeviceSelection(
+  computed(() => deviceStore.filteredDevices),
+)
+
+const showGroupBar = computed(() => bridge.devices.length >= 2)
+const selectable = computed(() => bridge.devices.length >= 2)
 
 onMounted(() => {
   if (!bridge.snapshot) bridge.connectSSE()
@@ -46,6 +55,40 @@ function onToggleFilter(key: string) {
   const idx = arr.indexOf(key)
   if (idx >= 0) arr.splice(idx, 1)
   else arr.push(key)
+}
+
+/* Adapter filter options */
+const uniqueAdapters = computed(() => {
+  const set = new Set<string>()
+  for (const d of bridge.devices) {
+    if (d.adapter) set.add(d.adapter)
+  }
+  return [...set].sort()
+})
+
+const adapterLabel = computed(() =>
+  deviceStore.filter.adapter || t('devices.allAdapters'),
+)
+
+function setAdapterFilter(adapter: string) {
+  deviceStore.filter.adapter = adapter
+}
+
+/* Group filter options */
+const groupLabel = computed(() => {
+  if (!deviceStore.filter.group) return t('devices.allGroups')
+  const g = bridge.groups.find((g) => g.group_id === deviceStore.filter.group)
+  return g?.group_name ?? deviceStore.filter.group
+})
+
+function setGroupFilter(groupId: string) {
+  deviceStore.filter.group = groupId
+  if (groupId) {
+    const group = bridge.groups.find((g) => g.group_id === groupId)
+    if (group) {
+      selection.selectGroup(group.members.map((m) => m.player_name))
+    }
+  }
 }
 
 function openDetail(mac: string) {
@@ -105,12 +148,75 @@ function openDetail(mac: string) {
 
     <template v-else>
       <!-- Filter bar -->
-      <SbFilterBar
-        v-model="deviceStore.filter.search"
-        :placeholder="t('common.search')"
-        :filters="statusFilters"
-        class="mb-4"
-        @toggle-filter="onToggleFilter"
+      <div class="mb-4 flex flex-wrap items-center gap-2">
+        <SbFilterBar
+          v-model="deviceStore.filter.search"
+          :placeholder="t('common.search')"
+          :filters="statusFilters"
+          class="flex-1"
+          @toggle-filter="onToggleFilter"
+        />
+
+        <!-- Adapter filter dropdown -->
+        <SbDropdown v-if="uniqueAdapters.length > 1" align="right">
+          <template #trigger>
+            <button
+              type="button"
+              aria-haspopup="true"
+              class="inline-flex cursor-pointer items-center gap-1 rounded-[--radius-button] border border-gray-300 bg-surface-card px-3 py-2 text-sm text-text-primary transition-colors hover:bg-surface-secondary dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200"
+            >
+              {{ adapterLabel }}
+              <ChevronDown class="h-4 w-4" />
+            </button>
+          </template>
+          <SbDropdownItem @click="setAdapterFilter('')">
+            {{ t('devices.allAdapters') }}
+          </SbDropdownItem>
+          <SbDropdownItem
+            v-for="adapter in uniqueAdapters"
+            :key="adapter"
+            @click="setAdapterFilter(adapter)"
+          >
+            {{ adapter }}
+          </SbDropdownItem>
+        </SbDropdown>
+
+        <!-- Group filter dropdown -->
+        <SbDropdown v-if="bridge.groups.length > 0" align="right">
+          <template #trigger>
+            <button
+              type="button"
+              aria-haspopup="true"
+              class="inline-flex cursor-pointer items-center gap-1 rounded-[--radius-button] border border-gray-300 bg-surface-card px-3 py-2 text-sm text-text-primary transition-colors hover:bg-surface-secondary dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200"
+            >
+              {{ groupLabel }}
+              <ChevronDown class="h-4 w-4" />
+            </button>
+          </template>
+          <SbDropdownItem @click="setGroupFilter('')">
+            {{ t('devices.allGroups') }}
+          </SbDropdownItem>
+          <SbDropdownItem
+            v-for="group in bridge.groups"
+            :key="group.group_id"
+            @click="setGroupFilter(group.group_id)"
+          >
+            {{ group.group_name }}
+          </SbDropdownItem>
+        </SbDropdown>
+      </div>
+
+      <!-- Group action bar -->
+      <GroupActionBar
+        v-if="showGroupBar"
+        :devices="deviceStore.filteredDevices"
+        :total="deviceStore.filteredDevices.length"
+        :selected-count="selection.selectedCount.value"
+        :all-selected="selection.allSelected.value"
+        :some-selected="selection.someSelected.value"
+        :selected-devices="selection.selectedDevices.value"
+        :selected-names="selection.selectedNames.value"
+        @toggle-all="selection.toggleAll()"
       />
 
       <!-- Empty state -->
@@ -139,7 +245,10 @@ function openDetail(mac: string) {
           :key="device.mac"
           :device="device"
           :device-index="index"
+          :selectable="selectable"
+          :selected="selection.selected.value.has(device.player_name)"
           @open-detail="openDetail"
+          @toggle-select="selection.toggle($event)"
         />
       </div>
 
@@ -151,6 +260,7 @@ function openDetail(mac: string) {
         <table class="w-full text-left text-sm">
           <thead>
             <tr class="border-b border-border bg-surface-secondary text-xs uppercase tracking-wider text-text-secondary">
+              <th v-if="selectable" class="w-10 py-2 pl-3 pr-1 font-medium" />
               <th class="py-2 pl-3 pr-2 font-medium">{{ t('devices.list.name') }}</th>
               <th class="px-2 py-2 font-medium">{{ t('devices.list.status') }}</th>
               <th class="px-2 py-2 font-medium">{{ t('devices.list.volume') }}</th>
@@ -165,7 +275,10 @@ function openDetail(mac: string) {
               :key="device.mac"
               :device="device"
               :device-index="index"
+              :selectable="selectable"
+              :selected="selection.selected.value.has(device.player_name)"
               @open-detail="openDetail"
+              @toggle-select="selection.toggle($event)"
             />
           </tbody>
         </table>

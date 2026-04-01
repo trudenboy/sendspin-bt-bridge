@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useConfigStore } from '@/stores/config'
 import { useBridgeStore } from '@/stores/bridge'
-import { SbSlider, SbCard, SbBadge } from '@/kit'
+import { SbSlider, SbCard, SbBadge, SbButton } from '@/kit'
+import { Pencil, Check } from 'lucide-vue-next'
 
 const { t } = useI18n()
 const configStore = useConfigStore()
@@ -21,6 +22,30 @@ const btMaxReconnect = computed({
 
 function formatSec(v: number): string {
   return `${v} ${t('config.btCheckIntervalUnit')}`
+}
+
+/* Adapter name inline editing */
+const editingHci = ref<string | null>(null)
+const editName = ref('')
+const editInput = ref<HTMLInputElement | null>(null)
+
+function startEditing(adapter: { hci_device: string; name: string }) {
+  editingHci.value = adapter.hci_device
+  editName.value = adapter.name || ''
+  nextTick(() => editInput.value?.focus())
+}
+
+function confirmEdit() {
+  if (!editingHci.value || !configStore.config) return
+  const adapters = configStore.config.adapters ?? []
+  const idx = adapters.findIndex((a) => a.hci_device === editingHci.value)
+  if (idx >= 0) {
+    configStore.updateField(`adapters.${idx}.name`, editName.value.trim())
+  } else {
+    adapters.push({ hci_device: editingHci.value, name: editName.value.trim() })
+    configStore.updateField('adapters', adapters)
+  }
+  editingHci.value = null
 }
 </script>
 
@@ -79,10 +104,36 @@ function formatSec(v: number): string {
           :key="adapter.hci_device"
           class="flex items-center justify-between px-1 py-3"
         >
-          <div>
-            <p class="text-sm font-medium text-text-primary">
-              {{ adapter.name || adapter.hci_device }}
-            </p>
+          <div class="min-w-0 flex-1">
+            <div v-if="editingHci === adapter.hci_device" class="flex items-center gap-2">
+              <input
+                ref="editInput"
+                v-model="editName"
+                type="text"
+                class="w-48 rounded border border-gray-300 bg-transparent px-2 py-1 text-sm text-text-primary outline-none focus:ring-2 focus:ring-primary/40 dark:border-gray-600"
+                @keydown.enter="confirmEdit"
+                @keydown.escape="editingHci = null"
+                @blur="confirmEdit"
+              />
+              <SbButton variant="ghost" size="sm" icon :title="t('common.confirm')" @click.prevent="confirmEdit">
+                <Check class="h-4 w-4" aria-hidden="true" />
+              </SbButton>
+            </div>
+            <div v-else class="flex items-center gap-1.5">
+              <p class="text-sm font-medium text-text-primary">
+                {{ adapter.name || adapter.hci_device }}
+              </p>
+              <SbButton
+                variant="ghost"
+                size="sm"
+                icon
+                :title="t('config.editAdapterName')"
+                class="!h-6 !w-6"
+                @click="startEditing(adapter)"
+              >
+                <Pencil class="h-3.5 w-3.5" aria-hidden="true" />
+              </SbButton>
+            </div>
             <p class="text-xs text-text-secondary">
               {{ adapter.hci_device }} · {{ adapter.mac }}
             </p>

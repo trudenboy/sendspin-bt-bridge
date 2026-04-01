@@ -7,6 +7,21 @@
     "diagnostics": "Диагностика",
     "ma": "Music Assistant"
   },
+  "header": {
+    "viewRelease": "Открыть релиз на GitHub",
+    "uptime": "Время работы",
+    "hourShort": "ч",
+    "minShort": "м",
+    "secShort": "с",
+    "healthGood": "Все системы в норме",
+    "healthDegraded": "Часть устройств с проблемами",
+    "healthError": "Устройства отключены",
+    "healthUnknown": "Нет устройств",
+    "bugReport": "Сообщить об ошибке",
+    "docs": "Документация",
+    "github": "Репозиторий GitHub",
+    "toggleMenu": "Открыть меню"
+  },
   "device": {
     "status": {
       "streaming": "Воспроизведение",
@@ -28,6 +43,8 @@
       "details": "Подробнее",
       "enableFailed": "Не удалось переключить устройство"
     },
+    "battery": "Батарея {level}%",
+    "reanchored": "Переподключено ×{count}",
     "backend": {
       "bluetooth_a2dp": "Bluetooth A2DP",
       "local_sink": "Локальный аудиовыход",
@@ -96,14 +113,22 @@
     "rawJsonWarning": "Редактирование JSON может нарушить конфигурацию. Будьте осторожны.",
     "invalidJson": "Невалидный JSON",
     "uploadConfig": "Загрузить конфигурацию",
-    "downloadConfig": "Скачать конфигурацию"
+    "downloadConfig": "Скачать конфигурацию",
+    "saveAndRestart": "Сохранить и перезапустить",
+    "editAdapterName": "Изменить имя адаптера",
+    "latencyPresets": "Пресеты задержки",
+    "latencyLow": "Низкая (200мс)",
+    "latencyStandard": "Стандартная (500мс)",
+    "latencyHigh": "Высокая (800мс)",
+    "latencyCustom": "Своя"
   },
   "diagnostics": {
     "tabs": {
       "health": "Здоровье",
       "events": "События",
       "recovery": "Восстановление",
-      "bugreport": "Отчёт об ошибке"
+      "bugreport": "Отчёт об ошибке",
+      "logs": "Логи"
     },
     "health": {
       "title": "Здоровье моста",
@@ -127,6 +152,15 @@
       "noIssues": "Всё в порядке",
       "noIssuesDesc": "Проблем не обнаружено. Все системы работают нормально."
     },
+    "copy": "Копировать",
+    "copied": "Скопировано!",
+    "copyFailed": "Ошибка копирования",
+    "downloadCsv": "Скачать CSV",
+    "audioRouting": "Аудио маршрутизация",
+    "audioSink": "Аудио приёмник",
+    "codec": "Кодек",
+    "sampleRate": "Частота дискретизации",
+    "reanchorCount": "Коррекции маршрутизации",
     "bugreport": {
       "systemInfo": "Информация о системе",
       "version": "Версия",
@@ -140,6 +174,17 @@
       "step1": "Скачайте отчёт об ошибке с помощью кнопки выше.",
       "step2": "Опишите проблему и шаги для воспроизведения.",
       "step3": "Откройте новый issue на"
+    },
+    "logs": {
+      "title": "Логи приложения",
+      "logLevel": "Уровень логов",
+      "autoScroll": "Авто-прокрутка",
+      "refresh": "Обновить",
+      "download": "Скачать",
+      "apply": "Применить",
+      "search": "Поиск по логам…",
+      "showingLines": "Показано {shown} из {total} записей",
+      "noLogs": "Нет записей в логе"
     }
   },
   "ma": {
@@ -168,11 +213,16 @@
     },
     "nowPlaying": {
       "artwork": "Обложка альбома",
+      "artworkPreview": "Превью обложки",
+      "artworkClose": "Закрыть",
       "noTrack": "Ничего не воспроизводится",
       "prev": "Предыдущий трек",
       "playPause": "Воспроизведение / Пауза",
       "next": "Следующий трек"
-    }
+    },
+    "autoConnecting": "Подключение к Music Assistant...",
+    "openInMA": "Открыть в Music Assistant",
+    "silentAuthFailed": "Автоподключение не удалось, войдите вручную"
   },
   "login": {
     "title": "Вход",
@@ -192,6 +242,13 @@
     "empty": {
       "title": "Устройства не настроены",
       "description": "Добавьте Bluetooth-колонку или аудиоустройство для начала работы."
+    },
+    "onboarding": {
+      "title": "Начало работы",
+      "addSpeaker": "Добавьте первую Bluetooth колонку",
+      "connectMA": "Подключитесь к Music Assistant",
+      "configure": "Настройте параметры",
+      "dismiss": "Скрыть"
     }
   },
   "devices": {
@@ -202,6 +259,16 @@
     },
     "viewGrid": "Сетка",
     "viewList": "Список",
+    "allAdapters": "Все адаптеры",
+    "allGroups": "Все группы",
+    "selected": "Выбрано {count} из {total}",
+    "noneSelected": "Не выбрано",
+    "selectAll": "Выбрать все",
+    "groupVolume": "Общая громкость",
+    "muteAll": "Отключить звук у всех",
+    "pauseAll": "Пауза у всех",
+    "reconnectAll": "Переподключить все",
+    "actionFailed": "Действие не выполнено",
     "list": {
       "name": "Имя",
       "status": "Статус",
@@ -267,7 +334,19 @@
       "strong": "Сильный",
       "medium": "Средний",
       "weak": "Слабый"
-    }
+    },
+    "paired": "Сопряжённые устройства",
+    "audioOnly": "Только аудио",
+    "allDevices": "Все устройства",
+    "audioCount": "{audio} аудио · {total} всего",
+    "addToFleet": "Добавить",
+    "info": "Информация",
+    "release": "Освободить",
+    "reclaim": "Вернуть",
+    "released": "Освобождено",
+    "resetReconnect": "Сброс и переподключение",
+    "deviceInfo": "Информация Bluetooth устройства",
+    "noDevices": "Нет сопряжённых устройств"
   },
   "common": {
     "loading": "Загрузка...",
@@ -305,7 +384,8 @@
     "pause": "Пауза",
     "next": "Следующий трек",
     "previous": "Предыдущий трек",
-    "failed": "Ошибка команды воспроизведения"
+    "failed": "Ошибка команды воспроизведения",
+    "progress": "Прогресс воспроизведения"
   },
   "adapter": {
     "management": "Управление адаптером",
@@ -315,6 +395,13 @@
     "powerFailed": "Не удалось переключить питание адаптера",
     "rebooted": "Адаптер перезагружен",
     "rebootFailed": "Не удалось перезагрузить адаптер"
+  },
+  "restart": {
+    "stopping": "Остановка моста…",
+    "restarting": "Перезапуск моста…",
+    "ready": "Мост успешно перезапущен",
+    "error": "Ошибка перезапуска",
+    "elapsed": "{seconds}с"
   },
   "bugreport": {
     "title": "Сообщить об ошибке",

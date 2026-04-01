@@ -1,14 +1,31 @@
 import { apiGet, apiPost } from './client'
-import type { AdapterInfo, AsyncJob, BtScanDevice } from './types'
+import type { AdapterInfo, AsyncJob, BtDeviceInfo, BtScanDevice, PairedDevice } from './types'
 
 export function getAdapters() {
   return apiGet<AdapterInfo[]>('/api/bt/adapters')
 }
 
-export function getPairedDevices() {
-  return apiGet<
-    { mac: string; name: string; trusted: boolean; class: string }[]
-  >('/api/bt/paired')
+export async function getPairedDevices(): Promise<PairedDevice[]> {
+  const res = await apiGet<{ devices: PairedDevice[] }>('/api/bt/paired')
+  return res.devices
+}
+
+export function getBtDeviceInfo(mac: string) {
+  return apiPost<BtDeviceInfo>('/api/bt/info', { mac })
+}
+
+export function setDeviceManagement(playerName: string, managed: boolean) {
+  return apiPost<{ success: boolean; message: string; enabled: boolean }>(
+    '/api/bt/management',
+    { player_name: playerName, enabled: managed },
+  )
+}
+
+export function resetAndReconnect(mac: string, adapter?: string) {
+  return apiPost<{ job_id: string }>('/api/bt/reset_reconnect', {
+    mac,
+    adapter,
+  })
 }
 
 export function startScan(adapter?: string) {

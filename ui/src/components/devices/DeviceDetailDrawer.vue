@@ -3,14 +3,16 @@ import { computed, watch, ref, reactive } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useBridgeStore } from '@/stores/bridge'
 import { useDeviceStore } from '@/stores/devices'
+import { useBluetoothStore } from '@/stores/bluetooth'
 import { useNotificationStore } from '@/stores/notifications'
 import { SbDrawer, SbTabs, SbTimeline, SbSignalPath, SbBadge, SbButton, SbToggle } from '@/kit'
 import DeviceStatusBadge from './DeviceStatusBadge.vue'
+import BtDeviceInfoModal from '@/components/bluetooth/BtDeviceInfoModal.vue'
 import { queryEvents } from '@/api/events'
 import { toggleAdapterPower, rebootAdapter } from '@/api/devices'
 import { saveConfig } from '@/api/config'
 import type { DeviceSnapshot, EventRecord } from '@/api/types'
-import { Power, RotateCw, Save } from 'lucide-vue-next'
+import { Power, RotateCw, Save, Info } from 'lucide-vue-next'
 
 const props = defineProps<{
   deviceId: string | null
@@ -24,6 +26,7 @@ const emit = defineEmits<{
 const { t } = useI18n()
 const bridge = useBridgeStore()
 const deviceStore = useDeviceStore()
+const btStore = useBluetoothStore()
 const notifications = useNotificationStore()
 
 const activeTab = ref('status')
@@ -32,6 +35,7 @@ const loadingEvents = ref(false)
 const adapterLoading = ref(false)
 const saving = ref(false)
 const editing = ref(false)
+const btInfoOpen = ref(false)
 
 const editForm = reactive({
   player_name: '',
@@ -67,6 +71,13 @@ const configDirty = computed(() => {
     String(editForm.listen_port) !== String(d.listen_port ?? '') ||
     String(editForm.static_delay_ms) !== String(d.static_delay_ms ?? '')
   )
+})
+
+const reanchorCount = computed(() => {
+  if (!events.value) return 0
+  return events.value.filter(
+    (e) => e.event_type === 'reanchor' || e.event_type === 'sink_routing_corrected',
+  ).length
 })
 
 const signalSegments = computed(() => {
@@ -176,6 +187,32 @@ async function onToggleEnabled() {
   }
 }
 
+async function onRelease() {
+  const d = device.value
+  if (!d) return
+  try {
+    await btStore.setManagement(d.player_name, false)
+    notifications.success(t('bluetooth.release'))
+  } catch {
+    notifications.error(t('device.actions.enableFailed'))
+  }
+}
+
+async function onReclaim() {
+  const d = device.value
+  if (!d) return
+  try {
+    await btStore.setManagement(d.player_name, true)
+    notifications.success(t('bluetooth.reclaim'))
+  } catch {
+    notifications.error(t('device.actions.enableFailed'))
+  }
+}
+
+function onBtInfo() {
+  btInfoOpen.value = true
+}
+
 async function onAdapterPower() {
   const adapter = device.value?.adapter
   if (!adapter) return
@@ -273,6 +310,37 @@ watch(
             </div>
             <div v-if="device.error" class="rounded-lg bg-red-50 p-3 text-sm text-error dark:bg-red-900/10">
               {{ device.error }}
+            </div>
+
+            <!-- Release/Reclaim + BT Info actions -->
+            <div class="flex items-center gap-2 border-t border-border pt-3">
+              <SbButton
+                v-if="device.enabled"
+                variant="secondary"
+                size="sm"
+                :loading="btStore.managementLoading"
+                @click="onRelease"
+              >
+                {{ t('bluetooth.release') }}
+              </SbButton>
+              <SbButton
+                v-else
+                variant="secondary"
+                size="sm"
+                :loading="btStore.managementLoading"
+                @click="onReclaim"
+              >
+                {{ t('bluetooth.reclaim') }}
+              </SbButton>
+              <SbButton variant="secondary" size="sm" @click="onBtInfo">
+                <template #icon-left>
+                  <Info class="h-3.5 w-3.5" />
+                </template>
+                {{ t('bluetooth.info') }}
+              </SbButton>
+              <SbBadge v-if="!device.enabled" tone="warning" size="sm">
+                {{ t('bluetooth.released') }}
+              </SbBadge>
             </div>
           </div>
         </template>
@@ -446,11 +514,36 @@ watch(
 
         <!-- Signal Path tab -->
         <template #signal>
-          <div class="py-4">
+          <div class="space-y-4 py-4">
             <SbSignalPath :segments="signalSegments" direction="vertical" />
+
+            <!-- Audio routing details -->
+            <div class="border-t border-border pt-4">
+              <h4 class="mb-3 text-xs font-semibold uppercase tracking-wider text-text-secondary">
+                {{ t('diagnostics.audioRouting') }}
+              </h4>
+              <dl class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                <dt class="text-text-secondary">{{ t('diagnostics.audioSink') }}</dt>
+                <dd class="font-mono text-xs text-text-primary">{{ device.audio_sink ?? '—' }}</dd>
+                <dt class="text-text-secondary">{{ t('diagnostics.codec') }}</dt>
+                <dd class="text-text-primary">{{ device.codec ?? '—' }}</dd>
+                <dt class="text-text-secondary">{{ t('diagnostics.sampleRate') }}</dt>
+                <dd class="text-text-primary">{{ device.sample_rate ? `${device.sample_rate} Hz` : '—' }}</dd>
+                <dt class="text-text-secondary">{{ t('diagnostics.reanchorCount') }}</dt>
+                <dd class="text-text-primary">{{ reanchorCount > 0 ? `${reanchorCount} corrections` : '—' }}</dd>
+              </dl>
+            </div>
           </div>
         </template>
       </SbTabs>
     </template>
+
+    <!-- BT Device Info Modal -->
+    <BtDeviceInfoModal
+      v-if="device"
+      :mac="device.mac"
+      :open="btInfoOpen"
+      @update:open="btInfoOpen = $event"
+    />
   </SbDrawer>
 </template>

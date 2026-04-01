@@ -6,6 +6,7 @@ import {
   discoverMA,
   queueCmd as apiQueueCmd,
   maLogin as apiMaLogin,
+  silentAuth as apiSilentAuth,
 } from '@/api/ma'
 import type { SyncGroup, NowPlaying } from '@/api/types'
 
@@ -51,6 +52,14 @@ export const useMaStore = defineStore('ma', () => {
     return result
   }
 
+  async function silentAuth(haToken: string, maUrl: string) {
+    const result = await apiSilentAuth(haToken, maUrl)
+    if (result.success) {
+      connected.value = true
+    }
+    return result
+  }
+
   return {
     connected,
     groups,
@@ -61,5 +70,6 @@ export const useMaStore = defineStore('ma', () => {
     getNowPlaying,
     queueCmd,
     login,
+    silentAuth,
   }
 })
