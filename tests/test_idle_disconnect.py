@@ -426,6 +426,7 @@ class TestIdleTimerGuardAtFiring:
     @pytest.mark.asyncio
     async def test_timer_restarts_when_playing_at_fire_time(self):
         """If playing=True when the timer fires, standby is skipped and timer restarts."""
+        real_sleep = asyncio.sleep  # keep a ref before mock replaces it
         with patch("sendspin_client._state") as state_mock:
             state_mock.get_main_loop.return_value = None
             state_mock.notify_status_changed = MagicMock()
@@ -434,20 +435,26 @@ class TestIdleTimerGuardAtFiring:
             client.status.update({"playing": True})
 
             with (
-                patch("asyncio.sleep", new_callable=AsyncMock),
+                patch("sendspin_client.asyncio.sleep", new_callable=AsyncMock),
                 patch.object(client, "_enter_standby", new_callable=AsyncMock) as enter_mock,
             ):
                 client._start_idle_timer()
-                # Let the task run to completion
-                await asyncio.sleep(0)
-                await asyncio.sleep(0)
+                original_task = client._idle_timer_task
+                assert original_task is not None
+                # Yield to the event loop so the timer task runs to completion.
+                # sendspin_client.asyncio.sleep is mocked (instant); we use the
+                # real sleep captured above for the yield.
+                await real_sleep(0)
+                await real_sleep(0)
                 enter_mock.assert_not_awaited()
-                # Timer should have been restarted (new task created)
+                # Guard detected active playback → restarted timer with a new task
                 assert client._idle_timer_task is not None
+                assert client._idle_timer_task is not original_task
 
     @pytest.mark.asyncio
     async def test_timer_restarts_when_streaming_at_fire_time(self):
         """If audio_streaming=True when the timer fires, standby is skipped."""
+        real_sleep = asyncio.sleep
         with patch("sendspin_client._state") as state_mock:
             state_mock.get_main_loop.return_value = None
             state_mock.notify_status_changed = MagicMock()
@@ -456,14 +463,17 @@ class TestIdleTimerGuardAtFiring:
             client.status.update({"audio_streaming": True})
 
             with (
-                patch("asyncio.sleep", new_callable=AsyncMock),
+                patch("sendspin_client.asyncio.sleep", new_callable=AsyncMock),
                 patch.object(client, "_enter_standby", new_callable=AsyncMock) as enter_mock,
             ):
                 client._start_idle_timer()
-                await asyncio.sleep(0)
-                await asyncio.sleep(0)
+                original_task = client._idle_timer_task
+                assert original_task is not None
+                await real_sleep(0)
+                await real_sleep(0)
                 enter_mock.assert_not_awaited()
                 assert client._idle_timer_task is not None
+                assert client._idle_timer_task is not original_task
 
     @pytest.mark.asyncio
     async def test_timer_enters_standby_when_idle_at_fire_time(self):
@@ -475,7 +485,7 @@ class TestIdleTimerGuardAtFiring:
             client = _make_client(idle_disconnect_minutes=30)
             # Both default to False — device is truly idle
 
-            with patch("asyncio.sleep", new_callable=AsyncMock):
+            with patch("sendspin_client.asyncio.sleep", new_callable=AsyncMock):
                 client._start_idle_timer()
                 task = client._idle_timer_task
                 assert task is not None
