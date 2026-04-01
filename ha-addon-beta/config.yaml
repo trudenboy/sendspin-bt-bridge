@@ -1,6 +1,6 @@
 ---
 name: "Sendspin Bluetooth Bridge (Beta)"
-version: "3.0.0-beta.10"
+version: "3.0.0-beta.11"
 slug: "sendspin_bt_bridge_beta"
 description: "Bridge Music Assistant Sendspin protocol to Bluetooth speakers (Beta channel)"
 url: "https://github.com/trudenboy/sendspin-bt-bridge"
