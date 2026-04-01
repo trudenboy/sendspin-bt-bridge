@@ -199,6 +199,16 @@
     "empty": {
       "title": "No devices yet",
       "description": "Scan for Bluetooth devices or add a device manually."
+    },
+    "viewGrid": "Grid view",
+    "viewList": "List view",
+    "list": {
+      "name": "Name",
+      "status": "Status",
+      "volume": "Volume",
+      "transport": "Transport",
+      "adapter": "Adapter",
+      "actions": "Actions"
     }
   },
   "drawer": {
@@ -222,7 +232,13 @@
       "adapter": "Adapter",
       "port": "Listen Port",
       "delay": "Static Delay",
-      "enabled": "Enabled"
+      "enabled": "Enabled",
+      "edit": "Edit",
+      "save": "Save",
+      "saved": "Device configuration saved",
+      "saveFailed": "Failed to save configuration",
+      "autoAdapter": "Auto (default)",
+      "autoPort": "Auto"
     },
     "events": {
       "empty": "No events recorded"
@@ -297,5 +313,36 @@
     "powerFailed": "Failed to toggle adapter power",
     "rebooted": "Adapter rebooted",
     "rebootFailed": "Failed to reboot adapter"
+  },
+  "bugreport": {
+    "title": "File a Bug Report",
+    "fileReport": "File Bug Report",
+    "fields": {
+      "title": "Issue Title",
+      "titlePlaceholder": "Brief description of the issue",
+      "description": "Description",
+      "descPlaceholder": "What happened? What did you expect instead?",
+      "email": "Your Email (for follow-up)"
+    },
+    "errors": {
+      "titleShort": "Title must be at least 5 characters",
+      "descShort": "Description must be at least 10 characters",
+      "emailInvalid": "Please enter a valid email address"
+    },
+    "method": {
+      "github": "GitHub",
+      "proxy": "Submit",
+      "copy": "Copy"
+    },
+    "diagnosticsPreview": "Diagnostic data",
+    "autoAttached": "auto-attached",
+    "loadingDiagnostics": "Loading diagnostics...",
+    "loadFailed": "Failed to load diagnostic data",
+    "submit": "Submit Report",
+    "download": "Download",
+    "submitted": "Bug report submitted successfully",
+    "submitFailed": "Failed to submit bug report",
+    "copied": "Report copied to clipboard",
+    "copyFailed": "Failed to copy to clipboard"
   }
 }

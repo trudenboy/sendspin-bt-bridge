@@ -26,16 +26,28 @@ export function getPreflight() {
   return apiGet<Record<string, unknown>>('/api/preflight')
 }
 
+export interface BugreportData {
+  markdown_short: string
+  text_full: string
+  suggested_description: string
+  report: Record<string, unknown>
+}
+
 export function getBugreport() {
-  return apiGet<Record<string, unknown>>('/api/bugreport')
+  return apiGet<BugreportData>('/api/bugreport')
+}
+
+export function checkProxyAvailable() {
+  return apiGet<{ available: boolean }>('/api/bugreport/proxy-available')
 }
 
 export function submitBugreport(data: {
   title: string
   description: string
-  include_diagnostics: boolean
+  email: string
+  diagnostics_text?: string
 }) {
-  return apiPost<{ success: boolean; issue_url?: string }>(
+  return apiPost<{ success: boolean; issue_url?: string; issue_number?: number; error?: string }>(
     '/api/bugreport/submit',
     data,
   )
@@ -49,5 +61,5 @@ export function rerunChecks(checkName: string) {
 
 export function downloadBugreport() {
   const { apiBase } = useIngress()
-  window.location.href = `${apiBase}/api/bugreport/download`
+  window.location.href = `${apiBase}/api/diagnostics/download`
 }

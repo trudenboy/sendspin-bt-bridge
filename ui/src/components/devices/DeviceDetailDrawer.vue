@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, watch, ref } from 'vue'
+import { computed, watch, ref, reactive } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useBridgeStore } from '@/stores/bridge'
 import { useDeviceStore } from '@/stores/devices'
@@ -8,8 +8,9 @@ import { SbDrawer, SbTabs, SbTimeline, SbSignalPath, SbBadge, SbButton, SbToggle
 import DeviceStatusBadge from './DeviceStatusBadge.vue'
 import { queryEvents } from '@/api/events'
 import { toggleAdapterPower, rebootAdapter } from '@/api/devices'
+import { saveConfig } from '@/api/config'
 import type { DeviceSnapshot, EventRecord } from '@/api/types'
-import { Power, RotateCw } from 'lucide-vue-next'
+import { Power, RotateCw, Save } from 'lucide-vue-next'
 
 const props = defineProps<{
   deviceId: string | null
@@ -29,6 +30,15 @@ const activeTab = ref('status')
 const events = ref<EventRecord[]>([])
 const loadingEvents = ref(false)
 const adapterLoading = ref(false)
+const saving = ref(false)
+const editing = ref(false)
+
+const editForm = reactive({
+  player_name: '',
+  adapter: '',
+  listen_port: '' as string | number,
+  static_delay_ms: '' as string | number,
+})
 
 const device = computed<DeviceSnapshot | undefined>(() =>
   bridge.devices.find((d) => d.mac === props.deviceId),
@@ -42,6 +52,22 @@ const tabs = computed(() => [
   { id: 'events', label: t('drawer.tabs.events'), badge: events.value.length || undefined },
   { id: 'signal', label: t('drawer.tabs.signal') },
 ])
+
+const availableAdapters = computed(() => {
+  const snap = bridge.snapshot
+  return snap?.adapters?.map((a) => a.name ?? a.address) ?? []
+})
+
+const configDirty = computed(() => {
+  const d = device.value
+  if (!d) return false
+  return (
+    editForm.player_name !== d.player_name ||
+    editForm.adapter !== (d.adapter ?? '') ||
+    String(editForm.listen_port) !== String(d.listen_port ?? '') ||
+    String(editForm.static_delay_ms) !== String(d.static_delay_ms ?? '')
+  )
+})
 
 const signalSegments = computed(() => {
   const d = device.value
@@ -90,6 +116,56 @@ function onDrawerUpdate(...args: unknown[]) {
   emit('update:open', Boolean(args[0]))
 }
 
+function startEditing() {
+  const d = device.value
+  if (!d) return
+  editForm.player_name = d.player_name
+  editForm.adapter = d.adapter ?? ''
+  editForm.listen_port = d.listen_port ?? ''
+  editForm.static_delay_ms = d.static_delay_ms ?? ''
+  editing.value = true
+}
+
+function cancelEditing() {
+  editing.value = false
+}
+
+async function saveDeviceConfig() {
+  const d = device.value
+  if (!d) return
+  saving.value = true
+  try {
+    const devices = bridge.snapshot?.devices ?? []
+    const updatedDevices = devices.map((dev) => {
+      if (dev.mac !== d.mac) {
+        return {
+          mac: dev.mac,
+          player_name: dev.player_name,
+          adapter: dev.adapter,
+          enabled: dev.enabled,
+          listen_port: dev.listen_port,
+          static_delay_ms: dev.static_delay_ms,
+        }
+      }
+      return {
+        mac: dev.mac,
+        player_name: editForm.player_name,
+        adapter: editForm.adapter || undefined,
+        enabled: dev.enabled,
+        listen_port: editForm.listen_port ? Number(editForm.listen_port) : undefined,
+        static_delay_ms: editForm.static_delay_ms ? Number(editForm.static_delay_ms) : undefined,
+      }
+    })
+    await saveConfig({ BLUETOOTH_DEVICES: updatedDevices })
+    notifications.success(t('drawer.config.saved'))
+    editing.value = false
+  } catch {
+    notifications.error(t('drawer.config.saveFailed'))
+  } finally {
+    saving.value = false
+  }
+}
+
 async function onToggleEnabled() {
   const d = device.value
   if (!d) return
@@ -131,6 +207,7 @@ async function onAdapterReboot() {
 watch(
   () => props.deviceId,
   async (id) => {
+    editing.value = false
     if (!id) return
     loadingEvents.value = true
     try {
@@ -203,7 +280,8 @@ watch(
         <!-- Config tab -->
         <template #config>
           <div class="space-y-4 py-4 text-sm">
-            <div class="grid grid-cols-2 gap-3">
+            <!-- Read-only mode -->
+            <div v-if="!editing" class="grid grid-cols-2 gap-3">
               <div>
                 <span class="text-text-secondary">{{ t('drawer.config.name') }}</span>
                 <p class="mt-1 text-text-primary">{{ device.player_name }}</p>
@@ -236,6 +314,88 @@ watch(
                   />
                 </div>
               </div>
+            </div>
+
+            <!-- Edit mode -->
+            <div v-else class="space-y-3">
+              <div>
+                <label class="mb-1 block text-xs text-text-secondary">{{ t('drawer.config.name') }}</label>
+                <input
+                  v-model="editForm.player_name"
+                  type="text"
+                  class="w-full rounded-lg border border-border bg-surface-primary px-2.5 py-1.5 text-sm text-text-primary focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
+              <div>
+                <label class="mb-1 block text-xs text-text-secondary">{{ t('drawer.config.mac') }}</label>
+                <p class="mt-1 font-mono text-text-secondary">{{ device.mac }}</p>
+              </div>
+              <div>
+                <label class="mb-1 block text-xs text-text-secondary">{{ t('drawer.config.adapter') }}</label>
+                <select
+                  v-model="editForm.adapter"
+                  class="w-full rounded-lg border border-border bg-surface-primary px-2.5 py-1.5 text-sm text-text-primary focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                >
+                  <option value="">{{ t('drawer.config.autoAdapter') }}</option>
+                  <option v-for="a in availableAdapters" :key="a" :value="a">{{ a }}</option>
+                </select>
+              </div>
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="mb-1 block text-xs text-text-secondary">{{ t('drawer.config.port') }}</label>
+                  <input
+                    v-model="editForm.listen_port"
+                    type="number"
+                    class="w-full rounded-lg border border-border bg-surface-primary px-2.5 py-1.5 text-sm text-text-primary focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                    :placeholder="t('drawer.config.autoPort')"
+                  />
+                </div>
+                <div>
+                  <label class="mb-1 block text-xs text-text-secondary">{{ t('drawer.config.delay') }}</label>
+                  <input
+                    v-model="editForm.static_delay_ms"
+                    type="number"
+                    class="w-full rounded-lg border border-border bg-surface-primary px-2.5 py-1.5 text-sm text-text-primary focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                    placeholder="ms"
+                  />
+                </div>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="text-xs text-text-secondary">{{ t('drawer.config.enabled') }}</span>
+                <SbToggle
+                  :model-value="device.enabled"
+                  :label="device.enabled ? t('common.yes') : t('common.no')"
+                  @update:model-value="onToggleEnabled"
+                />
+              </div>
+            </div>
+
+            <!-- Edit/Save buttons -->
+            <div class="flex items-center gap-2">
+              <SbButton
+                v-if="!editing"
+                variant="secondary"
+                size="sm"
+                @click="startEditing"
+              >
+                {{ t('drawer.config.edit') }}
+              </SbButton>
+              <template v-else>
+                <SbButton
+                  size="sm"
+                  :loading="saving"
+                  :disabled="!configDirty"
+                  @click="saveDeviceConfig"
+                >
+                  <template #icon-left>
+                    <Save class="h-3.5 w-3.5" />
+                  </template>
+                  {{ t('drawer.config.save') }}
+                </SbButton>
+                <SbButton variant="ghost" size="sm" @click="cancelEditing">
+                  {{ t('common.cancel') }}
+                </SbButton>
+              </template>
             </div>
 
             <!-- Adapter management -->

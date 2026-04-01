@@ -1,14 +1,17 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useDiagnosticsStore } from '@/stores/diagnostics'
 import { useBridgeStore } from '@/stores/bridge'
 import { SbCard, SbButton } from '@/kit'
-import { Download, Copy, ExternalLink } from 'lucide-vue-next'
+import { Download, Copy, Bug } from 'lucide-vue-next'
+import BugReportDialog from '@/components/BugReportDialog.vue'
 
 const { t } = useI18n()
 const diagnostics = useDiagnosticsStore()
 const bridge = useBridgeStore()
+
+const dialogOpen = ref(false)
 
 const systemInfo = computed(() => {
   const snap = bridge.snapshot
@@ -49,7 +52,14 @@ async function copyToClipboard() {
 
     <!-- Actions -->
     <div class="flex flex-wrap gap-3">
-      <SbButton variant="primary" @click="download">
+      <SbButton variant="primary" @click="dialogOpen = true">
+        <template #icon-left>
+          <Bug class="h-4 w-4" aria-hidden="true" />
+        </template>
+        {{ t('bugreport.fileReport') }}
+      </SbButton>
+
+      <SbButton variant="secondary" @click="download">
         <template #icon-left>
           <Download class="h-4 w-4" aria-hidden="true" />
         </template>
@@ -64,27 +74,6 @@ async function copyToClipboard() {
       </SbButton>
     </div>
 
-    <!-- GitHub instructions -->
-    <SbCard>
-      <template #header>
-        <span>{{ t('diagnostics.bugreport.howToFile') }}</span>
-      </template>
-      <ol class="list-decimal space-y-2 pl-5 text-sm text-text-secondary">
-        <li>{{ t('diagnostics.bugreport.step1') }}</li>
-        <li>{{ t('diagnostics.bugreport.step2') }}</li>
-        <li>
-          {{ t('diagnostics.bugreport.step3') }}
-          <a
-            href="https://github.com/TrudenBoy/sendspin-bt-bridge/issues/new"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="inline-flex items-center gap-1 text-primary hover:underline"
-          >
-            GitHub Issues
-            <ExternalLink class="h-3 w-3" aria-hidden="true" />
-          </a>
-        </li>
-      </ol>
-    </SbCard>
+    <BugReportDialog v-model="dialogOpen" />
   </div>
 </template>

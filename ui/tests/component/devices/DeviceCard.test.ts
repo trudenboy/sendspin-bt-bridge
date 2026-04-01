@@ -223,4 +223,59 @@ describe('DeviceCard', () => {
     await nextBtn!.trigger('click')
     expect(transportCmd).toHaveBeenCalledWith('next', 0)
   })
+
+  it('calls transportCmd on previous button click', async () => {
+    const { transportCmd } = await import('@/api/playback')
+    const w = mountCard(
+      makeDevice({ connected: true, audio_streaming: true, player_state: 'STREAMING' }),
+    )
+    const prevBtn = w.findAll('button').find(
+      (b) => b.attributes('aria-label') === 'Previous track',
+    )
+    expect(prevBtn).toBeTruthy()
+    await prevBtn!.trigger('click')
+    expect(transportCmd).toHaveBeenCalledWith('previous', 0)
+  })
+
+  it('passes deviceIndex to transportCmd', async () => {
+    const { transportCmd } = await import('@/api/playback')
+    const device = makeDevice({ connected: true, audio_streaming: true, player_state: 'STREAMING' })
+    const w = mount(DeviceCard, {
+      props: { device, deviceIndex: 5 },
+      global: { plugins: [buildI18n()] },
+    })
+    const pauseBtn = w.findAll('button').find(
+      (b) => b.attributes('aria-label') === 'Pause',
+    )
+    expect(pauseBtn).toBeTruthy()
+    await pauseBtn!.trigger('click')
+    expect(transportCmd).toHaveBeenCalledWith('pause', 5)
+  })
+
+  it('calls setEnabled(mac, false) when Disable clicked', async () => {
+    const w = mountCard(makeDevice({ enabled: true }))
+    // Open dropdown first (trigger wraps the MoreVertical button)
+    const triggerBtn = w.findAll('button').find(
+      (b) => b.attributes('aria-label') === 'Details',
+    )
+    await triggerBtn!.trigger('click')
+    const menuItems = w.findAll('button[role="menuitem"]')
+    const disableItem = menuItems.find((b) => b.text().includes('Disable'))
+    expect(disableItem).toBeTruthy()
+    await disableItem!.trigger('click')
+    expect(mockSetEnabled).toHaveBeenCalledWith('AA:BB:CC:DD:EE:FF', false)
+  })
+
+  it('calls setEnabled(mac, true) when Enable clicked', async () => {
+    const w = mountCard(makeDevice({ enabled: false }))
+    const triggerBtn = w.findAll('button').find(
+      (b) => b.attributes('aria-label') === 'Details',
+    )
+    await triggerBtn!.trigger('click')
+    const menuItems = w.findAll('button[role="menuitem"]')
+    const enableItem = menuItems.find((b) => b.text().includes('Enable'))
+    expect(enableItem).toBeTruthy()
+    await enableItem!.trigger('click')
+    expect(mockSetEnabled).toHaveBeenCalledWith('AA:BB:CC:DD:EE:FF', true)
+  })
 })

@@ -5,9 +5,13 @@ import { useBridgeStore } from '@/stores/bridge'
 import { useDeviceStore } from '@/stores/devices'
 import { SbFilterBar, SbButton, SbSpinner, SbEmptyState } from '@/kit'
 import DeviceCard from '@/components/devices/DeviceCard.vue'
+import DeviceListRow from '@/components/devices/DeviceListRow.vue'
 import DeviceDetailDrawer from '@/components/devices/DeviceDetailDrawer.vue'
 import BtScanModal from '@/components/bluetooth/BtScanModal.vue'
-import { Plus, Bluetooth } from 'lucide-vue-next'
+import { Plus, Bluetooth, LayoutGrid, List } from 'lucide-vue-next'
+
+type ViewMode = 'grid' | 'list'
+const STORAGE_KEY = 'sb-view-mode'
 
 const { t } = useI18n()
 const bridge = useBridgeStore()
@@ -16,10 +20,18 @@ const deviceStore = useDeviceStore()
 const drawerOpen = ref(false)
 const selectedMac = ref<string | null>(null)
 const scanModalOpen = ref(false)
+const viewMode = ref<ViewMode>(
+  (localStorage.getItem(STORAGE_KEY) as ViewMode) || 'grid',
+)
 
 onMounted(() => {
   if (!bridge.snapshot) bridge.connectSSE()
 })
+
+function setViewMode(mode: ViewMode) {
+  viewMode.value = mode
+  localStorage.setItem(STORAGE_KEY, mode)
+}
 
 const statusFilters = computed(() => [
   { key: 'STREAMING', label: t('device.status.streaming'), active: deviceStore.filter.status.includes('STREAMING') },
@@ -48,7 +60,29 @@ function openDetail(mac: string) {
       <h1 class="text-2xl font-bold text-text-primary">
         {{ t('app.devices') }}
       </h1>
-      <div class="flex gap-2">
+      <div class="flex items-center gap-2">
+        <!-- View mode toggle -->
+        <div class="flex rounded-lg border border-border">
+          <button
+            type="button"
+            class="rounded-l-lg p-1.5 transition-colors"
+            :class="viewMode === 'grid' ? 'bg-primary text-white' : 'text-text-secondary hover:bg-surface-secondary'"
+            :aria-label="t('devices.viewGrid')"
+            @click="setViewMode('grid')"
+          >
+            <LayoutGrid class="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            class="rounded-r-lg p-1.5 transition-colors"
+            :class="viewMode === 'list' ? 'bg-primary text-white' : 'text-text-secondary hover:bg-surface-secondary'"
+            :aria-label="t('devices.viewList')"
+            @click="setViewMode('list')"
+          >
+            <List class="h-4 w-4" />
+          </button>
+        </div>
+
         <SbButton variant="secondary" size="sm" @click="scanModalOpen = true">
           <template #icon-left>
             <Bluetooth class="h-4 w-4" />
@@ -97,7 +131,7 @@ function openDetail(mac: string) {
 
       <!-- Device grid -->
       <div
-        v-else-if="deviceStore.filteredDevices.length > 0"
+        v-else-if="viewMode === 'grid' && deviceStore.filteredDevices.length > 0"
         class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
       >
         <DeviceCard
@@ -109,8 +143,36 @@ function openDetail(mac: string) {
         />
       </div>
 
+      <!-- Device list -->
+      <div
+        v-else-if="viewMode === 'list' && deviceStore.filteredDevices.length > 0"
+        class="overflow-x-auto rounded-lg border border-border"
+      >
+        <table class="w-full text-left text-sm">
+          <thead>
+            <tr class="border-b border-border bg-surface-secondary text-xs uppercase tracking-wider text-text-secondary">
+              <th class="py-2 pl-3 pr-2 font-medium">{{ t('devices.list.name') }}</th>
+              <th class="px-2 py-2 font-medium">{{ t('devices.list.status') }}</th>
+              <th class="px-2 py-2 font-medium">{{ t('devices.list.volume') }}</th>
+              <th class="px-2 py-2 font-medium">{{ t('devices.list.transport') }}</th>
+              <th class="hidden px-2 py-2 font-medium md:table-cell">{{ t('devices.list.adapter') }}</th>
+              <th class="py-2 pl-2 pr-3 text-right font-medium">{{ t('devices.list.actions') }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <DeviceListRow
+              v-for="(device, index) in deviceStore.filteredDevices"
+              :key="device.mac"
+              :device="device"
+              :device-index="index"
+              @open-detail="openDetail"
+            />
+          </tbody>
+        </table>
+      </div>
+
       <!-- No filter results -->
-      <div v-else class="py-16 text-center text-text-secondary">
+      <div v-else-if="deviceStore.filteredDevices.length === 0" class="py-16 text-center text-text-secondary">
         {{ t('common.noResults') }}
       </div>
     </template>
