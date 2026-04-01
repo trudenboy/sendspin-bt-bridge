@@ -31,19 +31,63 @@
       "owner": 128
     }
   ],
-  "code_frequency": [],
+  "code_frequency": [
+    {
+      "week": "2025-12-28",
+      "additions": 2100,
+      "deletions": 115
+    },
+    {
+      "week": "2026-02-22",
+      "additions": 5195,
+      "deletions": 1487
+    },
+    {
+      "week": "2026-03-01",
+      "additions": 42942,
+      "deletions": 14646
+    },
+    {
+      "week": "2026-03-08",
+      "additions": 32343,
+      "deletions": 9590
+    },
+    {
+      "week": "2026-03-15",
+      "additions": 52529,
+      "deletions": 18252
+    },
+    {
+      "week": "2026-03-22",
+      "additions": 40699,
+      "deletions": 14965
+    },
+    {
+      "week": "2026-03-29",
+      "additions": 13059,
+      "deletions": 1944
+    }
+  ],
   "ai": {
     "commits_scanned": 200,
-    "ai_commits": 138,
-    "ai_ratio": 0.69,
+    "ai_commits": 134,
+    "ai_ratio": 0.67,
     "agents": [
       {
         "name": "Copilot",
-        "commits": 129
+        "commits": 123
       },
       {
         "name": "dependabot[bot]",
         "commits": 8
+      },
+      {
+        "name": "copilot-swe-agent[bot]",
+        "commits": 2
+      },
+      {
+        "name": "trudenboy",
+        "commits": 2
       },
       {
         "name": "Claude Sonnet 4.6",

@@ -1,9 +1,28 @@
 {
-  "total_downloads": 2,
-  "release_count": 173,
-  "latest_release_tag": "v2.52.2",
-  "latest_release_published_at": "2026-04-01T04:35:48Z",
+  "total_downloads": 7,
+  "release_count": 177,
+  "latest_release_tag": "v2.52.3",
+  "latest_release_published_at": "2026-04-01T15:19:46Z",
   "releases": [
+    {
+      "tag_name": "v2.52.3",
+      "name": "v2.52.3",
+      "prerelease": false,
+      "published_at": "2026-04-01T15:19:46Z",
+      "created_at": "2026-04-01T15:17:31Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.52.3",
+      "asset_downloads": 0,
+      "assets": [
+        {
+          "name": "sendspin-bt-bridge-2.52.3.tar.gz",
+          "download_count": 0,
+          "size": 841484,
+          "content_type": "application/x-gtar",
+          "created_at": "2026-04-01T15:19:47Z",
+          "updated_at": "2026-04-01T15:19:47Z"
+        }
+      ]
+    },
     {
       "tag_name": "v2.52.2",
       "name": "v2.52.2",
@@ -20,6 +39,63 @@
           "content_type": "application/x-gtar",
           "created_at": "2026-04-01T04:35:49Z",
           "updated_at": "2026-04-01T04:35:49Z"
+        }
+      ]
+    },
+    {
+      "tag_name": "vue-dist-v3.0.0-beta.8",
+      "name": "Vue dist v3.0.0-beta.8",
+      "prerelease": true,
+      "published_at": "2026-04-01T14:23:28Z",
+      "created_at": "2026-04-01T13:55:39Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/vue-dist-v3.0.0-beta.8",
+      "asset_downloads": 4,
+      "assets": [
+        {
+          "name": "vue-dist.tar.gz",
+          "download_count": 4,
+          "size": 128879,
+          "content_type": "application/x-gtar",
+          "created_at": "2026-04-01T14:23:27Z",
+          "updated_at": "2026-04-01T14:23:28Z"
+        }
+      ]
+    },
+    {
+      "tag_name": "vue-dist-v3.0.0-beta.7",
+      "name": "Vue dist v3.0.0-beta.7",
+      "prerelease": true,
+      "published_at": "2026-04-01T13:53:27Z",
+      "created_at": "2026-04-01T13:38:28Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/vue-dist-v3.0.0-beta.7",
+      "asset_downloads": 0,
+      "assets": [
+        {
+          "name": "vue-dist.tar.gz",
+          "download_count": 0,
+          "size": 124706,
+          "content_type": "application/x-gtar",
+          "created_at": "2026-04-01T13:53:26Z",
+          "updated_at": "2026-04-01T13:53:26Z"
+        }
+      ]
+    },
+    {
+      "tag_name": "vue-dist-v3.0.0-beta.10",
+      "name": "Vue dist v3.0.0-beta.10",
+      "prerelease": true,
+      "published_at": "2026-04-01T14:52:26Z",
+      "created_at": "2026-04-01T14:25:40Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/vue-dist-v3.0.0-beta.10",
+      "asset_downloads": 1,
+      "assets": [
+        {
+          "name": "vue-dist.tar.gz",
+          "download_count": 1,
+          "size": 134255,
+          "content_type": "application/x-gtar",
+          "created_at": "2026-04-01T14:52:25Z",
+          "updated_at": "2026-04-01T14:52:25Z"
         }
       ]
     },

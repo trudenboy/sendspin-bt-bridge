@@ -1,23 +1,23 @@
 [
   {
     "referrer": "github.com",
-    "count": 185,
-    "uniques": 47
+    "count": 180,
+    "uniques": 50
   },
   {
     "referrer": "community.home-assistant.io",
-    "count": 126,
-    "uniques": 31
+    "count": 111,
+    "uniques": 30
   },
   {
     "referrer": "lm.facebook.com",
-    "count": 68,
-    "uniques": 51
+    "count": 71,
+    "uniques": 53
   },
   {
-    "referrer": "trudenboy.github.io",
-    "count": 30,
-    "uniques": 11
+    "referrer": "m.facebook.com",
+    "count": 27,
+    "uniques": 21
   },
   {
     "referrer": "Google",
@@ -25,9 +25,9 @@
     "uniques": 11
   },
   {
-    "referrer": "m.facebook.com",
-    "count": 24,
-    "uniques": 19
+    "referrer": "trudenboy.github.io",
+    "count": 22,
+    "uniques": 9
   },
   {
     "referrer": "DuckDuckGo",

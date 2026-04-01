@@ -9,27 +9,27 @@
   },
   {
     "name": "Copilot code review",
-    "total_runs": 11,
-    "success_runs": 11,
+    "total_runs": 12,
+    "success_runs": 12,
     "failure_runs": 0,
     "last_status": "success",
-    "last_run_at": "2026-03-23T08:03:51Z"
+    "last_run_at": "2026-04-01T12:20:24Z"
   },
   {
     "name": "Archive Traffic Stats",
-    "total_runs": 36,
-    "success_runs": 28,
+    "total_runs": 37,
+    "success_runs": 29,
     "failure_runs": 7,
     "last_status": "in_progress",
-    "last_run_at": "2026-04-01T05:27:09Z"
+    "last_run_at": "2026-04-01T15:37:39Z"
   },
   {
     "name": "Copilot coding agent",
-    "total_runs": 1,
-    "success_runs": 1,
+    "total_runs": 8,
+    "success_runs": 8,
     "failure_runs": 0,
     "last_status": "success",
-    "last_run_at": "2026-03-16T17:53:52Z"
+    "last_run_at": "2026-04-01T15:12:26Z"
   },
   {
     "name": "Dependabot Updates",
@@ -41,18 +41,18 @@
   },
   {
     "name": "CI",
-    "total_runs": 115,
-    "success_runs": 103,
-    "failure_runs": 1,
+    "total_runs": 135,
+    "success_runs": 120,
+    "failure_runs": 3,
     "last_status": "success",
-    "last_run_at": "2026-04-01T04:25:24Z"
+    "last_run_at": "2026-04-01T15:09:20Z"
   },
   {
     "name": "Release",
-    "total_runs": 51,
-    "success_runs": 37,
-    "failure_runs": 3,
-    "last_status": "cancelled",
-    "last_run_at": "2026-04-01T04:32:02Z"
+    "total_runs": 61,
+    "success_runs": 43,
+    "failure_runs": 6,
+    "last_status": "in_progress",
+    "last_run_at": "2026-04-01T15:15:23Z"
   }
 ]
