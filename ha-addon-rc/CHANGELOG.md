@@ -7,13 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [2.52.3-rc.1] - 2026-04-01
-
-### Fixed
-- Idle standby timer now reacts to Music Assistant `playing` transport state — cancels timer when playback starts, starts timer when playback stops (in addition to existing `audio_streaming` logic)
-- Idle timer firing-time guard re-checks both `audio_streaming` and `playing` before entering standby; restarts timer if device is active
-- Daemon connect no longer starts idle timer when `playing=True`
-
 ## [2.50.0-rc.1] - 2026-03-26
 
 ### Changed
