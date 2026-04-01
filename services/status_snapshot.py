@@ -189,16 +189,10 @@ class BridgeSnapshot:
     error: str | None = None
 
     def to_status_payload(self) -> dict[str, Any]:
-        if not self.devices:
-            payload = dict(self.system_info)
-            if self.error:
-                payload["error"] = self.error
-            payload["devices"] = []
-        elif len(self.devices) == 1:
-            payload = self.devices[0].to_dict()
-        else:
-            payload = self.devices[0].to_dict()
-            payload["devices"] = [device.to_dict() for device in self.devices]
+        payload = dict(self.system_info)
+        if self.error:
+            payload["error"] = self.error
+        payload["devices"] = [device.to_dict() for device in self.devices]
 
         payload["groups"] = [group.to_dict() for group in self.groups]
         payload["ma_connected"] = self.ma_connected
@@ -758,6 +752,7 @@ def build_bridge_snapshot(clients: list[Any]) -> BridgeSnapshot:
         ma_connected=state.is_ma_connected(),
         ma_web_url=ma_url or None,
         disabled_devices=state.get_disabled_devices(),
+        system_info=state.get_bridge_system_info(),
         update_available=update_available,
         startup_progress=build_startup_progress_snapshot(),
         runtime_mode=mock_runtime.mode,

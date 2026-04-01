@@ -194,6 +194,23 @@ def _collect_adapter_diagnostics() -> list[dict]:
     return adapters
 
 
+def _collect_adapter_summary() -> list[dict]:
+    """Return lightweight adapter info for the status payload."""
+    try:
+        from services.bluetooth import list_bt_adapters
+        from state import get_adapter_name
+
+        macs = list_bt_adapters()
+        adapters = []
+        for i, mac in enumerate(macs):
+            hci = f"hci{i}"
+            name = get_adapter_name(mac) or hci
+            adapters.append({"hci_device": hci, "mac": mac, "name": name, "powered": True})
+        return adapters
+    except Exception:
+        return []
+
+
 def _collect_sink_input_diagnostics() -> list[dict]:
     r = subprocess.run(
         ["pactl", "list", "sink-inputs"],
@@ -416,6 +433,7 @@ def _build_status_payload() -> dict:
         ma_connected=bridge_snapshot.ma_connected,
         bridge_state=bridge_state,
     )
+    payload["adapters"] = _collect_adapter_summary()
     return payload
 
 

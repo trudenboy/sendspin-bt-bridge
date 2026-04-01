@@ -2445,8 +2445,10 @@ def test_status_includes_ma_syncgroup_id(client, monkeypatch):
         resp = client.get("/api/status")
         assert resp.status_code == 200
         data = resp.get_json()
-        assert data["group_name"] == "Semdspin BT"
-        assert data["ma_syncgroup_id"] == "syncgroup_5zr8ss8g"
+        assert "devices" in data
+        device = data["devices"][0]
+        assert device["group_name"] == "Semdspin BT"
+        assert device["ma_syncgroup_id"] == "syncgroup_5zr8ss8g"
     finally:
         state.set_ma_groups({}, [])
         state.set_ma_api_credentials("", "")
@@ -2494,13 +2496,15 @@ def test_status_includes_health_summary_and_recent_events(client, monkeypatch):
         resp = client.get("/api/status")
         assert resp.status_code == 200
         data = resp.get_json()
-        assert data["health_summary"]["state"] == "degraded"
-        assert data["health_summary"]["severity"] == "error"
-        assert data["recent_events"][0]["event_type"] == "runtime-error"
-        assert data["capabilities"]["domains"]["playback"]["currently_available"] is True
-        assert data["capabilities"]["actions"]["queue_control"]["currently_available"] is False
+        assert "devices" in data
+        device = data["devices"][0]
+        assert device["health_summary"]["state"] == "degraded"
+        assert device["health_summary"]["severity"] == "error"
+        assert device["recent_events"][0]["event_type"] == "runtime-error"
+        assert device["capabilities"]["domains"]["playback"]["currently_available"] is True
+        assert device["capabilities"]["actions"]["queue_control"]["currently_available"] is False
         assert (
-            data["capabilities"]["actions"]["queue_control"]["blocked_reason"]
+            device["capabilities"]["actions"]["queue_control"]["blocked_reason"]
             == "Music Assistant API is not connected."
         )
     finally:

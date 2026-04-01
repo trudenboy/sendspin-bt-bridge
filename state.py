@@ -127,6 +127,7 @@ def get_bridge_system_info() -> dict:
         "hostname": socket.gethostname(),
         "ip_address": ip,
         "uptime": str(timedelta(seconds=int(uptime.total_seconds()))),
+        "uptime_seconds": int(uptime.total_seconds()),
         "runtime": _detect_runtime_type(),
         "config_schema_version": CONFIG_SCHEMA_VERSION,
         "ipc_protocol_version": IPC_PROTOCOL_VERSION,
