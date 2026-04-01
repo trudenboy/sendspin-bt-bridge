@@ -177,7 +177,7 @@ class TestConfigV1ToV2FullLifecycle:
         players_second = second_load["players"]
 
         assert len(players_first) == len(players_second)
-        for p1, p2 in zip(players_first, players_second, strict=False):
+        for p1, p2 in zip(players_first, players_second):  # noqa: B905
             assert p1["player_name"] == p2["player_name"]
             assert p1["backend"]["mac"] == p2["backend"]["mac"]
             assert p1["id"] == p2["id"]
