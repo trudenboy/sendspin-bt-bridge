@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.0-beta.11] — 2026-04-02
+
+### Fixed
+- **Status API**: always return `devices[]` array — fixes Vue UI showing "No devices" on single-device deployments (e.g. LXC)
+- Remove legacy single-device flat payload format from `BridgeSnapshot.to_status_payload()`
+
+### Added
+- `adapters[]` field in `/api/status` payload for Vue bridge overview
+- `uptime_seconds` field in system info for Vue dashboard
+
 ## [3.0.0-beta.10] — 2026-04-01
 
 ### Fixed
