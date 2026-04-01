@@ -492,6 +492,26 @@ class SendspinClient:
                     )
                     self._start_idle_timer()
                     return
+                # MA monitor check: the daemon's playing/streaming flags may
+                # have been lost during an MA server reconnection, but the
+                # independent MA WebSocket monitor still knows the group state.
+                if self._ma_monitor_says_playing():
+                    logger.info(
+                        "[%s] Idle timer fired but MA monitor reports playing — restarting",
+                        self.player_name,
+                    )
+                    self._start_idle_timer()
+                    return
+                # Event history fallback: if the last playback event was a
+                # PLAYBACK_STARTED without a subsequent PLAYBACK_STOPPED, the
+                # device was likely playing before a reconnection reset the flags.
+                if self._event_history_says_playing():
+                    logger.info(
+                        "[%s] Idle timer fired but event history shows active session — restarting",
+                        self.player_name,
+                    )
+                    self._start_idle_timer()
+                    return
                 logger.info(
                     "[%s] Idle for %d min — entering standby",
                     self.player_name,
@@ -518,6 +538,31 @@ class SendspinClient:
         self._idle_timer_task = None
         if hasattr(task, "cancel"):
             task.cancel()
+
+    def _ma_monitor_says_playing(self) -> bool:
+        """Check the MA WebSocket monitor for active playback in this device's group."""
+        group_id = self.status.get("group_id")
+        if not group_id:
+            return False
+        try:
+            np = _state.get_ma_now_playing_for_group(group_id)
+            return np.get("state") == "playing"
+        except Exception:
+            return False
+
+    def _event_history_says_playing(self) -> bool:
+        """Check event history: last playback event was START without a matching STOP."""
+        try:
+            events = _state.get_device_events(self._event_device_id(), limit=15)
+        except Exception:
+            return False
+        for event in events:  # newest-first
+            et = event.get("event_type", "")
+            if et == "playback-stopped":
+                return False
+            if et == "playback-started":
+                return True
+        return False
 
     async def _enter_standby(self) -> None:
         """Disconnect BT and park daemon on null sink to let the speaker save power.

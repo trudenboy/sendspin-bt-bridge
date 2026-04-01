@@ -482,6 +482,8 @@ class TestIdleTimerGuardAtFiring:
             state_mock.get_main_loop.return_value = None
             state_mock.notify_status_changed = MagicMock()
             state_mock.publish_device_event = MagicMock()
+            state_mock.get_ma_now_playing_for_group.return_value = {}
+            state_mock.get_device_events.return_value = []
             client = _make_client(idle_disconnect_minutes=30)
             # Both default to False — device is truly idle
 
@@ -490,5 +492,189 @@ class TestIdleTimerGuardAtFiring:
                 task = client._idle_timer_task
                 assert task is not None
                 # Await the actual timer task so _enter_standby completes
+                await task
+                assert client.status["bt_standby"] is True
+
+
+class TestMaMonitorSaysPlaying:
+    """_ma_monitor_says_playing() checks MA WebSocket monitor group state."""
+
+    def test_returns_true_when_group_playing(self):
+        with patch("sendspin_client._state") as state_mock:
+            state_mock.notify_status_changed = MagicMock()
+            state_mock.get_ma_now_playing_for_group.return_value = {"state": "playing"}
+            client = _make_client()
+            client.status.update({"group_id": "grp-1"})
+            assert client._ma_monitor_says_playing() is True
+
+    def test_returns_false_when_group_paused(self):
+        with patch("sendspin_client._state") as state_mock:
+            state_mock.notify_status_changed = MagicMock()
+            state_mock.get_ma_now_playing_for_group.return_value = {"state": "paused"}
+            client = _make_client()
+            client.status.update({"group_id": "grp-1"})
+            assert client._ma_monitor_says_playing() is False
+
+    def test_returns_false_when_group_idle(self):
+        with patch("sendspin_client._state") as state_mock:
+            state_mock.notify_status_changed = MagicMock()
+            state_mock.get_ma_now_playing_for_group.return_value = {"state": "idle"}
+            client = _make_client()
+            client.status.update({"group_id": "grp-1"})
+            assert client._ma_monitor_says_playing() is False
+
+    def test_returns_false_when_no_group_id(self):
+        with patch("sendspin_client._state") as state_mock:
+            state_mock.notify_status_changed = MagicMock()
+            client = _make_client()
+            assert client._ma_monitor_says_playing() is False
+
+    def test_returns_false_when_no_now_playing_data(self):
+        with patch("sendspin_client._state") as state_mock:
+            state_mock.notify_status_changed = MagicMock()
+            state_mock.get_ma_now_playing_for_group.return_value = {}
+            client = _make_client()
+            client.status.update({"group_id": "grp-1"})
+            assert client._ma_monitor_says_playing() is False
+
+    def test_returns_false_on_exception(self):
+        with patch("sendspin_client._state") as state_mock:
+            state_mock.notify_status_changed = MagicMock()
+            state_mock.get_ma_now_playing_for_group.side_effect = RuntimeError("boom")
+            client = _make_client()
+            client.status.update({"group_id": "grp-1"})
+            assert client._ma_monitor_says_playing() is False
+
+
+class TestEventHistorySaysPlaying:
+    """_event_history_says_playing() checks recent event log for unmatched playback-started."""
+
+    def test_returns_true_when_last_event_is_started(self):
+        with patch("sendspin_client._state") as state_mock:
+            state_mock.notify_status_changed = MagicMock()
+            state_mock.get_device_events.return_value = [
+                {"event_type": "playback-started", "at": "2026-04-01T10:00:00Z"},
+            ]
+            client = _make_client()
+            assert client._event_history_says_playing() is True
+
+    def test_returns_false_when_last_event_is_stopped(self):
+        with patch("sendspin_client._state") as state_mock:
+            state_mock.notify_status_changed = MagicMock()
+            state_mock.get_device_events.return_value = [
+                {"event_type": "playback-stopped", "at": "2026-04-01T10:01:00Z"},
+                {"event_type": "playback-started", "at": "2026-04-01T10:00:00Z"},
+            ]
+            client = _make_client()
+            assert client._event_history_says_playing() is False
+
+    def test_returns_false_when_no_playback_events(self):
+        with patch("sendspin_client._state") as state_mock:
+            state_mock.notify_status_changed = MagicMock()
+            state_mock.get_device_events.return_value = [
+                {"event_type": "bluetooth-connected", "at": "2026-04-01T10:00:00Z"},
+            ]
+            client = _make_client()
+            assert client._event_history_says_playing() is False
+
+    def test_returns_false_when_no_events(self):
+        with patch("sendspin_client._state") as state_mock:
+            state_mock.notify_status_changed = MagicMock()
+            state_mock.get_device_events.return_value = []
+            client = _make_client()
+            assert client._event_history_says_playing() is False
+
+    def test_returns_false_on_exception(self):
+        with patch("sendspin_client._state") as state_mock:
+            state_mock.notify_status_changed = MagicMock()
+            state_mock.get_device_events.side_effect = RuntimeError("boom")
+            client = _make_client()
+            assert client._event_history_says_playing() is False
+
+    def test_skips_non_playback_events_to_find_started(self):
+        """Non-playback events between started and the query should be ignored."""
+        with patch("sendspin_client._state") as state_mock:
+            state_mock.notify_status_changed = MagicMock()
+            state_mock.get_device_events.return_value = [
+                {"event_type": "bluetooth-reconnected", "at": "2026-04-01T10:02:00Z"},
+                {"event_type": "daemon-connected", "at": "2026-04-01T10:01:00Z"},
+                {"event_type": "playback-started", "at": "2026-04-01T10:00:00Z"},
+            ]
+            client = _make_client()
+            assert client._event_history_says_playing() is True
+
+
+class TestIdleTimerGuardMaMonitor:
+    """_idle_timeout() defers to MA monitor before entering standby."""
+
+    @pytest.mark.asyncio
+    async def test_timer_restarts_when_ma_monitor_says_playing(self):
+        """MA monitor reports group playing → standby skipped, timer restarted."""
+        real_sleep = asyncio.sleep
+        with patch("sendspin_client._state") as state_mock:
+            state_mock.get_main_loop.return_value = None
+            state_mock.notify_status_changed = MagicMock()
+            state_mock.publish_device_event = MagicMock()
+            state_mock.get_ma_now_playing_for_group.return_value = {"state": "playing"}
+            client = _make_client(idle_disconnect_minutes=30)
+            client.status.update({"group_id": "grp-1"})
+
+            with (
+                patch("sendspin_client.asyncio.sleep", new_callable=AsyncMock),
+                patch.object(client, "_enter_standby", new_callable=AsyncMock) as enter_mock,
+            ):
+                client._start_idle_timer()
+                original_task = client._idle_timer_task
+                await real_sleep(0)
+                await real_sleep(0)
+                enter_mock.assert_not_awaited()
+                assert client._idle_timer_task is not None
+                assert client._idle_timer_task is not original_task
+
+    @pytest.mark.asyncio
+    async def test_timer_restarts_when_event_history_says_playing(self):
+        """Event history shows unmatched playback-started → standby skipped."""
+        real_sleep = asyncio.sleep
+        with patch("sendspin_client._state") as state_mock:
+            state_mock.get_main_loop.return_value = None
+            state_mock.notify_status_changed = MagicMock()
+            state_mock.publish_device_event = MagicMock()
+            state_mock.get_ma_now_playing_for_group.return_value = {}
+            state_mock.get_device_events.return_value = [
+                {"event_type": "playback-started", "at": "2026-04-01T10:00:00Z"},
+            ]
+            client = _make_client(idle_disconnect_minutes=30)
+
+            with (
+                patch("sendspin_client.asyncio.sleep", new_callable=AsyncMock),
+                patch.object(client, "_enter_standby", new_callable=AsyncMock) as enter_mock,
+            ):
+                client._start_idle_timer()
+                original_task = client._idle_timer_task
+                await real_sleep(0)
+                await real_sleep(0)
+                enter_mock.assert_not_awaited()
+                assert client._idle_timer_task is not None
+                assert client._idle_timer_task is not original_task
+
+    @pytest.mark.asyncio
+    async def test_timer_enters_standby_when_all_guards_clear(self):
+        """All guards report idle → standby proceeds normally."""
+        with patch("sendspin_client._state") as state_mock:
+            state_mock.get_main_loop.return_value = None
+            state_mock.notify_status_changed = MagicMock()
+            state_mock.publish_device_event = MagicMock()
+            state_mock.get_ma_now_playing_for_group.return_value = {"state": "idle"}
+            state_mock.get_device_events.return_value = [
+                {"event_type": "playback-stopped", "at": "2026-04-01T10:01:00Z"},
+                {"event_type": "playback-started", "at": "2026-04-01T10:00:00Z"},
+            ]
+            client = _make_client(idle_disconnect_minutes=30)
+            client.status.update({"group_id": "grp-1"})
+
+            with patch("sendspin_client.asyncio.sleep", new_callable=AsyncMock):
+                client._start_idle_timer()
+                task = client._idle_timer_task
+                assert task is not None
                 await task
                 assert client.status["bt_standby"] is True
