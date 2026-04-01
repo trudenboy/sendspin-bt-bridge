@@ -115,6 +115,10 @@
     "2026-03-29T00:00:00Z": {
       "count": 225,
       "uniques": 95
+    },
+    "2026-03-30T00:00:00Z": {
+      "count": 507,
+      "uniques": 220
     }
   },
   "views": {
@@ -233,38 +237,47 @@
     "2026-03-29T00:00:00Z": {
       "count": 180,
       "uniques": 102
+    },
+    "2026-03-30T00:00:00Z": {
+      "count": 124,
+      "uniques": 47
     }
   },
   "referrers": [
     {
       "referrer": "github.com",
-      "count": 179,
-      "uniques": 44
+      "count": 185,
+      "uniques": 47
     },
     {
       "referrer": "community.home-assistant.io",
-      "count": 138,
-      "uniques": 30
+      "count": 126,
+      "uniques": 31
     },
     {
       "referrer": "lm.facebook.com",
-      "count": 57,
-      "uniques": 42
+      "count": 68,
+      "uniques": 51
     },
     {
       "referrer": "trudenboy.github.io",
-      "count": 29,
-      "uniques": 10
+      "count": 30,
+      "uniques": 11
     },
     {
       "referrer": "Google",
-      "count": 25,
+      "count": 26,
       "uniques": 11
     },
     {
       "referrer": "m.facebook.com",
       "count": 24,
       "uniques": 19
+    },
+    {
+      "referrer": "DuckDuckGo",
+      "count": 13,
+      "uniques": 3
     },
     {
       "referrer": "yandex.ru",
@@ -277,61 +290,62 @@
       "uniques": 10
     },
     {
-      "referrer": "DuckDuckGo",
-      "count": 6,
-      "uniques": 1
-    },
-    {
-      "referrer": "sendspin-demo.onrender.com",
+      "referrer": "music-assistant.io",
       "count": 4,
-      "uniques": 2
+      "uniques": 1
     }
   ],
-  "last_updated": "2026-03-31T07:47:16.422Z",
+  "last_updated": "2026-04-01T04:40:44.949Z",
   "clones_window": {
-    "count": 3824,
-    "uniques": 983
+    "count": 4186,
+    "uniques": 1127
   },
   "views_window": {
-    "count": 1313,
-    "uniques": 386
+    "count": 1317,
+    "uniques": 375
   },
   "paths": [
     {
       "path": "/trudenboy/sendspin-bt-bridge",
       "title": "GitHub - trudenboy/sendspin-bt-bridge: A Bluetooth bridge for Music Assistant...",
-      "count": 704,
-      "uniques": 327
+      "count": 712,
+      "uniques": 329
     },
     {
       "path": "/trudenboy/sendspin-bt-bridge/issues",
       "title": "GitHub · Where software is built",
-      "count": 82,
-      "uniques": 30
-    },
-    {
-      "path": "/trudenboy/sendspin-bt-bridge/blob/main/README.ru.md",
-      "title": "sendspin-bt-bridge/README.ru.md at main · trudenboy/sendspin-bt-bridge · GitHub",
-      "count": 76,
-      "uniques": 49
+      "count": 84,
+      "uniques": 33
     },
     {
       "path": "/trudenboy/sendspin-bt-bridge/actions",
       "title": "Workflow runs · trudenboy/sendspin-bt-bridge",
-      "count": 60,
-      "uniques": 4
+      "count": 59,
+      "uniques": 3
+    },
+    {
+      "path": "/trudenboy/sendspin-bt-bridge/blob/main/README.ru.md",
+      "title": "sendspin-bt-bridge/README.ru.md at main · trudenboy/sendspin-bt-bridge",
+      "count": 50,
+      "uniques": 26
     },
     {
       "path": "/trudenboy/sendspin-bt-bridge/releases",
       "title": "Releases · trudenboy/sendspin-bt-bridge",
       "count": 45,
-      "uniques": 13
+      "uniques": 14
     },
     {
       "path": "/trudenboy/sendspin-bt-bridge/tags",
       "title": "Tags · trudenboy/sendspin-bt-bridge",
-      "count": 25,
+      "count": 24,
       "uniques": 2
+    },
+    {
+      "path": "/trudenboy/sendspin-bt-bridge/blob/main/docs-site/public/screenshots/screenshot-dashboard-full.png",
+      "title": "GitHub - trudenboy/sendspin-bt-bridge: A Bluetooth bridge for Music Assistant...",
+      "count": 13,
+      "uniques": 12
     },
     {
       "path": "/trudenboy/sendspin-bt-bridge/blob/main/docs-site/public/screenshots/sbb_infographic_en.png",
@@ -340,36 +354,30 @@
       "uniques": 11
     },
     {
-      "path": "/trudenboy/sendspin-bt-bridge/blob/main/docs-site/public/screenshots/screenshot-dashboard-full.png",
-      "title": "GitHub - trudenboy/sendspin-bt-bridge: A Bluetooth bridge for Music Assistant...",
-      "count": 12,
-      "uniques": 11
-    },
-    {
-      "path": "/trudenboy/sendspin-bt-bridge/tree/main",
-      "title": "GitHub - trudenboy/sendspin-bt-bridge: A Bluetooth bridge for Music Assistant...",
-      "count": 12,
-      "uniques": 8
-    },
-    {
       "path": "/trudenboy/sendspin-bt-bridge/actions/runs/23264458415",
       "title": "Release 2.40.5-rc.3 · trudenboy/sendspin-bt-bridge@86e5fd4",
       "count": 12,
       "uniques": 1
+    },
+    {
+      "path": "/trudenboy/sendspin-bt-bridge/pulls",
+      "title": "Pull requests · trudenboy/sendspin-bt-bridge",
+      "count": 11,
+      "uniques": 4
     }
   ],
   "repo": {
     "full_name": "trudenboy/sendspin-bt-bridge",
     "default_branch": "main",
     "open_issues_count": 0,
-    "stargazers_count": 42,
+    "stargazers_count": 40,
     "subscribers_count": 0,
-    "watchers_count": 42,
+    "watchers_count": 40,
     "forks_count": 1,
     "network_count": 1,
-    "size_kb": 36077,
-    "pushed_at": "2026-03-31T07:46:25Z",
-    "updated_at": "2026-03-31T07:46:28Z"
+    "size_kb": 36470,
+    "pushed_at": "2026-04-01T04:35:38Z",
+    "updated_at": "2026-04-01T04:35:42Z"
   },
   "repo_history": {
     "2026-03-17": {
@@ -566,14 +574,44 @@
       "size_kb": 36077,
       "pushed_at": "2026-03-31T07:46:25Z",
       "updated_at": "2026-03-31T07:46:28Z"
+    },
+    "2026-04-01": {
+      "full_name": "trudenboy/sendspin-bt-bridge",
+      "default_branch": "main",
+      "open_issues_count": 0,
+      "stargazers_count": 40,
+      "subscribers_count": 0,
+      "watchers_count": 40,
+      "forks_count": 1,
+      "network_count": 1,
+      "size_kb": 36470,
+      "pushed_at": "2026-04-01T04:35:38Z",
+      "updated_at": "2026-04-01T04:35:42Z"
     }
   },
   "releases": {
     "total_downloads": 1,
-    "release_count": 172,
-    "latest_release_tag": "v2.52.1",
-    "latest_release_published_at": "2026-03-30T14:15:16Z",
+    "release_count": 173,
+    "latest_release_tag": "v2.52.2",
+    "latest_release_published_at": "2026-04-01T04:35:48Z",
     "by_tag": {
+      "v2.52.2": {
+        "name": "v2.52.2",
+        "prerelease": false,
+        "published_at": "2026-04-01T04:35:48Z",
+        "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.52.2",
+        "asset_downloads": 0,
+        "assets": [
+          {
+            "name": "sendspin-bt-bridge-2.52.2.tar.gz",
+            "download_count": 0,
+            "size": 840796,
+            "content_type": "application/x-gtar",
+            "created_at": "2026-04-01T04:35:49Z",
+            "updated_at": "2026-04-01T04:35:49Z"
+          }
+        ]
+      },
       "v2.52.1": {
         "name": "v2.52.1",
         "prerelease": false,
@@ -2045,17 +2083,23 @@
       "total_downloads": 1,
       "release_count": 172,
       "latest_release_tag": "v2.52.1"
+    },
+    "2026-04-01": {
+      "total_downloads": 1,
+      "release_count": 173,
+      "latest_release_tag": "v2.52.2"
     }
   },
   "container": {
-    "total_versions": 3033,
-    "tagged_versions": 398,
+    "total_versions": 3061,
+    "tagged_versions": 402,
     "latest_tags": [],
     "by_tag": {
-      "v2.52.1": 233,
+      "v2.52.2": 0,
+      "v2.52.1": 285,
       "v2.52.0": 83,
       "v2.51.0": 222,
-      "v2.50.4": 280,
+      "v2.50.4": 282,
       "v2.50.3": 165,
       "v2.50.2": 36,
       "v2.50.1": 18,
@@ -2085,8 +2129,7 @@
       "v2.32.2": 18,
       "v2.32.0": 35,
       "v2.31.11": 46,
-      "v2.31.10": 4,
-      "v2.31.9": 6
+      "v2.31.10": 4
     }
   },
   "container_history": {
@@ -2097,13 +2140,17 @@
     "2026-03-31": {
       "total_versions": 3033,
       "tagged_versions": 398
+    },
+    "2026-04-01": {
+      "total_versions": 3061,
+      "tagged_versions": 402
     }
   },
   "issues": {
     "open_issues": 0,
-    "closed_issues": 23,
+    "closed_issues": 24,
     "open_prs": 0,
-    "closed_prs": 92
+    "closed_prs": 93
   },
   "issues_history": {
     "2026-03-31": {
@@ -2111,16 +2158,22 @@
       "closed_issues": 23,
       "open_prs": 0,
       "closed_prs": 92
+    },
+    "2026-04-01": {
+      "open_issues": 0,
+      "closed_issues": 24,
+      "open_prs": 0,
+      "closed_prs": 93
     }
   },
   "ci": [
     {
       "name": "Deploy Docs to GitHub Pages",
-      "total_runs": 138,
-      "success_runs": 135,
+      "total_runs": 143,
+      "success_runs": 140,
       "failure_runs": 3,
       "last_status": "success",
-      "last_run_at": "2026-03-31T07:31:43Z"
+      "last_run_at": "2026-03-31T08:14:38Z"
     },
     {
       "name": "Copilot code review",
@@ -2132,11 +2185,11 @@
     },
     {
       "name": "Archive Traffic Stats",
-      "total_runs": 34,
-      "success_runs": 26,
+      "total_runs": 35,
+      "success_runs": 27,
       "failure_runs": 7,
       "last_status": "in_progress",
-      "last_run_at": "2026-03-31T07:46:32Z"
+      "last_run_at": "2026-04-01T04:39:57Z"
     },
     {
       "name": "Copilot coding agent",
@@ -2156,19 +2209,19 @@
     },
     {
       "name": "CI",
-      "total_runs": 110,
-      "success_runs": 97,
+      "total_runs": 115,
+      "success_runs": 103,
       "failure_runs": 1,
-      "last_status": "in_progress",
-      "last_run_at": "2026-03-31T07:46:26Z"
+      "last_status": "success",
+      "last_run_at": "2026-04-01T04:25:24Z"
     },
     {
       "name": "Release",
-      "total_runs": 47,
-      "success_runs": 34,
+      "total_runs": 51,
+      "success_runs": 37,
       "failure_runs": 3,
-      "last_status": "cancelled",
-      "last_run_at": "2026-03-30T14:10:47Z"
+      "last_status": "in_progress",
+      "last_run_at": "2026-04-01T04:32:02Z"
     }
   ],
   "ci_history": {
@@ -2215,6 +2268,50 @@
         "success_runs": 34,
         "failure_runs": 3
       }
+    ],
+    "2026-04-01": [
+      {
+        "name": "Deploy Docs to GitHub Pages",
+        "total_runs": 143,
+        "success_runs": 140,
+        "failure_runs": 3
+      },
+      {
+        "name": "Copilot code review",
+        "total_runs": 11,
+        "success_runs": 11,
+        "failure_runs": 0
+      },
+      {
+        "name": "Archive Traffic Stats",
+        "total_runs": 35,
+        "success_runs": 27,
+        "failure_runs": 7
+      },
+      {
+        "name": "Copilot coding agent",
+        "total_runs": 1,
+        "success_runs": 1,
+        "failure_runs": 0
+      },
+      {
+        "name": "Dependabot Updates",
+        "total_runs": 15,
+        "success_runs": 15,
+        "failure_runs": 0
+      },
+      {
+        "name": "CI",
+        "total_runs": 115,
+        "success_runs": 103,
+        "failure_runs": 1
+      },
+      {
+        "name": "Release",
+        "total_runs": 51,
+        "success_runs": 37,
+        "failure_runs": 3
+      }
     ]
   },
   "dev": {
@@ -2226,28 +2323,28 @@
       },
       {
         "week_offset": -4,
-        "total": 177,
-        "owner": 177
+        "total": 238,
+        "owner": 231
       },
       {
         "week_offset": -3,
-        "total": 420,
-        "owner": 353
+        "total": 449,
+        "owner": 365
       },
       {
         "week_offset": -2,
-        "total": 356,
-        "owner": 290
+        "total": 276,
+        "owner": 233
       },
       {
         "week_offset": -1,
-        "total": 307,
-        "owner": 254
+        "total": 346,
+        "owner": 277
       },
       {
         "week_offset": 0,
-        "total": 358,
-        "owner": 158
+        "total": 334,
+        "owner": 128
       }
     ],
     "code_frequency": [
@@ -2283,8 +2380,8 @@
       },
       {
         "week": "2026-03-29",
-        "additions": 11817,
-        "deletions": 1556
+        "additions": 12890,
+        "deletions": 1923
       }
     ],
     "ai": {
@@ -2294,11 +2391,15 @@
       "agents": [
         {
           "name": "Copilot",
-          "commits": 130
+          "commits": 129
         },
         {
           "name": "dependabot[bot]",
           "commits": 8
+        },
+        {
+          "name": "Claude Sonnet 4.6",
+          "commits": 1
         }
       ]
     }
@@ -2306,6 +2407,11 @@
   "dev_history": {
     "2026-03-31": {
       "total_weekly_commits": 1632,
+      "ai_commits": 138,
+      "ai_ratio": 0.69
+    },
+    "2026-04-01": {
+      "total_weekly_commits": 1657,
       "ai_commits": 138,
       "ai_ratio": 0.69
     }
