@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.0-beta.8] — 2026-04-01
+
+### Added
+- **Transport controls** on device cards — play/pause, skip previous/next buttons when streaming
+- **Enable/disable toggle** in device card dropdown menu and drawer config tab
+- **Adapter management** in device detail drawer — power toggle and reboot buttons
+- **Disabled device visual** — opacity-50 on disabled device cards
+- **i18n**: transport, adapter management keys (EN+RU)
+- **Tests**: 509 Vue tests (was 501)
+
+### Added — Vue update checker (beta.7 post-release)
+- **Update badge** in header with animated pulse dot
+- **Update dialog** with version comparison, platform instructions, release notes
+- **One-click update** for HA addon; manual instructions for Docker/LXC
+- **Auto-check** on mount + periodic polling
+- **Pinia store** with 12 tests
+
 ## [3.0.0-beta.7] — 2026-04-01
 
 ### Fixed
