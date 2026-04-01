@@ -433,15 +433,16 @@ class TestIdleTimerGuardAtFiring:
             client = _make_client(idle_disconnect_minutes=30)
             client.status.update({"playing": True})
 
-            with patch("asyncio.sleep", new_callable=AsyncMock):
-                with patch.object(client, "_enter_standby", new_callable=AsyncMock) as enter_mock:
-                    client._start_idle_timer()
-                    # Let the task run to completion
-                    await asyncio.sleep(0)
-                    await asyncio.sleep(0)
-                    enter_mock.assert_not_awaited()
-                    # Timer should have been restarted (new task created)
-                    assert client._idle_timer_task is not None
+            with patch("asyncio.sleep", new_callable=AsyncMock), patch.object(
+                client, "_enter_standby", new_callable=AsyncMock
+            ) as enter_mock:
+                client._start_idle_timer()
+                # Let the task run to completion
+                await asyncio.sleep(0)
+                await asyncio.sleep(0)
+                enter_mock.assert_not_awaited()
+                # Timer should have been restarted (new task created)
+                assert client._idle_timer_task is not None
 
     @pytest.mark.asyncio
     async def test_timer_restarts_when_streaming_at_fire_time(self):
@@ -453,13 +454,14 @@ class TestIdleTimerGuardAtFiring:
             client = _make_client(idle_disconnect_minutes=30)
             client.status.update({"audio_streaming": True})
 
-            with patch("asyncio.sleep", new_callable=AsyncMock):
-                with patch.object(client, "_enter_standby", new_callable=AsyncMock) as enter_mock:
-                    client._start_idle_timer()
-                    await asyncio.sleep(0)
-                    await asyncio.sleep(0)
-                    enter_mock.assert_not_awaited()
-                    assert client._idle_timer_task is not None
+            with patch("asyncio.sleep", new_callable=AsyncMock), patch.object(
+                client, "_enter_standby", new_callable=AsyncMock
+            ) as enter_mock:
+                client._start_idle_timer()
+                await asyncio.sleep(0)
+                await asyncio.sleep(0)
+                enter_mock.assert_not_awaited()
+                assert client._idle_timer_task is not None
 
     @pytest.mark.asyncio
     async def test_timer_enters_standby_when_idle_at_fire_time(self):
