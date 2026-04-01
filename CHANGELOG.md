@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.0-beta.3] — 2026-04-01
+
+### Added — Epic 4: Vue Operator Console
+- **Vue 3 + TypeScript + Vite 8 SPA** replacing legacy vanilla JS frontend (`ui/` directory)
+- **UI Kit**: 21 reusable `Sb*` components (Button, Badge, Card, Dialog, Drawer, Table, Tabs, Timeline, SignalPath, etc.) with Tailwind CSS 4 design tokens and dark mode
+- **9 Pinia stores**: bridge, devices, config, bluetooth, ma, auth, events, diagnostics, notifications — typed API client with 7 endpoint modules
+- **Layout shell**: collapsible sidebar, responsive header, mobile bottom navigation, toast notifications
+- **Dashboard & Devices views**: SSE-driven device grid, health summary, volume slider, BT scan modal, 4-tab device detail drawer
+- **Configuration panel**: 6-tab config editor (General, Audio, Bluetooth, MA, Security, Advanced) with dirty tracking and validation
+- **Diagnostics view**: health summary, event timeline, recovery panel, bug report builder
+- **Music Assistant view**: MA login flow, group list, now-playing display
+- **Backend Descriptor Registry** (`ui/src/types/backend-registry.ts`): adding a new backend type UI = adding one descriptor object. 7 types defined: bluetooth_a2dp, local_sink, usb_audio, virtual_sink, snapcast_client, vban, le_audio
+- **i18n**: full EN + RU translations (~270 keys each)
+- **489 Vue tests** (Vitest + Vue Test Utils), type-check clean, ~93KB gzipped build
+
+### Changed
+- **Dockerfile**: new Node.js frontend build stage (`node:22-slim`) compiles Vue SPA
+- **Flask SPA serving**: `web_interface.py` serves Vue SPA from `ui/dist/` (dev) or `static/vue/` (Docker); falls back to legacy Jinja template when Vue build not present
+- **Stricter CSP**: `script-src 'self'` (no `unsafe-inline`) when Vue SPA is active
+- **CI**: added `test-vue` job (type-check + vitest + build) to `ci.yml`
+- **docs-site**: 6 new UI Kit documentation pages (3 EN + 3 RU) — component overview, design tokens, backend descriptor pattern
+
 ## [3.0.0-beta.2] — 2026-03-31
 
 ### Fixed
