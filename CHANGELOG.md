@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.0-beta.9] — 2026-04-02
+
+### Added
+- **Channel selector** in UpdateDialog — switch between stable/rc/beta channels from the web UI
+- Channel choice persisted to config on apply
+- Inline "up to date" and "checking" states when dialog is already open
+- i18n: channel selector keys (EN+RU)
+
 ## [3.0.0-beta.8] — 2026-04-01
 
 ### Added
