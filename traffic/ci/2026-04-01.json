@@ -17,11 +17,11 @@
   },
   {
     "name": "Archive Traffic Stats",
-    "total_runs": 35,
-    "success_runs": 27,
+    "total_runs": 36,
+    "success_runs": 28,
     "failure_runs": 7,
     "last_status": "in_progress",
-    "last_run_at": "2026-04-01T04:39:57Z"
+    "last_run_at": "2026-04-01T05:27:09Z"
   },
   {
     "name": "Copilot coding agent",
@@ -52,7 +52,7 @@
     "total_runs": 51,
     "success_runs": 37,
     "failure_runs": 3,
-    "last_status": "in_progress",
+    "last_status": "cancelled",
     "last_run_at": "2026-04-01T04:32:02Z"
   }
 ]

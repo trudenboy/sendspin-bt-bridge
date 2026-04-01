@@ -295,7 +295,7 @@
       "uniques": 1
     }
   ],
-  "last_updated": "2026-04-01T04:40:44.949Z",
+  "last_updated": "2026-04-01T05:28:03.610Z",
   "clones_window": {
     "count": 4186,
     "uniques": 1127
@@ -375,8 +375,8 @@
     "watchers_count": 40,
     "forks_count": 1,
     "network_count": 1,
-    "size_kb": 36470,
-    "pushed_at": "2026-04-01T04:35:38Z",
+    "size_kb": 36258,
+    "pushed_at": "2026-04-01T04:40:45Z",
     "updated_at": "2026-04-01T04:35:42Z"
   },
   "repo_history": {
@@ -584,13 +584,13 @@
       "watchers_count": 40,
       "forks_count": 1,
       "network_count": 1,
-      "size_kb": 36470,
-      "pushed_at": "2026-04-01T04:35:38Z",
+      "size_kb": 36258,
+      "pushed_at": "2026-04-01T04:40:45Z",
       "updated_at": "2026-04-01T04:35:42Z"
     }
   },
   "releases": {
-    "total_downloads": 1,
+    "total_downloads": 2,
     "release_count": 173,
     "latest_release_tag": "v2.52.2",
     "latest_release_published_at": "2026-04-01T04:35:48Z",
@@ -600,11 +600,11 @@
         "prerelease": false,
         "published_at": "2026-04-01T04:35:48Z",
         "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.52.2",
-        "asset_downloads": 0,
+        "asset_downloads": 1,
         "assets": [
           {
             "name": "sendspin-bt-bridge-2.52.2.tar.gz",
-            "download_count": 0,
+            "download_count": 1,
             "size": 840796,
             "content_type": "application/x-gtar",
             "created_at": "2026-04-01T04:35:49Z",
@@ -2085,7 +2085,7 @@
       "latest_release_tag": "v2.52.1"
     },
     "2026-04-01": {
-      "total_downloads": 1,
+      "total_downloads": 2,
       "release_count": 173,
       "latest_release_tag": "v2.52.2"
     }
@@ -2095,7 +2095,7 @@
     "tagged_versions": 402,
     "latest_tags": [],
     "by_tag": {
-      "v2.52.2": 0,
+      "v2.52.2": 19,
       "v2.52.1": 285,
       "v2.52.0": 83,
       "v2.51.0": 222,
@@ -2185,11 +2185,11 @@
     },
     {
       "name": "Archive Traffic Stats",
-      "total_runs": 35,
-      "success_runs": 27,
+      "total_runs": 36,
+      "success_runs": 28,
       "failure_runs": 7,
       "last_status": "in_progress",
-      "last_run_at": "2026-04-01T04:39:57Z"
+      "last_run_at": "2026-04-01T05:27:09Z"
     },
     {
       "name": "Copilot coding agent",
@@ -2220,7 +2220,7 @@
       "total_runs": 51,
       "success_runs": 37,
       "failure_runs": 3,
-      "last_status": "in_progress",
+      "last_status": "cancelled",
       "last_run_at": "2026-04-01T04:32:02Z"
     }
   ],
@@ -2284,8 +2284,8 @@
       },
       {
         "name": "Archive Traffic Stats",
-        "total_runs": 35,
-        "success_runs": 27,
+        "total_runs": 36,
+        "success_runs": 28,
         "failure_runs": 7
       },
       {
@@ -2347,43 +2347,7 @@
         "owner": 128
       }
     ],
-    "code_frequency": [
-      {
-        "week": "2025-12-28",
-        "additions": 2100,
-        "deletions": 115
-      },
-      {
-        "week": "2026-02-22",
-        "additions": 5195,
-        "deletions": 1487
-      },
-      {
-        "week": "2026-03-01",
-        "additions": 42942,
-        "deletions": 14646
-      },
-      {
-        "week": "2026-03-08",
-        "additions": 32343,
-        "deletions": 9590
-      },
-      {
-        "week": "2026-03-15",
-        "additions": 52529,
-        "deletions": 18252
-      },
-      {
-        "week": "2026-03-22",
-        "additions": 40699,
-        "deletions": 14965
-      },
-      {
-        "week": "2026-03-29",
-        "additions": 12890,
-        "deletions": 1923
-      }
-    ],
+    "code_frequency": [],
     "ai": {
       "commits_scanned": 200,
       "ai_commits": 138,
