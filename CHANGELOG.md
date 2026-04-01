@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.52.2-rc.1] - 2026-04-01
+
+### Fixed
+- MA Ingress sign-in crash with non-ASCII usernames (e.g. CJK characters) — `'latin-1' codec can't encode` error when creating MA token via Ingress JSONRPC (GH-119)
+
 ## [2.52.1] - 2026-03-30
 
 ### Fixed

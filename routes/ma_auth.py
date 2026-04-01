@@ -737,6 +737,20 @@ def _find_ma_ingress_url():
     return get_ma_addon_internal_ingress_url()
 
 
+def _latin1_safe(value: str) -> str:
+    """Percent-encode non-latin1 characters so the value is safe for HTTP headers.
+
+    ``urllib.request.Request`` encodes header values as latin-1 (ISO 8859-1).
+    Non-ASCII characters outside that range (e.g. CJK) cause
+    ``UnicodeEncodeError``.  RFC 8187 recommends percent-encoding such values.
+    """
+    try:
+        value.encode("latin-1")
+        return value
+    except UnicodeEncodeError:
+        return _up.quote(value, safe="")
+
+
 def _create_ma_token_via_ingress(ha_user_id: str, ha_username: str, ha_display_name: str = ""):
     """Create a long-lived MA token via MA's Ingress JSONRPC endpoint.
 
@@ -752,8 +766,8 @@ def _create_ma_token_via_ingress(ha_user_id: str, ha_username: str, ha_display_n
     headers = {
         "Content-Type": "application/json",
         "X-Remote-User-ID": ha_user_id,
-        "X-Remote-User-Name": ha_username,
-        "X-Remote-User-Display-Name": ha_display_name or ha_username,
+        "X-Remote-User-Name": _latin1_safe(ha_username),
+        "X-Remote-User-Display-Name": _latin1_safe(ha_display_name or ha_username),
     }
     payload = json.dumps(
         {
