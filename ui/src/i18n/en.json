@@ -263,5 +263,22 @@
     "noResults": "No results",
     "yes": "Yes",
     "no": "No"
+  },
+  "update": {
+    "title": "Software Update",
+    "available": "Update available",
+    "badge": "Update v{version}",
+    "checkNow": "Check for updates",
+    "upToDate": "You are running the latest version",
+    "versionCompare": "Version update",
+    "instructions": "Update Instructions",
+    "releaseNotes": "Release Notes",
+    "recheck": "Re-check",
+    "viewRelease": "Release Notes",
+    "applyNow": "Update Now",
+    "applyStarted": "Update started — the bridge will restart shortly",
+    "openHa": "Update in HA",
+    "copyCommand": "Copy command",
+    "checking": "Checking for updates…"
   }
 }

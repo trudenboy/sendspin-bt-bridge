@@ -4,6 +4,7 @@ import { computed } from 'vue'
 import AppHeader from '@/components/layout/AppHeader.vue'
 import AppSidebar from '@/components/layout/AppSidebar.vue'
 import MobileNav from '@/components/layout/MobileNav.vue'
+import UpdateDialog from '@/components/UpdateDialog.vue'
 import { SbToastContainer } from '@/kit'
 import { useTheme } from '@/composables/useTheme'
 
@@ -23,6 +24,7 @@ const hideNav = computed(() => route.meta.hideNav === true)
       </main>
     </div>
     <MobileNav v-if="!hideNav" class="lg:hidden" />
+    <UpdateDialog />
     <SbToastContainer />
   </div>
 </template>

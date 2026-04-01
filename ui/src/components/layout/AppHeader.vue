@@ -2,6 +2,7 @@
 import { useI18n } from 'vue-i18n'
 import { useTheme } from '@/composables/useTheme'
 import { useBridgeStore } from '@/stores/bridge'
+import { useUpdateStore } from '@/stores/update'
 import {
   LayoutDashboard,
   Speaker,
@@ -14,13 +15,15 @@ import {
   Menu,
   X,
   Globe,
+  ArrowUpCircle,
 } from 'lucide-vue-next'
-import { ref, type Component } from 'vue'
+import { ref, onMounted, type Component } from 'vue'
 import { useRoute } from 'vue-router'
 
 const { t, locale } = useI18n()
 const { mode, toggleTheme } = useTheme()
 const bridge = useBridgeStore()
+const update = useUpdateStore()
 const route = useRoute()
 const mobileMenuOpen = ref(false)
 
@@ -54,6 +57,10 @@ function toggleLocale() {
   locale.value = next
   localStorage.setItem('sendspin-ui:locale', next)
 }
+
+onMounted(() => {
+  update.fetchInfo()
+})
 </script>
 
 <template>
@@ -81,6 +88,26 @@ function toggleLocale() {
       >
         v{{ bridge.version }}
       </span>
+
+      <!-- Update badge -->
+      <button
+        v-if="update.updateAvailable"
+        class="hidden items-center gap-1.5 rounded-full bg-warning/10 px-2.5 py-0.5 text-xs font-medium text-warning transition-colors hover:bg-warning/20 sm:inline-flex"
+        :title="t('update.available')"
+        @click="update.openDialog()"
+      >
+        <span class="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-warning" />
+        {{ t('update.badge', { version: update.latestVersion }) }}
+      </button>
+      <button
+        v-else-if="!update.updateAvailable && bridge.version"
+        class="hidden items-center gap-1 rounded-full px-2 py-0.5 text-xs text-text-secondary transition-colors hover:bg-surface-secondary sm:inline-flex"
+        :title="t('update.checkNow')"
+        :disabled="update.checking"
+        @click="update.checkForUpdates()"
+      >
+        <ArrowUpCircle class="h-3.5 w-3.5" :class="{ 'animate-spin': update.checking }" />
+      </button>
 
       <!-- Desktop nav -->
       <nav class="ml-4 hidden items-center gap-1 md:flex">
