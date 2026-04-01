@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [2.52.3-rc.1] - 2026-04-01
+## [2.52.3] - 2026-04-01
 
 ### Fixed
 - Idle standby timer now reacts to Music Assistant `playing` transport state — cancels timer when playback starts, starts timer when playback stops (in addition to existing `audio_streaming` logic)
