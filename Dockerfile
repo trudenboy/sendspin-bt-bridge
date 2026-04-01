@@ -1,3 +1,13 @@
+# ── Stage 1: Build Vue frontend ──────────────────────────────────────────────
+FROM node:22-slim AS frontend
+
+WORKDIR /ui
+COPY ui/package.json ui/package-lock.json ./
+RUN npm ci --ignore-scripts
+COPY ui/ ./
+RUN npm run build
+
+# ── Stage 2: Build Python dependencies ──────────────────────────────────────
 FROM python:3.12-slim AS builder
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -136,7 +146,13 @@ COPY routes/ routes/
 COPY services/ services/
 COPY scripts/ scripts/
 COPY templates/ templates/
-COPY static/ static/
+
+# Copy Vue SPA build output as the primary frontend
+COPY --from=frontend /ui/dist/ static/vue/
+
+# Copy static assets (style.css still used by login.html, logos/favicons shared)
+COPY static/style.css static/bridge-logo.svg static/bridge-logo-full.png static/
+COPY static/bridge-logo-header.png static/favicon.svg static/favicon.png static/
 
 # GitHub App private key for bug report proxy (base64-encoded PEM)
 ARG BUGREPORTER_PRIVATE_KEY=""

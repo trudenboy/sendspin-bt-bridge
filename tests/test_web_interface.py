@@ -121,11 +121,20 @@ def test_csp_header_present_on_html(client):
 
 
 def test_csp_uses_unsafe_inline_without_nonce(client):
-    """script-src must use unsafe-inline WITHOUT nonce (nonce disables unsafe-inline, breaking onclick)."""
+    """When Vue SPA is available, script-src must NOT use unsafe-inline.
+
+    Legacy fallback uses unsafe-inline for onclick handlers.
+    """
     resp = client.get("/")
     csp = resp.headers["Content-Security-Policy"]
     script_src = csp.split("script-src")[1].split(";")[0]
-    assert "'unsafe-inline'" in script_src
+    # Vue SPA: strict CSP, no unsafe-inline for scripts
+    from web_interface import _VUE_AVAILABLE
+
+    if _VUE_AVAILABLE:
+        assert "'unsafe-inline'" not in script_src
+    else:
+        assert "'unsafe-inline'" in script_src
     assert "nonce-" not in script_src
 
 

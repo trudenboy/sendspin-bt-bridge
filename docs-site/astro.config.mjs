@@ -44,6 +44,11 @@ export default defineConfig({
         { label: 'Bluetooth Adapters', translations: { ru: 'Bluetooth-адаптеры' }, slug: 'bluetooth-adapters' },
         { label: 'API Reference', slug: 'api' },
         { label: 'Architecture', slug: 'architecture' },
+        {
+          label: 'UI Kit',
+          translations: { ru: 'UI Kit' },
+          autogenerate: { directory: 'ui-kit' },
+        },
         { label: 'Troubleshooting', translations: { ru: 'Устранение неполадок' }, slug: 'troubleshooting' },
         { label: 'Test Stand', translations: { ru: 'Тестовый стенд' }, slug: 'test-stand' },
         { label: 'Contributing', translations: { ru: 'Разработка' }, slug: 'contributing' },

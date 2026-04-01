@@ -28,6 +28,10 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
 
+# Vue SPA directory - ``ui/dist/`` in development, ``static/vue/`` in Docker
+_VUE_DIR = Path("ui/dist") if Path("ui/dist/index.html").is_file() else Path("static/vue")
+_VUE_AVAILABLE = (_VUE_DIR / "index.html").is_file()
+
 # Set secret key (generated once and persisted to config.json so sessions
 # survive container restarts).
 _startup_config = load_config()
@@ -156,6 +160,15 @@ def vstatic(version, filename):
     return resp
 
 
+@app.route("/assets/<path:filename>")
+def vue_assets(filename):
+    """Serve Vite-built assets with content-hash cache busting."""
+    assets_dir = _VUE_DIR / "assets"
+    resp = send_from_directory(str(assets_dir), filename)
+    resp.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    return resp
+
+
 @app.after_request
 def _set_cache_headers(response):
     """Prevent HA Ingress proxy and browsers from caching HTML pages.
@@ -168,15 +181,26 @@ def _set_cache_headers(response):
         response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
         response.headers["Pragma"] = "no-cache"
         response.headers["Expires"] = "0"
-        nonce = getattr(g, "csp_nonce", "")  # noqa: F841 — kept for future onclick→addEventListener migration
-        response.headers["Content-Security-Policy"] = (
-            "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline'; "
-            "style-src 'self' 'unsafe-inline'; "
-            "img-src 'self' data:; "
-            "connect-src 'self' ws: wss:; "
-            "frame-ancestors 'self'"
-        )
+        if _VUE_AVAILABLE:
+            # Vue SPA: stricter CSP (no inline scripts/styles needed)
+            response.headers["Content-Security-Policy"] = (
+                "default-src 'self'; "
+                "script-src 'self'; "
+                "style-src 'self' 'unsafe-inline'; "
+                "img-src 'self' data:; "
+                "connect-src 'self' ws: wss:; "
+                "frame-ancestors 'self'"
+            )
+        else:
+            # Legacy fallback: permissive CSP for inline scripts
+            response.headers["Content-Security-Policy"] = (
+                "default-src 'self'; "
+                "script-src 'self' 'unsafe-inline'; "
+                "style-src 'self' 'unsafe-inline'; "
+                "img-src 'self' data:; "
+                "connect-src 'self' ws: wss:; "
+                "frame-ancestors 'self'"
+            )
     response.headers["X-Content-Type-Options"] = "nosniff"
     return response
 
@@ -239,7 +263,7 @@ def _check_auth():
             return
 
     # Static assets and public API endpoints are always reachable
-    if request.path.startswith("/static/"):
+    if request.path.startswith("/static/") or request.path.startswith("/assets/"):
         return
     if request.path in _PUBLIC_PATHS:
         return
@@ -258,6 +282,9 @@ def _check_auth():
 def _handle_404(e):
     if request.path.startswith("/api/"):
         return jsonify({"error": "Not found"}), 404
+    # SPA client-side routing: serve index.html for all non-API paths
+    if _VUE_AVAILABLE:
+        return send_from_directory(str(_VUE_DIR), "index.html")
     return redirect("/")
 
 

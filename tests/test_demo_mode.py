@@ -638,6 +638,7 @@ async def test_demo_install_exposes_demo_logs_diagnostics_and_bugreport(monkeypa
 
 def test_demo_index_shows_demo_user_and_ma_token_notice_by_default(monkeypatch):
     monkeypatch.setenv("DEMO_MODE", "true")
+    monkeypatch.setattr("web_interface._VUE_AVAILABLE", False)
 
     template_root = Path(__file__).resolve().parents[1]
     app = Flask(
@@ -674,6 +675,7 @@ def test_demo_index_shows_demo_user_and_ma_token_notice_by_default(monkeypatch):
 def test_standalone_index_shows_short_web_port_hint(monkeypatch):
     monkeypatch.delenv("DEMO_MODE", raising=False)
     monkeypatch.delenv("SUPERVISOR_TOKEN", raising=False)
+    monkeypatch.setattr("web_interface._VUE_AVAILABLE", False)
 
     template_root = Path(__file__).resolve().parents[1]
     app = Flask(
@@ -706,6 +708,7 @@ def test_standalone_index_shows_short_web_port_hint(monkeypatch):
 
 def test_ha_addon_index_hides_logout_button(monkeypatch):
     monkeypatch.setenv("SUPERVISOR_TOKEN", "test-token")
+    monkeypatch.setattr("web_interface._VUE_AVAILABLE", False)
     monkeypatch.setattr(
         "routes.views.get_ma_addon_ui_url",
         lambda: "/api/hassio_ingress/ma-token",

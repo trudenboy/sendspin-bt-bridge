@@ -189,7 +189,21 @@ IPC: subprocess→parent via JSON lines on stdout; parent→subprocess via JSON 
 
 **Config persistence:** `/config/config.json` (mounted Docker volume at `/etc/docker/Sendspin`). Changes via the web UI require a container restart to take effect. See `config.schema.json` for the machine-readable JSON Schema describing all fields, types, and constraints.
 
-**`static/app.js`** — frontend logic: `_showBtInfoModal()` (BT device info modal), `rebootAdapter()` (adapter power cycle), `_startScanCooldown()` (scan button cooldown timer), `uploadConfig()` (config file upload).
+**Vue Operator Console (`ui/`):**
+- **Tech stack:** Vue 3 + TypeScript + Vite 8 + Tailwind CSS 4 + Pinia 3
+- **Entry:** `ui/src/main.ts` → `App.vue` (header + sidebar + router-view + mobile nav + toasts)
+- **Kit:** 21 `Sb*` components in `ui/src/kit/` (Button, Badge, Card, Dialog, Drawer, Table, Tabs, etc.)
+- **Stores:** 9 Pinia stores in `ui/src/stores/` (bridge, devices, config, bluetooth, ma, auth, events, diagnostics, notifications)
+- **API:** typed client in `ui/src/api/` with 7 endpoint modules
+- **Views:** Dashboard, Devices, Config (6 tabs), Diagnostics, MA, Login
+- **i18n:** EN + RU in `ui/src/i18n/`
+- **Backend registry:** `ui/src/types/backend-registry.ts` — maps `BackendType` → UI descriptor (icon, configFields, statusFields, signalPath). Adding a new backend UI = adding one descriptor object.
+- **Build:** `npm run build` → `ui/dist/` (~93KB gzipped), content-hashed, code-split per route
+- **Tests:** `npm test` (Vitest + Vue Test Utils), ~489 tests
+- **Dev:** `npm run dev` → Vite dev server with API proxy to Flask backend
+- **Serving:** Flask serves `ui/dist/index.html` for all non-API routes when Vue build is present; falls back to legacy `templates/index.html` otherwise
+
+**`static/app.js`** — legacy frontend (retained for fallback). Will be removed in a future release.
 
 **Docs site:** `docs-site/` — Astro Starlight, deployed to GitHub Pages at `https://trudenboy.github.io/sendspin-bt-bridge`
 

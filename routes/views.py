@@ -1,6 +1,6 @@
 import os
 
-from flask import Blueprint, current_app, render_template, session
+from flask import Blueprint, current_app, render_template, send_from_directory, session
 
 from config import BUILD_DATE, detect_ha_addon_channel, get_runtime_version, resolve_web_port
 from services.ha_addon import get_ma_addon_ui_url
@@ -10,7 +10,20 @@ views_bp = Blueprint("views", __name__)
 
 @views_bp.route("/")
 def index():
-    """Render the main page"""
+    """Serve the operator console.
+
+    When the Vue SPA build is present (``ui/dist/`` in dev or ``static/vue/``
+    in Docker), serve it directly.  Otherwise fall back to the legacy Jinja
+    template so the app remains usable during development before
+    ``npm run build``.
+    """
+    # Import lazily to avoid circular dependency at module level
+    from web_interface import _VUE_AVAILABLE, _VUE_DIR
+
+    if _VUE_AVAILABLE:
+        return send_from_directory(str(_VUE_DIR), "index.html")
+
+    # Legacy fallback (development without Vue build)
     auth_enabled = current_app.config.get("AUTH_ENABLED", False)
     is_ha_addon = current_app.config.get("IS_HA_ADDON", False)
     demo_mode = os.environ.get("DEMO_MODE", "").lower() == "true"
