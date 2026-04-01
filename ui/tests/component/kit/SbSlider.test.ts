@@ -58,4 +58,18 @@ describe('SbSlider', () => {
     const style = wrapper.find('input').attributes('style')
     expect(style).toContain('50%')
   })
+
+  it('computes correct percentage for non-zero min', () => {
+    const wrapper = mount(SbSlider, { props: { modelValue: 50, min: 0, max: 200 } })
+    const style = wrapper.find('input').attributes('style') ?? ''
+    expect(style).toContain('25%')
+  })
+
+  it('shows label and value together', () => {
+    const wrapper = mount(SbSlider, {
+      props: { label: 'Delay', modelValue: 300, showValue: true },
+    })
+    expect(wrapper.text()).toContain('Delay')
+    expect(wrapper.text()).toContain('300')
+  })
 })

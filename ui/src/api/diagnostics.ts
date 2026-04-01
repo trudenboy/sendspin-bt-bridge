@@ -1,11 +1,13 @@
 import { apiGet, apiPost } from './client'
+import { useIngress } from '@/composables/useIngress'
+import type { DiagnosticsData, RecoveryData, OperatorGuidance } from './types'
 
 export function getDiagnostics() {
-  return apiGet<Record<string, unknown>>('/api/diagnostics')
+  return apiGet<DiagnosticsData>('/api/diagnostics')
 }
 
 export function getRecoveryAssistant() {
-  return apiGet<Record<string, unknown>>('/api/recovery/assistant')
+  return apiGet<RecoveryData>('/api/recovery/assistant')
 }
 
 export function getRecoveryTimeline() {
@@ -13,7 +15,7 @@ export function getRecoveryTimeline() {
 }
 
 export function getOperatorGuidance() {
-  return apiGet<Record<string, unknown>>('/api/operator/guidance')
+  return apiGet<OperatorGuidance>('/api/operator/guidance')
 }
 
 export function getOnboardingAssistant() {
@@ -43,4 +45,9 @@ export function rerunChecks(checkName: string) {
   return apiPost<Record<string, unknown>>('/api/checks/rerun', {
     check: checkName,
   })
+}
+
+export function downloadBugreport() {
+  const { apiBase } = useIngress()
+  window.location.href = `${apiBase}/api/bugreport/download`
 }

@@ -15,7 +15,8 @@ const props = withDefaults(defineProps<Props>(), {
 
 const model = defineModel<boolean>({ default: false })
 
-const toggleId = computed(() => props.id ?? useId())
+const autoId = `sb-toggle-${useId()}`
+const toggleId = computed(() => props.id ?? autoId)
 
 function toggle() {
   if (!props.disabled) {

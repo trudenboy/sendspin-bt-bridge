@@ -65,6 +65,19 @@ describe('SbDropdown', () => {
     const wrapper = mount(SbDropdown)
     expect(wrapper.find('button').attributes('aria-haspopup')).toBe('true')
   })
+
+  it('applies full width class', async () => {
+    const wrapper = mount(SbDropdown, { props: { width: 'full' } })
+    await wrapper.find('button').trigger('click')
+    expect(wrapper.find('[role="menu"]').classes()).toContain('w-full')
+  })
+
+  it('applies custom width via style', async () => {
+    const wrapper = mount(SbDropdown, { props: { width: '300px' } })
+    await wrapper.find('button').trigger('click')
+    const style = wrapper.find('[role="menu"]').attributes('style') ?? ''
+    expect(style).toContain('300px')
+  })
 })
 
 describe('SbDropdownItem', () => {
@@ -91,5 +104,15 @@ describe('SbDropdownItem', () => {
     const wrapper = mount(SbDropdownItem, { props: { disabled: true } })
     expect(wrapper.find('button').attributes('disabled')).toBeDefined()
     expect(wrapper.find('button').classes()).toContain('cursor-not-allowed')
+  })
+
+  it('has tabindex on button element', () => {
+    const wrapper = mount(SbDropdownItem, { slots: { default: 'Edit' } })
+    expect(wrapper.find('button').exists()).toBe(true)
+  })
+
+  it('applies opacity when disabled', () => {
+    const wrapper = mount(SbDropdownItem, { props: { disabled: true } })
+    expect(wrapper.find('button').classes()).toContain('opacity-50')
   })
 })

@@ -67,4 +67,22 @@ describe('SbToggle', () => {
     expect(btn.classes()).toContain('h-6')
     expect(btn.classes()).toContain('w-10')
   })
+
+  it('uses custom id for toggle and label', () => {
+    const wrapper = mount(SbToggle, { props: { id: 'my-toggle', label: 'Test' } })
+    expect(wrapper.find('[role="switch"]').attributes('id')).toBe('my-toggle')
+    expect(wrapper.find('label').attributes('for')).toBe('my-toggle')
+  })
+
+  it('toggles when label is clicked', async () => {
+    const wrapper = mount(SbToggle, { props: { label: 'Click me', modelValue: false } })
+    await wrapper.find('label').trigger('click')
+    expect(wrapper.emitted('update:modelValue')?.[0]).toEqual([true])
+  })
+
+  it('applies disabled styling', () => {
+    const wrapper = mount(SbToggle, { props: { disabled: true } })
+    expect(wrapper.classes()).toContain('opacity-50')
+    expect(wrapper.classes()).toContain('cursor-not-allowed')
+  })
 })

@@ -207,3 +207,38 @@ export interface BtScanDevice {
   is_audio: boolean
   paired: boolean
 }
+
+/* Diagnostics */
+
+export interface DiagnosticsData {
+  status?: string
+  checks?: Record<string, unknown>
+  [key: string]: unknown
+}
+
+export interface RecoveryData {
+  issues?: {
+    device_mac: string
+    issue: string
+    severity: string
+    remediation: string
+  }[]
+  [key: string]: unknown
+}
+
+export interface OperatorGuidance {
+  phases?: {
+    name: string
+    status: string
+    items: { label: string; done: boolean }[]
+  }[]
+  [key: string]: unknown
+}
+
+/* Auth */
+
+export interface AuthCheckResponse {
+  authenticated: boolean
+  username?: string
+  ha_user?: boolean
+}

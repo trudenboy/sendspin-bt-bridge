@@ -79,6 +79,30 @@ describe('SbInput', () => {
     const input = wrapper.find('input')
     const descId = input.attributes('aria-describedby')
     expect(descId).toBeTruthy()
-    expect(wrapper.find(`#${descId}`).text()).toBe('Oops')
+    expect(wrapper.find(`#${CSS.escape(descId!)}`).text()).toBe('Oops')
+  })
+
+  it('uses custom id for input and label', () => {
+    const wrapper = mount(SbInput, { props: { id: 'custom-id', label: 'Name' } })
+    expect(wrapper.find('input').attributes('id')).toBe('custom-id')
+    expect(wrapper.find('label').attributes('for')).toBe('custom-id')
+  })
+
+  it('auto-generates id when not provided', () => {
+    const wrapper = mount(SbInput, { props: { label: 'Test' } })
+    const id = wrapper.find('input').attributes('id')
+    expect(id).toBeTruthy()
+    expect(wrapper.find('label').attributes('for')).toBe(id)
+  })
+
+  it('does not set aria-invalid when no error', () => {
+    const wrapper = mount(SbInput)
+    expect(wrapper.find('input').attributes('aria-invalid')).toBeUndefined()
+  })
+
+  it('sets aria-describedby for hint text', () => {
+    const wrapper = mount(SbInput, { props: { hint: 'Help text' } })
+    const describedBy = wrapper.find('input').attributes('aria-describedby')
+    expect(describedBy).toBeTruthy()
   })
 })

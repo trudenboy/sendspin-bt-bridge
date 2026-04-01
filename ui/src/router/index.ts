@@ -1,8 +1,16 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useIngress } from '@/composables/useIngress'
 
+declare module 'vue-router' {
+  interface RouteMeta {
+    requiresAuth?: boolean
+    hideNav?: boolean
+  }
+}
+
 const router = createRouter({
   history: createWebHistory(useIngress().basePath),
+  scrollBehavior: () => ({ top: 0 }),
   routes: [
     {
       path: '/',
@@ -33,7 +41,7 @@ const router = createRouter({
       path: '/login',
       name: 'login',
       component: () => import('@/views/LoginView.vue'),
-      meta: { public: true },
+      meta: { hideNav: true },
     },
   ],
 })

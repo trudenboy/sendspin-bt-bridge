@@ -65,3 +65,7 @@ export function toggleAdapterPower(adapter: string) {
     { adapter },
   )
 }
+
+export function rebootAdapter(adapter: string) {
+  return apiPost<{ success: boolean }>('/api/bt/adapter/reboot', { adapter })
+}

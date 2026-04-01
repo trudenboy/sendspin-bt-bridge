@@ -20,7 +20,8 @@ const props = withDefaults(defineProps<Props>(), {
 
 const model = defineModel<string>({ default: '' })
 
-const inputId = computed(() => props.id ?? useId())
+const autoId = `sb-input-${useId()}`
+const inputId = computed(() => props.id ?? autoId)
 const descriptionId = computed(() => `${inputId.value}-desc`)
 const hasDescription = computed(() => !!props.error || !!props.hint)
 </script>
@@ -56,7 +57,7 @@ const hasDescription = computed(() => !!props.error || !!props.hint)
         :placeholder="placeholder"
         :disabled="disabled"
         :required="required"
-        :aria-invalid="!!error"
+        :aria-invalid="error ? true : undefined"
         :aria-describedby="hasDescription ? descriptionId : undefined"
         :aria-required="required || undefined"
         class="w-full bg-transparent px-3 py-2 text-sm text-text-primary outline-none placeholder:text-text-disabled dark:text-white dark:placeholder:text-gray-500"
