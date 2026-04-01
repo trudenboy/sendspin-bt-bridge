@@ -31,7 +31,7 @@ concurrency:
 #                 └── docker-build  (amd64 + arm64 matrix)
 #                       └── docker-merge  (create manifest)
 #                             ├── addon-sync  (update ha-addon*/ dirs)
-#                             │     └── gh-release  (stable only)
+#                             │     └── gh-release  (all channels; prerelease for beta/rc)
 #                             └── armv7-build  (stable only)
 # ---------------------------------------------------------------------
 
@@ -371,26 +371,34 @@ jobs:
           git commit -m "chore: sync HA addon directories for ${VERSION}"
           git push origin HEAD:main
 
-  # ── 8. GitHub Release (stable only) ─────────────────────────────
+  # ── 8. GitHub Release (all channels) ─────────────────────────────
   gh-release:
     needs: [prepare, addon-sync]
-    if: needs.prepare.outputs.is_stable == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     permissions:
       contents: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
         with:
-          ref: main
+          ref: ${{ needs.prepare.outputs.is_stable == 'true' && 'main' || needs.prepare.outputs.tag }}
           fetch-depth: 0
 
       - name: Fetch all tags
         run: git fetch --force --tags
 
+      - name: Build Vue frontend
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: |
+          cd ui && npm ci --ignore-scripts && npm run build
+          tar -czf /tmp/vue-dist.tar.gz -C dist .
+
       - name: Resolve previous stable release
         id: previous
+        if: needs.prepare.outputs.is_stable == 'true'
         uses: actions/github-script@v8
         with:
           script: |
@@ -429,7 +437,7 @@ jobs:
           script: |
             const {owner, repo} = context.repo;
             const tag = '${{ needs.prepare.outputs.tag }}';
-            const previousTag = '${{ steps.previous.outputs.tag }}';
+            const previousTag = '${{ steps.previous.outputs.tag }}' || '';
             const params = { owner, repo, tag_name: tag };
             if (previousTag) params.previous_tag_name = previousTag;
             const response = await github.rest.repos.generateReleaseNotes(params);
@@ -465,15 +473,20 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Create or update GitHub release
+        env:
+          IS_STABLE: ${{ needs.prepare.outputs.is_stable }}
         uses: actions/github-script@v8
         with:
           script: |
             const {owner, repo} = context.repo;
             const tag = '${{ needs.prepare.outputs.tag }}';
             const body = ${{ toJSON(steps.body.outputs.body) }};
+            const isStable = process.env.IS_STABLE === 'true';
             const payload = {
               owner, repo, tag_name: tag, name: tag, body,
-              draft: false, prerelease: false, make_latest: 'true',
+              draft: false,
+              prerelease: !isStable,
+              make_latest: isStable ? 'true' : 'false',
             };
             let existing = null;
             try {
@@ -494,6 +507,12 @@ jobs:
           TARBALL="sendspin-bt-bridge-${VERSION}.tar.gz"
           git archive --format=tar.gz --prefix="sendspin-bt-bridge-${VERSION}/" "${TAG}" -o "${TARBALL}"
           gh release upload "${TAG}" "${TARBALL}" --clobber
+
+      - name: Upload Vue frontend build
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+        run: gh release upload "${TAG}" /tmp/vue-dist.tar.gz --clobber
 
   # ── 9. ARMv7 build (stable only) ────────────────────────────────
   armv7-build:

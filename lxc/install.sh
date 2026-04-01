@@ -69,6 +69,41 @@ record_release_ref() {
   printf '%s\n' "${GITHUB_BRANCH}" > "${dest_root}/.release-ref"
 }
 
+install_vue_frontend() {
+  local dest_root="$1"
+  local vue_dir="${dest_root}/static/vue"
+  local vue_asset_url
+
+  if [[ "${REF_KIND}" == "tags" ]]; then
+    vue_asset_url="https://github.com/${GITHUB_REPO}/releases/download/${GITHUB_BRANCH}/vue-dist.tar.gz"
+  else
+    local latest_tag
+    latest_tag=$(wget -qO- "https://api.github.com/repos/${GITHUB_REPO}/releases" 2>/dev/null | \
+      python3 -c "import sys,json; tags=[r['tag_name'] for r in json.load(sys.stdin) if not r['draft']]; print(tags[0] if tags else '')" 2>/dev/null || echo "")
+    if [[ -n "${latest_tag}" ]]; then
+      vue_asset_url="https://github.com/${GITHUB_REPO}/releases/download/${latest_tag}/vue-dist.tar.gz"
+    fi
+  fi
+
+  if [[ -n "${vue_asset_url:-}" ]]; then
+    local tmp_vue
+    tmp_vue="$(mktemp)"
+    if wget -q -O "${tmp_vue}" "${vue_asset_url}" 2>/dev/null && [[ -s "${tmp_vue}" ]]; then
+      rm -rf "${vue_dir}"
+      mkdir -p "${vue_dir}"
+      if tar -xzf "${tmp_vue}" -C "${vue_dir}"; then
+        rm -f "${tmp_vue}"
+        ok "Vue frontend installed"
+        return 0
+      fi
+    fi
+    rm -f "${tmp_vue}"
+  fi
+
+  warn "Vue frontend not available — UI will use legacy template"
+  return 0
+}
+
 # ─── Pre-flight ───────────────────────────────────────────────────────────────
 [[ $EUID -eq 0 ]] || die "Must be run as root"
 
@@ -100,6 +135,10 @@ mkdir -p /opt/sendspin-client
 sync_app_tree "${SNAPSHOT_ROOT}" /opt/sendspin-client
 record_release_ref /opt/sendspin-client
 ok "Application files downloaded"
+
+# ─── 2b. Vue frontend ─────────────────────────────────────────────────────────
+msg "Installing Vue frontend..."
+install_vue_frontend /opt/sendspin-client
 
 # ─── 3. Python dependencies ───────────────────────────────────────────────────
 msg "Installing Python dependencies..."
