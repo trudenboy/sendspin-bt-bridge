@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.0-beta.10] — 2026-04-01
+
+### Fixed
+- **CI**: Vue build now gates release — TS errors block tag creation
+- Fix 3 TypeScript build errors (BugReportDialog proxy type, adapter.mac, unused import)
+
+### Changed
+- `vue-dist` CI job reuses build artifact instead of rebuilding
+
 ## [3.0.0-beta.9] — 2026-04-02
 
 ### Added
