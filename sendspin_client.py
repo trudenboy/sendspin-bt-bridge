@@ -435,7 +435,7 @@ class SendspinClient:
                 details=event["details"] if isinstance(event["details"], dict) else None,
             )
         _state.notify_status_changed()
-        # Check audio_streaming transition for idle disconnect timer.
+        # Check audio_streaming / playing transitions for idle disconnect timer.
         # Skip if keep-alive is enabled — it actively prevents speaker sleep,
         # which contradicts the purpose of idle standby.
         if self.idle_disconnect_minutes > 0 and not getattr(self, "keepalive_enabled", False):
@@ -446,6 +446,19 @@ class SendspinClient:
                     self._start_idle_timer()
                 elif not was_streaming and now_streaming:
                     self._cancel_idle_timer()
+            # Cancel idle timer when MA reports playback started.
+            # audio_streaming tracks actual PCM data flow; playing tracks the
+            # MA-side transport state.  MA may report playing=True before any
+            # audio chunks arrive (buffering, codec negotiation), so we must
+            # cancel the timer on *either* transition to avoid a premature
+            # standby while the speaker is about to start (or already) playing.
+            if "playing" in updates:
+                was_playing = previous.get("playing", False)
+                now_playing = self.status.get("playing", False)
+                if not was_playing and now_playing:
+                    self._cancel_idle_timer()
+                elif was_playing and not now_playing and not self.status.get("audio_streaming"):
+                    self._start_idle_timer()
             # Start idle timer when daemon connects with no audio playing.
             # Without this, a device that connects but never plays would
             # never enter standby because the True→False transition that
@@ -454,6 +467,7 @@ class SendspinClient:
                 "server_connected" in updates
                 and self.status.get("server_connected") is True
                 and not self.status.get("audio_streaming")
+                and not self.status.get("playing")
                 and not self.status.get("bt_standby")
             ):
                 self._start_idle_timer()
@@ -468,6 +482,16 @@ class SendspinClient:
         async def _idle_timeout() -> None:
             try:
                 await asyncio.sleep(timeout)
+                # Re-check playback state at firing time.  The timer may
+                # have been started before audio/playback began (e.g. during
+                # server reconnection), but by now the speaker may be active.
+                if self.status.get("audio_streaming") or self.status.get("playing"):
+                    logger.debug(
+                        "[%s] Idle timer fired but device is active — restarting",
+                        self.player_name,
+                    )
+                    self._start_idle_timer()
+                    return
                 logger.info(
                     "[%s] Idle for %d min — entering standby",
                     self.player_name,

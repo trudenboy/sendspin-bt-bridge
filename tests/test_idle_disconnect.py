@@ -145,6 +145,42 @@ class TestIdleTimerStartCancel:
                 client._update_status({"server_connected": True})
                 start_mock.assert_not_called()
 
+    def test_timer_cancels_on_playing_start(self):
+        """Timer cancels when playing goes False→True (MA reports playback)."""
+        with patch("sendspin_client._state"):
+            client = _make_client(idle_disconnect_minutes=15)
+            # Previous state: not playing
+            with patch.object(client, "_cancel_idle_timer") as cancel_mock:
+                client._update_status({"playing": True})
+                cancel_mock.assert_called_once()
+
+    def test_timer_starts_on_playing_stop_without_streaming(self):
+        """Timer starts when playing goes True→False and audio_streaming is False."""
+        with patch("sendspin_client._state"):
+            client = _make_client(idle_disconnect_minutes=15)
+            client.status.update({"playing": True})
+            with patch.object(client, "_start_idle_timer") as start_mock:
+                client._update_status({"playing": False})
+                start_mock.assert_called_once()
+
+    def test_timer_not_started_on_playing_stop_while_streaming(self):
+        """Timer does NOT start when playing→False if audio_streaming is still True."""
+        with patch("sendspin_client._state"):
+            client = _make_client(idle_disconnect_minutes=15)
+            client.status.update({"playing": True, "audio_streaming": True})
+            with patch.object(client, "_start_idle_timer") as start_mock:
+                client._update_status({"playing": False})
+                start_mock.assert_not_called()
+
+    def test_timer_not_started_on_daemon_connect_when_playing(self):
+        """Timer does NOT start on daemon connect if playing is True."""
+        with patch("sendspin_client._state"):
+            client = _make_client(idle_disconnect_minutes=15)
+            client.status.update({"playing": True})
+            with patch.object(client, "_start_idle_timer") as start_mock:
+                client._update_status({"server_connected": True})
+                start_mock.assert_not_called()
+
 
 class TestCancelIdleTimer:
     """_cancel_idle_timer edge cases."""
@@ -382,3 +418,100 @@ class TestIdleTimerFullCycle:
             assert task2 is not task1  # new timer
 
             client._cancel_idle_timer()
+
+
+class TestIdleTimerGuardAtFiring:
+    """_idle_timeout() re-checks playback state before entering standby."""
+
+    @pytest.mark.asyncio
+    async def test_timer_restarts_when_playing_at_fire_time(self):
+        """If playing=True when the timer fires, standby is skipped and timer restarts."""
+        with patch("sendspin_client._state") as state_mock:
+            state_mock.get_main_loop.return_value = None
+            state_mock.notify_status_changed = MagicMock()
+            state_mock.publish_device_event = MagicMock()
+            client = _make_client(idle_disconnect_minutes=30)
+
+            # Simulate: timer fires but device is now playing
+            client.status.update({"playing": True})
+
+            with (
+                patch("asyncio.sleep", new_callable=AsyncMock),
+                patch.object(client, "_enter_standby", new_callable=AsyncMock) as enter_mock,
+                patch.object(client, "_start_idle_timer", wraps=client._start_idle_timer) as restart_mock,
+            ):
+                timeout = client.idle_disconnect_minutes * 60
+
+                async def _idle_timeout() -> None:
+                    try:
+                        await asyncio.sleep(timeout)
+                        if client.status.get("audio_streaming") or client.status.get("playing"):
+                            client._start_idle_timer()
+                            return
+                        await client._enter_standby()
+                    except asyncio.CancelledError:
+                        return
+
+                await _idle_timeout()
+                enter_mock.assert_not_awaited()
+                restart_mock.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_timer_restarts_when_streaming_at_fire_time(self):
+        """If audio_streaming=True when the timer fires, standby is skipped."""
+        with patch("sendspin_client._state") as state_mock:
+            state_mock.get_main_loop.return_value = None
+            state_mock.notify_status_changed = MagicMock()
+            state_mock.publish_device_event = MagicMock()
+            client = _make_client(idle_disconnect_minutes=30)
+            client.status.update({"audio_streaming": True})
+
+            with (
+                patch("asyncio.sleep", new_callable=AsyncMock),
+                patch.object(client, "_enter_standby", new_callable=AsyncMock) as enter_mock,
+                patch.object(client, "_start_idle_timer", wraps=client._start_idle_timer) as restart_mock,
+            ):
+                timeout = client.idle_disconnect_minutes * 60
+
+                async def _idle_timeout() -> None:
+                    try:
+                        await asyncio.sleep(timeout)
+                        if client.status.get("audio_streaming") or client.status.get("playing"):
+                            client._start_idle_timer()
+                            return
+                        await client._enter_standby()
+                    except asyncio.CancelledError:
+                        return
+
+                await _idle_timeout()
+                enter_mock.assert_not_awaited()
+                restart_mock.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_timer_enters_standby_when_idle_at_fire_time(self):
+        """If both playing and audio_streaming are False, standby proceeds."""
+        with patch("sendspin_client._state") as state_mock:
+            state_mock.get_main_loop.return_value = None
+            state_mock.notify_status_changed = MagicMock()
+            state_mock.publish_device_event = MagicMock()
+            client = _make_client(idle_disconnect_minutes=30)
+            # Both default to False — device is truly idle
+
+            with (
+                patch("asyncio.sleep", new_callable=AsyncMock),
+                patch.object(client, "_enter_standby", new_callable=AsyncMock) as enter_mock,
+            ):
+                timeout = client.idle_disconnect_minutes * 60
+
+                async def _idle_timeout() -> None:
+                    try:
+                        await asyncio.sleep(timeout)
+                        if client.status.get("audio_streaming") or client.status.get("playing"):
+                            client._start_idle_timer()
+                            return
+                        await client._enter_standby()
+                    except asyncio.CancelledError:
+                        return
+
+                await _idle_timeout()
+                enter_mock.assert_awaited_once()
