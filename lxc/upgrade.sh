@@ -131,14 +131,14 @@ install_vue_frontend() {
   local vue_dir="${dest_root}/static/vue"
   local vue_asset_url
 
-  # Try downloading pre-built Vue frontend from GitHub release
+  # Vue dist is published as a separate prerelease: vue-dist-v{version}
   if [[ "${REF_KIND}" == "tags" ]]; then
-    vue_asset_url="https://github.com/${GITHUB_REPO}/releases/download/${GITHUB_BRANCH}/vue-dist.tar.gz"
+    vue_asset_url="https://github.com/${GITHUB_REPO}/releases/download/vue-dist-${GITHUB_BRANCH}/vue-dist.tar.gz"
   else
-    # For branch-based installs, find the latest release tag matching the branch
+    # For branch-based installs, find the latest vue-dist release
     local latest_tag
     latest_tag=$(wget -qO- "https://api.github.com/repos/${GITHUB_REPO}/releases" 2>/dev/null | \
-      python3 -c "import sys,json; tags=[r['tag_name'] for r in json.load(sys.stdin) if not r['draft']]; print(tags[0] if tags else '')" 2>/dev/null || echo "")
+      python3 -c "import sys,json; tags=[r['tag_name'] for r in json.load(sys.stdin) if not r['draft'] and r['tag_name'].startswith('vue-dist-')]; print(tags[0] if tags else '')" 2>/dev/null || echo "")
     if [[ -n "${latest_tag}" ]]; then
       vue_asset_url="https://github.com/${GITHUB_REPO}/releases/download/${latest_tag}/vue-dist.tar.gz"
     fi

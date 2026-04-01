@@ -28,10 +28,11 @@ concurrency:
 #     ├── lint  (reusable _lint.yml)
 #     └── test  (reusable _test.yml)
 #           └── release  (commit config.py + create tag)
+#                 ├── vue-dist  (all channels — vue-dist-vX.Y.Z prerelease)
 #                 └── docker-build  (amd64 + arm64 matrix)
 #                       └── docker-merge  (create manifest)
 #                             ├── addon-sync  (update ha-addon*/ dirs)
-#                             │     └── gh-release  (all channels; prerelease for beta/rc)
+#                             │     └── gh-release  (stable only)
 #                             └── armv7-build  (stable only)
 # ---------------------------------------------------------------------
 
@@ -338,8 +339,22 @@ jobs:
         env:
           CHANNEL: ${{ needs.prepare.outputs.channel }}
           VERSION: ${{ needs.prepare.outputs.version }}
+          TAG: ${{ needs.prepare.outputs.tag }}
         run: |
           set -euo pipefail
+
+          # For non-stable releases, the root CHANGELOG.md on main doesn't
+          # contain beta/rc entries (they live on the beta/rc branch).
+          # Merge the CHANGELOG.md from the release tag so the addon-sync
+          # script can extract the correct entries for each channel.
+          if [[ "${CHANNEL}" != "stable" ]]; then
+            # Fetch the merge script from the tag (it may not exist on main yet)
+            git show "${TAG}:scripts/merge_branch_changelog.py" > /tmp/merge_branch_changelog.py 2>/dev/null || true
+            git show "${TAG}:CHANGELOG.md" > /tmp/branch-changelog.md 2>/dev/null || true
+            if [[ -s /tmp/branch-changelog.md && -s /tmp/merge_branch_changelog.py ]]; then
+              python3 /tmp/merge_branch_changelog.py CHANGELOG.md /tmp/branch-changelog.md
+            fi
+          fi
 
           stable_tag="$(git tag --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1 || true)"
           rc_tag="$(git tag --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$' | head -n 1 || true)"
@@ -371,9 +386,10 @@ jobs:
           git commit -m "chore: sync HA addon directories for ${VERSION}"
           git push origin HEAD:main
 
-  # ── 8. GitHub Release (all channels) ─────────────────────────────
+  # ── 8. GitHub Release (stable only) ──────────────────────────────
   gh-release:
     needs: [prepare, addon-sync]
+    if: needs.prepare.outputs.is_stable == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -387,14 +403,6 @@ jobs:
 
       - name: Fetch all tags
         run: git fetch --force --tags
-
-      - name: Build Vue frontend
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - run: |
-          cd ui && npm ci --ignore-scripts && npm run build
-          tar -czf /tmp/vue-dist.tar.gz -C dist .
 
       - name: Resolve previous stable release
         id: previous
@@ -508,13 +516,42 @@ jobs:
           git archive --format=tar.gz --prefix="sendspin-bt-bridge-${VERSION}/" "${TAG}" -o "${TARBALL}"
           gh release upload "${TAG}" "${TARBALL}" --clobber
 
-      - name: Upload Vue frontend build
+  # ── 9. Vue dist (all channels — for LXC deployments) ─────────────
+  vue-dist:
+    needs: [prepare, release]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout tagged code
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.prepare.outputs.tag }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build Vue frontend
+        run: cd ui && npm ci --ignore-scripts && npm run build
+
+      - name: Package vue-dist.tar.gz
+        run: tar -czf vue-dist.tar.gz -C ui/dist .
+
+      - name: Upload vue-dist release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.prepare.outputs.tag }}
-        run: gh release upload "${TAG}" /tmp/vue-dist.tar.gz --clobber
+        run: |
+          DIST_TAG="vue-dist-${TAG}"
+          gh release create "${DIST_TAG}" vue-dist.tar.gz \
+            --title "Vue dist ${TAG}" \
+            --notes "Pre-built Vue frontend for ${TAG}" \
+            --prerelease
 
-  # ── 9. ARMv7 build (stable only) ────────────────────────────────
+  # ── 10. ARMv7 build (stable only) ───────────────────────────────
   armv7-build:
     needs: [prepare, docker-merge]
     if: needs.prepare.outputs.is_stable == 'true'
