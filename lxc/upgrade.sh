@@ -18,6 +18,7 @@ die()  { err "$*"; exit 1; }
 # ─── Argument parsing ─────────────────────────────────────────────────────────
 GITHUB_REPO="trudenboy/sendspin-bt-bridge"
 GITHUB_BRANCH="main"
+_ORIG_ARGS=("$@")
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -53,7 +54,7 @@ _self_update() {
       rm -f "${new_script}"
       msg "upgrade.sh updated, restarting..."
       export _SELF_UPDATED=1
-      exec bash "${BASH_SOURCE[0]}" "$@"
+      exec bash "${BASH_SOURCE[0]}" "${_ORIG_ARGS[@]}"
     fi
     rm -f "${new_script}"
   else
@@ -61,7 +62,7 @@ _self_update() {
     warn "Could not fetch latest upgrade.sh — continuing with current version"
   fi
 }
-_self_update "$@"
+_self_update
 
 SCRIPT_TMP_DIR=""
 STAGE_APP=""
