@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.0-beta.13] — 2026-04-02
+
+### Fixed
+- Fix Vue test mocks for new `downloadTimelineCsv` export and MaNowPlaying button count
+
 ## [3.0.0-beta.12] — 2026-04-02
 
 ### Added — Vue UI Full Feature Parity
