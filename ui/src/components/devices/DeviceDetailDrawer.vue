@@ -55,7 +55,7 @@ const tabs = computed(() => [
 
 const availableAdapters = computed(() => {
   const snap = bridge.snapshot
-  return snap?.adapters?.map((a) => a.name ?? a.address) ?? []
+  return snap?.adapters?.map((a) => a.name ?? a.mac) ?? []
 })
 
 const configDirty = computed(() => {

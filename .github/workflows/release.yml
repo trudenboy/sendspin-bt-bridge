@@ -148,9 +148,33 @@ jobs:
     with:
       version: ${{ needs.prepare.outputs.version }}
 
+  # ── 3b. Vue build (gate for release) ────────────────────────────
+  vue-build:
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build Vue frontend
+        run: cd ui && npm ci --ignore-scripts && npm run build
+
+      - name: Upload dist artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vue-dist
+          path: ui/dist/
+          retention-days: 1
+
   # ── 4. Release (commit config.py + tag) ──────────────────────────
   release:
-    needs: [prepare, lint, test]
+    needs: [prepare, lint, test, vue-build]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -518,27 +542,20 @@ jobs:
 
   # ── 9. Vue dist (all channels — for LXC deployments) ─────────────
   vue-dist:
-    needs: [prepare, release]
+    needs: [prepare, release, vue-build]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: write
     steps:
-      - name: Checkout tagged code
-        uses: actions/checkout@v6
+      - name: Download dist artifact
+        uses: actions/download-artifact@v4
         with:
-          ref: ${{ needs.prepare.outputs.tag }}
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      - name: Build Vue frontend
-        run: cd ui && npm ci --ignore-scripts && npm run build
+          name: vue-dist
+          path: dist/
 
       - name: Package vue-dist.tar.gz
-        run: tar -czf vue-dist.tar.gz -C ui/dist .
+        run: tar -czf vue-dist.tar.gz -C dist .
 
       - name: Upload vue-dist release
         env:
@@ -547,6 +564,7 @@ jobs:
         run: |
           DIST_TAG="vue-dist-${TAG}"
           gh release create "${DIST_TAG}" vue-dist.tar.gz \
+            --repo "${{ github.repository }}" \
             --title "Vue dist ${TAG}" \
             --notes "Pre-built Vue frontend for ${TAG}" \
             --prerelease

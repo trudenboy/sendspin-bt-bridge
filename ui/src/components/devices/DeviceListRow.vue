@@ -12,7 +12,6 @@ import {
   Radio,
   Wifi,
   Headphones,
-  Play,
   Pause,
   SkipBack,
   SkipForward,

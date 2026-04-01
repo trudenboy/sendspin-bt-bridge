@@ -20,7 +20,7 @@ const notifications = useNotificationStore()
 const title = ref('')
 const description = ref('')
 const email = ref('')
-const method = ref<'github' | 'proxy' | 'copy'>('github')
+const method = ref<'github' | 'copy' | 'proxy'>('github')
 
 const report = ref<BugreportData | null>(null)
 const loading = ref(false)
@@ -35,13 +35,13 @@ const emailError = ref('')
 const canSubmit = computed(() => title.value.length >= 5 && description.value.length >= 10)
 
 const methods = computed(() => {
-  const list = [
-    { id: 'github' as const, label: t('bugreport.method.github'), icon: Github },
-    { id: 'copy' as const, label: t('bugreport.method.copy'), icon: Copy },
+  const list: { id: 'github' | 'copy' | 'proxy'; label: string; icon: typeof Github }[] = [
+    { id: 'github', label: t('bugreport.method.github'), icon: Github },
+    { id: 'copy', label: t('bugreport.method.copy'), icon: Copy },
   ]
   if (proxyAvailable.value) {
     list.splice(1, 0, {
-      id: 'proxy' as const,
+      id: 'proxy',
       label: t('bugreport.method.proxy'),
       icon: Send,
     })
