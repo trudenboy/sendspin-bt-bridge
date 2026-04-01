@@ -47,7 +47,6 @@ export function usePlaybackProgress(deviceRef: Ref<DeviceSnapshot>) {
   const hasProgress = ref(false)
 
   let timerHandle: ReturnType<typeof setInterval> | null = null
-  let lastSource: ProgressSource | null = null
 
   function resolveSource(): ProgressSource | null {
     const device = deviceRef.value
@@ -71,11 +70,9 @@ export function usePlaybackProgress(deviceRef: Ref<DeviceSnapshot>) {
       hasProgress.value = false
       elapsed.value = 0
       duration.value = 0
-      lastSource = null
       return
     }
 
-    lastSource = src
     duration.value = src.duration
 
     if (src.playing) {

@@ -27,7 +27,8 @@ concurrency:
 #   prepare
 #     ├── lint  (reusable _lint.yml)
 #     └── test  (reusable _test.yml)
-#           └── release  (commit config.py + create tag)
+#           └── vue-build  (tsc + vitest + vite build)
+#                 └── release  (commit config.py + create tag)
 #                 ├── vue-dist  (all channels — vue-dist-vX.Y.Z prerelease)
 #                 └── docker-build  (amd64 + arm64 matrix)
 #                       └── docker-merge  (create manifest)
@@ -150,7 +151,7 @@ jobs:
 
   # ── 3b. Vue build (gate for release) ────────────────────────────
   vue-build:
-    needs: prepare
+    needs: [prepare, test]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -162,8 +163,17 @@ jobs:
         with:
           node-version: 22
 
+      - name: Install dependencies
+        run: cd ui && npm ci
+
+      - name: Type-check Vue
+        run: cd ui && npx vue-tsc --noEmit
+
+      - name: Run Vue tests
+        run: cd ui && npx vitest run
+
       - name: Build Vue frontend
-        run: cd ui && npm ci --ignore-scripts && npm run build
+        run: cd ui && npx vite build
 
       - name: Upload dist artifact
         uses: actions/upload-artifact@v4

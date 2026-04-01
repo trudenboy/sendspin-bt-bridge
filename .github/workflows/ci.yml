@@ -30,6 +30,7 @@ jobs:
     uses: ./.github/workflows/_test.yml
 
   test-vue:
+    needs: [lint, test]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -44,6 +45,20 @@ jobs:
       - run: npx vue-tsc --noEmit
         working-directory: ui
       - run: npx vitest run
+        working-directory: ui
+
+  vue-build:
+    needs: test-vue
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - run: npm ci --ignore-scripts
         working-directory: ui
       - run: npx vite build
         working-directory: ui
