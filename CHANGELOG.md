@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.0-beta.12] — 2026-04-02
+
+### Added — Vue UI Full Feature Parity
+- **Header redesign**: remove nav tabs, legacy-style header with version badge, health dot, utility links (docs, GitHub, bug report)
+- **Group controls**: DeviceToolbar with adapter/group dropdown filters; GroupActionBar with multi-select, group volume slider, mute/pause/reconnect all
+- **Playback progress**: PlaybackProgress component with MA interpolation + native fallback, integrated into DeviceCard and DeviceListRow
+- **Logs viewer**: LogsViewer component with level filtering, search, auto-scroll, download, backend log level control (new Diagnostics tab)
+- **Restart banner**: RestartBanner with state machine (idle→stopping→restarting→ready), SSE disconnect/reconnect detection; Save & Restart in ConfigView
+- **BT management**: PairedDevicesList (audio-only filter, add/info/remove), BtDeviceInfoModal, release/reclaim in DeviceCard and DeviceDetailDrawer, tabbed BtScanModal
+- **MA enhancements**: silent auto-connect via HA token, external link to MA group settings, artwork full-size preview popover
+- **Diagnostics**: copy-to-clipboard on HealthSummary/EventTimeline/RecoveryPanel, recovery timeline CSV download, audio routing details in DeviceDetailDrawer
+- **Polish**: battery badge on cards, reanchor notification badge, keyboard shortcuts (Escape), onboarding checklist on Dashboard, adapter name inline editing, latency presets (Low/Standard/High), SbButton warning variant
+- 11 new components/composables, 30 modified files, ~100 new i18n keys (en + ru)
+
 ## [3.0.0-beta.11] — 2026-04-02
 
 ### Fixed
