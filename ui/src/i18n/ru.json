@@ -45,8 +45,212 @@
     "security": "Безопасность",
     "advanced": "Расширенные",
     "save": "Сохранить",
+    "saving": "Сохранение…",
     "saved": "Настройки сохранены",
-    "unsaved": "Есть несохранённые изменения"
+    "unsaved": "Есть несохранённые изменения",
+    "reset": "Сбросить",
+    "validate": "Проверить",
+    "validateConfig": "Проверить конфигурацию",
+    "validationOk": "Конфигурация корректна",
+    "validationResults": "Результаты проверки",
+    "configValid": "Конфигурация корректна",
+    "bridgeName": "Имя моста",
+    "bridgeNameHint": "Автоматически заполняется из hostname, если оставить пустым",
+    "timezone": "Часовой пояс",
+    "webPort": "Веб-порт",
+    "logLevel": "Уровень логирования",
+    "pulseLatency": "Задержка PulseAudio",
+    "pulseLatencyHint": "Задержка буфера PulseAudio в миллисекундах",
+    "pulseLatencyUnit": "мс",
+    "preferSbc": "Предпочитать кодек SBC",
+    "preferSbcHint": "Использовать SBC вместо более качественных кодеков для лучшей совместимости",
+    "staticDelay": "Статическая задержка аудио",
+    "staticDelayHint": "Отрицательная задержка в мс для компенсации задержки Bluetooth",
+    "btCheckInterval": "Интервал проверки BT",
+    "btCheckIntervalHint": "Как часто проверять состояние Bluetooth-подключения",
+    "btCheckIntervalUnit": "секунд",
+    "btMaxReconnect": "Макс. неудач переподключения",
+    "btMaxReconnectHint": "Прекратить попытки после указанного количества неудач подряд",
+    "managementMode": "Режим управления",
+    "adapterList": "Bluetooth-адаптеры",
+    "adapterPowered": "Включён",
+    "adapterOff": "Выключен",
+    "noAdapters": "Адаптеры не обнаружены",
+    "maServer": "URL сервера MA",
+    "maServerHint": "Используйте 'auto' для автообнаружения через mDNS",
+    "maPort": "Порт MA",
+    "autoDiscovery": "Автообнаружение",
+    "autoDiscoveryHint": "Автоматически находить сервер Music Assistant через mDNS",
+    "connectionStatus": "Статус подключения",
+    "maConnected": "Подключён",
+    "maDisconnected": "Отключён",
+    "enablePassword": "Включить защиту паролем",
+    "currentPassword": "Текущий пароль",
+    "newPassword": "Новый пароль",
+    "confirmPassword": "Подтвердите пароль",
+    "changePassword": "Изменить пароль",
+    "passwordMismatch": "Пароли не совпадают",
+    "haAuthInfo": "При работе как аддон Home Assistant аутентификация выполняется через HA",
+    "rawJson": "JSON-файл",
+    "rawJsonWarning": "Редактирование JSON может нарушить конфигурацию. Будьте осторожны.",
+    "invalidJson": "Невалидный JSON",
+    "uploadConfig": "Загрузить конфигурацию",
+    "downloadConfig": "Скачать конфигурацию"
+  },
+  "diagnostics": {
+    "tabs": {
+      "health": "Здоровье",
+      "events": "События",
+      "recovery": "Восстановление",
+      "bugreport": "Отчёт об ошибке"
+    },
+    "health": {
+      "title": "Здоровье моста",
+      "healthy": "Исправен",
+      "degraded": "Ухудшение",
+      "error": "Ошибка",
+      "unknown": "Неизвестно",
+      "audio": "Аудиоподсистема",
+      "bluetooth": "BT-контроллер",
+      "dbus": "D-Bus",
+      "memory": "Память"
+    },
+    "events": {
+      "loadMore": "Загрузить ещё",
+      "empty": "Нет событий",
+      "emptyDesc": "Пока не зарегистрировано ни одного события."
+    },
+    "recovery": {
+      "title": "Рекомендации по восстановлению",
+      "runChecks": "Проверить",
+      "noIssues": "Всё в порядке",
+      "noIssuesDesc": "Проблем не обнаружено. Все системы работают нормально."
+    },
+    "bugreport": {
+      "systemInfo": "Информация о системе",
+      "version": "Версия",
+      "buildDate": "Дата сборки",
+      "adapters": "Адаптеры",
+      "devices": "Устройства",
+      "maConnected": "MA подключён",
+      "download": "Скачать отчёт",
+      "copy": "Копировать в буфер",
+      "howToFile": "Как сообщить об ошибке",
+      "step1": "Скачайте отчёт об ошибке с помощью кнопки выше.",
+      "step2": "Опишите проблему и шаги для воспроизведения.",
+      "step3": "Откройте новый issue на"
+    }
+  },
+  "ma": {
+    "connection": {
+      "title": "Статус подключения",
+      "connected": "Подключён",
+      "disconnected": "Отключён"
+    },
+    "login": {
+      "title": "Подключение к Music Assistant",
+      "step1": "Шаг 1: Адрес сервера",
+      "step2": "Шаг 2: Аутентификация",
+      "serverUrl": "URL сервера",
+      "serverUrlPlaceholder": "http://192.168.1.100:8095",
+      "discover": "Автообнаружение",
+      "token": "Токен",
+      "tokenPlaceholder": "Введите токен HA или ключ API MA",
+      "submit": "Подключить",
+      "failed": "Не удалось подключиться. Проверьте учётные данные."
+    },
+    "groups": {
+      "members": "участников",
+      "empty": "Нет групп синхронизации",
+      "emptyDesc": "Группы синхронизации Music Assistant не найдены. Запустите поиск групп.",
+      "discover": "Найти группы"
+    },
+    "nowPlaying": {
+      "artwork": "Обложка альбома",
+      "noTrack": "Ничего не воспроизводится",
+      "prev": "Предыдущий трек",
+      "playPause": "Воспроизведение / Пауза",
+      "next": "Следующий трек"
+    }
+  },
+  "login": {
+    "title": "Вход",
+    "password": "Пароль",
+    "passwordPlaceholder": "Введите пароль",
+    "submit": "Войти",
+    "failed": "Неверный пароль. Попробуйте ещё раз.",
+    "haAuthenticated": "Аутентификация через Home Assistant"
+  },
+  "dashboard": {
+    "bridge": "Мост",
+    "adapters": "Адаптеры",
+    "devices": "Устройства",
+    "maStatus": "Music Assistant",
+    "maConnected": "Подключён",
+    "maDisconnected": "Отключён",
+    "empty": {
+      "title": "Устройства не настроены",
+      "description": "Добавьте Bluetooth-колонку или аудиоустройство для начала работы."
+    }
+  },
+  "devices": {
+    "addDevice": "Добавить устройство",
+    "empty": {
+      "title": "Нет устройств",
+      "description": "Выполните поиск Bluetooth-устройств или добавьте устройство вручную."
+    }
+  },
+  "drawer": {
+    "tabs": {
+      "status": "Статус",
+      "config": "Настройки",
+      "events": "События",
+      "signal": "Путь сигнала"
+    },
+    "status": {
+      "playerState": "Состояние",
+      "backendType": "Бэкенд",
+      "audioSink": "Аудиовыход",
+      "connected": "Подключён",
+      "codec": "Кодек",
+      "sampleRate": "Частота дискретизации"
+    },
+    "config": {
+      "name": "Имя",
+      "mac": "MAC-адрес",
+      "adapter": "Адаптер",
+      "port": "Порт прослушивания",
+      "delay": "Статическая задержка",
+      "enabled": "Включено"
+    },
+    "events": {
+      "empty": "Нет зарегистрированных событий"
+    },
+    "signal": {
+      "subprocess": "Подпроцесс"
+    }
+  },
+  "volume": {
+    "mute": "Выключить звук",
+    "unmute": "Включить звук"
+  },
+  "bluetooth": {
+    "scan": {
+      "title": "Поиск Bluetooth",
+      "description": "Поиск ближайших Bluetooth-аудиоустройств.",
+      "start": "Начать поиск",
+      "scanning": "Поиск…",
+      "pair": "Сопряжение",
+      "paired": "Сопряжено",
+      "audio": "Аудио",
+      "unknown": "Неизвестное устройство",
+      "noDevices": "Устройства не найдены"
+    },
+    "signal": {
+      "strong": "Сильный",
+      "medium": "Средний",
+      "weak": "Слабый"
+    }
   },
   "common": {
     "loading": "Загрузка...",
@@ -56,6 +260,8 @@
     "confirm": "Подтвердить",
     "close": "Закрыть",
     "search": "Поиск",
-    "noResults": "Нет результатов"
+    "noResults": "Нет результатов",
+    "yes": "Да",
+    "no": "Нет"
   }
 }

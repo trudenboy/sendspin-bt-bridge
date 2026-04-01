@@ -45,8 +45,212 @@
     "security": "Security",
     "advanced": "Advanced",
     "save": "Save",
+    "saving": "Saving…",
     "saved": "Configuration saved",
-    "unsaved": "Unsaved changes"
+    "unsaved": "Unsaved changes",
+    "reset": "Reset",
+    "validate": "Validate",
+    "validateConfig": "Validate Configuration",
+    "validationOk": "Configuration is valid",
+    "validationResults": "Validation Results",
+    "configValid": "Configuration is valid",
+    "bridgeName": "Bridge Name",
+    "bridgeNameHint": "Auto-populated from hostname if left empty",
+    "timezone": "Timezone",
+    "webPort": "Web Port",
+    "logLevel": "Log Level",
+    "pulseLatency": "Pulse Latency",
+    "pulseLatencyHint": "PulseAudio buffer latency in milliseconds",
+    "pulseLatencyUnit": "ms",
+    "preferSbc": "Prefer SBC Codec",
+    "preferSbcHint": "Use SBC codec instead of higher quality codecs for better compatibility",
+    "staticDelay": "Static Audio Delay",
+    "staticDelayHint": "Negative delay in milliseconds to compensate for Bluetooth latency",
+    "btCheckInterval": "BT Check Interval",
+    "btCheckIntervalHint": "How often to check Bluetooth connection status",
+    "btCheckIntervalUnit": "seconds",
+    "btMaxReconnect": "Max Reconnect Failures",
+    "btMaxReconnectHint": "Stop reconnecting after this many consecutive failures",
+    "managementMode": "Management Mode",
+    "adapterList": "Bluetooth Adapters",
+    "adapterPowered": "Powered",
+    "adapterOff": "Off",
+    "noAdapters": "No adapters detected",
+    "maServer": "MA Server URL",
+    "maServerHint": "Use 'auto' for mDNS discovery",
+    "maPort": "MA Port",
+    "autoDiscovery": "Auto-Discovery",
+    "autoDiscoveryHint": "Automatically discover Music Assistant server via mDNS",
+    "connectionStatus": "Connection Status",
+    "maConnected": "Connected",
+    "maDisconnected": "Disconnected",
+    "enablePassword": "Enable Password Protection",
+    "currentPassword": "Current Password",
+    "newPassword": "New Password",
+    "confirmPassword": "Confirm Password",
+    "changePassword": "Change Password",
+    "passwordMismatch": "Passwords do not match",
+    "haAuthInfo": "When running as a Home Assistant addon, authentication is handled by HA",
+    "rawJson": "Raw JSON",
+    "rawJsonWarning": "Editing raw JSON can break your configuration. Proceed with caution.",
+    "invalidJson": "Invalid JSON",
+    "uploadConfig": "Upload Config",
+    "downloadConfig": "Download Config"
+  },
+  "diagnostics": {
+    "tabs": {
+      "health": "Health",
+      "events": "Events",
+      "recovery": "Recovery",
+      "bugreport": "Bug Report"
+    },
+    "health": {
+      "title": "Bridge Health",
+      "healthy": "Healthy",
+      "degraded": "Degraded",
+      "error": "Error",
+      "unknown": "Unknown",
+      "audio": "Audio Backend",
+      "bluetooth": "BT Controller",
+      "dbus": "D-Bus",
+      "memory": "Memory"
+    },
+    "events": {
+      "loadMore": "Load more",
+      "empty": "No events",
+      "emptyDesc": "No events have been recorded yet."
+    },
+    "recovery": {
+      "title": "Recovery Guidance",
+      "runChecks": "Run Checks",
+      "noIssues": "All clear",
+      "noIssuesDesc": "No issues detected. All systems are operating normally."
+    },
+    "bugreport": {
+      "systemInfo": "System Information",
+      "version": "Version",
+      "buildDate": "Build Date",
+      "adapters": "Adapters",
+      "devices": "Devices",
+      "maConnected": "MA Connected",
+      "download": "Download Bug Report",
+      "copy": "Copy to Clipboard",
+      "howToFile": "How to File a Bug Report",
+      "step1": "Download the bug report using the button above.",
+      "step2": "Describe the issue and steps to reproduce.",
+      "step3": "Open a new issue on"
+    }
+  },
+  "ma": {
+    "connection": {
+      "title": "Connection Status",
+      "connected": "Connected",
+      "disconnected": "Disconnected"
+    },
+    "login": {
+      "title": "Connect to Music Assistant",
+      "step1": "Step 1: Server Address",
+      "step2": "Step 2: Authentication",
+      "serverUrl": "Server URL",
+      "serverUrlPlaceholder": "http://192.168.1.100:8095",
+      "discover": "Auto-Discover",
+      "token": "Token",
+      "tokenPlaceholder": "Enter HA token or MA API key",
+      "submit": "Connect",
+      "failed": "Connection failed. Check your credentials."
+    },
+    "groups": {
+      "members": "members",
+      "empty": "No Sync Groups",
+      "emptyDesc": "No Music Assistant sync groups found. Discover groups to get started.",
+      "discover": "Discover Groups"
+    },
+    "nowPlaying": {
+      "artwork": "Album artwork",
+      "noTrack": "Nothing playing",
+      "prev": "Previous track",
+      "playPause": "Play / Pause",
+      "next": "Next track"
+    }
+  },
+  "login": {
+    "title": "Sign In",
+    "password": "Password",
+    "passwordPlaceholder": "Enter your password",
+    "submit": "Sign In",
+    "failed": "Invalid password. Please try again.",
+    "haAuthenticated": "Authenticated via Home Assistant"
+  },
+  "dashboard": {
+    "bridge": "Bridge",
+    "adapters": "Adapters",
+    "devices": "Devices",
+    "maStatus": "Music Assistant",
+    "maConnected": "Connected",
+    "maDisconnected": "Disconnected",
+    "empty": {
+      "title": "No devices configured",
+      "description": "Add a Bluetooth speaker or audio device to get started."
+    }
+  },
+  "devices": {
+    "addDevice": "Add Device",
+    "empty": {
+      "title": "No devices yet",
+      "description": "Scan for Bluetooth devices or add a device manually."
+    }
+  },
+  "drawer": {
+    "tabs": {
+      "status": "Status",
+      "config": "Config",
+      "events": "Events",
+      "signal": "Signal Path"
+    },
+    "status": {
+      "playerState": "State",
+      "backendType": "Backend",
+      "audioSink": "Audio Sink",
+      "connected": "Connected",
+      "codec": "Codec",
+      "sampleRate": "Sample Rate"
+    },
+    "config": {
+      "name": "Name",
+      "mac": "MAC Address",
+      "adapter": "Adapter",
+      "port": "Listen Port",
+      "delay": "Static Delay",
+      "enabled": "Enabled"
+    },
+    "events": {
+      "empty": "No events recorded"
+    },
+    "signal": {
+      "subprocess": "Subprocess"
+    }
+  },
+  "volume": {
+    "mute": "Mute",
+    "unmute": "Unmute"
+  },
+  "bluetooth": {
+    "scan": {
+      "title": "Bluetooth Scan",
+      "description": "Scan for nearby Bluetooth audio devices.",
+      "start": "Start Scan",
+      "scanning": "Scanning…",
+      "pair": "Pair",
+      "paired": "Paired",
+      "audio": "Audio",
+      "unknown": "Unknown Device",
+      "noDevices": "No devices found"
+    },
+    "signal": {
+      "strong": "Strong",
+      "medium": "Medium",
+      "weak": "Weak"
+    }
   },
   "common": {
     "loading": "Loading...",
@@ -56,6 +260,8 @@
     "confirm": "Confirm",
     "close": "Close",
     "search": "Search",
-    "noResults": "No results"
+    "noResults": "No results",
+    "yes": "Yes",
+    "no": "No"
   }
 }
