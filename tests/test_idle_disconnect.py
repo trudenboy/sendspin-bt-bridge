@@ -145,6 +145,42 @@ class TestIdleTimerStartCancel:
                 client._update_status({"server_connected": True})
                 start_mock.assert_not_called()
 
+    def test_timer_cancels_on_playing_start(self):
+        """Timer cancels when playing goes False→True (MA reports playback)."""
+        with patch("sendspin_client._state"):
+            client = _make_client(idle_disconnect_minutes=15)
+            # Previous state: not playing
+            with patch.object(client, "_cancel_idle_timer") as cancel_mock:
+                client._update_status({"playing": True})
+                cancel_mock.assert_called_once()
+
+    def test_timer_starts_on_playing_stop_without_streaming(self):
+        """Timer starts when playing goes True→False and audio_streaming is False."""
+        with patch("sendspin_client._state"):
+            client = _make_client(idle_disconnect_minutes=15)
+            client.status.update({"playing": True})
+            with patch.object(client, "_start_idle_timer") as start_mock:
+                client._update_status({"playing": False})
+                start_mock.assert_called_once()
+
+    def test_timer_not_started_on_playing_stop_while_streaming(self):
+        """Timer does NOT start when playing→False if audio_streaming is still True."""
+        with patch("sendspin_client._state"):
+            client = _make_client(idle_disconnect_minutes=15)
+            client.status.update({"playing": True, "audio_streaming": True})
+            with patch.object(client, "_start_idle_timer") as start_mock:
+                client._update_status({"playing": False})
+                start_mock.assert_not_called()
+
+    def test_timer_not_started_on_daemon_connect_when_playing(self):
+        """Timer does NOT start on daemon connect if playing is True."""
+        with patch("sendspin_client._state"):
+            client = _make_client(idle_disconnect_minutes=15)
+            client.status.update({"playing": True})
+            with patch.object(client, "_start_idle_timer") as start_mock:
+                client._update_status({"server_connected": True})
+                start_mock.assert_not_called()
+
 
 class TestCancelIdleTimer:
     """_cancel_idle_timer edge cases."""
@@ -382,3 +418,77 @@ class TestIdleTimerFullCycle:
             assert task2 is not task1  # new timer
 
             client._cancel_idle_timer()
+
+
+class TestIdleTimerGuardAtFiring:
+    """_idle_timeout() re-checks playback state before entering standby."""
+
+    @pytest.mark.asyncio
+    async def test_timer_restarts_when_playing_at_fire_time(self):
+        """If playing=True when the timer fires, standby is skipped and timer restarts."""
+        real_sleep = asyncio.sleep  # keep a ref before mock replaces it
+        with patch("sendspin_client._state") as state_mock:
+            state_mock.get_main_loop.return_value = None
+            state_mock.notify_status_changed = MagicMock()
+            state_mock.publish_device_event = MagicMock()
+            client = _make_client(idle_disconnect_minutes=30)
+            client.status.update({"playing": True})
+
+            with (
+                patch("sendspin_client.asyncio.sleep", new_callable=AsyncMock),
+                patch.object(client, "_enter_standby", new_callable=AsyncMock) as enter_mock,
+            ):
+                client._start_idle_timer()
+                original_task = client._idle_timer_task
+                assert original_task is not None
+                # Yield to the event loop so the timer task runs to completion.
+                # sendspin_client.asyncio.sleep is mocked (instant); we use the
+                # real sleep captured above for the yield.
+                await real_sleep(0)
+                await real_sleep(0)
+                enter_mock.assert_not_awaited()
+                # Guard detected active playback → restarted timer with a new task
+                assert client._idle_timer_task is not None
+                assert client._idle_timer_task is not original_task
+
+    @pytest.mark.asyncio
+    async def test_timer_restarts_when_streaming_at_fire_time(self):
+        """If audio_streaming=True when the timer fires, standby is skipped."""
+        real_sleep = asyncio.sleep
+        with patch("sendspin_client._state") as state_mock:
+            state_mock.get_main_loop.return_value = None
+            state_mock.notify_status_changed = MagicMock()
+            state_mock.publish_device_event = MagicMock()
+            client = _make_client(idle_disconnect_minutes=30)
+            client.status.update({"audio_streaming": True})
+
+            with (
+                patch("sendspin_client.asyncio.sleep", new_callable=AsyncMock),
+                patch.object(client, "_enter_standby", new_callable=AsyncMock) as enter_mock,
+            ):
+                client._start_idle_timer()
+                original_task = client._idle_timer_task
+                assert original_task is not None
+                await real_sleep(0)
+                await real_sleep(0)
+                enter_mock.assert_not_awaited()
+                assert client._idle_timer_task is not None
+                assert client._idle_timer_task is not original_task
+
+    @pytest.mark.asyncio
+    async def test_timer_enters_standby_when_idle_at_fire_time(self):
+        """If both playing and audio_streaming are False, standby proceeds."""
+        with patch("sendspin_client._state") as state_mock:
+            state_mock.get_main_loop.return_value = None
+            state_mock.notify_status_changed = MagicMock()
+            state_mock.publish_device_event = MagicMock()
+            client = _make_client(idle_disconnect_minutes=30)
+            # Both default to False — device is truly idle
+
+            with patch("sendspin_client.asyncio.sleep", new_callable=AsyncMock):
+                client._start_idle_timer()
+                task = client._idle_timer_task
+                assert task is not None
+                # Await the actual timer task so _enter_standby completes
+                await task
+                assert client.status["bt_standby"] is True
