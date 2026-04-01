@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [3.0.0-beta.5] — 2026-04-01
+## [3.0.0-beta.6] — 2026-04-01
 
 ### Added — Epic 4: Vue Operator Console
 - **Vue 3 + TypeScript + Vite 8 SPA** replacing legacy vanilla JS frontend (`ui/` directory)
@@ -25,12 +25,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - **HA Ingress SPA serving**: set Vite `base: './'` so asset paths are relative — fixes blank page when accessed through HA Ingress proxy (`/api/hassio_ingress/<token>/`)
 - **vue-tsc build-mode type errors**: removed unused variables, fixed event handler types, corrected SbStatusDot tone mapping
+- **LXC Vue frontend**: `upgrade.sh` and `install.sh` now download pre-built `vue-dist.tar.gz` from GitHub releases into `static/vue/` — fixes blank/legacy UI on non-Docker deployments
 
 ### Changed
 - **Dockerfile**: new Node.js frontend build stage (`node:22-slim`) compiles Vue SPA
 - **Flask SPA serving**: `web_interface.py` serves Vue SPA from `ui/dist/` (dev) or `static/vue/` (Docker); falls back to legacy Jinja template when Vue build not present
 - **Stricter CSP**: `script-src 'self'` (no `unsafe-inline`) when Vue SPA is active
-- **CI**: added `test-vue` job (type-check + vitest + build) to `ci.yml`
+- **CI**: added `test-vue` job (type-check + vitest + build) to `ci.yml`; `gh-release` now runs for all channels (beta/rc as pre-release) with `vue-dist.tar.gz` asset
 - **docs-site**: 6 new UI Kit documentation pages (3 EN + 3 RU) — component overview, design tokens, backend descriptor pattern
 
 ## [3.0.0-beta.2] — 2026-03-31
