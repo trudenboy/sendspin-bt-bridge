@@ -6,14 +6,23 @@ import DeviceCard from '@/components/devices/DeviceCard.vue'
 import en from '@/i18n/en.json'
 import type { DeviceSnapshot } from '@/api/types'
 
+const mockSetVolume = vi.fn()
+const mockSetMute = vi.fn()
+const mockReconnect = vi.fn()
+const mockStandby = vi.fn()
+const mockWake = vi.fn()
+const mockRemove = vi.fn()
+const mockSetEnabled = vi.fn()
+
 vi.mock('@/stores/devices', () => ({
   useDeviceStore: () => ({
-    setVolume: vi.fn(),
-    setMute: vi.fn(),
-    reconnect: vi.fn(),
-    standby: vi.fn(),
-    wake: vi.fn(),
-    remove: vi.fn(),
+    setVolume: mockSetVolume,
+    setMute: mockSetMute,
+    reconnect: mockReconnect,
+    standby: mockStandby,
+    wake: mockWake,
+    remove: mockRemove,
+    setEnabled: mockSetEnabled,
   }),
 }))
 
@@ -21,6 +30,19 @@ vi.mock('@/stores/ma', () => ({
   useMaStore: () => ({
     nowPlaying: {},
   }),
+}))
+
+vi.mock('@/stores/notifications', () => ({
+  useNotificationStore: () => ({
+    success: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+    warning: vi.fn(),
+  }),
+}))
+
+vi.mock('@/api/playback', () => ({
+  transportCmd: vi.fn().mockResolvedValue({ success: true }),
 }))
 
 function buildI18n() {
@@ -51,11 +73,12 @@ function makeDevice(overrides: Partial<DeviceSnapshot> = {}): DeviceSnapshot {
 describe('DeviceCard', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
+    vi.clearAllMocks()
   })
 
   function mountCard(device: DeviceSnapshot = makeDevice()) {
     return mount(DeviceCard, {
-      props: { device },
+      props: { device, deviceIndex: 0 },
       global: { plugins: [buildI18n()] },
     })
   }
@@ -100,19 +123,104 @@ describe('DeviceCard', () => {
     expect(w.text()).toContain('Error')
   })
 
-  it('emits openDetail on details action', async () => {
+  it('emits openDetail on details action', () => {
     const w = mountCard()
-    // Find and click the dropdown trigger (MoreVertical button)
-    const actionBtn = w.findAll('button').find((b) =>
-      b.attributes('aria-label') === 'Details',
-    )
-    // The dropdown trigger opens the action menu
     expect(w.html()).toContain('Details')
   })
 
   it('renders action dropdown trigger', () => {
     const w = mountCard()
-    // MoreVertical icon should be present as an SVG
     expect(w.find('svg').exists()).toBe(true)
+  })
+
+  // Enable/disable toggle
+  it('shows Disable in dropdown when enabled', async () => {
+    const w = mountCard(makeDevice({ enabled: true }))
+    // The DeviceCard action button has aria-label "Details"
+    const triggerBtn = w.findAll('button').find(
+      (b) => b.attributes('aria-label') === 'Details',
+    )
+    expect(triggerBtn).toBeTruthy()
+    await triggerBtn!.trigger('click')
+    expect(w.text()).toContain('Disable')
+  })
+
+  it('shows Enable in dropdown when disabled', async () => {
+    const w = mountCard(makeDevice({ enabled: false }))
+    const triggerBtn = w.findAll('button').find(
+      (b) => b.attributes('aria-label') === 'Details',
+    )
+    expect(triggerBtn).toBeTruthy()
+    await triggerBtn!.trigger('click')
+    expect(w.text()).toContain('Enable')
+  })
+
+  it('applies opacity-50 when disabled', () => {
+    const w = mountCard(makeDevice({ enabled: false }))
+    const card = w.find('.opacity-50')
+    expect(card.exists()).toBe(true)
+  })
+
+  it('does not apply opacity-50 when enabled', () => {
+    const w = mountCard(makeDevice({ enabled: true }))
+    const card = w.find('.opacity-50')
+    expect(card.exists()).toBe(false)
+  })
+
+  // Transport controls
+  it('shows transport controls when streaming', () => {
+    const w = mountCard(
+      makeDevice({ connected: true, audio_streaming: true, player_state: 'STREAMING' }),
+    )
+    // Should have play/pause and skip buttons (SVGs inside the transport section)
+    const buttons = w.findAll('button')
+    const transportBtns = buttons.filter(
+      (b) =>
+        b.attributes('aria-label') === 'Pause' ||
+        b.attributes('aria-label') === 'Next track' ||
+        b.attributes('aria-label') === 'Previous track',
+    )
+    expect(transportBtns.length).toBe(3)
+  })
+
+  it('hides transport controls when not streaming', () => {
+    const w = mountCard(
+      makeDevice({ connected: true, audio_streaming: false, player_state: 'READY' }),
+    )
+    const buttons = w.findAll('button')
+    const transportBtns = buttons.filter(
+      (b) =>
+        b.attributes('aria-label') === 'Pause' ||
+        b.attributes('aria-label') === 'Play' ||
+        b.attributes('aria-label') === 'Next track' ||
+        b.attributes('aria-label') === 'Previous track',
+    )
+    expect(transportBtns.length).toBe(0)
+  })
+
+  it('calls transportCmd on pause button click', async () => {
+    const { transportCmd } = await import('@/api/playback')
+    const w = mountCard(
+      makeDevice({ connected: true, audio_streaming: true, player_state: 'STREAMING' }),
+    )
+    const pauseBtn = w.findAll('button').find(
+      (b) => b.attributes('aria-label') === 'Pause',
+    )
+    expect(pauseBtn).toBeTruthy()
+    await pauseBtn!.trigger('click')
+    expect(transportCmd).toHaveBeenCalledWith('pause', 0)
+  })
+
+  it('calls transportCmd on next button click', async () => {
+    const { transportCmd } = await import('@/api/playback')
+    const w = mountCard(
+      makeDevice({ connected: true, audio_streaming: true, player_state: 'STREAMING' }),
+    )
+    const nextBtn = w.findAll('button').find(
+      (b) => b.attributes('aria-label') === 'Next track',
+    )
+    expect(nextBtn).toBeTruthy()
+    await nextBtn!.trigger('click')
+    expect(transportCmd).toHaveBeenCalledWith('next', 0)
   })
 })

@@ -25,7 +25,8 @@
       "standby": "Standby",
       "enable": "Enable",
       "disable": "Disable",
-      "details": "Details"
+      "details": "Details",
+      "enableFailed": "Failed to toggle device"
     },
     "backend": {
       "bluetooth_a2dp": "Bluetooth A2DP",
@@ -280,5 +281,21 @@
     "openHa": "Update in HA",
     "copyCommand": "Copy command",
     "checking": "Checking for updates…"
+  },
+  "transport": {
+    "play": "Play",
+    "pause": "Pause",
+    "next": "Next track",
+    "previous": "Previous track",
+    "failed": "Transport command failed"
+  },
+  "adapter": {
+    "management": "Adapter Management",
+    "togglePower": "Power",
+    "reboot": "Reboot",
+    "powerToggled": "Adapter power toggled",
+    "powerFailed": "Failed to toggle adapter power",
+    "rebooted": "Adapter rebooted",
+    "rebootFailed": "Failed to reboot adapter"
   }
 }

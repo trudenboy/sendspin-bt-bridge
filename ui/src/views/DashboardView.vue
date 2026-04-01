@@ -126,9 +126,10 @@ function openDetail(mac: string) {
         class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
       >
         <DeviceCard
-          v-for="device in deviceStore.filteredDevices"
+          v-for="(device, index) in deviceStore.filteredDevices"
           :key="device.mac"
           :device="device"
+          :device-index="index"
           @open-detail="openDetail"
         />
       </div>

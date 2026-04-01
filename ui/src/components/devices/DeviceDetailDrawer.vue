@@ -2,10 +2,14 @@
 import { computed, watch, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useBridgeStore } from '@/stores/bridge'
-import { SbDrawer, SbTabs, SbTimeline, SbSignalPath, SbBadge } from '@/kit'
+import { useDeviceStore } from '@/stores/devices'
+import { useNotificationStore } from '@/stores/notifications'
+import { SbDrawer, SbTabs, SbTimeline, SbSignalPath, SbBadge, SbButton, SbToggle } from '@/kit'
 import DeviceStatusBadge from './DeviceStatusBadge.vue'
 import { queryEvents } from '@/api/events'
+import { toggleAdapterPower, rebootAdapter } from '@/api/devices'
 import type { DeviceSnapshot, EventRecord } from '@/api/types'
+import { Power, RotateCw } from 'lucide-vue-next'
 
 const props = defineProps<{
   deviceId: string | null
@@ -18,10 +22,13 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const bridge = useBridgeStore()
+const deviceStore = useDeviceStore()
+const notifications = useNotificationStore()
 
 const activeTab = ref('status')
 const events = ref<EventRecord[]>([])
 const loadingEvents = ref(false)
+const adapterLoading = ref(false)
 
 const device = computed<DeviceSnapshot | undefined>(() =>
   bridge.devices.find((d) => d.mac === props.deviceId),
@@ -81,6 +88,44 @@ const timelineEvents = computed(() =>
 
 function onDrawerUpdate(...args: unknown[]) {
   emit('update:open', Boolean(args[0]))
+}
+
+async function onToggleEnabled() {
+  const d = device.value
+  if (!d) return
+  try {
+    await deviceStore.setEnabled(d.mac, !d.enabled)
+  } catch {
+    notifications.error(t('device.actions.enableFailed'))
+  }
+}
+
+async function onAdapterPower() {
+  const adapter = device.value?.adapter
+  if (!adapter) return
+  adapterLoading.value = true
+  try {
+    await toggleAdapterPower(adapter)
+    notifications.success(t('adapter.powerToggled'))
+  } catch {
+    notifications.error(t('adapter.powerFailed'))
+  } finally {
+    adapterLoading.value = false
+  }
+}
+
+async function onAdapterReboot() {
+  const adapter = device.value?.adapter
+  if (!adapter) return
+  adapterLoading.value = true
+  try {
+    await rebootAdapter(adapter)
+    notifications.success(t('adapter.rebooted'))
+  } catch {
+    notifications.error(t('adapter.rebootFailed'))
+  } finally {
+    adapterLoading.value = false
+  }
 }
 
 watch(
@@ -157,7 +202,7 @@ watch(
 
         <!-- Config tab -->
         <template #config>
-          <div class="space-y-3 py-4 text-sm">
+          <div class="space-y-4 py-4 text-sm">
             <div class="grid grid-cols-2 gap-3">
               <div>
                 <span class="text-text-secondary">{{ t('drawer.config.name') }}</span>
@@ -183,9 +228,44 @@ watch(
               </div>
               <div>
                 <span class="text-text-secondary">{{ t('drawer.config.enabled') }}</span>
-                <p class="mt-1 text-text-primary">
-                  {{ device.enabled ? t('common.yes') : t('common.no') }}
-                </p>
+                <div class="mt-1">
+                  <SbToggle
+                    :model-value="device.enabled"
+                    :label="device.enabled ? t('common.yes') : t('common.no')"
+                    @update:model-value="onToggleEnabled"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <!-- Adapter management -->
+            <div v-if="device.adapter" class="border-t border-border pt-3">
+              <h4 class="mb-2 text-xs font-semibold uppercase tracking-wider text-text-secondary">
+                {{ t('adapter.management') }}
+              </h4>
+              <div class="flex items-center gap-2">
+                <SbButton
+                  variant="secondary"
+                  size="sm"
+                  :loading="adapterLoading"
+                  @click="onAdapterPower"
+                >
+                  <template #icon-left>
+                    <Power class="h-3.5 w-3.5" />
+                  </template>
+                  {{ t('adapter.togglePower') }}
+                </SbButton>
+                <SbButton
+                  variant="secondary"
+                  size="sm"
+                  :loading="adapterLoading"
+                  @click="onAdapterReboot"
+                >
+                  <template #icon-left>
+                    <RotateCw class="h-3.5 w-3.5" />
+                  </template>
+                  {{ t('adapter.reboot') }}
+                </SbButton>
               </div>
             </div>
           </div>
