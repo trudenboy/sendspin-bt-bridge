@@ -4,6 +4,9 @@ import tailwindcss from '@tailwindcss/vite'
 import { resolve } from 'path'
 
 export default defineConfig({
+  // Relative base so assets resolve correctly under HA Ingress
+  // (/api/hassio_ingress/<token>/) and any other reverse-proxy prefix.
+  base: './',
   plugins: [vue(), tailwindcss()],
   resolve: {
     alias: {

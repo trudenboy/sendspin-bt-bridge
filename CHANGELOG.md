@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [3.0.0-beta.4] — 2026-04-01
+## [3.0.0-beta.5] — 2026-04-01
 
 ### Added — Epic 4: Vue Operator Console
 - **Vue 3 + TypeScript + Vite 8 SPA** replacing legacy vanilla JS frontend (`ui/` directory)
@@ -21,6 +21,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Backend Descriptor Registry** (`ui/src/types/backend-registry.ts`): adding a new backend type UI = adding one descriptor object. 7 types defined: bluetooth_a2dp, local_sink, usb_audio, virtual_sink, snapcast_client, vban, le_audio
 - **i18n**: full EN + RU translations (~270 keys each)
 - **489 Vue tests** (Vitest + Vue Test Utils), type-check clean, ~93KB gzipped build
+
+### Fixed
+- **HA Ingress SPA serving**: set Vite `base: './'` so asset paths are relative — fixes blank page when accessed through HA Ingress proxy (`/api/hassio_ingress/<token>/`)
+- **vue-tsc build-mode type errors**: removed unused variables, fixed event handler types, corrected SbStatusDot tone mapping
 
 ### Changed
 - **Dockerfile**: new Node.js frontend build stage (`node:22-slim`) compiles Vue SPA
