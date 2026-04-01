@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [3.0.0-beta.3] — 2026-04-01
+## [3.0.0-beta.4] — 2026-04-01
 
 ### Added — Epic 4: Vue Operator Console
 - **Vue 3 + TypeScript + Vite 8 SPA** replacing legacy vanilla JS frontend (`ui/` directory)
