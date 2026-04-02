@@ -303,7 +303,7 @@
       "uniques": 1
     }
   ],
-  "last_updated": "2026-04-01T15:39:04.478Z",
+  "last_updated": "2026-04-02T03:58:17.003Z",
   "clones_window": {
     "count": 4366,
     "uniques": 1196
@@ -377,15 +377,15 @@
   "repo": {
     "full_name": "trudenboy/sendspin-bt-bridge",
     "default_branch": "main",
-    "open_issues_count": 0,
-    "stargazers_count": 40,
+    "open_issues_count": 2,
+    "stargazers_count": 41,
     "subscribers_count": 0,
-    "watchers_count": 40,
+    "watchers_count": 41,
     "forks_count": 1,
     "network_count": 1,
-    "size_kb": 37314,
-    "pushed_at": "2026-04-01T15:19:35Z",
-    "updated_at": "2026-04-01T15:19:40Z"
+    "size_kb": 36915,
+    "pushed_at": "2026-04-01T19:41:28Z",
+    "updated_at": "2026-04-02T00:19:17Z"
   },
   "repo_history": {
     "2026-03-17": {
@@ -595,11 +595,24 @@
       "size_kb": 37314,
       "pushed_at": "2026-04-01T15:19:35Z",
       "updated_at": "2026-04-01T15:19:40Z"
+    },
+    "2026-04-02": {
+      "full_name": "trudenboy/sendspin-bt-bridge",
+      "default_branch": "main",
+      "open_issues_count": 2,
+      "stargazers_count": 41,
+      "subscribers_count": 0,
+      "watchers_count": 41,
+      "forks_count": 1,
+      "network_count": 1,
+      "size_kb": 36915,
+      "pushed_at": "2026-04-01T19:41:28Z",
+      "updated_at": "2026-04-02T00:19:17Z"
     }
   },
   "releases": {
-    "total_downloads": 7,
-    "release_count": 177,
+    "total_downloads": 10,
+    "release_count": 179,
     "latest_release_tag": "v2.52.3",
     "latest_release_published_at": "2026-04-01T15:19:46Z",
     "by_tag": {
@@ -642,11 +655,11 @@
         "prerelease": true,
         "published_at": "2026-04-01T14:23:28Z",
         "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/vue-dist-v3.0.0-beta.8",
-        "asset_downloads": 4,
+        "asset_downloads": 5,
         "assets": [
           {
             "name": "vue-dist.tar.gz",
-            "download_count": 4,
+            "download_count": 5,
             "size": 128879,
             "content_type": "application/x-gtar",
             "created_at": "2026-04-01T14:23:27Z",
@@ -668,6 +681,40 @@
             "content_type": "application/x-gtar",
             "created_at": "2026-04-01T13:53:26Z",
             "updated_at": "2026-04-01T13:53:26Z"
+          }
+        ]
+      },
+      "vue-dist-v3.0.0-beta.14": {
+        "name": "Vue dist v3.0.0-beta.14",
+        "prerelease": true,
+        "published_at": "2026-04-01T18:49:58Z",
+        "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/vue-dist-v3.0.0-beta.14",
+        "asset_downloads": 1,
+        "assets": [
+          {
+            "name": "vue-dist.tar.gz",
+            "download_count": 1,
+            "size": 149153,
+            "content_type": "application/x-gtar",
+            "created_at": "2026-04-01T18:49:57Z",
+            "updated_at": "2026-04-01T18:49:57Z"
+          }
+        ]
+      },
+      "vue-dist-v3.0.0-beta.11": {
+        "name": "Vue dist v3.0.0-beta.11",
+        "prerelease": true,
+        "published_at": "2026-04-01T17:31:49Z",
+        "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/vue-dist-v3.0.0-beta.11",
+        "asset_downloads": 1,
+        "assets": [
+          {
+            "name": "vue-dist.tar.gz",
+            "download_count": 1,
+            "size": 134254,
+            "content_type": "application/x-gtar",
+            "created_at": "2026-04-01T17:31:48Z",
+            "updated_at": "2026-04-01T17:31:48Z"
           }
         ]
       },
@@ -2164,16 +2211,21 @@
       "total_downloads": 7,
       "release_count": 177,
       "latest_release_tag": "v2.52.3"
+    },
+    "2026-04-02": {
+      "total_downloads": 10,
+      "release_count": 179,
+      "latest_release_tag": "v2.52.3"
     }
   },
   "container": {
-    "total_versions": 3117,
-    "tagged_versions": 410,
+    "total_versions": 3138,
+    "tagged_versions": 413,
     "latest_tags": [],
     "by_tag": {
-      "v2.52.3": 4,
-      "v2.52.2": 186,
-      "v2.52.1": 285,
+      "v2.52.3": 183,
+      "v2.52.2": 190,
+      "v2.52.1": 287,
       "v2.52.0": 83,
       "v2.51.0": 222,
       "v2.50.4": 282,
@@ -2183,7 +2235,7 @@
       "v2.49.0": 116,
       "v2.48.2": 124,
       "v2.48.1": 22,
-      "v2.48.0": 0,
+      "v2.48.0": 54,
       "v2.47.2": 94,
       "v2.47.1": 25,
       "v2.46.0": 89,
@@ -2220,11 +2272,15 @@
     "2026-04-01": {
       "total_versions": 3117,
       "tagged_versions": 410
+    },
+    "2026-04-02": {
+      "total_versions": 3138,
+      "tagged_versions": 413
     }
   },
   "issues": {
-    "open_issues": 0,
-    "closed_issues": 25,
+    "open_issues": 2,
+    "closed_issues": 24,
     "open_prs": 0,
     "closed_prs": 95
   },
@@ -2238,6 +2294,12 @@
     "2026-04-01": {
       "open_issues": 0,
       "closed_issues": 25,
+      "open_prs": 0,
+      "closed_prs": 95
+    },
+    "2026-04-02": {
+      "open_issues": 2,
+      "closed_issues": 24,
       "open_prs": 0,
       "closed_prs": 95
     }
@@ -2261,11 +2323,11 @@
     },
     {
       "name": "Archive Traffic Stats",
-      "total_runs": 37,
-      "success_runs": 29,
+      "total_runs": 38,
+      "success_runs": 30,
       "failure_runs": 7,
       "last_status": "in_progress",
-      "last_run_at": "2026-04-01T15:37:39Z"
+      "last_run_at": "2026-04-02T03:57:25Z"
     },
     {
       "name": "Copilot coding agent",
@@ -2285,19 +2347,19 @@
     },
     {
       "name": "CI",
-      "total_runs": 135,
-      "success_runs": 120,
-      "failure_runs": 3,
+      "total_runs": 140,
+      "success_runs": 124,
+      "failure_runs": 4,
       "last_status": "success",
-      "last_run_at": "2026-04-01T15:09:20Z"
+      "last_run_at": "2026-04-01T19:37:55Z"
     },
     {
       "name": "Release",
-      "total_runs": 61,
-      "success_runs": 43,
-      "failure_runs": 6,
-      "last_status": "in_progress",
-      "last_run_at": "2026-04-01T15:15:23Z"
+      "total_runs": 66,
+      "success_runs": 46,
+      "failure_runs": 8,
+      "last_status": "success",
+      "last_run_at": "2026-04-01T19:37:55Z"
     }
   ],
   "ci_history": {
@@ -2388,39 +2450,88 @@
         "success_runs": 43,
         "failure_runs": 6
       }
+    ],
+    "2026-04-02": [
+      {
+        "name": "Deploy Docs to GitHub Pages",
+        "total_runs": 143,
+        "success_runs": 140,
+        "failure_runs": 3
+      },
+      {
+        "name": "Copilot code review",
+        "total_runs": 12,
+        "success_runs": 12,
+        "failure_runs": 0
+      },
+      {
+        "name": "Archive Traffic Stats",
+        "total_runs": 38,
+        "success_runs": 30,
+        "failure_runs": 7
+      },
+      {
+        "name": "Copilot coding agent",
+        "total_runs": 8,
+        "success_runs": 8,
+        "failure_runs": 0
+      },
+      {
+        "name": "Dependabot Updates",
+        "total_runs": 15,
+        "success_runs": 15,
+        "failure_runs": 0
+      },
+      {
+        "name": "CI",
+        "total_runs": 140,
+        "success_runs": 124,
+        "failure_runs": 4
+      },
+      {
+        "name": "Release",
+        "total_runs": 66,
+        "success_runs": 46,
+        "failure_runs": 8
+      }
     ]
   },
   "dev": {
     "weekly_commits": [
       {
+        "week_offset": -13,
+        "total": 1,
+        "owner": 0
+      },
+      {
         "week_offset": -12,
-        "total": 14,
+        "total": 13,
         "owner": 0
       },
       {
         "week_offset": -4,
-        "total": 238,
-        "owner": 231
+        "total": 292,
+        "owner": 283
       },
       {
         "week_offset": -3,
-        "total": 449,
-        "owner": 365
+        "total": 492,
+        "owner": 395
       },
       {
         "week_offset": -2,
-        "total": 276,
-        "owner": 233
+        "total": 243,
+        "owner": 213
       },
       {
         "week_offset": -1,
-        "total": 346,
-        "owner": 277
+        "total": 317,
+        "owner": 249
       },
       {
         "week_offset": 0,
-        "total": 334,
-        "owner": 128
+        "total": 322,
+        "owner": 94
       }
     ],
     "code_frequency": [
@@ -2456,14 +2567,14 @@
       },
       {
         "week": "2026-03-29",
-        "additions": 13059,
-        "deletions": 1944
+        "additions": 13307,
+        "deletions": 1949
       }
     ],
     "ai": {
       "commits_scanned": 200,
-      "ai_commits": 134,
-      "ai_ratio": 0.67,
+      "ai_commits": 130,
+      "ai_ratio": 0.65,
       "agents": [
         {
           "name": "Copilot",
@@ -2471,7 +2582,7 @@
         },
         {
           "name": "dependabot[bot]",
-          "commits": 8
+          "commits": 4
         },
         {
           "name": "copilot-swe-agent[bot]",
@@ -2498,6 +2609,11 @@
       "total_weekly_commits": 1657,
       "ai_commits": 134,
       "ai_ratio": 0.67
+    },
+    "2026-04-02": {
+      "total_weekly_commits": 1680,
+      "ai_commits": 130,
+      "ai_ratio": 0.65
     }
   }
 }
