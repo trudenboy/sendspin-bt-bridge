@@ -75,6 +75,43 @@ class TestRegistration:
         mon.register("FC:58:FA:EB:08:6C", "sink2", cb2, cb2)
         assert mon._sink_names["FC:58:FA:EB:08:6C"] == "sink2"
 
+    def test_register_dispatches_known_running_state(self):
+        """If sink was already observed as running before register(), on_active fires immediately."""
+        mon = SinkMonitor()
+        # Simulate pre-registration state observation
+        mon._sink_states["bluez_sink.FC_58_FA_EB_08_6C.a2dp_sink"] = "running"
+        on_active = MagicMock()
+        on_idle = MagicMock()
+        mon.register("FC:58:FA:EB:08:6C", "bluez_sink.FC_58_FA_EB_08_6C.a2dp_sink", on_active, on_idle)
+        on_active.assert_called_once()
+        on_idle.assert_not_called()
+
+    def test_register_dispatches_known_idle_state(self):
+        """If sink was already observed as idle before register(), on_idle fires immediately."""
+        mon = SinkMonitor()
+        mon._sink_states["bluez_sink.FC_58_FA_EB_08_6C.a2dp_sink"] = "idle"
+        on_active = MagicMock()
+        on_idle = MagicMock()
+        mon.register("FC:58:FA:EB:08:6C", "bluez_sink.FC_58_FA_EB_08_6C.a2dp_sink", on_active, on_idle)
+        on_idle.assert_called_once()
+        on_active.assert_not_called()
+
+    def test_register_no_dispatch_when_no_known_state(self):
+        """No callbacks fire on register() if sink state has not been observed yet."""
+        mon = SinkMonitor()
+        on_active = MagicMock()
+        on_idle = MagicMock()
+        mon.register("FC:58:FA:EB:08:6C", "bluez_sink.FC_58_FA_EB_08_6C.a2dp_sink", on_active, on_idle)
+        on_active.assert_not_called()
+        on_idle.assert_not_called()
+
+    def test_reverse_map_maintained(self):
+        mon = SinkMonitor()
+        mon.register("FC:58:FA:EB:08:6C", "bluez_sink.FC_58_FA_EB_08_6C.a2dp_sink", MagicMock(), MagicMock())
+        assert mon._sink_name_to_mac["bluez_sink.FC_58_FA_EB_08_6C.a2dp_sink"] == "FC:58:FA:EB:08:6C"
+        mon.unregister("FC:58:FA:EB:08:6C")
+        assert "bluez_sink.FC_58_FA_EB_08_6C.a2dp_sink" not in mon._sink_name_to_mac
+
 
 # ── State classification ────────────────────────────────────────────────
 
@@ -232,6 +269,34 @@ class TestHandleChange:
         await mon._handle_sink_change(pulse, 42)
         self.on_active.assert_not_called()
         self.on_idle.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_unregistered_bluez_sink_state_is_tracked(self):
+        """State is stored for unregistered bluez sinks so register() can catch up."""
+        mon = SinkMonitor()  # no registrations
+        pulse = AsyncMock()
+
+        pulse.sink_info.return_value = self._make_sink_info(
+            "bluez_sink.AA_BB_CC_DD_EE_FF.a2dp_sink",
+            0,  # running
+        )
+
+        await mon._handle_sink_change(pulse, 42)
+        assert mon._sink_states["bluez_sink.AA_BB_CC_DD_EE_FF.a2dp_sink"] == "running"
+
+    @pytest.mark.asyncio
+    async def test_non_bluez_sink_state_not_tracked(self):
+        """Non-bluez sinks are ignored entirely."""
+        mon = SinkMonitor()
+        pulse = AsyncMock()
+
+        pulse.sink_info.return_value = self._make_sink_info(
+            "alsa_output.pci.analog-stereo",
+            0,
+        )
+
+        await mon._handle_sink_change(pulse, 42)
+        assert "alsa_output.pci.analog-stereo" not in mon._sink_states
 
 
 # ── Sink removal ──────────────────────────────────────────────────────────

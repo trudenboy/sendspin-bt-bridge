@@ -473,9 +473,10 @@ class SendspinClient:
     # ── Idle disconnect timer ────────────────────────────────────────────
 
     def _sink_monitor_active(self) -> bool:
-        """Return True if a PA SinkMonitor is running for this device."""
+        """Return True only when sink monitoring is wired up for this device."""
         sm = getattr(self, "_sink_monitor", None)
-        return sm is not None and sm.available
+        sink_name = getattr(self, "bluetooth_sink_name", None)
+        return sm is not None and sm.available and bool(sink_name)
 
     def _on_sink_active(self) -> None:
         """Called by SinkMonitor when PA sink enters ``running``.

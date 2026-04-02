@@ -651,6 +651,7 @@ class TestSinkMonitorFallback:
             client = _make_client(idle_disconnect_minutes=15)
             client._sink_monitor = MagicMock()
             client._sink_monitor.available = True
+            client.bluetooth_sink_name = "bluez_sink.FC_58_FA_EB_08_6C.a2dp_sink"
             client.status.update({"audio_streaming": True})
 
             with patch.object(client, "_start_idle_timer") as start_mock:
@@ -689,14 +690,24 @@ class TestSinkMonitorActiveCheck:
         client._sink_monitor = None
         assert client._sink_monitor_active() is False
 
-    def test_sink_monitor_available_returns_true(self):
+    def test_sink_monitor_available_with_sink_returns_true(self):
         client = _make_client()
         client._sink_monitor = MagicMock()
         client._sink_monitor.available = True
+        client.bluetooth_sink_name = "bluez_sink.FC_58_FA_EB_08_6C.a2dp_sink"
         assert client._sink_monitor_active() is True
 
     def test_sink_monitor_not_available_returns_false(self):
         client = _make_client()
         client._sink_monitor = MagicMock()
         client._sink_monitor.available = False
+        client.bluetooth_sink_name = "bluez_sink.FC_58_FA_EB_08_6C.a2dp_sink"
+        assert client._sink_monitor_active() is False
+
+    def test_sink_monitor_available_but_no_sink_name_returns_false(self):
+        """Fallback stays active until BT sink is actually discovered."""
+        client = _make_client()
+        client._sink_monitor = MagicMock()
+        client._sink_monitor.available = True
+        client.bluetooth_sink_name = None
         assert client._sink_monitor_active() is False

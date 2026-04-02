@@ -75,6 +75,7 @@ class SinkMonitor:
     def __init__(self) -> None:
         self._callbacks: dict[str, tuple[Callable[[], None], Callable[[], None]]] = {}
         self._sink_names: dict[str, str] = {}  # MAC → sink_name
+        self._sink_name_to_mac: dict[str, str] = {}  # sink_name → MAC (reverse index)
         self._sink_states: dict[str, str] = {}  # sink_name → "running"|"idle"|"suspended"
         self._sink_index_to_name: dict[int, str] = {}  # PA index → sink_name
         self._task: asyncio.Task[None] | None = None
@@ -97,13 +98,28 @@ class SinkMonitor:
 
         *on_active* is called when the sink enters ``running``.
         *on_idle* is called when the sink leaves ``running`` (→ idle/suspended/removed).
+
+        If sink state was already observed before registration, the
+        appropriate callback fires immediately so no transitions are lost.
         """
         # Clean up old sink name mapping if MAC was already registered
         old_sink = self._sink_names.get(mac)
         if old_sink and old_sink != sink_name:
             self._sink_states.pop(old_sink, None)
+            self._sink_name_to_mac.pop(old_sink, None)
         self._callbacks[mac] = (on_active, on_idle)
         self._sink_names[mac] = sink_name
+        self._sink_name_to_mac[sink_name] = mac
+
+        # Immediately dispatch based on already-observed sink state so
+        # events that arrived before registration are not lost.
+        known_state = self._sink_states.get(sink_name)
+        if known_state == "running":
+            logger.debug("SinkMonitor: %s [%s] register → already running, firing on_active", sink_name, mac)
+            on_active()
+        elif known_state in ("idle", "suspended"):
+            logger.debug("SinkMonitor: %s [%s] register → already %s, firing on_idle", sink_name, mac, known_state)
+            on_idle()
 
     def unregister(self, mac: str) -> None:
         """Remove all state tracking for *mac*."""
@@ -111,6 +127,7 @@ class SinkMonitor:
         sink = self._sink_names.pop(mac, None)
         if sink:
             self._sink_states.pop(sink, None)
+            self._sink_name_to_mac.pop(sink, None)
 
     async def start(self) -> None:
         """Start the PA event subscription loop as a background task."""
@@ -159,7 +176,7 @@ class SinkMonitor:
     # ── Event handlers ────────────────────────────────────────────────
 
     async def _handle_sink_change(self, pulse: Any, sink_index: int) -> None:
-        """Query the sink and fire callbacks on state transitions."""
+        """Query the sink, store state for all bluez sinks, and fire callbacks."""
         try:
             sink_info = await pulse.sink_info(sink_index)  # type: ignore[union-attr]
         except Exception:
@@ -168,9 +185,8 @@ class SinkMonitor:
         sink_name: str = sink_info.name
         self._sink_index_to_name[sink_index] = sink_name
 
-        # Find registered MAC for this sink name
-        mac = self._find_mac_for_sink(sink_name)
-        if mac is None:
+        # Only track bluez sinks (Bluetooth audio)
+        if not _BLUEZ_MAC_RE.match(sink_name):
             return
 
         new_state = self._classify_state(sink_info.state)
@@ -179,7 +195,15 @@ class SinkMonitor:
         if new_state == old_state:
             return
 
+        # Always store state — even before registration — so register()
+        # can immediately dispatch based on known state.
         self._sink_states[sink_name] = new_state
+
+        # O(1) reverse lookup for registered MAC
+        mac = self._sink_name_to_mac.get(sink_name)
+        if mac is None:
+            return
+
         on_active, on_idle = self._callbacks.get(mac, (None, None))
         if on_active is None:
             return
@@ -198,7 +222,7 @@ class SinkMonitor:
             return
 
         old_state = self._sink_states.pop(sink_name, None)
-        mac = self._find_mac_for_sink(sink_name)
+        mac = self._sink_name_to_mac.get(sink_name)
         if mac is None or old_state != "running":
             return
 
@@ -208,13 +232,6 @@ class SinkMonitor:
             on_idle()
 
     # ── Helpers ───────────────────────────────────────────────────────
-
-    def _find_mac_for_sink(self, sink_name: str) -> str | None:
-        """Reverse lookup: sink_name → registered MAC."""
-        for mac, name in self._sink_names.items():
-            if name == sink_name:
-                return mac
-        return None
 
     @staticmethod
     def _classify_state(state: int) -> str:
