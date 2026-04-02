@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.52.4] - 2026-04-02
+
+### Fixed
+- Idle standby still triggered during MA server reconnections despite v2.52.3 fix — daemon's `playing` and `audio_streaming` flags both reset on reconnect, bypassing all guards (GH-120)
+- Added two-tier fallback guard in `_idle_timeout()`: MA WebSocket monitor group state (primary) and event history ring buffer (fallback) now prevent standby when playback is active but daemon flags were lost
+
 ## [2.52.3] - 2026-04-01
 
 ### Fixed
