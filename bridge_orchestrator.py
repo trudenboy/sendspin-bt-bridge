@@ -455,11 +455,20 @@ class BridgeOrchestrator:
             )
             if mac:
 
-                def _on_sink_found(sink_name: str, restored_volume: int | None = None, _client=client) -> None:
+                def _on_sink_found(
+                    sink_name: str,
+                    restored_volume: int | None = None,
+                    _client=client,
+                    _mac=mac,
+                ) -> None:
                     _client.bluetooth_sink_name = sink_name
                     logger.info("Stored Bluetooth sink for volume sync: %s", sink_name)
                     if restored_volume is not None:
                         _client._update_status({"volume": restored_volume})
+                    # Register with PA sink monitor for idle detection
+                    sm = getattr(_client, "_sink_monitor", None)
+                    if sm is not None and _mac:
+                        sm.register(_mac, sink_name, _client._on_sink_active, _client._on_sink_idle)
 
                 bt_mgr = bt_manager_factory(
                     mac,
@@ -602,6 +611,15 @@ class BridgeOrchestrator:
             base_listen_port=bootstrap.base_listen_port,
         )
         clients = device_bootstrap.clients
+
+        # Start PA sink state monitor (idle disconnect ground truth).
+        from services.sink_monitor import SinkMonitor
+
+        sink_monitor = SinkMonitor()
+        for client in clients:
+            client._sink_monitor = sink_monitor
+        await sink_monitor.start()
+
         try:
             startup_phase = "web"
             web_thread = (
