@@ -213,6 +213,7 @@ v3 is successful when the project can do all of the following without becoming f
 4. Signal path, route ownership, health, and event history are visible enough that problems are discovered by the UI before they are discovered by ear.
 5. Delay tuning becomes guided and explainable rather than trial and error.
 6. AI support and later fleet management can build on the same contracts, diagnostics bundles, and event history rather than inventing separate data models.
+7. Bluetooth runtime is hardened with signal quality monitoring, safe BLE coexistence, hardware media button tracking, and AppArmor security — so the bridge is a good citizen alongside HA's own BT stack.
 
 ---
 
@@ -292,6 +293,70 @@ Create the shared platform model for v3 and ship the first modern operator-conso
 
 ---
 
+## Phase V3-1.5: Bluetooth runtime hardening
+
+### Goal
+
+Harden the Bluetooth runtime with improvements inspired by community projects (ha-bluetooth-audio-manager, Multi-SendSpin-Player-Container) before expanding to new backend types.
+
+### Scope
+
+#### Epic 4a. Infrasound keep-alive method
+
+Our existing keep-alive sends 500 ms PCM silence bursts via `paplay` at configurable intervals. Some Bluetooth speakers detect PCM zeros as silence and still auto-sleep between bursts.
+
+- add an **infrasound** keep-alive method that streams a continuous 2 Hz sine wave (below 20 Hz hearing threshold) instead of periodic silence bursts
+- make the method configurable per device: `keepalive_method: "silence" | "infrasound"` (default: `"silence"` for backward compatibility)
+- infrasound mode streams continuously while idle (no interval gaps), silence mode keeps the existing burst behavior
+- validate that the 2 Hz sine wave does not trigger PulseAudio volume normalization or flat-volume artifacts
+
+#### Epic 4b. RSSI signal strength monitoring
+
+- read Bluetooth RSSI per connected device via `hcitool rssi <MAC>` or BlueZ D-Bus `RSSI` property
+- add `rssi_dbm` to `DeviceStatus` and `DeviceSnapshot`
+- color-code signal quality in UI (good / fair / weak / stale)
+- distinguish live vs stale RSSI readings (BR/EDR-only devices cannot refresh RSSI while connected; dual-mode devices can)
+- surface weak signal as a health warning in operator guidance
+
+#### Epic 4c. AVRCP media button tracking
+
+- monitor D-Bus MPRIS/AVRCP events per connected device for hardware media buttons (play/pause/next/previous/volume)
+- sync hardware volume button presses with bridge volume state
+- add per-device `avrcp_enabled` toggle (some speakers refuse to enter power-save with active AVRCP registration)
+- publish AVRCP events to `EventStore` with typed event categories (MPRIS, AVRCP, Transport)
+
+#### Epic 4d. BLE coexistence improvements
+
+- use `Transport=bredr` filter for BT scan to avoid interfering with HA BLE integrations (sensors, beacons, ESPHome proxies)
+- never modify adapter power, discoverable, or pairable states during scan
+- reference-count discovery start/stop to coexist with other BlueZ D-Bus clients
+
+#### Epic 4e. AppArmor security profile
+
+- add a custom AppArmor profile for the HA addon (`apparmor.txt`) following least-privilege principles
+- deny raw HCI device access (`/dev/hci*`) — all BT operations must go through BlueZ D-Bus
+- allow only required capabilities: `NET_ADMIN`, `NET_RAW`
+- allow D-Bus system bus, PulseAudio sockets, config/data paths, Python runtime
+- reference: `scyto/ha-bluetooth-audio-manager` AppArmor profile
+
+#### Epic 4f. Dedicated health endpoint
+
+- add `GET /api/health` returning structured health status (bridge state, device count, backend summary)
+- integrate with Docker `HEALTHCHECK` in `Dockerfile` and `docker-compose.yml`
+- integrate with HA addon `watchdog` URL in `config.yaml`
+- keep distinct from existing `/api/status` (which returns full diagnostic payload)
+
+### Exit criteria
+
+- keep-alive infrasound method prevents speaker sleep on devices that ignore PCM silence
+- RSSI monitoring provides signal quality visibility without requiring additional hardware
+- AVRCP events are tracked and visible in the event store
+- BT scan does not interfere with HA BLE integrations
+- HA addon runs under AppArmor with deny-by-default policy
+- health endpoint enables reliable container orchestration health checks
+
+---
+
 ## Phase V3-2: Modern operator console and wired/USB runtime
 
 ### Goal
@@ -306,6 +371,10 @@ Ship the first clearly multi-backend product wave: wired and USB players plus th
 - filter and classify likely outputs such as USB DAC, built-in audio, HDMI, and virtual sinks
 - create a direct-sink player type that can reuse the subprocess model, status reporting, volume control, and diagnostics patterns without Bluetooth pairing lifecycle
 - support per-device volume persistence, mute state, and backend-specific health reporting
+- add per-device **max volume** safety limit (especially important for amplified wired outputs)
+- add per-device or per-card **boot mute** preference to prevent volume spikes on restart
+- support **device aliases** — human-readable names for physical USB/HDMI audio devices independent of PulseAudio sink names
+- add per-card **profile selection** (e.g. `output:analog-stereo`, `output:hdmi-stereo`) configurable from the UI
 
 #### Epic 6. Capability-driven player management UX
 
@@ -390,8 +459,10 @@ Make health, signal path, and recovery state first-class operator surfaces rathe
 #### Epic 12. Live telemetry and degraded-mode summaries
 
 - expose current codec, sample rate, buffer and stream state, uptime, reconnect count, and resolved output sink where available
+- include RSSI signal strength telemetry for Bluetooth devices (from Epic 4b) in live telemetry views
 - pull telemetry from subprocess status lines, bridge state, backend callbacks, and event history
 - include structured per-device event history such as reconnects, sink loss or acquisition, route corrections, re-anchor events, and MA sync failures
+- include AVRCP media button events (from Epic 4c) in the device event timeline
 - publish compact degraded-mode and health-summary surfaces in addition to raw live status
 
 #### Epic 13. Signal path and route ownership visibility
@@ -566,6 +637,8 @@ Only start these once earlier phases are stable and demand is proven:
 - Home Assistant custom component or HACS strategy
 - plugin or extension surfaces
 - per-room DSP and EQ via virtual sinks or backend-specific processing surfaces
+- **12V trigger / amplifier power control** — automatic amplifier on/off via USB relay boards (HID, FTDI, Modbus/CH340) tied to player lifecycle events. Alternatively, expose player lifecycle webhooks for HA automations controlling amplifier switches via ESPHome/Zigbee/Z-Wave entities. Inspired by chrisuthe/Multi-SendSpin-Player-Container.
+- **OpenAPI / Swagger specification** — auto-generated API documentation for the 28+ REST endpoints, improving third-party integration and CLI development
 
 ---
 
@@ -613,6 +686,10 @@ v3 should add compatibility layers, migrate callers and config gradually, docume
 
 The `sbb` CLI must never import bridge runtime code or depend on Bluetooth, PulseAudio, or D-Bus libraries. It communicates exclusively through the REST API so it can be installed on any machine, including developer laptops without audio hardware.
 
+### 11. Bluetooth operations must not interfere with HA BLE
+
+All Bluetooth discovery and connection operations must use Classic Bluetooth (BR/EDR) transport only. The bridge must never disrupt HA's BLE scanning for sensors, beacons, or ESPHome proxies. Adapter power, discoverable, and pairable states must not be modified by scan operations.
+
 ---
 
 ## Execution and dependency notes
@@ -645,8 +722,13 @@ A realistic `v3.0.0-rc.1` should include:
   - config and runtime model v2 foundations
   - event-history and simulator foundations
   - first operator-console platform pieces
+- the core of V3-1.5:
+  - infrasound keep-alive method for Bluetooth speakers
+  - RSSI signal quality monitoring
+  - AppArmor security profile for HA addon
+  - dedicated health endpoint for Docker/HA orchestration
 - the core of V3-2:
-  - the first wired and USB backend
+  - the first wired and USB backend with max volume, boot mute, device aliases, and card profiles
   - backend-aware player creation and editing flows
   - the first new diagnostics and details surfaces in the operator console
   - `sbb` CLI with core device, config, status, and diagnostics commands
