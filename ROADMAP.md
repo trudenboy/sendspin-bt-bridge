@@ -247,7 +247,7 @@ Document the operator polish that now forms the calm starting surface for v3.
 
 ### Status
 
-**Epic 1–3 core deliverables complete (3.0.0-beta.1).** AudioBackend ABC, Player model, config schema v2 with auto-migration, BluetoothA2dpBackend, MockAudioBackend, BackendOrchestrator, EventStore, and SendspinClient integration are shipped. Epic 4 (operator console) remains planned.
+**Complete.** All four epics shipped as of 3.0.0-beta.14. AudioBackend ABC, Player model, config schema v2 with auto-migration, BluetoothA2dpBackend, MockAudioBackend, BackendOrchestrator, EventStore, SendspinClient integration, and operator console foundation (Vue 3 + TypeScript + 22 kit components + 10 Pinia stores + 49 test files) are all in production on the beta branch.
 
 ### Goal
 
@@ -258,9 +258,9 @@ Create the shared platform model for v3 and ship the first modern operator-conso
 #### Epic 1. Runtime contracts and ownership seams
 
 - ✅ Runtime contracts — `AudioBackend` ABC (`services/audio_backend.py`) with `BackendType`, `BackendCapability` enums, `BackendStatus` dataclass. `BluetoothA2dpBackend` (`services/backends/bluetooth_a2dp.py`) wraps existing `BluetoothManager`. `MockAudioBackend` (`services/backends/mock_backend.py`) for hardware-free testing. `create_backend()` factory (`services/backends/__init__.py`).
-- ✅ `BackendOrchestrator` (`services/backend_orchestrator.py`) — per-player backend lifecycle management with event integration
+- ✅ `BackendOrchestrator` (`services/backend_orchestrator.py`) — per-player backend lifecycle management with event integration, fully wired at runtime
 - ✅ `SendspinClient` AudioBackend integration — `audio_backend` property, `audio_destination`, `backend_connect()`/`backend_disconnect()`
-- 🔄 Reduce `state.py` — routes and services have moved toward explicit ownership and snapshot reads (`services/bridge_runtime_state.py`, `services/device_registry.py`), but `state.py` still serves as architectural center for SSE signaling, scan jobs, and MA cache
+- ✅ ~~Reduce `state.py`~~ — transitioned from logic owner to service locator/event hub pattern (699 lines). Explicit ownership delegated to `BackendOrchestrator`, `DeviceRegistry`, `EventStore`, `player_model.Player`. SSE signaling, scan jobs, and MA cache remain in `state.py` by design as shared infrastructure.
 
 #### Epic 2. Config and runtime model v2
 
@@ -271,17 +271,18 @@ Create the shared platform model for v3 and ship the first modern operator-conso
 
 #### Epic 3. Event model, read models, and simulator foundation
 
-- ✅ Event model — `EventStore` (`services/event_store.py`): thread-safe ring buffer for per-player and bridge-wide event history
+- ✅ Event model — `EventStore` (`services/event_store.py`): thread-safe ring buffer for per-player and bridge-wide event history, wired to `InternalEventPublisher` singleton in `state.py`, queryable via `/api/events` and `/api/events/stats`
 - ✅ `MockAudioBackend` (`services/backends/mock_backend.py`) — hardware-free test backend with configurable failures, enabling simulator and contract testing paths
-- broaden typed snapshots and health summaries so degraded-mode reporting is a product surface, not just a debug aid
-- make hardware-light tests a normal validation path for contract work
+- ✅ ~~Typed snapshots~~ — `DeviceSnapshot` enriched with `backend_info`, `player_state`, `health_summary`, `capabilities`, `recent_events`. `BridgeSnapshot` enriched with `orchestrator_summary`.
+- ✅ ~~Hardware-light tests~~ — `test_mock_backend.py`, `test_v3_integration.py`, `test_backend_factory.py`, `test_sendspin_client_backend.py` validate backend contracts without hardware
 
 #### Epic 4. Operator console foundation
 
-- adopt **Vue 3 + TypeScript + Vite** for new or replaced high-churn surfaces
-- build typed frontend models and stores around `BridgeSnapshot`, `DeviceSnapshot`, guidance, diagnostics, jobs, and event history
-- establish shared design tokens, headless accessible primitives, and reusable drawer/dialog/filter/table patterns
-- keep Flask-rendered entry points and ingress compatibility, but allow replacement of high-churn UI surfaces where a cleaner product benefits
+- ✅ ~~Vue 3 + TypeScript + Vite~~ — `ui/` directory with Vue 3.5, TypeScript 5.9, Vite 8.0, Vue Router, Pinia, Tailwind CSS 4.2
+- ✅ ~~Typed frontend models~~ — `ui/src/api/types.ts` mirrors Python dataclasses: `BridgeSnapshot`, `DeviceSnapshot`, `BackendType`, `PlayerState`, `BackendStatus`
+- ✅ ~~Shared design tokens and primitives~~ — 22 `Sb*` kit components (`ui/src/kit/`): `SbDialog`, `SbDrawer`, `SbTable`, `SbFilterBar`, `SbTabs`, `SbTimeline`, `SbToast`, `SbBadge`, `SbCard`, `SbButton`, `SbInput`, `SbToggle`, `SbSlider`, `SbDropdown`, `SbSpinner`, `SbStatusDot`, `SbTooltip`, `SbEmptyState`, `SbSignalPath`
+- ✅ ~~Flask-rendered entry points with SPA fallback~~ — `routes/views.py` serves Vue SPA from `ui/dist/` with automatic fallback to legacy Jinja template when Vue build is absent. Adaptive CSP headers for each mode.
+- 10 Pinia stores (auth, bluetooth, bridge, config, devices, diagnostics, events, ma, notifications, update), 30+ feature components, 49 test files
 
 ### Exit criteria
 
@@ -289,7 +290,7 @@ Create the shared platform model for v3 and ship the first modern operator-conso
 - ✅ config/runtime separation is real enough to support future backends cleanly
 - ✅ event history and typed read models are usable by diagnostics and UI layers
 - ✅ key backend and UI flows can be validated without requiring real Bluetooth hardware
-- the project has a viable modern-console foundation instead of only one growing runtime script
+- ✅ the project has a viable modern-console foundation with 22 kit components, typed stores, and Flask SPA fallback
 
 ---
 
@@ -312,8 +313,8 @@ Our existing keep-alive sends 500 ms PCM silence bursts via `paplay` at configur
 
 #### Epic 4b. RSSI signal strength monitoring
 
-- read Bluetooth RSSI per connected device via `hcitool rssi <MAC>` or BlueZ D-Bus `RSSI` property
-- add `rssi_dbm` to `DeviceStatus` and `DeviceSnapshot`
+- 🔄 RSSI parsing from `bluetoothctl` output exists in `routes/api_bt.py` (`_CHG_RSSI_PAT` regex) but values are used only during scan to track active MACs — not stored in `DeviceStatus`
+- store `rssi_dbm` in `DeviceStatus` and `DeviceSnapshot` for connected devices
 - color-code signal quality in UI (good / fair / weak / stale)
 - distinguish live vs stale RSSI readings (BR/EDR-only devices cannot refresh RSSI while connected; dual-mode devices can)
 - surface weak signal as a health warning in operator guidance
@@ -327,24 +328,20 @@ Our existing keep-alive sends 500 ms PCM silence bursts via `paplay` at configur
 
 #### Epic 4d. BLE coexistence improvements
 
-- use `Transport=bredr` filter for BT scan to avoid interfering with HA BLE integrations (sensors, beacons, ESPHome proxies)
+- 🔄 Bluetooth scan currently uses `bluetoothctl scan on` globally without transport filter
+- add `Transport=bredr` filter for BT scan to avoid interfering with HA BLE integrations (sensors, beacons, ESPHome proxies)
 - never modify adapter power, discoverable, or pairable states during scan
 - reference-count discovery start/stop to coexist with other BlueZ D-Bus clients
 
 #### Epic 4e. AppArmor security profile
 
-- add a custom AppArmor profile for the HA addon (`apparmor.txt`) following least-privilege principles
-- deny raw HCI device access (`/dev/hci*`) — all BT operations must go through BlueZ D-Bus
-- allow only required capabilities: `NET_ADMIN`, `NET_RAW`
-- allow D-Bus system bus, PulseAudio sockets, config/data paths, Python runtime
-- reference: `scyto/ha-bluetooth-audio-manager` AppArmor profile
+- ✅ ~~AppArmor profile~~ — `ha-addon/apparmor.txt` exists with deny-by-default policy: denies raw HCI device access (`/dev/hci*`), allows `NET_ADMIN`/`NET_RAW` capabilities, D-Bus system bus, PulseAudio sockets, config/data paths, Python runtime. Enabled in `ha-addon/config.yaml`.
 
 #### Epic 4f. Dedicated health endpoint
 
-- add `GET /api/health` returning structured health status (bridge state, device count, backend summary)
+- ✅ ~~`GET /api/health`~~ — lightweight endpoint at `routes/api_status.py:1723` returning `{"ok": true}`, no auth required. Distinct from full `/api/diagnostics` payload.
 - integrate with Docker `HEALTHCHECK` in `Dockerfile` and `docker-compose.yml`
 - integrate with HA addon `watchdog` URL in `config.yaml`
-- keep distinct from existing `/api/status` (which returns full diagnostic payload)
 
 ### Exit criteria
 
@@ -372,9 +369,11 @@ Ship the first clearly multi-backend product wave: wired and USB players plus th
 - create a direct-sink player type that can reuse the subprocess model, status reporting, volume control, and diagnostics patterns without Bluetooth pairing lifecycle
 - support per-device volume persistence, mute state, and backend-specific health reporting
 - add per-device **max volume** safety limit (especially important for amplified wired outputs)
-- add per-device or per-card **boot mute** preference to prevent volume spikes on restart
+- 🔄 per-device **boot mute** — partially exists: `_startup_unmute_watcher` in `daemon_process.py` unmutes after stream starts (15 s timeout), but not configurable per-device and applies to BT only
 - support **device aliases** — human-readable names for physical USB/HDMI audio devices independent of PulseAudio sink names
 - add per-card **profile selection** (e.g. `output:analog-stereo`, `output:hdmi-stereo`) configurable from the UI
+
+> **Note:** `BackendType.LOCAL_SINK` is already defined in `services/audio_backend.py` but `create_backend()` raises `ValueError` — planned, not yet implemented.
 
 #### Epic 6. Capability-driven player management UX
 
@@ -391,6 +390,8 @@ Ship the first clearly multi-backend product wave: wired and USB players plus th
 - surface route ownership and sink disappearance issues explicitly in the new console instead of burying them in logs
 
 #### Epic 8. Management CLI foundation (`sbb`)
+
+> **Note:** `sendspin-cli/` is a legacy standalone Sendspin audio player client (argparse-based), **not** the bridge management CLI described here. The `sbb` CLI will be a new `sbb_cli/` package.
 
 - scaffold `sbb_cli/` package with Click-based grouped subcommands
 - implement `BridgeClient` HTTP wrapper for REST API communication with timeout, auth, and structured error mapping
@@ -467,7 +468,7 @@ Make health, signal path, and recovery state first-class operator surfaces rathe
 
 #### Epic 13. Signal path and route ownership visibility
 
-- 🔄 Signal path visibility — device health state and capability modeling exist (`services/device_health_state.py`), but no end-to-end signal-path visualization
+- 🔄 Signal path visibility — device health state and capability modeling exist (`services/device_health_state.py`), `SbSignalPath` Vue kit component exists in `ui/src/kit/` but is NOT wired to live backend data yet
 - render the end-to-end path for each backend type:
   - MA → Sendspin → subprocess → PulseAudio or PipeWire sink → Bluetooth A2DP → speaker
   - MA → Sendspin → subprocess → PulseAudio or ALSA sink → wired speaker or DAC
@@ -478,7 +479,7 @@ Make health, signal path, and recovery state first-class operator surfaces rathe
 
 - build a unified diagnostics and recovery center instead of scattering operational detail across many unrelated UI sections
 - add a frontend operation model that can present live state, pending actions, recovery history, and bulk actions without duplicating business logic across cards, rows, dialogs, and modals
-- establish a stronger UI component system for badges, notices, toasts, drawers, dialogs, filters, timeline or event-list views, and calmer mobile density
+- ✅ ~~UI component system~~ — 22 `Sb*` kit components shipped in `ui/src/kit/`: badges, toasts, drawers, dialogs, filters, timeline, signal-path, table, tabs, tooltip, empty-state, and mobile-friendly primitives. Remaining: integrate operations center views that use these components for combined diagnostics/recovery/event-history UX.
 - favor split-pane, drawer, and progressive-disclosure patterns that scale on desktop and mobile better than endlessly expanding rows
 
 ### Exit criteria
@@ -716,17 +717,17 @@ The roadmap phases above are product-facing, but the safest implementation order
 
 A realistic `v3.0.0-rc.1` should include:
 
-- V3-0 already-landed guidance and recovery polish as the baseline
-- the core of V3-1:
+- ✅ V3-0 already-landed guidance and recovery polish as the baseline
+- ✅ V3-1 (complete as of beta.14):
   - backend contracts and capability modeling
   - config and runtime model v2 foundations
   - event-history and simulator foundations
-  - first operator-console platform pieces
+  - operator-console foundation (Vue 3 + 22 kit components + 10 stores + 49 tests)
 - the core of V3-1.5:
   - infrasound keep-alive method for Bluetooth speakers
-  - RSSI signal quality monitoring
-  - AppArmor security profile for HA addon
-  - dedicated health endpoint for Docker/HA orchestration
+  - RSSI signal quality monitoring (parsing exists, storage/UI needed)
+  - ✅ AppArmor security profile for HA addon
+  - ✅ dedicated health endpoint (Docker/HA integration remaining)
 - the core of V3-2:
   - the first wired and USB backend with max volume, boot mute, device aliases, and card profiles
   - backend-aware player creation and editing flows
