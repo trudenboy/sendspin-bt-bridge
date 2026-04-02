@@ -156,6 +156,10 @@ class SinkMonitor:
             try:
                 async with pulsectl_asyncio.PulseAsync("sendspin-sink-monitor") as pulse:
                     logger.info("SinkMonitor: connected to PulseAudio — subscribing to sink events")
+                    # Scan existing sinks to populate _sink_states before
+                    # subscribing — avoids stale cache after PA reconnect and
+                    # ensures register() dispatches correctly on first call.
+                    await self._scan_all_sinks(pulse)
                     async for event in pulse.subscribe_events("sink"):
                         ev_type = str(event.t)
                         if ev_type == "change" or ev_type == "new":
@@ -226,12 +230,58 @@ class SinkMonitor:
         if mac is None or old_state != "running":
             return
 
-        on_active, on_idle = self._callbacks.get(mac, (None, None))
+        _on_active, on_idle = self._callbacks.get(mac, (None, None))
         if on_idle is not None:
             logger.debug("SinkMonitor: %s [%s] removed while running — treating as idle", sink_name, mac)
             on_idle()
 
     # ── Helpers ───────────────────────────────────────────────────────
+
+    async def _scan_all_sinks(self, pulse: Any) -> None:
+        """One-shot scan of all PA sinks to refresh ``_sink_states``.
+
+        Called on initial connect and after reconnect so cached state is
+        up-to-date before the subscribe loop starts processing events.
+        Fires callbacks for registered sinks whose state changed during
+        the disconnect window.
+        """
+        try:
+            sinks = await pulse.sink_list()
+        except Exception as exc:
+            logger.debug("SinkMonitor: initial sink scan failed: %s", exc)
+            return
+
+        for sink_info in sinks:
+            sink_name: str = sink_info.name
+            self._sink_index_to_name[sink_info.index] = sink_name
+
+            if not _BLUEZ_MAC_RE.match(sink_name):
+                continue
+
+            new_state = self._classify_state(sink_info.state)
+            old_state = self._sink_states.get(sink_name)
+
+            if new_state == old_state:
+                continue
+
+            self._sink_states[sink_name] = new_state
+
+            mac = self._sink_name_to_mac.get(sink_name)
+            if mac is None:
+                continue
+
+            on_active, on_idle = self._callbacks.get(mac, (None, None))
+            if on_active is None:
+                continue
+
+            if new_state == "running" and old_state != "running":
+                logger.debug("SinkMonitor: scan %s [%s] → running", sink_name, mac)
+                on_active()
+            elif new_state in ("idle", "suspended") and old_state in ("running", None):
+                logger.debug("SinkMonitor: scan %s [%s] → %s", sink_name, mac, new_state)
+                on_idle()  # type: ignore[misc]
+
+        logger.debug("SinkMonitor: initial scan complete — %d bluez sink(s) tracked", len(self._sink_states))
 
     @staticmethod
     def _classify_state(state: int) -> str:

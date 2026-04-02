@@ -395,3 +395,120 @@ class TestMonitorLoop:
         mon._task = asyncio.create_task(_dummy())
         await mon.stop()
         assert mon._task is None
+
+
+# ── Initial sink scan ────────────────────────────────────────────────────
+
+
+class TestScanAllSinks:
+    """Test the initial sink scan on PA connect/reconnect."""
+
+    @staticmethod
+    def _make_sink_info(name: str, state: int, index: int = 42):
+        info = MagicMock()
+        info.name = name
+        info.state = state
+        info.index = index
+        return info
+
+    @pytest.mark.asyncio
+    async def test_scan_populates_sink_states(self):
+        """Scan stores state for all bluez sinks."""
+        mon = SinkMonitor()
+        pulse = AsyncMock()
+        pulse.sink_list.return_value = [
+            self._make_sink_info("bluez_sink.FC_58_FA_EB_08_6C.a2dp_sink", 0, index=10),
+            self._make_sink_info("alsa_output.pci.analog-stereo", 1, index=11),
+            self._make_sink_info("bluez_output.AA_BB_CC_DD_EE_FF.1", 1, index=12),
+        ]
+
+        await mon._scan_all_sinks(pulse)
+        assert mon._sink_states["bluez_sink.FC_58_FA_EB_08_6C.a2dp_sink"] == "running"
+        assert mon._sink_states["bluez_output.AA_BB_CC_DD_EE_FF.1"] == "idle"
+        assert "alsa_output.pci.analog-stereo" not in mon._sink_states
+
+    @pytest.mark.asyncio
+    async def test_scan_fires_callbacks_for_registered_sinks(self):
+        """Scan fires on_active/on_idle for registered sinks with state changes."""
+        mon = SinkMonitor()
+        on_active = MagicMock()
+        on_idle = MagicMock()
+        mon.register("FC:58:FA:EB:08:6C", "bluez_sink.FC_58_FA_EB_08_6C.a2dp_sink", on_active, on_idle)
+        # Clear any immediate dispatch from register()
+        on_active.reset_mock()
+        on_idle.reset_mock()
+
+        pulse = AsyncMock()
+        pulse.sink_list.return_value = [
+            self._make_sink_info("bluez_sink.FC_58_FA_EB_08_6C.a2dp_sink", 0, index=10),
+        ]
+
+        await mon._scan_all_sinks(pulse)
+        on_active.assert_called_once()
+        on_idle.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_scan_no_duplicate_for_same_state(self):
+        """Scan doesn't fire callback if state hasn't changed."""
+        mon = SinkMonitor()
+        on_active = MagicMock()
+        on_idle = MagicMock()
+        mon.register("FC:58:FA:EB:08:6C", "bluez_sink.FC_58_FA_EB_08_6C.a2dp_sink", on_active, on_idle)
+        on_active.reset_mock()
+        on_idle.reset_mock()
+
+        # Pre-set the state to idle
+        mon._sink_states["bluez_sink.FC_58_FA_EB_08_6C.a2dp_sink"] = "idle"
+
+        pulse = AsyncMock()
+        pulse.sink_list.return_value = [
+            self._make_sink_info("bluez_sink.FC_58_FA_EB_08_6C.a2dp_sink", 1, index=10),  # still idle
+        ]
+
+        await mon._scan_all_sinks(pulse)
+        on_active.assert_not_called()
+        on_idle.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_scan_updates_stale_state_after_reconnect(self):
+        """After PA reconnect, scan detects state change from stale cache."""
+        mon = SinkMonitor()
+        on_active = MagicMock()
+        on_idle = MagicMock()
+        mon.register("FC:58:FA:EB:08:6C", "bluez_sink.FC_58_FA_EB_08_6C.a2dp_sink", on_active, on_idle)
+        on_active.reset_mock()
+        on_idle.reset_mock()
+
+        # Stale state says idle, but sink is actually running now
+        mon._sink_states["bluez_sink.FC_58_FA_EB_08_6C.a2dp_sink"] = "idle"
+
+        pulse = AsyncMock()
+        pulse.sink_list.return_value = [
+            self._make_sink_info("bluez_sink.FC_58_FA_EB_08_6C.a2dp_sink", 0, index=10),  # running
+        ]
+
+        await mon._scan_all_sinks(pulse)
+        on_active.assert_called_once()
+        on_idle.assert_not_called()
+        assert mon._sink_states["bluez_sink.FC_58_FA_EB_08_6C.a2dp_sink"] == "running"
+
+    @pytest.mark.asyncio
+    async def test_scan_error_is_swallowed(self):
+        """If sink_list raises, scan doesn't crash the monitor."""
+        mon = SinkMonitor()
+        pulse = AsyncMock()
+        pulse.sink_list.side_effect = Exception("PA error")
+
+        await mon._scan_all_sinks(pulse)  # should not raise
+
+    @pytest.mark.asyncio
+    async def test_scan_populates_index_to_name(self):
+        """Scan builds the index→name mapping for future events."""
+        mon = SinkMonitor()
+        pulse = AsyncMock()
+        pulse.sink_list.return_value = [
+            self._make_sink_info("bluez_sink.FC_58_FA_EB_08_6C.a2dp_sink", 0, index=10),
+        ]
+
+        await mon._scan_all_sinks(pulse)
+        assert mon._sink_index_to_name[10] == "bluez_sink.FC_58_FA_EB_08_6C.a2dp_sink"

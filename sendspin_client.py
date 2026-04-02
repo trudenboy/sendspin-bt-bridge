@@ -371,6 +371,7 @@ class SendspinClient:
             logger_=logger,
         )
         self._stop_service = SubprocessStopService(logger_=logger)
+        self._idle_timer_lock = threading.Lock()
         self._idle_timer_task: asyncio.Task | concurrent.futures.Future | None = None
         self._sink_monitor: object | None = None  # set by main() after SinkMonitor.start()
 
@@ -503,13 +504,34 @@ class SendspinClient:
         self._start_idle_timer()
 
     def _start_idle_timer(self) -> None:
-        """Start (or restart) the idle disconnect timer."""
-        self._cancel_idle_timer()
+        """Start (or restart) the idle disconnect timer.
+
+        Thread-safe: protected by ``_idle_timer_lock`` to avoid leaked timers
+        when called concurrently from the asyncio event loop (sink monitor
+        callbacks) and Flask/Waitress threads (``_update_status`` fallback).
+        """
         timeout = self.idle_disconnect_minutes * 60
 
         async def _idle_timeout() -> None:
             try:
                 await asyncio.sleep(timeout)
+                # Safety guard: re-check conditions that may have changed
+                if self.status.get("bt_standby") or self.status.get("bt_waking"):
+                    logger.debug("[%s] Idle timer fired but device is standby/waking — skipping", self.player_name)
+                    return
+                if getattr(self, "keepalive_enabled", False):
+                    return
+                # Check cached PA sink state as a safety net — if the sink
+                # monitor missed a "running" event (e.g. brief PA disconnect),
+                # this prevents a false standby while audio is actually flowing.
+                sm = getattr(self, "_sink_monitor", None)
+                sink = getattr(self, "bluetooth_sink_name", None)
+                if sm and sink and getattr(sm, "_sink_states", {}).get(sink) == "running":
+                    logger.info(
+                        "[%s] Idle timer fired but PA sink is running — suppressing standby",
+                        self.player_name,
+                    )
+                    return
                 logger.info(
                     "[%s] Idle for %d min — entering standby",
                     self.player_name,
@@ -519,17 +541,24 @@ class SendspinClient:
             except asyncio.CancelledError:
                 return
 
-        loop = _state.get_main_loop()
-        if loop and loop.is_running():
-            self._idle_timer_task = asyncio.run_coroutine_threadsafe(_idle_timeout(), loop)
-        else:
-            try:
-                self._idle_timer_task = asyncio.ensure_future(_idle_timeout())
-            except RuntimeError:
-                pass
+        with self._idle_timer_lock:
+            self._cancel_idle_timer_unlocked()
+            loop = _state.get_main_loop()
+            if loop and loop.is_running():
+                self._idle_timer_task = asyncio.run_coroutine_threadsafe(_idle_timeout(), loop)
+            else:
+                try:
+                    self._idle_timer_task = asyncio.ensure_future(_idle_timeout())
+                except RuntimeError:
+                    pass
 
     def _cancel_idle_timer(self) -> None:
-        """Cancel any pending idle disconnect timer."""
+        """Cancel any pending idle disconnect timer (thread-safe)."""
+        with self._idle_timer_lock:
+            self._cancel_idle_timer_unlocked()
+
+    def _cancel_idle_timer_unlocked(self) -> None:
+        """Cancel idle timer — must be called with ``_idle_timer_lock`` held."""
         task = self._idle_timer_task
         if task is None:
             return

@@ -34,6 +34,7 @@ def _make_client(idle_disconnect_minutes: int = 30):
     client.player_name = "TestSpeaker"
     client.idle_disconnect_minutes = idle_disconnect_minutes
     client._status_lock = threading.Lock()
+    client._idle_timer_lock = threading.Lock()
     client._idle_timer_task = None
     client._playback_health = MagicMock()
     client._playback_health.on_status_update = MagicMock()
@@ -421,7 +422,7 @@ class TestIdleTimerFullCycle:
 
 
 class TestIdleTimerGuardAtFiring:
-    """_idle_timeout() enters standby directly (PA sink state is the authority)."""
+    """_idle_timeout() safety guard at firing time."""
 
     @pytest.mark.asyncio
     async def test_timer_enters_standby_directly(self):
@@ -451,6 +452,84 @@ class TestIdleTimerGuardAtFiring:
             state_mock.publish_device_event = MagicMock()
             client = _make_client(idle_disconnect_minutes=30)
             # Both default to False — device is truly idle
+
+            with patch("sendspin_client.asyncio.sleep", new_callable=AsyncMock):
+                client._start_idle_timer()
+                task = client._idle_timer_task
+                assert task is not None
+                await task
+                assert client.status["bt_standby"] is True
+
+    @pytest.mark.asyncio
+    async def test_timer_suppressed_when_already_standby(self):
+        """Timer fires but bt_standby is already True → skip."""
+        with patch("sendspin_client._state") as state_mock:
+            state_mock.get_main_loop.return_value = None
+            state_mock.notify_status_changed = MagicMock()
+            state_mock.publish_device_event = MagicMock()
+            client = _make_client(idle_disconnect_minutes=30)
+            client.status.update({"bt_standby": True})
+
+            with patch("sendspin_client.asyncio.sleep", new_callable=AsyncMock):
+                client._start_idle_timer()
+                task = client._idle_timer_task
+                assert task is not None
+                await task
+                # _enter_standby is a no-op when bt_standby already True
+                assert client.status["bt_standby"] is True
+
+    @pytest.mark.asyncio
+    async def test_timer_suppressed_when_waking(self):
+        """Timer fires during bt_waking → skip standby."""
+        with patch("sendspin_client._state") as state_mock:
+            state_mock.get_main_loop.return_value = None
+            state_mock.notify_status_changed = MagicMock()
+            state_mock.publish_device_event = MagicMock()
+            client = _make_client(idle_disconnect_minutes=30)
+            # Simulate wake in progress
+            client.status.update({"bt_standby": False, "bt_waking": True})
+
+            with patch("sendspin_client.asyncio.sleep", new_callable=AsyncMock):
+                client._start_idle_timer()
+                task = client._idle_timer_task
+                assert task is not None
+                await task
+                # Should NOT enter standby during wake
+                assert client.status["bt_standby"] is False
+
+    @pytest.mark.asyncio
+    async def test_timer_suppressed_when_pa_sink_running(self):
+        """Timer fires but cached PA sink state is 'running' → suppress standby."""
+        with patch("sendspin_client._state") as state_mock:
+            state_mock.get_main_loop.return_value = None
+            state_mock.notify_status_changed = MagicMock()
+            state_mock.publish_device_event = MagicMock()
+            client = _make_client(idle_disconnect_minutes=30)
+            # Wire a fake sink monitor with cached running state
+            sm = MagicMock()
+            sm._sink_states = {"bluez_sink.FC_58_FA_EB_08_6C.a2dp_sink": "running"}
+            client._sink_monitor = sm
+            client.bluetooth_sink_name = "bluez_sink.FC_58_FA_EB_08_6C.a2dp_sink"
+
+            with patch("sendspin_client.asyncio.sleep", new_callable=AsyncMock):
+                client._start_idle_timer()
+                task = client._idle_timer_task
+                assert task is not None
+                await task
+                assert client.status["bt_standby"] is False
+
+    @pytest.mark.asyncio
+    async def test_timer_proceeds_when_pa_sink_idle(self):
+        """Timer fires and cached PA sink state is 'idle' → enter standby."""
+        with patch("sendspin_client._state") as state_mock:
+            state_mock.get_main_loop.return_value = None
+            state_mock.notify_status_changed = MagicMock()
+            state_mock.publish_device_event = MagicMock()
+            client = _make_client(idle_disconnect_minutes=30)
+            sm = MagicMock()
+            sm._sink_states = {"bluez_sink.FC_58_FA_EB_08_6C.a2dp_sink": "idle"}
+            client._sink_monitor = sm
+            client.bluetooth_sink_name = "bluez_sink.FC_58_FA_EB_08_6C.a2dp_sink"
 
             with patch("sendspin_client.asyncio.sleep", new_callable=AsyncMock):
                 client._start_idle_timer()
@@ -711,3 +790,47 @@ class TestSinkMonitorActiveCheck:
         client._sink_monitor.available = True
         client.bluetooth_sink_name = None
         assert client._sink_monitor_active() is False
+
+
+class TestIdleTimerThreadSafety:
+    """Thread-safe access to _idle_timer_task via _idle_timer_lock."""
+
+    def test_concurrent_start_cancel_no_leak(self):
+        """Concurrent _start and _cancel don't leak timers."""
+        with patch("sendspin_client._state") as state_mock:
+            state_mock.get_main_loop.return_value = None
+            client = _make_client(idle_disconnect_minutes=15)
+
+            results = []
+
+            def _start():
+                try:
+                    client._start_idle_timer()
+                    results.append("started")
+                except Exception as e:
+                    results.append(f"error: {e}")
+
+            def _cancel():
+                try:
+                    client._cancel_idle_timer()
+                    results.append("cancelled")
+                except Exception as e:
+                    results.append(f"error: {e}")
+
+            threads = []
+            for _ in range(5):
+                threads.append(threading.Thread(target=_start))
+                threads.append(threading.Thread(target=_cancel))
+
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join(timeout=5)
+
+            # No errors should have occurred
+            assert all("error" not in r for r in results)
+
+    def test_lock_exists(self):
+        """Verify _idle_timer_lock is a real lock."""
+        client = _make_client()
+        assert isinstance(client._idle_timer_lock, type(threading.Lock()))
