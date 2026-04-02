@@ -394,3 +394,53 @@ class TestGroupAutoWake:
             state._check_group_auto_wake({"group-1": {"state": "playing"}})
 
         client._wake_from_standby.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_solo_player_auto_wake_by_player_id(self):
+        """Solo player (no group_id) is auto-woken when now_playing keyed by player_id is playing."""
+        from sendspin_client import DeviceStatus
+
+        wake_called = False
+
+        async def fake_wake():
+            nonlocal wake_called
+            wake_called = True
+
+        client = MagicMock()
+        client.player_name = "Solo-Speaker"
+        client.player_id = "solo-player-abc"
+        client.status = DeviceStatus()
+        client.status.update({"bt_standby": True})  # No group_id
+        client._wake_from_standby = fake_wake
+
+        import state
+
+        loop = asyncio.get_running_loop()
+        with (
+            patch.object(state, "_get_registry_active_clients_snapshot", return_value=[client]),
+            patch.object(state, "get_main_loop", return_value=loop),
+        ):
+            # now_playing keyed by player_id (how MA monitor caches solo players)
+            state._check_group_auto_wake({"solo-player-abc": {"state": "playing"}})
+            await asyncio.sleep(0.05)
+
+        assert wake_called
+
+    def test_solo_player_no_wake_when_idle(self):
+        """Solo player is NOT woken when now_playing keyed by player_id is idle."""
+        import state
+        from sendspin_client import DeviceStatus
+
+        client = MagicMock()
+        client.player_name = "Solo-Speaker"
+        client.player_id = "solo-player-abc"
+        client.status = DeviceStatus()
+        client.status.update({"bt_standby": True})  # No group_id
+
+        with (
+            patch.object(state, "_get_registry_active_clients_snapshot", return_value=[client]),
+            patch.object(state, "get_main_loop", return_value=MagicMock()),
+        ):
+            state._check_group_auto_wake({"solo-player-abc": {"state": "idle"}})
+
+        client._wake_from_standby.assert_not_called()

@@ -540,12 +540,17 @@ class SendspinClient:
             task.cancel()
 
     def _ma_monitor_says_playing(self) -> bool:
-        """Check the MA WebSocket monitor for active playback in this device's group."""
-        group_id = self.status.get("group_id")
-        if not group_id:
+        """Check the MA WebSocket monitor for active playback in this device's group.
+
+        For solo players (no group_id), falls back to checking by player_id
+        since MA monitor caches now-playing keyed by player_id for ungrouped
+        devices.
+        """
+        lookup_id = self.status.get("group_id") or getattr(self, "player_id", None)
+        if not lookup_id:
             return False
         try:
-            np = _state.get_ma_now_playing_for_group(group_id)
+            np = _state.get_ma_now_playing_for_group(lookup_id)
             return np.get("state") == "playing"
         except Exception:
             return False

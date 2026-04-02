@@ -638,12 +638,12 @@ def set_update_available(data: dict | None) -> None:
 
 
 def _check_group_auto_wake(now_playing: dict[str, dict]) -> None:
-    """Wake standby devices whose sync group has started playing.
+    """Wake standby devices whose sync group (or solo queue) has started playing.
 
     Called from ``replace_ma_now_playing()`` after the cache is updated.
     Iterates over all active clients; if a client is in standby and its
-    group_id appears in *now_playing* with ``state == "playing"``, schedule
-    a wake on the main asyncio loop.
+    group_id (or player_id for solo players) appears in *now_playing*
+    with ``state == "playing"``, schedule a wake on the main asyncio loop.
     """
     import asyncio
 
@@ -663,11 +663,11 @@ def _check_group_auto_wake(now_playing: dict[str, dict]) -> None:
             continue
         if not client.status.get("bt_standby"):
             continue
-        gid = client.status.get("group_id")
-        if gid and gid in playing_groups:
+        lookup_id: str | None = client.status.get("group_id") or getattr(client, "player_id", None)
+        if lookup_id and lookup_id in playing_groups:
             logger.info(
-                "[%s] Sync group %s is playing — auto-waking from standby",
+                "[%s] Sync group/solo queue %s is playing — auto-waking from standby",
                 getattr(client, "player_name", "?"),
-                gid,
+                lookup_id,
             )
             asyncio.run_coroutine_threadsafe(client._wake_from_standby(), loop)

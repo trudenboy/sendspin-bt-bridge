@@ -523,10 +523,31 @@ class TestMaMonitorSaysPlaying:
             client.status.update({"group_id": "grp-1"})
             assert client._ma_monitor_says_playing() is False
 
-    def test_returns_false_when_no_group_id(self):
+    def test_returns_false_when_no_group_id_and_no_player_id(self):
         with patch("sendspin_client._state") as state_mock:
             state_mock.notify_status_changed = MagicMock()
             client = _make_client()
+            # No group_id, no player_id → cannot check MA
+            assert client._ma_monitor_says_playing() is False
+
+    def test_solo_player_falls_back_to_player_id(self):
+        """Solo player (no group_id) uses player_id to check MA now-playing."""
+        with patch("sendspin_client._state") as state_mock:
+            state_mock.notify_status_changed = MagicMock()
+            state_mock.get_ma_now_playing_for_group.return_value = {"state": "playing"}
+            client = _make_client()
+            client.player_id = "solo-player-123"
+            # No group_id set — should fall back to player_id
+            assert client._ma_monitor_says_playing() is True
+            state_mock.get_ma_now_playing_for_group.assert_called_with("solo-player-123")
+
+    def test_solo_player_idle_returns_false(self):
+        """Solo player with MA state 'idle' returns False."""
+        with patch("sendspin_client._state") as state_mock:
+            state_mock.notify_status_changed = MagicMock()
+            state_mock.get_ma_now_playing_for_group.return_value = {"state": "idle"}
+            client = _make_client()
+            client.player_id = "solo-player-123"
             assert client._ma_monitor_says_playing() is False
 
     def test_returns_false_when_no_now_playing_data(self):
