@@ -404,6 +404,41 @@ Ship the first clearly multi-backend product wave: wired and USB players plus th
 - implement `sbb shell` interactive REPL with prompt_toolkit, persistent history, and dynamic MAC/adapter auto-completion
 - publish to PyPI as `sbb-cli` for standalone installation
 
+#### Epic 8b. Live config reload without bridge restart
+
+The subprocess-per-device architecture already provides the isolation needed: each device runs as an independent daemon process that can be stopped and respawned without affecting other devices. BluetoothManager, EventStore, and SSE connections survive per-device subprocess restarts.
+
+**Tier classification engine:**
+
+Config changes are classified by impact level. The orchestrator applies the least-invasive action for each change:
+
+| Tier | Scope | Mechanism | Audio interruption |
+|------|-------|-----------|-------------------|
+| 0 — IPC command | volume, mute, log level, standby | JSON command to daemon stdin | none |
+| 1 — subprocess restart | `static_delay_ms`, `preferred_format`, `listen_port`, `keepalive_interval`, `idle_disconnect_minutes` | Kill daemon → update attrs → respawn | ~2-5 s per device |
+| 2 — device recycle | `adapter`, `player_name`, re-enable disabled device | Teardown Client + BT manager → create new | ~10-30 s (BT reconnect) |
+| 3 — device add/remove | New or deleted device in config | Create or destroy client + register in DeviceRegistry | ~10-30 s (new) / 0 (remove) |
+| 4 — bridge restart required | `WEB_PORT`, `WEB_THREADS` | Waitress binds port once; cannot hot-swap | full restart |
+
+> **Already hot-reloadable (Tier 0):** volume, mute, play/pause/transport, log level, standby/wake, MA credentials (`reload_monitor_credentials()`), `VOLUME_VIA_MA`/`MUTE_VIA_MA` flags.
+
+**Implementation scope:**
+
+- add `ConfigDiffEngine` that compares old and new config, classifies each field change into a tier, and groups changes by device MAC
+- add `reconfigure_subprocess(**new_params)` to `SendspinClient` — updates instance attributes and restarts daemon subprocess (Tier 1)
+- refactor `BridgeOrchestrator.initialize_devices()` — extract `_create_single_device(device_config, bootstrap)` so that Tier 2/3 changes can construct individual clients at runtime
+- add `BridgeOrchestrator.apply_config_changes(changes)` that iterates changes from lowest to highest tier, applying IPC commands, subprocess restarts, device recycles, or add/remove as needed
+- extend `POST /api/config` response to include `applied_live: bool`, `restarted_devices: [...]`, and `restart_required_fields: [...]` so the frontend can show precise feedback
+- add SSE event type `config_applied` with per-device status (applied / restarting / failed / rollback)
+- add rollback for Tier 2 failures: if BT reconnect fails after adapter change, restore previous client from saved config
+- Tier 4 fields (`WEB_PORT`, `WEB_THREADS`) remain restart-required; the response signals this to the frontend which shows the existing restart banner
+
+**What NOT to implement:**
+
+- no file-watching (inotify/SIGHUP) — config changes flow through the API, not manual file edits
+- no Waitress hot-swap — would lose all SSE connections; `WEB_PORT` stays restart-required
+- no transparent subprocess migration — brief audio interruption on the affected device is acceptable
+
 ### Exit criteria
 
 - USB DACs and wired outputs appear in the UI alongside Bluetooth speakers as first-class player shapes
@@ -411,6 +446,7 @@ Ship the first clearly multi-backend product wave: wired and USB players plus th
 - Bluetooth and wired players share one capability-driven model without regressing Bluetooth reliability
 - the modern console is now responsible for the highest-churn player-management paths
 - `sbb` CLI can list devices, show status, manage config, and run diagnostics from a terminal without requiring a browser
+- per-device config changes (delay, format, keepalive, adapter) apply without restarting the entire bridge; only the affected device experiences a brief interruption
 
 ---
 
@@ -731,6 +767,7 @@ A realistic `v3.0.0-rc.1` should include:
 - the core of V3-2:
   - the first wired and USB backend with max volume, boot mute, device aliases, and card profiles
   - backend-aware player creation and editing flows
+  - live config reload for per-device settings without bridge restart (ConfigDiffEngine + subprocess hot-restart)
   - the first new diagnostics and details surfaces in the operator console
   - `sbb` CLI with core device, config, status, and diagnostics commands
 - baseline audio health visibility and signal-path publication
