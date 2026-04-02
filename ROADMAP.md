@@ -242,6 +242,42 @@ Ship the first clearly multi-backend product wave: wired and USB players plus th
 - implement `sbb shell` interactive REPL with prompt_toolkit, persistent history, and dynamic MAC/adapter auto-completion
 - publish to PyPI as `sbb-cli` for standalone installation
 
+#### Epic 8a. Live config reload without bridge restart
+
+- classify config fields into tiers by reload cost:
+  - **Tier 0** (instant via IPC): volume, mute, log level — already supported
+  - **Tier 1** (hot-reload): `BRIDGE_NAME`, `SENDSPIN_SERVER`, `SENDSPIN_PORT`, UI auth password, `keepalive_enabled`, `idle_disconnect_seconds`, `static_delay_ms` — apply in-process without subprocess restart
+  - **Tier 2** (per-device subprocess restart): adapter assignment, sink name, listen port — recreate only the affected subprocess
+  - **Tier 3** (full bridge restart): adding or removing devices, changing `WEB_PORT`, deep audio backend changes
+- expose a `/api/config/apply` endpoint that detects what changed, applies the cheapest tier, and returns what was reloaded versus what requires restart
+- show a UI indicator when pending changes require different restart levels
+- persist reload tier metadata alongside config schema for programmatic introspection
+
+#### Epic 8b. PA sink state monitoring for idle disconnect ✅ (in progress)
+
+- replace the 3-tier idle guard fallback (daemon flags → MA monitor → event history) with PulseAudio sink state as ground truth
+- subscribe to PA sink events via `pulsectl_asyncio` in the parent process — one subscription covers all devices
+- extract MAC from `bluez_sink.*` / `bluez_output.*` names to route events to the correct `SendspinClient`
+- fire `on_sink_active` (cancel idle timer) and `on_sink_idle` (start idle timer) callbacks on actual state transitions
+- graceful fallback to daemon-flag-based timer when pulsectl is unavailable (dev machines, containers without libpulse)
+- keep auto-wake system (`_check_group_auto_wake()`) separate and MA-driven
+
+#### Epic 8c. Per-device idle mode and power save
+
+- add per-device `idle_mode` config field with values: `default` (current idle disconnect), `power_save` (PA `suspend-sink` instead of BT disconnect), `stay_awake` (infrasound keepalive), `auto_disconnect` (aggressive short timeout)
+- `power_save` mode: on idle timeout, issue `pactl suspend-sink <sink> 1` to put the BT speaker into low-power mode while keeping BT connected — wake via `pactl suspend-sink <sink> 0` on playback resume
+- `stay_awake` mode: replace current silence-burst keepalive with continuous sub-20Hz sine wave (inaudible infrasound) to prevent BT speaker auto-off, inspired by scyto/ha-bluetooth-audio-manager
+- expose idle mode selection in the web UI device settings and `sbb` CLI
+- validate that `suspend-sink` and infrasound approaches work across PulseAudio and PipeWire
+
+#### Epic 8d. AVRCP metadata and Bluetooth signal monitoring
+
+- expose AVRCP track metadata (title, artist, album) via D-Bus `org.bluez.MediaPlayer1` for BT speakers that support it
+- surface now-playing metadata in the device status card and diagnostics
+- add RSSI signal strength monitoring via `hcitool rssi` or D-Bus `org.bluez.Device1.RSSI` for connected devices
+- use RSSI trends in health scoring: flag degraded signal as a possible cause of audio dropouts
+- add BLE coexistence awareness: detect when classic BT and BLE share an adapter and surface potential interference in diagnostics
+
 ### Exit criteria
 
 - USB DACs and wired outputs appear in the UI alongside Bluetooth speakers as first-class player shapes
@@ -249,6 +285,9 @@ Ship the first clearly multi-backend product wave: wired and USB players plus th
 - Bluetooth and wired players share one capability-driven model without regressing Bluetooth reliability
 - the modern console is now responsible for the highest-churn player-management paths
 - `sbb` CLI can list devices, show status, manage config, and run diagnostics from a terminal without requiring a browser
+- config changes that don't require a full restart are applied live with clear feedback
+- idle disconnect decisions are driven by PA sink state rather than fragile daemon-flag cascades
+- operators can choose per-device idle behavior (disconnect, power save, stay awake) to match speaker capabilities
 
 ## Phase V3-2.5: Virtual sinks and composed zones
 
@@ -460,6 +499,8 @@ Only start these once earlier phases are stable and demand is proven:
 - Home Assistant custom component or HACS strategy
 - plugin or extension surfaces
 - per-room DSP and EQ via virtual sinks or backend-specific processing surfaces
+- AppArmor security profile for Bluetooth and PulseAudio D-Bus access in hardened containers
+- `/health` HTTP endpoint for container orchestrators (Docker healthcheck, Kubernetes liveness probe)
 
 ## Cross-cutting guardrails
 
@@ -540,6 +581,8 @@ A realistic `v3.0.0-rc.1` should include:
   - backend-aware player creation and editing flows
   - the first new diagnostics and details surfaces in the operator console
   - `sbb` CLI with core device, config, status, and diagnostics commands
+  - PA sink state monitoring as idle disconnect ground truth
+  - per-device idle mode (disconnect, power save, stay awake)
 - baseline audio health visibility and signal-path publication
 - delay telemetry foundations and a manual calibration path
 - structured diagnostics bundle foundations for future planner and AI work

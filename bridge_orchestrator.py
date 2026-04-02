@@ -265,8 +265,9 @@ class BridgeOrchestrator:
         mute_sink: Callable[[str, bool], Awaitable[bool]] | None = None,
         get_sink_volume: Callable[[str], Awaitable[int | None]] | None = None,
         save_volume: Callable[[str | None, int], None] | None = None,
+        sink_monitor: Any | None = None,
     ) -> None:
-        """Mute active sinks and stop all clients in a controlled order."""
+        """Mute active sinks, stop the sink monitor, and stop all clients."""
         logger.info("Received shutdown signal — muting sinks before exit...")
         mute_sink_fn = mute_sink
         if mute_sink_fn is None:
@@ -305,6 +306,9 @@ class BridgeOrchestrator:
         for client in shutdown_clients:
             client.running = False
             await client.stop_sendspin()
+
+        if sink_monitor is not None:
+            await sink_monitor.stop()
 
         self.lifecycle_state.publish_clients([])
         self.lifecycle_state.publish_shutdown_complete(stopped_clients=len(shutdown_clients))
@@ -455,11 +459,20 @@ class BridgeOrchestrator:
             )
             if mac:
 
-                def _on_sink_found(sink_name: str, restored_volume: int | None = None, _client=client) -> None:
+                def _on_sink_found(
+                    sink_name: str,
+                    restored_volume: int | None = None,
+                    _client=client,
+                    _mac=mac,
+                ) -> None:
                     _client.bluetooth_sink_name = sink_name
                     logger.info("Stored Bluetooth sink for volume sync: %s", sink_name)
                     if restored_volume is not None:
                         _client._update_status({"volume": restored_volume})
+                    # Register with PA sink monitor for idle detection
+                    sm = getattr(_client, "_sink_monitor", None)
+                    if sm is not None and _mac:
+                        sm.register(_mac, sink_name, _client._on_sink_active, _client._on_sink_idle)
 
                 bt_mgr = bt_manager_factory(
                     mac,
@@ -602,7 +615,16 @@ class BridgeOrchestrator:
             base_listen_port=bootstrap.base_listen_port,
         )
         clients = device_bootstrap.clients
+
+        # Start PA sink state monitor (idle disconnect ground truth).
+        from services.sink_monitor import SinkMonitor
+
+        sink_monitor = SinkMonitor()
+        for client in clients:
+            client._sink_monitor = sink_monitor
+
         try:
+            await sink_monitor.start()
             startup_phase = "web"
             web_thread = (
                 self.start_web_server(clients, web_main=web_main) if web_main else self.start_web_server(clients)
@@ -610,7 +632,9 @@ class BridgeOrchestrator:
             loop = asyncio.get_running_loop()
             await self.configure_executor(len(clients), web_thread_name=web_thread.name)
             startup_phase = "signals"
-            self.install_signal_handlers(loop, shutdown_factory=lambda: self.graceful_shutdown(clients=clients))
+            self.install_signal_handlers(
+                loop, shutdown_factory=lambda: self.graceful_shutdown(clients=clients, sink_monitor=sink_monitor)
+            )
             startup_phase = "integrations"
             ma_bootstrap = await self.initialize_ma_integration(
                 bootstrap.config, clients, server_host=bootstrap.server_host
@@ -623,10 +647,14 @@ class BridgeOrchestrator:
                 phase=startup_phase,
                 details={"error_type": type(exc).__name__},
             )
+            await sink_monitor.stop()
             raise
-        return await self.run_runtime(
-            clients,
-            ma_monitor_task=ma_bootstrap.ma_monitor_task,
-            demo_mode=bootstrap.demo_mode,
-            version=version,
-        )
+        try:
+            return await self.run_runtime(
+                clients,
+                ma_monitor_task=ma_bootstrap.ma_monitor_task,
+                demo_mode=bootstrap.demo_mode,
+                version=version,
+            )
+        finally:
+            await sink_monitor.stop()

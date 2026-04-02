@@ -371,7 +371,9 @@ class SendspinClient:
             logger_=logger,
         )
         self._stop_service = SubprocessStopService(logger_=logger)
+        self._idle_timer_lock = threading.Lock()
         self._idle_timer_task: asyncio.Task | concurrent.futures.Future | None = None
+        self._sink_monitor: object | None = None  # set by main() after SinkMonitor.start()
 
     @property
     def _playing_since(self) -> float | None:
@@ -435,10 +437,17 @@ class SendspinClient:
                 details=event["details"] if isinstance(event["details"], dict) else None,
             )
         _state.notify_status_changed()
-        # Check audio_streaming / playing transitions for idle disconnect timer.
-        # Skip if keep-alive is enabled — it actively prevents speaker sleep,
-        # which contradicts the purpose of idle standby.
-        if self.idle_disconnect_minutes > 0 and not getattr(self, "keepalive_enabled", False):
+        # ── Idle disconnect timer (daemon-flag fallback) ──────────────
+        # When a PA SinkMonitor is active, idle timer start/cancel is driven
+        # entirely by sink running/idle transitions (see _on_sink_active /
+        # _on_sink_idle).  The block below only runs as a *fallback* when the
+        # sink monitor is not available (e.g. no pulsectl, or before the
+        # monitor loop connects).
+        if (
+            self.idle_disconnect_minutes > 0
+            and not getattr(self, "keepalive_enabled", False)
+            and not self._sink_monitor_active()
+        ):
             if "audio_streaming" in updates:
                 was_streaming = previous.get("audio_streaming", False)
                 now_streaming = self.status.get("audio_streaming", False)
@@ -446,12 +455,6 @@ class SendspinClient:
                     self._start_idle_timer()
                 elif not was_streaming and now_streaming:
                     self._cancel_idle_timer()
-            # Cancel idle timer when MA reports playback started.
-            # audio_streaming tracks actual PCM data flow; playing tracks the
-            # MA-side transport state.  MA may report playing=True before any
-            # audio chunks arrive (buffering, codec negotiation), so we must
-            # cancel the timer on *either* transition to avoid a premature
-            # standby while the speaker is about to start (or already) playing.
             if "playing" in updates:
                 was_playing = previous.get("playing", False)
                 now_playing = self.status.get("playing", False)
@@ -459,10 +462,6 @@ class SendspinClient:
                     self._cancel_idle_timer()
                 elif was_playing and not now_playing and not self.status.get("audio_streaming"):
                     self._start_idle_timer()
-            # Start idle timer when daemon connects with no audio playing.
-            # Without this, a device that connects but never plays would
-            # never enter standby because the True→False transition that
-            # normally starts the timer never occurs.
             if (
                 "server_connected" in updates
                 and self.status.get("server_connected") is True
@@ -474,43 +473,64 @@ class SendspinClient:
 
     # ── Idle disconnect timer ────────────────────────────────────────────
 
-    def _start_idle_timer(self) -> None:
-        """Start (or restart) the idle disconnect timer."""
+    def _sink_monitor_active(self) -> bool:
+        """Return True only when sink monitoring is wired up for this device."""
+        sm = getattr(self, "_sink_monitor", None)
+        sink_name = getattr(self, "bluetooth_sink_name", None)
+        return sm is not None and sm.available and bool(sink_name)
+
+    def _on_sink_active(self) -> None:
+        """Called by SinkMonitor when PA sink enters ``running``.
+
+        Immediately cancels any pending idle timer — audio is flowing.
+        """
+        if self.idle_disconnect_minutes <= 0 or getattr(self, "keepalive_enabled", False):
+            return
+        logger.debug("[%s] PA sink → running — cancelling idle timer", self.player_name)
         self._cancel_idle_timer()
+
+    def _on_sink_idle(self) -> None:
+        """Called by SinkMonitor when PA sink leaves ``running``.
+
+        Starts the idle disconnect timer — no audio is flowing.
+        """
+        if self.idle_disconnect_minutes <= 0 or getattr(self, "keepalive_enabled", False):
+            return
+        if self.status.get("bt_standby"):
+            return
+        logger.debug(
+            "[%s] PA sink → idle — starting idle timer (%d min)", self.player_name, self.idle_disconnect_minutes
+        )
+        self._start_idle_timer()
+
+    def _start_idle_timer(self) -> None:
+        """Start (or restart) the idle disconnect timer.
+
+        Thread-safe: protected by ``_idle_timer_lock`` to avoid leaked timers
+        when called concurrently from the asyncio event loop (sink monitor
+        callbacks) and Flask/Waitress threads (``_update_status`` fallback).
+        """
         timeout = self.idle_disconnect_minutes * 60
 
         async def _idle_timeout() -> None:
             try:
                 await asyncio.sleep(timeout)
-                # Re-check playback state at firing time.  The timer may
-                # have been started before audio/playback began (e.g. during
-                # server reconnection), but by now the speaker may be active.
-                if self.status.get("audio_streaming") or self.status.get("playing"):
-                    logger.debug(
-                        "[%s] Idle timer fired but device is active — restarting",
-                        self.player_name,
-                    )
-                    self._start_idle_timer()
+                # Safety guard: re-check conditions that may have changed
+                if self.status.get("bt_standby") or self.status.get("bt_waking"):
+                    logger.debug("[%s] Idle timer fired but device is standby/waking — skipping", self.player_name)
                     return
-                # MA monitor check: the daemon's playing/streaming flags may
-                # have been lost during an MA server reconnection, but the
-                # independent MA WebSocket monitor still knows the group state.
-                if self._ma_monitor_says_playing():
-                    logger.info(
-                        "[%s] Idle timer fired but MA monitor reports playing — restarting",
-                        self.player_name,
-                    )
-                    self._start_idle_timer()
+                if getattr(self, "keepalive_enabled", False):
                     return
-                # Event history fallback: if the last playback event was a
-                # PLAYBACK_STARTED without a subsequent PLAYBACK_STOPPED, the
-                # device was likely playing before a reconnection reset the flags.
-                if self._event_history_says_playing():
+                # Check cached PA sink state as a safety net — if the sink
+                # monitor missed a "running" event (e.g. brief PA disconnect),
+                # this prevents a false standby while audio is actually flowing.
+                sm = getattr(self, "_sink_monitor", None)
+                sink = getattr(self, "bluetooth_sink_name", None)
+                if sm and sink and getattr(sm, "_sink_states", {}).get(sink) == "running":
                     logger.info(
-                        "[%s] Idle timer fired but event history shows active session — restarting",
+                        "[%s] Idle timer fired but PA sink is running — suppressing standby",
                         self.player_name,
                     )
-                    self._start_idle_timer()
                     return
                 logger.info(
                     "[%s] Idle for %d min — entering standby",
@@ -521,17 +541,24 @@ class SendspinClient:
             except asyncio.CancelledError:
                 return
 
-        loop = _state.get_main_loop()
-        if loop and loop.is_running():
-            self._idle_timer_task = asyncio.run_coroutine_threadsafe(_idle_timeout(), loop)
-        else:
-            try:
-                self._idle_timer_task = asyncio.ensure_future(_idle_timeout())
-            except RuntimeError:
-                pass
+        with self._idle_timer_lock:
+            self._cancel_idle_timer_unlocked()
+            loop = _state.get_main_loop()
+            if loop and loop.is_running():
+                self._idle_timer_task = asyncio.run_coroutine_threadsafe(_idle_timeout(), loop)
+            else:
+                try:
+                    self._idle_timer_task = asyncio.ensure_future(_idle_timeout())
+                except RuntimeError:
+                    pass
 
     def _cancel_idle_timer(self) -> None:
-        """Cancel any pending idle disconnect timer."""
+        """Cancel any pending idle disconnect timer (thread-safe)."""
+        with self._idle_timer_lock:
+            self._cancel_idle_timer_unlocked()
+
+    def _cancel_idle_timer_unlocked(self) -> None:
+        """Cancel idle timer — must be called with ``_idle_timer_lock`` held."""
         task = self._idle_timer_task
         if task is None:
             return
