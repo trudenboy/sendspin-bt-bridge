@@ -179,7 +179,33 @@ def test_restart_handles_process_lookup_error(client, monkeypatch):
     assert os.getpid() in killed_pids
 
 
-# ---------------------------------------------------------------------------
+def test_restart_handles_permission_error(client, monkeypatch):
+    """Restart endpoint falls back to own-PID SIGTERM on PermissionError from PID 1."""
+    import routes.api as api_mod
+
+    monkeypatch.setattr(api_mod, "_detect_runtime", lambda: "docker")
+
+    killed_pids: list[int] = []
+
+    def _fake_kill(pid, sig):
+        if pid == 1:
+            raise PermissionError("Operation not permitted")
+        killed_pids.append(pid)
+
+    monkeypatch.setattr(os, "kill", _fake_kill)
+    monkeypatch.setattr(api_mod.time, "sleep", lambda _: None)
+
+    resp = client.post("/api/restart")
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["success"] is True
+
+    import time
+
+    time.sleep(0.1)
+    assert os.getpid() in killed_pids
+
+
 # Invalid MAC address in BluetoothManager.pair_and_trust
 # ---------------------------------------------------------------------------
 

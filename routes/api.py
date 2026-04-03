@@ -175,7 +175,7 @@ def api_restart():
                         logger.warning("Supervisor restart failed: %s; falling back to SIGTERM", e)
                         try:
                             os.kill(1, signal.SIGTERM)
-                        except ProcessLookupError:
+                        except (ProcessLookupError, PermissionError):
                             os.kill(os.getpid(), signal.SIGTERM)
                 else:
                     os.kill(os.getpid(), signal.SIGTERM)
@@ -187,7 +187,7 @@ def api_restart():
                 time.sleep(0.5)
                 try:
                     os.kill(1, signal.SIGTERM)
-                except ProcessLookupError:
+                except (ProcessLookupError, PermissionError):
                     os.kill(os.getpid(), signal.SIGTERM)
 
             threading.Thread(target=_do_docker, daemon=True).start()
