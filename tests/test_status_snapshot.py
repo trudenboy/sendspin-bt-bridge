@@ -124,7 +124,6 @@ def test_build_device_snapshot_includes_room_context_and_transfer_readiness(monk
                     "player_name": "Kitchen",
                     "room_id": "living-room",
                     "room_name": "Living Room",
-                    "handoff_mode": "fast_handoff",
                 }
             ]
         },
@@ -137,10 +136,10 @@ def test_build_device_snapshot_includes_room_context_and_transfer_readiness(monk
     assert data["room_name"] == "Living Room"
     assert data["room_source"] == "manual"
     assert data["room_confidence"] == "operator"
-    assert data["handoff_mode"] == "fast_handoff"
+    assert "handoff_mode" not in data
     assert data["transfer_readiness"]["ready"] is False
     assert data["transfer_readiness"]["reason"] == "reconnecting"
-    assert data["transfer_readiness"]["latency_profile"] == "fast_handoff"
+    assert "latency_profile" not in data["transfer_readiness"]
 
 
 def test_build_device_snapshot_includes_capability_payload():

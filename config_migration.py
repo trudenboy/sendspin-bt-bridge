@@ -16,7 +16,6 @@ logger = logging.getLogger(__name__)
 CONFIG_SCHEMA_VERSION = 1
 UPDATE_CHANNELS = ("stable", "rc", "beta")
 DEFAULT_UPDATE_CHANNEL = "stable"
-HANDOFF_MODES = ("default", "fast_handoff")
 
 
 def normalize_update_channel(raw_channel: object) -> str:
@@ -27,16 +26,6 @@ def normalize_update_channel(raw_channel: object) -> str:
     if normalized in UPDATE_CHANNELS:
         return normalized
     return DEFAULT_UPDATE_CHANNEL
-
-
-def normalize_handoff_mode(raw_mode: object) -> str:
-    """Return a supported handoff mode for a Bluetooth device."""
-    if not isinstance(raw_mode, str):
-        return HANDOFF_MODES[0]
-    normalized = raw_mode.strip().lower()
-    if normalized in HANDOFF_MODES:
-        return normalized
-    return HANDOFF_MODES[0]
 
 
 def _normalize_int_setting(
@@ -146,7 +135,6 @@ def _normalize_bluetooth_devices(config: dict, *, defaults: Mapping[str, Any]) -
             normalized["mac"] = mac.strip().upper()
         room_id = str(normalized.get("room_id") or "").strip()
         room_name = str(normalized.get("room_name") or "").strip()
-        handoff_mode = normalize_handoff_mode(normalized.get("handoff_mode"))
         if room_id:
             normalized["room_id"] = room_id
         else:
@@ -155,10 +143,7 @@ def _normalize_bluetooth_devices(config: dict, *, defaults: Mapping[str, Any]) -
             normalized["room_name"] = room_name
         else:
             normalized.pop("room_name", None)
-        if normalized.get("handoff_mode") not in (None, "") and handoff_mode != HANDOFF_MODES[0]:
-            normalized["handoff_mode"] = handoff_mode
-        else:
-            normalized.pop("handoff_mode", None)
+        normalized.pop("handoff_mode", None)
         normalized_devices.append(normalized)
     return normalized_devices
 
@@ -342,13 +327,12 @@ def resolve_device_room_context(
     device_mac: str = "",
     adapter_mac: str = "",
 ) -> dict[str, str]:
-    """Resolve room metadata and handoff mode for a configured Bluetooth device."""
+    """Resolve room metadata for a configured Bluetooth device."""
     resolved = {
         "room_id": "",
         "room_name": "",
         "room_source": "unknown",
         "room_confidence": "",
-        "handoff_mode": HANDOFF_MODES[0],
     }
     if not isinstance(config, dict):
         return resolved
@@ -366,7 +350,6 @@ def resolve_device_room_context(
             break
 
     if isinstance(configured_device, dict):
-        resolved["handoff_mode"] = normalize_handoff_mode(configured_device.get("handoff_mode"))
         room_id = str(configured_device.get("room_id") or "").strip()
         room_name = str(configured_device.get("room_name") or "").strip()
         if room_id or room_name:

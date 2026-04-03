@@ -309,7 +309,6 @@ The following keys are written by the bridge at runtime and should not normally 
 | `preferred_format` | Preferred output format |
 | `keepalive_silence` | Legacy compatibility flag from older addon configs; current runtime behavior does not expose a separate toggle in the web UI |
 | `keepalive_interval` | Silence keepalive interval in seconds; any positive value enables keepalive, minimum effective interval is 30 seconds |
-| `handoff_mode` | Room-transition handoff: `default` or `fast_handoff`; fast mode auto-sets a 45 s keepalive |
 | `room_id` | Home Assistant area / room ID for this device |
 | `room_name` | Human-readable room name |
 | `idle_disconnect_minutes` | Disconnect Bluetooth after this many idle minutes; `0` disables |

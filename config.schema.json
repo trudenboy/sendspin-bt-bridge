@@ -326,12 +326,6 @@
           "default": "pa",
           "description": "Volume control backend: 'pa' (PulseAudio) or 'sendspin'."
         },
-        "handoff_mode": {
-          "type": "string",
-          "enum": ["default", "fast_handoff"],
-          "default": "default",
-          "description": "Stream handoff strategy."
-        },
         "idle_disconnect_minutes": {
           "type": "integer",
           "minimum": 0,

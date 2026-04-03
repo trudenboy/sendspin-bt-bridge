@@ -220,7 +220,7 @@ def test_load_config_normalizes_types_and_prunes_orphan_volumes(tmp_path):
     assert loaded["LAST_VOLUMES"] == {"AA:BB:CC:DD:EE:FF": 55}
 
 
-def test_load_config_normalizes_room_metadata_and_handoff_mode(tmp_path):
+def test_load_config_normalizes_room_metadata(tmp_path):
     _write_config(
         tmp_path,
         {
@@ -230,7 +230,6 @@ def test_load_config_normalizes_room_metadata_and_handoff_mode(tmp_path):
                     "player_name": "Kitchen",
                     "room_name": "  Living Room  ",
                     "room_id": " living-room ",
-                    "handoff_mode": " FAST_HANDOFF ",
                 }
             ]
         },
@@ -242,7 +241,7 @@ def test_load_config_normalizes_room_metadata_and_handoff_mode(tmp_path):
     assert loaded["BLUETOOTH_DEVICES"][0]["mac"] == "AA:BB:CC:DD:EE:FF"
     assert loaded["BLUETOOTH_DEVICES"][0]["room_name"] == "Living Room"
     assert loaded["BLUETOOTH_DEVICES"][0]["room_id"] == "living-room"
-    assert loaded["BLUETOOTH_DEVICES"][0]["handoff_mode"] == "fast_handoff"
+    assert "handoff_mode" not in loaded["BLUETOOTH_DEVICES"][0]
 
 
 def test_resolve_device_room_context_prefers_manual_room_metadata_over_ha_area():
@@ -256,7 +255,6 @@ def test_resolve_device_room_context_prefers_manual_room_metadata_over_ha_area()
                     "player_name": "Kitchen",
                     "room_id": "kitchen",
                     "room_name": "Kitchen",
-                    "handoff_mode": "fast_handoff",
                 }
             ],
             "HA_AREA_NAME_ASSIST_ENABLED": True,
@@ -272,7 +270,6 @@ def test_resolve_device_room_context_prefers_manual_room_metadata_over_ha_area()
         "room_name": "Kitchen",
         "room_source": "manual",
         "room_confidence": "operator",
-        "handoff_mode": "fast_handoff",
     }
 
 

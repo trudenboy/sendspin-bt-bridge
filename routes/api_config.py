@@ -447,8 +447,6 @@ def _sync_ha_options(config: dict) -> None:
                 entry["room_id"] = d["room_id"]
             if d.get("room_name"):
                 entry["room_name"] = d["room_name"]
-            if d.get("handoff_mode"):
-                entry["handoff_mode"] = d["handoff_mode"]
             sup_devices.append(entry)
         sup_adapters = [
             dict(

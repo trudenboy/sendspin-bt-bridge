@@ -205,7 +205,6 @@ def main() -> None:
                     "keepalive_interval",
                     "room_id",
                     "room_name",
-                    "handoff_mode",
                     "idle_disconnect_minutes",
                 ):
                     if field not in dev and field in existing_devs[mac]:

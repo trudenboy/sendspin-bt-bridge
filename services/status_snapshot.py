@@ -13,7 +13,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import state
-from config import BUILD_DATE, HANDOFF_MODES, get_runtime_version, load_config, resolve_device_room_context
+from config import BUILD_DATE, get_runtime_version, load_config, resolve_device_room_context
 from services.bluetooth import _match_player_name
 from services.bridge_state_model import build_normalized_device_state
 from services.device_health_state import build_device_capabilities, compute_device_health_state
@@ -51,7 +51,6 @@ class DeviceSnapshot:
     room_name: str | None = None
     room_source: str | None = None
     room_confidence: str | None = None
-    handoff_mode: str = HANDOFF_MODES[0]
     transfer_readiness: dict[str, Any] | None = None
     runtime: str | None = None
     uptime: str | None = None
@@ -386,7 +385,6 @@ def _build_transfer_readiness(
         "daemon_ready": bool(device.connected),
         "sink_ready": bool(device.has_sink),
         "music_assistant_ready": bool(device.server_connected),
-        "latency_profile": str(device.handoff_mode or HANDOFF_MODES[0]),
         "recent_recovery_activity": {
             "active": bool(status.get("reconnecting")) or bool(status.get("reanchoring")) or bool(recent_types),
             "event_types": recent_types[:5],
@@ -522,7 +520,6 @@ def build_device_snapshot(client, *, configured_enabled: dict[str, bool] | None 
         room_name=room_context["room_name"] or None,
         room_source=room_context["room_source"] or None,
         room_confidence=room_context["room_confidence"] or None,
-        handoff_mode=room_context["handoff_mode"] or HANDOFF_MODES[0],
         runtime=state._detect_runtime_type(),
         uptime=uptime,
         extra=dict(status),
@@ -554,7 +551,6 @@ def build_device_snapshot(client, *, configured_enabled: dict[str, bool] | None 
         device.extra["room_source"] = device.room_source
     if device.room_confidence:
         device.extra["room_confidence"] = device.room_confidence
-    device.extra["handoff_mode"] = device.handoff_mode
     device.extra["bluetooth_paired"] = _snap_paired
     if bt_mgr:
         device.extra["max_reconnect_fails"] = _snap_max_reconn

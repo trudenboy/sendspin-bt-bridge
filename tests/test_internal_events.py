@@ -86,7 +86,6 @@ def test_publish_device_event_enriches_details_with_room_and_readiness_context(m
                     "player_name": "Kitchen",
                     "room_id": "living-room",
                     "room_name": "Living Room",
-                    "handoff_mode": "fast_handoff",
                 }
             ]
         },
@@ -109,7 +108,7 @@ def test_publish_device_event_enriches_details_with_room_and_readiness_context(m
     assert stored[0]["details"]["attempt"] == 2
     assert stored[0]["details"]["room_id"] == "living-room"
     assert stored[0]["details"]["room_name"] == "Living Room"
-    assert stored[0]["details"]["handoff_mode"] == "fast_handoff"
+    assert "handoff_mode" not in stored[0]["details"]
     assert stored[0]["details"]["transfer_readiness"]["ready"] is True
 
 

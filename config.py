@@ -31,9 +31,7 @@ from config_auth import check_password, hash_password
 from config_migration import (
     CONFIG_SCHEMA_VERSION,
     DEFAULT_UPDATE_CHANNEL,
-    HANDOFF_MODES,
     UPDATE_CHANNELS,
-    normalize_handoff_mode,
     normalize_update_channel,
     resolve_device_room_context,
 )
@@ -63,7 +61,6 @@ __all__ = [
     "DEFAULT_LISTEN_PORT_BASE",
     "DEFAULT_UPDATE_CHANNEL",
     "DEFAULT_WEB_PORT",
-    "HANDOFF_MODES",
     "RUNTIME_STATE_CONFIG_KEYS",
     "SENSITIVE_CONFIG_KEYS",
     "UPDATE_CHANNELS",
@@ -82,7 +79,6 @@ __all__ = [
     "is_ha_addon_runtime",
     "load_config",
     "migrate_config_payload",
-    "normalize_handoff_mode",
     "normalize_update_channel",
     "resolve_additional_web_port",
     "resolve_base_listen_port",

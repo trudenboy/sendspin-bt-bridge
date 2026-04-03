@@ -84,6 +84,7 @@ schema:
       preferred_format: str?
       keepalive_silence: bool?
       keepalive_interval: int?
+      idle_disconnect_minutes: int?
   bluetooth_adapters:
     - id: str
       mac: str?

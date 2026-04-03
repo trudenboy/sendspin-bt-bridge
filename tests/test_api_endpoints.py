@@ -1191,7 +1191,6 @@ def test_api_config_post_normalizes_numeric_strings(client, tmp_path, monkeypatc
                 "keepalive_interval": "60",
                 "room_name": "Living Room",
                 "room_id": "living-room",
-                "handoff_mode": "fast_handoff",
             }
         ],
         "BLUETOOTH_ADAPTERS": [],
@@ -1239,7 +1238,6 @@ def test_api_config_post_normalizes_numeric_strings(client, tmp_path, monkeypatc
     assert saved["BLUETOOTH_DEVICES"][0]["keepalive_interval"] == 60
     assert saved["BLUETOOTH_DEVICES"][0]["room_name"] == "Living Room"
     assert saved["BLUETOOTH_DEVICES"][0]["room_id"] == "living-room"
-    assert saved["BLUETOOTH_DEVICES"][0]["handoff_mode"] == "fast_handoff"
 
 
 def test_api_config_post_accepts_empty_manual_port_overrides(client, tmp_path, monkeypatch):

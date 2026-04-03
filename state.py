@@ -288,7 +288,6 @@ def _build_device_event_context(device_id: str) -> dict[str, Any]:
         return {}
 
     context: dict[str, Any] = {
-        "handoff_mode": str(getattr(snapshot, "handoff_mode", "") or ""),
         "transfer_readiness": dict(getattr(snapshot, "transfer_readiness", {}) or {}),
     }
     if getattr(snapshot, "room_id", None):
