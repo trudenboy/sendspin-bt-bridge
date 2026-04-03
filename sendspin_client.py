@@ -566,36 +566,6 @@ class SendspinClient:
         if hasattr(task, "cancel"):
             task.cancel()
 
-    def _ma_monitor_says_playing(self) -> bool:
-        """Check the MA WebSocket monitor for active playback in this device's group.
-
-        For solo players (no group_id), falls back to checking by player_id
-        since MA monitor caches now-playing keyed by player_id for ungrouped
-        devices.
-        """
-        lookup_id = self.status.get("group_id") or getattr(self, "player_id", None)
-        if not lookup_id:
-            return False
-        try:
-            np = _state.get_ma_now_playing_for_group(lookup_id)
-            return np.get("state") == "playing"
-        except Exception:
-            return False
-
-    def _event_history_says_playing(self) -> bool:
-        """Check event history: last playback event was START without a matching STOP."""
-        try:
-            events = _state.get_device_events(self._event_device_id(), limit=15)
-        except Exception:
-            return False
-        for event in events:  # newest-first
-            et = event.get("event_type", "")
-            if et == "playback-stopped":
-                return False
-            if et == "playback-started":
-                return True
-        return False
-
     async def _enter_standby(self) -> None:
         """Disconnect BT and park daemon on null sink to let the speaker save power.
 

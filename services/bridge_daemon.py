@@ -238,6 +238,64 @@ class BridgeDaemon(SendspinDaemon):
         else:
             self._on_server_disconnect()
 
+    async def _run_server_initiated(self, static_delay_ms: float) -> None:
+        """Override upstream to add WebSocket heartbeat on the listener side.
+
+        The upstream ``ClientListener`` creates ``web.WebSocketResponse()``
+        without a ``heartbeat`` parameter.  When MA connects to the daemon,
+        only MA's client-side heartbeat (30 s) keeps the connection alive.
+        Proxies, firewalls, and Docker bridge networks may still drop the
+        idle TCP connection because **no server-side pings** are sent.
+
+        This override injects ``heartbeat=30`` so the daemon sends its own
+        WebSocket pings — matching the behaviour of the MA server-side
+        (``aiosendspin.server.connection``, line 179) and the client-side
+        (``aiosendspin.client.client``, line 331).
+
+        See: music-assistant/support#4598, trudenboy/sendspin-bt-bridge#120.
+        """
+        from aiohttp import web as _web
+        from aiosendspin.client import ClientListener as _BaseListener
+
+        _ws_logger = logging.getLogger("aiosendspin.client.listener")
+
+        class _HeartbeatListener(_BaseListener):
+            """ClientListener with server-side WebSocket heartbeat."""
+
+            async def _handle_websocket(self, request: _web.Request) -> _web.WebSocketResponse:
+                ws = _web.WebSocketResponse(heartbeat=30)
+                await ws.prepare(request)
+                _ws_logger.debug("Incoming server connection from %s", request.remote)
+                try:
+                    await self._on_connection(ws)
+                except Exception:
+                    _ws_logger.exception(
+                        "Unhandled exception in on_connection callback for %s",
+                        request.remote,
+                    )
+                    if not ws.closed:
+                        await ws.close(code=1011, message=b"Internal error")
+                return ws
+
+        logger.info(
+            "Listening for server connections on port %d (mDNS: _sendspin._tcp.local.)",
+            self._args.listen_port,
+        )
+
+        self._static_delay_ms = static_delay_ms
+        self._connection_lock = asyncio.Lock()
+
+        self._listener = _HeartbeatListener(
+            client_id=self._args.client_id,
+            on_connection=self._handle_server_connection,
+            port=self._args.listen_port,
+            client_name=self._args.client_name,
+        )
+        await self._listener.start()
+
+        while True:
+            await asyncio.sleep(3600)
+
     async def _handle_server_connection(self, ws) -> None:
         """Mirror the upstream connect flow without stale disconnect status races."""
         logger.info("Server connected")

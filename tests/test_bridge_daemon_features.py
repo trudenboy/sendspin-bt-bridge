@@ -62,6 +62,30 @@ _daemon_mod = sys.modules["sendspin.daemon.daemon"]
 _daemon_mod.DaemonArgs = MagicMock  # type: ignore[attr-defined]
 _daemon_mod.SendspinDaemon = type("SendspinDaemon", (), {"__init__": lambda self, args: None})  # type: ignore[attr-defined]
 
+
+# Provide a real-ish ClientListener stub so BridgeDaemon._run_server_initiated can subclass it
+class _StubClientListener:
+    """Minimal stub matching aiosendspin.client.listener.ClientListener."""
+
+    def __init__(self, *, client_id, on_connection, port=8928, client_name=None, **kw):
+        self._client_id = client_id
+        self._on_connection = on_connection
+        self._port = port
+        self._client_name = client_name
+
+    async def start(self):
+        pass
+
+    async def stop(self):
+        pass
+
+    async def _handle_websocket(self, request):
+        raise NotImplementedError
+
+
+_client_mod = sys.modules["aiosendspin.client"]
+_client_mod.ClientListener = _StubClientListener  # type: ignore[attr-defined]
+
 sys.modules.pop("services.bridge_daemon", None)
 
 from services.bridge_daemon import BridgeDaemon  # noqa: E402
@@ -94,12 +118,12 @@ def _make_bridge_daemon(status: dict | None = None) -> BridgeDaemon:
     daemon._on_status_change = lambda: notified.append(True)
     daemon._background_tasks = set()
     daemon._client = None
-    daemon._listener = None
+    daemon._listener = None  # type: ignore[assignment]
     daemon._audio_handler = None
     daemon._settings = mock_args.settings
     daemon._mpris = None
     daemon._static_delay_ms = 0.0
-    daemon._connection_lock = None
+    daemon._connection_lock = None  # type: ignore[assignment]
     daemon._server_url = None
 
     daemon._notified = notified
@@ -505,3 +529,98 @@ class TestControllerState:
         daemon._on_controller_state(payload)
         assert "supported_commands" not in daemon._bridge_status
         assert len(daemon._notified) == 0
+
+
+class TestHeartbeatListenerOverride:
+    """_run_server_initiated() overrides upstream to add WebSocket heartbeat."""
+
+    def test_has_run_server_initiated_override(self):
+        """BridgeDaemon defines its own _run_server_initiated (not inherited)."""
+        assert "_run_server_initiated" in BridgeDaemon.__dict__
+
+    @pytest.mark.asyncio
+    async def test_run_server_initiated_creates_heartbeat_listener(self):
+        """Override creates a listener subclass named _HeartbeatListener."""
+        daemon = _make_bridge_daemon()
+        daemon._connection_lock = None
+        daemon._handle_server_connection = AsyncMock()
+
+        started = asyncio.Event()
+        _original_start = _StubClientListener.start
+
+        async def _intercept_start(self_listener):
+            started.set()
+
+        _StubClientListener.start = _intercept_start
+        try:
+            task = asyncio.create_task(daemon._run_server_initiated(0.0))
+            try:
+                await asyncio.wait_for(started.wait(), timeout=5.0)
+            finally:
+                task.cancel()
+                with pytest.raises(asyncio.CancelledError):
+                    await task
+        finally:
+            _StubClientListener.start = _original_start
+
+        listener = daemon._listener
+        assert listener is not None
+        assert type(listener).__name__ == "_HeartbeatListener"
+        assert isinstance(listener, _StubClientListener)
+
+    @pytest.mark.asyncio
+    async def test_heartbeat_listener_passes_heartbeat_30(self):
+        """The _HeartbeatListener._handle_websocket creates WS with heartbeat=30."""
+        daemon = _make_bridge_daemon()
+        daemon._connection_lock = None
+        daemon._handle_server_connection = AsyncMock()
+
+        started = asyncio.Event()
+        _original_start = _StubClientListener.start
+
+        async def _intercept_start(self_listener):
+            started.set()
+
+        _StubClientListener.start = _intercept_start
+        try:
+            task = asyncio.create_task(daemon._run_server_initiated(0.0))
+            try:
+                await asyncio.wait_for(started.wait(), timeout=5.0)
+            finally:
+                task.cancel()
+                with pytest.raises(asyncio.CancelledError):
+                    await task
+        finally:
+            _StubClientListener.start = _original_start
+
+        listener = daemon._listener
+        ws_kwargs: list[dict] = []
+
+        # Patch aiohttp.web.WebSocketResponse inside the override's import scope
+        import aiohttp.web as _real_web
+
+        class _CapturingWS:
+            closed = True
+
+            def __init__(self, **kwargs):
+                ws_kwargs.append(kwargs)
+
+            async def prepare(self, request):
+                pass
+
+            async def close(self, **kw):
+                pass
+
+        mock_request = MagicMock()
+        mock_request.remote = "127.0.0.1"
+
+        from unittest.mock import patch as _patch
+
+        with _patch.object(_real_web, "WebSocketResponse", _CapturingWS):
+            try:
+                await listener._handle_websocket(mock_request)
+            except Exception:
+                pass
+
+        assert len(ws_kwargs) >= 1
+        assert ws_kwargs[0].get("heartbeat") == 30
