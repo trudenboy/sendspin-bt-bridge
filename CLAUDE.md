@@ -225,14 +225,16 @@ On BT reconnect: PulseAudio's `module-rescue-streams` may move streams to the de
 | Turris router | 192.168.10.1 | `turris` |
 | Proxmox | 192.168.10.12 | `proxmox` |
 | HAOS VM 104 | 192.168.10.10 | `haos` |
+| Test VM 105 | 192.168.10.105 | `sendspin-test` |
 
 ### Proxmox host
 
 - PVE 8.4.16, kernel 6.8.12-18-pve
 - USB device mappings (passed through to HAOS VM 104):
   - `Audio` → CSR8510 A10 BT adapter → hci0 inside HAOS
-  - `BLE` → CSR8510 A10 BT adapter → hci1 inside HAOS
-  - SONOFF Zigbee dongle (`1a86:55d4`) → passed directly as `usb0`
+  - `BLE` → CSR8510 A10 BT adapter → VM 105 (test)
+  - `aTick` → CSR8510 A10 BT adapter → not assigned
+  - SONOFF Zigbee dongle (`1a86:55d4`) → passed directly as `usb0` to VM 104
 
 ### HAOS VM 104
 
@@ -273,6 +275,18 @@ A second deployment of the bridge runs in a Proxmox LXC container (not HAOS):
 - USB passthrough: `/dev/bus/usb` (host BT adapters)
 - Mounts host's `/run/dbus` and `/var/lib/bluetooth` (read-only) so it shares the host BT stack
 
+### Proxmox VM 105 (Docker test environment)
+
+Docker-based test deployment matching reporter environments (Ubuntu + PipeWire):
+- OS: Ubuntu 24.04 LTS, 2 vCPU, 2 GB RAM, 16 GB disk, static IP 192.168.10.105
+- Audio: PipeWire with pipewire-pulse (Ubuntu 24.04 default)
+- BT adapter: `BLE` mapping (C0:FB:F9:62:D7:D6)
+- Bridge runs via `docker compose` (same as end-user deployment)
+- Config dir: `/etc/docker/Sendspin/config.json`
+- Web UI: `http://192.168.10.105:8080`
+- Created with: `scripts/proxmox-vm-create.sh` (on Proxmox host)
+- Deploy/update: `scripts/proxmox-vm-deploy.sh` (from Mac)
+
 ## Agent Operations
 
 Commands for agents working with the production deployment.
@@ -311,4 +325,30 @@ ssh haos "pactl list sinks short"
 
 ```bash
 ssh proxmox "qm status 104"
+```
+
+### Test VM 105 operations
+
+```bash
+# Check VM status
+ssh proxmox "qm status 105"
+
+# Start / stop test VM
+ssh proxmox "qm start 105"
+ssh proxmox "qm stop 105"
+
+# View bridge logs
+ssh sendspin-test "docker logs -f sendspin-client"
+
+# Restart bridge
+ssh sendspin-test "docker restart sendspin-client"
+
+# Redeploy / update bridge
+bash scripts/proxmox-vm-deploy.sh
+
+# BT debugging inside container
+ssh sendspin-test "docker exec -it sendspin-client bluetoothctl"
+
+# Check audio sinks
+ssh sendspin-test "docker exec sendspin-client pactl list sinks short"
 ```
