@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.54.0-rc.4] - 2026-04-03
+
+### Fixed
+- **Docker update command** — modal now shows `docker compose pull && docker compose up -d` instead of just `docker pull` which didn't recreate the running container
+
 ## [2.54.0-rc.3] - 2026-04-03
 
 ### Fixed
