@@ -342,13 +342,13 @@ def _update_channel_warning(channel: str) -> str | None:
 
 
 def _docker_update_command(channel: str) -> str:
-    image_tag = channel_image_tag(channel)
-    return f"docker pull ghcr.io/trudenboy/sendspin-bt-bridge:{image_tag}"
+    return "docker compose pull && docker compose up -d"
 
 
 def _docker_update_instructions(channel: str) -> str:
-    command = _docker_update_command(channel)
-    return f"Pull the matching container tag manually, e.g. `{command}` and redeploy your container or compose stack."
+    image_tag = channel_image_tag(channel)
+    image = f"ghcr.io/trudenboy/sendspin-bt-bridge:{image_tag}"
+    return f"Make sure your docker-compose.yml uses image: {image}, then run the command below in the same directory."
 
 
 # ---------------------------------------------------------------------------
