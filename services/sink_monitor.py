@@ -284,12 +284,26 @@ class SinkMonitor:
         logger.debug("SinkMonitor: initial scan complete — %d bluez sink(s) tracked", len(self._sink_states))
 
     @staticmethod
-    def _classify_state(state: int) -> str:
-        """Map PA sink state integer to a string label."""
-        if state == _PA_SINK_RUNNING:
+    def _classify_state(state: Any) -> str:
+        """Map PA sink state to a string label.
+
+        ``pulsectl`` returns ``EnumValue`` wrappers that support
+        ``== 'suspended'`` but **not** ``int(state)`` or ``== 2``.
+        We try string equality first (works for ``EnumValue``), then
+        fall back to integer lookup for raw ``int`` values.
+        """
+        # pulsectl EnumValue: supports __eq__ with string labels
+        if state == "running":
             return "running"
-        if state == _PA_SINK_IDLE:
+        if state == "idle":
             return "idle"
-        if state == _PA_SINK_SUSPENDED:
+        if state == "suspended":
             return "suspended"
+        # Raw int fallback (older pulsectl or direct PA C API)
+        if isinstance(state, int):
+            return {
+                _PA_SINK_RUNNING: "running",
+                _PA_SINK_IDLE: "idle",
+                _PA_SINK_SUSPENDED: "suspended",
+            }.get(state, "unknown")
         return "unknown"

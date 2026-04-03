@@ -131,6 +131,32 @@ class TestClassifyState:
     def test_unknown(self):
         assert SinkMonitor._classify_state(-1) == "unknown"
 
+    def test_pulsectl_enum_value(self):
+        """pulsectl returns EnumValue that supports == with strings but NOT int()."""
+
+        class _EnumValue:
+            """Mimics pulsectl's real EnumValue: _c_val (int), _value (str),
+            __eq__ with strings, but no __int__."""
+
+            def __init__(self, c_val: int, value: str):
+                self._c_val = c_val
+                self._value = value
+
+            def __eq__(self, other: object) -> bool:
+                if isinstance(other, str):
+                    return self._value == other
+                if isinstance(other, type(self)):
+                    return self._c_val == other._c_val
+                return NotImplemented
+
+            def __repr__(self) -> str:
+                return f"<EnumValue sink/source-state={self._value}>"
+
+        assert SinkMonitor._classify_state(_EnumValue(0, "running")) == "running"
+        assert SinkMonitor._classify_state(_EnumValue(1, "idle")) == "idle"
+        assert SinkMonitor._classify_state(_EnumValue(2, "suspended")) == "suspended"
+        assert SinkMonitor._classify_state(_EnumValue(99, "bogus")) == "unknown"
+
 
 # ── Event handling (transition dispatch) ──────────────────────────────────
 
