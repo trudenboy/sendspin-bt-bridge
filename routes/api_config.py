@@ -960,12 +960,16 @@ def _read_log_lines(runtime: str, lines: int) -> list[str]:
             log_lines = (result.stdout + result.stderr).splitlines()
         except FileNotFoundError:
             # docker CLI unavailable — read from in-memory ring buffer
-            try:
-                from sendspin_client import _ring_log_handler
+            # attached to the root logger.  We cannot ``from sendspin_client
+            # import _ring_log_handler`` because the main script runs as
+            # ``__main__``; importing by module name creates a *second*
+            # instance with an empty buffer.
+            import sys
 
-                log_lines = list(_ring_log_handler.records)[-lines:]
-            except Exception:
-                pass
+            main_mod = sys.modules.get("__main__")
+            ring = getattr(main_mod, "_ring_log_handler", None)
+            if ring is not None:
+                log_lines = list(ring.records)[-lines:]
             if not log_lines:
                 log_lines = ["(docker CLI not available — showing logs since last restart only)"]
 
