@@ -6,6 +6,7 @@ import asyncio
 import logging
 import os
 import re
+import ssl
 import subprocess
 from typing import Any
 from urllib.parse import quote
@@ -86,6 +87,16 @@ def _tag_sort_key(tag: dict[str, Any]) -> tuple[int, int, int, int, int]:
     return _parse_version(str(tag.get("name", "")))
 
 
+def _make_compat_ssl_context() -> ssl.SSLContext:
+    """Create an SSL context compatible with middleboxes that drop post-quantum TLS."""
+    ctx = ssl.create_default_context()
+    try:
+        ctx.set_ecdh_curve("prime256v1")
+    except (ValueError, ssl.SSLError):
+        pass
+    return ctx
+
+
 async def _fetch_url(url: str, accept: str = "application/vnd.github+json") -> tuple[bytes, dict[str, str]] | None:
     import urllib.request
 
@@ -95,9 +106,10 @@ async def _fetch_url(url: str, accept: str = "application/vnd.github+json") -> t
             headers={"Accept": accept, "User-Agent": "sendspin-bt-bridge"},
         )
         loop = asyncio.get_running_loop()
+        ctx = _make_compat_ssl_context()
 
         def _fetch() -> tuple[bytes, dict[str, str]]:
-            resp = urllib.request.urlopen(req, timeout=15)
+            resp = urllib.request.urlopen(req, timeout=15, context=ctx)
             headers = {k.lower(): v for k, v in resp.getheaders()}
             return resp.read(), headers
 

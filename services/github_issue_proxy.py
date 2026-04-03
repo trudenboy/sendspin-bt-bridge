@@ -6,6 +6,7 @@ import base64
 import json
 import logging
 import os
+import ssl
 import threading
 import time
 from typing import Any
@@ -16,6 +17,17 @@ logger = logging.getLogger(__name__)
 _GITHUB_API = "https://api.github.com"
 _REPO_OWNER = "trudenboy"
 _REPO_NAME = "sendspin-bt-bridge"
+
+
+def _compat_ssl_ctx() -> ssl.SSLContext:
+    """SSL context compatible with middleboxes that drop post-quantum TLS."""
+    ctx = ssl.create_default_context()
+    try:
+        ctx.set_ecdh_curve("prime256v1")
+    except (ValueError, ssl.SSLError):
+        pass
+    return ctx
+
 
 # App credentials — App ID and Installation ID are not secret
 _APP_ID = "3219015"
@@ -101,7 +113,7 @@ class GitHubIssueProxy:
             req.add_header("Accept", "application/vnd.github+json")
             req.add_header("User-Agent", "sendspin-bug-reporter")
 
-            resp = urlopen(req, timeout=15)
+            resp = urlopen(req, timeout=15, context=_compat_ssl_ctx())
             data = json.loads(resp.read())
             self._token = data["token"]
             # Installation tokens expire in 1 hour
@@ -131,7 +143,7 @@ class GitHubIssueProxy:
         req.add_header("User-Agent", "sendspin-bug-reporter")
         req.add_header("Content-Type", "application/json")
 
-        resp = urlopen(req, timeout=20)
+        resp = urlopen(req, timeout=20, context=_compat_ssl_ctx())
         issue = json.loads(resp.read())
         logger.info("Created GitHub issue #%s: %s", issue["number"], issue["html_url"])
         return {

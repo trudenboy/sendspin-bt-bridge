@@ -5394,7 +5394,7 @@ function btAdapterOptions(selected) {
     return opts;
 }
 
-function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabled, preferredFormat, keepaliveInterval, roomName, roomId, handoffMode, idleDisconnectMinutes) {
+function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabled, preferredFormat, keepaliveInterval, roomName, roomId, idleDisconnectMinutes) {
     var tbody = document.getElementById('bt-devices-table');
     var wrap = document.createElement('div');
     wrap.className = 'bt-device-wrap';
@@ -5410,8 +5410,6 @@ function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabl
     if (kaVal > 0 && kaVal < 30) kaVal = 30;
     var roomNameVal = String(roomName || '').trim();
     var roomIdVal = String(roomId || '').trim();
-    var handoffModeVal = String(handoffMode || 'default').trim().toLowerCase();
-    if (handoffModeVal !== 'fast_handoff') handoffModeVal = 'default';
     var idleVal = (idleDisconnectMinutes !== undefined && idleDisconnectMinutes !== null && idleDisconnectMinutes !== '') ? parseInt(idleDisconnectMinutes, 10) : 0;
     if (idleVal < 0) idleVal = 0;
     row.innerHTML =
@@ -5486,12 +5484,7 @@ function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabl
             escHtmlAttr(roomNameVal) + '"></div>' +
         '<div data-experimental style="display:none"><label>Room ID</label>' +
             '<input type="text" class="bt-room-id" placeholder="living-room" title="Stable machine-readable room identifier" value="' +
-            escHtmlAttr(roomIdVal) + '"></div>' +
-        '<div data-experimental style="display:none"><label>Handoff mode</label>' +
-            '<select class="bt-handoff-mode" title="Optimize speaker readiness for room handoff scenarios">' +
-                '<option value="default"' + (handoffModeVal === 'default' ? ' selected' : '') + '>Default</option>' +
-                '<option value="fast_handoff"' + (handoffModeVal === 'fast_handoff' ? ' selected' : '') + '>Fast handoff</option>' +
-            '</select></div>';
+            escHtmlAttr(roomIdVal) + '"></div>';
 
     var enabledCb = row.querySelector('.bt-enabled');
     function syncBtRowIdentity() {
@@ -5636,7 +5629,6 @@ function collectBtDevices() {
         var idleVal    = idleEl ? parseInt(idleEl.value, 10) : 0;
         var roomNameEl = detail ? detail.querySelector('.bt-room-name') : null;
         var roomIdEl   = detail ? detail.querySelector('.bt-room-id') : null;
-        var handoffEl  = detail ? detail.querySelector('.bt-handoff-mode') : null;
         if (isNaN(kaVal) || kaVal < 0) kaVal = 0;
         if (kaVal > 0 && kaVal < 30) kaVal = 30;
         if (isNaN(idleVal) || idleVal < 0) idleVal = 0;
@@ -5647,10 +5639,8 @@ function collectBtDevices() {
         if (idleVal > 0) dev.idle_disconnect_minutes = idleVal;
         var roomName = roomNameEl ? String(roomNameEl.value || '').trim() : '';
         var roomId = roomIdEl ? String(roomIdEl.value || '').trim() : '';
-        var handoffMode = handoffEl ? String(handoffEl.value || 'default').trim().toLowerCase() : 'default';
         if (roomName) dev.room_name = roomName;
         if (roomId) dev.room_id = roomId;
-        if (handoffMode && handoffMode !== 'default') dev.handoff_mode = handoffMode;
         // Read enabled state from checkbox
         var enabledCb = row.querySelector('.bt-enabled');
         if (enabledCb && !enabledCb.checked) dev.enabled = false;
@@ -5680,7 +5670,7 @@ function populateBtDeviceRows(devices) {
     devices.forEach(function(d) {
         addBtDeviceRow(d.player_name || '', d.mac || '', d.adapter || '',
                        d.static_delay_ms, d.listen_host, d.listen_port, d.enabled,
-                       d.preferred_format, d.keepalive_interval, d.room_name, d.room_id, d.handoff_mode, d.idle_disconnect_minutes);
+                       d.preferred_format, d.keepalive_interval, d.room_name, d.room_id, d.idle_disconnect_minutes);
     });
     refreshBtDeviceRowsRuntime();
     _applyExperimentalVisibility();
@@ -8780,8 +8770,6 @@ function _normalizeBtDeviceDirtyFields(fields) {
     }
     var delay = parseFloat(fields.static_delay_ms);
     if (Number.isNaN(delay)) delay = 0;
-    var handoffMode = String(fields.handoff_mode || 'default').trim().toLowerCase();
-    if (handoffMode !== 'fast_handoff') handoffMode = 'default';
     var idleDisconnect = fields.idle_disconnect_minutes;
     if (idleDisconnect == null || idleDisconnect === '') idleDisconnect = 0;
     idleDisconnect = parseInt(idleDisconnect, 10);
@@ -8799,7 +8787,6 @@ function _normalizeBtDeviceDirtyFields(fields) {
         idle_disconnect_minutes: idleDisconnect,
         room_name: (fields.room_name || '').trim(),
         room_id: (fields.room_id || '').trim(),
-        handoff_mode: handoffMode,
     };
 }
 
@@ -8816,7 +8803,6 @@ function _defaultBtDeviceDirtyFields() {
         keepalive_interval: 0,
         room_name: '',
         room_id: '',
-        handoff_mode: 'default',
     });
 }
 
@@ -8836,7 +8822,6 @@ function _readBtDeviceDirtyFields(wrap) {
         idle_disconnect_minutes: detail ? (((detail.querySelector('.bt-idle-disconnect') || {}).value) || 0) : 0,
         room_name: detail ? (((detail.querySelector('.bt-room-name') || {}).value) || '') : '',
         room_id: detail ? (((detail.querySelector('.bt-room-id') || {}).value) || '') : '',
-        handoff_mode: detail ? (((detail.querySelector('.bt-handoff-mode') || {}).value) || 'default') : 'default',
     });
 }
 
@@ -8858,7 +8843,6 @@ function _getBtDeviceControlByField(wrap, fieldName) {
         idle_disconnect_minutes: '.bt-idle-disconnect',
         room_name: '.bt-room-name',
         room_id: '.bt-room-id',
-        handoff_mode: '.bt-handoff-mode',
     };
     return wrap.querySelector(selectors[fieldName] || '');
 }
@@ -9455,6 +9439,12 @@ function _syncRestartBanner(status, overrideServiceState) {
     if (!_restartMonitor) return;
 
     var elapsedSeconds = _restartMonitorElapsedSeconds();
+    // Safety: clear a stuck banner after 60s
+    if (elapsedSeconds > 60) {
+        _restartMonitor = null;
+        _setRestartBannerState(null);
+        return;
+    }
     var startupPercent = startup && typeof startup.percent === 'number' ? startup.percent : 0;
     var sawLiveRestartState =
         startupStatus === 'stopping' ||
@@ -9621,9 +9611,17 @@ async function saveAndRestart() {
             elapsedSeconds: 0,
         });
         try {
-            await fetch(API_BASE + '/api/restart', { method: 'POST' });
-        } catch (_) { /* Service dropped connection — expected */ }
-        setTimeout(updateStatus, 250);
+            var _restartResp = await fetch(API_BASE + '/api/restart', { method: 'POST' });
+            var _restartData = await _restartResp.json().catch(function() { return {}; });
+            if (_restartData.success && _restartMonitor) {
+                _restartMonitor.sawRuntimeRestart = true;
+            }
+        } catch (_) {
+            // Service dropped connection during restart — that confirms it's restarting
+            if (_restartMonitor) _restartMonitor.sawRuntimeRestart = true;
+        }
+        // Poll after the kill delay (500ms) so we don't get a stale pre-restart response
+        setTimeout(updateStatus, 2000);
 
     } catch (err) {
         _setRestartBannerState({
