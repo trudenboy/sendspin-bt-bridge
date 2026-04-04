@@ -307,3 +307,41 @@ def test_onboarding_assistant_recommends_discovery_when_ma_url_missing():
     assert ma_step.recommended_action is not None
     assert ma_step.recommended_action.key == "retry_ma_discovery"
     assert ma_step.recommended_action.label == "Discover Music Assistant"
+
+
+def test_onboarding_does_not_regress_when_all_devices_in_standby():
+    """Devices in idle-standby are logically connected; onboarding should not regress."""
+    devices = [
+        SimpleNamespace(
+            player_name="Kitchen",
+            bluetooth_connected=False,
+            has_sink=False,
+            static_delay_ms=-500.0,
+            extra={"bt_standby": True},
+        ),
+    ]
+
+    snapshot = build_onboarding_assistant_snapshot(
+        config={
+            "BLUETOOTH_DEVICES": [{"mac": "AA"}],
+            "PULSE_LATENCY_MSEC": 300,
+            "MA_API_URL": "http://ma.local",
+            "MA_API_TOKEN": "token",
+        },
+        preflight={
+            "audio": {"system": "pulseaudio", "sinks": 1},
+            "bluetooth": {"controller": True, "paired_devices": 1},
+        },
+        devices=devices,
+        ma_connected=True,
+        runtime_mode="production",
+    )
+
+    checks = {check.key: check for check in snapshot.checks}
+    assert checks["sink_verification"].status == "ok"
+    assert snapshot.counts["standby_devices"] == 1
+    # Checkpoints should all be reached
+    checkpoints = {cp.key: cp for cp in snapshot.checklist.checkpoints}
+    assert checkpoints["bluetooth_connected"].reached is True
+    assert checkpoints["sink_ready"].reached is True
+    assert snapshot.checklist.overall_status == "ok"

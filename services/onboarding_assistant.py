@@ -274,6 +274,8 @@ def _build_checklist_phases(steps: list[OnboardingChecklistStep]) -> list[Onboar
 def _build_checkpoints(counts: dict[str, int], checks_by_key: dict[str, OnboardingCheck]) -> list[OnboardingCheckpoint]:
     configured_devices = int(counts.get("configured_devices") or 0)
     connected_devices = int(counts.get("connected_devices") or 0)
+    standby_devices = int(counts.get("standby_devices") or 0)
+    connected_or_standby = connected_devices + standby_devices
     sink_ready_devices = int(counts.get("sink_ready_devices") or 0)
     ma_ready = checks_by_key.get("ma_auth", OnboardingCheck(key="ma_auth", status="warning", summary="")).status == "ok"
     return [
@@ -290,10 +292,11 @@ def _build_checkpoints(counts: dict[str, int], checks_by_key: dict[str, Onboardi
         OnboardingCheckpoint(
             key="bluetooth_connected",
             label="Bluetooth connected",
-            reached=connected_devices > 0,
+            reached=connected_or_standby > 0,
             summary=(
                 f"{connected_devices} speaker{'s' if connected_devices != 1 else ''} connected"
-                if connected_devices > 0
+                + (f" ({standby_devices} in standby)" if standby_devices else "")
+                if connected_or_standby > 0
                 else "Waiting for a configured speaker to connect"
             ),
         ),
@@ -426,14 +429,23 @@ def build_onboarding_assistant_snapshot(
     configured_count = int(bridge_state.configuration.configured_device_count)
     active_devices = [device for device in normalized_devices if device.management.get("bridge_managed", True)]
     released_devices = [device for device in normalized_devices if device.management.get("released")]
+    standby_devices = sum(1 for device in active_devices if device.bluetooth.get("standby"))
     connected_devices = sum(1 for device in active_devices if device.bluetooth.get("connected"))
+    # Devices in idle-standby were fully connected before the bridge
+    # intentionally disconnected BT to save power.  Treat them as
+    # "logically connected" so onboarding doesn't regress.
+    connected_or_standby = connected_devices + standby_devices
     sink_ready_devices = sum(
-        1 for device in active_devices if device.bluetooth.get("connected") and device.audio.get("has_sink")
+        1
+        for device in active_devices
+        if (device.bluetooth.get("connected") and device.audio.get("has_sink")) or device.bluetooth.get("standby")
     )
     missing_sink_devices = [
         device.player_name or "Unknown"
         for device in active_devices
-        if device.bluetooth.get("connected") and not device.audio.get("has_sink")
+        if device.bluetooth.get("connected")
+        and not device.audio.get("has_sink")
+        and not device.bluetooth.get("standby")
     ]
 
     bluetooth = bridge_state.runtime_substrate.bluetooth
@@ -660,7 +672,7 @@ def build_onboarding_assistant_snapshot(
                 ],
             )
         )
-    elif connected_devices == 0:
+    elif connected_or_standby == 0:
         checks.append(
             OnboardingCheck(
                 key="sink_verification",
@@ -674,14 +686,16 @@ def build_onboarding_assistant_snapshot(
             )
         )
     else:
+        standby_note = f" ({standby_devices} in standby)" if standby_devices and not connected_devices else ""
         checks.append(
             OnboardingCheck(
                 key="sink_verification",
                 status="ok",
-                summary="Connected devices have resolved Bluetooth sinks.",
+                summary=f"Connected devices have resolved Bluetooth sinks.{standby_note}",
                 details={
                     "connected_devices": connected_devices,
                     "sink_ready_devices": sink_ready_devices,
+                    "standby_devices": standby_devices,
                 },
             )
         )
@@ -802,6 +816,7 @@ def build_onboarding_assistant_snapshot(
         "active_devices": len(active_devices),
         "connected_devices": connected_devices,
         "sink_ready_devices": sink_ready_devices,
+        "standby_devices": standby_devices,
     }
 
     return OnboardingAssistantSnapshot(
