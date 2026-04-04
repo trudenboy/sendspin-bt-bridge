@@ -7,26 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [2.54.1-rc.4] - 2026-04-04
-
-### Improved
-- **Update modal: copyable Docker image** — the Docker image name (`ghcr.io/…`) is now displayed as a separate copyable `<code>` block below the instruction text instead of being buried inline; **docker-compose.yml** is bold for visibility.
-
-## [2.54.1-rc.3] - 2026-04-04
-
-### Fixed
-- **Mobile action buttons overflow** — expanded device card kept the desktop 2-column grid on mobile when dark mode was applied via class (`html.theme-dark`) instead of OS preference; action buttons (Reconnect / Wake / Disable) were squeezed into a narrow `auto` column and text was truncated. Moved missing layout overrides (`list-detail-body`, `list-detail-player-main`, `list-detail-art-rail`) to the top-level `≤640 px` breakpoint and added `text-overflow: ellipsis` safety net on button labels.
-
-## [2.54.1-rc.2] - 2026-04-04
+## [2.54.1] - 2026-04-04
 
 ### Fixed
 - **Process hangs after restart** — signal handler ran `graceful_shutdown()` but never stopped the asyncio event loop; the process stayed alive in a "shutdown complete" state with no devices while S6/Docker thought it was still healthy. Now calls `loop.stop()` after shutdown so the process actually exits and gets restarted.
 - **MUTE_VIA_MA default changed to `true`** — mute commands from the bridge web UI now route through the MA API by default so Music Assistant UI stays in sync (#132)
-
-## [2.54.1-rc.1] - 2026-04-04
-
-### Fixed
 - **Bluetooth soft-blocked on Raspberry Pi** — entrypoint now runs `rfkill unblock bluetooth` automatically at startup so the on-board adapter works without manual intervention
+- **Mobile action buttons overflow** — expanded device card kept the desktop 2-column grid on mobile when dark mode was applied via class instead of OS preference; action buttons were squeezed into a narrow column and text was truncated. Moved missing layout overrides to the top-level ≤640 px breakpoint and added `text-overflow: ellipsis` safety net on button labels.
+
+### Improved
+- **Update modal: copyable Docker image** — the Docker image name is now displayed as a separate copyable code block below the instruction text instead of being buried inline; **docker-compose.yml** is bold for visibility.
 
 ### Added
 - **Built-in adapter docs** — new "Built-in adapters (Raspberry Pi)" section in Bluetooth Adapters guide documenting the single-stream A2DP limitation of Pi 4/5 on-board Bluetooth and recommending USB dongles for multi-speaker setups
