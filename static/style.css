@@ -9141,6 +9141,26 @@ body {
         padding: 0 12px 12px;
     }
 
+    .list-detail-body {
+        grid-template-columns: 1fr;
+    }
+
+    .list-detail-player-main {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .list-detail-art-rail {
+        width: 100%;
+        gap: 8px;
+    }
+
+    .list-detail-player-center,
+    .list-detail-current-copy {
+        align-items: flex-start;
+        text-align: left;
+    }
+
     .list-detail-actions {
         display: grid;
         grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -9151,6 +9171,12 @@ body {
     .list-detail-actions .list-action-btn {
         padding: 8px 10px;
         font-size: 11px;
+        overflow: hidden;
+    }
+
+    .list-detail-actions .action-btn-label {
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
 
     .list-detail-playback-rail {
