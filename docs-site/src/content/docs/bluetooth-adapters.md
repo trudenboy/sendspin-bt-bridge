@@ -127,6 +127,34 @@ different chipset.
 | 4 | EDUP EP-B3536 | RTL8761BUV | 5.1 | ≥ 5.8 | ~$11 | ⭐⭐⭐⭐ |
 | 5 | Zexmte BT 5.0 | RTL8761B | 5.0 | ≥ 5.8 | ~$9 | ⭐⭐⭐ |
 
+## Built-in adapters (Raspberry Pi)
+
+Raspberry Pi boards include an on-board Broadcom Bluetooth controller.
+It works for basic testing but has significant limitations for
+multi-speaker audio streaming:
+
+| Board | Chipset | BT version | Max A2DP streams | Notes |
+|---|---|---|---|---|
+| **Pi 4 Model B** | BCM4345C0 (CYW43455) | 5.0 (BLE) | **1** | Shared antenna with WiFi, limited A2DP bandwidth |
+| **Pi 5** | CYW43455 variant | 5.0 (BLE) | **1** | Same chipset lineage, same single-stream limit |
+| **Pi 3 Model B+** | BCM43438 | 4.2 | **1** | Older BT version, lower throughput |
+
+:::caution[Single-stream limitation]
+The built-in Raspberry Pi Bluetooth adapter supports only **one
+concurrent A2DP audio stream**. To drive multiple speakers you **must**
+add one or more USB Bluetooth dongles (see recommended adapters above).
+:::
+
+:::tip[rfkill on Raspberry Pi]
+On some Pi OS installations the on-board Bluetooth is soft-blocked by
+default. The bridge automatically runs `rfkill unblock bluetooth` at
+startup, but if you run without Docker you may need to execute it
+manually:
+```bash
+sudo rfkill unblock bluetooth
+```
+:::
+
 ## Adapters to avoid
 
 | Adapter / chipset | Problem |

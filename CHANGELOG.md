@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.54.1-rc.1] - 2026-04-04
+
+### Fixed
+- **Bluetooth soft-blocked on Raspberry Pi** — entrypoint now runs `rfkill unblock bluetooth` automatically at startup so the on-board adapter works without manual intervention
+
+### Added
+- **Built-in adapter docs** — new "Built-in adapters (Raspberry Pi)" section in Bluetooth Adapters guide documenting the single-stream A2DP limitation of Pi 4/5 on-board Bluetooth and recommending USB dongles for multi-speaker setups
+
 ## [2.54.0] - 2026-04-04
 
 ### Added

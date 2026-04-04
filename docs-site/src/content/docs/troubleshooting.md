@@ -71,7 +71,7 @@ Then restart the addon. This is a temporary measure — updating is the correct 
 
 1. Confirm the speaker is paired at the host level.
 2. Confirm D-Bus is available to the bridge.
-3. Confirm the adapter is powered.
+3. Confirm the adapter is powered and not RF-killed (`rfkill list bluetooth`).
 4. Try **Reconnect** first, then **Re-pair** if the host pairing looks stale.
 5. If the device shows **Released**, click **Reclaim** before assuming pairing is broken.
 

@@ -90,6 +90,10 @@ _refresh_dbus_status() {
 _refresh_bluetooth_status() {
     BT_STATUS="✗ no controller"
     BT_PAIRED=0
+    # Unblock Bluetooth RF-kill switch (common on Raspberry Pi built-in adapters)
+    if command -v rfkill >/dev/null 2>&1; then
+        rfkill unblock bluetooth 2>/dev/null || true
+    fi
     if bluetoothctl show 2>&1 | grep -qE "Controller|Discovering|Powered"; then
         BT_ADAPTER=$(bluetoothctl list 2>/dev/null | head -1 | awk '{print $2}' || echo "unknown")
         BT_STATUS="✓ $BT_ADAPTER"
