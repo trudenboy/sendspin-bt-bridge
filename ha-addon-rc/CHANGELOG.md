@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.54.1-rc.4] - 2026-04-04
+
+### Improved
+- **Update modal: copyable Docker image** — the Docker image name (`ghcr.io/…`) is now displayed as a separate copyable `<code>` block below the instruction text instead of being buried inline; **docker-compose.yml** is bold for visibility.
+
 ## [2.54.1-rc.3] - 2026-04-04
 
 ### Fixed
