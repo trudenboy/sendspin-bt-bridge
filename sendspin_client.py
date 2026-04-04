@@ -678,6 +678,12 @@ class SendspinClient:
                 "bt_waking": False,
             }
         )
+        # SinkMonitor may have fired on_idle while bt_standby was still True
+        # (race window).  Re-arm the idle timer now that standby is cleared.
+        sm = getattr(self, "_sink_monitor", None)
+        sink = getattr(self, "bluetooth_sink_name", None)
+        if sm and sink and getattr(sm, "_sink_states", {}).get(sink) != "running":
+            self._on_sink_idle()
         if moved > 0:
             logger.info("[%s] Rerouted %d stream(s) to BT sink %s", self.player_name, moved, self.bluetooth_sink_name)
             await self._send_subprocess_command({"cmd": "reconnect", "delay": 1.0})

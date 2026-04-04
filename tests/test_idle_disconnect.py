@@ -273,6 +273,34 @@ class TestWakeFromStandby:
 
             client.bt_manager.allow_reconnect.assert_not_called()
 
+    @pytest.mark.asyncio
+    async def test_reroute_rearms_idle_timer_when_sink_not_running(self):
+        """After wake, _reroute_to_bt_sink re-arms idle timer if sink is idle.
+
+        Regression test: SinkMonitor fires on_idle while bt_standby is True
+        (race window) → _on_sink_idle returns early.  After bt_standby is
+        cleared in _reroute_to_bt_sink, the idle timer must be re-armed.
+        """
+        with patch("sendspin_client._state"):
+            client = _make_client(idle_disconnect_minutes=2)
+            client.bluetooth_sink_name = "bluez_sink.AA_BB.a2dp_sink"
+            client.status.update({"bt_standby": True, "bt_waking": True})
+            client._daemon_proc = MagicMock(pid=12345)
+            client._send_subprocess_command = AsyncMock()
+
+            # SinkMonitor reports sink as suspended (not running)
+            sm = MagicMock()
+            sm._sink_states = {"bluez_sink.AA_BB.a2dp_sink": "suspended"}
+            client._sink_monitor = sm
+
+            with patch("services.pulse.amove_pid_sink_inputs", new_callable=AsyncMock, return_value=0):
+                await client._reroute_to_bt_sink()
+
+            # bt_standby cleared
+            assert client.status["bt_standby"] is False
+            # idle timer must have been started (task is not None)
+            assert client._idle_timer_task is not None
+
 
 class TestBtMonitorStandbyCheck:
     """bt_monitor skips reconnect when device is in standby."""
