@@ -316,7 +316,7 @@ def test_api_update_info_reports_beta_channel_warning(config_client, monkeypatch
     assert data["channel"] == "beta"
     assert "Beta channel" in data["channel_warning"]
     assert data["command"] == "docker compose pull && docker compose up -d"
-    assert "ghcr.io/trudenboy/sendspin-bt-bridge:beta" in data["instructions"]
+    assert data["docker_image"] == "ghcr.io/trudenboy/sendspin-bt-bridge:beta"
 
 
 def test_api_update_info_reports_matching_ha_addon_delivery_channel(config_client, monkeypatch):

@@ -345,10 +345,13 @@ def _docker_update_command(channel: str) -> str:
     return "docker compose pull && docker compose up -d"
 
 
-def _docker_update_instructions(channel: str) -> str:
+def _docker_update_instructions(channel: str) -> tuple[str, str]:
     image_tag = channel_image_tag(channel)
     image = f"ghcr.io/trudenboy/sendspin-bt-bridge:{image_tag}"
-    return f"Make sure your docker-compose.yml uses image: {image}, then run the command below in the same directory."
+    return (
+        "Make sure your docker-compose.yml uses this image, then run the command below in the same directory.",
+        image,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1168,7 +1171,9 @@ def api_update_info():
     else:
         result["update_method"] = "manual"
         result["command"] = _docker_update_command(channel)
-        result["instructions"] = _docker_update_instructions(channel)
+        instructions_text, docker_image = _docker_update_instructions(channel)
+        result["instructions"] = instructions_text
+        result["docker_image"] = docker_image
     return jsonify(result)
 
 

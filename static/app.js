@@ -10305,8 +10305,40 @@ function _showUpdateDialog(ver, releaseUrl, releaseChannel) {
                     instructionsEl.className = 'update-modal-instructions';
                     var instructionText = document.createElement('div');
                     instructionText.className = 'update-modal-instructions-copy';
-                    instructionText.textContent = info.instructions || 'Pull the new image and redeploy your stack.';
+                    if (info.docker_image) {
+                        instructionText.append('Make sure your ');
+                        var composeFile = document.createElement('strong');
+                        composeFile.textContent = 'docker-compose.yml';
+                        instructionText.appendChild(composeFile);
+                        instructionText.append(' uses this image, then run the command below in the same directory.');
+                    } else {
+                        instructionText.textContent = info.instructions || 'Pull the new image and redeploy your stack.';
+                    }
                     instructionsEl.appendChild(instructionText);
+                    if (info.docker_image) {
+                        var imageRow = document.createElement('div');
+                        imageRow.className = 'update-modal-command-row';
+                        var imageCode = document.createElement('code');
+                        imageCode.className = 'update-modal-command';
+                        imageCode.textContent = info.docker_image;
+                        imageRow.appendChild(imageCode);
+                        var imageCopyBtn = document.createElement('button');
+                        imageCopyBtn.type = 'button';
+                        imageCopyBtn.className = 'update-modal-copy-btn';
+                        imageCopyBtn.textContent = 'Copy';
+                        imageCopyBtn.onclick = function() {
+                            var btn = this;
+                            _copyToClipboard(info.docker_image).then(function() {
+                                btn.textContent = 'Copied';
+                                showToast('Docker image copied', 'info');
+                                setTimeout(function() { btn.textContent = 'Copy'; }, 1600);
+                            }).catch(function() {
+                                showToast('Could not copy image name', 'error');
+                            });
+                        };
+                        imageRow.appendChild(imageCopyBtn);
+                        instructionsEl.appendChild(imageRow);
+                    }
                     if (info.command) {
                         var commandRow = document.createElement('div');
                         commandRow.className = 'update-modal-command-row';
