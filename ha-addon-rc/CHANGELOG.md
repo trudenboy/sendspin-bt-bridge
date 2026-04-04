@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.54.1-rc.3] - 2026-04-04
+
+### Fixed
+- **Mobile action buttons overflow** — expanded device card kept the desktop 2-column grid on mobile when dark mode was applied via class (`html.theme-dark`) instead of OS preference; action buttons (Reconnect / Wake / Disable) were squeezed into a narrow `auto` column and text was truncated. Moved missing layout overrides (`list-detail-body`, `list-detail-player-main`, `list-detail-art-rail`) to the top-level `≤640 px` breakpoint and added `text-overflow: ellipsis` safety net on button labels.
+
 ## [2.54.1-rc.2] - 2026-04-04
 
 ### Fixed
