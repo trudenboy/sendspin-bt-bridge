@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.54.1-rc.2] - 2026-04-04
+
+### Fixed
+- **Process hangs after restart** — signal handler ran `graceful_shutdown()` but never stopped the asyncio event loop; the process stayed alive in a "shutdown complete" state with no devices while S6/Docker thought it was still healthy. Now calls `loop.stop()` after shutdown so the process actually exits and gets restarted.
+- **MUTE_VIA_MA default changed to `true`** — mute commands from the bridge web UI now route through the MA API by default so Music Assistant UI stays in sync (#132)
+
 ## [2.54.1-rc.1] - 2026-04-04
 
 ### Fixed

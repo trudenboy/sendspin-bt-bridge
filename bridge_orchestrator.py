@@ -325,7 +325,11 @@ class BridgeOrchestrator:
             shutdown_factory_fn = self.graceful_shutdown
 
         def _signal_handler() -> None:
-            loop.create_task(shutdown_factory_fn())
+            async def _shutdown_and_exit() -> None:
+                await shutdown_factory_fn()
+                loop.stop()
+
+            loop.create_task(_shutdown_and_exit())
 
         for sig in (signal.SIGTERM, signal.SIGINT):
             loop.add_signal_handler(sig, _signal_handler)
