@@ -245,7 +245,7 @@
     },
     "MUTE_VIA_MA": {
       "type": "boolean",
-      "default": false,
+      "default": true,
       "description": "Route mute commands through Music Assistant API."
     },
     "SMOOTH_RESTART": {
