@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.54.2-rc.1] - 2026-04-05
+
+### Fixed
+- **Mute desync after BT reconnect** — after Bluetooth reconnect, the daemon unmuted the PulseAudio sink but never notified Music Assistant, leaving MA stuck on `muted=true` while audio was playing normally. The parent process now detects `sink_muted→false` transitions and forwards the unmute to MA via `players/cmd/volume_mute` when `MUTE_VIA_MA` is enabled (#132)
+
 ## [2.54.1] - 2026-04-04
 
 ### Fixed
