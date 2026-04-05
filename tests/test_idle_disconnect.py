@@ -453,15 +453,13 @@ class TestIdleTimerGuardAtFiring:
     """_idle_timeout() safety guard at firing time."""
 
     @pytest.mark.asyncio
-    async def test_timer_enters_standby_directly(self):
-        """Timer fires → enters standby without checking daemon flags."""
+    async def test_timer_suppressed_when_daemon_reports_playing(self):
+        """Timer fires but daemon says playing=True → suppress standby (#120)."""
         with patch("sendspin_client._state") as state_mock:
             state_mock.get_main_loop.return_value = None
             state_mock.notify_status_changed = MagicMock()
             state_mock.publish_device_event = MagicMock()
             client = _make_client(idle_disconnect_minutes=30)
-            # Playing=True should NOT prevent standby — PA sink state
-            # (via SinkMonitor) is the authority, not daemon flags.
             client.status.update({"playing": True})
 
             with patch("sendspin_client.asyncio.sleep", new_callable=AsyncMock):
@@ -469,7 +467,8 @@ class TestIdleTimerGuardAtFiring:
                 task = client._idle_timer_task
                 assert task is not None
                 await task
-                assert client.status["bt_standby"] is True
+                # Daemon reports active playback — must NOT enter standby
+                assert client.status["bt_standby"] is False
 
     @pytest.mark.asyncio
     async def test_timer_enters_standby_when_idle_at_fire_time(self):
@@ -548,7 +547,7 @@ class TestIdleTimerGuardAtFiring:
 
     @pytest.mark.asyncio
     async def test_timer_proceeds_when_pa_sink_idle(self):
-        """Timer fires and cached PA sink state is 'idle' → enter standby."""
+        """Timer fires and cached PA sink state is 'idle', daemon idle → enter standby."""
         with patch("sendspin_client._state") as state_mock:
             state_mock.get_main_loop.return_value = None
             state_mock.notify_status_changed = MagicMock()
@@ -565,6 +564,45 @@ class TestIdleTimerGuardAtFiring:
                 assert task is not None
                 await task
                 assert client.status["bt_standby"] is True
+
+    @pytest.mark.asyncio
+    async def test_timer_suppressed_when_daemon_streaming(self):
+        """Timer fires but daemon says audio_streaming=True → suppress standby (#120)."""
+        with patch("sendspin_client._state") as state_mock:
+            state_mock.get_main_loop.return_value = None
+            state_mock.notify_status_changed = MagicMock()
+            state_mock.publish_device_event = MagicMock()
+            client = _make_client(idle_disconnect_minutes=30)
+            client.status.update({"audio_streaming": True})
+
+            with patch("sendspin_client.asyncio.sleep", new_callable=AsyncMock):
+                client._start_idle_timer()
+                task = client._idle_timer_task
+                assert task is not None
+                await task
+                assert client.status["bt_standby"] is False
+
+    @pytest.mark.asyncio
+    async def test_timer_suppressed_pa_idle_but_daemon_playing(self):
+        """PA sink idle + daemon playing → daemon flag safety net suppresses standby."""
+        with patch("sendspin_client._state") as state_mock:
+            state_mock.get_main_loop.return_value = None
+            state_mock.notify_status_changed = MagicMock()
+            state_mock.publish_device_event = MagicMock()
+            client = _make_client(idle_disconnect_minutes=30)
+            sm = MagicMock()
+            sm._sink_states = {"bluez_sink.FC_58_FA_EB_08_6C.a2dp_sink": "idle"}
+            sm.available = True
+            client._sink_monitor = sm
+            client.bluetooth_sink_name = "bluez_sink.FC_58_FA_EB_08_6C.a2dp_sink"
+            client.status.update({"playing": True})
+
+            with patch("sendspin_client.asyncio.sleep", new_callable=AsyncMock):
+                client._start_idle_timer()
+                task = client._idle_timer_task
+                assert task is not None
+                await task
+                assert client.status["bt_standby"] is False
 
 
 class TestSinkMonitorDrivenIdle:
@@ -682,13 +720,13 @@ class TestSinkMonitorActiveCheck:
         client.bluetooth_sink_name = "bluez_sink.FC_58_FA_EB_08_6C.a2dp_sink"
         assert client._sink_monitor_active() is False
 
-    def test_sink_monitor_available_but_no_sink_name_returns_false(self):
-        """Fallback stays active until BT sink is actually discovered."""
+    def test_sink_monitor_available_without_sink_name_returns_true(self):
+        """Fallback suppressed as soon as monitor loop is running (#120)."""
         client = _make_client()
         client._sink_monitor = MagicMock()
         client._sink_monitor.available = True
         client.bluetooth_sink_name = None
-        assert client._sink_monitor_active() is False
+        assert client._sink_monitor_active() is True
 
 
 class TestIdleTimerThreadSafety:

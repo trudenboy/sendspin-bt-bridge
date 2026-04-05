@@ -474,10 +474,16 @@ class SendspinClient:
     # ── Idle disconnect timer ────────────────────────────────────────────
 
     def _sink_monitor_active(self) -> bool:
-        """Return True only when sink monitoring is wired up for this device."""
+        """Return True when a PA sink monitor is running for this bridge.
+
+        Checks whether the monitor loop is live.  The per-device sink
+        registration may happen later (once BT audio is configured), but
+        the fallback daemon-flag timer must be suppressed as soon as the
+        monitor is running — registration fires the correct callback
+        immediately when it arrives.
+        """
         sm = getattr(self, "_sink_monitor", None)
-        sink_name = getattr(self, "bluetooth_sink_name", None)
-        return sm is not None and sm.available and bool(sink_name)
+        return sm is not None and sm.available
 
     def _on_sink_active(self) -> None:
         """Called by SinkMonitor when PA sink enters ``running``.
@@ -532,10 +538,28 @@ class SendspinClient:
                         self.player_name,
                     )
                     return
+                # Secondary safety net: daemon status flags.  These can
+                # lag behind PA state on reconnect, but if the daemon says
+                # playing=True we should never enter standby.
+                if self.status.get("playing") or self.status.get("audio_streaming"):
+                    logger.info(
+                        "[%s] Idle timer fired but daemon reports active playback "
+                        "(playing=%s audio_streaming=%s) — suppressing standby",
+                        self.player_name,
+                        self.status.get("playing"),
+                        self.status.get("audio_streaming"),
+                    )
+                    return
                 logger.info(
-                    "[%s] Idle for %d min — entering standby",
+                    "[%s] Idle for %d min — entering standby "
+                    "(sink_monitor=%s, sink=%s, sink_state=%s, playing=%s, streaming=%s)",
                     self.player_name,
                     self.idle_disconnect_minutes,
+                    "active" if sm and getattr(sm, "available", False) else "inactive",
+                    sink or "none",
+                    getattr(sm, "_sink_states", {}).get(sink, "unknown") if sm and sink else "n/a",
+                    self.status.get("playing"),
+                    self.status.get("audio_streaming"),
                 )
                 await self._enter_standby()
             except asyncio.CancelledError:
