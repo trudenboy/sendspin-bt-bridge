@@ -524,3 +524,163 @@ def test_handle_subprocess_stderr_line_keeps_benign_stderr_as_warning():
 
     assert client.status.last_error is None
     log_warning.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Mute-desync after BT reconnect (#132)
+# ---------------------------------------------------------------------------
+
+
+class _FakeStdoutLines:
+    """Async-iterable that yields pre-encoded lines."""
+
+    def __init__(self, lines):
+        self._lines = list(lines)
+
+    def __aiter__(self):
+        self._iter = iter(self._lines)
+        return self
+
+    async def __anext__(self):
+        try:
+            return next(self._iter)
+        except StopIteration as exc:
+            raise StopAsyncIteration from exc
+
+
+@pytest.mark.asyncio
+async def test_sink_unmute_syncs_to_ma_when_muted_via_ma():
+    """When daemon reports sink_muted=False and MA thinks device is muted,
+    the parent must forward the unmute to MA (issue #132)."""
+    client = SendspinClient("Test Player", "localhost", 9000)
+    client.player_id = "sendspin-test-player"
+    # Simulate MA-muted state before reconnect
+    client._update_status({"muted": True, "sink_muted": True})
+
+    client._daemon_proc = SimpleNamespace(
+        stdout=_FakeStdoutLines(
+            [
+                json.dumps(
+                    {
+                        "type": "status",
+                        "protocol_version": IPC_PROTOCOL_VERSION,
+                        "sink_muted": False,
+                        "muted": True,
+                    }
+                ).encode(),
+            ]
+        )
+    )
+
+    with (
+        patch("sendspin_client._state.notify_status_changed"),
+        patch("routes.api_config.get_mute_via_ma", return_value=True),
+        patch("services.ma_runtime_state.is_ma_connected", return_value=True),
+        patch("services.ma_monitor.send_player_cmd", return_value=True) as mock_cmd,
+    ):
+        await client._read_subprocess_output()
+
+    mock_cmd.assert_awaited_once_with(
+        "players/cmd/volume_mute",
+        {"player_id": "sendspin-test-player", "muted": False},
+    )
+    assert client.status.muted is False
+
+
+@pytest.mark.asyncio
+async def test_sink_unmute_skipped_when_mute_via_ma_disabled():
+    """When MUTE_VIA_MA is disabled, sink unmute should NOT be synced to MA."""
+    client = SendspinClient("Test Player", "localhost", 9000)
+    client.player_id = "sendspin-test-player"
+    client._update_status({"muted": True, "sink_muted": True})
+
+    client._daemon_proc = SimpleNamespace(
+        stdout=_FakeStdoutLines(
+            [
+                json.dumps(
+                    {
+                        "type": "status",
+                        "protocol_version": IPC_PROTOCOL_VERSION,
+                        "sink_muted": False,
+                        "muted": True,
+                    }
+                ).encode(),
+            ]
+        )
+    )
+
+    with (
+        patch("sendspin_client._state.notify_status_changed"),
+        patch("routes.api_config.get_mute_via_ma", return_value=False),
+        patch("services.ma_runtime_state.is_ma_connected", return_value=True),
+        patch("services.ma_monitor.send_player_cmd", return_value=True) as mock_cmd,
+    ):
+        await client._read_subprocess_output()
+
+    mock_cmd.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_sink_unmute_skipped_when_ma_not_connected():
+    """When MA is not connected, unmute should NOT be synced."""
+    client = SendspinClient("Test Player", "localhost", 9000)
+    client.player_id = "sendspin-test-player"
+    client._update_status({"muted": True, "sink_muted": True})
+
+    client._daemon_proc = SimpleNamespace(
+        stdout=_FakeStdoutLines(
+            [
+                json.dumps(
+                    {
+                        "type": "status",
+                        "protocol_version": IPC_PROTOCOL_VERSION,
+                        "sink_muted": False,
+                        "muted": True,
+                    }
+                ).encode(),
+            ]
+        )
+    )
+
+    with (
+        patch("sendspin_client._state.notify_status_changed"),
+        patch("routes.api_config.get_mute_via_ma", return_value=True),
+        patch("services.ma_runtime_state.is_ma_connected", return_value=False),
+        patch("services.ma_monitor.send_player_cmd", return_value=True) as mock_cmd,
+    ):
+        await client._read_subprocess_output()
+
+    mock_cmd.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_sink_unmute_skipped_when_already_in_sync():
+    """When muted is already False, no MA call is needed (no desync)."""
+    client = SendspinClient("Test Player", "localhost", 9000)
+    client.player_id = "sendspin-test-player"
+    client._update_status({"muted": False, "sink_muted": True})
+
+    client._daemon_proc = SimpleNamespace(
+        stdout=_FakeStdoutLines(
+            [
+                json.dumps(
+                    {
+                        "type": "status",
+                        "protocol_version": IPC_PROTOCOL_VERSION,
+                        "sink_muted": False,
+                        "muted": False,
+                    }
+                ).encode(),
+            ]
+        )
+    )
+
+    with (
+        patch("sendspin_client._state.notify_status_changed"),
+        patch("routes.api_config.get_mute_via_ma", return_value=True),
+        patch("services.ma_runtime_state.is_ma_connected", return_value=True),
+        patch("services.ma_monitor.send_player_cmd", return_value=True) as mock_cmd,
+    ):
+        await client._read_subprocess_output()
+
+    mock_cmd.assert_not_awaited()

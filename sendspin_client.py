@@ -1008,8 +1008,39 @@ class SendspinClient:
                     _mac = self.bt_manager.mac_address if self.bt_manager else None
                     if isinstance(new_volume, int) and _mac:
                         save_device_volume(_mac, new_volume)
+                    # Sync unmute to MA after reconnect (#132):
+                    # daemon unmutes PA sink but MA still thinks device is muted.
+                    if updates.get("sink_muted") is False:
+                        await self._sync_unmute_to_ma()
             else:
                 self._ipc_service.handle_message(msg)
+
+    async def _sync_unmute_to_ma(self) -> None:
+        """Sync PA sink unmute to MA after BT reconnect (#132).
+
+        When the daemon unmutes the PulseAudio sink after reconnect,
+        MA may still hold muted=True from the previous session.
+        Forward the unmute so the two stay in sync.
+        """
+        from routes.api_config import get_mute_via_ma
+        from services.ma_runtime_state import is_ma_connected
+
+        if not get_mute_via_ma() or not is_ma_connected():
+            return
+        if not self.status.get("muted"):
+            return  # already in sync
+        pid = self.player_id
+        if not pid:
+            return
+        try:
+            from services.ma_monitor import send_player_cmd
+
+            ok = await send_player_cmd("players/cmd/volume_mute", {"player_id": pid, "muted": False})
+            if ok:
+                logger.info("[%s] Synced unmute to MA after reconnect", self.player_name)
+                self._update_status({"muted": False})
+        except Exception:
+            logger.debug("[%s] Failed to sync unmute to MA", self.player_name, exc_info=True)
 
     async def _read_subprocess_stderr(self) -> None:
         """Forward daemon subprocess stderr lines with severity matching their content."""
