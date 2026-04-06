@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.55.0-rc.12] - 2026-04-06
+
+### Changed
+- **Unified branding** — all logos, favicons, and addon assets replaced with the landing page wave-bridge design (two pillars + three wave curves); color differentiation preserved across channels; total asset size reduced from ~310 KB to ~55 KB
+
 ## [2.55.0-rc.11] - 2026-04-06
 
 ### Changed
