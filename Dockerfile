@@ -56,6 +56,16 @@ RUN if [ "${TARGETARCH}${TARGETVARIANT}" = "armv7" ]; then \
         pip install --no-cache-dir --prefix=/install -r /tmp/requirements.txt; \
     fi
 
+# Strip bloat from installed packages before copying to runtime stage
+RUN find /install -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null; \
+    find /install -type d -name tests -path '*/numpy/*' -exec rm -rf {} + 2>/dev/null; \
+    find /install -type d -name '*.dist-info' -exec sh -c 'rm -rf "$1"/RECORD "$1"/LICENSE* "$1"/NOTICE*' _ {} \; 2>/dev/null; \
+    rm -rf /install/lib/python3.12/site-packages/pip \
+           /install/lib/python3.12/site-packages/pygments \
+           /install/bin/pip* \
+           /install/bin/pygmentize; \
+    true
+
 # ──────────────────────────────────────────────────────────────────────────────
 FROM python:3.12-slim
 
@@ -71,6 +81,8 @@ ENV PYTHONUNBUFFERED=1 \
     S6_CMD_WAIT_FOR_SERVICES_MAXTIME=30000
 
 # Runtime system dependencies only (no build tools)
+ARG TARGETARCH
+ARG TARGETVARIANT
 RUN apt-get update && apt-get install -y --no-install-recommends \
     bluetooth \
     bluez \
@@ -79,14 +91,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gosu \
     pulseaudio \
     pulseaudio-module-bluetooth \
-    libavcodec61 \
-    libavdevice61 \
-    libavfilter10 \
-    libavformat61 \
-    libavutil59 \
     libportaudio2 \
-    libswresample5 \
-    libswscale8 \
     dbus \
     libdbus-1-3 \
     libdbus-glib-1-2 \
@@ -94,10 +99,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     tzdata \
     xz-utils \
     curl \
+    && if [ "${TARGETARCH}${TARGETVARIANT}" = "armv7" ]; then \
+        apt-get install -y --no-install-recommends \
+            libavcodec61 libavdevice61 libavfilter10 libavformat61 \
+            libavutil59 libswresample5 libswscale8; \
+    fi \
     && rm -rf /var/lib/apt/lists/*
 
 # Install S6 overlay (multi-arch aware)
-ARG TARGETARCH
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN S6_ARCH="" && \
     case "${TARGETARCH}" in \

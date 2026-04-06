@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.55.0-rc.7] - 2026-04-06
+
+### Changed
+- **Docker image size −37%** (916 → ~580 MB) — removed redundant system FFmpeg libraries on amd64/arm64; PyAV wheels bundle their own FFmpeg in `av.libs/`. System FFmpeg retained for armv7 only (compiled from source)
+- **pip package cleanup** — strip `__pycache__`, numpy test suite, pygments, pip from runtime image
+
 ## [2.55.0-rc.6] - 2026-04-06
 
 ### Fixed
