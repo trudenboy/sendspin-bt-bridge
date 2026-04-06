@@ -65,7 +65,7 @@ RUN find /install -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null; \
            /install/bin/pip* \
            /install/bin/pygmentize; \
     # Strip debug symbols from native libraries (~20-40 MB savings)
-    find /install -name '*.so' -o -name '*.so.*' | xargs strip --strip-unneeded 2>/dev/null; \
+    find /install \( -name '*.so' -o -name '*.so.*' \) -exec strip --strip-unneeded {} + 2>/dev/null; \
     true
 
 # ──────────────────────────────────────────────────────────────────────────────
