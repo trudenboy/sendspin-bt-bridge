@@ -1,103 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 204 108" width="204" height="108">
   <defs>
-    <linearGradient id="bridgeH" x1="0" y1="0" x2="1" y2="0">
+    <linearGradient id="lg" x1="0" y1="0" x2="1" y2="0">
       <stop offset="0%" stop-color="#50B0B8"/>
-      <stop offset="35%" stop-color="#5A9AAE"/>
-      <stop offset="65%" stop-color="#7085AE"/>
       <stop offset="100%" stop-color="#9070B8"/>
     </linearGradient>
-    <linearGradient id="bC1" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#40B5B8"/><stop offset="100%" stop-color="#58C5C5"/></linearGradient>
-    <linearGradient id="bC2" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#45ADB5"/><stop offset="100%" stop-color="#5CBCBE"/></linearGradient>
-    <linearGradient id="bC3" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#4AA5B0"/><stop offset="100%" stop-color="#60B2B5"/></linearGradient>
-    <linearGradient id="bC4" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#5098AA"/><stop offset="100%" stop-color="#68A8AE"/></linearGradient>
-    <linearGradient id="bC5" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#5890A5"/><stop offset="100%" stop-color="#70A0AA"/></linearGradient>
-    <linearGradient id="bC6" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#6585A5"/><stop offset="100%" stop-color="#7895AA"/></linearGradient>
-    <linearGradient id="bC7" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#7078A5"/><stop offset="100%" stop-color="#8588AB"/></linearGradient>
-    <linearGradient id="bC8" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#7A6EA8"/><stop offset="100%" stop-color="#9080B0"/></linearGradient>
-    <linearGradient id="bC9" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#8565AA"/><stop offset="100%" stop-color="#9878B2"/></linearGradient>
   </defs>
-
-  <!-- ═══ SEGMENTED EQUALIZER BARS ═══ -->
-  <g><g fill="url(#bC1)"><rect x="28" y="50.5" width="5" height="4" rx="0.6"/><rect x="28" y="45" width="5" height="4" rx="0.6"/><rect x="28" y="39.5" width="5" height="4" rx="0.6"/><rect x="28" y="34" width="5" height="4" rx="0.6"/><rect x="28" y="28.5" width="5" height="4" rx="0.6"/></g>
-  <g fill="url(#bC2)"><rect x="38" y="50.5" width="6" height="4" rx="0.6"/><rect x="38" y="45" width="6" height="4" rx="0.6"/><rect x="38" y="39.5" width="6" height="4" rx="0.6"/><rect x="38" y="34" width="6" height="4" rx="0.6"/><rect x="38" y="28.5" width="6" height="4" rx="0.6"/><rect x="38" y="23" width="6" height="4" rx="0.6"/><rect x="38" y="17.5" width="6" height="4" rx="0.6"/><rect x="38" y="12" width="6" height="4" rx="0.6"/><rect x="38" y="6.5" width="6" height="4" rx="0.6"/></g>
-  <g fill="url(#bC2)"><rect x="48" y="50.5" width="5" height="4" rx="0.6"/><rect x="48" y="45" width="5" height="4" rx="0.6"/><rect x="48" y="39.5" width="5" height="4" rx="0.6"/><rect x="48" y="34" width="5" height="4" rx="0.6"/><rect x="48" y="28.5" width="5" height="4" rx="0.6"/><rect x="48" y="23" width="5" height="4" rx="0.6"/><rect x="48" y="17.5" width="5" height="4" rx="0.6"/><rect x="48" y="12" width="5" height="4" rx="0.6"/><rect x="48" y="6.5" width="5" height="4" rx="0.6"/></g>
-  <g fill="url(#bC3)"><rect x="58" y="50.5" width="5" height="4" rx="0.6"/><rect x="58" y="45" width="5" height="4" rx="0.6"/><rect x="58" y="39.5" width="5" height="4" rx="0.6"/><rect x="58" y="34" width="5" height="4" rx="0.6"/></g>
-  <g fill="url(#bC4)"><rect x="73" y="50.5" width="8" height="4" rx="0.6"/><rect x="73" y="45" width="8" height="4" rx="0.6"/><rect x="73" y="39.5" width="8" height="4" rx="0.6"/><rect x="73" y="34" width="8" height="4" rx="0.6"/><rect x="73" y="28.5" width="8" height="4" rx="0.6"/></g>
-  <g fill="url(#bC5)"><rect x="83" y="50.5" width="8" height="4" rx="0.6"/><rect x="83" y="45" width="8" height="4" rx="0.6"/><rect x="83" y="39.5" width="8" height="4" rx="0.6"/><rect x="83" y="34" width="8" height="4" rx="0.6"/><rect x="83" y="28.5" width="8" height="4" rx="0.6"/><rect x="83" y="23" width="8" height="4" rx="0.6"/><rect x="83" y="17.5" width="8" height="4" rx="0.6"/><rect x="83" y="12" width="8" height="4" rx="0.6"/><rect x="83" y="6.5" width="8" height="4" rx="0.6"/><rect x="83" y="1" width="8" height="4" rx="0.6"/></g>
-  <g fill="url(#bC5)"><rect x="93" y="50.5" width="8" height="4" rx="0.6"/><rect x="93" y="45" width="8" height="4" rx="0.6"/><rect x="93" y="39.5" width="8" height="4" rx="0.6"/><rect x="93" y="34" width="8" height="4" rx="0.6"/><rect x="93" y="28.5" width="8" height="4" rx="0.6"/><rect x="93" y="23" width="8" height="4" rx="0.6"/></g>
-  <g fill="url(#bC6)"><rect x="103" y="50.5" width="8" height="4" rx="0.6"/><rect x="103" y="45" width="8" height="4" rx="0.6"/><rect x="103" y="39.5" width="8" height="4" rx="0.6"/></g>
-  <g fill="url(#bC6)"><rect x="113" y="50.5" width="7" height="4" rx="0.6"/><rect x="113" y="45" width="7" height="4" rx="0.6"/><rect x="113" y="39.5" width="7" height="4" rx="0.6"/><rect x="113" y="34" width="7" height="4" rx="0.6"/><rect x="113" y="28.5" width="7" height="4" rx="0.6"/></g>
-  <g fill="url(#bC7)"><rect x="122" y="50.5" width="8" height="4" rx="0.6"/><rect x="122" y="45" width="8" height="4" rx="0.6"/><rect x="122" y="39.5" width="8" height="4" rx="0.6"/><rect x="122" y="34" width="8" height="4" rx="0.6"/><rect x="122" y="28.5" width="8" height="4" rx="0.6"/><rect x="122" y="23" width="8" height="4" rx="0.6"/><rect x="122" y="17.5" width="8" height="4" rx="0.6"/><rect x="122" y="12" width="8" height="4" rx="0.6"/></g>
-  <g fill="url(#bC7)"><rect x="141" y="50.5" width="5" height="4" rx="0.6"/><rect x="141" y="45" width="5" height="4" rx="0.6"/><rect x="141" y="39.5" width="5" height="4" rx="0.6"/><rect x="141" y="34" width="5" height="4" rx="0.6"/></g>
-  <g fill="url(#bC8)"><rect x="152" y="50.5" width="6" height="4" rx="0.6"/><rect x="152" y="45" width="6" height="4" rx="0.6"/><rect x="152" y="39.5" width="6" height="4" rx="0.6"/><rect x="152" y="34" width="6" height="4" rx="0.6"/><rect x="152" y="28.5" width="6" height="4" rx="0.6"/><rect x="152" y="23" width="6" height="4" rx="0.6"/><rect x="152" y="17.5" width="6" height="4" rx="0.6"/><rect x="152" y="12" width="6" height="4" rx="0.6"/><rect x="152" y="6.5" width="6" height="4" rx="0.6"/></g>
-  <g fill="url(#bC8)"><rect x="161" y="50.5" width="6" height="4" rx="0.6"/><rect x="161" y="45" width="6" height="4" rx="0.6"/><rect x="161" y="39.5" width="6" height="4" rx="0.6"/><rect x="161" y="34" width="6" height="4" rx="0.6"/><rect x="161" y="28.5" width="6" height="4" rx="0.6"/><rect x="161" y="23" width="6" height="4" rx="0.6"/><rect x="161" y="17.5" width="6" height="4" rx="0.6"/><rect x="161" y="12" width="6" height="4" rx="0.6"/><rect x="161" y="6.5" width="6" height="4" rx="0.6"/></g>
-  <g fill="url(#bC9)"><rect x="172" y="50.5" width="5" height="4" rx="0.6"/><rect x="172" y="45" width="5" height="4" rx="0.6"/><rect x="172" y="39.5" width="5" height="4" rx="0.6"/><rect x="172" y="34" width="5" height="4" rx="0.6"/></g></g>
-
-  <!-- ═══ BRIDGE (all uniform stroke lines) ═══ -->
-  <g stroke="url(#bridgeH)" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-
-    <!-- DECK: 2 horizontal bands of 2 lines each -->
-    <line x1="0" y1="74" x2="204" y2="74"/>
-    <line x1="0" y1="77" x2="204" y2="77"/>
-    <line x1="0" y1="82" x2="204" y2="82"/>
-    <line x1="0" y1="85" x2="204" y2="85"/>
-
-    <!-- LEFT TOWER: 2 pillars from top through deck to bottom -->
-    <line x1="41" y1="55" x2="37" y2="108"/>
-    <line x1="49" y1="55" x2="53" y2="108"/>
-    <!-- Cross-beams -->
-    <line x1="41" y1="65" x2="49" y2="65"/>
-    <line x1="40.5" y1="74" x2="49.5" y2="74"/>
-    <line x1="40" y1="82" x2="50" y2="82"/>
-    <line x1="39.5" y1="90" x2="50.5" y2="90"/>
-    <line x1="39" y1="98" x2="51" y2="98"/>
-
-    <!-- RIGHT TOWER: 2 pillars from top through deck to bottom -->
-    <line x1="155" y1="55" x2="151" y2="108"/>
-    <line x1="163" y1="55" x2="167" y2="108"/>
-    <!-- Cross-beams -->
-    <line x1="155" y1="65" x2="163" y2="65"/>
-    <line x1="154.5" y1="74" x2="163.5" y2="74"/>
-    <line x1="154" y1="82" x2="164" y2="82"/>
-    <line x1="153.5" y1="90" x2="164.5" y2="90"/>
-    <line x1="153" y1="98" x2="165" y2="98"/>
-
-    <!-- MAIN CABLES -->
-    <!-- Left outer: deck edge → left tower top -->
-    <path d="M 2,77 Q 22,62 41,55"/>
-    <!-- Left inner: left tower top → center (sag to ~72) -->
-    <path d="M 41,55 Q 72,72 102,72"/>
-    <!-- Right inner: center → right tower top -->
-    <path d="M 102,72 Q 132,72 163,55"/>
-    <!-- Right outer: right tower top → deck edge -->
-    <path d="M 163,55 Q 182,62 202,77"/>
-
-    <!-- SUSPENDERS: vertical lines from cable to upper deck -->
-    <!-- Left outer span -->
-    <line x1="10" y1="72.5" x2="10" y2="74"/>
-    <line x1="17" y1="69" x2="17" y2="74"/>
-    <line x1="24" y1="65.5" x2="24" y2="74"/>
-    <line x1="31" y1="62" x2="31" y2="74"/>
-    <!-- Left inner span -->
-    <line x1="50" y1="58" x2="50" y2="74"/>
-    <line x1="57" y1="60.5" x2="57" y2="74"/>
-    <line x1="64" y1="63" x2="64" y2="74"/>
-    <line x1="71" y1="65" x2="71" y2="74"/>
-    <line x1="78" y1="67" x2="78" y2="74"/>
-    <line x1="85" y1="68.5" x2="85" y2="74"/>
-    <line x1="92" y1="70" x2="92" y2="74"/>
-    <!-- Right inner span -->
-    <line x1="112" y1="70" x2="112" y2="74"/>
-    <line x1="119" y1="68.5" x2="119" y2="74"/>
-    <line x1="126" y1="67" x2="126" y2="74"/>
-    <line x1="133" y1="65" x2="133" y2="74"/>
-    <line x1="140" y1="63" x2="140" y2="74"/>
-    <line x1="147" y1="60.5" x2="147" y2="74"/>
-    <line x1="154" y1="58" x2="154" y2="74"/>
-    <!-- Right outer span -->
-    <line x1="173" y1="62" x2="173" y2="74"/>
-    <line x1="180" y1="65.5" x2="180" y2="74"/>
-    <line x1="187" y1="69" x2="187" y2="74"/>
-    <line x1="194" y1="72.5" x2="194" y2="74"/>
-  </g>
+  <rect x="24.5" y="23.8" width="18.4" height="60.5" rx="6.4" fill="url(#lg)" opacity="0.9"/>
+  <rect x="161.2" y="23.8" width="18.4" height="60.5" rx="6.4" fill="url(#lg)" opacity="0.9"/>
+  <path d="M46.9 35.9 Q102.0 25.0 102.0 35.9 Q102.0 46.7 157.1 35.9" stroke="#50B0B8" stroke-width="7.8" fill="none" stroke-linecap="round" opacity="0.85"/>
+  <path d="M46.9 54.0 Q102.0 43.1 102.0 54.0 Q102.0 64.9 157.1 54.0" stroke="#7085AE" stroke-width="7.8" fill="none" stroke-linecap="round" opacity="0.85"/>
+  <path d="M46.9 72.1 Q102.0 61.3 102.0 72.1 Q102.0 83.0 157.1 72.1" stroke="#9070B8" stroke-width="7.8" fill="none" stroke-linecap="round" opacity="0.85"/>
+  <line x1="12.2" y1="90.7" x2="191.8" y2="90.7" stroke="url(#lg)" stroke-width="5.5" stroke-linecap="round" opacity="0.45"/>
 </svg>
