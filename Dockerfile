@@ -109,8 +109,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         # On amd64/arm64 PyAV bundles its own FFmpeg in av.libs/.
         # Remove transitive FFmpeg/GStreamer/codec deps pulled by pulseaudio
         # (~107 MB) — pactl/paplay work fine without them.
+        # Keep libasound2-plugins — it provides the ALSA→PulseAudio bridge
+        # (libasound_module_pcm_pulse.so) required by sounddevice/PortAudio.
         dpkg --force-depends -r \
-            libasound2-plugins iso-codes \
+            iso-codes \
             libavcodec61 libavfilter10 libavformat61 libavdevice61 \
             libavutil59 libswresample5 libswscale8 \
             libx265-215 libx264-164 libaom3 libsvtav1enc2 \
