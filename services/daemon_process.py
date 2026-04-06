@@ -595,6 +595,7 @@ async def _run(params: dict) -> None:
         "playing": False,
         "server_connected": False,
         "server_connected_at": None,
+        "server_url": server_url,
         "current_track": None,
         "current_artist": None,
         "volume": initial_volume,
@@ -663,6 +664,8 @@ async def _run(params: dict) -> None:
     cmd_task = asyncio.create_task(_read_commands(daemon_ref, stop_event, bt_sink_name=bluetooth_sink_name))
     daemon_task = asyncio.create_task(daemon.run())
     watcher_task = asyncio.create_task(_reanchor_watcher(status, _on_status_change, stop_event))
+    # Connection watchdog: surfaces a clear error when daemon cannot reach the server
+    conn_watchdog_task = asyncio.create_task(daemon._connection_watchdog())
     unmute_task = None
     if _startup_muted and bluetooth_sink_name:
         unmute_task = asyncio.create_task(
@@ -672,7 +675,7 @@ async def _run(params: dict) -> None:
         )
 
     # Wait until stop command or daemon exits.
-    # unmute_task is NOT in all_tasks — it's fire-and-forget so its completion
+    # unmute_task and conn_watchdog_task are fire-and-forget so their completion
     # doesn't trigger FIRST_COMPLETED and kill the daemon.
     all_tasks = [cmd_task, daemon_task, watcher_task, asyncio.create_task(stop_event.wait())]
     _done, pending = await asyncio.wait(
@@ -683,6 +686,7 @@ async def _run(params: dict) -> None:
     daemon_task.cancel()
     cmd_task.cancel()
     watcher_task.cancel()
+    conn_watchdog_task.cancel()
     if unmute_task:
         unmute_task.cancel()
     for t in pending:

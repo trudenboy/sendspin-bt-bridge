@@ -364,6 +364,33 @@ class BridgeDaemon(SendspinDaemon):
         self._bridge_status["group_id"] = None
         self._notify()
 
+    async def _connection_watchdog(self, delay: float = 30.0, poll_interval: float = 2.0) -> None:
+        """Surface a clear error when the daemon cannot reach the Sendspin server.
+
+        Runs as a background task alongside the daemon.  After *delay* seconds
+        with ``server_connected`` still False, sets ``last_error`` with the
+        target URL so the operator sees an actionable message in the UI.
+        Clears the error automatically once the connection succeeds.
+        """
+        try:
+            await asyncio.sleep(delay)
+            if self._bridge_status.get("server_connected"):
+                return
+            url = self._bridge_status.get("server_url") or "unknown"
+            self._bridge_status["last_error"] = (
+                f"Cannot connect to Sendspin server at {url}. "
+                "Check that SENDSPIN_PORT matches your Music Assistant Sendspin port."
+            )
+            self._bridge_status["last_error_at"] = datetime.now(tz=UTC).isoformat()
+            self._notify()
+            # Keep watching — clear the error once connected
+            while not self._bridge_status.get("server_connected"):
+                await asyncio.sleep(poll_interval)
+            self._bridge_status["last_error"] = None
+            self._notify()
+        except asyncio.CancelledError:
+            return
+
     # ── Audio / stream events ────────────────────────────────────────────────
 
     def _handle_format_change(self, codec: str | None, sample_rate: int, bit_depth: int, channels: int) -> None:

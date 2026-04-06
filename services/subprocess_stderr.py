@@ -17,6 +17,8 @@ UTC = timezone.utc
 class SubprocessStderrService:
     """Own stderr classification and crash-like status publication."""
 
+    _CONNECTION_ERROR_THRESHOLD = 3
+
     def __init__(
         self,
         *,
@@ -29,6 +31,7 @@ class SubprocessStderrService:
         self._update_status = update_status
         self._logger = logger_ or logging.getLogger(__name__)
         self._now_factory = now_factory or (lambda: datetime.now(tz=UTC))
+        self._consecutive_connection_errors = 0
 
     async def read_stream(self, stderr) -> None:
         """Read stderr lines until EOF and forward them through classification."""
@@ -45,6 +48,23 @@ class SubprocessStderrService:
         text = line.rstrip()
         if not text:
             return
+
+        # Track repeated connection errors to surface them
+        if "Connection error" in text and "ClientConnectorError" in text:
+            self._consecutive_connection_errors += 1
+            if self._consecutive_connection_errors >= self._CONNECTION_ERROR_THRESHOLD:
+                self._update_status(
+                    {
+                        "last_error": (
+                            "Cannot connect to Sendspin server. "
+                            "Check that SENDSPIN_PORT matches your Music Assistant Sendspin port."
+                        ),
+                        "last_error_at": self._now_factory().isoformat(),
+                    }
+                )
+        else:
+            self._consecutive_connection_errors = 0
+
         level = classify_subprocess_stderr_level(text)
         if level in ("error", "critical"):
             self._update_status(

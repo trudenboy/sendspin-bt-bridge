@@ -624,3 +624,55 @@ class TestHeartbeatListenerOverride:
 
         assert len(ws_kwargs) >= 1
         assert ws_kwargs[0].get("heartbeat") == 30
+
+
+class TestConnectionWatchdog:
+    """Tests for the connection watchdog that surfaces persistent connection failures."""
+
+    @pytest.mark.asyncio
+    async def test_watchdog_sets_last_error_when_not_connected(self):
+        """After delay, watchdog sets last_error if server_connected is still False."""
+        status = {"server_connected": False, "server_url": "ws://192.168.1.10:9000/sendspin"}
+        daemon = _make_bridge_daemon(status)
+        task = asyncio.create_task(daemon._connection_watchdog(delay=0.05))
+        await asyncio.sleep(0.1)
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+        assert status.get("last_error") is not None
+        assert "9000" in status["last_error"]
+        assert len(daemon._notified) >= 1
+
+    @pytest.mark.asyncio
+    async def test_watchdog_noop_when_already_connected(self):
+        """Watchdog does nothing if server_connected is True before delay expires."""
+        status = {"server_connected": True, "server_url": "ws://192.168.1.10:9000/sendspin"}
+        daemon = _make_bridge_daemon(status)
+        task = asyncio.create_task(daemon._connection_watchdog(delay=0.05))
+        await asyncio.sleep(0.1)
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+        assert status.get("last_error") is None
+
+    @pytest.mark.asyncio
+    async def test_watchdog_clears_when_connected_later(self):
+        """Watchdog clears last_error once server_connected becomes True."""
+        status = {"server_connected": False, "server_url": "ws://host:9000/sendspin"}
+        daemon = _make_bridge_daemon(status)
+        task = asyncio.create_task(daemon._connection_watchdog(delay=0.05, poll_interval=0.02))
+        await asyncio.sleep(0.1)
+        assert status.get("last_error") is not None
+        # Now simulate connection success
+        status["server_connected"] = True
+        await asyncio.sleep(0.05)
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+        assert status.get("last_error") is None

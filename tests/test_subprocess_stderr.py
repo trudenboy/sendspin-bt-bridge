@@ -84,3 +84,42 @@ async def test_read_stream_processes_until_eof():
     ]
     logger.warning.assert_called_once()
     logger.critical.assert_called_once()
+
+
+def test_handle_line_surfaces_repeated_connection_errors():
+    """Repeated ClientConnectorError lines should surface as last_error."""
+    updates: list[dict] = []
+    logger = Mock()
+    service = SubprocessStderrService(
+        player_name="Kitchen",
+        update_status=updates.append,
+        logger_=logger,
+        now_factory=lambda: datetime(2026, 4, 6, 15, 0, tzinfo=UTC),
+    )
+
+    # First two are warnings, third triggers error surfacing
+    service.handle_line("Connection error (ClientConnectorError), retrying in 1s")
+    service.handle_line("Connection error (ClientConnectorError), retrying in 2s")
+    service.handle_line("Connection error (ClientConnectorError), retrying in 4s")
+
+    assert any("Cannot connect" in u.get("last_error", "") for u in updates)
+
+
+def test_handle_line_connection_error_counter_resets_on_other_line():
+    """Non-connection-error lines reset the consecutive counter."""
+    updates: list[dict] = []
+    logger = Mock()
+    service = SubprocessStderrService(
+        player_name="Kitchen",
+        update_status=updates.append,
+        logger_=logger,
+        now_factory=lambda: datetime(2026, 4, 6, 15, 0, tzinfo=UTC),
+    )
+
+    service.handle_line("Connection error (ClientConnectorError), retrying in 1s")
+    service.handle_line("Connection error (ClientConnectorError), retrying in 2s")
+    service.handle_line("ALSA lib pcm.c:2666: Unknown PCM default")  # resets counter
+    service.handle_line("Connection error (ClientConnectorError), retrying in 4s")
+
+    # Should NOT have surfaced because the counter was reset
+    assert not any("Cannot connect" in u.get("last_error", "") for u in updates)
