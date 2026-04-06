@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.55.0-rc.11] - 2026-04-06
+
+### Changed
+- **HA addon icons redesigned** — replaced bridge+equalizer icon with landing page logo (two pillars with three wave curves); color differentiation preserved: stable=teal-purple, rc=gold, beta=red; total icon size reduced from 316 KB to 80 KB
+
 ## [2.55.0-rc.10] - 2026-04-06
 
 ### Fixed
