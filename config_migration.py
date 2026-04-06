@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 CONFIG_SCHEMA_VERSION = 1
 UPDATE_CHANNELS = ("stable", "rc", "beta")
 DEFAULT_UPDATE_CHANNEL = "stable"
+_VALID_IDLE_MODES = frozenset(("default", "power_save", "auto_disconnect", "keep_alive"))
 
 
 def normalize_update_channel(raw_channel: object) -> str:
@@ -144,8 +145,32 @@ def _normalize_bluetooth_devices(config: dict, *, defaults: Mapping[str, Any]) -
         else:
             normalized.pop("room_name", None)
         normalized.pop("handoff_mode", None)
+        _migrate_device_idle_mode(normalized)
         normalized_devices.append(normalized)
     return normalized_devices
+
+
+def _migrate_device_idle_mode(device: dict) -> None:
+    """Auto-migrate legacy keepalive/idle fields to idle_mode if absent.
+
+    Precedence: keepalive > idle_disconnect > default.
+    Invalid idle_mode values are removed.
+    """
+    existing = device.get("idle_mode")
+    if existing is not None:
+        if existing not in _VALID_IDLE_MODES:
+            logger.warning("Invalid idle_mode %r for device %s; removing", existing, device.get("mac", "?"))
+            device.pop("idle_mode")
+        return
+
+    keepalive_interval = int(device.get("keepalive_interval") or 0)
+    keepalive_enabled = bool(device.get("keepalive_enabled"))
+    idle_disconnect = int(device.get("idle_disconnect_minutes") or 0)
+
+    if keepalive_interval > 0 or keepalive_enabled:
+        device["idle_mode"] = "keep_alive"
+    elif idle_disconnect > 0:
+        device["idle_mode"] = "auto_disconnect"
 
 
 def _normalize_mac_key(raw_mac: object) -> str:
