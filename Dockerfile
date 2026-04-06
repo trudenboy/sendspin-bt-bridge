@@ -64,6 +64,8 @@ RUN find /install -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null; \
            /install/lib/python3.12/site-packages/pygments \
            /install/bin/pip* \
            /install/bin/pygmentize; \
+    # Strip debug symbols from native libraries (~20-40 MB savings)
+    find /install -name '*.so' -o -name '*.so.*' | xargs strip --strip-unneeded 2>/dev/null; \
     true
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -103,8 +105,30 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         apt-get install -y --no-install-recommends \
             libavcodec61 libavdevice61 libavfilter10 libavformat61 \
             libavutil59 libswresample5 libswscale8; \
+    else \
+        # On amd64/arm64 PyAV bundles its own FFmpeg in av.libs/.
+        # Remove transitive FFmpeg/GStreamer/codec deps pulled by pulseaudio
+        # (~107 MB) — pactl/paplay work fine without them.
+        dpkg --force-depends -r \
+            libasound2-plugins iso-codes \
+            libavcodec61 libavfilter10 libavformat61 libavdevice61 \
+            libavutil59 libswresample5 libswscale8 \
+            libx265-215 libx264-164 libaom3 libsvtav1enc2 \
+            libdav1d7 libvpx9 librsvg2-2 libcodec2-1.2 \
+            libgstreamer-plugins-base1.0-0 \
+            2>/dev/null || true; \
     fi \
     && rm -rf /var/lib/apt/lists/*
+
+# Strip unused Python stdlib modules
+RUN rm -rf /usr/local/lib/python3.12/ensurepip \
+           /usr/local/lib/python3.12/idlelib \
+           /usr/local/lib/python3.12/lib2to3 \
+           /usr/local/lib/python3.12/pydoc_data \
+           /usr/local/lib/python3.12/turtledemo \
+           /usr/local/lib/python3.12/turtle.py \
+           /usr/local/lib/python3.12/test \
+    && find /usr/local/lib/python3.12 -name __pycache__ -exec rm -rf {} + 2>/dev/null; true
 
 # Install S6 overlay (multi-arch aware)
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
