@@ -341,7 +341,7 @@ class SendspinClient:
         keepalive_interval: int = 30,
         idle_disconnect_minutes: int = 0,
         idle_mode: str = "default",
-        power_save_delay_seconds: int = 30,
+        power_save_delay_minutes: int = 1,
     ):
         self.player_name = player_name
         self.server_host = server_host
@@ -356,7 +356,7 @@ class SendspinClient:
         self.keepalive_enabled = idle_mode == "keep_alive" or keepalive_enabled
         self.keepalive_interval = max(30, keepalive_interval)  # seconds between keepalive bursts
         self.idle_disconnect_minutes = idle_disconnect_minutes  # 0 = disabled
-        self.power_save_delay_seconds = max(0, power_save_delay_seconds)
+        self.power_save_delay_minutes = max(0, power_save_delay_minutes)
 
         # Status tracking
         self.status = DeviceStatus(
@@ -561,9 +561,9 @@ class SendspinClient:
             self._start_idle_timer()
         elif mode == "power_save":
             logger.debug(
-                "[%s] PA sink -> idle -- starting power-save timer (%d s)",
+                "[%s] PA sink -> idle -- starting power-save timer (%d min)",
                 self.player_name,
-                self.power_save_delay_seconds,
+                self.power_save_delay_minutes,
             )
             self._start_power_save_timer()
 
@@ -651,8 +651,8 @@ class SendspinClient:
     # ── Power save timer ──────────────────────────────────────────────────
 
     def _start_power_save_timer(self) -> None:
-        """Schedule PA sink suspend after ``power_save_delay_seconds``."""
-        delay = getattr(self, "power_save_delay_seconds", 30)
+        """Schedule PA sink suspend after ``power_save_delay_minutes``."""
+        delay = getattr(self, "power_save_delay_minutes", 1) * 60
 
         async def _ps_timeout() -> None:
             try:

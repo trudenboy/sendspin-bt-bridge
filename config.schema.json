@@ -349,12 +349,12 @@
           "default": "default",
           "description": "Per-device idle behavior: 'default' (no action), 'power_save' (suspend PA sink to release A2DP), 'auto_disconnect' (full BT disconnect after timeout), 'keep_alive' (periodic infrasound bursts)."
         },
-        "power_save_delay_seconds": {
+        "power_save_delay_minutes": {
           "type": "integer",
           "minimum": 0,
-          "maximum": 300,
-          "default": 30,
-          "description": "Seconds after sink idle before suspending PA sink in power_save mode."
+          "maximum": 60,
+          "default": 1,
+          "description": "Minutes after sink idle before suspending PA sink in power_save mode."
         },
         "room_id": {
           "type": "string",

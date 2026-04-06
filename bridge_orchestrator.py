@@ -444,7 +444,7 @@ class BridgeOrchestrator:
             keepalive_interval = max(30, keepalive_interval) if keepalive_enabled else 30
             idle_disconnect_minutes = int(device.get("idle_disconnect_minutes") or 0)
             idle_mode = str(device.get("idle_mode") or "default")
-            power_save_delay_seconds = int(device.get("power_save_delay_seconds") or 30)
+            power_save_delay_minutes = int(device.get("power_save_delay_minutes") or 1)
 
             client = client_factory(
                 player_name,
@@ -460,7 +460,7 @@ class BridgeOrchestrator:
                 keepalive_interval=keepalive_interval,
                 idle_disconnect_minutes=idle_disconnect_minutes,
                 idle_mode=idle_mode,
-                power_save_delay_seconds=power_save_delay_seconds,
+                power_save_delay_minutes=power_save_delay_minutes,
             )
             if mac:
 

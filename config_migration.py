@@ -146,6 +146,7 @@ def _normalize_bluetooth_devices(config: dict, *, defaults: Mapping[str, Any]) -
             normalized.pop("room_name", None)
         normalized.pop("handoff_mode", None)
         _migrate_device_idle_mode(normalized)
+        _migrate_power_save_delay(normalized)
         normalized_devices.append(normalized)
     return normalized_devices
 
@@ -171,6 +172,14 @@ def _migrate_device_idle_mode(device: dict) -> None:
         device["idle_mode"] = "keep_alive"
     elif idle_disconnect > 0:
         device["idle_mode"] = "auto_disconnect"
+
+
+def _migrate_power_save_delay(device: dict) -> None:
+    """Convert legacy power_save_delay_seconds to power_save_delay_minutes."""
+    old = device.pop("power_save_delay_seconds", None)
+    if old is not None and "power_save_delay_minutes" not in device:
+        seconds = int(old)
+        device["power_save_delay_minutes"] = max(1, round(seconds / 60))
 
 
 def _normalize_mac_key(raw_mac: object) -> str:

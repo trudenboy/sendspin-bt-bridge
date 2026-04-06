@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 
-def _make_client(*, idle_mode: str = "power_save", power_save_delay: int = 5):
+def _make_client(*, idle_mode: str = "power_save", power_save_delay: int = 1):
     """Create a SendspinClient configured for power_save testing."""
     from sendspin_client import DeviceStatus, SendspinClient
 
@@ -18,7 +18,7 @@ def _make_client(*, idle_mode: str = "power_save", power_save_delay: int = 5):
     client.player_id = "test-player-id"
     client.idle_mode = idle_mode
     client.idle_disconnect_minutes = 0
-    client.power_save_delay_seconds = power_save_delay
+    client.power_save_delay_minutes = power_save_delay
     client._status_lock = threading.Lock()
     client._idle_timer_task = None
     client._idle_timer_lock = threading.Lock()

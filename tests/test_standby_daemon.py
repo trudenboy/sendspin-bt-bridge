@@ -20,7 +20,7 @@ def _make_client(idle_disconnect_minutes: int = 30, *, daemon_alive: bool = Fals
     client.player_id = "test-player-id"
     client.idle_disconnect_minutes = idle_disconnect_minutes
     client.idle_mode = "auto_disconnect" if idle_disconnect_minutes > 0 else "default"
-    client.power_save_delay_seconds = 30
+    client.power_save_delay_minutes = 1
     client._status_lock = threading.Lock()
     client._idle_timer_task = None
     client._idle_timer_lock = threading.Lock()

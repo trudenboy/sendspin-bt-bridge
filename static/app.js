@@ -5414,8 +5414,8 @@ function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabl
     if (idleVal < 0) idleVal = 0;
     var idleModeVal = String(idleMode || 'default');
     if (['default','power_save','auto_disconnect','keep_alive'].indexOf(idleModeVal) < 0) idleModeVal = 'default';
-    var psDelayVal = (powerSaveDelay !== undefined && powerSaveDelay !== null) ? parseInt(powerSaveDelay, 10) : 30;
-    if (isNaN(psDelayVal) || psDelayVal < 0) psDelayVal = 30;
+    var psDelayVal = (powerSaveDelay !== undefined && powerSaveDelay !== null) ? parseInt(powerSaveDelay, 10) : 1;
+    if (isNaN(psDelayVal) || psDelayVal < 0) psDelayVal = 1;
     row.innerHTML =
         '<div class="bt-enabled-cell bt-cell" data-label="Enabled"><label class="bt-switch" title="Enable or disable device">' +
             '<input type="checkbox" class="bt-enabled"' + (isEnabled ? ' checked' : '') + '>' +
@@ -5481,9 +5481,9 @@ function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabl
                 '<option value="keep_alive"' + (idleModeVal === 'keep_alive' ? ' selected' : '') + '>Keep alive</option>' +
             '</select></div>' +
         '<div class="bt-idle-mode-field bt-idle-mode-field--power_save"' + (idleModeVal === 'power_save' ? '' : ' style="display:none"') + '>' +
-            '<label>Suspend delay (s)</label>' +
-            '<input type="number" class="bt-power-save-delay" min="0" max="300" placeholder="30" ' +
-            'title="Seconds after sink idle before suspending PA sink" value="' + escHtmlAttr(String(psDelayVal)) + '"></div>' +
+            '<label>Suspend delay (min)</label>' +
+            '<input type="number" class="bt-power-save-delay" min="0" max="60" placeholder="1" ' +
+            'title="Minutes after sink idle before suspending PA sink" value="' + escHtmlAttr(String(psDelayVal)) + '"></div>' +
         '<div class="bt-idle-mode-field bt-idle-mode-field--auto_disconnect"' + (idleModeVal === 'auto_disconnect' ? '' : ' style="display:none"') + '>' +
             '<label>Idle standby (min)</label>' +
             '<input type="number" class="bt-idle-disconnect" min="0" placeholder="0" ' +
@@ -5642,7 +5642,7 @@ function collectBtDevices() {
         var idleModeEl = detail ? detail.querySelector('.bt-idle-mode') : null;
         var idleModeVal = idleModeEl ? idleModeEl.value : 'default';
         var psDelayEl  = detail ? detail.querySelector('.bt-power-save-delay') : null;
-        var psDelayVal = psDelayEl ? parseInt(psDelayEl.value, 10) : 30;
+        var psDelayVal = psDelayEl ? parseInt(psDelayEl.value, 10) : 1;
         var roomNameEl = detail ? detail.querySelector('.bt-room-name') : null;
         var roomIdEl   = detail ? detail.querySelector('.bt-room-id') : null;
         if (isNaN(kaVal) || kaVal < 0) kaVal = 0;
@@ -5655,7 +5655,7 @@ function collectBtDevices() {
         if (idleVal > 0) dev.idle_disconnect_minutes = idleVal;
         dev.idle_mode = idleModeVal;
         if (idleModeVal === 'power_save') {
-            if (!isNaN(psDelayVal) && psDelayVal >= 0) dev.power_save_delay_seconds = psDelayVal;
+            if (!isNaN(psDelayVal) && psDelayVal >= 0) dev.power_save_delay_minutes = psDelayVal;
         }
         var roomName = roomNameEl ? String(roomNameEl.value || '').trim() : '';
         var roomId = roomIdEl ? String(roomIdEl.value || '').trim() : '';
@@ -5691,7 +5691,7 @@ function populateBtDeviceRows(devices) {
         addBtDeviceRow(d.player_name || '', d.mac || '', d.adapter || '',
                        d.static_delay_ms, d.listen_host, d.listen_port, d.enabled,
                        d.preferred_format, d.keepalive_interval, d.room_name, d.room_id,
-                       d.idle_disconnect_minutes, d.idle_mode, d.power_save_delay_seconds);
+                       d.idle_disconnect_minutes, d.idle_mode, d.power_save_delay_minutes);
     });
     refreshBtDeviceRowsRuntime();
     _applyExperimentalVisibility();
