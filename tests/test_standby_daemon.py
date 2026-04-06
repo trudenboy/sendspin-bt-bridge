@@ -19,8 +19,12 @@ def _make_client(idle_disconnect_minutes: int = 30, *, daemon_alive: bool = Fals
     client.player_name = "TestSpeaker"
     client.player_id = "test-player-id"
     client.idle_disconnect_minutes = idle_disconnect_minutes
+    client.idle_mode = "auto_disconnect" if idle_disconnect_minutes > 0 else "default"
+    client.power_save_delay_seconds = 30
     client._status_lock = threading.Lock()
     client._idle_timer_task = None
+    client._idle_timer_lock = threading.Lock()
+    client._power_save_timer_task = None
     client._playback_health = MagicMock()
     client._playback_health.on_status_update = MagicMock()
     client.status = DeviceStatus()

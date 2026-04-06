@@ -231,6 +231,7 @@ class DeviceStatus:
     bt_standby: bool = False
     bt_standby_since: str | None = None
     bt_waking: bool = False
+    bt_power_save: bool = False
 
     # ── Dict-compatible interface ──────────────────────────────────────────
 
@@ -338,6 +339,8 @@ class SendspinClient:
         keepalive_enabled: bool = False,
         keepalive_interval: int = 30,
         idle_disconnect_minutes: int = 0,
+        idle_mode: str = "default",
+        power_save_delay_seconds: int = 30,
     ):
         self.player_name = player_name
         self.server_host = server_host
@@ -348,15 +351,11 @@ class SendspinClient:
         self.static_delay_ms = static_delay_ms  # per-device delay override (None = use env var)
         self.preferred_format = preferred_format  # preferred audio format string (e.g. "flac:44100:16:2")
         self._effective_bridge = effective_bridge  # bridge instance label for MA device info
-        self.keepalive_enabled = keepalive_enabled  # send periodic silence to keep BT speaker alive
+        self.idle_mode = idle_mode  # default | power_save | auto_disconnect | keep_alive
+        self.keepalive_enabled = idle_mode == "keep_alive" or keepalive_enabled
         self.keepalive_interval = max(30, keepalive_interval)  # seconds between keepalive bursts
         self.idle_disconnect_minutes = idle_disconnect_minutes  # 0 = disabled
-        if keepalive_enabled and idle_disconnect_minutes > 0:
-            logger.warning(
-                "[%s] Keep-alive and idle standby are both enabled — "
-                "idle standby will be suppressed (keep-alive prevents speaker sleep)",
-                player_name,
-            )
+        self.power_save_delay_seconds = max(0, power_save_delay_seconds)
 
         # Status tracking
         self.status = DeviceStatus(
@@ -407,6 +406,7 @@ class SendspinClient:
         self._stop_service = SubprocessStopService(logger_=logger)
         self._idle_timer_lock = threading.Lock()
         self._idle_timer_task: asyncio.Task | concurrent.futures.Future | None = None
+        self._power_save_timer_task: asyncio.Task | concurrent.futures.Future | None = None
         self._sink_monitor: object | None = None  # set by main() after SinkMonitor.start()
 
     @property
@@ -481,14 +481,22 @@ class SendspinClient:
         # fire and provide the fastest response on systems where PA events
         # are reliable.  Daemon flags act as a dual authority — overlapping
         # cancel/start calls are harmless (_start_idle_timer cancels first).
-        if self.idle_disconnect_minutes > 0 and not getattr(self, "keepalive_enabled", False):
+        _idle_mode = getattr(self, "idle_mode", "default")
+        if _idle_mode in ("auto_disconnect", "power_save"):
             if "playing" in updates or "audio_streaming" in updates:
                 was_active = previous.get("playing", False) or previous.get("audio_streaming", False)
                 now_active = self.status.get("playing", False) or self.status.get("audio_streaming", False)
                 if not was_active and now_active:
                     self._cancel_idle_timer()
+                    if _idle_mode == "power_save":
+                        self._cancel_power_save_timer()
+                        if self.status.get("bt_power_save"):
+                            asyncio.ensure_future(self._exit_power_save())
                 elif was_active and not now_active and not self.status.get("bt_standby"):
-                    self._start_idle_timer()
+                    if _idle_mode == "auto_disconnect":
+                        self._start_idle_timer()
+                    elif _idle_mode == "power_save":
+                        self._start_power_save_timer()
             # Server-connected fallback: only when SinkMonitor is not
             # running (otherwise the timer was already started by
             # SinkMonitor.register → on_idle at registration time).
@@ -500,7 +508,10 @@ class SendspinClient:
                     and not self.status.get("playing")
                     and not self.status.get("bt_standby")
                 ):
-                    self._start_idle_timer()
+                    if _idle_mode == "auto_disconnect":
+                        self._start_idle_timer()
+                    elif _idle_mode == "power_save":
+                        self._start_power_save_timer()
 
     # ── Idle disconnect timer ────────────────────────────────────────────
 
@@ -519,26 +530,40 @@ class SendspinClient:
     def _on_sink_active(self) -> None:
         """Called by SinkMonitor when PA sink enters ``running``.
 
-        Immediately cancels any pending idle timer — audio is flowing.
+        Cancels any pending idle/power-save timer — audio is flowing.
         """
-        if self.idle_disconnect_minutes <= 0 or getattr(self, "keepalive_enabled", False):
-            return
-        logger.debug("[%s] PA sink → running — cancelling idle timer", self.player_name)
-        self._cancel_idle_timer()
+        mode = getattr(self, "idle_mode", "default")
+        if mode == "auto_disconnect":
+            logger.debug("[%s] PA sink -> running -- cancelling idle timer", self.player_name)
+            self._cancel_idle_timer()
+        elif mode == "power_save":
+            logger.debug("[%s] PA sink -> running -- cancelling power-save timer", self.player_name)
+            self._cancel_power_save_timer()
+            if self.status.get("bt_power_save"):
+                asyncio.ensure_future(self._exit_power_save())
 
     def _on_sink_idle(self) -> None:
         """Called by SinkMonitor when PA sink leaves ``running``.
 
-        Starts the idle disconnect timer — no audio is flowing.
+        Starts the appropriate idle timer based on idle_mode.
         """
-        if self.idle_disconnect_minutes <= 0 or getattr(self, "keepalive_enabled", False):
-            return
+        mode = getattr(self, "idle_mode", "default")
         if self.status.get("bt_standby"):
             return
-        logger.debug(
-            "[%s] PA sink → idle — starting idle timer (%d min)", self.player_name, self.idle_disconnect_minutes
-        )
-        self._start_idle_timer()
+        if mode == "auto_disconnect":
+            logger.debug(
+                "[%s] PA sink -> idle -- starting idle timer (%d min)",
+                self.player_name,
+                self.idle_disconnect_minutes,
+            )
+            self._start_idle_timer()
+        elif mode == "power_save":
+            logger.debug(
+                "[%s] PA sink -> idle -- starting power-save timer (%d s)",
+                self.player_name,
+                self.power_save_delay_seconds,
+            )
+            self._start_power_save_timer()
 
     def _start_idle_timer(self) -> None:
         """Start (or restart) the idle disconnect timer.
@@ -556,7 +581,7 @@ class SendspinClient:
                 if self.status.get("bt_standby") or self.status.get("bt_waking"):
                     logger.debug("[%s] Idle timer fired but device is standby/waking — skipping", self.player_name)
                     return
-                if getattr(self, "keepalive_enabled", False):
+                if getattr(self, "idle_mode", "default") != "auto_disconnect":
                     return
                 # Check cached PA sink state as a safety net — if the sink
                 # monitor missed a "running" event (e.g. brief PA disconnect),
@@ -620,6 +645,82 @@ class SendspinClient:
         self._idle_timer_task = None
         if hasattr(task, "cancel"):
             task.cancel()
+
+    # ── Power save timer ──────────────────────────────────────────────────
+
+    def _start_power_save_timer(self) -> None:
+        """Schedule PA sink suspend after ``power_save_delay_seconds``."""
+        delay = getattr(self, "power_save_delay_seconds", 30)
+
+        async def _ps_timeout() -> None:
+            try:
+                await asyncio.sleep(delay)
+                if self.status.get("bt_standby") or self.status.get("bt_waking"):
+                    return
+                if self.status.get("playing") or self.status.get("audio_streaming"):
+                    return
+                if getattr(self, "idle_mode", "default") != "power_save":
+                    return
+                await self._enter_power_save()
+            except asyncio.CancelledError:
+                return
+
+        with self._idle_timer_lock:
+            self._cancel_power_save_timer_unlocked()
+            loop = _state.get_main_loop()
+            if loop and loop.is_running():
+                self._power_save_timer_task = asyncio.run_coroutine_threadsafe(_ps_timeout(), loop)
+            else:
+                try:
+                    self._power_save_timer_task = asyncio.ensure_future(_ps_timeout())
+                except RuntimeError:
+                    pass
+
+    def _cancel_power_save_timer(self) -> None:
+        """Cancel pending power-save suspend timer (thread-safe)."""
+        with self._idle_timer_lock:
+            self._cancel_power_save_timer_unlocked()
+
+    def _cancel_power_save_timer_unlocked(self) -> None:
+        task = self._power_save_timer_task
+        if task is None:
+            return
+        self._power_save_timer_task = None
+        if hasattr(task, "cancel"):
+            task.cancel()
+
+    async def _enter_power_save(self) -> None:
+        """Suspend the PA sink to release A2DP transport (BT stays connected)."""
+        if self.status.get("bt_power_save"):
+            return
+        sink = self.bluetooth_sink_name
+        if not sink:
+            return
+        from services.pulse import asuspend_sink
+
+        ok = await asuspend_sink(sink, True)
+        if ok:
+            self._update_status({"bt_power_save": True})
+            logger.info("[%s] Entered power-save (PA sink suspended)", self.player_name)
+        else:
+            logger.warning("[%s] Failed to suspend PA sink for power-save", self.player_name)
+
+    async def _exit_power_save(self) -> None:
+        """Resume the PA sink (re-open A2DP transport)."""
+        if not self.status.get("bt_power_save"):
+            return
+        sink = self.bluetooth_sink_name
+        if not sink:
+            self._update_status({"bt_power_save": False})
+            return
+        from services.pulse import asuspend_sink
+
+        ok = await asuspend_sink(sink, False)
+        self._update_status({"bt_power_save": False})
+        if ok:
+            logger.info("[%s] Exited power-save (PA sink resumed)", self.player_name)
+        else:
+            logger.warning("[%s] Failed to resume PA sink from power-save", self.player_name)
 
     async def _enter_standby(self) -> None:
         """Disconnect BT and park daemon on null sink to let the speaker save power.

@@ -33,9 +33,12 @@ def _make_client(idle_disconnect_minutes: int = 30):
     client = SendspinClient.__new__(SendspinClient)
     client.player_name = "TestSpeaker"
     client.idle_disconnect_minutes = idle_disconnect_minutes
+    client.idle_mode = "auto_disconnect" if idle_disconnect_minutes > 0 else "default"
+    client.power_save_delay_seconds = 30
     client._status_lock = threading.Lock()
     client._idle_timer_lock = threading.Lock()
     client._idle_timer_task = None
+    client._power_save_timer_task = None
     client._playback_health = MagicMock()
     client._playback_health.on_status_update = MagicMock()
     client.status = DeviceStatus()
@@ -640,10 +643,10 @@ class TestSinkMonitorDrivenIdle:
         # Timer NOT cancelled — _on_sink_active returns early
         assert client._idle_timer_task is not None
 
-    def test_on_sink_idle_noop_when_keepalive_enabled(self):
-        """_on_sink_idle() does nothing when keepalive is enabled."""
+    def test_on_sink_idle_noop_when_keepalive_mode(self):
+        """_on_sink_idle() does nothing when idle_mode is keep_alive."""
         client = _make_client(idle_disconnect_minutes=15)
-        client.keepalive_enabled = True
+        client.idle_mode = "keep_alive"
         with patch.object(client, "_start_idle_timer") as start_mock:
             client._on_sink_idle()
             start_mock.assert_not_called()
