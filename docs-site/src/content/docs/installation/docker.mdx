@@ -244,6 +244,33 @@ pactl list sinks short | grep -i bluez
   The bridge logs a specific warning when it detects PipeWire but no Bluetooth sinks are visible: *"WirePlumber (the Bluetooth policy manager) may not be running"*. This is the most common cause of "sink not found" on headless PipeWire installations.
 </Aside>
 
+### WirePlumber `with-logind` endpoint churn
+
+Even after enabling linger, you may see Bluetooth connections that succeed briefly then drop within seconds. Check `sudo journalctl -u bluetooth` — if you see continuous **endpoint registered / endpoint unregistered** cycles every ~10 seconds, WirePlumber's `with-logind` option is the cause.
+
+On headless systems without a graphical seat, WirePlumber's logind integration continuously re-registers and unregisters A2DP media endpoints with BlueZ, preventing any stable Bluetooth audio connection.
+
+**Fix:** Disable `with-logind` in WirePlumber:
+
+```bash
+mkdir -p ~/.config/wireplumber/bluetooth.lua.d
+cat > ~/.config/wireplumber/bluetooth.lua.d/51-disable-logind.lua << 'EOF'
+bluez_monitor.properties["with-logind"] = false
+EOF
+systemctl --user restart wireplumber
+```
+
+Verify the churn stopped:
+
+```bash
+# Should show NO 'Endpoint unregistered' entries
+sudo journalctl -u bluetooth --since '30 sec ago' | grep -i unregistered
+```
+
+<Aside type="caution">
+  The `with-logind` option is only present in WirePlumber 0.4.x (Ubuntu 24.04, Fedora 39). WirePlumber 0.5+ uses a different configuration system. If you are on WirePlumber 0.5+, check the [WirePlumber documentation](https://pipewire.pages.freedesktop.org/wireplumber/) for the equivalent setting.
+</Aside>
+
 ## Applying configuration changes
 
 Changes to devices, adapters, `WEB_PORT`, `BASE_LISTEN_PORT`, and Music Assistant connection settings require a container restart.

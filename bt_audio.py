@@ -202,7 +202,12 @@ def _warn_pipewire_session(known_sink_names: set[str]) -> None:
     reboot without an active login session, WirePlumber may not be running
     and PipeWire will never create the ``bluez_output.*`` sink node.
 
-    This helper checks the audio backend and emits a clear remediation hint
+    Even when WirePlumber *is* running, its ``with-logind`` option
+    (enabled by default) causes continuous A2DP endpoint churn on headless
+    systems — endpoints register then unregister every ~10 s, preventing
+    any stable Bluetooth connection.
+
+    This helper checks the audio backend and emits clear remediation hints
     so the operator doesn't have to dig through generic "sink not found" logs.
     """
     try:
@@ -228,3 +233,83 @@ def _warn_pipewire_session(known_sink_names: set[str]) -> None:
         "so PipeWire + WirePlumber start at boot without a login session. "
         "See https://trudenboy.github.io/sendspin-bt-bridge/installation/docker/"
     )
+    _warn_wireplumber_logind()
+
+
+def _warn_wireplumber_logind() -> None:
+    """Warn about WirePlumber ``with-logind`` causing A2DP endpoint churn.
+
+    On headless PipeWire systems, WirePlumber's logind integration
+    continuously re-registers and unregisters A2DP media endpoints with
+    BlueZ (~every 10 s) because there is no active graphical seat.  This
+    prevents any Bluetooth audio connection from stabilizing — the speaker
+    connects briefly then drops with ``a2dp-sink profile connect failed:
+    Protocol not available`` in bluetoothd logs.
+
+    The fix is to disable ``with-logind`` in WirePlumber's bluetooth
+    config.  This function detects the condition and logs the remedy.
+    """
+    logind_active = _is_wireplumber_logind_active()
+    if logind_active is None:
+        return  # cannot determine — stay silent
+    if not logind_active:
+        return  # already disabled — nothing to warn about
+
+    logger.warning(
+        "WirePlumber 'with-logind' is enabled — on headless systems this "
+        "causes A2DP endpoint churn that prevents Bluetooth connections "
+        "from stabilizing."
+    )
+    logger.warning(
+        "Fix: create ~/.config/wireplumber/bluetooth.lua.d/51-disable-logind.lua "
+        'containing:  bluez_monitor.properties["with-logind"] = false  — '
+        "then restart WirePlumber. "
+        "See https://trudenboy.github.io/sendspin-bt-bridge/installation/docker/"
+    )
+
+
+def _is_wireplumber_logind_active(
+    *,
+    _override_dirs: list | None = None,
+    _default_cfg_path: str | os.PathLike[str] | None = None,
+) -> bool | None:
+    """Check whether WirePlumber's ``with-logind`` is active.
+
+    Returns ``True`` if the default config has ``with-logind = true`` and
+    no user override disables it.  Returns ``None`` when the check cannot
+    be performed (e.g. config files unreadable).
+    """
+    import pathlib
+
+    # User override takes precedence (WirePlumber merges lua.d in order)
+    if _override_dirs is None:
+        _override_dirs = [
+            pathlib.Path.home() / ".config" / "wireplumber" / "bluetooth.lua.d",
+            pathlib.Path("/etc/wireplumber/bluetooth.lua.d"),
+        ]
+    for d in _override_dirs:
+        try:
+            for f in sorted(pathlib.Path(d).glob("*.lua")):
+                try:
+                    content = f.read_text()
+                except OSError:
+                    continue
+                # Look for explicit with-logind = false
+                if "with-logind" in content and "false" in content:
+                    return False
+        except OSError:
+            continue
+
+    # Check default config
+    if _default_cfg_path is None:
+        _default_cfg_path = pathlib.Path("/usr/share/wireplumber/bluetooth.lua.d/50-bluez-config.lua")
+    try:
+        content = pathlib.Path(_default_cfg_path).read_text()
+    except OSError:
+        return None
+
+    # Default WirePlumber ships with-logind = true
+    if "with-logind" in content and "true" in content:
+        return True
+
+    return None

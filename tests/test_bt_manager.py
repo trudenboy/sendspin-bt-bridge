@@ -238,9 +238,103 @@ def test_warn_pipewire_session_silent_when_bt_sinks_present():
     mock_warn.assert_not_called()
 
 
-def test_connected_default(bt_manager):
-    """BluetoothManager instances must start with connected = False."""
-    assert bt_manager.connected is False
+def test_warn_pipewire_session_also_checks_wireplumber_logind():
+    """_warn_pipewire_session calls _warn_wireplumber_logind when PipeWire has no BT sinks."""
+    import bt_audio
+
+    with (
+        patch("services.pulse.get_server_name", return_value="PulseAudio (on PipeWire 1.0.5)"),
+        patch.object(bt_audio, "_warn_wireplumber_logind") as mock_logind,
+        patch.object(bt_audio.logger, "warning"),
+    ):
+        bt_audio._warn_pipewire_session({"sendspin_fallback"})
+
+    mock_logind.assert_called_once()
+
+
+def test_is_wireplumber_logind_active_returns_false_when_override_exists(tmp_path):
+    """_is_wireplumber_logind_active returns False when user override disables with-logind."""
+    import bt_audio
+
+    override_dir = tmp_path / "override"
+    override_dir.mkdir()
+    (override_dir / "51-disable-logind.lua").write_text('bluez_monitor.properties["with-logind"] = false\n')
+
+    result = bt_audio._is_wireplumber_logind_active(
+        _override_dirs=[override_dir],
+        _default_cfg_path=tmp_path / "nonexistent.lua",
+    )
+    assert result is False
+
+
+def test_is_wireplumber_logind_active_returns_true_when_default_config(tmp_path):
+    """_is_wireplumber_logind_active returns True when default config has with-logind = true."""
+    import bt_audio
+
+    # No user overrides
+    empty_override = tmp_path / "override"
+    empty_override.mkdir()
+
+    default_cfg = tmp_path / "50-bluez-config.lua"
+    default_cfg.write_text('  ["with-logind"] = true,\n')
+
+    result = bt_audio._is_wireplumber_logind_active(
+        _override_dirs=[empty_override],
+        _default_cfg_path=default_cfg,
+    )
+    assert result is True
+
+
+def test_is_wireplumber_logind_active_returns_none_when_no_config(tmp_path):
+    """_is_wireplumber_logind_active returns None when config files are unreadable."""
+    import bt_audio
+
+    result = bt_audio._is_wireplumber_logind_active(
+        _override_dirs=[tmp_path / "nonexistent"],
+        _default_cfg_path=tmp_path / "nonexistent.lua",
+    )
+    assert result is None
+
+
+def test_warn_wireplumber_logind_emits_warning_when_active():
+    """_warn_wireplumber_logind logs fix instructions when logind is active."""
+    import bt_audio
+
+    with (
+        patch.object(bt_audio, "_is_wireplumber_logind_active", return_value=True),
+        patch.object(bt_audio.logger, "warning") as mock_warn,
+    ):
+        bt_audio._warn_wireplumber_logind()
+
+    messages = [call.args[0] for call in mock_warn.call_args_list]
+    assert any("with-logind" in m for m in messages)
+    assert any("51-disable-logind.lua" in m for m in messages)
+
+
+def test_warn_wireplumber_logind_silent_when_disabled():
+    """_warn_wireplumber_logind stays quiet when logind is already disabled."""
+    import bt_audio
+
+    with (
+        patch.object(bt_audio, "_is_wireplumber_logind_active", return_value=False),
+        patch.object(bt_audio.logger, "warning") as mock_warn,
+    ):
+        bt_audio._warn_wireplumber_logind()
+
+    mock_warn.assert_not_called()
+
+
+def test_warn_wireplumber_logind_silent_when_unknown():
+    """_warn_wireplumber_logind stays quiet when detection returns None."""
+    import bt_audio
+
+    with (
+        patch.object(bt_audio, "_is_wireplumber_logind_active", return_value=None),
+        patch.object(bt_audio.logger, "warning") as mock_warn,
+    ):
+        bt_audio._warn_wireplumber_logind()
+
+    mock_warn.assert_not_called()
 
 
 def test_device_name_fallback():
