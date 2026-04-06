@@ -272,6 +272,64 @@ class TestStartSendspinReroute:
             client.stop_sendspin.assert_not_awaited()
 
 
+# ── Keepalive infrasound ──────────────────────────────────────────────────
+
+
+class TestKeepaliveInfrasound:
+    """Keepalive burst uses 2 Hz infrasound instead of pure silence."""
+
+    def test_infrasound_buffer_is_not_silence(self):
+        """The keepalive buffer must contain non-zero samples (infrasound, not silence)."""
+        from sendspin_client import _generate_infrasound_burst
+
+        buf = _generate_infrasound_burst()
+        assert isinstance(buf, (bytes, bytearray))
+        assert len(buf) > 0
+        # Must not be all zeros — that's the old silence approach
+        assert buf != b"\x00" * len(buf)
+
+    def test_infrasound_buffer_length(self):
+        """Buffer length must match 1 s of stereo 16-bit 44100 Hz audio."""
+        from sendspin_client import _generate_infrasound_burst
+
+        buf = _generate_infrasound_burst()
+        # 1 s x 44100 Hz x 2 channels x 2 bytes/sample = 176400 bytes
+        assert len(buf) == 44100 * 2 * 2
+
+    def test_infrasound_amplitude_bounded(self):
+        """Peak amplitude must stay below -40 dB (≈ 328 out of 32767)."""
+        import struct
+
+        from sendspin_client import _generate_infrasound_burst
+
+        buf = _generate_infrasound_burst()
+        samples = struct.unpack(f"<{len(buf) // 2}h", buf)
+        peak = max(abs(s) for s in samples)
+        # Amplitude should be ~100, well below 328 (-40 dB threshold)
+        assert peak < 328, f"Peak amplitude {peak} exceeds -40 dB safety limit"
+        # But must have non-trivial signal
+        assert peak > 10, f"Peak amplitude {peak} too low, signal may be lost"
+
+    def test_infrasound_frequency_is_subsonic(self):
+        """Verify the signal completes roughly 2 full cycles in 1 second (2 Hz)."""
+        import struct
+
+        from sendspin_client import _generate_infrasound_burst
+
+        buf = _generate_infrasound_burst()
+        # Extract left channel samples only (every other sample)
+        all_samples = struct.unpack(f"<{len(buf) // 2}h", buf)
+        left = all_samples[::2]  # stereo → left channel
+
+        # Count zero-crossings (positive → negative transitions)
+        crossings = 0
+        for i in range(1, len(left)):
+            if left[i - 1] >= 0 and left[i] < 0:
+                crossings += 1
+        # 2 Hz → 2 full cycles → 2 negative zero-crossings
+        assert crossings == 2, f"Expected 2 zero-crossings (2 Hz), got {crossings}"
+
+
 # ── Keepalive suppression during standby ─────────────────────────────────
 
 

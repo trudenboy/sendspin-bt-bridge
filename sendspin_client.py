@@ -9,9 +9,11 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import math
 import os
 import random
 import socket
+import struct
 import sys
 import threading
 import time
@@ -121,6 +123,38 @@ _IPC_LOG_METHODS = {
     "error": logger.error,
     "critical": logger.critical,
 }
+
+# ── Keepalive infrasound buffer ───────────────────────────────────────────
+
+_INFRASOUND_RATE = 44100
+_INFRASOUND_FREQ = 2  # Hz — below human hearing (20 Hz)
+_INFRASOUND_AMP = 100  # approx -50 dB (100 / 32767), inaudible
+_INFRASOUND_DUR = 1.0  # seconds
+_INFRASOUND_CHANNELS = 2  # stereo
+
+_infrasound_cache: bytes | None = None
+
+
+def _generate_infrasound_burst() -> bytes:
+    """Generate 1 s of 2 Hz stereo infrasound at -50 dB.
+
+    Returns a cached PCM buffer (s16le, 44100 Hz, stereo) suitable for
+    ``paplay --raw``.  The 2 Hz frequency is below the human hearing
+    threshold; the -50 dB amplitude (100/32767) is inaudible, but the
+    non-zero PCM data keeps the A2DP transport active -- preventing
+    speakers from auto-sleeping.
+    """
+    global _infrasound_cache
+    if _infrasound_cache is not None:
+        return _infrasound_cache
+    n = int(_INFRASOUND_RATE * _INFRASOUND_DUR)
+    buf = bytearray(n * _INFRASOUND_CHANNELS * 2)
+    two_pi_f_over_r = 2.0 * math.pi * _INFRASOUND_FREQ / _INFRASOUND_RATE
+    for i in range(n):
+        val = int(_INFRASOUND_AMP * math.sin(two_pi_f_over_r * i))
+        struct.pack_into("<hh", buf, i * 4, val, val)
+    _infrasound_cache = bytes(buf)
+    return _infrasound_cache
 
 
 @dataclass
@@ -1108,8 +1142,10 @@ class SendspinClient:
         await self._send_subprocess_command(cmd)
         return True
 
+    # ── Keepalive ─────────────────────────────────────────────────────────
+
     async def _keepalive_loop(self) -> None:
-        """Periodically send a short silence burst to the BT sink to prevent speaker auto-disconnect."""
+        """Periodically send an infrasound burst to the BT sink to prevent speaker auto-disconnect."""
         try:
             # Stagger startup across devices to avoid simultaneous paplay bursts
             await asyncio.sleep(random.uniform(0, self.keepalive_interval))
@@ -1127,9 +1163,8 @@ class SendspinClient:
             return
 
     async def _send_keepalive_burst(self) -> None:
-        """Write 500 ms of PCM silence to the BT PulseAudio sink via paplay."""
-        # 500 ms x 44100 Hz x 2 channels x 2 bytes/sample = 88200 bytes
-        silence = b"\x00" * (int(44100 * 0.5) * 2 * 2)
+        """Write 1 s of 2 Hz infrasound to the BT PulseAudio sink via paplay."""
+        buf = _generate_infrasound_burst()
         try:
             proc = await asyncio.create_subprocess_exec(
                 "paplay",
@@ -1143,7 +1178,7 @@ class SendspinClient:
                 stderr=asyncio.subprocess.DEVNULL,
             )
             if proc.stdin:
-                proc.stdin.write(silence)
+                proc.stdin.write(buf)
                 await proc.stdin.drain()
                 proc.stdin.close()
             await asyncio.wait_for(proc.wait(), timeout=5.0)
