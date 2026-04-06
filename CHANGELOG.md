@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.54.2-rc.3] - 2026-04-06
+
+### Fixed
+- **Idle standby on PipeWire despite active playback** — PipeWire's PulseAudio compatibility layer does not emit sink state change events for Bluetooth sinks, so the SinkMonitor never fired `on_active` to cancel the idle timer. Daemon playback flags (`playing`/`audio_streaming`) now unconditionally participate in idle timer management alongside SinkMonitor callbacks, acting as a dual authority. This also fixes the reverse: when playback stops on PipeWire, the idle timer now correctly starts even though the SinkMonitor never saw the `running→idle` transition (#120)
+
 ## [2.54.2-rc.2] - 2026-04-05
 
 ### Fixed

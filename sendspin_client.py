@@ -437,39 +437,36 @@ class SendspinClient:
                 details=event["details"] if isinstance(event["details"], dict) else None,
             )
         _state.notify_status_changed()
-        # ── Idle disconnect timer (daemon-flag fallback) ──────────────
-        # When a PA SinkMonitor is active, idle timer start/cancel is driven
-        # entirely by sink running/idle transitions (see _on_sink_active /
-        # _on_sink_idle).  The block below only runs as a *fallback* when the
-        # sink monitor is not available (e.g. no pulsectl, or before the
-        # monitor loop connects).
-        if (
-            self.idle_disconnect_minutes > 0
-            and not getattr(self, "keepalive_enabled", False)
-            and not self._sink_monitor_active()
-        ):
-            if "audio_streaming" in updates:
-                was_streaming = previous.get("audio_streaming", False)
-                now_streaming = self.status.get("audio_streaming", False)
-                if was_streaming and not now_streaming:
-                    self._start_idle_timer()
-                elif not was_streaming and now_streaming:
+        # ── Idle disconnect timer ─────────────────────────────────────
+        # Daemon-reported playback flags always participate in idle timer
+        # management, regardless of SinkMonitor availability.  PipeWire's
+        # PA compatibility layer may not emit sink state change events for
+        # BT sinks (#120), so the SinkMonitor alone is insufficient.
+        #
+        # SinkMonitor callbacks (_on_sink_active / _on_sink_idle) still
+        # fire and provide the fastest response on systems where PA events
+        # are reliable.  Daemon flags act as a dual authority — overlapping
+        # cancel/start calls are harmless (_start_idle_timer cancels first).
+        if self.idle_disconnect_minutes > 0 and not getattr(self, "keepalive_enabled", False):
+            if "playing" in updates or "audio_streaming" in updates:
+                was_active = previous.get("playing", False) or previous.get("audio_streaming", False)
+                now_active = self.status.get("playing", False) or self.status.get("audio_streaming", False)
+                if not was_active and now_active:
                     self._cancel_idle_timer()
-            if "playing" in updates:
-                was_playing = previous.get("playing", False)
-                now_playing = self.status.get("playing", False)
-                if not was_playing and now_playing:
-                    self._cancel_idle_timer()
-                elif was_playing and not now_playing and not self.status.get("audio_streaming"):
+                elif was_active and not now_active and not self.status.get("bt_standby"):
                     self._start_idle_timer()
-            if (
-                "server_connected" in updates
-                and self.status.get("server_connected") is True
-                and not self.status.get("audio_streaming")
-                and not self.status.get("playing")
-                and not self.status.get("bt_standby")
-            ):
-                self._start_idle_timer()
+            # Server-connected fallback: only when SinkMonitor is not
+            # running (otherwise the timer was already started by
+            # SinkMonitor.register → on_idle at registration time).
+            if not self._sink_monitor_active():
+                if (
+                    "server_connected" in updates
+                    and self.status.get("server_connected") is True
+                    and not self.status.get("audio_streaming")
+                    and not self.status.get("playing")
+                    and not self.status.get("bt_standby")
+                ):
+                    self._start_idle_timer()
 
     # ── Idle disconnect timer ────────────────────────────────────────────
 

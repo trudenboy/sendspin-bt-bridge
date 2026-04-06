@@ -659,10 +659,15 @@ class TestSinkMonitorDrivenIdle:
 
 
 class TestSinkMonitorFallback:
-    """When sink monitor is active, daemon-flag fallback is suppressed."""
+    """Daemon flags always participate in idle timer — PipeWire compat (#120)."""
 
-    def test_fallback_suppressed_when_sink_monitor_active(self):
-        """_update_status does NOT start timer from daemon flags when sink monitor is active."""
+    def test_daemon_flags_start_timer_even_with_sink_monitor_active(self):
+        """_update_status starts timer from daemon flags even when sink monitor is active.
+
+        PipeWire's PA compat layer may not emit sink state change events for BT
+        sinks, so the SinkMonitor alone is insufficient.  Daemon flags are now a
+        dual authority alongside SinkMonitor callbacks.
+        """
         with patch("sendspin_client._state"):
             client = _make_client(idle_disconnect_minutes=15)
             client._sink_monitor = MagicMock()
@@ -672,6 +677,34 @@ class TestSinkMonitorFallback:
 
             with patch.object(client, "_start_idle_timer") as start_mock:
                 client._update_status({"audio_streaming": False})
+                start_mock.assert_called_once()
+
+    def test_daemon_flags_cancel_timer_even_with_sink_monitor_active(self):
+        """_update_status cancels timer from daemon flags even when sink monitor is active."""
+        with patch("sendspin_client._state"):
+            client = _make_client(idle_disconnect_minutes=15)
+            client._sink_monitor = MagicMock()
+            client._sink_monitor.available = True
+            client.bluetooth_sink_name = "bluez_sink.FC_58_FA_EB_08_6C.a2dp_sink"
+
+            with patch.object(client, "_cancel_idle_timer") as cancel_mock:
+                client._update_status({"audio_streaming": True})
+                cancel_mock.assert_called_once()
+
+    def test_server_connected_still_gated_by_sink_monitor(self):
+        """server_connected does NOT start timer when SinkMonitor is active.
+
+        The timer was already started by SinkMonitor.register() → on_idle
+        at registration time, so server_connected is redundant.
+        """
+        with patch("sendspin_client._state"):
+            client = _make_client(idle_disconnect_minutes=15)
+            client._sink_monitor = MagicMock()
+            client._sink_monitor.available = True
+            client.bluetooth_sink_name = "bluez_sink.FC_58_FA_EB_08_6C.a2dp_sink"
+
+            with patch.object(client, "_start_idle_timer") as start_mock:
+                client._update_status({"server_connected": True})
                 start_mock.assert_not_called()
 
     def test_fallback_active_when_no_sink_monitor(self):
@@ -771,3 +804,70 @@ class TestIdleTimerThreadSafety:
         """Verify _idle_timer_lock is a real lock."""
         client = _make_client()
         assert isinstance(client._idle_timer_lock, type(threading.Lock()))
+
+
+class TestPipeWireCompat:
+    """PipeWire systems where SinkMonitor events are missing (#120).
+
+    On PipeWire the PA compat layer may never send a ``running`` event
+    for BT sinks.  SinkMonitor fires on_idle at registration (suspended),
+    and the idle timer must be cancelled by daemon flags when audio starts.
+    """
+
+    def test_daemon_flags_cancel_timer_started_by_sink_monitor(self):
+        """SinkMonitor starts timer (on_idle), daemon flags cancel it (playing True)."""
+        with patch("sendspin_client._state"):
+            client = _make_client(idle_disconnect_minutes=2)
+            client._sink_monitor = MagicMock()
+            client._sink_monitor.available = True
+            client.bluetooth_sink_name = "bluez_output.CC_6E_A4_2B_12_36.1"
+
+            with (
+                patch.object(client, "_start_idle_timer") as start_mock,
+                patch.object(client, "_cancel_idle_timer") as cancel_mock,
+            ):
+                # 1. SinkMonitor fires on_idle (sink is suspended at registration)
+                client._on_sink_idle()
+                start_mock.assert_called_once()
+
+                # 2. Daemon reports playing (audio starts streaming)
+                client._update_status({"playing": True})
+                cancel_mock.assert_called_once()
+
+    def test_daemon_flags_restart_timer_when_playback_stops(self):
+        """After cancelling, daemon flags re-start timer when playback stops."""
+        with patch("sendspin_client._state"):
+            client = _make_client(idle_disconnect_minutes=2)
+            client._sink_monitor = MagicMock()
+            client._sink_monitor.available = True
+            client.bluetooth_sink_name = "bluez_output.CC_6E_A4_2B_12_36.1"
+
+            # Setup: audio is playing
+            client.status.update({"playing": True, "audio_streaming": True})
+
+            with patch.object(client, "_start_idle_timer") as start_mock:
+                # Playback stops (both flags go False)
+                client._update_status({"playing": False, "audio_streaming": False})
+                start_mock.assert_called_once()
+
+    def test_no_standby_while_streaming_on_pipewire(self):
+        """Full scenario: SinkMonitor on_idle → daemon playing → timer cancelled."""
+        with patch("sendspin_client._state"):
+            client = _make_client(idle_disconnect_minutes=2)
+            client._sink_monitor = MagicMock()
+            client._sink_monitor.available = True
+            client.bluetooth_sink_name = "bluez_output.CC_6E_A4_2B_12_36.1"
+
+            # SinkMonitor fires on_idle (PipeWire: sink registered as suspended)
+            client._on_sink_idle()
+
+            # Daemon starts playing — timer must be cancelled
+            with patch.object(client, "_cancel_idle_timer") as cancel_mock:
+                client._update_status({"audio_streaming": True, "playing": True})
+                cancel_mock.assert_called_once()
+
+            # Later daemon stops — timer must restart
+            client.status.update({"audio_streaming": True, "playing": True})
+            with patch.object(client, "_start_idle_timer") as start_mock:
+                client._update_status({"audio_streaming": False, "playing": False})
+                start_mock.assert_called_once()
