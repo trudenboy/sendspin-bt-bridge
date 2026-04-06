@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.55.0-rc.6] - 2026-04-06
+
+### Fixed
+- **NumPy crash on older CPUs** — reverted numpy constraint from `<3.0` back to `<2.0`; numpy 2.x requires X86_V2 baseline (POPCNT/SSE4.2) which is unavailable on QEMU `qemu64` and older physical CPUs, causing `RuntimeError: NumPy was built with baseline optimizations (X86_V2)` in daemon subprocess
+
+### Changed
+- **Dependency updates** — `dbus-fast` 4.0.0→4.0.4 (D-Bus performance improvements), `ruff` 0.11.13→0.15.8 (linter update)
+- **CI updates** — `docker/build-push-action` v6→v7 (Node 24), `actions/download-artifact` v4→v8 (hash enforcement), `actions/upload-pages-artifact` v3→v4
+
 ## [2.55.0-rc.5] - 2026-04-06
 
 ### Changed
