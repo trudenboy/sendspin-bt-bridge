@@ -5933,7 +5933,13 @@ body {
             border-radius: 4px; font-size: 13px; width: 100%;
             background: var(--card-background-color); color: var(--primary-text-color);
         }
-        .bt-detail-row input:focus { outline: none; border-color: var(--primary-color); }
+        .bt-detail-row select {
+            padding: 6px 8px; border: 1px solid var(--divider-color);
+            border-radius: 4px; font-size: 13px; width: 100%;
+            background: var(--card-background-color); color: var(--primary-text-color);
+            cursor: pointer;
+        }
+        .bt-detail-row input:focus, .bt-detail-row select:focus { outline: none; border-color: var(--primary-color); }
         .bt-expand-btn {
             display: inline-flex;
             align-items: center;
@@ -7691,6 +7697,7 @@ body {
         .bt-device-row select,
         .adapter-row input,
         .bt-detail-row input,
+        .bt-detail-row select,
         .filter-bar select,
         .group-filter-sel,
         .logs-filter-select {
@@ -7758,6 +7765,7 @@ body {
         .bt-device-row select:focus,
         .adapter-row input:focus,
         .bt-detail-row input:focus,
+        .bt-detail-row select:focus,
         .filter-bar select:focus,
         .group-filter-sel:focus,
         .logs-filter-select:focus {
@@ -7785,6 +7793,7 @@ body {
         .bt-device-row select:disabled,
         .adapter-row input:disabled,
         .bt-detail-row input:disabled,
+        .bt-detail-row select:disabled,
         .filter-bar select:disabled,
         .group-filter-sel:disabled,
         .logs-filter-select:disabled {
@@ -8549,6 +8558,7 @@ body {
         .form-group select,
         .form-group textarea,
         .bt-detail-row input,
+        .bt-detail-row select,
         .bugreport-field input:not([type="hidden"]),
         .bugreport-field textarea {
             border-radius: 8px;
