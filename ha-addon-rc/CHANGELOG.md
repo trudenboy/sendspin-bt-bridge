@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.55.1-rc.2] - 2026-04-06
+
+### Fixed
+- **WirePlumber `with-logind` endpoint churn** (#133) — on headless PipeWire systems, WirePlumber's logind integration continuously re-registers and unregisters A2DP media endpoints (~every 10 s), preventing any Bluetooth connection from stabilizing. The bridge now detects this condition and logs the fix: create `~/.config/wireplumber/bluetooth.lua.d/51-disable-logind.lua` with `bluez_monitor.properties["with-logind"] = false`
+
+### Improved
+- **WirePlumber diagnostics** — `_is_wireplumber_logind_active()` reads WirePlumber config files to detect when `with-logind` is enabled without a user override, and `_warn_wireplumber_logind()` emits actionable remediation
+- **Docker troubleshooting docs** — added "WirePlumber `with-logind` endpoint churn" section with diagnostic steps and fix instructions
+
 ## [2.55.1-rc.1] - 2026-04-06
 
 ### Fixed
