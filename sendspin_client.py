@@ -1038,9 +1038,12 @@ class SendspinClient:
     async def _start_sendspin_inner(self) -> None:
         """Spawn daemon_process.py subprocess with PULSE_SINK in its environment."""
         try:
-            # Configure BT audio sink if not yet done
+            # Configure BT audio sink if not yet done (offloaded to executor
+            # because configure_bluetooth_audio is a blocking call that sleeps
+            # during sink discovery retries — up to ~18 s).
             if self.bt_manager and self.bt_manager.connected and not self.bluetooth_sink_name:
-                self.bt_manager.configure_bluetooth_audio()
+                loop = asyncio.get_running_loop()
+                await loop.run_in_executor(None, self.bt_manager.configure_bluetooth_audio)
 
             # Phase 2 standby wake: daemon is alive on null sink — reroute streams
             # to the BT sink instead of spawning a new subprocess.

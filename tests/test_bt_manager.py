@@ -169,6 +169,75 @@ def test_configure_bluetooth_audio_no_sink(bt_manager):
     assert result is False
 
 
+def test_configure_bluetooth_audio_retries_five_times(bt_manager):
+    """Default retry count is 5 (env-configurable via SINK_RETRY_COUNT)."""
+    import bt_audio
+
+    assert bt_audio._SINK_RETRY_COUNT >= 5
+
+    call_count = 0
+
+    def _counting_list_sinks():
+        nonlocal call_count
+        call_count += 1
+        return []
+
+    with (
+        patch("bt_audio.list_sinks", side_effect=_counting_list_sinks),
+        patch("bt_audio.get_sink_volume", return_value=None),
+        patch("bt_audio.set_sink_mute", return_value=True),
+        patch("bt_audio._warn_pipewire_session"),
+        patch("time.sleep"),
+    ):
+        result = bt_manager.configure_bluetooth_audio()
+
+    assert result is False
+    # Initial call + (retry_count - 1) refreshes = retry_count total list_sinks calls
+    assert call_count == bt_audio._SINK_RETRY_COUNT
+
+
+def test_warn_pipewire_session_emits_on_pipewire_without_bt_sinks():
+    """_warn_pipewire_session logs remediation when PipeWire has no BT sinks."""
+    import bt_audio
+
+    with (
+        patch("services.pulse.get_server_name", return_value="PulseAudio (on PipeWire 1.0.5)"),
+        patch.object(bt_audio.logger, "warning") as mock_warn,
+    ):
+        bt_audio._warn_pipewire_session({"sendspin_fallback"})
+
+    messages = [call.args[0] for call in mock_warn.call_args_list]
+    assert any("WirePlumber" in m for m in messages)
+    assert any("loginctl enable-linger" in m for m in messages)
+
+
+def test_warn_pipewire_session_silent_on_pulseaudio():
+    """_warn_pipewire_session does nothing on native PulseAudio."""
+    import bt_audio
+
+    with (
+        patch("services.pulse.get_server_name", return_value="pulseaudio 17.0"),
+        patch.object(bt_audio.logger, "warning") as mock_warn,
+    ):
+        bt_audio._warn_pipewire_session(set())
+
+    mock_warn.assert_not_called()
+
+
+def test_warn_pipewire_session_silent_when_bt_sinks_present():
+    """_warn_pipewire_session stays quiet if BT sinks exist (no false alarm)."""
+    import bt_audio
+
+    sinks = {"bluez_output.AA_BB_CC_DD_EE_FF.1", "sendspin_fallback"}
+    with (
+        patch("services.pulse.get_server_name", return_value="PulseAudio (on PipeWire 1.0.5)"),
+        patch.object(bt_audio.logger, "warning") as mock_warn,
+    ):
+        bt_audio._warn_pipewire_session(sinks)
+
+    mock_warn.assert_not_called()
+
+
 def test_connected_default(bt_manager):
     """BluetoothManager instances must start with connected = False."""
     assert bt_manager.connected is False

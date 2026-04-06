@@ -17,6 +17,10 @@ If you want the latest status first, start with the newest entry below.
 
 ## Entries
 
+- [2026-04-06 — Idle mode, Docker diet, and unified branding (v2.55.0)](./2026-04-06-idle-mode-docker-diet-and-v2-55/)
+- [2026-04-04 — v2.54.0 stable, mute desync, and Raspberry Pi](./2026-04-04-stable-254-mute-desync-and-rpi/)
+- [2026-04-02 — The idle standby saga and SinkMonitor](./2026-04-02-idle-standby-saga-and-sink-monitor/)
+- [2026-03-31 — Stats dashboard, Russian landing, and v3 roadmap](./2026-03-31-stats-russian-landing-and-v3-roadmap/)
 - [2026-03-30 — Landing page, auto-translation, and v2.52.0](./2026-03-30-landing-page-and-v2-52/)
 - [2026-03-29 — Bug report proxy, Docker Compose fix, and v2.51.0 stable](./2026-03-29-bugreport-proxy-and-docker-fix/)
 - [2026-03-28 — Mobile UI overhaul, diagnostics redesign, and v2.51.0](./2026-03-28-mobile-ui-and-diagnostics/)

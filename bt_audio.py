@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import subprocess
 from typing import TYPE_CHECKING
 
@@ -27,7 +28,7 @@ logger = logging.getLogger(__name__)
 # Timing constants (mirrors values in bluetooth_manager.py)
 _A2DP_PROFILE_DELAY = 3.0
 _SINK_RETRY_DELAY = 3.0
-_SINK_RETRY_COUNT = 3
+_SINK_RETRY_COUNT = int(os.environ.get("SINK_RETRY_COUNT", "5"))
 
 
 def _force_sbc_codec(pa_mac: str) -> None:
@@ -184,9 +185,46 @@ def configure_bluetooth_audio(
         elif not success:
             logger.warning("Could not find Bluetooth sink for %s", mac_address)
             logger.warning("Audio may play from default device instead of Bluetooth")
+            _warn_pipewire_session(known_names)
 
         return success
 
     except (OSError, subprocess.SubprocessError, json.JSONDecodeError) as e:
         logger.error("Error configuring Bluetooth audio: %s", e)
         return False
+
+
+def _warn_pipewire_session(known_sink_names: set[str]) -> None:
+    """Log a targeted warning when sink discovery fails on PipeWire.
+
+    On PipeWire, Bluetooth audio sinks are managed by WirePlumber which
+    runs as a user-session service (``systemd --user``).  After a host
+    reboot without an active login session, WirePlumber may not be running
+    and PipeWire will never create the ``bluez_output.*`` sink node.
+
+    This helper checks the audio backend and emits a clear remediation hint
+    so the operator doesn't have to dig through generic "sink not found" logs.
+    """
+    try:
+        from services.pulse import get_server_name
+
+        server = get_server_name()
+    except Exception:
+        return
+
+    if not server or "pipewire" not in str(server).lower():
+        return
+
+    has_bt_sink = any(n.startswith(("bluez_output.", "bluez_sink.")) for n in known_sink_names)
+    if has_bt_sink:
+        return
+
+    logger.warning(
+        "PipeWire detected but no Bluetooth audio sinks are visible. "
+        "WirePlumber (the Bluetooth policy manager) may not be running."
+    )
+    logger.warning(
+        "On headless/server systems, run 'loginctl enable-linger <user>' "
+        "so PipeWire + WirePlumber start at boot without a login session. "
+        "See https://trudenboy.github.io/sendspin-bt-bridge/installation/docker/"
+    )

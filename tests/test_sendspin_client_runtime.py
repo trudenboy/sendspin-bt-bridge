@@ -254,6 +254,44 @@ async def test_start_sendspin_coalesces_requests_before_lock_acquire():
     assert calls == [1]
 
 
+@pytest.mark.asyncio
+async def test_start_sendspin_inner_offloads_configure_bt_audio_to_executor():
+    """configure_bluetooth_audio must run via run_in_executor, not block the loop."""
+    client = SendspinClient("Test Player", "localhost", 9000)
+    client._start_sendspin_lock = asyncio.Lock()
+
+    configure_called_in_executor = False
+
+    def _fake_configure():
+        nonlocal configure_called_in_executor
+        configure_called_in_executor = True
+        return True
+
+    bt_mgr = SimpleNamespace(connected=True, configure_bluetooth_audio=_fake_configure)
+    client.bt_manager = bt_mgr
+    client.bluetooth_sink_name = ""
+
+    executor_used = False
+
+    async def _tracking_executor(executor, fn, *args):
+        nonlocal executor_used
+        executor_used = True
+        return fn(*args)
+
+    with (
+        patch.object(asyncio.get_running_loop(), "run_in_executor", side_effect=_tracking_executor),
+        patch.object(client, "is_running", return_value=False),
+        patch.object(client, "stop_sendspin", return_value=None),
+    ):
+        try:
+            await client._start_sendspin_inner()
+        except Exception:
+            pass
+
+    assert executor_used, "configure_bluetooth_audio should be called via run_in_executor"
+    assert configure_called_in_executor, "configure_bluetooth_audio should have been invoked"
+
+
 def test_set_bt_management_enabled_cancels_reconnect_before_release():
     client = SendspinClient("Test Player", "localhost", 9000)
     bt_manager = SimpleNamespace(
