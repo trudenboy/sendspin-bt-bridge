@@ -68,6 +68,8 @@ IPC: subprocess→parent via JSON lines on stdout; parent→subprocess via JSON 
 - `DeviceStatus` — `@dataclass` typed per-device status; dict-compatible (`["key"]`, `.get()`, `.update()`, `.copy()`)
 - `SendspinClient` — manages the per-device subprocess lifecycle. Spawns `services/daemon_process.py` with correct `PULSE_SINK` env var. Reads JSON status from subprocess stdout, sends volume/stop commands via stdin.
 - `_status_lock = threading.Lock()` + `_update_status(updates)` — thread-safe status mutation from asyncio loop, D-Bus callback thread, and Flask WSGI threads; calls `notify_status_changed()` after each mutation
+- `idle_mode` — per-device enum (`default`|`power_save`|`auto_disconnect`|`keep_alive`). Dispatches idle behavior: power_save suspends PA sink, auto_disconnect enters standby, keep_alive sends 2 Hz infrasound bursts
+- `_start_power_save_timer()` / `_enter_power_save()` / `_exit_power_save()` — PA sink suspend/resume for power_save mode
 - `_start_sendspin_inner()` — subprocess spawn with `PULSE_SINK` and JSON args
 - `stop_sendspin()` — graceful stop: sends `{"cmd":"stop"}` to stdin, kills if timeout
 - `_read_subprocess_output()` — async task: forwards log lines, detects volume changes, calls `save_device_volume()`

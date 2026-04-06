@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.55.0-rc.1] - 2026-04-07
+
+### Added
+- **Per-device idle mode** — new `idle_mode` enum per Bluetooth device replaces the two independent `keepalive_interval` / `idle_disconnect_minutes` settings. Four modes:
+  - `default` — no action when idle; speaker's own hardware timer decides
+  - `power_save` — suspend PA sink after configurable delay (`power_save_delay_seconds`, 0-300, default 30); releases A2DP transport so speaker can sleep while BT stays connected; auto-resumes on next play
+  - `auto_disconnect` — full BT disconnect + daemon→null-sink after `idle_disconnect_minutes` (existing standby behavior)
+  - `keep_alive` — stream periodic infrasound bursts at configurable interval (existing keepalive)
+- **Infrasound keepalive** — keepalive bursts now use a 2 Hz sine wave at -50 dB instead of pure digital silence. Below human hearing threshold but non-zero PCM data keeps A2DP transport active on speakers that ignore digital silence.
+- **PA sink suspend/resume** — new `asuspend_sink()` / `suspend_sink()` helpers in `services/pulse.py` for the power_save mode, with pulsectl + pactl fallback.
+- **Status API** — `idle_mode` and `bt_power_save` fields are now exposed in `/api/status` per-device responses.
+
+### Changed
+- **Legacy UI** — device detail row now shows a single "Idle mode" dropdown instead of two separate numeric inputs; mode-specific fields (delay, standby minutes, keepalive interval) are shown/hidden based on selected mode.
+- **HA addon schemas** — `idle_mode` and `power_save_delay_seconds` options added to all three addon configs (stable, beta, rc).
+- **Config migration** — old configs with `keepalive_interval > 0` auto-migrate to `idle_mode: keep_alive`; `idle_disconnect_minutes > 0` to `auto_disconnect`; both zero to `default`. Explicit `idle_mode` values are never overwritten.
+
 ## [2.54.2] - 2026-04-06
 
 ### Fixed
