@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.55.1-rc.1] - 2026-04-06
+
+### Fixed
+- **Sink discovery timeout too short** (#133) — increased default from 9 s to 15 s (5 retries × 3 s); configurable via `SINK_RETRY_COUNT` env var for systems where WirePlumber starts slowly after reboot
+- **Event loop blocked during sink discovery** (#133) — `configure_bluetooth_audio()` was called synchronously inside the async event loop, blocking it for up to 9 s and causing `Cannot run the event loop while another loop is running` on BT reconnect; now offloaded to `run_in_executor()`
+- **Silent sink failure on headless PipeWire** (#133) — when sink discovery fails and PipeWire is detected with no Bluetooth sinks visible, the bridge now logs a targeted warning identifying WirePlumber as the likely missing component and suggesting `loginctl enable-linger`
+
+### Improved
+- **Headless PipeWire documentation** — new "Headless PipeWire: Bluetooth sinks not appearing after reboot" troubleshooting section in Docker installation guide with `loginctl enable-linger` instructions
+
 ## [2.55.0-rc.12] - 2026-04-06
 
 ### Changed

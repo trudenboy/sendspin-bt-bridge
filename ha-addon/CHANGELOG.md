@@ -15,8 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **`power_save`** — suspend PulseAudio sink after configurable delay → releases A2DP transport → speaker enters hardware sleep while Bluetooth stays connected → instant resume on next play (no reconnect latency)
   - **`auto_disconnect`** — full Bluetooth disconnect + daemon→null-sink after timeout (original standby behavior)
   - **`keep_alive`** — stream periodic infrasound bursts (2 Hz sine at −50 dB) to keep A2DP transport active; below human hearing but prevents speakers that ignore digital silence from disconnecting
-- **PulseAudio sink suspend/resume** for power save mode; native pulsectl API with automatic `pactl` fallback
-- **SinkMonitor idle detection** — PulseAudio/PipeWire sink state events are now the primary idle detection authority; daemon playback flags serve as dual-authority fallback for PipeWire environments that don't emit sink events for BT sinks
+- **PulseAudio sink suspend/resume** — new `asuspend_sink()` / `suspend_sink()` helpers in `services/pulse.py` for power save mode; native pulsectl API with automatic `pactl` fallback
+- **SinkMonitor idle detection** — PulseAudio/PipeWire sink state events (`running` → `idle` → `suspended`) are now the primary idle detection authority; daemon playback flags serve as dual-authority fallback for PipeWire environments that don't emit sink events for BT sinks
 - **WebSocket heartbeat keepalive** — 30-second ping/pong on Sendspin server-initiated connections prevents silent proxy/firewall drops
 
 ### Changed
@@ -28,7 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CI updates** — `docker/build-push-action` v6→v7, `actions/download-artifact` v4→v8, `actions/upload-pages-artifact` v3→v4
 
 ### Fixed
-- **Idle standby during active playback** — dual-authority model (SinkMonitor + daemon flags) prevents false standby on PipeWire where PA sink events may not be delivered for BT sinks; firing-time safety net checks all sources before entering standby
+- **Idle standby during active playback** (#120) — dual-authority model (SinkMonitor + daemon flags) prevents false standby on PipeWire where PA sink events may not be delivered for BT sinks; firing-time safety net checks all sources before entering standby
 - **NumPy crash on older CPUs** — pin `numpy<2.0`; numpy 2.x requires X86_V2 baseline (POPCNT/SSE4.2) unavailable on QEMU `qemu64` and older CPUs
 - **Subprocess crash on PipeWire** — keep `libasound2-plugins` (ALSA→PulseAudio bridge) required by sounddevice/PortAudio
 - **Config download 404 in HA addon ingress mode** — use `API_BASE` prefix for download URLs
