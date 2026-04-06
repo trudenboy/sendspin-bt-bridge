@@ -5394,7 +5394,7 @@ function btAdapterOptions(selected) {
     return opts;
 }
 
-function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabled, preferredFormat, keepaliveInterval, roomName, roomId, idleDisconnectMinutes) {
+function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabled, preferredFormat, keepaliveInterval, roomName, roomId, idleDisconnectMinutes, idleMode, powerSaveDelay) {
     var tbody = document.getElementById('bt-devices-table');
     var wrap = document.createElement('div');
     wrap.className = 'bt-device-wrap';
@@ -5412,6 +5412,10 @@ function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabl
     var roomIdVal = String(roomId || '').trim();
     var idleVal = (idleDisconnectMinutes !== undefined && idleDisconnectMinutes !== null && idleDisconnectMinutes !== '') ? parseInt(idleDisconnectMinutes, 10) : 0;
     if (idleVal < 0) idleVal = 0;
+    var idleModeVal = String(idleMode || 'default');
+    if (['default','power_save','auto_disconnect','keep_alive'].indexOf(idleModeVal) < 0) idleModeVal = 'default';
+    var psDelayVal = (powerSaveDelay !== undefined && powerSaveDelay !== null) ? parseInt(powerSaveDelay, 10) : 30;
+    if (isNaN(psDelayVal) || psDelayVal < 0) psDelayVal = 30;
     row.innerHTML =
         '<div class="bt-enabled-cell bt-cell" data-label="Enabled"><label class="bt-switch" title="Enable or disable device">' +
             '<input type="checkbox" class="bt-enabled"' + (isEnabled ? ' checked' : '') + '>' +
@@ -5469,16 +5473,27 @@ function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabl
         '<div><label>Listen Address</label>' +
             '<input type="text" class="bt-listen-host" placeholder="auto" title="IP address this player advertises" value="' +
             escHtmlAttr(listenHost || '') + '"></div>' +
-        '<div><label>Keep-alive (s)</label>' +
+        '<div><label>Idle mode</label>' +
+            '<select class="bt-idle-mode" title="Per-device idle behavior">' +
+                '<option value="default"' + (idleModeVal === 'default' ? ' selected' : '') + '>Default (no action)</option>' +
+                '<option value="power_save"' + (idleModeVal === 'power_save' ? ' selected' : '') + '>Power save</option>' +
+                '<option value="auto_disconnect"' + (idleModeVal === 'auto_disconnect' ? ' selected' : '') + '>Auto disconnect</option>' +
+                '<option value="keep_alive"' + (idleModeVal === 'keep_alive' ? ' selected' : '') + '>Keep alive</option>' +
+            '</select></div>' +
+        '<div class="bt-idle-mode-field bt-idle-mode-field--power_save"' + (idleModeVal === 'power_save' ? '' : ' style="display:none"') + '>' +
+            '<label>Suspend delay (s)</label>' +
+            '<input type="number" class="bt-power-save-delay" min="0" max="300" placeholder="30" ' +
+            'title="Seconds after sink idle before suspending PA sink" value="' + escHtmlAttr(String(psDelayVal)) + '"></div>' +
+        '<div class="bt-idle-mode-field bt-idle-mode-field--auto_disconnect"' + (idleModeVal === 'auto_disconnect' ? '' : ' style="display:none"') + '>' +
+            '<label>Idle standby (min)</label>' +
+            '<input type="number" class="bt-idle-disconnect" min="0" placeholder="0" ' +
+            'title="Disconnect BT after this many idle minutes (0 = always connected)." value="' +
+            escHtmlAttr(String(idleVal)) + '"></div>' +
+        '<div class="bt-idle-mode-field bt-idle-mode-field--keep_alive"' + (idleModeVal === 'keep_alive' ? '' : ' style="display:none"') + '>' +
+            '<label>Keep-alive (s)</label>' +
             '<input type="number" class="bt-keepalive-interval" min="0" placeholder="0" ' +
             'title="0 = disabled, min 30 when enabled" value="' +
             escHtmlAttr(String(kaVal)) + '"></div>' +
-        '<div><label>Idle standby (min)</label>' +
-            '<input type="number" class="bt-idle-disconnect" min="0" placeholder="0" ' +
-            'title="Disconnect BT after this many idle minutes (0 = always connected). ' +
-            'Wake-on-play will reconnect automatically. Note: some speakers/headphones ' +
-            'enter deep sleep after a model-specific timeout and cannot be woken remotely." value="' +
-            escHtmlAttr(String(idleVal)) + '"></div>' +
         '<div data-experimental style="display:none"><label>Room name</label>' +
             '<input type="text" class="bt-room-name" placeholder="e.g. Living Room" title="Stable room label for MA/HA/MassDroid interoperability" value="' +
             escHtmlAttr(roomNameVal) + '"></div>' +
@@ -5569,22 +5584,19 @@ function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabl
         syncBtRowIdentity();
         refreshBtDeviceRowsRuntime();
     });
-    // Mutual exclusion: keep-alive and idle standby cannot both be > 0
-    var kaInput = detail.querySelector('.bt-keepalive-interval');
-    var idleInput = detail.querySelector('.bt-idle-disconnect');
-    function _syncKeepaliveIdleExclusion() {
-        var ka = parseInt(kaInput.value, 10) || 0;
-        var idle = parseInt(idleInput.value, 10) || 0;
-        idleInput.disabled = ka > 0;
-        kaInput.disabled = idle > 0;
-        if (ka > 0) idleInput.title = 'Disabled — keep-alive prevents idle standby';
-        else idleInput.title = 'Disconnect BT after this many idle minutes. 0 = always connected. Recommended: 30';
-        if (idle > 0) kaInput.title = 'Disabled — idle standby conflicts with keep-alive';
-        else kaInput.title = '0 = disabled, min 30 when enabled';
+    // Show/hide mode-specific fields when idle_mode changes
+    var idleModeSelect = detail.querySelector('.bt-idle-mode');
+    function _syncIdleModeFields() {
+        var mode = idleModeSelect.value;
+        detail.querySelectorAll('.bt-idle-mode-field').forEach(function(el) { el.style.display = 'none'; });
+        var target = detail.querySelector('.bt-idle-mode-field--' + mode);
+        if (target) target.style.display = '';
     }
-    kaInput.addEventListener('input', _syncKeepaliveIdleExclusion);
-    idleInput.addEventListener('input', _syncKeepaliveIdleExclusion);
-    _syncKeepaliveIdleExclusion();
+    idleModeSelect.addEventListener('change', function() {
+        _syncIdleModeFields();
+        _recomputeConfigDirtyState();
+    });
+    _syncIdleModeFields();
 
     row.querySelector('.bt-expand-btn').addEventListener('click', function() {
         var open = detail.style.display !== 'none';
@@ -5627,6 +5639,10 @@ function collectBtDevices() {
         var kaVal      = kaIntEl ? parseInt(kaIntEl.value, 10) : 0;
         var idleEl     = detail ? detail.querySelector('.bt-idle-disconnect') : null;
         var idleVal    = idleEl ? parseInt(idleEl.value, 10) : 0;
+        var idleModeEl = detail ? detail.querySelector('.bt-idle-mode') : null;
+        var idleModeVal = idleModeEl ? idleModeEl.value : 'default';
+        var psDelayEl  = detail ? detail.querySelector('.bt-power-save-delay') : null;
+        var psDelayVal = psDelayEl ? parseInt(psDelayEl.value, 10) : 30;
         var roomNameEl = detail ? detail.querySelector('.bt-room-name') : null;
         var roomIdEl   = detail ? detail.querySelector('.bt-room-id') : null;
         if (isNaN(kaVal) || kaVal < 0) kaVal = 0;
@@ -5637,6 +5653,10 @@ function collectBtDevices() {
         if (listenPort) dev.listen_port = listenPort;
         dev.keepalive_interval = kaVal;
         if (idleVal > 0) dev.idle_disconnect_minutes = idleVal;
+        dev.idle_mode = idleModeVal;
+        if (idleModeVal === 'power_save') {
+            if (!isNaN(psDelayVal) && psDelayVal >= 0) dev.power_save_delay_seconds = psDelayVal;
+        }
         var roomName = roomNameEl ? String(roomNameEl.value || '').trim() : '';
         var roomId = roomIdEl ? String(roomIdEl.value || '').trim() : '';
         if (roomName) dev.room_name = roomName;
@@ -5670,7 +5690,8 @@ function populateBtDeviceRows(devices) {
     devices.forEach(function(d) {
         addBtDeviceRow(d.player_name || '', d.mac || '', d.adapter || '',
                        d.static_delay_ms, d.listen_host, d.listen_port, d.enabled,
-                       d.preferred_format, d.keepalive_interval, d.room_name, d.room_id, d.idle_disconnect_minutes);
+                       d.preferred_format, d.keepalive_interval, d.room_name, d.room_id,
+                       d.idle_disconnect_minutes, d.idle_mode, d.power_save_delay_seconds);
     });
     refreshBtDeviceRowsRuntime();
     _applyExperimentalVisibility();
