@@ -40,6 +40,8 @@ from services.ipc_protocol import (
     with_protocol_version,
 )
 from services.playback_health import PlaybackHealthMonitor
+from services.sendspin_port_probe import DEFAULT_PORT as DEFAULT_SENDSPIN_PORT
+from services.sendspin_port_probe import probe_sendspin_port
 from services.status_event_builder import StatusEventBuilder
 from services.subprocess_command import SubprocessCommandService
 from services.subprocess_ipc import SubprocessIpcService
@@ -133,6 +135,18 @@ _INFRASOUND_DUR = 1.0  # seconds
 _INFRASOUND_CHANNELS = 2  # stereo
 
 _infrasound_cache: bytes | None = None
+
+
+async def _probe_port_if_default(host: str, default_port: int) -> int | None:
+    """Probe for the Sendspin port when using the default (9000).
+
+    Returns the first responding port, or None if nothing responds.
+    """
+    try:
+        return await probe_sendspin_port(host, default_port)
+    except Exception:
+        logger.debug("Port probe for %s failed, using default port %d", host, default_port)
+        return None
 
 
 def _generate_infrasound_burst() -> bytes:
@@ -1074,7 +1088,19 @@ class SendspinClient:
 
             server_url: str | None = None
             if self.server_host and self.server_host.lower() not in ("auto", "discover", ""):
-                server_url = f"ws://{self.server_host}:{self.server_port}/sendspin"
+                effective_port = self.server_port
+                if self.server_port == DEFAULT_SENDSPIN_PORT:
+                    probed = await _probe_port_if_default(self.server_host, self.server_port)
+                    if probed is not None and probed != self.server_port:
+                        logger.warning(
+                            "[%s] Sendspin port %d did not respond, but port %d did — using %d",
+                            self.player_name,
+                            self.server_port,
+                            probed,
+                            probed,
+                        )
+                        effective_port = probed
+                server_url = f"ws://{self.server_host}:{effective_port}/sendspin"
                 logger.info(
                     "Starting Sendspin player '%s' connecting to %s (port %s)",
                     self.player_name,
