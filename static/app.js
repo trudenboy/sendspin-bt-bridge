@@ -1777,6 +1777,11 @@ function _afterBluetoothAddToFleet(name, mac) {
     setTimeout(function() {
         var wrap = _findBtConfigWrapByIdentity(name, mac);
         if (wrap) {
+            var detailRow = wrap.querySelector('.bt-detail-row');
+            var expandBtn = wrap.querySelector('.bt-expand-btn');
+            if (detailRow && detailRow.style.display === 'none' && expandBtn) {
+                expandBtn.click();
+            }
             _highlightBtConfigWrap(wrap);
             return;
         }
@@ -1794,6 +1799,12 @@ function openDeviceSettings(i) {
         if (!target) {
             showToast('Device row not found in Configuration → Devices', 'error');
             return;
+        }
+        // Auto-expand detail row
+        var detailRow = target.querySelector('.bt-detail-row');
+        var expandBtn = target.querySelector('.bt-expand-btn');
+        if (detailRow && detailRow.style.display === 'none' && expandBtn) {
+            expandBtn.click();
         }
         _highlightBtConfigWrap(target);
     }, 180);
