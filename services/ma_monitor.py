@@ -34,9 +34,10 @@ _POLL_INTERVAL = 15  # seconds between polling cycles when events unavailable
 _GROUPS_REFRESH_INTERVAL = 60  # seconds between syncgroup cache refreshes
 _RECONNECT_BASE = 2  # seconds — first reconnect delay
 _RECONNECT_MAX = 60  # seconds — max reconnect delay
-_STALE_RECONNECT_READY_TIMEOUT = 30.0
+_STALE_RECONNECT_READY_TIMEOUT = 120.0
 _STALE_RECONNECT_READY_POLL_INTERVAL = 0.5
 _STALE_RECONNECT_STARTUP_GRACE = 20.0
+_STALE_RETRIGGER_POLL_INTERVAL = 10.0
 
 
 def _active_bridge_clients() -> list:
@@ -353,11 +354,30 @@ class MaMonitor:
                     await asyncio.sleep(_STALE_RECONNECT_READY_POLL_INTERVAL)
 
                 logger.info(
-                    "MA: player '%s' stale metadata reconnect timed out waiting for readiness",
+                    "MA: player '%s' stale metadata reconnect timed out — spawning retrigger task",
                     display_name,
                 )
+                self._track_background_task(asyncio.create_task(_retrigger_on_connect()))
             finally:
                 self._pending_stale_reconnects.discard(player_key)
+
+        async def _retrigger_on_connect() -> None:
+            """Poll until the player becomes ready, then fire the stale reconnect."""
+            while self._running:
+                if matched_client.status.get("playing"):
+                    logger.info(
+                        "MA: player '%s' stale retrigger skipped — playback began",
+                        display_name,
+                    )
+                    return
+                if matched_client.is_running() and matched_client.status.get("server_connected"):
+                    logger.info(
+                        "MA: player '%s' became ready after initial timeout — reconnecting for stale metadata",
+                        display_name,
+                    )
+                    await matched_client.send_reconnect()
+                    return
+                await asyncio.sleep(_STALE_RETRIGGER_POLL_INTERVAL)
 
         self._track_background_task(asyncio.create_task(_wait_and_reconnect()))
 

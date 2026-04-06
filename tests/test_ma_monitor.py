@@ -477,3 +477,70 @@ async def test_refresh_stale_player_metadata_defers_reconnect_until_player_ready
     client.send_reconnect.assert_awaited_once()
     assert sent[0]["command"] == "players/all"
     assert monitor._pending_stale_reconnects == set()
+
+
+@pytest.mark.asyncio
+async def test_stale_reconnect_retriggers_after_timeout(monkeypatch):
+    """When initial timeout expires without readiness, a retrigger task should
+    reconnect once the player eventually becomes ready."""
+    monitor = MaMonitor("http://ma:8095", "token")
+    monitor._running = True
+
+    sent = []
+
+    async def _fake_send(payload: str):
+        sent.append(json.loads(payload))
+
+    players_response = {
+        "message_id": 1,
+        "result": [
+            {
+                "display_name": "Kitchen Speaker",
+                "device_info": {"product_name": "", "manufacturer": ""},
+            }
+        ],
+    }
+    messages = iter([json.dumps(players_response)])
+
+    async def _fake_recv():
+        return next(messages)
+
+    ws = SimpleNamespace(send=_fake_send, recv=_fake_recv)
+    client = SimpleNamespace(
+        player_name="Kitchen Speaker",
+        player_id="sendspin-kitchen",
+        status={"playing": False, "server_connected": False},
+        send_reconnect=AsyncMock(),
+    )
+    # Client is NOT running — initial timeout will expire
+    client.is_running = lambda: False
+
+    monkeypatch.setattr(ma_monitor, "_active_bridge_clients", lambda: [client])
+    # Zero out all delays so test runs instantly
+    monkeypatch.setattr(ma_monitor, "_STALE_RECONNECT_READY_TIMEOUT", 0.0)
+    monkeypatch.setattr(ma_monitor, "_STALE_RECONNECT_READY_POLL_INTERVAL", 0.0)
+    monkeypatch.setattr(ma_monitor, "_STALE_RECONNECT_STARTUP_GRACE", 0.0)
+    monkeypatch.setattr(ma_monitor, "_STALE_RETRIGGER_POLL_INTERVAL", 0.0)
+    original_sleep = ma_monitor.asyncio.sleep
+
+    async def _yielding_sleep(_delay):
+        await original_sleep(0)
+
+    monkeypatch.setattr(ma_monitor.asyncio, "sleep", _yielding_sleep)
+
+    await monitor._refresh_stale_player_metadata(ws)
+
+    # Let initial timeout task complete — reconnect should NOT happen yet
+    initial_tasks = list(monitor._background_tasks)
+    await asyncio.wait_for(asyncio.gather(*initial_tasks), timeout=1)
+    client.send_reconnect.assert_not_awaited()
+
+    # Now simulate the player becoming ready — retrigger should fire
+    client.is_running = lambda: True
+    client.status["server_connected"] = True
+
+    retrigger_tasks = [t for t in monitor._background_tasks if t not in initial_tasks]
+    assert len(retrigger_tasks) > 0, "retrigger task should have been spawned"
+
+    await asyncio.wait_for(asyncio.gather(*retrigger_tasks), timeout=1)
+    client.send_reconnect.assert_awaited_once()
