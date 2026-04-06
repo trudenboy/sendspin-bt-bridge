@@ -206,6 +206,8 @@ def main() -> None:
                     "room_id",
                     "room_name",
                     "idle_disconnect_minutes",
+                    "idle_mode",
+                    "power_save_delay_seconds",
                 ):
                     if field not in dev and field in existing_devs[mac]:
                         dev[field] = existing_devs[mac][field]
