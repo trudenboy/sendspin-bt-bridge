@@ -32,6 +32,7 @@ __all__ = [
     "_PULSECTL_AVAILABLE",
     "aensure_null_sink",
     "amove_pid_sink_inputs",
+    "asuspend_sink",
     "ensure_null_sink",
     "get_server_name",
     "get_sink_description",
@@ -42,6 +43,7 @@ __all__ = [
     "remove_null_sink",
     "set_sink_mute",
     "set_sink_volume",
+    "suspend_sink",
 ]
 
 # ---------------------------------------------------------------------------
@@ -187,6 +189,30 @@ async def aget_sink_mute(sink_name: str) -> bool | None:
     except Exception as exc:
         logger.debug("aget_sink_mute(%s) error: %s — falling back", sink_name, exc)
         return _fallback_get_mute(sink_name)
+
+
+async def asuspend_sink(sink_name: str, suspend: bool) -> bool:
+    """Suspend or resume *sink_name*.  Returns True on success.
+
+    Suspending a Bluetooth sink releases the A2DP transport, allowing
+    the speaker to enter its own power-save mode while keeping the BT
+    link connected.  Resuming re-opens the transport.
+    """
+    if not _PULSECTL_AVAILABLE:
+        return _fallback_suspend_sink(sink_name, suspend)
+    try:
+        async with asyncio.timeout(_TIMEOUT):
+            async with pulsectl_asyncio.PulseAsync(_CLIENT_NAME) as pulse:
+                sink = await _aget_sink(pulse, sink_name)
+                if sink is None:
+                    logger.warning("asuspend_sink: sink %s not found", sink_name)
+                    return False
+                await pulse.sink_suspend(sink.index, suspend)
+                logger.debug("asuspend_sink(%s, %s) ok", sink_name, suspend)
+                return True
+    except Exception as exc:
+        logger.debug("asuspend_sink(%s) error: %s — falling back", sink_name, exc)
+        return _fallback_suspend_sink(sink_name, suspend)
 
 
 async def alist_sink_input_ids() -> set[int]:
@@ -417,6 +443,10 @@ def get_sink_mute(sink_name: str) -> bool | None:
     return _run(aget_sink_mute(sink_name))
 
 
+def suspend_sink(sink_name: str, suspend: bool) -> bool:
+    return _run(asuspend_sink(sink_name, suspend))
+
+
 def get_server_name() -> str:
     return _run(aget_server_name())
 
@@ -527,6 +557,23 @@ def _fallback_get_mute(sink_name: str) -> bool | None:
     except Exception as exc:
         logger.debug("get sink mute failed: %s", exc)
     return None
+
+
+def _fallback_suspend_sink(sink_name: str, suspend: bool) -> bool:
+    try:
+        r = subprocess.run(
+            ["pactl", "suspend-sink", sink_name, "1" if suspend else "0"],
+            capture_output=True,
+            text=True,
+            timeout=3,
+        )
+        if r.returncode == 0:
+            logger.debug("pactl suspend-sink %s %s ok", sink_name, suspend)
+            return True
+        logger.warning("pactl suspend-sink failed: %s", r.stderr.strip())
+    except Exception as exc:
+        logger.debug("suspend-sink fallback failed: %s", exc)
+    return False
 
 
 def _fallback_server_name() -> str:
