@@ -7,24 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [2.54.2-rc.3] - 2026-04-06
-
-### Fixed
-- **Idle standby on PipeWire despite active playback** — PipeWire's PulseAudio compatibility layer does not emit sink state change events for Bluetooth sinks, so the SinkMonitor never fired `on_active` to cancel the idle timer. Daemon playback flags (`playing`/`audio_streaming`) now unconditionally participate in idle timer management alongside SinkMonitor callbacks, acting as a dual authority. This also fixes the reverse: when playback stops on PipeWire, the idle timer now correctly starts even though the SinkMonitor never saw the `running→idle` transition (#120)
-
-## [2.54.2-rc.2] - 2026-04-05
-
-### Fixed
-- **Mute desync after BT reconnect** — after Bluetooth reconnect, the daemon unmuted the PulseAudio sink but never notified Music Assistant, leaving MA stuck on `muted=true` while audio was playing normally. The parent process now detects `sink_muted→false` transitions and forwards the unmute to MA via `players/cmd/volume_mute` when `MUTE_VIA_MA` is enabled (#132)
-- **False idle standby during active playback** — two fixes to prevent the bridge entering standby while music is playing (#120):
-  - `_sink_monitor_active()` no longer requires the BT sink name to be discovered — the fallback daemon-flag timer is suppressed as soon as the PA monitor loop is running, closing a race window where `server_connected=True` could start the timer before sink registration
-  - `_idle_timeout()` safety guard now checks daemon `playing`/`audio_streaming` flags as a secondary safety net after the PA sink state check; enhanced diagnostic logging on standby entry
-
-## [2.54.2-rc.1] - 2026-04-05
-
-### Fixed
-- **Mute desync after BT reconnect** — initial RC with only the mute desync fix (#132)
-
 ## [2.54.0-rc.6] - 2026-04-04
 
 ### Fixed
