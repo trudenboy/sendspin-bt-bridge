@@ -232,6 +232,7 @@ class DeviceStatus:
     bt_standby_since: str | None = None
     bt_waking: bool = False
     bt_power_save: bool = False
+    idle_mode: str = "default"
 
     # ── Dict-compatible interface ──────────────────────────────────────────
 
@@ -362,6 +363,7 @@ class SendspinClient:
             bluetooth_available=bt_manager.check_bluetooth_available() if bt_manager else False,
             ip_address=listen_host or self.get_ip_address(),
             hostname=socket.gethostname(),
+            idle_mode=idle_mode,
         )
 
         self._status_lock = threading.Lock()
