@@ -330,18 +330,31 @@
           "type": "integer",
           "minimum": 0,
           "default": 0,
-          "description": "Minutes of idle before BT standby disconnect. 0 = disabled."
+          "description": "Minutes of idle before BT standby disconnect. 0 = disabled. Legacy field — prefer idle_mode."
         },
         "keepalive_enabled": {
           "type": "boolean",
           "default": false,
-          "description": "Send periodic silence to prevent BT speaker auto-sleep."
+          "description": "Send periodic silence to prevent BT speaker auto-sleep. Legacy field — prefer idle_mode."
         },
         "keepalive_interval": {
           "type": "integer",
           "minimum": 30,
           "default": 30,
-          "description": "Seconds between keepalive silence bursts."
+          "description": "Seconds between keepalive infrasound bursts."
+        },
+        "idle_mode": {
+          "type": "string",
+          "enum": ["default", "power_save", "auto_disconnect", "keep_alive"],
+          "default": "default",
+          "description": "Per-device idle behavior: 'default' (no action), 'power_save' (suspend PA sink to release A2DP), 'auto_disconnect' (full BT disconnect after timeout), 'keep_alive' (periodic infrasound bursts)."
+        },
+        "power_save_delay_seconds": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 300,
+          "default": 30,
+          "description": "Seconds after sink idle before suspending PA sink in power_save mode."
         },
         "room_id": {
           "type": "string",
