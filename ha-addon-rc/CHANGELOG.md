@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.55.0-rc.10] - 2026-04-06
+
+### Fixed
+- **Subprocess crash on PipeWire** — keep `libasound2-plugins` (ALSA→PulseAudio bridge) which provides `libasound_module_pcm_pulse.so` required by sounddevice/PortAudio to discover audio sinks; removing it caused "No audio output device found" crash loop
+
 ## [2.55.0-rc.9] - 2026-04-06
 
 ### Changed
