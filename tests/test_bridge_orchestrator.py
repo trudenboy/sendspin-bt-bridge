@@ -801,6 +801,8 @@ def test_initialize_devices_builds_clients_and_registers_disabled_devices():
             keepalive_enabled,
             keepalive_interval,
             idle_disconnect_minutes=0,
+            idle_mode="default",
+            power_save_delay_seconds=30,
         ):
             self.player_name = player_name
             self.server_host = server_host
@@ -813,6 +815,8 @@ def test_initialize_devices_builds_clients_and_registers_disabled_devices():
             self.keepalive_enabled = keepalive_enabled
             self.keepalive_interval = keepalive_interval
             self.idle_disconnect_minutes = idle_disconnect_minutes
+            self.idle_mode = idle_mode
+            self.power_save_delay_seconds = power_save_delay_seconds
             self.bt_manager = None
             self.bt_management_enabled = True
             self.bluetooth_sink_name = None
