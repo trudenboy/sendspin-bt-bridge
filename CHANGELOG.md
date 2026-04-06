@@ -7,24 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [2.55.1-rc.2] - 2026-04-06
+## [2.55.1] - 2026-04-06
 
 ### Fixed
 - **WirePlumber `with-logind` endpoint churn** (#133) — on headless PipeWire systems, WirePlumber's logind integration continuously re-registers and unregisters A2DP media endpoints (~every 10 s), preventing any Bluetooth connection from stabilizing. The bridge now detects this condition and logs the fix: create `~/.config/wireplumber/bluetooth.lua.d/51-disable-logind.lua` with `bluez_monitor.properties["with-logind"] = false`
-
-### Improved
-- **WirePlumber diagnostics** — `_is_wireplumber_logind_active()` reads WirePlumber config files to detect when `with-logind` is enabled without a user override, and `_warn_wireplumber_logind()` emits actionable remediation
-- **Docker troubleshooting docs** — added "WirePlumber `with-logind` endpoint churn" section with diagnostic steps and fix instructions
-
-## [2.55.1-rc.1] - 2026-04-06
-
-### Fixed
 - **Sink discovery timeout too short** (#133) — increased default from 9 s to 15 s (5 retries × 3 s); configurable via `SINK_RETRY_COUNT` env var for systems where WirePlumber starts slowly after reboot
 - **Event loop blocked during sink discovery** (#133) — `configure_bluetooth_audio()` was called synchronously inside the async event loop, blocking it for up to 9 s and causing `Cannot run the event loop while another loop is running` on BT reconnect; now offloaded to `run_in_executor()`
 - **Silent sink failure on headless PipeWire** (#133) — when sink discovery fails and PipeWire is detected with no Bluetooth sinks visible, the bridge now logs a targeted warning identifying WirePlumber as the likely missing component and suggesting `loginctl enable-linger`
 
 ### Improved
-- **Headless PipeWire documentation** — new "Headless PipeWire: Bluetooth sinks not appearing after reboot" troubleshooting section in Docker installation guide with `loginctl enable-linger` instructions
+- **WirePlumber diagnostics** — `_is_wireplumber_logind_active()` reads WirePlumber config files to detect when `with-logind` is enabled without a user override, and `_warn_wireplumber_logind()` emits actionable remediation
+- **Docker troubleshooting docs** — added "WirePlumber `with-logind` endpoint churn" and "Headless PipeWire: Bluetooth sinks not appearing after reboot" troubleshooting sections with diagnostic steps and fix instructions
 
 ## [2.55.0] - 2026-04-06
 
