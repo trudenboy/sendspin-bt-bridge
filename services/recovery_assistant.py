@@ -260,6 +260,8 @@ def build_recovery_issue_actions(
             "Open device settings",
             device_names=names,
         )
+    elif issue_key == "sendspin_port_unreachable":
+        primary_action = _recovery_action("open_config", "Open config", device_names=names)
     elif issue_key == "setup_step":
         primary_action = None
     else:
@@ -351,18 +353,44 @@ def _build_device_issues(devices: list[Any]) -> list[RecoveryIssue]:
             )
             continue
         if not daemon_connected and not audio_streaming and not ma_reconnecting:
-            primary_action, secondary_actions = build_recovery_issue_actions("transport_down", device_names)
-            issues.append(
-                RecoveryIssue(
-                    key="transport_down",
-                    severity="error",
-                    title=f"{name} lost bridge transport",
-                    summary=summary or "The Sendspin daemon is not connected for this device.",
-                    primary_action=primary_action,
-                    secondary_actions=secondary_actions,
-                    device_name=name,
+            last_error = str(_device_extra(device).get("last_error") or summary or "")
+            is_connection_error = "Cannot connect" in last_error or "ClientConnectorError" in last_error
+            if is_connection_error:
+                primary_action, secondary_actions = build_recovery_issue_actions(
+                    "sendspin_port_unreachable", device_names
                 )
-            )
+                port_summary = (
+                    last_error
+                    if "SENDSPIN_PORT" in last_error
+                    else (
+                        f"{last_error} Check that SENDSPIN_PORT in your bridge config matches "
+                        "the Sendspin port configured in Music Assistant."
+                    )
+                )
+                issues.append(
+                    RecoveryIssue(
+                        key="sendspin_port_unreachable",
+                        severity="error",
+                        title=f"{name} cannot reach Sendspin server",
+                        summary=port_summary,
+                        primary_action=primary_action,
+                        secondary_actions=secondary_actions,
+                        device_name=name,
+                    )
+                )
+            else:
+                primary_action, secondary_actions = build_recovery_issue_actions("transport_down", device_names)
+                issues.append(
+                    RecoveryIssue(
+                        key="transport_down",
+                        severity="error",
+                        title=f"{name} lost bridge transport",
+                        summary=summary or "The Sendspin daemon is not connected for this device.",
+                        primary_action=primary_action,
+                        secondary_actions=secondary_actions,
+                        device_name=name,
+                    )
+                )
             continue
         health_state = str(health.get("state") or "")
         if ma_reconnecting:

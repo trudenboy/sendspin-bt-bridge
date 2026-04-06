@@ -93,6 +93,13 @@ ISSUE_REGISTRY: dict[str, GuidanceIssueDefinition] = {
         severity="error",
         default_reason_codes=("daemon_disconnected",),
     ),
+    "sendspin_port_unreachable": GuidanceIssueDefinition(
+        key="sendspin_port_unreachable",
+        layer="transport",
+        priority=48,
+        severity="error",
+        default_reason_codes=("server_connection_refused",),
+    ),
     "repair_required": GuidanceIssueDefinition(
         key="repair_required",
         layer="sink_verification",

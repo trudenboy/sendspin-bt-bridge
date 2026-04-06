@@ -162,6 +162,40 @@ def test_recovery_assistant_ignores_transport_down_during_planned_ma_reconnect()
     assert data["summary"]["highest_severity"] == "ok"
 
 
+def test_recovery_assistant_transport_down_with_connection_error_suggests_port_check():
+    """When transport is down due to connection error, guidance should mention SENDSPIN_PORT."""
+    snapshot = build_recovery_assistant_snapshot(
+        config={"BLUETOOTH_DEVICES": [{"mac": "AA"}], "PULSE_LATENCY_MSEC": 250},
+        devices=[
+            SimpleNamespace(
+                player_name="Kitchen",
+                bt_management_enabled=True,
+                bluetooth_connected=True,
+                has_sink=True,
+                server_connected=False,
+                playing=False,
+                static_delay_ms=0.0,
+                recent_events=[],
+                health_summary={
+                    "state": "degraded",
+                    "severity": "error",
+                    "summary": "Cannot connect to Sendspin server at ws://192.168.1.10:9000/sendspin. Check that SENDSPIN_PORT matches your Music Assistant Sendspin port.",
+                },
+                extra={"last_error": "Cannot connect to Sendspin server at ws://192.168.1.10:9000/sendspin"},
+            )
+        ],
+        onboarding_assistant={"checklist": {"overall_status": "ok", "checkpoints": []}},
+        startup_progress={"status": "complete", "message": "Startup complete."},
+    )
+
+    data = snapshot.to_dict()
+    assert len(data["issues"]) == 1
+    issue = data["issues"][0]
+    assert issue["key"] == "sendspin_port_unreachable"
+    assert "SENDSPIN_PORT" in issue["summary"]
+    assert issue["primary_action"]["key"] == "open_config"
+
+
 def test_recovery_assistant_prefers_repair_for_unpaired_device():
     snapshot = build_recovery_assistant_snapshot(
         config={"BLUETOOTH_DEVICES": [{"mac": "AA"}], "PULSE_LATENCY_MSEC": 250},
