@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.55.0] - 2026-04-06
+
+### Changed
+- **Docker image −51%** (916 → ~450 MB) — removed redundant system FFmpeg on amd64/arm64 (PyAV bundles its own); force-remove transitive codec/GStreamer deps; strip .so debug symbols; clean unused Python stdlib
+- **Unified branding** — all logos, favicons, and HA addon icons replaced with the landing page wave-bridge design (two pillars + three wave curves); channel color differentiation preserved (stable=teal-purple, rc=gold, beta=red); total asset size reduced from ~310 KB to ~55 KB
+- **Power save delay in minutes** — `power_save_delay_seconds` renamed to `power_save_delay_minutes`; default 1 min, max 60 min; auto-migration on startup
+- **Dependency updates** — `dbus-fast` 4.0.0→4.0.4, `ruff` 0.11.13→0.15.8
+- **CI updates** — `docker/build-push-action` v6→v7, `actions/download-artifact` v4→v8, `actions/upload-pages-artifact` v3→v4
+
+### Fixed
+- **NumPy crash on older CPUs** — pin `numpy<2.0`; numpy 2.x requires X86_V2 baseline (POPCNT/SSE4.2) unavailable on QEMU `qemu64` and older CPUs
+- **Subprocess crash on PipeWire** — keep `libasound2-plugins` (ALSA→PulseAudio bridge) required by sounddevice/PortAudio
+- **Config download 404 in HA addon ingress mode** — use `API_BASE` prefix for download URLs
+- **Idle mode dropdown unstyled** — added CSS rules matching existing input styling
+
+### Improved
+- **Auto-expand device detail row on CTA navigation** — clicking "Configure" from onboarding auto-expands the target device row
+
 ## [2.54.2] - 2026-04-06
 
 ### Fixed
