@@ -1,0 +1,104 @@
+{
+  "weekly_commits": [
+    {
+      "week_offset": -13,
+      "total": 14,
+      "owner": 0
+    },
+    {
+      "week_offset": -5,
+      "total": 177,
+      "owner": 177
+    },
+    {
+      "week_offset": -4,
+      "total": 420,
+      "owner": 353
+    },
+    {
+      "week_offset": -3,
+      "total": 356,
+      "owner": 290
+    },
+    {
+      "week_offset": -2,
+      "total": 307,
+      "owner": 254
+    },
+    {
+      "week_offset": -1,
+      "total": 358,
+      "owner": 158
+    },
+    {
+      "week_offset": 0,
+      "total": 209,
+      "owner": 10
+    }
+  ],
+  "code_frequency": [
+    {
+      "week": "2025-12-28",
+      "additions": 2100,
+      "deletions": 115
+    },
+    {
+      "week": "2026-02-22",
+      "additions": 5195,
+      "deletions": 1487
+    },
+    {
+      "week": "2026-03-01",
+      "additions": 42942,
+      "deletions": 14646
+    },
+    {
+      "week": "2026-03-08",
+      "additions": 32343,
+      "deletions": 9590
+    },
+    {
+      "week": "2026-03-15",
+      "additions": 52529,
+      "deletions": 18252
+    },
+    {
+      "week": "2026-03-22",
+      "additions": 40699,
+      "deletions": 14965
+    },
+    {
+      "week": "2026-03-29",
+      "additions": 482885,
+      "deletions": 2638
+    },
+    {
+      "week": "2026-04-05",
+      "additions": 3423,
+      "deletions": 442
+    }
+  ],
+  "ai": {
+    "commits_scanned": 200,
+    "ai_commits": 96,
+    "ai_ratio": 0.48,
+    "agents": [
+      {
+        "name": "Copilot",
+        "commits": 92
+      },
+      {
+        "name": "trudenboy",
+        "commits": 3
+      },
+      {
+        "name": "copilot-swe-agent[bot]",
+        "commits": 2
+      },
+      {
+        "name": "Claude Sonnet 4.6",
+        "commits": 1
+      }
+    ]
+  }
+}
