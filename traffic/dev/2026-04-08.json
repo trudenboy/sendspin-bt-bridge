@@ -1,0 +1,63 @@
+{
+  "weekly_commits": [
+    {
+      "week_offset": -13,
+      "total": 14,
+      "owner": 0
+    },
+    {
+      "week_offset": -5,
+      "total": 238,
+      "owner": 231
+    },
+    {
+      "week_offset": -4,
+      "total": 449,
+      "owner": 365
+    },
+    {
+      "week_offset": -3,
+      "total": 276,
+      "owner": 233
+    },
+    {
+      "week_offset": -2,
+      "total": 346,
+      "owner": 277
+    },
+    {
+      "week_offset": -1,
+      "total": 334,
+      "owner": 128
+    },
+    {
+      "week_offset": 0,
+      "total": 184,
+      "owner": 8
+    }
+  ],
+  "code_frequency": [],
+  "ai": {
+    "commits_scanned": 200,
+    "ai_commits": 96,
+    "ai_ratio": 0.48,
+    "agents": [
+      {
+        "name": "Copilot",
+        "commits": 92
+      },
+      {
+        "name": "trudenboy",
+        "commits": 3
+      },
+      {
+        "name": "copilot-swe-agent[bot]",
+        "commits": 2
+      },
+      {
+        "name": "Claude Sonnet 4.6",
+        "commits": 1
+      }
+    ]
+  }
+}
