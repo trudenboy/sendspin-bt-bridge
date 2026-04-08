@@ -1,12 +1,12 @@
 [
   {
     "referrer": "github.com",
-    "count": 181,
+    "count": 166,
     "uniques": 53
   },
   {
     "referrer": "community.home-assistant.io",
-    "count": 121,
+    "count": 104,
     "uniques": 34
   },
   {
@@ -16,8 +16,8 @@
   },
   {
     "referrer": "Google",
-    "count": 36,
-    "uniques": 12
+    "count": 37,
+    "uniques": 13
   },
   {
     "referrer": "trudenboy.github.io",
