@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [2.55.3-rc.3] - 2026-04-09
+## [2.55.3] - 2026-04-09
 
 ### Added
 - **Sink mute detection and recovery** (#123) — four-layer defense against system-level PA sink mute going unnoticed:
@@ -16,14 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Recovery guidance**: new `sink_system_muted` issue in operator recovery assistant with "Unmute speaker" primary action; new `/api/unmute_sink` endpoint for direct PA sink unmute bypassing MA routing
   - **Auto-unmute safety net**: parent-side watchdog auto-unmutes after 30 s grace period if desync persists; daemon startup unmute retries up to 3× on failure
 
-## [2.55.3-rc.2] - 2026-04-09
-
 ### Fixed
 - **Mute immediately overridden by reconnect unmute sync** — `_sync_unmute_to_ma()` fired on every `sink_muted=False` status update, not just after subprocess (re)start. When mute was routed through MA, the PA sink stayed unmuted, triggering the sync which instantly reversed the user's mute. Added `_pending_reconnect_unmute_sync` flag that is set on subprocess start and consumed after the first sync
-
-## [2.55.3-rc.1] - 2026-04-09
-
-### Fixed
 - **Auto-released devices show "Reconnect" instead of "Reclaim"** — when a device was auto-released after repeated BT connection failures, the `play_pause` and `queue_control` capability blocked reasons incorrectly recommended `reconnect` instead of `toggle_bt_management`. The device card action buttons also showed a disabled "Reconnect" instead of a "Reclaim" button
 - **Grid view action button not switching to Reclaim** — the SSE update logic for grid-view cards now dynamically swaps between Reconnect/Reclaim based on `bt_management_enabled` state
 
