@@ -1,13 +1,13 @@
 [
   {
     "referrer": "github.com",
-    "count": 166,
-    "uniques": 53
+    "count": 163,
+    "uniques": 52
   },
   {
     "referrer": "community.home-assistant.io",
-    "count": 104,
-    "uniques": 34
+    "count": 91,
+    "uniques": 36
   },
   {
     "referrer": "lm.facebook.com",
@@ -25,28 +25,28 @@
     "uniques": 9
   },
   {
+    "referrer": "DuckDuckGo",
+    "count": 28,
+    "uniques": 6
+  },
+  {
     "referrer": "m.facebook.com",
     "count": 27,
     "uniques": 21
   },
   {
-    "referrer": "DuckDuckGo",
-    "count": 27,
-    "uniques": 6
-  },
-  {
     "referrer": "l.facebook.com",
-    "count": 12,
+    "count": 13,
     "uniques": 11
-  },
-  {
-    "referrer": "yandex.ru",
-    "count": 8,
-    "uniques": 4
   },
   {
     "referrer": "music-assistant.io",
     "count": 8,
     "uniques": 2
+  },
+  {
+    "referrer": "Bing",
+    "count": 5,
+    "uniques": 3
   }
 ]

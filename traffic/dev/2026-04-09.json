@@ -79,18 +79,18 @@
     },
     {
       "week": "2026-04-05",
-      "additions": 3423,
-      "deletions": 442
+      "additions": 4000,
+      "deletions": 505
     }
   ],
   "ai": {
     "commits_scanned": 200,
-    "ai_commits": 96,
-    "ai_ratio": 0.48,
+    "ai_commits": 88,
+    "ai_ratio": 0.44,
     "agents": [
       {
         "name": "Copilot",
-        "commits": 92
+        "commits": 84
       },
       {
         "name": "trudenboy",
