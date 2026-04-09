@@ -361,32 +361,43 @@ def build_device_capabilities(device: Any) -> dict[str, Any]:
         safe_actions=(["open_diagnostics"] if toggle_management_blocked_reason else ["toggle_bt_management"]),
     )
 
-    play_pause_blocked_reason = (
-        None
-        if getattr(device, "server_connected", False)
-        else _block_reason_payload(
+    if getattr(device, "server_connected", False):
+        play_pause_blocked_reason = None
+    elif released:
+        play_pause_blocked_reason = _block_reason_payload(
+            code="released",
+            message="Bluetooth management is released; reclaim it first.",
+            remediation=["toggle_bt_management", "open_diagnostics"],
+            depends_on=["bt_management_enabled"],
+            recommended_action="toggle_bt_management",
+        )
+    elif ma_reconnecting:
+        play_pause_blocked_reason = _block_reason_payload(
             code="ma_reconnecting",
             message="Music Assistant reconnect is in progress.",
             remediation=["open_diagnostics"],
             depends_on=["sendspin_connected"],
             recommended_action="open_diagnostics",
         )
-        if ma_reconnecting
-        else _block_reason_payload(
+    else:
+        play_pause_blocked_reason = _block_reason_payload(
             code="daemon_disconnected",
             message="Sendspin is not connected.",
             remediation=["reconnect", "open_diagnostics"],
             depends_on=["sendspin_connected"],
             recommended_action="reconnect",
         )
-    )
     play_pause = _capability_payload(
         supported=True,
         currently_available=bool(getattr(device, "server_connected", False)),
         blocked_reason=play_pause_blocked_reason,
-        safe_actions=["reconnect", "open_diagnostics"]
-        if not getattr(device, "server_connected", False)
-        else ["play_pause"],
+        safe_actions=(
+            ["toggle_bt_management", "open_diagnostics"]
+            if released and not getattr(device, "server_connected", False)
+            else ["reconnect", "open_diagnostics"]
+            if not getattr(device, "server_connected", False)
+            else ["play_pause"]
+        ),
     )
 
     volume_blocked_reason = None
@@ -425,23 +436,30 @@ def build_device_capabilities(device: Any) -> dict[str, Any]:
 
     queue_blocked_reason = None
     if not getattr(device, "server_connected", False):
-        queue_blocked_reason = (
-            _block_reason_payload(
+        if released:
+            queue_blocked_reason = _block_reason_payload(
+                code="released",
+                message="Bluetooth management is released; reclaim it first.",
+                remediation=["toggle_bt_management", "open_diagnostics"],
+                depends_on=["bt_management_enabled"],
+                recommended_action="toggle_bt_management",
+            )
+        elif ma_reconnecting:
+            queue_blocked_reason = _block_reason_payload(
                 code="ma_reconnecting",
                 message="Music Assistant reconnect is in progress.",
                 remediation=["open_diagnostics"],
                 depends_on=["sendspin_connected"],
                 recommended_action="open_diagnostics",
             )
-            if ma_reconnecting
-            else _block_reason_payload(
+        else:
+            queue_blocked_reason = _block_reason_payload(
                 code="daemon_disconnected",
                 message="Sendspin is not connected.",
                 remediation=["reconnect", "open_diagnostics"],
                 depends_on=["sendspin_connected"],
                 recommended_action="reconnect",
             )
-        )
     elif not ma_connected:
         queue_blocked_reason = _block_reason_payload(
             code="ma_disconnected",

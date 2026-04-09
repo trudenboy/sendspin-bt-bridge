@@ -3106,7 +3106,9 @@ function buildListView(entries, hiddenCount) {
             ? 'Wake from standby — reconnect Bluetooth and resume audio'
             : 'Enter standby — disconnect Bluetooth to save speaker battery';
         var detailActions = '<div class="list-detail-actions" onclick="event.stopPropagation()">' +
-            '<button type="button" class="action-btn list-action-btn accent" id="dbtn-reconnect-' + i + '" onclick="btReconnect(' + i + ')" title="' + escHtmlAttr(reconnectTitle) + '"' + (reconnectAvailable && !cardDisabled ? '' : ' disabled') + '>' + _actionButtonInnerHtml('reconnect', 'Reconnect') + '</button>' +
+            (mgmtEnabled
+                ? '<button type="button" class="action-btn list-action-btn accent" id="dbtn-reconnect-' + i + '" onclick="btReconnect(' + i + ')" title="' + escHtmlAttr(reconnectTitle) + '"' + (reconnectAvailable && !cardDisabled ? '' : ' disabled') + '>' + _actionButtonInnerHtml('reconnect', 'Reconnect') + '</button>'
+                : '<button type="button" class="action-btn list-action-btn success" id="dbtn-release-' + i + '" onclick="btToggleManagement(' + i + ')" title="Resume BT management and auto-reconnect">' + _actionButtonInnerHtml('release', 'Reclaim') + '</button>') +
             '<button type="button" class="action-btn list-action-btn ' + standbyActionClass + '" id="dbtn-standby-' + i + '" onclick="btToggleStandby(' + i + ')" title="' + escHtmlAttr(standbyTitle) + '"' + (cardDisabled ? ' disabled' : '') + '>' + _actionButtonInnerHtml(standbyIcon, standbyLabel) + '</button>' +
             '<button type="button" class="action-btn list-action-btn danger" onclick="confirmDisableDevice(' + i + ')"' + (cardDisabled ? ' disabled' : '') + '>' + _actionButtonInnerHtml('disable', 'Disable') + '</button>' +
         '</div>';
@@ -3843,10 +3845,23 @@ function populateDeviceCard(i, dev) {
     {
         var reconnBtn = document.getElementById('dbtn-reconnect-' + i);
         if (reconnBtn) {
-            reconnBtn.disabled = !reconnectAvailable || _isDeviceDisabled(dev);
-            reconnBtn.title = reconnectAvailable
-                ? 'Reconnect Bluetooth and refresh sink routing'
-                : _capabilityBlockedReason(reconnectCapability, 'Reconnect unavailable');
+            var mgmtOn = dev.bt_management_enabled !== false;
+            if (!mgmtOn) {
+                // Swap to Reclaim button when released
+                reconnBtn.innerHTML = _actionButtonInnerHtml('release', 'Reclaim');
+                reconnBtn.className = reconnBtn.className.replace(/\baccent\b/, 'success');
+                reconnBtn.onclick = function() { btToggleManagement(i); };
+                reconnBtn.disabled = _isDeviceDisabled(dev);
+                reconnBtn.title = 'Resume BT management and auto-reconnect';
+            } else {
+                reconnBtn.innerHTML = _actionButtonInnerHtml('reconnect', 'Reconnect');
+                reconnBtn.className = reconnBtn.className.replace(/\bsuccess\b/, 'accent');
+                reconnBtn.onclick = function() { btReconnect(i); };
+                reconnBtn.disabled = !reconnectAvailable || _isDeviceDisabled(dev);
+                reconnBtn.title = reconnectAvailable
+                    ? 'Reconnect Bluetooth and refresh sink routing'
+                    : _capabilityBlockedReason(reconnectCapability, 'Reconnect unavailable');
+            }
         }
     }
 
