@@ -414,6 +414,7 @@ class SendspinClient:
             allowed_keys=_IPC_ALLOWED_KEYS,
         )
         self._command_service = SubprocessCommandService(logger_=logger)
+        self._pending_reconnect_unmute_sync = False
         self._stderr_service = SubprocessStderrService(
             player_name=player_name,
             update_status=self._update_status,
@@ -1155,6 +1156,7 @@ class SendspinClient:
             )
             self._update_status({"playing": False})
             self._clear_ma_reconnecting()
+            self._pending_reconnect_unmute_sync = True
 
             # Start async tasks to consume subprocess stdout and stderr
             self._daemon_task = asyncio.create_task(self._read_subprocess_output())
@@ -1197,7 +1199,10 @@ class SendspinClient:
                         save_device_volume(_mac, new_volume)
                     # Sync unmute to MA after reconnect (#132):
                     # daemon unmutes PA sink but MA still thinks device is muted.
-                    if updates.get("sink_muted") is False:
+                    # Only sync once after subprocess (re)start to avoid
+                    # overriding explicit user mute commands (#155).
+                    if updates.get("sink_muted") is False and self._pending_reconnect_unmute_sync:
+                        self._pending_reconnect_unmute_sync = False
                         await self._sync_unmute_to_ma()
             else:
                 self._ipc_service.handle_message(msg)

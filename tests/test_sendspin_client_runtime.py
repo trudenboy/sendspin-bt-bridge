@@ -594,6 +594,7 @@ async def test_sink_unmute_syncs_to_ma_when_muted_via_ma():
     client.player_id = "sendspin-test-player"
     # Simulate MA-muted state before reconnect
     client._update_status({"muted": True, "sink_muted": True})
+    client._pending_reconnect_unmute_sync = True
 
     client._daemon_proc = SimpleNamespace(
         stdout=_FakeStdoutLines(
@@ -623,6 +624,7 @@ async def test_sink_unmute_syncs_to_ma_when_muted_via_ma():
         {"player_id": "sendspin-test-player", "muted": False},
     )
     assert client.status.muted is False
+    assert client._pending_reconnect_unmute_sync is False
 
 
 @pytest.mark.asyncio
@@ -631,6 +633,7 @@ async def test_sink_unmute_skipped_when_mute_via_ma_disabled():
     client = SendspinClient("Test Player", "localhost", 9000)
     client.player_id = "sendspin-test-player"
     client._update_status({"muted": True, "sink_muted": True})
+    client._pending_reconnect_unmute_sync = True
 
     client._daemon_proc = SimpleNamespace(
         stdout=_FakeStdoutLines(
@@ -664,6 +667,7 @@ async def test_sink_unmute_skipped_when_ma_not_connected():
     client = SendspinClient("Test Player", "localhost", 9000)
     client.player_id = "sendspin-test-player"
     client._update_status({"muted": True, "sink_muted": True})
+    client._pending_reconnect_unmute_sync = True
 
     client._daemon_proc = SimpleNamespace(
         stdout=_FakeStdoutLines(
@@ -697,6 +701,7 @@ async def test_sink_unmute_skipped_when_already_in_sync():
     client = SendspinClient("Test Player", "localhost", 9000)
     client.player_id = "sendspin-test-player"
     client._update_status({"muted": False, "sink_muted": True})
+    client._pending_reconnect_unmute_sync = True
 
     client._daemon_proc = SimpleNamespace(
         stdout=_FakeStdoutLines(
@@ -722,3 +727,41 @@ async def test_sink_unmute_skipped_when_already_in_sync():
         await client._read_subprocess_output()
 
     mock_cmd.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_sink_unmute_not_synced_without_reconnect_flag():
+    """After the first reconnect sync is consumed, subsequent sink_muted=False
+    events must NOT trigger MA unmute — this would override user mute (#155)."""
+    client = SendspinClient("Test Player", "localhost", 9000)
+    client.player_id = "sendspin-test-player"
+    client._update_status({"muted": True, "sink_muted": True})
+    # Flag already consumed (default False) — simulates normal operation
+    assert client._pending_reconnect_unmute_sync is False
+
+    client._daemon_proc = SimpleNamespace(
+        stdout=_FakeStdoutLines(
+            [
+                json.dumps(
+                    {
+                        "type": "status",
+                        "protocol_version": IPC_PROTOCOL_VERSION,
+                        "sink_muted": False,
+                        "muted": True,
+                    }
+                ).encode(),
+            ]
+        )
+    )
+
+    with (
+        patch("sendspin_client._state.notify_status_changed"),
+        patch("routes.api_config.get_mute_via_ma", return_value=True),
+        patch("services.ma_runtime_state.is_ma_connected", return_value=True),
+        patch("services.ma_monitor.send_player_cmd", return_value=True) as mock_cmd,
+    ):
+        await client._read_subprocess_output()
+
+    mock_cmd.assert_not_awaited()
+    # Mute state should remain True (user's mute preserved)
+    assert client.status.muted is True

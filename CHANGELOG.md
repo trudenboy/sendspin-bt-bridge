@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.55.3-rc.2] - 2026-04-09
+
+### Fixed
+- **Mute immediately overridden by reconnect unmute sync** — `_sync_unmute_to_ma()` fired on every `sink_muted=False` status update, not just after subprocess (re)start. When mute was routed through MA, the PA sink stayed unmuted, triggering the sync which instantly reversed the user's mute. Added `_pending_reconnect_unmute_sync` flag that is set on subprocess start and consumed after the first sync
+
 ## [2.55.3-rc.1] - 2026-04-09
 
 ### Fixed
