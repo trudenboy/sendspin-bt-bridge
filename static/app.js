@@ -853,6 +853,15 @@ function _collectDeviceBlockedControlHints(dev, transportState, guidance) {
     var sinkAvailable = !!(transportState && transportState.hasSink);
     var queueAvailable = !!(transportState && transportState.hasQueueControls);
 
+    if (dev.sink_muted && !dev.muted && deviceHasSink(dev)) {
+        _pushBlockedControlHint(hints, {
+            title: 'Audio sink muted at system level',
+            message: 'PulseAudio sink is muted — no sound will play. Click Unmute to restore.',
+            dependsOn: [],
+            action: { key: 'unmute_sink', label: 'Unmute speaker', device_names: [dev.player_name] },
+        });
+    }
+
     if (!reconnectAvailable) {
         _pushBlockedControlHint(hints, {
             title: 'Reconnect unavailable',
@@ -1366,6 +1375,11 @@ function getUnifiedDeviceStatusMeta(dev) {
         label = 'No sink';
         tone = 'error';
         summary = 'Connected, waiting for audio sink';
+    } else if (safeDev.sink_muted && !safeDev.muted && deviceHasSink(safeDev) && safeDev.bluetooth_connected) {
+        key = 'sink-muted';
+        label = 'Sink muted';
+        tone = 'warning';
+        summary = 'Audio sink muted at system level';
     } else if (maMeta.pending && safeDev.server_connected && deviceHasSink(safeDev)) {
         key = 'ma-pending';
         label = 'Applying';
@@ -7919,6 +7933,28 @@ function _runOperatorGuidanceAction(action) {
                 confirmSummary: 'Apply this Bluetooth management action to these devices?',
             }
         );
+        return false;
+    }
+    if (actionKey === 'unmute_sink') {
+        var unmuteName = deviceNames[0] || '';
+        if (!unmuteName) {
+            showToast('Device name not specified', 'error');
+            return false;
+        }
+        fetch(API_BASE + '/api/unmute_sink', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ player_name: unmuteName }),
+        }).then(function(r) { return r.json(); }).then(function(d) {
+            if (d.success) {
+                showToast('Sink unmuted for ' + unmuteName, 'success');
+                updateStatus();
+            } else {
+                showToast(d.error || 'Failed to unmute sink', 'error');
+            }
+        }).catch(function(e) {
+            showToast('Unmute sink failed: ' + e.message, 'error');
+        });
         return false;
     }
     return false;

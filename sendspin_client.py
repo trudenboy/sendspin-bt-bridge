@@ -415,6 +415,7 @@ class SendspinClient:
         )
         self._command_service = SubprocessCommandService(logger_=logger)
         self._pending_reconnect_unmute_sync = False
+        self._sink_mute_watchdog_task: asyncio.Task | concurrent.futures.Future | None = None
         self._stderr_service = SubprocessStderrService(
             player_name=player_name,
             update_status=self._update_status,
@@ -529,6 +530,12 @@ class SendspinClient:
                         self._start_idle_timer()
                     elif _idle_mode == "power_save":
                         self._start_power_save_timer()
+        # ── Sink mute watchdog ────────────────────────────────────────
+        if "sink_muted" in updates:
+            if self.status.get("sink_muted") and not self.status.get("muted"):
+                self._start_sink_mute_watchdog()
+            else:
+                self._cancel_sink_mute_watchdog()
 
     # ── Idle disconnect timer ────────────────────────────────────────────
 
@@ -738,6 +745,57 @@ class SendspinClient:
             logger.info("[%s] Exited power-save (PA sink resumed)", self.player_name)
         else:
             logger.warning("[%s] Failed to resume PA sink from power-save", self.player_name)
+
+    # ---- Sink mute watchdog (safety net) ----
+
+    def _start_sink_mute_watchdog(self) -> None:
+        """Schedule auto-unmute if sink stays muted without user intent after 30s."""
+
+        async def _watchdog() -> None:
+            try:
+                await asyncio.sleep(30)
+                with self._status_lock:
+                    sink_muted = self.status.get("sink_muted")
+                    app_muted = self.status.get("muted")
+                    bt_connected = self.status.get("bluetooth_connected")
+                if not sink_muted or app_muted or not bt_connected:
+                    return
+                sink = self.bluetooth_sink_name
+                if not sink:
+                    return
+                from services.pulse import aset_sink_mute
+
+                ok = await aset_sink_mute(sink, False)
+                if ok:
+                    self._update_status({"sink_muted": False})
+                    logger.info("[%s] Auto-unmuted sink %s (safety net)", self.player_name, sink)
+                else:
+                    logger.warning("[%s] Safety-net auto-unmute failed for %s", self.player_name, sink)
+            except asyncio.CancelledError:
+                return
+
+        with self._idle_timer_lock:
+            self._cancel_sink_mute_watchdog_unlocked()
+            loop = _state.get_main_loop()
+            if loop and loop.is_running():
+                self._sink_mute_watchdog_task = asyncio.run_coroutine_threadsafe(_watchdog(), loop)
+            else:
+                try:
+                    self._sink_mute_watchdog_task = asyncio.ensure_future(_watchdog())
+                except RuntimeError:
+                    pass
+
+    def _cancel_sink_mute_watchdog(self) -> None:
+        with self._idle_timer_lock:
+            self._cancel_sink_mute_watchdog_unlocked()
+
+    def _cancel_sink_mute_watchdog_unlocked(self) -> None:
+        task = self._sink_mute_watchdog_task
+        if task is None:
+            return
+        self._sink_mute_watchdog_task = None
+        if hasattr(task, "cancel"):
+            task.cancel()
 
     async def _enter_standby(self) -> None:
         """Disconnect BT and park daemon on null sink to let the speaker save power.

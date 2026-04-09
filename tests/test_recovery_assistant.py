@@ -262,3 +262,61 @@ def test_recovery_assistant_only_flags_auto_released_devices():
     assert data["issues"][0]["primary_action"]["key"] == "toggle_bt_management"
     assert data["issues"][0]["recommended_action"]["key"] == "toggle_bt_management"
     assert data["issues"][0]["secondary_actions"][0]["key"] == "open_diagnostics"
+
+
+def test_recovery_assistant_flags_sink_system_muted():
+    """When PA sink is muted at system level but app is not muted, flag it."""
+    devices = [
+        SimpleNamespace(
+            player_name="Bedroom",
+            bt_management_enabled=True,
+            bluetooth_connected=True,
+            has_sink=True,
+            server_connected=True,
+            static_delay_ms=0.0,
+            recent_events=[],
+            health_summary={"state": "degraded", "severity": "warning", "summary": "Audio sink muted at system level"},
+            extra={"sink_muted": True, "muted": False},
+        ),
+    ]
+
+    snapshot = build_recovery_assistant_snapshot(
+        config={"BLUETOOTH_DEVICES": [{"mac": "CC"}], "PULSE_LATENCY_MSEC": 300},
+        devices=devices,
+        onboarding_assistant={"checklist": {"overall_status": "ok", "checkpoints": []}},
+        startup_progress={"status": "complete", "message": "Startup complete."},
+    )
+
+    data = snapshot.to_dict()
+    assert len(data["issues"]) == 1
+    assert data["issues"][0]["key"] == "sink_system_muted"
+    assert data["issues"][0]["title"] == "Bedroom audio sink is muted at system level"
+    assert data["issues"][0]["primary_action"]["key"] == "unmute_sink"
+    assert data["issues"][0]["recommended_action"]["key"] == "unmute_sink"
+
+
+def test_recovery_assistant_no_sink_muted_issue_when_app_muted():
+    """When user muted explicitly, sink_muted is expected — no recovery issue."""
+    devices = [
+        SimpleNamespace(
+            player_name="Bedroom",
+            bt_management_enabled=True,
+            bluetooth_connected=True,
+            has_sink=True,
+            server_connected=True,
+            static_delay_ms=0.0,
+            recent_events=[],
+            health_summary={"state": "ready", "severity": "info", "summary": "Connected and ready"},
+            extra={"sink_muted": True, "muted": True},
+        ),
+    ]
+
+    snapshot = build_recovery_assistant_snapshot(
+        config={"BLUETOOTH_DEVICES": [{"mac": "CC"}], "PULSE_LATENCY_MSEC": 300},
+        devices=devices,
+        onboarding_assistant={"checklist": {"overall_status": "ok", "checkpoints": []}},
+        startup_progress={"status": "complete", "message": "Startup complete."},
+    )
+
+    data = snapshot.to_dict()
+    assert data["summary"]["open_issue_count"] == 0

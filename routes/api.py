@@ -453,6 +453,50 @@ def set_mute():
         return jsonify({"success": False, "error": "Internal error"}), 500
 
 
+@api_bp.route("/api/unmute_sink", methods=["POST"])
+def unmute_sink():
+    """Force-unmute the PulseAudio sink for a device, bypassing MA routing.
+
+    Used as a recovery action when the PA sink is muted at system level
+    (e.g. after a crash or restart) while the application-level mute is off.
+    """
+    try:
+        data = request.get_json() or {}
+        player_name = data.get("player_name")
+        if not player_name:
+            return jsonify({"error": "player_name is required"}), 400
+
+        snapshot = get_device_registry_snapshot().active_clients
+        target_pairs = _select_target_pairs(snapshot, player_name=player_name)
+        if not target_pairs:
+            return jsonify({"success": False, "error": "Device not found"}), 404
+
+        client, _device = target_pairs[0]
+        if not client.bluetooth_sink_name:
+            return jsonify({"success": False, "error": "No audio sink configured"}), 400
+
+        ok = set_sink_mute(client.bluetooth_sink_name, False)
+        if not ok:
+            return jsonify({"success": False, "error": "Failed to unmute sink"}), 500
+
+        muted = get_sink_mute(client.bluetooth_sink_name)
+        client._update_status({"sink_muted": bool(muted) if muted is not None else False})
+
+        loop = get_main_loop()
+        if loop:
+            _submit_loop_coroutine(
+                loop,
+                client._send_subprocess_command({"cmd": "set_mute", "muted": False}),
+                description=f"unmute_sink for {client.player_name}",
+            )
+
+        logger.info("Sink unmuted via recovery action for %s", player_name)
+        return jsonify({"success": True, "sink_muted": False})
+    except Exception:
+        logger.exception("Unmute sink failed")
+        return jsonify({"success": False, "error": "Internal error"}), 500
+
+
 @api_bp.route("/api/pause_all", methods=["POST"])
 def pause_all():
     """Pause or play all running daemon subprocesses.

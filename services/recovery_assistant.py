@@ -254,6 +254,16 @@ def build_recovery_issue_actions(
             f"Reclaim {len(names)} devices" if len(names) > 1 else "Reclaim Bluetooth",
             device_names=names,
         )
+    elif issue_key == "sink_system_muted":
+        primary_action = _recovery_action(
+            "unmute_sink",
+            "Unmute speaker",
+            device_names=names,
+        )
+        secondary_actions.insert(
+            0,
+            _recovery_action("open_diagnostics", "Open diagnostics", device_names=names),
+        )
     elif issue_key == "duplicate_device":
         primary_action = _recovery_action(
             "open_devices_settings",
@@ -321,6 +331,23 @@ def _build_device_issues(devices: list[Any]) -> list[RecoveryIssue]:
                     severity="error",
                     title=f"{name} is missing a sink",
                     summary=summary or "The speaker is connected, but no Bluetooth sink is resolved yet.",
+                    primary_action=primary_action,
+                    secondary_actions=secondary_actions,
+                    device_name=name,
+                )
+            )
+            continue
+        sink_muted = bool(audio.get("sink_muted")) if audio else bool(_device_extra(device).get("sink_muted"))
+        app_muted = bool(audio.get("muted")) if audio else bool(_device_extra(device).get("muted"))
+        if bluetooth_connected and has_sink and sink_muted and not app_muted:
+            primary_action, secondary_actions = build_recovery_issue_actions("sink_system_muted", device_names)
+            issues.append(
+                RecoveryIssue(
+                    key="sink_system_muted",
+                    severity="warning",
+                    title=f"{name} audio sink is muted at system level",
+                    summary=summary
+                    or "The PulseAudio sink is muted. Audio will not play until unmuted. This can happen after a crash or restart.",
                     primary_action=primary_action,
                     secondary_actions=secondary_actions,
                     device_name=name,

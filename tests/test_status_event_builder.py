@@ -89,3 +89,38 @@ def test_build_emits_reconnect_recovery_and_management_disable_events():
     ]
     assert events[2]["details"] == {"attempt": 3}
     assert events[3]["details"] == {"released_by": "auto"}
+
+
+def test_build_emits_sink_muted_event_on_desync():
+    previous = {"sink_muted": False, "muted": False}
+    current = {"sink_muted": True, "muted": False}
+    updates = {"sink_muted": True}
+
+    events = StatusEventBuilder.build(previous, current, updates)
+
+    assert len(events) == 1
+    assert events[0]["event_type"] == "sink-muted"
+    assert events[0]["level"] == "warning"
+
+
+def test_build_emits_sink_unmuted_event():
+    previous = {"sink_muted": True, "muted": False}
+    current = {"sink_muted": False, "muted": False}
+    updates = {"sink_muted": False}
+
+    events = StatusEventBuilder.build(previous, current, updates)
+
+    assert len(events) == 1
+    assert events[0]["event_type"] == "sink-unmuted"
+    assert events[0]["level"] == "info"
+
+
+def test_build_no_sink_muted_event_when_app_also_muted():
+    """User-initiated mute — sink_muted is expected, no warning event."""
+    previous = {"sink_muted": False, "muted": True}
+    current = {"sink_muted": True, "muted": True}
+    updates = {"sink_muted": True}
+
+    events = StatusEventBuilder.build(previous, current, updates)
+
+    assert not any(e["event_type"] == "sink-muted" for e in events)

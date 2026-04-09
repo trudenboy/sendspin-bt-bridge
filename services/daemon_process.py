@@ -342,14 +342,22 @@ async def _startup_unmute_watcher(
         _logger.info("[%s] Startup unmute timeout — no audio streamed, unmuting anyway", player_name)
 
     try:
-        if await aset_sink_mute(sink_name, False):
+        ok = await aset_sink_mute(sink_name, False)
+        if not ok:
+            for retry in range(1, 4):
+                _logger.info("[%s] Unmute retry %d/3 for %s", player_name, retry, sink_name)
+                await asyncio.sleep(2)
+                ok = await aset_sink_mute(sink_name, False)
+                if ok:
+                    break
+        if ok:
             _logger.info("[%s] Unmuted sink %s (startup complete)", player_name, sink_name)
             with _status_lock:
                 status["sink_muted"] = False
             if on_status_change:
                 on_status_change()
         else:
-            _logger.warning("[%s] Failed to unmute sink %s", player_name, sink_name)
+            _logger.warning("[%s] Failed to unmute sink %s after retries", player_name, sink_name)
     except Exception as exc:
         _logger.warning("[%s] Error unmuting sink: %s", player_name, exc)
 

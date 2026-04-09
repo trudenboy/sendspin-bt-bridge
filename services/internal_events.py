@@ -37,6 +37,8 @@ class DeviceEventType(str, Enum):
     MA_MONITOR_STALE = "ma-monitor-stale"
     BLUETOOTH_STANDBY_ENTERED = "bluetooth-standby-entered"
     BLUETOOTH_STANDBY_EXITED = "bluetooth-standby-exited"
+    SINK_MUTED = "sink-muted"
+    SINK_UNMUTED = "sink-unmuted"
 
 
 _DEFAULT_EVENT_LEVELS: dict[str, str] = {
@@ -57,6 +59,8 @@ _DEFAULT_EVENT_LEVELS: dict[str, str] = {
     DeviceEventType.MA_MONITOR_STALE.value: "warning",
     DeviceEventType.BLUETOOTH_STANDBY_ENTERED.value: "info",
     DeviceEventType.BLUETOOTH_STANDBY_EXITED.value: "info",
+    DeviceEventType.SINK_MUTED.value: "warning",
+    DeviceEventType.SINK_UNMUTED.value: "info",
 }
 
 

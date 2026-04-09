@@ -765,3 +765,36 @@ async def test_sink_unmute_not_synced_without_reconnect_flag():
     mock_cmd.assert_not_awaited()
     # Mute state should remain True (user's mute preserved)
     assert client.status.muted is True
+
+
+def test_sink_mute_watchdog_starts_on_desync():
+    """Watchdog should be scheduled when sink_muted becomes True while app is not muted."""
+    client = SendspinClient("Test Player", "localhost", 9000)
+    client.status.update({"muted": False, "sink_muted": False})
+
+    with patch.object(client, "_start_sink_mute_watchdog") as mock_start:
+        client._update_status({"sink_muted": True})
+
+    mock_start.assert_called_once()
+
+
+def test_sink_mute_watchdog_cancelled_on_unmute():
+    """Watchdog should be cancelled when sink gets unmuted."""
+    client = SendspinClient("Test Player", "localhost", 9000)
+    client.status.update({"muted": False, "sink_muted": True})
+
+    with patch.object(client, "_cancel_sink_mute_watchdog") as mock_cancel:
+        client._update_status({"sink_muted": False})
+
+    mock_cancel.assert_called_once()
+
+
+def test_sink_mute_watchdog_not_started_when_app_muted():
+    """When user explicitly muted, sink_muted is expected — no watchdog."""
+    client = SendspinClient("Test Player", "localhost", 9000)
+    client.status.update({"muted": True, "sink_muted": False})
+
+    with patch.object(client, "_start_sink_mute_watchdog") as mock_start:
+        client._update_status({"sink_muted": True})
+
+    mock_start.assert_not_called()

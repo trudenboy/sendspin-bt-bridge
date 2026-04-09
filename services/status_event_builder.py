@@ -131,4 +131,17 @@ class StatusEventBuilder:
                 details={"last_error_at": current.get("last_error_at")},
             )
 
+        if "sink_muted" in updates and current.get("sink_muted") != previous.get("sink_muted"):
+            if current.get("sink_muted") and not current.get("muted"):
+                _add(
+                    DeviceEventType.SINK_MUTED.value,
+                    level="warning",
+                    message="Audio sink muted at system level",
+                )
+            elif not current.get("sink_muted") and previous.get("sink_muted"):
+                _add(
+                    DeviceEventType.SINK_UNMUTED.value,
+                    message="Audio sink unmuted",
+                )
+
         return events

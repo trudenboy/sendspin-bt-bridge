@@ -172,6 +172,23 @@ def compute_device_health_state(device: Any) -> DeviceHealthState:
             last_event_at=last_event_at,
         )
 
+    if (
+        extra.get("sink_muted")
+        and not extra.get("muted")
+        and getattr(device, "bluetooth_connected", False)
+        and getattr(device, "bluetooth_sink_name", None)
+    ):
+        _append_reason(reasons, "sink_muted_at_system_level")
+        for reason in event_reasons:
+            _append_reason(reasons, reason)
+        return DeviceHealthState(
+            state="degraded",
+            severity="warning",
+            summary="Audio sink muted at system level",
+            reasons=reasons,
+            last_event_at=last_event_at,
+        )
+
     if getattr(device, "playing", False) and not audio_streaming:
         _append_reason(reasons, "playback_without_audio")
         for reason in event_reasons:

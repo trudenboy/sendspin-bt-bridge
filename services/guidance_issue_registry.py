@@ -65,6 +65,13 @@ ISSUE_REGISTRY: dict[str, GuidanceIssueDefinition] = {
         severity="error",
         default_reason_codes=("no_sink",),
     ),
+    "sink_system_muted": GuidanceIssueDefinition(
+        key="sink_system_muted",
+        layer="sink_verification",
+        priority=42,
+        severity="warning",
+        default_reason_codes=("sink_muted_at_system_level",),
+    ),
     "device-disconnected": GuidanceIssueDefinition(
         key="device-disconnected",
         layer="sink_verification",
