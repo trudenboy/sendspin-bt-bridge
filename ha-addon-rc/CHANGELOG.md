@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.55.3-rc.1] - 2026-04-09
+
+### Fixed
+- **Auto-released devices show "Reconnect" instead of "Reclaim"** — when a device was auto-released after repeated BT connection failures, the `play_pause` and `queue_control` capability blocked reasons incorrectly recommended `reconnect` instead of `toggle_bt_management`. The device card action buttons also showed a disabled "Reconnect" instead of a "Reclaim" button
+- **Grid view action button not switching to Reclaim** — the SSE update logic for grid-view cards now dynamically swaps between Reconnect/Reclaim based on `bt_management_enabled` state
+
 ## [2.55.2-rc.1] - 2026-04-07
 
 ### Fixed
