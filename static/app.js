@@ -2714,10 +2714,14 @@ function _getDeviceNowPlayingState(dev, i) {
     var deviceMaActive = !!(ma.connected && deviceHasSink(safeDev));
     // Daemon metadata reflects the actual playing track (critical for sourceplugin providers like ynison).
     // MA now-playing may report a different queue item, so daemon takes priority.
-    var artist = _firstOfSlash(safeDev.current_artist || (deviceMaActive ? (ma.artist || '') : '') || '');
+    // When daemon provides track title, suppress MA fallback for other fields to avoid mixing
+    // metadata from two different tracks (daemon track name + MA artist/album from a different song).
+    var daemonHasTrack = !!safeDev.current_track;
+    var useMaFallback = deviceMaActive && !daemonHasTrack;
+    var artist = _firstOfSlash(safeDev.current_artist || (useMaFallback ? (ma.artist || '') : '') || '');
     var track = _firstOfSlash(safeDev.current_track || (deviceMaActive ? (ma.track || '') : '') || '');
-    var album = _firstOfSlash(safeDev.current_album || (deviceMaActive ? (ma.album || '') : '') || '');
-    var artUrl = safeDev.artwork_url || (deviceMaActive ? (ma.image_url || '') : '') || '';
+    var album = _firstOfSlash(safeDev.current_album || (useMaFallback ? (ma.album || '') : '') || '');
+    var artUrl = safeDev.artwork_url || (useMaFallback ? (ma.image_url || '') : '') || '';
     return {
         ma: ma,
         deviceMaActive: deviceMaActive,
@@ -2956,17 +2960,22 @@ function _getListTrackMeta(dev) {
 
 function _getListTrackArtist(dev) {
     var ma = dev.ma_now_playing || {};
-    return _firstOfSlash(dev.current_artist || ma.artist || '');
+    if (dev.current_artist) return _firstOfSlash(dev.current_artist);
+    if (dev.current_track) return '';
+    return _firstOfSlash(ma.artist || '');
 }
 
 function _getListTrackAlbum(dev) {
     var ma = dev.ma_now_playing || {};
-    return _firstOfSlash(dev.current_album || (ma.connected && deviceHasSink(dev) ? (ma.album || '') : '') || '');
+    if (dev.current_album) return _firstOfSlash(dev.current_album);
+    if (dev.current_track) return '';
+    return _firstOfSlash(ma.connected && deviceHasSink(dev) ? (ma.album || '') : '');
 }
 
 function _getListRowSummary(dev) {
     var track = _getListTrackLabel(dev);
-    var artist = _firstOfSlash(dev.current_artist || (dev.ma_now_playing || {}).artist || '');
+    var useMaFallback = !dev.current_track;
+    var artist = _firstOfSlash(dev.current_artist || (useMaFallback ? ((dev.ma_now_playing || {}).artist || '') : '') || '');
     if (track && artist) return track + ' — ' + artist;
     if (track) return track;
     var releaseMeta = getDeviceReleaseMeta(dev);
