@@ -79,14 +79,22 @@ def resolve_web_port(*, env: Mapping[str, str] | None = None, hostname: str | No
         configured_port = _configured_port_override(load_config(), "WEB_PORT", DEFAULT_WEB_PORT)
         if configured_port is not None:
             return configured_port
-    # HA addon: prefer dynamic INGRESS_PORT assigned by Supervisor (ingress_port: 0)
-    ingress_port = environ.get("INGRESS_PORT")
-    if ingress_port not in (None, ""):
-        channel = detect_ha_addon_channel(env=environ, hostname=hostname)
-        fallback = HA_ADDON_CHANNEL_DEFAULTS[channel]["web_port"]
-        coerced = _coerce_port(ingress_port, fallback)
-        if coerced != fallback:
-            return coerced
+    # HA addon: query Supervisor API for dynamically assigned ingress port
+    try:
+        from services.ha_addon import get_self_addon_info
+
+        addon_info = get_self_addon_info(timeout=3.0)
+        if addon_info:
+            raw_ingress = addon_info.get("ingress_port")
+            if raw_ingress is not None:
+                channel = detect_ha_addon_channel(env=environ, hostname=hostname)
+                fallback = HA_ADDON_CHANNEL_DEFAULTS[channel]["web_port"]
+                coerced = _coerce_port(raw_ingress, fallback)
+                if coerced != fallback:
+                    logger.info("Using Supervisor-assigned ingress port %d", coerced)
+                    return coerced
+    except Exception:
+        pass
     channel = detect_ha_addon_channel(env=environ, hostname=hostname)
     return HA_ADDON_CHANNEL_DEFAULTS[channel]["web_port"]
 

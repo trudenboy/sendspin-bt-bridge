@@ -429,36 +429,49 @@ def test_resolve_runtime_ports_allow_base_port_env_override_in_ha_addon():
     assert resolve_base_listen_port(env=env) == 19000
 
 
-def test_resolve_web_port_uses_ingress_port_env_in_ha_addon():
+def test_resolve_web_port_uses_ingress_port_from_supervisor_api():
+    from unittest.mock import patch
+
     from config import resolve_web_port
 
     env = {
         "SUPERVISOR_TOKEN": "token",
         "HOSTNAME": "85b1ecde-sendspin-bt-bridge",
-        "INGRESS_PORT": "38745",
     }
-    assert resolve_web_port(env=env) == 38745
+    with patch(
+        "services.ha_addon.get_self_addon_info",
+        return_value={"ingress_port": 38745},
+    ):
+        assert resolve_web_port(env=env) == 38745
 
 
 def test_resolve_web_port_falls_back_to_channel_default_without_ingress_port():
+    from unittest.mock import patch
+
     from config import resolve_web_port
 
     env = {
         "SUPERVISOR_TOKEN": "token",
         "HOSTNAME": "85b1ecde-sendspin-bt-bridge",
     }
-    assert resolve_web_port(env=env) == 8080
+    with patch("services.ha_addon.get_self_addon_info", return_value=None):
+        assert resolve_web_port(env=env) == 8080
 
 
-def test_resolve_web_port_ignress_port_invalid_falls_back_to_channel_default():
+def test_resolve_web_port_ingress_port_zero_falls_back_to_channel_default():
+    from unittest.mock import patch
+
     from config import resolve_web_port
 
     env = {
         "SUPERVISOR_TOKEN": "token",
         "HOSTNAME": "85b1ecde-sendspin-bt-bridge-rc",
-        "INGRESS_PORT": "not-a-port",
     }
-    assert resolve_web_port(env=env) == 8081
+    with patch(
+        "services.ha_addon.get_self_addon_info",
+        return_value={"ingress_port": 0},
+    ):
+        assert resolve_web_port(env=env) == 8081
 
 
 def test_resolve_additional_web_port_is_disabled_in_ha_addon():
