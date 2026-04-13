@@ -27,7 +27,7 @@ audio: true
 apparmor: true
 init: false
 ingress: true
-ingress_port: 8080
+ingress_port: 0
 panel_icon: mdi:bluetooth-audio
 panel_admin: false
 tmpfs: true

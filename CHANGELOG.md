@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.56.0-rc.2] - 2026-04-13
+
+### Fixed
+- **Incorrect track metadata with sourceplugin providers** — when playing via sourceplugin (e.g. Yandex ynison), MA now-playing returned metadata from its own queue item instead of the actual playing track. Changed metadata priority in `_getDeviceNowPlayingState()` and `_getListTrackAlbum()` to daemon-first with MA fallback, matching the existing correct behavior in list view. Affects track title, artist, album, and artwork in all expanded/card views
+
+## [2.56.0-rc.1] - 2026-04-13
+
+### Fixed
+- **HA addon ingress port conflict with Matter/Thread** (#138) — switched all addon channels from hardcoded `ingress_port` (8080/8081/8082) to dynamic `ingress_port: 0`. HA Supervisor now auto-assigns a free port via `INGRESS_PORT` env var, eliminating conflicts with other host-network addons. Channel defaults retained as fallback for older Supervisor versions
+
 ## [2.55.3] - 2026-04-09
 
 ### Added

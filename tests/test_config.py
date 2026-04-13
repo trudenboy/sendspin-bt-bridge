@@ -429,6 +429,38 @@ def test_resolve_runtime_ports_allow_base_port_env_override_in_ha_addon():
     assert resolve_base_listen_port(env=env) == 19000
 
 
+def test_resolve_web_port_uses_ingress_port_env_in_ha_addon():
+    from config import resolve_web_port
+
+    env = {
+        "SUPERVISOR_TOKEN": "token",
+        "HOSTNAME": "85b1ecde-sendspin-bt-bridge",
+        "INGRESS_PORT": "38745",
+    }
+    assert resolve_web_port(env=env) == 38745
+
+
+def test_resolve_web_port_falls_back_to_channel_default_without_ingress_port():
+    from config import resolve_web_port
+
+    env = {
+        "SUPERVISOR_TOKEN": "token",
+        "HOSTNAME": "85b1ecde-sendspin-bt-bridge",
+    }
+    assert resolve_web_port(env=env) == 8080
+
+
+def test_resolve_web_port_ignress_port_invalid_falls_back_to_channel_default():
+    from config import resolve_web_port
+
+    env = {
+        "SUPERVISOR_TOKEN": "token",
+        "HOSTNAME": "85b1ecde-sendspin-bt-bridge-rc",
+        "INGRESS_PORT": "not-a-port",
+    }
+    assert resolve_web_port(env=env) == 8081
+
+
 def test_resolve_additional_web_port_is_disabled_in_ha_addon():
     from config import resolve_additional_web_port
 

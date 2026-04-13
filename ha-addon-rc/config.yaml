@@ -27,7 +27,7 @@ audio: true
 apparmor: true
 init: false
 ingress: true
-ingress_port: 8081
+ingress_port: 0
 panel_icon: mdi:flag-checkered
 panel_admin: false
 stage: experimental

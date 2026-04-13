@@ -43,7 +43,7 @@ def test_generate_same_slug_beta_variant_switches_channel_defaults():
     assert "update_channel:" not in config_text
     assert "web_port:" not in config_text
     assert "boot: manual" in config_text
-    assert "ingress_port: 8082" in config_text
+    assert "ingress_port: 0" in config_text
     assert "web_port: null" not in config_text
     assert "base_listen_port: null" not in config_text
     assert "panel_icon: mdi:flask-outline" in config_text
@@ -72,7 +72,7 @@ def test_generate_suffix_slug_rc_variant_supports_multi_addon_layout():
     assert "update_channel:" not in config_text
     assert "web_port:" not in config_text
     assert "boot: manual" in config_text
-    assert "ingress_port: 8081" in config_text
+    assert "ingress_port: 0" in config_text
     assert "panel_icon: mdi:flag-checkered" in config_text
     assert "stage: experimental" in config_text
 
@@ -107,8 +107,8 @@ def test_generate_multi_addon_repo_files_renders_suffix_slug_repository_layout()
     assert 'slug: "sendspin_bt_bridge_beta"' in rendered["ha-addon-beta/config.yaml"]
     assert "boot: manual" in rendered["ha-addon-rc/config.yaml"]
     assert "boot: manual" in rendered["ha-addon-beta/config.yaml"]
-    assert "ingress_port: 8081" in rendered["ha-addon-rc/config.yaml"]
-    assert "ingress_port: 8082" in rendered["ha-addon-beta/config.yaml"]
+    assert "ingress_port: 0" in rendered["ha-addon-rc/config.yaml"]
+    assert "ingress_port: 0" in rendered["ha-addon-beta/config.yaml"]
     assert "panel_icon: mdi:flag-checkered" in rendered["ha-addon-rc/config.yaml"]
     assert "panel_icon: mdi:flask-outline" in rendered["ha-addon-beta/config.yaml"]
     assert "stage: experimental" in rendered["ha-addon-rc/config.yaml"]
