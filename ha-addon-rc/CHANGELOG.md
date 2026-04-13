@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.56.0-rc.3] - 2026-04-13
+
+### Fixed
+- **HA addon 502 on ingress** — `INGRESS_PORT` is not an env var; Supervisor communicates the dynamic port via its REST API. Replaced env var lookup with Supervisor API query (`/addons/self/info`) to read the assigned `ingress_port`
+
 ## [2.56.0-rc.2] - 2026-04-13
 
 ### Fixed
@@ -15,7 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [2.56.0-rc.1] - 2026-04-13
 
 ### Fixed
-- **HA addon ingress port conflict with Matter/Thread** (#138) — switched all addon channels from hardcoded `ingress_port` (8080/8081/8082) to dynamic `ingress_port: 0`. HA Supervisor now auto-assigns a free port via `INGRESS_PORT` env var, eliminating conflicts with other host-network addons. Channel defaults retained as fallback for older Supervisor versions
+- **HA addon ingress port conflict with Matter/Thread** (#138) — switched all addon channels from hardcoded `ingress_port` (8080/8081/8082) to dynamic `ingress_port: 0`. HA Supervisor now auto-assigns a free port, eliminating conflicts with other host-network addons. Channel defaults retained as fallback for older Supervisor versions
 
 ## [2.55.2-rc.1] - 2026-04-07
 
