@@ -2712,11 +2712,12 @@ function _getDeviceNowPlayingState(dev, i) {
     var safeDev = dev || {};
     var ma = safeDev.ma_now_playing || {};
     var deviceMaActive = !!(ma.connected && deviceHasSink(safeDev));
-    var artist = _firstOfSlash((deviceMaActive ? (ma.artist || '') : '') || safeDev.current_artist || '');
-    var track = _firstOfSlash((deviceMaActive ? (ma.track || '') : '') || safeDev.current_track || '');
-    var album = _firstOfSlash((deviceMaActive ? (ma.album || '') : '') || safeDev.current_album || '');
-    var artUrl = deviceMaActive ? (ma.image_url || '') : '';
-    if (!artUrl && safeDev.artwork_url) artUrl = safeDev.artwork_url;
+    // Daemon metadata reflects the actual playing track (critical for sourceplugin providers like ynison).
+    // MA now-playing may report a different queue item, so daemon takes priority.
+    var artist = _firstOfSlash(safeDev.current_artist || (deviceMaActive ? (ma.artist || '') : '') || '');
+    var track = _firstOfSlash(safeDev.current_track || (deviceMaActive ? (ma.track || '') : '') || '');
+    var album = _firstOfSlash(safeDev.current_album || (deviceMaActive ? (ma.album || '') : '') || '');
+    var artUrl = safeDev.artwork_url || (deviceMaActive ? (ma.image_url || '') : '') || '';
     return {
         ma: ma,
         deviceMaActive: deviceMaActive,
@@ -2960,7 +2961,7 @@ function _getListTrackArtist(dev) {
 
 function _getListTrackAlbum(dev) {
     var ma = dev.ma_now_playing || {};
-    return _firstOfSlash(ma.connected && deviceHasSink(dev) ? (ma.album || '') : '');
+    return _firstOfSlash(dev.current_album || (ma.connected && deviceHasSink(dev) ? (ma.album || '') : '') || '');
 }
 
 function _getListRowSummary(dev) {
