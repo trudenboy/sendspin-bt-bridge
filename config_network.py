@@ -79,6 +79,14 @@ def resolve_web_port(*, env: Mapping[str, str] | None = None, hostname: str | No
         configured_port = _configured_port_override(load_config(), "WEB_PORT", DEFAULT_WEB_PORT)
         if configured_port is not None:
             return configured_port
+    # HA addon: prefer dynamic INGRESS_PORT assigned by Supervisor (ingress_port: 0)
+    ingress_port = environ.get("INGRESS_PORT")
+    if ingress_port not in (None, ""):
+        channel = detect_ha_addon_channel(env=environ, hostname=hostname)
+        fallback = HA_ADDON_CHANNEL_DEFAULTS[channel]["web_port"]
+        coerced = _coerce_port(ingress_port, fallback)
+        if coerced != fallback:
+            return coerced
     channel = detect_ha_addon_channel(env=environ, hostname=hostname)
     return HA_ADDON_CHANNEL_DEFAULTS[channel]["web_port"]
 

@@ -27,7 +27,7 @@ audio: true
 apparmor: true
 init: false
 ingress: true
-ingress_port: 8082
+ingress_port: 0
 panel_icon: mdi:flask-outline
 panel_admin: false
 stage: experimental

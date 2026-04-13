@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.56.0-rc.1] - 2026-04-13
+
+### Fixed
+- **HA addon ingress port conflict with Matter/Thread** (#138) — switched all addon channels from hardcoded `ingress_port` (8080/8081/8082) to dynamic `ingress_port: 0`. HA Supervisor now auto-assigns a free port via `INGRESS_PORT` env var, eliminating conflicts with other host-network addons. Channel defaults retained as fallback for older Supervisor versions
+
 ## [2.55.3] - 2026-04-09
 
 ### Added

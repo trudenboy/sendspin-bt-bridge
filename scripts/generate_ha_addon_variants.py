@@ -35,9 +35,9 @@ _CHANNEL_LABELS = {
     "beta": "Beta",
 }
 _CHANNEL_NETWORK_DEFAULTS = {
-    "stable": {"ingress_port": 8080, "base_listen_port": 8928},
-    "rc": {"ingress_port": 8081, "base_listen_port": 9028},
-    "beta": {"ingress_port": 8082, "base_listen_port": 9128},
+    "stable": {"ingress_port": 0, "base_listen_port": 8928},
+    "rc": {"ingress_port": 0, "base_listen_port": 9028},
+    "beta": {"ingress_port": 0, "base_listen_port": 9128},
 }
 _CHANNEL_BOOT_DEFAULTS = {
     "stable": "auto",
