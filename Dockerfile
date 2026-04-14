@@ -48,12 +48,16 @@ RUN grep -v '^sendspin' /tmp/requirements.txt > /tmp/requirements-deps.txt && \
         pip install --no-cache-dir --prefix=/install -r /tmp/requirements-deps.txt; \
     fi
 
-# Layer 2: sendspin package only — lightweight, rebuilt each release
+# Layer 2: sendspin package only — lightweight, rebuilt each release.
+# armv7 uses --no-deps because all transitive deps are explicit in layer 1;
+# amd64/arm64 omit it so pip resolves transitive deps like aiosendspin-mpris.
 ARG SENDSPIN_VERSION=""
-RUN if [ -n "${SENDSPIN_VERSION}" ]; then \
-        pip install --no-cache-dir --prefix=/install --no-deps "sendspin==${SENDSPIN_VERSION}"; \
+RUN NO_DEPS="" && \
+    if [ "${TARGETARCH}${TARGETVARIANT}" = "armv7" ]; then NO_DEPS="--no-deps"; fi && \
+    if [ -n "${SENDSPIN_VERSION}" ]; then \
+        pip install --no-cache-dir --prefix=/install ${NO_DEPS} "sendspin==${SENDSPIN_VERSION}"; \
     else \
-        pip install --no-cache-dir --prefix=/install --no-deps "sendspin>=5.3.0,<6.0.0"; \
+        pip install --no-cache-dir --prefix=/install ${NO_DEPS} "sendspin>=5.3.0,<6.0.0"; \
     fi
 
 # Strip bloat from installed packages before copying to runtime stage
