@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.56.3] - 2026-04-14
+
+### Fixed
+- **Docker build failing on amd64/arm64** — `aiosendspin-mpris` (transitive dep of sendspin) was missing because `--no-deps` blocked pip from resolving it. Now `--no-deps` is only used for armv7 where all deps are listed explicitly
+
 ## [2.56.2] - 2026-04-14
 
 ### Fixed
