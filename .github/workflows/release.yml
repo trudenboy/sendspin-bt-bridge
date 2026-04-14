@@ -500,7 +500,7 @@ jobs:
     needs: [prepare, docker-merge]
     if: needs.prepare.outputs.is_stable == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 90
     permissions:
       packages: write
     steps:

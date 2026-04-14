@@ -3,7 +3,6 @@ FROM python:3.12-slim AS builder
 ENV DEBIAN_FRONTEND=noninteractive
 ARG TARGETARCH
 ARG TARGETVARIANT
-ARG SENDSPIN_VERSION=""
 
 # Build-time system dependencies (needed to compile dbus-python, portaudio bindings,
 # and PyAV on architectures without pre-built wheels)
@@ -29,31 +28,32 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libtiff-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# Layer 1: All dependencies except sendspin — cached across releases.
+# SENDSPIN_VERSION is intentionally declared later so version bumps never
+# invalidate this expensive layer (numpy/PyAV compile from source on armv7).
 COPY requirements.txt /tmp/
-RUN if [ "${TARGETARCH}${TARGETVARIANT}" = "armv7" ]; then \
-        # The Docker image builds on Debian slim with newer FFmpeg libs, so keep
-        # PyAV aligned with aiosendspin's av>=15 requirement here.
-        grep -v '^sendspin' /tmp/requirements.txt > /tmp/requirements-armv7.txt && \
-        pip install --no-cache-dir --prefix=/install \
-            -r /tmp/requirements-armv7.txt \
+RUN grep -v '^sendspin' /tmp/requirements.txt > /tmp/requirements-deps.txt && \
+    if [ "${TARGETARCH}${TARGETVARIANT}" = "armv7" ]; then \
+        pip install --no-cache-dir --prefer-binary --prefix=/install \
+            --extra-index-url https://www.piwheels.org/simple \
+            -r /tmp/requirements-deps.txt \
             "aiosendspin-mpris~=2.1.1" \
             "av>=15.0.0,<16.0.0" \
             "numpy>=1.24.0,<2.0" \
             "qrcode>=8.0" \
             "readchar>=4.0.0" \
             "rich>=13.0.0" \
-            "sounddevice>=0.4.6" && \
-        if [ -n "${SENDSPIN_VERSION}" ]; then \
-            pip install --no-cache-dir --prefix=/install --no-deps "sendspin==${SENDSPIN_VERSION}"; \
-        else \
-            pip install --no-cache-dir --prefix=/install --no-deps "sendspin>=5.3.0,<6.0.0"; \
-        fi; \
-    elif [ -n "${SENDSPIN_VERSION}" ]; then \
-        grep -v '^sendspin' /tmp/requirements.txt > /tmp/requirements-release.txt && \
-        pip install --no-cache-dir --prefix=/install -r /tmp/requirements-release.txt && \
-        pip install --no-cache-dir --prefix=/install -c /tmp/requirements-release.txt "sendspin==${SENDSPIN_VERSION}"; \
+            "sounddevice>=0.4.6"; \
     else \
-        pip install --no-cache-dir --prefix=/install -r /tmp/requirements.txt; \
+        pip install --no-cache-dir --prefix=/install -r /tmp/requirements-deps.txt; \
+    fi
+
+# Layer 2: sendspin package only — lightweight, rebuilt each release
+ARG SENDSPIN_VERSION=""
+RUN if [ -n "${SENDSPIN_VERSION}" ]; then \
+        pip install --no-cache-dir --prefix=/install --no-deps "sendspin==${SENDSPIN_VERSION}"; \
+    else \
+        pip install --no-cache-dir --prefix=/install --no-deps "sendspin>=5.3.0,<6.0.0"; \
     fi
 
 # Strip bloat from installed packages before copying to runtime stage
