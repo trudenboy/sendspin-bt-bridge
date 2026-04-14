@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.56.2] - 2026-04-14
+
+### Fixed
+- **armv7 Docker build timing out in CI** — split Dockerfile pip install into two layers so heavy native deps (numpy, PyAV, dbus-python) are cached across releases and not recompiled on every version bump. Added piwheels.org as extra index for pre-built ARM wheels. Increased armv7 build timeout from 45 to 90 min for cold builds
+
 ## [2.56.1] - 2026-04-13
 
 ### Fixed
