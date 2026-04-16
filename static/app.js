@@ -2721,7 +2721,7 @@ function _getDeviceNowPlayingState(dev, i) {
     var artist = _firstOfSlash(safeDev.current_artist || (useMaFallback ? (ma.artist || '') : '') || '');
     var track = _firstOfSlash(safeDev.current_track || (deviceMaActive ? (ma.track || '') : '') || '');
     var album = _firstOfSlash(safeDev.current_album || (useMaFallback ? (ma.album || '') : '') || '');
-    var artUrl = _getSafeArtworkUrl(safeDev.artwork_url) || (deviceMaActive ? (ma.image_url || '') : '') || '';
+    var artUrl = _getSafeArtworkUrl(safeDev.artwork_url) || (useMaFallback ? (ma.image_url || '') : '') || '';
     return {
         ma: ma,
         deviceMaActive: deviceMaActive,
