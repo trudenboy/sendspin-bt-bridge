@@ -313,7 +313,15 @@
         },
         "delay_ms": {
           "type": "integer",
-          "description": "Per-device static audio delay in milliseconds (negative = earlier)."
+          "minimum": 0,
+          "maximum": 5000,
+          "description": "Per-device static audio delay in milliseconds (0–5000). Added on top of DAC-anchored sync."
+        },
+        "static_delay_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5000,
+          "description": "Per-device static audio delay in milliseconds (0–5000). Added on top of DAC-anchored sync."
         },
         "enabled": {
           "type": "boolean",

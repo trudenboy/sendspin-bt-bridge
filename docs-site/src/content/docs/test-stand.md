@@ -30,7 +30,7 @@ graph TB
                 T_DBUS["D-Bus system bus<br/>bind-mount from host"]
                 T_PA["PulseAudio 16.1 --system<br/>user pulse uid=109"]
                 T_BLUEZ["BlueZ 5.72<br/>bluetoothctl"]
-                T_SBB["SBB v2.49.0<br/>Python 3.12.3<br/>aiosendspin 4.3.2"]
+                T_SBB["SBB v2.57.0<br/>Python 3.12.3<br/>aiosendspin 5.1.0"]
                 T_WEB["Flask 3.1.3 + Waitress 3.0.2<br/>:8080"]
                 T_DBUS --> T_BLUEZ
                 T_DBUS --> T_PA

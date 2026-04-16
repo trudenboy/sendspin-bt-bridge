@@ -78,7 +78,7 @@ schema:
     - mac: "match(([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2})"
       player_name: str
       adapter: str?
-      static_delay_ms: int?
+      static_delay_ms: "int(0,5000)?"
       listen_host: str?
       listen_port: port?
       enabled: bool?

@@ -194,7 +194,7 @@ IPC: subprocess→parent via JSON lines on stdout; parent→subprocess via JSON 
 | `WEB_THREADS` | `8` | Waitress worker thread count |
 | `PULSE_SINK` | (per-subprocess) | PulseAudio sink name; set automatically per daemon subprocess |
 | `SUPERVISOR_TOKEN` | — | Presence indicates HA addon runtime (set by HA Supervisor) |
-| `SENDSPIN_STATIC_DELAY_MS` | `-300` | Static audio delay in ms passed to daemon subprocess |
+| `SENDSPIN_STATIC_DELAY_MS` | `0` | Static audio delay in ms (0–5000) passed to daemon subprocess; added on top of DAC-anchored sync |
 | `SENDSPIN_VERSION_REF_FILE` | `/opt/sendspin-client/.release-ref` | Path to persisted install/update version ref |
 
 ## Container Requirements

@@ -503,7 +503,7 @@ async def _run(params: dict) -> None:
     client_id: str = params["client_id"]
     listen_port: int = params["listen_port"]
     server_url: str | None = params.get("url")
-    static_delay_ms: float = params.get("static_delay_ms", -300.0)
+    static_delay_ms: float = params.get("static_delay_ms", 0.0)
     bluetooth_sink_name: str | None = params.get("bluetooth_sink_name")
     initial_volume: int = params.get("volume", 100)
     initial_muted: bool = bool(params.get("muted", False))
@@ -582,7 +582,7 @@ async def _run(params: dict) -> None:
             "listen_port": listen_port,
             "use_mpris": False,
             "volume_controller": pa_volume_controller,
-            # Legacy compat: older sendspin uses use_hardware_volume instead
+            # sendspin 7+ uses volume_controller; 5.x uses use_hardware_volume
             "use_hardware_volume": False,
             "preferred_format": preferred_fmt,
         },

@@ -39,7 +39,7 @@ def _make_client(
         listen_port=8928,
         server_host="music-assistant.local",
         server_port=9000,
-        static_delay_ms=-500.0,
+        static_delay_ms=500.0,
         connected_server_url="",
         bt_manager=SimpleNamespace(
             mac_address="AA:BB:CC:DD:EE:FF",
