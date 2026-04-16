@@ -152,6 +152,9 @@ def _normalize_bluetooth_devices(config: dict, *, defaults: Mapping[str, Any]) -
     return normalized_devices
 
 
+_warned_negative_delays: set[str] = set()
+
+
 def _migrate_negative_static_delay(device: dict) -> None:
     """Clamp negative static_delay_ms to 0 (sendspin 7.0+ only accepts 0-5000)."""
     raw = device.get("static_delay_ms")
@@ -162,11 +165,14 @@ def _migrate_negative_static_delay(device: dict) -> None:
     except (TypeError, ValueError):
         return
     if value < 0:
-        logger.warning(
-            "Device %s: static_delay_ms=%s is negative; clamping to 0 (sendspin 7.0+ uses DAC-anchored sync)",
-            device.get("mac", device.get("player_name", "?")),
-            raw,
-        )
+        key = str(device.get("mac", device.get("player_name", "?")))
+        if key not in _warned_negative_delays:
+            _warned_negative_delays.add(key)
+            logger.warning(
+                "Device %s: static_delay_ms=%s is negative; clamping to 0 (sendspin 7.0+ uses DAC-anchored sync)",
+                key,
+                raw,
+            )
         device["static_delay_ms"] = 0
 
 

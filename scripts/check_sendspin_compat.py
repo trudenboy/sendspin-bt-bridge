@@ -44,7 +44,7 @@ def main() -> int:
         "client_name": "Compat Smoke Player",
         "settings": object(),
         "url": "ws://localhost:9000/sendspin",
-        "static_delay_ms": -500.0,
+        "static_delay_ms": 0.0,
         "listen_port": 9000,
         "use_mpris": False,
         "use_hardware_volume": False,
