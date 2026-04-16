@@ -1,0 +1,65 @@
+{
+  "weekly_commits": [
+    {
+      "week_offset": -15,
+      "total": 1,
+      "owner": 0
+    },
+    {
+      "week_offset": -14,
+      "total": 13,
+      "owner": 0
+    },
+    {
+      "week_offset": -6,
+      "total": 292,
+      "owner": 283
+    },
+    {
+      "week_offset": -5,
+      "total": 492,
+      "owner": 395
+    },
+    {
+      "week_offset": -4,
+      "total": 243,
+      "owner": 213
+    },
+    {
+      "week_offset": -3,
+      "total": 317,
+      "owner": 249
+    },
+    {
+      "week_offset": -2,
+      "total": 322,
+      "owner": 94
+    },
+    {
+      "week_offset": -1,
+      "total": 161,
+      "owner": 8
+    },
+    {
+      "week_offset": 0,
+      "total": 36,
+      "owner": 0
+    }
+  ],
+  "code_frequency": [],
+  "ai": {
+    "commits_scanned": 200,
+    "ai_commits": 92,
+    "ai_ratio": 0.46,
+    "agents": [
+      {
+        "name": "Copilot",
+        "commits": 91
+      },
+      {
+        "name": "trudenboy",
+        "commits": 1
+      }
+    ]
+  }
+}

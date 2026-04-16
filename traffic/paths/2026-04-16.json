@@ -1,0 +1,62 @@
+[
+  {
+    "path": "/trudenboy/sendspin-bt-bridge",
+    "title": "Overview",
+    "count": 656,
+    "uniques": 352
+  },
+  {
+    "path": "/trudenboy/sendspin-bt-bridge/issues",
+    "title": "/issues",
+    "count": 116,
+    "uniques": 42
+  },
+  {
+    "path": "/trudenboy/sendspin-bt-bridge/pulls",
+    "title": "/pulls",
+    "count": 29,
+    "uniques": 14
+  },
+  {
+    "path": "/trudenboy/sendspin-bt-bridge/issues/123",
+    "title": "/issues/123",
+    "count": 24,
+    "uniques": 6
+  },
+  {
+    "path": "/trudenboy/sendspin-bt-bridge/blob/main/README.ru.md",
+    "title": "/blob/main/README.ru.md",
+    "count": 23,
+    "uniques": 15
+  },
+  {
+    "path": "/trudenboy/sendspin-bt-bridge/blob/main/docs-site/public/screenshots/screenshot-dashboard-full.png",
+    "title": "/blob/main/docs-site/public/screenshots/screenshot-dashboard-full.png",
+    "count": 17,
+    "uniques": 17
+  },
+  {
+    "path": "/trudenboy/sendspin-bt-bridge/releases",
+    "title": "/releases",
+    "count": 16,
+    "uniques": 9
+  },
+  {
+    "path": "/trudenboy/sendspin-bt-bridge/pull/121",
+    "title": "/pull/121",
+    "count": 16,
+    "uniques": 1
+  },
+  {
+    "path": "/trudenboy/sendspin-bt-bridge/blob/main/ROADMAP.md",
+    "title": "/blob/main/ROADMAP.md",
+    "count": 12,
+    "uniques": 11
+  },
+  {
+    "path": "/trudenboy/sendspin-bt-bridge/issues/120",
+    "title": "/issues/120",
+    "count": 12,
+    "uniques": 8
+  }
+]
