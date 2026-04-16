@@ -3264,15 +3264,20 @@ def test_device_enabled_missing_fields(client):
 # ---------------------------------------------------------------------------
 
 
-def test_ha_auth_page_escapes_xss_payload(client):
-    """XSS payload in ma_url must be safely quoted in the rendered page."""
+def test_ha_auth_page_escapes_xss_payload(client, monkeypatch):
+    """XSS payload inside a valid URL must be safely quoted in the rendered page.
+
+    The outer URL-safety check rejects obviously-malformed inputs; this test
+    focuses on the defence-in-depth JS string escaping for values that do get
+    through.
+    """
+    from routes import ma_auth as _ma_auth
+
+    monkeypatch.setattr(_ma_auth, "is_safe_external_url", lambda _u: True)
     resp = client.get("/api/ma/ha-auth-page?ma_url=';alert(1)//")
     assert resp.status_code == 200
     body = resp.data.decode()
-    # The payload must be inside a JSON-quoted string (double quotes),
-    # not raw inside single-quoted JS where it could break out.
     assert '"\';alert(1)//"' in body
-    # The old vulnerable pattern must NOT appear.
     assert "= '';alert(1)//';" not in body
 
 
@@ -3284,8 +3289,11 @@ def test_ha_auth_page_rejects_javascript_scheme(client):
     assert "Invalid" in body
 
 
-def test_ha_auth_page_accepts_http_url(client):
+def test_ha_auth_page_accepts_http_url(client, monkeypatch):
     """Normal http URL should be accepted and present in the page."""
+    from routes import ma_auth as _ma_auth
+
+    monkeypatch.setattr(_ma_auth, "is_safe_external_url", lambda _u: True)
     url = "http://192.168.1.100:8123"
     resp = client.get(f"/api/ma/ha-auth-page?ma_url={url}")
     assert resp.status_code == 200

@@ -24,6 +24,18 @@ def _isolated_config(tmp_path, monkeypatch):
     (tmp_path / "config.json").write_text(json.dumps({}))
 
 
+@pytest.fixture(autouse=True)
+def _allow_localhost_urls(monkeypatch):
+    """Bypass the SSRF guard for this suite — these tests exercise auth flows
+    against mocked HA/MA hosts addressed as ``http://localhost:8095``.  URL
+    safety itself is covered by ``tests/test_url_safety.py`` and
+    ``tests/test_ma_auth_ssrf.py``.
+    """
+    from routes import ma_auth as _ma_auth
+
+    monkeypatch.setattr(_ma_auth, "is_safe_external_url", lambda _u: True)
+
+
 @pytest.fixture()
 def client():
     """Return a Flask test client with the api blueprint registered."""

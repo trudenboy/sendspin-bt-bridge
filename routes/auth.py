@@ -30,7 +30,7 @@ import urllib.request as _ur
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 
-from flask import Blueprint, Response, redirect, render_template, request, session, url_for
+from flask import Blueprint, Response, jsonify, redirect, render_template, request, session, url_for
 
 from config import check_password, load_config
 
@@ -120,13 +120,20 @@ def _get_trusted_proxies() -> set[str]:
 
 
 def _get_forwarded_client_ip() -> str:
-    """Return the proxied client IP from trusted forwarding headers, if present."""
+    """Return the rightmost untrusted hop from X-Forwarded-For.
+
+    Only the proxies we trust (see ``_get_trusted_proxies``) are allowed to
+    append their own addresses to XFF.  The real client is therefore the
+    *rightmost* hop that is NOT a trusted proxy.  Using the leftmost hop is
+    spoofable by any client that sets an XFF header themselves.
+    """
+    trusted = _get_trusted_proxies()
     forwarded_for = request.headers.get("X-Forwarded-For", "")
     if forwarded_for:
-        for part in forwarded_for.split(","):
-            candidate = part.strip()
-            if candidate:
-                return candidate
+        hops = [p.strip() for p in forwarded_for.split(",") if p.strip()]
+        for hop in reversed(hops):
+            if hop not in trusted:
+                return hop
     return request.headers.get("X-Real-IP", "").strip()
 
 
@@ -643,15 +650,25 @@ def _handle_ha_direct_login(
 
     flow = _ha_flow_start()
     if flow is None:
-        logger.warning("HA login flow unavailable, falling back to Supervisor auth")
-        if _supervisor_auth(username, password):
-            _clear_failures(client_ip)
-            session.clear()
-            session["authenticated"] = True
-            session["ha_user"] = username
-            return None, redirect(_safe_next_url())
-        _record_failure(client_ip)
-        return "Invalid credentials", None
+        if os.environ.get("ALLOW_SUPERVISOR_FALLBACK") == "1":
+            logger.warning(
+                "HA login_flow unreachable — falling back to Supervisor auth "
+                "(ALLOW_SUPERVISOR_FALLBACK=1). This path does NOT verify MFA."
+            )
+            if _supervisor_auth(username, password):
+                _clear_failures(client_ip)
+                bucket = session.get("_lockout_client_id")
+                session.clear()
+                if bucket:
+                    session["_lockout_client_id"] = bucket
+                session["authenticated"] = True
+                session["ha_user"] = username
+                session["auth_method"] = "ha_supervisor_fallback"
+                return None, redirect(_safe_next_url())
+            _record_failure(client_ip)
+            return "Invalid credentials", None
+        logger.error("HA login_flow unreachable; refusing Supervisor fallback (MFA cannot be verified)")
+        return "Authentication service unavailable", None
     if flow.get("_ha_error") or not flow.get("flow_id"):
         logger.error("HA login_flow service error (flow=%r)", flow)
         return "Authentication service unavailable", None
@@ -766,7 +783,20 @@ def login():
     )
 
 
-@auth_bp.route("/logout")
+@auth_bp.route("/logout", methods=["GET", "POST"])
 def logout():
-    session.pop("authenticated", None)
+    if request.method == "GET":
+        return (
+            render_template(
+                "logout_method.html",
+                login_url=url_for("auth.login"),
+            ),
+            405,
+        )
+    if not _validate_csrf_token():
+        return jsonify({"error": "Invalid CSRF token"}), 403
+    bucket = session.get("_lockout_client_id")
+    session.clear()
+    if bucket:
+        session["_lockout_client_id"] = bucket
     return redirect(url_for("auth.login"))

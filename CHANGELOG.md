@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.58.0-rc.1] - 2026-04-16
+
+### Security
+- **SSRF guard on MA auth routes** — `/api/ma/login`, `/api/ma/ha-auth-page`, `/api/ma/ha-silent-auth`, and `/api/ma/ha-login` now validate every user-supplied `ma_url`/`ha_url` through the new `services.url_safety.is_safe_external_url`, which resolves the host via DNS and rejects loopback, link-local, private (RFC1918), reserved, multicast, and unspecified addresses. In HA addon mode the Supervisor proxy network (`172.30.32.0/23`) and the internal `supervisor`/`hassio`/`homeassistant` hostnames remain allowlisted
+- **Session-bound MFA state** — the second step of `/api/ma/ha-login` (OAuth MFA) no longer trusts `ha_url`, `client_id`, `flow_id`, or `state` from the request body; the server-side `session["_ha_oauth"]` entry stored at step `init` is the only source of truth and is cleared once the flow completes or aborts
+- **Supervisor fallback is now opt-in** — when HA Core's `login_flow` is unreachable, the bridge no longer silently falls back to `/auth/login` against the Supervisor API (which does not verify MFA). The fallback must be enabled explicitly with `ALLOW_SUPERVISOR_FALLBACK=1`; when enabled, each use is logged at `WARNING` with "does NOT verify MFA"
+- **Logout hardened** — `POST /logout` now requires a valid CSRF token and performs a full `session.clear()` (only `_lockout_client_id` is preserved so brute-force buckets survive). `GET /logout` returns 405 with a small HTML page linking to `/login` so bookmarks and CSRF GETs cannot drop sessions
+- **X-Forwarded-For hardening** — rate-limit client identification now picks the rightmost hop that is *not* in `_get_trusted_proxies()`, instead of the spoofable leftmost hop
+- **X-Frame-Options: SAMEORIGIN** in standalone (non-HA-addon) mode; HA addon mode still omits it because Ingress needs to frame the UI (CSP `frame-ancestors 'self'` covers that case)
+
+### Fixed
+- **500 handler no longer redirects** — `web_interface._handle_500` returns a plain-text `Internal Server Error` response instead of `redirect("/")`, eliminating a potential redirect loop when `/` is itself failing
+- **Subprocess stdout stall protection** — `SendspinClient._read_subprocess_output` now wraps `stdout.readline()` in `asyncio.wait_for(timeout=120)`, so a silent-but-alive daemon no longer leaves the reader task blocked forever. Timeouts log at DEBUG and keep polling; a dead subprocess (`returncode != None`) exits the loop cleanly
+
+### Known issues
+- CSP still ships with `'unsafe-inline'` because several templates use inline `onclick` handlers. The nonce plumbing is already in place; full migration to `addEventListener` is tracked for a follow-up minor release
+
 ## [2.57.1] - 2026-04-16
 
 ### Fixed

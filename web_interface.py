@@ -17,7 +17,7 @@ import threading
 from datetime import timedelta
 from pathlib import Path
 
-from flask import Flask, g, jsonify, redirect, request, send_from_directory, session, url_for
+from flask import Flask, Response, g, jsonify, redirect, request, send_from_directory, session, url_for
 from waitress import serve  # type: ignore[import-untyped]
 
 from config import ensure_secret_key, get_runtime_version, load_config, resolve_additional_web_port, resolve_web_port
@@ -178,6 +178,8 @@ def _set_cache_headers(response):
             "frame-ancestors 'self'"
         )
     response.headers["X-Content-Type-Options"] = "nosniff"
+    if not _is_ha_addon:
+        response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
     return response
 
 
@@ -266,7 +268,7 @@ def _handle_500(e):
     logger.error("Internal server error: %s", e)
     if request.path.startswith("/api/"):
         return jsonify({"error": "Internal server error"}), 500
-    return redirect("/")
+    return Response("Internal Server Error", status=500, mimetype="text/plain")
 
 
 def main():

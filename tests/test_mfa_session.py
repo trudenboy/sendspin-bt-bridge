@@ -302,9 +302,12 @@ def test_ha_via_ma_login_user_cleared_after_auth(client, app):
 # ---------------------------------------------------------------------------
 
 
-def test_supervisor_fallback_clears_ha_login_user(client, app):
-    """When HA Core is unreachable and Supervisor /auth fallback succeeds,
-    _ha_login_user must still be cleaned up."""
+def test_supervisor_fallback_clears_ha_login_user(client, app, monkeypatch):
+    """When HA Core is unreachable and the Supervisor fallback is explicitly
+    enabled via ``ALLOW_SUPERVISOR_FALLBACK=1``, ``_ha_login_user`` is still
+    cleaned up after a successful fallback sign-in.
+    """
+    monkeypatch.setenv("ALLOW_SUPERVISOR_FALLBACK", "1")
     with client.session_transaction() as sess:
         sess["_ha_login_user"] = "stale"
 

@@ -326,26 +326,13 @@ def test_set_bt_management_enabled_cancels_reconnect_before_release():
 async def test_read_subprocess_output_accepts_protocol_versioned_status_once():
     client = SendspinClient("Test Player", "localhost", 9000)
 
-    class _FakeStdout:
-        def __init__(self, lines):
-            self._lines = list(lines)
-
-        def __aiter__(self):
-            self._iter = iter(self._lines)
-            return self
-
-        async def __anext__(self):
-            try:
-                return next(self._iter)
-            except StopIteration as exc:
-                raise StopAsyncIteration from exc
-
     client._daemon_proc = SimpleNamespace(
-        stdout=_FakeStdout(
+        returncode=None,
+        stdout=_FakeStdoutLines(
             [
                 json.dumps({"type": "status", "protocol_version": IPC_PROTOCOL_VERSION, "playing": True}).encode(),
             ]
-        )
+        ),
     )
 
     await client._read_subprocess_output()
@@ -357,22 +344,9 @@ async def test_read_subprocess_output_accepts_protocol_versioned_status_once():
 async def test_read_subprocess_output_accepts_structured_error_envelope_once():
     client = SendspinClient("Test Player", "localhost", 9000)
 
-    class _FakeStdout:
-        def __init__(self, lines):
-            self._lines = list(lines)
-
-        def __aiter__(self):
-            self._iter = iter(self._lines)
-            return self
-
-        async def __anext__(self):
-            try:
-                return next(self._iter)
-            except StopIteration as exc:
-                raise StopAsyncIteration from exc
-
     client._daemon_proc = SimpleNamespace(
-        stdout=_FakeStdout(
+        returncode=None,
+        stdout=_FakeStdoutLines(
             [
                 json.dumps(
                     {
@@ -384,7 +358,7 @@ async def test_read_subprocess_output_accepts_structured_error_envelope_once():
                     }
                 ).encode(),
             ]
-        )
+        ),
     )
 
     with patch("sendspin_client.logger.error"):
@@ -398,16 +372,7 @@ async def test_read_subprocess_output_accepts_structured_error_envelope_once():
 async def test_read_subprocess_output_delegates_log_messages_to_ipc_service():
     client = SendspinClient("Test Player", "localhost", 9000)
 
-    class _FakeStdout:
-        def __aiter__(self):
-            self._iter = iter([json.dumps({"type": "log", "level": "info", "msg": "hello"}).encode()])
-            return self
-
-        async def __anext__(self):
-            try:
-                return next(self._iter)
-            except StopIteration as exc:
-                raise StopAsyncIteration from exc
+    log_line = json.dumps({"type": "log", "level": "info", "msg": "hello"}).encode()
 
     class _FakeService:
         def __init__(self):
@@ -423,12 +388,15 @@ async def test_read_subprocess_output_delegates_log_messages_to_ipc_service():
 
     fake_service = _FakeService()
     client._ipc_service = fake_service
-    client._daemon_proc = SimpleNamespace(stdout=_FakeStdout())
+    client._daemon_proc = SimpleNamespace(
+        returncode=None,
+        stdout=_FakeStdoutLines([log_line]),
+    )
 
     await client._read_subprocess_output()
 
     assert fake_service.seen == [
-        ("parse", json.dumps({"type": "log", "level": "info", "msg": "hello"}).encode()),
+        ("parse", log_line + b"\n"),
         ("handle", {"type": "log", "level": "info", "msg": "hello"}),
     ]
 
@@ -570,20 +538,18 @@ def test_handle_subprocess_stderr_line_keeps_benign_stderr_as_warning():
 
 
 class _FakeStdoutLines:
-    """Async-iterable that yields pre-encoded lines."""
+    """``readline``-based stdout mock that yields pre-encoded lines then EOF."""
 
     def __init__(self, lines):
         self._lines = list(lines)
 
-    def __aiter__(self):
-        self._iter = iter(self._lines)
-        return self
-
-    async def __anext__(self):
-        try:
-            return next(self._iter)
-        except StopIteration as exc:
-            raise StopAsyncIteration from exc
+    async def readline(self):
+        if self._lines:
+            line = self._lines.pop(0)
+            if line and not line.endswith(b"\n"):
+                line = line + b"\n"
+            return line
+        return b""
 
 
 @pytest.mark.asyncio

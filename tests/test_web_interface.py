@@ -333,7 +333,11 @@ def test_csp_includes_frame_ancestors(client):
     assert "frame-ancestors" in csp
 
 
-def test_no_x_frame_options(client):
-    """X-Frame-Options should NOT be set (CSP frame-ancestors supersedes it)."""
+def test_x_frame_options_sameorigin_in_standalone(client):
+    """Standalone deploy (no SUPERVISOR_TOKEN) should set XFO=SAMEORIGIN.
+
+    HA addon mode omits XFO so HA Ingress can frame the UI; that path is
+    covered in tests/test_headers_and_xff.py.
+    """
     resp = client.get("/")
-    assert "X-Frame-Options" not in resp.headers
+    assert resp.headers.get("X-Frame-Options") == "SAMEORIGIN"

@@ -76,19 +76,25 @@
                         <span class="header-user-icon ui-icon-slot" data-ui-icon="user" aria-hidden="true"></span>
                         admin
                     </span>
-                    <a href="{{ url_for('auth.logout') }}" class="header-btn-signout" title="Sign out">
-                        <span class="header-btn-signout-icon ui-icon-slot" data-ui-icon="signout" aria-hidden="true"></span>
-                        <span class="header-btn-signout-label">Sign out</span>
-                    </a>
+                    <form method="POST" action="{{ url_for('auth.logout') }}" class="header-signout-form">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        <button type="submit" class="header-btn-signout" title="Sign out">
+                            <span class="header-btn-signout-icon ui-icon-slot" data-ui-icon="signout" aria-hidden="true"></span>
+                            <span class="header-btn-signout-label">Sign out</span>
+                        </button>
+                    </form>
                 {% elif demo_mode %}
                     <span class="header-user-name">
                         <span class="header-user-icon ui-icon-slot" data-ui-icon="user" aria-hidden="true"></span>
                         Demo User
                     </span>
-                    <a href="{{ url_for('auth.logout') }}" class="header-btn-signout" title="Sign out">
-                        <span class="header-btn-signout-icon ui-icon-slot" data-ui-icon="signout" aria-hidden="true"></span>
-                        <span class="header-btn-signout-label">Sign out</span>
-                    </a>
+                    <form method="POST" action="{{ url_for('auth.logout') }}" class="header-signout-form">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        <button type="submit" class="header-btn-signout" title="Sign out">
+                            <span class="header-btn-signout-icon ui-icon-slot" data-ui-icon="signout" aria-hidden="true"></span>
+                            <span class="header-btn-signout-label">Sign out</span>
+                        </button>
+                    </form>
                 {% endif %}
                 {% endif %}
                 </div>
