@@ -327,7 +327,9 @@ class BridgeOrchestrator:
         def _signal_handler() -> None:
             async def _shutdown_and_exit() -> None:
                 await shutdown_factory_fn()
-                loop.stop()
+                for task in asyncio.all_tasks(loop):
+                    if task is not asyncio.current_task():
+                        task.cancel()
 
             loop.create_task(_shutdown_and_exit())
 
