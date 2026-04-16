@@ -39,7 +39,6 @@ RUN grep -v '^sendspin' /tmp/requirements.txt > /tmp/requirements-deps.txt && \
             -r /tmp/requirements-deps.txt \
             "aiosendspin-mpris~=2.1.1" \
             "av>=15.0.0,<16.0.0" \
-            "numpy>=1.24.0,<2.0" \
             "qrcode>=8.0" \
             "readchar>=4.0.0" \
             "rich>=13.0.0" \
@@ -51,20 +50,13 @@ RUN grep -v '^sendspin' /tmp/requirements.txt > /tmp/requirements-deps.txt && \
 # Layer 2: sendspin package only — lightweight, rebuilt each release.
 # armv7 uses --no-deps because all transitive deps are explicit in layer 1;
 # amd64/arm64 omit it so pip resolves transitive deps like aiosendspin-mpris.
-# Pass requirements-deps.txt as a constraints file so version pins (e.g. numpy<2.0)
-# are enforced: pip's --prefix install doesn't see existing packages from layer 1,
-# so without constraints it would upgrade numpy to 2.x (requires X86_V2 CPU baseline).
 ARG SENDSPIN_VERSION=""
 RUN NO_DEPS="" && \
     if [ "${TARGETARCH}${TARGETVARIANT}" = "armv7" ]; then NO_DEPS="--no-deps"; fi && \
     if [ -n "${SENDSPIN_VERSION}" ]; then \
-        pip install --no-cache-dir --prefix=/install ${NO_DEPS} \
-            --constraint /tmp/requirements-deps.txt \
-            "sendspin==${SENDSPIN_VERSION}"; \
+        pip install --no-cache-dir --prefix=/install ${NO_DEPS} "sendspin==${SENDSPIN_VERSION}"; \
     else \
-        pip install --no-cache-dir --prefix=/install ${NO_DEPS} \
-            --constraint /tmp/requirements-deps.txt \
-            "sendspin>=5.3.0,<6.0.0"; \
+        pip install --no-cache-dir --prefix=/install ${NO_DEPS} "sendspin>=5.3.0,<6.0.0"; \
     fi
 
 # Strip bloat from installed packages before copying to runtime stage
