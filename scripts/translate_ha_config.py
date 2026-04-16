@@ -162,6 +162,13 @@ def main() -> None:
     for dev in config["BLUETOOTH_DEVICES"]:
         if isinstance(dev, dict):
             dev.setdefault("enabled", True)
+            raw_delay = dev.get("static_delay_ms")
+            if raw_delay is not None:
+                try:
+                    normalized_delay = int(float(raw_delay))
+                except (TypeError, ValueError):
+                    normalized_delay = 0
+                dev["static_delay_ms"] = max(0, min(5000, normalized_delay))
 
     # Preserve runtime state from previous config
     try:

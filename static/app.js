@@ -2721,7 +2721,7 @@ function _getDeviceNowPlayingState(dev, i) {
     var artist = _firstOfSlash(safeDev.current_artist || (useMaFallback ? (ma.artist || '') : '') || '');
     var track = _firstOfSlash(safeDev.current_track || (deviceMaActive ? (ma.track || '') : '') || '');
     var album = _firstOfSlash(safeDev.current_album || (useMaFallback ? (ma.album || '') : '') || '');
-    var artUrl = safeDev.artwork_url || (useMaFallback ? (ma.image_url || '') : '') || '';
+    var artUrl = _getSafeArtworkUrl(safeDev.artwork_url) || (useMaFallback ? (ma.image_url || '') : '') || '';
     return {
         ma: ma,
         deviceMaActive: deviceMaActive,
@@ -5491,7 +5491,7 @@ function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabl
                 escHtmlAttr(String(portVal)) + '">' +
         '</div>' +
         '<div class="bt-cell bt-cell--delay" data-label="Delay">' +
-            '<input type="number" class="bt-delay" title="Static delay. Negative = compensate latency" aria-label="Static delay in milliseconds" placeholder="-300" value="' +
+            '<input type="number" class="bt-delay" title="Extra delay on top of DAC-anchored sync (0\u20135000 ms)" aria-label="Static delay in milliseconds" placeholder="0" min="0" max="5000" value="' +
                 escHtmlAttr(String(delayVal)) + '" step="50">' +
         '</div>' +
         '<div class="bt-cell bt-cell--runtime" data-label="Live">' +
@@ -8889,7 +8889,7 @@ function _defaultBtDeviceDirtyFields() {
         player_name: '',
         mac: '',
         adapter: '',
-        static_delay_ms: -300,
+        static_delay_ms: 0,
         listen_host: '',
         listen_port: null,
         preferred_format: 'flac:44100:16:2',

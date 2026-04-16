@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-CONFIG_SCHEMA_VERSION = 1
+CONFIG_SCHEMA_VERSION = 2
 UPDATE_CHANNELS = ("stable", "rc", "beta")
 DEFAULT_UPDATE_CHANNEL = "stable"
 _VALID_IDLE_MODES = frozenset(("default", "power_save", "auto_disconnect", "keep_alive"))
@@ -145,10 +145,44 @@ def _normalize_bluetooth_devices(config: dict, *, defaults: Mapping[str, Any]) -
         else:
             normalized.pop("room_name", None)
         normalized.pop("handoff_mode", None)
+        _migrate_negative_static_delay(normalized)
         _migrate_device_idle_mode(normalized)
         _migrate_power_save_delay(normalized)
         normalized_devices.append(normalized)
     return normalized_devices
+
+
+_warned_static_delay_issues: set[tuple[str, str]] = set()
+
+
+def _migrate_negative_static_delay(device: dict) -> None:
+    """Normalize static_delay_ms to a numeric value within 0-5000 for sendspin 7.0+."""
+    raw = device.get("static_delay_ms")
+    if raw is None:
+        return
+    key = str(device.get("mac", device.get("player_name", "?")))
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        if (key, "invalid") not in _warned_static_delay_issues:
+            _warned_static_delay_issues.add((key, "invalid"))
+            logger.warning("Device %s: static_delay_ms=%r is invalid; removing field", key, raw)
+        device.pop("static_delay_ms", None)
+        return
+    if value < 0:
+        if (key, "negative") not in _warned_static_delay_issues:
+            _warned_static_delay_issues.add((key, "negative"))
+            logger.warning(
+                "Device %s: static_delay_ms=%s is negative; clamping to 0 (sendspin 7.0+ uses DAC-anchored sync)",
+                key,
+                raw,
+            )
+        device["static_delay_ms"] = 0
+    elif value > 5000:
+        if (key, "high") not in _warned_static_delay_issues:
+            _warned_static_delay_issues.add((key, "high"))
+            logger.warning("Device %s: static_delay_ms=%s exceeds 5000; clamping to 5000", key, raw)
+        device["static_delay_ms"] = 5000
 
 
 def _migrate_device_idle_mode(device: dict) -> None:

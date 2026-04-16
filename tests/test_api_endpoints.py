@@ -1273,7 +1273,9 @@ def test_api_config_post_normalizes_numeric_strings(client, tmp_path, monkeypatc
     assert saved["BRUTE_FORCE_MAX_ATTEMPTS"] == 4
     assert saved["STARTUP_BANNER_GRACE_SECONDS"] == 0
     assert saved["RECOVERY_BANNER_GRACE_SECONDS"] == 15
-    assert saved["CONFIG_SCHEMA_VERSION"] == 1
+    from config import CONFIG_SCHEMA_VERSION
+
+    assert saved["CONFIG_SCHEMA_VERSION"] == CONFIG_SCHEMA_VERSION
     assert saved["BLUETOOTH_DEVICES"][0]["listen_port"] == 8930
     assert saved["BLUETOOTH_DEVICES"][0]["keepalive_interval"] == 60
     assert saved["BLUETOOTH_DEVICES"][0]["room_name"] == "Living Room"

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from config import CONFIG_SCHEMA_VERSION
 from services.config_validation import validate_uploaded_config
 
 
@@ -12,7 +13,7 @@ def test_validate_uploaded_config_adds_schema_version_warning_when_missing():
     )
 
     assert result.is_valid is True
-    assert result.normalized_config["CONFIG_SCHEMA_VERSION"] == 1
+    assert result.normalized_config["CONFIG_SCHEMA_VERSION"] == CONFIG_SCHEMA_VERSION
     assert result.normalized_config["SENDSPIN_PORT"] == 9000
     assert result.normalized_config["BLUETOOTH_DEVICES"][0]["mac"] == "AA:BB:CC:DD:EE:FF"
     assert result.warnings[0].field == "CONFIG_SCHEMA_VERSION"
@@ -202,3 +203,40 @@ def test_validate_uploaded_config_migrates_legacy_shape():
     ]
     assert result.normalized_config["LAST_VOLUMES"] == {"AA:BB:CC:DD:EE:FF": 40}
     assert any(issue.field == "BLUETOOTH_DEVICES" for issue in result.warnings)
+
+
+def test_validate_uploaded_config_rejects_negative_static_delay():
+    result = validate_uploaded_config(
+        {
+            "CONFIG_SCHEMA_VERSION": 2,
+            "BLUETOOTH_DEVICES": [
+                {"mac": "AA:BB:CC:DD:EE:FF", "static_delay_ms": -10},
+            ],
+        }
+    )
+    assert any("static_delay_ms" in issue.field for issue in result.errors)
+
+
+def test_validate_uploaded_config_rejects_excessive_static_delay():
+    result = validate_uploaded_config(
+        {
+            "CONFIG_SCHEMA_VERSION": 2,
+            "BLUETOOTH_DEVICES": [
+                {"mac": "AA:BB:CC:DD:EE:FF", "static_delay_ms": 6000},
+            ],
+        }
+    )
+    assert any("static_delay_ms" in issue.field for issue in result.errors)
+
+
+def test_validate_uploaded_config_accepts_valid_static_delay():
+    result = validate_uploaded_config(
+        {
+            "CONFIG_SCHEMA_VERSION": 2,
+            "BLUETOOTH_DEVICES": [
+                {"mac": "AA:BB:CC:DD:EE:FF", "static_delay_ms": 150},
+            ],
+        }
+    )
+    assert result.is_valid is True
+    assert result.normalized_config["BLUETOOTH_DEVICES"][0]["static_delay_ms"] == 150

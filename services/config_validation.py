@@ -252,6 +252,14 @@ def validate_uploaded_config(
                 min_value=1024,
                 max_value=65535,
             )
+            _normalize_optional_field_int(
+                normalized["BLUETOOTH_DEVICES"][index],
+                result,
+                "static_delay_ms",
+                issue_field=f"{field_prefix}.static_delay_ms",
+                min_value=0,
+                max_value=5000,
+            )
             if keepalive_interval is not None and keepalive_interval != 0 and keepalive_interval < 30:
                 result.errors.append(
                     ConfigValidationIssue(

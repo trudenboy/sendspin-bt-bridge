@@ -39,7 +39,6 @@ RUN grep -v '^sendspin' /tmp/requirements.txt > /tmp/requirements-deps.txt && \
             -r /tmp/requirements-deps.txt \
             "aiosendspin-mpris~=2.1.1" \
             "av>=15.0.0,<16.0.0" \
-            "numpy>=1.24.0,<2.0" \
             "qrcode>=8.0" \
             "readchar>=4.0.0" \
             "rich>=13.0.0" \

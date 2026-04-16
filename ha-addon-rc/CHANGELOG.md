@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.57.0-rc.1] - 2026-04-16
+
+### Changed
+- **Upgrade sendspin 5.9.0 → 7.0.0 and aiosendspin 4.4.0 → 5.1.0** — DAC-anchored sync, remote per-player delay, multi-server support, playback bugfixes
+- **`static_delay_ms` now accepts only 0–5000 ms** — negative values migrated to `0` on load. DAC-anchored sync handles audio latency automatically; use small positive values (e.g. 50 ms) to fine-tune if needed
+- Default `SENDSPIN_STATIC_DELAY_MS` changed from `-300` to `0`
+
 ## [2.56.1-rc.1] - 2026-04-13
 
 ### Fixed

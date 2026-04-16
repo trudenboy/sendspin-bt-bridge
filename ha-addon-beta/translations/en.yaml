@@ -126,8 +126,8 @@ configuration:
       static_delay_ms:
         name: "Static delay (ms)"
         description: >-
-          Fixed latency offset in milliseconds. Use negative values to compensate
-          for Bluetooth A2DP buffering (typical default: -300). Leave 0 for no adjustment.
+          Extra delay in milliseconds (0–5000) added on top of DAC-anchored sync.
+          Default 0. Use small positive values (e.g. 50) only if audio plays slightly too late.
       listen_host:
         name: "Listen host"
         description: >-

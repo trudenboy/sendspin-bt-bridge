@@ -39,6 +39,7 @@ from services.internal_events import DeviceEventType
 from services.ipc_protocol import (
     with_protocol_version,
 )
+from services.ma_artwork import build_artwork_proxy_url
 from services.playback_health import PlaybackHealthMonitor
 from services.sendspin_port_probe import DEFAULT_PORT as DEFAULT_SENDSPIN_PORT
 from services.sendspin_port_probe import probe_sendspin_port
@@ -471,6 +472,10 @@ class SendspinClient:
         and D-Bus callback thread. Callbacks are invoked OUTSIDE the lock to avoid deadlocks.
         """
         recorded_events: list[dict[str, object]] = []
+        if "artwork_url" in updates:
+            raw_art = updates.get("artwork_url")
+            if isinstance(raw_art, str) and raw_art.strip():
+                updates["artwork_url"] = build_artwork_proxy_url(raw_art)
         with self._status_lock:
             previous = self.status.copy()
             self._playback_health.observe_status_update(
@@ -1143,7 +1148,27 @@ class SendspinClient:
             if self.static_delay_ms is not None:
                 static_delay_ms = self.static_delay_ms
             else:
-                static_delay_ms = float(os.environ.get("SENDSPIN_STATIC_DELAY_MS", "-300"))
+                raw_delay_env = os.environ.get("SENDSPIN_STATIC_DELAY_MS", "0")
+                try:
+                    static_delay_ms = float(raw_delay_env)
+                except (TypeError, ValueError):
+                    logger.warning(
+                        "[%s] Invalid SENDSPIN_STATIC_DELAY_MS=%r; using 0",
+                        self.player_name,
+                        raw_delay_env,
+                    )
+                    static_delay_ms = 0.0
+                if not math.isfinite(static_delay_ms):
+                    static_delay_ms = 0.0
+                elif static_delay_ms < 0 or static_delay_ms > 5000:
+                    clamped = max(0.0, min(5000.0, static_delay_ms))
+                    logger.warning(
+                        "[%s] SENDSPIN_STATIC_DELAY_MS=%s out of range; clamped to %.0f",
+                        self.player_name,
+                        raw_delay_env,
+                        clamped,
+                    )
+                    static_delay_ms = clamped
 
             server_url: str | None = None
             if self.server_host and self.server_host.lower() not in ("auto", "discover", ""):

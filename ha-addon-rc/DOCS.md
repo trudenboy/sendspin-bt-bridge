@@ -135,7 +135,7 @@ Each entry in the `bluetooth_devices` list represents one Bluetooth speaker.
 | `mac` | **yes** | string | Bluetooth MAC address of the speaker (`AA:BB:CC:DD:EE:FF`). Find it with `bluetoothctl devices` after pairing. |
 | `player_name` | **yes** | string | Display name shown in Music Assistant. Must be unique across all devices. |
 | `adapter` | no | string | MAC address of the Bluetooth adapter to use for this device. Leave blank to use the system default adapter. |
-| `static_delay_ms` | no | int | Fixed latency offset in milliseconds. Use negative values (default `-300`) to compensate for Bluetooth A2DP buffering. `0` for no adjustment. |
+| `static_delay_ms` | no | int | Extra delay in milliseconds (0–5000) added on top of DAC-anchored sync. Default `0`. Use small positive values (e.g. 50) only if audio plays slightly too late. |
 | `listen_host` | no | string | Override the listen address for this device's Sendspin server. |
 | `listen_port` | no | port | Override the listen port for this device's Sendspin server. |
 | `enabled` | no | bool | Set to `false` to temporarily disable a device without removing it from the config. |
@@ -199,7 +199,7 @@ bluetooth_devices:
   - mac: "11:22:33:44:55:66"
     player_name: "Bedroom"
     adapter: "00:1A:7D:DA:71:13"
-    static_delay_ms: -300
+    static_delay_ms: 50
 ```
 
 **Tips for multi-speaker setups:**
@@ -207,8 +207,9 @@ bluetooth_devices:
 - Assign distinct `player_name` values so they are easy to identify in MA.
 - If speakers are on different Bluetooth adapters, specify the `adapter` MAC
   for each device to avoid contention.
-- Use `static_delay_ms` to align audio timing across speakers when grouping
-  them in Music Assistant multi-room mode.
+- Use `static_delay_ms` (0–5000) to fine-tune audio timing across speakers
+  when grouping them in Music Assistant multi-room mode. DAC-anchored sync
+  handles most latency automatically; only add a small positive value if needed.
 - On low-power hardware (RPi 3 / armv7), enable `prefer_sbc_codec` and limit
   the number of simultaneous speakers to avoid CPU saturation.
 

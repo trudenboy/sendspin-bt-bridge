@@ -1,6 +1,5 @@
-sendspin==5.9.0
-numpy<2.0
-aiosendspin==4.4.0
+sendspin==7.0.0
+aiosendspin[server]==5.1.0
 flask==3.1.3
 waitress==3.0.2
 dbus-python==1.4.0

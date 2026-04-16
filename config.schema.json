@@ -311,9 +311,11 @@
           "maximum": 65535,
           "description": "Override Sendspin listener port for this device."
         },
-        "delay_ms": {
+        "static_delay_ms": {
           "type": "integer",
-          "description": "Per-device static audio delay in milliseconds (negative = earlier)."
+          "minimum": 0,
+          "maximum": 5000,
+          "description": "Per-device static audio delay in milliseconds (0–5000). Added on top of DAC-anchored sync."
         },
         "enabled": {
           "type": "boolean",
