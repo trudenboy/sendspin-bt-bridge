@@ -7,12 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.57.0-rc.4] - 2026-04-16
+
+### Changed
+- **numpy upgraded to 2.x (no upper pin)** — dropped the previous `numpy<2.0` compatibility cap. sendspin 7 only requires `numpy>=1.26`, but pip now resolves numpy 2.x and a hard compatibility pin would have required a constraint file with `[extras]`, which pip rejects
+- **amd64 CPU baseline raised to X86_V2** — numpy 2.x wheels are built with the X86_V2 baseline (SSE3 / SSSE3 / SSE4.1 / SSE4.2). Hosts without these extensions (e.g. QEMU VMs using `cpu: qemu64` or `kvm64`) now fail at startup with `RuntimeError: NumPy was built with baseline optimizations: (X86_V2) but your machine doesn't support: (X86_V2)`. Fix by switching the VM CPU type to `host` (Proxmox: `qm set <vmid> --cpu host`) or any modern named model (e.g. `Haswell`, `Skylake-Client`)
+- **armv7 may build numpy from source** — piwheels has no cp312 wheels for numpy 2.x, so the armv7 image will compile it under QEMU. Builds take significantly longer; subsequent releases reuse the cached layer
+
+## [2.57.0-rc.2] - 2026-04-16
+
+### Fixed
+- **Album artwork not rendering under HA Ingress** — daemon-reported `artwork_url` points directly at the MA server and fails the same-origin check under `https://ha.example/<slug>_sendspin_bt_bridge_rc/`. UI now runs `artwork_url` through `_getSafeArtworkUrl()` first and falls back to the same-origin signed MA proxy URL (`/api/ma/artwork?...&sig=...`) when a device has MA context
+- **Migration warning log spam every 15 s** — HA Supervisor rewrites `/data/config.json` from `options.json` on each restart/poll, so devices with pre-existing negative `static_delay_ms` triggered the "clamping to 0" warning on every `load_config()`. Warnings are now deduplicated per MAC per process, and `scripts/translate_ha_config.py` clamps negatives at the options.json → config.json translation step so the underlying value is fixed at source
+
 ## [2.57.0-rc.1] - 2026-04-16
 
 ### Changed
-- **Upgrade sendspin 5.9.0 → 7.0.0 and aiosendspin 4.4.0 → 5.1.0** — DAC-anchored sync, remote per-player delay, multi-server support, playback bugfixes
-- **`static_delay_ms` now accepts only 0–5000 ms** — negative values migrated to `0` on load. DAC-anchored sync handles audio latency automatically; use small positive values (e.g. 50 ms) to fine-tune if needed
-- Default `SENDSPIN_STATIC_DELAY_MS` changed from `-300` to `0`
+- **Upgrade sendspin 5.9.0 → 7.0.0 and aiosendspin 4.4.0 → 5.1.0** — gains DAC-anchored sync (#226), remote per-player delay (#185), multi-server daemon support, and several playback bugfixes
+- **`static_delay_ms` now accepts only 0–5000 ms** — negative values are no longer valid. DAC-anchored sync in sendspin 7.0 automatically compensates for audio hardware latency, making the old large negative offsets (−300…−600 ms) unnecessary. Existing negative values are migrated to `0` on first load. Users may fine-tune with small positive values (e.g. 50 ms) if needed
+- Default `SENDSPIN_STATIC_DELAY_MS` environment variable changed from `-300` to `0`
+- Config schema version bumped to 2 (auto-migrated from v1)
+
+### Fixed
+- **Dependency conflict blocking sendspin 7.0.0** — `aiosendspin` updated from 4.4.0 to 5.1.0 (`[server]` extra) to satisfy sendspin 7's `aiosendspin~=5.1` requirement
 
 ## [2.56.1-rc.1] - 2026-04-13
 

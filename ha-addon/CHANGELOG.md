@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.57.0] - 2026-04-16
+
+### Changed
+- **Upgrade sendspin 5.9.0 → 7.0.0 and aiosendspin 4.4.0 → 5.1.0** — DAC-anchored sync (#226) auto-compensates for audio hardware latency, remote per-player delay (#185), multi-server daemon support, and several playback bugfixes
+- **`static_delay_ms` now accepts only 0–5000 ms** — negative values are no longer valid. DAC-anchored sync removes the need for the old large negative offsets (−300…−600 ms). Existing negative values are auto-migrated to `0` on first load; re-tune with small positive values (e.g. 50 ms) only if needed
+- Default `SENDSPIN_STATIC_DELAY_MS` environment variable changed from `-300` to `0`
+- Config schema version bumped to 2 (auto-migrated from v1)
+- **numpy upgraded to 2.x** — amd64 CPU baseline now requires X86_V2 (SSE3 / SSSE3 / SSE4.1 / SSE4.2). Hosts running on QEMU `cpu: qemu64` or `kvm64` fail at startup with `RuntimeError: NumPy was built with baseline optimizations: (X86_V2)`. Switch the VM CPU type to `host` (Proxmox: `qm set <vmid> --cpu host`) or a modern named model (`Haswell`, `Skylake-Client`, …)
+- armv7 image may compile numpy from source on first build (piwheels has no cp312 wheels for numpy 2.x); subsequent releases reuse the cached layer
+
+### Fixed
+- **Album artwork not rendering under HA Ingress** — daemon-reported `artwork_url` points directly at the MA server and fails the same-origin check under Ingress; UI now falls back to the signed same-origin MA proxy URL when a device has MA context
+- **Migration warning log spam every 15 s** — HA Supervisor rewrites `config.json` from `options.json` on each poll, so pre-existing negative `static_delay_ms` triggered the clamp warning repeatedly. Warnings are now deduplicated per MAC per process, and the options.json → config.json translator clamps negatives at source
+
 ## [2.56.3] - 2026-04-14
 
 ### Fixed
