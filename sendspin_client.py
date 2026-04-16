@@ -1617,15 +1617,18 @@ async def main():
     except ImportError:
         _persist_enabled = None
 
-    await orchestrator.run_bridge_lifecycle(
-        bootstrap,
-        version=get_runtime_version(),
-        client_factory=SendspinClient,
-        bt_manager_factory=BluetoothManager,
-        filter_devices_fn=_filter_duplicate_bluetooth_devices,
-        load_saved_volume_fn=_load_saved_device_volume,
-        persist_enabled_fn=_persist_enabled,
-    )
+    try:
+        await orchestrator.run_bridge_lifecycle(
+            bootstrap,
+            version=get_runtime_version(),
+            client_factory=SendspinClient,
+            bt_manager_factory=BluetoothManager,
+            filter_devices_fn=_filter_duplicate_bluetooth_devices,
+            load_saved_volume_fn=_load_saved_device_volume,
+            persist_enabled_fn=_persist_enabled,
+        )
+    except asyncio.CancelledError:
+        logger.info("Client shutting down...")
 
 
 if __name__ == "__main__":

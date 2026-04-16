@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.57.1] - 2026-04-16
+
+### Fixed
+- **HA addon fails to start after upgrade from 2.56.x** — Supervisor rejects existing negative `static_delay_ms` values (e.g. −300) against the new `int(0,5000)` schema. Relaxed HA schema to `int?` so the addon can start; `translate_ha_config.py` clamps to [0, 5000] at container startup
+- **Crash on shutdown (`Event loop stopped before Future completed`)** — signal handler called `loop.stop()` which broke `asyncio.run()`. Replaced with task cancellation for clean exit
+- **Daemon artwork_url not proxied** — raw cross-origin MA artwork URLs from the daemon subprocess are now wrapped via `build_artwork_proxy_url()` at the parent IPC boundary, making them same-origin safe under HA Ingress without relying on the MA fallback
+- **`static_delay_ms` validation hardened** — config migration now handles >5000 (clamp) and non-numeric (remove) values; env var `SENDSPIN_STATIC_DELAY_MS` validated with try/except and [0, 5000] clamp; HA options translator clamps full range
+- **Removed unused `delay_ms` from config schema** — only `static_delay_ms` is used by the codebase; the stale `delay_ms` field could silently pass validation but was ignored at runtime
+
 ## [2.57.0] - 2026-04-16
 
 ### Changed
