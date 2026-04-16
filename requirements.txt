@@ -1,4 +1,4 @@
-sendspin==5.9.0
+sendspin==7.0.0
 numpy<2.0
 aiosendspin==4.4.0
 flask==3.1.3
