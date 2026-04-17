@@ -41,7 +41,7 @@ from services.ipc_protocol import (
 )
 from services.ma_artwork import build_artwork_proxy_url
 from services.playback_health import PlaybackHealthMonitor
-from services.port_bind_probe import find_available_bind_port
+from services.port_bind_probe import DEFAULT_MAX_ATTEMPTS, find_available_bind_port
 from services.sendspin_port_probe import DEFAULT_PORT as DEFAULT_SENDSPIN_PORT
 from services.sendspin_port_probe import probe_sendspin_port
 from services.status_event_builder import StatusEventBuilder
@@ -1220,12 +1220,12 @@ class SendspinClient:
             # binds wildcard by default, so probing a specific listen_host
             # would miss collisions on other interfaces.
             requested_port = int(self.listen_port)
-            available_port = find_available_bind_port(requested_port, host="0.0.0.0", max_attempts=10)
+            available_port = find_available_bind_port(requested_port, host="0.0.0.0", max_attempts=DEFAULT_MAX_ATTEMPTS)
             if available_port is None:
                 self._bind_failures += 1
                 hint = (
                     f"Cannot bind any port in range "
-                    f"{requested_port}-{requested_port + 9}. "
+                    f"{requested_port}-{requested_port + DEFAULT_MAX_ATTEMPTS - 1}. "
                     f"Run 'lsof -i :{requested_port}' on the host to find the owner."
                 )
                 logger.error("[%s] %s", self.player_name, hint)

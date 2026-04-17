@@ -14,7 +14,7 @@ from services.log_analysis import classify_subprocess_stderr_level
 
 UTC = timezone.utc
 
-_PORT_NUMBER_RE = re.compile(r":(\d{4,5})\b")
+_PORT_NUMBER_RE = re.compile(r":(\d{1,5})\b")
 
 
 class SubprocessStderrService:
@@ -58,7 +58,11 @@ class SubprocessStderrService:
         lower = text.lower()
         if any(marker in lower for marker in self._PORT_COLLISION_MARKERS):
             match = _PORT_NUMBER_RE.search(text)
-            port_str = match.group(1) if match else None
+            port_str = None
+            if match:
+                candidate = match.group(1)
+                if 1 <= int(candidate) <= 65535:
+                    port_str = candidate
             if port_str:
                 hint = (
                     f"Port {port_str} already in use by another process. "

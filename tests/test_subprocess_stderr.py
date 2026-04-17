@@ -159,6 +159,42 @@ def test_handle_line_port_collision_extracts_port_number():
     assert "lsof -i :8928" in updates[0]["last_error"]
 
 
+def test_handle_line_port_collision_extracts_low_port_number():
+    """Low-range ports (1-3 digits) from 'host:port' phrase still land in the hint."""
+    updates: list[dict] = []
+    logger = Mock()
+    service = SubprocessStderrService(
+        player_name="Kitchen",
+        update_status=updates.append,
+        logger_=logger,
+    )
+
+    service.handle_line("bind 0.0.0.0:80 address already in use")
+    service.handle_line("bind 0.0.0.0:443 address already in use")
+
+    assert len(updates) == 2
+    assert "lsof -i :80" in updates[0]["last_error"]
+    assert "lsof -i :443" in updates[1]["last_error"]
+
+
+def test_handle_line_port_collision_rejects_out_of_range_number():
+    """Numbers > 65535 must not be accepted as ports; fall back to generic hint."""
+    updates: list[dict] = []
+    logger = Mock()
+    service = SubprocessStderrService(
+        player_name="Kitchen",
+        update_status=updates.append,
+        logger_=logger,
+    )
+
+    service.handle_line("bind :99999 address already in use")
+
+    assert len(updates) == 1
+    # Generic hint (no specific port in "lsof -i :<n>")
+    assert "lsof -i :<port>" in updates[0]["last_error"]
+    assert "99999" not in updates[0]["last_error"]
+
+
 def test_handle_line_connection_error_counter_resets_on_other_line():
     """Non-connection-error lines reset the consecutive counter."""
     updates: list[dict] = []
