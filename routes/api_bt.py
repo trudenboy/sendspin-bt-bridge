@@ -364,15 +364,22 @@ def api_bt_remove():
     if adapter_mac_raw and not validate_mac(adapter_mac_raw):
         return jsonify({"error": "Invalid adapter MAC"}), 400
 
+    adapters = [str(a).upper() for a in list_bt_adapters() if a]
     if adapter_mac_raw:
+        # Reject adapter MACs that aren't present on the host — otherwise
+        # ``bluetoothctl select`` silently fails and ``remove`` runs against
+        # the default controller, returning a misleading ``ok: true``.
+        if adapters and adapter_mac_raw not in adapters:
+            return (
+                jsonify({"error": "Unknown adapter MAC", "adapter_mac": adapter_mac_raw}),
+                400,
+            )
         _bt_remove_device(mac, adapter_mac_raw)
+    elif adapters:
+        for adapter in adapters:
+            _bt_remove_device(mac, adapter)
     else:
-        adapters = [str(a).upper() for a in list_bt_adapters() if a]
-        if adapters:
-            for adapter in adapters:
-                _bt_remove_device(mac, adapter)
-        else:
-            _bt_remove_device(mac, "")
+        _bt_remove_device(mac, "")
     return jsonify({"ok": True, "mac": mac})
 
 

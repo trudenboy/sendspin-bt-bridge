@@ -204,6 +204,27 @@ def test_remove_rejects_invalid_adapter_mac(client, monkeypatch):
     fake_remove.assert_not_called()
 
 
+def test_remove_rejects_adapter_mac_not_present_on_host(client, monkeypatch):
+    """A syntactically-valid adapter MAC that isn't reported by
+    ``list_bt_adapters`` must return 400 instead of silently "succeeding"
+    against the default controller while the ``select`` failed."""
+
+    import routes.api_bt as module
+
+    monkeypatch.setattr(module, "list_bt_adapters", lambda: ["C0:FB:F9:62:D7:D6", "00:15:83:FF:8F:2B"])
+    fake_remove = MagicMock()
+    monkeypatch.setattr(module, "_bt_remove_device", fake_remove)
+
+    resp = client.post(
+        "/api/bt/remove",
+        json={"mac": "AA:BB:CC:DD:EE:01", "adapter_mac": "DE:AD:BE:EF:00:01"},
+    )
+    assert resp.status_code == 400
+    body = resp.get_json() or {}
+    assert "adapter" in (body.get("error") or "").lower()
+    fake_remove.assert_not_called()
+
+
 def test_remove_without_adapters_still_calls_default(client, monkeypatch):
     """Pre-existing behaviour preserved when no adapters are known."""
 
