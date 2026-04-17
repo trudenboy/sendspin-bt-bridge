@@ -88,6 +88,21 @@ echo ""
 # ── 4. Bluetooth ─────────────────────────────────────────────────────────────
 echo -e "${BOLD}4. Bluetooth${NC}"
 BT_OK=false
+
+# Fresh Raspberry Pi OS Lite images (Trixie especially) sometimes ship with
+# Bluetooth soft-blocked by rfkill. Diagnostic-only: do not mutate in this script.
+if command -v rfkill &>/dev/null; then
+  if rfkill list bluetooth 2>/dev/null | grep -qi "Hard blocked: yes"; then
+    bad "Bluetooth is hard-blocked by rfkill (physical switch or firmware)"
+    info "Clear the hardware/firmware kill before anything else"
+  elif rfkill list bluetooth 2>/dev/null | grep -qi "Soft blocked: yes"; then
+    bad "Bluetooth is soft-blocked by rfkill"
+    info "Fix: sudo rfkill unblock bluetooth"
+  else
+    ok "Bluetooth is not blocked by rfkill"
+  fi
+fi
+
 if systemctl is-active bluetooth &>/dev/null; then
   ok "bluetoothd service is running"
   BT_OK=true
@@ -171,6 +186,27 @@ elif [ -S "$PW_SOCK" ]; then
 else
   bad "No audio socket found at /run/user/${DETECTED_UID}/"
   info "Check that audio is running as your user (UID ${DETECTED_UID})"
+fi
+
+# systemd --user linger check — only meaningful when PipeWire/WirePlumber run
+# as user services. Without linger, they stop at logout and Bluetooth A2DP
+# sinks won't appear at boot on a headless host (see issue #151).
+if [ "$AUDIO_SYSTEM" = "pipewire" ] && command -v loginctl &>/dev/null; then
+  CURRENT_USER=$(id -un)
+  LINGER_STATE=$(loginctl show-user "$CURRENT_USER" -p Linger 2>/dev/null | cut -d= -f2 || echo "")
+  case "$LINGER_STATE" in
+    yes)
+      ok "systemd-user linger is enabled for $CURRENT_USER"
+      ;;
+    no)
+      skip "systemd-user linger is NOT enabled for $CURRENT_USER"
+      info "On a headless host, PipeWire/WirePlumber stop at logout — Bluetooth sinks won't appear at next boot until you log in interactively"
+      info "Enable once: sudo loginctl enable-linger $CURRENT_USER"
+      ;;
+    *)
+      : # loginctl not usable / user not registered; stay silent
+      ;;
+  esac
 fi
 echo ""
 

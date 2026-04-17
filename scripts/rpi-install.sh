@@ -124,12 +124,37 @@ fi
 
 step "4. Bluetooth"
 BT_OK=false
+
+# Fresh Raspberry Pi OS Lite images (esp. Trixie) sometimes ship with Bluetooth
+# soft-blocked by rfkill or with bluetoothd masked. Handle both cases here —
+# rfkill unblock and systemctl enable are idempotent, so safe to run unconditionally.
+if command -v rfkill &>/dev/null; then
+  if rfkill list bluetooth 2>/dev/null | grep -qi "Hard blocked: yes"; then
+    bad "Bluetooth is hard-blocked by rfkill (physical switch or firmware)"
+    info "Nothing else will work until this is cleared at the hardware/firmware level"
+  elif rfkill list bluetooth 2>/dev/null | grep -qi "Soft blocked: yes"; then
+    info "Bluetooth is soft-blocked — running: sudo rfkill unblock bluetooth"
+    if sudo rfkill unblock bluetooth 2>/dev/null; then
+      ok "Bluetooth unblocked"
+    else
+      skip "rfkill unblock failed — try manually: sudo rfkill unblock bluetooth"
+    fi
+  fi
+fi
+
 if systemctl is-active bluetooth &>/dev/null; then
   ok "bluetoothd service is running"
   BT_OK=true
 elif command -v bluetoothctl &>/dev/null; then
-  skip "bluetoothd service not detected via systemctl, but bluetoothctl is available"
-  BT_OK=true
+  info "bluetoothd not running — running: sudo systemctl enable --now bluetooth"
+  if sudo systemctl enable --now bluetooth &>/dev/null; then
+    ok "bluetoothd enabled and started"
+    BT_OK=true
+  else
+    skip "Could not enable bluetoothd automatically, but bluetoothctl is available"
+    info "Try manually: sudo systemctl enable --now bluetooth"
+    BT_OK=true
+  fi
 else
   bad "bluetoothd is not running and bluetoothctl not found"
   info "Install: sudo apt install bluez && sudo systemctl enable --now bluetooth"
