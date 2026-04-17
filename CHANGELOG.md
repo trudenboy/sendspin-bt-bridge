@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.59.0-rc.2] - 2026-04-17
+
+Second review round on top of rc.1. Feedback from Copilot on PR #158:
+
+### Fixed
+- **`services/subprocess_stderr.py`** — `_PORT_NUMBER_RE` widened to `\d{1,5}`
+  with an explicit `1..65535` range check so low-range ports (80, 443, …)
+  appear in the `lsof -i :<port>` hint and out-of-range numbers fall back to
+  the generic hint.
+- **`sendspin_client.py`** — `DEFAULT_MAX_ATTEMPTS` imported from
+  `services.port_bind_probe` and used for both the probe call and the error
+  hint range so tuning the constant in one place keeps them in sync.
+
 ## [2.59.0-rc.1] - 2026-04-17
 
 Operational-resilience and security-hardening rollup for issues surfaced from
