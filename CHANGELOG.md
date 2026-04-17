@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.58.0-rc.2] - 2026-04-17
+
+### Added
+- **Multi-adapter paired-device management** — `/api/bt/paired` now enumerates every known adapter via `list_bt_adapters()` and queries each with `select <mac>\ndevices Paired`, merging results so each device carries `adapters: [<mac>, ...]`. Previously bonds on a non-default controller were invisible in the UI
+- **Per-adapter unpair from the UI** — `/api/bt/remove` accepts optional `adapter_mac` (validated) and, when absent, iterates every adapter so bonds on secondary controllers can finally be removed. The "Already paired" list renders an `hciN`/MAC badge per device so it's clear which controller owns each bond
+
 ## [2.58.0-rc.1] - 2026-04-16
 
 ### Security
