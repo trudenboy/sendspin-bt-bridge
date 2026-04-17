@@ -663,7 +663,10 @@ def _handle_ha_direct_login(
                     session["_lockout_client_id"] = bucket
                 session["authenticated"] = True
                 session["ha_user"] = username
-                session["auth_method"] = "ha_supervisor_fallback"
+                # ``auth_method`` is overwritten by the outer ``login()`` with
+                # the form-submitted method; use a distinct key so the
+                # fallback marker survives.
+                session["auth_fallback_used"] = True
                 return None, redirect(_safe_next_url())
             _record_failure(client_ip)
             return "Invalid credentials", None

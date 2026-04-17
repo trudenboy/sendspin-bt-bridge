@@ -3294,7 +3294,7 @@ def test_ha_auth_page_accepts_http_url(client, monkeypatch):
     from routes import ma_auth as _ma_auth
 
     monkeypatch.setattr(_ma_auth, "is_safe_external_url", lambda _u: True)
-    url = "http://192.168.1.100:8123"
+    url = "http://example.com"
     resp = client.get(f"/api/ma/ha-auth-page?ma_url={url}")
     assert resp.status_code == 200
     assert url.encode() in resp.data

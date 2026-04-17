@@ -10,6 +10,7 @@ import asyncio
 import contextlib
 import json
 import logging
+import os
 import re
 import socket
 import urllib.error as _ue
@@ -34,6 +35,7 @@ from services.ma_runtime_state import (
 )
 from services.url_safety import (
     SafeHTTPConnection,
+    SafeHTTPSConnection,
     is_safe_external_url,
     safe_build_opener,
     safe_urlopen,
@@ -558,7 +560,11 @@ def _ma_callback_exchange(ma_url: str, code: str, oauth_state: str):
             return None
         parsed_cb = _up.urlparse(cb_url)
         hostname = parsed_cb.hostname or "localhost"
-        conn = SafeHTTPConnection(hostname, parsed_cb.port or 80, timeout=15)
+        conn: SafeHTTPConnection | SafeHTTPSConnection
+        if parsed_cb.scheme == "https":
+            conn = SafeHTTPSConnection(hostname, parsed_cb.port or 443, timeout=15)
+        else:
+            conn = SafeHTTPConnection(hostname, parsed_cb.port or 80, timeout=15)
         path = f"{parsed_cb.path}?{parsed_cb.query}"
         conn.request("GET", path)
         resp = conn.getresponse()
@@ -1210,23 +1216,36 @@ def api_ma_login():
     if not is_safe_external_url(ma_url):
         return jsonify({"success": False, "error": "Invalid or disallowed URL"}), 400
 
-    # Login and create long-lived token
-    # Try the library first (works with stable MA), then fall back to direct HTTP
-    # which supports both stable and beta MA formats.
+    # Login and create long-lived token.
+    #
+    # In *default* mode we try the library first (faster path for stable MA)
+    # and fall back to direct HTTP (which covers MA beta + applies our
+    # ``SafeHTTP(S)Connection`` peer-IP verification at connect time).
+    #
+    # In *strict* (``SENDSPIN_STRICT_SSRF=1``) mode we skip the library
+    # entirely because it uses its own HTTP stack that doesn't go through
+    # ``safe_urlopen``, making DNS-rebinding attacks at connect time still
+    # possible.  The direct-HTTP path is authoritative for both stable and
+    # beta MA, so there's no functional regression.
     token = None
-    try:
-        from music_assistant_client import login_with_token
+    lib_exc: Exception | None = None
+    if os.environ.get("SENDSPIN_STRICT_SSRF", "").strip() != "1":
+        try:
+            from music_assistant_client import login_with_token
 
-        fut = asyncio.run_coroutine_threadsafe(
-            login_with_token(ma_url, username, password, token_name=_ma_token_name()), loop
-        )
-        _user, token = fut.result(timeout=30.0)
-    except Exception as lib_exc:
-        # Library login failed — always try direct HTTP fallback.
+            fut = asyncio.run_coroutine_threadsafe(
+                login_with_token(ma_url, username, password, token_name=_ma_token_name()), loop
+            )
+            _user, token = fut.result(timeout=30.0)
+        except Exception as exc:
+            lib_exc = exc
+    if token is None:
+        # Library login failed or was skipped — try direct HTTP fallback.
         # The library raises generic "Invalid username or password" for any 401,
         # including format mismatches with MA beta, so we can't distinguish
         # real auth errors from format issues at this level.
-        logger.info("Library login failed (%s), trying direct HTTP login", lib_exc)
+        if lib_exc is not None:
+            logger.info("Library login failed (%s), trying direct HTTP login", lib_exc)
         try:
             session_token = _ma_http_login(ma_url, username, password)
             token = _exchange_for_long_lived_token(ma_url, session_token)
