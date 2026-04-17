@@ -548,7 +548,32 @@ def build_onboarding_assistant_snapshot(
             )
         )
 
-    if audio_system == "unknown":
+    if audio_system == "unreachable":
+        socket_path = str(audio.get("socket") or "(unknown)")
+        last_error = str(audio.get("last_error") or "connection refused")
+        checks.append(
+            OnboardingCheck(
+                key="audio",
+                status="error",
+                summary=(
+                    f"Audio socket {socket_path} is mounted but the server refused the connection ({last_error})."
+                ),
+                details={
+                    "system": "unreachable",
+                    "socket": socket_path,
+                    "socket_exists": True,
+                    "socket_reachable": False,
+                    "last_error": last_error,
+                    "reason_code": "pa_socket_refused",
+                },
+                actions=[
+                    "On the Docker host, run `sudo loginctl enable-linger <user>` for the audio user so PipeWire/PulseAudio keeps running without an active SSH session.",
+                    "Reboot the host (or `systemctl --user start pipewire.socket pipewire.service wireplumber.service`) and restart the container.",
+                    "See docs: https://trudenboy.github.io/sendspin-bt-bridge/installation/docker/#headless-pipewire-bluetooth-sinks-not-appearing-after-reboot",
+                ],
+            )
+        )
+    elif audio_system == "unknown":
         checks.append(
             OnboardingCheck(
                 key="audio",

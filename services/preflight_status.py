@@ -89,20 +89,34 @@ def collect_preflight_status(
     collections_status: dict[str, dict[str, Any]] = {}
     failed_collections: list[str] = []
 
-    audio_info: dict[str, Any] = {"system": "unknown", "socket": None, "sinks": 0}
+    audio_info: dict[str, Any] = {
+        "system": "unknown",
+        "socket": None,
+        "socket_exists": False,
+        "socket_reachable": None,
+        "sinks": 0,
+        "last_error": None,
+    }
+    pulse_sock = os.environ.get("PULSE_SERVER", "")
+    if pulse_sock:
+        audio_info["socket"] = pulse_sock
+        sock_path = pulse_sock.split("unix:", 1)[-1] if pulse_sock.startswith("unix:") else pulse_sock
+        audio_info["socket_exists"] = bool(exists_fn(sock_path)) if sock_path else False
     try:
         srv = get_server_name_fn()
         if srv and "pipewire" in str(srv).lower():
             audio_info["system"] = "pipewire"
         elif srv:
             audio_info["system"] = "pulseaudio"
-        pulse_sock = os.environ.get("PULSE_SERVER", "")
-        if pulse_sock:
-            audio_info["socket"] = pulse_sock
+        audio_info["socket_reachable"] = True
         sinks = list_sinks_fn()
         audio_info["sinks"] = len(sinks) if sinks else 0
         collections_status["audio"] = collection_status_payload("ok", count=audio_info["sinks"])
     except Exception as exc:
+        audio_info["last_error"] = str(exc) or type(exc).__name__
+        if audio_info["socket_exists"]:
+            audio_info["system"] = "unreachable"
+            audio_info["socket_reachable"] = False
         failed_collections.append("audio")
         collections_status["audio"] = collection_status_payload("error", error=collection_error_payload(exc))
 

@@ -5,6 +5,34 @@ from types import SimpleNamespace
 from services.onboarding_assistant import build_onboarding_assistant_snapshot
 
 
+def test_onboarding_audio_unreachable_socket_emits_pa_socket_refused_reason_code():
+    snapshot = build_onboarding_assistant_snapshot(
+        config={"BLUETOOTH_DEVICES": [], "PULSE_LATENCY_MSEC": 200},
+        preflight={
+            "audio": {
+                "system": "unreachable",
+                "sinks": 0,
+                "socket": "unix:/run/user/1000/pulse/native",
+                "socket_exists": True,
+                "socket_reachable": False,
+                "last_error": "Connection refused",
+            },
+            "bluetooth": {"controller": True, "paired_devices": 0},
+        },
+        devices=[],
+        ma_connected=False,
+        runtime_mode="production",
+    )
+
+    audio = next(check for check in snapshot.checks if check.key == "audio")
+    assert audio.status == "error"
+    assert audio.details["reason_code"] == "pa_socket_refused"
+    assert audio.details["system"] == "unreachable"
+    assert audio.details["socket"] == "unix:/run/user/1000/pulse/native"
+    joined_actions = " ".join(audio.actions)
+    assert "loginctl enable-linger" in joined_actions
+
+
 def test_onboarding_assistant_reports_missing_prerequisites():
     snapshot = build_onboarding_assistant_snapshot(
         config={"BLUETOOTH_DEVICES": [], "PULSE_LATENCY_MSEC": 200},
