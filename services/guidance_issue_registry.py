@@ -58,6 +58,13 @@ ISSUE_REGISTRY: dict[str, GuidanceIssueDefinition] = {
         severity="warning",
         default_reason_codes=("audio_backend_unavailable",),
     ),
+    "pa_socket_refused": GuidanceIssueDefinition(
+        key="pa_socket_refused",
+        layer="audio",
+        priority=32,
+        severity="error",
+        default_reason_codes=("pa_socket_refused",),
+    ),
     "missing_sink": GuidanceIssueDefinition(
         key="missing_sink",
         layer="sink_verification",

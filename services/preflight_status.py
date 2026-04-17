@@ -5,11 +5,28 @@ from __future__ import annotations
 import json
 import os
 import platform as _platform
+import socket as _socket
 import subprocess
 from typing import Any
 
 from config import get_runtime_version
 from services.pulse import get_server_name, list_sinks
+
+
+def _default_connect_fn(sock_path: str, timeout: float = 1.0) -> None:
+    """Probe a PulseAudio/PipeWire Unix socket for reachability.
+
+    Raises ``ConnectionRefusedError`` when the server is not listening
+    (classic headless-linger symptom), ``PermissionError`` when the caller
+    cannot open the socket, and ``OSError`` for protocol/other failures.
+    The caller is expected to distinguish "refused" from other failures.
+    """
+    s = _socket.socket(_socket.AF_UNIX, _socket.SOCK_STREAM)
+    s.settimeout(timeout)
+    try:
+        s.connect(sock_path)
+    finally:
+        s.close()
 
 
 def collection_error_payload(exc: Exception) -> dict[str, str]:
@@ -75,6 +92,7 @@ def collect_preflight_status(
     machine_fn=None,
     exists_fn=None,
     open_fn=None,
+    connect_fn=None,
 ) -> dict[str, Any]:
     """Collect preflight runtime checks for reuse across routes and assistants."""
     get_server_name_fn = get_server_name if get_server_name_fn is None else get_server_name_fn
@@ -84,27 +102,65 @@ def collect_preflight_status(
     machine_fn = _platform.machine if machine_fn is None else machine_fn
     exists_fn = os.path.exists if exists_fn is None else exists_fn
     open_fn = open if open_fn is None else open_fn
+    connect_fn = _default_connect_fn if connect_fn is None else connect_fn
 
     arch = machine_fn()
     collections_status: dict[str, dict[str, Any]] = {}
     failed_collections: list[str] = []
 
-    audio_info: dict[str, Any] = {"system": "unknown", "socket": None, "sinks": 0}
-    try:
-        srv = get_server_name_fn()
-        if srv and "pipewire" in str(srv).lower():
-            audio_info["system"] = "pipewire"
-        elif srv:
-            audio_info["system"] = "pulseaudio"
-        pulse_sock = os.environ.get("PULSE_SERVER", "")
-        if pulse_sock:
-            audio_info["socket"] = pulse_sock
-        sinks = list_sinks_fn()
-        audio_info["sinks"] = len(sinks) if sinks else 0
-        collections_status["audio"] = collection_status_payload("ok", count=audio_info["sinks"])
-    except Exception as exc:
+    audio_info: dict[str, Any] = {
+        "system": "unknown",
+        "socket": None,
+        "socket_exists": False,
+        "socket_reachable": None,
+        "sinks": 0,
+        "last_error": None,
+    }
+    pulse_sock = os.environ.get("PULSE_SERVER", "")
+    sock_path = ""
+    if pulse_sock:
+        audio_info["socket"] = pulse_sock
+        sock_path = pulse_sock.split("unix:", 1)[-1] if pulse_sock.startswith("unix:") else pulse_sock
+        audio_info["socket_exists"] = bool(exists_fn(sock_path)) if sock_path else False
+
+    # Explicit reachability probe: services.pulse.get_server_name() swallows
+    # connect errors and returns "not available", so relying on it to raise
+    # would leave the "unreachable" path dead in production. Connect-probe
+    # the Unix socket directly and classify the failure: ConnectionRefused
+    # → linger-specific issue; everything else → generic audio failure.
+    probe_exc: Exception | None = None
+    if audio_info["socket_exists"] and sock_path:
+        try:
+            connect_fn(sock_path)
+            audio_info["socket_reachable"] = True
+        except ConnectionRefusedError as exc:
+            probe_exc = exc
+            audio_info["socket_reachable"] = False
+            audio_info["system"] = "unreachable"
+            audio_info["last_error"] = str(exc) or "Connection refused"
+        except (PermissionError, FileNotFoundError, OSError) as exc:
+            probe_exc = exc
+            audio_info["socket_reachable"] = False
+            audio_info["last_error"] = str(exc) or type(exc).__name__
+
+    if probe_exc is not None:
         failed_collections.append("audio")
-        collections_status["audio"] = collection_status_payload("error", error=collection_error_payload(exc))
+        collections_status["audio"] = collection_status_payload("error", error=collection_error_payload(probe_exc))
+    else:
+        try:
+            srv = get_server_name_fn()
+            srv_text = str(srv or "").strip()
+            if srv_text and "pipewire" in srv_text.lower():
+                audio_info["system"] = "pipewire"
+            elif srv_text and srv_text.lower() != "not available":
+                audio_info["system"] = "pulseaudio"
+            sinks = list_sinks_fn()
+            audio_info["sinks"] = len(sinks) if sinks else 0
+            collections_status["audio"] = collection_status_payload("ok", count=audio_info["sinks"])
+        except Exception as exc:
+            audio_info["last_error"] = str(exc) or type(exc).__name__
+            failed_collections.append("audio")
+            collections_status["audio"] = collection_status_payload("error", error=collection_error_payload(exc))
 
     bt_info: dict[str, Any] = {"controller": False, "adapter": None, "paired_devices": 0}
     try:

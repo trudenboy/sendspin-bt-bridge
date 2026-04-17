@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from config_network import is_ha_addon_runtime
 from services._helpers import _device_audio_streaming, _device_extra, _device_ma_reconnecting, _parse_timestamp
 from services.guidance_issue_registry import build_issue_context, issue_sort_priority
 from services.recovery_assistant import RecoveryAction, build_recovery_issue_actions
@@ -444,6 +445,34 @@ def _audio_backend_issue(
     if not isinstance(audio_check, dict) or str(audio_check.get("status") or "") != "error":
         return None
 
+    details = dict(audio_check.get("details") or {})
+    reason_code = str(details.get("reason_code") or "")
+
+    # Headless PipeWire / PulseAudio — only relevant outside HA addon where
+    # the operator can run `loginctl enable-linger` on the Docker host.
+    if reason_code == "pa_socket_refused" and not is_ha_addon_runtime():
+        socket_path = str(details.get("socket") or "")
+        summary = (
+            f"The audio socket ({socket_path or 'configured path'}) is mounted into the container, "
+            "but the host's PipeWire/PulseAudio server refused the connection. This is the classic "
+            "symptom of a headless host without user-session lingering."
+        )
+        actions = [
+            "On the Docker host: `sudo loginctl enable-linger <user>` (the user whose UID matches AUDIO_UID).",
+            "Reboot the host, or restart the user session's audio units (`systemctl --user start pipewire.socket pipewire.service wireplumber.service`).",
+            "Restart the bridge container once the server is up.",
+            "Docs: https://trudenboy.github.io/sendspin-bt-bridge/installation/docker/#headless-pipewire-bluetooth-sinks-not-appearing-after-reboot",
+        ]
+        return {
+            "key": "pa_socket_refused",
+            "title": "Audio server unreachable — enable user lingering",
+            "summary": summary,
+            "details": details,
+            "actions": actions,
+            "primary_action": GuidanceAction(key="open_diagnostics", label="Open diagnostics"),
+            "secondary_actions": [],
+        }
+
     summary = str(audio_check.get("summary") or "The bridge cannot reach its audio backend right now.")
     if all_devices_globally_disabled:
         summary = (
@@ -462,7 +491,7 @@ def _audio_backend_issue(
     return {
         "title": "Audio backend unavailable",
         "summary": summary,
-        "details": dict(audio_check.get("details") or {}),
+        "details": details,
         "actions": actions,
         "primary_action": GuidanceAction(key="open_diagnostics", label="Open diagnostics"),
         "secondary_actions": secondary_actions,
@@ -551,7 +580,7 @@ def _build_issue_groups(
     elif audio_backend_issue and current_step_key == "audio":
         _append_group(
             groups,
-            key="audio_unavailable",
+            key=str(audio_backend_issue.get("key") or "audio_unavailable"),
             severity="error",
             title=audio_backend_issue["title"],
             summary=audio_backend_issue["summary"],
