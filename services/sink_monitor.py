@@ -201,6 +201,10 @@ class SinkMonitor:
             return
         if self._task is not None:
             return
+        # Reset initial-failure bookkeeping so a retry after self-disable
+        # gets a fresh window instead of tripping the threshold immediately.
+        self._consecutive_connect_failures = 0
+        self._transient_warning_logged = False
         self._task = asyncio.create_task(self._monitor_loop())
 
     async def stop(self) -> None:
@@ -269,6 +273,10 @@ class SinkMonitor:
                             label,
                             hint,
                         )
+                        # Clear the handle so a caller can re-invoke start()
+                        # after fixing the underlying PA setup without having
+                        # to reconstruct the SinkMonitor instance.
+                        self._task = None
                         return
                     await asyncio.sleep(_BACKOFF_BASE)
                 else:

@@ -1060,10 +1060,12 @@ class SendspinClient:
                             self._restart_delay = 1.0  # reset when BT drives the restart
                             logger.info("Daemon subprocess stopped; waiting for BT to reconnect")
                     else:
-                        # Daemon alive — reset backoff + bind-failure counter
+                        # Daemon alive — reset backoff + bind-failure state
                         self._restart_delay = 1.0
                         if self._bind_failures:
                             self._bind_failures = 0
+                        if self._restart_halted:
+                            self._restart_halted = False
 
                 # Zombie playback watchdog: playing=True but no audio data for too long
                 self._check_zombie_playback()
@@ -1213,10 +1215,12 @@ class SendspinClient:
             # Host-side bind preflight: aiosendspin's ClientListener (aiohttp
             # TCPSite) does not auto-shift on EADDRINUSE, so a stale process
             # holding our port would crash the daemon on every restart cycle.
-            # Probe first and transparently shift within a small window.
+            # Probe the wildcard interface ("0.0.0.0") because the daemon
+            # subprocess receives only listen_port in params — its listener
+            # binds wildcard by default, so probing a specific listen_host
+            # would miss collisions on other interfaces.
             requested_port = int(self.listen_port)
-            probe_host = self.listen_host or "0.0.0.0"
-            available_port = find_available_bind_port(requested_port, host=probe_host, max_attempts=10)
+            available_port = find_available_bind_port(requested_port, host="0.0.0.0", max_attempts=10)
             if available_port is None:
                 self._bind_failures += 1
                 hint = (
@@ -1248,6 +1252,11 @@ class SendspinClient:
                     available_port,
                 )
                 self._update_status({"port_collision": True, "active_listen_port": available_port})
+            else:
+                # Clean start — clear any stale collision flag from a prior cycle
+                # so the UI does not show a permanent "port_collision" indicator.
+                if self.status.get("port_collision") or self.status.get("active_listen_port") is not None:
+                    self._update_status({"port_collision": False, "active_listen_port": None})
             self.listen_port = available_port
 
             params = json.dumps(

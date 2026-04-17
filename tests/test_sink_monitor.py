@@ -626,6 +626,9 @@ class TestMonitorLoopFailureBehavior:
             await asyncio.wait_for(mon._task, timeout=2.0)
 
         assert mon.available is False
+        # _task must be cleared after self-disable so a later start() can retry
+        # without requiring a full bridge restart.
+        assert mon._task is None
         assert mon._consecutive_connect_failures >= sm_mod._INITIAL_FAILURE_THRESHOLD
         warnings = [r for r in caplog.records if r.levelname == "WARNING"]
         # One diagnostic on first failure + one "disabled after" final.
@@ -775,6 +778,41 @@ class TestMonitorLoopFailureBehavior:
         assert sleeps[0] == pytest.approx(sm_mod._BACKOFF_BASE)
         assert sleeps[1] == pytest.approx(sm_mod._BACKOFF_BASE * sm_mod._BACKOFF_FACTOR)
         assert sleeps[2] == pytest.approx(sm_mod._BACKOFF_BASE * sm_mod._BACKOFF_FACTOR**2)
+
+    @pytest.mark.asyncio
+    async def test_start_after_self_disable_resets_counters_and_restarts(self):
+        """After self-disable, calling start() again must reset counters and run a fresh loop."""
+        import services.sink_monitor as sm_mod
+
+        mon = SinkMonitor()
+        state = {"attempt": 0}
+
+        def _factory(*_args, **_kwargs):
+            state["attempt"] += 1
+            # First 3 attempts (initial disable path) fail; the 4th (after
+            # manual restart) succeeds to prove the loop is live again.
+            if state["attempt"] <= 3:
+                return _ConnectFail(ConnectionRefusedError("down"))
+            return _ConnectSuccessThenCancel()
+
+        with (
+            patch("services.sink_monitor._PULSECTL_AVAILABLE", True),
+            patch.object(sm_mod, "pulsectl_asyncio", MagicMock(PulseAsync=_factory), create=True),
+            patch("services.sink_monitor.asyncio.sleep", new_callable=AsyncMock),
+        ):
+            await mon.start()
+            await asyncio.wait_for(mon._task, timeout=2.0)
+            assert mon._task is None
+            assert mon._consecutive_connect_failures >= sm_mod._INITIAL_FAILURE_THRESHOLD
+
+            # Operator fixed PA and restarts the monitor.
+            await mon.start()
+            assert mon._task is not None
+            with contextlib.suppress(asyncio.CancelledError):
+                await asyncio.wait_for(mon._task, timeout=2.0)
+
+        assert mon._ever_connected is True
+        assert mon._consecutive_connect_failures == 0
 
     @pytest.mark.asyncio
     async def test_cancel_during_reconnect_exits_cleanly(self):

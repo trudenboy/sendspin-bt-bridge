@@ -769,12 +769,19 @@ def test_sink_mute_watchdog_not_started_when_app_muted():
 @pytest.mark.asyncio
 async def test_start_sendspin_inner_auto_shifts_listen_port_when_taken(monkeypatch):
     """When the configured port is taken, listen_port must auto-shift and status must flag collision."""
-    client = SendspinClient("Test Player", "localhost", 9000, listen_port=8928)
+    client = SendspinClient("Test Player", "localhost", 9000, listen_port=8928, listen_host="127.0.0.1")
     client._start_sendspin_lock = asyncio.Lock()
     client.bluetooth_sink_name = ""  # skip BT configure path
 
-    # Force the probe to return a shifted port.
-    monkeypatch.setattr("sendspin_client.find_available_bind_port", lambda *a, **kw: 8929)
+    # Force the probe to return a shifted port, and capture probe args to verify
+    # we always probe the wildcard interface even when listen_host is set.
+    probe_calls: list[dict] = []
+
+    def _fake_probe(port, *, host, max_attempts):
+        probe_calls.append({"port": port, "host": host, "max_attempts": max_attempts})
+        return 8929
+
+    monkeypatch.setattr("sendspin_client.find_available_bind_port", _fake_probe)
 
     captured_params: list[str] = []
 
@@ -807,6 +814,42 @@ async def test_start_sendspin_inner_auto_shifts_listen_port_when_taken(monkeypat
     assert captured_params, "subprocess should have been spawned"
     parsed = json.loads(captured_params[0])
     assert parsed["listen_port"] == 8929
+    # Probe must target wildcard to catch collisions on interfaces the daemon
+    # actually binds — not the specific listen_host that is display-only.
+    assert probe_calls[0]["host"] == "0.0.0.0"
+
+
+@pytest.mark.asyncio
+async def test_start_sendspin_inner_clears_port_collision_on_clean_start(monkeypatch):
+    """After a clean spawn, a prior port_collision flag must be cleared."""
+    client = SendspinClient("Test Player", "localhost", 9000, listen_port=8928)
+    client._start_sendspin_lock = asyncio.Lock()
+    client.bluetooth_sink_name = ""
+    # Pretend a previous restart cycle flagged a collision.
+    client.status.update({"port_collision": True, "active_listen_port": 8929})
+
+    monkeypatch.setattr("sendspin_client.find_available_bind_port", lambda p, **_: p)
+
+    class _FakeProc:
+        returncode = None
+
+        def __init__(self):
+            self.stdin = SimpleNamespace(write=lambda _d: None, drain=_noop_async, close=lambda: None)
+            self.stdout = SimpleNamespace(readline=_eof_readline)
+            self.stderr = SimpleNamespace(readline=_eof_readline)
+
+    async def _fake_exec(*_args, **_kwargs):
+        return _FakeProc()
+
+    with (
+        patch("sendspin_client.asyncio.create_subprocess_exec", side_effect=_fake_exec),
+        patch.object(client, "is_running", return_value=False),
+        patch.object(client, "stop_sendspin", return_value=None),
+    ):
+        await client._start_sendspin_inner()
+
+    assert client.status["port_collision"] is False
+    assert client.status["active_listen_port"] is None
 
 
 @pytest.mark.asyncio
