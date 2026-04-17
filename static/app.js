@@ -11215,7 +11215,9 @@ function _renderRecoveryIssueActionRow(issue) {
     if (issue.device_name || (issue.device_names && issue.device_names.length)) {
         var dev = issue.device_name || issue.device_names[0] || '';
         reportContext = '<button type="button" class="btn btn-sm diag-recovery-action diag-report-issue-btn" ' +
-            'onclick="return _openBugReport(event, {device: \'' + escHtmlAttr(dev) + '\', issue: \'' + escHtmlAttr(issue.title || '') + '\'})" ' +
+            'data-action="open-bug-report-context" ' +
+            'data-report-device="' + escHtmlAttr(dev) + '" ' +
+            'data-report-issue="' + escHtmlAttr(issue.title || '') + '" ' +
             'title="Report this issue">\uD83D\uDC1B</button>';
     }
     if (!primaryAction && !secondaryActions.length && !reportContext) return '';
@@ -12153,6 +12155,13 @@ const _ACTION_REGISTRY = {
     'toggle-mobile-menu':       toggleMobileMenu,
     'close-mobile-menu':        closeMobileMenu,
     'open-bug-report':          (_el, ev) => _openBugReport(ev),
+    'open-bug-report-context':  (el, ev) => {
+        _openBugReport(ev, {
+            device: el.getAttribute('data-report-device') || '',
+            issue: el.getAttribute('data-report-issue') || '',
+        });
+        return false;
+    },
     'toggle-theme-mode':        toggleThemeMode,
     'follow-link-new-tab':      (el, ev) => _followLinkInNewTab(ev, el),
     'open-auth-settings':       () => { openAuthSettings(); return false; },

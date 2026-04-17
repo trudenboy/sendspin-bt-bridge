@@ -355,7 +355,7 @@ def test_templates_have_no_inline_event_handlers():
     import pathlib
     import re
 
-    pattern = re.compile(r"""\s(on[a-z]+)\s*=\s*["']""", re.IGNORECASE)
+    pattern = re.compile(r"""(?:^|[\s'"])(on[a-z]+)\s*=\s*["']""", re.IGNORECASE)
     project_root = pathlib.Path(__file__).resolve().parent.parent
     offenders: dict[str, set[str]] = {}
     for path in [
