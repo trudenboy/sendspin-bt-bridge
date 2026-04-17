@@ -399,27 +399,66 @@ def api_bt_remove():
     return jsonify({"ok": True, "mac": mac})
 
 
-def _get_bt_device_info(mac: str) -> dict:
-    """Run ``bluetoothctl info <mac>`` and return parsed dict."""
-    r = subprocess.run(
-        ["bluetoothctl"],
-        input=f"info {mac}\n",
-        capture_output=True,
-        text=True,
-        timeout=5,
-    )
-    lines = [_ANSI_RE.sub("", ln).strip() for ln in r.stdout.splitlines() if ln.strip()]
+_INFO_FIELDS = frozenset({"name", "alias", "paired", "bonded", "trusted", "blocked", "connected", "class", "icon"})
+
+
+def _parse_bluetoothctl_info(stdout: str, mac: str) -> dict:
+    lines = [_ANSI_RE.sub("", ln).strip() for ln in stdout.splitlines() if ln.strip()]
     info: dict = {"mac": mac, "raw": lines}
     for ln in lines:
         if ":" not in ln:
             continue
         key, _, val = ln.partition(":")
-        key = key.strip()
-        val = val.strip()
-        k = key.lower().replace(" ", "_")
-        if k in ("name", "alias", "paired", "bonded", "trusted", "blocked", "connected", "class", "icon"):
-            info[k] = val
+        k = key.strip().lower().replace(" ", "_")
+        if k in _INFO_FIELDS:
+            info[k] = val.strip()
     return info
+
+
+def _run_bluetoothctl_info(mac: str, adapter: str) -> dict:
+    cmds: list[str] = []
+    if adapter:
+        cmds.append(f"select {adapter}")
+    cmds.append(f"info {mac}")
+    r = subprocess.run(
+        ["bluetoothctl"],
+        input="\n".join(cmds) + "\n",
+        capture_output=True,
+        text=True,
+        timeout=5,
+    )
+    return _parse_bluetoothctl_info(r.stdout, mac)
+
+
+def _get_bt_device_info(mac: str, adapter: str = "") -> dict:
+    """Return ``bluetoothctl info`` for ``mac``, adapter-aware.
+
+    With ``adapter`` explicit, ``select <adapter>`` is prefixed (``hciN``
+    is resolved to the controller MAC first — HAOS/LXC reject
+    ``select hciN``). Without ``adapter``, each known controller is
+    probed in turn and the first response that actually contains device
+    fields (``Name:``/``Paired:``/…) wins; this is what lets the info
+    modal work for bonds on the non-default radio when older UI call
+    sites haven't been updated to pass the adapter yet.
+    """
+    if adapter:
+        return _run_bluetoothctl_info(mac, _resolve_adapter_to_mac(adapter))
+
+    try:
+        adapter_macs = [m.upper() for m in list_bt_adapters() if m]
+    except Exception:  # pragma: no cover - defensive
+        adapter_macs = []
+
+    last_result: dict | None = None
+    for adapter_mac in adapter_macs:
+        result = _run_bluetoothctl_info(mac, adapter_mac)
+        if any(field in result for field in _INFO_FIELDS):
+            return result
+        last_result = result
+
+    if last_result is not None:
+        return last_result
+    return _run_bluetoothctl_info(mac, "")
 
 
 @bt_bp.route("/api/bt/info", methods=["POST"])
@@ -430,7 +469,11 @@ def api_bt_info():
     if not validate_mac(mac):
         return jsonify({"success": False, "error": "Invalid MAC"}), 400
     try:
-        return jsonify(_get_bt_device_info(mac))
+        adapter = validate_adapter(data.get("adapter"))
+    except ValueError:
+        return jsonify({"success": False, "error": "Invalid adapter identifier"}), 400
+    try:
+        return jsonify(_get_bt_device_info(mac, adapter))
     except Exception:
         logger.exception("Failed to get device info for %s", mac)
         return jsonify({"mac": mac, "error": "Failed to get device info"}), 500
@@ -1100,6 +1143,7 @@ def api_bt_pair_new_result(job_id: str):
 
 def _run_standalone_pair(job_id: str, mac: str, adapter: str) -> None:
     """Run pair + trust via bluetoothctl for a device not yet in config."""
+    adapter = _resolve_adapter_to_mac(adapter)
     try:
         cleanup_cmds: list[str] = []
         if adapter:

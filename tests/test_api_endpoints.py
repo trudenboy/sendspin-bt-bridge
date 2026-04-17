@@ -353,16 +353,72 @@ def test_run_standalone_pair_cleans_stale_device_before_trusting(monkeypatch):
     monkeypatch.setattr(api_bt_mod.subprocess, "Popen", lambda *args, **kwargs: fake_proc)
     monkeypatch.setattr(api_bt_mod, "finish_scan_job", finish_job)
     monkeypatch.setattr(api_bt_mod.time, "sleep", lambda _seconds: None)
+    # Pretend the host reports two controllers: hci0 + hci1.
+    monkeypatch.setattr(
+        api_bt_mod,
+        "list_bt_adapters",
+        lambda: ["C0:FB:F9:62:D6:9D", "C0:FB:F9:62:D7:D6"],
+    )
 
     with patch("selectors.DefaultSelector", side_effect=lambda: _FakeSelector(fake_proc.stdout)):
         api_bt_mod._run_standalone_pair("job-1", "AA:BB:CC:DD:EE:FF", "hci1")
 
     cleanup_input = cleanup_run.call_args.kwargs["input"]
-    assert cleanup_input == "select hci1\nremove AA:BB:CC:DD:EE:FF\n"
+    # ``hci1`` must be translated to the controller MAC before ``select`` —
+    # ``bluetoothctl select hci1`` fails on HAOS/LXC with "Controller hci1
+    # not available" and the whole pair sequence silently runs against the
+    # default controller.
+    assert cleanup_input == "select C0:FB:F9:62:D7:D6\nremove AA:BB:CC:DD:EE:FF\n"
+    assert fake_proc.stdin.writes[0].startswith("select C0:FB:F9:62:D7:D6\n")
     assert fake_proc.stdin.writes[0].endswith("scan on\n")
     assert fake_proc.stdin.writes[1] == "pair AA:BB:CC:DD:EE:FF\n"
     assert fake_proc.stdin.writes[2].startswith("trust AA:BB:CC:DD:EE:FF\n")
     finish_job.assert_called_once_with("job-1", {"success": True, "mac": "AA:BB:CC:DD:EE:FF"})
+
+
+def test_run_standalone_pair_keeps_hci_name_when_resolution_fails(monkeypatch):
+    """If ``list_bt_adapters`` returns nothing, keep the supplied ``hciN``
+    rather than dropping the ``select`` prefix — a failed ``select`` is a
+    visible error, silently pairing against the default controller is not.
+    """
+    import routes.api_bt as api_bt_mod
+
+    fake_proc = _FakeProc(stdout_lines=["Pairing successful\n"], tail="Paired: yes\n")
+    cleanup_run = MagicMock()
+
+    monkeypatch.setattr(api_bt_mod.subprocess, "run", cleanup_run)
+    monkeypatch.setattr(api_bt_mod.subprocess, "Popen", lambda *args, **kwargs: fake_proc)
+    monkeypatch.setattr(api_bt_mod, "finish_scan_job", MagicMock())
+    monkeypatch.setattr(api_bt_mod.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(api_bt_mod, "list_bt_adapters", lambda: [])
+
+    with patch("selectors.DefaultSelector", side_effect=lambda: _FakeSelector(fake_proc.stdout)):
+        api_bt_mod._run_standalone_pair("job-2", "AA:BB:CC:DD:EE:FF", "hci0")
+
+    assert cleanup_run.call_args.kwargs["input"] == "select hci0\nremove AA:BB:CC:DD:EE:FF\n"
+
+
+def test_run_standalone_pair_passes_mac_through_unchanged(monkeypatch):
+    """MAC inputs must never be mutated by ``_resolve_adapter_to_mac``."""
+    import routes.api_bt as api_bt_mod
+
+    fake_proc = _FakeProc(stdout_lines=["Pairing successful\n"], tail="Paired: yes\n")
+    cleanup_run = MagicMock()
+
+    monkeypatch.setattr(api_bt_mod.subprocess, "run", cleanup_run)
+    monkeypatch.setattr(api_bt_mod.subprocess, "Popen", lambda *args, **kwargs: fake_proc)
+    monkeypatch.setattr(api_bt_mod, "finish_scan_job", MagicMock())
+    monkeypatch.setattr(api_bt_mod.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(
+        api_bt_mod,
+        "list_bt_adapters",
+        lambda: ["C0:FB:F9:62:D6:9D", "C0:FB:F9:62:D7:D6"],
+    )
+
+    with patch("selectors.DefaultSelector", side_effect=lambda: _FakeSelector(fake_proc.stdout)):
+        api_bt_mod._run_standalone_pair("job-3", "AA:BB:CC:DD:EE:FF", "C0:FB:F9:62:D7:D6")
+
+    assert cleanup_run.call_args.kwargs["input"] == "select C0:FB:F9:62:D7:D6\nremove AA:BB:CC:DD:EE:FF\n"
 
 
 def test_bt_pair_new_returns_409_when_bt_operation_busy(client, monkeypatch):
