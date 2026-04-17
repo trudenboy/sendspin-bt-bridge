@@ -270,13 +270,29 @@ def api_bt_adapters():
 def _parse_paired_stdout(stdout: str) -> "list[tuple[str, str]]":
     """Extract ``(mac, name)`` pairs from bluetoothctl ``devices [Paired]`` output.
 
+    Interactive ``bluetoothctl`` interleaves async discovery notifications
+    (``[CHG] Device <mac> RSSI: …``, ``[NEW]/[DEL] Device …``, ``[CHG]
+    Device <mac> ManufacturerData.*``) on the same stdout we are parsing.
+    Only lines that begin with a bare ``Device <mac> <rest>`` token — after
+    stripping ANSI colour codes and any leading prompt echo — are genuine
+    responses to ``devices Paired``; everything else is noise.  Without
+    this discrimination the Already-Paired list contained ghost rows
+    whose ``bluetoothctl info`` actually reported ``Paired: no``.
+
     Names that look like MAC-as-name (``AA:BB:…`` / ``AA-BB-…``) are normalized
     to an empty string so downstream filters can treat them as unnamed.
     """
     results: list[tuple[str, str]] = []
     for line in stdout.splitlines():
         clean = _ANSI_RE.sub("", line)
-        m = _DEV_PAT.search(clean)
+        # Strip any leading prompt echo like ``[ENEBY20]> ``. Anchored so
+        # bracket-prefixed async notifications (``[CHG] ``/``[NEW] ``/
+        # ``[DEL] ``) survive and fail the ``startswith("Device ")`` check
+        # below.
+        stripped = re.sub(r"^\[[^\]]+\]>\s*", "", clean).lstrip()
+        if not stripped.startswith("Device "):
+            continue
+        m = _DEV_PAT.match(stripped)
         if not m:
             continue
         mac = m.group(1).upper()
@@ -516,8 +532,38 @@ def api_bt_reset_reconnect_result(job_id: str):
     return jsonify(job)
 
 
+def _resolve_adapter_to_mac(adapter: str) -> str:
+    """Translate ``hciN`` → controller MAC for ``bluetoothctl select``.
+
+    ``bluetoothctl select hci0`` fails with ``Controller hci0 not
+    available`` on HAOS and LXC containers where the D-Bus objects are
+    keyed by MAC, not by interface name.  When the bridge's fleet-row
+    ``<select>`` emits ``hci0``/``hci1`` we must resolve it against
+    ``bluetoothctl list`` (ordered) before issuing any ``select``. If
+    resolution fails (adapters all down, etc.) the original ``hciN`` is
+    returned so the caller can still attempt it — a failed ``select``
+    at least surfaces as a visible paring failure, while silently
+    dropping the prefix would run the flow against the default
+    controller.  MAC inputs pass through unchanged.
+    """
+    if not adapter or not adapter.startswith("hci"):
+        return adapter
+    try:
+        idx = int(adapter[3:])
+    except ValueError:
+        return adapter
+    try:
+        macs = [m.upper() for m in list_bt_adapters() if m]
+    except Exception:  # pragma: no cover - defensive
+        return adapter
+    if 0 <= idx < len(macs):
+        return macs[idx]
+    return adapter
+
+
 def _run_reset_reconnect(job_id: str, mac: str, adapter: str) -> None:
     """Remove device, then pair + trust + connect from scratch."""
+    adapter = _resolve_adapter_to_mac(adapter)
     try:
         # Step 1: Remove existing pairing
         logger.info("Reset & Reconnect %s: removing…", mac)
