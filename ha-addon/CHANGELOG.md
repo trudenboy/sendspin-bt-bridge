@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.58.0] - 2026-04-17
+
+Stable rollup of the rc.1 → rc.5 series. Headline theme: **multi-adapter correctness** across every Bluetooth flow the UI exposes, plus a security-hardening pass on the MA auth surface.
+
+### Security
+- SSRF guard on all MA auth routes (`/api/ma/login`, `/api/ma/ha-auth-page`, `/api/ma/ha-silent-auth`, `/api/ma/ha-login`) via `services.url_safety.is_safe_external_url`; `SENDSPIN_STRICT_SSRF=1` opts into stricter loopback/RFC1918 rejection
+- DNS-rebinding defence on outbound HTTP (`safe_urlopen` / `safe_build_opener` re-check `socket.getpeername()` after connect)
+- XSS hardening on `/api/ma/ha-auth-page` — `ma_url` is `</` → `<\\/` escaped before inline-script injection
+- MA-reported `ha_url` is re-validated through `is_safe_external_url` before the server-side OAuth exchange
+- Session-bound MFA state — `/api/ma/ha-login` step 2 no longer trusts `ha_url`/`client_id`/`flow_id`/`state` from the request body; only `session["_ha_oauth"]` is authoritative
+- Supervisor fallback is opt-in (`ALLOW_SUPERVISOR_FALLBACK=1`) and logs a `WARNING` with "does NOT verify MFA" on each use
+- Logout hardened — `POST /logout` requires CSRF and does a full `session.clear()`; `GET /logout` returns 405 with a small HTML page
+- X-Forwarded-For hardening — rate-limit client ID now uses the rightmost hop that is *not* a trusted proxy
+- X-Frame-Options: SAMEORIGIN in standalone mode; HA-addon mode keeps it off for Ingress framing
+
+### Added
+- **Multi-adapter paired-device management** — `/api/bt/paired` enumerates every adapter via `list_bt_adapters()` and merges results so each device carries `adapters: [<mac>, ...]`. Bonds on a non-default controller are now visible in the UI for the first time
+- **Per-adapter unpair** — `/api/bt/remove` accepts optional `adapter_mac`; the "Already paired" list renders an `hciN`/MAC badge per device
+- **Targeted "enable-linger" hint for headless PipeWire** — preflight audio probe distinguishes "socket path not mounted" from "socket mounted but server refused the connection", and the latter surfaces a dedicated operator-guidance issue with the exact fix (`sudo loginctl enable-linger <user>` + reboot) and a docs link. Gated by `is_ha_addon_runtime()` so HA add-on users (where Supervisor owns audio) still see the generic guidance (fixes #151)
+
+### Fixed
+- **Reset & Reconnect now honours the adapter the device is bonded with** — `/api/bt/reset_reconnect` always threaded `select <adapter>` through remove/power-cycle/pair/trust/connect, but both UI call sites invoked `resetAndReconnect` without an adapter, so bonds on a non-default radio could never be rebuilt through the UI. Fleet row now reads `.bt-adapter`; the "Already paired" list passes `d.adapters[0]`. The backend resolves `hciN` → controller MAC before any `bluetoothctl select` (HAOS/LXC reject raw `select hciN` with `Controller hciN not available`)
+- **"Add & Pair" now remembers the adapter the scan used** — two layered bugs: frontend `btAdapterOptions` never matched the scan-supplied controller MAC against `a.id` (always `hciN`), so the new fleet row's `<select>` defaulted to "default"; backend `_run_standalone_pair` passed the raw adapter straight to `bluetoothctl select` and silently ran the pair on the BlueZ default controller. Dropdown now matches on both `a.id` and `a.mac`; pair backend resolves `hciN` → MAC via `_resolve_adapter_to_mac`
+- **BT Info modal shows only the MAC for devices on the non-default controller** — `_get_bt_device_info` ran `bluetoothctl info` with no `select`, so Yandex mini 2 on `hci1` returned `Device … not available` and the modal fell back to the MAC-only field. The helper now accepts an adapter (resolving `hciN`), and both UI call sites forward it. When no adapter is supplied, every known controller is probed and the first response with real device fields wins — legacy call sites still work
+- **"Already paired" list no longer lists ghost devices** — interactive `bluetoothctl` interleaves async discovery notifications (`[CHG]`/`[NEW]`/`[DEL] Device <mac> RSSI: …`) into the same stdout we pipe `devices Paired` through, so every nearby BLE beacon appeared as "paired" even when `bluetoothctl info` reported `Paired: no`. `_parse_paired_stdout` now strips the prompt echo and accepts only bare `Device <mac> <name>` lines
+- **Preflight audio reachability is now measured by a real probe** — the previous implementation relied on `services.pulse.get_server_name()` raising on connect failure, but that helper swallows connect errors and returns `"not available"`. The preflight now performs an explicit `AF_UNIX` connect to the `PULSE_SERVER` socket: `ConnectionRefusedError` → `unreachable` (linger-specific guidance), `PermissionError`/other `OSError` → generic audio failure with the real error text
+- **500 handler no longer redirects** — `_handle_500` returns plain text instead of `redirect("/")`, eliminating a potential redirect loop when `/` itself is failing
+- **Subprocess stdout stall protection** — `SendspinClient._read_subprocess_output` now wraps `stdout.readline()` in `asyncio.wait_for(timeout=120)`, so a silent-but-alive daemon no longer leaves the reader task blocked forever
+
+### Known issues
+- CSP still ships with `'unsafe-inline'` because several templates use inline `onclick` handlers. The nonce plumbing is in place; full migration is tracked for a follow-up minor release
+
 ## [2.57.1] - 2026-04-16
 
 ### Fixed
