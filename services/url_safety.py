@@ -1,12 +1,26 @@
-"""Reject server-side fetches to private/internal networks.
+"""Reject server-side fetches to dangerous network targets.
 
-Used to guard route handlers that resolve an arbitrary user-supplied URL
-and then perform a server-side HTTP request to it — preventing SSRF
-against internal services (127.0.0.1, 169.254.169.254, RFC1918 ranges).
+This project runs on home LANs, HAOS boxes, Proxmox LXC containers and
+similar deployments where Music Assistant / Home Assistant legitimately
+live on RFC1918 addresses or on ``localhost`` (host-networked Docker /
+HAOS).  A pure "block all private" SSRF guard would reject those
+legitimate configurations, so we operate in two modes:
 
-In HA-addon mode (when SUPERVISOR_TOKEN is set) a small allowlist of
-internal hostnames and the Supervisor proxy network (172.30.32.0/23) is
-permitted so legitimate MA / HA discovery keeps working.
+**Default (LAN-permissive)** — blocks:
+  * non-http(s) schemes (``file://``, ``javascript:``, ``data:`` …)
+  * link-local (169.254.0.0/16) — covers AWS/GCP/Azure IMDS and APIPA
+  * multicast, reserved and the unspecified ``0.0.0.0``
+
+  Allows loopback and private RFC1918 ranges because the bridge
+  normally *lives* on such a network and routinely has to talk to LAN
+  services.
+
+**Strict mode** — enabled by setting ``SENDSPIN_STRICT_SSRF=1`` — also
+blocks loopback and RFC1918 addresses, except the Home Assistant
+Supervisor proxy net (172.30.32.0/23) and the supervisor/hassio/
+homeassistant internal hostnames when running as an HA add-on.
+Intended for deployments where the bridge is exposed on an untrusted
+network.
 
 Two layers of protection are provided:
 
@@ -44,24 +58,46 @@ def _is_ha_addon_runtime() -> bool:
     return bool(os.environ.get("SUPERVISOR_TOKEN"))
 
 
+def _is_strict_mode() -> bool:
+    """``SENDSPIN_STRICT_SSRF=1`` opts in to blocking loopback + RFC1918."""
+    return os.environ.get("SENDSPIN_STRICT_SSRF", "").strip() == "1"
+
+
 def _is_ip_safe(ip: ipaddress.IPv4Address | ipaddress.IPv6Address, *, is_ha_addon: bool) -> bool:
-    if ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast or ip.is_unspecified:
+    # Loopback is handled first because IPv6 ``::1`` is classified both as
+    # loopback *and* reserved; we don't want the reserved-blocklist below
+    # to catch it.  Loopback follows the strict-mode rule.
+    if ip.is_loopback:
+        return not _is_strict_mode()
+    # Always block these — link-local covers AWS/GCP/Azure metadata
+    # endpoints and APIPA; multicast/reserved/unspecified have no
+    # legitimate reason to be the target of an HTTP fetch.
+    if ip.is_link_local or ip.is_reserved or ip.is_multicast or ip.is_unspecified:
         return False
     if ip.is_private:
-        return bool(is_ha_addon and ip in _HA_ADDON_PROXY_NET)
+        # HA Supervisor proxy net is always allowed in addon mode.
+        if is_ha_addon and ip in _HA_ADDON_PROXY_NET:
+            return True
+        # In LAN-permissive default mode, RFC1918 is OK; strict rejects.
+        return not _is_strict_mode()
     return True
 
 
 def is_safe_external_url(url: str) -> bool:
     """Return True if ``url`` is a safe target for a server-side HTTP request.
 
-    Rejects:
+    Always rejects:
       * non-http(s) schemes (file://, javascript:, data:, ftp:, …)
       * URLs without a hostname
-      * hostnames that resolve to loopback/link-local/reserved/multicast
-      * hostnames that resolve to private RFC1918 ranges
-        (except the HA Supervisor proxy net when running as an HA addon)
+      * hostnames that resolve to link-local (169.254.0.0/16 — cloud
+        metadata + APIPA), multicast, reserved or the unspecified
+        ``0.0.0.0``
       * hostnames that do not resolve at all
+
+    Additionally rejected in strict mode (``SENDSPIN_STRICT_SSRF=1``):
+      * loopback (``127.0.0.0/8``, ``::1``)
+      * RFC1918 private ranges (except the HA Supervisor proxy net
+        when running as an HA addon)
 
     Note: this is a *pre-flight* check.  Callers that actually fetch the
     URL must also use ``safe_urlopen`` / ``safe_build_opener`` so that

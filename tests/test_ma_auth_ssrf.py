@@ -41,17 +41,27 @@ def client(app):
     return app.test_client()
 
 
-# Sample URLs that must be rejected by is_safe_external_url regardless of
-# whether the host is reachable.
+# Sample URLs that must be rejected by is_safe_external_url in *default*
+# mode — cloud metadata (link-local), multicast/reserved/unspecified, and
+# any non-http(s) scheme.  Loopback and RFC1918 addresses are LAN-legit
+# for this project and only blocked when ``SENDSPIN_STRICT_SSRF=1``; see
+# ``UNSAFE_URLS_STRICT`` for that class.
 UNSAFE_URLS = [
+    "http://169.254.169.254/latest/meta-data/",  # AWS/GCP IMDS
+    "http://169.254.1.1/",  # link-local
+    "http://224.0.0.1/",  # multicast
+    "http://0.0.0.0/",  # unspecified
+    "file:///etc/passwd",
+    "javascript:alert(1)",
+    "gopher://attacker/",
+]
+
+
+UNSAFE_URLS_STRICT = [
     "http://127.0.0.1:8095",
     "http://127.0.0.1:22",
     "http://10.0.0.1:8095",
     "http://192.168.1.10:8095",
-    "http://169.254.169.254/latest/meta-data/",
-    "file:///etc/passwd",
-    "javascript:alert(1)",
-    "gopher://attacker/",
 ]
 
 
@@ -61,6 +71,25 @@ class TestApiMaLoginSSRF:
     @pytest.mark.parametrize("url", UNSAFE_URLS)
     def test_rejects_unsafe_urls(self, client, url, monkeypatch):
         monkeypatch.delenv("SUPERVISOR_TOKEN", raising=False)
+        monkeypatch.delenv("SENDSPIN_STRICT_SSRF", raising=False)
+        urlopen = MagicMock()
+        with (
+            patch.object(ma_auth_module._ur, "urlopen", urlopen),
+            patch.object(ma_auth_module, "get_main_loop", return_value=MagicMock()),
+        ):
+            resp = client.post(
+                "/api/ma/login",
+                json={"url": url, "username": "u", "password": "p"},
+            )
+        assert resp.status_code == 400
+        assert resp.get_json()["error"] == "Invalid or disallowed URL"
+        urlopen.assert_not_called()
+
+    @pytest.mark.parametrize("url", UNSAFE_URLS_STRICT)
+    def test_rejects_private_urls_in_strict_mode(self, client, url, monkeypatch):
+        """Loopback + RFC1918 URLs are rejected when strict mode is on."""
+        monkeypatch.delenv("SUPERVISOR_TOKEN", raising=False)
+        monkeypatch.setenv("SENDSPIN_STRICT_SSRF", "1")
         urlopen = MagicMock()
         with (
             patch.object(ma_auth_module._ur, "urlopen", urlopen),
@@ -78,9 +107,17 @@ class TestApiMaLoginSSRF:
 class TestApiMaHaAuthPageSSRF:
     """GET /api/ma/ha-auth-page must reject unsafe ma_url."""
 
-    @pytest.mark.parametrize("url", ["http://127.0.0.1", "http://10.0.0.1", "file:///etc/passwd"])
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "http://169.254.169.254",
+            "http://224.0.0.1",
+            "file:///etc/passwd",
+        ],
+    )
     def test_rejects_unsafe_urls(self, client, url, monkeypatch):
         monkeypatch.delenv("SUPERVISOR_TOKEN", raising=False)
+        monkeypatch.delenv("SENDSPIN_STRICT_SSRF", raising=False)
         resp = client.get("/api/ma/ha-auth-page", query_string={"ma_url": url})
         assert resp.status_code == 400
         assert b"Invalid or disallowed URL" in resp.data
@@ -94,9 +131,10 @@ class TestApiMaHaAuthPageSSRF:
 class TestApiMaHaSilentAuthSSRF:
     """POST /api/ma/ha-silent-auth must reject unsafe ma_url."""
 
-    @pytest.mark.parametrize("url", ["http://127.0.0.1:8095", "http://10.0.0.1:8095"])
+    @pytest.mark.parametrize("url", ["http://169.254.169.254/", "http://224.0.0.1/"])
     def test_rejects_unsafe_urls(self, client, url, monkeypatch):
         monkeypatch.delenv("SUPERVISOR_TOKEN", raising=False)
+        monkeypatch.delenv("SENDSPIN_STRICT_SSRF", raising=False)
         urlopen = MagicMock()
         with patch.object(ma_auth_module._ur, "urlopen", urlopen):
             resp = client.post(
@@ -111,9 +149,10 @@ class TestApiMaHaSilentAuthSSRF:
 class TestApiMaHaLoginSSRF:
     """POST /api/ma/ha-login (init) must reject unsafe ma_url."""
 
-    @pytest.mark.parametrize("url", ["http://127.0.0.1:8095", "http://169.254.169.254"])
+    @pytest.mark.parametrize("url", ["http://169.254.169.254", "http://224.0.0.1"])
     def test_init_rejects_unsafe_urls(self, client, url, monkeypatch):
         monkeypatch.delenv("SUPERVISOR_TOKEN", raising=False)
+        monkeypatch.delenv("SENDSPIN_STRICT_SSRF", raising=False)
         urlopen = MagicMock()
         with patch.object(ma_auth_module._ur, "urlopen", urlopen):
             resp = client.post(
