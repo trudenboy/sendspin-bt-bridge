@@ -17,7 +17,7 @@ import threading
 from datetime import timedelta
 from pathlib import Path
 
-from flask import Flask, g, jsonify, redirect, request, send_from_directory, session, url_for
+from flask import Flask, Response, g, jsonify, redirect, request, send_from_directory, session, url_for
 from waitress import serve  # type: ignore[import-untyped]
 
 from config import ensure_secret_key, get_runtime_version, load_config, resolve_additional_web_port, resolve_web_port
@@ -160,9 +160,13 @@ def vstatic(version, filename):
 def _set_cache_headers(response):
     """Prevent HA Ingress proxy and browsers from caching HTML pages.
 
-    Also sets security headers: CSP on HTML responses and X-Content-Type-Options
-    on all responses.  X-Frame-Options is intentionally omitted — CSP
-    frame-ancestors supersedes it, and HA Ingress needs to frame us.
+    Also sets security headers:
+      * ``Content-Security-Policy`` on HTML responses (including
+        ``frame-ancestors 'self'``)
+      * ``X-Content-Type-Options: nosniff`` on every response
+      * ``X-Frame-Options: SAMEORIGIN`` in standalone/Docker mode.  It is
+        omitted in HA add-on mode so HA Ingress can frame us (CSP
+        ``frame-ancestors`` already provides the modern equivalent).
     """
     if response.content_type and "text/html" in response.content_type:
         response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
@@ -178,6 +182,8 @@ def _set_cache_headers(response):
             "frame-ancestors 'self'"
         )
     response.headers["X-Content-Type-Options"] = "nosniff"
+    if not _is_ha_addon:
+        response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
     return response
 
 
@@ -266,7 +272,7 @@ def _handle_500(e):
     logger.error("Internal server error: %s", e)
     if request.path.startswith("/api/"):
         return jsonify({"error": "Internal server error"}), 500
-    return redirect("/")
+    return Response("Internal Server Error", status=500, mimetype="text/plain")
 
 
 def main():

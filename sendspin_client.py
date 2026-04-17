@@ -1257,11 +1257,33 @@ class SendspinClient:
             logger.error("Failed to start Sendspin daemon subprocess: %s", e)
             self._update_status({"last_error": str(e), "server_connected": False})
 
+    _STDOUT_IDLE_TIMEOUT_SECS: float = 120.0
+
     async def _read_subprocess_output(self) -> None:
-        """Read JSON lines from daemon subprocess stdout and merge into self.status."""
+        """Read JSON lines from daemon subprocess stdout and merge into self.status.
+
+        ``stdout.readline()`` is wrapped in ``asyncio.wait_for`` so that a stalled
+        daemon (e.g. subprocess alive but not writing) does not leave this reader
+        blocked forever.  On timeout, we log at DEBUG and keep polling — only a
+        real EOF (empty line) or a dead subprocess ends the loop.
+        """
         if self._daemon_proc is None or self._daemon_proc.stdout is None:
             return
-        async for line in self._daemon_proc.stdout:
+        stdout = self._daemon_proc.stdout
+        while True:
+            try:
+                line = await asyncio.wait_for(stdout.readline(), timeout=self._STDOUT_IDLE_TIMEOUT_SECS)
+            except TimeoutError:
+                if self._daemon_proc.returncode is not None:
+                    return
+                logger.debug(
+                    "[%s] subprocess idle (no stdout for %.0fs)",
+                    self.player_name,
+                    self._STDOUT_IDLE_TIMEOUT_SECS,
+                )
+                continue
+            if not line:
+                return
             msg = self._ipc_service.parse_line(line)
             if msg is None:
                 continue

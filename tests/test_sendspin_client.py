@@ -14,6 +14,19 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+
+class _ReadlineStdout:
+    """Async stdout mock that yields pre-encoded lines then EOF via readline()."""
+
+    def __init__(self, lines):
+        self._lines = list(lines)
+
+    async def readline(self):
+        if self._lines:
+            return self._lines.pop(0)
+        return b""
+
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -397,11 +410,8 @@ class TestReadSubprocessOutput:
         # IPC protocol uses flat status envelopes: {"type": "status", "volume": 55, ...}
         status_line = json.dumps({"type": "status", "volume": 55, "playing": True}).encode() + b"\n"
 
-        async def _fake_stdout():
-            yield status_line
-
         proc = MagicMock()
-        proc.stdout = _fake_stdout()
+        proc.stdout = _ReadlineStdout([status_line])
         proc.returncode = None
         client._daemon_proc = proc
 
@@ -413,12 +423,10 @@ class TestReadSubprocessOutput:
     async def test_malformed_json_is_skipped(self, client):
         """Non-JSON lines must be silently ignored, not crash."""
 
-        async def _fake_stdout():
-            yield b"not-json\n"
-            yield json.dumps({"type": "status", "volume": 88}).encode() + b"\n"
+        lines = [b"not-json\n", json.dumps({"type": "status", "volume": 88}).encode() + b"\n"]
 
         proc = MagicMock()
-        proc.stdout = _fake_stdout()
+        proc.stdout = _ReadlineStdout(lines)
         proc.returncode = None
         client._daemon_proc = proc
 
@@ -430,11 +438,8 @@ class TestReadSubprocessOutput:
         """Volume updates from subprocess should call save_device_volume."""
         status_line = json.dumps({"type": "status", "volume": 60}).encode() + b"\n"
 
-        async def _fake_stdout():
-            yield status_line
-
         proc = MagicMock()
-        proc.stdout = _fake_stdout()
+        proc.stdout = _ReadlineStdout([status_line])
         proc.returncode = None
         client._daemon_proc = proc
 
@@ -447,11 +452,8 @@ class TestReadSubprocessOutput:
         """Status updates without volume should not trigger save."""
         status_line = json.dumps({"type": "status", "playing": True}).encode() + b"\n"
 
-        async def _fake_stdout():
-            yield status_line
-
         proc = MagicMock()
-        proc.stdout = _fake_stdout()
+        proc.stdout = _ReadlineStdout([status_line])
         proc.returncode = None
         client._daemon_proc = proc
 
@@ -465,11 +467,8 @@ class TestReadSubprocessOutput:
         client._update_status({"ma_reconnecting": True})
         status_line = json.dumps({"type": "status", "server_connected": True}).encode() + b"\n"
 
-        async def _fake_stdout():
-            yield status_line
-
         proc = MagicMock()
-        proc.stdout = _fake_stdout()
+        proc.stdout = _ReadlineStdout([status_line])
         proc.returncode = None
         client._daemon_proc = proc
 

@@ -24,6 +24,23 @@ def _isolated_config(tmp_path, monkeypatch):
     (tmp_path / "config.json").write_text(json.dumps({}))
 
 
+@pytest.fixture(autouse=True)
+def _allow_localhost_urls(monkeypatch):
+    """Bypass the SSRF guard for this suite — these tests exercise auth flows
+    against mocked HA/MA hosts addressed as ``http://localhost:8095``.  URL
+    safety itself is covered by ``tests/test_url_safety.py`` and
+    ``tests/test_ma_auth_ssrf.py``.
+    """
+    from routes import ma_auth as _ma_auth
+    from services import url_safety as _url_safety
+
+    monkeypatch.setattr(_ma_auth, "is_safe_external_url", lambda _u: True)
+    # safe_urlopen performs its own is_safe_external_url check internally —
+    # patch it at the definition module too so mocked urllib.request.urlopen
+    # is reached.
+    monkeypatch.setattr(_url_safety, "is_safe_external_url", lambda _u: True)
+
+
 @pytest.fixture()
 def client():
     """Return a Flask test client with the api blueprint registered."""
@@ -203,7 +220,7 @@ class TestCreateHaIngressSessionViaWs:
 class TestCreateMaTokenViaIngress:
     @patch("routes.ma_auth._find_ma_ingress_url", return_value="http://localhost:8094")
     @patch("routes.ma_auth.socket.gethostname", return_value="bridge-host")
-    @patch("urllib.request.urlopen")
+    @patch("routes.ma_auth.safe_urlopen")
     def test_success_returns_token(self, mock_urlopen, _mock_hostname, _mock_find):
         resp_body = json.dumps({"result": "long_lived_token_123"}).encode()
         mock_resp = MagicMock()
@@ -223,7 +240,7 @@ class TestCreateMaTokenViaIngress:
         assert json.loads(req.data.decode())["args"]["name"] == "Sendspin BT Bridge (bridge-host)"
 
     @patch("routes.ma_auth._find_ma_ingress_url", return_value="http://localhost:8094")
-    @patch("urllib.request.urlopen")
+    @patch("routes.ma_auth.safe_urlopen")
     def test_error_response_returns_none(self, mock_urlopen, _mock_find):
         resp_body = json.dumps({"error": {"code": 403, "message": "Insufficient permissions"}}).encode()
         mock_resp = MagicMock()
@@ -237,7 +254,7 @@ class TestCreateMaTokenViaIngress:
         assert _create_ma_token_via_ingress("user123", "user") is None
 
     @patch("routes.ma_auth._find_ma_ingress_url", return_value="http://localhost:8094")
-    @patch("urllib.request.urlopen", side_effect=ConnectionError("refused"))
+    @patch("routes.ma_auth.safe_urlopen", side_effect=ConnectionError("refused"))
     def test_connection_error_returns_none(self, _mock, _mock_find):
         from routes.ma_auth import _create_ma_token_via_ingress
 
@@ -245,7 +262,7 @@ class TestCreateMaTokenViaIngress:
 
     @patch("routes.ma_auth._find_ma_ingress_url", return_value="http://localhost:8094")
     @patch("routes.ma_auth.socket.gethostname", return_value="bridge-host")
-    @patch("urllib.request.urlopen")
+    @patch("routes.ma_auth.safe_urlopen")
     def test_non_ascii_username_is_percent_encoded(self, mock_urlopen, _h, _f):
         """Non-latin1 usernames (e.g. CJK) must be percent-encoded in headers.
 
@@ -278,7 +295,7 @@ class TestCreateMaTokenViaIngress:
 
     @patch("routes.ma_auth._find_ma_ingress_url", return_value="http://localhost:8094")
     @patch("routes.ma_auth.socket.gethostname", return_value="bridge-host")
-    @patch("urllib.request.urlopen")
+    @patch("routes.ma_auth.safe_urlopen")
     def test_ascii_username_not_encoded(self, mock_urlopen, _h, _f):
         """Pure ASCII usernames must pass through unchanged."""
         resp_body = json.dumps({"result": "tok"}).encode()
@@ -326,7 +343,7 @@ class TestLatinSafe:
 
     @patch("routes.ma_auth._get_ha_supervisor_addon_info_via_ws", return_value=None)
     @patch("routes.ma_auth._create_ha_ingress_session_via_ws", return_value="ingress-session-token")
-    @patch("urllib.request.urlopen")
+    @patch("routes.ma_auth.safe_urlopen")
     def test_success_returns_token_for_nested_addon_payload(self, mock_urlopen, _mock_session, _mock_ws_lookup):
         addon_resp = MagicMock()
         addon_resp.read.return_value = json.dumps(
@@ -369,7 +386,7 @@ class TestLatinSafe:
         },
     )
     @patch("routes.ma_auth._create_ha_ingress_session_via_ws", return_value="ingress-session-token")
-    @patch("urllib.request.urlopen")
+    @patch("routes.ma_auth.safe_urlopen")
     def test_success_returns_token_for_ws_supervisor_payload(self, mock_urlopen, _mock_session, _mock_ws_lookup):
         token_resp = MagicMock()
         token_resp.read.return_value = json.dumps({"result": "ma_long_lived_token"}).encode()
@@ -389,7 +406,7 @@ class TestLatinSafe:
 
     @patch("routes.ma_auth._get_ha_supervisor_addon_info_via_ws", return_value=None)
     @patch("routes.ma_auth._create_ha_ingress_session_via_ws", return_value="ingress-session-token")
-    @patch("urllib.request.urlopen")
+    @patch("routes.ma_auth.safe_urlopen")
     def test_returns_none_when_ingress_url_missing(self, mock_urlopen, _mock_session, _mock_ws_lookup):
         addon_resp = MagicMock()
         addon_resp.read.return_value = json.dumps({"data": {"state": "stopped"}}).encode()
@@ -523,8 +540,8 @@ def test_ingress_failure_returns_502(_ws, _ingress, _mock_get_ma_api_credentials
 
 
 class TestGetMaOauthParams:
-    @patch("routes.ma_auth._ur.urlopen")
-    @patch("routes.ma_auth._ur.build_opener")
+    @patch("routes.ma_auth.safe_urlopen")
+    @patch("routes.ma_auth.safe_build_opener")
     def test_parses_redirect_based_auth_authorize(self, mock_build_opener, mock_urlopen):
         auth_url = (
             "http://ha.local:8123/auth/authorize?"
@@ -547,8 +564,8 @@ class TestGetMaOauthParams:
         )
         mock_urlopen.assert_not_called()
 
-    @patch("routes.ma_auth._ur.urlopen")
-    @patch("routes.ma_auth._ur.build_opener")
+    @patch("routes.ma_auth.safe_urlopen")
+    @patch("routes.ma_auth.safe_build_opener")
     def test_parses_jsonrpc_authorization_url_result_dict(self, mock_build_opener, mock_urlopen):
         opener = MagicMock()
         opener.open.side_effect = _http_error_with_location("http://ma.local:8095/auth/authorize", "")

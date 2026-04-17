@@ -10,13 +10,14 @@ import asyncio
 import contextlib
 import json
 import logging
+import os
 import re
 import socket
 import urllib.error as _ue
 import urllib.parse as _up
 import urllib.request as _ur
 
-from flask import Response, jsonify, request
+from flask import Response, jsonify, request, session
 
 from config import load_config, update_config
 from routes.api_ma import (
@@ -31,6 +32,13 @@ from services.ma_runtime_state import (
     get_ma_api_credentials,
     set_ma_api_credentials,
     set_ma_groups,
+)
+from services.url_safety import (
+    SafeHTTPConnection,
+    SafeHTTPSConnection,
+    is_safe_external_url,
+    safe_build_opener,
+    safe_urlopen,
 )
 
 logger = logging.getLogger(__name__)
@@ -162,7 +170,7 @@ def _ma_http_login(ma_url: str, username: str, password: str) -> str:
         data = json.dumps(body).encode()
         req = _ur.Request(login_url, data=data, method="POST")
         req.add_header("Content-Type", "application/json")
-        with _ur.urlopen(req, timeout=15) as resp:
+        with safe_urlopen(req, timeout=15) as resp:
             return json.loads(resp.read())
 
     # 1) Try stable format: {"username": ..., "password": ...}
@@ -276,6 +284,12 @@ def _get_ma_oauth_bootstrap(ma_url: str) -> tuple[tuple[str, str, str, str] | No
         parsed = _up.urlparse(auth_url)
         params = _up.parse_qs(parsed.query)
         ha_base = f"{parsed.scheme}://{parsed.netloc}"
+        # MA-reported ha_base is attacker-influenced (the MA server could
+        # return a URL pointing at an internal target).  Gate it through
+        # the same SSRF check that user-supplied URLs go through.
+        if not is_safe_external_url(ha_base):
+            logger.warning("MA reported HA OAuth base that failed SSRF check: %s", ha_base)
+            return "", "", "", ""
         client_id = params.get("client_id", [""])[0]
         redirect_uri = params.get("redirect_uri", [""])[0]
         oauth_state = params.get("state", [""])[0]
@@ -352,7 +366,7 @@ def _get_ma_oauth_bootstrap(ma_url: str) -> tuple[tuple[str, str, str, str] | No
         req = _ur.Request(
             f"{ma_url}/auth/authorize?provider_id=homeassistant&return_url={_up.quote(return_url, safe=':/?=&')}"
         )
-        opener = _ur.build_opener(_NoRedirectHandler)
+        opener = safe_build_opener(_NoRedirectHandler)
         with opener.open(req, timeout=10) as resp:
             body = resp.read()
             payload, text = _body_to_payload(body)
@@ -388,7 +402,7 @@ def _get_ma_oauth_bootstrap(ma_url: str) -> tuple[tuple[str, str, str, str] | No
         ).encode()
         req = _ur.Request(f"{ma_url}/api", data=body, method="POST")
         req.add_header("Content-Type", "application/json")
-        with _ur.urlopen(req, timeout=10) as resp:
+        with safe_urlopen(req, timeout=10) as resp:
             data = json.loads(resp.read())
             parsed = _parse_response_auth_url(payload=data)
             if parsed:
@@ -419,7 +433,7 @@ def _get_ma_oauth_params(ma_url: str):
 def _get_ma_server_info(ma_url: str) -> dict[str, object]:
     """Return parsed ``/info`` payload from MA, or an empty dict on failure."""
     try:
-        with _ur.urlopen(f"{ma_url.rstrip('/')}/info", timeout=10) as resp:
+        with safe_urlopen(f"{ma_url.rstrip('/')}/info", timeout=10) as resp:
             data = json.loads(resp.read())
         return data if isinstance(data, dict) else {}
     except Exception as exc:
@@ -433,7 +447,12 @@ def _ma_reports_homeassistant_addon(ma_url: str) -> bool:
 
 
 def _derive_ha_urls_from_ma(ma_url: str) -> list[str]:
-    """Derive likely HA Core base URLs from an MA add-on URL."""
+    """Derive likely HA Core base URLs from an MA add-on URL.
+
+    Each candidate is filtered through ``is_safe_external_url`` so we never
+    hand back a URL that would resolve to a forbidden private/loopback
+    address (e.g., when the caller supplied an arbitrary MA URL).
+    """
     parsed = _up.urlparse(str(ma_url or "").strip())
     if parsed.scheme not in ("http", "https") or not parsed.hostname:
         return []
@@ -442,8 +461,11 @@ def _derive_ha_urls_from_ma(ma_url: str) -> list[str]:
 
     def _add(url: str) -> None:
         normalized = str(url or "").rstrip("/")
-        if normalized and normalized not in candidates:
-            candidates.append(normalized)
+        if not normalized or normalized in candidates:
+            return
+        if not is_safe_external_url(normalized):
+            return
+        candidates.append(normalized)
 
     if parsed.scheme == "https":
         _add(f"https://{parsed.hostname}")
@@ -467,7 +489,7 @@ def _exchange_ha_auth_code(ha_url: str, code: str, client_id: str) -> dict[str, 
         method="POST",
     )
     try:
-        with _ur.urlopen(req, timeout=15) as resp:
+        with safe_urlopen(req, timeout=15) as resp:
             payload = json.loads(resp.read())
         return payload if isinstance(payload, dict) else None
     except Exception as exc:
@@ -492,7 +514,7 @@ def _ha_login_flow_start(ha_url: str, client_id: str, redirect_uri: str):
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        with _ur.urlopen(req, timeout=10) as resp:
+        with safe_urlopen(req, timeout=10) as resp:
             return json.loads(resp.read())
     except Exception as exc:
         logger.warning("HA login_flow start failed: %s", exc)
@@ -511,7 +533,7 @@ def _ha_login_flow_step(ha_url: str, flow_id: str, payload: dict, client_id: str
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        with _ur.urlopen(req, timeout=10) as resp:
+        with safe_urlopen(req, timeout=10) as resp:
             return json.loads(resp.read())
     except HTTPError as exc:
         try:
@@ -527,16 +549,22 @@ def _ha_login_flow_step(ha_url: str, flow_id: str, payload: dict, client_id: str
 
 def _ma_callback_exchange(ma_url: str, code: str, oauth_state: str):
     """Call MA /auth/callback to exchange HA code for MA token."""
-    import http.client
     import urllib.parse as _up
 
     try:
         cb_url = (
             f"{ma_url}/auth/callback?code={_up.quote(code)}&state={_up.quote(oauth_state)}&provider_id=homeassistant"
         )
+        if not is_safe_external_url(cb_url):
+            logger.warning("Refusing MA callback exchange: disallowed URL %s", cb_url)
+            return None
         parsed_cb = _up.urlparse(cb_url)
         hostname = parsed_cb.hostname or "localhost"
-        conn = http.client.HTTPConnection(hostname, parsed_cb.port or 80, timeout=15)
+        conn: SafeHTTPConnection | SafeHTTPSConnection
+        if parsed_cb.scheme == "https":
+            conn = SafeHTTPSConnection(hostname, parsed_cb.port or 443, timeout=15)
+        else:
+            conn = SafeHTTPConnection(hostname, parsed_cb.port or 80, timeout=15)
         path = f"{parsed_cb.path}?{parsed_cb.query}"
         conn.request("GET", path)
         resp = conn.getresponse()
@@ -779,7 +807,7 @@ def _create_ma_token_via_ingress(ha_user_id: str, ha_username: str, ha_display_n
 
     try:
         req = _ur.Request(url, data=payload, headers=headers, method="POST")
-        with _ur.urlopen(req, timeout=10) as resp:
+        with safe_urlopen(req, timeout=10) as resp:
             raw = resp.read().decode()
             logger.debug("MA Ingress raw response: %s", raw[:200])
             data = json.loads(raw)
@@ -815,7 +843,7 @@ def _find_ma_ingress_url_via_ha(ha_url: str, ha_token: str) -> str:
         try:
             if not isinstance(data, dict):
                 req = _ur.Request(f"{ha_url.rstrip('/')}/api/hassio/addons/{slug}/info", headers=headers, method="GET")
-                with _ur.urlopen(req, timeout=10) as resp:
+                with safe_urlopen(req, timeout=10) as resp:
                     payload = json.loads(resp.read())
                 data = payload.get("data") if isinstance(payload, dict) else None
                 if not isinstance(data, dict) and isinstance(payload, dict) and payload.get("slug"):
@@ -865,7 +893,7 @@ def _create_ma_token_via_ha_proxy(ha_url: str, ha_token: str) -> str | None:
         method="POST",
     )
     try:
-        with _ur.urlopen(req, timeout=15) as resp:
+        with safe_urlopen(req, timeout=15) as resp:
             raw = resp.read().decode()
             data = json.loads(raw)
     except Exception as exc:
@@ -1185,23 +1213,39 @@ def api_ma_login():
     if "://" not in ma_url:
         ma_url = f"http://{ma_url}"
 
-    # Login and create long-lived token
-    # Try the library first (works with stable MA), then fall back to direct HTTP
-    # which supports both stable and beta MA formats.
-    token = None
-    try:
-        from music_assistant_client import login_with_token
+    if not is_safe_external_url(ma_url):
+        return jsonify({"success": False, "error": "Invalid or disallowed URL"}), 400
 
-        fut = asyncio.run_coroutine_threadsafe(
-            login_with_token(ma_url, username, password, token_name=_ma_token_name()), loop
-        )
-        _user, token = fut.result(timeout=30.0)
-    except Exception as lib_exc:
-        # Library login failed — always try direct HTTP fallback.
+    # Login and create long-lived token.
+    #
+    # In *default* mode we try the library first (faster path for stable MA)
+    # and fall back to direct HTTP (which covers MA beta + applies our
+    # ``SafeHTTP(S)Connection`` peer-IP verification at connect time).
+    #
+    # In *strict* (``SENDSPIN_STRICT_SSRF=1``) mode we skip the library
+    # entirely because it uses its own HTTP stack that doesn't go through
+    # ``safe_urlopen``, making DNS-rebinding attacks at connect time still
+    # possible.  The direct-HTTP path is authoritative for both stable and
+    # beta MA, so there's no functional regression.
+    token = None
+    lib_exc: Exception | None = None
+    if os.environ.get("SENDSPIN_STRICT_SSRF", "").strip() != "1":
+        try:
+            from music_assistant_client import login_with_token
+
+            fut = asyncio.run_coroutine_threadsafe(
+                login_with_token(ma_url, username, password, token_name=_ma_token_name()), loop
+            )
+            _user, token = fut.result(timeout=30.0)
+        except Exception as exc:
+            lib_exc = exc
+    if token is None:
+        # Library login failed or was skipped — try direct HTTP fallback.
         # The library raises generic "Invalid username or password" for any 401,
         # including format mismatches with MA beta, so we can't distinguish
         # real auth errors from format issues at this level.
-        logger.info("Library login failed (%s), trying direct HTTP login", lib_exc)
+        if lib_exc is not None:
+            logger.info("Library login failed (%s), trying direct HTTP login", lib_exc)
         try:
             session_token = _ma_http_login(ma_url, username, password)
             token = _exchange_for_long_lived_token(ma_url, session_token)
@@ -1246,10 +1290,13 @@ def api_ma_ha_auth_page():
     then posts the result back to ``window.opener`` via ``postMessage``.
     """
     ma_url = request.args.get("ma_url", "")
-    scheme = _up.urlparse(ma_url).scheme.lower() if ma_url else ""
-    if scheme and scheme not in ("http", "https"):
-        return Response("Invalid URL scheme", status=400)
-    safe_ma_url = json.dumps(ma_url)  # JS-safe; includes surrounding quotes
+    if ma_url and not is_safe_external_url(ma_url):
+        return Response("Invalid or disallowed URL", status=400)
+    # json.dumps() escapes quotes/backslashes but NOT the ``</`` sequence,
+    # so a ma_url containing ``</script>`` would break out of the inline
+    # <script> block and land in the HTML context → reflected XSS.
+    # Escape the slash after ``<`` to neutralise script-boundary attacks.
+    safe_ma_url = json.dumps(ma_url).replace("</", "<\\/")
     return Response(
         _HA_AUTH_PAGE_HTML.replace("__MA_URL__", safe_ma_url),
         content_type="text/html; charset=utf-8",
@@ -1277,6 +1324,9 @@ def api_ma_ha_silent_auth():
 
     if not ha_token or not ma_url:
         return jsonify({"success": False, "error": "Missing ha_token or ma_url"}), 400
+
+    if not is_safe_external_url(ma_url):
+        return jsonify({"success": False, "error": "Invalid or disallowed URL"}), 400
 
     # Idempotency: reuse existing token if it still works for this MA instance
     existing_url, existing_token = get_ma_api_credentials()
@@ -1374,6 +1424,9 @@ def api_ma_ha_login():
     if not ma_url:
         return jsonify({"success": False, "error": "MA URL is required"}), 400
 
+    if not is_safe_external_url(ma_url):
+        return jsonify({"success": False, "error": "Invalid or disallowed URL"}), 400
+
     # ── Step dispatcher ───────────────────────────────────────────────────
 
     if step == "init":
@@ -1421,15 +1474,20 @@ def api_ma_ha_login():
 
             if result.get("type") == "form" and result.get("step_id") == "mfa":
                 placeholders = result.get("description_placeholders") or {}
+                session["_ha_oauth"] = {
+                    "auth_mode": "ma_oauth",
+                    "flow_id": flow_id,
+                    "ha_url": ha_url,
+                    "client_id": client_id,
+                    "state": oauth_state,
+                    "ma_url": ma_url,
+                    "username": username,
+                }
                 return jsonify(
                     {
                         "success": True,
                         "step": "mfa",
                         "auth_mode": "ma_oauth",
-                        "flow_id": flow_id,
-                        "ha_url": ha_url,
-                        "client_id": client_id,
-                        "state": oauth_state,
                         "mfa_module_id": placeholders.get("mfa_module_id", "totp"),
                         "mfa_module_name": placeholders.get("mfa_module_name", "Authenticator app"),
                     }
@@ -1490,15 +1548,20 @@ def api_ma_ha_login():
 
         if result.get("type") == "form" and result.get("step_id") == "mfa":
             placeholders = result.get("description_placeholders") or {}
+            session["_ha_oauth"] = {
+                "auth_mode": "ha_direct",
+                "flow_id": flow_id,
+                "ha_url": ha_url,
+                "client_id": client_id,
+                "state": "",
+                "ma_url": ma_url,
+                "username": username,
+            }
             return jsonify(
                 {
                     "success": True,
                     "step": "mfa",
                     "auth_mode": "ha_direct",
-                    "flow_id": flow_id,
-                    "ha_url": ha_url,
-                    "client_id": client_id,
-                    "state": "",
                     "mfa_module_id": placeholders.get("mfa_module_id", "totp"),
                     "mfa_module_name": placeholders.get("mfa_module_name", "Authenticator app"),
                 }
@@ -1509,16 +1572,28 @@ def api_ma_ha_login():
         return jsonify({"success": False, "error": err_msg}), 401
 
     elif step == "mfa":
-        flow_id = (data.get("flow_id") or "").strip()
-        ha_url = (data.get("ha_url") or "").strip().rstrip("/")
-        client_id = (data.get("client_id") or "").strip()
-        oauth_state = (data.get("state") or "").strip()
-        auth_mode = (data.get("auth_mode") or "ma_oauth").strip()
+        # Trusted OAuth parameters live in the server-side session and were
+        # saved when the init step successfully started the HA login flow.
+        # Ignoring body-supplied ha_url/client_id/state prevents SSRF and flow
+        # hijacking — the client only proves knowledge of the MFA code.
+        oauth_ctx = session.get("_ha_oauth") or {}
+        flow_id = str(oauth_ctx.get("flow_id") or "").strip()
+        ha_url = str(oauth_ctx.get("ha_url") or "").strip().rstrip("/")
+        client_id = str(oauth_ctx.get("client_id") or "").strip()
+        oauth_state = str(oauth_ctx.get("state") or "").strip()
+        auth_mode = str(oauth_ctx.get("auth_mode") or "ma_oauth").strip()
+        session_ma_url = str(oauth_ctx.get("ma_url") or "").strip().rstrip("/")
+        username = str(oauth_ctx.get("username") or "").strip()
         code = (data.get("code") or "").replace(" ", "").replace("-", "")
-        username = (data.get("username") or "").strip()
 
-        if not flow_id or not ha_url or not code or (auth_mode != "ha_direct" and not oauth_state):
-            return jsonify({"success": False, "error": "Missing required fields"}), 400
+        if not code:
+            return jsonify({"success": False, "error": "Missing authentication code"}), 400
+        if not flow_id or not ha_url or (auth_mode != "ha_direct" and not oauth_state):
+            session.pop("_ha_oauth", None)
+            return jsonify({"success": False, "error": "Session expired — please start again"}), 400
+        if session_ma_url and session_ma_url != ma_url:
+            session.pop("_ha_oauth", None)
+            return jsonify({"success": False, "error": "Session expired — please start again"}), 400
 
         result = _ha_login_flow_step(ha_url, flow_id, {"code": code}, client_id)
         if not result:
@@ -1526,20 +1601,23 @@ def api_ma_ha_login():
 
         if result.get("type") == "create_entry":
             ha_code = result.get("result", "")
-            if auth_mode == "ha_direct":
-                auth_result, auth_error = _complete_ma_login_via_ha_code(ha_url, ha_code, client_id, ma_url)
-                if not auth_result:
-                    return jsonify({"success": False, "error": auth_error or "Authentication failed"}), 502
-                ma_token = str(auth_result.get("ma_token") or "")
-                saved_username = str(auth_result.get("name") or username or "HA user")
-            else:
-                ma_session_token = _ma_callback_exchange(ma_url, ha_code, oauth_state)
-                if not ma_session_token:
-                    return jsonify({"success": False, "error": "Failed to exchange HA code for MA token"}), 500
-                ma_token = _exchange_for_long_lived_token(ma_url, ma_session_token)
-                saved_username = username or "HA user"
+            try:
+                if auth_mode == "ha_direct":
+                    auth_result, auth_error = _complete_ma_login_via_ha_code(ha_url, ha_code, client_id, ma_url)
+                    if not auth_result:
+                        return jsonify({"success": False, "error": auth_error or "Authentication failed"}), 502
+                    ma_token = str(auth_result.get("ma_token") or "")
+                    saved_username = str(auth_result.get("name") or username or "HA user")
+                else:
+                    ma_session_token = _ma_callback_exchange(ma_url, ha_code, oauth_state)
+                    if not ma_session_token:
+                        return jsonify({"success": False, "error": "Failed to exchange HA code for MA token"}), 500
+                    ma_token = _exchange_for_long_lived_token(ma_url, ma_session_token)
+                    saved_username = username or "HA user"
 
-            _save_ma_token_and_rediscover(ma_url, ma_token, saved_username, auth_provider="ha")
+                _save_ma_token_and_rediscover(ma_url, ma_token, saved_username, auth_provider="ha")
+            finally:
+                session.pop("_ha_oauth", None)
 
             return jsonify(
                 {
@@ -1552,6 +1630,7 @@ def api_ma_ha_login():
             )
 
         if result.get("type") == "abort":
+            session.pop("_ha_oauth", None)
             return jsonify({"success": False, "error": "Session expired — please start again"}), 400
 
         return jsonify({"success": False, "error": "Invalid authentication code"}), 401
