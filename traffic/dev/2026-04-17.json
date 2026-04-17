@@ -1,0 +1,126 @@
+{
+  "weekly_commits": [
+    {
+      "week_offset": -15,
+      "total": 14,
+      "owner": 0
+    },
+    {
+      "week_offset": -6,
+      "total": 430,
+      "owner": 393
+    },
+    {
+      "week_offset": -5,
+      "total": 458,
+      "owner": 373
+    },
+    {
+      "week_offset": -4,
+      "total": 183,
+      "owner": 161
+    },
+    {
+      "week_offset": -3,
+      "total": 416,
+      "owner": 288
+    },
+    {
+      "week_offset": -2,
+      "total": 198,
+      "owner": 20
+    },
+    {
+      "week_offset": -1,
+      "total": 154,
+      "owner": 7
+    },
+    {
+      "week_offset": 0,
+      "total": 38,
+      "owner": 2
+    }
+  ],
+  "code_frequency": [
+    {
+      "week": "2025-12-28",
+      "additions": 2100,
+      "deletions": 115
+    },
+    {
+      "week": "2026-02-22",
+      "additions": 5195,
+      "deletions": 1487
+    },
+    {
+      "week": "2026-03-01",
+      "additions": 42942,
+      "deletions": 14646
+    },
+    {
+      "week": "2026-03-08",
+      "additions": 32343,
+      "deletions": 9590
+    },
+    {
+      "week": "2026-03-15",
+      "additions": 52529,
+      "deletions": 18252
+    },
+    {
+      "week": "2026-03-22",
+      "additions": 40699,
+      "deletions": 14965
+    },
+    {
+      "week": "2026-03-29",
+      "additions": 482885,
+      "deletions": 2638
+    },
+    {
+      "week": "2026-04-05",
+      "additions": 4000,
+      "deletions": 505
+    },
+    {
+      "week": "2026-04-12",
+      "additions": 2562,
+      "deletions": 363
+    }
+  ],
+  "ai": {
+    "commits_scanned": 200,
+    "ai_commits": 95,
+    "ai_ratio": 0.475,
+    "agents": [
+      {
+        "name": "Copilot",
+        "commits": 86
+      },
+      {
+        "name": "dependabot[bot]",
+        "commits": 5
+      },
+      {
+        "name": "Renso",
+        "commits": 3
+      },
+      {
+        "name": "Claude Opus 4.6",
+        "commits": 2
+      },
+      {
+        "name": "Claude Opus 4.7",
+        "commits": 1
+      },
+      {
+        "name": "github-actions[bot]",
+        "commits": 1
+      },
+      {
+        "name": "trudenboy",
+        "commits": 1
+      }
+    ]
+  }
+}
