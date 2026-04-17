@@ -532,8 +532,38 @@ def api_bt_reset_reconnect_result(job_id: str):
     return jsonify(job)
 
 
+def _resolve_adapter_to_mac(adapter: str) -> str:
+    """Translate ``hciN`` → controller MAC for ``bluetoothctl select``.
+
+    ``bluetoothctl select hci0`` fails with ``Controller hci0 not
+    available`` on HAOS and LXC containers where the D-Bus objects are
+    keyed by MAC, not by interface name.  When the bridge's fleet-row
+    ``<select>`` emits ``hci0``/``hci1`` we must resolve it against
+    ``bluetoothctl list`` (ordered) before issuing any ``select``. If
+    resolution fails (adapters all down, etc.) the original ``hciN`` is
+    returned so the caller can still attempt it — a failed ``select``
+    at least surfaces as a visible paring failure, while silently
+    dropping the prefix would run the flow against the default
+    controller.  MAC inputs pass through unchanged.
+    """
+    if not adapter or not adapter.startswith("hci"):
+        return adapter
+    try:
+        idx = int(adapter[3:])
+    except ValueError:
+        return adapter
+    try:
+        macs = [m.upper() for m in list_bt_adapters() if m]
+    except Exception:  # pragma: no cover - defensive
+        return adapter
+    if 0 <= idx < len(macs):
+        return macs[idx]
+    return adapter
+
+
 def _run_reset_reconnect(job_id: str, mac: str, adapter: str) -> None:
     """Remove device, then pair + trust + connect from scratch."""
+    adapter = _resolve_adapter_to_mac(adapter)
     try:
         # Step 1: Remove existing pairing
         logger.info("Reset & Reconnect %s: removing…", mac)

@@ -189,7 +189,7 @@ def test_reset_reconnect_rejects_invalid_adapter(client, monkeypatch):
 def test_run_reset_reconnect_threads_select_adapter_through_every_phase(monkeypatch):
     """``select <adapter>`` must appear in remove, power-cycle, *and*
     the pair/trust/connect bluetoothctl session — otherwise the power
-    cycle hits the default controller and paring happens on the wrong
+    cycle hits the default controller and pairing happens on the wrong
     radio.
     """
 
@@ -232,3 +232,86 @@ def test_run_reset_reconnect_threads_select_adapter_through_every_phase(monkeypa
     assert "pair AA:BB:CC:DD:EE:04" in popen_input
     assert "trust AA:BB:CC:DD:EE:04" in popen_input
     assert "connect AA:BB:CC:DD:EE:04" in popen_input
+
+
+def test_run_reset_reconnect_translates_hci_name_to_controller_mac(monkeypatch):
+    """``bluetoothctl select hci1`` fails on HAOS / LXC with ``Controller
+    hci1 not available`` — only the controller MAC is accepted. The fleet
+    row's ``<select>`` sends ``hci0``/``hci1`` as its value, so the reset
+    flow must translate it to a MAC before issuing ``select`` or the
+    entire sequence silently runs against the default controller.
+    """
+
+    import routes.api_bt as module
+
+    captured_runs: list[str] = []
+
+    def fake_run(args: Any, *_a: Any, **kw: Any) -> _FakeCompletedProcess:
+        captured_runs.append(kw.get("input", "") or "")
+        return _FakeCompletedProcess()
+
+    fake_proc = _FakePopen(stdout_text="Pairing successful\n")
+
+    def fake_popen(*_a: Any, **_kw: Any) -> _FakePopen:
+        return fake_proc
+
+    monkeypatch.setattr(module.subprocess, "run", fake_run)
+    monkeypatch.setattr(module.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(module.time, "sleep", lambda *_a, **_kw: None)
+    monkeypatch.setattr(module, "_PAIR_SCAN_DURATION", 0)
+    monkeypatch.setattr(module, "_PAIR_WAIT_DURATION", 5)
+    # Pretend the host reports two controllers: hci0 + hci1.
+    monkeypatch.setattr(
+        module,
+        "list_bt_adapters",
+        lambda: ["C0:FB:F9:62:D6:9D", "C0:FB:F9:62:D7:D6"],
+    )
+
+    import selectors
+
+    monkeypatch.setattr(selectors, "DefaultSelector", _FakeSelector)
+
+    job_id = "job-test-hci"
+    module.create_scan_job(job_id)
+    module._run_reset_reconnect(job_id, "AA:BB:CC:DD:EE:05", "hci1")
+
+    # Every ``select`` across every phase must name the resolved MAC.
+    assert _extract_select_lines(captured_runs[0]) == ["C0:FB:F9:62:D7:D6"]
+    assert _extract_select_lines(captured_runs[1]) == ["C0:FB:F9:62:D7:D6"]
+    popen_input = "".join(fake_proc.stdin.buffer)
+    assert _extract_select_lines(popen_input) == ["C0:FB:F9:62:D7:D6"]
+    assert "select hci1" not in popen_input.lower()
+
+
+def test_run_reset_reconnect_keeps_hci_name_when_resolution_fails(monkeypatch):
+    """If ``bluetoothctl list`` is empty (e.g. all adapters down mid-flow),
+    fall back to the supplied ``hciN`` instead of dropping the ``select``
+    prefix entirely.  The command may still fail at bluetoothctl layer,
+    but silently running against the default controller is worse — a
+    failed ``select`` surfaces as the natural "not paired" outcome.
+    """
+
+    import routes.api_bt as module
+
+    captured_runs: list[str] = []
+
+    def fake_run(args: Any, *_a: Any, **kw: Any) -> _FakeCompletedProcess:
+        captured_runs.append(kw.get("input", "") or "")
+        return _FakeCompletedProcess()
+
+    monkeypatch.setattr(module.subprocess, "run", fake_run)
+    monkeypatch.setattr(module.subprocess, "Popen", lambda *_a, **_kw: _FakePopen())
+    monkeypatch.setattr(module.time, "sleep", lambda *_a, **_kw: None)
+    monkeypatch.setattr(module, "_PAIR_SCAN_DURATION", 0)
+    monkeypatch.setattr(module, "_PAIR_WAIT_DURATION", 5)
+    monkeypatch.setattr(module, "list_bt_adapters", lambda: [])
+
+    import selectors
+
+    monkeypatch.setattr(selectors, "DefaultSelector", _FakeSelector)
+
+    job_id = "job-test-fallback"
+    module.create_scan_job(job_id)
+    module._run_reset_reconnect(job_id, "AA:BB:CC:DD:EE:06", "hci0")
+
+    assert _extract_select_lines(captured_runs[0]) == ["HCI0"]
