@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -538,3 +539,302 @@ class TestScanAllSinks:
 
         await mon._scan_all_sinks(pulse)
         assert mon._sink_index_to_name[10] == "bluez_sink.FC_58_FA_EB_08_6C.a2dp_sink"
+
+
+# ── Failure diagnosis & self-disable ─────────────────────────────────────
+
+
+class _ConnectFail:
+    """Context manager stub that raises the given exception on __aenter__."""
+
+    def __init__(self, exc: BaseException):
+        self._exc = exc
+
+    async def __aenter__(self):
+        raise self._exc
+
+    async def __aexit__(self, *args):
+        return False
+
+
+class _ConnectSuccessThenCancel:
+    """Stub that enters the body once, then cancels via CancelledError."""
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        return False
+
+    def subscribe_events(self, *_args, **_kwargs):
+        async def _agen():
+            raise asyncio.CancelledError()
+            yield  # pragma: no cover
+
+        return _agen()
+
+    async def sink_list(self):
+        return []
+
+
+class _ConnectSuccessThenDrop:
+    """Stub that enters the body, then the event loop raises a transient error."""
+
+    def __init__(self, drop_exc: BaseException | None = None):
+        self._drop_exc = drop_exc or ConnectionResetError("dropped")
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        return False
+
+    def subscribe_events(self, *_args, **_kwargs):
+        drop = self._drop_exc
+
+        async def _agen():
+            raise drop
+            yield  # pragma: no cover
+
+        return _agen()
+
+    async def sink_list(self):
+        return []
+
+
+class TestMonitorLoopFailureBehavior:
+    """Diagnose-then-disable semantics for the reconnect loop."""
+
+    @pytest.mark.asyncio
+    async def test_initial_connect_failures_disable_after_threshold(self, caplog):
+        """After _INITIAL_FAILURE_THRESHOLD initial failures, the loop returns."""
+        import services.sink_monitor as sm_mod
+
+        mon = SinkMonitor()
+        exc = ConnectionRefusedError("no server")
+
+        def _factory(*_args, **_kwargs):
+            return _ConnectFail(exc)
+
+        with (
+            patch("services.sink_monitor._PULSECTL_AVAILABLE", True),
+            patch.object(sm_mod, "pulsectl_asyncio", MagicMock(PulseAsync=_factory), create=True),
+            patch("services.sink_monitor.asyncio.sleep", new_callable=AsyncMock),
+            caplog.at_level("DEBUG", logger="services.sink_monitor"),
+        ):
+            await mon.start()
+            await asyncio.wait_for(mon._task, timeout=2.0)
+
+        assert mon.available is False
+        assert mon._consecutive_connect_failures >= sm_mod._INITIAL_FAILURE_THRESHOLD
+        warnings = [r for r in caplog.records if r.levelname == "WARNING"]
+        # One diagnostic on first failure + one "disabled after" final.
+        assert len(warnings) == 2
+        assert "cannot connect to PulseAudio" in warnings[0].getMessage()
+        assert "server-not-listening" in warnings[0].getMessage()
+        assert "SinkMonitor disabled after" in warnings[1].getMessage()
+
+    @pytest.mark.asyncio
+    async def test_diagnose_file_not_found_reports_socket_missing(self, caplog):
+        import services.sink_monitor as sm_mod
+
+        mon = SinkMonitor()
+        exc = FileNotFoundError(2, "No such file")
+
+        def _factory(*_args, **_kwargs):
+            return _ConnectFail(exc)
+
+        with (
+            patch("services.sink_monitor._PULSECTL_AVAILABLE", True),
+            patch.object(sm_mod, "pulsectl_asyncio", MagicMock(PulseAsync=_factory), create=True),
+            patch("services.sink_monitor.asyncio.sleep", new_callable=AsyncMock),
+            caplog.at_level("WARNING", logger="services.sink_monitor"),
+        ):
+            await mon.start()
+            await asyncio.wait_for(mon._task, timeout=2.0)
+
+        msgs = " ".join(r.getMessage() for r in caplog.records)
+        assert "socket-missing" in msgs
+        assert "/run/user" in msgs
+
+    @pytest.mark.asyncio
+    async def test_diagnose_permission_error_reports_uid_mismatch(self, caplog):
+        import services.sink_monitor as sm_mod
+
+        mon = SinkMonitor()
+        exc = PermissionError(13, "Permission denied")
+
+        def _factory(*_args, **_kwargs):
+            return _ConnectFail(exc)
+
+        with (
+            patch("services.sink_monitor._PULSECTL_AVAILABLE", True),
+            patch.object(sm_mod, "pulsectl_asyncio", MagicMock(PulseAsync=_factory), create=True),
+            patch("services.sink_monitor.asyncio.sleep", new_callable=AsyncMock),
+            caplog.at_level("WARNING", logger="services.sink_monitor"),
+        ):
+            await mon.start()
+            await asyncio.wait_for(mon._task, timeout=2.0)
+
+        msgs = " ".join(r.getMessage() for r in caplog.records)
+        assert "permission-denied" in msgs
+        assert "AUDIO_UID" in msgs
+
+    @pytest.mark.asyncio
+    async def test_diagnose_unknown_exception_falls_back_to_generic(self, caplog):
+        import services.sink_monitor as sm_mod
+
+        mon = SinkMonitor()
+        exc = RuntimeError("weird")
+
+        def _factory(*_args, **_kwargs):
+            return _ConnectFail(exc)
+
+        with (
+            patch("services.sink_monitor._PULSECTL_AVAILABLE", True),
+            patch.object(sm_mod, "pulsectl_asyncio", MagicMock(PulseAsync=_factory), create=True),
+            patch("services.sink_monitor.asyncio.sleep", new_callable=AsyncMock),
+            caplog.at_level("WARNING", logger="services.sink_monitor"),
+        ):
+            await mon.start()
+            await asyncio.wait_for(mon._task, timeout=2.0)
+
+        msgs = " ".join(r.getMessage() for r in caplog.records)
+        assert "RuntimeError" in msgs
+        assert "weird" in msgs
+
+    @pytest.mark.asyncio
+    async def test_successful_connect_resets_counter(self, caplog):
+        """First two attempts fail, third succeeds → no 'disabled' WARNING."""
+        import services.sink_monitor as sm_mod
+
+        mon = SinkMonitor()
+        attempts: list[int] = []
+
+        def _factory(*_args, **_kwargs):
+            attempts.append(1)
+            if len(attempts) < 3:
+                return _ConnectFail(ConnectionRefusedError("transient"))
+            return _ConnectSuccessThenCancel()
+
+        with (
+            patch("services.sink_monitor._PULSECTL_AVAILABLE", True),
+            patch.object(sm_mod, "pulsectl_asyncio", MagicMock(PulseAsync=_factory), create=True),
+            patch("services.sink_monitor.asyncio.sleep", new_callable=AsyncMock),
+            caplog.at_level("WARNING", logger="services.sink_monitor"),
+        ):
+            await mon.start()
+            with contextlib.suppress(asyncio.CancelledError):
+                await asyncio.wait_for(mon._task, timeout=2.0)
+
+        assert mon._ever_connected is True
+        assert mon._consecutive_connect_failures == 0
+        msgs = " ".join(r.getMessage() for r in caplog.records)
+        assert "SinkMonitor disabled after" not in msgs
+
+    @pytest.mark.asyncio
+    async def test_post_success_transient_uses_backoff_and_demotes_log(self, caplog):
+        """After one success, transient failures log WARNING once, then DEBUG."""
+        import services.sink_monitor as sm_mod
+
+        mon = SinkMonitor()
+        state = {"count": 0}
+
+        def _factory(*_args, **_kwargs):
+            state["count"] += 1
+            if state["count"] == 1:
+                return _ConnectSuccessThenDrop(ConnectionResetError("dropped"))
+            return _ConnectFail(ConnectionRefusedError("transient"))
+
+        sleeps: list[float] = []
+
+        async def _record_sleep(delay: float) -> None:
+            sleeps.append(delay)
+            if len(sleeps) >= 3:
+                raise asyncio.CancelledError()
+
+        with (
+            patch("services.sink_monitor._PULSECTL_AVAILABLE", True),
+            patch.object(sm_mod, "pulsectl_asyncio", MagicMock(PulseAsync=_factory), create=True),
+            patch("services.sink_monitor.asyncio.sleep", side_effect=_record_sleep),
+            caplog.at_level("DEBUG", logger="services.sink_monitor"),
+        ):
+            await mon.start()
+            with contextlib.suppress(asyncio.CancelledError):
+                await asyncio.wait_for(mon._task, timeout=2.0)
+
+        # Expect exactly one WARNING for the first post-success reconnect.
+        reconnect_warnings = [
+            r for r in caplog.records if r.levelname == "WARNING" and "PA connection lost" in r.getMessage()
+        ]
+        assert len(reconnect_warnings) == 1
+        # Subsequent reconnect failures must be DEBUG.
+        debugs = [r for r in caplog.records if r.levelname == "DEBUG"]
+        assert any("reconnect attempt failed" in r.getMessage() for r in debugs)
+        # Backoff schedule: 5, 10, 20 (doubles per miss).
+        assert sleeps[0] == pytest.approx(sm_mod._BACKOFF_BASE)
+        assert sleeps[1] == pytest.approx(sm_mod._BACKOFF_BASE * sm_mod._BACKOFF_FACTOR)
+        assert sleeps[2] == pytest.approx(sm_mod._BACKOFF_BASE * sm_mod._BACKOFF_FACTOR**2)
+
+    @pytest.mark.asyncio
+    async def test_cancel_during_reconnect_exits_cleanly(self):
+        """Cancelling during backoff sleep must not raise."""
+        import services.sink_monitor as sm_mod
+
+        mon = SinkMonitor()
+
+        def _factory(*_args, **_kwargs):
+            return _ConnectFail(ConnectionRefusedError("nope"))
+
+        with (
+            patch("services.sink_monitor._PULSECTL_AVAILABLE", True),
+            patch.object(sm_mod, "pulsectl_asyncio", MagicMock(PulseAsync=_factory), create=True),
+            patch("services.sink_monitor.asyncio.sleep", new_callable=AsyncMock),
+        ):
+            await mon.start()
+            # Cancel almost immediately; should not raise.
+            await asyncio.sleep(0)
+            await mon.stop()
+        assert mon._task is None
+
+
+class TestDescribePAFailure:
+    """Direct unit tests for _describe_pa_failure."""
+
+    def test_file_not_found(self):
+        from services.sink_monitor import _describe_pa_failure
+
+        label, hint = _describe_pa_failure(FileNotFoundError(2, "x"))
+        assert label == "socket-missing"
+        assert "PULSE_SERVER" in hint
+
+    def test_permission_error(self):
+        from services.sink_monitor import _describe_pa_failure
+
+        label, hint = _describe_pa_failure(PermissionError(13, "x"))
+        assert label == "permission-denied"
+        assert "AUDIO_UID" in hint
+
+    def test_connection_refused(self):
+        from services.sink_monitor import _describe_pa_failure
+
+        label, hint = _describe_pa_failure(ConnectionRefusedError("x"))
+        assert label == "server-not-listening"
+        assert "pactl info" in hint
+
+    def test_protocol_error_econnreset(self):
+        import errno as _errno
+
+        from services.sink_monitor import _describe_pa_failure
+
+        exc = OSError(_errno.ECONNRESET, "reset")
+        label, hint = _describe_pa_failure(exc)
+        assert label == "protocol-error"
+        assert "pipewire-pulse version" in hint
+
+    def test_unknown_exception(self):
+        from services.sink_monitor import _describe_pa_failure
+
+        label, hint = _describe_pa_failure(RuntimeError("weird"))
+        assert label == "unknown"
+        assert "RuntimeError" in hint

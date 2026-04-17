@@ -764,3 +764,86 @@ def test_sink_mute_watchdog_not_started_when_app_muted():
         client._update_status({"sink_muted": True})
 
     mock_start.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_start_sendspin_inner_auto_shifts_listen_port_when_taken(monkeypatch):
+    """When the configured port is taken, listen_port must auto-shift and status must flag collision."""
+    client = SendspinClient("Test Player", "localhost", 9000, listen_port=8928)
+    client._start_sendspin_lock = asyncio.Lock()
+    client.bluetooth_sink_name = ""  # skip BT configure path
+
+    # Force the probe to return a shifted port.
+    monkeypatch.setattr("sendspin_client.find_available_bind_port", lambda *a, **kw: 8929)
+
+    captured_params: list[str] = []
+
+    class _FakeProc:
+        returncode = None
+
+        def __init__(self):
+            self.stdin = SimpleNamespace(write=lambda _d: None, drain=_noop_async, close=lambda: None)
+            self.stdout = SimpleNamespace(readline=_eof_readline)
+            self.stderr = SimpleNamespace(readline=_eof_readline)
+
+        async def wait(self):
+            return 0
+
+    async def _fake_exec(*args, **kwargs):
+        # args = (python, '-m', 'services.daemon_process', params, ...)
+        captured_params.append(args[3])
+        return _FakeProc()
+
+    with (
+        patch("sendspin_client.asyncio.create_subprocess_exec", side_effect=_fake_exec),
+        patch.object(client, "is_running", return_value=False),
+        patch.object(client, "stop_sendspin", return_value=None),
+    ):
+        await client._start_sendspin_inner()
+
+    assert client.listen_port == 8929
+    assert client.status["port_collision"] is True
+    assert client.status["active_listen_port"] == 8929
+    assert captured_params, "subprocess should have been spawned"
+    parsed = json.loads(captured_params[0])
+    assert parsed["listen_port"] == 8929
+
+
+@pytest.mark.asyncio
+async def test_start_sendspin_inner_halts_after_max_bind_failures(monkeypatch):
+    """After _MAX_BIND_FAILURES consecutive probe failures, the restart loop must be halted."""
+    from sendspin_client import _MAX_BIND_FAILURES
+
+    client = SendspinClient("Test Player", "localhost", 9000, listen_port=8928)
+    client._start_sendspin_lock = asyncio.Lock()
+    client.bluetooth_sink_name = ""
+
+    monkeypatch.setattr("sendspin_client.find_available_bind_port", lambda *a, **kw: None)
+
+    exec_calls = 0
+
+    async def _unexpected_exec(*args, **kwargs):
+        nonlocal exec_calls
+        exec_calls += 1
+        return SimpleNamespace(returncode=0, stdin=None, stdout=None, stderr=None)
+
+    with (
+        patch("sendspin_client.asyncio.create_subprocess_exec", side_effect=_unexpected_exec),
+        patch.object(client, "is_running", return_value=False),
+        patch.object(client, "stop_sendspin", return_value=None),
+    ):
+        for _ in range(_MAX_BIND_FAILURES):
+            await client._start_sendspin_inner()
+
+    assert client._bind_failures == _MAX_BIND_FAILURES
+    assert client._restart_halted is True
+    assert client.status["port_collision"] is True
+    assert exec_calls == 0  # never spawned because probe kept failing
+
+
+async def _noop_async(*_args, **_kwargs):
+    return None
+
+
+async def _eof_readline():
+    return b""

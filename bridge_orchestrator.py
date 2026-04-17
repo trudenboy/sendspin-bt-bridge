@@ -21,6 +21,7 @@ from config import detect_ha_addon_channel, ensure_bridge_name, load_config, res
 from services.device_registry import get_device_registry_snapshot
 from services.lifecycle_state import BridgeLifecycleState
 from services.ma_integration_service import BridgeMaIntegrationService
+from services.port_bind_probe import is_port_available
 from services.sendspin_compat import format_dependency_versions, get_runtime_dependency_versions
 from services.update_checker import run_update_checker
 
@@ -542,6 +543,14 @@ class BridgeOrchestrator:
                     "[%s] Using default listen_port %s with multiple devices — set explicit ports.",
                     client.player_name,
                     base_listen_port,
+                )
+            elif not is_port_available(listen_port):
+                logger.warning(
+                    "[%s] Configured listen_port %d is already in use on the host. "
+                    "Bridge will auto-shift at startup. Run 'lsof -i :%d' to identify the owner.",
+                    client.player_name,
+                    listen_port,
+                    listen_port,
                 )
             used_ports.add(listen_port)
 

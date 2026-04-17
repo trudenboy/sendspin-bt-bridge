@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
@@ -13,11 +14,14 @@ from services.log_analysis import classify_subprocess_stderr_level
 
 UTC = timezone.utc
 
+_PORT_NUMBER_RE = re.compile(r":(\d{4,5})\b")
+
 
 class SubprocessStderrService:
     """Own stderr classification and crash-like status publication."""
 
     _CONNECTION_ERROR_THRESHOLD = 3
+    _PORT_COLLISION_MARKERS = ("errno 98", "address already in use", "eaddrinuse")
 
     def __init__(
         self,
@@ -47,6 +51,29 @@ class SubprocessStderrService:
         """Classify one daemon stderr line and mirror crash-like output into status."""
         text = line.rstrip()
         if not text:
+            return
+
+        # Port-collision (EADDRINUSE): must run before the generic classifier so the
+        # hint with the actionable lsof command is not overwritten by a terse one.
+        lower = text.lower()
+        if any(marker in lower for marker in self._PORT_COLLISION_MARKERS):
+            match = _PORT_NUMBER_RE.search(text)
+            port_str = match.group(1) if match else None
+            if port_str:
+                hint = (
+                    f"Port {port_str} already in use by another process. "
+                    f"Run 'lsof -i :{port_str}' to identify the owner."
+                )
+            else:
+                hint = "Listen port already in use by another process. Run 'lsof -i :<port>' to identify the owner."
+            self._update_status(
+                {
+                    "port_collision": True,
+                    "last_error": hint,
+                    "last_error_at": self._now_factory().isoformat(),
+                }
+            )
+            self._logger.error("[%s] daemon stderr: %s", self.player_name, text)
             return
 
         # Track repeated connection errors to surface them

@@ -105,6 +105,60 @@ def test_handle_line_surfaces_repeated_connection_errors():
     assert any("Cannot connect" in u.get("last_error", "") for u in updates)
 
 
+def test_handle_line_detects_errno_98_sets_port_collision():
+    """stderr line with 'errno 98' should flag port_collision and include an lsof hint."""
+    updates: list[dict] = []
+    logger = Mock()
+    service = SubprocessStderrService(
+        player_name="Kitchen",
+        update_status=updates.append,
+        logger_=logger,
+        now_factory=lambda: datetime(2026, 4, 6, 15, 0, tzinfo=UTC),
+    )
+
+    service.handle_line("OSError: [Errno 98] Address already in use")
+
+    assert len(updates) == 1
+    update = updates[0]
+    assert update["port_collision"] is True
+    assert "lsof" in update["last_error"]
+    assert update["last_error_at"] == "2026-04-06T15:00:00+00:00"
+    logger.error.assert_called_once()
+
+
+def test_handle_line_detects_address_already_in_use_phrase():
+    """Phrase 'address already in use' (no errno) still triggers port_collision."""
+    updates: list[dict] = []
+    logger = Mock()
+    service = SubprocessStderrService(
+        player_name="Kitchen",
+        update_status=updates.append,
+        logger_=logger,
+    )
+
+    service.handle_line("RuntimeError: address already in use")
+
+    assert len(updates) == 1
+    assert updates[0]["port_collision"] is True
+
+
+def test_handle_line_port_collision_extracts_port_number():
+    """Port number from 'host:port' phrase should appear in the surfaced hint."""
+    updates: list[dict] = []
+    logger = Mock()
+    service = SubprocessStderrService(
+        player_name="Kitchen",
+        update_status=updates.append,
+        logger_=logger,
+    )
+
+    service.handle_line("bind 0.0.0.0:8928 address already in use")
+
+    assert len(updates) == 1
+    assert "8928" in updates[0]["last_error"]
+    assert "lsof -i :8928" in updates[0]["last_error"]
+
+
 def test_handle_line_connection_error_counter_resets_on_other_line():
     """Non-connection-error lines reset the consecutive counter."""
     updates: list[dict] = []
