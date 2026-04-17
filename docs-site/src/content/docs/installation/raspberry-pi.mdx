@@ -137,13 +137,25 @@ systemctl is-active bluetooth  # expect: active
 bluetoothctl show              # expect: Powered: yes
 ```
 
-If `bluetoothctl` still misbehaves after that — especially on a just-imaged system with no prior pairings — a full `apt` update and a reinstall of the BlueZ stack sometimes clears stale state:
+If `bluetoothctl` still misbehaves after that — especially on a just-imaged system with no prior pairings — bring the BlueZ stack to a clean state. Try the non-destructive path first:
 
 ```bash
 sudo apt update && sudo apt full-upgrade -y
 sudo apt install --reinstall bluez bluez-firmware
 sudo systemctl restart bluetooth
 ```
+
+If that doesn't clear it, a full purge + reinstall has been reported to work where `--reinstall` alone did not (context: issue [#151](https://github.com/trudenboy/sendspin-bt-bridge/issues/151)):
+
+```bash
+sudo apt-get --purge remove bluez bluez-firmware
+sudo apt-get install bluez bluez-firmware
+sudo systemctl restart bluetooth
+```
+
+<Aside type="caution">
+  The purge path removes BlueZ configuration files. If you already have paired Bluetooth devices, their pairing state in `/var/lib/bluetooth/` may be lost and you will need to pair them again. Only use the purge path on a fresh install or when you are willing to re-pair.
+</Aside>
 
 <Aside type="tip">
   Once the bridge is running you can scan and pair new speakers directly from the web UI (**Add → Scan → Pair**). Running `bluetoothctl pair` on the host by hand is only one option — not a requirement.
