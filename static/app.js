@@ -5581,8 +5581,10 @@ function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabl
             showToast('Set a device MAC address first', 'error');
             return;
         }
+        var adapterSel = row.querySelector('.bt-adapter');
+        var rowAdapter = adapterSel ? (adapterSel.value || '').trim() : '';
         _closeBtDeviceActionMenu(this);
-        showBtDeviceInfo(rowMac);
+        showBtDeviceInfo(rowMac, rowAdapter);
     });
     row.querySelector('.bt-device-action-reset').addEventListener('click', function(event) {
         event.preventDefault();
@@ -6610,12 +6612,17 @@ async function resetAndReconnect(mac, name, btnEl, adapter) {
     }
 }
 
-async function showBtDeviceInfo(mac) {
+async function showBtDeviceInfo(mac, adapter) {
     try {
+        // Explicit adapter hops over HAOS/LXC bug where ``bluetoothctl
+        // info`` queries only the default controller — without it bonds
+        // on hci1 render as "MAC only" in the modal.
+        var body = {mac: mac};
+        if (adapter) body.adapter = adapter;
         var resp = await fetch(API_BASE + '/api/bt/info', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({mac: mac})
+            body: JSON.stringify(body)
         });
         var info = await resp.json();
         var lines = [];
@@ -6780,7 +6787,8 @@ async function loadPairedDevices(options) {
             });
             row.querySelector('.paired-info-btn').addEventListener('click', function(e) {
                 e.stopPropagation();
-                showBtDeviceInfo(d.mac);
+                var pairedAdapter = Array.isArray(d.adapters) && d.adapters.length ? d.adapters[0] : '';
+                showBtDeviceInfo(d.mac, pairedAdapter);
             });
             var pairedReleaseBtn = row.querySelector('.paired-release-btn');
             if (pairedReleaseBtn) {
